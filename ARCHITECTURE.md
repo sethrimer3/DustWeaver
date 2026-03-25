@@ -43,12 +43,42 @@ Input → Commands → Game Loop → Sim (tick) → Snapshot → Renderer
 
 Each tick:
 1. Clear forces.
-2. Apply binding forces (orbit).
-3. Apply inter-particle forces (repulsion + contact destruction).
-4. Integrate (Euler: v += F/m * dt, x += v * dt).
-5. Increment tick counter.
+2. Apply per-element forces: hash-noise perturbation, curl-noise turbulence,
+   isotropic diffusion, upward/buoyancy bias (`elementForces.ts`).
+3. Apply binding forces: element-aware anchor spring + orbital tangential
+   force driving circular orbit around the owner cluster (`binding.ts`).
+4. Apply inter-particle forces: different-owner repulsion + contact
+   destruction; same-owner boid forces (cohesion, separation, alignment)
+   weighted by element profiles (`forces.ts`).
+5. Euler integration with per-element drag (`integration.ts`).
+6. Lifetime update: age particles; respawn expired particles at their owner
+   with new random anchor offsets (`lifetime.ts`).
+7. Increment tick counter.
 
-## Snapshot Boundary
+## Elemental Particle System
+
+`sim/particles/elementProfiles.ts` defines `ElementProfile` — a struct of
+~18 tunable coefficients (mass, drag, orbitalStrength, noiseAmplitude,
+instability, cohesion, lifetime, …) — and one named preset per `ParticleKind`.
+
+Force pipeline layers (all accumulated before integration):
+- **Element forces** (`elementForces.ts`): hash-noise perturbation (rate
+  controlled by `instability`), curl-noise turbulence, diffusion, upward bias.
+- **Binding forces** (`binding.ts`): spring toward per-particle anchor point
+  (owner pos + polar offset) scaled by `attractionStrength`; tangential
+  orbital force scaled by `orbitalStrength`.
+- **Inter-particle forces** (`forces.ts`): same-owner boid (cohesion,
+  separation, alignment); different-owner repulsion + contact destruction.
+
+**Adding a new element:**
+1. Add a `ParticleKind` enum value in `sim/particles/kinds.ts`.
+2. Add an `ElementProfile` constant and push it into `ELEMENT_PROFILES`
+   at the matching index in `sim/particles/elementProfiles.ts`.
+3. Add a matching colour entry in `render/particles/styles.ts` (Canvas 2D)
+   and a `kindColor()` branch in the fragment shader in
+   `render/particles/shaders.ts` (WebGL).
+
+
 
 - `WorldSnapshot` is a shallow readonly view of the current sim state.
 - Created each frame before rendering.

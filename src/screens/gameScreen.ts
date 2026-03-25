@@ -1,8 +1,9 @@
 import { createWorldState, WorldState, MAX_PARTICLES } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { ParticleKind } from '../sim/particles/kinds';
+import { getElementProfile } from '../sim/particles/elementProfiles';
 import { tick } from '../sim/tick';
-import { RngState, createRng, nextFloatRange } from '../sim/rng';
+import { RngState, createRng, nextFloat, nextFloatRange } from '../sim/rng';
 import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters } from '../render/clusters/renderer';
@@ -13,9 +14,8 @@ import { CommandKind } from '../input/commands';
 
 const FIXED_DT_MS = 16.666;
 const PLAYER_SPEED_WORLD = 100.0;
-const PARTICLE_COUNT_PER_CLUSTER = 8;
-const ORBIT_RADIUS_WORLD = 30.0;
-const WORLD_TO_SCREEN_SCALE = 1.0;
+/** Particles per cluster — more gives richer elemental cloud effects. */
+const PARTICLE_COUNT_PER_CLUSTER = 20;
 
 // Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
 const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
@@ -27,29 +27,62 @@ export interface GameScreenCallbacks {
   onReturnToMap: () => void;
 }
 
+/**
+ * Spawns `count` particles of `kind` orbiting the given cluster position.
+ * Sets all new particle buffer fields including anchor, lifetime, and noise seed.
+ */
 function spawnClusterParticles(
   world: WorldState,
   clusterEntityId: number,
   clusterXWorld: number,
   clusterYWorld: number,
+  kind: ParticleKind,
+  count: number,
   rng: RngState,
 ): void {
-  const count = PARTICLE_COUNT_PER_CLUSTER;
+  const profile = getElementProfile(kind);
+
   for (let i = 0; i < count; i++) {
     if (world.particleCount >= MAX_PARTICLES) break;
     const idx = world.particleCount++;
-    const angleRad = (i / count) * Math.PI * 2;
-    world.positionXWorld[idx] = clusterXWorld + Math.cos(angleRad) * ORBIT_RADIUS_WORLD;
-    world.positionYWorld[idx] = clusterYWorld + Math.sin(angleRad) * ORBIT_RADIUS_WORLD;
-    world.velocityXWorld[idx] = nextFloatRange(rng, -10, 10);
-    world.velocityYWorld[idx] = nextFloatRange(rng, -10, 10);
-    world.forceX[idx] = 0;
-    world.forceY[idx] = 0;
-    world.massKg[idx] = 1.0;
-    world.chargeUnits[idx] = 0;
-    world.isAliveFlag[idx] = 1;
-    world.kindBuffer[idx] = ParticleKind.Physical;
-    world.ownerEntityId[idx] = clusterEntityId;
+
+    // Evenly-spaced anchor angles with a small random offset
+    const baseAngleRad = (i / count) * Math.PI * 2;
+    const jitter = nextFloatRange(rng, -0.3, 0.3);
+    const anchorAngleRad = baseAngleRad + jitter;
+
+    const radiusVariance = profile.orbitRadiusWorld * 0.25;
+    const anchorRadius   = profile.orbitRadiusWorld
+      + nextFloatRange(rng, -radiusVariance, radiusVariance);
+
+    // Spawn position at anchor target
+    world.positionXWorld[idx] = clusterXWorld + Math.cos(anchorAngleRad) * anchorRadius;
+    world.positionYWorld[idx] = clusterYWorld + Math.sin(anchorAngleRad) * anchorRadius;
+
+    const spawnSpeed = 15.0;
+    world.velocityXWorld[idx] = nextFloatRange(rng, -spawnSpeed, spawnSpeed);
+    world.velocityYWorld[idx] = nextFloatRange(rng, -spawnSpeed, spawnSpeed);
+
+    world.forceX[idx]            = 0;
+    world.forceY[idx]            = 0;
+    world.massKg[idx]            = profile.massKg;
+    world.chargeUnits[idx]       = 0;
+    world.isAliveFlag[idx]       = 1;
+    world.kindBuffer[idx]        = kind;
+    world.ownerEntityId[idx]     = clusterEntityId;
+    world.anchorAngleRad[idx]    = anchorAngleRad;
+    world.anchorRadiusWorld[idx] = anchorRadius;
+
+    // Stagger initial age so particles don't all respawn simultaneously
+    const ageOffsetTicks = nextFloatRange(rng, 0, profile.lifetimeBaseTicks);
+    const lifetimeVariance = nextFloatRange(
+      rng, -profile.lifetimeVarianceTicks, profile.lifetimeVarianceTicks,
+    );
+    world.lifetimeTicks[idx] = Math.max(2.0, profile.lifetimeBaseTicks + lifetimeVariance);
+    world.ageTicks[idx]      = ageOffsetTicks;
+
+    // Unique per-particle noise phase so particles don't all jitter in unison
+    world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
   }
 }
 
@@ -79,20 +112,24 @@ export function startGameScreen(
 
   const ctx = canvas.getContext('2d')!;
 
-  const world = createWorldState(FIXED_DT_MS);
-  const rng = createRng(12345);
+  // World RNG seed 42 — separate from the level-setup RNG below
+  const world = createWorldState(FIXED_DT_MS, 42);
+  // Level-setup RNG (positions, spawn scatter) — distinct from world.rng
+  const levelRng = createRng(12345);
 
   const centerXWorld = canvas.width / 2;
   const centerYWorld = canvas.height / 2;
 
   const playerCluster = createClusterState(1, centerXWorld - 150, centerYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
-  const enemyCluster = createClusterState(2, centerXWorld + 150, centerYWorld, 0, PARTICLE_COUNT_PER_CLUSTER);
+  const enemyCluster  = createClusterState(2, centerXWorld + 150, centerYWorld, 0, PARTICLE_COUNT_PER_CLUSTER);
 
   world.clusters.push(playerCluster);
   world.clusters.push(enemyCluster);
 
-  spawnClusterParticles(world, playerCluster.entityId, playerCluster.positionXWorld, playerCluster.positionYWorld, rng);
-  spawnClusterParticles(world, enemyCluster.entityId, enemyCluster.positionXWorld, enemyCluster.positionYWorld, rng);
+  // Player gets Fire particles; enemy gets Ice particles.
+  // Different elements give each side a visually distinct feel.
+  spawnClusterParticles(world, playerCluster.entityId, playerCluster.positionXWorld, playerCluster.positionYWorld, ParticleKind.Fire,      PARTICLE_COUNT_PER_CLUSTER, levelRng);
+  spawnClusterParticles(world, enemyCluster.entityId,  enemyCluster.positionXWorld,  enemyCluster.positionYWorld,  ParticleKind.Ice,       PARTICLE_COUNT_PER_CLUSTER, levelRng);
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
@@ -190,7 +227,7 @@ export function startGameScreen(
 
     if (webglRenderer.isAvailable) {
       // WebGL canvas (behind) renders the dark background and glowing particles.
-      webglRenderer.render(snapshot, 0, 0, WORLD_TO_SCREEN_SCALE);
+      webglRenderer.render(snapshot, 0, 0, 1.0);
       // 2D canvas (on top) is transparent so the WebGL layer shows through;
       // it only draws cluster indicators, HUD, and UI text.
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -198,10 +235,10 @@ export function startGameScreen(
       // Canvas 2D fallback: fill background and draw particles with arc calls.
       ctx.fillStyle = '#0a0a12';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      renderParticles(ctx, snapshot, 0, 0, WORLD_TO_SCREEN_SCALE);
+      renderParticles(ctx, snapshot, 0, 0, 1.0);
     }
 
-    renderClusters(ctx, snapshot, 0, 0, WORLD_TO_SCREEN_SCALE);
+    renderClusters(ctx, snapshot, 0, 0, 1.0);
     renderHudOverlay(ctx, hudState);
 
     // Draw touch joystick visual when active

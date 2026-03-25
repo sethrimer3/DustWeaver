@@ -52,3 +52,49 @@
 ## Bundler
 - Vite with TypeScript.
 - Entry: `src/main.ts`.
+
+## Elemental Particle Behavior System
+
+### Force Layering
+Particle forces are accumulated from four independent passes per tick:
+1. **Element forces** (`elementForces.ts`): per-particle hash-noise (direction
+   determined by `floor(tick × instability)` so `instability=1` changes every
+   tick and `instability=0.02` changes every ~50 ticks), curl-noise turbulence
+   (approximated from a scalar potential), isotropic diffusion, and a constant
+   upward-bias.
+2. **Binding forces** (`binding.ts`): spring toward each particle's individual
+   anchor point (set at spawn as an offset from the owner center); plus a
+   constant-magnitude tangential force driving orbit.
+3. **Inter-particle boid forces** (`forces.ts`): cohesion, separation, alignment
+   with same-owner neighbors; repulsion + destruction with different-owner.
+4. **Drag** applied in integration before Euler step.
+
+### Noise Determinism
+A pair of integer-multiply-xorshift hash functions are used instead of consuming
+the shared PRNG for per-tick noise.  This gives identical noise per (particleIndex,
+tick, noiseTickSeed) regardless of processing order, making the sim reproducible
+without the fragility of a shared PRNG consumed in a hot loop.
+
+### Lifetime / Respawn
+Particles have `ageTicks` and `lifetimeTicks`.  When they expire they respawn at
+their owner with a fresh random anchor angle/radius — keeping particle count
+constant and element character persistent.  Short-lived elements (fire, lightning)
+feel like they flicker and regenerate rapidly; long-lived elements (ice, physical)
+feel persistent and stable.
+
+### Performance (Elemental System)
+- Boid neighbor range (36 world units) larger than inter-cluster repulsion range
+  (20 world units); both handled in a single spatial-grid pass.
+- Boid accumulators (_cohesionX, _alignX, …) are module-level Float32Arrays
+  reset with `.fill(0)` each tick — no per-tick allocation.
+- Hash noise: 2 multiply-xorshift ops per particle per tick (~500K/sec at 512
+  particles × 60 fps) — negligible CPU cost.
+- MAX_PARTICLES raised from 512 → 1024 to support richer elemental clouds.
+  GPU buffer is pre-allocated at that capacity (1024 × 4 floats × 4 bytes = 16 KB).
+
+### WebGL Vertex Format Change
+Old: [x, y, isPlayer]  (3 floats)
+New: [x, y, kind, normalizedAge]  (4 floats)
+The `kind` drives element colour selection in the GLSL fragment shader.
+`normalizedAge` (ageTicks / lifetimeTicks) drives alpha fade and point-size
+shrink in the vertex shader — particles visually decay as they age out.

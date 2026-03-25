@@ -1,16 +1,30 @@
-import { ParticleKind } from '../../sim/particles/kinds';
+/**
+ * Per-element visual style for the Canvas 2D fallback renderer.
+ * The WebGL renderer picks colours directly in the vertex packing step
+ * (see webglRenderer.ts + shaders.ts → kindColor()).
+ */
 
 export interface ParticleStyle {
   colorHex: string;
   radiusPx: number;
 }
 
-const PHYSICAL_STYLE: ParticleStyle = {
-  colorHex: '#00cfff',
-  radiusPx: 4,
-};
+// ---- Per-element colour palette (matches ELEMENT_COLORS in webglRenderer) -
+
+const STYLES: ParticleStyle[] = [
+  { colorHex: '#7799aa', radiusPx: 4 }, // Physical  — steel blue-grey
+  { colorHex: '#ff5500', radiusPx: 4 }, // Fire      — hot orange
+  { colorHex: '#88ddff', radiusPx: 4 }, // Ice       — cool light blue
+  { colorHex: '#ffff44', radiusPx: 4 }, // Lightning — electric yellow
+  { colorHex: '#44ff44', radiusPx: 4 }, // Poison    — acid green
+  { colorHex: '#cc44ff', radiusPx: 4 }, // Arcane    — violet
+  { colorHex: '#88ffee', radiusPx: 4 }, // Wind      — pale cyan
+  { colorHex: '#ffeeaa', radiusPx: 4 }, // Holy      — warm gold
+  { colorHex: '#6633cc', radiusPx: 4 }, // Shadow    — deep purple
+];
+
+const FALLBACK_STYLE: ParticleStyle = STYLES[0];
 
 export function getParticleStyle(kind: number): ParticleStyle {
-  if (kind === ParticleKind.Physical) return PHYSICAL_STYLE;
-  return PHYSICAL_STYLE;
+  return STYLES[kind] ?? FALLBACK_STYLE;
 }
