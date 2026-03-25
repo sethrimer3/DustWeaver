@@ -19,6 +19,7 @@ import { WorldState } from '../world';
 import { createSpatialGrid, clearGrid, insertParticle, queryNeighbors } from '../spatial/grid';
 import type { SpatialGrid } from '../spatial/grid';
 import { getElementProfile } from './elementProfiles';
+import { ParticleKind } from './kinds';
 
 export const PARTICLE_RADIUS_WORLD = 4.0;
 
@@ -105,7 +106,14 @@ export function applyInterParticleForces(world: WorldState): void {
       const dist = Math.sqrt(distSq);
 
       if (ownerI !== ownerJ) {
-        // ---- Different-owner: repulsion + contact destruction ----------
+        // ---- Different-owner interaction -----------------------------------
+        // Fluid particles (background) are never destroyed on contact.
+        // Their physical interaction is handled by the disturbance system.
+        if (kindBuffer[i] === ParticleKind.Fluid || kindBuffer[j] === ParticleKind.Fluid) {
+          continue;
+        }
+
+        // ---- Non-Fluid different-owner: repulsion + contact destruction ----
         if (dist < CONTACT_DIST_WORLD) {
           if (scratchDestroyCount < MAX_PARTICLES) {
             scratchDestroyA[scratchDestroyCount] = i;
@@ -123,8 +131,9 @@ export function applyInterParticleForces(world: WorldState): void {
           forceX[j] -= fx;
           forceY[j] -= fy;
         }
-      } else {
-        // ---- Same-owner: boid accumulation (within boid range) ----------
+      } else if (ownerI !== -1) {
+        // ---- Same-owner, non-Fluid: boid accumulation (within boid range) --
+        // ownerI === -1 means both are unowned Fluid particles; skip boid.
         if (dist < BOID_RANGE_WORLD) {
           _cohesionX[i] += positionXWorld[j];
           _cohesionY[i] += positionYWorld[j];

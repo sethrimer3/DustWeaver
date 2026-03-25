@@ -15,10 +15,18 @@ export enum ParticleKind {
   Nature    = 11,  // Organic, tendrils, circular — low cost
   Crystal   = 12,  // Precise, geometric, hexagonal — high cost
   Void      = 13,  // Dark matter ring — very high cost
+  // Background / environmental (not equippable by players)
+  Fluid     = 14,  // Background fluid particle — invisible until disturbed
 }
 
 /** Total number of defined kinds — keep in sync with the enum above. */
-export const PARTICLE_KIND_COUNT = 14;
+export const PARTICLE_KIND_COUNT = 15;
+
+/**
+ * Number of kinds that players can equip (excludes background/environmental kinds).
+ * Fluid (14) and any future environmental kinds are intentionally excluded.
+ */
+export const EQUIPPABLE_PARTICLE_KIND_COUNT = 14;
 
 /**
  * Particle shape enum — controls how each particle kind is rendered.
@@ -51,6 +59,7 @@ export const KIND_SHAPE: ParticleShape[] = [
   ParticleShape.Circle,   // Nature
   ParticleShape.Hexagon,  // Crystal
   ParticleShape.Ring,     // Void
+  ParticleShape.Circle,   // Fluid — soft circular glow
 ];
 
 /** Returns the rendered shape for the given kind index, defaulting to Circle. */

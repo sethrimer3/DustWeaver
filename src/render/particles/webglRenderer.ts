@@ -1,11 +1,14 @@
 /**
  * WebGL-accelerated particle renderer.
  *
- * Vertex format per particle: [x, y, kind, normalizedAge]  (4 floats = 16 bytes)
+ * Vertex format per particle: [x, y, kind, normalizedAge, disturbanceFactor]
+ *                              (5 floats = 20 bytes)
  *
- *  • kind          — ParticleKind enum value; fragment shader maps it to colour.
- *  • normalizedAge — ageTicks / lifetimeTicks in [0, 1]; drives alpha fade
- *                    and point-size shrink in the vertex shader.
+ *  • kind              — ParticleKind enum value; fragment shader maps it to colour.
+ *  • normalizedAge     — ageTicks / lifetimeTicks in [0, 1]; drives alpha fade
+ *                        and point-size shrink in the vertex shader.
+ *  • disturbanceFactor — [0, 1]; non-zero only for Fluid particles; drives their
+ *                        alpha (0 = invisible, 1 = fully revealed).
  *
  * Performance notes:
  *  - GPU buffer pre-allocated at MAX_PARTICLES capacity; per-frame upload
@@ -19,8 +22,8 @@ import { MAX_PARTICLES } from '../../sim/particles/state';
 import { WorldSnapshot } from '../snapshot';
 import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shaders';
 
-/** [x, y, kind, normalizedAge] per vertex */
-const FLOATS_PER_VERTEX = 4;
+/** [x, y, kind, normalizedAge, disturbanceFactor] per vertex */
+const FLOATS_PER_VERTEX = 5;
 const BYTES_PER_FLOAT   = 4;
 /** Visual radius for each particle's point sprite (pixels). */
 const POINT_SIZE_PX = 12.0;
@@ -96,11 +99,12 @@ export class WebGLParticleRenderer {
   private readonly vertexBuffer: WebGLBuffer | null = null;
 
   // Attribute / uniform locations
-  private readonly attrPositionScreen: number = -1;
-  private readonly attrKind: number = -1;
-  private readonly attrNormalizedAge: number = -1;
-  private readonly uResolution: WebGLUniformLocation | null = null;
-  private readonly uPointSizePx: WebGLUniformLocation | null = null;
+  private readonly attrPositionScreen:    number = -1;
+  private readonly attrKind:              number = -1;
+  private readonly attrNormalizedAge:     number = -1;
+  private readonly attrDisturbanceFactor: number = -1;
+  private readonly uResolution:    WebGLUniformLocation | null = null;
+  private readonly uPointSizePx:   WebGLUniformLocation | null = null;
 
   /**
    * Pre-allocated CPU vertex data: [x, y, kind, normalizedAge] per particle.
@@ -144,11 +148,12 @@ export class WebGLParticleRenderer {
     this.program = program;
     this.vertexBuffer = vertexBuffer;
 
-    this.attrPositionScreen = gl.getAttribLocation(program, 'a_positionScreen');
-    this.attrKind           = gl.getAttribLocation(program, 'a_kind');
-    this.attrNormalizedAge  = gl.getAttribLocation(program, 'a_normalizedAge');
-    this.uResolution        = gl.getUniformLocation(program, 'u_resolution');
-    this.uPointSizePx       = gl.getUniformLocation(program, 'u_pointSizePx');
+    this.attrPositionScreen    = gl.getAttribLocation(program, 'a_positionScreen');
+    this.attrKind              = gl.getAttribLocation(program, 'a_kind');
+    this.attrNormalizedAge     = gl.getAttribLocation(program, 'a_normalizedAge');
+    this.attrDisturbanceFactor = gl.getAttribLocation(program, 'a_disturbanceFactor');
+    this.uResolution           = gl.getUniformLocation(program, 'u_resolution');
+    this.uPointSizePx          = gl.getUniformLocation(program, 'u_pointSizePx');
 
     // Additive blending: overlapping particles accumulate into natural bloom.
     gl.enable(gl.BLEND);
@@ -194,6 +199,7 @@ export class WebGLParticleRenderer {
       particleCount, isAliveFlag,
       positionXWorld, positionYWorld,
       kindBuffer, ageTicks, lifetimeTicks,
+      disturbanceFactor,
     } = particles;
 
     // ---- Pack alive-particle vertex data (no allocations) ---------------
@@ -208,6 +214,7 @@ export class WebGLParticleRenderer {
       packed[base + 1] = positionYWorld[i] * scalePx + offsetYPx;
       packed[base + 2] = kindBuffer[i];
       packed[base + 3] = normAge;
+      packed[base + 4] = disturbanceFactor[i];
       vertexCount++;
     }
 
@@ -229,11 +236,13 @@ export class WebGLParticleRenderer {
 
     const stride = FLOATS_PER_VERTEX * BYTES_PER_FLOAT;
     gl.enableVertexAttribArray(this.attrPositionScreen);
-    gl.vertexAttribPointer(this.attrPositionScreen, 2, gl.FLOAT, false, stride, 0);
+    gl.vertexAttribPointer(this.attrPositionScreen,    2, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(this.attrKind);
-    gl.vertexAttribPointer(this.attrKind,           1, gl.FLOAT, false, stride, 2 * BYTES_PER_FLOAT);
+    gl.vertexAttribPointer(this.attrKind,              1, gl.FLOAT, false, stride, 2 * BYTES_PER_FLOAT);
     gl.enableVertexAttribArray(this.attrNormalizedAge);
-    gl.vertexAttribPointer(this.attrNormalizedAge,  1, gl.FLOAT, false, stride, 3 * BYTES_PER_FLOAT);
+    gl.vertexAttribPointer(this.attrNormalizedAge,     1, gl.FLOAT, false, stride, 3 * BYTES_PER_FLOAT);
+    gl.enableVertexAttribArray(this.attrDisturbanceFactor);
+    gl.vertexAttribPointer(this.attrDisturbanceFactor, 1, gl.FLOAT, false, stride, 4 * BYTES_PER_FLOAT);
 
     gl.drawArrays(gl.POINTS, 0, vertexCount);
   }

@@ -13,6 +13,11 @@ export interface ParticleSnapshot {
   readonly ageTicks:          Float32Array;
   /** Max lifetime in ticks — used with ageTicks for normalizedAge. */
   readonly lifetimeTicks:     Float32Array;
+  /**
+   * Per-particle disturbance level in [0, 1].
+   * Non-zero only for Fluid background particles; drives their alpha.
+   */
+  readonly disturbanceFactor: Float32Array;
   readonly particleCount:     number;
 }
 
@@ -50,16 +55,17 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
   return {
     tick: world.tick,
     particles: {
-      positionXWorld:  world.positionXWorld,
-      positionYWorld:  world.positionYWorld,
-      velocityXWorld:  world.velocityXWorld,
-      velocityYWorld:  world.velocityYWorld,
-      isAliveFlag:     world.isAliveFlag,
-      kindBuffer:      world.kindBuffer,
-      ownerEntityId:   world.ownerEntityId,
-      ageTicks:        world.ageTicks,
-      lifetimeTicks:   world.lifetimeTicks,
-      particleCount:   world.particleCount,
+      positionXWorld:    world.positionXWorld,
+      positionYWorld:    world.positionYWorld,
+      velocityXWorld:    world.velocityXWorld,
+      velocityYWorld:    world.velocityYWorld,
+      isAliveFlag:       world.isAliveFlag,
+      kindBuffer:        world.kindBuffer,
+      ownerEntityId:     world.ownerEntityId,
+      ageTicks:          world.ageTicks,
+      lifetimeTicks:     world.lifetimeTicks,
+      disturbanceFactor: world.disturbanceFactor,
+      particleCount:     world.particleCount,
     },
     clusters: clusterSnapshots,
   };

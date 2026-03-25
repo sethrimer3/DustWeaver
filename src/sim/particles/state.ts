@@ -25,6 +25,13 @@ export interface ParticleBuffers {
   // ---- Noise phase --------------------------------------------------------
   /** Per-particle seed mixed into the noise hash for staggered perturbation. */
   noiseTickSeed:     Uint32Array;
+  // ---- Fluid disturbance --------------------------------------------------
+  /**
+   * For Fluid background particles: 0 = fully transparent (undisturbed),
+   * 1 = fully visible (maximally disturbed).  Decays each tick and is bumped
+   * by nearby fast-moving non-Fluid particles.  Always 0 for non-Fluid kinds.
+   */
+  disturbanceFactor: Float32Array;
 }
 
 export function createParticleBuffers(): ParticleBuffers {
@@ -45,5 +52,6 @@ export function createParticleBuffers(): ParticleBuffers {
     anchorAngleRad:    new Float32Array(MAX_PARTICLES),
     anchorRadiusWorld: new Float32Array(MAX_PARTICLES),
     noiseTickSeed:     new Uint32Array(MAX_PARTICLES),
+    disturbanceFactor: new Float32Array(MAX_PARTICLES),
   };
 }

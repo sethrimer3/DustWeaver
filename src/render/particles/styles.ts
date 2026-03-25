@@ -26,6 +26,7 @@ const STYLES: ParticleStyle[] = [
   { colorHex: '#44cc44', radiusPx: 4 }, // Nature    — vivid green
   { colorHex: '#aaeeff', radiusPx: 4 }, // Crystal   — icy bright blue
   { colorHex: '#220033', radiusPx: 5 }, // Void      — near-black purple (slightly larger)
+  { colorHex: '#88ccff', radiusPx: 6 }, // Fluid     — pale aqua-blue (larger soft glow)
 ];
 
 const FALLBACK_STYLE: ParticleStyle = STYLES[0];
