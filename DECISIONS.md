@@ -26,6 +26,29 @@
 - HTML Canvas 2D for initial implementation.
 - WebGL upgrade path available if Canvas 2D performance is insufficient.
 
+## WebGL Particle Shaders
+- Particle rendering upgraded to WebGL (WebGL1 + `experimental-webgl` fallback).
+- Approach: single `gl.drawArrays(gl.POINTS, N)` call per frame — all alive
+  particles rendered as point sprites in one GPU draw.
+- Shader design:
+  - Vertex shader transforms world-space (x, y) to clip space via a
+    `u_resolution` uniform; sets `gl_PointSize` for the sprite footprint.
+  - Fragment shader uses `gl_PointCoord` to compute a radial glow falloff
+    (`pow(1 − dist, 1.8)`) plus a tight bright core
+    (`pow(max(0, 1 − dist × 3), 2.5)`).  No texture lookup needed.
+  - Per-particle colour (cyan = player, red = enemy) encoded as a single
+    `a_isPlayer` float attribute; GLSL `mix()` selects the colour.
+- Blending: `gl.blendFunc(SRC_ALPHA, ONE)` — additive.  Overlapping particles
+  accumulate into natural bloom without a post-process pass.
+- GPU buffer pre-allocated at `MAX_PARTICLES` capacity; each frame uploads only
+  the alive-particle slice via `gl.bufferSubData` (≤ 6 KB at 512 particles).
+- Canvas layering: WebGL canvas sits behind the 2D game-canvas (DOM insertion
+  order).  2D canvas calls `clearRect` each frame so transparent pixels expose
+  the WebGL layer.  Clusters, HUD, and UI text remain on the 2D canvas.
+- Graceful degradation: if WebGL context creation or shader compilation fails,
+  `WebGLParticleRenderer.isAvailable` is `false` and the caller falls back to
+  the existing Canvas 2D arc-based renderer — no code path removed.
+
 ## Bundler
 - Vite with TypeScript.
 - Entry: `src/main.ts`.
