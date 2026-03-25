@@ -9,7 +9,7 @@
  * onCancel() when the player returns to the World Map.
  */
 
-import { ParticleKind, EQUIPPABLE_PARTICLE_KIND_COUNT } from '../sim/particles/kinds';
+import { ParticleKind, EQUIPPABLE_KINDS } from '../sim/particles/kinds';
 import { getSlotCost, totalSlotCost } from '../sim/particles/slotCost';
 import { PlayerProgress } from '../progression/playerProgress';
 
@@ -26,6 +26,10 @@ interface KindMeta {
   colorHex: string;
 }
 
+/**
+ * Indexed in the same order as EQUIPPABLE_KINDS (Physical, Fire, ..., Water, Lava, Stone).
+ * Must stay in sync with EQUIPPABLE_KINDS.
+ */
 const KIND_META: KindMeta[] = [
   { name: 'Physical',  colorHex: '#7799aa', description: 'Dense, grounded particles. Steady and reliable.' },
   { name: 'Fire',      colorHex: '#ff5500', description: 'Flickering flames. Chaotic and short-lived.' },
@@ -36,16 +40,19 @@ const KIND_META: KindMeta[] = [
   { name: 'Wind',      colorHex: '#88ffee', description: 'Rushing gusts. Fast and highly aligned.' },
   { name: 'Holy',      colorHex: '#ffeeaa', description: 'Sacred light. Rising and orderly.' },
   { name: 'Shadow',    colorHex: '#9966ff', description: 'Dark tendrils. Sinking and unstable.' },
-  { name: 'Metal',     colorHex: '#aabbcc', description: 'Iron shards. Dense, durable, heavy.' },
+  { name: 'Metal',     colorHex: '#aabbcc', description: 'Iron shards. Dense, durable. Reflects damage when blocking.' },
   { name: 'Earth',     colorHex: '#aa8833', description: 'Stone fragments. Grounded and steady.' },
   { name: 'Nature',    colorHex: '#44cc44', description: 'Living vines. Organic and gentle.' },
   { name: 'Crystal',   colorHex: '#aaeeff', description: 'Prismatic shards. Precise and brilliant.' },
   { name: 'Void',      colorHex: '#9933cc', description: 'Dark matter rings. Exotic and powerful.' },
+  { name: 'Water',     colorHex: '#2299ee', description: 'Flowing currents. Fluid and persistent.' },
+  { name: 'Lava',      colorHex: '#ff2200', description: 'Molten rock. Slow, devastating, burns everything near it.' },
+  { name: 'Stone',     colorHex: '#888899', description: 'Rock fragments. Shatters into smaller pieces on impact.' },
 ];
 
-if (KIND_META.length !== EQUIPPABLE_PARTICLE_KIND_COUNT) {
+if (KIND_META.length !== EQUIPPABLE_KINDS.length) {
   throw new Error(
-    `KIND_META length (${KIND_META.length}) must equal EQUIPPABLE_PARTICLE_KIND_COUNT (${EQUIPPABLE_PARTICLE_KIND_COUNT})`,
+    `KIND_META length (${KIND_META.length}) must equal EQUIPPABLE_KINDS.length (${EQUIPPABLE_KINDS.length})`,
   );
 }
 
@@ -238,8 +245,8 @@ export function showLoadoutScreen(
 
   const cardEls: HTMLDivElement[] = [];
 
-  for (let k = 0; k < EQUIPPABLE_PARTICLE_KIND_COUNT; k++) {
-    const kind = k as ParticleKind;
+  for (let k = 0; k < EQUIPPABLE_KINDS.length; k++) {
+    const kind = EQUIPPABLE_KINDS[k];
     const meta = KIND_META[k];
     const cost = getSlotCost(kind);
 

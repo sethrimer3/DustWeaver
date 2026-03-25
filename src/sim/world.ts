@@ -40,6 +40,15 @@ export interface WorldState extends ParticleBuffers {
   /** Normalized block direction (updated each tick while blocking). */
   playerBlockDirXWorld: number;
   playerBlockDirYWorld: number;
+
+  // ---- Player movement input (set each frame by game screen) --------------
+  /**
+   * Normalized movement input direction for this tick.
+   * Set by the game screen before tick(); cleared by applyClusterMovement().
+   * Zero when no movement input is provided.
+   */
+  playerMoveInputDxWorld: number;
+  playerMoveInputDyWorld: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -62,6 +71,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isPlayerBlockingFlag: 0,
     playerBlockDirXWorld: 1.0,
     playerBlockDirYWorld: 0.0,
+    playerMoveInputDxWorld: 0.0,
+    playerMoveInputDyWorld: 0.0,
     ...createParticleBuffers(),
   };
 }

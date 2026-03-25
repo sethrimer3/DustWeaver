@@ -54,6 +54,12 @@ export interface ParticleBuffers {
    * When this reaches 0, behaviorMode resets to 0 (orbit).
    */
   attackModeTicksLeft: Float32Array;
+  /**
+   * When 1, this particle is transient (e.g., a stone shard or lava trail ember).
+   * Transient particles do NOT respawn when they expire or are destroyed.
+   * Their buffer slots are recycled by findFreeParticleSlot() after they die.
+   */
+  isTransientFlag:     Uint8Array;
 }
 
 export function createParticleBuffers(): ParticleBuffers {
@@ -79,5 +85,6 @@ export function createParticleBuffers(): ParticleBuffers {
     particleDurability:  new Float32Array(MAX_PARTICLES),
     respawnDelayTicks:   new Float32Array(MAX_PARTICLES),
     attackModeTicksLeft: new Float32Array(MAX_PARTICLES),
+    isTransientFlag:     new Uint8Array(MAX_PARTICLES),
   };
 }

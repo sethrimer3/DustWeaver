@@ -35,7 +35,7 @@ export interface WallDef {
 }
 
 /** Visual theme used for background tinting and atmospheric effects. */
-export type LevelTheme = 'physical' | 'water' | 'ice' | 'boss';
+export type LevelTheme = 'physical' | 'water' | 'ice' | 'boss' | 'fire' | 'lava' | 'stone' | 'metal';
 
 /** Full definition for a single game level. */
 export interface LevelDef {

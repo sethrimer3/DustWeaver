@@ -490,6 +490,64 @@ const WATER: ElementProfile = {
   regenerationRateTicks: 50,
 };
 
+/**
+ * Lava — slow, heavy, few in number but powerful.
+ * Extremely long lifetime; low noise; strong gravity.
+ * Leaves burning trails (implemented via lavaEffect.ts AoE damage).
+ */
+const LAVA: ElementProfile = {
+  massKg:               6.0,   // very heavy — slow and sluggish
+  drag:                 4.5,   // high drag — settles quickly
+  attractionStrength:   2.5,
+  orbitalStrength:      8.0,   // slow orbit
+  orbitRadiusWorld:     26.0,
+  noiseAmplitude:       5.0,   // low turbulence — deliberate movement
+  instability:          0.02,
+  curlStrength:         3.0,
+  diffusion:            0.5,
+  upwardBias:           -12.0, // strong gravity — sinks like molten rock
+  cohesion:             0.6,
+  separation:           0.8,
+  alignment:            0.4,
+  lifetimeBaseTicks:    900,   // very long-lived — persistent threats
+  lifetimeVarianceTicks: 120,
+  temperature:          1.0,   // maximum heat glow
+  stability:            0.85,
+  toughness:            3.5,   // durable
+  attackPower:          3.0,   // high damage per contact
+  maxPopulationCount:   8,     // few particles — rare and impactful
+  regenerationRateTicks: 150,  // slow regeneration
+};
+
+/**
+ * Stone — dense, physical, fragmented.
+ * Moderate lifetime; low noise; shatters into small stone shards on
+ * impact with walls or enemy particles.
+ */
+const STONE: ElementProfile = {
+  massKg:               3.0,   // heavy but less than lava
+  drag:                 3.0,
+  attractionStrength:   2.0,
+  orbitalStrength:      12.0,
+  orbitRadiusWorld:     28.0,
+  noiseAmplitude:       6.0,
+  instability:          0.03,
+  curlStrength:         1.5,
+  diffusion:            0.3,
+  upwardBias:           -8.0,  // falls like rocks
+  cohesion:             0.55,
+  separation:           0.7,
+  alignment:            0.35,
+  lifetimeBaseTicks:    550,
+  lifetimeVarianceTicks: 100,
+  temperature:          0.05,
+  stability:            0.80,
+  toughness:            2.8,   // tough but brittle on impact
+  attackPower:          2.0,
+  maxPopulationCount:   14,
+  regenerationRateTicks: 100,
+};
+
 // ---- Lookup table --------------------------------------------------------
 
 /**
@@ -513,6 +571,8 @@ export const ELEMENT_PROFILES: ElementProfile[] = [
   VOID,       // 13 — ParticleKind.Void
   FLUID,      // 14 — ParticleKind.Fluid
   WATER,      // 15 — ParticleKind.Water
+  LAVA,       // 16 — ParticleKind.Lava
+  STONE,      // 17 — ParticleKind.Stone
 ];
 
 /** Returns the profile for `kind`, falling back to Physical if out of range. */

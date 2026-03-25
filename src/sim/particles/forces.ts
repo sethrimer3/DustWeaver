@@ -13,6 +13,11 @@
  *  B) Different-owner pairs — gameplay combat:
  *       • Repulsion  — push away within a range
  *       • Destruction on contact — both particles die, owner loses HP
+ *
+ * Special mechanics:
+ *   • Metal (block mode=2): reflects incoming damage back to attacker.
+ *   • Stone: shatters into small fragments on contact kill.
+ *   • Lava: spawns short-lived fire trail particles when combat-killed.
  */
 
 import { WorldState } from '../world';
@@ -21,6 +26,7 @@ import type { SpatialGrid } from '../spatial/grid';
 import { getElementProfile } from './elementProfiles';
 import { getElementalMultiplier } from './negation';
 import { ParticleKind } from './kinds';
+import { nextFloat } from '../rng';
 
 export const PARTICLE_RADIUS_WORLD = 4.0;
 
@@ -44,6 +50,25 @@ const scratchDestroyA = new Int32Array(1024);
 const scratchDestroyB = new Int32Array(1024);
 let scratchDestroyCount = 0;
 
+// Pre-allocated scratch for post-contact stone shatter events
+const _shatterPosX  = new Float32Array(256);
+const _shatterPosY  = new Float32Array(256);
+const _shatterVelX  = new Float32Array(256);
+const _shatterVelY  = new Float32Array(256);
+const _shatterOwner = new Int32Array(256);
+let _shatterCount   = 0;
+
+// Pre-allocated scratch for post-contact lava trail fire spawns
+const _lavaTrailPosX  = new Float32Array(64);
+const _lavaTrailPosY  = new Float32Array(64);
+const _lavaTrailOwner = new Int32Array(64);
+let _lavaTrailCount   = 0;
+
+/** Stone shard lifetime (ticks) — kept short to flag as transient. */
+const STONE_SHARD_LIFETIME_TICKS = 35.0;
+/** Fire trail lifetime (ticks) — brief burning embers from lava. */
+const LAVA_FIRE_TRAIL_LIFETIME_TICKS = 55.0;
+
 // ---- Boid accumulator scratch -------------------------------------------
 // Per-particle accumulators for same-owner neighbour sums.
 // Re-used each tick; indexed by particleIndex — pre-allocated once.
@@ -55,6 +80,104 @@ const _alignX      = new Float32Array(MAX_PARTICLES);
 const _alignY      = new Float32Array(MAX_PARTICLES);
 const _neighborCount = new Uint16Array(MAX_PARTICLES);
 
+// ---- Helpers -------------------------------------------------------------
+
+/** Finds a dead transient slot to reuse, or allocates a new one at the end. */
+function _findFreeSlot(world: WorldState): number {
+  for (let i = 0; i < world.particleCount; i++) {
+    if (world.isAliveFlag[i] === 0 && world.respawnDelayTicks[i] <= 0 && world.isTransientFlag[i] === 1) {
+      return i;
+    }
+  }
+  if (world.particleCount < world.positionXWorld.length) {
+    return world.particleCount++;
+  }
+  return -1;
+}
+
+/** Spawns 2 stone shard particles at the given impact position/velocity. */
+function _spawnStoneShards(
+  world: WorldState,
+  posX: number, posY: number,
+  impactVelX: number, impactVelY: number,
+  ownerEntityIdValue: number,
+): void {
+  const profile = getElementProfile(ParticleKind.Stone);
+  const rng = world.rng;
+
+  for (let s = 0; s < 2; s++) {
+    const idx = _findFreeSlot(world);
+    if (idx === -1) return;
+
+    const angleRad = nextFloat(rng) * Math.PI * 2.0;
+    const speed = 100.0 + nextFloat(rng) * 100.0;
+
+    world.positionXWorld[idx]    = posX;
+    world.positionYWorld[idx]    = posY;
+    world.velocityXWorld[idx]    = Math.cos(angleRad) * speed + impactVelX * 0.3;
+    world.velocityYWorld[idx]    = Math.sin(angleRad) * speed + impactVelY * 0.3;
+    world.forceX[idx]            = 0;
+    world.forceY[idx]            = 0;
+    world.massKg[idx]            = profile.massKg * 0.35;
+    world.chargeUnits[idx]       = 0;
+    world.isAliveFlag[idx]       = 1;
+    world.kindBuffer[idx]        = ParticleKind.Stone;
+    world.ownerEntityId[idx]     = ownerEntityIdValue;
+    world.anchorAngleRad[idx]    = 0;
+    world.anchorRadiusWorld[idx] = 0;
+    world.disturbanceFactor[idx] = 0;
+    world.noiseTickSeed[idx]     = ((nextFloat(rng) * 0xffffffff) >>> 0);
+    world.lifetimeTicks[idx]     = STONE_SHARD_LIFETIME_TICKS;
+    world.ageTicks[idx]          = 0;
+    world.behaviorMode[idx]      = 1;   // attack mode — suppresses binding
+    world.attackModeTicksLeft[idx] = STONE_SHARD_LIFETIME_TICKS + 10;
+    world.particleDurability[idx] = 1.0;
+    world.respawnDelayTicks[idx] = 0;
+    world.isTransientFlag[idx]   = 1;   // transient — no respawn
+  }
+}
+
+/** Spawns 2 short-lived fire particles as lava trail embers at given position. */
+function _spawnLavaTrailFire(
+  world: WorldState,
+  posX: number, posY: number,
+  ownerEntityIdValue: number,
+): void {
+  const profile = getElementProfile(ParticleKind.Fire);
+  const rng = world.rng;
+
+  for (let s = 0; s < 2; s++) {
+    const idx = _findFreeSlot(world);
+    if (idx === -1) return;
+
+    const angleRad = nextFloat(rng) * Math.PI * 2.0;
+    const speed = 30.0 + nextFloat(rng) * 60.0;
+
+    world.positionXWorld[idx]    = posX;
+    world.positionYWorld[idx]    = posY;
+    world.velocityXWorld[idx]    = Math.cos(angleRad) * speed;
+    world.velocityYWorld[idx]    = Math.sin(angleRad) * speed;
+    world.forceX[idx]            = 0;
+    world.forceY[idx]            = 0;
+    world.massKg[idx]            = profile.massKg;
+    world.chargeUnits[idx]       = 0;
+    world.isAliveFlag[idx]       = 1;
+    world.kindBuffer[idx]        = ParticleKind.Fire;
+    world.ownerEntityId[idx]     = ownerEntityIdValue;
+    world.anchorAngleRad[idx]    = 0;
+    world.anchorRadiusWorld[idx] = 0;
+    world.disturbanceFactor[idx] = 0;
+    world.noiseTickSeed[idx]     = ((nextFloat(rng) * 0xffffffff) >>> 0);
+    world.lifetimeTicks[idx]     = LAVA_FIRE_TRAIL_LIFETIME_TICKS;
+    world.ageTicks[idx]          = 0;
+    world.behaviorMode[idx]      = 1;   // attack mode — flies freely
+    world.attackModeTicksLeft[idx] = LAVA_FIRE_TRAIL_LIFETIME_TICKS + 10;
+    world.particleDurability[idx] = 1.0;
+    world.respawnDelayTicks[idx] = 0;
+    world.isTransientFlag[idx]   = 1;   // transient — no respawn
+  }
+}
+
 // ---- Main export --------------------------------------------------------
 
 export function applyInterParticleForces(world: WorldState): void {
@@ -64,7 +187,7 @@ export function applyInterParticleForces(world: WorldState): void {
     forceX, forceY,
     isAliveFlag, ownerEntityId, kindBuffer,
     particleCount, clusters,
-    particleDurability, respawnDelayTicks,
+    particleDurability, respawnDelayTicks, behaviorMode, isTransientFlag,
   } = world;
 
   // ---- Rebuild spatial grid -------------------------------------------
@@ -190,6 +313,9 @@ export function applyInterParticleForces(world: WorldState): void {
   }
 
   // ---- Apply deferred contact resolution (elemental durability model) ----
+  _shatterCount = 0;
+  _lavaTrailCount = 0;
+
   for (let k = 0; k < scratchDestroyCount; k++) {
     const ai = scratchDestroyA[k];
     const bi = scratchDestroyB[k];
@@ -203,19 +329,75 @@ export function applyInterParticleForces(world: WorldState): void {
     const multAvsB = getElementalMultiplier(kindA, kindB);
     const multBvsA = getElementalMultiplier(kindB, kindA);
 
-    // Each particle deals damage to the other
-    particleDurability[bi] -= profileA.attackPower * multAvsB;
-    particleDurability[ai] -= profileB.attackPower * multBvsA;
+    // ── Metal block-mode reflection ──────────────────────────────────────────
+    // When a Metal particle is in block mode (behaviorMode=2), incoming attacks
+    // deal greatly reduced damage to the metal and are reflected back to the
+    // attacker at double power.
+    let dmgAtoB = profileA.attackPower * multAvsB;
+    let dmgBtoA = profileB.attackPower * multBvsA;
 
+    if (kindB === ParticleKind.Metal && behaviorMode[bi] === 2) {
+      // B is blocking metal — reflect A's damage back, metal takes minimal hit
+      dmgBtoA = dmgBtoA * 2.0;  // reflected damage to A
+      dmgAtoB = dmgAtoB * 0.15; // only 15% gets through metal's block
+    } else if (kindA === ParticleKind.Metal && behaviorMode[ai] === 2) {
+      // A is blocking metal
+      dmgAtoB = dmgAtoB * 2.0;
+      dmgBtoA = dmgBtoA * 0.15;
+    }
+
+    // Each particle deals damage to the other
+    particleDurability[bi] -= dmgAtoB;
+    particleDurability[ai] -= dmgBtoA;
+
+    // ── Stone shatter on combat kill ─────────────────────────────────────────
     if (particleDurability[bi] <= 0) {
       isAliveFlag[bi] = 0;
       respawnDelayTicks[bi] = profileB.regenerationRateTicks;
+      if (kindB === ParticleKind.Stone && isTransientFlag[bi] === 0 && _shatterCount < _shatterPosX.length) {
+        _shatterPosX[_shatterCount] = positionXWorld[bi];
+        _shatterPosY[_shatterCount] = positionYWorld[bi];
+        _shatterVelX[_shatterCount] = velocityXWorld[bi];
+        _shatterVelY[_shatterCount] = velocityYWorld[bi];
+        _shatterOwner[_shatterCount] = ownerEntityId[bi];
+        _shatterCount++;
+      }
+      if (kindB === ParticleKind.Lava && isTransientFlag[bi] === 0 && _lavaTrailCount < _lavaTrailPosX.length) {
+        _lavaTrailPosX[_lavaTrailCount] = positionXWorld[bi];
+        _lavaTrailPosY[_lavaTrailCount] = positionYWorld[bi];
+        _lavaTrailOwner[_lavaTrailCount] = ownerEntityId[bi];
+        _lavaTrailCount++;
+      }
     }
     if (particleDurability[ai] <= 0) {
       isAliveFlag[ai] = 0;
       respawnDelayTicks[ai] = profileA.regenerationRateTicks;
+      if (kindA === ParticleKind.Stone && isTransientFlag[ai] === 0 && _shatterCount < _shatterPosX.length) {
+        _shatterPosX[_shatterCount] = positionXWorld[ai];
+        _shatterPosY[_shatterCount] = positionYWorld[ai];
+        _shatterVelX[_shatterCount] = velocityXWorld[ai];
+        _shatterVelY[_shatterCount] = velocityYWorld[ai];
+        _shatterOwner[_shatterCount] = ownerEntityId[ai];
+        _shatterCount++;
+      }
+      if (kindA === ParticleKind.Lava && isTransientFlag[ai] === 0 && _lavaTrailCount < _lavaTrailPosX.length) {
+        _lavaTrailPosX[_lavaTrailCount] = positionXWorld[ai];
+        _lavaTrailPosY[_lavaTrailCount] = positionYWorld[ai];
+        _lavaTrailOwner[_lavaTrailCount] = ownerEntityId[ai];
+        _lavaTrailCount++;
+      }
     }
     // NOTE: Cluster HP damage is now only dealt via core contact (see below).
+  }
+
+  // ── Spawn stone shards from recorded shatter events ──────────────────────
+  for (let s = 0; s < _shatterCount; s++) {
+    _spawnStoneShards(world, _shatterPosX[s], _shatterPosY[s], _shatterVelX[s], _shatterVelY[s], _shatterOwner[s]);
+  }
+
+  // ── Spawn lava trail fire from recorded kill events ───────────────────────
+  for (let l = 0; l < _lavaTrailCount; l++) {
+    _spawnLavaTrailFire(world, _lavaTrailPosX[l], _lavaTrailPosY[l], _lavaTrailOwner[l]);
   }
 
   // ---- Core-contact damage -----------------------------------------------
