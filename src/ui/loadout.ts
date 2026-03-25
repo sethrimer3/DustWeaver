@@ -9,7 +9,7 @@
  * onCancel() when the player returns to the World Map.
  */
 
-import { ParticleKind, EQUIPPABLE_KINDS } from '../sim/particles/kinds';
+import { ParticleKind, EQUIPPABLE_KINDS, EQUIPPABLE_PARTICLE_KIND_COUNT } from '../sim/particles/kinds';
 import { getSlotCost, totalSlotCost } from '../sim/particles/slotCost';
 import { PlayerProgress } from '../progression/playerProgress';
 
