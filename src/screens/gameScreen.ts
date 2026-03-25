@@ -8,7 +8,7 @@ import { renderParticles } from '../render/particles/renderer';
 import { renderClusters } from '../render/clusters/renderer';
 import { renderHudOverlay, HudState } from '../render/hud/overlay';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
-import { createInputState, attachInputListeners, collectCommands } from '../input/handler';
+import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
 
 const FIXED_DT_MS = 16.666;
@@ -16,6 +16,12 @@ const PLAYER_SPEED_WORLD = 100.0;
 const PARTICLE_COUNT_PER_CLUSTER = 8;
 const ORBIT_RADIUS_WORLD = 30.0;
 const WORLD_TO_SCREEN_SCALE = 1.0;
+
+// Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
+const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
+const JOYSTICK_INNER_RADIUS_PX = 22;
+
+const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 export interface GameScreenCallbacks {
   onReturnToMap: () => void;
@@ -49,18 +55,26 @@ function spawnClusterParticles(
 
 export function startGameScreen(
   canvas: HTMLCanvasElement,
+  uiRoot: HTMLElement,
   callbacks: GameScreenCallbacks,
 ): () => void {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-
   // Attempt to create the WebGL particle renderer.  If WebGL is unavailable
   // (old device, software renderer, etc.) we fall back to Canvas 2D rendering.
   const webglRenderer = new WebGLParticleRenderer();
+
+  function resizeCanvas(): void {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    if (webglRenderer.isAvailable) {
+      webglRenderer.resize(canvas.width, canvas.height);
+    }
+  }
+
+  resizeCanvas();
+
   if (webglRenderer.isAvailable) {
     // Insert the WebGL canvas BEFORE game-canvas so it renders underneath.
     canvas.parentElement!.insertBefore(webglRenderer.canvas, canvas);
-    webglRenderer.resize(canvas.width, canvas.height);
   }
 
   const ctx = canvas.getContext('2d')!;
@@ -83,6 +97,23 @@ export function startGameScreen(
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
 
+  // Mobile "Return to Map" button — only injected when on a touch device
+  let mapButton: HTMLButtonElement | null = null;
+  if (IS_TOUCH_DEVICE) {
+    mapButton = document.createElement('button');
+    mapButton.textContent = 'MAP';
+    mapButton.style.cssText = `
+      position: absolute; top: 16px; right: 16px;
+      background: rgba(0,0,0,0.6); border: 2px solid #00cfff; color: #00cfff;
+      padding: 10px 20px; font-size: 1rem; font-family: monospace;
+      cursor: pointer; border-radius: 6px; touch-action: manipulation;
+    `;
+    mapButton.addEventListener('click', () => {
+      inputState.isEscapePressed = true;
+    });
+    uiRoot.appendChild(mapButton);
+  }
+
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
 
   let lastTimestampMs = 0;
@@ -91,6 +122,11 @@ export function startGameScreen(
   let fpsAccMs = 0;
   let isRunning = true;
   let rafHandle = 0;
+
+  function onResize(): void {
+    resizeCanvas();
+  }
+  window.addEventListener('resize', onResize);
 
   function frame(timestampMs: number): void {
     if (!isRunning) return;
@@ -168,9 +204,50 @@ export function startGameScreen(
     renderClusters(ctx, snapshot, 0, 0, WORLD_TO_SCREEN_SCALE);
     renderHudOverlay(ctx, hudState);
 
+    // Draw touch joystick visual when active
+    if (inputState.isTouchJoystickActiveFlag === 1) {
+      const bx = inputState.touchJoystickBaseXPx;
+      const by = inputState.touchJoystickBaseYPx;
+      const cx = inputState.touchJoystickCurrentXPx;
+      const cy = inputState.touchJoystickCurrentYPx;
+
+      ctx.save();
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(bx, by, JOYSTICK_OUTER_RADIUS_PX, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0,207,255,0.35)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(0,207,255,0.08)';
+      ctx.fill();
+
+      // Clamp thumb to outer ring
+      const dx = cx - bx;
+      const dy = cy - by;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      let thumbXPx = cx;
+      let thumbYPx = cy;
+      if (dist > JOYSTICK_OUTER_RADIUS_PX) {
+        thumbXPx = bx + (dx / dist) * JOYSTICK_OUTER_RADIUS_PX;
+        thumbYPx = by + (dy / dist) * JOYSTICK_OUTER_RADIUS_PX;
+      }
+
+      // Inner thumb
+      ctx.beginPath();
+      ctx.arc(thumbXPx, thumbYPx, JOYSTICK_INNER_RADIUS_PX, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,207,255,0.45)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Control hints
+    const controlHintText = IS_TOUCH_DEVICE
+      ? 'Touch & drag to move  |  TAP MAP to return'
+      : 'ESC - Return to Map  |  WASD - Move';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '12px monospace';
-    ctx.fillText('ESC - Return to Map | WASD - Move', canvas.width / 2 - 120, canvas.height - 10);
+    const hintWidthPx = ctx.measureText(controlHintText).width;
+    ctx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
 
     rafHandle = requestAnimationFrame(frame);
   }
@@ -182,5 +259,9 @@ export function startGameScreen(
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
     detachInput();
     webglRenderer.dispose();
+    window.removeEventListener('resize', onResize);
+    if (mapButton !== null && mapButton.parentElement !== null) {
+      mapButton.parentElement.removeChild(mapButton);
+    }
   };
 }
