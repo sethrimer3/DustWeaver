@@ -135,15 +135,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       // Was blocking — collectCommands will emit BlockEnd on next frame
       // (isMouseDownFlag=0 && isBlockingFlag=1 triggers the BlockEnd path)
     } else if (holdMs < ATTACK_HOLD_THRESHOLD_MS) {
-      // Quick click — fire attack in direction of mouse movement, or rightward if stationary
+      // Quick click — attack toward current mouse cursor position (gameScreen converts to direction)
       state.isAttackFiredFlag = 1;
-      state.attackDirXPx = e.clientX - state.mouseDownXPx;
-      state.attackDirYPx = e.clientY - state.mouseDownYPx;
-      // If essentially no drag, default to rightward direction
-      if (Math.abs(state.attackDirXPx) < 2 && Math.abs(state.attackDirYPx) < 2) {
-        state.attackDirXPx = 1;
-        state.attackDirYPx = 0;
-      }
+      state.attackDirXPx = e.clientX;
+      state.attackDirYPx = e.clientY;
     }
   }
 
@@ -215,10 +210,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         if (state.isBlockingFlag === 1) {
           // Let collectCommands emit BlockEnd (isBlockingFlag stays 1 until then)
         } else {
-          // Quick swipe — fire attack
+          // Quick swipe — fire attack toward touch release position (gameScreen converts to direction)
           state.isAttackFiredFlag = 1;
-          state.attackDirXPx = state.secondTouchCurrentXPx - state.secondTouchStartXPx;
-          state.attackDirYPx = state.secondTouchCurrentYPx - state.secondTouchStartYPx;
+          state.attackDirXPx = state.secondTouchCurrentXPx;
+          state.attackDirYPx = state.secondTouchCurrentYPx;
         }
       }
     }
@@ -267,11 +262,9 @@ export function collectCommands(input: InputState): GameCommand[] {
   // ---- Attack / block commands -------------------------------------------
   if (input.isAttackFiredFlag === 1) {
     input.isAttackFiredFlag = 0;
-    let adx = input.attackDirXPx;
-    let ady = input.attackDirYPx;
-    const alen = Math.sqrt(adx * adx + ady * ady);
-    if (alen < 0.1) { adx = 1; ady = 0; } else { adx /= alen; ady /= alen; }
-    commands.push({ kind: CommandKind.Attack, dirXNorm: adx, dirYNorm: ady });
+    // attackDirXPx/attackDirYPx hold the raw aim screen position;
+    // gameScreen.ts converts to a world-space direction relative to the player.
+    commands.push({ kind: CommandKind.Attack, aimXPx: input.attackDirXPx, aimYPx: input.attackDirYPx });
   }
 
   // Transition from mouse-down to blocking when hold threshold exceeded

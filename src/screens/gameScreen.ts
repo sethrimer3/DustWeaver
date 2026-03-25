@@ -285,9 +285,17 @@ export function startGameScreen(
         moveDx = cmd.dx;
         moveDy = cmd.dy;
       } else if (cmd.kind === CommandKind.Attack) {
-        world.playerAttackDirXWorld = cmd.dirXNorm;
-        world.playerAttackDirYWorld = cmd.dirYNorm;
-        world.playerAttackTriggeredFlag = 1;
+        const player = world.clusters[0];
+        if (player !== undefined) {
+          // Convert aim screen position to world-space direction relative to the player
+          let dirX = cmd.aimXPx - player.positionXWorld;
+          let dirY = cmd.aimYPx - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
+          world.playerAttackDirXWorld = dirX;
+          world.playerAttackDirYWorld = dirY;
+          world.playerAttackTriggeredFlag = 1;
+        }
       } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
         const player = world.clusters[0];
         if (player !== undefined) {

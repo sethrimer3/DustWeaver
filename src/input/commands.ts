@@ -19,9 +19,13 @@ export interface ReturnToMapCommand {
 
 export interface AttackCommand {
   kind: CommandKind.Attack;
-  /** Normalized attack direction in screen space. */
-  dirXNorm: number;
-  dirYNorm: number;
+  /**
+   * Attack aim point in screen space (absolute pixels).
+   * On PC this is the mouse cursor position; on mobile it is the touch-release position.
+   * gameScreen.ts converts this to a world-space direction relative to the player.
+   */
+  aimXPx: number;
+  aimYPx: number;
 }
 
 export interface BlockStartCommand {
