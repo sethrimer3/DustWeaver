@@ -2,10 +2,10 @@
  * Particle lifetime and respawn management.
  *
  * Each tick, every alive particle's age increments by 1.
- * When age reaches its lifetime the particle is respawned at its owner
- * with a fresh random anchor offset — keeping the particle count constant
- * and element-specific decay rates (fire dies and rebirths quickly;
- * ice persists much longer).
+ * When age reaches its lifetime the particle is respawned:
+ *   • Owned particles (ownerEntityId ≥ 0) respawn at their owner cluster.
+ *   • Fluid background particles (ownerEntityId === -1) respawn at a random
+ *     position within the world bounds — keeping the fluid field constant.
  *
  * Respawning uses world.rng so the sequence is deterministic and
  * reproducible given the same initial seed.
@@ -14,6 +14,7 @@
 import { WorldState } from '../world';
 import { getElementProfile } from './elementProfiles';
 import { nextFloat, nextFloatRange } from '../rng';
+import { ParticleKind } from './kinds';
 
 export function updateParticleLifetimes(world: WorldState): void {
   const {
@@ -24,8 +25,9 @@ export function updateParticleLifetimes(world: WorldState): void {
     ownerEntityId, clusters,
     ageTicks, lifetimeTicks,
     anchorAngleRad, anchorRadiusWorld,
-    noiseTickSeed,
+    noiseTickSeed, disturbanceFactor,
     particleCount, rng,
+    worldWidthWorld, worldHeightWorld,
   } = world;
 
   for (let i = 0; i < particleCount; i++) {
@@ -35,7 +37,33 @@ export function updateParticleLifetimes(world: WorldState): void {
 
     if (ageTicks[i] < lifetimeTicks[i]) continue;
 
-    // ---- Particle has expired: respawn at owner -------------------------
+    // ---- Particle has expired -------------------------------------------
+    const profile = getElementProfile(kindBuffer[i]);
+
+    // New lifetime with variance
+    const newLifetime = profile.lifetimeBaseTicks
+      + nextFloatRange(rng,
+          -profile.lifetimeVarianceTicks,
+           profile.lifetimeVarianceTicks);
+
+    // ---- Fluid background particle: respawn at random world position ----
+    if (kindBuffer[i] === ParticleKind.Fluid) {
+      positionXWorld[i] = nextFloat(rng) * worldWidthWorld;
+      positionYWorld[i] = nextFloat(rng) * worldHeightWorld;
+      velocityXWorld[i] = 0.0;
+      velocityYWorld[i] = 0.0;
+      forceX[i] = 0.0;
+      forceY[i] = 0.0;
+      massKg[i] = profile.massKg;
+      disturbanceFactor[i] = 0.0;
+      noiseTickSeed[i] = (nextFloat(rng) * 0xffffffff) >>> 0;
+      lifetimeTicks[i] = Math.max(2.0, newLifetime);
+      ageTicks[i] = 0.0;
+      isAliveFlag[i] = 1;
+      continue;
+    }
+
+    // ---- Owned particle: respawn at owner --------------------------------
     const ownerId = ownerEntityId[i];
     let ownerX = 0.0;
     let ownerY = 0.0;
@@ -54,8 +82,6 @@ export function updateParticleLifetimes(world: WorldState): void {
       isAliveFlag[i] = 0;
       continue;
     }
-
-    const profile = getElementProfile(kindBuffer[i]);
 
     // New random anchor angle and radius (small variance around base orbit)
     const newAngleRad    = nextFloat(rng) * (Math.PI * 2);
@@ -80,11 +106,6 @@ export function updateParticleLifetimes(world: WorldState): void {
     forceY[i] = 0.0;
     massKg[i] = profile.massKg;
 
-    // New lifetime with variance
-    const newLifetime = profile.lifetimeBaseTicks
-      + nextFloatRange(rng,
-          -profile.lifetimeVarianceTicks,
-           profile.lifetimeVarianceTicks);
     lifetimeTicks[i] = Math.max(2.0, newLifetime);
     ageTicks[i]      = 0.0;
     isAliveFlag[i]   = 1;

@@ -366,6 +366,31 @@ const VOID: ElementProfile = {
   stability:            0.5,
 };
 
+/**
+ * Fluid — invisible background particles that flow like water.
+ * They have no owner and drift freely via gentle curl noise.
+ * They become visible when disturbed by nearby fast-moving particles.
+ */
+const FLUID: ElementProfile = {
+  massKg:               0.12,   // very light — responsive to forces
+  drag:                 1.8,    // enough drag to settle back after disturbance
+  attractionStrength:   0.0,    // no owner anchor
+  orbitalStrength:      0.0,
+  orbitRadiusWorld:     60.0,   // spawn spread reference (used at spawn time)
+  noiseAmplitude:       3.0,    // gentle random perturbation
+  instability:          0.02,   // very slow noise direction changes — smooth drift
+  curlStrength:         6.0,    // curl noise gives fluid-like meandering flow
+  diffusion:            0.5,
+  upwardBias:           0.0,
+  cohesion:             0.0,    // no boid behaviour — fluid particles ignore each other
+  separation:           0.0,
+  alignment:            0.0,
+  lifetimeBaseTicks:    4000,   // very long-lived; rarely respawn
+  lifetimeVarianceTicks: 800,
+  temperature:          0.0,    // cold/neutral
+  stability:            1.0,
+};
+
 // ---- Lookup table --------------------------------------------------------
 
 /**
@@ -387,6 +412,7 @@ export const ELEMENT_PROFILES: ElementProfile[] = [
   NATURE,     // 11 — ParticleKind.Nature
   CRYSTAL,    // 12 — ParticleKind.Crystal
   VOID,       // 13 — ParticleKind.Void
+  FLUID,      // 14 — ParticleKind.Fluid
 ];
 
 /** Returns the profile for `kind`, falling back to Physical if out of range. */

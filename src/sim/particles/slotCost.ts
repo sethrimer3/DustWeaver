@@ -8,7 +8,7 @@
  * Cost scale: 1 (cheapest) → 4 (rarest/most powerful)
  */
 
-import { ParticleKind, PARTICLE_KIND_COUNT } from './kinds';
+import { ParticleKind, EQUIPPABLE_PARTICLE_KIND_COUNT } from './kinds';
 
 /**
  * Slot cost table indexed by ParticleKind value.
@@ -31,9 +31,9 @@ const SLOT_COSTS: number[] = [
   4, // Void       — maximum cost (rare, exotic)
 ];
 
-if (SLOT_COSTS.length !== PARTICLE_KIND_COUNT) {
+if (SLOT_COSTS.length !== EQUIPPABLE_PARTICLE_KIND_COUNT) {
   throw new Error(
-    `SLOT_COSTS length (${SLOT_COSTS.length}) must equal PARTICLE_KIND_COUNT (${PARTICLE_KIND_COUNT})`,
+    `SLOT_COSTS length (${SLOT_COSTS.length}) must equal EQUIPPABLE_PARTICLE_KIND_COUNT (${EQUIPPABLE_PARTICLE_KIND_COUNT})`,
   );
 }
 

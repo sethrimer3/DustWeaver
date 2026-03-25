@@ -1,7 +1,8 @@
 /**
  * GLSL shader sources for WebGL particle rendering.
  *
- * Vertex format (per particle): [x, y, kind, normalizedAge]  (4 floats)
+ * Vertex format (per particle): [x, y, kind, normalizedAge, disturbanceFactor]
+ *                                (5 floats)
  *
  * Design goals:
  *  - Single draw call for all particles via gl.POINTS / point sprites.
@@ -11,6 +12,8 @@
  *  - Shape clipping via gl_PointCoord — non-Physical kinds render as polygons.
  *  - Radial glow falloff for circle kinds; edge highlight for polygon kinds.
  *  - Additive blending (SRC_ALPHA, ONE) produces natural bloom.
+ *  - Fluid particles (kind 14) are normally transparent; disturbanceFactor
+ *    drives their alpha so they appear only when disturbed by nearby movement.
  *  - GLSL ES 1.00 for maximum device compatibility.
  */
 
@@ -19,12 +22,14 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
   attribute vec2  a_positionScreen;
   attribute float a_kind;
   attribute float a_normalizedAge;
+  attribute float a_disturbanceFactor;
 
   uniform vec2  u_resolution;
   uniform float u_pointSizePx;
 
   varying float v_kind;
   varying float v_normalizedAge;
+  varying float v_disturbanceFactor;
 
   void main() {
     vec2 clip = (a_positionScreen / u_resolution) * 2.0 - 1.0;
@@ -35,8 +40,9 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
     float sizeFactor = 1.0 - a_normalizedAge * 0.40;
     gl_PointSize = u_pointSizePx * sizeFactor;
 
-    v_kind          = a_kind;
-    v_normalizedAge = a_normalizedAge;
+    v_kind              = a_kind;
+    v_normalizedAge     = a_normalizedAge;
+    v_disturbanceFactor = a_disturbanceFactor;
   }
 `.trim();
 
@@ -56,6 +62,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
 
   varying float v_kind;
   varying float v_normalizedAge;
+  varying float v_disturbanceFactor;
 
   const float PI = 3.14159265;
 
@@ -86,6 +93,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 11) return vec3(0.27, 0.80, 0.27);  // Nature    — vivid green
     if (ki == 12) return vec3(0.67, 0.93, 1.00);  // Crystal   — icy bright blue
     if (ki == 13) return vec3(0.13, 0.00, 0.20);  // Void      — near-black purple
+    if (ki == 14) return vec3(0.55, 0.80, 1.00);  // Fluid     — pale aqua-blue
     return vec3(0.47, 0.60, 0.67);                // Physical  — steel blue-grey
   }
 
@@ -106,6 +114,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 11) return 0.0; // Nature    → Circle
     if (ki == 12) return 4.0; // Crystal   → Hexagon
     if (ki == 13) return 7.0; // Void      → Ring
+    if (ki == 14) return 0.0; // Fluid     → Circle
     return 0.0;               // Physical  → Circle (default)
   }
 
@@ -173,6 +182,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     // gl_PointCoord is in [0,1]; remap to [-0.5, 0.5].
     vec2 coord = gl_PointCoord - vec2(0.5);
 
+    int ki = int(v_kind + 0.5);
     int shape = int(kindShape(v_kind) + 0.5);
     if (outsideShape(coord, shape)) discard;
 
@@ -183,8 +193,16 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     float ageFade = 1.0 - v_normalizedAge;
     float alpha;
 
-    if (shape == 0) {
-      // Circle: radial soft-glow with bright white-hot core (original behaviour).
+    if (ki == 14) {
+      // Fluid background particle: completely transparent when undisturbed;
+      // glows as a soft pale-aqua radial blur when disturbed by nearby motion.
+      float glow = pow(max(0.0, 1.0 - dist * 2.0), 1.8);
+      float core = pow(max(0.0, 1.0 - dist * 5.0), 3.0);
+      color += vec3(core * 0.35);
+      // disturbanceFactor drives visibility; ageFade prevents end-of-life flash.
+      alpha = glow * v_disturbanceFactor * ageFade * 0.55;
+    } else if (shape == 0) {
+      // Circle: radial soft-glow with bright white-hot core (Physical, Nature).
       float glow = pow(1.0 - dist * 2.0, 1.8);
       float core = pow(max(0.0, 1.0 - dist * 6.0), 2.5);
       color += vec3(core * 0.7);

@@ -9,6 +9,10 @@ export interface WorldState extends ParticleBuffers {
   clusters: ClusterState[];
   /** Deterministic PRNG used for in-sim events (particle respawn, spawning). */
   rng: RngState;
+  /** Width of the playable world area in world units (used for Fluid respawn bounds). */
+  worldWidthWorld: number;
+  /** Height of the playable world area in world units (used for Fluid respawn bounds). */
+  worldHeightWorld: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -18,6 +22,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     particleCount: 0,
     clusters: [],
     rng: createRng(rngSeed),
+    worldWidthWorld: 800,
+    worldHeightWorld: 600,
     ...createParticleBuffers(),
   };
 }

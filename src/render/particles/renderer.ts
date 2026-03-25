@@ -1,6 +1,6 @@
 import { WorldSnapshot } from '../snapshot';
 import { getParticleStyle } from './styles';
-import { getKindShape, ParticleShape } from '../../sim/particles/kinds';
+import { getKindShape, ParticleShape, ParticleKind } from '../../sim/particles/kinds';
 
 // ---- Shape drawing helpers -----------------------------------------------
 
@@ -121,12 +121,17 @@ function drawParticleShape(
 
 // ---- Main renderer -------------------------------------------------------
 
+/** Skip drawing particles whose computed alpha is below this threshold — avoids
+ *  submitting nearly-invisible draw calls (saves Canvas 2D state overhead). */
+const MIN_VISIBLE_ALPHA = 0.004;
+
 export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
   const { particles } = snapshot;
   const {
     particleCount, isAliveFlag,
     positionXWorld, positionYWorld,
     kindBuffer, ageTicks, lifetimeTicks,
+    disturbanceFactor,
   } = particles;
 
   for (let i = 0; i < particleCount; i++) {
@@ -141,7 +146,14 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     // Alpha fades out as the particle approaches end of life
     const lt      = lifetimeTicks[i];
     const normAge = lt > 0 ? Math.min(1.0, ageTicks[i] / lt) : 0.0;
-    const alpha   = 1.0 - normAge;
+    const ageFade = 1.0 - normAge;
+
+    // Fluid background particles are only visible when disturbed
+    const alpha = kind === ParticleKind.Fluid
+      ? disturbanceFactor[i] * ageFade * 0.55
+      : ageFade;
+
+    if (alpha <= MIN_VISIBLE_ALPHA) continue;
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = style.colorHex;

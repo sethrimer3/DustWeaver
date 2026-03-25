@@ -9,7 +9,7 @@
  * onCancel() when the player returns to the World Map.
  */
 
-import { ParticleKind, PARTICLE_KIND_COUNT } from '../sim/particles/kinds';
+import { ParticleKind, EQUIPPABLE_PARTICLE_KIND_COUNT } from '../sim/particles/kinds';
 import { getSlotCost, totalSlotCost } from '../sim/particles/slotCost';
 import { PlayerProgress } from '../progression/playerProgress';
 
@@ -43,9 +43,9 @@ const KIND_META: KindMeta[] = [
   { name: 'Void',      colorHex: '#9933cc', description: 'Dark matter rings. Exotic and powerful.' },
 ];
 
-if (KIND_META.length !== PARTICLE_KIND_COUNT) {
+if (KIND_META.length !== EQUIPPABLE_PARTICLE_KIND_COUNT) {
   throw new Error(
-    `KIND_META length (${KIND_META.length}) must equal PARTICLE_KIND_COUNT (${PARTICLE_KIND_COUNT})`,
+    `KIND_META length (${KIND_META.length}) must equal EQUIPPABLE_PARTICLE_KIND_COUNT (${EQUIPPABLE_PARTICLE_KIND_COUNT})`,
   );
 }
 
@@ -238,7 +238,7 @@ export function showLoadoutScreen(
 
   const cardEls: HTMLDivElement[] = [];
 
-  for (let k = 0; k < PARTICLE_KIND_COUNT; k++) {
+  for (let k = 0; k < EQUIPPABLE_PARTICLE_KIND_COUNT; k++) {
     const kind = k as ParticleKind;
     const meta = KIND_META[k];
     const cost = getSlotCost(kind);
@@ -326,7 +326,7 @@ export function showLoadoutScreen(
   }
 
   function refreshAllCards(): void {
-    for (let k = 0; k < PARTICLE_KIND_COUNT; k++) {
+    for (let k = 0; k < EQUIPPABLE_PARTICLE_KIND_COUNT; k++) {
       const kind = k as ParticleKind;
       updateCardState(kind, cardEls[k], cardEls[k].querySelector('canvas')!, KIND_META[k]);
     }

@@ -16,6 +16,8 @@ const FIXED_DT_MS = 16.666;
 const PLAYER_SPEED_WORLD = 100.0;
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
+/** Number of background Fluid particles filling the entire arena. */
+const BACKGROUND_FLUID_COUNT = 300;
 
 // Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
 const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
@@ -123,6 +125,46 @@ function spawnLoadoutParticles(
   }
 }
 
+/**
+ * Scatters `count` background Fluid particles randomly across the world area.
+ * These have no owner (ownerEntityId = -1) and are normally invisible;
+ * they glow as they are disturbed by nearby fast-moving particles.
+ */
+function spawnBackgroundFluidParticles(
+  world: WorldState,
+  count: number,
+  rng: RngState,
+): void {
+  const profile = getElementProfile(ParticleKind.Fluid);
+
+  for (let i = 0; i < count; i++) {
+    if (world.particleCount >= MAX_PARTICLES) break;
+    const idx = world.particleCount++;
+
+    world.positionXWorld[idx] = nextFloat(rng) * world.worldWidthWorld;
+    world.positionYWorld[idx] = nextFloat(rng) * world.worldHeightWorld;
+    world.velocityXWorld[idx] = 0.0;
+    world.velocityYWorld[idx] = 0.0;
+    world.forceX[idx]            = 0.0;
+    world.forceY[idx]            = 0.0;
+    world.massKg[idx]            = profile.massKg;
+    world.chargeUnits[idx]       = 0.0;
+    world.isAliveFlag[idx]       = 1;
+    world.kindBuffer[idx]        = ParticleKind.Fluid;
+    world.ownerEntityId[idx]     = -1;
+    world.anchorAngleRad[idx]    = 0.0;
+    world.anchorRadiusWorld[idx] = 0.0;
+    world.disturbanceFactor[idx] = 0.0;
+
+    // Stagger initial age so particles don't all expire simultaneously
+    const lifetimeVariance = nextFloatRange(rng, -profile.lifetimeVarianceTicks, profile.lifetimeVarianceTicks);
+    world.lifetimeTicks[idx] = Math.max(2.0, profile.lifetimeBaseTicks + lifetimeVariance);
+    world.ageTicks[idx]      = nextFloat(rng) * profile.lifetimeBaseTicks;
+
+    world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
+  }
+}
+
 export function startGameScreen(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
@@ -158,6 +200,10 @@ export function startGameScreen(
   const centerXWorld = canvas.width / 2;
   const centerYWorld = canvas.height / 2;
 
+  // Set world bounds for Fluid background particle respawn
+  world.worldWidthWorld  = canvas.width;
+  world.worldHeightWorld = canvas.height;
+
   const playerCluster = createClusterState(1, centerXWorld - 150, centerYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
   const enemyCluster  = createClusterState(2, centerXWorld + 150, centerYWorld, 0, PARTICLE_COUNT_PER_CLUSTER);
 
@@ -168,6 +214,10 @@ export function startGameScreen(
   // Enemy always gets Ice particles.
   spawnLoadoutParticles(world, playerCluster.entityId, playerCluster.positionXWorld, playerCluster.positionYWorld, playerLoadout,       PARTICLE_COUNT_PER_CLUSTER, levelRng);
   spawnClusterParticles(world, enemyCluster.entityId,  enemyCluster.positionXWorld,  enemyCluster.positionYWorld,  ParticleKind.Ice, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+
+  // Scatter background Fluid particles across the full arena.
+  // These are invisible at rest and glow when disturbed by moving particles.
+  spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
