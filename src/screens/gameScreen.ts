@@ -7,6 +7,7 @@ import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters } from '../render/clusters/renderer';
 import { renderHudOverlay, HudState } from '../render/hud/overlay';
+import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands } from '../input/handler';
 import { CommandKind } from '../input/commands';
 
@@ -50,10 +51,19 @@ export function startGameScreen(
   canvas: HTMLCanvasElement,
   callbacks: GameScreenCallbacks,
 ): () => void {
-  const ctx = canvas.getContext('2d')!;
-
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+
+  // Attempt to create the WebGL particle renderer.  If WebGL is unavailable
+  // (old device, software renderer, etc.) we fall back to Canvas 2D rendering.
+  const webglRenderer = new WebGLParticleRenderer();
+  if (webglRenderer.isAvailable) {
+    // Insert the WebGL canvas BEFORE game-canvas so it renders underneath.
+    canvas.parentElement!.insertBefore(webglRenderer.canvas, canvas);
+    webglRenderer.resize(canvas.width, canvas.height);
+  }
+
+  const ctx = canvas.getContext('2d')!;
 
   const world = createWorldState(FIXED_DT_MS);
   const rng = createRng(12345);
@@ -140,12 +150,22 @@ export function startGameScreen(
     }
     hudState.particleCount = aliveCount;
 
-    ctx.fillStyle = '#0a0a12';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     const snapshot = createSnapshot(world);
+
+    if (webglRenderer.isAvailable) {
+      // WebGL canvas (behind) renders the dark background and glowing particles.
+      webglRenderer.render(snapshot, 0, 0, WORLD_TO_SCREEN_SCALE);
+      // 2D canvas (on top) is transparent so the WebGL layer shows through;
+      // it only draws cluster indicators, HUD, and UI text.
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    } else {
+      // Canvas 2D fallback: fill background and draw particles with arc calls.
+      ctx.fillStyle = '#0a0a12';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      renderParticles(ctx, snapshot, 0, 0, WORLD_TO_SCREEN_SCALE);
+    }
+
     renderClusters(ctx, snapshot, 0, 0, WORLD_TO_SCREEN_SCALE);
-    renderParticles(ctx, snapshot, 0, 0, WORLD_TO_SCREEN_SCALE);
     renderHudOverlay(ctx, hudState);
 
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
@@ -161,5 +181,6 @@ export function startGameScreen(
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
     detachInput();
+    webglRenderer.dispose();
   };
 }

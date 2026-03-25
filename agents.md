@@ -287,3 +287,47 @@ Entities (player, enemies) are clusters of bound particles. When adding a new en
 3. Define binding forces between the cluster's particles in `sim/clusters/`.
 4. Define the entity's ability set in `src/abilities/`.
 5. Keep each cluster file focused on a single entity type — no shared "god" cluster files.
+
+---
+
+## 12. WebGL Particle Shader Guidelines
+
+### Architecture
+
+Particle rendering uses a two-canvas layering strategy:
+
+- **`WebGLParticleRenderer`** (`render/particles/webglRenderer.ts`) owns a WebGL canvas inserted *before* the 2D game-canvas in the DOM.  All particles are drawn on this canvas.
+- The **2D game-canvas** sits on top (transparent background when WebGL is active) and renders clusters, HUD, and text.
+- If WebGL is unavailable, `WebGLParticleRenderer.isAvailable` is `false` and the caller falls back to the Canvas 2D arc renderer — never remove this fallback.
+
+### Shader Rules
+
+- All GLSL shader source lives in `render/particles/shaders.ts` as exported string constants.
+- Use **GLSL ES 1.00** (`precision mediump float;` in fragment shader, no `#version` directive) for maximum compatibility with WebGL1 and older mobile devices.
+- Particle visuals are implemented as **point sprites**: each particle is one vertex; the fragment shader uses `gl_PointCoord` to compute radial effects — never allocate a quad mesh per particle.
+- Use **additive blending** (`gl.blendFunc(SRC_ALPHA, ONE)`) so overlapping particles produce natural bloom without a separate post-process pass.
+- Do NOT use `gl.DEPTH_TEST` for 2D particle rendering — particles are rendered flat.
+
+### Performance Constraints
+
+- The GPU vertex buffer must be **pre-allocated** at `MAX_PARTICLES` capacity in the constructor; never call `gl.bufferData` with a resizing intent in the render hot path.
+- Upload alive-particle data each frame with **`gl.bufferSubData`**, not `gl.bufferData` (avoids GPU reallocation).
+- The CPU-side interleaved vertex array (`Float32Array`) must be **pre-allocated** and never recreated per frame.
+- The isPlayer lookup table must be a **pre-allocated `Uint8Array`** reset with `fill(0)` each frame (not a `Map` or object literal).
+- All alive particles are drawn in a **single `gl.drawArrays(gl.POINTS, 0, vertexCount)` call** — never loop `drawArrays` per particle.
+
+### Adding New Visual Effects via Shaders
+
+When adding a new per-particle visual property (e.g., speed glow, charge colour, damage flash):
+
+1. Add the new attribute to the interleaved vertex format in `webglRenderer.ts` and update `FLOATS_PER_VERTEX`.
+2. Add the corresponding `attribute` declaration and logic to `PARTICLE_VERTEX_SHADER_SRC` or `PARTICLE_FRAGMENT_SHADER_SRC` in `shaders.ts`.
+3. Pack the new data during the vertex-packing loop in `WebGLParticleRenderer.render()` — no allocations.
+4. Document the new visual encoding in `DECISIONS.md`.
+5. If the new data requires adding a field to `ParticleSnapshot`, update `render/snapshot.ts` and `createSnapshot` accordingly.
+
+### Graceful Degradation
+
+- Never remove `render/particles/renderer.ts` (Canvas 2D arc renderer) — it is the mandatory fallback.
+- If shader compilation fails at runtime, `WebGLParticleRenderer.isAvailable` becomes `false`; errors are logged to the console, and the game falls back silently.
+- The visual quality difference between WebGL and Canvas 2D fallback is acceptable — correctness and playability take priority over beauty on low-end devices.
