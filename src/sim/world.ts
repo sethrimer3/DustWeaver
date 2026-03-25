@@ -2,6 +2,9 @@ import { ParticleBuffers, createParticleBuffers, MAX_PARTICLES } from './particl
 import { ClusterState } from './clusters/state';
 import { RngState, createRng } from './rng';
 
+/** Maximum number of axis-aligned wall rectangles supported per world. */
+export const MAX_WALLS = 64;
+
 export interface WorldState extends ParticleBuffers {
   tick: number;
   dtMs: number;
@@ -13,6 +16,18 @@ export interface WorldState extends ParticleBuffers {
   worldWidthWorld: number;
   /** Height of the playable world area in world units (used for Fluid respawn bounds). */
   worldHeightWorld: number;
+
+  // ---- Wall / obstacle geometry ------------------------------------------
+  /** Number of active wall rectangles in the wall buffers. */
+  wallCount: number;
+  /** Left edge X of each wall (world units). */
+  wallXWorld: Float32Array;
+  /** Top edge Y of each wall (world units). */
+  wallYWorld: Float32Array;
+  /** Width of each wall (world units). */
+  wallWWorld: Float32Array;
+  /** Height of each wall (world units). */
+  wallHWorld: Float32Array;
 
   // ---- Player combat state ------------------------------------------------
   /** Set to 1 for exactly one tick to trigger attack launch. */
@@ -36,6 +51,11 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     rng: createRng(rngSeed),
     worldWidthWorld: 800,
     worldHeightWorld: 600,
+    wallCount: 0,
+    wallXWorld: new Float32Array(MAX_WALLS),
+    wallYWorld: new Float32Array(MAX_WALLS),
+    wallWWorld: new Float32Array(MAX_WALLS),
+    wallHWorld: new Float32Array(MAX_WALLS),
     playerAttackTriggeredFlag: 0,
     playerAttackDirXWorld: 1.0,
     playerAttackDirYWorld: 0.0,

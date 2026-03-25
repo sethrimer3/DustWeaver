@@ -1,15 +1,5 @@
 /**
- * Player progression state — level, dust slots, and loadout.
- *
- * Dust slots:
- *   The player's available "budget" for equipping particle types.
- *   Each particle type costs a certain number of slots (see slotCost.ts).
- *   Slots grow with level, letting higher-level players equip rarer/costlier types.
- *
- * Loadout:
- *   An ordered list of ParticleKind values the player has equipped.
- *   In battle, PARTICLE_COUNT_PER_CLUSTER particles are distributed evenly
- *   across the chosen kinds.
+ * Player progression state — level, dust slots, loadout, and world progress.
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
@@ -43,6 +33,11 @@ export interface PlayerProgress {
   dustSlots: number;
   /** Currently equipped particle kinds. May not exceed dustSlots total cost. */
   loadout: ParticleKind[];
+  /**
+   * Number of World 1 levels unlocked (1 = only L1 available, 7 = all unlocked).
+   * Increases by 1 each time the player completes a level.
+   */
+  world1UnlockedCount: number;
 }
 
 // ---- Factory / helpers ---------------------------------------------------
@@ -50,6 +45,7 @@ export interface PlayerProgress {
 /**
  * Creates the default starting PlayerProgress (level 1, Fire + Ice loadout).
  * Total slot cost = 2 (Fire) + 2 (Ice) = 4, which fits within the 5-slot budget.
+ * Only World 1 Level 1 is unlocked initially.
  */
 export function createDefaultProgress(): PlayerProgress {
   const level = 1;
@@ -57,6 +53,7 @@ export function createDefaultProgress(): PlayerProgress {
     level,
     dustSlots: getDustSlots(level),
     loadout: [ParticleKind.Fire, ParticleKind.Ice],
+    world1UnlockedCount: 1,
   };
 }
 

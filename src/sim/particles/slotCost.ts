@@ -29,6 +29,7 @@ const SLOT_COSTS: number[] = [
   1, // Nature     — low cost (organic, light)
   3, // Crystal    — high cost (precise, long-lived)
   4, // Void       — maximum cost (rare, exotic)
+  2, // Water      — moderate cost (flowing, World 1 theme)
 ];
 
 if (SLOT_COSTS.length !== EQUIPPABLE_PARTICLE_KIND_COUNT) {

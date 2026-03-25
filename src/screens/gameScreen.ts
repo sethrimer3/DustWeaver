@@ -1,4 +1,4 @@
-import { createWorldState, WorldState, MAX_PARTICLES } from '../sim/world';
+import { createWorldState, WorldState, MAX_PARTICLES, MAX_WALLS } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
@@ -6,11 +6,12 @@ import { tick } from '../sim/tick';
 import { RngState, createRng, nextFloat, nextFloatRange } from '../sim/rng';
 import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
-import { renderClusters } from '../render/clusters/renderer';
+import { renderClusters, renderWalls } from '../render/clusters/renderer';
 import { renderHudOverlay, HudState } from '../render/hud/overlay';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
+import { LevelDef } from '../levels/levelDef';
 
 const FIXED_DT_MS = 16.666;
 const PLAYER_SPEED_WORLD = 100.0;
@@ -18,6 +19,12 @@ const PLAYER_SPEED_WORLD = 100.0;
 const PARTICLE_COUNT_PER_CLUSTER = 20;
 /** Number of background Fluid particles filling the entire arena. */
 const BACKGROUND_FLUID_COUNT = 300;
+
+// Delay (ms) after all enemies are defeated before triggering onLevelComplete
+const VICTORY_DELAY_MS = 2000;
+
+/** Boss clusters receive this multiplier on their base HP for extra durability. */
+const BOSS_HP_MULTIPLIER = 2;
 
 // Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
 const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
@@ -27,6 +34,8 @@ const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0
 
 export interface GameScreenCallbacks {
   onReturnToMap: () => void;
+  /** Called after victory delay with the completed level definition. */
+  onLevelComplete: (level: LevelDef) => void;
 }
 
 /**
@@ -132,8 +141,6 @@ function spawnLoadoutParticles(
 
 /**
  * Scatters `count` background Fluid particles randomly across the world area.
- * These have no owner (ownerEntityId = -1) and are normally invisible;
- * they glow as they are disturbed by nearby fast-moving particles.
  */
 function spawnBackgroundFluidParticles(
   world: WorldState,
@@ -161,7 +168,6 @@ function spawnBackgroundFluidParticles(
     world.anchorRadiusWorld[idx] = 0.0;
     world.disturbanceFactor[idx] = 0.0;
 
-    // Stagger initial age so particles don't all expire simultaneously
     const lifetimeVariance = nextFloatRange(rng, -profile.lifetimeVarianceTicks, profile.lifetimeVarianceTicks);
     world.lifetimeTicks[idx] = Math.max(2.0, profile.lifetimeBaseTicks + lifetimeVariance);
     world.ageTicks[idx]      = nextFloat(rng) * profile.lifetimeBaseTicks;
@@ -170,14 +176,46 @@ function spawnBackgroundFluidParticles(
   }
 }
 
+/** Loads wall definitions from a LevelDef into the WorldState wall buffers. */
+function loadWalls(world: WorldState, levelDef: LevelDef, widthWorld: number, heightWorld: number): void {
+  const count = Math.min(levelDef.walls.length, MAX_WALLS);
+  world.wallCount = count;
+  for (let wi = 0; wi < count; wi++) {
+    const def = levelDef.walls[wi];
+    world.wallXWorld[wi] = def.xFraction * widthWorld;
+    world.wallYWorld[wi] = def.yFraction * heightWorld;
+    world.wallWWorld[wi] = def.wFraction * widthWorld;
+    world.wallHWorld[wi] = def.hFraction * heightWorld;
+  }
+}
+
+/** Background fill colour for each level theme. */
+function themeBgColor(theme: string): string {
+  switch (theme) {
+    case 'water': return '#040c18';
+    case 'ice':   return '#040d14';
+    case 'boss':  return '#0c0408';
+    default:      return '#0a0a12'; // physical
+  }
+}
+
+/** Returns a display label for the theme. */
+function themeLabel(theme: string): string {
+  switch (theme) {
+    case 'water': return 'Water';
+    case 'ice':   return 'Ice';
+    case 'boss':  return 'BOSS';
+    default:      return 'Physical';
+  }
+}
+
 export function startGameScreen(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
   playerLoadout: ParticleKind[],
+  levelDef: LevelDef,
   callbacks: GameScreenCallbacks,
 ): () => void {
-  // Attempt to create the WebGL particle renderer.  If WebGL is unavailable
-  // (old device, software renderer, etc.) we fall back to Canvas 2D rendering.
   const webglRenderer = new WebGLParticleRenderer();
 
   function resizeCanvas(): void {
@@ -191,43 +229,51 @@ export function startGameScreen(
   resizeCanvas();
 
   if (webglRenderer.isAvailable) {
-    // Insert the WebGL canvas BEFORE game-canvas so it renders underneath.
     canvas.parentElement!.insertBefore(webglRenderer.canvas, canvas);
   }
 
   const ctx = canvas.getContext('2d')!;
 
-  // World RNG seed 42 — separate from the level-setup RNG below
   const world = createWorldState(FIXED_DT_MS, 42);
-  // Level-setup RNG (positions, spawn scatter) — distinct from world.rng
   const levelRng = createRng(12345);
 
-  const centerXWorld = canvas.width / 2;
   const centerYWorld = canvas.height / 2;
 
-  // Set world bounds for Fluid background particle respawn
   world.worldWidthWorld  = canvas.width;
   world.worldHeightWorld = canvas.height;
 
-  const playerCluster = createClusterState(1, centerXWorld - 150, centerYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
-  const enemyCluster  = createClusterState(2, centerXWorld + 150, centerYWorld, 0, PARTICLE_COUNT_PER_CLUSTER);
-
+  // ── Spawn player ─────────────────────────────────────────────────────────
+  const playerCluster = createClusterState(1, canvas.width * 0.20, centerYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
   world.clusters.push(playerCluster);
-  world.clusters.push(enemyCluster);
+  spawnLoadoutParticles(
+    world, playerCluster.entityId,
+    playerCluster.positionXWorld, playerCluster.positionYWorld,
+    playerLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng,
+  );
 
-  // Player spawns particles from their chosen loadout.
-  // Enemy always gets Ice particles.
-  spawnLoadoutParticles(world, playerCluster.entityId, playerCluster.positionXWorld, playerCluster.positionYWorld, playerLoadout,       PARTICLE_COUNT_PER_CLUSTER, levelRng);
-  spawnClusterParticles(world, enemyCluster.entityId,  enemyCluster.positionXWorld,  enemyCluster.positionYWorld,  ParticleKind.Ice, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+  // ── Spawn enemies from level definition ──────────────────────────────────
+  let nextEntityId = 2;
+  for (let ei = 0; ei < levelDef.enemies.length; ei++) {
+    const enemyDef = levelDef.enemies[ei];
+    const ex = enemyDef.xFraction * canvas.width;
+    const ey = enemyDef.yFraction * canvas.height;
+    const particleCount = enemyDef.particleCount;
+    const hp = enemyDef.isBossFlag === 1 ? particleCount * BOSS_HP_MULTIPLIER : particleCount;
 
-  // Scatter background Fluid particles across the full arena.
-  // These are invisible at rest and glow when disturbed by moving particles.
+    const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
+    world.clusters.push(enemyCluster);
+    spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, particleCount, levelRng);
+  }
+
+  // ── Spawn background Fluid particles ─────────────────────────────────────
   spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
+
+  // ── Load level walls ──────────────────────────────────────────────────────
+  loadWalls(world, levelDef, canvas.width, canvas.height);
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
 
-  // Mobile "Return to Map" button — only injected when on a touch device
   let mapButton: HTMLButtonElement | null = null;
   if (IS_TOUCH_DEVICE) {
     mapButton = document.createElement('button');
@@ -246,6 +292,8 @@ export function startGameScreen(
 
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
 
+  const bgColor = themeBgColor(levelDef.theme);
+
   let lastTimestampMs = 0;
   let accumulatorMs = 0;
   let frameCount = 0;
@@ -253,8 +301,13 @@ export function startGameScreen(
   let isRunning = true;
   let rafHandle = 0;
 
+  // Victory state
+  let victoryTimeMs = -1;  // -1 = no victory yet
+  let victoryTriggered = false;
+
   function onResize(): void {
     resizeCanvas();
+    loadWalls(world, levelDef, canvas.width, canvas.height);
   }
   window.addEventListener('resize', onResize);
 
@@ -287,8 +340,6 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.Attack) {
         const player = world.clusters[0];
         if (player !== undefined) {
-          // aimXPx/aimYPx are screen-space pixels; world units are 1:1 with screen pixels
-          // (no camera transform), so this subtraction yields a valid world-space vector.
           let dirX = cmd.aimXPx - player.positionXWorld;
           let dirY = cmd.aimYPx - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -300,9 +351,6 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
         const player = world.clusters[0];
         if (player !== undefined) {
-          // Both BlockStart and BlockUpdate carry absolute screen-space aim positions.
-          // This game uses a 1:1 screen-pixel to world-unit mapping (no camera offset or
-          // zoom), so subtracting world position from screen position is valid here.
           let dirX = cmd.aimXPx - player.positionXWorld;
           let dirY = cmd.aimYPx - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -324,7 +372,28 @@ export function startGameScreen(
       return;
     }
 
-    // Apply player movement once per fixed tick to keep speed frame-rate independent
+    // ── Victory check ────────────────────────────────────────────────────────
+    if (!victoryTriggered) {
+      let allEnemiesDead = true;
+      for (let ci = 1; ci < world.clusters.length; ci++) {
+        if (world.clusters[ci].isAliveFlag === 1) {
+          allEnemiesDead = false;
+          break;
+        }
+      }
+      if (allEnemiesDead && world.clusters.length > 1) {
+        if (victoryTimeMs < 0) {
+          victoryTimeMs = timestampMs;
+        } else if (timestampMs - victoryTimeMs >= VICTORY_DELAY_MS) {
+          victoryTriggered = true;
+          isRunning = false;
+          detachInput();
+          callbacks.onLevelComplete(levelDef);
+          return;
+        }
+      }
+    }
+
     accumulatorMs += elapsedMs;
     while (accumulatorMs >= FIXED_DT_MS) {
       if (moveDx !== 0 || moveDy !== 0) {
@@ -349,22 +418,45 @@ export function startGameScreen(
     const snapshot = createSnapshot(world);
 
     if (webglRenderer.isAvailable) {
-      // WebGL canvas (behind) renders the dark background and glowing particles.
       webglRenderer.render(snapshot, 0, 0, 1.0);
-      // 2D canvas (on top) is transparent so the WebGL layer shows through;
-      // it only draws cluster indicators, HUD, and UI text.
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     } else {
-      // Canvas 2D fallback: fill background and draw particles with arc calls.
-      ctx.fillStyle = '#0a0a12';
+      ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       renderParticles(ctx, snapshot, 0, 0, 1.0);
     }
 
+    // Walls before cluster indicators so clusters are drawn on top
+    renderWalls(ctx, snapshot, 0, 0, 1.0);
     renderClusters(ctx, snapshot, 0, 0, 1.0);
     renderHudOverlay(ctx, hudState);
 
-    // Draw touch joystick visual when active
+    // ── Level name banner (top-center) ──────────────────────────────────────
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '13px monospace';
+    const levelLabel = `W${levelDef.worldNumber}-L${levelDef.levelNumber}  ${levelDef.name}  [${themeLabel(levelDef.theme)}]`;
+    const labelW = ctx.measureText(levelLabel).width;
+    ctx.fillText(levelLabel, (canvas.width - labelW) / 2, 22);
+
+    // ── Victory banner ───────────────────────────────────────────────────────
+    if (victoryTimeMs >= 0) {
+      const progress = Math.min(1.0, (lastTimestampMs - victoryTimeMs) / VICTORY_DELAY_MS);
+      ctx.save();
+      ctx.globalAlpha = progress;
+      ctx.fillStyle = 'rgba(0,207,100,0.85)';
+      ctx.font = 'bold 48px monospace';
+      const victoryText = 'LEVEL COMPLETE!';
+      const vw = ctx.measureText(victoryText).width;
+      ctx.fillText(victoryText, (canvas.width - vw) / 2, canvas.height / 2 - 20);
+      ctx.font = '20px monospace';
+      ctx.fillStyle = 'rgba(180,255,200,0.85)';
+      const subText = 'Returning to World Map…';
+      const sw = ctx.measureText(subText).width;
+      ctx.fillText(subText, (canvas.width - sw) / 2, canvas.height / 2 + 20);
+      ctx.restore();
+    }
+
+    // ── Touch joystick ───────────────────────────────────────────────────────
     if (inputState.isTouchJoystickActiveFlag === 1) {
       const bx = inputState.touchJoystickBaseXPx;
       const by = inputState.touchJoystickBaseYPx;
@@ -372,7 +464,6 @@ export function startGameScreen(
       const cy = inputState.touchJoystickCurrentYPx;
 
       ctx.save();
-      // Outer ring
       ctx.beginPath();
       ctx.arc(bx, by, JOYSTICK_OUTER_RADIUS_PX, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(0,207,255,0.35)';
@@ -381,7 +472,6 @@ export function startGameScreen(
       ctx.fillStyle = 'rgba(0,207,255,0.08)';
       ctx.fill();
 
-      // Clamp thumb to outer ring
       const dx = cx - bx;
       const dy = cy - by;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -392,7 +482,6 @@ export function startGameScreen(
         thumbYPx = by + (dy / dist) * JOYSTICK_OUTER_RADIUS_PX;
       }
 
-      // Inner thumb
       ctx.beginPath();
       ctx.arc(thumbXPx, thumbYPx, JOYSTICK_INNER_RADIUS_PX, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(0,207,255,0.45)';
@@ -400,7 +489,7 @@ export function startGameScreen(
       ctx.restore();
     }
 
-    // Control hints
+    // ── Control hints ────────────────────────────────────────────────────────
     const controlHintText = IS_TOUCH_DEVICE
       ? 'L.thumb=move  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
       : 'WASD=move  |  Click=attack  |  Hold=block  |  ESC=return';

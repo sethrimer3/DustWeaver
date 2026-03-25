@@ -19,6 +19,7 @@ import { applyFluidDisturbance } from './particles/disturbance';
 import { applyBindingForces } from './clusters/binding';
 import { applyCombatForces } from './particles/combat';
 import { applyInterParticleForces } from './particles/forces';
+import { applyWallForces } from './particles/walls';
 import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 
@@ -43,6 +44,9 @@ export function tick(world: WorldState): void {
 
   // 5. Inter-particle: repulsion (different owners) + boid (same owner)
   applyInterParticleForces(world);
+
+  // 5.5. Wall repulsion forces — push particles away from obstacle geometry
+  applyWallForces(world);
 
   // 6. Euler integration with per-element drag
   integrateParticles(world);

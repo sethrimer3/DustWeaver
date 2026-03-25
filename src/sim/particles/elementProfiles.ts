@@ -461,6 +461,35 @@ const FLUID: ElementProfile = {
   regenerationRateTicks: 0,
 };
 
+/**
+ * Water — flowing, turbulent, moderately powerful.
+ * Used for World 1 water-theme enemies.  Behaves like flowing liquid:
+ * medium mass, strong curl noise, upward diffusion, moderate lifetime.
+ */
+const WATER: ElementProfile = {
+  massKg:               0.55,
+  drag:                 1.4,
+  attractionStrength:   0.55,
+  orbitalStrength:      28.0,
+  orbitRadiusWorld:     32.0,
+  noiseAmplitude:       28.0,
+  instability:          0.12,
+  curlStrength:         30.0,   // strong curl gives fluid flow feel
+  diffusion:            12.0,
+  upwardBias:           5.0,    // slight upward bubble tendency
+  cohesion:             0.22,
+  separation:           0.38,
+  alignment:            0.28,
+  lifetimeBaseTicks:    280,
+  lifetimeVarianceTicks: 70,
+  temperature:          0.18,
+  stability:            0.42,
+  toughness:            1.8,
+  attackPower:          1.5,
+  maxPopulationCount:   22,
+  regenerationRateTicks: 50,
+};
+
 // ---- Lookup table --------------------------------------------------------
 
 /**
@@ -483,6 +512,7 @@ export const ELEMENT_PROFILES: ElementProfile[] = [
   CRYSTAL,    // 12 — ParticleKind.Crystal
   VOID,       // 13 — ParticleKind.Void
   FLUID,      // 14 — ParticleKind.Fluid
+  WATER,      // 15 — ParticleKind.Water
 ];
 
 /** Returns the profile for `kind`, falling back to Physical if out of range. */

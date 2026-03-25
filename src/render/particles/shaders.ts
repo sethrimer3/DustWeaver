@@ -94,6 +94,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 12) return vec3(0.67, 0.93, 1.00);  // Crystal   — icy bright blue
     if (ki == 13) return vec3(0.13, 0.00, 0.20);  // Void      — near-black purple
     if (ki == 14) return vec3(0.55, 0.80, 1.00);  // Fluid     — pale aqua-blue
+    if (ki == 15) return vec3(0.13, 0.60, 0.93);  // Water     — deep flowing blue
     return vec3(0.47, 0.60, 0.67);                // Physical  — steel blue-grey
   }
 
@@ -115,6 +116,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 12) return 4.0; // Crystal   → Hexagon
     if (ki == 13) return 7.0; // Void      → Ring
     if (ki == 14) return 0.0; // Fluid     → Circle
+    if (ki == 15) return 0.0; // Water     → Circle
     return 0.0;               // Physical  → Circle (default)
   }
 

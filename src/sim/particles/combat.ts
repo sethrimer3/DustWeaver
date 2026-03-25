@@ -54,6 +54,7 @@ function getAttackParams(kind: number): { speedWorld: number; halfSpreadRad: num
     case ParticleKind.Nature:    return { speedWorld: 160, halfSpreadRad: 0.78, loopStrength: 0.3  }; // curving vines
     case ParticleKind.Crystal:   return { speedWorld: 380, halfSpreadRad: 1.57, loopStrength: 0.0  }; // wide shards ~180° total
     case ParticleKind.Void:      return { speedWorld: 270, halfSpreadRad: 0.70, loopStrength: -0.5 }; // inward spiral
+    case ParticleKind.Water:     return { speedWorld: 240, halfSpreadRad: 0.65, loopStrength: 0.3  }; // flowing burst
     default:                     return { speedWorld: 200, halfSpreadRad: 0.50, loopStrength: 0.0  };
   }
 }
