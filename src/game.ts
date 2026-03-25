@@ -20,7 +20,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         onStartLevel: () => navigate('gameplay'),
       });
     } else if (to === 'gameplay') {
-      cleanup = startGameScreen(canvas, {
+      cleanup = startGameScreen(canvas, uiRoot, {
         onReturnToMap: () => navigate('worldMap'),
       });
     }
