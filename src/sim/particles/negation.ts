@@ -67,6 +67,20 @@ setMultiplier(10, 3, 2.0);  // earth vs lightning -- grounds electricity
 // ---- Void (13) interactions ----------------------------------------------
 setMultiplier(13, 5, 2.0);  // void vs arcane -- void absorbs magic
 
+// ---- Lava (16) interactions ----------------------------------------------
+setMultiplier(16, 11, 3.0); // lava vs nature  -- burns plants easily
+setMultiplier(16, 2, 0.5);  // lava vs ice     -- ice partially quenches lava
+setMultiplier(16, 6, 0.5);  // lava vs wind    -- wind disperses lava slowly
+setMultiplier(2, 16, 2.0);  // ice vs lava     -- solidifies lava
+setMultiplier(6, 16, 1.5);  // wind vs lava    -- fans the flames
+
+// ---- Stone (17) interactions ---------------------------------------------
+setMultiplier(17, 1, 1.5);  // stone vs fire   -- stone smothers fire
+setMultiplier(17, 16, 0.5); // stone vs lava   -- lava melts stone
+setMultiplier(3, 17, 2.5);  // lightning vs stone -- shatters rock
+setMultiplier(16, 17, 2.0); // lava vs stone   -- melts stone
+setMultiplier(1, 17, 0.5);  // fire vs stone   -- fire barely damages stone
+
 /** Returns the elemental damage multiplier for attackerKind hitting defenderKind. */
 export function getElementalMultiplier(attackerKind: number, defenderKind: number): number {
   if (attackerKind < 0 || attackerKind >= PARTICLE_KIND_COUNT) return 1.0;

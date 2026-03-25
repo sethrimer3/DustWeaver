@@ -10,7 +10,7 @@ export enum ParticleKind {
   Holy      = 7,
   Shadow    = 8,
   // New particle types
-  Metal     = 9,   // Heavy, dense, squared — high cost
+  Metal     = 9,   // Heavy, dense, squared — high cost; reflects damage when blocking
   Earth     = 10,  // Grounded, steady, triangular — medium cost
   Nature    = 11,  // Organic, tendrils, circular — low cost
   Crystal   = 12,  // Precise, geometric, hexagonal — high cost
@@ -19,16 +19,45 @@ export enum ParticleKind {
   Fluid     = 14,  // Background fluid particle — invisible until disturbed
   // World 1 themes
   Water     = 15,  // Flowing, turbulent — World 1 water enemy theme
+  // World 2 themes
+  Lava      = 16,  // Slow, powerful, few particles, burning aura — World 2 lava theme
+  Stone     = 17,  // Heavy, shatters on wall/enemy impact into fragments — World 2 stone theme
 }
 
 /** Total number of defined kinds — keep in sync with the enum above. */
-export const PARTICLE_KIND_COUNT = 16;
+export const PARTICLE_KIND_COUNT = 18;
 
 /**
- * Number of kinds that players can equip (excludes background/environmental kinds).
- * Fluid (14) is intentionally excluded; Water (15) is equippable.
+ * Ordered list of particle kinds that players can equip.
+ * Fluid (14) is intentionally excluded as it is a background-only kind.
+ * All other kinds including Water (15), Lava (16), and Stone (17) are equippable.
  */
-export const EQUIPPABLE_PARTICLE_KIND_COUNT = 15;
+export const EQUIPPABLE_KINDS: readonly ParticleKind[] = [
+  ParticleKind.Physical,
+  ParticleKind.Fire,
+  ParticleKind.Ice,
+  ParticleKind.Lightning,
+  ParticleKind.Poison,
+  ParticleKind.Arcane,
+  ParticleKind.Wind,
+  ParticleKind.Holy,
+  ParticleKind.Shadow,
+  ParticleKind.Metal,
+  ParticleKind.Earth,
+  ParticleKind.Nature,
+  ParticleKind.Crystal,
+  ParticleKind.Void,
+  // Fluid (14) intentionally skipped
+  ParticleKind.Water,
+  ParticleKind.Lava,
+  ParticleKind.Stone,
+];
+
+/**
+ * Number of kinds that players can equip.
+ * Equals EQUIPPABLE_KINDS.length; use this for iteration counts.
+ */
+export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 17
 
 /**
  * Particle shape enum — controls how each particle kind is rendered.
@@ -63,6 +92,8 @@ export const KIND_SHAPE: ParticleShape[] = [
   ParticleShape.Ring,     // Void
   ParticleShape.Circle,   // Fluid — soft circular glow
   ParticleShape.Circle,   // Water — soft flowing circle
+  ParticleShape.Circle,   // Lava  — molten circle (like fluid/water but fiery)
+  ParticleShape.Triangle, // Stone — jagged triangle fragment
 ];
 
 /** Returns the rendered shape for the given kind index, defaulting to Circle. */

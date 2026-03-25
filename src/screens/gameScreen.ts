@@ -14,7 +14,6 @@ import { CommandKind } from '../input/commands';
 import { LevelDef } from '../levels/levelDef';
 
 const FIXED_DT_MS = 16.666;
-const PLAYER_SPEED_WORLD = 100.0;
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
 /** Number of background Fluid particles filling the entire arena. */
@@ -192,20 +191,28 @@ function loadWalls(world: WorldState, levelDef: LevelDef, widthWorld: number, he
 /** Background fill colour for each level theme. */
 function themeBgColor(theme: string): string {
   switch (theme) {
-    case 'water': return '#040c18';
-    case 'ice':   return '#040d14';
-    case 'boss':  return '#0c0408';
-    default:      return '#0a0a12'; // physical
+    case 'water':  return '#040c18';
+    case 'ice':    return '#040d14';
+    case 'boss':   return '#0c0408';
+    case 'fire':   return '#120400';
+    case 'lava':   return '#180a00';
+    case 'stone':  return '#0a0a0c';
+    case 'metal':  return '#080c10';
+    default:       return '#0a0a12'; // physical
   }
 }
 
 /** Returns a display label for the theme. */
 function themeLabel(theme: string): string {
   switch (theme) {
-    case 'water': return 'Water';
-    case 'ice':   return 'Ice';
-    case 'boss':  return 'BOSS';
-    default:      return 'Physical';
+    case 'water':  return 'Water';
+    case 'ice':    return 'Ice';
+    case 'boss':   return 'BOSS';
+    case 'fire':   return 'Fire';
+    case 'lava':   return 'Lava';
+    case 'stone':  return 'Stone';
+    case 'metal':  return 'Metal';
+    default:       return 'Physical';
   }
 }
 
@@ -400,9 +407,9 @@ export function startGameScreen(
         const player = world.clusters[0];
         if (player !== undefined) {
           const len = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
-          const speedWorld = PLAYER_SPEED_WORLD * (FIXED_DT_MS / 1000.0);
-          player.positionXWorld += (moveDx / len) * speedWorld;
-          player.positionYWorld += (moveDy / len) * speedWorld;
+          // Set normalized move input; applyClusterMovement handles smooth velocity
+          world.playerMoveInputDxWorld = moveDx / len;
+          world.playerMoveInputDyWorld = moveDy / len;
         }
       }
       tick(world);

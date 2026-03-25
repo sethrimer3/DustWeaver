@@ -14,7 +14,7 @@
  */
 
 import { WorldState } from '../world';
-import { ParticleKind } from './kinds';
+import { ParticleKind, PARTICLE_KIND_COUNT } from './kinds';
 
 // ---- Constants ----------------------------------------------------------
 
@@ -30,10 +30,10 @@ const ATTACK_DURATION_TICKS = 45;
 
 // ---- Pre-allocated scratch buffers (no per-tick allocations) ------------
 // Per-kind counters reused across triggerAttackLaunch and applyBlockForces
-const _kindParticleIndex   = new Uint16Array(16);
-const _kindTotal           = new Uint16Array(16);
-const _blockKindCount      = new Uint16Array(16);
-const _blockKindSlotIdx    = new Uint16Array(16);
+const _kindParticleIndex   = new Uint16Array(PARTICLE_KIND_COUNT);
+const _kindTotal           = new Uint16Array(PARTICLE_KIND_COUNT);
+const _blockKindCount      = new Uint16Array(PARTICLE_KIND_COUNT);
+const _blockKindSlotIdx    = new Uint16Array(PARTICLE_KIND_COUNT);
 
 // ---- Attack launch -------------------------------------------------------
 
@@ -55,6 +55,8 @@ function getAttackParams(kind: number): { speedWorld: number; halfSpreadRad: num
     case ParticleKind.Crystal:   return { speedWorld: 380, halfSpreadRad: 1.57, loopStrength: 0.0  }; // wide shards ~180° total
     case ParticleKind.Void:      return { speedWorld: 270, halfSpreadRad: 0.70, loopStrength: -0.5 }; // inward spiral
     case ParticleKind.Water:     return { speedWorld: 240, halfSpreadRad: 0.65, loopStrength: 0.3  }; // flowing burst
+    case ParticleKind.Lava:      return { speedWorld: 120, halfSpreadRad: 0.30, loopStrength: 0.0  }; // slow heavy lob
+    case ParticleKind.Stone:     return { speedWorld: 300, halfSpreadRad: 0.50, loopStrength: 0.0  }; // shard scatter
     default:                     return { speedWorld: 200, halfSpreadRad: 0.50, loopStrength: 0.0  };
   }
 }
@@ -67,6 +69,8 @@ function getAttackDurationTicks(kind: number): number {
     case ParticleKind.Poison:    return 90;
     case ParticleKind.Metal:     return 70;
     case ParticleKind.Earth:     return 75;
+    case ParticleKind.Lava:      return 90;   // lava lingers long
+    case ParticleKind.Stone:     return 40;   // stone shard flies then falls
     default:                     return ATTACK_DURATION_TICKS;
   }
 }
@@ -79,7 +83,7 @@ export function triggerAttackLaunch(world: WorldState): void {
   const {
     isAliveFlag, ownerEntityId, kindBuffer, clusters,
     velocityXWorld, velocityYWorld,
-    behaviorMode, attackModeTicksLeft,
+    behaviorMode, attackModeTicksLeft, isTransientFlag,
     playerAttackDirXWorld: adx, playerAttackDirYWorld: ady,
   } = world;
 
@@ -94,21 +98,24 @@ export function triggerAttackLaunch(world: WorldState): void {
   if (playerEntityId === -1) return;
 
   // Count per-kind particles to spread them within their spread arc
+  // (exclude transient particles — shards and trail fire)
   _kindParticleIndex.fill(0);
   _kindTotal.fill(0);
   for (let i = 0; i < world.particleCount; i++) {
-    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId) {
+    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId && isTransientFlag[i] === 0) {
       const k = kindBuffer[i];
-      if (k < 16) _kindTotal[k]++;
+      if (k < PARTICLE_KIND_COUNT) _kindTotal[k]++;
     }
   }
 
   for (let i = 0; i < world.particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
     if (ownerEntityId[i] !== playerEntityId) continue;
+    if (isTransientFlag[i] === 1) continue;   // skip transient shards / trail fire
 
     const kind = kindBuffer[i];
     const { speedWorld, halfSpreadRad, loopStrength } = getAttackParams(kind);
+
 
     const total = _kindTotal[kind] > 0 ? _kindTotal[kind] : 1;
     const idx   = _kindParticleIndex[kind]++;
@@ -367,6 +374,22 @@ function computeShieldTarget(
         targetYWorld: ownerYWorld + Math.sin(branchAngle) * depth,
       };
     }
+    case ParticleKind.Lava: {
+      // Lava shield: loose circular formation — molten ring around the owner
+      const angle = (particleIndex / totalParticles) * Math.PI * 2.0
+        + Math.atan2(blockDirYWorld, blockDirXWorld);
+      return {
+        targetXWorld: ownerXWorld + Math.cos(angle) * SHIELD_DIST_WORLD * 0.85,
+        targetYWorld: ownerYWorld + Math.sin(angle) * SHIELD_DIST_WORLD * 0.85,
+      };
+    }
+    case ParticleKind.Stone: {
+      // Stone shield: dense straight wall (like Ice/Metal)
+      return {
+        targetXWorld: ownerXWorld + blockDirXWorld * SHIELD_DIST_WORLD + perpX * slotOffset,
+        targetYWorld: ownerYWorld + blockDirYWorld * SHIELD_DIST_WORLD + perpY * slotOffset,
+      };
+    }
     default: {
       // Generic wall (fallback)
       return {
@@ -386,7 +409,7 @@ export function applyBlockForces(world: WorldState): void {
     isAliveFlag, ownerEntityId, kindBuffer, clusters,
     positionXWorld, positionYWorld,
     forceX, forceY,
-    behaviorMode,
+    behaviorMode, isTransientFlag,
     playerBlockDirXWorld, playerBlockDirYWorld,
     isPlayerBlockingFlag,
     particleCount,
@@ -414,19 +437,20 @@ export function applyBlockForces(world: WorldState): void {
   }
   if (playerEntityId === -1) return;
 
-  // Count alive player particles per kind so we can compute slot indices
+  // Count alive player (non-transient) particles per kind for slot indices
   _blockKindCount.fill(0);
   _blockKindSlotIdx.fill(0);
   for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId) {
+    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId && isTransientFlag[i] === 0) {
       const k = kindBuffer[i];
-      if (k < 16) _blockKindCount[k]++;
+      if (k < PARTICLE_KIND_COUNT) _blockKindCount[k]++;
     }
   }
 
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
     if (ownerEntityId[i] !== playerEntityId) continue;
+    if (isTransientFlag[i] === 1) continue;   // shards and trail fire stay in attack mode
 
     behaviorMode[i] = 2;
 

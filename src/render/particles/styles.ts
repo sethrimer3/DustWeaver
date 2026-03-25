@@ -28,6 +28,8 @@ const STYLES: ParticleStyle[] = [
   { colorHex: '#220033', radiusPx: 5 }, // Void      — near-black purple (slightly larger)
   { colorHex: '#88ccff', radiusPx: 6 }, // Fluid     — pale aqua-blue (larger soft glow)
   { colorHex: '#2299ee', radiusPx: 4 }, // Water     — deep flowing blue
+  { colorHex: '#ff2200', radiusPx: 6 }, // Lava      — molten deep red-orange (larger, hot)
+  { colorHex: '#888899', radiusPx: 4 }, // Stone     — cool grey
 ];
 
 const FALLBACK_STYLE: ParticleStyle = STYLES[0];

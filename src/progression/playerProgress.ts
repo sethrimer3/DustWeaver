@@ -38,6 +38,11 @@ export interface PlayerProgress {
    * Increases by 1 each time the player completes a level.
    */
   world1UnlockedCount: number;
+  /**
+   * Number of World 2 levels unlocked (0 = World 2 locked, 1 = L1 available, etc.).
+   * Unlocks to 1 when the player completes World 1 boss (level 7).
+   */
+  world2UnlockedCount: number;
 }
 
 // ---- Factory / helpers ---------------------------------------------------
@@ -54,6 +59,7 @@ export function createDefaultProgress(): PlayerProgress {
     dustSlots: getDustSlots(level),
     loadout: [ParticleKind.Fire, ParticleKind.Ice],
     world1UnlockedCount: 1,
+    world2UnlockedCount: 0,
   };
 }
 
