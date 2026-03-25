@@ -1,26 +1,70 @@
+/**
+ * Inter-particle forces using the shared spatial grid.
+ *
+ * Two categories are handled in a single neighbor-query pass:
+ *
+ *  A) Same-owner pairs — boid-like forces for visual personality:
+ *       • Cohesion   — slow pull toward the neighbor centroid
+ *       • Separation — hard push away from very-close neighbors
+ *       • Alignment  — gentle velocity matching
+ *     Weights come from each particle's ElementProfile so, e.g.,
+ *     ice particles cluster tightly while fire particles spread loosely.
+ *
+ *  B) Different-owner pairs — gameplay combat:
+ *       • Repulsion  — push away within a range
+ *       • Destruction on contact — both particles die, owner loses HP
+ */
+
 import { WorldState } from '../world';
 import { createSpatialGrid, clearGrid, insertParticle, queryNeighbors } from '../spatial/grid';
 import type { SpatialGrid } from '../spatial/grid';
+import { getElementProfile } from './elementProfiles';
 
 export const PARTICLE_RADIUS_WORLD = 4.0;
-const REPEL_RANGE_WORLD = 20.0;
-const REPEL_STRENGTH = 50.0;
+
+// ---- Spatial grid --------------------------------------------------------
+
+const REPEL_RANGE_WORLD  = 20.0;
 const CONTACT_DIST_WORLD = PARTICLE_RADIUS_WORLD * 2.0;
 
-// Module-level singleton spatial grid - allocated once, never per-frame
-const sharedSpatialGrid: SpatialGrid = createSpatialGrid(REPEL_RANGE_WORLD * 2);
+// Boid neighbor range — larger than repulsion so cohesion/alignment can act
+// across a wider neighbourhood without requiring a second grid pass.
+const BOID_RANGE_WORLD = 36.0;
 
-// Pre-allocated scratch for pending destruction
-const scratchDestroyA = new Int32Array(512);
-const scratchDestroyB = new Int32Array(512);
+// Single grid covers the larger of the two query radii.
+const GRID_CELL_SIZE = BOID_RANGE_WORLD * 2.0;
+
+// Module-level singleton — allocated once, never per-frame.
+const sharedSpatialGrid: SpatialGrid = createSpatialGrid(GRID_CELL_SIZE);
+
+// Pre-allocated scratch for pending destruction (avoids mutation mid-loop)
+const scratchDestroyA = new Int32Array(1024);
+const scratchDestroyB = new Int32Array(1024);
 let scratchDestroyCount = 0;
+
+// ---- Boid accumulator scratch -------------------------------------------
+// Per-particle accumulators for same-owner neighbour sums.
+// Re-used each tick; indexed by particleIndex — pre-allocated once.
+import { MAX_PARTICLES } from './state';
+
+const _cohesionX   = new Float32Array(MAX_PARTICLES);
+const _cohesionY   = new Float32Array(MAX_PARTICLES);
+const _alignX      = new Float32Array(MAX_PARTICLES);
+const _alignY      = new Float32Array(MAX_PARTICLES);
+const _neighborCount = new Uint16Array(MAX_PARTICLES);
+
+// ---- Main export --------------------------------------------------------
 
 export function applyInterParticleForces(world: WorldState): void {
   const {
     positionXWorld, positionYWorld,
-    forceX, forceY, isAliveFlag, ownerEntityId, particleCount, clusters
+    velocityXWorld, velocityYWorld,
+    forceX, forceY,
+    isAliveFlag, ownerEntityId, kindBuffer,
+    particleCount, clusters,
   } = world;
 
+  // ---- Rebuild spatial grid -------------------------------------------
   clearGrid(sharedSpatialGrid);
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 1) {
@@ -28,16 +72,25 @@ export function applyInterParticleForces(world: WorldState): void {
     }
   }
 
+  // ---- Reset boid accumulators (trivial fill) -------------------------
+  _cohesionX.fill(0, 0, particleCount);
+  _cohesionY.fill(0, 0, particleCount);
+  _alignX.fill(0, 0, particleCount);
+  _alignY.fill(0, 0, particleCount);
+  _neighborCount.fill(0, 0, particleCount);
+
   scratchDestroyCount = 0;
 
+  // ---- Per-particle neighbour pass ------------------------------------
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
 
     const px = positionXWorld[i];
     const py = positionYWorld[i];
     const ownerI = ownerEntityId[i];
+    const profileI = getElementProfile(kindBuffer[i]);
 
-    const neighborCount = queryNeighbors(sharedSpatialGrid, px, py, REPEL_RANGE_WORLD);
+    const neighborCount = queryNeighbors(sharedSpatialGrid, px, py, BOID_RANGE_WORLD);
 
     for (let ni = 0; ni < neighborCount; ni++) {
       const j = sharedSpatialGrid.queryResult[ni];
@@ -45,34 +98,87 @@ export function applyInterParticleForces(world: WorldState): void {
       if (isAliveFlag[j] === 0) continue;
 
       const ownerJ = ownerEntityId[j];
-
       const dx = positionXWorld[j] - px;
       const dy = positionYWorld[j] - py;
       const distSq = dx * dx + dy * dy;
       if (distSq < 0.0001) continue;
       const dist = Math.sqrt(distSq);
 
-      if (dist < CONTACT_DIST_WORLD && ownerI !== ownerJ) {
-        if (scratchDestroyCount < 512) {
-          scratchDestroyA[scratchDestroyCount] = i;
-          scratchDestroyB[scratchDestroyCount] = j;
-          scratchDestroyCount++;
+      if (ownerI !== ownerJ) {
+        // ---- Different-owner: repulsion + contact destruction ----------
+        if (dist < CONTACT_DIST_WORLD) {
+          if (scratchDestroyCount < MAX_PARTICLES) {
+            scratchDestroyA[scratchDestroyCount] = i;
+            scratchDestroyB[scratchDestroyCount] = j;
+            scratchDestroyCount++;
+          }
+          continue;
         }
-        continue;
-      }
+        if (dist < REPEL_RANGE_WORLD) {
+          const force = 50.0 * (1.0 - dist / REPEL_RANGE_WORLD) / dist;
+          const fx = -dx * force;
+          const fy = -dy * force;
+          forceX[i] += fx;
+          forceY[i] += fy;
+          forceX[j] -= fx;
+          forceY[j] -= fy;
+        }
+      } else {
+        // ---- Same-owner: boid accumulation (within boid range) ----------
+        if (dist < BOID_RANGE_WORLD) {
+          _cohesionX[i] += positionXWorld[j];
+          _cohesionY[i] += positionYWorld[j];
+          _cohesionX[j] += px;
+          _cohesionY[j] += py;
+          _alignX[i]  += velocityXWorld[j];
+          _alignY[i]  += velocityYWorld[j];
+          _alignX[j]  += velocityXWorld[i];
+          _alignY[j]  += velocityYWorld[i];
+          _neighborCount[i]++;
+          _neighborCount[j]++;
 
-      if (dist < REPEL_RANGE_WORLD) {
-        const force = REPEL_STRENGTH * (1.0 - dist / REPEL_RANGE_WORLD) / dist;
-        const fx = -dx * force;
-        const fy = -dy * force;
-        forceX[i] += fx;
-        forceY[i] += fy;
-        forceX[j] -= fx;
-        forceY[j] -= fy;
+          // Separation: profile.separation weight; repel inside half range
+          if (dist < BOID_RANGE_WORLD * 0.45) {
+            const sep = profileI.separation * (1.0 - dist / (BOID_RANGE_WORLD * 0.45)) / dist;
+            const sfx = -dx * sep * 30.0;
+            const sfy = -dy * sep * 30.0;
+            forceX[i] += sfx;
+            forceY[i] += sfy;
+            forceX[j] -= sfx;
+            forceY[j] -= sfy;
+          }
+        }
       }
     }
   }
 
+  // ---- Apply accumulated boid forces ----------------------------------
+  for (let i = 0; i < particleCount; i++) {
+    if (isAliveFlag[i] === 0) continue;
+    const nc = _neighborCount[i];
+    if (nc === 0) continue;
+
+    const profile = getElementProfile(kindBuffer[i]);
+    const invNc = 1.0 / nc;
+
+    // Cohesion: steer toward average neighbor position
+    if (profile.cohesion > 0.0) {
+      const avgX = _cohesionX[i] * invNc;
+      const avgY = _cohesionY[i] * invNc;
+      forceX[i] += (avgX - positionXWorld[i]) * profile.cohesion * 2.0;
+      forceY[i] += (avgY - positionYWorld[i]) * profile.cohesion * 2.0;
+    }
+
+    // Alignment: match average neighbor velocity
+    if (profile.alignment > 0.0) {
+      const avgVx = _alignX[i] * invNc;
+      const avgVy = _alignY[i] * invNc;
+      forceX[i] += (avgVx - velocityXWorld[i]) * profile.alignment * 0.5;
+      forceY[i] += (avgVy - velocityYWorld[i]) * profile.alignment * 0.5;
+    }
+  }
+
+  // ---- Apply deferred contact-destruction -----------------------------
   for (let k = 0; k < scratchDestroyCount; k++) {
     const ai = scratchDestroyA[k];
     const bi = scratchDestroyB[k];

@@ -1,32 +1,29 @@
 /**
  * WebGL-accelerated particle renderer.
  *
- * Renders all particles in a single draw call using GL point sprites.
- * Additive blending (SRC_ALPHA, ONE) gives natural bloom where particles
- * overlap without requiring a separate post-process pass.
+ * Vertex format per particle: [x, y, kind, normalizedAge]  (4 floats = 16 bytes)
  *
- * Falls back gracefully: if WebGL is unavailable `isAvailable` is false and
- * the caller should fall back to the Canvas 2D renderer.
+ *  • kind          — ParticleKind enum value; fragment shader maps it to colour.
+ *  • normalizedAge — ageTicks / lifetimeTicks in [0, 1]; drives alpha fade
+ *                    and point-size shrink in the vertex shader.
  *
  * Performance notes:
- *  - GPU buffer is pre-allocated at MAX_PARTICLES capacity; each frame only
- *    uploads the alive-particle slice via gl.bufferSubData (no heap alloc).
- *  - CPU-side vertex packing uses a pre-allocated Float32Array — no per-frame
- *    allocations in the hot path.
- *  - isPlayer lookup uses a pre-allocated Uint8Array keyed by entityId.
+ *  - GPU buffer pre-allocated at MAX_PARTICLES capacity; per-frame upload
+ *    is bufferSubData only (no GPU heap realloc).
+ *  - CPU vertex array (packedVertexData) is pre-allocated; no per-frame alloc.
+ *  - All alive particles drawn in a single gl.drawArrays(POINTS) call.
+ *  - Falls back gracefully: isAvailable=false → caller uses Canvas 2D.
  */
 
 import { MAX_PARTICLES } from '../../sim/particles/state';
 import { WorldSnapshot } from '../snapshot';
 import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shaders';
 
-/** [x, y, isPlayer] per vertex */
-const FLOATS_PER_VERTEX = 3;
-const BYTES_PER_FLOAT = 4;
-/** Default visual radius in pixels for each particle's point sprite. */
+/** [x, y, kind, normalizedAge] per vertex */
+const FLOATS_PER_VERTEX = 4;
+const BYTES_PER_FLOAT   = 4;
+/** Visual radius for each particle's point sprite (pixels). */
 const POINT_SIZE_PX = 12.0;
-/** Maximum entityId value supported by the fast lookup table. */
-const ENTITY_LOOKUP_SIZE = 256;
 /** Dark background colour components (matches #0A0A12). */
 const BG_R = 0.039;
 const BG_G = 0.039;
@@ -98,24 +95,19 @@ export class WebGLParticleRenderer {
   private readonly program: WebGLProgram | null = null;
   private readonly vertexBuffer: WebGLBuffer | null = null;
 
-  // Attribute / uniform locations (−1 / null = not found, handled gracefully)
+  // Attribute / uniform locations
   private readonly attrPositionScreen: number = -1;
-  private readonly attrIsPlayer: number = -1;
+  private readonly attrKind: number = -1;
+  private readonly attrNormalizedAge: number = -1;
   private readonly uResolution: WebGLUniformLocation | null = null;
   private readonly uPointSizePx: WebGLUniformLocation | null = null;
 
   /**
-   * Pre-allocated CPU-side vertex data: [x, y, isPlayer] per particle.
-   * Re-packed each frame; never reallocated.
+   * Pre-allocated CPU vertex data: [x, y, kind, normalizedAge] per particle.
+   * Packed each frame; never reallocated.
    */
   private readonly packedVertexData: Float32Array =
     new Float32Array(MAX_PARTICLES * FLOATS_PER_VERTEX);
-
-  /**
-   * isPlayer flag indexed by entityId for O(1) lookup during particle packing.
-   * Cleared and rebuilt each frame (trivial cost: 256 bytes).
-   */
-  private readonly isPlayerLookup: Uint8Array = new Uint8Array(ENTITY_LOOKUP_SIZE);
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -153,11 +145,12 @@ export class WebGLParticleRenderer {
     this.vertexBuffer = vertexBuffer;
 
     this.attrPositionScreen = gl.getAttribLocation(program, 'a_positionScreen');
-    this.attrIsPlayer = gl.getAttribLocation(program, 'a_isPlayer');
-    this.uResolution = gl.getUniformLocation(program, 'u_resolution');
-    this.uPointSizePx = gl.getUniformLocation(program, 'u_pointSizePx');
+    this.attrKind           = gl.getAttribLocation(program, 'a_kind');
+    this.attrNormalizedAge  = gl.getAttribLocation(program, 'a_normalizedAge');
+    this.uResolution        = gl.getUniformLocation(program, 'u_resolution');
+    this.uPointSizePx       = gl.getUniformLocation(program, 'u_pointSizePx');
 
-    // Additive blending: overlapping particles naturally accumulate into bloom.
+    // Additive blending: overlapping particles accumulate into natural bloom.
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
@@ -166,7 +159,7 @@ export class WebGLParticleRenderer {
 
   /** Resize the WebGL canvas and viewport to match the display resolution. */
   resize(widthPx: number, heightPx: number): void {
-    this.canvas.width = widthPx;
+    this.canvas.width  = widthPx;
     this.canvas.height = heightPx;
     if (this.gl !== null) {
       this.gl.viewport(0, 0, widthPx, heightPx);
@@ -178,10 +171,9 @@ export class WebGLParticleRenderer {
    *
    * Hot-path notes:
    *  - No heap allocations inside this method.
-   *  - `isPlayerLookup` is a Uint8Array reset via `fill(0)` (trivial).
-   *  - Vertex data is packed into `packedVertexData` (pre-allocated).
-   *  - Only the alive-particle slice is uploaded to the GPU via bufferSubData.
-   *  - All alive particles are drawn in a single `gl.drawArrays` call.
+   *  - Vertex data packed into pre-allocated packedVertexData Float32Array.
+   *  - Only the alive-particle slice is uploaded via gl.bufferSubData.
+   *  - All particles drawn in a single gl.drawArrays(POINTS) call.
    */
   render(
     snapshot: WorldSnapshot,
@@ -197,44 +189,39 @@ export class WebGLParticleRenderer {
     ) return;
 
     const gl = this.gl;
-    const { particles, clusters } = snapshot;
-    const { particleCount, isAliveFlag, positionXWorld, positionYWorld, ownerEntityId } = particles;
+    const { particles } = snapshot;
+    const {
+      particleCount, isAliveFlag,
+      positionXWorld, positionYWorld,
+      kindBuffer, ageTicks, lifetimeTicks,
+    } = particles;
 
-    // --- Rebuild isPlayer lookup (allocation-free) --------------------------
-    const lookup = this.isPlayerLookup;
-    lookup.fill(0);
-    for (let ci = 0; ci < clusters.length; ci++) {
-      const c = clusters[ci];
-      if (c.entityId >= 0 && c.entityId < ENTITY_LOOKUP_SIZE) {
-        lookup[c.entityId] = c.isPlayerFlag;
-      }
-    }
-
-    // --- Pack alive-particle vertex data ------------------------------------
+    // ---- Pack alive-particle vertex data (no allocations) ---------------
     const packed = this.packedVertexData;
     let vertexCount = 0;
     for (let i = 0; i < particleCount; i++) {
       if (isAliveFlag[i] === 0) continue;
       const base = vertexCount * FLOATS_PER_VERTEX;
-      const eid = ownerEntityId[i];
+      const lt = lifetimeTicks[i];
+      const normAge = lt > 0 ? Math.min(1.0, ageTicks[i] / lt) : 0.0;
       packed[base + 0] = positionXWorld[i] * scalePx + offsetXPx;
       packed[base + 1] = positionYWorld[i] * scalePx + offsetYPx;
-      packed[base + 2] = (eid >= 0 && eid < ENTITY_LOOKUP_SIZE) ? lookup[eid] : 0;
+      packed[base + 2] = kindBuffer[i];
+      packed[base + 3] = normAge;
       vertexCount++;
     }
 
-    // --- Clear with dark background -----------------------------------------
+    // ---- Clear with dark background -------------------------------------
     gl.clearColor(BG_R, BG_G, BG_B, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     if (vertexCount === 0) return;
 
-    // --- Upload only the used vertex slice to the GPU -----------------------
-    // bufferSubData avoids reallocating GPU memory; uploads vertexCount*12 bytes.
+    // ---- Upload only the used slice to the GPU -------------------------
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, packed.subarray(0, vertexCount * FLOATS_PER_VERTEX));
 
-    // --- Issue a single draw call -------------------------------------------
+    // ---- Single draw call ----------------------------------------------
     gl.useProgram(this.program);
 
     gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
@@ -243,8 +230,10 @@ export class WebGLParticleRenderer {
     const stride = FLOATS_PER_VERTEX * BYTES_PER_FLOAT;
     gl.enableVertexAttribArray(this.attrPositionScreen);
     gl.vertexAttribPointer(this.attrPositionScreen, 2, gl.FLOAT, false, stride, 0);
-    gl.enableVertexAttribArray(this.attrIsPlayer);
-    gl.vertexAttribPointer(this.attrIsPlayer, 1, gl.FLOAT, false, stride, 2 * BYTES_PER_FLOAT);
+    gl.enableVertexAttribArray(this.attrKind);
+    gl.vertexAttribPointer(this.attrKind,           1, gl.FLOAT, false, stride, 2 * BYTES_PER_FLOAT);
+    gl.enableVertexAttribArray(this.attrNormalizedAge);
+    gl.vertexAttribPointer(this.attrNormalizedAge,  1, gl.FLOAT, false, stride, 3 * BYTES_PER_FLOAT);
 
     gl.drawArrays(gl.POINTS, 0, vertexCount);
   }
@@ -253,7 +242,7 @@ export class WebGLParticleRenderer {
   dispose(): void {
     if (this.gl === null) return;
     const gl = this.gl;
-    if (this.program !== null) gl.deleteProgram(this.program);
+    if (this.program      !== null) gl.deleteProgram(this.program);
     if (this.vertexBuffer !== null) gl.deleteBuffer(this.vertexBuffer);
     if (this.canvas.parentElement !== null) this.canvas.parentElement.removeChild(this.canvas);
   }
