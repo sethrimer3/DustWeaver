@@ -31,10 +31,19 @@ export interface ClusterSnapshot {
   readonly maxHealthPoints:  number;
 }
 
+export interface WallSnapshot {
+  readonly count:   number;
+  readonly xWorld:  Float32Array;
+  readonly yWorld:  Float32Array;
+  readonly wWorld:  Float32Array;
+  readonly hWorld:  Float32Array;
+}
+
 export interface WorldSnapshot {
   readonly tick:     number;
   readonly particles: ParticleSnapshot;
   readonly clusters:  readonly ClusterSnapshot[];
+  readonly walls:     WallSnapshot;
 }
 
 export function createSnapshot(world: WorldState): WorldSnapshot {
@@ -68,5 +77,12 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       particleCount:     world.particleCount,
     },
     clusters: clusterSnapshots,
+    walls: {
+      count:  world.wallCount,
+      xWorld: world.wallXWorld,
+      yWorld: world.wallYWorld,
+      wWorld: world.wallWWorld,
+      hWorld: world.wallHWorld,
+    },
   };
 }

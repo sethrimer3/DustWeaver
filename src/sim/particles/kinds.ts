@@ -17,16 +17,18 @@ export enum ParticleKind {
   Void      = 13,  // Dark matter ring — very high cost
   // Background / environmental (not equippable by players)
   Fluid     = 14,  // Background fluid particle — invisible until disturbed
+  // World 1 themes
+  Water     = 15,  // Flowing, turbulent — World 1 water enemy theme
 }
 
 /** Total number of defined kinds — keep in sync with the enum above. */
-export const PARTICLE_KIND_COUNT = 15;
+export const PARTICLE_KIND_COUNT = 16;
 
 /**
  * Number of kinds that players can equip (excludes background/environmental kinds).
- * Fluid (14) and any future environmental kinds are intentionally excluded.
+ * Fluid (14) is intentionally excluded; Water (15) is equippable.
  */
-export const EQUIPPABLE_PARTICLE_KIND_COUNT = 14;
+export const EQUIPPABLE_PARTICLE_KIND_COUNT = 15;
 
 /**
  * Particle shape enum — controls how each particle kind is rendered.
@@ -60,6 +62,7 @@ export const KIND_SHAPE: ParticleShape[] = [
   ParticleShape.Hexagon,  // Crystal
   ParticleShape.Ring,     // Void
   ParticleShape.Circle,   // Fluid — soft circular glow
+  ParticleShape.Circle,   // Water — soft flowing circle
 ];
 
 /** Returns the rendered shape for the given kind index, defaulting to Circle. */
