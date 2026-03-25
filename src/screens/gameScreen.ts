@@ -85,6 +85,11 @@ function spawnClusterParticles(
 
     // Unique per-particle noise phase so particles don't all jitter in unison
     world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
+
+    world.behaviorMode[idx]        = 0;
+    world.particleDurability[idx]  = profile.toughness;
+    world.respawnDelayTicks[idx]   = 0;
+    world.attackModeTicksLeft[idx] = 0;
   }
 }
 
@@ -279,6 +284,32 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.MovePlayer) {
         moveDx = cmd.dx;
         moveDy = cmd.dy;
+      } else if (cmd.kind === CommandKind.Attack) {
+        world.playerAttackDirXWorld = cmd.dirXNorm;
+        world.playerAttackDirYWorld = cmd.dirYNorm;
+        world.playerAttackTriggeredFlag = 1;
+      } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
+        const player = world.clusters[0];
+        if (player !== undefined) {
+          let dirX: number;
+          let dirY: number;
+          if (cmd.kind === CommandKind.BlockStart) {
+            dirX = cmd.dirXNorm;
+            dirY = cmd.dirYNorm;
+          } else {
+            // BlockUpdate carries raw mouse/touch screen position
+            dirX = cmd.dirXNorm - player.positionXWorld;
+            dirY = cmd.dirYNorm - player.positionYWorld;
+            const len = Math.sqrt(dirX * dirX + dirY * dirY);
+            if (len < 1.0) { dirX = world.playerBlockDirXWorld; dirY = world.playerBlockDirYWorld; }
+            else { dirX /= len; dirY /= len; }
+          }
+          world.playerBlockDirXWorld = dirX;
+          world.playerBlockDirYWorld = dirY;
+          world.isPlayerBlockingFlag = 1;
+        }
+      } else if (cmd.kind === CommandKind.BlockEnd) {
+        world.isPlayerBlockingFlag = 0;
       }
     }
 
@@ -367,8 +398,8 @@ export function startGameScreen(
 
     // Control hints
     const controlHintText = IS_TOUCH_DEVICE
-      ? 'Touch & drag to move  |  TAP MAP to return'
-      : 'ESC - Return to Map  |  WASD - Move';
+      ? 'L.thumb=move  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
+      : 'WASD=move  |  Click=attack  |  Hold=block  |  ESC=return';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '12px monospace';
     const hintWidthPx = ctx.measureText(controlHintText).width;

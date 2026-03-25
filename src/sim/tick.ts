@@ -6,6 +6,7 @@
  *   2. Per-element forces (noise, curl, buoyancy)          → elementForces.ts
  *   3. Fluid disturbance: decay + push from fast neighbours → disturbance.ts
  *   4. Owner-anchor binding + orbital swirl                → binding.ts
+ *   4.5. Combat forces — attack launch impulse + block shield positioning   → combat.ts
  *   5. Inter-particle (repulsion, cohesion, sep, align)    → forces.ts
  *   6. Euler integration with drag                         → integration.ts
  *   7. Lifetime update + respawn                           → lifetime.ts
@@ -16,6 +17,7 @@ import { WorldState } from './world';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
 import { applyBindingForces } from './clusters/binding';
+import { applyCombatForces } from './particles/combat';
 import { applyInterParticleForces } from './particles/forces';
 import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
@@ -35,6 +37,9 @@ export function tick(world: WorldState): void {
 
   // 4. Owner-anchor spring + orbital tangential force
   applyBindingForces(world);
+
+  // 4.5. Combat forces — attack launch and block shield positioning
+  applyCombatForces(world);
 
   // 5. Inter-particle: repulsion (different owners) + boid (same owner)
   applyInterParticleForces(world);

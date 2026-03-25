@@ -32,6 +32,28 @@ export interface ParticleBuffers {
    * by nearby fast-moving non-Fluid particles.  Always 0 for non-Fluid kinds.
    */
   disturbanceFactor: Float32Array;
+
+  // ---- Combat / behavior --------------------------------------------------
+  /**
+   * Behavior mode per particle:
+   *   0 = normal orbit around owner
+   *   1 = attack — launched in attack direction; binding forces suppressed
+   *   2 = block  — positioned as shield; anchor target overridden by combat.ts
+   */
+  behaviorMode:        Uint8Array;
+  /** Current durability.  Decremented by elemental damage; reset to toughness on respawn. */
+  particleDurability:  Float32Array;
+  /**
+   * Remaining ticks before a combat-killed (isAliveFlag=0) particle respawns.
+   * Set to profile.regenerationRateTicks on combat kill; counted down by lifetime.ts.
+   * 0 means no pending respawn.
+   */
+  respawnDelayTicks:   Float32Array;
+  /**
+   * Ticks remaining in attack-launch mode for this particle.
+   * When this reaches 0, behaviorMode resets to 0 (orbit).
+   */
+  attackModeTicksLeft: Float32Array;
 }
 
 export function createParticleBuffers(): ParticleBuffers {
@@ -53,5 +75,9 @@ export function createParticleBuffers(): ParticleBuffers {
     anchorRadiusWorld: new Float32Array(MAX_PARTICLES),
     noiseTickSeed:     new Uint32Array(MAX_PARTICLES),
     disturbanceFactor: new Float32Array(MAX_PARTICLES),
+    behaviorMode:        new Uint8Array(MAX_PARTICLES),
+    particleDurability:  new Float32Array(MAX_PARTICLES),
+    respawnDelayTicks:   new Float32Array(MAX_PARTICLES),
+    attackModeTicksLeft: new Float32Array(MAX_PARTICLES),
   };
 }

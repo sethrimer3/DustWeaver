@@ -19,6 +19,7 @@ import { WorldState } from '../world';
 import { createSpatialGrid, clearGrid, insertParticle, queryNeighbors } from '../spatial/grid';
 import type { SpatialGrid } from '../spatial/grid';
 import { getElementProfile } from './elementProfiles';
+import { getElementalMultiplier } from './negation';
 import { ParticleKind } from './kinds';
 
 export const PARTICLE_RADIUS_WORLD = 4.0;
@@ -63,6 +64,7 @@ export function applyInterParticleForces(world: WorldState): void {
     forceX, forceY,
     isAliveFlag, ownerEntityId, kindBuffer,
     particleCount, clusters,
+    particleDurability, respawnDelayTicks,
   } = world;
 
   // ---- Rebuild spatial grid -------------------------------------------
@@ -187,20 +189,64 @@ export function applyInterParticleForces(world: WorldState): void {
     }
   }
 
-  // ---- Apply deferred contact-destruction -----------------------------
+  // ---- Apply deferred contact resolution (elemental durability model) ----
   for (let k = 0; k < scratchDestroyCount; k++) {
     const ai = scratchDestroyA[k];
     const bi = scratchDestroyB[k];
-    if (isAliveFlag[ai] === 1 && isAliveFlag[bi] === 1) {
-      isAliveFlag[ai] = 0;
+    if (isAliveFlag[ai] === 0 || isAliveFlag[bi] === 0) continue;
+
+    const kindA = kindBuffer[ai];
+    const kindB = kindBuffer[bi];
+    const profileA = getElementProfile(kindA);
+    const profileB = getElementProfile(kindB);
+
+    const multAvsB = getElementalMultiplier(kindA, kindB);
+    const multBvsA = getElementalMultiplier(kindB, kindA);
+
+    // Each particle deals damage to the other
+    particleDurability[bi] -= profileA.attackPower * multAvsB;
+    particleDurability[ai] -= profileB.attackPower * multBvsA;
+
+    if (particleDurability[bi] <= 0) {
       isAliveFlag[bi] = 0;
-      const ownerA = ownerEntityId[ai];
-      const ownerB = ownerEntityId[bi];
-      for (let ci = 0; ci < clusters.length; ci++) {
-        if (clusters[ci].entityId === ownerA || clusters[ci].entityId === ownerB) {
-          if (clusters[ci].healthPoints > 0) clusters[ci].healthPoints -= 1;
-          if (clusters[ci].healthPoints <= 0) clusters[ci].isAliveFlag = 0;
+      respawnDelayTicks[bi] = profileB.regenerationRateTicks;
+    }
+    if (particleDurability[ai] <= 0) {
+      isAliveFlag[ai] = 0;
+      respawnDelayTicks[ai] = profileA.regenerationRateTicks;
+    }
+    // NOTE: Cluster HP damage is now only dealt via core contact (see below).
+  }
+
+  // ---- Core-contact damage -----------------------------------------------
+  // A particle that enters an enemy cluster's core radius deals attackPower
+  // damage to that cluster and is consumed.
+  const CORE_RADIUS_WORLD = 14.0;
+  for (let i = 0; i < particleCount; i++) {
+    if (isAliveFlag[i] === 0) continue;
+    const ownerI = ownerEntityId[i];
+    if (ownerI === -1) continue; // unowned (Fluid)
+
+    for (let ci = 0; ci < clusters.length; ci++) {
+      const cluster = clusters[ci];
+      if (cluster.entityId === ownerI) continue;  // own cluster
+      if (cluster.isAliveFlag === 0) continue;
+
+      const dxc = positionXWorld[i] - cluster.positionXWorld;
+      const dyc = positionYWorld[i] - cluster.positionYWorld;
+      if (dxc * dxc + dyc * dyc < CORE_RADIUS_WORLD * CORE_RADIUS_WORLD) {
+        const profile = getElementProfile(kindBuffer[i]);
+        if (cluster.healthPoints > 0) {
+          cluster.healthPoints -= profile.attackPower;
+          if (cluster.healthPoints <= 0) {
+            cluster.healthPoints = 0;
+            cluster.isAliveFlag = 0;
+          }
         }
+        // Consume the attacking particle
+        isAliveFlag[i] = 0;
+        respawnDelayTicks[i] = profile.regenerationRateTicks;
+        break;
       }
     }
   }

@@ -3,6 +3,9 @@ import { GameCommand, CommandKind } from './commands';
 const JOYSTICK_DEAD_ZONE_PX = 12;
 export const JOYSTICK_MAX_RADIUS_PX = 60;
 
+/** Hold < 200ms = quick attack; hold ≥ 200ms transitions to block mode. */
+const ATTACK_HOLD_THRESHOLD_MS = 200;
+
 export interface InputState {
   isKeyW: boolean;
   isKeyA: boolean;
@@ -17,6 +20,32 @@ export interface InputState {
   touchJoystickBaseYPx: number;
   touchJoystickCurrentXPx: number;
   touchJoystickCurrentYPx: number;
+
+  // ---- Attack / block input state -----------------------------------------
+  /** True while the left mouse button is held (PC). */
+  isMouseDownFlag: 0 | 1;
+  /** Timestamp (performance.now()) when mouse button went down. */
+  mouseDownTimeMs: number;
+  /** Screen position where the mouse button went down. */
+  mouseDownXPx: number;
+  mouseDownYPx: number;
+  /** Set to 1 for one frame when an attack should fire (mouse released quickly). */
+  isAttackFiredFlag: 0 | 1;
+  /** Attack direction in screen pixels (relative, will be normalized upstream). */
+  attackDirXPx: number;
+  attackDirYPx: number;
+  /** 1 while the player is in block mode (mouse held > threshold or second touch held). */
+  isBlockingFlag: 0 | 1;
+  /** Block direction in screen pixels (raw mouse/touch position, normalized upstream). */
+  blockDirXPx: number;
+  blockDirYPx: number;
+  // ---- Second touch (mobile attack/block) ---------------------------------
+  secondTouchId: number;   // -1 = no second touch
+  secondTouchStartXPx: number;
+  secondTouchStartYPx: number;
+  secondTouchStartTimeMs: number;
+  secondTouchCurrentXPx: number;
+  secondTouchCurrentYPx: number;
 }
 
 export function createInputState(): InputState {
@@ -33,6 +62,22 @@ export function createInputState(): InputState {
     touchJoystickBaseYPx: 0,
     touchJoystickCurrentXPx: 0,
     touchJoystickCurrentYPx: 0,
+    isMouseDownFlag: 0,
+    mouseDownTimeMs: 0,
+    mouseDownXPx: 0,
+    mouseDownYPx: 0,
+    isAttackFiredFlag: 0,
+    attackDirXPx: 1,
+    attackDirYPx: 0,
+    isBlockingFlag: 0,
+    blockDirXPx: 1,
+    blockDirYPx: 0,
+    secondTouchId: -1,
+    secondTouchStartXPx: 0,
+    secondTouchStartYPx: 0,
+    secondTouchStartTimeMs: 0,
+    secondTouchCurrentXPx: 0,
+    secondTouchCurrentYPx: 0,
   };
 }
 
@@ -74,6 +119,33 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.mouseXPx = e.clientX;
     state.mouseYPx = e.clientY;
   }
+  function onMouseDown(e: MouseEvent): void {
+    if (e.button !== 0) return; // left button only
+    state.isMouseDownFlag = 1;
+    state.mouseDownTimeMs = performance.now();
+    state.mouseDownXPx = e.clientX;
+    state.mouseDownYPx = e.clientY;
+  }
+  function onMouseUp(e: MouseEvent): void {
+    if (e.button !== 0) return;
+    if (state.isMouseDownFlag === 0) return;
+    state.isMouseDownFlag = 0;
+    const holdMs = performance.now() - state.mouseDownTimeMs;
+    if (state.isBlockingFlag === 1) {
+      // Was blocking — collectCommands will emit BlockEnd on next frame
+      // (isMouseDownFlag=0 && isBlockingFlag=1 triggers the BlockEnd path)
+    } else if (holdMs < ATTACK_HOLD_THRESHOLD_MS) {
+      // Quick click — fire attack in direction of mouse movement, or rightward if stationary
+      state.isAttackFiredFlag = 1;
+      state.attackDirXPx = e.clientX - state.mouseDownXPx;
+      state.attackDirYPx = e.clientY - state.mouseDownYPx;
+      // If essentially no drag, default to rightward direction
+      if (Math.abs(state.attackDirXPx) < 2 && Math.abs(state.attackDirYPx) < 2) {
+        state.attackDirXPx = 1;
+        state.attackDirYPx = 0;
+      }
+    }
+  }
 
   function onTouchStart(e: TouchEvent): void {
     e.preventDefault();
@@ -87,6 +159,14 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         state.touchJoystickBaseYPx = t.clientY;
         state.touchJoystickCurrentXPx = t.clientX;
         state.touchJoystickCurrentYPx = t.clientY;
+      } else if (state.secondTouchId === -1) {
+        // Second finger — attack/block gesture
+        state.secondTouchId = t.identifier;
+        state.secondTouchStartXPx = t.clientX;
+        state.secondTouchStartYPx = t.clientY;
+        state.secondTouchStartTimeMs = performance.now();
+        state.secondTouchCurrentXPx = t.clientX;
+        state.secondTouchCurrentYPx = t.clientY;
       } else {
         // Additional touches update the aim/mouse position
         state.mouseXPx = t.clientX;
@@ -112,6 +192,9 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         state.touchJoystickCurrentXPx = t.clientX;
         state.touchJoystickCurrentYPx = t.clientY;
         applyJoystickToKeys(state);
+      } else if (t.identifier === state.secondTouchId) {
+        state.secondTouchCurrentXPx = t.clientX;
+        state.secondTouchCurrentYPx = t.clientY;
       } else {
         state.mouseXPx = t.clientX;
         state.mouseYPx = t.clientY;
@@ -127,6 +210,16 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         joystickTouchId = -1;
         state.isTouchJoystickActiveFlag = 0;
         clearJoystickKeys(state);
+      } else if (t.identifier === state.secondTouchId) {
+        state.secondTouchId = -1;
+        if (state.isBlockingFlag === 1) {
+          // Let collectCommands emit BlockEnd (isBlockingFlag stays 1 until then)
+        } else {
+          // Quick swipe — fire attack
+          state.isAttackFiredFlag = 1;
+          state.attackDirXPx = state.secondTouchCurrentXPx - state.secondTouchStartXPx;
+          state.attackDirYPx = state.secondTouchCurrentYPx - state.secondTouchStartYPx;
+        }
       }
     }
   }
@@ -134,6 +227,8 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('mouseup', onMouseUp);
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
   canvas.addEventListener('touchmove', onTouchMove, { passive: false });
   canvas.addEventListener('touchend', onTouchEnd, { passive: false });
@@ -143,6 +238,8 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
     canvas.removeEventListener('mousemove', onMouseMove);
+    canvas.removeEventListener('mousedown', onMouseDown);
+    canvas.removeEventListener('mouseup', onMouseUp);
     canvas.removeEventListener('touchstart', onTouchStart);
     canvas.removeEventListener('touchmove', onTouchMove);
     canvas.removeEventListener('touchend', onTouchEnd);
@@ -166,5 +263,63 @@ export function collectCommands(input: InputState): GameCommand[] {
     commands.push({ kind: CommandKind.ReturnToMap });
     input.isEscapePressed = false;
   }
+
+  // ---- Attack / block commands -------------------------------------------
+  if (input.isAttackFiredFlag === 1) {
+    input.isAttackFiredFlag = 0;
+    let adx = input.attackDirXPx;
+    let ady = input.attackDirYPx;
+    const alen = Math.sqrt(adx * adx + ady * ady);
+    if (alen < 0.1) { adx = 1; ady = 0; } else { adx /= alen; ady /= alen; }
+    commands.push({ kind: CommandKind.Attack, dirXNorm: adx, dirYNorm: ady });
+  }
+
+  // Transition from mouse-down to blocking when hold threshold exceeded
+  if (input.isMouseDownFlag === 1 && input.isBlockingFlag === 0) {
+    const holdMs = performance.now() - input.mouseDownTimeMs;
+    if (holdMs >= ATTACK_HOLD_THRESHOLD_MS) {
+      input.isBlockingFlag = 1;
+      let bdx = input.mouseXPx - input.mouseDownXPx;
+      let bdy = input.mouseYPx - input.mouseDownYPx;
+      const blen = Math.sqrt(bdx * bdx + bdy * bdy);
+      if (blen < 5) { bdx = 1; bdy = 0; } else { bdx /= blen; bdy /= blen; }
+      commands.push({ kind: CommandKind.BlockStart, dirXNorm: bdx, dirYNorm: bdy });
+    }
+  }
+
+  if (input.isBlockingFlag === 1) {
+    // Continuously update block direction toward current mouse position
+    input.blockDirXPx = input.mouseXPx;
+    input.blockDirYPx = input.mouseYPx;
+    commands.push({ kind: CommandKind.BlockUpdate, dirXNorm: input.mouseXPx, dirYNorm: input.mouseYPx });
+  }
+
+  if (input.isMouseDownFlag === 0 && input.isBlockingFlag === 1) {
+    input.isBlockingFlag = 0;
+    commands.push({ kind: CommandKind.BlockEnd });
+  }
+
+  // ---- Second touch attack/block (mobile) --------------------------------
+  if (input.secondTouchId !== -1) {
+    const holdMs = performance.now() - input.secondTouchStartTimeMs;
+    if (holdMs >= ATTACK_HOLD_THRESHOLD_MS && input.isBlockingFlag === 0) {
+      input.isBlockingFlag = 1;
+      let btdx = input.secondTouchCurrentXPx - input.secondTouchStartXPx;
+      let btdy = input.secondTouchCurrentYPx - input.secondTouchStartYPx;
+      const btlen = Math.sqrt(btdx * btdx + btdy * btdy);
+      if (btlen < 5) { btdx = 1; btdy = 0; } else { btdx /= btlen; btdy /= btlen; }
+      commands.push({ kind: CommandKind.BlockStart, dirXNorm: btdx, dirYNorm: btdy });
+    }
+    if (input.isBlockingFlag === 1) {
+      commands.push({ kind: CommandKind.BlockUpdate, dirXNorm: input.secondTouchCurrentXPx, dirYNorm: input.secondTouchCurrentYPx });
+    }
+  }
+
+  // Emit BlockEnd when second touch ended while blocking
+  if (input.secondTouchId === -1 && input.isBlockingFlag === 1 && input.isMouseDownFlag === 0) {
+    input.isBlockingFlag = 0;
+    commands.push({ kind: CommandKind.BlockEnd });
+  }
+
   return commands;
 }

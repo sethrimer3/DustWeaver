@@ -25,11 +25,13 @@ export function applyBindingForces(world: WorldState): void {
     ownerEntityId, isAliveFlag,
     kindBuffer,
     anchorAngleRad, anchorRadiusWorld,
+    behaviorMode,
     particleCount,
   } = world;
 
   for (let particleIndex = 0; particleIndex < particleCount; particleIndex++) {
     if (isAliveFlag[particleIndex] === 0) continue;
+    if (behaviorMode[particleIndex] !== 0) continue;
 
     // Find the owning cluster
     const ownerId = ownerEntityId[particleIndex];
