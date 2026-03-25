@@ -85,6 +85,11 @@ function spawnClusterParticles(
 
     // Unique per-particle noise phase so particles don't all jitter in unison
     world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
+
+    world.behaviorMode[idx]        = 0;
+    world.particleDurability[idx]  = profile.toughness;
+    world.respawnDelayTicks[idx]   = 0;
+    world.attackModeTicksLeft[idx] = 0;
   }
 }
 
@@ -279,6 +284,36 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.MovePlayer) {
         moveDx = cmd.dx;
         moveDy = cmd.dy;
+      } else if (cmd.kind === CommandKind.Attack) {
+        const player = world.clusters[0];
+        if (player !== undefined) {
+          // aimXPx/aimYPx are screen-space pixels; world units are 1:1 with screen pixels
+          // (no camera transform), so this subtraction yields a valid world-space vector.
+          let dirX = cmd.aimXPx - player.positionXWorld;
+          let dirY = cmd.aimYPx - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
+          world.playerAttackDirXWorld = dirX;
+          world.playerAttackDirYWorld = dirY;
+          world.playerAttackTriggeredFlag = 1;
+        }
+      } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
+        const player = world.clusters[0];
+        if (player !== undefined) {
+          // Both BlockStart and BlockUpdate carry absolute screen-space aim positions.
+          // This game uses a 1:1 screen-pixel to world-unit mapping (no camera offset or
+          // zoom), so subtracting world position from screen position is valid here.
+          let dirX = cmd.aimXPx - player.positionXWorld;
+          let dirY = cmd.aimYPx - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = world.playerBlockDirXWorld; dirY = world.playerBlockDirYWorld; }
+          else { dirX /= len; dirY /= len; }
+          world.playerBlockDirXWorld = dirX;
+          world.playerBlockDirYWorld = dirY;
+          world.isPlayerBlockingFlag = 1;
+        }
+      } else if (cmd.kind === CommandKind.BlockEnd) {
+        world.isPlayerBlockingFlag = 0;
       }
     }
 
@@ -367,8 +402,8 @@ export function startGameScreen(
 
     // Control hints
     const controlHintText = IS_TOUCH_DEVICE
-      ? 'Touch & drag to move  |  TAP MAP to return'
-      : 'ESC - Return to Map  |  WASD - Move';
+      ? 'L.thumb=move  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
+      : 'WASD=move  |  Click=attack  |  Hold=block  |  ESC=return';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '12px monospace';
     const hintWidthPx = ctx.measureText(controlHintText).width;

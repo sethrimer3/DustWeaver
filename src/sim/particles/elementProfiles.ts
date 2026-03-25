@@ -68,6 +68,16 @@ export interface ElementProfile {
   temperature: number;
   /** 0–1 orderliness hint; affects visual quality not motion. */
   stability: number;
+
+  // ---- Combat stats -------------------------------------------------------
+  /** Particle durability — how many damage-points it takes to destroy this particle. */
+  toughness: number;
+  /** Damage dealt to enemy cluster per core-contact hit. */
+  attackPower: number;
+  /** Maximum simultaneous alive particles for this kind per cluster. */
+  maxPopulationCount: number;
+  /** Ticks to wait before a combat-killed particle respawns at its owner. */
+  regenerationRateTicks: number;
 }
 
 // ---- Individual element presets -----------------------------------------
@@ -91,6 +101,10 @@ const PHYSICAL: ElementProfile = {
   lifetimeVarianceTicks: 120,
   temperature:          0.15,
   stability:            0.70,
+  toughness:            2.0,
+  attackPower:          1.5,
+  maxPopulationCount:   20,
+  regenerationRateTicks: 60,
 };
 
 /** Fire — flickering, rising, chaotic, lively.  Short lifetime. */
@@ -112,6 +126,10 @@ const FIRE: ElementProfile = {
   lifetimeVarianceTicks: 45,
   temperature:          1.0,
   stability:            0.08,
+  toughness:            1.0,
+  attackPower:          1.0,
+  maxPopulationCount:   24,
+  regenerationRateTicks: 30,
 };
 
 /** Ice — smooth, structured, crystalline.  Long lifetime. */
@@ -133,6 +151,10 @@ const ICE: ElementProfile = {
   lifetimeVarianceTicks: 70,
   temperature:          0.04,
   stability:            0.95,
+  toughness:            3.0,
+  attackPower:          2.0,
+  maxPopulationCount:   18,
+  regenerationRateTicks: 90,
 };
 
 /** Lightning — jittery, snapping, volatile.  Very short lifetime. */
@@ -154,6 +176,10 @@ const LIGHTNING: ElementProfile = {
   lifetimeVarianceTicks: 12,
   temperature:          0.8,
   stability:            0.0,
+  toughness:            1.0,
+  attackPower:          3.0,
+  maxPopulationCount:   16,
+  regenerationRateTicks: 20,
 };
 
 /** Poison — sticky, diffuse, slowly drifting. */
@@ -175,6 +201,10 @@ const POISON: ElementProfile = {
   lifetimeVarianceTicks: 60,
   temperature:          0.3,
   stability:            0.3,
+  toughness:            1.5,
+  attackPower:          1.0,
+  maxPopulationCount:   22,
+  regenerationRateTicks: 45,
 };
 
 /** Arcane — tight orbital spiral, strange turbulence. */
@@ -196,6 +226,10 @@ const ARCANE: ElementProfile = {
   lifetimeVarianceTicks: 100,
   temperature:          0.6,
   stability:            0.4,
+  toughness:            1.5,
+  attackPower:          2.0,
+  maxPopulationCount:   20,
+  regenerationRateTicks: 50,
 };
 
 /** Wind — fast, swirling, highly aligned. */
@@ -217,6 +251,10 @@ const WIND: ElementProfile = {
   lifetimeVarianceTicks: 50,
   temperature:          0.1,
   stability:            0.35,
+  toughness:            1.0,
+  attackPower:          1.0,
+  maxPopulationCount:   26,
+  regenerationRateTicks: 25,
 };
 
 /** Holy — rising, orderly, warm glow. */
@@ -238,6 +276,10 @@ const HOLY: ElementProfile = {
   lifetimeVarianceTicks: 90,
   temperature:          0.7,
   stability:            0.8,
+  toughness:            2.0,
+  attackPower:          2.5,
+  maxPopulationCount:   18,
+  regenerationRateTicks: 70,
 };
 
 /** Shadow — sinking, diffuse, unstable. */
@@ -259,6 +301,10 @@ const SHADOW: ElementProfile = {
   lifetimeVarianceTicks: 80,
   temperature:          0.2,
   stability:            0.25,
+  toughness:            1.5,
+  attackPower:          2.0,
+  maxPopulationCount:   20,
+  regenerationRateTicks: 40,
 };
 
 /** Metal — dense, rigid, square-shaped. Slow orbit, high cohesion. */
@@ -280,6 +326,10 @@ const METAL: ElementProfile = {
   lifetimeVarianceTicks: 100,
   temperature:          0.05,
   stability:            0.98,
+  toughness:            4.0,
+  attackPower:          1.5,
+  maxPopulationCount:   16,
+  regenerationRateTicks: 120,
 };
 
 /** Earth — grounded, steady, triangular drift. Moderate lifetime. */
@@ -301,6 +351,10 @@ const EARTH: ElementProfile = {
   lifetimeVarianceTicks: 120,
   temperature:          0.10,
   stability:            0.75,
+  toughness:            2.5,
+  attackPower:          1.0,
+  maxPopulationCount:   20,
+  regenerationRateTicks: 80,
 };
 
 /** Nature — organic tendrils, gently curling and flowing. */
@@ -322,6 +376,10 @@ const NATURE: ElementProfile = {
   lifetimeVarianceTicks: 80,
   temperature:          0.2,
   stability:            0.45,
+  toughness:            1.5,
+  attackPower:          1.0,
+  maxPopulationCount:   24,
+  regenerationRateTicks: 40,
 };
 
 /** Crystal — precise hexagonal orbits, very stable, bright. */
@@ -343,6 +401,10 @@ const CRYSTAL: ElementProfile = {
   lifetimeVarianceTicks: 50,
   temperature:          0.55,
   stability:            0.92,
+  toughness:            3.0,
+  attackPower:          2.5,
+  maxPopulationCount:   18,
+  regenerationRateTicks: 100,
 };
 
 /** Void — drifting ring-shaped particles, slow decay, gravitational pull. */
@@ -364,6 +426,10 @@ const VOID: ElementProfile = {
   lifetimeVarianceTicks: 120,
   temperature:          0.45,
   stability:            0.5,
+  toughness:            2.0,
+  attackPower:          3.0,
+  maxPopulationCount:   16,
+  regenerationRateTicks: 60,
 };
 
 /**
@@ -389,6 +455,10 @@ const FLUID: ElementProfile = {
   lifetimeVarianceTicks: 800,
   temperature:          0.0,    // cold/neutral
   stability:            1.0,
+  toughness:            0.1,
+  attackPower:          0.0,
+  maxPopulationCount:   300,
+  regenerationRateTicks: 0,
 };
 
 // ---- Lookup table --------------------------------------------------------
