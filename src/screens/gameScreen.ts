@@ -98,29 +98,38 @@ export function startGameScreen(
     }
 
     const commands = collectCommands(inputState);
+    let returnToMap = false;
+    let moveDx = 0;
+    let moveDy = 0;
     for (let ci = 0; ci < commands.length; ci++) {
       const cmd = commands[ci];
       if (cmd.kind === CommandKind.ReturnToMap) {
-        isRunning = false;
-        detachInput();
-        callbacks.onReturnToMap();
-        return;
-      }
-      if (cmd.kind === CommandKind.MovePlayer) {
-        const player = world.clusters[0];
-        if (player !== undefined) {
-          const len = Math.sqrt(cmd.dx * cmd.dx + cmd.dy * cmd.dy);
-          if (len > 0) {
-            const speedWorld = PLAYER_SPEED_WORLD * (elapsedMs / 1000.0);
-            player.positionXWorld += (cmd.dx / len) * speedWorld;
-            player.positionYWorld += (cmd.dy / len) * speedWorld;
-          }
-        }
+        returnToMap = true;
+      } else if (cmd.kind === CommandKind.MovePlayer) {
+        moveDx = cmd.dx;
+        moveDy = cmd.dy;
       }
     }
 
+    if (returnToMap) {
+      isRunning = false;
+      detachInput();
+      callbacks.onReturnToMap();
+      return;
+    }
+
+    // Apply player movement once per fixed tick to keep speed frame-rate independent
     accumulatorMs += elapsedMs;
     while (accumulatorMs >= FIXED_DT_MS) {
+      if (moveDx !== 0 || moveDy !== 0) {
+        const player = world.clusters[0];
+        if (player !== undefined) {
+          const len = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
+          const speedWorld = PLAYER_SPEED_WORLD * (FIXED_DT_MS / 1000.0);
+          player.positionXWorld += (moveDx / len) * speedWorld;
+          player.positionYWorld += (moveDy / len) * speedWorld;
+        }
+      }
       tick(world);
       accumulatorMs -= FIXED_DT_MS;
     }

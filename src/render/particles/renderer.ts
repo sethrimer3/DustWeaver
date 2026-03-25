@@ -5,6 +5,13 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
   const { particles } = snapshot;
   const { particleCount, isAliveFlag, positionXWorld, positionYWorld, kindBuffer, ownerEntityId } = particles;
 
+  // Pre-build entityId → isPlayerFlag map to avoid O(n×m) per-particle lookup
+  const isPlayerByEntityId = new Map<number, boolean>();
+  for (let ci = 0; ci < snapshot.clusters.length; ci++) {
+    const c = snapshot.clusters[ci];
+    isPlayerByEntityId.set(c.entityId, c.isPlayerFlag === 1);
+  }
+
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
 
@@ -14,14 +21,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     const screenX = positionXWorld[i] * scalePx + offsetXPx;
     const screenY = positionYWorld[i] * scalePx + offsetYPx;
 
-    const ownerId = ownerEntityId[i];
-    let isPlayer = false;
-    for (let ci = 0; ci < snapshot.clusters.length; ci++) {
-      if (snapshot.clusters[ci].entityId === ownerId) {
-        isPlayer = snapshot.clusters[ci].isPlayerFlag === 1;
-        break;
-      }
-    }
+    const isPlayer = isPlayerByEntityId.get(ownerEntityId[i]) === true;
     const color = isPlayer ? '#00cfff' : '#ff4444';
 
     ctx.beginPath();
