@@ -261,6 +261,111 @@ const SHADOW: ElementProfile = {
   stability:            0.25,
 };
 
+/** Metal — dense, rigid, square-shaped. Slow orbit, high cohesion. */
+const METAL: ElementProfile = {
+  massKg:               4.0,
+  drag:                 3.5,
+  attractionStrength:   3.0,
+  orbitalStrength:      10.0,
+  orbitRadiusWorld:     28.0,
+  noiseAmplitude:       4.0,
+  instability:          0.01,
+  curlStrength:         0.5,
+  diffusion:            0.1,
+  upwardBias:           -8.0,  // heavy gravity
+  cohesion:             0.8,
+  separation:           0.9,
+  alignment:            0.6,
+  lifetimeBaseTicks:    800,
+  lifetimeVarianceTicks: 100,
+  temperature:          0.05,
+  stability:            0.98,
+};
+
+/** Earth — grounded, steady, triangular drift. Moderate lifetime. */
+const EARTH: ElementProfile = {
+  massKg:               2.0,
+  drag:                 2.8,
+  attractionStrength:   1.8,
+  orbitalStrength:      16.0,
+  orbitRadiusWorld:     30.0,
+  noiseAmplitude:       12.0,
+  instability:          0.05,
+  curlStrength:         4.0,
+  diffusion:            1.5,
+  upwardBias:           -6.0,  // gravity-like
+  cohesion:             0.5,
+  separation:           0.6,
+  alignment:            0.3,
+  lifetimeBaseTicks:    500,
+  lifetimeVarianceTicks: 120,
+  temperature:          0.10,
+  stability:            0.75,
+};
+
+/** Nature — organic tendrils, gently curling and flowing. */
+const NATURE: ElementProfile = {
+  massKg:               0.7,
+  drag:                 1.2,
+  attractionStrength:   0.6,
+  orbitalStrength:      22.0,
+  orbitRadiusWorld:     32.0,
+  noiseAmplitude:       18.0,
+  instability:          0.10,
+  curlStrength:         26.0,   // strong curl gives organic feel
+  diffusion:            6.0,
+  upwardBias:           4.0,   // gentle upward drift
+  cohesion:             0.25,
+  separation:           0.35,
+  alignment:            0.2,
+  lifetimeBaseTicks:    320,
+  lifetimeVarianceTicks: 80,
+  temperature:          0.2,
+  stability:            0.45,
+};
+
+/** Crystal — precise hexagonal orbits, very stable, bright. */
+const CRYSTAL: ElementProfile = {
+  massKg:               1.4,
+  drag:                 2.6,
+  attractionStrength:   2.2,
+  orbitalStrength:      18.0,
+  orbitRadiusWorld:     34.0,
+  noiseAmplitude:       2.0,
+  instability:          0.015,
+  curlStrength:         0.8,
+  diffusion:            0.1,
+  upwardBias:           0.0,
+  cohesion:             0.7,
+  separation:           0.95,
+  alignment:            0.65,
+  lifetimeBaseTicks:    700,
+  lifetimeVarianceTicks: 50,
+  temperature:          0.55,
+  stability:            0.92,
+};
+
+/** Void — drifting ring-shaped particles, slow decay, gravitational pull. */
+const VOID: ElementProfile = {
+  massKg:               0.8,
+  drag:                 0.9,
+  attractionStrength:   1.4,
+  orbitalStrength:      30.0,
+  orbitRadiusWorld:     40.0,
+  noiseAmplitude:       16.0,
+  instability:          0.08,
+  curlStrength:         18.0,
+  diffusion:            3.0,
+  upwardBias:           -3.0,  // slow sink
+  cohesion:             0.12,
+  separation:           0.5,
+  alignment:            0.3,
+  lifetimeBaseTicks:    450,
+  lifetimeVarianceTicks: 120,
+  temperature:          0.45,
+  stability:            0.5,
+};
+
 // ---- Lookup table --------------------------------------------------------
 
 /**
@@ -268,15 +373,20 @@ const SHADOW: ElementProfile = {
  * Must stay in sync with the ParticleKind enum order.
  */
 export const ELEMENT_PROFILES: ElementProfile[] = [
-  PHYSICAL,   // 0 — ParticleKind.Physical
-  FIRE,       // 1 — ParticleKind.Fire
-  ICE,        // 2 — ParticleKind.Ice
-  LIGHTNING,  // 3 — ParticleKind.Lightning
-  POISON,     // 4 — ParticleKind.Poison
-  ARCANE,     // 5 — ParticleKind.Arcane
-  WIND,       // 6 — ParticleKind.Wind
-  HOLY,       // 7 — ParticleKind.Holy
-  SHADOW,     // 8 — ParticleKind.Shadow
+  PHYSICAL,   // 0  — ParticleKind.Physical
+  FIRE,       // 1  — ParticleKind.Fire
+  ICE,        // 2  — ParticleKind.Ice
+  LIGHTNING,  // 3  — ParticleKind.Lightning
+  POISON,     // 4  — ParticleKind.Poison
+  ARCANE,     // 5  — ParticleKind.Arcane
+  WIND,       // 6  — ParticleKind.Wind
+  HOLY,       // 7  — ParticleKind.Holy
+  SHADOW,     // 8  — ParticleKind.Shadow
+  METAL,      // 9  — ParticleKind.Metal
+  EARTH,      // 10 — ParticleKind.Earth
+  NATURE,     // 11 — ParticleKind.Nature
+  CRYSTAL,    // 12 — ParticleKind.Crystal
+  VOID,       // 13 — ParticleKind.Void
 ];
 
 /** Returns the profile for `kind`, falling back to Physical if out of range. */

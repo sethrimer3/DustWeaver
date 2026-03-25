@@ -1,8 +1,14 @@
+import { PlayerProgress } from '../progression/playerProgress';
+
 export interface WorldMapCallbacks {
-  onStartLevel: () => void;
+  onStartLevel: (progress: PlayerProgress) => void;
 }
 
-export function showWorldMap(root: HTMLElement, callbacks: WorldMapCallbacks): () => void {
+export function showWorldMap(
+  root: HTMLElement,
+  progress: PlayerProgress,
+  callbacks: WorldMapCallbacks,
+): () => void {
   const el = document.createElement('div');
   el.id = 'world-map';
   el.style.cssText = `
@@ -11,7 +17,10 @@ export function showWorldMap(root: HTMLElement, callbacks: WorldMapCallbacks): (
     background: rgba(0,0,0,0.85); color: #fff; font-family: monospace;
   `;
   el.innerHTML = `
-    <h2 style="font-size: 2rem; color: #00cfff; margin-bottom: 2rem;">World Map</h2>
+    <h2 style="font-size: 2rem; color: #00cfff; margin-bottom: 0.5rem;">World Map</h2>
+    <p style="color:#888; font-size:0.85rem; margin-bottom:2rem;">
+      Level ${progress.level} &nbsp;|&nbsp; ${progress.dustSlots} dust slots available
+    </p>
     <div style="display: flex; gap: 2rem;">
       <button id="btn-lobby" style="
         background: transparent; border: 2px solid #888; color: #888;
@@ -36,7 +45,7 @@ export function showWorldMap(root: HTMLElement, callbacks: WorldMapCallbacks): (
   });
 
   btnW1L1.addEventListener('click', () => {
-    callbacks.onStartLevel();
+    callbacks.onStartLevel(progress);
   });
 
   return () => {

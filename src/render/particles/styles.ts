@@ -21,6 +21,11 @@ const STYLES: ParticleStyle[] = [
   { colorHex: '#88ffee', radiusPx: 4 }, // Wind      — pale cyan
   { colorHex: '#ffeeaa', radiusPx: 4 }, // Holy      — warm gold
   { colorHex: '#6633cc', radiusPx: 4 }, // Shadow    — deep purple
+  { colorHex: '#aabbcc', radiusPx: 4 }, // Metal     — silver
+  { colorHex: '#88662a', radiusPx: 4 }, // Earth     — warm brown
+  { colorHex: '#44cc44', radiusPx: 4 }, // Nature    — vivid green
+  { colorHex: '#aaeeff', radiusPx: 4 }, // Crystal   — icy bright blue
+  { colorHex: '#220033', radiusPx: 5 }, // Void      — near-black purple (slightly larger)
 ];
 
 const FALLBACK_STYLE: ParticleStyle = STYLES[0];

@@ -14,7 +14,7 @@ import { CommandKind } from '../input/commands';
 
 const FIXED_DT_MS = 16.666;
 const PLAYER_SPEED_WORLD = 100.0;
-/** Particles per cluster — more gives richer elemental cloud effects. */
+/** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
 
 // Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
@@ -86,9 +86,47 @@ function spawnClusterParticles(
   }
 }
 
+/**
+ * Distributes `totalCount` particles across the kinds in `loadout`,
+ * spreading them as evenly as possible.
+ */
+function spawnLoadoutParticles(
+  world: WorldState,
+  clusterEntityId: number,
+  clusterXWorld: number,
+  clusterYWorld: number,
+  loadout: ParticleKind[],
+  totalCount: number,
+  rng: RngState,
+): void {
+  if (loadout.length === 0) {
+    // Fallback to Physical if somehow the loadout is empty
+    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, ParticleKind.Physical, totalCount, rng);
+    return;
+  }
+
+  const baseCount = Math.floor(totalCount / loadout.length);
+  let remainder   = totalCount - baseCount * loadout.length;
+
+  for (let k = 0; k < loadout.length; k++) {
+    const extraCount = remainder > 0 ? 1 : 0;
+    remainder -= extraCount;
+    spawnClusterParticles(
+      world,
+      clusterEntityId,
+      clusterXWorld,
+      clusterYWorld,
+      loadout[k],
+      baseCount + extraCount,
+      rng,
+    );
+  }
+}
+
 export function startGameScreen(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
+  playerLoadout: ParticleKind[],
   callbacks: GameScreenCallbacks,
 ): () => void {
   // Attempt to create the WebGL particle renderer.  If WebGL is unavailable
@@ -126,10 +164,10 @@ export function startGameScreen(
   world.clusters.push(playerCluster);
   world.clusters.push(enemyCluster);
 
-  // Player gets Fire particles; enemy gets Ice particles.
-  // Different elements give each side a visually distinct feel.
-  spawnClusterParticles(world, playerCluster.entityId, playerCluster.positionXWorld, playerCluster.positionYWorld, ParticleKind.Fire,      PARTICLE_COUNT_PER_CLUSTER, levelRng);
-  spawnClusterParticles(world, enemyCluster.entityId,  enemyCluster.positionXWorld,  enemyCluster.positionYWorld,  ParticleKind.Ice,       PARTICLE_COUNT_PER_CLUSTER, levelRng);
+  // Player spawns particles from their chosen loadout.
+  // Enemy always gets Ice particles.
+  spawnLoadoutParticles(world, playerCluster.entityId, playerCluster.positionXWorld, playerCluster.positionYWorld, playerLoadout,       PARTICLE_COUNT_PER_CLUSTER, levelRng);
+  spawnClusterParticles(world, enemyCluster.entityId,  enemyCluster.positionXWorld,  enemyCluster.positionYWorld,  ParticleKind.Ice, PARTICLE_COUNT_PER_CLUSTER, levelRng);
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
