@@ -35,8 +35,8 @@ interface DecorativeParticle {
 
 // ─── Noise helpers (no external dependencies) ──────────────────────────────
 
-/** Simple 2D hash returning a value in [−1, 1]. */
-function hash2(x: number, y: number): number {
+/** Simple 2D hash returning a value in [−1, 1]. Used only for decorative noise (not sim RNG). */
+function noiseHash2(x: number, y: number): number {
   // Integer hash chain (bit-mixing)
   let n = Math.imul(Math.imul(x | 0, 1664525) + 1013904223 | 0, (y | 0) ^ 0x9e3779b9 | 0);
   n = Math.imul(n ^ (n >>> 13), 1664525) + 1013904223 | 0;
@@ -58,10 +58,10 @@ function valueNoise(x: number, y: number, scale: number): number {
   // Smooth-step
   const ux = fx * fx * (3 - 2 * fx);
   const uy = fy * fy * (3 - 2 * fy);
-  const v00 = hash2(ix,     iy    );
-  const v10 = hash2(ix + 1, iy    );
-  const v01 = hash2(ix,     iy + 1);
-  const v11 = hash2(ix + 1, iy + 1);
+  const v00 = noiseHash2(ix,     iy    );
+  const v10 = noiseHash2(ix + 1, iy    );
+  const v01 = noiseHash2(ix,     iy + 1);
+  const v11 = noiseHash2(ix + 1, iy + 1);
   return v00 * (1 - ux) * (1 - uy)
        + v10 *      ux  * (1 - uy)
        + v01 * (1 - ux) *      uy
@@ -120,10 +120,11 @@ export class DecorativeParticleBackground {
     this.ctx = this.canvas.getContext('2d')!;
 
     this.particles = [];
+    // Initialize at (0,0); resize() must be called after construction to scatter them.
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       this.particles.push({
-        x: Math.random() * 800,
-        y: Math.random() * 600,
+        x: 0,
+        y: 0,
         alpha: Math.random(),
         baseAlpha: 0.18 + Math.random() * 0.42,
       });

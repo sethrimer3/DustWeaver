@@ -48,12 +48,14 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       cleanup = startGameScreen(canvas, uiRoot, activeLoadout, selectedLevel, {
         onReturnToMap: () => navigate('worldMap'),
         onLevelComplete: (levelDef) => {
-          // Unlock the next level if this was the furthest one completed
-          const completedIndex = levelDef.levelNumber - 1; // 0-based
-          if (completedIndex + 1 >= progress.world1UnlockedCount) {
+          // completedIndex is 0-based; world1UnlockedCount counts how many are available (1-based).
+          // Unlock the next level when the player beats the last currently-unlocked level.
+          const completedIndex = levelDef.levelNumber - 1; // 0-based index of completed level
+          if (completedIndex >= progress.world1UnlockedCount - 1) {
+            // Player beat the frontier level — unlock the next one
             progress.world1UnlockedCount = Math.min(
               WORLD1_LEVELS.length,
-              completedIndex + 2,
+              completedIndex + 2, // +1 to move past completed, +1 for 1-based count
             );
           }
           navigate('worldMap');

@@ -23,6 +23,9 @@ const BACKGROUND_FLUID_COUNT = 300;
 // Delay (ms) after all enemies are defeated before triggering onLevelComplete
 const VICTORY_DELAY_MS = 2000;
 
+/** Boss clusters receive this multiplier on their base HP for extra durability. */
+const BOSS_HP_MULTIPLIER = 2;
+
 // Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
 const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
 const JOYSTICK_INNER_RADIUS_PX = 22;
@@ -255,7 +258,7 @@ export function startGameScreen(
     const ex = enemyDef.xFraction * canvas.width;
     const ey = enemyDef.yFraction * canvas.height;
     const particleCount = enemyDef.particleCount;
-    const hp = enemyDef.isBossFlag === 1 ? particleCount * 2 : particleCount;
+    const hp = enemyDef.isBossFlag === 1 ? particleCount * BOSS_HP_MULTIPLIER : particleCount;
 
     const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
     world.clusters.push(enemyCluster);

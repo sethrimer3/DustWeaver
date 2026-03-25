@@ -35,7 +35,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
       box-shadow: 0 0 16px rgba(0,207,255,0.3);
     ">PLAY</button>
     <p style="position:absolute; bottom:1rem; color:rgba(255,255,255,0.2); font-size:0.7rem;">
-      Particle Physics &amp; Euclidean Fluid Dynamics
+      Particle Physics &amp; Eulerian Fluid Dynamics
     </p>
   `;
 

@@ -52,8 +52,18 @@ export function applyWallForces(world: WorldState): void {
       const dist = Math.sqrt(dist2);
 
       if (dist < 0.001) {
-        // Particle is at or inside wall — push right as fallback
-        forceX[i] += WALL_FORCE_MAX;
+        // Particle is at/inside wall center — push away from wall center
+        const wcx = wx + ww * 0.5;
+        const wcy = wy + wh * 0.5;
+        const fwx = positionXWorld[i] - wcx;
+        const fwy = positionYWorld[i] - wcy;
+        const fwLen = Math.sqrt(fwx * fwx + fwy * fwy);
+        if (fwLen > 0.001) {
+          forceX[i] += (fwx / fwLen) * WALL_FORCE_MAX;
+          forceY[i] += (fwy / fwLen) * WALL_FORCE_MAX;
+        } else {
+          forceX[i] += WALL_FORCE_MAX; // degenerate fallback
+        }
         continue;
       }
 
