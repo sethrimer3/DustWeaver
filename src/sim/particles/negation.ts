@@ -31,9 +31,10 @@ function setMultiplier(attackerKind: number, defenderKind: number, value: number
 }
 
 // ---- Fire (1) interactions -----------------------------------------------
-setMultiplier(1, 2, 0.33);  // fire vs ice  -- 3 fire to kill 1 ice
-setMultiplier(1, 11, 2.0);  // fire vs nature
-setMultiplier(1, 12, 0.5);  // fire vs crystal -- fire melts crystal slowly
+// fire vs ice: 3 fire needed per ice = already handled by ice.toughness=3 / fire.attackPower=1
+// No extra multiplier needed; ice is simply tough, not fire-resistant.
+setMultiplier(1, 11, 2.0);  // fire vs nature -- fire burns plants more efficiently
+setMultiplier(1, 12, 0.5);  // fire vs crystal -- fire barely melts crystal (crystal handles heat)
 
 // ---- Ice (2) interactions ------------------------------------------------
 setMultiplier(2, 1, 1.0);   // ice vs fire (neutral; fire just has low toughness)

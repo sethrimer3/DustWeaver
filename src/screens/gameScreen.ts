@@ -287,7 +287,8 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.Attack) {
         const player = world.clusters[0];
         if (player !== undefined) {
-          // Convert aim screen position to world-space direction relative to the player
+          // aimXPx/aimYPx are screen-space pixels; world units are 1:1 with screen pixels
+          // (no camera transform), so this subtraction yields a valid world-space vector.
           let dirX = cmd.aimXPx - player.positionXWorld;
           let dirY = cmd.aimYPx - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -299,19 +300,14 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
         const player = world.clusters[0];
         if (player !== undefined) {
-          let dirX: number;
-          let dirY: number;
-          if (cmd.kind === CommandKind.BlockStart) {
-            dirX = cmd.dirXNorm;
-            dirY = cmd.dirYNorm;
-          } else {
-            // BlockUpdate carries raw mouse/touch screen position
-            dirX = cmd.dirXNorm - player.positionXWorld;
-            dirY = cmd.dirYNorm - player.positionYWorld;
-            const len = Math.sqrt(dirX * dirX + dirY * dirY);
-            if (len < 1.0) { dirX = world.playerBlockDirXWorld; dirY = world.playerBlockDirYWorld; }
-            else { dirX /= len; dirY /= len; }
-          }
+          // Both BlockStart and BlockUpdate carry absolute screen-space aim positions.
+          // This game uses a 1:1 screen-pixel to world-unit mapping (no camera offset or
+          // zoom), so subtracting world position from screen position is valid here.
+          let dirX = cmd.aimXPx - player.positionXWorld;
+          let dirY = cmd.aimYPx - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = world.playerBlockDirXWorld; dirY = world.playerBlockDirYWorld; }
+          else { dirX /= len; dirY /= len; }
           world.playerBlockDirXWorld = dirX;
           world.playerBlockDirYWorld = dirY;
           world.isPlayerBlockingFlag = 1;

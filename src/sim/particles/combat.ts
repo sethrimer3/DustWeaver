@@ -42,7 +42,7 @@ function getAttackParams(kind: number): { speedWorld: number; halfSpreadRad: num
   switch (kind as ParticleKind) {
     case ParticleKind.Physical:  return { speedWorld: 420, halfSpreadRad: 0.10, loopStrength: 0.0  };
     case ParticleKind.Fire:      return { speedWorld: 220, halfSpreadRad: 0.40, loopStrength: 1.0  }; // fire loops
-    case ParticleKind.Ice:       return { speedWorld: 320, halfSpreadRad: 1.05, loopStrength: 0.0  }; // wide arc ~60°
+    case ParticleKind.Ice:       return { speedWorld: 320, halfSpreadRad: 1.05, loopStrength: 0.0  }; // wide arc ~120° total
     case ParticleKind.Lightning: return { speedWorld: 750, halfSpreadRad: 0.08, loopStrength: 0.0  }; // tight streak
     case ParticleKind.Poison:    return { speedWorld: 90,  halfSpreadRad: 1.57, loopStrength: 0.0  }; // cloud burst (~180°)
     case ParticleKind.Arcane:    return { speedWorld: 260, halfSpreadRad: 0.52, loopStrength: 0.5  }; // spiral
@@ -52,7 +52,7 @@ function getAttackParams(kind: number): { speedWorld: number; halfSpreadRad: num
     case ParticleKind.Metal:     return { speedWorld: 180, halfSpreadRad: 0.17, loopStrength: 0.0  }; // heavy beam
     case ParticleKind.Earth:     return { speedWorld: 160, halfSpreadRad: 0.35, loopStrength: 0.0  }; // rock spread
     case ParticleKind.Nature:    return { speedWorld: 160, halfSpreadRad: 0.78, loopStrength: 0.3  }; // curving vines
-    case ParticleKind.Crystal:   return { speedWorld: 380, halfSpreadRad: 1.57, loopStrength: 0.0  }; // wide shards ~90°
+    case ParticleKind.Crystal:   return { speedWorld: 380, halfSpreadRad: 1.57, loopStrength: 0.0  }; // wide shards ~180° total
     case ParticleKind.Void:      return { speedWorld: 270, halfSpreadRad: 0.70, loopStrength: -0.5 }; // inward spiral
     default:                     return { speedWorld: 200, halfSpreadRad: 0.50, loopStrength: 0.0  };
   }

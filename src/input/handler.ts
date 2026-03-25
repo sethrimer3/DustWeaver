@@ -36,9 +36,6 @@ export interface InputState {
   attackDirYPx: number;
   /** 1 while the player is in block mode (mouse held > threshold or second touch held). */
   isBlockingFlag: 0 | 1;
-  /** Block direction in screen pixels (raw mouse/touch position, normalized upstream). */
-  blockDirXPx: number;
-  blockDirYPx: number;
   // ---- Second touch (mobile attack/block) ---------------------------------
   secondTouchId: number;   // -1 = no second touch
   secondTouchStartXPx: number;
@@ -70,8 +67,6 @@ export function createInputState(): InputState {
     attackDirXPx: 1,
     attackDirYPx: 0,
     isBlockingFlag: 0,
-    blockDirXPx: 1,
-    blockDirYPx: 0,
     secondTouchId: -1,
     secondTouchStartXPx: 0,
     secondTouchStartYPx: 0,
@@ -272,19 +267,14 @@ export function collectCommands(input: InputState): GameCommand[] {
     const holdMs = performance.now() - input.mouseDownTimeMs;
     if (holdMs >= ATTACK_HOLD_THRESHOLD_MS) {
       input.isBlockingFlag = 1;
-      let bdx = input.mouseXPx - input.mouseDownXPx;
-      let bdy = input.mouseYPx - input.mouseDownYPx;
-      const blen = Math.sqrt(bdx * bdx + bdy * bdy);
-      if (blen < 5) { bdx = 1; bdy = 0; } else { bdx /= blen; bdy /= blen; }
-      commands.push({ kind: CommandKind.BlockStart, dirXNorm: bdx, dirYNorm: bdy });
+      // Pass absolute mouse screen position; gameScreen.ts will compute direction from player
+      commands.push({ kind: CommandKind.BlockStart, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
     }
   }
 
   if (input.isBlockingFlag === 1) {
-    // Continuously update block direction toward current mouse position
-    input.blockDirXPx = input.mouseXPx;
-    input.blockDirYPx = input.mouseYPx;
-    commands.push({ kind: CommandKind.BlockUpdate, dirXNorm: input.mouseXPx, dirYNorm: input.mouseYPx });
+    // Continuously update block direction toward current mouse/touch position
+    commands.push({ kind: CommandKind.BlockUpdate, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
   }
 
   if (input.isMouseDownFlag === 0 && input.isBlockingFlag === 1) {
@@ -297,14 +287,11 @@ export function collectCommands(input: InputState): GameCommand[] {
     const holdMs = performance.now() - input.secondTouchStartTimeMs;
     if (holdMs >= ATTACK_HOLD_THRESHOLD_MS && input.isBlockingFlag === 0) {
       input.isBlockingFlag = 1;
-      let btdx = input.secondTouchCurrentXPx - input.secondTouchStartXPx;
-      let btdy = input.secondTouchCurrentYPx - input.secondTouchStartYPx;
-      const btlen = Math.sqrt(btdx * btdx + btdy * btdy);
-      if (btlen < 5) { btdx = 1; btdy = 0; } else { btdx /= btlen; btdy /= btlen; }
-      commands.push({ kind: CommandKind.BlockStart, dirXNorm: btdx, dirYNorm: btdy });
+      // Pass absolute touch screen position; gameScreen.ts will compute direction from player
+      commands.push({ kind: CommandKind.BlockStart, aimXPx: input.secondTouchCurrentXPx, aimYPx: input.secondTouchCurrentYPx });
     }
     if (input.isBlockingFlag === 1) {
-      commands.push({ kind: CommandKind.BlockUpdate, dirXNorm: input.secondTouchCurrentXPx, dirYNorm: input.secondTouchCurrentYPx });
+      commands.push({ kind: CommandKind.BlockUpdate, aimXPx: input.secondTouchCurrentXPx, aimYPx: input.secondTouchCurrentYPx });
     }
   }
 

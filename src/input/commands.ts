@@ -30,14 +30,22 @@ export interface AttackCommand {
 
 export interface BlockStartCommand {
   kind: CommandKind.BlockStart;
-  dirXNorm: number;
-  dirYNorm: number;
+  /**
+   * Absolute screen-space aim position (pixels).
+   * gameScreen.ts converts to world-space direction relative to the player.
+   */
+  aimXPx: number;
+  aimYPx: number;
 }
 
 export interface BlockUpdateCommand {
   kind: CommandKind.BlockUpdate;
-  dirXNorm: number;
-  dirYNorm: number;
+  /**
+   * Absolute screen-space aim position (pixels).
+   * gameScreen.ts converts to world-space direction relative to the player.
+   */
+  aimXPx: number;
+  aimYPx: number;
 }
 
 export interface BlockEndCommand {
