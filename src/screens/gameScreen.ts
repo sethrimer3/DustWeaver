@@ -1,12 +1,13 @@
 import { createWorldState, WorldState, MAX_PARTICLES, MAX_WALLS } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
+import { initGrappleChainParticles, fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { tick } from '../sim/tick';
 import { RngState, createRng, nextFloat, nextFloatRange } from '../sim/rng';
 import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
-import { renderClusters, renderWalls } from '../render/clusters/renderer';
+import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
 import { renderHudOverlay, HudState } from '../render/hud/overlay';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
@@ -273,6 +274,9 @@ export function startGameScreen(
   // ── Spawn background Fluid particles ─────────────────────────────────────
   spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
 
+  // ── Reserve grapple hook chain particle slots ─────────────────────────────
+  initGrappleChainParticles(world, playerCluster.entityId);
+
   // ── Load level walls ──────────────────────────────────────────────────────
   loadWalls(world, levelDef, canvas.width, canvas.height);
 
@@ -373,6 +377,13 @@ export function startGameScreen(
         }
       } else if (cmd.kind === CommandKind.BlockEnd) {
         world.isPlayerBlockingFlag = 0;
+      } else if (cmd.kind === CommandKind.GrappleFire) {
+        const player = world.clusters[0];
+        if (player !== undefined && player.isAliveFlag === 1) {
+          fireGrapple(world, cmd.aimXPx, cmd.aimYPx);
+        }
+      } else if (cmd.kind === CommandKind.GrappleRelease) {
+        releaseGrapple(world);
       }
     }
 
@@ -465,6 +476,7 @@ export function startGameScreen(
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, 0, 0, 1.0);
     renderClusters(ctx, snapshot, 0, 0, 1.0);
+    renderGrapple(ctx, snapshot, 0, 0, 1.0);
     renderHudOverlay(ctx, hudState);
 
     // ── Level name banner (top-center) ──────────────────────────────────────
@@ -528,7 +540,7 @@ export function startGameScreen(
     // ── Control hints ────────────────────────────────────────────────────────
     const controlHintText = IS_TOUCH_DEVICE
       ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
-      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  ESC=return';
+      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  R.Click=grapple  |  ESC=return';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '12px monospace';
     const hintWidthPx = ctx.measureText(controlHintText).width;

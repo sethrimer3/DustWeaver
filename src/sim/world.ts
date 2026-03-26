@@ -60,6 +60,24 @@ export interface WorldState extends ParticleBuffers {
   // ---- Player jump (set each frame by game screen) ------------------------
   /** Set to 1 for one tick to trigger a player jump (cleared by applyClusterMovement). */
   playerJumpTriggeredFlag: 0 | 1;
+
+  // ---- Grapple hook -------------------------------------------------------
+  /** 1 while the player's grapple hook is attached to an anchor point. */
+  isGrappleActiveFlag: 0 | 1;
+  /** World-space X coordinate of the grapple anchor point. */
+  grappleAnchorXWorld: number;
+  /** World-space Y coordinate of the grapple anchor point. */
+  grappleAnchorYWorld: number;
+  /**
+   * Fixed rope length (world units) set at fire time.
+   * The player is constrained to stay within this distance of the anchor.
+   */
+  grappleLengthWorld: number;
+  /**
+   * Start index in the particle buffer of the GRAPPLE_SEGMENT_COUNT chain particles.
+   * -1 if not yet allocated. These slots are reserved by the game screen at startup.
+   */
+  grappleParticleStartIndex: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -88,6 +106,11 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerMoveInputDxWorld: 0.0,
     playerMoveInputDyWorld: 0.0,
     playerJumpTriggeredFlag: 0,
+    isGrappleActiveFlag: 0,
+    grappleAnchorXWorld: 0.0,
+    grappleAnchorYWorld: 0.0,
+    grappleLengthWorld: 0.0,
+    grappleParticleStartIndex: -1,
     ...createParticleBuffers(),
   };
 }

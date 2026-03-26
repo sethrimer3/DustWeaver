@@ -7,6 +7,8 @@ export enum CommandKind {
   BlockEnd = 5,
   Dash = 6,
   Jump = 7,
+  GrappleFire = 8,
+  GrappleRelease = 9,
 }
 
 export interface MovePlayerCommand {
@@ -68,6 +70,20 @@ export interface JumpCommand {
   kind: CommandKind.Jump;
 }
 
+export interface GrappleFireCommand {
+  kind: CommandKind.GrappleFire;
+  /**
+   * Aim point in screen space (absolute pixels) where the hook is fired.
+   * gameScreen.ts converts to world-space anchor position.
+   */
+  aimXPx: number;
+  aimYPx: number;
+}
+
+export interface GrappleReleaseCommand {
+  kind: CommandKind.GrappleRelease;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
@@ -76,5 +92,7 @@ export type GameCommand =
   | BlockUpdateCommand
   | BlockEndCommand
   | DashCommand
-  | JumpCommand;
+  | JumpCommand
+  | GrappleFireCommand
+  | GrappleReleaseCommand;
 

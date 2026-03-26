@@ -49,6 +49,16 @@ export interface InputState {
   secondTouchStartTimeMs: number;
   secondTouchCurrentXPx: number;
   secondTouchCurrentYPx: number;
+  // ---- Grapple hook -------------------------------------------------------
+  /** True while the right mouse button is held (triggers grapple). */
+  isRightMouseDownFlag: 0 | 1;
+  /** Set to 1 for one frame when grapple should fire (right button pressed). */
+  isGrappleFireTriggeredFlag: 0 | 1;
+  /** Set to 1 for one frame when grapple should release (right button released). */
+  isGrappleReleaseTriggeredFlag: 0 | 1;
+  /** Screen-space aim position where the grapple fires. */
+  grappleAimXPx: number;
+  grappleAimYPx: number;
 }
 
 export function createInputState(): InputState {
@@ -82,6 +92,11 @@ export function createInputState(): InputState {
     secondTouchStartTimeMs: 0,
     secondTouchCurrentXPx: 0,
     secondTouchCurrentYPx: 0,
+    isRightMouseDownFlag: 0,
+    isGrappleFireTriggeredFlag: 0,
+    isGrappleReleaseTriggeredFlag: 0,
+    grappleAimXPx: 0,
+    grappleAimYPx: 0,
   };
 }
 
@@ -135,25 +150,36 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.mouseYPx = e.clientY;
   }
   function onMouseDown(e: MouseEvent): void {
-    if (e.button !== 0) return; // left button only
-    state.isMouseDownFlag = 1;
-    state.mouseDownTimeMs = performance.now();
-    state.mouseDownXPx = e.clientX;
-    state.mouseDownYPx = e.clientY;
+    if (e.button === 0) {
+      state.isMouseDownFlag = 1;
+      state.mouseDownTimeMs = performance.now();
+      state.mouseDownXPx = e.clientX;
+      state.mouseDownYPx = e.clientY;
+    } else if (e.button === 2) {
+      // Right-click: fire grapple hook toward cursor
+      state.isRightMouseDownFlag = 1;
+      state.isGrappleFireTriggeredFlag = 1;
+      state.grappleAimXPx = e.clientX;
+      state.grappleAimYPx = e.clientY;
+    }
   }
   function onMouseUp(e: MouseEvent): void {
-    if (e.button !== 0) return;
-    if (state.isMouseDownFlag === 0) return;
-    state.isMouseDownFlag = 0;
-    const holdMs = performance.now() - state.mouseDownTimeMs;
-    if (state.isBlockingFlag === 1) {
-      // Was blocking — collectCommands will emit BlockEnd on next frame
-      // (isMouseDownFlag=0 && isBlockingFlag=1 triggers the BlockEnd path)
-    } else if (holdMs < ATTACK_HOLD_THRESHOLD_MS) {
-      // Quick click — attack toward current mouse cursor position (gameScreen converts to direction)
-      state.isAttackFiredFlag = 1;
-      state.attackDirXPx = e.clientX;
-      state.attackDirYPx = e.clientY;
+    if (e.button === 0) {
+      if (state.isMouseDownFlag === 0) return;
+      state.isMouseDownFlag = 0;
+      const holdMs = performance.now() - state.mouseDownTimeMs;
+      if (state.isBlockingFlag === 1) {
+        // Was blocking — collectCommands will emit BlockEnd on next frame
+        // (isMouseDownFlag=0 && isBlockingFlag=1 triggers the BlockEnd path)
+      } else if (holdMs < ATTACK_HOLD_THRESHOLD_MS) {
+        // Quick click — attack toward current mouse cursor position (gameScreen converts to direction)
+        state.isAttackFiredFlag = 1;
+        state.attackDirXPx = e.clientX;
+        state.attackDirYPx = e.clientY;
+      }
+    } else if (e.button === 2) {
+      state.isRightMouseDownFlag = 0;
+      state.isGrappleReleaseTriggeredFlag = 1;
     }
   }
 
@@ -243,6 +269,9 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   canvas.addEventListener('touchmove', onTouchMove, { passive: false });
   canvas.addEventListener('touchend', onTouchEnd, { passive: false });
   canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
+  // Prevent browser context menu on right-click so grapple fires cleanly.
+  function onContextMenu(e: MouseEvent): void { e.preventDefault(); }
+  canvas.addEventListener('contextmenu', onContextMenu);
 
   return () => {
     window.removeEventListener('keydown', onKeyDown);
@@ -254,6 +283,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     canvas.removeEventListener('touchmove', onTouchMove);
     canvas.removeEventListener('touchend', onTouchEnd);
     canvas.removeEventListener('touchcancel', onTouchEnd);
+    canvas.removeEventListener('contextmenu', onContextMenu);
   };
 }
 
@@ -328,6 +358,16 @@ export function collectCommands(input: InputState): GameCommand[] {
   if (input.secondTouchId === -1 && input.isBlockingFlag === 1 && input.isMouseDownFlag === 0) {
     input.isBlockingFlag = 0;
     commands.push({ kind: CommandKind.BlockEnd });
+  }
+
+  // ---- Grapple hook commands ----------------------------------------------
+  if (input.isGrappleFireTriggeredFlag === 1) {
+    input.isGrappleFireTriggeredFlag = 0;
+    commands.push({ kind: CommandKind.GrappleFire, aimXPx: input.grappleAimXPx, aimYPx: input.grappleAimYPx });
+  }
+  if (input.isGrappleReleaseTriggeredFlag === 1) {
+    input.isGrappleReleaseTriggeredFlag = 0;
+    commands.push({ kind: CommandKind.GrappleRelease });
   }
 
   return commands;
