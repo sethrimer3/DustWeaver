@@ -255,7 +255,10 @@ export function updateParticleLifetimes(world: WorldState): void {
 
     lifetimeTicks[i] = Math.max(2.0, newLifetime);
     ageTicks[i]      = 0.0;  // restart visual cycle — particle stays alive
-    // behaviorMode stays 0 (orbit); durability is not reset (persist until killed)
+    // particleDurability[i] is intentionally NOT reset here: owned particles
+    // persist until killed by combat.  Their durability (damage capacity) carries
+    // over across age cycles.  Only respawnDelayTicks (after a combat kill) resets
+    // durability back to profile.toughness (handled in the respawn-delay block above).
     attackModeTicksLeft[i] = 0;
   }
 }

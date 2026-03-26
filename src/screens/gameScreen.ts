@@ -429,6 +429,8 @@ export function startGameScreen(
             world.playerDashDirXWorld = moveDx / len;
             world.playerDashDirYWorld = moveDy / len;
           } else {
+            // Note: world units == screen pixels in this game (worldWidthWorld = canvas.width),
+            // so subtracting positionXWorld from a Px-suffixed screen coordinate is valid.
             let dirX = dashAimXPx - player.positionXWorld;
             let dirY = dashAimYPx - player.positionYWorld;
             const len = Math.sqrt(dirX * dirX + dirY * dirY);

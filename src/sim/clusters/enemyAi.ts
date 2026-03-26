@@ -15,6 +15,11 @@
 
 import { WorldState } from '../world';
 import { nextFloat } from '../rng';
+import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD } from './dashConstants';
+
+// Re-export shared constants so callers that previously imported from this module
+// don't need to change their import paths.
+export { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD };
 
 // ---- AI tuning constants -------------------------------------------------
 
@@ -33,11 +38,7 @@ const ENEMY_DODGE_CHANCE_PER_TICK = 0.025;
 /** Duration of a single dodge burst (ticks). */
 const ENEMY_DODGE_DURATION_TICKS = 22;
 /** Speed (world units / sec) of a dodge burst. */
-export const ENEMY_DASH_SPEED_WORLD = 220.0;
-/** Recharge time after a dash/dodge (ticks, shared constant with movement). */
-export const DASH_COOLDOWN_TICKS = 180;  // 3 seconds at 60 fps
-/** Visual recharge animation duration (ticks). */
-export const DASH_RECHARGE_ANIM_TICKS = 36;  // 0.6 seconds
+export const ENEMY_DASH_SPEED_WORLD = ENEMY_DODGE_SPEED_WORLD;
 
 export function applyEnemyAI(world: WorldState): void {
   const { clusters, isAliveFlag, ownerEntityId, behaviorMode,

@@ -29,7 +29,7 @@
  */
 
 import { WorldState } from '../world';
-import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DASH_SPEED_WORLD } from './enemyAi';
+import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD } from './dashConstants';
 
 // ---- Player constants ------------------------------------------------------
 /** Maximum speed of the player cluster (world units per second). */
@@ -147,8 +147,8 @@ export function applyClusterMovement(world: WorldState): void {
 
       // ── Blend in dodge/weave lateral velocity ─────────────────────────────
       if (cluster.enemyAiDodgeTicks > 0) {
-        targetVelX += cluster.enemyAiDodgeDirXWorld * ENEMY_DASH_SPEED_WORLD;
-        targetVelY += cluster.enemyAiDodgeDirYWorld * ENEMY_DASH_SPEED_WORLD;
+        targetVelX += cluster.enemyAiDodgeDirXWorld * ENEMY_DODGE_SPEED_WORLD;
+        targetVelY += cluster.enemyAiDodgeDirYWorld * ENEMY_DODGE_SPEED_WORLD;
       }
 
       const alpha = ENEMY_ACCEL_PER_SEC * dtSec;

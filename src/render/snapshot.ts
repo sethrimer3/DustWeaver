@@ -1,7 +1,7 @@
 import { WorldState } from '../sim/world';
 import { ClusterState } from '../sim/clusters/state';
 import { INFLUENCE_RADIUS_WORLD } from '../sim/clusters/binding';
-import { DASH_COOLDOWN_TICKS } from '../sim/clusters/enemyAi';
+import { DASH_COOLDOWN_TICKS } from '../sim/clusters/dashConstants';
 
 export interface ParticleSnapshot {
   readonly positionXWorld:    Float32Array;

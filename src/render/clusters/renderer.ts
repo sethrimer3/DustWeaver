@@ -1,5 +1,5 @@
 import { WorldSnapshot } from '../snapshot';
-import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/enemyAi';
+import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas.
@@ -76,9 +76,11 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
         : 1.0 - (animProgress - 0.6) / 0.4;
       ctx.beginPath();
       ctx.arc(screenX, screenY, ringRadiusPx, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255,210,60,${(alpha * 0.9).toFixed(3)})`;
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.strokeStyle = '#ffd23c';  // rgb(255,210,60)
       ctx.lineWidth = 3;
       ctx.stroke();
+      ctx.globalAlpha = 1.0;
     }
 
     // ── Dash cooldown arc (only when recharging) ──────────────────────────
