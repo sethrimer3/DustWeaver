@@ -244,13 +244,11 @@ export function startGameScreen(
   const world = createWorldState(FIXED_DT_MS, 42);
   const levelRng = createRng(12345);
 
-  const centerYWorld = canvas.height / 2;
-
   world.worldWidthWorld  = canvas.width;
   world.worldHeightWorld = canvas.height;
 
-  // ── Spawn player ─────────────────────────────────────────────────────────
-  const playerCluster = createClusterState(1, canvas.width * 0.20, centerYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
+  // ── Spawn player near the floor (gravity will land them immediately) ──────
+  const playerCluster = createClusterState(1, canvas.width * 0.15, canvas.height * 0.75, 1, PARTICLE_COUNT_PER_CLUSTER);
   world.clusters.push(playerCluster);
   spawnLoadoutParticles(
     world, playerCluster.entityId,
@@ -336,21 +334,20 @@ export function startGameScreen(
     const commands = collectCommands(inputState);
     let returnToMap = false;
     let moveDx = 0;
-    let moveDy = 0;
     let dashAimXPx = 0;
-    let dashAimYPx = 0;
     let dashTriggered = false;
+    let jumpTriggered = false;
     for (let ci = 0; ci < commands.length; ci++) {
       const cmd = commands[ci];
       if (cmd.kind === CommandKind.ReturnToMap) {
         returnToMap = true;
       } else if (cmd.kind === CommandKind.MovePlayer) {
         moveDx = cmd.dx;
-        moveDy = cmd.dy;
+      } else if (cmd.kind === CommandKind.Jump) {
+        jumpTriggered = true;
       } else if (cmd.kind === CommandKind.Dash) {
         dashTriggered = true;
         dashAimXPx = cmd.aimXPx;
-        dashAimYPx = cmd.aimYPx;
       } else if (cmd.kind === CommandKind.Attack) {
         const player = world.clusters[0];
         if (player !== undefined) {
@@ -411,33 +408,38 @@ export function startGameScreen(
     accumulatorMs += elapsedMs;
     while (accumulatorMs >= FIXED_DT_MS) {
       const player = world.clusters[0];
-      if (moveDx !== 0 || moveDy !== 0) {
+      if (moveDx !== 0) {
         if (player !== undefined) {
-          const len = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
-          // Set normalized move input; applyClusterMovement handles smooth velocity
-          world.playerMoveInputDxWorld = moveDx / len;
-          world.playerMoveInputDyWorld = moveDy / len;
+          // Horizontal input only — movement.ts ignores Y in platformer mode
+          world.playerMoveInputDxWorld = moveDx > 0 ? 1.0 : -1.0;
+          world.playerMoveInputDyWorld = 0.0;
         }
       }
-      // Dash: set direction from mouse aim or current movement input
+      // Jump trigger (one-shot per frame accumulation)
+      if (jumpTriggered) {
+        world.playerJumpTriggeredFlag = 1;
+        jumpTriggered = false;
+      }
+      // Dash: horizontal direction from movement input or cursor
       if (dashTriggered) {
         world.playerDashTriggeredFlag = 1;
         if (player !== undefined) {
-          // Prefer movement direction; fall back to mouse-toward-cursor direction
-          if (moveDx !== 0 || moveDy !== 0) {
-            const len = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
-            world.playerDashDirXWorld = moveDx / len;
-            world.playerDashDirYWorld = moveDy / len;
+          if (moveDx !== 0) {
+            world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
+            world.playerDashDirYWorld = 0.0;
           } else {
-            // Note: world units == screen pixels in this game (worldWidthWorld = canvas.width),
-            // so subtracting positionXWorld from a Px-suffixed screen coordinate is valid.
-            let dirX = dashAimXPx - player.positionXWorld;
-            let dirY = dashAimYPx - player.positionYWorld;
-            const len = Math.sqrt(dirX * dirX + dirY * dirY);
-            if (len > 1.0) { world.playerDashDirXWorld = dirX / len; world.playerDashDirYWorld = dirY / len; }
+            const dirX = dashAimXPx - player.positionXWorld;
+            const absX = dirX < 0 ? -dirX : dirX;
+            if (absX > 1.0) {
+              world.playerDashDirXWorld = dirX > 0 ? 1.0 : -1.0;
+            } else {
+              // Cursor is too close — fall back to current movement direction
+              world.playerDashDirXWorld = player.velocityXWorld >= 0 ? 1.0 : -1.0;
+            }
+            world.playerDashDirYWorld = 0.0;
           }
         }
-        dashTriggered = false;  // one-shot per frame accumulation
+        dashTriggered = false;
       }
       tick(world);
       accumulatorMs -= FIXED_DT_MS;
@@ -525,8 +527,8 @@ export function startGameScreen(
 
     // ── Control hints ────────────────────────────────────────────────────────
     const controlHintText = IS_TOUCH_DEVICE
-      ? 'L.thumb=move  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
-      : 'WASD=move  |  SPACE/SHIFT=dash  |  Click=attack  |  Hold=block  |  ESC=return';
+      ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
+      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  ESC=return';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '12px monospace';
     const hintWidthPx = ctx.measureText(controlHintText).width;

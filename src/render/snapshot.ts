@@ -39,6 +39,10 @@ export interface ClusterSnapshot {
   readonly maxDashCooldownTicks:  number;
   /** Counts down after dash recharges — drives the golden ring animation. */
   readonly dashRechargeAnimTicks: number;
+  /** Half-width of the cluster box (world units). Used by renderer to draw a box. */
+  readonly halfWidthWorld:        number;
+  /** Half-height of the cluster box (world units). Used by renderer to draw a box. */
+  readonly halfHeightWorld:       number;
 }
 
 export interface WallSnapshot {
@@ -72,6 +76,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       dashCooldownTicks:     c.dashCooldownTicks,
       maxDashCooldownTicks:  DASH_COOLDOWN_TICKS,
       dashRechargeAnimTicks: c.dashRechargeAnimTicks,
+      halfWidthWorld:        c.halfWidthWorld,
+      halfHeightWorld:       c.halfHeightWorld,
     });
   }
 
