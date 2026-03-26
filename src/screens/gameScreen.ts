@@ -542,7 +542,7 @@ export function startGameScreen(
     // ── Control hints ────────────────────────────────────────────────────────
     const controlHintText = IS_TOUCH_DEVICE
       ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
-      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  R.Click=grapple  |  ESC=return';
+      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=return';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '12px monospace';
     const hintWidthPx = ctx.measureText(controlHintText).width;

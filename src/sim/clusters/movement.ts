@@ -91,6 +91,8 @@ const CLUSTER_EDGE_MARGIN_WORLD = 10.0;
  * Must exceed the maximum cluster displacement in one tick (≈ terminal velocity / 60).
  */
 const PLATFORM_SNAP_TOLERANCE_WORLD = 20.0;
+/** Air platforms at or below this thickness remain top-only "thin" obstacles. */
+const THIN_OBSTACLE_MAX_HEIGHT_WORLD = 34.0;
 
 /**
  * Checks the cluster box (bottom edge) against all wall top surfaces and the
@@ -126,6 +128,8 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
     const wallLeft  = world.wallXWorld[wi];
     const wallRight = wallLeft + world.wallWWorld[wi];
     const wallTop   = world.wallYWorld[wi];
+    const wallH     = world.wallHWorld[wi];
+    if (wallH > THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
 
     // Horizontal overlap required
     if (clusterRight <= wallLeft || clusterLeft >= wallRight) continue;
@@ -143,6 +147,79 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
     }
   }
   return false;
+}
+
+function resolveClusterSolidWallCollision(
+  cluster: import('./state').ClusterState,
+  world: WorldState,
+  prevX: number,
+  prevY: number,
+): void {
+  const hw = cluster.halfWidthWorld;
+  const hh = cluster.halfHeightWorld;
+
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const wallLeft = world.wallXWorld[wi];
+    const wallTop = world.wallYWorld[wi];
+    const wallRight = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop + world.wallHWorld[wi];
+    const wallH = world.wallHWorld[wi];
+    if (wallH <= THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
+
+    const left = cluster.positionXWorld - hw;
+    const right = cluster.positionXWorld + hw;
+    const top = cluster.positionYWorld - hh;
+    const bottom = cluster.positionYWorld + hh;
+    if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
+
+    const prevLeft = prevX - hw;
+    const prevRight = prevX + hw;
+    const prevTop = prevY - hh;
+    const prevBottom = prevY + hh;
+
+    if (prevBottom <= wallTop && cluster.velocityYWorld >= 0) {
+      cluster.positionYWorld = wallTop - hh;
+      cluster.velocityYWorld = 0;
+      cluster.isGroundedFlag = 1;
+      continue;
+    }
+    if (prevTop >= wallBottom && cluster.velocityYWorld <= 0) {
+      cluster.positionYWorld = wallBottom + hh;
+      if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+      continue;
+    }
+    if (prevRight <= wallLeft && cluster.velocityXWorld >= 0) {
+      cluster.positionXWorld = wallLeft - hw;
+      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+      continue;
+    }
+    if (prevLeft >= wallRight && cluster.velocityXWorld <= 0) {
+      cluster.positionXWorld = wallRight + hw;
+      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+      continue;
+    }
+
+    const penLeft = right - wallLeft;
+    const penRight = wallRight - left;
+    const penTop = bottom - wallTop;
+    const penBottom = wallBottom - top;
+    const minPen = Math.min(penLeft, penRight, penTop, penBottom);
+
+    if (minPen === penTop) {
+      cluster.positionYWorld = wallTop - hh;
+      cluster.velocityYWorld = 0;
+      cluster.isGroundedFlag = 1;
+    } else if (minPen === penBottom) {
+      cluster.positionYWorld = wallBottom + hh;
+      if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+    } else if (minPen === penLeft) {
+      cluster.positionXWorld = wallLeft - hw;
+      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+    } else {
+      cluster.positionXWorld = wallRight + hw;
+      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+    }
+  }
 }
 
 export function applyClusterMovement(world: WorldState): void {
@@ -266,12 +343,15 @@ export function applyClusterMovement(world: WorldState): void {
     }
 
     // ── Integrate position ─────────────────────────────────────────────────
+    const prevX = cluster.positionXWorld;
+    const prevY = cluster.positionYWorld;
     cluster.positionXWorld += cluster.velocityXWorld * dtSec;
     cluster.positionYWorld += cluster.velocityYWorld * dtSec;
 
     // ── Resolve floor / platform landing ──────────────────────────────────
     const wasGrounded = cluster.isGroundedFlag === 1;
     const justLanded = resolveClusterFloorCollision(cluster, world);
+    resolveClusterSolidWallCollision(cluster, world, prevX, prevY);
 
     if (cluster.isPlayerFlag === 1) {
       if (justLanded) {

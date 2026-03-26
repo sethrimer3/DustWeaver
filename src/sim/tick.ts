@@ -33,6 +33,8 @@ import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 
 export function tick(world: WorldState): void {
+  if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
+
   // 0. Cluster movement — smooth acceleration/deceleration for player and enemies
   applyClusterMovement(world);
 

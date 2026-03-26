@@ -75,6 +75,11 @@ export interface WorldState extends ParticleBuffers {
    * The player is constrained to stay within this distance of the anchor.
    */
   grappleLengthWorld: number;
+  /** Remaining ticks for the grapple attach sparkle burst effect. */
+  grappleAttachFxTicks: number;
+  /** World-space effect center for grapple attach burst. */
+  grappleAttachFxXWorld: number;
+  grappleAttachFxYWorld: number;
   /**
    * Start index in the particle buffer of the GRAPPLE_SEGMENT_COUNT chain particles.
    * -1 if not yet allocated. These slots are reserved by the game screen at startup.
@@ -113,6 +118,9 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleAnchorXWorld: 0.0,
     grappleAnchorYWorld: 0.0,
     grappleLengthWorld: 0.0,
+    grappleAttachFxTicks: 0,
+    grappleAttachFxXWorld: 0.0,
+    grappleAttachFxYWorld: 0.0,
     grappleParticleStartIndex: -1,
     ...createParticleBuffers(),
   };

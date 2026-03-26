@@ -22,6 +22,18 @@ const TIME_SPEED = 0.00012;
 
 /** Speed scale for the curl velocity field. */
 const CURL_SPEED = 62.0;
+/** Velocity damping to smooth particle motion (higher = smoother / less twitchy). */
+const VELOCITY_DAMPING = 0.90;
+/** How strongly particles follow the sampled curl field each frame. */
+const FLOW_FOLLOW = 26.0;
+/** Inter-particle repulsion radius in pixels. */
+const PARTICLE_REPEL_RADIUS_PX = 24.0;
+/** Inter-particle repulsion strength (small, only to avoid clumping). */
+const PARTICLE_REPEL_STRENGTH = 38.0;
+/** Edge repulsion influence distance from each screen boundary. */
+const EDGE_REPEL_RANGE_PX = 110.0;
+/** Edge repulsion force scale (grows rapidly near boundaries). */
+const EDGE_REPEL_STRENGTH = 42000.0;
 
 /** Mouse drag disturbance radius in pixels. */
 const MOUSE_DISTURB_RADIUS_PX = 130.0;
@@ -38,6 +50,8 @@ export type DecorativeTheme = 'menu' | 'worldmap';
 interface DecorativeParticle {
   x: number;
   y: number;
+  vx: number;
+  vy: number;
   prevX: number;
   prevY: number;
   alpha: number;
@@ -145,6 +159,8 @@ export class DecorativeParticleBackground {
       this.particles.push({
         x: 0,
         y: 0,
+        vx: 0,
+        vy: 0,
         prevX: 0,
         prevY: 0,
         alpha: 0.25 + Math.random() * 0.12,
@@ -166,6 +182,8 @@ export class DecorativeParticleBackground {
       this.particles[i].y = Math.random() * h;
       this.particles[i].prevX = this.particles[i].x;
       this.particles[i].prevY = this.particles[i].y;
+      this.particles[i].vx = 0;
+      this.particles[i].vy = 0;
     }
   }
 
@@ -250,8 +268,42 @@ export class DecorativeParticleBackground {
 
       // Curl-noise velocity
       curlNoise(p.x, p.y, t, noiseScale, _vel);
-      p.x += _vel[0] * CURL_SPEED * dtSec;
-      p.y += _vel[1] * CURL_SPEED * dtSec;
+      p.vx += _vel[0] * FLOW_FOLLOW * dtSec;
+      p.vy += _vel[1] * FLOW_FOLLOW * dtSec;
+
+      // Slight local repulsion only when decorative particles are close.
+      for (let j = 0; j < this.particles.length; j++) {
+        if (j === i) continue;
+        const q = this.particles[j];
+        const qx = p.x - q.x;
+        const qy = p.y - q.y;
+        const dist2 = qx * qx + qy * qy;
+        const r = PARTICLE_REPEL_RADIUS_PX;
+        if (dist2 >= r * r || dist2 < 1e-4) continue;
+        const dist = Math.sqrt(dist2);
+        const falloff = 1.0 - dist / r;
+        const invDist = 1.0 / dist;
+        p.vx += qx * invDist * falloff * PARTICLE_REPEL_STRENGTH * dtSec;
+        p.vy += qy * invDist * falloff * PARTICLE_REPEL_STRENGTH * dtSec;
+      }
+
+      // Repel from screen edges with increasing strength near boundaries.
+      const leftD = p.x;
+      if (leftD < EDGE_REPEL_RANGE_PX) {
+        p.vx += (EDGE_REPEL_STRENGTH / ((leftD + 8) * (leftD + 8))) * dtSec;
+      }
+      const rightD = w - p.x;
+      if (rightD < EDGE_REPEL_RANGE_PX) {
+        p.vx -= (EDGE_REPEL_STRENGTH / ((rightD + 8) * (rightD + 8))) * dtSec;
+      }
+      const topD = p.y;
+      if (topD < EDGE_REPEL_RANGE_PX) {
+        p.vy += (EDGE_REPEL_STRENGTH / ((topD + 8) * (topD + 8))) * dtSec;
+      }
+      const bottomD = h - p.y;
+      if (bottomD < EDGE_REPEL_RANGE_PX) {
+        p.vy -= (EDGE_REPEL_STRENGTH / ((bottomD + 8) * (bottomD + 8))) * dtSec;
+      }
 
       if (this.hasMouse) {
         const dx = p.x - this.mouseX;
@@ -260,11 +312,16 @@ export class DecorativeParticleBackground {
         const r2 = MOUSE_DISTURB_RADIUS_PX * MOUSE_DISTURB_RADIUS_PX;
         if (d2 < r2) {
           const falloff = 1.0 - d2 / r2;
-          p.x += _drag[0] * falloff * MOUSE_DRAG_FORCE;
-          p.y += _drag[1] * falloff * MOUSE_DRAG_FORCE;
+          p.vx += _drag[0] * falloff * MOUSE_DRAG_FORCE;
+          p.vy += _drag[1] * falloff * MOUSE_DRAG_FORCE;
           p.disturbance = Math.min(1, p.disturbance + falloff * 0.22);
         }
       }
+
+      p.vx *= VELOCITY_DAMPING;
+      p.vy *= VELOCITY_DAMPING;
+      p.x += (p.vx + _vel[0] * CURL_SPEED) * dtSec;
+      p.y += (p.vy + _vel[1] * CURL_SPEED) * dtSec;
 
       // Wrap around edges
       if (p.x < 0)  p.x += w;
