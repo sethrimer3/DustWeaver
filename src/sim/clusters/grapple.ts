@@ -29,6 +29,7 @@ export const GRAPPLE_MAX_LENGTH_WORLD = 300;
 
 /** Minimum rope length to prevent degenerate zero-length ropes. */
 const GRAPPLE_MIN_LENGTH_WORLD = 30;
+const GRAPPLE_ATTACH_FX_TICKS = 14;
 
 /** Number of Gold particles that form the visible chain between player and anchor. */
 export const GRAPPLE_SEGMENT_COUNT = 10;
@@ -40,6 +41,60 @@ export const GRAPPLE_SEGMENT_COUNT = 10;
  * their owner anchor — the grapple system overrides their positions directly.
  */
 const BEHAVIOR_MODE_GRAPPLE_CHAIN = 3;
+
+interface RayHit {
+  t: number;
+  x: number;
+  y: number;
+}
+
+function raycastWalls(world: WorldState, ox: number, oy: number, dx: number, dy: number, maxDist: number): RayHit | null {
+  let bestT = Number.POSITIVE_INFINITY;
+  let bestX = 0;
+  let bestY = 0;
+
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const minX = world.wallXWorld[wi];
+    const minY = world.wallYWorld[wi];
+    const maxX = minX + world.wallWWorld[wi];
+    const maxY = minY + world.wallHWorld[wi];
+
+    let tMin = 0;
+    let tMax = maxDist;
+
+    if (Math.abs(dx) < 1e-6) {
+      if (ox < minX || ox > maxX) continue;
+    } else {
+      const tx1 = (minX - ox) / dx;
+      const tx2 = (maxX - ox) / dx;
+      const txMin = tx1 < tx2 ? tx1 : tx2;
+      const txMax = tx1 > tx2 ? tx1 : tx2;
+      tMin = txMin > tMin ? txMin : tMin;
+      tMax = txMax < tMax ? txMax : tMax;
+      if (tMin > tMax) continue;
+    }
+
+    if (Math.abs(dy) < 1e-6) {
+      if (oy < minY || oy > maxY) continue;
+    } else {
+      const ty1 = (minY - oy) / dy;
+      const ty2 = (maxY - oy) / dy;
+      const tyMin = ty1 < ty2 ? ty1 : ty2;
+      const tyMax = ty1 > ty2 ? ty1 : ty2;
+      tMin = tyMin > tMin ? tyMin : tMin;
+      tMax = tyMax < tMax ? tyMax : tMax;
+      if (tMin > tMax) continue;
+    }
+
+    if (tMin >= 0 && tMin <= maxDist && tMin < bestT) {
+      bestT = tMin;
+      bestX = ox + dx * tMin;
+      bestY = oy + dy * tMin;
+    }
+  }
+
+  return Number.isFinite(bestT) ? { t: bestT, x: bestX, y: bestY } : null;
+}
 
 /**
  * Initialises the GRAPPLE_SEGMENT_COUNT chain particle slots starting at
@@ -92,16 +147,26 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const dx = anchorXWorld - player.positionXWorld;
   const dy = anchorYWorld - player.positionYWorld;
   const dist = Math.sqrt(dx * dx + dy * dy);
-  const clampedDist = Math.min(Math.max(dist, GRAPPLE_MIN_LENGTH_WORLD), GRAPPLE_MAX_LENGTH_WORLD);
-
   if (dist < 1.0) return; // cursor too close to player — ignore
 
-  // Place anchor at clamped distance along the aim direction
   const invDist = 1.0 / dist;
-  world.grappleAnchorXWorld = player.positionXWorld + dx * invDist * clampedDist;
-  world.grappleAnchorYWorld = player.positionYWorld + dy * invDist * clampedDist;
+  const dirX = dx * invDist;
+  const dirY = dy * invDist;
+  const maxCastDist = Math.min(dist, GRAPPLE_MAX_LENGTH_WORLD);
+  const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
+  if (hit === null) return;
+
+  const hitDist = Math.sqrt((hit.x - player.positionXWorld) ** 2 + (hit.y - player.positionYWorld) ** 2);
+  const clampedDist = Math.min(Math.max(hitDist, GRAPPLE_MIN_LENGTH_WORLD), GRAPPLE_MAX_LENGTH_WORLD);
+
+  // Place anchor at clamped distance along the aim direction
+  world.grappleAnchorXWorld = player.positionXWorld + dirX * clampedDist;
+  world.grappleAnchorYWorld = player.positionYWorld + dirY * clampedDist;
   world.grappleLengthWorld  = clampedDist;
   world.isGrappleActiveFlag = 1;
+  world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
+  world.grappleAttachFxXWorld = world.grappleAnchorXWorld;
+  world.grappleAttachFxYWorld = world.grappleAnchorYWorld;
 
   // Activate chain particles
   if (world.grappleParticleStartIndex >= 0) {
@@ -199,6 +264,11 @@ export function updateGrappleChainParticles(world: WorldState): void {
   const py = player.positionYWorld;
   const ax = world.grappleAnchorXWorld;
   const ay = world.grappleAnchorYWorld;
+  const dx = ax - px;
+  const dy = ay - py;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const nx = len > 1e-6 ? -dy / len : 0.0;
+  const ny = len > 1e-6 ? dx / len : 0.0;
 
   const start = world.grappleParticleStartIndex;
   const count = GRAPPLE_SEGMENT_COUNT;
@@ -209,8 +279,10 @@ export function updateGrappleChainParticles(world: WorldState): void {
     // Skip the endpoints (player pos and anchor itself) so segments
     // sit between them rather than on top of either.
     const t = (i + 1) / (count + 1);
-    world.positionXWorld[idx] = px + (ax - px) * t;
-    world.positionYWorld[idx] = py + (ay - py) * t;
+    const spacedT = 0.08 + t * 0.84;
+    const wobble = Math.sin(world.tick * 0.33 + i * 1.17) * 2.2;
+    world.positionXWorld[idx] = px + dx * spacedT + nx * wobble;
+    world.positionYWorld[idx] = py + dy * spacedT + ny * wobble;
     world.velocityXWorld[idx] = 0.0;
     world.velocityYWorld[idx] = 0.0;
     world.forceX[idx]         = 0.0;
