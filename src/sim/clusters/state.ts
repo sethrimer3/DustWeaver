@@ -16,6 +16,22 @@ export interface ClusterState {
   halfWidthWorld: number;
   /** Half-height of the cluster box in world units (used for rendering and collision). */
   halfHeightWorld: number;
+  /**
+   * Coyote-time countdown (ticks).  Set to COYOTE_TIME_TICKS when the cluster
+   * leaves a grounded surface; a jump is still allowed while > 0.
+   */
+  coyoteTimeTicks: number;
+  /**
+   * Jump-buffer countdown (ticks).  Set to JUMP_BUFFER_TICKS when a jump input
+   * arrives while the cluster is airborne; the jump fires when the cluster next
+   * lands while bufferTicks > 0.
+   */
+  jumpBufferTicks: number;
+  /**
+   * Snapshot of playerJumpHeldFlag from the previous tick.
+   * Used to detect the rising→falling edge for a one-shot jump-height cut.
+   */
+  prevJumpHeldFlag: 0 | 1;
 
   // ---- Dash (player and enemy) -------------------------------------------
   /** Remaining cooldown ticks before dash is available again.  0 = ready. */
@@ -63,8 +79,11 @@ export function createClusterState(
     healthPoints: maxHealthPoints,
     maxHealthPoints,
     isGroundedFlag: 0,
-    halfWidthWorld: 20,
-    halfHeightWorld: 28,
+    halfWidthWorld: 4,
+    halfHeightWorld: 6,
+    coyoteTimeTicks: 0,
+    jumpBufferTicks: 0,
+    prevJumpHeldFlag: 0,
     dashCooldownTicks: 0,
     dashRechargeAnimTicks: 0,
     enemyAiAttackCooldownTicks: 30,

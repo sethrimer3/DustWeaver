@@ -431,6 +431,8 @@ export function startGameScreen(
         world.playerJumpTriggeredFlag = 1;
         jumpTriggered = false;
       }
+      // Propagate jump held state every tick for variable-height jump cut
+      world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
       // Dash: horizontal direction from movement input or cursor
       if (dashTriggered) {
         world.playerDashTriggeredFlag = 1;

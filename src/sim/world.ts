@@ -60,6 +60,8 @@ export interface WorldState extends ParticleBuffers {
   // ---- Player jump (set each frame by game screen) ------------------------
   /** Set to 1 for one tick to trigger a player jump (cleared by applyClusterMovement). */
   playerJumpTriggeredFlag: 0 | 1;
+  /** 1 while the jump key is physically held down — used for variable-height jump cut. */
+  playerJumpHeldFlag: 0 | 1;
 
   // ---- Grapple hook -------------------------------------------------------
   /** 1 while the player's grapple hook is attached to an anchor point. */
@@ -106,6 +108,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerMoveInputDxWorld: 0.0,
     playerMoveInputDyWorld: 0.0,
     playerJumpTriggeredFlag: 0,
+    playerJumpHeldFlag: 0,
     isGrappleActiveFlag: 0,
     grappleAnchorXWorld: 0.0,
     grappleAnchorYWorld: 0.0,
