@@ -160,28 +160,20 @@ export function triggerAttackLaunch(world: WorldState): void {
 /**
  * Each tick: tick down attackModeTicksLeft; return particles to orbit when expired.
  * Also applies per-element special forces during attack mode (fire looping, etc.)
+ * Processes attack-mode particles for ALL owners (player and enemies).
  */
 export function tickAttackMode(world: WorldState): void {
   const {
-    isAliveFlag, ownerEntityId, kindBuffer, clusters,
+    isAliveFlag, kindBuffer,
     velocityXWorld, velocityYWorld,
     forceX, forceY,
     behaviorMode, attackModeTicksLeft,
     particleCount,
   } = world;
 
-  let playerEntityId = -1;
-  for (let ci = 0; ci < clusters.length; ci++) {
-    if (clusters[ci].isPlayerFlag === 1 && clusters[ci].isAliveFlag === 1) {
-      playerEntityId = clusters[ci].entityId;
-      break;
-    }
-  }
-
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
     if (behaviorMode[i] !== 1) continue;
-    if (ownerEntityId[i] !== playerEntityId) continue;
 
     attackModeTicksLeft[i] -= 1.0;
     if (attackModeTicksLeft[i] <= 0) {
@@ -473,20 +465,177 @@ export function applyBlockForces(world: WorldState): void {
   }
 }
 
+// ---- Enemy attack launch --------------------------------------------------
+
+// Per-kind counters reused for enemy attack launch (same purpose as player ones)
+const _enemyKindIndex = new Uint16Array(PARTICLE_KIND_COUNT);
+const _enemyKindTotal = new Uint16Array(PARTICLE_KIND_COUNT);
+
+/**
+ * Launches all alive, orbit-mode particles belonging to the given enemy cluster.
+ * Works identically to triggerAttackLaunch but targets the player cluster position.
+ */
+function triggerEnemyAttackLaunch(
+  world: WorldState,
+  enemyEntityId: number,
+  attackDirX: number,
+  attackDirY: number,
+): void {
+  const {
+    isAliveFlag, ownerEntityId, kindBuffer,
+    velocityXWorld, velocityYWorld,
+    behaviorMode, attackModeTicksLeft, isTransientFlag,
+    particleCount,
+  } = world;
+
+  _enemyKindIndex.fill(0);
+  _enemyKindTotal.fill(0);
+  for (let i = 0; i < particleCount; i++) {
+    if (isAliveFlag[i] === 1 && ownerEntityId[i] === enemyEntityId && isTransientFlag[i] === 0) {
+      const k = kindBuffer[i];
+      if (k < PARTICLE_KIND_COUNT) _enemyKindTotal[k]++;
+    }
+  }
+
+  for (let i = 0; i < particleCount; i++) {
+    if (isAliveFlag[i] === 0) continue;
+    if (ownerEntityId[i] !== enemyEntityId) continue;
+    if (isTransientFlag[i] === 1) continue;
+    if (behaviorMode[i] !== 0) continue;
+
+    const kind = kindBuffer[i];
+    const { speedWorld, halfSpreadRad, loopStrength } = getAttackParams(kind);
+
+    const total = _enemyKindTotal[kind] > 0 ? _enemyKindTotal[kind] : 1;
+    const idx   = _enemyKindIndex[kind]++;
+
+    let angleOffsetRad: number;
+    if (total === 1) {
+      angleOffsetRad = 0.0;
+    } else {
+      if (kind === ParticleKind.Holy) {
+        angleOffsetRad = (idx / total) * Math.PI * 2.0;
+      } else {
+        angleOffsetRad = -halfSpreadRad + (idx / (total - 1)) * halfSpreadRad * 2.0;
+      }
+    }
+
+    const baseAngleRad = Math.atan2(attackDirY, attackDirX);
+    const launchAngleRad = baseAngleRad + angleOffsetRad;
+
+    velocityXWorld[i] = Math.cos(launchAngleRad) * speedWorld;
+    velocityYWorld[i] = Math.sin(launchAngleRad) * speedWorld;
+
+    if (loopStrength !== 0.0) {
+      const perpX = -Math.sin(launchAngleRad);
+      const perpY =  Math.cos(launchAngleRad);
+      const kick = loopStrength * speedWorld * 0.25 * ((idx % 2 === 0) ? 1.0 : -1.0);
+      velocityXWorld[i] += perpX * kick;
+      velocityYWorld[i] += perpY * kick;
+    }
+
+    behaviorMode[i]        = 1;
+    attackModeTicksLeft[i] = getAttackDurationTicks(kind);
+  }
+}
+
+// Per-kind counters reused for enemy block forces
+const _eBlockKindCount   = new Uint16Array(PARTICLE_KIND_COUNT);
+const _eBlockKindSlotIdx = new Uint16Array(PARTICLE_KIND_COUNT);
+
+/**
+ * Applies block shield forces to all particles of blocking enemy clusters.
+ * Mirror of applyBlockForces but reads the block state from ClusterState fields.
+ */
+function applyEnemyBlockForces(world: WorldState): void {
+  const {
+    isAliveFlag, ownerEntityId, kindBuffer, clusters,
+    positionXWorld, positionYWorld,
+    forceX, forceY,
+    behaviorMode, isTransientFlag,
+    particleCount,
+  } = world;
+
+  for (let ci = 0; ci < clusters.length; ci++) {
+    const cluster = clusters[ci];
+    if (cluster.isPlayerFlag === 1 || cluster.isAliveFlag === 0) continue;
+    if (cluster.enemyAiIsBlockingFlag === 0) {
+      // Blocking just ended — release block-mode particles of this enemy back to orbit
+      for (let i = 0; i < particleCount; i++) {
+        if (ownerEntityId[i] === cluster.entityId && behaviorMode[i] === 2) {
+          behaviorMode[i] = 0;
+        }
+      }
+      continue;
+    }
+
+    const enemyEntityId  = cluster.entityId;
+    const blockDirX      = cluster.enemyAiBlockDirXWorld;
+    const blockDirY      = cluster.enemyAiBlockDirYWorld;
+    const enemyX         = cluster.positionXWorld;
+    const enemyY         = cluster.positionYWorld;
+
+    _eBlockKindCount.fill(0);
+    _eBlockKindSlotIdx.fill(0);
+    for (let i = 0; i < particleCount; i++) {
+      if (isAliveFlag[i] === 1 && ownerEntityId[i] === enemyEntityId && isTransientFlag[i] === 0) {
+        const k = kindBuffer[i];
+        if (k < PARTICLE_KIND_COUNT) _eBlockKindCount[k]++;
+      }
+    }
+
+    for (let i = 0; i < particleCount; i++) {
+      if (isAliveFlag[i] === 0) continue;
+      if (ownerEntityId[i] !== enemyEntityId) continue;
+      if (isTransientFlag[i] === 1) continue;
+
+      behaviorMode[i] = 2;
+
+      const kind  = kindBuffer[i];
+      const total = _eBlockKindCount[kind] > 0 ? _eBlockKindCount[kind] : 1;
+      const slot  = _eBlockKindSlotIdx[kind]++;
+
+      const { targetXWorld, targetYWorld } = computeShieldTarget(
+        enemyX, enemyY,
+        blockDirX, blockDirY,
+        slot, total, kind,
+      );
+
+      const dsx = targetXWorld - positionXWorld[i];
+      const dsy = targetYWorld - positionYWorld[i];
+      forceX[i] += dsx * SHIELD_SPRING_STRENGTH;
+      forceY[i] += dsy * SHIELD_SPRING_STRENGTH;
+    }
+  }
+}
+
 /**
  * Main entry point called from tick.ts.
- * Handles attack trigger, attack mode tick-down, and block shield forces.
+ * Handles attack trigger, attack mode tick-down, and block shield forces
+ * for both the player and all enemy clusters.
  */
 export function applyCombatForces(world: WorldState): void {
-  // ---- Attack trigger (one-shot) -----------------------------------------
+  // ---- Player attack trigger (one-shot) -----------------------------------
   if (world.playerAttackTriggeredFlag === 1) {
     triggerAttackLaunch(world);
     world.playerAttackTriggeredFlag = 0;
   }
 
+  // ---- Enemy attack triggers (set each tick by enemyAi.ts) ---------------
+  for (let ci = 0; ci < world.clusters.length; ci++) {
+    const cluster = world.clusters[ci];
+    if (cluster.isPlayerFlag === 1 || cluster.isAliveFlag === 0) continue;
+    if (cluster.enemyAttackTriggeredFlag === 1) {
+      triggerEnemyAttackLaunch(world, cluster.entityId,
+        cluster.enemyAttackDirXWorld, cluster.enemyAttackDirYWorld);
+      cluster.enemyAttackTriggeredFlag = 0;
+    }
+  }
+
   // ---- Per-tick attack mode forces (fire loops, spirals, etc.) -----------
   tickAttackMode(world);
 
-  // ---- Block shield forces (continuous while blocking) -------------------
+  // ---- Block shield forces (player + blocking enemies) -------------------
   applyBlockForces(world);
+  applyEnemyBlockForces(world);
 }

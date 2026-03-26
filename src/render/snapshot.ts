@@ -1,5 +1,7 @@
 import { WorldState } from '../sim/world';
 import { ClusterState } from '../sim/clusters/state';
+import { INFLUENCE_RADIUS_WORLD } from '../sim/clusters/binding';
+import { DASH_COOLDOWN_TICKS } from '../sim/clusters/dashConstants';
 
 export interface ParticleSnapshot {
   readonly positionXWorld:    Float32Array;
@@ -22,13 +24,21 @@ export interface ParticleSnapshot {
 }
 
 export interface ClusterSnapshot {
-  readonly entityId:         number;
-  readonly positionXWorld:   number;
-  readonly positionYWorld:   number;
-  readonly isAliveFlag:      0 | 1;
-  readonly isPlayerFlag:     0 | 1;
-  readonly healthPoints:     number;
-  readonly maxHealthPoints:  number;
+  readonly entityId:              number;
+  readonly positionXWorld:        number;
+  readonly positionYWorld:        number;
+  readonly isAliveFlag:           0 | 1;
+  readonly isPlayerFlag:          0 | 1;
+  readonly healthPoints:          number;
+  readonly maxHealthPoints:       number;
+  /** Radius (world units) of this cluster's particle influence ring. */
+  readonly influenceRadiusWorld:  number;
+  /** Ticks until dash is available again (0 = ready). */
+  readonly dashCooldownTicks:     number;
+  /** Max dash cooldown ticks (used to compute recharge progress bar). */
+  readonly maxDashCooldownTicks:  number;
+  /** Counts down after dash recharges — drives the golden ring animation. */
+  readonly dashRechargeAnimTicks: number;
 }
 
 export interface WallSnapshot {
@@ -51,13 +61,17 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
   for (let i = 0; i < world.clusters.length; i++) {
     const c: ClusterState = world.clusters[i];
     clusterSnapshots.push({
-      entityId:        c.entityId,
-      positionXWorld:  c.positionXWorld,
-      positionYWorld:  c.positionYWorld,
-      isAliveFlag:     c.isAliveFlag,
-      isPlayerFlag:    c.isPlayerFlag,
-      healthPoints:    c.healthPoints,
-      maxHealthPoints: c.maxHealthPoints,
+      entityId:              c.entityId,
+      positionXWorld:        c.positionXWorld,
+      positionYWorld:        c.positionYWorld,
+      isAliveFlag:           c.isAliveFlag,
+      isPlayerFlag:          c.isPlayerFlag,
+      healthPoints:          c.healthPoints,
+      maxHealthPoints:       c.maxHealthPoints,
+      influenceRadiusWorld:  INFLUENCE_RADIUS_WORLD,
+      dashCooldownTicks:     c.dashCooldownTicks,
+      maxDashCooldownTicks:  DASH_COOLDOWN_TICKS,
+      dashRechargeAnimTicks: c.dashRechargeAnimTicks,
     });
   }
 

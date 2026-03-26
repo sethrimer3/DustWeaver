@@ -337,6 +337,9 @@ export function startGameScreen(
     let returnToMap = false;
     let moveDx = 0;
     let moveDy = 0;
+    let dashAimXPx = 0;
+    let dashAimYPx = 0;
+    let dashTriggered = false;
     for (let ci = 0; ci < commands.length; ci++) {
       const cmd = commands[ci];
       if (cmd.kind === CommandKind.ReturnToMap) {
@@ -344,6 +347,10 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.MovePlayer) {
         moveDx = cmd.dx;
         moveDy = cmd.dy;
+      } else if (cmd.kind === CommandKind.Dash) {
+        dashTriggered = true;
+        dashAimXPx = cmd.aimXPx;
+        dashAimYPx = cmd.aimYPx;
       } else if (cmd.kind === CommandKind.Attack) {
         const player = world.clusters[0];
         if (player !== undefined) {
@@ -403,14 +410,34 @@ export function startGameScreen(
 
     accumulatorMs += elapsedMs;
     while (accumulatorMs >= FIXED_DT_MS) {
+      const player = world.clusters[0];
       if (moveDx !== 0 || moveDy !== 0) {
-        const player = world.clusters[0];
         if (player !== undefined) {
           const len = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
           // Set normalized move input; applyClusterMovement handles smooth velocity
           world.playerMoveInputDxWorld = moveDx / len;
           world.playerMoveInputDyWorld = moveDy / len;
         }
+      }
+      // Dash: set direction from mouse aim or current movement input
+      if (dashTriggered) {
+        world.playerDashTriggeredFlag = 1;
+        if (player !== undefined) {
+          // Prefer movement direction; fall back to mouse-toward-cursor direction
+          if (moveDx !== 0 || moveDy !== 0) {
+            const len = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
+            world.playerDashDirXWorld = moveDx / len;
+            world.playerDashDirYWorld = moveDy / len;
+          } else {
+            // Note: world units == screen pixels in this game (worldWidthWorld = canvas.width),
+            // so subtracting positionXWorld from a Px-suffixed screen coordinate is valid.
+            let dirX = dashAimXPx - player.positionXWorld;
+            let dirY = dashAimYPx - player.positionYWorld;
+            const len = Math.sqrt(dirX * dirX + dirY * dirY);
+            if (len > 1.0) { world.playerDashDirXWorld = dirX / len; world.playerDashDirYWorld = dirY / len; }
+          }
+        }
+        dashTriggered = false;  // one-shot per frame accumulation
       }
       tick(world);
       accumulatorMs -= FIXED_DT_MS;
@@ -499,7 +526,7 @@ export function startGameScreen(
     // ── Control hints ────────────────────────────────────────────────────────
     const controlHintText = IS_TOUCH_DEVICE
       ? 'L.thumb=move  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
-      : 'WASD=move  |  Click=attack  |  Hold=block  |  ESC=return';
+      : 'WASD=move  |  SPACE/SHIFT=dash  |  Click=attack  |  Hold=block  |  ESC=return';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '12px monospace';
     const hintWidthPx = ctx.measureText(controlHintText).width;

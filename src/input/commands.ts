@@ -5,6 +5,7 @@ export enum CommandKind {
   BlockStart = 3,
   BlockUpdate = 4,
   BlockEnd = 5,
+  Dash = 6,
 }
 
 export interface MovePlayerCommand {
@@ -52,10 +53,22 @@ export interface BlockEndCommand {
   kind: CommandKind.BlockEnd;
 }
 
+export interface DashCommand {
+  kind: CommandKind.Dash;
+  /**
+   * Preferred dash direction in screen space (absolute pixels, from player toward cursor).
+   * Falls back to current movement direction when no explicit direction is given.
+   */
+  aimXPx: number;
+  aimYPx: number;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
   | AttackCommand
   | BlockStartCommand
   | BlockUpdateCommand
-  | BlockEndCommand;
+  | BlockEndCommand
+  | DashCommand;
+

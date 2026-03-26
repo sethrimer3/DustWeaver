@@ -10,12 +10,22 @@
  *      scaled by orbitalStrength.  This drives circular orbiting without needing
  *      to rotate the anchor angle each tick.
  *
+ * Influence radius: binding forces are only applied when a particle is within
+ * INFLUENCE_RADIUS_WORLD of its owner.  Particles that drift outside this radius
+ * (e.g. after being knocked back) move freely until they re-enter the ring.
+ *
  * Force magnitudes come from the particle's ElementProfile so each element
  * feels differently "attached" to its owner.
  */
 
 import { WorldState } from '../world';
 import { getElementProfile } from '../particles/elementProfiles';
+
+/**
+ * Radius (world units) within which a cluster can control its particles.
+ * Exported so the renderer can draw the matching influence ring.
+ */
+export const INFLUENCE_RADIUS_WORLD = 200.0;
 
 export function applyBindingForces(world: WorldState): void {
   const {
@@ -47,6 +57,14 @@ export function applyBindingForces(world: WorldState): void {
       }
     }
     if (!found) continue;
+
+    // ── Influence radius check ─────────────────────────────────────────────
+    // Skip binding for particles outside the owner's influence ring so they
+    // drift freely and only orbit when within range.
+    const dxToOwner = positionXWorld[particleIndex] - ownerX;
+    const dyToOwner = positionYWorld[particleIndex] - ownerY;
+    const distToOwnerSq = dxToOwner * dxToOwner + dyToOwner * dyToOwner;
+    if (distToOwnerSq > INFLUENCE_RADIUS_WORLD * INFLUENCE_RADIUS_WORLD) continue;
 
     const profile = getElementProfile(kindBuffer[particleIndex]);
 
