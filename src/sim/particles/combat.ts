@@ -112,6 +112,7 @@ export function triggerAttackLaunch(world: WorldState): void {
     if (isAliveFlag[i] === 0) continue;
     if (ownerEntityId[i] !== playerEntityId) continue;
     if (isTransientFlag[i] === 1) continue;   // skip transient shards / trail fire
+    if (behaviorMode[i] !== 0) continue;      // already mid-flight — wait for orbit reset
 
     const kind = kindBuffer[i];
     const { speedWorld, halfSpreadRad, loopStrength } = getAttackParams(kind);
