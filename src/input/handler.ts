@@ -134,7 +134,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Escape') state.isEscapePressed = true;
     if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
       e.preventDefault();
-      state.isJumpTriggeredFlag = true;
+      if (!e.repeat) { state.isJumpTriggeredFlag = true; }
       state.isJumpHeldFlag = true;
     }
     if (e.key === 'Shift') {

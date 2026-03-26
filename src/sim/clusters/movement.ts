@@ -32,12 +32,12 @@ import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD 
 
 // ---- Gravity & jump --------------------------------------------------------
 /** Downward acceleration applied each tick (world units per second²). */
-const GRAVITY_WORLD_PER_SEC2 = 1600.0;
+const GRAVITY_WORLD_PER_SEC2 = 1100.0;
 /**
  * Extra gravity multiplier applied while the player is falling (velocityY > 0).
- * Creates the characteristic fast-fall / weighty-landing feel of Celeste/HK.
+ * Creates a weighty-landing feel without being overly punishing.
  */
-const FALL_GRAVITY_MULTIPLIER = 2.5;
+const FALL_GRAVITY_MULTIPLIER = 2.0;
 /** Maximum downward fall speed (world units per second) — prevents tunnelling. */
 const TERMINAL_VELOCITY_WORLD_PER_SEC = 900.0;
 /** Upward impulse applied on jump (world units per second). */
@@ -62,11 +62,13 @@ const JUMP_BUFFER_TICKS = 8;
 /** Maximum horizontal speed of the player cluster (world units per second). */
 const PLAYER_MAX_SPEED_WORLD_PER_SEC = 300.0;
 /** How quickly the player reaches max speed from rest while grounded (snappy). */
-const PLAYER_ACCEL_PER_SEC = 48.0;
-/** Air-control acceleration — slightly softer than ground for a grounded feel. */
-const PLAYER_AIR_ACCEL_PER_SEC = 38.0;
-/** How quickly the player decelerates when no input is given. */
-const PLAYER_DECEL_PER_SEC = 60.0;
+const PLAYER_ACCEL_PER_SEC = 60.0;
+/** Air-control acceleration — softer than ground to preserve momentum in the air. */
+const PLAYER_AIR_ACCEL_PER_SEC = 30.0;
+/** Floor friction: how quickly the player stops when grounded and no input is given. */
+const PLAYER_GROUND_DECEL_PER_SEC = 80.0;
+/** Air drag: minimal deceleration while airborne so the player keeps horizontal momentum. */
+const PLAYER_AIR_DECEL_PER_SEC = 10.0;
 /** Speed burst applied on a horizontal dash (world units per second). */
 const PLAYER_DASH_SPEED_WORLD = 560.0;
 
@@ -224,6 +226,7 @@ export function applyClusterMovement(world: WorldState): void {
           // Airborne — buffer the jump
           cluster.jumpBufferTicks = JUMP_BUFFER_TICKS;
         }
+        world.playerJumpTriggeredFlag = 0;
       }
 
       // ── Player horizontal acceleration ───────────────────────────────────
@@ -234,7 +237,7 @@ export function applyClusterMovement(world: WorldState): void {
       if (inputDx !== 0) {
         alpha = (cluster.isGroundedFlag === 1 ? PLAYER_ACCEL_PER_SEC : PLAYER_AIR_ACCEL_PER_SEC) * dtSec;
       } else {
-        alpha = PLAYER_DECEL_PER_SEC * dtSec;
+        alpha = (cluster.isGroundedFlag === 1 ? PLAYER_GROUND_DECEL_PER_SEC : PLAYER_AIR_DECEL_PER_SEC) * dtSec;
       }
       if (alpha > 1.0) alpha = 1.0;
       cluster.velocityXWorld += (targetVelX - cluster.velocityXWorld) * alpha;
