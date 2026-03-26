@@ -208,7 +208,10 @@ export function updateParticleLifetimes(world: WorldState): void {
       continue;
     }
 
-    // ---- Owned particle: respawn at owner --------------------------------
+    // ---- Owned particle: persist — cycle the age and refresh anchor -----
+    // Owned particles only die from combat, never from natural lifetime expiry.
+    // Cycling the age maintains the visual fade-in / fade-out shimmer while
+    // keeping the particle alive and the count constant.
     const ownerId = ownerEntityId[i];
     let ownerX = 0.0;
     let ownerY = 0.0;
@@ -228,7 +231,7 @@ export function updateParticleLifetimes(world: WorldState): void {
       continue;
     }
 
-    // New random anchor angle and radius (small variance around base orbit)
+    // Refresh anchor and lifetime for the next cycle
     const newAngleRad    = nextFloat(rng) * (Math.PI * 2);
     const radiusVariance = profile.orbitRadiusWorld * 0.25;
     const newRadius      = profile.orbitRadiusWorld
@@ -238,11 +241,10 @@ export function updateParticleLifetimes(world: WorldState): void {
     anchorRadiusWorld[i] = newRadius;
     noiseTickSeed[i]     = (nextFloat(rng) * 0xffffffff) >>> 0;
 
-    // Reset position to anchor target
+    // Gently nudge toward the refreshed anchor (don't teleport)
     positionXWorld[i] = ownerX + Math.cos(newAngleRad) * newRadius;
     positionYWorld[i] = ownerY + Math.sin(newAngleRad) * newRadius;
 
-    // Small spawn velocity for natural "birth" scatter
     const spawnSpeed = 15.0;
     velocityXWorld[i] = nextFloatRange(rng, -spawnSpeed, spawnSpeed);
     velocityYWorld[i] = nextFloatRange(rng, -spawnSpeed, spawnSpeed);
@@ -252,10 +254,8 @@ export function updateParticleLifetimes(world: WorldState): void {
     massKg[i] = profile.massKg;
 
     lifetimeTicks[i] = Math.max(2.0, newLifetime);
-    ageTicks[i]      = 0.0;
-    isAliveFlag[i]   = 1;
-    behaviorMode[i] = 0;
-    particleDurability[i] = profile.toughness;
+    ageTicks[i]      = 0.0;  // restart visual cycle — particle stays alive
+    // behaviorMode stays 0 (orbit); durability is not reset (persist until killed)
     attackModeTicksLeft[i] = 0;
   }
 }

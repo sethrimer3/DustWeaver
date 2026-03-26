@@ -11,11 +11,15 @@
  *     game screen each frame from the directional input).
  *   • Accelerates the cluster velocity toward (input * MAX_SPEED).
  *   • When input is zero the velocity decelerates via drag.
+ *   • Dash (world.playerDashTriggeredFlag): one-shot velocity burst in the
+ *     current move direction.  3-second recharge.
  *
- * Enemy movement (simple seek AI):
+ * Enemy movement (AI-driven seek + dodge):
  *   • Each non-player alive cluster accelerates toward the player cluster.
  *   • Enemies slow when within a comfortable combat range so they don't
  *     endlessly ram the player.
+ *   • When the enemy AI has triggered a dodge (enemyAiDodgeTicks > 0), the
+ *     lateral dodge velocity is blended in on top of the seek velocity.
  *
  * Position is updated from velocity; clusters are clamped to world bounds
  * with a margin so they never exit the arena.
@@ -25,12 +29,15 @@
  */
 
 import { WorldState } from '../world';
+import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DASH_SPEED_WORLD } from './enemyAi';
 
 // ---- Player constants ------------------------------------------------------
 /** Maximum speed of the player cluster (world units per second). */
 const PLAYER_MAX_SPEED_WORLD_PER_SEC = 180.0;
 /** Responsiveness of speed change per second (higher = snappier acceleration). */
 const PLAYER_ACCEL_PER_SEC = 14.0;
+/** Speed burst applied on a dash (world units per second). */
+const PLAYER_DASH_SPEED_WORLD = 480.0;
 
 // ---- Enemy constants -------------------------------------------------------
 /** Maximum chase speed for enemy clusters (world units per second). */
@@ -73,6 +80,37 @@ export function applyClusterMovement(world: WorldState): void {
     if (cluster.isAliveFlag === 0) continue;
 
     if (cluster.isPlayerFlag === 1) {
+      // ── Player dash cooldown tick-down ─────────────────────────────────────
+      if (cluster.dashCooldownTicks > 0) {
+        cluster.dashCooldownTicks -= 1;
+        if (cluster.dashCooldownTicks === 0) {
+          cluster.dashRechargeAnimTicks = DASH_RECHARGE_ANIM_TICKS;
+        }
+      }
+      if (cluster.dashRechargeAnimTicks > 0) {
+        cluster.dashRechargeAnimTicks -= 1;
+      }
+
+      // ── Player dash burst (one-shot impulse) ───────────────────────────────
+      if (world.playerDashTriggeredFlag === 1 && cluster.dashCooldownTicks === 0) {
+        const ddx = world.playerDashDirXWorld;
+        const ddy = world.playerDashDirYWorld;
+        const dLen = Math.sqrt(ddx * ddx + ddy * ddy);
+        if (dLen > 0.01) {
+          cluster.velocityXWorld = (ddx / dLen) * PLAYER_DASH_SPEED_WORLD;
+          cluster.velocityYWorld = (ddy / dLen) * PLAYER_DASH_SPEED_WORLD;
+        } else {
+          const cLen = Math.sqrt(
+            cluster.velocityXWorld * cluster.velocityXWorld +
+            cluster.velocityYWorld * cluster.velocityYWorld);
+          if (cLen > 1.0) {
+            cluster.velocityXWorld = (cluster.velocityXWorld / cLen) * PLAYER_DASH_SPEED_WORLD;
+            cluster.velocityYWorld = (cluster.velocityYWorld / cLen) * PLAYER_DASH_SPEED_WORLD;
+          }
+        }
+        cluster.dashCooldownTicks = DASH_COOLDOWN_TICKS;
+      }
+
       // ── Player: smooth acceleration toward input direction ─────────────────
       const inputDx = world.playerMoveInputDxWorld;
       const inputDy = world.playerMoveInputDyWorld;
@@ -107,6 +145,12 @@ export function applyClusterMovement(world: WorldState): void {
         targetVelY = (dyToPlayer * invDist) * targetSpeed;
       }
 
+      // ── Blend in dodge/weave lateral velocity ─────────────────────────────
+      if (cluster.enemyAiDodgeTicks > 0) {
+        targetVelX += cluster.enemyAiDodgeDirXWorld * ENEMY_DASH_SPEED_WORLD;
+        targetVelY += cluster.enemyAiDodgeDirYWorld * ENEMY_DASH_SPEED_WORLD;
+      }
+
       const alpha = ENEMY_ACCEL_PER_SEC * dtSec;
       const clampedAlpha = alpha < 1.0 ? alpha : 1.0;
       cluster.velocityXWorld += (targetVelX - cluster.velocityXWorld) * clampedAlpha;
@@ -134,7 +178,8 @@ export function applyClusterMovement(world: WorldState): void {
     }
   }
 
-  // Clear player move input for next tick
+  // Clear player move input and dash trigger for next tick
   world.playerMoveInputDxWorld = 0.0;
   world.playerMoveInputDyWorld = 0.0;
+  world.playerDashTriggeredFlag = 0;
 }

@@ -41,6 +41,13 @@ export interface WorldState extends ParticleBuffers {
   playerBlockDirXWorld: number;
   playerBlockDirYWorld: number;
 
+  // ---- Player dash --------------------------------------------------------
+  /** Set to 1 for one tick to trigger a player dash. */
+  playerDashTriggeredFlag: 0 | 1;
+  /** Normalized direction of the dash (set alongside playerDashTriggeredFlag). */
+  playerDashDirXWorld: number;
+  playerDashDirYWorld: number;
+
   // ---- Player movement input (set each frame by game screen) --------------
   /**
    * Normalized movement input direction for this tick.
@@ -71,6 +78,9 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isPlayerBlockingFlag: 0,
     playerBlockDirXWorld: 1.0,
     playerBlockDirYWorld: 0.0,
+    playerDashTriggeredFlag: 0,
+    playerDashDirXWorld: 1.0,
+    playerDashDirYWorld: 0.0,
     playerMoveInputDxWorld: 0.0,
     playerMoveInputDyWorld: 0.0,
     ...createParticleBuffers(),

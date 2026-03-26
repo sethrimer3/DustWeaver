@@ -2,23 +2,25 @@
  * Main simulation tick pipeline.
  *
  * Order matters — each pass reads forces accumulated by previous passes:
- *   0. Cluster movement — smooth acceleration/deceleration + enemy AI  → clusters/movement.ts
- *   1. Clear forces
- *   2. Per-element forces (noise, curl, buoyancy)                       → elementForces.ts
- *   3. Fluid disturbance: decay + push from fast neighbours             → disturbance.ts
- *   4. Owner-anchor binding + orbital swirl                             → binding.ts
- *   4.5. Combat forces — attack launch impulse + block shield positioning → combat.ts
- *   4.6. Lava AoE burn — deals heat damage to nearby enemies            → lavaEffect.ts
- *   5. Inter-particle (repulsion, cohesion, sep, align)                 → forces.ts
- *   5.5. Wall repulsion forces — push particles away from obstacle geometry → walls.ts
- *   6. Euler integration with drag                                      → integration.ts
- *   6.5. Wall bounce — reflect velocities off wall faces                 → walls.ts
- *   7. Lifetime update + respawn                                        → lifetime.ts
- *   8. Increment tick counter
+ *   0.   Cluster movement — smooth acceleration/deceleration + player dash   → clusters/movement.ts
+ *   0.5. Enemy AI — attack / block / dodge decisions                          → clusters/enemyAi.ts
+ *   1.   Clear forces
+ *   2.   Per-element forces (noise, curl, buoyancy)                           → elementForces.ts
+ *   3.   Fluid disturbance: decay + push from fast neighbours                 → disturbance.ts
+ *   4.   Owner-anchor binding + orbital swirl                                 → binding.ts
+ *   4.5. Combat forces — attack launch impulse + block shield positioning     → combat.ts
+ *   4.6. Lava AoE burn — deals heat damage to nearby enemies                 → lavaEffect.ts
+ *   5.   Inter-particle (repulsion, cohesion, sep, align)                     → forces.ts
+ *   5.5. Wall repulsion forces — push particles away from obstacle geometry   → walls.ts
+ *   6.   Euler integration with drag                                          → integration.ts
+ *   6.5. Wall bounce — reflect velocities off wall faces                      → walls.ts
+ *   7.   Lifetime update + respawn                                            → lifetime.ts
+ *   8.   Increment tick counter
  */
 
 import { WorldState } from './world';
 import { applyClusterMovement } from './clusters/movement';
+import { applyEnemyAI } from './clusters/enemyAi';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
 import { applyBindingForces } from './clusters/binding';
@@ -32,6 +34,9 @@ import { updateParticleLifetimes } from './particles/lifetime';
 export function tick(world: WorldState): void {
   // 0. Cluster movement — smooth acceleration/deceleration for player and enemies
   applyClusterMovement(world);
+
+  // 0.5. Enemy AI — decide attack / block / dodge for each enemy cluster
+  applyEnemyAI(world);
 
   // 1. Clear accumulated forces from previous tick
   for (let i = 0; i < world.particleCount; i++) {
@@ -48,7 +53,7 @@ export function tick(world: WorldState): void {
   // 4. Owner-anchor spring + orbital tangential force
   applyBindingForces(world);
 
-  // 4.5. Combat forces — attack launch and block shield positioning
+  // 4.5. Combat forces — player/enemy attack launch and block shield positioning
   applyCombatForces(world);
 
   // 4.6. Lava AoE burn — heat damage to nearby enemy particles
@@ -67,7 +72,7 @@ export function tick(world: WorldState): void {
   //      stone shatter events are processed here too.
   applyWallBounce(world);
 
-  // 7. Lifetime: age particles; respawn expired ones
+  // 7. Lifetime: age particles; cycle owned particles or respawn combat-killed ones
   updateParticleLifetimes(world);
 
   world.tick++;

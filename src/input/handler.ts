@@ -12,6 +12,8 @@ export interface InputState {
   isKeyS: boolean;
   isKeyD: boolean;
   isEscapePressed: boolean;
+  /** Set to true for one collectCommands call to trigger a dash. */
+  isDashTriggeredFlag: boolean;
   mouseXPx: number;
   mouseYPx: number;
   // Touch joystick state (populated by touch listeners; read by renderer for visual feedback)
@@ -52,6 +54,7 @@ export function createInputState(): InputState {
     isKeyS: false,
     isKeyD: false,
     isEscapePressed: false,
+    isDashTriggeredFlag: false,
     mouseXPx: 0,
     mouseYPx: 0,
     isTouchJoystickActiveFlag: 0,
@@ -102,6 +105,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 's' || e.key === 'S') state.isKeyS = true;
     if (e.key === 'd' || e.key === 'D') state.isKeyD = true;
     if (e.key === 'Escape') state.isEscapePressed = true;
+    if (e.key === ' ' || e.key === 'Shift') {
+      e.preventDefault();
+      state.isDashTriggeredFlag = true;
+    }
   }
   function onKeyUp(e: KeyboardEvent): void {
     if (e.key === 'w' || e.key === 'W') state.isKeyW = false;
@@ -252,6 +259,12 @@ export function collectCommands(input: InputState): GameCommand[] {
   if (input.isEscapePressed) {
     commands.push({ kind: CommandKind.ReturnToMap });
     input.isEscapePressed = false;
+  }
+
+  // ---- Dash command --------------------------------------------------------
+  if (input.isDashTriggeredFlag) {
+    input.isDashTriggeredFlag = false;
+    commands.push({ kind: CommandKind.Dash, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
   }
 
   // ---- Attack / block commands -------------------------------------------

@@ -1,4 +1,5 @@
 import { WorldSnapshot } from '../snapshot';
+import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/enemyAi';
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas.
@@ -38,6 +39,8 @@ export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapsh
 }
 
 export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
+  ctx.save();
+
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {
     const cluster = snapshot.clusters[ci];
     if (cluster.isAliveFlag === 0) continue;
@@ -45,7 +48,51 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
     const screenX = cluster.positionXWorld * scalePx + offsetXPx;
     const screenY = cluster.positionYWorld * scalePx + offsetYPx;
 
-    const color = cluster.isPlayerFlag === 1 ? '#00ff99' : '#ff6600';
+    // ── Influence ring (faint, dashed) ─────────────────────────────────────
+    const influenceRadiusPx = cluster.influenceRadiusWorld * scalePx;
+    const isPlayer = cluster.isPlayerFlag === 1;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, influenceRadiusPx, 0, Math.PI * 2);
+    ctx.strokeStyle = isPlayer
+      ? 'rgba(0,255,153,0.12)'
+      : 'rgba(255,102,0,0.10)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([8, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // ── Dash recharge golden ring animation ───────────────────────────────
+    // When dashRechargeAnimTicks > 0 a golden ring swoops in from a large
+    // radius, closes around the cluster indicator, then fades out.
+    if (isPlayer && cluster.dashRechargeAnimTicks > 0) {
+      const animProgress = 1.0 - cluster.dashRechargeAnimTicks / DASH_RECHARGE_ANIM_TICKS;
+      // Ring starts at 3× the cluster indicator radius and closes to it
+      const startRadiusPx = 60;
+      const endRadiusPx   = 14;
+      const ringRadiusPx  = startRadiusPx + (endRadiusPx - startRadiusPx) * animProgress;
+      // Alpha: fade in fast, then out
+      const alpha = animProgress < 0.6
+        ? animProgress / 0.6
+        : 1.0 - (animProgress - 0.6) / 0.4;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, ringRadiusPx, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,210,60,${(alpha * 0.9).toFixed(3)})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // ── Dash cooldown arc (only when recharging) ──────────────────────────
+    if (cluster.dashCooldownTicks > 0 && isPlayer) {
+      const progress = 1.0 - cluster.dashCooldownTicks / cluster.maxDashCooldownTicks;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, 16, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,180,30,0.55)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // ── Cluster indicator dot ─────────────────────────────────────────────
+    const color = isPlayer ? '#00ff99' : '#ff6600';
     const radiusPx = 10;
 
     ctx.beginPath();
@@ -56,6 +103,7 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
     ctx.lineWidth = 1;
     ctx.stroke();
 
+    // ── Health bar ────────────────────────────────────────────────────────
     const barWidthPx = 40;
     const barHeightPx = 4;
     const barXPx = screenX - barWidthPx / 2;
@@ -64,7 +112,10 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
 
     ctx.fillStyle = '#333';
     ctx.fillRect(barXPx, barYPx, barWidthPx, barHeightPx);
-    ctx.fillStyle = cluster.isPlayerFlag === 1 ? '#00ff99' : '#ff6600';
+    ctx.fillStyle = isPlayer ? '#00ff99' : '#ff6600';
     ctx.fillRect(barXPx, barYPx, barWidthPx * healthRatio, barHeightPx);
   }
+
+  ctx.restore();
 }
+
