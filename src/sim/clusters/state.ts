@@ -9,6 +9,14 @@ export interface ClusterState {
   healthPoints: number;
   maxHealthPoints: number;
 
+  // ---- Platformer physics -------------------------------------------------
+  /** 1 when the cluster is resting on a surface (floor or platform top). */
+  isGroundedFlag: 0 | 1;
+  /** Half-width of the cluster box in world units (used for rendering and collision). */
+  halfWidthWorld: number;
+  /** Half-height of the cluster box in world units (used for rendering and collision). */
+  halfHeightWorld: number;
+
   // ---- Dash (player and enemy) -------------------------------------------
   /** Remaining cooldown ticks before dash is available again.  0 = ready. */
   dashCooldownTicks: number;
@@ -54,6 +62,9 @@ export function createClusterState(
     isPlayerFlag,
     healthPoints: maxHealthPoints,
     maxHealthPoints,
+    isGroundedFlag: 0,
+    halfWidthWorld: 20,
+    halfHeightWorld: 28,
     dashCooldownTicks: 0,
     dashRechargeAnimTicks: 0,
     enemyAiAttackCooldownTicks: 30,

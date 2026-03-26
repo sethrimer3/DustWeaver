@@ -6,6 +6,7 @@ export enum CommandKind {
   BlockUpdate = 4,
   BlockEnd = 5,
   Dash = 6,
+  Jump = 7,
 }
 
 export interface MovePlayerCommand {
@@ -63,6 +64,10 @@ export interface DashCommand {
   aimYPx: number;
 }
 
+export interface JumpCommand {
+  kind: CommandKind.Jump;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
@@ -70,5 +75,6 @@ export type GameCommand =
   | BlockStartCommand
   | BlockUpdateCommand
   | BlockEndCommand
-  | DashCommand;
+  | DashCommand
+  | JumpCommand;
 

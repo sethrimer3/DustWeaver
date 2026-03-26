@@ -12,6 +12,10 @@ export interface InputState {
   isKeyS: boolean;
   isKeyD: boolean;
   isEscapePressed: boolean;
+  /** Set to true for one collectCommands call to trigger a jump. */
+  isJumpTriggeredFlag: boolean;
+  /** Tracks whether the joystick is already past the up-flick threshold (edge-detect). */
+  isJoystickUpActiveFlag: boolean;
   /** Set to true for one collectCommands call to trigger a dash. */
   isDashTriggeredFlag: boolean;
   mouseXPx: number;
@@ -54,6 +58,8 @@ export function createInputState(): InputState {
     isKeyS: false,
     isKeyD: false,
     isEscapePressed: false,
+    isJumpTriggeredFlag: false,
+    isJoystickUpActiveFlag: false,
     isDashTriggeredFlag: false,
     mouseXPx: 0,
     mouseYPx: 0,
@@ -82,16 +88,19 @@ export function createInputState(): InputState {
 function applyJoystickToKeys(state: InputState): void {
   const dx = state.touchJoystickCurrentXPx - state.touchJoystickBaseXPx;
   const dy = state.touchJoystickCurrentYPx - state.touchJoystickBaseYPx;
-  state.isKeyW = dy < -JOYSTICK_DEAD_ZONE_PX;
-  state.isKeyS = dy > JOYSTICK_DEAD_ZONE_PX;
+  // Platformer: joystick only maps horizontal movement
   state.isKeyA = dx < -JOYSTICK_DEAD_ZONE_PX;
   state.isKeyD = dx > JOYSTICK_DEAD_ZONE_PX;
+  // Upward flick triggers a one-shot jump on the rising edge only
+  const isUpFlick = dy < -JOYSTICK_DEAD_ZONE_PX * 2;
+  if (isUpFlick && !state.isJoystickUpActiveFlag) {
+    state.isJumpTriggeredFlag = true;
+  }
+  state.isJoystickUpActiveFlag = isUpFlick;
 }
 
 function clearJoystickKeys(state: InputState): void {
-  state.isKeyW = false;
   state.isKeyA = false;
-  state.isKeyS = false;
   state.isKeyD = false;
 }
 
@@ -100,21 +109,25 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   let joystickTouchId = -1;
 
   function onKeyDown(e: KeyboardEvent): void {
-    if (e.key === 'w' || e.key === 'W') state.isKeyW = true;
     if (e.key === 'a' || e.key === 'A') state.isKeyA = true;
-    if (e.key === 's' || e.key === 'S') state.isKeyS = true;
     if (e.key === 'd' || e.key === 'D') state.isKeyD = true;
+    if (e.key === 'ArrowLeft') state.isKeyA = true;
+    if (e.key === 'ArrowRight') state.isKeyD = true;
     if (e.key === 'Escape') state.isEscapePressed = true;
-    if (e.key === ' ' || e.key === 'Shift') {
+    if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      state.isJumpTriggeredFlag = true;
+    }
+    if (e.key === 'Shift') {
       e.preventDefault();
       state.isDashTriggeredFlag = true;
     }
   }
   function onKeyUp(e: KeyboardEvent): void {
-    if (e.key === 'w' || e.key === 'W') state.isKeyW = false;
     if (e.key === 'a' || e.key === 'A') state.isKeyA = false;
-    if (e.key === 's' || e.key === 'S') state.isKeyS = false;
     if (e.key === 'd' || e.key === 'D') state.isKeyD = false;
+    if (e.key === 'ArrowLeft') state.isKeyA = false;
+    if (e.key === 'ArrowRight') state.isKeyD = false;
     if (e.key === 'Escape') state.isEscapePressed = false;
   }
   function onMouseMove(e: MouseEvent): void {
@@ -248,17 +261,20 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
 export function collectCommands(input: InputState): GameCommand[] {
   const commands: GameCommand[] = [];
   let dx = 0;
-  let dy = 0;
-  if (input.isKeyW) dy -= 1;
-  if (input.isKeyS) dy += 1;
   if (input.isKeyA) dx -= 1;
   if (input.isKeyD) dx += 1;
-  if (dx !== 0 || dy !== 0) {
-    commands.push({ kind: CommandKind.MovePlayer, dx, dy });
+  if (dx !== 0) {
+    commands.push({ kind: CommandKind.MovePlayer, dx, dy: 0 });
   }
   if (input.isEscapePressed) {
     commands.push({ kind: CommandKind.ReturnToMap });
     input.isEscapePressed = false;
+  }
+
+  // ---- Jump command --------------------------------------------------------
+  if (input.isJumpTriggeredFlag) {
+    input.isJumpTriggeredFlag = false;
+    commands.push({ kind: CommandKind.Jump });
   }
 
   // ---- Dash command --------------------------------------------------------

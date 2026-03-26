@@ -48,36 +48,41 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
     const screenX = cluster.positionXWorld * scalePx + offsetXPx;
     const screenY = cluster.positionYWorld * scalePx + offsetYPx;
 
+    const isPlayer = cluster.isPlayerFlag === 1;
+
+    // ── Box dimensions ─────────────────────────────────────────────────────
+    const boxHalfW = cluster.halfWidthWorld * scalePx;
+    const boxHalfH = cluster.halfHeightWorld * scalePx;
+    const boxLeft  = screenX - boxHalfW;
+    const boxTop   = screenY - boxHalfH;
+    const boxW     = boxHalfW * 2;
+    const boxH     = boxHalfH * 2;
+
     // ── Influence ring (faint, dashed) ─────────────────────────────────────
     const influenceRadiusPx = cluster.influenceRadiusWorld * scalePx;
-    const isPlayer = cluster.isPlayerFlag === 1;
     ctx.beginPath();
     ctx.arc(screenX, screenY, influenceRadiusPx, 0, Math.PI * 2);
     ctx.strokeStyle = isPlayer
-      ? 'rgba(0,255,153,0.12)'
-      : 'rgba(255,102,0,0.10)';
+      ? 'rgba(0,255,153,0.10)'
+      : 'rgba(255,102,0,0.08)';
     ctx.lineWidth = 1.5;
     ctx.setLineDash([8, 6]);
     ctx.stroke();
     ctx.setLineDash([]);
 
     // ── Dash recharge golden ring animation ───────────────────────────────
-    // When dashRechargeAnimTicks > 0 a golden ring swoops in from a large
-    // radius, closes around the cluster indicator, then fades out.
     if (isPlayer && cluster.dashRechargeAnimTicks > 0) {
       const animProgress = 1.0 - cluster.dashRechargeAnimTicks / DASH_RECHARGE_ANIM_TICKS;
-      // Ring starts at 3× the cluster indicator radius and closes to it
-      const startRadiusPx = 60;
-      const endRadiusPx   = 14;
-      const ringRadiusPx  = startRadiusPx + (endRadiusPx - startRadiusPx) * animProgress;
-      // Alpha: fade in fast, then out
+      const startDistancePx = 60;
+      const endDistancePx   = boxHalfW;
+      const ringRadiusPx    = startDistancePx + (endDistancePx - startDistancePx) * animProgress;
       const alpha = animProgress < 0.6
         ? animProgress / 0.6
         : 1.0 - (animProgress - 0.6) / 0.4;
       ctx.beginPath();
       ctx.arc(screenX, screenY, ringRadiusPx, 0, Math.PI * 2);
       ctx.globalAlpha = alpha * 0.9;
-      ctx.strokeStyle = '#ffd23c';  // rgb(255,210,60)
+      ctx.strokeStyle = '#ffd23c';
       ctx.lineWidth = 3;
       ctx.stroke();
       ctx.globalAlpha = 1.0;
@@ -87,29 +92,35 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
     if (cluster.dashCooldownTicks > 0 && isPlayer) {
       const progress = 1.0 - cluster.dashCooldownTicks / cluster.maxDashCooldownTicks;
       ctx.beginPath();
-      ctx.arc(screenX, screenY, 16, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+      ctx.arc(screenX, screenY, boxHalfW + 4, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
       ctx.strokeStyle = 'rgba(255,180,30,0.55)';
       ctx.lineWidth = 2;
       ctx.stroke();
     }
 
-    // ── Cluster indicator dot ─────────────────────────────────────────────
-    const color = isPlayer ? '#00ff99' : '#ff6600';
-    const radiusPx = 10;
+    // ── Cluster box body ──────────────────────────────────────────────────
+    const bodyColor = isPlayer ? '#00ff99' : '#ff6600';
 
-    ctx.beginPath();
-    ctx.arc(screenX, screenY, radiusPx, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    // Filled box
+    ctx.fillStyle = bodyColor;
+    ctx.globalAlpha = 0.75;
+    ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+    ctx.globalAlpha = 1.0;
 
-    // ── Health bar ────────────────────────────────────────────────────────
-    const barWidthPx = 40;
+    // Box border
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+
+    // Inner highlight on top edge
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(boxLeft + 2, boxTop + 2, boxW - 4, 3);
+
+    // ── Health bar (above the box) ────────────────────────────────────────
+    const barWidthPx  = boxW;
     const barHeightPx = 4;
-    const barXPx = screenX - barWidthPx / 2;
-    const barYPx = screenY - radiusPx - 8;
+    const barXPx      = boxLeft;
+    const barYPx      = boxTop - barHeightPx - 4;
     const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
 
     ctx.fillStyle = '#333';

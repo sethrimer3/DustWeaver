@@ -50,12 +50,16 @@ export interface WorldState extends ParticleBuffers {
 
   // ---- Player movement input (set each frame by game screen) --------------
   /**
-   * Normalized movement input direction for this tick.
+   * Normalized horizontal movement input for this tick.
    * Set by the game screen before tick(); cleared by applyClusterMovement().
    * Zero when no movement input is provided.
    */
   playerMoveInputDxWorld: number;
   playerMoveInputDyWorld: number;
+
+  // ---- Player jump (set each frame by game screen) ------------------------
+  /** Set to 1 for one tick to trigger a player jump (cleared by applyClusterMovement). */
+  playerJumpTriggeredFlag: 0 | 1;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -83,6 +87,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerDashDirYWorld: 0.0,
     playerMoveInputDxWorld: 0.0,
     playerMoveInputDyWorld: 0.0,
+    playerJumpTriggeredFlag: 0,
     ...createParticleBuffers(),
   };
 }
