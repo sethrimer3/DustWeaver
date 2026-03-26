@@ -30,6 +30,7 @@ const STYLES: ParticleStyle[] = [
   { colorHex: '#2299ee', radiusPx: 4 }, // Water     — deep flowing blue
   { colorHex: '#ff2200', radiusPx: 6 }, // Lava      — molten deep red-orange (larger, hot)
   { colorHex: '#888899', radiusPx: 4 }, // Stone     — cool grey
+  { colorHex: '#ffd700', radiusPx: 4 }, // Gold      — bright golden yellow
 ];
 
 const FALLBACK_STYLE: ParticleStyle = STYLES[0];

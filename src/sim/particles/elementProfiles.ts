@@ -548,6 +548,36 @@ const STONE: ElementProfile = {
   regenerationRateTicks: 100,
 };
 
+/**
+ * Gold — grappling hook chain particles.
+ * Stable, low-turbulence, warm glowing appearance.
+ * Positions are overridden each tick by the grapple system; physics parameters
+ * have minimal effect but are set low to avoid visible drift between updates.
+ */
+const GOLD: ElementProfile = {
+  massKg:               1.0,
+  drag:                 2.5,
+  attractionStrength:   0.0,   // grapple system controls position directly
+  orbitalStrength:      0.0,
+  orbitRadiusWorld:     10.0,
+  noiseAmplitude:       4.0,   // slight shimmer
+  instability:          0.06,
+  curlStrength:         0.8,
+  diffusion:            0.3,
+  upwardBias:           0.0,
+  cohesion:             0.0,
+  separation:           0.0,
+  alignment:            0.0,
+  lifetimeBaseTicks:    999999, // effectively infinite — managed by grapple system
+  lifetimeVarianceTicks: 0,
+  temperature:          0.85,   // warm glow
+  stability:            0.90,
+  toughness:            1.0,
+  attackPower:          0.0,    // chain particles deal no combat damage
+  maxPopulationCount:   10,
+  regenerationRateTicks: 0,
+};
+
 // ---- Lookup table --------------------------------------------------------
 
 /**
@@ -573,6 +603,7 @@ export const ELEMENT_PROFILES: ElementProfile[] = [
   WATER,      // 15 — ParticleKind.Water
   LAVA,       // 16 — ParticleKind.Lava
   STONE,      // 17 — ParticleKind.Stone
+  GOLD,       // 18 — ParticleKind.Gold
 ];
 
 /** Returns the profile for `kind`, falling back to Physical if out of range. */

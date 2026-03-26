@@ -20,6 +20,7 @@
 
 import { WorldState } from './world';
 import { applyClusterMovement } from './clusters/movement';
+import { applyGrappleClusterConstraint, updateGrappleChainParticles } from './clusters/grapple';
 import { applyEnemyAI } from './clusters/enemyAi';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
@@ -34,6 +35,9 @@ import { updateParticleLifetimes } from './particles/lifetime';
 export function tick(world: WorldState): void {
   // 0. Cluster movement — smooth acceleration/deceleration for player and enemies
   applyClusterMovement(world);
+
+  // 0.25. Grapple rope constraint — corrects player cluster position/velocity
+  applyGrappleClusterConstraint(world);
 
   // 0.5. Enemy AI — decide attack / block / dodge for each enemy cluster
   applyEnemyAI(world);
@@ -71,6 +75,9 @@ export function tick(world: WorldState): void {
   // 6.5. Wall velocity bounce — reflect particles off wall faces with damping;
   //      stone shatter events are processed here too.
   applyWallBounce(world);
+
+  // 6.75. Grapple chain particle update — reposition Gold chain particles along rope
+  updateGrappleChainParticles(world);
 
   // 7. Lifetime: age particles; cycle owned particles or respawn combat-killed ones
   updateParticleLifetimes(world);

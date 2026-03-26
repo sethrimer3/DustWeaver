@@ -58,6 +58,12 @@ export interface WorldSnapshot {
   readonly particles: ParticleSnapshot;
   readonly clusters:  readonly ClusterSnapshot[];
   readonly walls:     WallSnapshot;
+  /** 1 while the player's grapple hook is attached; 0 otherwise. */
+  readonly isGrappleActiveFlag:  0 | 1;
+  /** World-space X of the grapple anchor point (only valid when isGrappleActiveFlag=1). */
+  readonly grappleAnchorXWorld:  number;
+  /** World-space Y of the grapple anchor point (only valid when isGrappleActiveFlag=1). */
+  readonly grappleAnchorYWorld:  number;
 }
 
 export function createSnapshot(world: WorldState): WorldSnapshot {
@@ -104,5 +110,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       wWorld: world.wallWWorld,
       hWorld: world.wallHWorld,
     },
+    isGrappleActiveFlag: world.isGrappleActiveFlag,
+    grappleAnchorXWorld: world.grappleAnchorXWorld,
+    grappleAnchorYWorld: world.grappleAnchorYWorld,
   };
 }

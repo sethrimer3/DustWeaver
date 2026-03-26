@@ -97,6 +97,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 15) return vec3(0.13, 0.60, 0.93);  // Water     — deep flowing blue
     if (ki == 16) return vec3(1.00, 0.13, 0.00);  // Lava      — deep molten red-orange
     if (ki == 17) return vec3(0.53, 0.53, 0.60);  // Stone     — cool grey
+    if (ki == 18) return vec3(1.00, 0.84, 0.00);  // Gold      — bright golden yellow
     return vec3(0.47, 0.60, 0.67);                // Physical  — steel blue-grey
   }
 
@@ -121,6 +122,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 15) return 0.0; // Water     → Circle
     if (ki == 16) return 0.0; // Lava      → Circle (molten, fluid)
     if (ki == 17) return 3.0; // Stone     → Triangle (rocky, jagged)
+    if (ki == 18) return 1.0; // Gold      → Diamond (sparkle)
     return 0.0;               // Physical  → Circle (default)
   }
 
