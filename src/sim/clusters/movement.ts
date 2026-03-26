@@ -1,12 +1,15 @@
 /**
  * Cluster movement — platformer physics with gravity, jumping, and walking.
  *
- * Player movement:
- *   • A/D keys move the player left/right with smooth acceleration.
- *   • Gravity is applied every tick, pulling clusters downward.
- *   • Jump (world.playerJumpTriggeredFlag): applies an upward velocity impulse
- *     when the player is grounded.
- *   • Dash (world.playerDashTriggeredFlag): horizontal velocity burst (Shift key).
+ * Player movement (Hollow Knight / Celeste inspired):
+ *   • A/D keys move the player left/right with crisp, snappy acceleration.
+ *   • Higher gravity + fast-fall multiplier makes jumps feel weighty yet agile.
+ *   • Variable jump height: releasing the jump key early cuts the upward velocity,
+ *     enabling both short hops and full arcs from the same button.
+ *   • Coyote time: jump is still allowed for a brief window after walking off a ledge.
+ *   • Jump buffer: a jump input received slightly before landing is remembered and
+ *     fires as soon as the player touches down.
+ *   • Dash (Shift key): horizontal velocity burst on a 3-second cooldown.
  *
  * Enemy movement:
  *   • Enemies walk horizontally toward the player at a fixed speed.
@@ -29,32 +32,54 @@ import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD 
 
 // ---- Gravity & jump --------------------------------------------------------
 /** Downward acceleration applied each tick (world units per second²). */
-const GRAVITY_WORLD_PER_SEC2 = 900.0;
+const GRAVITY_WORLD_PER_SEC2 = 1600.0;
+/**
+ * Extra gravity multiplier applied while the player is falling (velocityY > 0).
+ * Creates the characteristic fast-fall / weighty-landing feel of Celeste/HK.
+ */
+const FALL_GRAVITY_MULTIPLIER = 2.5;
 /** Maximum downward fall speed (world units per second) — prevents tunnelling. */
-const TERMINAL_VELOCITY_WORLD_PER_SEC = 650.0;
+const TERMINAL_VELOCITY_WORLD_PER_SEC = 900.0;
 /** Upward impulse applied on jump (world units per second). */
-const PLAYER_JUMP_SPEED_WORLD = 575.0;
+const PLAYER_JUMP_SPEED_WORLD = 700.0;
+/**
+ * Fraction of upward velocity retained when the jump key is released early.
+ * Lower = shorter minimum hop.  Applied only while the player is still rising.
+ */
+const JUMP_CUT_MULTIPLIER = 0.40;
+/**
+ * Ticks after leaving a grounded surface during which a jump is still accepted.
+ * Gives the player a brief "coyote time" grace window (~0.1 s at 60 fps).
+ */
+const COYOTE_TIME_TICKS = 6;
+/**
+ * Ticks a jump input is remembered while the player is airborne.
+ * When the player lands while bufferTicks > 0, the jump fires immediately.
+ */
+const JUMP_BUFFER_TICKS = 8;
 
 // ---- Player walk constants -------------------------------------------------
 /** Maximum horizontal speed of the player cluster (world units per second). */
-const PLAYER_MAX_SPEED_WORLD_PER_SEC = 200.0;
-/** How quickly the player reaches max speed from rest (higher = snappier). */
-const PLAYER_ACCEL_PER_SEC = 18.0;
+const PLAYER_MAX_SPEED_WORLD_PER_SEC = 300.0;
+/** How quickly the player reaches max speed from rest while grounded (snappy). */
+const PLAYER_ACCEL_PER_SEC = 48.0;
+/** Air-control acceleration — slightly softer than ground for a grounded feel. */
+const PLAYER_AIR_ACCEL_PER_SEC = 38.0;
 /** How quickly the player decelerates when no input is given. */
-const PLAYER_DECEL_PER_SEC = 26.0;
+const PLAYER_DECEL_PER_SEC = 60.0;
 /** Speed burst applied on a horizontal dash (world units per second). */
-const PLAYER_DASH_SPEED_WORLD = 480.0;
+const PLAYER_DASH_SPEED_WORLD = 560.0;
 
 // ---- Enemy walk constants --------------------------------------------------
 /** Maximum horizontal chase speed for enemy clusters (world units per second). */
-const ENEMY_MAX_SPEED_WORLD_PER_SEC = 80.0;
+const ENEMY_MAX_SPEED_WORLD_PER_SEC = 90.0;
 /** Enemy horizontal acceleration rate. */
-const ENEMY_ACCEL_PER_SEC = 5.0;
+const ENEMY_ACCEL_PER_SEC = 8.0;
 /**
  * Horizontal distance (world units) below which enemies stop advancing.
  * Keeps them in a comfortable attack range.
  */
-const ENEMY_ENGAGE_DIST_WORLD = 130.0;
+const ENEMY_ENGAGE_DIST_WORLD = 60.0;
 
 // ---- World bounds ----------------------------------------------------------
 /** Horizontal margin from world edges within which clusters are clamped. */
@@ -63,7 +88,7 @@ const CLUSTER_EDGE_MARGIN_WORLD = 10.0;
  * Maximum vertical overlap (world units) that still triggers a platform snap.
  * Must exceed the maximum cluster displacement in one tick (≈ terminal velocity / 60).
  */
-const PLATFORM_SNAP_TOLERANCE_WORLD = 30.0;
+const PLATFORM_SNAP_TOLERANCE_WORLD = 20.0;
 
 /**
  * Checks the cluster box (bottom edge) against all wall top surfaces and the
@@ -73,8 +98,10 @@ const PLATFORM_SNAP_TOLERANCE_WORLD = 30.0;
  * Only "landing from above" collisions are resolved (velocity ≥ 0 downward or
  * already standing).  Side / ceiling collisions are handled by particle wall
  * forces alone.
+ *
+ * Returns true if a landing surface was found.
  */
-function resolveClusterFloorCollision(cluster: import('./state').ClusterState, world: WorldState): void {
+function resolveClusterFloorCollision(cluster: import('./state').ClusterState, world: WorldState): boolean {
   cluster.isGroundedFlag = 0;
 
   const hw = cluster.halfWidthWorld;
@@ -89,7 +116,7 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
     cluster.positionYWorld  = floorY - hh;
     cluster.velocityYWorld  = 0;
     cluster.isGroundedFlag  = 1;
-    return;
+    return true;
   }
 
   // ── Walls (platforms) ─────────────────────────────────────────────────────
@@ -110,9 +137,10 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
       cluster.positionYWorld = wallTop - hh;
       cluster.velocityYWorld = 0;
       cluster.isGroundedFlag = 1;
-      return;
+      return true;
     }
   }
+  return false;
 }
 
 export function applyClusterMovement(world: WorldState): void {
@@ -137,14 +165,18 @@ export function applyClusterMovement(world: WorldState): void {
     const cluster = world.clusters[ci];
     if (cluster.isAliveFlag === 0) continue;
 
-    // ── Apply gravity ──────────────────────────────────────────────────────
-    cluster.velocityYWorld += GRAVITY_WORLD_PER_SEC2 * dtSec;
+    // ── Apply gravity (with fast-fall multiplier for player) ───────────────
+    let gravThisTick = GRAVITY_WORLD_PER_SEC2;
+    if (cluster.isPlayerFlag === 1 && cluster.velocityYWorld > 0) {
+      gravThisTick *= FALL_GRAVITY_MULTIPLIER;
+    }
+    cluster.velocityYWorld += gravThisTick * dtSec;
     if (cluster.velocityYWorld > TERMINAL_VELOCITY_WORLD_PER_SEC) {
       cluster.velocityYWorld = TERMINAL_VELOCITY_WORLD_PER_SEC;
     }
 
     if (cluster.isPlayerFlag === 1) {
-      // ── Player dash cooldown tick-down ─────────────────────────────────
+      // ── Dash cooldown tick-down ─────────────────────────────────────────
       if (cluster.dashCooldownTicks > 0) {
         cluster.dashCooldownTicks -= 1;
         if (cluster.dashCooldownTicks === 0) {
@@ -155,28 +187,52 @@ export function applyClusterMovement(world: WorldState): void {
         cluster.dashRechargeAnimTicks -= 1;
       }
 
-      // ── Player horizontal dash burst (one-shot impulse) ────────────────
+      // ── Coyote time tick-down ───────────────────────────────────────────
+      if (cluster.coyoteTimeTicks > 0) {
+        cluster.coyoteTimeTicks -= 1;
+      }
+
+      // ── Jump buffer tick-down ───────────────────────────────────────────
+      if (cluster.jumpBufferTicks > 0) {
+        cluster.jumpBufferTicks -= 1;
+      }
+
+      // ── Variable jump height: cut upward velocity on key-release edge ──
+      // Detect the transition from held→not-held to apply the cut exactly once.
+      const jumpJustReleased = cluster.prevJumpHeldFlag === 1 && !world.playerJumpHeldFlag;
+      if (jumpJustReleased && cluster.velocityYWorld < 0) {
+        cluster.velocityYWorld *= JUMP_CUT_MULTIPLIER;
+      }
+      cluster.prevJumpHeldFlag = world.playerJumpHeldFlag;
+
+      // ── Player horizontal dash burst (one-shot impulse) ─────────────────
       if (world.playerDashTriggeredFlag === 1 && cluster.dashCooldownTicks === 0) {
-        // Dash horizontally in movement direction or toward cursor
         const ddx = world.playerDashDirXWorld;
         const dashDirX = ddx !== 0 ? (ddx > 0 ? 1 : -1) : (cluster.velocityXWorld >= 0 ? 1 : -1);
         cluster.velocityXWorld = dashDirX * PLAYER_DASH_SPEED_WORLD;
         cluster.dashCooldownTicks = DASH_COOLDOWN_TICKS;
       }
 
-      // ── Player jump impulse ────────────────────────────────────────────
-      if (world.playerJumpTriggeredFlag === 1 && cluster.isGroundedFlag === 1) {
-        cluster.velocityYWorld = -PLAYER_JUMP_SPEED_WORLD;
-        cluster.isGroundedFlag = 0;
+      // ── Register jump buffer when jump pressed while airborne ───────────
+      if (world.playerJumpTriggeredFlag === 1) {
+        if (cluster.isGroundedFlag === 1 || cluster.coyoteTimeTicks > 0) {
+          // Grounded (or coyote window) — jump immediately
+          cluster.velocityYWorld = -PLAYER_JUMP_SPEED_WORLD;
+          cluster.isGroundedFlag = 0;
+          cluster.coyoteTimeTicks = 0;
+        } else {
+          // Airborne — buffer the jump
+          cluster.jumpBufferTicks = JUMP_BUFFER_TICKS;
+        }
       }
 
-      // ── Player horizontal acceleration ────────────────────────────────
+      // ── Player horizontal acceleration ───────────────────────────────────
       const inputDx = world.playerMoveInputDxWorld;
       const targetVelX = inputDx * PLAYER_MAX_SPEED_WORLD_PER_SEC;
 
       let alpha: number;
       if (inputDx !== 0) {
-        alpha = PLAYER_ACCEL_PER_SEC * dtSec;
+        alpha = (cluster.isGroundedFlag === 1 ? PLAYER_ACCEL_PER_SEC : PLAYER_AIR_ACCEL_PER_SEC) * dtSec;
       } else {
         alpha = PLAYER_DECEL_PER_SEC * dtSec;
       }
@@ -190,10 +246,8 @@ export function applyClusterMovement(world: WorldState): void {
 
       let targetVelX = 0.0;
       if (absDx > ENEMY_ENGAGE_DIST_WORLD) {
-        // Walk toward player
         targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC;
       } else if (absDx > 10.0) {
-        // Slow approach inside engage range
         targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC
           * (absDx / ENEMY_ENGAGE_DIST_WORLD);
       }
@@ -213,7 +267,22 @@ export function applyClusterMovement(world: WorldState): void {
     cluster.positionYWorld += cluster.velocityYWorld * dtSec;
 
     // ── Resolve floor / platform landing ──────────────────────────────────
-    resolveClusterFloorCollision(cluster, world);
+    const wasGrounded = cluster.isGroundedFlag === 1;
+    const justLanded = resolveClusterFloorCollision(cluster, world);
+
+    if (cluster.isPlayerFlag === 1) {
+      if (justLanded) {
+        // Fire buffered jump on landing
+        if (cluster.jumpBufferTicks > 0) {
+          cluster.velocityYWorld = -PLAYER_JUMP_SPEED_WORLD;
+          cluster.isGroundedFlag = 0;
+          cluster.jumpBufferTicks = 0;
+        }
+      } else if (wasGrounded && cluster.isGroundedFlag === 0) {
+        // Player just walked off a ledge — start coyote time
+        cluster.coyoteTimeTicks = COYOTE_TIME_TICKS;
+      }
+    }
 
     // ── Clamp horizontal world bounds ─────────────────────────────────────
     if (cluster.positionXWorld < minX + cluster.halfWidthWorld) {

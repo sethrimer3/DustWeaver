@@ -14,6 +14,8 @@ export interface InputState {
   isEscapePressed: boolean;
   /** Set to true for one collectCommands call to trigger a jump. */
   isJumpTriggeredFlag: boolean;
+  /** True while any jump key (W / Space / ArrowUp) is physically held down. */
+  isJumpHeldFlag: boolean;
   /** Tracks whether the joystick is already past the up-flick threshold (edge-detect). */
   isJoystickUpActiveFlag: boolean;
   /** Set to true for one collectCommands call to trigger a dash. */
@@ -69,6 +71,7 @@ export function createInputState(): InputState {
     isKeyD: false,
     isEscapePressed: false,
     isJumpTriggeredFlag: false,
+    isJumpHeldFlag: false,
     isJoystickUpActiveFlag: false,
     isDashTriggeredFlag: false,
     mouseXPx: 0,
@@ -132,6 +135,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
       e.preventDefault();
       state.isJumpTriggeredFlag = true;
+      state.isJumpHeldFlag = true;
     }
     if (e.key === 'Shift') {
       e.preventDefault();
@@ -144,6 +148,9 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'ArrowLeft') state.isKeyA = false;
     if (e.key === 'ArrowRight') state.isKeyD = false;
     if (e.key === 'Escape') state.isEscapePressed = false;
+    if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
+      state.isJumpHeldFlag = false;
+    }
   }
   function onMouseMove(e: MouseEvent): void {
     state.mouseXPx = e.clientX;
