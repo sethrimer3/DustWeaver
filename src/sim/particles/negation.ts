@@ -74,6 +74,11 @@ setMultiplier(16, 6, 0.5);  // lava vs wind    -- wind disperses lava slowly
 setMultiplier(2, 16, 2.0);  // ice vs lava     -- solidifies lava
 setMultiplier(6, 16, 1.5);  // wind vs lava    -- fans the flames
 
+// ---- Water (15) interactions ---------------------------------------------
+setMultiplier(15, 1, 2.5);  // water vs fire   -- water douses flames
+setMultiplier(1, 15, 0.5);  // fire vs water   -- fire struggles against water
+setMultiplier(15, 16, 1.8); // water vs lava   -- water solidifies lava
+
 // ---- Stone (17) interactions ---------------------------------------------
 setMultiplier(17, 1, 1.5);  // stone vs fire   -- stone smothers fire
 setMultiplier(17, 16, 0.5); // stone vs lava   -- lava melts stone
