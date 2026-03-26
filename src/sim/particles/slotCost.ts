@@ -37,6 +37,7 @@ const SLOT_COSTS: number[] = [
   2, // Water      (15) — moderate cost (flowing, World 1 theme)
   4, // Lava       (16) — maximum cost (rare, devastating, slow)
   2, // Stone      (17) — moderate cost (physical shatter)
+  0, // Gold       (18) — non-equippable grapple-chain placeholder
 ];
 
 if (SLOT_COSTS.length !== PARTICLE_KIND_COUNT) {
