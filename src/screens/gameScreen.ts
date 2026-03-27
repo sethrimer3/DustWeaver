@@ -15,6 +15,8 @@ import { CommandKind } from '../input/commands';
 import { LevelDef } from '../levels/levelDef';
 
 const FIXED_DT_MS = 16.666;
+/** Canonical level-grid block size (sprites/objects snap to this). */
+const BLOCK_SIZE_PX = 30;
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
 /** Number of background Fluid particles filling the entire arena. */
@@ -182,11 +184,16 @@ function loadWalls(world: WorldState, levelDef: LevelDef, widthWorld: number, he
   world.wallCount = count;
   for (let wi = 0; wi < count; wi++) {
     const def = levelDef.walls[wi];
-    world.wallXWorld[wi] = def.xFraction * widthWorld;
-    world.wallYWorld[wi] = def.yFraction * heightWorld;
-    world.wallWWorld[wi] = def.wFraction * widthWorld;
-    world.wallHWorld[wi] = def.hFraction * heightWorld;
+    world.wallXWorld[wi] = snapToBlockGridPx(def.xFraction * widthWorld);
+    world.wallYWorld[wi] = snapToBlockGridPx(def.yFraction * heightWorld);
+    world.wallWWorld[wi] = Math.max(BLOCK_SIZE_PX, snapToBlockGridPx(def.wFraction * widthWorld));
+    world.wallHWorld[wi] = Math.max(BLOCK_SIZE_PX, snapToBlockGridPx(def.hFraction * heightWorld));
   }
+}
+
+/** Snaps a world-space pixel coordinate/size to the canonical block grid. */
+function snapToBlockGridPx(valuePx: number): number {
+  return Math.round(valuePx / BLOCK_SIZE_PX) * BLOCK_SIZE_PX;
 }
 
 /** Background fill colour for each level theme. */
@@ -249,7 +256,13 @@ export function startGameScreen(
   world.worldHeightWorld = canvas.height;
 
   // ── Spawn player near the floor (gravity will land them immediately) ──────
-  const playerCluster = createClusterState(1, canvas.width * 0.15, canvas.height * 0.75, 1, PARTICLE_COUNT_PER_CLUSTER);
+  const playerCluster = createClusterState(
+    1,
+    snapToBlockGridPx(canvas.width * 0.15),
+    snapToBlockGridPx(canvas.height * 0.75),
+    1,
+    PARTICLE_COUNT_PER_CLUSTER,
+  );
   world.clusters.push(playerCluster);
   spawnLoadoutParticles(
     world, playerCluster.entityId,
@@ -261,8 +274,8 @@ export function startGameScreen(
   let nextEntityId = 2;
   for (let ei = 0; ei < levelDef.enemies.length; ei++) {
     const enemyDef = levelDef.enemies[ei];
-    const ex = enemyDef.xFraction * canvas.width;
-    const ey = enemyDef.yFraction * canvas.height;
+    const ex = snapToBlockGridPx(enemyDef.xFraction * canvas.width);
+    const ey = snapToBlockGridPx(enemyDef.yFraction * canvas.height);
     const particleCount = enemyDef.particleCount;
     const hp = enemyDef.isBossFlag === 1 ? particleCount * BOSS_HP_MULTIPLIER : particleCount;
 
