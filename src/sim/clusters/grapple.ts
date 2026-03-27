@@ -31,6 +31,19 @@ export const GRAPPLE_MAX_LENGTH_WORLD = 300;
 const GRAPPLE_MIN_LENGTH_WORLD = 30;
 const GRAPPLE_ATTACH_FX_TICKS = 14;
 
+/**
+ * Speed at which the rope shortens while the jump button is held (world units per second).
+ * Shorter rope = tighter swing radius = faster rotation = bigger launch when released.
+ */
+const GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC = 90.0;
+
+/**
+ * Maximum total rope that can be pulled in before the grapple breaks (world units).
+ * This is a tension limit — pulling too hard snaps the rope and the player flies
+ * off with their accumulated swing momentum.  Acts as the skill ceiling for the mechanic.
+ */
+const GRAPPLE_MAX_PULL_IN_WORLD = 150.0;
+
 /** Number of Gold particles that form the visible chain between player and anchor. */
 export const GRAPPLE_SEGMENT_COUNT = 10;
 
@@ -163,6 +176,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   world.grappleAnchorXWorld = player.positionXWorld + dirX * clampedDist;
   world.grappleAnchorYWorld = player.positionYWorld + dirY * clampedDist;
   world.grappleLengthWorld  = clampedDist;
+  world.grapplePullInAmountWorld = 0.0;  // reset pull-in counter for this new attachment
   world.isGrappleActiveFlag = 1;
   world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
   world.grappleAttachFxXWorld = world.grappleAnchorXWorld;
@@ -202,6 +216,12 @@ export function releaseGrapple(world: WorldState): void {
  * Called after applyClusterMovement (which applies gravity and floor collision)
  * so the constraint acts on the fully-updated cluster position and velocity.
  *
+ * Rope pull-in: while the jump button is held the rope shortens at
+ * GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC, letting the player tighten the swing
+ * radius and build rotational speed.  The total amount pulled is tracked; if
+ * it exceeds GRAPPLE_MAX_PULL_IN_WORLD the rope snaps and the player launches
+ * with their accumulated momentum.
+ *
  * When the rope is taut (player distance > grappleLengthWorld):
  *   1. The player's position is snapped back onto the rope circle.
  *   2. The outward radial velocity component is removed (inelastic normal
@@ -214,6 +234,28 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   if (player === undefined || player.isAliveFlag === 0) {
     releaseGrapple(world);
     return;
+  }
+
+  const dtSec = world.dtMs / 1000.0;
+
+  // ── Rope pull-in while jump is held ───────────────────────────────────────
+  // The jump button is suppressed from triggering a normal jump when the
+  // grapple is active (see movement.ts), so holding jump here means "reel in".
+  if (world.playerJumpHeldFlag === 1) {
+    const pullThisTick = GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC * dtSec;
+    const newLength    = world.grappleLengthWorld - pullThisTick;
+
+    if (newLength >= GRAPPLE_MIN_LENGTH_WORLD) {
+      world.grappleLengthWorld       = newLength;
+      world.grapplePullInAmountWorld += pullThisTick;
+
+      // Snap limit: too much tension breaks the rope and the player flies free
+      if (world.grapplePullInAmountWorld >= GRAPPLE_MAX_PULL_IN_WORLD) {
+        releaseGrapple(world);
+        return;
+      }
+    }
+    // If newLength < GRAPPLE_MIN_LENGTH_WORLD the rope is at minimum — no more pull.
   }
 
   const ax = world.grappleAnchorXWorld;

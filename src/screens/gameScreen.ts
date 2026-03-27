@@ -8,7 +8,7 @@ import { RngState, createRng, nextFloat, nextFloatRange } from '../sim/rng';
 import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
-import { renderHudOverlay, HudState } from '../render/hud/overlay';
+import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
@@ -521,6 +521,24 @@ export function startGameScreen(
       if (world.isAliveFlag[i] === 1) aliveCount++;
     }
     hudState.particleCount = aliveCount;
+
+    // ── Populate movement debug state from the player cluster ─────────────────
+    const playerClusterForHud = world.clusters[0];
+    if (playerClusterForHud !== undefined && playerClusterForHud.isAliveFlag === 1) {
+      const dbg: HudDebugState = {
+        isGrounded:           playerClusterForHud.isGroundedFlag === 1,
+        coyoteTimeTicks:      playerClusterForHud.coyoteTimeTicks,
+        jumpBufferTicks:      playerClusterForHud.jumpBufferTicks,
+        isWallSlidingFlag:    playerClusterForHud.isWallSlidingFlag === 1,
+        isTouchingWallLeft:   playerClusterForHud.isTouchingWallLeftFlag === 1,
+        isTouchingWallRight:  playerClusterForHud.isTouchingWallRightFlag === 1,
+        wallJumpLockoutTicks: playerClusterForHud.wallJumpLockoutTicks,
+        isGrappleActive:      world.isGrappleActiveFlag === 1,
+        grappleLengthWorld:   world.grappleLengthWorld,
+        grapplePullInAmountWorld: world.grapplePullInAmountWorld,
+      };
+      hudState.debug = dbg;
+    }
 
     const snapshot = createSnapshot(world);
 
