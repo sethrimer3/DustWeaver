@@ -27,18 +27,17 @@ const FLOATS_PER_VERTEX = 5;
 const BYTES_PER_FLOAT   = 4;
 /** Visual radius for each particle's point sprite (pixels). */
 const POINT_SIZE_PX = 5.0;
-/** Default dark background colour components (matches #0A0A12). */
-let _bgR = 0.039;
-let _bgG = 0.039;
-let _bgB = 0.071;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/** WebGL context attributes: alpha channel enabled, non-premultiplied for correct canvas compositing. */
+const WEBGL_CONTEXT_ATTRS: WebGLContextAttributes = { alpha: true, premultipliedAlpha: false };
+
 function tryGetWebGLContext(canvas: HTMLCanvasElement): WebGLRenderingContext | null {
-  return (canvas.getContext('webgl') as WebGLRenderingContext | null)
-      ?? (canvas.getContext('experimental-webgl' as 'webgl') as WebGLRenderingContext | null);
+  return (canvas.getContext('webgl', WEBGL_CONTEXT_ATTRS) as WebGLRenderingContext | null)
+      ?? (canvas.getContext('experimental-webgl' as 'webgl', WEBGL_CONTEXT_ATTRS) as WebGLRenderingContext | null);
 }
 
 function compileShader(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
@@ -155,30 +154,24 @@ export class WebGLParticleRenderer {
     this.uResolution           = gl.getUniformLocation(program, 'u_resolution');
     this.uPointSizePx          = gl.getUniformLocation(program, 'u_pointSizePx');
 
-    // Additive blending: overlapping particles accumulate into natural bloom.
+    // Additive blending for RGB (overlapping particles bloom) with standard
+    // source-over alpha compositing so the transparent canvas composites
+    // correctly over the 2D game canvas below it.
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     this.isAvailable = true;
   }
 
-  /** Resize the WebGL canvas and viewport to match the display resolution. */
+  /**
+   * Resize the WebGL canvas and viewport to match the display resolution.
+   */
   resize(widthPx: number, heightPx: number): void {
     this.canvas.width  = widthPx;
     this.canvas.height = heightPx;
     if (this.gl !== null) {
       this.gl.viewport(0, 0, widthPx, heightPx);
     }
-  }
-
-  /**
-   * Set the background clear colour (RGB, each 0–1).
-   * Call when the active room changes to a different world.
-   */
-  setBackgroundColor(r: number, g: number, b: number): void {
-    _bgR = r;
-    _bgG = g;
-    _bgB = b;
   }
 
   /**
@@ -228,8 +221,8 @@ export class WebGLParticleRenderer {
       vertexCount++;
     }
 
-    // ---- Clear with dark background -------------------------------------
-    gl.clearColor(_bgR, _bgG, _bgB, 1.0);
+    // ---- Clear to transparent so the 2D canvas below shows through ----------
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     if (vertexCount === 0) return;
