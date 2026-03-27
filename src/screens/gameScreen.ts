@@ -12,7 +12,7 @@ import { renderHudOverlay, HudState } from '../render/hud/overlay';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
-import { LevelDef } from '../levels/levelDef';
+import { DoorDef, LevelDef } from '../levels/levelDef';
 
 const FIXED_DT_MS = 16.666;
 /** Canonical level-grid block size (sprites/objects snap to this). */
@@ -22,8 +22,6 @@ const PARTICLE_COUNT_PER_CLUSTER = 20;
 /** Number of background Fluid particles filling the entire arena. */
 const BACKGROUND_FLUID_COUNT = 300;
 
-// Delay (ms) after all enemies are defeated before triggering onLevelComplete
-const VICTORY_DELAY_MS = 2000;
 
 /** Boss clusters receive this multiplier on their base HP for extra durability. */
 const BOSS_HP_MULTIPLIER = 2;
@@ -36,8 +34,8 @@ const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0
 
 export interface GameScreenCallbacks {
   onReturnToMap: () => void;
-  /** Called after victory delay with the completed level definition. */
-  onLevelComplete: (level: LevelDef) => void;
+  /** Called when the player enters the active exit door. */
+  onExitDoor: (level: LevelDef, target: 'next' | 'menu') => void;
 }
 
 /**
@@ -195,6 +193,42 @@ function loadWalls(world: WorldState, levelDef: LevelDef, widthWorld: number, he
 function snapToBlockGridPx(valuePx: number): number {
   return Math.round(valuePx / BLOCK_SIZE_PX) * BLOCK_SIZE_PX;
 }
+function doorToWorldRect(door: DoorDef, worldWidthWorld: number, worldHeightWorld: number): {
+  xWorld: number;
+  yWorld: number;
+  wWorld: number;
+  hWorld: number;
+} {
+  return {
+    xWorld: snapToBlockGridPx(door.xFraction * worldWidthWorld),
+    yWorld: snapToBlockGridPx(door.yFraction * worldHeightWorld),
+    wWorld: Math.max(BLOCK_SIZE_PX, snapToBlockGridPx(door.wFraction * worldWidthWorld)),
+    hWorld: Math.max(BLOCK_SIZE_PX, snapToBlockGridPx(door.hFraction * worldHeightWorld)),
+  };
+}
+
+function drawDoor(
+  ctx: CanvasRenderingContext2D,
+  xWorld: number,
+  yWorld: number,
+  wWorld: number,
+  hWorld: number,
+  label: string,
+  isActive: boolean,
+): void {
+  ctx.save();
+  ctx.fillStyle = isActive ? 'rgba(0, 240, 140, 0.25)' : 'rgba(170, 170, 170, 0.2)';
+  ctx.strokeStyle = isActive ? '#00f08c' : '#777';
+  ctx.lineWidth = 2;
+  ctx.fillRect(xWorld, yWorld, wWorld, hWorld);
+  ctx.strokeRect(xWorld, yWorld, wWorld, hWorld);
+  ctx.fillStyle = isActive ? '#9bffd3' : '#aaa';
+  ctx.font = '11px monospace';
+  const textWidth = ctx.measureText(label).width;
+  ctx.fillText(label, xWorld + (wWorld - textWidth) * 0.5, yWorld - 6);
+  ctx.restore();
+}
+
 
 /** Background fill colour for each level theme. */
 function themeBgColor(theme: string): string {
@@ -255,11 +289,14 @@ export function startGameScreen(
   world.worldWidthWorld  = canvas.width;
   world.worldHeightWorld = canvas.height;
 
-  // ── Spawn player near the floor (gravity will land them immediately) ──────
+  let entryDoorWorld = doorToWorldRect(levelDef.entryDoor, canvas.width, canvas.height);
+  let exitDoorWorld = doorToWorldRect(levelDef.exitDoor, canvas.width, canvas.height);
+
+  // ── Spawn player at entry door position ───────────────────────────────────
   const playerCluster = createClusterState(
     1,
-    snapToBlockGridPx(canvas.width * 0.15),
-    snapToBlockGridPx(canvas.height * 0.75),
+    entryDoorWorld.xWorld + entryDoorWorld.wWorld * 0.5,
+    entryDoorWorld.yWorld + entryDoorWorld.hWorld * 0.5,
     1,
     PARTICLE_COUNT_PER_CLUSTER,
   );
@@ -323,13 +360,15 @@ export function startGameScreen(
   let isRunning = true;
   let rafHandle = 0;
 
-  // Victory state
-  let victoryTimeMs = -1;  // -1 = no victory yet
-  let victoryTriggered = false;
+  // Exit-door state
+  let areEnemiesCleared = false;
+  let hasExitedThroughDoor = false;
 
   function onResize(): void {
     resizeCanvas();
     loadWalls(world, levelDef, canvas.width, canvas.height);
+    entryDoorWorld = doorToWorldRect(levelDef.entryDoor, canvas.width, canvas.height);
+    exitDoorWorld = doorToWorldRect(levelDef.exitDoor, canvas.width, canvas.height);
   }
   window.addEventListener('resize', onResize);
 
@@ -407,8 +446,8 @@ export function startGameScreen(
       return;
     }
 
-    // ── Victory check ────────────────────────────────────────────────────────
-    if (!victoryTriggered) {
+    // ── Exit door unlock check ───────────────────────────────────────────────
+    if (!areEnemiesCleared) {
       let allEnemiesDead = true;
       for (let ci = 1; ci < world.clusters.length; ci++) {
         if (world.clusters[ci].isAliveFlag === 1) {
@@ -416,14 +455,20 @@ export function startGameScreen(
           break;
         }
       }
-      if (allEnemiesDead && world.clusters.length > 1) {
-        if (victoryTimeMs < 0) {
-          victoryTimeMs = timestampMs;
-        } else if (timestampMs - victoryTimeMs >= VICTORY_DELAY_MS) {
-          victoryTriggered = true;
+      areEnemiesCleared = allEnemiesDead && world.clusters.length > 1;
+    }
+
+    // ── Exit door interaction ───────────────────────────────────────────────
+    if (areEnemiesCleared && !hasExitedThroughDoor) {
+      const player = world.clusters[0];
+      if (player !== undefined) {
+        const insideExitX = player.positionXWorld >= exitDoorWorld.xWorld && player.positionXWorld <= exitDoorWorld.xWorld + exitDoorWorld.wWorld;
+        const insideExitY = player.positionYWorld >= exitDoorWorld.yWorld && player.positionYWorld <= exitDoorWorld.yWorld + exitDoorWorld.hWorld;
+        if (insideExitX && insideExitY) {
+          hasExitedThroughDoor = true;
           isRunning = false;
           detachInput();
-          callbacks.onLevelComplete(levelDef);
+          callbacks.onExitDoor(levelDef, levelDef.exitDoor.target);
           return;
         }
       }
@@ -492,6 +537,8 @@ export function startGameScreen(
     renderWalls(ctx, snapshot, 0, 0, 1.0);
     renderClusters(ctx, snapshot, 0, 0, 1.0);
     renderGrapple(ctx, snapshot, 0, 0, 1.0);
+    drawDoor(ctx, entryDoorWorld.xWorld, entryDoorWorld.yWorld, entryDoorWorld.wWorld, entryDoorWorld.hWorld, 'ENTRY', true);
+    drawDoor(ctx, exitDoorWorld.xWorld, exitDoorWorld.yWorld, exitDoorWorld.wWorld, exitDoorWorld.hWorld, 'EXIT', areEnemiesCleared);
     renderHudOverlay(ctx, hudState);
 
     // ── Level name banner (top-center) ──────────────────────────────────────
@@ -501,21 +548,19 @@ export function startGameScreen(
     const labelW = ctx.measureText(levelLabel).width;
     ctx.fillText(levelLabel, (canvas.width - labelW) / 2, 22);
 
-    // ── Victory banner ───────────────────────────────────────────────────────
-    if (victoryTimeMs >= 0) {
-      const progress = Math.min(1.0, (lastTimestampMs - victoryTimeMs) / VICTORY_DELAY_MS);
+    // ── Exit-door status banner ──────────────────────────────────────────────
+    if (areEnemiesCleared) {
       ctx.save();
-      ctx.globalAlpha = progress;
-      ctx.fillStyle = 'rgba(0,207,100,0.85)';
-      ctx.font = 'bold 48px monospace';
-      const victoryText = 'LEVEL COMPLETE!';
-      const vw = ctx.measureText(victoryText).width;
-      ctx.fillText(victoryText, (canvas.width - vw) / 2, canvas.height / 2 - 20);
-      ctx.font = '20px monospace';
-      ctx.fillStyle = 'rgba(180,255,200,0.85)';
-      const subText = 'Returning to World Map…';
-      const sw = ctx.measureText(subText).width;
-      ctx.fillText(subText, (canvas.width - sw) / 2, canvas.height / 2 + 20);
+      ctx.fillStyle = 'rgba(0,207,100,0.9)';
+      ctx.font = 'bold 28px monospace';
+      const bannerText = 'EXIT DOOR OPEN';
+      const bannerWidth = ctx.measureText(bannerText).width;
+      ctx.fillText(bannerText, (canvas.width - bannerWidth) / 2, canvas.height / 2 - 20);
+      ctx.font = '16px monospace';
+      ctx.fillStyle = 'rgba(170,255,210,0.9)';
+      const subText = 'Step into the EXIT door';
+      const subWidth = ctx.measureText(subText).width;
+      ctx.fillText(subText, (canvas.width - subWidth) / 2, canvas.height / 2 + 12);
       ctx.restore();
     }
 
