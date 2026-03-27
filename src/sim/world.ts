@@ -91,6 +91,14 @@ export interface WorldState extends ParticleBuffers {
    * -1 if not yet allocated. These slots are reserved by the game screen at startup.
    */
   grappleParticleStartIndex: number;
+  /**
+   * Number of consecutive ticks the jump button has been held while the grapple
+   * is active.  Used for tap-vs-hold detection:
+   *   • ≤ GRAPPLE_JUMP_TAP_THRESHOLD_TICKS on release → tap → release grapple
+   *   • > threshold while held → hold → retract rope
+   * Reset to 0 on grapple fire / release.
+   */
+  grappleJumpHeldTickCount: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -129,6 +137,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleAttachFxXWorld: 0.0,
     grappleAttachFxYWorld: 0.0,
     grappleParticleStartIndex: -1,
+    grappleJumpHeldTickCount: 0,
     ...createParticleBuffers(),
   };
 }

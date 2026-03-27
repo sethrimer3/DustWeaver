@@ -394,10 +394,15 @@ export function applyClusterMovement(world: WorldState): void {
       }
 
       // ── Apply gravity (rise / fall split + jump-cut multiplier) ────────
-      // When grappling, gravity still applies; the grapple constraint
-      // (step 0.25) projects the player back onto the rope circle afterward.
+      // When grappling, use consistent gravity (no jump-cut multiplier, no
+      // asymmetric rise/fall) for a natural pendulum feel.  The grapple
+      // constraint (step 0.25) handles the actual swing physics.
       let grav: number;
-      if (cluster.velocityYWorld < 0) {
+      if (world.isGrappleActiveFlag === 1) {
+        // Consistent gravity for pendulum swing — use the base rise gravity
+        // for both directions so the arc is symmetric and physically convincing.
+        grav = RISE_GRAVITY_WORLD_PER_SEC2;
+      } else if (cluster.velocityYWorld < 0) {
         // Rising: use heavier gravity if the jump key was released early,
         // giving a shorter hop without any abrupt velocity clamp.
         grav = world.playerJumpHeldFlag === 1
@@ -408,7 +413,11 @@ export function applyClusterMovement(world: WorldState): void {
         grav = FALL_GRAVITY_WORLD_PER_SEC2;
       }
       cluster.velocityYWorld += grav * dtSec;
-      if (cluster.velocityYWorld > TERMINAL_VELOCITY_WORLD_PER_SEC) {
+      // Skip terminal velocity cap during grapple — the swing can legitimately
+      // exceed the normal fall speed cap without causing tunnelling issues
+      // because the rope constraint clamps displacement each tick.
+      if (world.isGrappleActiveFlag === 0 &&
+          cluster.velocityYWorld > TERMINAL_VELOCITY_WORLD_PER_SEC) {
         cluster.velocityYWorld = TERMINAL_VELOCITY_WORLD_PER_SEC;
       }
 
@@ -456,38 +465,44 @@ export function applyClusterMovement(world: WorldState): void {
       }
 
       // ── Horizontal movement (direct acceleration model) ─────────────────
-      // Direct force accumulation gives responsive control without the
-      // slipperiness of a pure lerp approach.
+      // While grappling, skip horizontal acceleration and deceleration —
+      // the pendulum physics (gravity + rope constraint) governs all motion.
+      // Applying platformer-style speed caps or deceleration here would fight
+      // against the swing and break the physical feel.
       const inputDx   = world.playerMoveInputDxWorld;
       const isGrounded = cluster.isGroundedFlag === 1;
 
-      if (inputDx !== 0) {
-        // Reversing direction uses a higher turn acceleration for snappy feel
-        const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
-                          (inputDx < 0 && cluster.velocityXWorld >  1.0);
-        let accel: number;
-        if (isTurning) {
-          accel = TURN_ACCELERATION_PER_SEC2;
-        } else if (isGrounded) {
-          accel = GROUND_ACCELERATION_PER_SEC2;
+      if (world.isGrappleActiveFlag === 0) {
+        // Direct force accumulation gives responsive control without the
+        // slipperiness of a pure lerp approach.
+        if (inputDx !== 0) {
+          // Reversing direction uses a higher turn acceleration for snappy feel
+          const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
+                            (inputDx < 0 && cluster.velocityXWorld >  1.0);
+          let accel: number;
+          if (isTurning) {
+            accel = TURN_ACCELERATION_PER_SEC2;
+          } else if (isGrounded) {
+            accel = GROUND_ACCELERATION_PER_SEC2;
+          } else {
+            accel = AIR_ACCELERATION_PER_SEC2;
+          }
+          cluster.velocityXWorld += inputDx * accel * dtSec;
+          // Clamp to max run speed only in the direction of input
+          if (inputDx > 0 && cluster.velocityXWorld > MAX_RUN_SPEED_WORLD_PER_SEC) {
+            cluster.velocityXWorld = MAX_RUN_SPEED_WORLD_PER_SEC;
+          } else if (inputDx < 0 && cluster.velocityXWorld < -MAX_RUN_SPEED_WORLD_PER_SEC) {
+            cluster.velocityXWorld = -MAX_RUN_SPEED_WORLD_PER_SEC;
+          }
         } else {
-          accel = AIR_ACCELERATION_PER_SEC2;
-        }
-        cluster.velocityXWorld += inputDx * accel * dtSec;
-        // Clamp to max run speed only in the direction of input
-        if (inputDx > 0 && cluster.velocityXWorld > MAX_RUN_SPEED_WORLD_PER_SEC) {
-          cluster.velocityXWorld = MAX_RUN_SPEED_WORLD_PER_SEC;
-        } else if (inputDx < 0 && cluster.velocityXWorld < -MAX_RUN_SPEED_WORLD_PER_SEC) {
-          cluster.velocityXWorld = -MAX_RUN_SPEED_WORLD_PER_SEC;
-        }
-      } else {
-        // No horizontal input — decelerate toward zero
-        const decel = isGrounded ? GROUND_DECELERATION_PER_SEC2 : AIR_DECELERATION_PER_SEC2;
-        const dv    = decel * dtSec;
-        if (cluster.velocityXWorld > 0) {
-          cluster.velocityXWorld = cluster.velocityXWorld - dv > 0 ? cluster.velocityXWorld - dv : 0;
-        } else if (cluster.velocityXWorld < 0) {
-          cluster.velocityXWorld = cluster.velocityXWorld + dv < 0 ? cluster.velocityXWorld + dv : 0;
+          // No horizontal input — decelerate toward zero
+          const decel = isGrounded ? GROUND_DECELERATION_PER_SEC2 : AIR_DECELERATION_PER_SEC2;
+          const dv    = decel * dtSec;
+          if (cluster.velocityXWorld > 0) {
+            cluster.velocityXWorld = cluster.velocityXWorld - dv > 0 ? cluster.velocityXWorld - dv : 0;
+          } else if (cluster.velocityXWorld < 0) {
+            cluster.velocityXWorld = cluster.velocityXWorld + dv < 0 ? cluster.velocityXWorld + dv : 0;
+          }
         }
       }
 
@@ -588,9 +603,13 @@ export function applyClusterMovement(world: WorldState): void {
     }
   }
 
-  // Clear per-tick player inputs (consumed this tick)
+  // Clear per-tick player inputs (consumed this tick).
+  // playerJumpTriggeredFlag is preserved when grappling so applyGrappleClusterConstraint
+  // (step 0.25) can detect the rising edge of a jump press for tap/hold detection.
   world.playerMoveInputDxWorld  = 0.0;
   world.playerMoveInputDyWorld  = 0.0;
   world.playerDashTriggeredFlag = 0;
-  world.playerJumpTriggeredFlag = 0;
+  if (world.isGrappleActiveFlag === 0) {
+    world.playerJumpTriggeredFlag = 0;
+  }
 }
