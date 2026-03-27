@@ -149,14 +149,21 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
   return false;
 }
 
+/**
+ * Returns true if the cluster landed on the top surface of any solid wall this
+ * tick.  Used by the caller to trigger buffered jumps consistently on thick
+ * platforms (including the main floor) just as thin platforms do via
+ * resolveClusterFloorCollision.
+ */
 function resolveClusterSolidWallCollision(
   cluster: import('./state').ClusterState,
   world: WorldState,
   prevX: number,
   prevY: number,
-): void {
+): boolean {
   const hw = cluster.halfWidthWorld;
   const hh = cluster.halfHeightWorld;
+  let landed = false;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
     const wallLeft = world.wallXWorld[wi];
@@ -181,6 +188,7 @@ function resolveClusterSolidWallCollision(
       cluster.positionYWorld = wallTop - hh;
       cluster.velocityYWorld = 0;
       cluster.isGroundedFlag = 1;
+      landed = true;
       continue;
     }
     if (prevTop >= wallBottom && cluster.velocityYWorld <= 0) {
@@ -209,6 +217,7 @@ function resolveClusterSolidWallCollision(
       cluster.positionYWorld = wallTop - hh;
       cluster.velocityYWorld = 0;
       cluster.isGroundedFlag = 1;
+      landed = true;
     } else if (minPen === penBottom) {
       cluster.positionYWorld = wallBottom + hh;
       if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
@@ -220,6 +229,7 @@ function resolveClusterSolidWallCollision(
       if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
     }
   }
+  return landed;
 }
 
 export function applyClusterMovement(world: WorldState): void {
@@ -350,8 +360,11 @@ export function applyClusterMovement(world: WorldState): void {
 
     // ── Resolve floor / platform landing ──────────────────────────────────
     const wasGrounded = cluster.isGroundedFlag === 1;
-    const justLanded = resolveClusterFloorCollision(cluster, world);
-    resolveClusterSolidWallCollision(cluster, world, prevX, prevY);
+    const thinLanded = resolveClusterFloorCollision(cluster, world);
+    const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY);
+    // justLanded is true for any top-surface landing — thin platform, thick
+    // wall (including the main floor), or the world-bottom boundary.
+    const justLanded = thinLanded || thickLanded;
 
     if (cluster.isPlayerFlag === 1) {
       if (justLanded) {
