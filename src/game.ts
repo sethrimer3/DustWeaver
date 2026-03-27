@@ -51,7 +51,12 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           activeSaveData = saveData;
           progress = saveData.progress;
           sessionStartMs = performance.now();
-          navigate('loadout');
+          // If the save has explored rooms (returning player), skip loadout
+          if (progress.exploredRoomIds.length > 0) {
+            navigate('gameplay', progress.loadout);
+          } else {
+            navigate('loadout');
+          }
         },
       });
     } else if (to === 'loadout') {
@@ -64,12 +69,16 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       });
     } else if (to === 'gameplay') {
       const activeLoadout = loadout ?? progress.loadout;
-      cleanup = startGameScreen(canvas, uiRoot, activeLoadout, null, {
+      const startRoomId = progress.lastSaveRoomId ?? null;
+      cleanup = startGameScreen(canvas, uiRoot, activeLoadout, startRoomId, {
         onReturnToMenu: () => {
           persistSaveSlot();
           navigate('mainMenu');
         },
-      });
+        onSave: () => {
+          persistSaveSlot();
+        },
+      }, progress);
     }
   }
 

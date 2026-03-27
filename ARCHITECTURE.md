@@ -106,3 +106,34 @@ Force pipeline layers (all accumulated before integration):
 - `KeyboardEvent` → `InputState` (mutable booleans).
 - `collectCommands(inputState)` → `GameCommand[]` per frame.
 - Commands applied before sim tick.
+- F key produces `CommandKind.Interact` for skill tomb interaction.
+
+## Death Screen
+
+When the player cluster dies (`isAliveFlag === 0`):
+1. Sim ticks and room transitions are skipped (freeze effect).
+2. `showDeathScreen` renders a 50% dark overlay + blurred goldEmbers animation
+   at 50% opacity + "Dusts..." text + navigation buttons.
+3. "Return to Last Save" reloads the saved room/spawn from `PlayerProgress`.
+4. "Return to Main Menu" exits gameplay.
+
+## Skill Tomb System
+
+Skill tombs are interactable save points placed in rooms.
+- `SkillTombRenderer` manages the sprite and golden dust particle effects.
+- When the player is within `SKILL_TOMB_INTERACT_RADIUS_WORLD` (90 units):
+  - Golden dust swirls around the tomb.
+  - "Press F to interact" prompt appears.
+- When the player leaves proximity, dust turns dull gold and falls to ground.
+- Interaction opens `showSkillTombMenu` with Loadout and World Map tabs.
+- Progress is auto-saved on interaction and on menu close.
+
+## Skill Tomb Menu
+
+Two-tab menu (`ui/skillTombMenu.ts`):
+1. **Loadout** — particle kind selection (same as old loadout screen).
+2. **World Map** — canvas-based room map with zoom (mouse wheel) and pan (drag).
+   Shows explored rooms with blocks, doorways (blue), and skill tombs (gold).
+- ESC closes the menu without opening the pause menu (captured with `{ capture: true }`).
+- X button in top-right corner also closes.
+
