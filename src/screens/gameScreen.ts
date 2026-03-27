@@ -17,6 +17,8 @@ import { RoomDef, BLOCK_SIZE_WORLD } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
 import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
+import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
+import { renderWorldBackground } from '../render/backgroundRenderer';
 
 const FIXED_DT_MS = 16.666;
 /** Canonical level-grid block size (sprites/objects snap to this). */
@@ -403,6 +405,41 @@ export function startGameScreen(
   let isRunning = true;
   let rafHandle = 0;
 
+  // ── Pause / debug / settings state ──────────────────────────────────────
+  let isPaused = false;
+  let pauseMenuCleanup: (() => void) | null = null;
+  let isDebugMode = false;
+  const pauseMenuState: PauseMenuState = {
+    isDebugOn: false,
+    musicVolume: 0.7,
+    sfxVolume: 0.7,
+    graphicsQuality: 'med',
+  };
+
+  function openPauseMenu(): void {
+    if (isPaused) return;
+    isPaused = true;
+    pauseMenuCleanup = showPauseMenu(uiRoot, pauseMenuState, {
+      onResume: () => {
+        isPaused = false;
+        pauseMenuCleanup = null;
+        // Reset timestamp so elapsed doesn't include paused time
+        lastTimestampMs = 0;
+      },
+      onExitToMainMenu: () => {
+        isPaused = false;
+        pauseMenuCleanup = null;
+        isRunning = false;
+        detachInput();
+        callbacks.onReturnToMenu();
+      },
+      onToggleDebug: () => {
+        isDebugMode = !isDebugMode;
+        pauseMenuState.isDebugOn = isDebugMode;
+      },
+    });
+  }
+
   function onResize(): void {
     resizeCanvas();
   }
@@ -462,7 +499,7 @@ export function startGameScreen(
     const zoom = camera.zoom;
 
     const commands = collectCommands(inputState);
-    let returnToMenu = false;
+    let openPause = false;
     let moveDx = 0;
     let dashAimXPx = 0;
     let dashTriggered = false;
@@ -470,7 +507,7 @@ export function startGameScreen(
     for (let ci = 0; ci < commands.length; ci++) {
       const cmd = commands[ci];
       if (cmd.kind === CommandKind.ReturnToMap) {
-        returnToMenu = true;
+        openPause = true;
       } else if (cmd.kind === CommandKind.MovePlayer) {
         moveDx = cmd.dx;
       } else if (cmd.kind === CommandKind.Jump) {
@@ -517,10 +554,13 @@ export function startGameScreen(
       }
     }
 
-    if (returnToMenu) {
-      isRunning = false;
-      detachInput();
-      callbacks.onReturnToMenu();
+    if (openPause) {
+      openPauseMenu();
+    }
+
+    // While paused, still render the frozen scene but skip sim and transitions
+    if (isPaused) {
+      rafHandle = requestAnimationFrame(frame);
       return;
     }
 
@@ -599,21 +639,25 @@ export function startGameScreen(
     hudState.particleCount = aliveCount;
 
     // ── Populate movement debug state from the player cluster ─────────────────
-    const playerClusterForHud = world.clusters[0];
-    if (playerClusterForHud !== undefined && playerClusterForHud.isAliveFlag === 1) {
-      const dbg: HudDebugState = {
-        isGrounded:           playerClusterForHud.isGroundedFlag === 1,
-        coyoteTimeTicks:      playerClusterForHud.coyoteTimeTicks,
-        jumpBufferTicks:      playerClusterForHud.jumpBufferTicks,
-        isWallSlidingFlag:    playerClusterForHud.isWallSlidingFlag === 1,
-        isTouchingWallLeft:   playerClusterForHud.isTouchingWallLeftFlag === 1,
-        isTouchingWallRight:  playerClusterForHud.isTouchingWallRightFlag === 1,
-        wallJumpLockoutTicks: playerClusterForHud.wallJumpLockoutTicks,
-        isGrappleActive:      world.isGrappleActiveFlag === 1,
-        grappleLengthWorld:   world.grappleLengthWorld,
-        grapplePullInAmountWorld: world.grapplePullInAmountWorld,
-      };
-      hudState.debug = dbg;
+    if (isDebugMode) {
+      const playerClusterForHud = world.clusters[0];
+      if (playerClusterForHud !== undefined && playerClusterForHud.isAliveFlag === 1) {
+        const dbg: HudDebugState = {
+          isGrounded:           playerClusterForHud.isGroundedFlag === 1,
+          coyoteTimeTicks:      playerClusterForHud.coyoteTimeTicks,
+          jumpBufferTicks:      playerClusterForHud.jumpBufferTicks,
+          isWallSlidingFlag:    playerClusterForHud.isWallSlidingFlag === 1,
+          isTouchingWallLeft:   playerClusterForHud.isTouchingWallLeftFlag === 1,
+          isTouchingWallRight:  playerClusterForHud.isTouchingWallRightFlag === 1,
+          wallJumpLockoutTicks: playerClusterForHud.wallJumpLockoutTicks,
+          isGrappleActive:      world.isGrappleActiveFlag === 1,
+          grappleLengthWorld:   world.grappleLengthWorld,
+          grapplePullInAmountWorld: world.grapplePullInAmountWorld,
+        };
+        hudState.debug = dbg;
+      }
+    } else {
+      hudState.debug = undefined;
     }
 
     const snapshot = createSnapshot(world);
@@ -625,6 +669,13 @@ export function startGameScreen(
     } else {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // ── World background with parallax (behind everything else) ───────────
+    renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, ox, oy);
+
+    // Particles (Canvas 2D fallback only — WebGL draws on its own canvas)
+    if (!webglRenderer.isAvailable) {
       renderParticles(ctx, snapshot, ox, oy, zoom);
     }
 
@@ -637,14 +688,18 @@ export function startGameScreen(
     drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
 
     environmentalDust.render(ctx, ox, oy, zoom);
-    renderHudOverlay(ctx, hudState);
 
-    // ── Room name banner (top-center) ──────────────────────────────────────
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '13px monospace';
-    const roomLabel = currentRoom.name;
-    const labelW = ctx.measureText(roomLabel).width;
-    ctx.fillText(roomLabel, (canvas.width - labelW) / 2, 22);
+    // Debug-only HUD and room name
+    if (isDebugMode) {
+      renderHudOverlay(ctx, hudState);
+
+      // ── Room name banner (top-center) ──────────────────────────────────────
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.font = '13px monospace';
+      const roomLabel = currentRoom.name;
+      const labelW = ctx.measureText(roomLabel).width;
+      ctx.fillText(roomLabel, (canvas.width - labelW) / 2, 22);
+    }
 
     // ── Touch joystick ───────────────────────────────────────────────────────
     if (inputState.isTouchJoystickActiveFlag === 1) {
@@ -679,14 +734,16 @@ export function startGameScreen(
       ctx.restore();
     }
 
-    // ── Control hints ────────────────────────────────────────────────────────
-    const controlHintText = IS_TOUCH_DEVICE
-      ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
-      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=menu';
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '12px monospace';
-    const hintWidthPx = ctx.measureText(controlHintText).width;
-    ctx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
+    // ── Control hints (debug only) ──────────────────────────────────────────
+    if (isDebugMode) {
+      const controlHintText = IS_TOUCH_DEVICE
+        ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
+        : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=menu';
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.font = '12px monospace';
+      const hintWidthPx = ctx.measureText(controlHintText).width;
+      ctx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
+    }
 
     rafHandle = requestAnimationFrame(frame);
   }
@@ -696,6 +753,7 @@ export function startGameScreen(
   return () => {
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
+    if (pauseMenuCleanup !== null) pauseMenuCleanup();
     detachInput();
     webglRenderer.dispose();
     window.removeEventListener('resize', onResize);

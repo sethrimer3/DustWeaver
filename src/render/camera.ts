@@ -8,8 +8,8 @@
  * All state is pre-allocated — no per-frame object creation.
  */
 
-/** Default camera zoom factor. 2× means 1 world unit = 2 screen pixels. */
-export const CAMERA_DEFAULT_ZOOM = 2.0;
+/** Default camera zoom factor. 2.8× means 1 world unit = 2.8 screen pixels. */
+export const CAMERA_DEFAULT_ZOOM = 2.8;
 
 /** Lerp speed per second (0 = no follow, 1 = instant snap). */
 const CAMERA_FOLLOW_SPEED = 8.0;
