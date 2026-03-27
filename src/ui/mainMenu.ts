@@ -117,11 +117,12 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     <h1 style="
       font-size: 4.5rem; color: #d4a84b;
       text-shadow: 0 0 40px rgba(212,168,75,0.5), 0 0 80px rgba(212,168,75,0.25);
-      margin-bottom: 0.3rem; letter-spacing: 0.08em; font-weight: 700;
+      margin-bottom: 0.3rem; letter-spacing: 0.08em; font-weight: 400;
+      text-transform: uppercase;
     ">DustWeaver</h1>
     <p style="
       color: rgba(212,168,75,0.55); font-size: 0.95rem; letter-spacing: 0.18em;
-      text-transform: uppercase; margin-top: 0;
+      text-transform: uppercase; margin-top: 0; font-weight: 400;
     ">Press any key</p>
   `;
   container.appendChild(titleEl);
@@ -149,7 +150,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     btn.style.cssText = `
       background: transparent; border: 1px solid rgba(212,168,75,0.4);
       color: #d4a84b; padding: 0.9rem 4rem; font-size: 1.2rem;
-      font-family: 'Cinzel', serif; cursor: pointer; transition: all 0.25s;
+      font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer; transition: all 0.25s;
       border-radius: 2px; letter-spacing: 0.14em; text-transform: uppercase;
       min-width: 280px;
     `;
@@ -245,7 +246,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     heading.style.cssText = `
       color: #d4a84b; font-size: 1.8rem; margin-bottom: 0.6rem;
       text-shadow: 0 0 20px rgba(212,168,75,0.3);
-      letter-spacing: 0.06em; font-weight: 600;
+      letter-spacing: 0.06em; font-weight: 400;
     `;
     saveSlotsEl.appendChild(heading);
 
@@ -257,13 +258,13 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
       slotBtn.style.cssText = `
         background: rgba(0,0,0,0.5); border: 1px solid rgba(212,168,75,0.3);
         color: #d4a84b; padding: 1.2rem 2rem;
-        font-family: 'Cinzel', serif; cursor: pointer; transition: all 0.25s;
+        font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer; transition: all 0.25s;
         border-radius: 3px; min-width: 340px; text-align: center;
       `;
 
       if (hasData) {
         slotBtn.innerHTML = `
-          <div style="font-size: 1.1rem; letter-spacing: 0.1em; margin-bottom: 0.4rem; font-weight: 600;">
+          <div style="font-size: 1.1rem; letter-spacing: 0.1em; margin-bottom: 0.4rem; font-weight: 400;">
             Save Slot ${i + 1}
           </div>
           <div style="font-size: 0.8rem; color: rgba(212,168,75,0.65); letter-spacing: 0.05em;">
@@ -275,7 +276,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
         `;
       } else {
         slotBtn.innerHTML = `
-          <div style="font-size: 1.1rem; letter-spacing: 0.1em; margin-bottom: 0.4rem; font-weight: 600;">
+          <div style="font-size: 1.1rem; letter-spacing: 0.1em; margin-bottom: 0.4rem; font-weight: 400;">
             Save Slot ${i + 1}
           </div>
           <div style="font-size: 0.8rem; color: rgba(212,168,75,0.4); letter-spacing: 0.05em;">

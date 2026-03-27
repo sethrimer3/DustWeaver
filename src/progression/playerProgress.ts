@@ -43,6 +43,12 @@ export interface PlayerProgress {
    * Unlocks to 1 when the player completes World 1 boss (level 7).
    */
   world2UnlockedCount: number;
+  /** Set of room IDs the player has visited (used for the world map). */
+  exploredRoomIds: string[];
+  /** Room ID of the last save point used (for "Return to Last Save"). */
+  lastSaveRoomId: string | null;
+  /** Block coordinates of the last save point used. */
+  lastSaveSpawnBlock: [number, number] | null;
 }
 
 // ---- Factory / helpers ---------------------------------------------------
@@ -60,6 +66,9 @@ export function createDefaultProgress(): PlayerProgress {
     loadout: [ParticleKind.Fire, ParticleKind.Ice],
     world1UnlockedCount: 1,
     world2UnlockedCount: 0,
+    exploredRoomIds: [],
+    lastSaveRoomId: null,
+    lastSaveSpawnBlock: null,
   };
 }
 

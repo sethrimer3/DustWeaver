@@ -174,6 +174,9 @@ export const ROOM_LOBBY: RoomDef = {
       targetSpawnBlock: [W2_ROOM_WIDTH - 4, W2_ROOM_HEIGHT - 5],
     },
   ],
+  skillTombs: [
+    { xBlock: 24, yBlock: 14 },
+  ],
 };
 
 // ── World 1, Room 1 ──────────────────────────────────────────────────────────
@@ -229,6 +232,7 @@ export const ROOM_W1_ROOM1: RoomDef = {
       targetSpawnBlock: [LOBBY_WIDTH - 4, LOBBY_TUNNEL_Y + 2],
     },
   ],
+  skillTombs: [],
 };
 
 // ── World 2, Room 1 ──────────────────────────────────────────────────────────
@@ -284,6 +288,7 @@ export const ROOM_W2_ROOM1: RoomDef = {
       targetSpawnBlock: [3, LOBBY_TUNNEL_Y + 2],
     },
   ],
+  skillTombs: [],
 };
 
 // ── Room registry ────────────────────────────────────────────────────────────

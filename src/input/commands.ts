@@ -9,6 +9,7 @@ export enum CommandKind {
   Jump = 7,
   GrappleFire = 8,
   GrappleRelease = 9,
+  Interact = 10,
 }
 
 export interface MovePlayerCommand {
@@ -84,6 +85,10 @@ export interface GrappleReleaseCommand {
   kind: CommandKind.GrappleRelease;
 }
 
+export interface InteractCommand {
+  kind: CommandKind.Interact;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
@@ -94,5 +99,6 @@ export type GameCommand =
   | DashCommand
   | JumpCommand
   | GrappleFireCommand
-  | GrappleReleaseCommand;
+  | GrappleReleaseCommand
+  | InteractCommand;
 

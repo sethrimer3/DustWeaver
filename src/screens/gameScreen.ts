@@ -19,6 +19,10 @@ import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '..
 import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
 import { renderWorldBackground } from '../render/backgroundRenderer';
+import { showDeathScreen } from '../ui/deathScreen';
+import { showSkillTombMenu } from '../ui/skillTombMenu';
+import { SkillTombRenderer } from '../render/skillTombRenderer';
+import { PlayerProgress } from '../progression/playerProgress';
 
 const FIXED_DT_MS = 16.666;
 /** Canonical level-grid block size (sprites/objects snap to this). */
@@ -42,6 +46,7 @@ const TUNNEL_DETECT_MARGIN_WORLD = 2 * BLOCK_SIZE_WORLD;
 
 export interface GameScreenCallbacks {
   onReturnToMenu: () => void;
+  onSave?: () => void;
 }
 
 /**
@@ -285,6 +290,7 @@ export function startGameScreen(
   playerLoadout: ParticleKind[],
   startRoomId: string | null,
   callbacks: GameScreenCallbacks,
+  progress?: PlayerProgress,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
 
@@ -366,6 +372,14 @@ export function startGameScreen(
     // Init dust
     environmentalDust.initFromWorld(world);
 
+    // Init skill tomb renderer
+    skillTombRenderer.init(room.skillTombs);
+
+    // Track explored room
+    if (progress && !progress.exploredRoomIds.includes(room.id)) {
+      progress.exploredRoomIds.push(room.id);
+    }
+
     // Snap camera to player position
     snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, canvas.width, canvas.height);
   }
@@ -373,9 +387,18 @@ export function startGameScreen(
   const world = createWorldState(FIXED_DT_MS, 42);
   const levelRng = createRng(12345);
   const environmentalDust = new EnvironmentalDustLayer();
+  const skillTombRenderer = new SkillTombRenderer();
 
-  // Initial room load
-  loadRoom(currentRoom, currentRoom.playerSpawnBlock[0], currentRoom.playerSpawnBlock[1]);
+  // Track explored rooms
+  if (progress && !progress.exploredRoomIds.includes(currentRoom.id)) {
+    progress.exploredRoomIds.push(currentRoom.id);
+  }
+
+  // Initial room load — use saved spawn point if returning to a save
+  const initialSpawnBlock = (progress && progress.lastSaveSpawnBlock && progress.lastSaveRoomId === currentRoom.id)
+    ? progress.lastSaveSpawnBlock
+    : currentRoom.playerSpawnBlock;
+  loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
@@ -417,7 +440,7 @@ export function startGameScreen(
   };
 
   function openPauseMenu(): void {
-    if (isPaused) return;
+    if (isPaused || isPlayerDead || isSkillTombMenuOpen) return;
     isPaused = true;
     pauseMenuCleanup = showPauseMenu(uiRoot, pauseMenuState, {
       onResume: () => {
@@ -436,6 +459,79 @@ export function startGameScreen(
       onToggleDebug: () => {
         isDebugMode = !isDebugMode;
         pauseMenuState.isDebugOn = isDebugMode;
+      },
+    });
+  }
+
+  // ── Death screen state ───────────────────────────────────────────────────
+  let isPlayerDead = false;
+  let deathScreenCleanup: (() => void) | null = null;
+
+  function showPlayerDeathScreen(): void {
+    if (isPlayerDead) return;
+    isPlayerDead = true;
+    deathScreenCleanup = showDeathScreen(uiRoot, {
+      onReturnToLastSave: () => {
+        isPlayerDead = false;
+        deathScreenCleanup = null;
+        // Reload from last save point or starting room
+        if (progress && progress.lastSaveRoomId) {
+          const saveRoom = ROOM_REGISTRY.get(progress.lastSaveRoomId);
+          if (saveRoom && progress.lastSaveSpawnBlock) {
+            loadRoom(saveRoom, progress.lastSaveSpawnBlock[0], progress.lastSaveSpawnBlock[1]);
+          } else {
+            loadRoom(currentRoom, currentRoom.playerSpawnBlock[0], currentRoom.playerSpawnBlock[1]);
+          }
+        } else {
+          loadRoom(currentRoom, currentRoom.playerSpawnBlock[0], currentRoom.playerSpawnBlock[1]);
+        }
+        lastTimestampMs = 0;
+      },
+      onReturnToMainMenu: () => {
+        isPlayerDead = false;
+        deathScreenCleanup = null;
+        isRunning = false;
+        detachInput();
+        callbacks.onReturnToMenu();
+      },
+    });
+  }
+
+  // ── Skill tomb menu state ───────────────────────────────────────────────
+  let isSkillTombMenuOpen = false;
+  let skillTombMenuCleanup: (() => void) | null = null;
+
+  function openSkillTombMenu(): void {
+    if (isSkillTombMenuOpen || !progress) return;
+    isSkillTombMenuOpen = true;
+
+    // Save progress
+    if (callbacks.onSave) callbacks.onSave();
+
+    // Record save point
+    const player = world.clusters[0];
+    if (player) {
+      const nearbyIndex = skillTombRenderer.getNearbyTombIndex(player.positionXWorld, player.positionYWorld);
+      if (nearbyIndex >= 0) {
+        const tombPos = skillTombRenderer.getTombPosition(nearbyIndex);
+        if (tombPos) {
+          progress.lastSaveRoomId = currentRoom.id;
+          progress.lastSaveSpawnBlock = [
+            Math.round(tombPos.xWorld / BLOCK_SIZE_PX),
+            Math.round(tombPos.yWorld / BLOCK_SIZE_PX),
+          ];
+        }
+      }
+    }
+
+    skillTombMenuCleanup = showSkillTombMenu(uiRoot, progress, currentRoom.id, {
+      onClose: (updatedLoadout) => {
+        isSkillTombMenuOpen = false;
+        skillTombMenuCleanup = null;
+        progress.loadout = updatedLoadout;
+        lastTimestampMs = 0;
+        // Save after closing
+        if (callbacks.onSave) callbacks.onSave();
       },
     });
   }
@@ -504,6 +600,7 @@ export function startGameScreen(
     let dashAimXPx = 0;
     let dashTriggered = false;
     let jumpTriggered = false;
+    let interactTriggered = false;
     for (let ci = 0; ci < commands.length; ci++) {
       const cmd = commands[ci];
       if (cmd.kind === CommandKind.ReturnToMap) {
@@ -551,6 +648,17 @@ export function startGameScreen(
         }
       } else if (cmd.kind === CommandKind.GrappleRelease) {
         releaseGrapple(world);
+      } else if (cmd.kind === CommandKind.Interact) {
+        // Check if player is near a skill tomb
+        const playerForInteract = world.clusters[0];
+        if (playerForInteract !== undefined && playerForInteract.isAliveFlag === 1) {
+          const nearbyIndex = skillTombRenderer.getNearbyTombIndex(
+            playerForInteract.positionXWorld, playerForInteract.positionYWorld,
+          );
+          if (nearbyIndex >= 0) {
+            interactTriggered = true;
+          }
+        }
       }
     }
 
@@ -558,8 +666,18 @@ export function startGameScreen(
       openPauseMenu();
     }
 
-    // While paused, still render the frozen scene but skip sim and transitions
-    if (isPaused) {
+    if (interactTriggered && progress) {
+      openSkillTombMenu();
+    }
+
+    // While paused or in a menu, still render the frozen scene but skip sim and transitions
+    if (isPaused || isSkillTombMenuOpen) {
+      rafHandle = requestAnimationFrame(frame);
+      return;
+    }
+
+    // While dead, still render the frozen scene but skip sim
+    if (isPlayerDead) {
       rafHandle = requestAnimationFrame(frame);
       return;
     }
@@ -610,6 +728,18 @@ export function startGameScreen(
       tick(world);
       environmentalDust.update(world, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
+    }
+
+    // ── Check for player death ───────────────────────────────────────────────
+    const playerForDeath = world.clusters[0];
+    if (playerForDeath !== undefined && playerForDeath.isAliveFlag === 0 && !isPlayerDead) {
+      showPlayerDeathScreen();
+    }
+
+    // ── Update skill tomb renderer ──────────────────────────────────────────
+    const playerForTomb = world.clusters[0];
+    if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
+      skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
@@ -689,6 +819,9 @@ export function startGameScreen(
 
     environmentalDust.render(ctx, ox, oy, zoom);
 
+    // Skill tombs (sprite + dust particles)
+    skillTombRenderer.render(ctx, ox, oy, zoom);
+
     // Debug-only HUD and room name
     if (isDebugMode) {
       renderHudOverlay(ctx, hudState);
@@ -754,6 +887,8 @@ export function startGameScreen(
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
+    if (deathScreenCleanup !== null) deathScreenCleanup();
+    if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
     detachInput();
     webglRenderer.dispose();
     window.removeEventListener('resize', onResize);

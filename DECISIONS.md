@@ -202,3 +202,31 @@ deceleration, and speed capping are skipped while the grapple is active.  All
 motion is governed by the pendulum physics (gravity + rope constraint + damping).
 This prevents the acceleration model from fighting against the swing.
 
+## Skill Tomb Save Points (BUILD 27)
+- Skill tombs are placed in rooms via `skillTombs` array in `RoomDef`.
+- Uses `skill_tomb.png` sprite from `ASSETS/SPRITES/WORLDS/W-0/`.
+- Proximity detection radius: 3 blocks (90 world units).
+- Golden dust particles swirl around the tomb when the player is near;
+  particles transition to dull gold and fall to the ground when the player leaves.
+- Press F to interact: saves progress and opens the Skill Tomb menu.
+- The Skill Tomb menu has two tabs: Loadout and World Map.
+- Loadout tab replaces the old standalone loadout screen for returning players.
+- World Map tab shows explored rooms in their relative positions with zoom/pan.
+
+## Death Loop (BUILD 27)
+- When the player's cluster `isAliveFlag` becomes 0, the sim freezes.
+- A 50% dark overlay fades in, with the blurred goldEmbers animation playing
+  at 50% opacity over it.
+- "Dusts..." text and two buttons: "Return to Last Save" and "Return to Main Menu".
+- "Return to Last Save" reloads the room/spawn of the last skill tomb used.
+
+## Game Flow Changes (BUILD 27)
+- New saves still show the loadout screen before gameplay.
+- Returning saves (with explored rooms) skip the loadout screen and go directly
+  to gameplay, spawning at the last save point.
+- Loadout is now accessible through skill tomb interaction during gameplay.
+
+## Font Convention (BUILD 27)
+- All UI text uses Cinzel, Regular 400.
+- Main menu title text uses text-transform: uppercase.
+

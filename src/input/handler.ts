@@ -61,6 +61,8 @@ export interface InputState {
   /** Screen-space aim position where the grapple fires. */
   grappleAimXPx: number;
   grappleAimYPx: number;
+  /** Set to true for one collectCommands call to trigger an interact (F key). */
+  isInteractTriggeredFlag: boolean;
 }
 
 export function createInputState(): InputState {
@@ -100,6 +102,7 @@ export function createInputState(): InputState {
     isGrappleReleaseTriggeredFlag: 0,
     grappleAimXPx: 0,
     grappleAimYPx: 0,
+    isInteractTriggeredFlag: false,
   };
 }
 
@@ -146,6 +149,9 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       state.isGrappleFireTriggeredFlag = 1;
       state.grappleAimXPx = state.mouseXPx;
       state.grappleAimYPx = state.mouseYPx;
+    }
+    if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
+      state.isInteractTriggeredFlag = true;
     }
   }
   function onKeyUp(e: KeyboardEvent): void {
@@ -376,6 +382,12 @@ export function collectCommands(input: InputState): GameCommand[] {
   if (input.isGrappleReleaseTriggeredFlag === 1) {
     input.isGrappleReleaseTriggeredFlag = 0;
     commands.push({ kind: CommandKind.GrappleRelease });
+  }
+
+  // ---- Interact command ---------------------------------------------------
+  if (input.isInteractTriggeredFlag) {
+    input.isInteractTriggeredFlag = false;
+    commands.push({ kind: CommandKind.Interact });
   }
 
   return commands;
