@@ -64,6 +64,10 @@ export interface WorldSnapshot {
   readonly grappleAnchorXWorld:  number;
   /** World-space Y of the grapple anchor point (only valid when isGrappleActiveFlag=1). */
   readonly grappleAnchorYWorld:  number;
+  /** Remaining ticks for grapple attach burst visual effect. */
+  readonly grappleAttachFxTicks: number;
+  readonly grappleAttachFxXWorld: number;
+  readonly grappleAttachFxYWorld: number;
 }
 
 export function createSnapshot(world: WorldState): WorldSnapshot {
@@ -113,5 +117,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     isGrappleActiveFlag: world.isGrappleActiveFlag,
     grappleAnchorXWorld: world.grappleAnchorXWorld,
     grappleAnchorYWorld: world.grappleAnchorYWorld,
+    grappleAttachFxTicks: world.grappleAttachFxTicks,
+    grappleAttachFxXWorld: world.grappleAttachFxXWorld,
+    grappleAttachFxYWorld: world.grappleAttachFxYWorld,
   };
 }

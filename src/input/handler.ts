@@ -52,11 +52,11 @@ export interface InputState {
   secondTouchCurrentXPx: number;
   secondTouchCurrentYPx: number;
   // ---- Grapple hook -------------------------------------------------------
-  /** True while the right mouse button is held (triggers grapple). */
-  isRightMouseDownFlag: 0 | 1;
-  /** Set to 1 for one frame when grapple should fire (right button pressed). */
+  /** True while the grapple key (E) is physically held down. */
+  isGrappleHeldFlag: 0 | 1;
+  /** Set to 1 for one frame when grapple should fire (E pressed). */
   isGrappleFireTriggeredFlag: 0 | 1;
-  /** Set to 1 for one frame when grapple should release (right button released). */
+  /** Set to 1 for one frame when grapple should release (E released). */
   isGrappleReleaseTriggeredFlag: 0 | 1;
   /** Screen-space aim position where the grapple fires. */
   grappleAimXPx: number;
@@ -95,7 +95,7 @@ export function createInputState(): InputState {
     secondTouchStartTimeMs: 0,
     secondTouchCurrentXPx: 0,
     secondTouchCurrentYPx: 0,
-    isRightMouseDownFlag: 0,
+    isGrappleHeldFlag: 0,
     isGrappleFireTriggeredFlag: 0,
     isGrappleReleaseTriggeredFlag: 0,
     grappleAimXPx: 0,
@@ -134,12 +134,18 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Escape') state.isEscapePressed = true;
     if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
       e.preventDefault();
-      state.isJumpTriggeredFlag = true;
+      if (!e.repeat) { state.isJumpTriggeredFlag = true; }
       state.isJumpHeldFlag = true;
     }
     if (e.key === 'Shift') {
       e.preventDefault();
       state.isDashTriggeredFlag = true;
+    }
+    if ((e.key === 'e' || e.key === 'E') && !e.repeat) {
+      state.isGrappleHeldFlag = 1;
+      state.isGrappleFireTriggeredFlag = 1;
+      state.grappleAimXPx = state.mouseXPx;
+      state.grappleAimYPx = state.mouseYPx;
     }
   }
   function onKeyUp(e: KeyboardEvent): void {
@@ -150,6 +156,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Escape') state.isEscapePressed = false;
     if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
       state.isJumpHeldFlag = false;
+    }
+    if (e.key === 'e' || e.key === 'E') {
+      state.isGrappleHeldFlag = 0;
+      state.isGrappleReleaseTriggeredFlag = 1;
     }
   }
   function onMouseMove(e: MouseEvent): void {
@@ -162,12 +172,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       state.mouseDownTimeMs = performance.now();
       state.mouseDownXPx = e.clientX;
       state.mouseDownYPx = e.clientY;
-    } else if (e.button === 2) {
-      // Right-click: fire grapple hook toward cursor
-      state.isRightMouseDownFlag = 1;
-      state.isGrappleFireTriggeredFlag = 1;
-      state.grappleAimXPx = e.clientX;
-      state.grappleAimYPx = e.clientY;
     }
   }
   function onMouseUp(e: MouseEvent): void {
@@ -184,9 +188,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         state.attackDirXPx = e.clientX;
         state.attackDirYPx = e.clientY;
       }
-    } else if (e.button === 2) {
-      state.isRightMouseDownFlag = 0;
-      state.isGrappleReleaseTriggeredFlag = 1;
     }
   }
 
@@ -276,7 +277,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   canvas.addEventListener('touchmove', onTouchMove, { passive: false });
   canvas.addEventListener('touchend', onTouchEnd, { passive: false });
   canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
-  // Prevent browser context menu on right-click so grapple fires cleanly.
+  // Prevent browser context menu on right-click during gameplay.
   function onContextMenu(e: MouseEvent): void { e.preventDefault(); }
   canvas.addEventListener('contextmenu', onContextMenu);
 

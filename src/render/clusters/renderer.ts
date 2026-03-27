@@ -132,13 +132,8 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
   ctx.restore();
 }
 
-/**
- * Renders the grapple rope: a golden line from the player cluster to the anchor
- * point, with a bright circle at the anchor and a subtle glow.
- * Call after renderClusters so the rope draws on top of the cluster boxes.
- */
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
-  if (snapshot.isGrappleActiveFlag === 0) return;
+  if (snapshot.isGrappleActiveFlag === 0 && snapshot.grappleAttachFxTicks <= 0) return;
 
   let playerCluster: (typeof snapshot.clusters)[0] | undefined;
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {
@@ -147,31 +142,26 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
       break;
     }
   }
-  if (playerCluster === undefined) return;
+  if (playerCluster === undefined && snapshot.grappleAttachFxTicks <= 0) return;
 
-  const px = playerCluster.positionXWorld * scalePx + offsetXPx;
-  const py = playerCluster.positionYWorld * scalePx + offsetYPx;
+  const px = playerCluster !== undefined ? playerCluster.positionXWorld * scalePx + offsetXPx : 0;
+  const py = playerCluster !== undefined ? playerCluster.positionYWorld * scalePx + offsetYPx : 0;
   const ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
   const ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
 
   ctx.save();
 
-  // ── Rope glow (wide, faint) ───────────────────────────────────────────────
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(ax, ay);
-  ctx.strokeStyle = 'rgba(255, 215, 0, 0.15)';
-  ctx.lineWidth = 6;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-
-  // ── Rope line (thin, bright) ──────────────────────────────────────────────
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(ax, ay);
-  ctx.strokeStyle = 'rgba(255, 215, 0, 0.70)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  if (snapshot.isGrappleActiveFlag === 1 && playerCluster !== undefined) {
+    // Faint guide glow only — the "rope" itself is represented by gold particles.
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(ax, ay);
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.08)';
+    ctx.lineWidth = 2.0;
+    ctx.setLineDash([1, 10]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   // ── Anchor point circle ───────────────────────────────────────────────────
   ctx.beginPath();
@@ -182,6 +172,22 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
+  if (snapshot.grappleAttachFxTicks > 0) {
+    const fxProgress = 1.0 - snapshot.grappleAttachFxTicks / 14.0;
+    const fxRadius = 6 + fxProgress * 24;
+    const fxAlpha = 0.4 * (1.0 - fxProgress);
+    ctx.beginPath();
+    ctx.arc(
+      snapshot.grappleAttachFxXWorld * scalePx + offsetXPx,
+      snapshot.grappleAttachFxYWorld * scalePx + offsetYPx,
+      fxRadius,
+      0,
+      Math.PI * 2,
+    );
+    ctx.strokeStyle = `rgba(255, 236, 170, ${fxAlpha})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
-
