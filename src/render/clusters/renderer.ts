@@ -1,41 +1,18 @@
 import { WorldSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
+import { renderWallSprites } from '../walls/blockSpriteRenderer';
+
+/** Block size in world units — walls are decomposed into tiles of this size. */
+const BLOCK_SIZE_PX = 30;
 
 /**
- * Renders walls (level geometry) from the snapshot on the 2D canvas.
+ * Renders walls (level geometry) from the snapshot on the 2D canvas using
+ * context-sensitive (auto-tiling) block sprites.  Falls back to solid-colour
+ * rectangles per tile while sprites are still loading.
  * Walls are drawn before cluster indicators so clusters appear on top.
  */
 export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
-  const walls = snapshot.walls;
-  if (walls.count === 0) return;
-
-  ctx.save();
-  for (let wi = 0; wi < walls.count; wi++) {
-    const sx = walls.xWorld[wi] * scalePx + offsetXPx;
-    const sy = walls.yWorld[wi] * scalePx + offsetYPx;
-    const sw = walls.wWorld[wi] * scalePx;
-    const sh = walls.hWorld[wi] * scalePx;
-
-    // Fill
-    ctx.fillStyle = '#1a2535';
-    ctx.fillRect(sx, sy, sw, sh);
-
-    // Inner highlight (top-left edges)
-    ctx.fillStyle = 'rgba(80,120,180,0.18)';
-    ctx.fillRect(sx, sy, sw, 2);
-    ctx.fillRect(sx, sy, 2, sh);
-
-    // Outer shadow (bottom-right edges)
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(sx, sy + sh - 2, sw, 2);
-    ctx.fillRect(sx + sw - 2, sy, 2, sh);
-
-    // Glow border
-    ctx.strokeStyle = 'rgba(60,140,220,0.35)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sh - 1);
-  }
-  ctx.restore();
+  renderWallSprites(ctx, snapshot, offsetXPx, offsetYPx, scalePx, BLOCK_SIZE_PX);
 }
 
 export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
