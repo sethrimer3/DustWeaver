@@ -23,7 +23,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
 
   /** Active save-slot index (set when player picks a slot). */
   let activeSlotIndex = 0;
-  /** Timestamp (ms) when gameplay started for the current session (for play-time tracking). */
+  /** Timestamp (ms from performance.now) when gameplay started for the current session (for play-time tracking). */
   let sessionStartMs = 0;
   /** Active save data reference for persisting updates. */
   let activeSaveData: SaveSlotData | null = null;
@@ -34,12 +34,12 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   /** Persist the current save slot (update lastPlayed and accumulate play time). */
   function persistSaveSlot(): void {
     if (activeSaveData === null) return;
-    const now = Date.now();
+    const now = performance.now();
     if (sessionStartMs > 0) {
       activeSaveData.playTimeMs += now - sessionStartMs;
       sessionStartMs = now;
     }
-    activeSaveData.lastPlayedIso = new Date(now).toISOString();
+    activeSaveData.lastPlayedIso = new Date().toISOString();
     activeSaveData.progress = progress;
     saveSaveSlot(activeSlotIndex, activeSaveData);
   }
@@ -63,7 +63,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           activeSlotIndex = slotIndex;
           activeSaveData = saveData;
           progress = saveData.progress;
-          sessionStartMs = Date.now();
+          sessionStartMs = performance.now();
           navigate('worldMap');
         },
       });
