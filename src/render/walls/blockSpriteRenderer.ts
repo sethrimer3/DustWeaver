@@ -24,12 +24,12 @@ import { WallSnapshot } from '../snapshot';
 /** Module-level image cache — populated once, reused forever. */
 const _imageCache = new Map<string, HTMLImageElement>();
 
-function loadBlockSprite(filename: string): HTMLImageElement {
-  const cached = _imageCache.get(filename);
+function _loadImage(src: string): HTMLImageElement {
+  const cached = _imageCache.get(src);
   if (cached !== undefined) return cached;
   const img = new Image();
-  img.src = `SPRITES/level/world_1/${filename}`;
-  _imageCache.set(filename, img);
+  img.src = src;
+  _imageCache.set(src, img);
   return img;
 }
 
@@ -37,15 +37,65 @@ function isSpriteReady(img: HTMLImageElement): boolean {
   return img.complete && img.naturalWidth > 0;
 }
 
-// Pre-load all six variants at module initialisation time.
-const _sprites = {
-  block:  loadBlockSprite('world_1_block.png'),
-  single: loadBlockSprite('world_1_block_single.png'),
-  edge:   loadBlockSprite('world_1_block_edge.png'),
-  corner: loadBlockSprite('world_1_block_corner.png'),
-  end:    loadBlockSprite('world_1_block_end.png'),
-  vertex: loadBlockSprite('world_1_block_vertex.png'),
-};
+/** Sprite set for a single world theme. */
+interface BlockSpriteSet {
+  block:  HTMLImageElement;
+  single: HTMLImageElement;
+  edge:   HTMLImageElement;
+  corner: HTMLImageElement;
+  end:    HTMLImageElement;
+  vertex: HTMLImageElement;
+}
+
+/** Cache of loaded sprite sets keyed by worldNumber. */
+const _spriteSets = new Map<number, BlockSpriteSet>();
+
+/**
+ * Returns the sprite set for a given world number, loading on first access.
+ *
+ * W-0, W-1, W-2 use simple filenames (block.png, corner.png, …).
+ * W-3 through W-9 use prefixed filenames (world_N_block.png, …).
+ */
+function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
+  const cached = _spriteSets.get(worldNumber);
+  if (cached !== undefined) return cached;
+
+  const dir = `SPRITES/WORLDS/W-${worldNumber}/blocks`;
+  let sprites: BlockSpriteSet;
+  if (worldNumber <= 2) {
+    sprites = {
+      block:  _loadImage(`${dir}/block.png`),
+      single: _loadImage(`${dir}/single.png`),
+      edge:   _loadImage(`${dir}/edge.png`),
+      corner: _loadImage(`${dir}/corner.png`),
+      end:    _loadImage(`${dir}/end.png`),
+      vertex: _loadImage(`${dir}/vertex.png`),
+    };
+  } else {
+    const prefix = `world_${worldNumber}_block`;
+    sprites = {
+      block:  _loadImage(`${dir}/${prefix}.png`),
+      single: _loadImage(`${dir}/${prefix}_single.png`),
+      edge:   _loadImage(`${dir}/${prefix}_edge.png`),
+      corner: _loadImage(`${dir}/${prefix}_corner.png`),
+      end:    _loadImage(`${dir}/${prefix}_end.png`),
+      vertex: _loadImage(`${dir}/${prefix}_vertex.png`),
+    };
+  }
+  _spriteSets.set(worldNumber, sprites);
+  return sprites;
+}
+
+/** Active sprite set — updated when setActiveWorld() is called. */
+let _sprites: BlockSpriteSet = getBlockSpriteSet(0);
+
+/**
+ * Set the active world number for block sprite rendering.
+ * Call this when the player enters a new room with a different worldNumber.
+ */
+export function setActiveBlockSpriteWorld(worldNumber: number): void {
+  _sprites = getBlockSpriteSet(worldNumber);
+}
 
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
 

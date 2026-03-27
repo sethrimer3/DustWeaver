@@ -13,16 +13,18 @@ import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
-import { DoorDef, LevelDef } from '../levels/levelDef';
+import { RoomDef, BLOCK_SIZE_WORLD } from '../levels/roomDef';
+import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
+import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
+import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
 
 const FIXED_DT_MS = 16.666;
 /** Canonical level-grid block size (sprites/objects snap to this). */
-const BLOCK_SIZE_PX = 30;
+const BLOCK_SIZE_PX = BLOCK_SIZE_WORLD;
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
 /** Number of background Fluid particles filling the entire arena. */
 const BACKGROUND_FLUID_COUNT = 300;
-
 
 /** Boss clusters receive this multiplier on their base HP for extra durability. */
 const BOSS_HP_MULTIPLIER = 2;
@@ -33,10 +35,11 @@ const JOYSTICK_INNER_RADIUS_PX = 22;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
+/** Blocks of transition tunnel extending past room boundary. */
+const TUNNEL_DETECT_MARGIN_WORLD = 2 * BLOCK_SIZE_WORLD;
+
 export interface GameScreenCallbacks {
-  onReturnToMap: () => void;
-  /** Called when the player enters the active exit door. */
-  onExitDoor: (level: LevelDef, target: 'next' | 'menu') => void;
+  onReturnToMenu: () => void;
 }
 
 /**
@@ -177,93 +180,108 @@ function spawnBackgroundFluidParticles(
   }
 }
 
-/** Loads wall definitions from a LevelDef into the WorldState wall buffers. */
-function loadWalls(world: WorldState, levelDef: LevelDef, widthWorld: number, heightWorld: number): void {
-  const count = Math.min(levelDef.walls.length, MAX_WALLS);
+/** Loads wall definitions from a RoomDef into the WorldState wall buffers. */
+function loadRoomWalls(world: WorldState, room: RoomDef): void {
+  const count = Math.min(room.walls.length, MAX_WALLS);
   world.wallCount = count;
   for (let wi = 0; wi < count; wi++) {
-    const def = levelDef.walls[wi];
-    world.wallXWorld[wi] = snapToBlockGridPx(def.xFraction * widthWorld);
-    world.wallYWorld[wi] = snapToBlockGridPx(def.yFraction * heightWorld);
-    world.wallWWorld[wi] = Math.max(BLOCK_SIZE_PX, snapToBlockGridPx(def.wFraction * widthWorld));
-    world.wallHWorld[wi] = Math.max(BLOCK_SIZE_PX, snapToBlockGridPx(def.hFraction * heightWorld));
+    const def = room.walls[wi];
+    world.wallXWorld[wi] = def.xBlock * BLOCK_SIZE_PX;
+    world.wallYWorld[wi] = def.yBlock * BLOCK_SIZE_PX;
+    world.wallWWorld[wi] = Math.max(BLOCK_SIZE_PX, def.wBlock * BLOCK_SIZE_PX);
+    world.wallHWorld[wi] = Math.max(BLOCK_SIZE_PX, def.hBlock * BLOCK_SIZE_PX);
   }
 }
 
-/** Snaps a world-space pixel coordinate/size to the canonical block grid. */
-function snapToBlockGridPx(valuePx: number): number {
-  return Math.round(valuePx / BLOCK_SIZE_PX) * BLOCK_SIZE_PX;
-}
-function doorToWorldRect(door: DoorDef, worldWidthWorld: number, worldHeightWorld: number): {
-  xWorld: number;
-  yWorld: number;
-  wWorld: number;
-  hWorld: number;
-} {
-  return {
-    xWorld: snapToBlockGridPx(door.xFraction * worldWidthWorld),
-    yWorld: snapToBlockGridPx(door.yFraction * worldHeightWorld),
-    wWorld: Math.max(BLOCK_SIZE_PX, snapToBlockGridPx(door.wFraction * worldWidthWorld)),
-    hWorld: Math.max(BLOCK_SIZE_PX, snapToBlockGridPx(door.hFraction * worldHeightWorld)),
-  };
+
+
+/** Background fill colour for each world number. */
+function worldBgColor(worldNumber: number): string {
+  switch (worldNumber) {
+    case 0:  return '#0d1a0f'; // pale dark green
+    case 1:  return '#051408'; // deep dark green
+    case 2:  return '#080c1a'; // dark blue
+    default: return '#0a0a12';
+  }
 }
 
-function drawDoor(
+/** Background fill colour as RGB floats for WebGL. */
+function worldBgColorRgb(worldNumber: number): [number, number, number] {
+  switch (worldNumber) {
+    case 0:  return [0.051, 0.102, 0.059]; // #0d1a0f
+    case 1:  return [0.020, 0.078, 0.031]; // #051408
+    case 2:  return [0.031, 0.047, 0.102]; // #080c1a
+    default: return [0.039, 0.039, 0.071]; // #0a0a12
+  }
+}
+
+/**
+ * Draws a gradient darkness overlay at room transition tunnel edges.
+ * The gradient goes from transparent to 100% black at the very edge.
+ */
+function drawTunnelDarkness(
   ctx: CanvasRenderingContext2D,
-  xWorld: number,
-  yWorld: number,
-  wWorld: number,
-  hWorld: number,
-  label: string,
-  isActive: boolean,
+  room: RoomDef,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
 ): void {
+  const roomWidthWorld = room.widthBlocks * BLOCK_SIZE_PX;
+  const fadeDepthWorld = 4 * BLOCK_SIZE_PX; // 4 blocks of fade
+
   ctx.save();
-  ctx.fillStyle = isActive ? 'rgba(0, 240, 140, 0.25)' : 'rgba(170, 170, 170, 0.2)';
-  ctx.strokeStyle = isActive ? '#00f08c' : '#777';
-  ctx.lineWidth = 2;
-  ctx.fillRect(xWorld, yWorld, wWorld, hWorld);
-  ctx.strokeRect(xWorld, yWorld, wWorld, hWorld);
-  ctx.fillStyle = isActive ? '#9bffd3' : '#aaa';
-  ctx.font = '11px monospace';
-  const textWidth = ctx.measureText(label).width;
-  ctx.fillText(label, xWorld + (wWorld - textWidth) * 0.5, yWorld - 6);
+
+  for (let ti = 0; ti < room.transitions.length; ti++) {
+    const t = room.transitions[ti];
+    const openTopWorld = t.positionBlock * BLOCK_SIZE_PX;
+    const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_PX;
+
+    if (t.direction === 'left') {
+      // Fade from left room edge inward
+      const x0Screen = 0 * zoom + offsetXPx;
+      const x1Screen = fadeDepthWorld * zoom + offsetXPx;
+      const y0Screen = (openTopWorld - BLOCK_SIZE_PX) * zoom + offsetYPx;
+      const y1Screen = (openBottomWorld + BLOCK_SIZE_PX) * zoom + offsetYPx;
+
+      const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x0Screen - 200, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
+    } else if (t.direction === 'right') {
+      // Fade from right room edge inward
+      const x0Screen = (roomWidthWorld - fadeDepthWorld) * zoom + offsetXPx;
+      const x1Screen = roomWidthWorld * zoom + offsetXPx;
+      const y0Screen = (openTopWorld - BLOCK_SIZE_PX) * zoom + offsetYPx;
+      const y1Screen = (openBottomWorld + BLOCK_SIZE_PX) * zoom + offsetYPx;
+
+      const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,1)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x0Screen, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
+    }
+  }
+
   ctx.restore();
 }
 
-
-/** Background fill colour for each level theme. */
-function themeBgColor(theme: string): string {
-  switch (theme) {
-    case 'water':  return '#040c18';
-    case 'ice':    return '#040d14';
-    case 'boss':   return '#0c0408';
-    case 'fire':   return '#120400';
-    case 'lava':   return '#180a00';
-    case 'stone':  return '#0a0a0c';
-    case 'metal':  return '#080c10';
-    default:       return '#0a0a12'; // physical
-  }
-}
-
-/** Returns a display label for the theme. */
-function themeLabel(theme: string): string {
-  switch (theme) {
-    case 'water':  return 'Water';
-    case 'ice':    return 'Ice';
-    case 'boss':   return 'BOSS';
-    case 'fire':   return 'Fire';
-    case 'lava':   return 'Lava';
-    case 'stone':  return 'Stone';
-    case 'metal':  return 'Metal';
-    default:       return 'Physical';
-  }
+/**
+ * Converts a screen-space aim position (mouse/touch in screen pixels)
+ * back to world coordinates given the current camera transform.
+ */
+function screenToWorld(screenXPx: number, screenYPx: number, offsetXPx: number, offsetYPx: number, zoom: number): { xWorld: number; yWorld: number } {
+  return {
+    xWorld: (screenXPx - offsetXPx) / zoom,
+    yWorld: (screenYPx - offsetYPx) / zoom,
+  };
 }
 
 export function startGameScreen(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
   playerLoadout: ParticleKind[],
-  levelDef: LevelDef,
+  startRoomId: string | null,
   callbacks: GameScreenCallbacks,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
@@ -283,78 +301,100 @@ export function startGameScreen(
   }
 
   const ctx = canvas.getContext('2d')!;
+  const camera = createCameraState();
+
+  // ── Room state ────────────────────────────────────────────────────────────
+  let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
+  let bgColor = worldBgColor(currentRoom.worldNumber);
+  let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_PX;
+  let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_PX;
+
+  /** Initialises (or re-initialises) world state for the given room. */
+  function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void {
+    currentRoom = room;
+    bgColor = worldBgColor(room.worldNumber);
+    roomWidthWorld = room.widthBlocks * BLOCK_SIZE_PX;
+    roomHeightWorld = room.heightBlocks * BLOCK_SIZE_PX;
+
+    // Apply world-specific block sprites and background
+    setActiveBlockSpriteWorld(room.worldNumber);
+    const [bgR, bgG, bgB] = worldBgColorRgb(room.worldNumber);
+    webglRenderer.setBackgroundColor(bgR, bgG, bgB);
+
+    // Reset world state
+    world.tick = 0;
+    world.particleCount = 0;
+    world.clusters.length = 0;
+    world.wallCount = 0;
+    world.worldWidthWorld = roomWidthWorld;
+    world.worldHeightWorld = roomHeightWorld;
+
+    // Reset grapple state
+    world.isGrappleActiveFlag = 0;
+    world.grappleParticleStartIndex = -1;
+
+    // Spawn player at the given block position
+    const spawnXWorld = spawnXBlock * BLOCK_SIZE_PX;
+    const spawnYWorld = spawnYBlock * BLOCK_SIZE_PX;
+    const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
+    world.clusters.push(playerCluster);
+    spawnLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+
+    // Spawn enemies
+    let nextEntityId = 2;
+    for (let ei = 0; ei < room.enemies.length; ei++) {
+      const enemyDef = room.enemies[ei];
+      const ex = enemyDef.xBlock * BLOCK_SIZE_PX;
+      const ey = enemyDef.yBlock * BLOCK_SIZE_PX;
+      const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
+      const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
+      world.clusters.push(enemyCluster);
+      spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
+    }
+
+    // Spawn background Fluid particles
+    spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
+
+    // Reserve grapple chain particle slots
+    initGrappleChainParticles(world, 1);
+
+    // Load walls
+    loadRoomWalls(world, room);
+
+    // Init dust
+    environmentalDust.initFromWorld(world);
+
+    // Snap camera to player position
+    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, canvas.width, canvas.height);
+  }
 
   const world = createWorldState(FIXED_DT_MS, 42);
   const levelRng = createRng(12345);
   const environmentalDust = new EnvironmentalDustLayer();
 
-  world.worldWidthWorld  = canvas.width;
-  world.worldHeightWorld = canvas.height;
-
-  let entryDoorWorld = doorToWorldRect(levelDef.entryDoor, canvas.width, canvas.height);
-  let exitDoorWorld = doorToWorldRect(levelDef.exitDoor, canvas.width, canvas.height);
-
-  // ── Spawn player at entry door position ───────────────────────────────────
-  const playerCluster = createClusterState(
-    1,
-    entryDoorWorld.xWorld + entryDoorWorld.wWorld * 0.5,
-    entryDoorWorld.yWorld + entryDoorWorld.hWorld * 0.5,
-    1,
-    PARTICLE_COUNT_PER_CLUSTER,
-  );
-  world.clusters.push(playerCluster);
-  spawnLoadoutParticles(
-    world, playerCluster.entityId,
-    playerCluster.positionXWorld, playerCluster.positionYWorld,
-    playerLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng,
-  );
-
-  // ── Spawn enemies from level definition ──────────────────────────────────
-  let nextEntityId = 2;
-  for (let ei = 0; ei < levelDef.enemies.length; ei++) {
-    const enemyDef = levelDef.enemies[ei];
-    const ex = snapToBlockGridPx(enemyDef.xFraction * canvas.width);
-    const ey = snapToBlockGridPx(enemyDef.yFraction * canvas.height);
-    const particleCount = enemyDef.particleCount;
-    const hp = enemyDef.isBossFlag === 1 ? particleCount * BOSS_HP_MULTIPLIER : particleCount;
-
-    const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
-    world.clusters.push(enemyCluster);
-    spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, particleCount, levelRng);
-  }
-
-  // ── Spawn background Fluid particles ─────────────────────────────────────
-  spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
-
-  // ── Reserve grapple hook chain particle slots ─────────────────────────────
-  initGrappleChainParticles(world, playerCluster.entityId);
-
-  // ── Load level walls ──────────────────────────────────────────────────────
-  loadWalls(world, levelDef, canvas.width, canvas.height);
-  environmentalDust.initFromWorld(world);
+  // Initial room load
+  loadRoom(currentRoom, currentRoom.playerSpawnBlock[0], currentRoom.playerSpawnBlock[1]);
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
 
-  let mapButton: HTMLButtonElement | null = null;
+  let menuButton: HTMLButtonElement | null = null;
   if (IS_TOUCH_DEVICE) {
-    mapButton = document.createElement('button');
-    mapButton.textContent = 'MAP';
-    mapButton.style.cssText = `
+    menuButton = document.createElement('button');
+    menuButton.textContent = 'MENU';
+    menuButton.style.cssText = `
       position: absolute; top: 16px; right: 16px;
       background: rgba(0,0,0,0.6); border: 2px solid #00cfff; color: #00cfff;
       padding: 10px 20px; font-size: 1rem; font-family: 'Cinzel', serif;
       cursor: pointer; border-radius: 6px; touch-action: manipulation;
     `;
-    mapButton.addEventListener('click', () => {
+    menuButton.addEventListener('click', () => {
       inputState.isEscapePressed = true;
     });
-    uiRoot.appendChild(mapButton);
+    uiRoot.appendChild(menuButton);
   }
 
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
-
-  const bgColor = themeBgColor(levelDef.theme);
 
   let lastTimestampMs = 0;
   let accumulatorMs = 0;
@@ -363,18 +403,44 @@ export function startGameScreen(
   let isRunning = true;
   let rafHandle = 0;
 
-  // Exit-door state
-  let areEnemiesCleared = false;
-  let hasExitedThroughDoor = false;
-
   function onResize(): void {
     resizeCanvas();
-    loadWalls(world, levelDef, canvas.width, canvas.height);
-    environmentalDust.initFromWorld(world);
-    entryDoorWorld = doorToWorldRect(levelDef.entryDoor, canvas.width, canvas.height);
-    exitDoorWorld = doorToWorldRect(levelDef.exitDoor, canvas.width, canvas.height);
   }
   window.addEventListener('resize', onResize);
+
+  /**
+   * Check if the player has entered a transition tunnel and should move
+   * to the adjacent room.
+   */
+  function checkRoomTransitions(): boolean {
+    const player = world.clusters[0];
+    if (player === undefined || player.isAliveFlag === 0) return false;
+
+    const px = player.positionXWorld;
+    const py = player.positionYWorld;
+
+    for (let ti = 0; ti < currentRoom.transitions.length; ti++) {
+      const t = currentRoom.transitions[ti];
+      const openTopWorld = t.positionBlock * BLOCK_SIZE_PX;
+      const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_PX;
+
+      let isInTunnel = false;
+      if (t.direction === 'left') {
+        isInTunnel = px < TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
+      } else if (t.direction === 'right') {
+        isInTunnel = px > roomWidthWorld - TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
+      }
+
+      if (isInTunnel) {
+        const targetRoom = ROOM_REGISTRY.get(t.targetRoomId);
+        if (targetRoom !== undefined) {
+          loadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1]);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   function frame(timestampMs: number): void {
     if (!isRunning) return;
@@ -391,8 +457,12 @@ export function startGameScreen(
       frameCount = 0;
     }
 
+    // ── Compute camera offset for screen → world conversion ──────────────
+    const { offsetXPx, offsetYPx } = getCameraOffset(camera, canvas.width, canvas.height);
+    const zoom = camera.zoom;
+
     const commands = collectCommands(inputState);
-    let returnToMap = false;
+    let returnToMenu = false;
     let moveDx = 0;
     let dashAimXPx = 0;
     let dashTriggered = false;
@@ -400,7 +470,7 @@ export function startGameScreen(
     for (let ci = 0; ci < commands.length; ci++) {
       const cmd = commands[ci];
       if (cmd.kind === CommandKind.ReturnToMap) {
-        returnToMap = true;
+        returnToMenu = true;
       } else if (cmd.kind === CommandKind.MovePlayer) {
         moveDx = cmd.dx;
       } else if (cmd.kind === CommandKind.Jump) {
@@ -411,8 +481,10 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.Attack) {
         const player = world.clusters[0];
         if (player !== undefined) {
-          let dirX = cmd.aimXPx - player.positionXWorld;
-          let dirY = cmd.aimYPx - player.positionYWorld;
+          // Convert screen-space aim to world coordinates
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          let dirX = aim.xWorld - player.positionXWorld;
+          let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
           if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
           world.playerAttackDirXWorld = dirX;
@@ -422,8 +494,9 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
         const player = world.clusters[0];
         if (player !== undefined) {
-          let dirX = cmd.aimXPx - player.positionXWorld;
-          let dirY = cmd.aimYPx - player.positionYWorld;
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          let dirX = aim.xWorld - player.positionXWorld;
+          let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
           if (len < 1.0) { dirX = world.playerBlockDirXWorld; dirY = world.playerBlockDirYWorld; }
           else { dirX /= len; dirY /= len; }
@@ -436,80 +509,58 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.GrappleFire) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          fireGrapple(world, cmd.aimXPx, cmd.aimYPx);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          fireGrapple(world, aim.xWorld, aim.yWorld);
         }
       } else if (cmd.kind === CommandKind.GrappleRelease) {
         releaseGrapple(world);
       }
     }
 
-    if (returnToMap) {
+    if (returnToMenu) {
       isRunning = false;
       detachInput();
-      callbacks.onReturnToMap();
+      callbacks.onReturnToMenu();
       return;
     }
 
-    // ── Exit door unlock check ───────────────────────────────────────────────
-    if (!areEnemiesCleared) {
-      let allEnemiesDead = true;
-      for (let ci = 1; ci < world.clusters.length; ci++) {
-        if (world.clusters[ci].isAliveFlag === 1) {
-          allEnemiesDead = false;
-          break;
-        }
-      }
-      areEnemiesCleared = allEnemiesDead && world.clusters.length > 1;
+    // ── Room transition check ──────────────────────────────────────────────
+    if (checkRoomTransitions()) {
+      // Room changed — skip this frame's sim, render the new room next frame
+      rafHandle = requestAnimationFrame(frame);
+      return;
     }
 
-    // ── Exit door interaction ───────────────────────────────────────────────
-    if (areEnemiesCleared && !hasExitedThroughDoor) {
-      const player = world.clusters[0];
-      if (player !== undefined) {
-        const insideExitX = player.positionXWorld >= exitDoorWorld.xWorld && player.positionXWorld <= exitDoorWorld.xWorld + exitDoorWorld.wWorld;
-        const insideExitY = player.positionYWorld >= exitDoorWorld.yWorld && player.positionYWorld <= exitDoorWorld.yWorld + exitDoorWorld.hWorld;
-        if (insideExitX && insideExitY) {
-          hasExitedThroughDoor = true;
-          isRunning = false;
-          detachInput();
-          callbacks.onExitDoor(levelDef, levelDef.exitDoor.target);
-          return;
-        }
-      }
-    }
-
+    // ── Sim ticks ──────────────────────────────────────────────────────────
     accumulatorMs += elapsedMs;
     while (accumulatorMs >= FIXED_DT_MS) {
       const player = world.clusters[0];
       if (moveDx !== 0) {
         if (player !== undefined) {
-          // Horizontal input only — movement.ts ignores Y in platformer mode
           world.playerMoveInputDxWorld = moveDx > 0 ? 1.0 : -1.0;
           world.playerMoveInputDyWorld = 0.0;
         }
       }
-      // Jump trigger (one-shot per frame accumulation)
       if (jumpTriggered) {
         world.playerJumpTriggeredFlag = 1;
         jumpTriggered = false;
       }
-      // Propagate jump held state every tick for variable-height jump cut
       world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
-      // Dash: horizontal direction from movement input or cursor
       if (dashTriggered) {
         world.playerDashTriggeredFlag = 1;
-        if (player !== undefined) {
+        const player2 = world.clusters[0];
+        if (player2 !== undefined) {
           if (moveDx !== 0) {
             world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
             world.playerDashDirYWorld = 0.0;
           } else {
-            const dirX = dashAimXPx - player.positionXWorld;
+            const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom);
+            const dirX = aim.xWorld - player2.positionXWorld;
             const absX = dirX < 0 ? -dirX : dirX;
             if (absX > 1.0) {
               world.playerDashDirXWorld = dirX > 0 ? 1.0 : -1.0;
             } else {
-              // Cursor is too close — fall back to current movement direction
-              world.playerDashDirXWorld = player.velocityXWorld >= 0 ? 1.0 : -1.0;
+              world.playerDashDirXWorld = player2.velocityXWorld >= 0 ? 1.0 : -1.0;
             }
             world.playerDashDirYWorld = 0.0;
           }
@@ -520,6 +571,26 @@ export function startGameScreen(
       environmentalDust.update(world, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
     }
+
+    // ── Update camera to follow player ──────────────────────────────────────
+    const playerForCamera = world.clusters[0];
+    if (playerForCamera !== undefined && playerForCamera.isAliveFlag === 1) {
+      updateCamera(
+        camera,
+        playerForCamera.positionXWorld,
+        playerForCamera.positionYWorld,
+        roomWidthWorld,
+        roomHeightWorld,
+        canvas.width,
+        canvas.height,
+        elapsedMs / 1000,
+      );
+    }
+
+    // ── Recompute camera offset after update ─────────────────────────────────
+    const camOff = getCameraOffset(camera, canvas.width, canvas.height);
+    const ox = camOff.offsetXPx;
+    const oy = camOff.offsetYPx;
 
     let aliveCount = 0;
     for (let i = 0; i < world.particleCount; i++) {
@@ -547,46 +618,33 @@ export function startGameScreen(
 
     const snapshot = createSnapshot(world);
 
+    // ── Render ───────────────────────────────────────────────────────────────
     if (webglRenderer.isAvailable) {
-      webglRenderer.render(snapshot, 0, 0, 1.0);
+      webglRenderer.render(snapshot, ox, oy, zoom);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     } else {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      renderParticles(ctx, snapshot, 0, 0, 1.0);
+      renderParticles(ctx, snapshot, ox, oy, zoom);
     }
 
     // Walls before cluster indicators so clusters are drawn on top
-    renderWalls(ctx, snapshot, 0, 0, 1.0);
-    renderClusters(ctx, snapshot, 0, 0, 1.0);
-    renderGrapple(ctx, snapshot, 0, 0, 1.0);
-    drawDoor(ctx, entryDoorWorld.xWorld, entryDoorWorld.yWorld, entryDoorWorld.wWorld, entryDoorWorld.hWorld, 'ENTRY', true);
-    drawDoor(ctx, exitDoorWorld.xWorld, exitDoorWorld.yWorld, exitDoorWorld.wWorld, exitDoorWorld.hWorld, 'EXIT', areEnemiesCleared);
-    environmentalDust.render(ctx);
+    renderWalls(ctx, snapshot, ox, oy, zoom);
+    renderClusters(ctx, snapshot, ox, oy, zoom);
+    renderGrapple(ctx, snapshot, ox, oy, zoom);
+
+    // Tunnel darkness overlays
+    drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
+
+    environmentalDust.render(ctx, ox, oy, zoom);
     renderHudOverlay(ctx, hudState);
 
-    // ── Level name banner (top-center) ──────────────────────────────────────
+    // ── Room name banner (top-center) ──────────────────────────────────────
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '13px monospace';
-    const levelLabel = `W${levelDef.worldNumber}-L${levelDef.levelNumber}  ${levelDef.name}  [${themeLabel(levelDef.theme)}]`;
-    const labelW = ctx.measureText(levelLabel).width;
-    ctx.fillText(levelLabel, (canvas.width - labelW) / 2, 22);
-
-    // ── Exit-door status banner ──────────────────────────────────────────────
-    if (areEnemiesCleared) {
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,207,100,0.9)';
-      ctx.font = 'bold 28px monospace';
-      const bannerText = 'EXIT DOOR OPEN';
-      const bannerWidth = ctx.measureText(bannerText).width;
-      ctx.fillText(bannerText, (canvas.width - bannerWidth) / 2, canvas.height / 2 - 20);
-      ctx.font = '16px monospace';
-      ctx.fillStyle = 'rgba(170,255,210,0.9)';
-      const subText = 'Step into the EXIT door';
-      const subWidth = ctx.measureText(subText).width;
-      ctx.fillText(subText, (canvas.width - subWidth) / 2, canvas.height / 2 + 12);
-      ctx.restore();
-    }
+    const roomLabel = currentRoom.name;
+    const labelW = ctx.measureText(roomLabel).width;
+    ctx.fillText(roomLabel, (canvas.width - labelW) / 2, 22);
 
     // ── Touch joystick ───────────────────────────────────────────────────────
     if (inputState.isTouchJoystickActiveFlag === 1) {
@@ -623,8 +681,8 @@ export function startGameScreen(
 
     // ── Control hints ────────────────────────────────────────────────────────
     const controlHintText = IS_TOUCH_DEVICE
-      ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MAP to return'
-      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=return';
+      ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
+      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=menu';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '12px monospace';
     const hintWidthPx = ctx.measureText(controlHintText).width;
@@ -641,8 +699,8 @@ export function startGameScreen(
     detachInput();
     webglRenderer.dispose();
     window.removeEventListener('resize', onResize);
-    if (mapButton !== null && mapButton.parentElement !== null) {
-      mapButton.parentElement.removeChild(mapButton);
+    if (menuButton !== null && menuButton.parentElement !== null) {
+      menuButton.parentElement.removeChild(menuButton);
     }
   };
 }

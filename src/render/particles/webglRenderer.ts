@@ -27,10 +27,10 @@ const FLOATS_PER_VERTEX = 5;
 const BYTES_PER_FLOAT   = 4;
 /** Visual radius for each particle's point sprite (pixels). */
 const POINT_SIZE_PX = 5.0;
-/** Dark background colour components (matches #0A0A12). */
-const BG_R = 0.039;
-const BG_G = 0.039;
-const BG_B = 0.071;
+/** Default dark background colour components (matches #0A0A12). */
+let _bgR = 0.039;
+let _bgG = 0.039;
+let _bgB = 0.071;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -172,6 +172,16 @@ export class WebGLParticleRenderer {
   }
 
   /**
+   * Set the background clear colour (RGB, each 0–1).
+   * Call when the active room changes to a different world.
+   */
+  setBackgroundColor(r: number, g: number, b: number): void {
+    _bgR = r;
+    _bgG = g;
+    _bgB = b;
+  }
+
+  /**
    * Clear the canvas and render all alive particles from `snapshot`.
    *
    * Hot-path notes:
@@ -219,7 +229,7 @@ export class WebGLParticleRenderer {
     }
 
     // ---- Clear with dark background -------------------------------------
-    gl.clearColor(BG_R, BG_G, BG_B, 1.0);
+    gl.clearColor(_bgR, _bgG, _bgB, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     if (vertexCount === 0) return;
@@ -232,7 +242,7 @@ export class WebGLParticleRenderer {
     gl.useProgram(this.program);
 
     gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
-    gl.uniform1f(this.uPointSizePx, POINT_SIZE_PX);
+    gl.uniform1f(this.uPointSizePx, POINT_SIZE_PX * scalePx);
 
     const stride = FLOATS_PER_VERTEX * BYTES_PER_FLOAT;
     gl.enableVertexAttribArray(this.attrPositionScreen);
