@@ -9,6 +9,7 @@ import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
 import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
+import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
@@ -285,6 +286,7 @@ export function startGameScreen(
 
   const world = createWorldState(FIXED_DT_MS, 42);
   const levelRng = createRng(12345);
+  const environmentalDust = new EnvironmentalDustLayer();
 
   world.worldWidthWorld  = canvas.width;
   world.worldHeightWorld = canvas.height;
@@ -329,6 +331,7 @@ export function startGameScreen(
 
   // ── Load level walls ──────────────────────────────────────────────────────
   loadWalls(world, levelDef, canvas.width, canvas.height);
+  environmentalDust.initFromWorld(world);
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
@@ -367,6 +370,7 @@ export function startGameScreen(
   function onResize(): void {
     resizeCanvas();
     loadWalls(world, levelDef, canvas.width, canvas.height);
+    environmentalDust.initFromWorld(world);
     entryDoorWorld = doorToWorldRect(levelDef.entryDoor, canvas.width, canvas.height);
     exitDoorWorld = doorToWorldRect(levelDef.exitDoor, canvas.width, canvas.height);
   }
@@ -513,6 +517,7 @@ export function startGameScreen(
         dashTriggered = false;
       }
       tick(world);
+      environmentalDust.update(world, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
     }
 
@@ -557,6 +562,7 @@ export function startGameScreen(
     renderGrapple(ctx, snapshot, 0, 0, 1.0);
     drawDoor(ctx, entryDoorWorld.xWorld, entryDoorWorld.yWorld, entryDoorWorld.wWorld, entryDoorWorld.hWorld, 'ENTRY', true);
     drawDoor(ctx, exitDoorWorld.xWorld, exitDoorWorld.yWorld, exitDoorWorld.wWorld, exitDoorWorld.hWorld, 'EXIT', areEnemiesCleared);
+    environmentalDust.render(ctx);
     renderHudOverlay(ctx, hudState);
 
     // ── Level name banner (top-center) ──────────────────────────────────────
