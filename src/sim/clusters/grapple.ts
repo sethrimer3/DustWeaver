@@ -103,7 +103,7 @@ const GRAPPLE_MAX_RETRACT_SPEED_RATIO = 1.1;
 
 /**
  * Tangential velocity damping coefficient (fraction of speed lost per second).
- * At 0.12 the player loses ~12 % of tangential speed each second — subtle
+ * At 0.12 the player loses ~12% of tangential speed each second — subtle
  * enough that single swings feel lively, but energy decays visibly over 3–4
  * full oscillations.  Increase for more drag; decrease for a floatier feel.
  */
@@ -420,12 +420,12 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // is not penalised.  The effect is subtle: enough that perpetual motion
   // eventually decays, but not so strong that the swing feels dead.
   {
-    const vRad2 = player.velocityXWorld * nx + player.velocityYWorld * ny;
-    const vtx2  = player.velocityXWorld - vRad2 * nx;
-    const vty2  = player.velocityYWorld - vRad2 * ny;
+    const vRadial = player.velocityXWorld * nx + player.velocityYWorld * ny;
+    const vTangX  = player.velocityXWorld - vRadial * nx;
+    const vTangY  = player.velocityYWorld - vRadial * ny;
     const dampFactor = Math.max(0.0, 1.0 - GRAPPLE_SWING_DAMPING_PER_SEC * dtSec);
-    player.velocityXWorld = vRad2 * nx + vtx2 * dampFactor;
-    player.velocityYWorld = vRad2 * ny + vty2 * dampFactor;
+    player.velocityXWorld = vRadial * nx + vTangX * dampFactor;
+    player.velocityYWorld = vRadial * ny + vTangY * dampFactor;
   }
 }
 
