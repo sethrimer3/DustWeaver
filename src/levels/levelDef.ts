@@ -34,6 +34,16 @@ export interface WallDef {
   hFraction: number;
 }
 
+/** Defines a door rectangle and its destination semantics for a level. */
+export interface DoorDef {
+  xFraction: number;
+  yFraction: number;
+  wFraction: number;
+  hFraction: number;
+  /** "next" moves forward in campaign flow, "menu" returns to main menu. */
+  target: 'next' | 'menu';
+}
+
 /** Visual theme used for background tinting and atmospheric effects. */
 export type LevelTheme = 'physical' | 'water' | 'ice' | 'boss' | 'fire' | 'lava' | 'stone' | 'metal';
 
@@ -46,4 +56,8 @@ export interface LevelDef {
   theme: LevelTheme;
   enemies: EnemyDef[];
   walls: WallDef[];
+  /** Player spawn door for the level. */
+  entryDoor: DoorDef;
+  /** Exit door used to move to next screen / main menu. */
+  exitDoor: DoorDef;
 }

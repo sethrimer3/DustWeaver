@@ -8,6 +8,13 @@ import { LevelDef } from './levels/levelDef';
 import { WORLD1_LEVELS } from './levels/world1';
 import { WORLD2_LEVELS } from './levels/world2';
 
+function getNextLevel(current: LevelDef): LevelDef | null {
+  const source = current.worldNumber === 1 ? WORLD1_LEVELS : WORLD2_LEVELS;
+  const nextIndex = current.levelNumber;
+  return source[nextIndex] ?? null;
+}
+
+
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
   let cleanup: (() => void) | null = null;
 
@@ -48,31 +55,32 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       const activeLoadout = loadout ?? progress.loadout;
       cleanup = startGameScreen(canvas, uiRoot, activeLoadout, selectedLevel, {
         onReturnToMap: () => navigate('worldMap'),
-        onLevelComplete: (levelDef) => {
-          // completedIndex is 0-based; unlockedCount counts how many are available (1-based).
-          // Unlock the next level when the player beats the last currently-unlocked level.
-          const completedIndex = levelDef.levelNumber - 1; // 0-based index of completed level
+        onExitDoor: (levelDef, target) => {
+          const completedIndex = levelDef.levelNumber - 1;
 
           if (levelDef.worldNumber === 1) {
             if (completedIndex >= progress.world1UnlockedCount - 1) {
-              // Player beat the frontier World 1 level — unlock the next one
-              progress.world1UnlockedCount = Math.min(
-                WORLD1_LEVELS.length,
-                completedIndex + 2, // +1 to move past completed, +1 for 1-based count
-              );
+              progress.world1UnlockedCount = Math.min(WORLD1_LEVELS.length, completedIndex + 2);
             }
-            // Completing World 1 boss (last level) unlocks World 2
             if (levelDef.levelNumber === WORLD1_LEVELS.length && progress.world2UnlockedCount === 0) {
               progress.world2UnlockedCount = 1;
             }
           } else if (levelDef.worldNumber === 2) {
             if (completedIndex >= progress.world2UnlockedCount - 1) {
-              // Player beat the frontier World 2 level — unlock the next one
-              progress.world2UnlockedCount = Math.min(
-                WORLD2_LEVELS.length,
-                completedIndex + 2, // +1 to move past completed, +1 for 1-based count
-              );
+              progress.world2UnlockedCount = Math.min(WORLD2_LEVELS.length, completedIndex + 2);
             }
+          }
+
+          if (target === 'menu') {
+            navigate('mainMenu');
+            return;
+          }
+
+          const nextLevel = getNextLevel(levelDef);
+          if (nextLevel !== null) {
+            selectedLevel = nextLevel;
+            navigate('loadout');
+            return;
           }
 
           navigate('worldMap');
