@@ -548,19 +548,19 @@ export function startGameScreen(
       world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
       if (dashTriggered) {
         world.playerDashTriggeredFlag = 1;
-        const player2 = world.clusters[0];
-        if (player2 !== undefined) {
+        const playerForDash = world.clusters[0];
+        if (playerForDash !== undefined) {
           if (moveDx !== 0) {
             world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
             world.playerDashDirYWorld = 0.0;
           } else {
             const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom);
-            const dirX = aim.xWorld - player2.positionXWorld;
+            const dirX = aim.xWorld - playerForDash.positionXWorld;
             const absX = dirX < 0 ? -dirX : dirX;
             if (absX > 1.0) {
               world.playerDashDirXWorld = dirX > 0 ? 1.0 : -1.0;
             } else {
-              world.playerDashDirXWorld = player2.velocityXWorld >= 0 ? 1.0 : -1.0;
+              world.playerDashDirXWorld = playerForDash.velocityXWorld >= 0 ? 1.0 : -1.0;
             }
             world.playerDashDirYWorld = 0.0;
           }

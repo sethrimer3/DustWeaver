@@ -14,11 +14,28 @@ Two canvases are layered in the DOM:
    particles via `renderParticles` (Canvas 2D arc fallback).
 
 The render call order each frame:
-1. `webglRenderer.render(snapshot)` — background + particles (WebGL) **or**
+1. `webglRenderer.render(snapshot, offsetX, offsetY, zoom)` — background + particles (WebGL) **or**
    `ctx.fillRect` + `renderParticles` (Canvas 2D fallback)
-2. `renderClusters(ctx, snapshot)` — entity circles and health bars (2D)
-3. `renderHudOverlay(ctx, hud)` — FPS / frame-time / particle-count (2D)
-4. Instructions text (2D)
+2. `renderWalls(ctx, snapshot, offsetX, offsetY, zoom)` — auto-tiling block sprites (2D)
+3. `renderClusters(ctx, snapshot, offsetX, offsetY, zoom)` — entity boxes and health bars (2D)
+4. `renderGrapple(ctx, snapshot, offsetX, offsetY, zoom)` — grapple rope/anchor (2D)
+5. `drawTunnelDarkness(ctx, room, offsetX, offsetY, zoom)` — transition tunnel fade-to-black (2D)
+6. `environmentalDust.render(ctx, offsetX, offsetY, zoom)` — environmental dust layer (2D)
+7. `renderHudOverlay(ctx, hud)` — FPS / frame-time / particle-count (2D)
+8. Room name banner, control hints, touch joystick (2D)
+
+Camera (`render/camera.ts`) follows the player cluster position with a smooth
+lerp, clamped to room bounds so the viewport never shows outside the room.
+
+## Metroidvania Room System
+
+Room definitions live in `levels/roomDef.ts` (types) and `levels/rooms.ts` (data).
+Each room specifies walls, enemies, and transitions in block-unit coordinates.
+The game screen loads one room at a time; transitions swap the entire sim state.
+
+```
+World 2 ←—[tunnel]—— LOBBY ——[tunnel]—→ World 1
+```
 
 ## Layer Separation
 

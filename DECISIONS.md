@@ -13,6 +13,21 @@
 - World space: floating-point units.
 - Screen space: pixels.
 - Scale: 1 world unit = 1 pixel at default zoom.
+- Camera zoom: default 2× (1 world unit = 2 screen pixels at default zoom).
+  Camera follows player, clamped to room bounds so viewport never shows void.
+
+## Metroidvania Room System (BUILD 24)
+- Game uses interconnected rooms instead of a level-select world map.
+- Player spawns in a central lobby (world 0) with tunnels leading left (world 2)
+  and right (world 1).
+- Rooms are defined in block-unit coordinates (1 block = 30 world units).
+- Room transitions are open tunnel passages at room edges; blocks line the
+  tunnel ceiling/floor and a darkness gradient fades to 100% black at the edge.
+- When the player enters a transition zone, the current room is unloaded and
+  the target room is loaded with the player at the corresponding spawn point.
+- Per-world block sprites: W-0 for world 0, W-1 for world 1, W-2 for world 2.
+- Per-world background colours: world 0 = pale dark green (#0d1a0f),
+  world 1 = deep dark green (#051408), world 2 = dark blue (#080c1a).
 
 ## Float vs Fixed-Point
 - Using 32-bit floats (Float32Array) for particle buffers.
