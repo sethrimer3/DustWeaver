@@ -433,26 +433,26 @@ const VOID: ElementProfile = {
 };
 
 /**
- * Fluid — invisible background particles that flow like water.
- * They have no owner and drift freely via gentle curl noise.
- * They become visible when disturbed by nearby fast-moving particles.
+ * Fluid — decorative environmental dust layer.
+ * Dust starts near level surfaces, stays mostly settled due to drag + mild
+ * downward bias, and becomes more visible/swirly when disturbed.
  */
 const FLUID: ElementProfile = {
-  massKg:               0.12,   // very light — responsive to forces
-  drag:                 1.8,    // enough drag to settle back after disturbance
+  massKg:               0.12,   // very light — responsive to disturbance
+  drag:                 4.8,    // high drag so dust quickly settles
   attractionStrength:   0.0,    // no owner anchor
   orbitalStrength:      0.0,
   orbitRadiusWorld:     60.0,   // spawn spread reference (used at spawn time)
-  noiseAmplitude:       3.0,    // gentle random perturbation
-  instability:          0.02,   // very slow noise direction changes — smooth drift
-  curlStrength:         6.0,    // curl noise gives fluid-like meandering flow
-  diffusion:            0.5,
-  upwardBias:           0.0,
+  noiseAmplitude:       0.2,    // minimal idle jitter
+  instability:          0.01,
+  curlStrength:         0.6,    // slight swirl, mostly from disturbance bursts
+  diffusion:            0.1,
+  upwardBias:           -40.0,  // downward settling onto surfaces (world Y+)
   cohesion:             0.0,    // no boid behaviour — fluid particles ignore each other
   separation:           0.0,
   alignment:            0.0,
-  lifetimeBaseTicks:    4000,   // very long-lived; rarely respawn
-  lifetimeVarianceTicks: 800,
+  lifetimeBaseTicks:    999999, // effectively persistent environmental layer
+  lifetimeVarianceTicks: 0,
   temperature:          0.0,    // cold/neutral
   stability:            1.0,
   toughness:            0.1,

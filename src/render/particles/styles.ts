@@ -26,7 +26,7 @@ const STYLES: ParticleStyle[] = [
   { colorHex: '#44cc44', radiusPx: 2 }, // Nature    — vivid green
   { colorHex: '#aaeeff', radiusPx: 2 }, // Crystal   — icy bright blue
   { colorHex: '#220033', radiusPx: 2 }, // Void      — near-black purple
-  { colorHex: '#88ccff', radiusPx: 6 }, // Fluid     — pale aqua-blue (background, keep larger)
+  { colorHex: '#8b6f2a', radiusPx: 2 }, // Fluid     — dark gold decorative dust
   { colorHex: '#2299ee', radiusPx: 2 }, // Water     — deep flowing blue
   { colorHex: '#ff2200', radiusPx: 3 }, // Lava      — molten deep red-orange (slightly larger)
   { colorHex: '#888899', radiusPx: 2 }, // Stone     — cool grey

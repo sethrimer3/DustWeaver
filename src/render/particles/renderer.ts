@@ -148,9 +148,10 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     const normAge = lt > 0 ? Math.min(1.0, ageTicks[i] / lt) : 0.0;
     const ageFade = 1.0 - normAge;
 
-    // Fluid background particles are only visible when disturbed
+    // Decorative background dust (Fluid) is faintly visible at rest and
+    // brightens when disturbed by nearby air movement.
     const alpha = kind === ParticleKind.Fluid
-      ? disturbanceFactor[i] * ageFade * 0.55
+      ? disturbanceFactor[i] * ageFade * 0.75
       : ageFade;
 
     if (alpha <= MIN_VISIBLE_ALPHA) continue;
@@ -161,4 +162,3 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
   }
   ctx.globalAlpha = 1.0;
 }
-

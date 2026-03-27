@@ -179,6 +179,8 @@ const ENEMY_MAX_SPEED_WORLD_PER_SEC = 90.0;
 
 /** Enemy horizontal acceleration rate (exponential blend factor per second). */
 const ENEMY_ACCEL_PER_SEC = 8.0;
+/** Landing speed that maps to a full-strength dust-air burst. */
+const DUST_LANDING_SPEED_FOR_FULL_BURST_WORLD = 260.0;
 
 /**
  * Horizontal distance (px) below which enemies stop advancing.
@@ -352,6 +354,8 @@ function resolveClusterSolidWallCollision(
 
 export function applyClusterMovement(world: WorldState): void {
   const dtSec = world.dtMs / 1000.0;
+  // Landing bursts are one-tick events and are repopulated below.
+  world.dustAirBurstCount = 0;
 
   // ── Locate the player cluster position (needed by enemy AI) ───────────────
   let playerX = 0.0;
@@ -525,6 +529,7 @@ export function applyClusterMovement(world: WorldState): void {
     // ── Integrate position ─────────────────────────────────────────────────
     const prevX = cluster.positionXWorld;
     const prevY = cluster.positionYWorld;
+    const velocityYBeforeLandingResolveWorld = cluster.velocityYWorld;
     cluster.positionXWorld += cluster.velocityXWorld * dtSec;
     cluster.positionYWorld += cluster.velocityYWorld * dtSec;
 
@@ -543,6 +548,14 @@ export function applyClusterMovement(world: WorldState): void {
     const thinLanded  = resolveClusterFloorCollision(cluster, world);
     const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY);
     const justLanded  = thinLanded || thickLanded;
+    if (justLanded && velocityYBeforeLandingResolveWorld > 0 && world.dustAirBurstCount < world.dustAirBurstXWorld.length) {
+      const burstIndex = world.dustAirBurstCount++;
+      const landingSpeedWorld = velocityYBeforeLandingResolveWorld;
+      const normalizedStrength = landingSpeedWorld / DUST_LANDING_SPEED_FOR_FULL_BURST_WORLD;
+      world.dustAirBurstXWorld[burstIndex] = cluster.positionXWorld;
+      world.dustAirBurstYWorld[burstIndex] = cluster.positionYWorld + cluster.halfHeightWorld;
+      world.dustAirBurstStrength[burstIndex] = normalizedStrength < 2.0 ? normalizedStrength : 2.0;
+    }
 
     if (cluster.isPlayerFlag === 1) {
       // ── Wall slide: cap downward velocity when pressing into a wall ─────

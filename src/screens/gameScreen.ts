@@ -19,8 +19,8 @@ const FIXED_DT_MS = 16.666;
 const BLOCK_SIZE_PX = 30;
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
-/** Number of background Fluid particles filling the entire arena. */
-const BACKGROUND_FLUID_COUNT = 300;
+/** Number of decorative dust particles layered on level surfaces. */
+const BACKGROUND_DUST_COUNT = 340;
 
 
 /** Boss clusters receive this multiplier on their base HP for extra durability. */
@@ -139,22 +139,73 @@ function spawnLoadoutParticles(
   }
 }
 
+/** Returns a small mound height for decorative dust (0-4 px, with 4 as a rare peak). */
+function sampleDustHeightPx(rng: RngState): number {
+  const r = nextFloat(rng);
+  if (r < 0.56) return 0;
+  if (r < 0.81) return 1;
+  if (r < 0.94) return 2;
+  if (r < 0.988) return 3;
+  return 4;
+}
+
 /**
- * Scatters `count` background Fluid particles randomly across the world area.
+ * Places decorative Fluid-as-dust particles along world floor and wall top
+ * surfaces, with small mound noise in height.
  */
-function spawnBackgroundFluidParticles(
+function spawnBackgroundDustParticles(
   world: WorldState,
   count: number,
   rng: RngState,
 ): void {
   const profile = getElementProfile(ParticleKind.Fluid);
+  const segmentStartXWorld: number[] = [];
+  const segmentEndXWorld: number[] = [];
+  const segmentTopYWorld: number[] = [];
+  const segmentLengthWorld: number[] = [];
+  let totalLengthWorld = 0.0;
+
+  // World floor segment
+  segmentStartXWorld.push(0.0);
+  segmentEndXWorld.push(world.worldWidthWorld);
+  segmentTopYWorld.push(world.worldHeightWorld);
+  segmentLengthWorld.push(world.worldWidthWorld);
+  totalLengthWorld += world.worldWidthWorld;
+
+  // Top surfaces of level walls
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const startX = world.wallXWorld[wi];
+    const endX = startX + world.wallWWorld[wi];
+    const lengthWorld = endX - startX;
+    if (lengthWorld <= 2.0) continue;
+    segmentStartXWorld.push(startX);
+    segmentEndXWorld.push(endX);
+    segmentTopYWorld.push(world.wallYWorld[wi]);
+    segmentLengthWorld.push(lengthWorld);
+    totalLengthWorld += lengthWorld;
+  }
 
   for (let i = 0; i < count; i++) {
     if (world.particleCount >= MAX_PARTICLES) break;
     const idx = world.particleCount++;
 
-    world.positionXWorld[idx] = nextFloat(rng) * world.worldWidthWorld;
-    world.positionYWorld[idx] = nextFloat(rng) * world.worldHeightWorld;
+    let targetSegment = 0;
+    let pickLengthWorld = nextFloat(rng) * totalLengthWorld;
+    for (let si = 0; si < segmentLengthWorld.length; si++) {
+      pickLengthWorld -= segmentLengthWorld[si];
+      if (pickLengthWorld <= 0) {
+        targetSegment = si;
+        break;
+      }
+    }
+
+    const segmentStartX = segmentStartXWorld[targetSegment];
+    const segmentEndX = segmentEndXWorld[targetSegment];
+    const surfaceYWorld = segmentTopYWorld[targetSegment];
+    const moundHeightPx = sampleDustHeightPx(rng);
+
+    world.positionXWorld[idx] = nextFloatRange(rng, segmentStartX, segmentEndX);
+    world.positionYWorld[idx] = surfaceYWorld - moundHeightPx + nextFloatRange(rng, -0.35, 0.35);
     world.velocityXWorld[idx] = 0.0;
     world.velocityYWorld[idx] = 0.0;
     world.forceX[idx]            = 0.0;
@@ -166,11 +217,10 @@ function spawnBackgroundFluidParticles(
     world.ownerEntityId[idx]     = -1;
     world.anchorAngleRad[idx]    = 0.0;
     world.anchorRadiusWorld[idx] = 0.0;
-    world.disturbanceFactor[idx] = 0.0;
+    world.disturbanceFactor[idx] = 0.22 + moundHeightPx * 0.03;
 
-    const lifetimeVariance = nextFloatRange(rng, -profile.lifetimeVarianceTicks, profile.lifetimeVarianceTicks);
-    world.lifetimeTicks[idx] = Math.max(2.0, profile.lifetimeBaseTicks + lifetimeVariance);
-    world.ageTicks[idx]      = nextFloat(rng) * profile.lifetimeBaseTicks;
+    world.lifetimeTicks[idx] = profile.lifetimeBaseTicks;
+    world.ageTicks[idx]      = nextFloat(rng) * 120.0;
 
     world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
   }
@@ -322,7 +372,7 @@ export function startGameScreen(
   }
 
   // ── Spawn background Fluid particles ─────────────────────────────────────
-  spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
+  spawnBackgroundDustParticles(world, BACKGROUND_DUST_COUNT, levelRng);
 
   // ── Reserve grapple hook chain particle slots ─────────────────────────────
   initGrappleChainParticles(world, playerCluster.entityId);

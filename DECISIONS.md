@@ -147,3 +147,18 @@ and the player launches with accumulated momentum.  This creates a skill-ceiling
 mechanic: skilled players can build large speed with careful timing, but the rope
 will break under sustained tension.
 
+## Environmental Dust Layer (BUILD 23)
+
+- The background `Fluid` particle kind is now used as a decorative dust layer:
+  a thin dark-gold band resting on the world floor and on wall top surfaces.
+- Spawn placement is weighted by surface length and includes mound noise
+  (`0–4 px` high with `4` as a rare peak) to avoid a perfectly flat line.
+- Dust visibility no longer decays to zero.  `disturbanceFactor` decays toward a
+  low resting baseline so the layer remains faintly visible when calm.
+- Air disturbance is driven by both:
+  1. nearby fast-moving non-Fluid particles, and
+  2. one-tick landing burst events emitted by cluster movement on impact.
+  Landing bursts raise dust alpha and apply outward/upward impulse so jump
+  landings produce visible localized swirls/puffs.
+- Dust is non-interactive decoration only: it has no owner, deals no combat
+  effects, and is excluded from cross-owner contact-destruction logic.

@@ -4,6 +4,8 @@ import { RngState, createRng } from './rng';
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
 export const MAX_WALLS = 64;
+/** Max one-tick dust-air burst events emitted by landing clusters. */
+export const MAX_DUST_AIR_BURSTS = 16;
 
 export interface WorldState extends ParticleBuffers {
   tick: number;
@@ -91,6 +93,16 @@ export interface WorldState extends ParticleBuffers {
    * -1 if not yet allocated. These slots are reserved by the game screen at startup.
    */
   grappleParticleStartIndex: number;
+
+  // ---- Environmental dust-air bursts -------------------------------------
+  /** Number of active one-tick dust-air burst events emitted this frame. */
+  dustAirBurstCount: number;
+  /** Burst center X positions in world units. */
+  dustAirBurstXWorld: Float32Array;
+  /** Burst center Y positions in world units. */
+  dustAirBurstYWorld: Float32Array;
+  /** Burst strength scalar (unitless, nominal range [0, 2]). */
+  dustAirBurstStrength: Float32Array;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -129,6 +141,10 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleAttachFxXWorld: 0.0,
     grappleAttachFxYWorld: 0.0,
     grappleParticleStartIndex: -1,
+    dustAirBurstCount: 0,
+    dustAirBurstXWorld: new Float32Array(MAX_DUST_AIR_BURSTS),
+    dustAirBurstYWorld: new Float32Array(MAX_DUST_AIR_BURSTS),
+    dustAirBurstStrength: new Float32Array(MAX_DUST_AIR_BURSTS),
     ...createParticleBuffers(),
   };
 }

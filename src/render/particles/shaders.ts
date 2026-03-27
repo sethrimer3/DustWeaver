@@ -12,8 +12,8 @@
  *  - Shape clipping via gl_PointCoord — non-Physical kinds render as polygons.
  *  - Radial glow falloff for circle kinds; edge highlight for polygon kinds.
  *  - Additive blending (SRC_ALPHA, ONE) produces natural bloom.
- *  - Fluid particles (kind 14) are normally transparent; disturbanceFactor
- *    drives their alpha so they appear only when disturbed by nearby movement.
+ *  - Fluid particles (kind 14) are rendered as decorative dust: dim at rest,
+ *    brighter when disturbed by nearby movement and landing air bursts.
  *  - GLSL ES 1.00 for maximum device compatibility.
  */
 
@@ -93,7 +93,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 11) return vec3(0.27, 0.80, 0.27);  // Nature    — vivid green
     if (ki == 12) return vec3(0.67, 0.93, 1.00);  // Crystal   — icy bright blue
     if (ki == 13) return vec3(0.13, 0.00, 0.20);  // Void      — near-black purple
-    if (ki == 14) return vec3(0.55, 0.80, 1.00);  // Fluid     — pale aqua-blue
+    if (ki == 14) return vec3(0.55, 0.44, 0.16);  // Fluid     — dark gold dust
     if (ki == 15) return vec3(0.13, 0.60, 0.93);  // Water     — deep flowing blue
     if (ki == 16) return vec3(1.00, 0.13, 0.00);  // Lava      — deep molten red-orange
     if (ki == 17) return vec3(0.53, 0.53, 0.60);  // Stone     — cool grey
@@ -202,13 +202,13 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     float alpha;
 
     if (ki == 14) {
-      // Fluid background particle: completely transparent when undisturbed;
-      // glows as a soft pale-aqua radial blur when disturbed by nearby motion.
+      // Decorative dust: faintly visible at rest, brightens and swirls when
+      // disturbed by nearby movement.
       float glow = pow(max(0.0, 1.0 - dist * 2.0), 1.8);
       float core = pow(max(0.0, 1.0 - dist * 5.0), 3.0);
-      color += vec3(core * 0.35);
-      // disturbanceFactor drives visibility; ageFade prevents end-of-life flash.
-      alpha = glow * v_disturbanceFactor * ageFade * 0.55;
+      color += vec3(core * 0.25);
+      // disturbanceFactor includes a resting baseline and burst peaks.
+      alpha = glow * v_disturbanceFactor * ageFade * 0.75;
     } else if (ki == 16) {
       // Lava: intense molten core with hot orange-white center and red outer glow.
       float glow = pow(max(0.0, 1.0 - dist * 2.0), 1.4);
@@ -239,5 +239,4 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     gl_FragColor = vec4(color, alpha);
   }
 `.trim();
-
 
