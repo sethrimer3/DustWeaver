@@ -42,6 +42,12 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     ) {
       return null;
     }
+    // Migrate: fill in any fields added after the save was created.
+    // PlayerProgress is a flat structure (primitives and arrays only), so a
+    // shallow spread is sufficient — existing fields from the save are
+    // preserved while missing fields receive safe defaults.
+    const defaults = createDefaultProgress();
+    parsed.progress = { ...defaults, ...parsed.progress };
     return parsed;
   } catch {
     return null;
