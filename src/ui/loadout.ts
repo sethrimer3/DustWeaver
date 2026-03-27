@@ -182,7 +182,7 @@ export function showLoadoutScreen(
   el.style.cssText = `
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(5,5,15,0.97);
-    color: #eee; font-family: monospace;
+    color: #eee; font-family: 'Cinzel', serif;
     display: flex; flex-direction: column; align-items: center;
     overflow-y: auto; box-sizing: border-box; padding: 20px 16px 80px;
   `;
@@ -353,7 +353,7 @@ export function showLoadoutScreen(
   cancelBtn.textContent = '← Back';
   cancelBtn.style.cssText = `
     background: transparent; border: 2px solid #555; color: #aaa;
-    padding: 10px 22px; font-size: 0.9rem; font-family: monospace;
+    padding: 10px 22px; font-size: 0.9rem; font-family: 'Cinzel', serif;
     cursor: pointer; border-radius: 6px;
   `;
   cancelBtn.addEventListener('click', () => callbacks.onCancel());
@@ -363,7 +363,7 @@ export function showLoadoutScreen(
   startBtn.id = 'loadout-start-btn';
   startBtn.style.cssText = `
     background: transparent; border: 2px solid #00cfff; color: #00cfff;
-    padding: 10px 28px; font-size: 0.95rem; font-family: monospace;
+    padding: 10px 28px; font-size: 0.95rem; font-family: 'Cinzel', serif;
     cursor: pointer; border-radius: 6px; font-weight: bold;
   `;
   startBtn.addEventListener('click', () => {

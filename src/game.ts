@@ -7,6 +7,7 @@ import { createDefaultProgress, PlayerProgress } from './progression/playerProgr
 import { LevelDef } from './levels/levelDef';
 import { WORLD1_LEVELS } from './levels/world1';
 import { WORLD2_LEVELS } from './levels/world2';
+import { SaveSlotData, saveSaveSlot } from './progression/saveSlots';
 
 function getNextLevel(current: LevelDef): LevelDef | null {
   const source = current.worldNumber === 1 ? WORLD1_LEVELS : WORLD2_LEVELS;
@@ -18,23 +19,53 @@ function getNextLevel(current: LevelDef): LevelDef | null {
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
   let cleanup: (() => void) | null = null;
 
-  const progress: PlayerProgress = createDefaultProgress();
+  let progress: PlayerProgress = createDefaultProgress();
+
+  /** Active save-slot index (set when player picks a slot). */
+  let activeSlotIndex = 0;
+  /** Timestamp (ms) when gameplay started for the current session (for play-time tracking). */
+  let sessionStartMs = 0;
+  /** Active save data reference for persisting updates. */
+  let activeSaveData: SaveSlotData | null = null;
 
   /** The level the player has selected to play next. */
   let selectedLevel: LevelDef = WORLD1_LEVELS[0];
+
+  /** Persist the current save slot (update lastPlayed and accumulate play time). */
+  function persistSaveSlot(): void {
+    if (activeSaveData === null) return;
+    const now = Date.now();
+    if (sessionStartMs > 0) {
+      activeSaveData.playTimeMs += now - sessionStartMs;
+      sessionStartMs = now;
+    }
+    activeSaveData.lastPlayedIso = new Date(now).toISOString();
+    activeSaveData.progress = progress;
+    saveSaveSlot(activeSlotIndex, activeSaveData);
+  }
 
   function navigate(
     to: 'mainMenu' | 'worldMap' | 'loadout' | 'gameplay',
     loadout?: ParticleKind[],
   ): void {
+    // Persist progress when leaving gameplay
     if (cleanup !== null) {
+      if (activeSaveData !== null && sessionStartMs > 0) {
+        persistSaveSlot();
+      }
       cleanup();
       cleanup = null;
     }
 
     if (to === 'mainMenu') {
       cleanup = showMainMenu(uiRoot, {
-        onPlay: () => navigate('worldMap'),
+        onPlay: (slotIndex, saveData) => {
+          activeSlotIndex = slotIndex;
+          activeSaveData = saveData;
+          progress = saveData.progress;
+          sessionStartMs = Date.now();
+          navigate('worldMap');
+        },
       });
     } else if (to === 'worldMap') {
       cleanup = showWorldMap(uiRoot, progress, {
@@ -70,6 +101,9 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
               progress.world2UnlockedCount = Math.min(WORLD2_LEVELS.length, completedIndex + 2);
             }
           }
+
+          // Persist after level completion
+          persistSaveSlot();
 
           if (target === 'menu') {
             navigate('mainMenu');

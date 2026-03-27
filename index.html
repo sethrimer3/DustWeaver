@@ -9,7 +9,14 @@
   <title>DustWeaver</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @font-face {
+      font-family: 'Cinzel';
+      src: url('font/Cinzel/Cinzel-VariableFont_wght.ttf') format('truetype');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cinzel', serif; }
     body { background: #000; overflow: hidden; width: 100vw; height: 100vh; touch-action: none; }
     canvas { display: block; touch-action: none; }
     #game-canvas { position: absolute; top: 0; left: 0; }
