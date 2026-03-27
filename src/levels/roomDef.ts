@@ -81,4 +81,6 @@ export interface RoomDef {
   playerSpawnBlock: readonly [number, number];
   /** Transition tunnels connecting to other rooms. */
   transitions: readonly RoomTransitionDef[];
+  /** Skill tomb positions (block units). Empty array if none. */
+  skillTombs: readonly { xBlock: number; yBlock: number }[];
 }
