@@ -44,7 +44,7 @@ function buildWorldGrid(
     btn.style.cssText = `
       background: rgba(0,0,0,0.55); border: 2px solid ${isUnlocked ? tc.border : '#333'};
       color: ${isUnlocked ? tc.text : '#444'}; padding: 0.8rem 1.4rem;
-      font-size: ${isBoss ? '1rem' : '0.9rem'}; font-family: monospace;
+      font-size: ${isBoss ? '1rem' : '0.9rem'}; font-family: 'Cinzel', serif;
       cursor: ${isUnlocked ? 'pointer' : 'default'}; border-radius: 6px;
       min-width: 160px; text-align: left; transition: all 0.18s;
       box-shadow: ${isUnlocked ? `0 0 12px ${tc.glow}` : 'none'};
@@ -101,7 +101,7 @@ export function showWorldMap(
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
     padding-top: 1.5rem; padding-bottom: 2rem;
-    color: #fff; font-family: monospace;
+    color: #fff; font-family: 'Cinzel', serif;
     overflow-y: auto;
   `;
 

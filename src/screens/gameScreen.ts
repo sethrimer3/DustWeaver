@@ -343,7 +343,7 @@ export function startGameScreen(
     mapButton.style.cssText = `
       position: absolute; top: 16px; right: 16px;
       background: rgba(0,0,0,0.6); border: 2px solid #00cfff; color: #00cfff;
-      padding: 10px 20px; font-size: 1rem; font-family: monospace;
+      padding: 10px 20px; font-size: 1rem; font-family: 'Cinzel', serif;
       cursor: pointer; border-radius: 6px; touch-action: manipulation;
     `;
     mapButton.addEventListener('click', () => {
