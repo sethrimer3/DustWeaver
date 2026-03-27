@@ -150,11 +150,11 @@ const _TILE_TABLE: TileSpec[] = ((): TileSpec[] => {
   set(_S | _E,           'corner', -_HALF_PI);
   set(_N | _W,           'corner', _HALF_PI);
 
-  // 3 neighbors — edge; default: N+E+W solid, S exposed
-  set(_N | _E | _W,      'edge', 0);
-  set(_N | _E | _S,      'edge', _HALF_PI);
-  set(_N | _S | _W,      'edge', -_HALF_PI);
-  set(_E | _S | _W,      'edge', _PI);
+  // 3 neighbors — edge; default sprite faces NORTH, so we add π to orient correctly.
+  set(_N | _E | _W,      'edge', _PI);          // S exposed
+  set(_N | _E | _S,      'edge', -_HALF_PI);    // W exposed
+  set(_N | _S | _W,      'edge', _HALF_PI);     // E exposed
+  set(_E | _S | _W,      'edge', 0);            // N exposed
 
   // 4 neighbors — fully surrounded
   set(_N | _E | _S | _W, 'block', 0);
@@ -177,27 +177,24 @@ function _isOccupied(col: number, row: number): boolean {
   return _occupied.has(_tileKey(col, row));
 }
 
-/** Populates _occupied from all wall AABBs in screen space. */
+/**
+ * Populates _occupied from all wall AABBs in world-space tile coordinates.
+ *
+ * Using world-space coordinates (instead of screen-space) ensures the tile
+ * grid is stable — blocks translate smoothly with the camera offset rather
+ * than snapping to screen-aligned grid positions.
+ */
 function _buildOccupancy(
   walls:         WallSnapshot,
-  offsetXPx:     number,
-  offsetYPx:     number,
-  scalePx:       number,
   blockSizePx:   number,
 ): void {
   _occupied.clear();
-  const tileSizePx = blockSizePx * scalePx;
 
   for (let wi = 0; wi < walls.count; wi++) {
-    const screenX = walls.xWorld[wi] * scalePx + offsetXPx;
-    const screenY = walls.yWorld[wi] * scalePx + offsetYPx;
-    const screenW = walls.wWorld[wi] * scalePx;
-    const screenH = walls.hWorld[wi] * scalePx;
-
-    const colStart = Math.floor(screenX / tileSizePx);
-    const rowStart = Math.floor(screenY / tileSizePx);
-    const colCount = Math.max(1, Math.ceil((screenX + screenW) / tileSizePx) - colStart);
-    const rowCount = Math.max(1, Math.ceil((screenY + screenH) / tileSizePx) - rowStart);
+    const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
+    const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
+    const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
+    const rowCount = Math.max(1, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
 
     for (let r = 0; r < rowCount; r++) {
       for (let c = 0; c < colCount; c++) {
@@ -311,9 +308,9 @@ export function renderWallSprites(
   const walls = snapshot.walls;
   if (walls.count === 0) return;
 
-  const tileSizePx = blockSizePx * scalePx;
+  const tileSizeScreen = blockSizePx * scalePx;
 
-  _buildOccupancy(walls, offsetXPx, offsetYPx, scalePx, blockSizePx);
+  _buildOccupancy(walls, blockSizePx);
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -336,9 +333,10 @@ export function renderWallSprites(
 
     const spec = _TILE_TABLE[mask];
 
-    const tileX  = col * tileSizePx;
-    const tileY  = row * tileSizePx;
-    const halfSz = tileSizePx * 0.5;
+    // Convert world-space tile position to screen space for smooth scrolling
+    const tileX  = col * blockSizePx * scalePx + offsetXPx;
+    const tileY  = row * blockSizePx * scalePx + offsetYPx;
+    const halfSz = tileSizeScreen * 0.5;
     const cx     = tileX + halfSz;
     const cy     = tileY + halfSz;
 
@@ -346,22 +344,22 @@ export function renderWallSprites(
 
     if (isSpriteReady(img)) {
       if (spec.rotationRad === 0) {
-        ctx.drawImage(img, tileX, tileY, tileSizePx, tileSizePx);
+        ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(spec.rotationRad);
-        ctx.drawImage(img, -halfSz, -halfSz, tileSizePx, tileSizePx);
+        ctx.drawImage(img, -halfSz, -halfSz, tileSizeScreen, tileSizeScreen);
         ctx.restore();
       }
     } else {
-      _drawFallbackTile(ctx, tileX, tileY, tileSizePx);
+      _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
     }
 
     // Draw vertex overlay at concave inner corners of corner tiles.
     if (spec.variant === 'corner') {
       _drawVertexOverlays(
-        ctx, col, row, tileX, tileY, tileSizePx,
+        ctx, col, row, tileX, tileY, tileSizeScreen,
         northSolid, eastSolid, southSolid, westSolid,
       );
     }
