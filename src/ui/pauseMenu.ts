@@ -295,7 +295,6 @@ export function showPauseMenu(
     state.isDebugOn ? 'Debug Off' : 'Debug On',
     () => {
       callbacks.onToggleDebug();
-      state.isDebugOn = !state.isDebugOn;
       debugBtn.textContent = state.isDebugOn ? 'Debug Off' : 'Debug On';
     },
   );

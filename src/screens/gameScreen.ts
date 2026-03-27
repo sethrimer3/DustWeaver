@@ -435,6 +435,7 @@ export function startGameScreen(
       },
       onToggleDebug: () => {
         isDebugMode = !isDebugMode;
+        pauseMenuState.isDebugOn = isDebugMode;
       },
     });
   }
@@ -668,11 +669,15 @@ export function startGameScreen(
     } else {
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      renderParticles(ctx, snapshot, ox, oy, zoom);
     }
 
-    // ── World background with parallax ────────────────────────────────────
+    // ── World background with parallax (behind everything else) ───────────
     renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, ox, oy);
+
+    // Particles (Canvas 2D fallback only — WebGL draws on its own canvas)
+    if (!webglRenderer.isAvailable) {
+      renderParticles(ctx, snapshot, ox, oy, zoom);
+    }
 
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, ox, oy, zoom);

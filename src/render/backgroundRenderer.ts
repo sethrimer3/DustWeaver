@@ -20,6 +20,10 @@ const PROC_TILE_SIZE = 256;
 /** Vite base URL for public assets. */
 const BASE = import.meta.env.BASE_URL;
 
+/** Path template for world background images (relative to publicDir). */
+const WORLD_BG_PATH = (worldNumber: number): string =>
+  `${BASE}SPRITES/WORLDS/W-${worldNumber}/background/background.png`;
+
 // ─── Image / procedural cache ────────────────────────────────────────────────
 
 const _bgImageCache = new Map<number, HTMLCanvasElement>();
@@ -39,7 +43,7 @@ function _getOrCreateBgTile(worldNumber: number): HTMLCanvasElement {
 
   // Attempt to load the real background image
   const img = new Image();
-  img.src = `${BASE}SPRITES/WORLDS/W-${worldNumber}/background/background.png`;
+  img.src = WORLD_BG_PATH(worldNumber);
   img.onload = () => {
     // Replace procedural tile with the loaded image drawn onto a canvas
     const c = document.createElement('canvas');
@@ -123,6 +127,14 @@ function _hash(n: number): number {
   return x;
 }
 
+/**
+ * Wraps an offset into the range [-tileSize, 0) so that tiling starts
+ * just off-screen to the left/top and seamlessly covers the viewport.
+ */
+function wrapToTileStart(offset: number, tileSize: number): number {
+  return -((((-offset) % tileSize) + tileSize) % tileSize);
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -153,8 +165,8 @@ export function renderWorldBackground(
   const pyOff = cameraOffsetYPx * PARALLAX_FACTOR;
 
   // Compute starting tile position so tiles seamlessly cover the viewport
-  const startX = -((((-pxOff) % tw) + tw) % tw);
-  const startY = -((((-pyOff) % th) + th) % th);
+  const startX = wrapToTileStart(pxOff, tw);
+  const startY = wrapToTileStart(pyOff, th);
 
   ctx.save();
   for (let y = startY; y < viewportHeightPx; y += th) {
