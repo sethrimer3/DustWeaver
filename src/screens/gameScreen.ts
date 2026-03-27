@@ -212,15 +212,6 @@ function worldBgColor(worldNumber: number): string {
   }
 }
 
-/** Background fill colour as RGB floats for WebGL. */
-function worldBgColorRgb(worldNumber: number): [number, number, number] {
-  switch (worldNumber) {
-    case 0:  return [0.051, 0.102, 0.059]; // #0d1a0f
-    case 1:  return [0.020, 0.078, 0.031]; // #051408
-    case 2:  return [0.031, 0.047, 0.102]; // #080c1a
-    default: return [0.039, 0.039, 0.071]; // #0a0a12
-  }
-}
 
 /**
  * Draws a gradient darkness overlay at room transition tunnel edges.
@@ -305,7 +296,7 @@ export function startGameScreen(
   resizeCanvas();
 
   if (webglRenderer.isAvailable) {
-    canvas.parentElement!.insertBefore(webglRenderer.canvas, canvas);
+    canvas.insertAdjacentElement('afterend', webglRenderer.canvas);
   }
 
   const ctx = canvas.getContext('2d')!;
@@ -326,8 +317,6 @@ export function startGameScreen(
 
     // Apply world-specific block sprites and background
     setActiveBlockSpriteWorld(room.worldNumber);
-    const [bgR, bgG, bgB] = worldBgColorRgb(room.worldNumber);
-    webglRenderer.setBackgroundColor(bgR, bgG, bgB);
 
     // Reset world state
     world.tick = 0;
@@ -804,11 +793,6 @@ export function startGameScreen(
     // ── World background with parallax (behind everything else) ───────────
     renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, ox, oy);
 
-    // Particles (Canvas 2D fallback only — WebGL draws on its own canvas)
-    if (!webglRenderer.isAvailable) {
-      renderParticles(ctx, snapshot, ox, oy, zoom);
-    }
-
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, ox, oy, zoom);
     renderClusters(ctx, snapshot, ox, oy, zoom);
@@ -821,6 +805,14 @@ export function startGameScreen(
 
     // Skill tombs (sprite + dust particles)
     skillTombRenderer.render(ctx, ox, oy, zoom);
+
+    // Particles drawn on top of all game layers (Canvas 2D fallback only —
+    // WebGL draws on its own transparent canvas inserted after the 2D canvas in
+    // the DOM via insertAdjacentElement('afterend'), keeping it above all 2D
+    // layers; the transparent clear ensures game content shows through)
+    if (!webglRenderer.isAvailable) {
+      renderParticles(ctx, snapshot, ox, oy, zoom);
+    }
 
     // Debug-only HUD and room name
     if (isDebugMode) {
