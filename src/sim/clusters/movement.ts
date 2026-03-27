@@ -1,109 +1,215 @@
 /**
- * Cluster movement — platformer physics with gravity, jumping, and walking.
+ * Cluster movement — platformer physics for player and enemies.
  *
- * Player movement (Hollow Knight / Celeste inspired):
- *   • A/D keys move the player left/right with crisp, snappy acceleration.
- *   • Higher gravity + fast-fall multiplier makes jumps feel weighty yet agile.
- *   • Variable jump height: releasing the jump key early cuts the upward velocity,
- *     enabling both short hops and full arcs from the same button.
- *   • Coyote time: jump is still allowed for a brief window after walking off a ledge.
- *   • Jump buffer: a jump input received slightly before landing is remembered and
- *     fires as soon as the player touches down.
- *   • Dash (Shift key): horizontal velocity burst on a 3-second cooldown.
+ * === Player movement design (Celeste / Hollow Knight style) ===
  *
- * Enemy movement:
- *   • Enemies walk horizontally toward the player at a fixed speed.
- *   • Gravity is applied so they stand on platforms.
- *   • No enemy jumping — simple patrol / seek behaviour only.
+ * All major tuning constants are exposed at the top of this file.
+ * Jump physics are derived from explicit kinematic targets (jump height and
+ * time to apex) so changing the targets produces predictable results.
  *
- * Platform & floor collision:
- *   • After integrating position, the cluster box bottom is tested against all
- *     wall top surfaces and the world floor.  When a landing is detected the
- *     cluster is snapped to the surface, vertical velocity is zeroed, and
- *     isGroundedFlag is set to 1.
- *   • Left/right world bounds are enforced with an edge margin.
+ * Key features:
+ *   • Rise / fall gravity split — heavier fall feels snappier and more readable.
+ *   • Variable jump height via jump-cut gravity (applying extra gravity while
+ *     rising with the jump key released gives shorter, intentional hops).
+ *   • Coyote time — jump still allowed briefly after walking off a ledge.
+ *   • Jump buffer — jump input remembered briefly before landing.
+ *   • Direct acceleration model — no lerp/alpha blending; forces are applied
+ *     per-frame so the player reaches top speed quickly and turns feel snappy.
+ *   • Turn acceleration — higher acceleration rate when reversing direction.
+ *   • Wall slide — pressing into a solid wall while falling caps descent speed.
+ *   • Wall jump — launch away from a wall at a fixed vector; a post-jump
+ *     lockout prevents instant re-grab and infinite altitude climbing.
+ *   • Dash — horizontal burst on a cooldown.
  *
- * Called as step 0 in the tick pipeline (before all force/integration passes)
- * so cluster anchor positions are stable for the entire tick.
+ * === Enemy movement ===
+ *   • Walk horizontally toward the player with exponential-blend acceleration.
+ *   • Gravity applied so enemies land on platforms.
+ *   • No jumping or wall interaction.
+ *
+ * === Platform collision ===
+ *   • Thin walls (h ≤ THIN_OBSTACLE_MAX_HEIGHT_WORLD) are top-surface-only.
+ *   • Thick solid walls use a sweep-based axis-priority resolver.
+ *   • Wall-touch flags (left / right) are set by the solid-wall resolver and
+ *     used this tick for wall-slide capping; used next tick for wall-jump.
+ *
+ * Called as step 0 in the tick pipeline.
  */
 
 import { WorldState } from '../world';
 import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD } from './dashConstants';
 
-// ---- Gravity & jump --------------------------------------------------------
-/** Downward acceleration applied each tick (world units per second²). */
-const GRAVITY_WORLD_PER_SEC2 = 1100.0;
+// ============================================================================
+// Jump physics — derived from kinematic targets
+// ============================================================================
+
 /**
- * Extra gravity multiplier applied while the player is falling (velocityY > 0).
- * Creates a weighty-landing feel without being overly punishing.
+ * Target full-jump height in world units.
+ * 60 px = exactly 2 standard blocks (each 30 px tall).
  */
-const FALL_GRAVITY_MULTIPLIER = 2.0;
-/** Maximum downward fall speed (world units per second) — prevents tunnelling. */
+const JUMP_HEIGHT_WORLD = 60.0;
+
+/**
+ * Time from jump launch to apex (seconds).
+ * Shorter = snappier arc; 0.35 s gives a tight, readable trajectory.
+ */
+const TIME_TO_APEX_SEC = 0.35;
+
+/**
+ * Rise gravity (px/s²): computed from jump height + apex time.
+ *   gravity = (2 × jumpHeight) / (timeToApex²) ≈ 979.6 px/s²
+ * Do not edit directly — change JUMP_HEIGHT_WORLD / TIME_TO_APEX_SEC instead.
+ */
+const RISE_GRAVITY_WORLD_PER_SEC2 = (2.0 * JUMP_HEIGHT_WORLD) / (TIME_TO_APEX_SEC * TIME_TO_APEX_SEC);
+
+/**
+ * Initial upward jump velocity (positive value; negated when applied).
+ *   jumpVelocity = gravity × timeToApex ≈ 342.8 px/s
+ * Do not edit directly — change JUMP_HEIGHT_WORLD / TIME_TO_APEX_SEC instead.
+ */
+const PLAYER_JUMP_SPEED_WORLD = RISE_GRAVITY_WORLD_PER_SEC2 * TIME_TO_APEX_SEC;
+
+/**
+ * Fall gravity (px/s²).  Stronger than rise gravity so landings feel weighty
+ * and the downward arc is visibly faster than the upward arc.  ~1600 px/s²
+ * gives a clean asymmetric feel without being punishing.
+ */
+const FALL_GRAVITY_WORLD_PER_SEC2 = 1600.0;
+
+/**
+ * Jump-cut gravity multiplier.
+ * While the player is still rising (velocityY < 0) and the jump key is NOT
+ * held, gravity is scaled by this factor — producing a shorter hop on early
+ * release without any abrupt velocity clamp.  ~2.5 gives a clean range from
+ * short quick hops to full two-block arcs.
+ */
+const JUMP_CUT_GRAVITY_MULTIPLIER = 2.5;
+
+/** Maximum downward fall speed (px/s).  Prevents tunnelling at high speeds. */
 const TERMINAL_VELOCITY_WORLD_PER_SEC = 900.0;
-/** Upward impulse applied on jump (world units per second). */
-const PLAYER_JUMP_SPEED_WORLD = 700.0;
+
+// ============================================================================
+// Coyote time & jump buffer
+// ============================================================================
+
 /**
- * Fraction of upward velocity retained when the jump key is released early.
- * Lower = shorter minimum hop.  Applied only while the player is still rising.
- */
-const JUMP_CUT_MULTIPLIER = 0.40;
-/**
- * Ticks after leaving a grounded surface during which a jump is still accepted.
- * Gives the player a brief "coyote time" grace window (~0.1 s at 60 fps).
+ * Ticks after leaving a grounded surface during which a jump is still allowed
+ * (coyote time).  At 60 fps, 6 ticks ≈ 0.10 s.
  */
 const COYOTE_TIME_TICKS = 6;
-/**
- * Ticks a jump input is remembered while the player is airborne.
- * When the player lands while bufferTicks > 0, the jump fires immediately.
- */
-const JUMP_BUFFER_TICKS = 8;
 
-// ---- Player walk constants -------------------------------------------------
-/** Maximum horizontal speed of the player cluster (world units per second). */
-const PLAYER_MAX_SPEED_WORLD_PER_SEC = 300.0;
-/** How quickly the player reaches max speed from rest while grounded (snappy). */
-const PLAYER_ACCEL_PER_SEC = 60.0;
-/** Air-control acceleration — softer than ground to preserve momentum in the air. */
-const PLAYER_AIR_ACCEL_PER_SEC = 30.0;
-/** Floor friction: how quickly the player stops when grounded and no input is given. */
-const PLAYER_GROUND_DECEL_PER_SEC = 80.0;
-/** Air drag: minimal deceleration while airborne so the player keeps horizontal momentum. */
-const PLAYER_AIR_DECEL_PER_SEC = 10.0;
-/** Speed burst applied on a horizontal dash (world units per second). */
+/**
+ * Ticks a jump input is remembered while airborne (jump buffer).
+ * When the player lands while bufferTicks > 0 the jump fires immediately.
+ * At 60 fps, 6 ticks ≈ 0.10 s.
+ */
+const JUMP_BUFFER_TICKS = 6;
+
+// ============================================================================
+// Horizontal movement
+// ============================================================================
+
+/** Maximum horizontal run speed (px/s). */
+const MAX_RUN_SPEED_WORLD_PER_SEC = 140.0;
+
+/** Ground acceleration: how quickly the player builds up speed on the ground (px/s²). */
+const GROUND_ACCELERATION_PER_SEC2 = 1200.0;
+
+/** Ground deceleration: how quickly the player stops on the ground when no input (px/s²). */
+const GROUND_DECELERATION_PER_SEC2 = 1500.0;
+
+/** Air acceleration: slightly reduced control while airborne (px/s²). */
+const AIR_ACCELERATION_PER_SEC2 = 900.0;
+
+/** Air deceleration: gentle slowdown while airborne with no input (px/s²). */
+const AIR_DECELERATION_PER_SEC2 = 1000.0;
+
+/**
+ * Turn acceleration: applied when reversing horizontal direction (px/s²).
+ * Higher than ground acceleration so direction changes feel crisp and snappy.
+ */
+const TURN_ACCELERATION_PER_SEC2 = 2200.0;
+
+/** Speed burst applied on a horizontal dash (px/s). */
 const PLAYER_DASH_SPEED_WORLD = 560.0;
 
-// ---- Enemy walk constants --------------------------------------------------
-/** Maximum horizontal chase speed for enemy clusters (world units per second). */
-const ENEMY_MAX_SPEED_WORLD_PER_SEC = 90.0;
-/** Enemy horizontal acceleration rate. */
-const ENEMY_ACCEL_PER_SEC = 8.0;
+// ============================================================================
+// Wall slide
+// ============================================================================
+
 /**
- * Horizontal distance (world units) below which enemies stop advancing.
+ * Maximum downward speed while wall-sliding (px/s).
+ * The player descends slowly and controllably when pressing into a solid wall
+ * in the air.  Only active when the player is pushing toward the wall and the
+ * wall-jump lockout is not running.
+ */
+const WALL_SLIDE_MAX_FALL_SPEED = 80.0;
+
+// ============================================================================
+// Wall jump
+// ============================================================================
+
+/**
+ * Horizontal launch speed away from the wall on a wall jump (px/s).
+ * Should exceed MAX_RUN_SPEED so the player is pushed meaningfully away even
+ * while holding the opposite direction.
+ */
+const WALL_JUMP_X_SPEED_WORLD = 160.0;
+
+/**
+ * Vertical launch speed on a wall jump (px/s, applied upward).
+ * Slightly below a full ground jump to prevent net altitude gain when chaining
+ * wall jumps on the same wall.
+ */
+const WALL_JUMP_Y_SPEED_WORLD = 320.0;
+
+/**
+ * Ticks after a wall jump during which the same-side wall sensor is suppressed.
+ * Prevents instant re-grab and ensures the player is physically away from the
+ * wall before another wall jump becomes available.
+ * At 60 fps, 20 ticks ≈ 0.33 s.
+ */
+const WALL_JUMP_LOCKOUT_TICKS = 20;
+
+// ============================================================================
+// Enemy movement
+// ============================================================================
+
+/** Maximum horizontal chase speed for enemy clusters (px/s). */
+const ENEMY_MAX_SPEED_WORLD_PER_SEC = 90.0;
+
+/** Enemy horizontal acceleration rate (exponential blend factor per second). */
+const ENEMY_ACCEL_PER_SEC = 8.0;
+
+/**
+ * Horizontal distance (px) below which enemies stop advancing.
  * Keeps them in a comfortable attack range.
  */
 const ENEMY_ENGAGE_DIST_WORLD = 60.0;
 
-// ---- World bounds ----------------------------------------------------------
+// ============================================================================
+// World bounds
+// ============================================================================
+
 /** Horizontal margin from world edges within which clusters are clamped. */
 const CLUSTER_EDGE_MARGIN_WORLD = 10.0;
-/**
- * Maximum vertical overlap (world units) that still triggers a platform snap.
- * Must exceed the maximum cluster displacement in one tick (≈ terminal velocity / 60).
- */
-const PLATFORM_SNAP_TOLERANCE_WORLD = 20.0;
-/** Air platforms at or below this thickness remain top-only "thin" obstacles. */
-const THIN_OBSTACLE_MAX_HEIGHT_WORLD = 34.0;
 
 /**
- * Checks the cluster box (bottom edge) against all wall top surfaces and the
- * world floor.  When a landing surface is found, snaps the cluster on top of
- * it, zeroes vertical velocity, and sets isGroundedFlag to 1.
- *
- * Only "landing from above" collisions are resolved (velocity ≥ 0 downward or
- * already standing).  Side / ceiling collisions are handled by particle wall
- * forces alone.
- *
- * Returns true if a landing surface was found.
+ * Maximum vertical overlap (px) that still triggers a platform snap.
+ * Must exceed the maximum cluster displacement per tick (≈ terminal vel / 60).
+ */
+const PLATFORM_SNAP_TOLERANCE_WORLD = 20.0;
+
+/** Walls at or below this height are treated as top-surface-only thin platforms. */
+const THIN_OBSTACLE_MAX_HEIGHT_WORLD = 34.0;
+
+// ============================================================================
+// Collision helpers
+// ============================================================================
+
+/**
+ * Resolves the cluster box against the world floor and thin platform top surfaces.
+ * Resets isGroundedFlag to 0 on entry, then sets it to 1 if a landing is found.
+ * Returns true if the cluster landed this tick.
  */
 function resolveClusterFloorCollision(cluster: import('./state').ClusterState, world: WorldState): boolean {
   cluster.isGroundedFlag = 0;
@@ -117,13 +223,13 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
   // ── World floor ───────────────────────────────────────────────────────────
   const floorY = world.worldHeightWorld;
   if (clusterBottom >= floorY) {
-    cluster.positionYWorld  = floorY - hh;
-    cluster.velocityYWorld  = 0;
-    cluster.isGroundedFlag  = 1;
+    cluster.positionYWorld = floorY - hh;
+    cluster.velocityYWorld = 0;
+    cluster.isGroundedFlag = 1;
     return true;
   }
 
-  // ── Walls (platforms) ─────────────────────────────────────────────────────
+  // ── Thin wall top surfaces ─────────────────────────────────────────────────
   for (let wi = 0; wi < world.wallCount; wi++) {
     const wallLeft  = world.wallXWorld[wi];
     const wallRight = wallLeft + world.wallWWorld[wi];
@@ -131,10 +237,8 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
     const wallH     = world.wallHWorld[wi];
     if (wallH > THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
 
-    // Horizontal overlap required
     if (clusterRight <= wallLeft || clusterLeft >= wallRight) continue;
 
-    // Cluster bottom just passed through or is sitting on the wall top surface
     if (
       clusterBottom >= wallTop &&
       clusterBottom <= wallTop + PLATFORM_SNAP_TOLERANCE_WORLD &&
@@ -150,10 +254,14 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
 }
 
 /**
- * Returns true if the cluster landed on the top surface of any solid wall this
- * tick.  Used by the caller to trigger buffered jumps consistently on thick
- * platforms (including the main floor) just as thin platforms do via
- * resolveClusterFloorCollision.
+ * Resolves the cluster against solid (thick) wall boxes using a sweep-based
+ * axis-priority test.  Sets isGroundedFlag for top-surface landings.
+ *
+ * Also sets isTouchingWallLeftFlag / isTouchingWallRightFlag on the player
+ * cluster when it is pushed out of a wall's left or right face — these flags
+ * are used this tick for wall-slide capping and next tick for wall-jump input.
+ *
+ * Returns true if the cluster landed on a top surface this tick.
  */
 function resolveClusterSolidWallCollision(
   cluster: import('./state').ClusterState,
@@ -166,24 +274,25 @@ function resolveClusterSolidWallCollision(
   let landed = false;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
-    const wallLeft = world.wallXWorld[wi];
-    const wallTop = world.wallYWorld[wi];
-    const wallRight = wallLeft + world.wallWWorld[wi];
-    const wallBottom = wallTop + world.wallHWorld[wi];
-    const wallH = world.wallHWorld[wi];
+    const wallLeft   = world.wallXWorld[wi];
+    const wallTop    = world.wallYWorld[wi];
+    const wallRight  = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop  + world.wallHWorld[wi];
+    const wallH      = world.wallHWorld[wi];
     if (wallH <= THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
 
-    const left = cluster.positionXWorld - hw;
-    const right = cluster.positionXWorld + hw;
-    const top = cluster.positionYWorld - hh;
+    const left   = cluster.positionXWorld - hw;
+    const right  = cluster.positionXWorld + hw;
+    const top    = cluster.positionYWorld - hh;
     const bottom = cluster.positionYWorld + hh;
     if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
 
-    const prevLeft = prevX - hw;
-    const prevRight = prevX + hw;
-    const prevTop = prevY - hh;
+    const prevLeft   = prevX - hw;
+    const prevRight  = prevX + hw;
+    const prevTop    = prevY - hh;
     const prevBottom = prevY + hh;
 
+    // ── Sweep-based exact face detection ──────────────────────────────────
     if (prevBottom <= wallTop && cluster.velocityYWorld >= 0) {
       cluster.positionYWorld = wallTop - hh;
       cluster.velocityYWorld = 0;
@@ -199,19 +308,22 @@ function resolveClusterSolidWallCollision(
     if (prevRight <= wallLeft && cluster.velocityXWorld >= 0) {
       cluster.positionXWorld = wallLeft - hw;
       if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
       continue;
     }
     if (prevLeft >= wallRight && cluster.velocityXWorld <= 0) {
       cluster.positionXWorld = wallRight + hw;
       if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
       continue;
     }
 
-    const penLeft = right - wallLeft;
-    const penRight = wallRight - left;
-    const penTop = bottom - wallTop;
+    // ── Fallback: minimum-penetration axis resolution ──────────────────────
+    const penLeft   = right  - wallLeft;
+    const penRight  = wallRight  - left;
+    const penTop    = bottom - wallTop;
     const penBottom = wallBottom - top;
-    const minPen = Math.min(penLeft, penRight, penTop, penBottom);
+    const minPen    = Math.min(penLeft, penRight, penTop, penBottom);
 
     if (minPen === penTop) {
       cluster.positionYWorld = wallTop - hh;
@@ -224,18 +336,24 @@ function resolveClusterSolidWallCollision(
     } else if (minPen === penLeft) {
       cluster.positionXWorld = wallLeft - hw;
       if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
     } else {
       cluster.positionXWorld = wallRight + hw;
       if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
     }
   }
   return landed;
 }
 
+// ============================================================================
+// Main cluster movement update (step 0 of tick pipeline)
+// ============================================================================
+
 export function applyClusterMovement(world: WorldState): void {
   const dtSec = world.dtMs / 1000.0;
 
-  // ── Locate the player cluster (needed by enemy AI) ────────────────────────
+  // ── Locate the player cluster position (needed by enemy AI) ───────────────
   let playerX = 0.0;
   let playerFound = false;
   for (let ci = 0; ci < world.clusters.length; ci++) {
@@ -254,18 +372,8 @@ export function applyClusterMovement(world: WorldState): void {
     const cluster = world.clusters[ci];
     if (cluster.isAliveFlag === 0) continue;
 
-    // ── Apply gravity (with fast-fall multiplier for player) ───────────────
-    let gravThisTick = GRAVITY_WORLD_PER_SEC2;
-    if (cluster.isPlayerFlag === 1 && cluster.velocityYWorld > 0) {
-      gravThisTick *= FALL_GRAVITY_MULTIPLIER;
-    }
-    cluster.velocityYWorld += gravThisTick * dtSec;
-    if (cluster.velocityYWorld > TERMINAL_VELOCITY_WORLD_PER_SEC) {
-      cluster.velocityYWorld = TERMINAL_VELOCITY_WORLD_PER_SEC;
-    }
-
     if (cluster.isPlayerFlag === 1) {
-      // ── Dash cooldown tick-down ─────────────────────────────────────────
+      // ── Tick down all cooldown / buffer timers ──────────────────────────
       if (cluster.dashCooldownTicks > 0) {
         cluster.dashCooldownTicks -= 1;
         if (cluster.dashCooldownTicks === 0) {
@@ -275,26 +383,36 @@ export function applyClusterMovement(world: WorldState): void {
       if (cluster.dashRechargeAnimTicks > 0) {
         cluster.dashRechargeAnimTicks -= 1;
       }
-
-      // ── Coyote time tick-down ───────────────────────────────────────────
       if (cluster.coyoteTimeTicks > 0) {
         cluster.coyoteTimeTicks -= 1;
       }
-
-      // ── Jump buffer tick-down ───────────────────────────────────────────
       if (cluster.jumpBufferTicks > 0) {
         cluster.jumpBufferTicks -= 1;
       }
-
-      // ── Variable jump height: cut upward velocity on key-release edge ──
-      // Detect the transition from held→not-held to apply the cut exactly once.
-      const jumpJustReleased = cluster.prevJumpHeldFlag === 1 && !world.playerJumpHeldFlag;
-      if (jumpJustReleased && cluster.velocityYWorld < 0) {
-        cluster.velocityYWorld *= JUMP_CUT_MULTIPLIER;
+      if (cluster.wallJumpLockoutTicks > 0) {
+        cluster.wallJumpLockoutTicks -= 1;
       }
-      cluster.prevJumpHeldFlag = world.playerJumpHeldFlag;
 
-      // ── Player horizontal dash burst (one-shot impulse) ─────────────────
+      // ── Apply gravity (rise / fall split + jump-cut multiplier) ────────
+      // When grappling, gravity still applies; the grapple constraint
+      // (step 0.25) projects the player back onto the rope circle afterward.
+      let grav: number;
+      if (cluster.velocityYWorld < 0) {
+        // Rising: use heavier gravity if the jump key was released early,
+        // giving a shorter hop without any abrupt velocity clamp.
+        grav = world.playerJumpHeldFlag === 1
+          ? RISE_GRAVITY_WORLD_PER_SEC2
+          : RISE_GRAVITY_WORLD_PER_SEC2 * JUMP_CUT_GRAVITY_MULTIPLIER;
+      } else {
+        // Falling: stronger gravity for a snappier, more readable descent.
+        grav = FALL_GRAVITY_WORLD_PER_SEC2;
+      }
+      cluster.velocityYWorld += grav * dtSec;
+      if (cluster.velocityYWorld > TERMINAL_VELOCITY_WORLD_PER_SEC) {
+        cluster.velocityYWorld = TERMINAL_VELOCITY_WORLD_PER_SEC;
+      }
+
+      // ── Dash burst (one-shot horizontal impulse) ─────────────────────────
       if (world.playerDashTriggeredFlag === 1 && cluster.dashCooldownTicks === 0) {
         const ddx = world.playerDashDirXWorld;
         const dashDirX = ddx !== 0 ? (ddx > 0 ? 1 : -1) : (cluster.velocityXWorld >= 0 ? 1 : -1);
@@ -302,54 +420,106 @@ export function applyClusterMovement(world: WorldState): void {
         cluster.dashCooldownTicks = DASH_COOLDOWN_TICKS;
       }
 
-      // ── Register jump buffer when jump pressed while airborne ───────────
-      if (world.playerJumpTriggeredFlag === 1) {
+      // ── Jump trigger ─────────────────────────────────────────────────────
+      // While the grapple is active the jump button controls rope pull-in
+      // (handled in grapple.ts step 0.25), so normal / wall jumps are skipped.
+      if (world.playerJumpTriggeredFlag === 1 && world.isGrappleActiveFlag === 0) {
         if (cluster.isGroundedFlag === 1 || cluster.coyoteTimeTicks > 0) {
-          // Grounded (or coyote window) — jump immediately
-          cluster.velocityYWorld = -PLAYER_JUMP_SPEED_WORLD;
-          cluster.isGroundedFlag = 0;
+          // ── Normal ground jump ─────────────────────────────────────────
+          cluster.velocityYWorld  = -PLAYER_JUMP_SPEED_WORLD;
+          cluster.isGroundedFlag  = 0;
           cluster.coyoteTimeTicks = 0;
         } else {
-          // Airborne — buffer the jump
-          cluster.jumpBufferTicks = JUMP_BUFFER_TICKS;
+          // ── Wall jump (uses wall-touch flags from the previous tick) ───
+          // The flags persist from last tick's collision resolution so they
+          // are available here before this tick's position integration.
+          const canJumpFromLeft  = cluster.isTouchingWallLeftFlag  === 1
+                                && cluster.wallJumpLockoutTicks === 0;
+          const canJumpFromRight = cluster.isTouchingWallRightFlag === 1
+                                && cluster.wallJumpLockoutTicks === 0;
+
+          if (canJumpFromLeft || canJumpFromRight) {
+            // wallDir = +1 if wall is to the right, -1 if wall is to the left
+            const wallDir = canJumpFromRight ? 1 : -1;
+            // Launch away: horizontal component opposes wallDir
+            cluster.velocityXWorld       = -wallDir * WALL_JUMP_X_SPEED_WORLD;
+            cluster.velocityYWorld       = -WALL_JUMP_Y_SPEED_WORLD;
+            cluster.wallJumpLockoutTicks = WALL_JUMP_LOCKOUT_TICKS;
+            cluster.isWallSlidingFlag    = 0;
+            cluster.coyoteTimeTicks      = 0;
+          } else {
+            // Fully airborne and no usable wall — buffer the jump
+            cluster.jumpBufferTicks = JUMP_BUFFER_TICKS;
+          }
         }
         world.playerJumpTriggeredFlag = 0;
       }
 
-      // ── Player horizontal acceleration ───────────────────────────────────
-      const inputDx = world.playerMoveInputDxWorld;
-      const targetVelX = inputDx * PLAYER_MAX_SPEED_WORLD_PER_SEC;
+      // ── Horizontal movement (direct acceleration model) ─────────────────
+      // Direct force accumulation gives responsive control without the
+      // slipperiness of a pure lerp approach.
+      const inputDx   = world.playerMoveInputDxWorld;
+      const isGrounded = cluster.isGroundedFlag === 1;
 
-      let alpha: number;
       if (inputDx !== 0) {
-        alpha = (cluster.isGroundedFlag === 1 ? PLAYER_ACCEL_PER_SEC : PLAYER_AIR_ACCEL_PER_SEC) * dtSec;
+        // Reversing direction uses a higher turn acceleration for snappy feel
+        const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
+                          (inputDx < 0 && cluster.velocityXWorld >  1.0);
+        let accel: number;
+        if (isTurning) {
+          accel = TURN_ACCELERATION_PER_SEC2;
+        } else if (isGrounded) {
+          accel = GROUND_ACCELERATION_PER_SEC2;
+        } else {
+          accel = AIR_ACCELERATION_PER_SEC2;
+        }
+        cluster.velocityXWorld += inputDx * accel * dtSec;
+        // Clamp to max run speed only in the direction of input
+        if (inputDx > 0 && cluster.velocityXWorld > MAX_RUN_SPEED_WORLD_PER_SEC) {
+          cluster.velocityXWorld = MAX_RUN_SPEED_WORLD_PER_SEC;
+        } else if (inputDx < 0 && cluster.velocityXWorld < -MAX_RUN_SPEED_WORLD_PER_SEC) {
+          cluster.velocityXWorld = -MAX_RUN_SPEED_WORLD_PER_SEC;
+        }
       } else {
-        alpha = (cluster.isGroundedFlag === 1 ? PLAYER_GROUND_DECEL_PER_SEC : PLAYER_AIR_DECEL_PER_SEC) * dtSec;
-      }
-      if (alpha > 1.0) alpha = 1.0;
-      cluster.velocityXWorld += (targetVelX - cluster.velocityXWorld) * alpha;
-
-    } else if (playerFound) {
-      // ── Enemy: horizontal walk toward player ───────────────────────────
-      const dxToPlayer = playerX - cluster.positionXWorld;
-      const absDx = dxToPlayer < 0 ? -dxToPlayer : dxToPlayer;
-
-      let targetVelX = 0.0;
-      if (absDx > ENEMY_ENGAGE_DIST_WORLD) {
-        targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC;
-      } else if (absDx > 10.0) {
-        targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC
-          * (absDx / ENEMY_ENGAGE_DIST_WORLD);
+        // No horizontal input — decelerate toward zero
+        const decel = isGrounded ? GROUND_DECELERATION_PER_SEC2 : AIR_DECELERATION_PER_SEC2;
+        const dv    = decel * dtSec;
+        if (cluster.velocityXWorld > 0) {
+          cluster.velocityXWorld = cluster.velocityXWorld - dv > 0 ? cluster.velocityXWorld - dv : 0;
+        } else if (cluster.velocityXWorld < 0) {
+          cluster.velocityXWorld = cluster.velocityXWorld + dv < 0 ? cluster.velocityXWorld + dv : 0;
+        }
       }
 
-      // Blend in lateral dodge (X component only for platformer)
-      if (cluster.enemyAiDodgeTicks > 0) {
-        targetVelX += cluster.enemyAiDodgeDirXWorld * ENEMY_DODGE_SPEED_WORLD;
+    } else {
+      // ── Enemy: gravity ──────────────────────────────────────────────────
+      cluster.velocityYWorld += RISE_GRAVITY_WORLD_PER_SEC2 * dtSec;
+      if (cluster.velocityYWorld > TERMINAL_VELOCITY_WORLD_PER_SEC) {
+        cluster.velocityYWorld = TERMINAL_VELOCITY_WORLD_PER_SEC;
       }
 
-      const enemyAlpha = ENEMY_ACCEL_PER_SEC * dtSec;
-      const clampedEnemyAlpha = enemyAlpha < 1.0 ? enemyAlpha : 1.0;
-      cluster.velocityXWorld += (targetVelX - cluster.velocityXWorld) * clampedEnemyAlpha;
+      if (playerFound) {
+        // ── Enemy horizontal walk toward player ────────────────────────────
+        const dxToPlayer = playerX - cluster.positionXWorld;
+        const absDx = dxToPlayer < 0 ? -dxToPlayer : dxToPlayer;
+
+        let targetVelX = 0.0;
+        if (absDx > ENEMY_ENGAGE_DIST_WORLD) {
+          targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC;
+        } else if (absDx > 10.0) {
+          targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC
+            * (absDx / ENEMY_ENGAGE_DIST_WORLD);
+        }
+
+        // Blend in lateral dodge (X component only)
+        if (cluster.enemyAiDodgeTicks > 0) {
+          targetVelX += cluster.enemyAiDodgeDirXWorld * ENEMY_DODGE_SPEED_WORLD;
+        }
+
+        const enemyAlpha = ENEMY_ACCEL_PER_SEC * dtSec;
+        const clampedEnemyAlpha = enemyAlpha < 1.0 ? enemyAlpha : 1.0;
+        cluster.velocityXWorld += (targetVelX - cluster.velocityXWorld) * clampedEnemyAlpha;
+      }
     }
 
     // ── Integrate position ─────────────────────────────────────────────────
@@ -358,24 +528,52 @@ export function applyClusterMovement(world: WorldState): void {
     cluster.positionXWorld += cluster.velocityXWorld * dtSec;
     cluster.positionYWorld += cluster.velocityYWorld * dtSec;
 
+    // ── Reset player wall-touch flags before collision resolution ──────────
+    // Flags are re-populated by resolveClusterSolidWallCollision below.
+    // They remain set from the previous tick until this point, so the jump
+    // trigger check above correctly sees last-tick wall contact.
+    if (cluster.isPlayerFlag === 1) {
+      cluster.isTouchingWallLeftFlag  = 0;
+      cluster.isTouchingWallRightFlag = 0;
+      cluster.isWallSlidingFlag       = 0;
+    }
+
     // ── Resolve floor / platform landing ──────────────────────────────────
     const wasGrounded = cluster.isGroundedFlag === 1;
-    const thinLanded = resolveClusterFloorCollision(cluster, world);
+    const thinLanded  = resolveClusterFloorCollision(cluster, world);
     const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY);
-    // justLanded is true for any top-surface landing — thin platform, thick
-    // wall (including the main floor), or the world-bottom boundary.
-    const justLanded = thinLanded || thickLanded;
+    const justLanded  = thinLanded || thickLanded;
 
     if (cluster.isPlayerFlag === 1) {
+      // ── Wall slide: cap downward velocity when pressing into a wall ─────
+      // Only active when airborne, falling, lockout is clear, and the player
+      // is actively pushing toward the wall (intentional interaction).
+      if (
+        cluster.isGroundedFlag === 0 &&
+        cluster.velocityYWorld > 0 &&
+        cluster.wallJumpLockoutTicks === 0
+      ) {
+        const inputDx = world.playerMoveInputDxWorld;
+        const pressingIntoWall =
+          (cluster.isTouchingWallRightFlag === 1 && inputDx > 0) ||
+          (cluster.isTouchingWallLeftFlag  === 1 && inputDx < 0);
+        if (pressingIntoWall) {
+          cluster.isWallSlidingFlag = 1;
+          if (cluster.velocityYWorld > WALL_SLIDE_MAX_FALL_SPEED) {
+            cluster.velocityYWorld = WALL_SLIDE_MAX_FALL_SPEED;
+          }
+        }
+      }
+
       if (justLanded) {
-        // Fire buffered jump on landing
+        // Fire buffered jump immediately on landing
         if (cluster.jumpBufferTicks > 0) {
-          cluster.velocityYWorld = -PLAYER_JUMP_SPEED_WORLD;
-          cluster.isGroundedFlag = 0;
+          cluster.velocityYWorld  = -PLAYER_JUMP_SPEED_WORLD;
+          cluster.isGroundedFlag  = 0;
           cluster.jumpBufferTicks = 0;
         }
       } else if (wasGrounded && cluster.isGroundedFlag === 0) {
-        // Player just walked off a ledge — start coyote time
+        // Player walked off a ledge — start coyote time
         cluster.coyoteTimeTicks = COYOTE_TIME_TICKS;
       }
     }
@@ -390,9 +588,9 @@ export function applyClusterMovement(world: WorldState): void {
     }
   }
 
-  // Clear per-tick player inputs
-  world.playerMoveInputDxWorld   = 0.0;
-  world.playerMoveInputDyWorld   = 0.0;
-  world.playerDashTriggeredFlag  = 0;
-  world.playerJumpTriggeredFlag  = 0;
+  // Clear per-tick player inputs (consumed this tick)
+  world.playerMoveInputDxWorld  = 0.0;
+  world.playerMoveInputDyWorld  = 0.0;
+  world.playerDashTriggeredFlag = 0;
+  world.playerJumpTriggeredFlag = 0;
 }

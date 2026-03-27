@@ -29,9 +29,24 @@ export interface ClusterState {
   jumpBufferTicks: number;
   /**
    * Snapshot of playerJumpHeldFlag from the previous tick.
-   * Used to detect the rising→falling edge for a one-shot jump-height cut.
+   * Retained for potential future use; no longer drives the jump-cut logic
+   * (jump cut is now implemented via an extra gravity multiplier, not velocity clamping).
    */
   prevJumpHeldFlag: 0 | 1;
+
+  // ---- Wall interaction ---------------------------------------------------
+  /** 1 when the player's left side is pressed against a solid wall this tick. */
+  isTouchingWallLeftFlag: 0 | 1;
+  /** 1 when the player's right side is pressed against a solid wall this tick. */
+  isTouchingWallRightFlag: 0 | 1;
+  /** 1 while the player is performing a controlled wall slide. */
+  isWallSlidingFlag: 0 | 1;
+  /**
+   * Ticks remaining in the post-wall-jump lockout window.
+   * While > 0 the wall sensor that triggered the jump will not allow a new
+   * wall slide or wall jump, preventing instant re-grab / infinite climbing.
+   */
+  wallJumpLockoutTicks: number;
 
   // ---- Dash (player and enemy) -------------------------------------------
   /** Remaining cooldown ticks before dash is available again.  0 = ready. */
@@ -79,11 +94,15 @@ export function createClusterState(
     healthPoints: maxHealthPoints,
     maxHealthPoints,
     isGroundedFlag: 0,
-    halfWidthWorld: 4,
-    halfHeightWorld: 6,
+    halfWidthWorld: 5,
+    halfHeightWorld: 5,
     coyoteTimeTicks: 0,
     jumpBufferTicks: 0,
     prevJumpHeldFlag: 0,
+    isTouchingWallLeftFlag: 0,
+    isTouchingWallRightFlag: 0,
+    isWallSlidingFlag: 0,
+    wallJumpLockoutTicks: 0,
     dashCooldownTicks: 0,
     dashRechargeAnimTicks: 0,
     enemyAiAttackCooldownTicks: 30,

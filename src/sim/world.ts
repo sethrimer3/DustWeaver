@@ -75,6 +75,12 @@ export interface WorldState extends ParticleBuffers {
    * The player is constrained to stay within this distance of the anchor.
    */
   grappleLengthWorld: number;
+  /**
+   * Total amount of rope pulled in during the current grapple session (world units).
+   * Accumulates while the jump button is held; grapple breaks when this exceeds
+   * GRAPPLE_MAX_PULL_IN_WORLD.  Reset to 0 on each new grapple fire.
+   */
+  grapplePullInAmountWorld: number;
   /** Remaining ticks for the grapple attach sparkle burst effect. */
   grappleAttachFxTicks: number;
   /** World-space effect center for grapple attach burst. */
@@ -118,6 +124,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleAnchorXWorld: 0.0,
     grappleAnchorYWorld: 0.0,
     grappleLengthWorld: 0.0,
+    grapplePullInAmountWorld: 0.0,
     grappleAttachFxTicks: 0,
     grappleAttachFxXWorld: 0.0,
     grappleAttachFxYWorld: 0.0,
