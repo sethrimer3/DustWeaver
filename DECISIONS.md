@@ -162,3 +162,43 @@ and the player launches with accumulated momentum.  This creates a skill-ceiling
 mechanic: skilled players can build large speed with careful timing, but the rope
 will break under sustained tension.
 
+### Grapple Hook Physics Overhaul (BUILD 26)
+
+**Momentum preservation:** The player's velocity is never zeroed when the grapple
+attaches.  The rope constraint only acts when taut (player beyond rope length),
+removing the outward radial velocity component while preserving tangential motion.
+This allows fast-moving players to carry momentum into wide, natural arcs.
+
+**Angular momentum conservation on rope shortening:** When the rope is retracted,
+tangential velocity is scaled by (oldLength / newLength), conserving angular
+momentum (L = m × v × r).  This makes retraction feel like winding up for a
+launch rather than an artificial speed boost.  The ratio is clamped to ≤ 1.1 per
+tick to prevent extreme speed spikes on very short ropes.
+
+**Swing damping:** A subtle tangential damping coefficient (0.12 per second)
+slowly bleeds energy from the swing to simulate air resistance / rope friction.
+Only the tangential component is damped so gravity is not penalised.  The effect
+is barely noticeable within a single swing but becomes apparent after 3–4 full
+oscillations.  The constant is exposed for tuning.
+
+**Tap-jump vs hold-jump:** While grappling, the jump button serves dual purpose:
+  - **Tap** (press + release within 6 ticks / ~100 ms): instantly releases the
+    grapple and the player flies off with their current velocity.
+  - **Hold** (held beyond 6 ticks): retracts the rope, building angular speed.
+Retraction begins immediately on press for responsiveness; if released within the
+tap window, the negligible retraction (~7 px) is imperceptible.  An ultra-fast
+tap (pressed and released within a single frame) is detected separately via the
+playerJumpTriggeredFlag.
+
+**Gravity during grapple:** Consistent base gravity (rise gravity ≈ 980 px/s²)
+is used for both rising and falling while grappling, instead of the asymmetric
+rise/fall split and jump-cut multiplier used for normal platforming.  This
+produces a symmetric, physically convincing pendulum arc.  Terminal velocity
+capping is also skipped during grapple since the rope constraint limits
+displacement each tick.
+
+**Horizontal movement during grapple:** Platformer-style horizontal acceleration,
+deceleration, and speed capping are skipped while the grapple is active.  All
+motion is governed by the pendulum physics (gravity + rope constraint + damping).
+This prevents the acceleration model from fighting against the swing.
+
