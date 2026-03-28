@@ -582,10 +582,10 @@ export function applyClusterMovement(world: WorldState): void {
       );
       if (eyeSpeed > 8.0) {
         const targetAngleRad = Math.atan2(cluster.velocityYWorld, cluster.velocityXWorld);
-        let angleDiff = targetAngleRad - cluster.flyingEyeFacingAngleRad;
-        // Wrap to [-PI, PI] to always take the shortest arc
-        while (angleDiff >  Math.PI) angleDiff -= Math.PI * 2.0;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2.0;
+        // Normalise to [-PI, PI] in O(1) with modulo arithmetic
+        let angleDiff = ((targetAngleRad - cluster.flyingEyeFacingAngleRad + Math.PI)
+          % (Math.PI * 2.0)) - Math.PI;
+        if (angleDiff < -Math.PI) angleDiff += Math.PI * 2.0;
         cluster.flyingEyeFacingAngleRad += angleDiff
           * Math.min(1.0, FLYING_EYE_TURN_RATE_PER_SEC * dtSec);
       }

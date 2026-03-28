@@ -147,10 +147,10 @@ export function renderClusters(
     if (cluster.isFlyingEyeFlag === 1) {
       // ── Flying Eye: draw 4 concentric diamond outlines ──────────────────
       const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
-      const outerHalfDiagonalPx = boxHalfW * 2.5;
+      const outerHalfDiagonalScreen = boxHalfW * 2.5;
       renderFlyingEye(
         ctx, screenX, screenY,
-        outerHalfDiagonalPx,
+        outerHalfDiagonalScreen,
         cluster.flyingEyeFacingAngleRad,
         cluster.flyingEyeElementKind,
         healthRatio,
