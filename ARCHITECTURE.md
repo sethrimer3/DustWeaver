@@ -137,3 +137,27 @@ Two-tab menu (`ui/skillTombMenu.ts`):
 - ESC closes the menu without opening the pause menu (captured with `{ capture: true }`).
 - X button in top-right corner also closes.
 
+## World Editor (BUILD 35)
+
+The world editor is an in-game level editing tool accessible via the debug UI.
+
+### Module Layout (`src/editor/`)
+- **editorState.ts** — Core state: mode, tool, palette, selection, mutable `EditorRoomData`.
+- **editorController.ts** — Orchestrator: lifecycle, input processing, tool dispatch, UI wiring.
+- **editorCamera.ts** — Free WASD camera panning independent of the player.
+- **editorInput.ts** — Keyboard/mouse/wheel input isolated from gameplay input.
+- **editorTools.ts** — Select, Place, Delete tool logic with grid-snapping and hit testing.
+- **editorUI.ts** — DOM-based toolbar, palette panel, inspector panel, export button.
+- **editorRenderer.ts** — Canvas overlays: grid, placement preview, selection highlights, transition zones.
+- **editorWorldMap.ts** — Room list overlay (M key) for jumping between rooms.
+- **transitionLinker.ts** — Cross-room transition linking workflow.
+- **editorExport.ts** — Browser download of room JSON.
+- **roomJson.ts** — `RoomJsonDef` schema, validation, conversion between JSON ↔ `EditorRoomData` ↔ `RoomDef`.
+
+### Integration with Game Screen
+- `EditorController` is created once in `startGameScreen()`.
+- A "World Editor" button appears when debug mode is on.
+- When editor is active, the frame function skips gameplay (sim, input, transitions)
+  and delegates to the editor's update/render cycle.
+- The editor calls `loadRoom()` to apply changes to the runtime world when jumping rooms.
+

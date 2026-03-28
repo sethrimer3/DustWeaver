@@ -278,3 +278,45 @@ further increasing upward speed.
 `renderWalls` now accepts an `isDebugMode` flag.  When enabled, a dashed red
 outline (`rgba(255,60,60,0.75)`) is drawn over every wall AABB so developers
 can verify the collision boundary matches the visual tile geometry.
+
+## World Editor (BUILD 35)
+
+### Editor Architecture
+- The editor is a modular system under `src/editor/` with a single integration
+  point in `gameScreen.ts` via `EditorController`.
+- When active, the editor takes over the frame loop: gameplay input is suppressed,
+  the camera becomes free-moving (WASD), and editor overlays are drawn on top of
+  the frozen game world.
+- The editor operates on authored room data (`EditorRoomData`), which is the
+  source-of-truth for level content. Runtime `WorldState` is rebuilt from this
+  data via `editorRoomDataToRoomDef()` when needed.
+
+### JSON Export Format
+- Room data is exported as `RoomJsonDef` (clean, human-readable JSON).
+- Enemy particle kinds use string names (e.g. `"Fire"`, `"Ice"`) rather than
+  numeric enum values for readability and stability.
+- Boundary walls and tunnel wall geometry are **not serialized** — they are
+  regenerated deterministically from room dimensions and transition definitions
+  at load time by `editorRoomDataToRoomDef()`.
+- The schema captures: id, name, worldNumber, widthBlocks, heightBlocks,
+  playerSpawnBlock, interiorWalls, enemies, transitions, skillTombs.
+
+### Compatibility Strategy
+- Existing TypeScript-authored rooms in `levels/rooms.ts` remain untouched.
+- The editor can export any room to JSON and a JSON loader path exists via
+  `jsonToEditorRoomData()` → `editorRoomDataToRoomDef()`.
+- Full migration of all rooms to JSON is deferred to a future decision.
+
+### Transition Linking
+- The editor supports a "Link Transition" workflow: select a transition,
+  click Link, pick a destination room from the world map, then click the
+  target transition to complete the link.
+- This updates `targetRoomId` and `targetSpawnBlock` on the source transition.
+
+### Up/Down Transitions
+- The editor and JSON schema support `up` and `down` transition directions in
+  their data models (EditorTransition, RoomJsonDef, RoomTransitionDef).
+- Runtime tunnel wall generation currently only handles `left` and `right`
+  directions. Up/down tunnel walls will be added when the first up/down
+  transition is needed in gameplay. The editor and export format are already
+  structured to support this without schema changes.
