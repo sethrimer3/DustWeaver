@@ -18,10 +18,13 @@ import { ParticleKind, PARTICLE_KIND_COUNT } from './kinds';
 
 // ---- Constants ----------------------------------------------------------
 
-/** Distance from owner center where shield particles form. */
-const SHIELD_DIST_WORLD   = 50.0;
-/** Spacing between shield particles in a line/arc formation. */
-const SHIELD_SPACING_WORLD = 9.0;
+/** Distance from owner center where shield particles form.
+ *  Set to player halfWidth (5) + ~2.5 particle diameters so the wall
+ *  sits just outside the player body. */
+const SHIELD_DIST_WORLD   = 7.5;
+/** Spacing between shield particles: equal to one particle diameter (10/6 wu)
+ *  so particles pack tightly with no gaps. */
+const SHIELD_SPACING_WORLD = 10.0 / 6.0;
 /** Spring strength pulling block particles toward their shield position. */
 const SHIELD_SPRING_STRENGTH = 400.0;
 

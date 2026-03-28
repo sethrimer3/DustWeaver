@@ -25,8 +25,9 @@ import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shad
 /** [x, y, kind, normalizedAge, disturbanceFactor] per vertex */
 const FLOATS_PER_VERTEX = 5;
 const BYTES_PER_FLOAT   = 4;
-/** Visual radius for each particle's point sprite (pixels). */
-const POINT_SIZE_PX = 2.5;
+/** Visual diameter for each particle's point sprite, in world units (= 1/6th player size).
+ *  Multiplied by scalePx in the render call to get the gl_PointSize in screen pixels. */
+const PARTICLE_DIAMETER_WORLD = 10.0 / 6.0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -235,7 +236,7 @@ export class WebGLParticleRenderer {
     gl.useProgram(this.program);
 
     gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
-    gl.uniform1f(this.uPointSizePx, POINT_SIZE_PX * scalePx);
+    gl.uniform1f(this.uPointSizePx, PARTICLE_DIAMETER_WORLD * scalePx);
 
     const stride = FLOATS_PER_VERTEX * BYTES_PER_FLOAT;
     gl.enableVertexAttribArray(this.attrPositionScreen);
