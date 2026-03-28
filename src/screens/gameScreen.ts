@@ -699,6 +699,35 @@ export function startGameScreen(
       return;
     }
 
+    // Latch one-shot jump/dash inputs into world state before ticking.
+    // This preserves edge-triggered inputs on high-refresh frames where no
+    // fixed sim tick runs (accumulator < FIXED_DT_MS).
+    if (jumpTriggered) {
+      world.playerJumpTriggeredFlag = 1;
+    }
+    world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
+
+    if (dashTriggered) {
+      world.playerDashTriggeredFlag = 1;
+      const playerForDash = world.clusters[0];
+      if (playerForDash !== undefined) {
+        if (moveDx !== 0) {
+          world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
+          world.playerDashDirYWorld = 0.0;
+        } else {
+          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom);
+          const dirX = aim.xWorld - playerForDash.positionXWorld;
+          const absX = dirX < 0 ? -dirX : dirX;
+          if (absX > 1.0) {
+            world.playerDashDirXWorld = dirX > 0 ? 1.0 : -1.0;
+          } else {
+            world.playerDashDirXWorld = playerForDash.velocityXWorld >= 0 ? 1.0 : -1.0;
+          }
+          world.playerDashDirYWorld = 0.0;
+        }
+      }
+    }
+
     // ── Sim ticks ──────────────────────────────────────────────────────────
     accumulatorMs += elapsedMs;
     while (accumulatorMs >= FIXED_DT_MS) {
@@ -708,32 +737,6 @@ export function startGameScreen(
           world.playerMoveInputDxWorld = moveDx > 0 ? 1.0 : -1.0;
           world.playerMoveInputDyWorld = 0.0;
         }
-      }
-      if (jumpTriggered) {
-        world.playerJumpTriggeredFlag = 1;
-        jumpTriggered = false;
-      }
-      world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
-      if (dashTriggered) {
-        world.playerDashTriggeredFlag = 1;
-        const playerForDash = world.clusters[0];
-        if (playerForDash !== undefined) {
-          if (moveDx !== 0) {
-            world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
-            world.playerDashDirYWorld = 0.0;
-          } else {
-            const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom);
-            const dirX = aim.xWorld - playerForDash.positionXWorld;
-            const absX = dirX < 0 ? -dirX : dirX;
-            if (absX > 1.0) {
-              world.playerDashDirXWorld = dirX > 0 ? 1.0 : -1.0;
-            } else {
-              world.playerDashDirXWorld = playerForDash.velocityXWorld >= 0 ? 1.0 : -1.0;
-            }
-            world.playerDashDirYWorld = 0.0;
-          }
-        }
-        dashTriggered = false;
       }
       tick(world);
       environmentalDust.update(world, FIXED_DT_MS);
