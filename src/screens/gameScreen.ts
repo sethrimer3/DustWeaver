@@ -37,7 +37,7 @@ const BACKGROUND_FLUID_COUNT = 300;
 const BOSS_HP_MULTIPLIER = 2;
 
 /** Half-width and half-height (world units) of a flying eye cluster hitbox. */
-const FLYING_EYE_HALF_SIZE_WORLD = 14;
+const FLYING_EYE_HALF_SIZE_WORLD = 2.8;
 
 // Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
 const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
