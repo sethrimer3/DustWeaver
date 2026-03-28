@@ -45,7 +45,7 @@ import { getElementProfile } from '../particles/elementProfiles';
  * Radius (world units) within which a cluster can control its particles.
  * Exported so the renderer can draw the matching influence ring.
  */
-export const INFLUENCE_RADIUS_WORLD = 200.0;
+export const INFLUENCE_RADIUS_WORLD = 100.0;
 
 // ── Player-state behaviour constants ─────────────────────────────────────────
 
@@ -62,7 +62,7 @@ const STANDING_STILL_BREATH_RATE_RAD = 0.04;
  * Half-amplitude of the radius breathing pulse (world units).
  * Orbit radius varies by ±this amount at full breathing depth.
  */
-const STANDING_STILL_BREATH_AMP_WORLD = 6.0;
+const STANDING_STILL_BREATH_AMP_WORLD = 3.0;
 
 /** Fraction of normal orbitalStrength applied while the player is airborne (comet tail). */
 const JUMP_ORBITAL_SCALE = 0.25;
@@ -77,7 +77,7 @@ const TRAIL_MIN_SPEED_WORLD = 40.0;
  */
 const TRAIL_FULL_SPEED_WORLD = 500.0;
 /** Maximum distance (world units) the spring target is displaced behind the player. */
-const TRAIL_OFFSET_MAX_WORLD = 70.0;
+const TRAIL_OFFSET_MAX_WORLD = 35.0;
 
 /** Fraction of normal orbitalStrength applied while an attack is in flight. */
 const ATTACK_ORBITAL_SCALE = 2.5;

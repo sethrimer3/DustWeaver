@@ -67,13 +67,14 @@
 import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
+import { INFLUENCE_RADIUS_WORLD } from './binding';
 
 // ============================================================================
 // Tuning constants — adjust these to dial in the grapple feel
 // ============================================================================
 
-/** Maximum rope length the player can shoot (world units). */
-export const GRAPPLE_MAX_LENGTH_WORLD = 300;
+/** Maximum rope length the player can shoot (world units) — matches the zone of influence radius. */
+export const GRAPPLE_MAX_LENGTH_WORLD = INFLUENCE_RADIUS_WORLD;
 
 /** Minimum rope length to prevent degenerate zero-length ropes. */
 const GRAPPLE_MIN_LENGTH_WORLD = 30;
