@@ -169,8 +169,9 @@ export function deleteAtCursor(state: EditorState): void {
   // Check transitions first
   for (let i = 0; i < room.transitions.length; i++) {
     if (hitTestTransition(room.transitions[i], bx, by, room)) {
+      const removedUid = room.transitions[i].uid;
       room.transitions.splice(i, 1);
-      if (state.selectedElement?.uid === room.transitions[i]?.uid) state.selectedElement = null;
+      if (state.selectedElement?.uid === removedUid) state.selectedElement = null;
       return;
     }
   }

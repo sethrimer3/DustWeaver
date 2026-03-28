@@ -35,25 +35,25 @@ export function completeTransitionLink(
   sourceRoomTransitions: EditorTransition[],
   targetRoomId: string,
   targetTransition: EditorTransition,
+  targetRoomWidthBlocks?: number,
 ): void {
   const sourceTrans = sourceRoomTransitions.find(t => t.uid === state.linkSourceTransitionUid);
   if (sourceTrans) {
     sourceTrans.targetRoomId = targetRoomId;
-    // Compute spawn position based on target transition
+    // Spawn 3 blocks inside the target room from the transition edge.
+    // For right transitions, use the target room width if available.
+    const SPAWN_INSET_BLOCKS = 3;
     const spawnOffset = Math.floor(targetTransition.openingSizeBlocks / 2);
     if (targetTransition.direction === 'left') {
-      sourceTrans.targetSpawnBlock = [3, targetTransition.positionBlock + spawnOffset];
+      sourceTrans.targetSpawnBlock = [SPAWN_INSET_BLOCKS, targetTransition.positionBlock + spawnOffset];
     } else if (targetTransition.direction === 'right') {
-      // Spawn near the right edge
-      sourceTrans.targetSpawnBlock = [
-        /* width will be filled by caller */ 3,
-        targetTransition.positionBlock + spawnOffset,
-      ];
+      const rightX = (targetRoomWidthBlocks ?? 40) - SPAWN_INSET_BLOCKS - 1;
+      sourceTrans.targetSpawnBlock = [rightX, targetTransition.positionBlock + spawnOffset];
+    } else if (targetTransition.direction === 'up') {
+      sourceTrans.targetSpawnBlock = [targetTransition.positionBlock + spawnOffset, SPAWN_INSET_BLOCKS];
     } else {
-      sourceTrans.targetSpawnBlock = [
-        targetTransition.positionBlock + spawnOffset,
-        3,
-      ];
+      // down
+      sourceTrans.targetSpawnBlock = [targetTransition.positionBlock + spawnOffset, SPAWN_INSET_BLOCKS];
     }
   }
 

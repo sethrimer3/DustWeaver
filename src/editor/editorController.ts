@@ -218,6 +218,7 @@ export function createEditorController(
                 linkSourceRoomData.transitions,
                 linkTargetRoomId || state.roomData.id,
                 targetTrans,
+                state.roomData.widthBlocks,
               );
               linkSourceRoomData = null;
               linkTargetRoomId = '';
