@@ -1,14 +1,14 @@
 /**
  * Room definition types for the Metroidvania-style interconnected world.
  *
- * All positions and sizes are in **block units** (1 block = 15 world units).
+ * All positions and sizes are in **block units** (1 block = 30 world units).
  * The game screen converts them to world units at load time.
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
 
 /** Size of one block in world units. */
-export const BLOCK_SIZE_WORLD = 15;
+export const BLOCK_SIZE_WORLD = 30;
 
 /** An enemy cluster placed inside a room. */
 export interface RoomEnemyDef {

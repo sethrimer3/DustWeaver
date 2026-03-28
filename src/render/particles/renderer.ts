@@ -163,3 +163,4 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
   }
   ctx.globalAlpha = 1.0;
 }
+

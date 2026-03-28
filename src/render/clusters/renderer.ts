@@ -1,10 +1,9 @@
 import { WorldSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
-import { BLOCK_SIZE_WORLD } from '../../levels/roomDef';
 
 /** Block size in world units — walls are decomposed into tiles of this size. */
-const BLOCK_SIZE_PX = BLOCK_SIZE_WORLD;
+const BLOCK_SIZE_PX = 30;
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas using
