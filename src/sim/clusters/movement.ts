@@ -189,7 +189,7 @@ const ENEMY_ENGAGE_DIST_WORLD = 60.0;
 /**
  * Maximum line-of-sight range for rolling enemies (world units).
  * Rolling enemies only chase the player when within this distance,
- * or when recently damaged (rollingEnemyAgressiveTicks > 0).
+ * or when recently damaged (rollingEnemyAggressiveTicks > 0).
  * ~20 blocks at BLOCK_SIZE_WORLD = 15.
  */
 const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 300.0;
@@ -640,7 +640,7 @@ export function applyClusterMovement(world: WorldState): void {
         // Rolling enemies only chase when in sight range or recently damaged
         const canChase = cluster.isRollingEnemyFlag === 0
           || distToPlayer <= ROLLING_ENEMY_SIGHT_RANGE_WORLD
-          || cluster.rollingEnemyAgressiveTicks > 0;
+          || cluster.rollingEnemyAggressiveTicks > 0;
 
         let targetVelX = 0.0;
         if (canChase) {
@@ -760,8 +760,8 @@ export function applyClusterMovement(world: WorldState): void {
           ((cluster.rollingEnemyRollAngleRad % twoPi) + twoPi) % twoPi;
 
         // Tick down aggression timer
-        if (cluster.rollingEnemyAgressiveTicks > 0) {
-          cluster.rollingEnemyAgressiveTicks -= 1;
+        if (cluster.rollingEnemyAggressiveTicks > 0) {
+          cluster.rollingEnemyAggressiveTicks -= 1;
         }
       }
     }

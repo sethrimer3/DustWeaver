@@ -115,7 +115,7 @@ export interface ClusterState {
    * after taking damage, even if the player is outside normal sight range.
    * Decremented each tick; set to ROLLING_ENEMY_AGGRO_DURATION_TICKS on damage.
    */
-  rollingEnemyAgressiveTicks: number;
+  rollingEnemyAggressiveTicks: number;
 
   // ---- Player sprite rotation (populated only when isPlayerFlag === 1) -----
   /**
@@ -171,7 +171,7 @@ export function createClusterState(
     isRollingEnemyFlag: 0,
     rollingEnemySpriteIndex: 1,
     rollingEnemyRollAngleRad: 0,
-    rollingEnemyAgressiveTicks: 0,
+    rollingEnemyAggressiveTicks: 0,
     playerRotationAngleRad: 0,
   };
 }
