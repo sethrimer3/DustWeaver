@@ -35,6 +35,9 @@ const BACKGROUND_FLUID_COUNT = 300;
 /** Boss clusters receive this multiplier on their base HP for extra durability. */
 const BOSS_HP_MULTIPLIER = 2;
 
+/** Half-width and half-height (world units) of a flying eye cluster hitbox. */
+const FLYING_EYE_HALF_SIZE_WORLD = 14;
+
 // Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
 const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
 const JOYSTICK_INNER_RADIUS_PX = 22;
@@ -345,6 +348,17 @@ export function startGameScreen(
       const ey = enemyDef.yBlock * BLOCK_SIZE_PX;
       const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
       const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
+
+      if (enemyDef.isFlyingEyeFlag === 1) {
+        enemyCluster.isFlyingEyeFlag     = 1;
+        enemyCluster.flyingEyeElementKind = enemyDef.kinds.length > 0
+          ? enemyDef.kinds[0]
+          : ParticleKind.Wind;
+        // Flying eyes are larger than ground enemies
+        enemyCluster.halfWidthWorld  = FLYING_EYE_HALF_SIZE_WORLD;
+        enemyCluster.halfHeightWorld = FLYING_EYE_HALF_SIZE_WORLD;
+      }
+
       world.clusters.push(enemyCluster);
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

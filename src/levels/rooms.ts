@@ -221,6 +221,24 @@ export const ROOM_W1_ROOM1: RoomDef = {
       particleCount: 14,
       isBossFlag: 0,
     },
+    // Flying Eye (Fire) — hovers mid-room
+    {
+      xBlock: 12,
+      yBlock: 9,
+      kinds: [ParticleKind.Fire],
+      particleCount: 16,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 1,
+    },
+    // Flying Eye (Wind) — hovers right side
+    {
+      xBlock: 30,
+      yBlock: 7,
+      kinds: [ParticleKind.Wind],
+      particleCount: 16,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 1,
+    },
   ],
   playerSpawnBlock: [3, W1_ROOM_HEIGHT - 5],
   transitions: [
@@ -276,6 +294,15 @@ export const ROOM_W2_ROOM1: RoomDef = {
       kinds: [ParticleKind.Fire],
       particleCount: 14,
       isBossFlag: 0,
+    },
+    // Flying Eye (Ice) — hovers mid-room
+    {
+      xBlock: 20,
+      yBlock: 8,
+      kinds: [ParticleKind.Ice],
+      particleCount: 16,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 1,
     },
   ],
   playerSpawnBlock: [W2_ROOM_WIDTH - 4, W2_ROOM_HEIGHT - 5],

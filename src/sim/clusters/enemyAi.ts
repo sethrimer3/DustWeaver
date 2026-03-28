@@ -169,15 +169,24 @@ export function applyEnemyAI(world: WorldState): void {
     // ── Dodge / weave decision ─────────────────────────────────────────────
     // Spontaneous lateral dodge: adds life and unpredictability.
     // Also triggered when threatened (incoming particles detected).
+    // Flying eyes dodge more eagerly and dash directly away from threats.
+    const flyingEyeThreatened = cluster.isFlyingEyeFlag === 1 && incomingThreatCount >= 1;
     const shouldDodge = cluster.enemyAiDodgeTicks === 0
       && cluster.dashCooldownTicks === 0
-      && (incomingThreatCount >= 2 || nextFloat(rng) < ENEMY_DODGE_CHANCE_PER_TICK);
+      && (incomingThreatCount >= 2 || nextFloat(rng) < ENEMY_DODGE_CHANCE_PER_TICK
+          || flyingEyeThreatened);
 
     if (shouldDodge) {
-      // Perpendicular to player direction (randomised side via RNG)
-      const side = nextFloat(rng) < 0.5 ? 1.0 : -1.0;
-      cluster.enemyAiDodgeDirXWorld = -dirToPlayerY * side;
-      cluster.enemyAiDodgeDirYWorld =  dirToPlayerX * side;
+      if (flyingEyeThreatened) {
+        // Flying eye dashes directly away from the player when threatened
+        cluster.enemyAiDodgeDirXWorld = -dirToPlayerX;
+        cluster.enemyAiDodgeDirYWorld = -dirToPlayerY;
+      } else {
+        // Ground enemy / non-threatened flying eye: perpendicular dodge
+        const side = nextFloat(rng) < 0.5 ? 1.0 : -1.0;
+        cluster.enemyAiDodgeDirXWorld = -dirToPlayerY * side;
+        cluster.enemyAiDodgeDirYWorld =  dirToPlayerX * side;
+      }
       cluster.enemyAiDodgeTicks = ENEMY_DODGE_DURATION_TICKS;
       cluster.dashCooldownTicks  = DASH_COOLDOWN_TICKS;
     }
