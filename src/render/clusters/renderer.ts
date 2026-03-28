@@ -1,9 +1,10 @@
 import { WorldSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
+import { BLOCK_SIZE_WORLD } from '../../levels/roomDef';
 
 /** Block size in world units — walls are decomposed into tiles of this size. */
-const BLOCK_SIZE_PX = 30;
+const BLOCK_SIZE_PX = BLOCK_SIZE_WORLD;
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas using
@@ -15,7 +16,14 @@ export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapsh
   renderWallSprites(ctx, snapshot, offsetXPx, offsetYPx, scalePx, BLOCK_SIZE_PX);
 }
 
-export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
+export function renderClusters(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+  showHitboxes = false,
+): void {
   ctx.save();
 
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {
@@ -92,6 +100,14 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
     // Inner highlight on top edge
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
     ctx.fillRect(boxLeft + 2, boxTop + 2, boxW - 4, 3);
+
+    if (showHitboxes) {
+      ctx.strokeStyle = isPlayer ? 'rgba(0, 255, 170, 0.95)' : 'rgba(255, 120, 40, 0.95)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+      ctx.setLineDash([]);
+    }
 
     // ── Health bar (above the box) ────────────────────────────────────────
     const barWidthPx  = boxW;
