@@ -23,6 +23,7 @@ import { showDeathScreen } from '../ui/deathScreen';
 import { showSkillTombMenu } from '../ui/skillTombMenu';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
+import { createEditorController, EditorController } from '../editor/editorController';
 
 const FIXED_DT_MS = 16.666;
 /** Canonical level-grid block size (sprites/objects snap to this). */
@@ -427,6 +428,38 @@ export function startGameScreen(
     uiRoot.appendChild(menuButton);
   }
 
+  // ── World Editor ────────────────────────────────────────────────────────
+  const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY) => {
+    loadRoom(roomDef, spawnX, spawnY);
+  });
+
+  // "World Editor" toggle button — shown when debug mode is on
+  let editorToggleBtn: HTMLButtonElement | null = null;
+  function ensureEditorButton(): void {
+    if (editorToggleBtn !== null) return;
+    editorToggleBtn = document.createElement('button');
+    editorToggleBtn.style.cssText = `
+      position: absolute; top: 38px; right: 16px;
+      background: rgba(0,0,0,0.6); border: 2px solid #00c864; color: #00c864;
+      padding: 6px 14px; font-size: 0.85rem; font-family: 'Cinzel', serif;
+      cursor: pointer; border-radius: 6px; z-index: 800;
+    `;
+    editorToggleBtn.textContent = 'World Editor';
+    editorToggleBtn.addEventListener('click', () => {
+      editorController.toggle(currentRoom);
+      editorToggleBtn!.textContent = editorController.state.isActive ? 'Exit Editor' : 'World Editor';
+      editorToggleBtn!.style.borderColor = editorController.state.isActive ? '#ff6644' : '#00c864';
+      editorToggleBtn!.style.color = editorController.state.isActive ? '#ff6644' : '#00c864';
+    });
+    uiRoot.appendChild(editorToggleBtn);
+  }
+  function removeEditorButton(): void {
+    if (editorToggleBtn !== null && editorToggleBtn.parentElement) {
+      editorToggleBtn.parentElement.removeChild(editorToggleBtn);
+      editorToggleBtn = null;
+    }
+  }
+
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
 
   let lastTimestampMs = 0;
@@ -468,6 +501,7 @@ export function startGameScreen(
       onToggleDebug: () => {
         isDebugMode = !isDebugMode;
         pauseMenuState.isDebugOn = isDebugMode;
+        if (isDebugMode) { ensureEditorButton(); } else { removeEditorButton(); }
       },
     });
   }
@@ -602,6 +636,50 @@ export function startGameScreen(
     // ── Compute camera offset for screen → world conversion ──────────────
     const { offsetXPx, offsetYPx } = getCameraOffset(camera, canvas.width, canvas.height);
     const zoom = camera.zoom;
+
+    // ── Editor mode gate ──────────────────────────────────────────────────
+    // When the editor is active, it takes over camera and input; skip gameplay.
+    if (editorController.state.isActive) {
+      const isEditorConsuming = editorController.update(elapsedMs / 1000, camera, offsetXPx, offsetYPx, zoom);
+
+      if (isEditorConsuming) {
+        // Still render the game world (walls, particles, etc.) as backdrop
+        const camOff = getCameraOffset(camera, canvas.width, canvas.height);
+        const eox = camOff.offsetXPx;
+        const eoy = camOff.offsetYPx;
+        const snapshot = createSnapshot(world);
+
+        if (webglRenderer.isAvailable) {
+          webglRenderer.render(snapshot, eox, eoy, zoom);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, eox, eoy);
+        renderWalls(ctx, snapshot, eox, eoy, zoom, true);
+        renderClusters(ctx, snapshot, eox, eoy, zoom, true);
+        renderGrapple(ctx, snapshot, eox, eoy, zoom);
+        drawTunnelDarkness(ctx, currentRoom, eox, eoy, zoom);
+        environmentalDust.render(ctx, eox, eoy, zoom, true);
+        skillTombRenderer.render(ctx, eox, eoy, zoom);
+
+        if (!webglRenderer.isAvailable) {
+          renderParticles(ctx, snapshot, eox, eoy, zoom);
+        }
+
+        // Draw editor overlays on top
+        editorController.render(ctx, eox, eoy, zoom, canvas.width, canvas.height);
+
+        if (isDebugMode) {
+          renderHudOverlay(ctx, hudState);
+        }
+
+        rafHandle = requestAnimationFrame(frame);
+        return;
+      }
+    }
 
     const commands = collectCommands(inputState);
     let openPause = false;
@@ -917,6 +995,8 @@ export function startGameScreen(
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
     if (deathScreenCleanup !== null) deathScreenCleanup();
     if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
+    editorController.destroy();
+    removeEditorButton();
     detachInput();
     webglRenderer.dispose();
     window.removeEventListener('resize', onResize);
