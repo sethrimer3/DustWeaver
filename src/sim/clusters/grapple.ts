@@ -121,6 +121,8 @@ const GRAPPLE_JUMP_TAP_THRESHOLD_TICKS = 6;
  * Upward velocity impulse (world units/second) added to the player when they
  * tap-release the grapple.  Gives a small "hop" on release so the player can
  * pop off ledges or continue upward momentum after a swing.
+ * Applied by *subtracting* from velocityYWorld — negative Y is upward in this
+ * coordinate system (Y increases downward on screen).
  */
 const GRAPPLE_TAP_HOP_SPEED_WORLD = 80.0;
 

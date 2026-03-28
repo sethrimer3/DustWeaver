@@ -44,7 +44,7 @@ import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD 
 
 /**
  * Target full-jump height in world units.
- * 40 world units (approx. 1.5 standard blocks at BLOCK_SIZE_WORLD = 11.25).
+ * 40 world units (approx. 3.6 standard blocks at BLOCK_SIZE_WORLD = 11.25).
  */
 const JUMP_HEIGHT_WORLD = 40.0;
 

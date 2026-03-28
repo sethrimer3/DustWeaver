@@ -270,8 +270,9 @@ closer than `GRAPPLE_MIN_LENGTH_WORLD` the grapple no longer fires at all
 Tapping jump while grappling now adds an upward velocity impulse
 (`GRAPPLE_TAP_HOP_SPEED_WORLD = 80 px/s`) before releasing the grapple.  Both
 the ultra-fast tap path and the regular tap path (held ≤ 6 ticks) apply the hop.
-The impulse is additive: if the player is already moving upward faster than
-80 px/s, the hop does not slow them down.
+The impulse is always applied additively (velocityYWorld -= 80): if the player is
+already moving upward at 100 px/s (velocityYWorld = -100), the result is -180 px/s,
+further increasing upward speed.
 
 ### Debug Hitbox Rendering
 `renderWalls` now accepts an `isDebugMode` flag.  When enabled, a dashed red
