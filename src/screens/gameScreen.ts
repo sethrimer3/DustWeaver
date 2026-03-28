@@ -416,6 +416,7 @@ export function startGameScreen(
   let fpsAccMs = 0;
   let isRunning = true;
   let rafHandle = 0;
+  let interactInputPulseMs = 0;
 
   // ── Pause / debug / settings state ──────────────────────────────────────
   let isPaused = false;
@@ -638,6 +639,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.GrappleRelease) {
         releaseGrapple(world);
       } else if (cmd.kind === CommandKind.Interact) {
+        interactInputPulseMs = 150;
         // Check if player is near a skill tomb
         const playerForInteract = world.clusters[0];
         if (playerForInteract !== undefined && playerForInteract.isAliveFlag === 1) {
@@ -772,6 +774,14 @@ export function startGameScreen(
           isGrappleActive:      world.isGrappleActiveFlag === 1,
           grappleLengthWorld:   world.grappleLengthWorld,
           grapplePullInAmountWorld: world.grapplePullInAmountWorld,
+          inputUp: inputState.isJumpHeldFlag || inputState.isJumpTriggeredFlag,
+          inputLeft: inputState.isKeyA,
+          inputRight: inputState.isKeyD,
+          inputDown: inputState.isKeyS,
+          inputLeftClick: inputState.isMouseDownFlag === 1,
+          inputRightClick: inputState.isRightMouseDownFlag === 1,
+          inputGrapple: inputState.isGrappleHeldFlag === 1,
+          inputInteract: interactInputPulseMs > 0,
         };
         hudState.debug = dbg;
       }
@@ -795,13 +805,13 @@ export function startGameScreen(
 
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, ox, oy, zoom);
-    renderClusters(ctx, snapshot, ox, oy, zoom);
+    renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderGrapple(ctx, snapshot, ox, oy, zoom);
 
     // Tunnel darkness overlays
     drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
 
-    environmentalDust.render(ctx, ox, oy, zoom);
+    environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
 
     // Skill tombs (sprite + dust particles)
     skillTombRenderer.render(ctx, ox, oy, zoom);
@@ -824,6 +834,10 @@ export function startGameScreen(
       const roomLabel = currentRoom.name;
       const labelW = ctx.measureText(roomLabel).width;
       ctx.fillText(roomLabel, (canvas.width - labelW) / 2, 22);
+    }
+
+    if (interactInputPulseMs > 0) {
+      interactInputPulseMs = Math.max(0, interactInputPulseMs - elapsedMs);
     }
 
     // ── Touch joystick ───────────────────────────────────────────────────────
