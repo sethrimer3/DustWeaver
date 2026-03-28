@@ -7,8 +7,8 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 
-/** Size of one block in world units. */
-export const BLOCK_SIZE_WORLD = 15;
+/** Size of one block in world units (25 % smaller than the original 15). */
+export const BLOCK_SIZE_WORLD = 11.25;
 
 /** An enemy cluster placed inside a room. */
 export interface RoomEnemyDef {

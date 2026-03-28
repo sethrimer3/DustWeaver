@@ -230,3 +230,51 @@ This prevents the acceleration model from fighting against the swing.
 - All UI text uses Cinzel, Regular 400.
 - Main menu title text uses text-transform: uppercase.
 
+
+## BUILD 34 Changes
+
+### Block Size Reduction
+`BLOCK_SIZE_WORLD` reduced from 15 to 11.25 (25% smaller).  All room dimensions
+(walls, enemy spawns, tunnel positions) are stored in block units and converted
+to world units at load time, so the entire geometry shrinks proportionally.
+Player and enemy physics constants (jump height, gravity, speed) remain in
+absolute world units and are therefore unaffected by the block size change —
+the player effectively becomes larger relative to each block.
+
+### Jump Height Reduction
+`JUMP_HEIGHT_WORLD` reduced from 60 to 40 world units.  Derived constants
+(rise gravity, jump velocity) are recomputed automatically:
+- Rise gravity = (2 × 40) / (0.40²) = 500 px/s²
+- Jump velocity = 500 × 0.40 = 200 px/s (upward)
+The jump arc is noticeably shorter and snappier.
+
+### Grapple Bug Fix (Immediate Release on Attachment)
+Root cause: when the player pressed jump on the same animation frame as firing
+the grapple, `playerJumpTriggeredFlag` was set to 1 in gameScreen.ts AFTER
+`fireGrapple` ran.  On the first sim tick, `applyClusterMovement` skipped the
+normal jump path (grapple active), leaving the flag set.
+`applyGrappleClusterConstraint` then saw `jumpJustPressed=1` and
+`playerJumpHeldFlag=0` and treated it as an ultra-fast tap-release, immediately
+detaching the grapple.
+
+Fix: `fireGrapple` now clears `playerJumpTriggeredFlag` immediately after
+attaching so that any jump input that coincides with the fire frame is
+discarded rather than being consumed by the constraint on the next tick.
+
+Secondary fix: the anchor is now placed at the exact raycast surface hit point
+(`hit.x/hit.y`) instead of `player + dir * clampedDist`.  If the wall is
+closer than `GRAPPLE_MIN_LENGTH_WORLD` the grapple no longer fires at all
+(previously it would embed the anchor inside the block geometry).
+
+### Grapple Tap-Jump Hop
+Tapping jump while grappling now adds an upward velocity impulse
+(`GRAPPLE_TAP_HOP_SPEED_WORLD = 80 px/s`) before releasing the grapple.  Both
+the ultra-fast tap path and the regular tap path (held ≤ 6 ticks) apply the hop.
+The impulse is always applied additively (velocityYWorld -= 80): if the player is
+already moving upward at 100 px/s (velocityYWorld = -100), the result is -180 px/s,
+further increasing upward speed.
+
+### Debug Hitbox Rendering
+`renderWalls` now accepts an `isDebugMode` flag.  When enabled, a dashed red
+outline (`rgba(255,60,60,0.75)`) is drawn over every wall AABB so developers
+can verify the collision boundary matches the visual tile geometry.

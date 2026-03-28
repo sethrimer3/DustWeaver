@@ -104,9 +104,28 @@ function renderFlyingEye(
  * context-sensitive (auto-tiling) block sprites.  Falls back to solid-colour
  * rectangles per tile while sprites are still loading.
  * Walls are drawn before cluster indicators so clusters appear on top.
+ *
+ * When isDebugMode is true, a red outline is drawn around every wall AABB so
+ * that hitbox boundaries are visible during development.
  */
-export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
+export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
   renderWallSprites(ctx, snapshot, offsetXPx, offsetYPx, scalePx, BLOCK_SIZE_PX);
+
+  if (isDebugMode) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 60, 60, 0.75)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    for (let wi = 0; wi < snapshot.walls.count; wi++) {
+      const screenX = snapshot.walls.xWorld[wi] * scalePx + offsetXPx;
+      const screenY = snapshot.walls.yWorld[wi] * scalePx + offsetYPx;
+      const screenW = snapshot.walls.wWorld[wi] * scalePx;
+      const screenH = snapshot.walls.hWorld[wi] * scalePx;
+      ctx.strokeRect(screenX, screenY, screenW, screenH);
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
 }
 
 export function renderClusters(
