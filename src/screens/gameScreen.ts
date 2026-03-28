@@ -211,6 +211,7 @@ function worldBgColor(worldNumber: number): string {
     case 0:  return '#0d1a0f'; // pale dark green
     case 1:  return '#051408'; // deep dark green
     case 2:  return '#080c1a'; // dark blue
+    case 3:  return '#1a0500'; // deep dark red-orange (fire/lava world)
     default: return '#0a0a12';
   }
 }
@@ -357,6 +358,10 @@ export function startGameScreen(
         // Flying eyes are larger than ground enemies
         enemyCluster.halfWidthWorld  = FLYING_EYE_HALF_SIZE_WORLD;
         enemyCluster.halfHeightWorld = FLYING_EYE_HALF_SIZE_WORLD;
+      } else if (enemyDef.isRollingEnemyFlag === 1) {
+        enemyCluster.isRollingEnemyFlag    = 1;
+        enemyCluster.rollingEnemySpriteIndex = enemyDef.rollingEnemySpriteIndex ?? 1;
+        enemyCluster.rollingEnemyRollAngleRad = 0;
       }
 
       world.clusters.push(enemyCluster);

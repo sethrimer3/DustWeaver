@@ -7,6 +7,38 @@ import { ParticleKind } from '../../sim/particles/kinds';
 /** Block size in world units — walls are decomposed into tiles of this size. */
 const BLOCK_SIZE_PX = BLOCK_SIZE_WORLD;
 
+// ── Sprite loading ──────────────────────────────────────────────────────────
+
+/** Module-level image cache keyed by URL — populated once, reused forever. */
+const _imgCache = new Map<string, HTMLImageElement>();
+
+function _loadImg(src: string): HTMLImageElement {
+  const cached = _imgCache.get(src);
+  if (cached !== undefined) return cached;
+  const img = new Image();
+  img.src = src;
+  _imgCache.set(src, img);
+  return img;
+}
+
+function _isSpriteReady(img: HTMLImageElement): boolean {
+  return img.complete && img.naturalWidth > 0;
+}
+
+/** Player character sprite. */
+const _playerSprite: HTMLImageElement = _loadImg('SPRITES/player/player.png');
+
+/** Rolling enemy sprites indexed by spriteIndex (1–6). Index 0 is unused. */
+const _enemySprites: HTMLImageElement[] = [
+  _loadImg('SPRITES/player/player.png'), // placeholder at index 0 (unused)
+  _loadImg('SPRITES/enemies/universal/enemy (1).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (2).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (3).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (4).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (5).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (6).png'),
+];
+
 // ── Flying Eye rendering constants ─────────────────────────────────────────
 
 /** Sizes of each concentric diamond (as a fraction of the outermost half-diagonal). */
@@ -155,9 +187,50 @@ export function renderClusters(
         cluster.flyingEyeElementKind,
         healthRatio,
       );
+    } else if (isPlayer) {
+      // ── Player: sprite (fitted to box, slowly rotating) ─────────────────
+      const rotAngle = cluster.playerRotationAngleRad;
+      const sprite   = _playerSprite;
+      if (_isSpriteReady(sprite)) {
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(rotAngle);
+        ctx.drawImage(sprite, -boxHalfW, -boxHalfH, boxW, boxH);
+        ctx.restore();
+      } else {
+        // Fallback while sprite loads: coloured box
+        ctx.fillStyle = '#00ff99';
+        ctx.globalAlpha = 0.75;
+        ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+        ctx.globalAlpha = 1.0;
+        ctx.strokeStyle = '#00ff99';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+      }
+    } else if (cluster.isRollingEnemyFlag === 1) {
+      // ── Rolling enemy: sprite rotated by accumulated roll angle ──────────
+      const idx    = cluster.rollingEnemySpriteIndex;
+      const sprite = idx >= 1 && idx <= 6 ? _enemySprites[idx] : _enemySprites[1];
+      const rollAngle = cluster.rollingEnemyRollAngleRad;
+      if (_isSpriteReady(sprite)) {
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(rollAngle);
+        ctx.drawImage(sprite, -boxHalfW, -boxHalfH, boxW, boxH);
+        ctx.restore();
+      } else {
+        // Fallback while sprite loads: orange box
+        ctx.fillStyle = '#ff6600';
+        ctx.globalAlpha = 0.75;
+        ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+        ctx.globalAlpha = 1.0;
+        ctx.strokeStyle = '#ff6600';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+      }
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
-      const bodyColor = isPlayer ? '#00ff99' : '#ff6600';
+      const bodyColor = '#ff6600';
 
       // Filled box
       ctx.fillStyle = bodyColor;
@@ -175,7 +248,7 @@ export function renderClusters(
       ctx.fillRect(boxLeft + 2, boxTop + 2, boxW - 4, 3);
 
       if (showHitboxes) {
-        ctx.strokeStyle = isPlayer ? 'rgba(0, 255, 170, 0.95)' : 'rgba(255, 120, 40, 0.95)';
+        ctx.strokeStyle = 'rgba(255, 120, 40, 0.95)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 3]);
         ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
@@ -200,9 +273,15 @@ export function renderClusters(
 
     ctx.fillStyle = '#333';
     ctx.fillRect(barXPx, barYPx, barWidthPx, barHeightPx);
-    ctx.fillStyle = cluster.isFlyingEyeFlag === 1
-      ? getFlyingEyeColor(cluster.flyingEyeElementKind)
-      : (isPlayer ? '#00ff99' : '#ff6600');
+    let barColor: string;
+    if (cluster.isFlyingEyeFlag === 1) {
+      barColor = getFlyingEyeColor(cluster.flyingEyeElementKind);
+    } else if (isPlayer) {
+      barColor = '#00ff99';
+    } else {
+      barColor = '#ff6600';
+    }
+    ctx.fillStyle = barColor;
     ctx.fillRect(barXPx, barYPx, barWidthPx * healthRatio, barHeightPx);
   }
 

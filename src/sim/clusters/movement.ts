@@ -186,6 +186,28 @@ const ENEMY_ACCEL_PER_SEC = 8.0;
  */
 const ENEMY_ENGAGE_DIST_WORLD = 60.0;
 
+/**
+ * Maximum line-of-sight range for rolling enemies (world units).
+ * Rolling enemies only chase the player when within this distance,
+ * or when recently damaged (rollingEnemyAggressiveTicks > 0).
+ * ~20 blocks at BLOCK_SIZE_WORLD = 15.
+ */
+const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 300.0;
+
+/**
+ * Effective rolling radius (world units) used to convert horizontal
+ * displacement to sprite rotation.  A smaller value = spins faster.
+ */
+const ROLLING_ENEMY_SPRITE_RADIUS_WORLD = 5.0;
+
+// ── Player sprite rotation ──────────────────────────────────────────────────
+
+/** Rotation rate (radians/tick) for the player sprite while idle/moving. */
+const PLAYER_SPRITE_ROTATION_SLOW_RAD_PER_TICK = 0.012;
+
+/** Rotation rate (radians/tick) for the player sprite while blocking. */
+const PLAYER_SPRITE_ROTATION_FAST_RAD_PER_TICK = 0.10;
+
 // ============================================================================
 // Flying eye movement
 // ============================================================================
@@ -420,6 +442,17 @@ export function applyClusterMovement(world: WorldState): void {
         cluster.wallJumpLockoutTicks -= 1;
       }
 
+      // ── Update player sprite rotation ─────────────────────────────────
+      {
+        const rotRate = world.isPlayerBlockingFlag === 1
+          ? PLAYER_SPRITE_ROTATION_FAST_RAD_PER_TICK
+          : PLAYER_SPRITE_ROTATION_SLOW_RAD_PER_TICK;
+        cluster.playerRotationAngleRad += rotRate;
+        if (cluster.playerRotationAngleRad >= Math.PI * 2.0) {
+          cluster.playerRotationAngleRad -= Math.PI * 2.0;
+        }
+      }
+
       // ── Apply gravity (rise / fall split + jump-cut multiplier) ────────
       // When grappling, use consistent gravity (no jump-cut multiplier, no
       // asymmetric rise/fall) for a natural pendulum feel.  The grapple
@@ -601,13 +634,22 @@ export function applyClusterMovement(world: WorldState): void {
         // ── Enemy horizontal walk toward player ────────────────────────────
         const dxToPlayer = playerX - cluster.positionXWorld;
         const absDx = dxToPlayer < 0 ? -dxToPlayer : dxToPlayer;
+        const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer +
+          (playerY - cluster.positionYWorld) * (playerY - cluster.positionYWorld));
+
+        // Rolling enemies only chase when in sight range or recently damaged
+        const canChase = cluster.isRollingEnemyFlag === 0
+          || distToPlayer <= ROLLING_ENEMY_SIGHT_RANGE_WORLD
+          || cluster.rollingEnemyAggressiveTicks > 0;
 
         let targetVelX = 0.0;
-        if (absDx > ENEMY_ENGAGE_DIST_WORLD) {
-          targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC;
-        } else if (absDx > 10.0) {
-          targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC
-            * (absDx / ENEMY_ENGAGE_DIST_WORLD);
+        if (canChase) {
+          if (absDx > ENEMY_ENGAGE_DIST_WORLD) {
+            targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC;
+          } else if (absDx > 10.0) {
+            targetVelX = (dxToPlayer > 0 ? 1 : -1) * ENEMY_MAX_SPEED_WORLD_PER_SEC
+              * (absDx / ENEMY_ENGAGE_DIST_WORLD);
+          }
         }
 
         // Blend in lateral dodge (X component only for ground enemies)
@@ -705,6 +747,22 @@ export function applyClusterMovement(world: WorldState): void {
       } else if (cluster.positionXWorld > maxX - cluster.halfWidthWorld) {
         cluster.positionXWorld = maxX - cluster.halfWidthWorld;
         if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+      }
+
+      // ── Rolling enemy: accumulate roll rotation from horizontal motion ────
+      // Only update while grounded so the sprite doesn't spin during free-fall.
+      if (cluster.isRollingEnemyFlag === 1 && cluster.isGroundedFlag === 1) {
+        cluster.rollingEnemyRollAngleRad +=
+          cluster.velocityXWorld * dtSec / ROLLING_ENEMY_SPRITE_RADIUS_WORLD;
+        // Keep in [0, 2π) to prevent unbounded growth
+        const twoPi = Math.PI * 2.0;
+        cluster.rollingEnemyRollAngleRad =
+          ((cluster.rollingEnemyRollAngleRad % twoPi) + twoPi) % twoPi;
+
+        // Tick down aggression timer
+        if (cluster.rollingEnemyAggressiveTicks > 0) {
+          cluster.rollingEnemyAggressiveTicks -= 1;
+        }
       }
     }
   } // end for (clusters)

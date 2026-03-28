@@ -604,6 +604,16 @@ function applyEnemyBlockForces(world: WorldState): void {
         const angle = (slot / total) * Math.PI * 2.0;
         targetXWorld = enemyX + Math.cos(angle) * SHIELD_DIST_WORLD;
         targetYWorld = enemyY + Math.sin(angle) * SHIELD_DIST_WORLD;
+      } else if (cluster.isRollingEnemyFlag === 1) {
+        // Rolling enemy block: wide crescent arc facing the player.
+        // blockDirX/Y was set to point TOWARD the player in enemyAi.ts,
+        // so the crescent forms between this enemy and the player.
+        const crescentAngle = Math.atan2(blockDirY, blockDirX);
+        const halfSpread = Math.PI * 0.75; // ±135° → nearly a full semicircle
+        const t = total > 1 ? slot / (total - 1) : 0.5;
+        const angle = crescentAngle - halfSpread * 0.5 + t * halfSpread;
+        targetXWorld = enemyX + Math.cos(angle) * SHIELD_DIST_WORLD;
+        targetYWorld = enemyY + Math.sin(angle) * SHIELD_DIST_WORLD;
       } else {
         ({ targetXWorld, targetYWorld } = computeShieldTarget(
           enemyX, enemyY,

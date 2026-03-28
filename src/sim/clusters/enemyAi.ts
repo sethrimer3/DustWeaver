@@ -146,9 +146,17 @@ export function applyEnemyAI(world: WorldState): void {
     if (incomingThreatCount >= 1 && cluster.enemyAiIsBlockingFlag === 0
         && cluster.enemyAiBlockRemainingTicks === 0) {
       cluster.enemyAiIsBlockingFlag = 1;
-      // Block toward the player (intercept incoming particles from that side)
-      cluster.enemyAiBlockDirXWorld = -dirToPlayerX; // face player
-      cluster.enemyAiBlockDirYWorld = -dirToPlayerY;
+      if (cluster.isRollingEnemyFlag === 1) {
+        // Rolling enemies form a crescent shield on the player-facing side.
+        // Block direction points TOWARD the player so the crescent is between
+        // enemy and player.
+        cluster.enemyAiBlockDirXWorld = dirToPlayerX;
+        cluster.enemyAiBlockDirYWorld = dirToPlayerY;
+      } else {
+        // Other enemies shield the back side (existing behaviour)
+        cluster.enemyAiBlockDirXWorld = -dirToPlayerX;
+        cluster.enemyAiBlockDirYWorld = -dirToPlayerY;
+      }
       cluster.enemyAiBlockRemainingTicks = ENEMY_BLOCK_DURATION_TICKS;
       // Stagger next attack a bit (don't attack while blocking)
       if (cluster.enemyAiAttackCooldownTicks < ENEMY_BLOCK_COOLDOWN_TICKS) {

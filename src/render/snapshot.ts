@@ -49,6 +49,14 @@ export interface ClusterSnapshot {
   readonly flyingEyeFacingAngleRad: number;
   /** Primary element kind of this flying eye (ParticleKind value). Drives eye colour. */
   readonly flyingEyeElementKind:  number;
+  /** 1 if this cluster is a rolling ground enemy, rendered with a rotating sprite. */
+  readonly isRollingEnemyFlag:    0 | 1;
+  /** Which enemy sprite to render (1–6), corresponding to enemy (N).png. */
+  readonly rollingEnemySpriteIndex: number;
+  /** Accumulated roll angle (radians) used to rotate the enemy sprite. */
+  readonly rollingEnemyRollAngleRad: number;
+  /** Player sprite accumulated rotation angle (radians). */
+  readonly playerRotationAngleRad: number;
 }
 
 export interface WallSnapshot {
@@ -74,6 +82,8 @@ export interface WorldSnapshot {
   readonly grappleAttachFxTicks: number;
   readonly grappleAttachFxXWorld: number;
   readonly grappleAttachFxYWorld: number;
+  /** 1 while the player is holding block — used to drive player sprite rotation speed. */
+  readonly isPlayerBlockingFlag: 0 | 1;
 }
 
 export function createSnapshot(world: WorldState): WorldSnapshot {
@@ -97,6 +107,10 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       isFlyingEyeFlag:          c.isFlyingEyeFlag,
       flyingEyeFacingAngleRad:  c.flyingEyeFacingAngleRad,
       flyingEyeElementKind:     c.flyingEyeElementKind,
+      isRollingEnemyFlag:       c.isRollingEnemyFlag,
+      rollingEnemySpriteIndex:  c.rollingEnemySpriteIndex,
+      rollingEnemyRollAngleRad: c.rollingEnemyRollAngleRad,
+      playerRotationAngleRad:   c.playerRotationAngleRad,
     });
   }
 
@@ -129,5 +143,6 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleAttachFxTicks: world.grappleAttachFxTicks,
     grappleAttachFxXWorld: world.grappleAttachFxXWorld,
     grappleAttachFxYWorld: world.grappleAttachFxYWorld,
+    isPlayerBlockingFlag: world.isPlayerBlockingFlag,
   };
 }
