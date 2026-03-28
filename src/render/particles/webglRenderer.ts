@@ -26,7 +26,7 @@ import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shad
 const FLOATS_PER_VERTEX = 5;
 const BYTES_PER_FLOAT   = 4;
 /** Visual radius for each particle's point sprite (pixels). */
-const POINT_SIZE_PX = 5.0;
+const POINT_SIZE_PX = 2.5;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
