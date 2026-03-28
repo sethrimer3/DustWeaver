@@ -43,6 +43,12 @@ export interface ClusterSnapshot {
   readonly halfWidthWorld:        number;
   /** Half-height of the cluster box (world units). Used by renderer to draw a box. */
   readonly halfHeightWorld:       number;
+  /** 1 if this cluster is a flying eye, rendered as concentric diamond outlines. */
+  readonly isFlyingEyeFlag:       0 | 1;
+  /** Angle (radians) the eye is currently looking — used to offset inner diamonds. */
+  readonly flyingEyeFacingAngleRad: number;
+  /** Primary element kind of this flying eye (ParticleKind value). Drives eye colour. */
+  readonly flyingEyeElementKind:  number;
 }
 
 export interface WallSnapshot {
@@ -88,6 +94,9 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       dashRechargeAnimTicks: c.dashRechargeAnimTicks,
       halfWidthWorld:        c.halfWidthWorld,
       halfHeightWorld:       c.halfHeightWorld,
+      isFlyingEyeFlag:          c.isFlyingEyeFlag,
+      flyingEyeFacingAngleRad:  c.flyingEyeFacingAngleRad,
+      flyingEyeElementKind:     c.flyingEyeElementKind,
     });
   }
 

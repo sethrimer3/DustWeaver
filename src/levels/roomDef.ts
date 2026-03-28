@@ -22,6 +22,11 @@ export interface RoomEnemyDef {
   particleCount: number;
   /** 1 if boss, 0 otherwise. */
   isBossFlag: 0 | 1;
+  /**
+   * 1 if this enemy is a flying eye — floats in the air, moves in 2D,
+   * and is rendered as 4 concentric diamond outlines.
+   */
+  isFlyingEyeFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

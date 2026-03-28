@@ -187,6 +187,31 @@ const ENEMY_ACCEL_PER_SEC = 8.0;
 const ENEMY_ENGAGE_DIST_WORLD = 60.0;
 
 // ============================================================================
+// Flying eye movement
+// ============================================================================
+
+/** Maximum 2D flight speed of flying eye clusters (world units/s). */
+const FLYING_EYE_SPEED_WORLD_PER_SEC = 95.0;
+
+/** Acceleration alpha per second for flying eye 2D steering (exponential blend). */
+const FLYING_EYE_ACCEL_PER_SEC = 5.5;
+
+/**
+ * Preferred hover distance from the player.
+ * The eye will approach if farther and retreat if closer.
+ */
+const FLYING_EYE_PREFERRED_DIST_WORLD = 175.0;
+
+/** Dead-band half-width around preferred hover distance.  Inside the band the eye orbits. */
+const FLYING_EYE_PREFERRED_BAND_WORLD = 35.0;
+
+/** Angular rate (radians/second) at which the facing angle tracks the velocity direction. */
+const FLYING_EYE_TURN_RATE_PER_SEC = 7.0;
+
+/** Vertical margin from world top/bottom within which flying eyes are clamped. */
+const FLYING_EYE_VERTICAL_MARGIN_WORLD = 30.0;
+
+// ============================================================================
 // World bounds
 // ============================================================================
 
@@ -355,11 +380,13 @@ export function applyClusterMovement(world: WorldState): void {
 
   // ── Locate the player cluster position (needed by enemy AI) ───────────────
   let playerX = 0.0;
+  let playerY = 0.0;
   let playerFound = false;
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const c = world.clusters[ci];
     if (c.isPlayerFlag === 1 && c.isAliveFlag === 1) {
       playerX = c.positionXWorld;
+      playerY = c.positionYWorld;
       playerFound = true;
       break;
     }
@@ -506,8 +533,65 @@ export function applyClusterMovement(world: WorldState): void {
         }
       }
 
+    } else if (cluster.isFlyingEyeFlag === 1) {
+      // ── Flying Eye: no gravity, 2D steering toward/away from player ────────
+      if (playerFound) {
+        const dxToPlayer = playerX - cluster.positionXWorld;
+        const dyToPlayer = playerY - cluster.positionYWorld;
+        const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+        const invDist = distToPlayer > 0.5 ? 1.0 / distToPlayer : 0.0;
+        const dirX = dxToPlayer * invDist;
+        const dirY = dyToPlayer * invDist;
+
+        let targetVelX = 0.0;
+        let targetVelY = 0.0;
+
+        const outerBand = FLYING_EYE_PREFERRED_DIST_WORLD + FLYING_EYE_PREFERRED_BAND_WORLD;
+        const innerBand = FLYING_EYE_PREFERRED_DIST_WORLD - FLYING_EYE_PREFERRED_BAND_WORLD;
+
+        if (distToPlayer > outerBand) {
+          // Too far — fly toward player
+          targetVelX = dirX * FLYING_EYE_SPEED_WORLD_PER_SEC;
+          targetVelY = dirY * FLYING_EYE_SPEED_WORLD_PER_SEC;
+        } else if (distToPlayer < innerBand) {
+          // Too close — retreat away from player
+          targetVelX = -dirX * FLYING_EYE_SPEED_WORLD_PER_SEC;
+          targetVelY = -dirY * FLYING_EYE_SPEED_WORLD_PER_SEC;
+        } else {
+          // In preferred band — gentle circular drift perpendicular to player
+          targetVelX = -dirY * FLYING_EYE_SPEED_WORLD_PER_SEC * 0.3;
+          targetVelY =  dirX * FLYING_EYE_SPEED_WORLD_PER_SEC * 0.3;
+        }
+
+        // Flying eyes apply dodge in full 2D (both X and Y components)
+        if (cluster.enemyAiDodgeTicks > 0) {
+          targetVelX += cluster.enemyAiDodgeDirXWorld * ENEMY_DODGE_SPEED_WORLD * 1.6;
+          targetVelY += cluster.enemyAiDodgeDirYWorld * ENEMY_DODGE_SPEED_WORLD * 1.6;
+        }
+
+        const alpha = FLYING_EYE_ACCEL_PER_SEC * dtSec;
+        const clampedAlpha = alpha < 1.0 ? alpha : 1.0;
+        cluster.velocityXWorld += (targetVelX - cluster.velocityXWorld) * clampedAlpha;
+        cluster.velocityYWorld += (targetVelY - cluster.velocityYWorld) * clampedAlpha;
+      }
+
+      // Update facing angle to smoothly track velocity direction
+      const eyeSpeed = Math.sqrt(
+        cluster.velocityXWorld * cluster.velocityXWorld +
+        cluster.velocityYWorld * cluster.velocityYWorld,
+      );
+      if (eyeSpeed > 8.0) {
+        const targetAngleRad = Math.atan2(cluster.velocityYWorld, cluster.velocityXWorld);
+        let angleDiff = targetAngleRad - cluster.flyingEyeFacingAngleRad;
+        // Wrap to [-PI, PI] to always take the shortest arc
+        while (angleDiff >  Math.PI) angleDiff -= Math.PI * 2.0;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2.0;
+        cluster.flyingEyeFacingAngleRad += angleDiff
+          * Math.min(1.0, FLYING_EYE_TURN_RATE_PER_SEC * dtSec);
+      }
+
     } else {
-      // ── Enemy: gravity ──────────────────────────────────────────────────
+      // ── Ground enemy: gravity ───────────────────────────────────────────────
       cluster.velocityYWorld += RISE_GRAVITY_WORLD_PER_SEC2 * dtSec;
       if (cluster.velocityYWorld > TERMINAL_VELOCITY_WORLD_PER_SEC) {
         cluster.velocityYWorld = TERMINAL_VELOCITY_WORLD_PER_SEC;
@@ -526,7 +610,7 @@ export function applyClusterMovement(world: WorldState): void {
             * (absDx / ENEMY_ENGAGE_DIST_WORLD);
         }
 
-        // Blend in lateral dodge (X component only)
+        // Blend in lateral dodge (X component only for ground enemies)
         if (cluster.enemyAiDodgeTicks > 0) {
           targetVelX += cluster.enemyAiDodgeDirXWorld * ENEMY_DODGE_SPEED_WORLD;
         }
@@ -553,55 +637,77 @@ export function applyClusterMovement(world: WorldState): void {
       cluster.isWallSlidingFlag       = 0;
     }
 
-    // ── Resolve floor / platform landing ──────────────────────────────────
-    const wasGrounded = cluster.isGroundedFlag === 1;
-    const thinLanded  = resolveClusterFloorCollision(cluster, world);
-    const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY);
-    const justLanded  = thinLanded || thickLanded;
+    if (cluster.isFlyingEyeFlag === 1) {
+      // ── Flying eye: clamp to world bounds in both axes (no floor landing) ─
+      const hw = cluster.halfWidthWorld;
+      const hh = cluster.halfHeightWorld;
+      const minYEye = FLYING_EYE_VERTICAL_MARGIN_WORLD + hh;
+      const maxYEye = world.worldHeightWorld - FLYING_EYE_VERTICAL_MARGIN_WORLD - hh;
+      if (cluster.positionYWorld < minYEye) {
+        cluster.positionYWorld = minYEye;
+        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+      } else if (cluster.positionYWorld > maxYEye) {
+        cluster.positionYWorld = maxYEye;
+        if (cluster.velocityYWorld > 0) cluster.velocityYWorld = 0;
+      }
+      if (cluster.positionXWorld < minX + hw) {
+        cluster.positionXWorld = minX + hw;
+        if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+      } else if (cluster.positionXWorld > maxX - hw) {
+        cluster.positionXWorld = maxX - hw;
+        if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+      }
+    } else {
+      // ── Resolve floor / platform landing (ground entities only) ──────────
+      const wasGrounded = cluster.isGroundedFlag === 1;
+      const thinLanded  = resolveClusterFloorCollision(cluster, world);
+      const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY);
+      const justLanded  = thinLanded || thickLanded;
 
-    if (cluster.isPlayerFlag === 1) {
-      // ── Wall slide: cap downward velocity when pressing into a wall ─────
-      // Only active when airborne, falling, lockout is clear, and the player
-      // is actively pushing toward the wall (intentional interaction).
-      if (
-        cluster.isGroundedFlag === 0 &&
-        cluster.velocityYWorld > 0 &&
-        cluster.wallJumpLockoutTicks === 0
-      ) {
-        const inputDx = world.playerMoveInputDxWorld;
-        const pressingIntoWall =
-          (cluster.isTouchingWallRightFlag === 1 && inputDx > 0) ||
-          (cluster.isTouchingWallLeftFlag  === 1 && inputDx < 0);
-        if (pressingIntoWall) {
-          cluster.isWallSlidingFlag = 1;
-          if (cluster.velocityYWorld > WALL_SLIDE_MAX_FALL_SPEED) {
-            cluster.velocityYWorld = WALL_SLIDE_MAX_FALL_SPEED;
+      if (cluster.isPlayerFlag === 1) {
+        // ── Wall slide: cap downward velocity when pressing into a wall ─────
+        // Only active when airborne, falling, lockout is clear, and the player
+        // is actively pushing toward the wall (intentional interaction).
+        if (
+          cluster.isGroundedFlag === 0 &&
+          cluster.velocityYWorld > 0 &&
+          cluster.wallJumpLockoutTicks === 0
+        ) {
+          const inputDx = world.playerMoveInputDxWorld;
+          const pressingIntoWall =
+            (cluster.isTouchingWallRightFlag === 1 && inputDx > 0) ||
+            (cluster.isTouchingWallLeftFlag  === 1 && inputDx < 0);
+          if (pressingIntoWall) {
+            cluster.isWallSlidingFlag = 1;
+            if (cluster.velocityYWorld > WALL_SLIDE_MAX_FALL_SPEED) {
+              cluster.velocityYWorld = WALL_SLIDE_MAX_FALL_SPEED;
+            }
           }
         }
-      }
 
-      if (justLanded) {
-        // Fire buffered jump immediately on landing
-        if (cluster.jumpBufferTicks > 0) {
-          cluster.velocityYWorld  = -PLAYER_JUMP_SPEED_WORLD;
-          cluster.isGroundedFlag  = 0;
-          cluster.jumpBufferTicks = 0;
+        if (justLanded) {
+          // Fire buffered jump immediately on landing
+          if (cluster.jumpBufferTicks > 0) {
+            cluster.velocityYWorld  = -PLAYER_JUMP_SPEED_WORLD;
+            cluster.isGroundedFlag  = 0;
+            cluster.jumpBufferTicks = 0;
+          }
+        } else if (wasGrounded && cluster.isGroundedFlag === 0) {
+          // Player walked off a ledge — start coyote time
+          cluster.coyoteTimeTicks = COYOTE_TIME_TICKS;
         }
-      } else if (wasGrounded && cluster.isGroundedFlag === 0) {
-        // Player walked off a ledge — start coyote time
-        cluster.coyoteTimeTicks = COYOTE_TIME_TICKS;
+      }
+
+      // ── Clamp horizontal world bounds (ground entities) ─────────────────
+      if (cluster.positionXWorld < minX + cluster.halfWidthWorld) {
+        cluster.positionXWorld = minX + cluster.halfWidthWorld;
+        if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+      } else if (cluster.positionXWorld > maxX - cluster.halfWidthWorld) {
+        cluster.positionXWorld = maxX - cluster.halfWidthWorld;
+        if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
       }
     }
-
-    // ── Clamp horizontal world bounds ─────────────────────────────────────
-    if (cluster.positionXWorld < minX + cluster.halfWidthWorld) {
-      cluster.positionXWorld = minX + cluster.halfWidthWorld;
-      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
-    } else if (cluster.positionXWorld > maxX - cluster.halfWidthWorld) {
-      cluster.positionXWorld = maxX - cluster.halfWidthWorld;
-      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
-    }
-  }
+  } // end for (clusters)
 
   // Clear per-tick player inputs (consumed this tick).
   // playerJumpTriggeredFlag is preserved when grappling so applyGrappleClusterConstraint

@@ -345,6 +345,17 @@ export function startGameScreen(
       const ey = enemyDef.yBlock * BLOCK_SIZE_PX;
       const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
       const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
+
+      if (enemyDef.isFlyingEyeFlag === 1) {
+        enemyCluster.isFlyingEyeFlag     = 1;
+        enemyCluster.flyingEyeElementKind = enemyDef.kinds.length > 0
+          ? enemyDef.kinds[0]
+          : ParticleKind.Wind;
+        // Flying eyes are larger than ground enemies
+        enemyCluster.halfWidthWorld  = 14;
+        enemyCluster.halfHeightWorld = 14;
+      }
+
       world.clusters.push(enemyCluster);
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

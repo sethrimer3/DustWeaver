@@ -71,9 +71,28 @@ export interface ClusterState {
   enemyAiBlockRemainingTicks: number;
   /** Ticks remaining in the current dodge burst. */
   enemyAiDodgeTicks: number;
-  /** Lateral dodge velocity (world units / sec). */
+  /** Dodge velocity direction (world units / sec). */
   enemyAiDodgeDirXWorld: number;
   enemyAiDodgeDirYWorld: number;
+
+  // ---- Flying Eye (populated only when isFlyingEyeFlag === 1) ------------
+  /**
+   * 1 if this cluster is a flying eye — hovers in the air, moves in 2D,
+   * and is rendered as 4 concentric diamond outlines.
+   */
+  isFlyingEyeFlag: 0 | 1;
+  /**
+   * The angle (radians) the eye is currently "looking" toward.
+   * Smoothly tracks the cluster's velocity direction each tick.
+   * Used by the renderer to slide the inner diamond rings in the facing direction.
+   */
+  flyingEyeFacingAngleRad: number;
+  /**
+   * Primary element kind used by this flying eye (ParticleKind value).
+   * Stored here so the renderer can apply the correct element colour without
+   * scanning the particle buffers each frame.
+   */
+  flyingEyeElementKind: number;
 }
 
 export function createClusterState(
@@ -116,5 +135,8 @@ export function createClusterState(
     enemyAiDodgeTicks: 0,
     enemyAiDodgeDirXWorld: 0,
     enemyAiDodgeDirYWorld: 0,
+    isFlyingEyeFlag: 0,
+    flyingEyeFacingAngleRad: 0,
+    flyingEyeElementKind: 0,
   };
 }

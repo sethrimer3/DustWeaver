@@ -2,9 +2,70 @@ import { WorldSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_WORLD } from '../../levels/roomDef';
+import { ParticleKind } from '../../sim/particles/kinds';
 
 /** Block size in world units — walls are decomposed into tiles of this size. */
 const BLOCK_SIZE_PX = BLOCK_SIZE_WORLD;
+
+// ── Flying Eye rendering constants ─────────────────────────────────────────
+
+/** Sizes of each concentric diamond (as a fraction of the outermost half-diagonal). */
+const FLYING_EYE_RING_SCALES = [1.0, 0.72, 0.50, 0.31];
+/** Offset of each diamond's centre in the facing direction (fraction of outerR). */
+const FLYING_EYE_RING_OFFSETS = [0.0, 0.07, 0.14, 0.19];
+/** Stroke widths (screen pixels) for each ring, outer to inner. */
+const FLYING_EYE_RING_WIDTHS = [3.5, 2.5, 2.0, 1.5];
+
+/** Returns the primary display colour for a flying eye by element kind. */
+function getFlyingEyeColor(elementKind: number): string {
+  switch (elementKind as ParticleKind) {
+    case ParticleKind.Fire:  return '#ff5522';
+    case ParticleKind.Ice:   return '#44ccff';
+    case ParticleKind.Wind:  return '#88ffaa';
+    default:                 return '#ccccff';
+  }
+}
+
+/**
+ * Draws four concentric diamond outlines centred at (screenX, screenY).
+ * The inner diamonds are offset in the facing direction so the eye appears
+ * to "look" in that direction.
+ */
+function renderFlyingEye(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  outerHalfDiagonalPx: number,
+  facingAngleRad: number,
+  elementKind: number,
+  healthRatio: number,
+): void {
+  const color = getFlyingEyeColor(elementKind);
+  const facingDirX = Math.cos(facingAngleRad);
+  const facingDirY = Math.sin(facingAngleRad);
+
+  ctx.strokeStyle = color;
+  ctx.fillStyle = 'transparent';
+  ctx.globalAlpha = 0.85 + healthRatio * 0.15;
+
+  for (let d = 0; d < FLYING_EYE_RING_SCALES.length; d++) {
+    const r   = outerHalfDiagonalPx * FLYING_EYE_RING_SCALES[d];
+    const off = outerHalfDiagonalPx * FLYING_EYE_RING_OFFSETS[d];
+    const cx  = screenX + facingDirX * off;
+    const cy  = screenY + facingDirY * off;
+
+    ctx.lineWidth = FLYING_EYE_RING_WIDTHS[d];
+    ctx.beginPath();
+    ctx.moveTo(cx + r, cy);       // right point
+    ctx.lineTo(cx,     cy + r);   // bottom point
+    ctx.lineTo(cx - r, cy);       // left point
+    ctx.lineTo(cx,     cy - r);   // top point
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1.0;
+}
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas using
@@ -83,42 +144,65 @@ export function renderClusters(
       ctx.stroke();
     }
 
-    // ── Cluster box body ──────────────────────────────────────────────────
-    const bodyColor = isPlayer ? '#00ff99' : '#ff6600';
+    if (cluster.isFlyingEyeFlag === 1) {
+      // ── Flying Eye: draw 4 concentric diamond outlines ──────────────────
+      const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
+      const outerHalfDiagonalPx = boxHalfW * 2.5;
+      renderFlyingEye(
+        ctx, screenX, screenY,
+        outerHalfDiagonalPx,
+        cluster.flyingEyeFacingAngleRad,
+        cluster.flyingEyeElementKind,
+        healthRatio,
+      );
+    } else {
+      // ── Regular cluster box body ─────────────────────────────────────────
+      const bodyColor = isPlayer ? '#00ff99' : '#ff6600';
 
-    // Filled box
-    ctx.fillStyle = bodyColor;
-    ctx.globalAlpha = 0.75;
-    ctx.fillRect(boxLeft, boxTop, boxW, boxH);
-    ctx.globalAlpha = 1.0;
+      // Filled box
+      ctx.fillStyle = bodyColor;
+      ctx.globalAlpha = 0.75;
+      ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+      ctx.globalAlpha = 1.0;
 
-    // Box border
-    ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
-
-    // Inner highlight on top edge
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.fillRect(boxLeft + 2, boxTop + 2, boxW - 4, 3);
-
-    if (showHitboxes) {
-      ctx.strokeStyle = isPlayer ? 'rgba(0, 255, 170, 0.95)' : 'rgba(255, 120, 40, 0.95)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
+      // Box border
+      ctx.strokeStyle = bodyColor;
+      ctx.lineWidth = 2;
       ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
-      ctx.setLineDash([]);
+
+      // Inner highlight on top edge
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(boxLeft + 2, boxTop + 2, boxW - 4, 3);
+
+      if (showHitboxes) {
+        ctx.strokeStyle = isPlayer ? 'rgba(0, 255, 170, 0.95)' : 'rgba(255, 120, 40, 0.95)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+        ctx.setLineDash([]);
+      }
     }
 
-    // ── Health bar (above the box) ────────────────────────────────────────
-    const barWidthPx  = boxW;
-    const barHeightPx = 4;
-    const barXPx      = boxLeft;
-    const barYPx      = boxTop - barHeightPx - 4;
+    // ── Health bar (above the body) ───────────────────────────────────────
     const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
+    // For flying eyes the health bar is anchored above the outer diamond ring;
+    // for regular clusters it sits above the box.
+    const barWidthPx  = cluster.isFlyingEyeFlag === 1
+      ? boxHalfW * 5.0
+      : boxW;
+    const barHeightPx = 4;
+    const barXPx      = cluster.isFlyingEyeFlag === 1
+      ? screenX - barWidthPx * 0.5
+      : boxLeft;
+    const barYPx      = cluster.isFlyingEyeFlag === 1
+      ? screenY - boxHalfW * 2.5 - barHeightPx - 6
+      : boxTop - barHeightPx - 4;
 
     ctx.fillStyle = '#333';
     ctx.fillRect(barXPx, barYPx, barWidthPx, barHeightPx);
-    ctx.fillStyle = isPlayer ? '#00ff99' : '#ff6600';
+    ctx.fillStyle = cluster.isFlyingEyeFlag === 1
+      ? getFlyingEyeColor(cluster.flyingEyeElementKind)
+      : (isPlayer ? '#00ff99' : '#ff6600');
     ctx.fillRect(barXPx, barYPx, barWidthPx * healthRatio, barHeightPx);
   }
 

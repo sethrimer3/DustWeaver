@@ -574,6 +574,7 @@ function applyEnemyBlockForces(world: WorldState): void {
     const blockDirY      = cluster.enemyAiBlockDirYWorld;
     const enemyX         = cluster.positionXWorld;
     const enemyY         = cluster.positionYWorld;
+    const isFlyingEye    = cluster.isFlyingEyeFlag === 1;
 
     _eBlockKindCount.fill(0);
     _eBlockKindSlotIdx.fill(0);
@@ -595,11 +596,21 @@ function applyEnemyBlockForces(world: WorldState): void {
       const total = _eBlockKindCount[kind] > 0 ? _eBlockKindCount[kind] : 1;
       const slot  = _eBlockKindSlotIdx[kind]++;
 
-      const { targetXWorld, targetYWorld } = computeShieldTarget(
-        enemyX, enemyY,
-        blockDirX, blockDirY,
-        slot, total, kind,
-      );
+      let targetXWorld: number;
+      let targetYWorld: number;
+
+      if (isFlyingEye) {
+        // Flying eye block: spin all particles in a tight protective circle
+        const angle = (slot / total) * Math.PI * 2.0;
+        targetXWorld = enemyX + Math.cos(angle) * SHIELD_DIST_WORLD;
+        targetYWorld = enemyY + Math.sin(angle) * SHIELD_DIST_WORLD;
+      } else {
+        ({ targetXWorld, targetYWorld } = computeShieldTarget(
+          enemyX, enemyY,
+          blockDirX, blockDirY,
+          slot, total, kind,
+        ));
+      }
 
       const dsx = targetXWorld - positionXWorld[i];
       const dsy = targetYWorld - positionYWorld[i];
