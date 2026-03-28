@@ -50,20 +50,20 @@ const JUMP_HEIGHT_WORLD = 60.0;
 
 /**
  * Time from jump launch to apex (seconds).
- * Shorter = snappier arc; 0.35 s gives a tight, readable trajectory.
+ * Shorter = snappier arc; 0.40 s gives a slightly floatier, more forgiving arc.
  */
-const TIME_TO_APEX_SEC = 0.35;
+const TIME_TO_APEX_SEC = 0.40;
 
 /**
  * Rise gravity (px/s²): computed from jump height + apex time.
- *   gravity = (2 × jumpHeight) / (timeToApex²) ≈ 979.6 px/s²
+ *   gravity = (2 × jumpHeight) / (timeToApex²) = 750 px/s²
  * Do not edit directly — change JUMP_HEIGHT_WORLD / TIME_TO_APEX_SEC instead.
  */
 const RISE_GRAVITY_WORLD_PER_SEC2 = (2.0 * JUMP_HEIGHT_WORLD) / (TIME_TO_APEX_SEC * TIME_TO_APEX_SEC);
 
 /**
  * Initial upward jump velocity (positive value; negated when applied).
- *   jumpVelocity = gravity × timeToApex ≈ 342.8 px/s
+ *   jumpVelocity = gravity × timeToApex = 300 px/s
  * Do not edit directly — change JUMP_HEIGHT_WORLD / TIME_TO_APEX_SEC instead.
  */
 const PLAYER_JUMP_SPEED_WORLD = RISE_GRAVITY_WORLD_PER_SEC2 * TIME_TO_APEX_SEC;
@@ -85,7 +85,7 @@ const FALL_GRAVITY_WORLD_PER_SEC2 = 1600.0;
 const JUMP_CUT_GRAVITY_MULTIPLIER = 2.5;
 
 /** Maximum downward fall speed (px/s).  Prevents tunnelling at high speeds. */
-const TERMINAL_VELOCITY_WORLD_PER_SEC = 900.0;
+const TERMINAL_VELOCITY_WORLD_PER_SEC = 240.0;
 
 // ============================================================================
 // Coyote time & jump buffer
