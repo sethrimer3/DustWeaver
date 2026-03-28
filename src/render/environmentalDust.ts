@@ -9,7 +9,6 @@ const RETURN_TO_REST = 16.0;
 const DISTURB_RADIUS_WORLD = 92.0;
 const LANDING_RADIUS_WORLD = 145.0;
 const LANDING_VERTICAL_SPEED_THRESHOLD = 80.0;
-const DUST_SIZE_MULTIPLIER = 4;
 
 interface SurfaceSegment {
   x0: number;
@@ -137,7 +136,7 @@ export class EnvironmentalDustLayer {
         const g = this.glow[i];
         if (g < minGlow || g >= maxGlow) continue;
 
-        const size = (1 + (this.moundHeightPx[i] > 2 ? 1 : 0)) * DUST_SIZE_MULTIPLIER * scalePx;
+        const size = (1 + (this.moundHeightPx[i] > 2 ? 1 : 0)) * scalePx;
         ctx.fillRect(
           this.xWorld[i] * scalePx + offsetXPx,
           this.yWorld[i] * scalePx + offsetYPx,

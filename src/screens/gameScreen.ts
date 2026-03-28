@@ -6,8 +6,8 @@ import { getElementProfile } from '../sim/particles/elementProfiles';
 import { tick } from '../sim/tick';
 import { RngState, createRng, nextFloat, nextFloatRange } from '../sim/rng';
 import { createSnapshot } from '../render/snapshot';
-import { renderParticles, renderParticleHitboxes } from '../render/particles/renderer';
-import { renderClusters, renderWalls, renderGrapple, renderClusterHitboxes } from '../render/clusters/renderer';
+import { renderParticles } from '../render/particles/renderer';
+import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
 import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
@@ -772,14 +772,6 @@ export function startGameScreen(
           isGrappleActive:      world.isGrappleActiveFlag === 1,
           grappleLengthWorld:   world.grappleLengthWorld,
           grapplePullInAmountWorld: world.grapplePullInAmountWorld,
-          inputUp:              inputState.isJumpHeldFlag,
-          inputLeft:            inputState.isKeyA,
-          inputRight:           inputState.isKeyD,
-          inputDown:            inputState.isKeyS,
-          inputLeftClick:       inputState.isMouseDownFlag === 1,
-          inputRightClick:      inputState.isRightMouseDownFlag === 1,
-          inputGrapple:         inputState.isGrappleHeldFlag === 1,
-          inputInteract:        inputState.isInteractHeldFlag,
         };
         hudState.debug = dbg;
       }
@@ -820,11 +812,6 @@ export function startGameScreen(
     // layers; the transparent clear ensures game content shows through)
     if (!webglRenderer.isAvailable) {
       renderParticles(ctx, snapshot, ox, oy, zoom);
-    }
-
-    if (isDebugMode) {
-      renderClusterHitboxes(ctx, snapshot, ox, oy, zoom);
-      renderParticleHitboxes(ctx, snapshot, ox, oy, zoom);
     }
 
     // Debug-only HUD and room name

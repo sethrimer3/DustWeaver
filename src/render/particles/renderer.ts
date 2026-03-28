@@ -2,8 +2,6 @@ import { WorldSnapshot } from '../snapshot';
 import { getParticleStyle } from './styles';
 import { getKindShape, ParticleShape, ParticleKind } from '../../sim/particles/kinds';
 
-const PARTICLE_SIZE_MULTIPLIER = 4;
-
 // ---- Shape drawing helpers -----------------------------------------------
 
 /**
@@ -159,7 +157,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = style.colorHex;
-    drawParticleShape(ctx, screenX, screenY, style.radiusPx * PARTICLE_SIZE_MULTIPLIER, kind);
+    drawParticleShape(ctx, screenX, screenY, style.radiusPx, kind);
   }
   ctx.globalAlpha = 1.0;
 }

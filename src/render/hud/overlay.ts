@@ -19,14 +19,6 @@ export interface HudDebugState {
   isGrappleActive: boolean;
   grappleLengthWorld: number;
   grapplePullInAmountWorld: number;
-  inputUp: boolean;
-  inputLeft: boolean;
-  inputRight: boolean;
-  inputDown: boolean;
-  inputLeftClick: boolean;
-  inputRightClick: boolean;
-  inputGrapple: boolean;
-  inputInteract: boolean;
 }
 
 export interface HudState {
@@ -55,10 +47,6 @@ export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): 
         `  Slide:${d.isWallSlidingFlag ? 'Y' : 'N'}`,
       `WallLock: ${d.wallJumpLockoutTicks}t`,
       `Grapple:  ${d.isGrappleActive ? `len=${d.grappleLengthWorld.toFixed(0)} pull=${d.grapplePullInAmountWorld.toFixed(0)}` : 'off'}`,
-      `Input U:  ${d.inputUp ? 'Y' : 'N'}   D: ${d.inputDown ? 'Y' : 'N'}`,
-      `Input L:  ${d.inputLeft ? 'Y' : 'N'}   R: ${d.inputRight ? 'Y' : 'N'}`,
-      `L/R Click:${d.inputLeftClick ? 'Y' : 'N'}/${d.inputRightClick ? 'Y' : 'N'}`,
-      `Grap/Int: ${d.inputGrapple ? 'Y' : 'N'}/${d.inputInteract ? 'Y' : 'N'}`,
     ];
   }
 
