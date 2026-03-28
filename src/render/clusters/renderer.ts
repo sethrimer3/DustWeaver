@@ -4,6 +4,7 @@ import { renderWallSprites } from '../walls/blockSpriteRenderer';
 
 /** Block size in world units — walls are decomposed into tiles of this size. */
 const BLOCK_SIZE_PX = 30;
+const CLUSTER_SIZE_MULTIPLIER = 4;
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas using
@@ -28,8 +29,8 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
     const isPlayer = cluster.isPlayerFlag === 1;
 
     // ── Box dimensions ─────────────────────────────────────────────────────
-    const boxHalfW = cluster.halfWidthWorld * scalePx;
-    const boxHalfH = cluster.halfHeightWorld * scalePx;
+    const boxHalfW = cluster.halfWidthWorld * scalePx * CLUSTER_SIZE_MULTIPLIER;
+    const boxHalfH = cluster.halfHeightWorld * scalePx * CLUSTER_SIZE_MULTIPLIER;
     const boxLeft  = screenX - boxHalfW;
     const boxTop   = screenY - boxHalfH;
     const boxW     = boxHalfW * 2;
@@ -106,6 +107,28 @@ export function renderClusters(ctx: CanvasRenderingContext2D, snapshot: WorldSna
     ctx.fillRect(barXPx, barYPx, barWidthPx * healthRatio, barHeightPx);
   }
 
+  ctx.restore();
+}
+
+export function renderClusterHitboxes(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  ctx.save();
+  for (let ci = 0; ci < snapshot.clusters.length; ci++) {
+    const cluster = snapshot.clusters[ci];
+    if (cluster.isAliveFlag === 0) continue;
+    const screenX = cluster.positionXWorld * scalePx + offsetXPx;
+    const screenY = cluster.positionYWorld * scalePx + offsetYPx;
+    const halfW = cluster.halfWidthWorld * scalePx * CLUSTER_SIZE_MULTIPLIER;
+    const halfH = cluster.halfHeightWorld * scalePx * CLUSTER_SIZE_MULTIPLIER;
+    ctx.strokeStyle = cluster.isPlayerFlag === 1 ? 'rgba(0, 255, 153, 0.9)' : 'rgba(255, 120, 20, 0.9)';
+    ctx.lineWidth = 1.25;
+    ctx.strokeRect(screenX - halfW, screenY - halfH, halfW * 2, halfH * 2);
+  }
   ctx.restore();
 }
 

@@ -27,6 +27,7 @@ const FLOATS_PER_VERTEX = 5;
 const BYTES_PER_FLOAT   = 4;
 /** Visual radius for each particle's point sprite (pixels). */
 const POINT_SIZE_PX = 2.5;
+const PARTICLE_SIZE_MULTIPLIER = 4;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -235,7 +236,7 @@ export class WebGLParticleRenderer {
     gl.useProgram(this.program);
 
     gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
-    gl.uniform1f(this.uPointSizePx, POINT_SIZE_PX * scalePx);
+    gl.uniform1f(this.uPointSizePx, POINT_SIZE_PX * PARTICLE_SIZE_MULTIPLIER * scalePx);
 
     const stride = FLOATS_PER_VERTEX * BYTES_PER_FLOAT;
     gl.enableVertexAttribArray(this.attrPositionScreen);
