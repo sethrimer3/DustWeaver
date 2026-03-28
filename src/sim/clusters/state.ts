@@ -93,6 +93,36 @@ export interface ClusterState {
    * scanning the particle buffers each frame.
    */
   flyingEyeElementKind: number;
+
+  // ---- Rolling Enemy (populated only when isRollingEnemyFlag === 1) -------
+  /**
+   * 1 if this cluster is a rolling ground enemy — uses a sprite that rotates
+   * as the enemy rolls, and forms a crescent shield when blocking.
+   */
+  isRollingEnemyFlag: 0 | 1;
+  /**
+   * Which enemy sprite to render (1–6), corresponding to enemy (N).png.
+   * Set at spawn time from RoomEnemyDef; never changed during gameplay.
+   */
+  rollingEnemySpriteIndex: number;
+  /**
+   * Accumulated roll rotation (radians) — incremented each tick proportional
+   * to horizontal velocity so the sprite appears to roll along the ground.
+   */
+  rollingEnemyRollAngleRad: number;
+  /**
+   * Countdown ticks during which the enemy aggressively chases the player
+   * after taking damage, even if the player is outside normal sight range.
+   * Decremented each tick; set to ROLLING_ENEMY_AGGRO_DURATION_TICKS on damage.
+   */
+  rollingEnemyAgressiveTicks: number;
+
+  // ---- Player sprite rotation (populated only when isPlayerFlag === 1) -----
+  /**
+   * Accumulated rotation angle (radians) for the player sprite.
+   * Slowly increments each tick; speeds up while the player is blocking.
+   */
+  playerRotationAngleRad: number;
 }
 
 export function createClusterState(
@@ -138,5 +168,10 @@ export function createClusterState(
     isFlyingEyeFlag: 0,
     flyingEyeFacingAngleRad: 0,
     flyingEyeElementKind: 0,
+    isRollingEnemyFlag: 0,
+    rollingEnemySpriteIndex: 1,
+    rollingEnemyRollAngleRad: 0,
+    rollingEnemyAgressiveTicks: 0,
+    playerRotationAngleRad: 0,
   };
 }

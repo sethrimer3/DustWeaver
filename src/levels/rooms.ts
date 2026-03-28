@@ -2,11 +2,12 @@
  * Metroidvania room definitions.
  *
  * Layout:
- *   World 2 ← [LOBBY] → World 1
+ *   World 3 ← World 2 ← [LOBBY] → World 1
  *
  * The lobby is a neutral hub (world 0) with exits left and right.
  * Going RIGHT leads to World 1 rooms.
  * Going LEFT leads to World 2 rooms.
+ * Going further LEFT from World 2 leads to World 3 (fire/lava world).
  *
  * All coordinates are in block units (1 block = 30 world units).
  */
@@ -132,6 +133,9 @@ const W1_ROOM_HEIGHT = 24;
 const W2_ROOM_WIDTH = 40;
 const W2_ROOM_HEIGHT = 24;
 
+const W3_ROOM_WIDTH = 44;
+const W3_ROOM_HEIGHT = 24;
+
 // ── Lobby (World 0) ──────────────────────────────────────────────────────────
 
 const lobbyTunnels: TunnelOpening[] = [
@@ -207,19 +211,25 @@ export const ROOM_W1_ROOM1: RoomDef = {
     { xBlock: 32, yBlock: 19, wBlock: 4, hBlock: 1 },
   ],
   enemies: [
+    // Rolling enemy 1 — Physical dust
     {
       xBlock: 20,
       yBlock: 15,
-      kinds: [ParticleKind.Physical, ParticleKind.Earth],
+      kinds: [ParticleKind.Physical],
       particleCount: 18,
       isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 1,
     },
+    // Rolling enemy 2 — Metal dust
     {
       xBlock: 32,
       yBlock: 17,
-      kinds: [ParticleKind.Physical],
+      kinds: [ParticleKind.Metal],
       particleCount: 14,
       isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 2,
     },
     // Flying Eye (Fire) — hovers mid-room
     {
@@ -259,6 +269,7 @@ const W2_TUNNEL_Y = 16;
 
 const w2r1Tunnels: TunnelOpening[] = [
   { direction: 'right', positionBlock: W2_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+  { direction: 'left',  positionBlock: W2_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
 ];
 
 const w2r1Boundary = buildBoundaryWalls(W2_ROOM_WIDTH, W2_ROOM_HEIGHT, w2r1Tunnels);
@@ -281,19 +292,25 @@ export const ROOM_W2_ROOM1: RoomDef = {
     { xBlock: 10, yBlock: 20, wBlock: 6, hBlock: 1 },
   ],
   enemies: [
+    // Rolling enemy 3 — Water dust
     {
       xBlock: 12,
       yBlock: 16,
-      kinds: [ParticleKind.Fire, ParticleKind.Lava],
+      kinds: [ParticleKind.Water],
       particleCount: 18,
       isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 3,
     },
+    // Rolling enemy 4 — Ice dust
     {
       xBlock: 28,
       yBlock: 14,
-      kinds: [ParticleKind.Fire],
+      kinds: [ParticleKind.Ice],
       particleCount: 14,
       isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 4,
     },
     // Flying Eye (Ice) — hovers mid-room
     {
@@ -314,6 +331,76 @@ export const ROOM_W2_ROOM1: RoomDef = {
       openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
       targetSpawnBlock: [3, LOBBY_TUNNEL_Y + 2],
     },
+    {
+      direction: 'left',
+      targetRoomId: 'w3_room1',
+      positionBlock: W2_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [W3_ROOM_WIDTH - 4, W2_TUNNEL_Y + 2],
+    },
+  ],
+  skillTombs: [],
+};
+
+// ── World 3, Room 1 (Fire/Lava World) ────────────────────────────────────────
+
+const W3_TUNNEL_Y = 16;
+
+const w3r1Tunnels: TunnelOpening[] = [
+  { direction: 'right', positionBlock: W3_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+];
+
+const w3r1Boundary = buildBoundaryWalls(W3_ROOM_WIDTH, W3_ROOM_HEIGHT, w3r1Tunnels);
+const w3r1TunnelWalls = buildTunnelWalls(W3_ROOM_WIDTH, w3r1Tunnels);
+
+export const ROOM_W3_ROOM1: RoomDef = {
+  id: 'w3_room1',
+  name: 'Crucible Depths',
+  worldNumber: 3,
+  widthBlocks: W3_ROOM_WIDTH,
+  heightBlocks: W3_ROOM_HEIGHT,
+  walls: [
+    ...w3r1Boundary,
+    ...w3r1TunnelWalls,
+    // Interior platforms — rugged, asymmetric terrain
+    { xBlock: 5,  yBlock: 19, wBlock: 6, hBlock: 1 },
+    { xBlock: 14, yBlock: 16, wBlock: 5, hBlock: 1 },
+    { xBlock: 24, yBlock: 18, wBlock: 4, hBlock: 1 },
+    { xBlock: 32, yBlock: 14, wBlock: 5, hBlock: 1 },
+    { xBlock: 18, yBlock: 12, wBlock: 6, hBlock: 1 },
+    { xBlock: 8,  yBlock: 13, wBlock: 4, hBlock: 1 },
+  ],
+  enemies: [
+    // Rolling enemy 5 — Fire dust
+    {
+      xBlock: 16,
+      yBlock: 15,
+      kinds: [ParticleKind.Fire],
+      particleCount: 18,
+      isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 5,
+    },
+    // Rolling enemy 6 — Lava dust
+    {
+      xBlock: 32,
+      yBlock: 13,
+      kinds: [ParticleKind.Lava],
+      particleCount: 20,
+      isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 6,
+    },
+  ],
+  playerSpawnBlock: [W3_ROOM_WIDTH - 4, W3_ROOM_HEIGHT - 5],
+  transitions: [
+    {
+      direction: 'right',
+      targetRoomId: 'w2_room1',
+      positionBlock: W3_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [3, W2_TUNNEL_Y + 2],
+    },
   ],
   skillTombs: [],
 };
@@ -325,6 +412,7 @@ export const ROOM_REGISTRY: ReadonlyMap<string, RoomDef> = new Map([
   [ROOM_LOBBY.id, ROOM_LOBBY],
   [ROOM_W1_ROOM1.id, ROOM_W1_ROOM1],
   [ROOM_W2_ROOM1.id, ROOM_W2_ROOM1],
+  [ROOM_W3_ROOM1.id, ROOM_W3_ROOM1],
 ]);
 
 /** The room the player starts in. */

@@ -834,6 +834,11 @@ export function applyInterParticleForces(world: WorldState): void {
             cluster.healthPoints = 0;
             cluster.isAliveFlag = 0;
           }
+          // Rolling enemies become aggressive when hit — chase player even
+          // if outside normal sight range for a short duration.
+          if (cluster.isRollingEnemyFlag === 1) {
+            cluster.rollingEnemyAgressiveTicks = 180; // ~3 seconds at 60 fps
+          }
         }
         // Consume the attacking particle
         isAliveFlag[i] = 0;
