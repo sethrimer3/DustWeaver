@@ -283,11 +283,13 @@ export class EnvironmentalDustLayer {
     // "resting layer" behavior stable while still allowing disturbances.
     let bestSurfaceY = world.worldHeightWorld - 1;
     const px = this.xWorld[particleIndex];
+    const pyWorld = this.yWorld[particleIndex];
     for (let wi = 0; wi < world.wallCount; wi++) {
       const wx = world.wallXWorld[wi];
       const ww = world.wallWWorld[wi];
       const wy = world.wallYWorld[wi];
-      if (px >= wx && px <= wx + ww && wy <= bestSurfaceY) {
+      // Find the nearest surface at or above the particle (largest wy <= pyWorld), not the globally topmost one.
+      if (px >= wx && px <= wx + ww && wy <= pyWorld && wy > bestSurfaceY) {
         bestSurfaceY = wy;
       }
     }
