@@ -117,6 +117,13 @@ const GRAPPLE_SWING_DAMPING_PER_SEC = 0.12;
  */
 const GRAPPLE_JUMP_TAP_THRESHOLD_TICKS = 6;
 
+/**
+ * Upward velocity impulse (world units/second) added to the player when they
+ * tap-release the grapple.  Gives a small "hop" on release so the player can
+ * pop off ledges or continue upward momentum after a swing.
+ */
+const GRAPPLE_TAP_HOP_SPEED_WORLD = 80.0;
+
 /** Number of Gold particles that form the visible chain between player and anchor. */
 export const GRAPPLE_SEGMENT_COUNT = 10;
 
@@ -222,8 +229,9 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
 }
 
 /**
- * Fires the grapple, setting the anchor at the given world-space position
- * (pre-clamped to GRAPPLE_MAX_LENGTH_WORLD by the caller).
+ * Fires the grapple, setting the anchor at the exact raycast hit point on a
+ * wall surface.  Returns without attaching if the wall is too close (less than
+ * GRAPPLE_MIN_LENGTH_WORLD away) to prevent degenerate behaviour.
  * Activates the chain particles.
  */
 export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorld: number): void {
@@ -243,14 +251,23 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   if (hit === null) return;
 
   const hitDist = Math.sqrt((hit.x - player.positionXWorld) ** 2 + (hit.y - player.positionYWorld) ** 2);
-  const clampedDist = Math.min(Math.max(hitDist, GRAPPLE_MIN_LENGTH_WORLD), GRAPPLE_MAX_LENGTH_WORLD);
 
-  // Place anchor at clamped distance along the aim direction
-  world.grappleAnchorXWorld = player.positionXWorld + dirX * clampedDist;
-  world.grappleAnchorYWorld = player.positionYWorld + dirY * clampedDist;
-  world.grappleLengthWorld  = clampedDist;
+  // Don't attach when the wall is closer than the minimum rope length — doing
+  // so would place the anchor inside the block geometry, which causes the
+  // visible dot to appear embedded in the tile and produces erratic physics.
+  if (hitDist < GRAPPLE_MIN_LENGTH_WORLD) return;
+
+  // Place the anchor exactly at the raycast surface hit point.
+  world.grappleAnchorXWorld = hit.x;
+  world.grappleAnchorYWorld = hit.y;
+  world.grappleLengthWorld  = hitDist;
   world.grapplePullInAmountWorld = 0.0;  // reset pull-in counter for this new attachment
   world.grappleJumpHeldTickCount = 0;   // reset tap/hold tracker
+  // Clear any pending jump trigger so that a jump press made on the same frame
+  // as the grapple fire (e.g. jumping then immediately grappling) is not
+  // misread as a tap-release by applyGrappleClusterConstraint on the very
+  // first tick after attachment.
+  world.playerJumpTriggeredFlag = 0;
   world.isGrappleActiveFlag = 1;
   world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
   world.grappleAttachFxXWorld = world.grappleAnchorXWorld;
@@ -327,6 +344,9 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // and keyup fired between two ticks).  The triggered flag is set but the
   // held flag is already false.
   if (jumpJustPressed && world.playerJumpHeldFlag === 0) {
+    // Give the player a small upward "hop" on release so they can pop off
+    // surfaces or continue upward momentum out of a swing.
+    player.velocityYWorld -= GRAPPLE_TAP_HOP_SPEED_WORLD;
     releaseGrapple(world);
     return;
   }
@@ -340,6 +360,8 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     // Jump was just released.  If the hold was short enough → tap → release.
     if (world.grappleJumpHeldTickCount <= GRAPPLE_JUMP_TAP_THRESHOLD_TICKS) {
       world.grappleJumpHeldTickCount = 0;
+      // Give the player a small upward "hop" on release.
+      player.velocityYWorld -= GRAPPLE_TAP_HOP_SPEED_WORLD;
       releaseGrapple(world);
       return;
     }

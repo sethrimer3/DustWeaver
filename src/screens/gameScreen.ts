@@ -826,7 +826,7 @@ export function startGameScreen(
     renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, ox, oy);
 
     // Walls before cluster indicators so clusters are drawn on top
-    renderWalls(ctx, snapshot, ox, oy, zoom);
+    renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderGrapple(ctx, snapshot, ox, oy, zoom);
 
