@@ -163,26 +163,3 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
   }
   ctx.globalAlpha = 1.0;
 }
-
-export function renderParticleHitboxes(
-  ctx: CanvasRenderingContext2D,
-  snapshot: WorldSnapshot,
-  offsetXPx: number,
-  offsetYPx: number,
-  scalePx: number,
-): void {
-  const { particles } = snapshot;
-  ctx.save();
-  ctx.strokeStyle = 'rgba(255, 255, 0, 0.55)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < particles.particleCount; i++) {
-    if (particles.isAliveFlag[i] === 0) continue;
-    const screenX = particles.positionXWorld[i] * scalePx + offsetXPx;
-    const screenY = particles.positionYWorld[i] * scalePx + offsetYPx;
-    const r = getParticleStyle(particles.kindBuffer[i]).radiusPx * PARTICLE_SIZE_MULTIPLIER;
-    ctx.beginPath();
-    ctx.arc(screenX, screenY, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
