@@ -32,6 +32,8 @@ export interface InputState {
   // ---- Attack / block input state -----------------------------------------
   /** True while the left mouse button is held (PC). */
   isMouseDownFlag: 0 | 1;
+  /** True while the right mouse button is held (PC). */
+  isRightMouseDownFlag: 0 | 1;
   /** Timestamp (performance.now()) when mouse button went down. */
   mouseDownTimeMs: number;
   /** Screen position where the mouse button went down. */
@@ -84,6 +86,7 @@ export function createInputState(): InputState {
     touchJoystickCurrentXPx: 0,
     touchJoystickCurrentYPx: 0,
     isMouseDownFlag: 0,
+    isRightMouseDownFlag: 0,
     mouseDownTimeMs: 0,
     mouseDownXPx: 0,
     mouseDownYPx: 0,
@@ -132,6 +135,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   function onKeyDown(e: KeyboardEvent): void {
     if (e.key === 'a' || e.key === 'A') state.isKeyA = true;
     if (e.key === 'd' || e.key === 'D') state.isKeyD = true;
+    if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') state.isKeyS = true;
     if (e.key === 'ArrowLeft') state.isKeyA = true;
     if (e.key === 'ArrowRight') state.isKeyD = true;
     if (e.key === 'Escape') state.isEscapePressed = true;
@@ -157,6 +161,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   function onKeyUp(e: KeyboardEvent): void {
     if (e.key === 'a' || e.key === 'A') state.isKeyA = false;
     if (e.key === 'd' || e.key === 'D') state.isKeyD = false;
+    if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') state.isKeyS = false;
     if (e.key === 'ArrowLeft') state.isKeyA = false;
     if (e.key === 'ArrowRight') state.isKeyD = false;
     if (e.key === 'Escape') state.isEscapePressed = false;
@@ -178,6 +183,8 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       state.mouseDownTimeMs = performance.now();
       state.mouseDownXPx = e.clientX;
       state.mouseDownYPx = e.clientY;
+    } else if (e.button === 2) {
+      state.isRightMouseDownFlag = 1;
     }
   }
   function onMouseUp(e: MouseEvent): void {
@@ -194,6 +201,8 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         state.attackDirXPx = e.clientX;
         state.attackDirYPx = e.clientY;
       }
+    } else if (e.button === 2) {
+      state.isRightMouseDownFlag = 0;
     }
   }
 

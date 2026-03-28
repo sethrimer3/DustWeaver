@@ -118,7 +118,13 @@ export class EnvironmentalDustLayer {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D, offsetXPx = 0, offsetYPx = 0, scalePx = 1.0): void {
+  render(
+    ctx: CanvasRenderingContext2D,
+    offsetXPx = 0,
+    offsetYPx = 0,
+    scalePx = 1.0,
+    showHitboxes = false,
+  ): void {
     if (this.particleCount === 0) return;
 
     ctx.save();
@@ -137,12 +143,19 @@ export class EnvironmentalDustLayer {
         if (g < minGlow || g >= maxGlow) continue;
 
         const size = (1 + (this.moundHeightPx[i] > 2 ? 1 : 0)) * scalePx;
+        const drawX = this.xWorld[i] * scalePx + offsetXPx;
+        const drawY = this.yWorld[i] * scalePx + offsetYPx;
         ctx.fillRect(
-          this.xWorld[i] * scalePx + offsetXPx,
-          this.yWorld[i] * scalePx + offsetYPx,
+          drawX,
+          drawY,
           size,
           size,
         );
+        if (showHitboxes) {
+          ctx.strokeStyle = 'rgba(255, 230, 140, 0.9)';
+          ctx.lineWidth = 0.75;
+          ctx.strokeRect(drawX, drawY, size, size);
+        }
       }
     }
 

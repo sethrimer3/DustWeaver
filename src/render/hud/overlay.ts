@@ -19,6 +19,14 @@ export interface HudDebugState {
   isGrappleActive: boolean;
   grappleLengthWorld: number;
   grapplePullInAmountWorld: number;
+  inputUp: boolean;
+  inputLeft: boolean;
+  inputRight: boolean;
+  inputDown: boolean;
+  inputLeftClick: boolean;
+  inputRightClick: boolean;
+  inputGrapple: boolean;
+  inputInteract: boolean;
 }
 
 export interface HudState {
@@ -47,6 +55,9 @@ export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): 
         `  Slide:${d.isWallSlidingFlag ? 'Y' : 'N'}`,
       `WallLock: ${d.wallJumpLockoutTicks}t`,
       `Grapple:  ${d.isGrappleActive ? `len=${d.grappleLengthWorld.toFixed(0)} pull=${d.grapplePullInAmountWorld.toFixed(0)}` : 'off'}`,
+      `Input U/L/R/D: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}`,
+      `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
+      `Input Grap/Int: ${d.inputGrapple ? 'G' : '-'} / ${d.inputInteract ? 'I' : '-'}`,
     ];
   }
 
@@ -56,7 +67,7 @@ export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): 
   const padYPx    = 8;
   const lineHeightPx = 16;
   const fontSizePx   = 12;
-  const panelWidth   = 180;
+  const panelWidth   = 290;
 
   ctx.save();
   ctx.font = `${fontSizePx}px monospace`;
