@@ -25,10 +25,8 @@ import {
   isLoadoutValid,
   createDefaultWeaveLoadout,
 } from '../sim/weaves/playerLoadout';
-import { getDustDefinition, DUST_DEFINITIONS } from '../sim/weaves/dustDefinition';
+import { getDustDefinition } from '../sim/weaves/dustDefinition';
 import {
-  WeaveId,
-  WEAVE_REGISTRY,
   WEAVE_LIST,
   getWeaveDefinition,
 } from '../sim/weaves/weaveDefinition';

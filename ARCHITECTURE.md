@@ -161,3 +161,34 @@ The world editor is an in-game level editing tool accessible via the debug UI.
   and delegates to the editor's update/render cycle.
 - The editor calls `loadRoom()` to apply changes to the runtime world when jumping rooms.
 
+
+## Weave Combat System (BUILD 39)
+
+### Module Layout
+```
+src/sim/weaves/
+  dustDefinition.ts    — Dust type registry (id, name, slot cost, color)
+  weaveDefinition.ts   — Weave registry (id, name, pattern data, capacity)
+  playerLoadout.ts     — PlayerWeaveLoadout type, binding validation
+  weaveCombat.ts       — Weave force application in tick pipeline
+```
+
+### Tick Pipeline Integration
+The Weave combat system is injected at step 4.55, after the legacy combat forces:
+```
+4.5  applyCombatForces()          — legacy enemy attack/block
+4.55 applyPlayerWeaveCombat()     — Weave-based player combat
+```
+
+### Data Flow
+1. Player selects Weaves and binds dust in loadout UI (ui/weaveLoadout.ts or ui/skillTombMenu.ts)
+2. Loadout is stored in PlayerProgress.weaveLoadout
+3. At room load, spawnWeaveLoadoutParticles assigns weaveSlotId to each particle
+4. WorldState stores equipped weave IDs and activation flags
+5. Input handler generates WeaveActivate/WeaveHold/WeaveEnd commands
+6. gameScreen converts screen aim to world direction and sets world state flags
+7. weaveCombat.ts reads flags each tick and applies pattern forces to bound particles
+
+### Snapshot Boundary
+- ParticleSnapshot does not include weaveSlotId (not needed for rendering)
+- WorldSnapshot includes isPlayerWeaveActiveFlag for sprite animation hints

@@ -328,3 +328,60 @@ can verify the collision boundary matches the visual tile geometry.
   directions. Up/down tunnel walls will be added when the first up/down
   transition is needed in gameplay. The editor and export format are already
   structured to support this without schema changes.
+
+## Weave Combat System (BUILD 39)
+
+### Design Philosophy
+- **Old model**: Left click = attack (per-dust-type pattern), Right click = block (per-dust-type shield)
+- **New model**: Left click = Primary Weave, Right click = Secondary Weave
+- Dust type governs passive motion + elemental identity. Weave governs active combat form.
+
+### Key Separation
+- **Dust types** define: passive ambient motion, visual theme, elemental interactions, slot cost
+- **Weaves** define: active deployment pattern, duration, cooldown, slot capacity
+- The same Weave always produces the same recognizable shape regardless of dust type
+
+### Weave Types (Initial Set)
+- Aegis Weave: orbiting shield ring (sustained)
+- Bastion Weave: directional wall (sustained)
+- Spire Weave: straight line shot (burst, 45 ticks)
+- Torrent Weave: cone spray (burst)
+- Comet Weave: compressed projectile (burst)
+- Scatter Weave: outward explosion (burst)
+
+### Loadout Structure
+- PlayerWeaveLoadout contains primary + secondary WeaveBinding
+- Each WeaveBinding has a weaveId and an array of bound ParticleKinds
+- Slot costs are per-dust-type (defined in dustDefinition.ts)
+- Slot capacity is per-Weave (defined in weaveDefinition.ts)
+
+### Behavior Modes (Extended)
+- Mode 0: Passive orbit (dust-type motion from ElementProfile)
+- Mode 1: Legacy attack (enemy AI only)
+- Mode 2: Legacy block (enemy AI only)
+- Mode 3: Weave active (particle executing a Weave pattern)
+- Mode 4: Returning (transitioning back to passive orbit)
+
+### Input Mapping
+- Left click quick release = burst primary Weave (or sustained trigger)
+- Left click hold = sustained primary Weave
+- Right click quick release = burst secondary Weave
+- Right click hold = sustained secondary Weave
+- Hold threshold: 200ms (matches old attack/block threshold)
+
+### Particle Buffer
+- New `weaveSlotId` Uint8Array tracks which Weave slot each particle is bound to
+- 0 = unbound (enemies, background), 1 = primary, 2 = secondary
+- Set at spawn time based on PlayerWeaveLoadout
+
+### Enemy Combat
+- Enemies still use the legacy attack/block system (modes 1/2)
+- Enemy combat forces in combat.ts are unchanged
+- Player combat forces now come from weaveCombat.ts (step 4.55 in tick pipeline)
+
+### Tuning Locations
+- Passive dust motion: `sim/particles/elementProfiles.ts`
+- Dust slot costs: `sim/weaves/dustDefinition.ts`
+- Weave slot capacities: `sim/weaves/weaveDefinition.ts`
+- Weave behavior tuning: `sim/weaves/weaveCombat.ts`
+- Default loadout: `sim/weaves/playerLoadout.ts` (createDefaultWeaveLoadout)

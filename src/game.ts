@@ -1,5 +1,5 @@
 import { showMainMenu } from './ui/mainMenu';
-import { showLoadoutScreen } from './ui/loadout';
+import { showLoadoutScreen } from './ui/weaveLoadout';
 import { startGameScreen } from './screens/gameScreen';
 import { ParticleKind } from './sim/particles/kinds';
 import { createDefaultProgress, PlayerProgress } from './progression/playerProgress';
@@ -61,8 +61,9 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       });
     } else if (to === 'loadout') {
       cleanup = showLoadoutScreen(uiRoot, progress, {
-        onConfirm: (chosenLoadout) => {
+        onConfirm: (chosenLoadout, chosenWeaveLoadout) => {
           progress.loadout = chosenLoadout.slice();
+          progress.weaveLoadout = chosenWeaveLoadout;
           navigate('gameplay', chosenLoadout);
         },
         onCancel: () => navigate('mainMenu'),
