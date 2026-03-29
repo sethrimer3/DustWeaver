@@ -507,9 +507,10 @@ export function applyClusterMovement(world: WorldState): void {
           grav = NORMAL_GRAVITY_WORLD_PER_SEC2;
         }
       } else {
-        // Falling: check for apex half-gravity (vy just turned positive & near zero).
+        // Falling: check for apex half-gravity (vy just crossed zero, near apex).
+        const absVy = cluster.velocityYWorld; // already positive when falling
         if (
-          cluster.velocityYWorld < APEX_THRESHOLD_WORLD_PER_SEC &&
+          absVy < APEX_THRESHOLD_WORLD_PER_SEC &&
           world.playerJumpHeldFlag === 1
         ) {
           grav = NORMAL_GRAVITY_WORLD_PER_SEC2 * APEX_GRAVITY_MULTIPLIER;
@@ -618,9 +619,19 @@ export function applyClusterMovement(world: WorldState): void {
       if (world.isGrappleActiveFlag === 0) {
         // During wall-jump force-time window, override horizontal velocity
         // to the outward launch direction — prevents immediately steering back.
+        // Cancel early if the player hits a wall in the force direction.
         if (cluster.wallJumpForceTimeTicks > 0) {
-          cluster.velocityXWorld = cluster.wallJumpDirX * WALL_JUMP_X_SPEED_WORLD;
-        } else if (inputDx !== 0) {
+          const hitsWallInForceDir =
+            (cluster.wallJumpDirX > 0 && cluster.isTouchingWallRightFlag === 1) ||
+            (cluster.wallJumpDirX < 0 && cluster.isTouchingWallLeftFlag  === 1);
+          if (hitsWallInForceDir) {
+            cluster.wallJumpForceTimeTicks = 0;
+          } else {
+            cluster.velocityXWorld = cluster.wallJumpDirX * WALL_JUMP_X_SPEED_WORLD;
+          }
+        }
+
+        if (cluster.wallJumpForceTimeTicks <= 0 && inputDx !== 0) {
           // Reversing direction uses a higher turn acceleration for snappy feel
           const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
                             (inputDx < 0 && cluster.velocityXWorld >  1.0);
@@ -639,8 +650,8 @@ export function applyClusterMovement(world: WorldState): void {
           } else if (inputDx < 0 && cluster.velocityXWorld < -MAX_RUN_SPEED_WORLD_PER_SEC) {
             cluster.velocityXWorld = -MAX_RUN_SPEED_WORLD_PER_SEC;
           }
-        } else {
-          // No horizontal input — decelerate toward zero
+        } else if (cluster.wallJumpForceTimeTicks <= 0) {
+          // No horizontal input and not in force-time — decelerate toward zero
           const decel = isGrounded ? GROUND_DECELERATION_PER_SEC2 : AIR_DECELERATION_PER_SEC2;
           const dv    = decel * dtSec;
           if (cluster.velocityXWorld > 0) {
