@@ -37,7 +37,7 @@ const ORBIT_DAMPING = 12.0;
 /** Effectively-infinite lifetime for orbit-managed dust (system controls removal). */
 const ORBIT_DUST_LIFETIME_TICKS = 9999;
 
-/** Minimum distance for safe normalisation to avoid division by near-zero. */
+/** Minimum distance for safe normalization to avoid division by near-zero. */
 const MIN_NORMALIZE_DIST_WORLD = 0.5;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ export function updateRockElementalDust(world: WorldState): void {
           const dx = playerX - positionXWorld[i];
           const dy = playerY - positionYWorld[i];
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const invDist = dist > MIN_NORMALIZE_DIST_WORLD ? 1.0 / dist : 1.0;
+          const invDist = dist > MIN_NORMALIZE_DIST_WORLD ? 1.0 / dist : 0.0;
 
           velocityXWorld[i] = dx * invDist * RE_PROJECTILE_SPEED_WORLD_PER_SEC;
           velocityYWorld[i] = dy * invDist * RE_PROJECTILE_SPEED_WORLD_PER_SEC;
