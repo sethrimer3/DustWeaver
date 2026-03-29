@@ -146,9 +146,17 @@ export function applyEnemyAI(world: WorldState): void {
     if (incomingThreatCount >= 1 && cluster.enemyAiIsBlockingFlag === 0
         && cluster.enemyAiBlockRemainingTicks === 0) {
       cluster.enemyAiIsBlockingFlag = 1;
-      // Block toward the player (intercept incoming particles from that side)
-      cluster.enemyAiBlockDirXWorld = -dirToPlayerX; // face player
-      cluster.enemyAiBlockDirYWorld = -dirToPlayerY;
+      if (cluster.isRollingEnemyFlag === 1) {
+        // Rolling enemies form a crescent shield on the player-facing side.
+        // Block direction points TOWARD the player so the crescent is between
+        // enemy and player.
+        cluster.enemyAiBlockDirXWorld = dirToPlayerX;
+        cluster.enemyAiBlockDirYWorld = dirToPlayerY;
+      } else {
+        // Other enemies shield the back side (existing behaviour)
+        cluster.enemyAiBlockDirXWorld = -dirToPlayerX;
+        cluster.enemyAiBlockDirYWorld = -dirToPlayerY;
+      }
       cluster.enemyAiBlockRemainingTicks = ENEMY_BLOCK_DURATION_TICKS;
       // Stagger next attack a bit (don't attack while blocking)
       if (cluster.enemyAiAttackCooldownTicks < ENEMY_BLOCK_COOLDOWN_TICKS) {
@@ -169,15 +177,24 @@ export function applyEnemyAI(world: WorldState): void {
     // ── Dodge / weave decision ─────────────────────────────────────────────
     // Spontaneous lateral dodge: adds life and unpredictability.
     // Also triggered when threatened (incoming particles detected).
+    // Flying eyes dodge more eagerly and dash directly away from threats.
+    const flyingEyeThreatened = cluster.isFlyingEyeFlag === 1 && incomingThreatCount >= 1;
     const shouldDodge = cluster.enemyAiDodgeTicks === 0
       && cluster.dashCooldownTicks === 0
-      && (incomingThreatCount >= 2 || nextFloat(rng) < ENEMY_DODGE_CHANCE_PER_TICK);
+      && (incomingThreatCount >= 2 || nextFloat(rng) < ENEMY_DODGE_CHANCE_PER_TICK
+          || flyingEyeThreatened);
 
     if (shouldDodge) {
-      // Perpendicular to player direction (randomised side via RNG)
-      const side = nextFloat(rng) < 0.5 ? 1.0 : -1.0;
-      cluster.enemyAiDodgeDirXWorld = -dirToPlayerY * side;
-      cluster.enemyAiDodgeDirYWorld =  dirToPlayerX * side;
+      if (flyingEyeThreatened) {
+        // Flying eye dashes directly away from the player when threatened
+        cluster.enemyAiDodgeDirXWorld = -dirToPlayerX;
+        cluster.enemyAiDodgeDirYWorld = -dirToPlayerY;
+      } else {
+        // Ground enemy / non-threatened flying eye: perpendicular dodge
+        const side = nextFloat(rng) < 0.5 ? 1.0 : -1.0;
+        cluster.enemyAiDodgeDirXWorld = -dirToPlayerY * side;
+        cluster.enemyAiDodgeDirYWorld =  dirToPlayerX * side;
+      }
       cluster.enemyAiDodgeTicks = ENEMY_DODGE_DURATION_TICKS;
       cluster.dashCooldownTicks  = DASH_COOLDOWN_TICKS;
     }

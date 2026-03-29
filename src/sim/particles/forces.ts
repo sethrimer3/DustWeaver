@@ -28,7 +28,9 @@ import { getElementalMultiplier } from './negation';
 import { ParticleKind } from './kinds';
 import { nextFloat } from '../rng';
 
-export const PARTICLE_RADIUS_WORLD = 4.0;
+// Particle half-size: 1/6th of the player's full width (10 world units) divided by 2.
+// Square hitbox side = 10/6 ≈ 1.667 wu; radius = side/2 ≈ 0.833 wu.
+export const PARTICLE_RADIUS_WORLD = 5.0 / 6.0;
 
 // ---- Spatial grid --------------------------------------------------------
 
@@ -833,6 +835,11 @@ export function applyInterParticleForces(world: WorldState): void {
           if (cluster.healthPoints <= 0) {
             cluster.healthPoints = 0;
             cluster.isAliveFlag = 0;
+          }
+          // Rolling enemies become aggressive when hit — chase player even
+          // if outside normal sight range for a short duration.
+          if (cluster.isRollingEnemyFlag === 1) {
+            cluster.rollingEnemyAggressiveTicks = 180; // ~3 seconds at 60 fps
           }
         }
         // Consume the attacking particle

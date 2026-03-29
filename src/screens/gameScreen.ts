@@ -23,6 +23,8 @@ import { showDeathScreen } from '../ui/deathScreen';
 import { showSkillTombMenu } from '../ui/skillTombMenu';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
+import { createEditorController, EditorController } from '../editor/editorController';
+import { PlayerWeaveLoadout, createDefaultWeaveLoadout, WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from '../sim/weaves/playerLoadout';
 
 const FIXED_DT_MS = 16.666;
 /** Canonical level-grid block size (sprites/objects snap to this). */
@@ -34,6 +36,9 @@ const BACKGROUND_FLUID_COUNT = 300;
 
 /** Boss clusters receive this multiplier on their base HP for extra durability. */
 const BOSS_HP_MULTIPLIER = 2;
+
+/** Half-width and half-height (world units) of a flying eye cluster hitbox. */
+const FLYING_EYE_HALF_SIZE_WORLD = 2.8;
 
 // Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
 const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
@@ -151,6 +156,50 @@ function spawnLoadoutParticles(
 }
 
 /**
+ * Spawns particles for a Weave loadout, assigning weaveSlotId to each particle
+ * based on which Weave binding owns the dust type.
+ */
+function spawnWeaveLoadoutParticles(
+  world: WorldState,
+  clusterEntityId: number,
+  clusterXWorld: number,
+  clusterYWorld: number,
+  weaveLoadout: PlayerWeaveLoadout,
+  totalCount: number,
+  rng: RngState,
+): void {
+  // Collect all dust from both bindings
+  const allDust = [...weaveLoadout.primary.boundDust, ...weaveLoadout.secondary.boundDust];
+  if (allDust.length === 0) {
+    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, ParticleKind.Physical, totalCount, rng);
+    return;
+  }
+
+  // Distribute totalCount across all bound dust types
+  const baseCount = Math.floor(totalCount / allDust.length);
+  let remainder = totalCount - baseCount * allDust.length;
+
+  // Track the particle index range for each dust entry so we can assign weave slots
+  const primaryCount = weaveLoadout.primary.boundDust.length;
+
+  for (let k = 0; k < allDust.length; k++) {
+    const extraCount = remainder > 0 ? 1 : 0;
+    remainder -= extraCount;
+    const count = baseCount + extraCount;
+
+    const startIdx = world.particleCount;
+    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, allDust[k], count, rng);
+    const endIdx = world.particleCount;
+
+    // Assign weave slot based on which binding this dust came from
+    const weaveSlot = k < primaryCount ? WEAVE_SLOT_PRIMARY : WEAVE_SLOT_SECONDARY;
+    for (let i = startIdx; i < endIdx; i++) {
+      world.weaveSlotId[i] = weaveSlot;
+    }
+  }
+}
+
+/**
  * Scatters `count` background Fluid particles randomly across the world area.
  */
 function spawnBackgroundFluidParticles(
@@ -208,6 +257,7 @@ function worldBgColor(worldNumber: number): string {
     case 0:  return '#0d1a0f'; // pale dark green
     case 1:  return '#051408'; // deep dark green
     case 2:  return '#080c1a'; // dark blue
+    case 3:  return '#1a0500'; // deep dark red-orange (fire/lava world)
     default: return '#0a0a12';
   }
 }
@@ -278,12 +328,17 @@ function screenToWorld(screenXPx: number, screenYPx: number, offsetXPx: number, 
 export function startGameScreen(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
-  playerLoadout: ParticleKind[],
+  _legacyPlayerLoadout: ParticleKind[],
   startRoomId: string | null,
   callbacks: GameScreenCallbacks,
   progress?: PlayerProgress,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
+
+  // ── Weave loadout (replaces flat particle loadout for combat) ──────────
+  // Initialize from progress if available, otherwise create default
+  let playerWeaveLoadout: PlayerWeaveLoadout = progress?.weaveLoadout
+    ?? createDefaultWeaveLoadout();
 
   function resizeCanvas(): void {
     canvas.width = window.innerWidth;
@@ -335,7 +390,11 @@ export function startGameScreen(
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_PX;
     const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
     world.clusters.push(playerCluster);
-    spawnLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+    spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+
+    // Apply weave IDs to world state for combat dispatch
+    world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
+    world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
 
     // Spawn enemies
     let nextEntityId = 2;
@@ -345,6 +404,21 @@ export function startGameScreen(
       const ey = enemyDef.yBlock * BLOCK_SIZE_PX;
       const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
       const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
+
+      if (enemyDef.isFlyingEyeFlag === 1) {
+        enemyCluster.isFlyingEyeFlag     = 1;
+        enemyCluster.flyingEyeElementKind = enemyDef.kinds.length > 0
+          ? enemyDef.kinds[0]
+          : ParticleKind.Wind;
+        // Flying eyes are larger than ground enemies
+        enemyCluster.halfWidthWorld  = FLYING_EYE_HALF_SIZE_WORLD;
+        enemyCluster.halfHeightWorld = FLYING_EYE_HALF_SIZE_WORLD;
+      } else if (enemyDef.isRollingEnemyFlag === 1) {
+        enemyCluster.isRollingEnemyFlag    = 1;
+        enemyCluster.rollingEnemySpriteIndex = enemyDef.rollingEnemySpriteIndex ?? 1;
+        enemyCluster.rollingEnemyRollAngleRad = 0;
+      }
+
       world.clusters.push(enemyCluster);
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }
@@ -408,6 +482,38 @@ export function startGameScreen(
     uiRoot.appendChild(menuButton);
   }
 
+  // ── World Editor ────────────────────────────────────────────────────────
+  const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY) => {
+    loadRoom(roomDef, spawnX, spawnY);
+  });
+
+  // "World Editor" toggle button — shown when debug mode is on
+  let editorToggleBtn: HTMLButtonElement | null = null;
+  function ensureEditorButton(): void {
+    if (editorToggleBtn !== null) return;
+    editorToggleBtn = document.createElement('button');
+    editorToggleBtn.style.cssText = `
+      position: absolute; top: 38px; right: 16px;
+      background: rgba(0,0,0,0.6); border: 2px solid #00c864; color: #00c864;
+      padding: 6px 14px; font-size: 0.85rem; font-family: 'Cinzel', serif;
+      cursor: pointer; border-radius: 6px; z-index: 800;
+    `;
+    editorToggleBtn.textContent = 'World Editor';
+    editorToggleBtn.addEventListener('click', () => {
+      editorController.toggle(currentRoom);
+      editorToggleBtn!.textContent = editorController.state.isActive ? 'Exit Editor' : 'World Editor';
+      editorToggleBtn!.style.borderColor = editorController.state.isActive ? '#ff6644' : '#00c864';
+      editorToggleBtn!.style.color = editorController.state.isActive ? '#ff6644' : '#00c864';
+    });
+    uiRoot.appendChild(editorToggleBtn);
+  }
+  function removeEditorButton(): void {
+    if (editorToggleBtn !== null && editorToggleBtn.parentElement) {
+      editorToggleBtn.parentElement.removeChild(editorToggleBtn);
+      editorToggleBtn = null;
+    }
+  }
+
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
 
   let lastTimestampMs = 0;
@@ -449,6 +555,7 @@ export function startGameScreen(
       onToggleDebug: () => {
         isDebugMode = !isDebugMode;
         pauseMenuState.isDebugOn = isDebugMode;
+        if (isDebugMode) { ensureEditorButton(); } else { removeEditorButton(); }
       },
     });
   }
@@ -515,10 +622,11 @@ export function startGameScreen(
     }
 
     skillTombMenuCleanup = showSkillTombMenu(uiRoot, progress, currentRoom.id, {
-      onClose: (updatedLoadout) => {
+      onClose: (updatedLoadout, updatedWeaveLoadout) => {
         isSkillTombMenuOpen = false;
         skillTombMenuCleanup = null;
         progress.loadout = updatedLoadout;
+        progress.weaveLoadout = updatedWeaveLoadout;
         lastTimestampMs = 0;
         // Save after closing
         if (callbacks.onSave) callbacks.onSave();
@@ -584,6 +692,50 @@ export function startGameScreen(
     const { offsetXPx, offsetYPx } = getCameraOffset(camera, canvas.width, canvas.height);
     const zoom = camera.zoom;
 
+    // ── Editor mode gate ──────────────────────────────────────────────────
+    // When the editor is active, it takes over camera and input; skip gameplay.
+    if (editorController.state.isActive) {
+      const isEditorConsuming = editorController.update(elapsedMs / 1000, camera, offsetXPx, offsetYPx, zoom);
+
+      if (isEditorConsuming) {
+        // Still render the game world (walls, particles, etc.) as backdrop
+        const camOff = getCameraOffset(camera, canvas.width, canvas.height);
+        const eox = camOff.offsetXPx;
+        const eoy = camOff.offsetYPx;
+        const snapshot = createSnapshot(world);
+
+        if (webglRenderer.isAvailable) {
+          webglRenderer.render(snapshot, eox, eoy, zoom);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, eox, eoy);
+        renderWalls(ctx, snapshot, eox, eoy, zoom, true);
+        renderClusters(ctx, snapshot, eox, eoy, zoom, true);
+        renderGrapple(ctx, snapshot, eox, eoy, zoom);
+        drawTunnelDarkness(ctx, currentRoom, eox, eoy, zoom);
+        environmentalDust.render(ctx, eox, eoy, zoom, true);
+        skillTombRenderer.render(ctx, eox, eoy, zoom);
+
+        if (!webglRenderer.isAvailable) {
+          renderParticles(ctx, snapshot, eox, eoy, zoom);
+        }
+
+        // Draw editor overlays on top
+        editorController.render(ctx, eox, eoy, zoom, canvas.width, canvas.height);
+
+        if (isDebugMode) {
+          renderHudOverlay(ctx, hudState);
+        }
+
+        rafHandle = requestAnimationFrame(frame);
+        return;
+      }
+    }
+
     const commands = collectCommands(inputState);
     let openPause = false;
     let moveDx = 0;
@@ -603,33 +755,71 @@ export function startGameScreen(
         dashTriggered = true;
         dashAimXPx = cmd.aimXPx;
       } else if (cmd.kind === CommandKind.Attack) {
+        // Legacy attack command — no longer used for player (enemies still use it internally)
+        // Kept for backward compatibility; ignored for player
+      } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
+        // Legacy block command — no longer used for player
+      } else if (cmd.kind === CommandKind.BlockEnd) {
+        // Legacy block end — no longer used for player
+      } else if (cmd.kind === CommandKind.WeaveActivatePrimary) {
         const player = world.clusters[0];
-        if (player !== undefined) {
-          // Convert screen-space aim to world coordinates
+        if (player !== undefined && player.isAliveFlag === 1) {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
           if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
-          world.playerAttackDirXWorld = dirX;
-          world.playerAttackDirYWorld = dirY;
-          world.playerAttackTriggeredFlag = 1;
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          world.playerPrimaryWeaveTriggeredFlag = 1;
         }
-      } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
+      } else if (cmd.kind === CommandKind.WeaveHoldPrimary) {
         const player = world.clusters[0];
-        if (player !== undefined) {
+        if (player !== undefined && player.isAliveFlag === 1) {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
-          if (len < 1.0) { dirX = world.playerBlockDirXWorld; dirY = world.playerBlockDirYWorld; }
+          if (len < 1.0) { dirX = world.playerWeaveAimDirXWorld; dirY = world.playerWeaveAimDirYWorld; }
           else { dirX /= len; dirY /= len; }
-          world.playerBlockDirXWorld = dirX;
-          world.playerBlockDirYWorld = dirY;
-          world.isPlayerBlockingFlag = 1;
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          // For sustained weaves, trigger on first hold frame
+          if (world.isPlayerPrimaryWeaveActiveFlag === 0) {
+            world.playerPrimaryWeaveTriggeredFlag = 1;
+          }
         }
-      } else if (cmd.kind === CommandKind.BlockEnd) {
-        world.isPlayerBlockingFlag = 0;
+      } else if (cmd.kind === CommandKind.WeaveEndPrimary) {
+        world.playerPrimaryWeaveEndFlag = 1;
+      } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
+        const player = world.clusters[0];
+        if (player !== undefined && player.isAliveFlag === 1) {
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          let dirX = aim.xWorld - player.positionXWorld;
+          let dirY = aim.yWorld - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          world.playerSecondaryWeaveTriggeredFlag = 1;
+        }
+      } else if (cmd.kind === CommandKind.WeaveHoldSecondary) {
+        const player = world.clusters[0];
+        if (player !== undefined && player.isAliveFlag === 1) {
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          let dirX = aim.xWorld - player.positionXWorld;
+          let dirY = aim.yWorld - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = world.playerWeaveAimDirXWorld; dirY = world.playerWeaveAimDirYWorld; }
+          else { dirX /= len; dirY /= len; }
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          if (world.isPlayerSecondaryWeaveActiveFlag === 0) {
+            world.playerSecondaryWeaveTriggeredFlag = 1;
+          }
+        }
+      } else if (cmd.kind === CommandKind.WeaveEndSecondary) {
+        world.playerSecondaryWeaveEndFlag = 1;
       } else if (cmd.kind === CommandKind.GrappleFire) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
@@ -680,6 +870,35 @@ export function startGameScreen(
       return;
     }
 
+    // Latch one-shot jump/dash inputs into world state before ticking.
+    // This preserves edge-triggered inputs on high-refresh frames where no
+    // fixed sim tick runs (accumulator < FIXED_DT_MS).
+    if (jumpTriggered) {
+      world.playerJumpTriggeredFlag = 1;
+    }
+    world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
+
+    if (dashTriggered) {
+      world.playerDashTriggeredFlag = 1;
+      const playerForDash = world.clusters[0];
+      if (playerForDash !== undefined) {
+        if (moveDx !== 0) {
+          world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
+          world.playerDashDirYWorld = 0.0;
+        } else {
+          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom);
+          const dirX = aim.xWorld - playerForDash.positionXWorld;
+          const absX = dirX < 0 ? -dirX : dirX;
+          if (absX > 1.0) {
+            world.playerDashDirXWorld = dirX > 0 ? 1.0 : -1.0;
+          } else {
+            world.playerDashDirXWorld = playerForDash.velocityXWorld >= 0 ? 1.0 : -1.0;
+          }
+          world.playerDashDirYWorld = 0.0;
+        }
+      }
+    }
+
     // ── Sim ticks ──────────────────────────────────────────────────────────
     accumulatorMs += elapsedMs;
     while (accumulatorMs >= FIXED_DT_MS) {
@@ -689,32 +908,6 @@ export function startGameScreen(
           world.playerMoveInputDxWorld = moveDx > 0 ? 1.0 : -1.0;
           world.playerMoveInputDyWorld = 0.0;
         }
-      }
-      if (jumpTriggered) {
-        world.playerJumpTriggeredFlag = 1;
-        jumpTriggered = false;
-      }
-      world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
-      if (dashTriggered) {
-        world.playerDashTriggeredFlag = 1;
-        const playerForDash = world.clusters[0];
-        if (playerForDash !== undefined) {
-          if (moveDx !== 0) {
-            world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
-            world.playerDashDirYWorld = 0.0;
-          } else {
-            const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom);
-            const dirX = aim.xWorld - playerForDash.positionXWorld;
-            const absX = dirX < 0 ? -dirX : dirX;
-            if (absX > 1.0) {
-              world.playerDashDirXWorld = dirX > 0 ? 1.0 : -1.0;
-            } else {
-              world.playerDashDirXWorld = playerForDash.velocityXWorld >= 0 ? 1.0 : -1.0;
-            }
-            world.playerDashDirYWorld = 0.0;
-          }
-        }
-        dashTriggered = false;
       }
       tick(world);
       environmentalDust.update(world, FIXED_DT_MS);
@@ -804,7 +997,7 @@ export function startGameScreen(
     renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, ox, oy);
 
     // Walls before cluster indicators so clusters are drawn on top
-    renderWalls(ctx, snapshot, ox, oy, zoom);
+    renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderGrapple(ctx, snapshot, ox, oy, zoom);
 
@@ -895,6 +1088,8 @@ export function startGameScreen(
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
     if (deathScreenCleanup !== null) deathScreenCleanup();
     if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
+    editorController.destroy();
+    removeEditorButton();
     detachInput();
     webglRenderer.dispose();
     window.removeEventListener('resize', onResize);

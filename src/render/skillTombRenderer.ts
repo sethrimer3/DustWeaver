@@ -21,6 +21,21 @@ const DUST_PARTICLE_COUNT = 24;
 /** Max number of skill tombs supported per room. */
 const MAX_TOMBS = 8;
 
+/** Ground level relative to tomb center (world units below). */
+const GROUND_OFFSET_WORLD = 15;
+
+/** Horizontal friction applied per second while a dust particle slides on the floor. */
+const FLOOR_FRICTION_PER_SEC = 6.0;
+
+/** Physical contact radius of each dust particle for collision resolution (world units). */
+const DUST_CONTACT_RADIUS_WORLD = 2.0;
+
+/** Outward launch speed (world units/sec) given to dust particles when swirl deactivates. */
+const DUST_FALL_LAUNCH_SPEED_WORLD = 18.0;
+
+/** Rendered size of each dust particle in screen pixels (uniform, 2×2). */
+const DUST_PIXEL_SIZE = 2;
+
 interface DustParticle {
   /** Current position relative to tomb center (world units). */
   xWorld: number;
@@ -47,6 +62,8 @@ interface TombState {
   isPlayerNearbyFlag: boolean;
   /** Transition factor 0..1 (1 = fully active/swirling, 0 = fully grounded). */
   activationFactor: number;
+  /** Activation factor from the previous update — used to detect swirl→fall transition. */
+  prevActivationFactor: number;
   /** Decorative dust particles. */
   dustParticles: DustParticle[];
   /** Accumulator for swirl animation. */
@@ -83,7 +100,7 @@ export class SkillTombRenderer {
           vyWorld: 0,
           angleRad: angle,
           radiusWorld: radius,
-          sizeWorld: 1.0 + Math.random() * 1.5,
+          sizeWorld: 1.0,
           brightness: 0.3,
           isGroundedFlag: true,
         });
@@ -94,6 +111,7 @@ export class SkillTombRenderer {
         yWorld: centerYWorld,
         isPlayerNearbyFlag: false,
         activationFactor: 0,
+        prevActivationFactor: 0,
         dustParticles: particles,
         swirlAngleRad: 0,
       });
@@ -126,6 +144,23 @@ export class SkillTombRenderer {
 
       tomb.swirlAngleRad += dtSec * 1.5;
 
+      // Detect swirl→fall transition (activation just dropped below threshold)
+      const prevActivation = tomb.prevActivationFactor;
+      tomb.prevActivationFactor = tomb.activationFactor;
+      const justDeactivated = prevActivation > 0.1 && tomb.activationFactor <= 0.1;
+
+      // When swirl deactivates, launch particles outward so they spread and pile up
+      if (justDeactivated) {
+        for (let p = 0; p < tomb.dustParticles.length; p++) {
+          const dp = tomb.dustParticles[p];
+          const len = Math.sqrt(dp.xWorld * dp.xWorld + dp.yWorld * dp.yWorld);
+          if (len > 0.001) {
+            dp.vxWorld = (dp.xWorld / len) * DUST_FALL_LAUNCH_SPEED_WORLD;
+            dp.vyWorld = 0;
+          }
+        }
+      }
+
       // Update dust particles
       for (let p = 0; p < tomb.dustParticles.length; p++) {
         const dp = tomb.dustParticles[p];
@@ -146,16 +181,63 @@ export class SkillTombRenderer {
             dp.xWorld += dp.vxWorld * dtSec;
             dp.yWorld += dp.vyWorld * dtSec;
 
-            // Ground at tomb base (approximately 15 world units below center)
-            const groundY = 15;
-            if (dp.yWorld > groundY) {
-              dp.yWorld = groundY;
-              dp.vyWorld = 0;
-              dp.vxWorld = 0;
+            // Ground collision
+            if (dp.yWorld > GROUND_OFFSET_WORLD) {
+              dp.yWorld = GROUND_OFFSET_WORLD;
+              dp.vyWorld *= -0.15; // small bounce
+              if (Math.abs(dp.vyWorld) < 2) dp.vyWorld = 0;
               dp.isGroundedFlag = true;
             }
           }
+
+          // Floor friction (applied every tick when grounded or just landed)
+          if (dp.isGroundedFlag) {
+            dp.yWorld = GROUND_OFFSET_WORLD; // keep pinned to floor
+            dp.vxWorld *= Math.max(0, 1 - FLOOR_FRICTION_PER_SEC * dtSec);
+            if (Math.abs(dp.vxWorld) < 0.3) dp.vxWorld = 0;
+          }
+
           dp.brightness = Math.max(0.2, dp.brightness - 0.5 * dtSec);
+        }
+      }
+
+      // Particle-particle collision resolution when not swirling
+      if (tomb.activationFactor <= 0.1) {
+        const contactDist = DUST_CONTACT_RADIUS_WORLD * 2;
+        const contactDistSq = contactDist * contactDist;
+        for (let particleIndexA = 0; particleIndexA < tomb.dustParticles.length; particleIndexA++) {
+          const particleA = tomb.dustParticles[particleIndexA];
+          for (let particleIndexB = particleIndexA + 1; particleIndexB < tomb.dustParticles.length; particleIndexB++) {
+            const particleB = tomb.dustParticles[particleIndexB];
+            const dx = particleB.xWorld - particleA.xWorld;
+            const dy = particleB.yWorld - particleA.yWorld;
+            const distSq = dx * dx + dy * dy;
+            if (distSq >= contactDistSq || distSq < 0.0001) continue;
+            const dist = Math.sqrt(distSq);
+            const overlap = contactDist - dist;
+            const nx = dx / dist;
+            const ny = dy / dist;
+
+            if (particleA.isGroundedFlag && particleB.isGroundedFlag) {
+              // Both grounded: push apart horizontally only
+              particleA.xWorld -= nx * overlap * 0.5;
+              particleB.xWorld += nx * overlap * 0.5;
+            } else {
+              // At least one is airborne: full 2D push + velocity response
+              particleA.xWorld -= nx * overlap * 0.5;
+              particleA.yWorld -= ny * overlap * 0.5;
+              particleB.xWorld += nx * overlap * 0.5;
+              particleB.yWorld += ny * overlap * 0.5;
+              const relVn = (particleB.vxWorld - particleA.vxWorld) * nx + (particleB.vyWorld - particleA.vyWorld) * ny;
+              if (relVn < 0) {
+                const impulse = relVn * 0.3;
+                particleA.vxWorld += impulse * nx;
+                particleA.vyWorld += impulse * ny;
+                particleB.vxWorld -= impulse * nx;
+                particleB.vyWorld -= impulse * ny;
+              }
+            }
+          }
         }
       }
     }
@@ -213,7 +295,7 @@ export class SkillTombRenderer {
         const dp = tomb.dustParticles[p];
         const px = (tomb.xWorld + dp.xWorld) * zoom + offsetXPx;
         const py = (tomb.yWorld + dp.yWorld) * zoom + offsetYPx;
-        const size = dp.sizeWorld * zoom;
+        const size = DUST_PIXEL_SIZE;
 
         // Interpolate between dull gold and bright gold based on brightness
         const r = Math.round(180 + 32 * dp.brightness);

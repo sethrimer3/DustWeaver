@@ -4,6 +4,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import { getSlotCost, totalSlotCost } from '../sim/particles/slotCost';
+import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
 
 export { getSlotCost, totalSlotCost };
 
@@ -31,8 +32,10 @@ export interface PlayerProgress {
   level: number;
   /** Total dust slots available at this level. */
   dustSlots: number;
-  /** Currently equipped particle kinds. May not exceed dustSlots total cost. */
+  /** Currently equipped particle kinds (legacy — kept for backward compat). */
   loadout: ParticleKind[];
+  /** Weave-based loadout with primary/secondary weave bindings and bound dust. */
+  weaveLoadout: PlayerWeaveLoadout;
   /**
    * Number of World 1 levels unlocked (1 = only L1 available, 7 = all unlocked).
    * Increases by 1 each time the player completes a level.
@@ -60,10 +63,12 @@ export interface PlayerProgress {
  */
 export function createDefaultProgress(): PlayerProgress {
   const level = 1;
+  const weaveLoadout = createDefaultWeaveLoadout();
   return {
     level,
     dustSlots: getDustSlots(level),
     loadout: [ParticleKind.Fire, ParticleKind.Ice],
+    weaveLoadout,
     world1UnlockedCount: 1,
     world2UnlockedCount: 0,
     exploredRoomIds: [],

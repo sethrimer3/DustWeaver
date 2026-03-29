@@ -34,6 +34,19 @@ export interface ClusterState {
    */
   prevJumpHeldFlag: 0 | 1;
 
+  // ---- Variable jump sustain (Celeste-style) --------------------------------
+  /**
+   * Ticks remaining in the variable-jump sustain window.
+   * While > 0 and the jump button is held, upward velocity is sustained so
+   * gravity cannot eat into the launch speed — producing expressive full jumps.
+   */
+  varJumpTimerTicks: number;
+  /**
+   * Snapshot of the vertical launch speed at the moment of a jump.
+   * Used by the sustain window to cap velocity (negative = upward).
+   */
+  varJumpSpeedWorld: number;
+
   // ---- Wall interaction ---------------------------------------------------
   /** 1 when the player's left side is pressed against a solid wall this tick. */
   isTouchingWallLeftFlag: 0 | 1;
@@ -47,6 +60,17 @@ export interface ClusterState {
    * wall slide or wall jump, preventing instant re-grab / infinite climbing.
    */
   wallJumpLockoutTicks: number;
+  /**
+   * Ticks remaining in the post-wall-jump force window.
+   * While > 0, horizontal input is overridden by the outward wall-jump
+   * direction so the player cannot immediately steer back to the wall.
+   */
+  wallJumpForceTimeTicks: number;
+  /**
+   * Direction of the most recent wall jump (±1).
+   * Used during the force-time window to maintain outward velocity.
+   */
+  wallJumpDirX: number;
 
   // ---- Dash (player and enemy) -------------------------------------------
   /** Remaining cooldown ticks before dash is available again.  0 = ready. */
@@ -71,9 +95,58 @@ export interface ClusterState {
   enemyAiBlockRemainingTicks: number;
   /** Ticks remaining in the current dodge burst. */
   enemyAiDodgeTicks: number;
-  /** Lateral dodge velocity (world units / sec). */
+  /** Dodge velocity direction (world units / sec). */
   enemyAiDodgeDirXWorld: number;
   enemyAiDodgeDirYWorld: number;
+
+  // ---- Flying Eye (populated only when isFlyingEyeFlag === 1) ------------
+  /**
+   * 1 if this cluster is a flying eye — hovers in the air, moves in 2D,
+   * and is rendered as 4 concentric diamond outlines.
+   */
+  isFlyingEyeFlag: 0 | 1;
+  /**
+   * The angle (radians) the eye is currently "looking" toward.
+   * Smoothly tracks the cluster's velocity direction each tick.
+   * Used by the renderer to slide the inner diamond rings in the facing direction.
+   */
+  flyingEyeFacingAngleRad: number;
+  /**
+   * Primary element kind used by this flying eye (ParticleKind value).
+   * Stored here so the renderer can apply the correct element colour without
+   * scanning the particle buffers each frame.
+   */
+  flyingEyeElementKind: number;
+
+  // ---- Rolling Enemy (populated only when isRollingEnemyFlag === 1) -------
+  /**
+   * 1 if this cluster is a rolling ground enemy — uses a sprite that rotates
+   * as the enemy rolls, and forms a crescent shield when blocking.
+   */
+  isRollingEnemyFlag: 0 | 1;
+  /**
+   * Which enemy sprite to render (1–6), corresponding to enemy (N).png.
+   * Set at spawn time from RoomEnemyDef; never changed during gameplay.
+   */
+  rollingEnemySpriteIndex: number;
+  /**
+   * Accumulated roll rotation (radians) — incremented each tick proportional
+   * to horizontal velocity so the sprite appears to roll along the ground.
+   */
+  rollingEnemyRollAngleRad: number;
+  /**
+   * Countdown ticks during which the enemy aggressively chases the player
+   * after taking damage, even if the player is outside normal sight range.
+   * Decremented each tick; set to ROLLING_ENEMY_AGGRO_DURATION_TICKS on damage.
+   */
+  rollingEnemyAggressiveTicks: number;
+
+  // ---- Player sprite rotation (populated only when isPlayerFlag === 1) -----
+  /**
+   * Accumulated rotation angle (radians) for the player sprite.
+   * Slowly increments each tick; speeds up while the player is blocking.
+   */
+  playerRotationAngleRad: number;
 }
 
 export function createClusterState(
@@ -99,10 +172,14 @@ export function createClusterState(
     coyoteTimeTicks: 0,
     jumpBufferTicks: 0,
     prevJumpHeldFlag: 0,
+    varJumpTimerTicks: 0,
+    varJumpSpeedWorld: 0,
     isTouchingWallLeftFlag: 0,
     isTouchingWallRightFlag: 0,
     isWallSlidingFlag: 0,
     wallJumpLockoutTicks: 0,
+    wallJumpForceTimeTicks: 0,
+    wallJumpDirX: 0,
     dashCooldownTicks: 0,
     dashRechargeAnimTicks: 0,
     enemyAiAttackCooldownTicks: 30,
@@ -116,5 +193,13 @@ export function createClusterState(
     enemyAiDodgeTicks: 0,
     enemyAiDodgeDirXWorld: 0,
     enemyAiDodgeDirYWorld: 0,
+    isFlyingEyeFlag: 0,
+    flyingEyeFacingAngleRad: 0,
+    flyingEyeElementKind: 0,
+    isRollingEnemyFlag: 0,
+    rollingEnemySpriteIndex: 1,
+    rollingEnemyRollAngleRad: 0,
+    rollingEnemyAggressiveTicks: 0,
+    playerRotationAngleRad: 0,
   };
 }

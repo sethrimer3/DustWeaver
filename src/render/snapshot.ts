@@ -43,6 +43,20 @@ export interface ClusterSnapshot {
   readonly halfWidthWorld:        number;
   /** Half-height of the cluster box (world units). Used by renderer to draw a box. */
   readonly halfHeightWorld:       number;
+  /** 1 if this cluster is a flying eye, rendered as concentric diamond outlines. */
+  readonly isFlyingEyeFlag:       0 | 1;
+  /** Angle (radians) the eye is currently looking — used to offset inner diamonds. */
+  readonly flyingEyeFacingAngleRad: number;
+  /** Primary element kind of this flying eye (ParticleKind value). Drives eye colour. */
+  readonly flyingEyeElementKind:  number;
+  /** 1 if this cluster is a rolling ground enemy, rendered with a rotating sprite. */
+  readonly isRollingEnemyFlag:    0 | 1;
+  /** Which enemy sprite to render (1–6), corresponding to enemy (N).png. */
+  readonly rollingEnemySpriteIndex: number;
+  /** Accumulated roll angle (radians) used to rotate the enemy sprite. */
+  readonly rollingEnemyRollAngleRad: number;
+  /** Player sprite accumulated rotation angle (radians). */
+  readonly playerRotationAngleRad: number;
 }
 
 export interface WallSnapshot {
@@ -68,6 +82,10 @@ export interface WorldSnapshot {
   readonly grappleAttachFxTicks: number;
   readonly grappleAttachFxXWorld: number;
   readonly grappleAttachFxYWorld: number;
+  /** 1 while the player is holding block or a sustained weave — used to drive player sprite rotation speed. */
+  readonly isPlayerBlockingFlag: 0 | 1;
+  /** 1 while the player has any sustained Weave active (primary or secondary). */
+  readonly isPlayerWeaveActiveFlag: 0 | 1;
 }
 
 export function createSnapshot(world: WorldState): WorldSnapshot {
@@ -88,6 +106,13 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       dashRechargeAnimTicks: c.dashRechargeAnimTicks,
       halfWidthWorld:        c.halfWidthWorld,
       halfHeightWorld:       c.halfHeightWorld,
+      isFlyingEyeFlag:          c.isFlyingEyeFlag,
+      flyingEyeFacingAngleRad:  c.flyingEyeFacingAngleRad,
+      flyingEyeElementKind:     c.flyingEyeElementKind,
+      isRollingEnemyFlag:       c.isRollingEnemyFlag,
+      rollingEnemySpriteIndex:  c.rollingEnemySpriteIndex,
+      rollingEnemyRollAngleRad: c.rollingEnemyRollAngleRad,
+      playerRotationAngleRad:   c.playerRotationAngleRad,
     });
   }
 
@@ -120,5 +145,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleAttachFxTicks: world.grappleAttachFxTicks,
     grappleAttachFxXWorld: world.grappleAttachFxXWorld,
     grappleAttachFxYWorld: world.grappleAttachFxYWorld,
+    isPlayerBlockingFlag: world.isPlayerBlockingFlag,
+    isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
   };
 }

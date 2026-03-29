@@ -18,10 +18,13 @@ import { ParticleKind, PARTICLE_KIND_COUNT } from './kinds';
 
 // ---- Constants ----------------------------------------------------------
 
-/** Distance from owner center where shield particles form. */
-const SHIELD_DIST_WORLD   = 50.0;
-/** Spacing between shield particles in a line/arc formation. */
-const SHIELD_SPACING_WORLD = 9.0;
+/** Distance from owner center where shield particles form.
+ *  Set to player halfWidth (5) + ~2.5 particle diameters so the wall
+ *  sits just outside the player body. */
+const SHIELD_DIST_WORLD   = 7.5;
+/** Spacing between shield particles: equal to one particle diameter (10/6 wu)
+ *  so particles pack tightly with no gaps. */
+const SHIELD_SPACING_WORLD = 10.0 / 6.0;
 /** Spring strength pulling block particles toward their shield position. */
 const SHIELD_SPRING_STRENGTH = 400.0;
 
@@ -574,6 +577,7 @@ function applyEnemyBlockForces(world: WorldState): void {
     const blockDirY      = cluster.enemyAiBlockDirYWorld;
     const enemyX         = cluster.positionXWorld;
     const enemyY         = cluster.positionYWorld;
+    const isFlyingEye    = cluster.isFlyingEyeFlag === 1;
 
     _eBlockKindCount.fill(0);
     _eBlockKindSlotIdx.fill(0);
@@ -595,11 +599,31 @@ function applyEnemyBlockForces(world: WorldState): void {
       const total = _eBlockKindCount[kind] > 0 ? _eBlockKindCount[kind] : 1;
       const slot  = _eBlockKindSlotIdx[kind]++;
 
-      const { targetXWorld, targetYWorld } = computeShieldTarget(
-        enemyX, enemyY,
-        blockDirX, blockDirY,
-        slot, total, kind,
-      );
+      let targetXWorld: number;
+      let targetYWorld: number;
+
+      if (isFlyingEye) {
+        // Flying eye block: spin all particles in a tight protective circle
+        const angle = (slot / total) * Math.PI * 2.0;
+        targetXWorld = enemyX + Math.cos(angle) * SHIELD_DIST_WORLD;
+        targetYWorld = enemyY + Math.sin(angle) * SHIELD_DIST_WORLD;
+      } else if (cluster.isRollingEnemyFlag === 1) {
+        // Rolling enemy block: wide crescent arc facing the player.
+        // blockDirX/Y was set to point TOWARD the player in enemyAi.ts,
+        // so the crescent forms between this enemy and the player.
+        const crescentAngle = Math.atan2(blockDirY, blockDirX);
+        const halfSpread = Math.PI * 0.75; // ±135° → nearly a full semicircle
+        const t = total > 1 ? slot / (total - 1) : 0.5;
+        const angle = crescentAngle - halfSpread * 0.5 + t * halfSpread;
+        targetXWorld = enemyX + Math.cos(angle) * SHIELD_DIST_WORLD;
+        targetYWorld = enemyY + Math.sin(angle) * SHIELD_DIST_WORLD;
+      } else {
+        ({ targetXWorld, targetYWorld } = computeShieldTarget(
+          enemyX, enemyY,
+          blockDirX, blockDirY,
+          slot, total, kind,
+        ));
+      }
 
       const dsx = targetXWorld - positionXWorld[i];
       const dsy = targetYWorld - positionYWorld[i];

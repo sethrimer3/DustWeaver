@@ -2,18 +2,130 @@ import { WorldSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_WORLD } from '../../levels/roomDef';
+import { ParticleKind } from '../../sim/particles/kinds';
 
 /** Block size in world units — walls are decomposed into tiles of this size. */
 const BLOCK_SIZE_PX = BLOCK_SIZE_WORLD;
+
+// ── Sprite loading ──────────────────────────────────────────────────────────
+
+/** Module-level image cache keyed by URL — populated once, reused forever. */
+const _imgCache = new Map<string, HTMLImageElement>();
+
+function _loadImg(src: string): HTMLImageElement {
+  const cached = _imgCache.get(src);
+  if (cached !== undefined) return cached;
+  const img = new Image();
+  img.src = src;
+  _imgCache.set(src, img);
+  return img;
+}
+
+function _isSpriteReady(img: HTMLImageElement): boolean {
+  return img.complete && img.naturalWidth > 0;
+}
+
+/** Player character sprite. */
+const _playerSprite: HTMLImageElement = _loadImg('SPRITES/player/player.png');
+
+/** Rolling enemy sprites indexed by spriteIndex (1–6). Index 0 is unused. */
+const _enemySprites: HTMLImageElement[] = [
+  _loadImg('SPRITES/player/player.png'), // placeholder at index 0 (unused)
+  _loadImg('SPRITES/enemies/universal/enemy (1).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (2).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (3).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (4).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (5).png'),
+  _loadImg('SPRITES/enemies/universal/enemy (6).png'),
+];
+
+// ── Flying Eye rendering constants ─────────────────────────────────────────
+
+/** Sizes of each concentric diamond (as a fraction of the outermost half-diagonal). */
+const FLYING_EYE_RING_SCALES = [1.0, 0.72, 0.50, 0.31];
+/** Offset of each diamond's centre in the facing direction (fraction of outerR). */
+const FLYING_EYE_RING_OFFSETS = [0.0, 0.07, 0.14, 0.19];
+/** Stroke widths (screen pixels) for each ring, outer to inner. */
+const FLYING_EYE_RING_WIDTHS = [3.5, 2.5, 2.0, 1.5];
+
+/** Returns the primary display colour for a flying eye by element kind. */
+function getFlyingEyeColor(elementKind: number): string {
+  switch (elementKind as ParticleKind) {
+    case ParticleKind.Fire:  return '#ff5522';
+    case ParticleKind.Ice:   return '#44ccff';
+    case ParticleKind.Wind:  return '#88ffaa';
+    default:                 return '#ccccff';
+  }
+}
+
+/**
+ * Draws four concentric diamond outlines centred at (screenX, screenY).
+ * The inner diamonds are offset in the facing direction so the eye appears
+ * to "look" in that direction.
+ */
+function renderFlyingEye(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  outerHalfDiagonalPx: number,
+  facingAngleRad: number,
+  elementKind: number,
+  healthRatio: number,
+): void {
+  const color = getFlyingEyeColor(elementKind);
+  const facingDirX = Math.cos(facingAngleRad);
+  const facingDirY = Math.sin(facingAngleRad);
+
+  ctx.strokeStyle = color;
+  ctx.fillStyle = 'transparent';
+  ctx.globalAlpha = 0.85 + healthRatio * 0.15;
+
+  for (let d = 0; d < FLYING_EYE_RING_SCALES.length; d++) {
+    const r   = outerHalfDiagonalPx * FLYING_EYE_RING_SCALES[d];
+    const off = outerHalfDiagonalPx * FLYING_EYE_RING_OFFSETS[d];
+    const cx  = screenX + facingDirX * off;
+    const cy  = screenY + facingDirY * off;
+
+    ctx.lineWidth = FLYING_EYE_RING_WIDTHS[d];
+    ctx.beginPath();
+    ctx.moveTo(cx + r, cy);       // right point
+    ctx.lineTo(cx,     cy + r);   // bottom point
+    ctx.lineTo(cx - r, cy);       // left point
+    ctx.lineTo(cx,     cy - r);   // top point
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1.0;
+}
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas using
  * context-sensitive (auto-tiling) block sprites.  Falls back to solid-colour
  * rectangles per tile while sprites are still loading.
  * Walls are drawn before cluster indicators so clusters appear on top.
+ *
+ * When isDebugMode is true, a red outline is drawn around every wall AABB so
+ * that hitbox boundaries are visible during development.
  */
-export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
+export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
   renderWallSprites(ctx, snapshot, offsetXPx, offsetYPx, scalePx, BLOCK_SIZE_PX);
+
+  if (isDebugMode) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 60, 60, 0.75)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    for (let wi = 0; wi < snapshot.walls.count; wi++) {
+      const screenX = snapshot.walls.xWorld[wi] * scalePx + offsetXPx;
+      const screenY = snapshot.walls.yWorld[wi] * scalePx + offsetYPx;
+      const screenW = snapshot.walls.wWorld[wi] * scalePx;
+      const screenH = snapshot.walls.hWorld[wi] * scalePx;
+      ctx.strokeRect(screenX, screenY, screenW, screenH);
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
 }
 
 export function renderClusters(
@@ -83,42 +195,112 @@ export function renderClusters(
       ctx.stroke();
     }
 
-    // ── Cluster box body ──────────────────────────────────────────────────
-    const bodyColor = isPlayer ? '#00ff99' : '#ff6600';
+    if (cluster.isFlyingEyeFlag === 1) {
+      // ── Flying Eye: draw 4 concentric diamond outlines ──────────────────
+      const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
+      const outerHalfDiagonalScreen = boxHalfW * 2.5;
+      renderFlyingEye(
+        ctx, screenX, screenY,
+        outerHalfDiagonalScreen,
+        cluster.flyingEyeFacingAngleRad,
+        cluster.flyingEyeElementKind,
+        healthRatio,
+      );
+    } else if (isPlayer) {
+      // ── Player: sprite (fitted to box, slowly rotating) ─────────────────
+      const rotAngle = cluster.playerRotationAngleRad;
+      const sprite   = _playerSprite;
+      if (_isSpriteReady(sprite)) {
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(rotAngle);
+        ctx.drawImage(sprite, -boxHalfW, -boxHalfH, boxW, boxH);
+        ctx.restore();
+      } else {
+        // Fallback while sprite loads: coloured box
+        ctx.fillStyle = '#00ff99';
+        ctx.globalAlpha = 0.75;
+        ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+        ctx.globalAlpha = 1.0;
+        ctx.strokeStyle = '#00ff99';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+      }
+    } else if (cluster.isRollingEnemyFlag === 1) {
+      // ── Rolling enemy: sprite rotated by accumulated roll angle ──────────
+      const idx    = cluster.rollingEnemySpriteIndex;
+      const sprite = idx >= 1 && idx <= 6 ? _enemySprites[idx] : _enemySprites[1];
+      const rollAngle = cluster.rollingEnemyRollAngleRad;
+      if (_isSpriteReady(sprite)) {
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(rollAngle);
+        ctx.drawImage(sprite, -boxHalfW, -boxHalfH, boxW, boxH);
+        ctx.restore();
+      } else {
+        // Fallback while sprite loads: orange box
+        ctx.fillStyle = '#ff6600';
+        ctx.globalAlpha = 0.75;
+        ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+        ctx.globalAlpha = 1.0;
+        ctx.strokeStyle = '#ff6600';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+      }
+    } else {
+      // ── Regular cluster box body ─────────────────────────────────────────
+      const bodyColor = '#ff6600';
 
-    // Filled box
-    ctx.fillStyle = bodyColor;
-    ctx.globalAlpha = 0.75;
-    ctx.fillRect(boxLeft, boxTop, boxW, boxH);
-    ctx.globalAlpha = 1.0;
+      // Filled box
+      ctx.fillStyle = bodyColor;
+      ctx.globalAlpha = 0.75;
+      ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+      ctx.globalAlpha = 1.0;
 
-    // Box border
-    ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
-
-    // Inner highlight on top edge
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.fillRect(boxLeft + 2, boxTop + 2, boxW - 4, 3);
-
-    if (showHitboxes) {
-      ctx.strokeStyle = isPlayer ? 'rgba(0, 255, 170, 0.95)' : 'rgba(255, 120, 40, 0.95)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
+      // Box border
+      ctx.strokeStyle = bodyColor;
+      ctx.lineWidth = 2;
       ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
-      ctx.setLineDash([]);
+
+      // Inner highlight on top edge
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(boxLeft + 2, boxTop + 2, boxW - 4, 3);
+
+      if (showHitboxes) {
+        ctx.strokeStyle = 'rgba(255, 120, 40, 0.95)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+        ctx.setLineDash([]);
+      }
     }
 
-    // ── Health bar (above the box) ────────────────────────────────────────
-    const barWidthPx  = boxW;
-    const barHeightPx = 4;
-    const barXPx      = boxLeft;
-    const barYPx      = boxTop - barHeightPx - 4;
+    // ── Health bar (above the body) ───────────────────────────────────────
     const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
+    // For flying eyes the health bar is anchored above the outer diamond ring;
+    // for regular clusters it sits above the box.
+    const barWidthPx  = cluster.isFlyingEyeFlag === 1
+      ? boxHalfW * 5.0
+      : boxW;
+    const barHeightPx = 4;
+    const barXPx      = cluster.isFlyingEyeFlag === 1
+      ? screenX - barWidthPx * 0.5
+      : boxLeft;
+    const barYPx      = cluster.isFlyingEyeFlag === 1
+      ? screenY - boxHalfW * 2.5 - barHeightPx - 6
+      : boxTop - barHeightPx - 4;
 
     ctx.fillStyle = '#333';
     ctx.fillRect(barXPx, barYPx, barWidthPx, barHeightPx);
-    ctx.fillStyle = isPlayer ? '#00ff99' : '#ff6600';
+    let barColor: string;
+    if (cluster.isFlyingEyeFlag === 1) {
+      barColor = getFlyingEyeColor(cluster.flyingEyeElementKind);
+    } else if (isPlayer) {
+      barColor = '#00ff99';
+    } else {
+      barColor = '#ff6600';
+    }
+    ctx.fillStyle = barColor;
     ctx.fillRect(barXPx, barYPx, barWidthPx * healthRatio, barHeightPx);
   }
 

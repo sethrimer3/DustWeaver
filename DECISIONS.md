@@ -114,46 +114,54 @@ The `kind` drives element colour selection in the GLSL fragment shader.
 `normalizedAge` (ageTicks / lifetimeTicks) drives alpha fade and point-size
 shrink in the vertex shader — particles visually decay as they age out.
 
-## Player Movement Physics (BUILD 22)
+## Player Movement Physics (BUILD 38 — Celeste-inspired retune)
+
+### Gravity Model
+Replaced the dual rise/fall gravity split with a unified normal gravity (900 px/s²).
+Rise/fall asymmetry is now achieved through:
+- Jump-cut gravity multiplier (2.5×) when rising with jump released
+- Apex half-gravity (0.5×) when abs(vy) < 50 px/s and jump is held
+- Normal fall cap (160 px/s) + fast fall cap (240 px/s, smooth approach at 300/s)
 
 ### Jump Physics
-Jump constants are derived from explicit kinematic targets rather than guessed values:
-- Target jump height: 60 px (2 standard 30 px blocks)
-- Time to apex: 0.35 s
-- Rise gravity = (2 × 60) / (0.35²) ≈ 979.6 px/s²
-- Jump velocity = gravity × 0.35 ≈ 342.8 px/s (applied upward)
-- Fall gravity: 1600 px/s² (stronger than rise for a snappier descent)
+- Normal gravity: 900 px/s²
+- Jump velocity: 300 px/s (applied upward)
+- Variable jump sustain: 0.20 s window where holding jump prevents gravity from
+  decaying past the launch speed — creates expressive short hops vs full jumps.
+- Apex half-gravity: gravity × 0.5 when abs(vy) < 50 and jump held — brief float.
 
 ### Jump-Cut (Variable Jump Height)
-Jump-cut uses an extra-gravity multiplier (2.5×) applied while the player is rising
-with the jump key released, rather than clamping velocity on key release.  This gives
-a smooth range of hop heights from a single button without abrupt velocity changes.
+Jump-cut gravity multiplier (2.5×) still applied while rising with jump released.
+Now works alongside the variable jump sustain system (sustain cancelled on release).
+
+### Fall System
+Two-stage terminal velocity replaces the old single 240 px/s cap:
+- Normal max fall: 160 px/s (default)
+- Fast max fall: 240 px/s (when holding down, smooth approach at 300/s)
 
 ### Horizontal Movement
-Switched from an exponential-blend (lerp) model to a direct acceleration model:
+Direct acceleration model preserved. Retuned values:
 - Ground acceleration: 1200 px/s²
 - Ground deceleration: 1500 px/s²
-- Air acceleration:    900 px/s²
-- Air deceleration:    1000 px/s²
+- Air acceleration:    780 px/s²
+- Air deceleration:    900 px/s²
 - Turn acceleration:   2200 px/s² (when reversing direction)
-- Max run speed:       140 px/s
-Turn acceleration is applied any time the player pushes against their current
-velocity direction; it is the same whether grounded or airborne.
+- Max run speed:       105 px/s
 
 ### Player Hitbox
 Changed from 8×12 to 10×10 px (halfWidth=5, halfHeight=5) to match the spec of
 exactly one-third of a standard block (30 px) in each dimension.
 
 ### Wall Slide
-When airborne, pressing into a solid (thick) wall while falling, the player enters a
-wall slide.  Descent is capped at 80 px/s.  Disabled during the wall-jump lockout
-window so the player has a moment of free flight after a wall jump.
+Wall slide descent capped at 25 px/s (reduced from 80) for deliberate, readable
+Celeste-like wall interaction.
 
 ### Wall Jump
-Launch vector: 160 px/s horizontal (away from wall) + 320 px/s vertical (up).
-A 20-tick lockout (~0.33 s) prevents immediately re-grabbing the same wall, which
-also prevents infinite altitude climbing — by the time the lockout expires the
-player is falling, not rising.
+Retuned for anti-climb: 220 px/s horizontal + 220 px/s vertical (down from 320).
+Strong outward push paired with a 10-tick force-time window (~0.16 s) during which
+horizontal input is overridden by the launch direction.  12-tick lockout (~0.20 s)
+prevents immediate re-grab.  Net effect: wall jumping off the same wall repeatedly
+returns the player to roughly the same height or slightly lower.
 
 ### Grapple Hook Rope Pull-In
 Holding the jump button while grappling shortens the rope at 90 px/s, tightening
@@ -230,3 +238,150 @@ This prevents the acceleration model from fighting against the swing.
 - All UI text uses Cinzel, Regular 400.
 - Main menu title text uses text-transform: uppercase.
 
+
+## BUILD 34 Changes
+
+### Block Size Reduction
+`BLOCK_SIZE_WORLD` reduced from 15 to 11.25 (25% smaller).  All room dimensions
+(walls, enemy spawns, tunnel positions) are stored in block units and converted
+to world units at load time, so the entire geometry shrinks proportionally.
+Player and enemy physics constants (jump height, gravity, speed) remain in
+absolute world units and are therefore unaffected by the block size change —
+the player effectively becomes larger relative to each block.
+
+### Jump Height Reduction
+`JUMP_HEIGHT_WORLD` reduced from 60 to 40 world units.  Derived constants
+(rise gravity, jump velocity) are recomputed automatically:
+- Rise gravity = (2 × 40) / (0.40²) = 500 px/s²
+- Jump velocity = 500 × 0.40 = 200 px/s (upward)
+The jump arc is noticeably shorter and snappier.
+
+### Grapple Bug Fix (Immediate Release on Attachment)
+Root cause: when the player pressed jump on the same animation frame as firing
+the grapple, `playerJumpTriggeredFlag` was set to 1 in gameScreen.ts AFTER
+`fireGrapple` ran.  On the first sim tick, `applyClusterMovement` skipped the
+normal jump path (grapple active), leaving the flag set.
+`applyGrappleClusterConstraint` then saw `jumpJustPressed=1` and
+`playerJumpHeldFlag=0` and treated it as an ultra-fast tap-release, immediately
+detaching the grapple.
+
+Fix: `fireGrapple` now clears `playerJumpTriggeredFlag` immediately after
+attaching so that any jump input that coincides with the fire frame is
+discarded rather than being consumed by the constraint on the next tick.
+
+Secondary fix: the anchor is now placed at the exact raycast surface hit point
+(`hit.x/hit.y`) instead of `player + dir * clampedDist`.  If the wall is
+closer than `GRAPPLE_MIN_LENGTH_WORLD` the grapple no longer fires at all
+(previously it would embed the anchor inside the block geometry).
+
+### Grapple Tap-Jump Hop
+Tapping jump while grappling now adds an upward velocity impulse
+(`GRAPPLE_TAP_HOP_SPEED_WORLD = 80 px/s`) before releasing the grapple.  Both
+the ultra-fast tap path and the regular tap path (held ≤ 6 ticks) apply the hop.
+The impulse is always applied additively (velocityYWorld -= 80): if the player is
+already moving upward at 100 px/s (velocityYWorld = -100), the result is -180 px/s,
+further increasing upward speed.
+
+### Debug Hitbox Rendering
+`renderWalls` now accepts an `isDebugMode` flag.  When enabled, a dashed red
+outline (`rgba(255,60,60,0.75)`) is drawn over every wall AABB so developers
+can verify the collision boundary matches the visual tile geometry.
+
+## World Editor (BUILD 35)
+
+### Editor Architecture
+- The editor is a modular system under `src/editor/` with a single integration
+  point in `gameScreen.ts` via `EditorController`.
+- When active, the editor takes over the frame loop: gameplay input is suppressed,
+  the camera becomes free-moving (WASD), and editor overlays are drawn on top of
+  the frozen game world.
+- The editor operates on authored room data (`EditorRoomData`), which is the
+  source-of-truth for level content. Runtime `WorldState` is rebuilt from this
+  data via `editorRoomDataToRoomDef()` when needed.
+
+### JSON Export Format
+- Room data is exported as `RoomJsonDef` (clean, human-readable JSON).
+- Enemy particle kinds use string names (e.g. `"Fire"`, `"Ice"`) rather than
+  numeric enum values for readability and stability.
+- Boundary walls and tunnel wall geometry are **not serialized** — they are
+  regenerated deterministically from room dimensions and transition definitions
+  at load time by `editorRoomDataToRoomDef()`.
+- The schema captures: id, name, worldNumber, widthBlocks, heightBlocks,
+  playerSpawnBlock, interiorWalls, enemies, transitions, skillTombs.
+
+### Compatibility Strategy
+- Existing TypeScript-authored rooms in `levels/rooms.ts` remain untouched.
+- The editor can export any room to JSON and a JSON loader path exists via
+  `jsonToEditorRoomData()` → `editorRoomDataToRoomDef()`.
+- Full migration of all rooms to JSON is deferred to a future decision.
+
+### Transition Linking
+- The editor supports a "Link Transition" workflow: select a transition,
+  click Link, pick a destination room from the world map, then click the
+  target transition to complete the link.
+- This updates `targetRoomId` and `targetSpawnBlock` on the source transition.
+
+### Up/Down Transitions
+- The editor and JSON schema support `up` and `down` transition directions in
+  their data models (EditorTransition, RoomJsonDef, RoomTransitionDef).
+- Runtime tunnel wall generation currently only handles `left` and `right`
+  directions. Up/down tunnel walls will be added when the first up/down
+  transition is needed in gameplay. The editor and export format are already
+  structured to support this without schema changes.
+
+## Weave Combat System (BUILD 39)
+
+### Design Philosophy
+- **Old model**: Left click = attack (per-dust-type pattern), Right click = block (per-dust-type shield)
+- **New model**: Left click = Primary Weave, Right click = Secondary Weave
+- Dust type governs passive motion + elemental identity. Weave governs active combat form.
+
+### Key Separation
+- **Dust types** define: passive ambient motion, visual theme, elemental interactions, slot cost
+- **Weaves** define: active deployment pattern, duration, cooldown, slot capacity
+- The same Weave always produces the same recognizable shape regardless of dust type
+
+### Weave Types (Initial Set)
+- Aegis Weave: orbiting shield ring (sustained)
+- Bastion Weave: directional wall (sustained)
+- Spire Weave: straight line shot (burst, 45 ticks)
+- Torrent Weave: cone spray (burst)
+- Comet Weave: compressed projectile (burst)
+- Scatter Weave: outward explosion (burst)
+
+### Loadout Structure
+- PlayerWeaveLoadout contains primary + secondary WeaveBinding
+- Each WeaveBinding has a weaveId and an array of bound ParticleKinds
+- Slot costs are per-dust-type (defined in dustDefinition.ts)
+- Slot capacity is per-Weave (defined in weaveDefinition.ts)
+
+### Behavior Modes (Extended)
+- Mode 0: Passive orbit (dust-type motion from ElementProfile)
+- Mode 1: Legacy attack (enemy AI only)
+- Mode 2: Legacy block (enemy AI only)
+- Mode 3: Weave active (particle executing a Weave pattern)
+- Mode 4: Returning (transitioning back to passive orbit)
+
+### Input Mapping
+- Left click quick release = burst primary Weave (or sustained trigger)
+- Left click hold = sustained primary Weave
+- Right click quick release = burst secondary Weave
+- Right click hold = sustained secondary Weave
+- Hold threshold: 200ms (matches old attack/block threshold)
+
+### Particle Buffer
+- New `weaveSlotId` Uint8Array tracks which Weave slot each particle is bound to
+- 0 = unbound (enemies, background), 1 = primary, 2 = secondary
+- Set at spawn time based on PlayerWeaveLoadout
+
+### Enemy Combat
+- Enemies still use the legacy attack/block system (modes 1/2)
+- Enemy combat forces in combat.ts are unchanged
+- Player combat forces now come from weaveCombat.ts (step 4.55 in tick pipeline)
+
+### Tuning Locations
+- Passive dust motion: `sim/particles/elementProfiles.ts`
+- Dust slot costs: `sim/weaves/dustDefinition.ts`
+- Weave slot capacities: `sim/weaves/weaveDefinition.ts`
+- Weave behavior tuning: `sim/weaves/weaveCombat.ts`
+- Default loadout: `sim/weaves/playerLoadout.ts` (createDefaultWeaveLoadout)

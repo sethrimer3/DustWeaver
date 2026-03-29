@@ -125,6 +125,10 @@ function drawParticleShape(
  *  submitting nearly-invisible draw calls (saves Canvas 2D state overhead). */
 const MIN_VISIBLE_ALPHA = 0.004;
 
+// Particle render radius in world units: 1/6th player size (10 wu) divided by 2.
+// Matches PARTICLE_RADIUS_WORLD in sim/particles/forces.ts.
+const PARTICLE_RENDER_RADIUS_WORLD = 5.0 / 6.0;
+
 export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
   const { particles } = snapshot;
   const {
@@ -133,6 +137,9 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     kindBuffer, ageTicks, lifetimeTicks,
     disturbanceFactor,
   } = particles;
+
+  // Radius in screen pixels: world-unit radius scaled by zoom.
+  const radiusPx = PARTICLE_RENDER_RADIUS_WORLD * scalePx;
 
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
@@ -157,7 +164,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = style.colorHex;
-    drawParticleShape(ctx, screenX, screenY, style.radiusPx, kind);
+    drawParticleShape(ctx, screenX, screenY, radiusPx, kind);
   }
   ctx.globalAlpha = 1.0;
 }

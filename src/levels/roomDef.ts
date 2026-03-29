@@ -7,8 +7,8 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 
-/** Size of one block in world units. */
-export const BLOCK_SIZE_WORLD = 15;
+/** Size of one block in world units (25 % smaller than the original 15). */
+export const BLOCK_SIZE_WORLD = 11.25;
 
 /** An enemy cluster placed inside a room. */
 export interface RoomEnemyDef {
@@ -22,6 +22,21 @@ export interface RoomEnemyDef {
   particleCount: number;
   /** 1 if boss, 0 otherwise. */
   isBossFlag: 0 | 1;
+  /**
+   * 1 if this enemy is a flying eye — floats in the air, moves in 2D,
+   * and is rendered as 4 concentric diamond outlines.
+   */
+  isFlyingEyeFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a rolling ground enemy — rolls toward the player,
+   * rendered with a rotating sprite, and forms a crescent shield when blocking.
+   */
+  isRollingEnemyFlag?: 0 | 1;
+  /**
+   * Which enemy sprite to use (1–6), corresponding to SPRITES/enemies/universal/enemy (N).png.
+   * Only meaningful when isRollingEnemyFlag === 1.
+   */
+  rollingEnemySpriteIndex?: number;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */
