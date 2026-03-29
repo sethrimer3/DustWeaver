@@ -114,6 +114,7 @@ export function placeAtCursor(state: EditorState): void {
       isFlyingEyeFlag: 0,
       isRollingEnemyFlag: 1,
       rollingEnemySpriteIndex: 1,
+      isRockElementalFlag: 0,
     });
   } else if (item.id === 'enemy_flying_eye') {
     room.enemies.push({
@@ -126,6 +127,20 @@ export function placeAtCursor(state: EditorState): void {
       isFlyingEyeFlag: 1,
       isRollingEnemyFlag: 0,
       rollingEnemySpriteIndex: 0,
+      isRockElementalFlag: 0,
+    });
+  } else if (item.id === 'enemy_rock_elemental') {
+    room.enemies.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      kinds: ['Earth'],
+      particleCount: 20,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 0,
+      isRollingEnemyFlag: 0,
+      rollingEnemySpriteIndex: 0,
+      isRockElementalFlag: 1,
     });
   } else if (item.id === 'player_spawn') {
     room.playerSpawnBlock = [bx, by];

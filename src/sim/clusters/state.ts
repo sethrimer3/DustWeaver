@@ -141,6 +141,41 @@ export interface ClusterState {
    */
   rollingEnemyAggressiveTicks: number;
 
+  // ---- Rock Elemental (populated only when isRockElementalFlag === 1) ------
+  /**
+   * 1 if this cluster is a rock elemental — hovers near the ground,
+   * orbits brown-rock dust, and fires dust projectiles at the player.
+   */
+  isRockElementalFlag: 0 | 1;
+  /**
+   * Current Rock Elemental state:
+   *  0 = inactive (rock pieces on ground, not damageable)
+   *  1 = activating (transitioning from rock pieces to floating formation)
+   *  2 = active (hovering, idle)
+   *  3 = evading (retreating from player when too close)
+   *  4 = attacking (firing dust projectile)
+   *  5 = regenerating (rebuilding dust orbit)
+   *  6 = dead
+   */
+  rockElementalState: number;
+  /** Ticks elapsed in the current state (used for activation lerp, etc.). */
+  rockElementalStateTicks: number;
+  /** Spawn X position (world units) — used for leash radius check. */
+  rockElementalSpawnXWorld: number;
+  /** Spawn Y position (world units) — used for leash radius check. */
+  rockElementalSpawnYWorld: number;
+  /** Current number of orbiting dust particles. */
+  rockElementalDustCount: number;
+  /** Accumulated orbit angle (radians) — drives dust rotation. */
+  rockElementalOrbitAngleRad: number;
+  /** Ticks since last dust regeneration. */
+  rockElementalRegenTicks: number;
+  /**
+   * Activation lerp progress in [0, 1].
+   * 0 = fully on ground (rock pieces), 1 = fully floating formation.
+   */
+  rockElementalActivationProgress: number;
+
   // ---- Player sprite rotation (populated only when isPlayerFlag === 1) -----
   /**
    * Accumulated rotation angle (radians) for the player sprite.
@@ -200,6 +235,15 @@ export function createClusterState(
     rollingEnemySpriteIndex: 1,
     rollingEnemyRollAngleRad: 0,
     rollingEnemyAggressiveTicks: 0,
+    isRockElementalFlag: 0,
+    rockElementalState: 0,
+    rockElementalStateTicks: 0,
+    rockElementalSpawnXWorld: positionXWorld,
+    rockElementalSpawnYWorld: positionYWorld,
+    rockElementalDustCount: 0,
+    rockElementalOrbitAngleRad: 0,
+    rockElementalRegenTicks: 0,
+    rockElementalActivationProgress: 0,
     playerRotationAngleRad: 0,
   };
 }

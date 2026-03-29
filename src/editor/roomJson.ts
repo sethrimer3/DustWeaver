@@ -58,6 +58,7 @@ export interface RoomJsonEnemy {
   isFlyingEye: boolean;
   isRollingEnemy: boolean;
   rollingEnemySpriteIndex?: number;
+  isRockElemental: boolean;
 }
 
 export interface RoomJsonWall {
@@ -183,6 +184,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isFlyingEyeFlag: e.isFlyingEye ? 1 : 0,
     isRollingEnemyFlag: e.isRollingEnemy ? 1 : 0,
     rollingEnemySpriteIndex: e.rollingEnemySpriteIndex ?? 1,
+    isRockElementalFlag: e.isRockElemental ? 1 : 0,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => ({
@@ -242,6 +244,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isFlyingEye: e.isFlyingEyeFlag === 1,
       isRollingEnemy: e.isRollingEnemyFlag === 1,
       rollingEnemySpriteIndex: e.isRollingEnemyFlag === 1 ? e.rollingEnemySpriteIndex : undefined,
+      isRockElemental: e.isRockElementalFlag === 1,
     })),
     transitions: data.transitions.map(t => ({
       direction: t.direction,
@@ -368,6 +371,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isFlyingEyeFlag: e.isFlyingEyeFlag,
       isRollingEnemyFlag: e.isRollingEnemyFlag,
       rollingEnemySpriteIndex: e.rollingEnemySpriteIndex,
+      isRockElementalFlag: e.isRockElementalFlag,
     };
   });
 
@@ -436,6 +440,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isFlyingEyeFlag: (e.isFlyingEyeFlag ?? 0) as 0 | 1,
     isRollingEnemyFlag: (e.isRollingEnemyFlag ?? 0) as 0 | 1,
     rollingEnemySpriteIndex: e.rollingEnemySpriteIndex ?? 1,
+    isRockElementalFlag: (e.isRockElementalFlag ?? 0) as 0 | 1,
   }));
 
   const transitions: EditorTransition[] = room.transitions.map(t => ({

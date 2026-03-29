@@ -37,6 +37,11 @@ export interface RoomEnemyDef {
    * Only meaningful when isRollingEnemyFlag === 1.
    */
   rollingEnemySpriteIndex?: number;
+  /**
+   * 1 if this enemy is a rock elemental — hovers near the ground, has
+   * inactive/active states, orbits/fires brown-rock dust projectiles.
+   */
+  isRockElementalFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

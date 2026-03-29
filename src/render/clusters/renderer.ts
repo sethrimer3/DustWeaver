@@ -39,6 +39,15 @@ const _enemySprites: HTMLImageElement[] = [
   _loadImg('SPRITES/enemies/universal/enemy (6).png'),
 ];
 
+// ── Rock Elemental sprites ────────────────────────────────────────────────
+
+const _reHeadDeactivated = _loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_head_deactivated.png');
+const _reArm1Deactivated = _loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_arm_1_deactivated.png');
+const _reArm2Deactivated = _loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_arm_2_deactivated.png');
+const _reHeadActivated   = _loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_head_activated.png');
+const _reArm1Activated   = _loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_arm_1_activated.png');
+const _reArm2Activated   = _loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_arm_2_activated.png');
+
 // ── Flying Eye rendering constants ─────────────────────────────────────────
 
 /** Sizes of each concentric diamond (as a fraction of the outermost half-diagonal). */
@@ -247,6 +256,70 @@ export function renderClusters(
         ctx.lineWidth = 2;
         ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
       }
+    } else if (cluster.isRockElementalFlag === 1) {
+      // ── Rock Elemental: composite sprite (head + 2 arms) ────────────────
+      const reState = cluster.rockElementalState;
+      const isActiveRE = reState >= 2; // active states use activated sprites
+      const activationT = cluster.rockElementalActivationProgress;
+      
+      const headSprite = isActiveRE ? _reHeadActivated : _reHeadDeactivated;
+      const arm1Sprite = isActiveRE ? _reArm1Activated : _reArm1Deactivated;
+      const arm2Sprite = isActiveRE ? _reArm2Activated : _reArm2Deactivated;
+      
+      // Piece sizes
+      const headSize = boxW * 1.2;
+      const armSize = boxW * 0.9;
+      
+      if (reState === 0) {
+        // Inactive: rock pieces scattered on ground
+        if (_isSpriteReady(headSprite)) {
+          ctx.drawImage(headSprite, screenX - headSize * 0.5, screenY - headSize * 0.3, headSize, headSize);
+        }
+        if (_isSpriteReady(arm1Sprite)) {
+          ctx.drawImage(arm1Sprite, screenX - armSize * 1.4, screenY, armSize, armSize);
+        }
+        if (_isSpriteReady(arm2Sprite)) {
+          ctx.drawImage(arm2Sprite, screenX + armSize * 0.5, screenY + armSize * 0.1, armSize, armSize);
+        }
+      } else {
+        // Activating or active: lerp pieces into floating formation
+        const t = reState === 1 ? activationT : 1.0;
+        
+        // Head: rises from ground to center-above
+        const headRestY = screenY - headSize * 0.3;
+        const headFloatY = screenY - headSize * 1.0;
+        const headY = headRestY + (headFloatY - headRestY) * t;
+        
+        // Arm 1: slides left
+        const arm1RestX = screenX - armSize * 1.4;
+        const arm1RestY = screenY;
+        const arm1FloatX = screenX - armSize * 1.1;
+        const arm1FloatY = screenY - armSize * 0.4;
+        const arm1X = arm1RestX + (arm1FloatX - arm1RestX) * t;
+        const arm1Y = arm1RestY + (arm1FloatY - arm1RestY) * t;
+        
+        // Arm 2: slides right
+        const arm2RestX = screenX + armSize * 0.5;
+        const arm2RestY = screenY + armSize * 0.1;
+        const arm2FloatX = screenX + armSize * 0.3;
+        const arm2FloatY = screenY - armSize * 0.4;
+        const arm2X = arm2RestX + (arm2FloatX - arm2RestX) * t;
+        const arm2Y = arm2RestY + (arm2FloatY - arm2RestY) * t;
+        
+        // Gentle hover bob when fully active
+        const bobOffset = reState >= 2 ? Math.sin(cluster.rockElementalOrbitAngleRad * 0.5) * 2.0 * scalePx : 0;
+        
+        if (_isSpriteReady(headSprite)) {
+          ctx.drawImage(headSprite, screenX - headSize * 0.5, headY + bobOffset, headSize, headSize);
+        }
+        if (_isSpriteReady(arm1Sprite)) {
+          ctx.drawImage(arm1Sprite, arm1X, arm1Y + bobOffset, armSize, armSize);
+        }
+        if (_isSpriteReady(arm2Sprite)) {
+          ctx.drawImage(arm2Sprite, arm2X, arm2Y + bobOffset, armSize, armSize);
+        }
+      }
+
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -295,6 +368,8 @@ export function renderClusters(
     let barColor: string;
     if (cluster.isFlyingEyeFlag === 1) {
       barColor = getFlyingEyeColor(cluster.flyingEyeElementKind);
+    } else if (cluster.isRockElementalFlag === 1) {
+      barColor = '#8b6914'; // brown/amber for rock elemental
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

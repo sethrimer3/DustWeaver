@@ -22,6 +22,8 @@ import { WorldState } from './world';
 import { applyClusterMovement } from './clusters/movement';
 import { applyGrappleClusterConstraint, updateGrappleChainParticles } from './clusters/grapple';
 import { applyEnemyAI } from './clusters/enemyAi';
+import { applyRockElementalAI } from './clusters/rockElementalAi';
+import { updateRockElementalDust } from './clusters/rockElementalDust';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
 import { applyBindingForces } from './clusters/binding';
@@ -44,6 +46,12 @@ export function tick(world: WorldState): void {
 
   // 0.5. Enemy AI — decide attack / block / dodge for each enemy cluster
   applyEnemyAI(world);
+
+  // 0.5b. Rock Elemental AI — state machine transitions
+  applyRockElementalAI(world);
+
+  // 0.5c. Rock Elemental dust orbit/projectile — position and fire dust
+  updateRockElementalDust(world);
 
   // 1. Clear accumulated forces from previous tick
   for (let i = 0; i < world.particleCount; i++) {
