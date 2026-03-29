@@ -622,10 +622,11 @@ export function startGameScreen(
     }
 
     skillTombMenuCleanup = showSkillTombMenu(uiRoot, progress, currentRoom.id, {
-      onClose: (updatedLoadout) => {
+      onClose: (updatedLoadout, updatedWeaveLoadout) => {
         isSkillTombMenuOpen = false;
         skillTombMenuCleanup = null;
         progress.loadout = updatedLoadout;
+        progress.weaveLoadout = updatedWeaveLoadout;
         lastTimestampMs = 0;
         // Save after closing
         if (callbacks.onSave) callbacks.onSave();
