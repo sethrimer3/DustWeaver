@@ -60,6 +60,16 @@ export interface ParticleBuffers {
    * Their buffer slots are recycled by findFreeParticleSlot() after they die.
    */
   isTransientFlag:     Uint8Array;
+
+  // ---- Weave binding -------------------------------------------------------
+  /**
+   * Which Weave slot this particle is bound to:
+   *   0 = unbound (no weave assigned — enemy particles, background, etc.)
+   *   1 = primary Weave
+   *   2 = secondary Weave
+   * Set at spawn time when the player loadout is applied.
+   */
+  weaveSlotId:         Uint8Array;
 }
 
 export function createParticleBuffers(): ParticleBuffers {
@@ -86,5 +96,6 @@ export function createParticleBuffers(): ParticleBuffers {
     respawnDelayTicks:   new Float32Array(MAX_PARTICLES),
     attackModeTicksLeft: new Float32Array(MAX_PARTICLES),
     isTransientFlag:     new Uint8Array(MAX_PARTICLES),
+    weaveSlotId:         new Uint8Array(MAX_PARTICLES),
   };
 }

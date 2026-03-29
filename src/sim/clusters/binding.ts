@@ -114,15 +114,15 @@ export function applyBindingForces(world: WorldState): void {
     }
   }
 
-  // Count how many player particles are currently in attack mode (mode 1).
-  // Used to detect whether an attack is still in flight.
+  // Count how many player particles are currently in attack mode (mode 1)
+  // or weave active (mode 3). Used to detect whether an attack/weave is in flight.
   let playerAttackActiveCount = 0;
   if (playerEntityId !== -1) {
     for (let i = 0; i < particleCount; i++) {
       if (
         isAliveFlag[i] === 1 &&
         ownerEntityId[i] === playerEntityId &&
-        behaviorMode[i] === 1
+        (behaviorMode[i] === 1 || behaviorMode[i] === 3)
       ) {
         playerAttackActiveCount++;
       }

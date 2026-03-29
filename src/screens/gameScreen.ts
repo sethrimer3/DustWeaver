@@ -24,6 +24,7 @@ import { showSkillTombMenu } from '../ui/skillTombMenu';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
+import { PlayerWeaveLoadout, createDefaultWeaveLoadout, WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from '../sim/weaves/playerLoadout';
 
 const FIXED_DT_MS = 16.666;
 /** Canonical level-grid block size (sprites/objects snap to this). */
@@ -151,6 +152,50 @@ function spawnLoadoutParticles(
       baseCount + extraCount,
       rng,
     );
+  }
+}
+
+/**
+ * Spawns particles for a Weave loadout, assigning weaveSlotId to each particle
+ * based on which Weave binding owns the dust type.
+ */
+function spawnWeaveLoadoutParticles(
+  world: WorldState,
+  clusterEntityId: number,
+  clusterXWorld: number,
+  clusterYWorld: number,
+  weaveLoadout: PlayerWeaveLoadout,
+  totalCount: number,
+  rng: RngState,
+): void {
+  // Collect all dust from both bindings
+  const allDust = [...weaveLoadout.primary.boundDust, ...weaveLoadout.secondary.boundDust];
+  if (allDust.length === 0) {
+    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, ParticleKind.Physical, totalCount, rng);
+    return;
+  }
+
+  // Distribute totalCount across all bound dust types
+  const baseCount = Math.floor(totalCount / allDust.length);
+  let remainder = totalCount - baseCount * allDust.length;
+
+  // Track the particle index range for each dust entry so we can assign weave slots
+  const primaryCount = weaveLoadout.primary.boundDust.length;
+
+  for (let k = 0; k < allDust.length; k++) {
+    const extraCount = remainder > 0 ? 1 : 0;
+    remainder -= extraCount;
+    const count = baseCount + extraCount;
+
+    const startIdx = world.particleCount;
+    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, allDust[k], count, rng);
+    const endIdx = world.particleCount;
+
+    // Assign weave slot based on which binding this dust came from
+    const weaveSlot = k < primaryCount ? WEAVE_SLOT_PRIMARY : WEAVE_SLOT_SECONDARY;
+    for (let i = startIdx; i < endIdx; i++) {
+      world.weaveSlotId[i] = weaveSlot;
+    }
   }
 }
 
@@ -283,12 +328,17 @@ function screenToWorld(screenXPx: number, screenYPx: number, offsetXPx: number, 
 export function startGameScreen(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
-  playerLoadout: ParticleKind[],
+  _playerLoadout: ParticleKind[],
   startRoomId: string | null,
   callbacks: GameScreenCallbacks,
   progress?: PlayerProgress,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
+
+  // ── Weave loadout (replaces flat particle loadout for combat) ──────────
+  // Initialize from progress if available, otherwise create default
+  let playerWeaveLoadout: PlayerWeaveLoadout = progress?.weaveLoadout
+    ?? createDefaultWeaveLoadout();
 
   function resizeCanvas(): void {
     canvas.width = window.innerWidth;
@@ -340,7 +390,11 @@ export function startGameScreen(
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_PX;
     const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
     world.clusters.push(playerCluster);
-    spawnLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+    spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+
+    // Apply weave IDs to world state for combat dispatch
+    world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
+    world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
 
     // Spawn enemies
     let nextEntityId = 2;
@@ -700,33 +754,71 @@ export function startGameScreen(
         dashTriggered = true;
         dashAimXPx = cmd.aimXPx;
       } else if (cmd.kind === CommandKind.Attack) {
+        // Legacy attack command — no longer used for player (enemies still use it internally)
+        // Kept for backward compatibility; ignored for player
+      } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
+        // Legacy block command — no longer used for player
+      } else if (cmd.kind === CommandKind.BlockEnd) {
+        // Legacy block end — no longer used for player
+      } else if (cmd.kind === CommandKind.WeaveActivatePrimary) {
         const player = world.clusters[0];
-        if (player !== undefined) {
-          // Convert screen-space aim to world coordinates
+        if (player !== undefined && player.isAliveFlag === 1) {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
           if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
-          world.playerAttackDirXWorld = dirX;
-          world.playerAttackDirYWorld = dirY;
-          world.playerAttackTriggeredFlag = 1;
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          world.playerPrimaryWeaveTriggeredFlag = 1;
         }
-      } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
+      } else if (cmd.kind === CommandKind.WeaveHoldPrimary) {
         const player = world.clusters[0];
-        if (player !== undefined) {
+        if (player !== undefined && player.isAliveFlag === 1) {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
-          if (len < 1.0) { dirX = world.playerBlockDirXWorld; dirY = world.playerBlockDirYWorld; }
+          if (len < 1.0) { dirX = world.playerWeaveAimDirXWorld; dirY = world.playerWeaveAimDirYWorld; }
           else { dirX /= len; dirY /= len; }
-          world.playerBlockDirXWorld = dirX;
-          world.playerBlockDirYWorld = dirY;
-          world.isPlayerBlockingFlag = 1;
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          // For sustained weaves, trigger on first hold frame
+          if (world.isPlayerPrimaryWeaveActiveFlag === 0) {
+            world.playerPrimaryWeaveTriggeredFlag = 1;
+          }
         }
-      } else if (cmd.kind === CommandKind.BlockEnd) {
-        world.isPlayerBlockingFlag = 0;
+      } else if (cmd.kind === CommandKind.WeaveEndPrimary) {
+        world.playerPrimaryWeaveEndFlag = 1;
+      } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
+        const player = world.clusters[0];
+        if (player !== undefined && player.isAliveFlag === 1) {
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          let dirX = aim.xWorld - player.positionXWorld;
+          let dirY = aim.yWorld - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          world.playerSecondaryWeaveTriggeredFlag = 1;
+        }
+      } else if (cmd.kind === CommandKind.WeaveHoldSecondary) {
+        const player = world.clusters[0];
+        if (player !== undefined && player.isAliveFlag === 1) {
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          let dirX = aim.xWorld - player.positionXWorld;
+          let dirY = aim.yWorld - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = world.playerWeaveAimDirXWorld; dirY = world.playerWeaveAimDirYWorld; }
+          else { dirX /= len; dirY /= len; }
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          if (world.isPlayerSecondaryWeaveActiveFlag === 0) {
+            world.playerSecondaryWeaveTriggeredFlag = 1;
+          }
+        }
+      } else if (cmd.kind === CommandKind.WeaveEndSecondary) {
+        world.playerSecondaryWeaveEndFlag = 1;
       } else if (cmd.kind === CommandKind.GrappleFire) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {

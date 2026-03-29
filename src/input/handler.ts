@@ -311,6 +311,11 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
 }
 
 // Allocates in input layer — acceptable outside sim hot-path
+// Right-click sustained hold state (persists across frames within collectCommands)
+let _rightMouseWasDown = false;
+let _rightMouseDownTimeMs = 0;
+let _isRightBlockingFlag = false;
+
 export function collectCommands(input: InputState): GameCommand[] {
   const commands: GameCommand[] = [];
   let dx = 0;
@@ -336,51 +341,82 @@ export function collectCommands(input: InputState): GameCommand[] {
     commands.push({ kind: CommandKind.Dash, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
   }
 
-  // ---- Attack / block commands -------------------------------------------
+  // ---- Attack / block commands (LEGACY — kept for enemy AI compatibility) ---
+  // Old attack/block is replaced by Weave commands for the player.
+  // The legacy command types are still generated but will be ignored by
+  // the game screen for the player; enemy AI still produces them internally.
+
+  // ---- Primary Weave (left click) -----------------------------------------
   if (input.isAttackFiredFlag === 1) {
     input.isAttackFiredFlag = 0;
-    // attackDirXPx/attackDirYPx hold the raw aim screen position;
-    // gameScreen.ts converts to a world-space direction relative to the player.
-    commands.push({ kind: CommandKind.Attack, aimXPx: input.attackDirXPx, aimYPx: input.attackDirYPx });
+    // Quick left click → burst activation of primary Weave
+    commands.push({ kind: CommandKind.WeaveActivatePrimary, aimXPx: input.attackDirXPx, aimYPx: input.attackDirYPx });
   }
 
-  // Transition from mouse-down to blocking when hold threshold exceeded
+  // Transition from left mouse-down to sustained primary Weave when hold threshold exceeded
   if (input.isMouseDownFlag === 1 && input.isBlockingFlag === 0) {
     const holdMs = performance.now() - input.mouseDownTimeMs;
     if (holdMs >= ATTACK_HOLD_THRESHOLD_MS) {
       input.isBlockingFlag = 1;
-      // Pass absolute mouse screen position; gameScreen.ts will compute direction from player
-      commands.push({ kind: CommandKind.BlockStart, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
+      commands.push({ kind: CommandKind.WeaveHoldPrimary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
     }
   }
 
-  if (input.isBlockingFlag === 1) {
-    // Continuously update block direction toward current mouse/touch position
-    commands.push({ kind: CommandKind.BlockUpdate, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
+  if (input.isBlockingFlag === 1 && input.isMouseDownFlag === 1) {
+    // Continuously update aim direction while sustaining primary Weave
+    commands.push({ kind: CommandKind.WeaveHoldPrimary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
   }
 
-  if (input.isMouseDownFlag === 0 && input.isBlockingFlag === 1) {
+  if (input.isMouseDownFlag === 0 && input.isBlockingFlag === 1 && input.isRightMouseDownFlag === 0) {
     input.isBlockingFlag = 0;
-    commands.push({ kind: CommandKind.BlockEnd });
+    commands.push({ kind: CommandKind.WeaveEndPrimary });
   }
 
-  // ---- Second touch attack/block (mobile) --------------------------------
+  // ---- Secondary Weave (right click) --------------------------------------
+  if (input.isRightMouseDownFlag === 1 && !_rightMouseWasDown) {
+    // Right mouse just went down — for burst weaves, we fire on release.
+    // For sustained weaves, we begin holding immediately after threshold.
+    _rightMouseDownTimeMs = performance.now();
+  }
+  if (input.isRightMouseDownFlag === 0 && _rightMouseWasDown) {
+    // Right mouse released
+    const holdMs = performance.now() - _rightMouseDownTimeMs;
+    if (_isRightBlockingFlag) {
+      _isRightBlockingFlag = false;
+      commands.push({ kind: CommandKind.WeaveEndSecondary });
+    } else if (holdMs < ATTACK_HOLD_THRESHOLD_MS) {
+      // Quick right click → burst activation of secondary Weave
+      commands.push({ kind: CommandKind.WeaveActivateSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
+    }
+  }
+  if (input.isRightMouseDownFlag === 1 && !_isRightBlockingFlag) {
+    const holdMs = performance.now() - _rightMouseDownTimeMs;
+    if (holdMs >= ATTACK_HOLD_THRESHOLD_MS) {
+      _isRightBlockingFlag = true;
+      commands.push({ kind: CommandKind.WeaveHoldSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
+    }
+  }
+  if (_isRightBlockingFlag && input.isRightMouseDownFlag === 1) {
+    commands.push({ kind: CommandKind.WeaveHoldSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
+  }
+  _rightMouseWasDown = input.isRightMouseDownFlag === 1;
+
+  // ---- Second touch attack/block (mobile) — maps to primary Weave --------
   if (input.secondTouchId !== -1) {
     const holdMs = performance.now() - input.secondTouchStartTimeMs;
     if (holdMs >= ATTACK_HOLD_THRESHOLD_MS && input.isBlockingFlag === 0) {
       input.isBlockingFlag = 1;
-      // Pass absolute touch screen position; gameScreen.ts will compute direction from player
-      commands.push({ kind: CommandKind.BlockStart, aimXPx: input.secondTouchCurrentXPx, aimYPx: input.secondTouchCurrentYPx });
+      commands.push({ kind: CommandKind.WeaveHoldPrimary, aimXPx: input.secondTouchCurrentXPx, aimYPx: input.secondTouchCurrentYPx });
     }
     if (input.isBlockingFlag === 1) {
-      commands.push({ kind: CommandKind.BlockUpdate, aimXPx: input.secondTouchCurrentXPx, aimYPx: input.secondTouchCurrentYPx });
+      commands.push({ kind: CommandKind.WeaveHoldPrimary, aimXPx: input.secondTouchCurrentXPx, aimYPx: input.secondTouchCurrentYPx });
     }
   }
 
-  // Emit BlockEnd when second touch ended while blocking
+  // Emit WeaveEndPrimary when second touch ended while holding
   if (input.secondTouchId === -1 && input.isBlockingFlag === 1 && input.isMouseDownFlag === 0) {
     input.isBlockingFlag = 0;
-    commands.push({ kind: CommandKind.BlockEnd });
+    commands.push({ kind: CommandKind.WeaveEndPrimary });
   }
 
   // ---- Grapple hook commands ----------------------------------------------

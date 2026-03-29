@@ -31,6 +31,7 @@ import { applyInterParticleForces } from './particles/forces';
 import { applyWallForces, applyWallBounce } from './particles/walls';
 import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
+import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -59,8 +60,12 @@ export function tick(world: WorldState): void {
   // 4. Owner-anchor spring + orbital tangential force
   applyBindingForces(world);
 
-  // 4.5. Combat forces — player/enemy attack launch and block shield positioning
+  // 4.5. Combat forces — enemy attack launch and block shield positioning (legacy)
+  //      Player combat now uses the Weave system (step 4.55).
   applyCombatForces(world);
+
+  // 4.55. Player Weave combat — applies weave activation patterns for bound dust
+  applyPlayerWeaveCombat(world);
 
   // 4.6. Lava AoE burn — heat damage to nearby enemy particles
   applyLavaEffect(world);
