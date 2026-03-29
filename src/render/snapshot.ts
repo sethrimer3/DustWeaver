@@ -82,8 +82,10 @@ export interface WorldSnapshot {
   readonly grappleAttachFxTicks: number;
   readonly grappleAttachFxXWorld: number;
   readonly grappleAttachFxYWorld: number;
-  /** 1 while the player is holding block — used to drive player sprite rotation speed. */
+  /** 1 while the player is holding block or a sustained weave — used to drive player sprite rotation speed. */
   readonly isPlayerBlockingFlag: 0 | 1;
+  /** 1 while the player has any sustained Weave active (primary or secondary). */
+  readonly isPlayerWeaveActiveFlag: 0 | 1;
 }
 
 export function createSnapshot(world: WorldState): WorldSnapshot {
@@ -144,5 +146,6 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleAttachFxXWorld: world.grappleAttachFxXWorld,
     grappleAttachFxYWorld: world.grappleAttachFxYWorld,
     isPlayerBlockingFlag: world.isPlayerBlockingFlag,
+    isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
   };
 }

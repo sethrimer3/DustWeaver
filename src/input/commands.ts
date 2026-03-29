@@ -10,6 +10,18 @@ export enum CommandKind {
   GrappleFire = 8,
   GrappleRelease = 9,
   Interact = 10,
+  /** Activate the equipped primary Weave (left click quick release). */
+  WeaveActivatePrimary = 11,
+  /** Begin holding the primary Weave (left click sustained). */
+  WeaveHoldPrimary = 12,
+  /** Release/end the primary Weave hold. */
+  WeaveEndPrimary = 13,
+  /** Activate the equipped secondary Weave (right click quick release). */
+  WeaveActivateSecondary = 14,
+  /** Begin holding the secondary Weave (right click sustained). */
+  WeaveHoldSecondary = 15,
+  /** Release/end the secondary Weave hold. */
+  WeaveEndSecondary = 16,
 }
 
 export interface MovePlayerCommand {
@@ -89,6 +101,44 @@ export interface InteractCommand {
   kind: CommandKind.Interact;
 }
 
+/** Activate primary Weave — burst-type (left click quick release). */
+export interface WeaveActivatePrimaryCommand {
+  kind: CommandKind.WeaveActivatePrimary;
+  aimXPx: number;
+  aimYPx: number;
+}
+
+/** Hold primary Weave — sustained-type (left click held). */
+export interface WeaveHoldPrimaryCommand {
+  kind: CommandKind.WeaveHoldPrimary;
+  aimXPx: number;
+  aimYPx: number;
+}
+
+/** End primary Weave hold. */
+export interface WeaveEndPrimaryCommand {
+  kind: CommandKind.WeaveEndPrimary;
+}
+
+/** Activate secondary Weave — burst-type (right click quick release). */
+export interface WeaveActivateSecondaryCommand {
+  kind: CommandKind.WeaveActivateSecondary;
+  aimXPx: number;
+  aimYPx: number;
+}
+
+/** Hold secondary Weave — sustained-type (right click held). */
+export interface WeaveHoldSecondaryCommand {
+  kind: CommandKind.WeaveHoldSecondary;
+  aimXPx: number;
+  aimYPx: number;
+}
+
+/** End secondary Weave hold. */
+export interface WeaveEndSecondaryCommand {
+  kind: CommandKind.WeaveEndSecondary;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
@@ -100,5 +150,11 @@ export type GameCommand =
   | JumpCommand
   | GrappleFireCommand
   | GrappleReleaseCommand
-  | InteractCommand;
+  | InteractCommand
+  | WeaveActivatePrimaryCommand
+  | WeaveHoldPrimaryCommand
+  | WeaveEndPrimaryCommand
+  | WeaveActivateSecondaryCommand
+  | WeaveHoldSecondaryCommand
+  | WeaveEndSecondaryCommand;
 

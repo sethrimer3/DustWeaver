@@ -41,6 +41,27 @@ export interface WorldState extends ParticleBuffers {
   playerBlockDirXWorld: number;
   playerBlockDirYWorld: number;
 
+  // ---- Player Weave combat state ------------------------------------------
+  /** ID of the equipped primary Weave. */
+  playerPrimaryWeaveId: string;
+  /** ID of the equipped secondary Weave. */
+  playerSecondaryWeaveId: string;
+  /** Set to 1 for one tick when the primary Weave should activate. */
+  playerPrimaryWeaveTriggeredFlag: 0 | 1;
+  /** Set to 1 for one tick when the secondary Weave should activate. */
+  playerSecondaryWeaveTriggeredFlag: 0 | 1;
+  /** 1 while the primary sustained Weave is actively held. */
+  isPlayerPrimaryWeaveActiveFlag: 0 | 1;
+  /** 1 while the secondary sustained Weave is actively held. */
+  isPlayerSecondaryWeaveActiveFlag: 0 | 1;
+  /** Set to 1 for one tick when the primary Weave input is released. */
+  playerPrimaryWeaveEndFlag: 0 | 1;
+  /** Set to 1 for one tick when the secondary Weave input is released. */
+  playerSecondaryWeaveEndFlag: 0 | 1;
+  /** Normalized aim direction for weave activation (world units). */
+  playerWeaveAimDirXWorld: number;
+  playerWeaveAimDirYWorld: number;
+
   // ---- Player dash --------------------------------------------------------
   /** Set to 1 for one tick to trigger a player dash. */
   playerDashTriggeredFlag: 0 | 1;
@@ -121,6 +142,17 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isPlayerBlockingFlag: 0,
     playerBlockDirXWorld: 1.0,
     playerBlockDirYWorld: 0.0,
+    // Weave combat state
+    playerPrimaryWeaveId: 'spire',
+    playerSecondaryWeaveId: 'aegis',
+    playerPrimaryWeaveTriggeredFlag: 0,
+    playerSecondaryWeaveTriggeredFlag: 0,
+    isPlayerPrimaryWeaveActiveFlag: 0,
+    isPlayerSecondaryWeaveActiveFlag: 0,
+    playerPrimaryWeaveEndFlag: 0,
+    playerSecondaryWeaveEndFlag: 0,
+    playerWeaveAimDirXWorld: 1.0,
+    playerWeaveAimDirYWorld: 0.0,
     playerDashTriggeredFlag: 0,
     playerDashDirXWorld: 1.0,
     playerDashDirYWorld: 0.0,
