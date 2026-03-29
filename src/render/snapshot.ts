@@ -57,6 +57,16 @@ export interface ClusterSnapshot {
   readonly rollingEnemyRollAngleRad: number;
   /** Player sprite accumulated rotation angle (radians). */
   readonly playerRotationAngleRad: number;
+  /** 1 if this cluster is a rock elemental. */
+  readonly isRockElementalFlag: 0 | 1;
+  /** Current rock elemental state (0-6). */
+  readonly rockElementalState: number;
+  /** Activation lerp progress [0,1]. */
+  readonly rockElementalActivationProgress: number;
+  /** Current orbit angle (radians) for dust positioning. */
+  readonly rockElementalOrbitAngleRad: number;
+  /** Number of orbiting dust particles. */
+  readonly rockElementalDustCount: number;
 }
 
 export interface WallSnapshot {
@@ -113,6 +123,11 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       rollingEnemySpriteIndex:  c.rollingEnemySpriteIndex,
       rollingEnemyRollAngleRad: c.rollingEnemyRollAngleRad,
       playerRotationAngleRad:   c.playerRotationAngleRad,
+      isRockElementalFlag:              c.isRockElementalFlag,
+      rockElementalState:               c.rockElementalState,
+      rockElementalActivationProgress:  c.rockElementalActivationProgress,
+      rockElementalOrbitAngleRad:       c.rockElementalOrbitAngleRad,
+      rockElementalDustCount:           c.rockElementalDustCount,
     });
   }
 

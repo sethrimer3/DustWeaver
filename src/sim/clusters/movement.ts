@@ -719,6 +719,29 @@ export function applyClusterMovement(world: WorldState): void {
           * Math.min(1.0, FLYING_EYE_TURN_RATE_PER_SEC * dtSec);
       }
 
+    } else if (cluster.isRockElementalFlag === 1) {
+      // ── Rock Elemental: hover near ground, no standard gravity ─────────────
+      // When inactive or activating, stay grounded (apply gravity).
+      // When active+, hover: apply gentle upward force to counteract gravity,
+      // constrained to a max hover height.
+      if (cluster.rockElementalState >= 2) {
+        // Active states: hover behavior
+        // Apply reduced gravity
+        const hoverGrav = 200.0; // Much lighter than normal gravity (900)
+        cluster.velocityYWorld += hoverGrav * dtSec;
+        
+        // Cap downward velocity (gentle float)
+        if (cluster.velocityYWorld > 40.0) {
+          cluster.velocityYWorld = 40.0;
+        }
+      } else {
+        // Inactive/activating: standard gravity (sit on ground)
+        cluster.velocityYWorld += 900.0 * dtSec;
+        if (cluster.velocityYWorld > 240.0) {
+          cluster.velocityYWorld = 240.0;
+        }
+      }
+
     } else {
       // ── Ground enemy: gravity ───────────────────────────────────────────────
       cluster.velocityYWorld += NORMAL_GRAVITY_WORLD_PER_SEC2 * dtSec;

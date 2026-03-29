@@ -417,6 +417,14 @@ export function startGameScreen(
         enemyCluster.isRollingEnemyFlag    = 1;
         enemyCluster.rollingEnemySpriteIndex = enemyDef.rollingEnemySpriteIndex ?? 1;
         enemyCluster.rollingEnemyRollAngleRad = 0;
+      } else if (enemyDef.isRockElementalFlag === 1) {
+        enemyCluster.isRockElementalFlag = 1;
+        enemyCluster.rockElementalSpawnXWorld = ex;
+        enemyCluster.rockElementalSpawnYWorld = ey;
+        enemyCluster.rockElementalState = 0; // start inactive
+        // Rock Elemental is slightly larger than regular enemies
+        enemyCluster.halfWidthWorld = 4.5;
+        enemyCluster.halfHeightWorld = 4.5;
       }
 
       world.clusters.push(enemyCluster);

@@ -385,3 +385,51 @@ can verify the collision boundary matches the visual tile geometry.
 - Weave slot capacities: `sim/weaves/weaveDefinition.ts`
 - Weave behavior tuning: `sim/weaves/weaveCombat.ts`
 - Default loadout: `sim/weaves/playerLoadout.ts` (createDefaultWeaveLoadout)
+
+## Brown Rock Cave Content (BUILD 41)
+
+### World 0 Background
+- World 0 now uses `SPRITES/BACKGROUNDS/brownRock_background_1.png` as its tiled background.
+- Procedural background generation has been removed. All worlds use image-based backgrounds.
+- If an image is not yet loaded, a solid fallback colour is drawn (no procedural textures).
+- World 0 fallback colour: `#2a1a0e` (brown-rock cave).
+
+### Brown Rock Block Sprites
+- World 0 block auto-tiling uses brown-rock sprites from `SPRITES/BLOCKS/brownRock/`.
+- Four variants available: `brownRock_block_1.png` (block/vertex), `brownRock_block_2.png` (edge/corner),
+  `brownRock_block_3.png` (single/end), `brownRock_block_large_1.png` (2×2 editor palette).
+- Editor palette includes all 4 brown rock blocks with correct dimensions.
+
+### Rock Elemental Enemy
+- New enemy type: `isRockElementalFlag` on `RoomEnemyDef` and `ClusterState`.
+- 7 states: inactive (0), activating (1), active (2), evading (3), attacking (4), regenerating (5), dead (6).
+- AI module: `sim/clusters/rockElementalAi.ts`
+- Dust orbit/projectile module: `sim/clusters/rockElementalDust.ts`
+- Tick pipeline: steps 0.5b (AI) and 0.5c (dust) after `applyEnemyAI`.
+- Movement: hover physics with reduced gravity (200 vs 900) in active states.
+- Dust uses `ParticleKind.Earth` particles, orbiting at 36 wu radius.
+- Orbit → projectile conversion uses existing `behaviorMode=1` attack damage flow.
+- Composite rendering: head + 2 arm sprites with deactivated/activated variants.
+
+### Rock Elemental Tuning Constants
+- Activation range: 180 wu
+- Activation duration: 30 ticks (0.5 s)
+- Preferred distance: 140 wu
+- Evade threshold: 80 wu
+- Max hover height: 40 wu
+- Leash radius: 220 wu
+- Max dust: 12
+- Orbit radius: 36 wu
+- Regen interval: 48 ticks (0.8 s)
+- Projectile speed: 220 wu/s
+- Projectile lifetime: 180 ticks (3 s)
+- All constants in `sim/clusters/rockElementalAi.ts`.
+
+### Lobby Remake
+- Lobby room "Stone Hollow" (48×24 blocks, world 0).
+- Cave-shaped with uneven ceiling stalactites, irregular side wall insets, uneven floor.
+- Central plateau: 8 blocks wide (x=20..28), top at row 19 (3 blocks above row 22 floor).
+- Player spawn on plateau top at (24, 18).
+- Skill tome on plateau at (26, 18), 2 blocks right of spawn.
+- One Rock Elemental at (10, 20), >10 blocks from plateau center.
+- Left/right tunnel transitions preserved at row 16.
