@@ -39,9 +39,14 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'wall_6x1', label: 'Platform 6×1', category: 'blocks', defaultWidthBlocks: 6, defaultHeightBlocks: 1 },
   { id: 'wall_1x4', label: 'Pillar 1×4', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
   { id: 'wall_3x3', label: 'Block 3×3', category: 'blocks', defaultWidthBlocks: 3, defaultHeightBlocks: 3 },
+  { id: 'brownRock_1x1_v1', label: 'Brown Rock 1', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'brownRock_1x1_v2', label: 'Brown Rock 2', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'brownRock_1x1_v3', label: 'Brown Rock 3', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'brownRock_2x2',    label: 'Brown Rock Large', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
   // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },
+  { id: 'enemy_rock_elemental', label: 'Rock Elemental', category: 'enemies' },
   // Triggers
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
@@ -69,6 +74,7 @@ export interface EditorEnemy {
   isFlyingEyeFlag: 0 | 1;
   isRollingEnemyFlag: 0 | 1;
   rollingEnemySpriteIndex: number;
+  isRockElementalFlag: 0 | 1;
 }
 
 export interface EditorTransition {
