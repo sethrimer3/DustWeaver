@@ -311,10 +311,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
 }
 
 // Allocates in input layer — acceptable outside sim hot-path
-// Right-click sustained hold state (persists across frames within collectCommands)
+// Right-click sustained Weave hold state (persists across frames within collectCommands)
 let _rightMouseWasDown = false;
 let _rightMouseDownTimeMs = 0;
-let _isRightBlockingFlag = false;
+let _isRightWeaveSustainedFlag = false;
 
 export function collectCommands(input: InputState): GameCommand[] {
   const commands: GameCommand[] = [];
@@ -381,22 +381,22 @@ export function collectCommands(input: InputState): GameCommand[] {
   if (input.isRightMouseDownFlag === 0 && _rightMouseWasDown) {
     // Right mouse released
     const holdMs = performance.now() - _rightMouseDownTimeMs;
-    if (_isRightBlockingFlag) {
-      _isRightBlockingFlag = false;
+    if (_isRightWeaveSustainedFlag) {
+      _isRightWeaveSustainedFlag = false;
       commands.push({ kind: CommandKind.WeaveEndSecondary });
     } else if (holdMs < ATTACK_HOLD_THRESHOLD_MS) {
       // Quick right click → burst activation of secondary Weave
       commands.push({ kind: CommandKind.WeaveActivateSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
     }
   }
-  if (input.isRightMouseDownFlag === 1 && !_isRightBlockingFlag) {
+  if (input.isRightMouseDownFlag === 1 && !_isRightWeaveSustainedFlag) {
     const holdMs = performance.now() - _rightMouseDownTimeMs;
     if (holdMs >= ATTACK_HOLD_THRESHOLD_MS) {
-      _isRightBlockingFlag = true;
+      _isRightWeaveSustainedFlag = true;
       commands.push({ kind: CommandKind.WeaveHoldSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
     }
   }
-  if (_isRightBlockingFlag && input.isRightMouseDownFlag === 1) {
+  if (_isRightWeaveSustainedFlag && input.isRightMouseDownFlag === 1) {
     commands.push({ kind: CommandKind.WeaveHoldSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
   }
   _rightMouseWasDown = input.isRightMouseDownFlag === 1;

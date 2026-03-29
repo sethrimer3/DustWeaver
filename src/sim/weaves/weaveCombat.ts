@@ -32,20 +32,20 @@ import { WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from './playerLoadout';
 
 // ---- Constants --------------------------------------------------------------
 
-/** Spring strength pulling weave-active particles toward their pattern positions. */
+/** Spring strength (force per world unit of displacement) pulling weave-active particles toward their pattern positions. */
 const WEAVE_SPRING_STRENGTH = 400.0;
 
 /** Distance from owner center for Aegis orbit ring (world units). */
 const AEGIS_ORBIT_DIST_WORLD = 8.0;
-/** Aegis orbital angular velocity (radians per tick). */
-const AEGIS_ORBIT_SPEED_RAD = 0.06;
+/** Aegis orbital rotation rate (radians per tick). */
+const AEGIS_ORBIT_ROTATION_RATE_RAD = 0.06;
 
 /** Distance from owner center for Bastion wall (world units). */
 const BASTION_WALL_DIST_WORLD = 7.5;
 /** Spacing between Bastion wall particles (world units). */
 const BASTION_SPACING_WORLD = 10.0 / 6.0;
 
-/** Speed for returning particles (pulling back to orbit). */
+/** Spring strength (force per world unit) for returning particles pulling back to orbit. */
 const RETURN_SPRING_STRENGTH = 200.0;
 /** Ticks for return transition. */
 const RETURN_DURATION_TICKS = 20;
@@ -87,7 +87,7 @@ function applyAegisPattern(
     behaviorMode[i] = 3; // weave active
 
     // Distribute evenly around the circle, rotating each tick
-    const angleRad = (slotIdx / total) * Math.PI * 2.0 + world.tick * AEGIS_ORBIT_SPEED_RAD;
+    const angleRad = (slotIdx / total) * Math.PI * 2.0 + world.tick * AEGIS_ORBIT_ROTATION_RATE_RAD;
     const targetX = playerX + Math.cos(angleRad) * AEGIS_ORBIT_DIST_WORLD;
     const targetY = playerY + Math.sin(angleRad) * AEGIS_ORBIT_DIST_WORLD;
 

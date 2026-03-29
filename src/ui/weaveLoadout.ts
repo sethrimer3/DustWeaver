@@ -79,6 +79,9 @@ export function showLoadoutScreen(
   `;
   el.appendChild(panelsContainer);
 
+  // Store render functions for weave panels (avoids `any` cast on DOM elements)
+  const panelRenderFns = new WeakMap<HTMLDivElement, () => void>();
+
   // Helper: create a weave panel
   function createWeavePanel(
     label: string,
@@ -211,8 +214,7 @@ export function showLoadoutScreen(
     }
 
     renderPanel();
-    // Store render function on the element for external refresh
-    (panel as any)._render = renderPanel;
+    panelRenderFns.set(panel, renderPanel);
     return panel;
   }
 
@@ -340,8 +342,8 @@ export function showLoadoutScreen(
         }
 
         // Re-render everything
-        (primaryPanel as any)._render();
-        (secondaryPanel as any)._render();
+        panelRenderFns.get(primaryPanel)?.();
+        panelRenderFns.get(secondaryPanel)?.();
         renderDustPool();
         updateStartButton();
       });

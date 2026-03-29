@@ -328,7 +328,7 @@ function screenToWorld(screenXPx: number, screenYPx: number, offsetXPx: number, 
 export function startGameScreen(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
-  _playerLoadout: ParticleKind[],
+  _legacyPlayerLoadout: ParticleKind[],
   startRoomId: string | null,
   callbacks: GameScreenCallbacks,
   progress?: PlayerProgress,
