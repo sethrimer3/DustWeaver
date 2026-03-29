@@ -34,6 +34,19 @@ export interface ClusterState {
    */
   prevJumpHeldFlag: 0 | 1;
 
+  // ---- Variable jump sustain (Celeste-style) --------------------------------
+  /**
+   * Ticks remaining in the variable-jump sustain window.
+   * While > 0 and the jump button is held, upward velocity is sustained so
+   * gravity cannot eat into the launch speed — producing expressive full jumps.
+   */
+  varJumpTimerTicks: number;
+  /**
+   * Snapshot of the vertical launch speed at the moment of a jump.
+   * Used by the sustain window to cap velocity (negative = upward).
+   */
+  varJumpSpeedWorld: number;
+
   // ---- Wall interaction ---------------------------------------------------
   /** 1 when the player's left side is pressed against a solid wall this tick. */
   isTouchingWallLeftFlag: 0 | 1;
@@ -47,6 +60,17 @@ export interface ClusterState {
    * wall slide or wall jump, preventing instant re-grab / infinite climbing.
    */
   wallJumpLockoutTicks: number;
+  /**
+   * Ticks remaining in the post-wall-jump force window.
+   * While > 0, horizontal input is overridden by the outward wall-jump
+   * direction so the player cannot immediately steer back to the wall.
+   */
+  wallJumpForceTimeTicks: number;
+  /**
+   * Direction of the most recent wall jump (±1).
+   * Used during the force-time window to maintain outward velocity.
+   */
+  wallJumpDirX: number;
 
   // ---- Dash (player and enemy) -------------------------------------------
   /** Remaining cooldown ticks before dash is available again.  0 = ready. */
@@ -148,10 +172,14 @@ export function createClusterState(
     coyoteTimeTicks: 0,
     jumpBufferTicks: 0,
     prevJumpHeldFlag: 0,
+    varJumpTimerTicks: 0,
+    varJumpSpeedWorld: 0,
     isTouchingWallLeftFlag: 0,
     isTouchingWallRightFlag: 0,
     isWallSlidingFlag: 0,
     wallJumpLockoutTicks: 0,
+    wallJumpForceTimeTicks: 0,
+    wallJumpDirX: 0,
     dashCooldownTicks: 0,
     dashRechargeAnimTicks: 0,
     enemyAiAttackCooldownTicks: 30,
