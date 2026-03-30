@@ -1174,8 +1174,8 @@ export function startGameScreen(
     if (inputState.isTouchJoystickActiveFlag === 1) {
       const bx = inputState.touchJoystickBaseXPx;
       const by = inputState.touchJoystickBaseYPx;
-      const jcx = inputState.touchJoystickCurrentXPx;
-      const jcy = inputState.touchJoystickCurrentYPx;
+      const joystickCurrentXPx = inputState.touchJoystickCurrentXPx;
+      const joystickCurrentYPx = inputState.touchJoystickCurrentYPx;
 
       deviceCtx.save();
       deviceCtx.beginPath();
@@ -1186,11 +1186,11 @@ export function startGameScreen(
       deviceCtx.fillStyle = 'rgba(0,207,255,0.08)';
       deviceCtx.fill();
 
-      const dx = jcx - bx;
-      const dy = jcy - by;
+      const dx = joystickCurrentXPx - bx;
+      const dy = joystickCurrentYPx - by;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      let thumbXPx = jcx;
-      let thumbYPx = jcy;
+      let thumbXPx = joystickCurrentXPx;
+      let thumbYPx = joystickCurrentYPx;
       if (dist > JOYSTICK_OUTER_RADIUS_PX) {
         thumbXPx = bx + (dx / dist) * JOYSTICK_OUTER_RADIUS_PX;
         thumbYPx = by + (dy / dist) * JOYSTICK_OUTER_RADIUS_PX;

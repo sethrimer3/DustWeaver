@@ -372,8 +372,8 @@ function resolveWallsX(
       if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
       if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
     } else {
-      // Fallback: push out on the shortest X-axis direction (comment: edge case
-      // where cluster was already overlapping on X at start of tick, e.g. spawn)
+      // Fallback: push out on the shortest X-axis direction.
+      // Edge case where cluster was already overlapping on X at start of tick, e.g. spawn.
       const penLeft  = right - wallLeft;
       const penRight = wallRight - left;
       if (penLeft < penRight) {
@@ -436,8 +436,8 @@ function resolveWallsY(
       cluster.positionYWorld = wallBottom + hh;
       if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
     } else {
-      // Fallback: push out on the shortest Y-axis direction (comment: edge case
-      // where cluster was already overlapping on Y at start of tick, e.g. spawn)
+      // Fallback: push out on the shortest Y-axis direction.
+      // Edge case where cluster was already overlapping on Y at start of tick, e.g. spawn.
       const penTop    = bottom - wallTop;
       const penBottom = wallBottom - top;
       if (penTop < penBottom) {
