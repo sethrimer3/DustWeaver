@@ -733,6 +733,7 @@ export function startGameScreen(
         renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, eox, eoy);
         renderWalls(ctx, snapshot, eox, eoy, zoom, true);
         renderClusters(ctx, snapshot, eox, eoy, zoom, true);
+        renderRadiantTether(ctx, snapshot, eox, eoy, zoom, true);
         renderGrapple(ctx, snapshot, eox, eoy, zoom);
         drawTunnelDarkness(ctx, currentRoom, eox, eoy, zoom);
         environmentalDust.render(ctx, eox, eoy, zoom, true);

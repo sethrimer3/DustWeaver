@@ -742,6 +742,11 @@ export function applyClusterMovement(world: WorldState): void {
         }
       }
 
+    } else if (cluster.isRadiantTetherFlag === 1) {
+      // ── Radiant Tether boss: fully floating, no gravity ─────────────────
+      // Movement is handled by the chain winching system in radiantTetherAi.ts
+      // No gravity, no enemy walk logic — boss moves purely via chain tension.
+
     } else {
       // ── Ground enemy: gravity ───────────────────────────────────────────────
       cluster.velocityYWorld += NORMAL_GRAVITY_WORLD_PER_SEC2 * dtSec;
@@ -817,6 +822,27 @@ export function applyClusterMovement(world: WorldState): void {
       } else if (cluster.positionXWorld > maxX - hw) {
         cluster.positionXWorld = maxX - hw;
         if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+      }
+    } else if (cluster.isRadiantTetherFlag === 1) {
+      // ── Radiant Tether boss: clamp to room bounds, skip floor/wall collision ─
+      const hw = cluster.halfWidthWorld;
+      const hh = cluster.halfHeightWorld;
+      const margin = 20.0; // Keep boss away from absolute room edges
+      if (cluster.positionXWorld < minX + margin + hw) {
+        cluster.positionXWorld = minX + margin + hw;
+        cluster.radiantTetherVelXWorld *= -0.3;
+      }
+      if (cluster.positionXWorld > maxX - margin - hw) {
+        cluster.positionXWorld = maxX - margin - hw;
+        cluster.radiantTetherVelXWorld *= -0.3;
+      }
+      if (cluster.positionYWorld < margin + hh) {
+        cluster.positionYWorld = margin + hh;
+        cluster.radiantTetherVelYWorld *= -0.3;
+      }
+      if (cluster.positionYWorld > world.worldHeightWorld - margin - hh) {
+        cluster.positionYWorld = world.worldHeightWorld - margin - hh;
+        cluster.radiantTetherVelYWorld *= -0.3;
       }
     } else {
       // ── Resolve floor / platform landing (ground entities only) ──────────

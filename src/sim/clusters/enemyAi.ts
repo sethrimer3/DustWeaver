@@ -62,6 +62,8 @@ export function applyEnemyAI(world: WorldState): void {
   for (let ci = 0; ci < clusters.length; ci++) {
     const cluster = clusters[ci];
     if (cluster.isPlayerFlag === 1 || cluster.isAliveFlag === 0) continue;
+    // Skip specialized enemies that have their own AI modules
+    if (cluster.isRadiantTetherFlag === 1) continue;
 
     // ── Tick down cooldowns ────────────────────────────────────────────────
     if (cluster.enemyAiAttackCooldownTicks > 0) {

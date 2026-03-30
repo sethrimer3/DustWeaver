@@ -192,3 +192,25 @@ The Weave combat system is injected at step 4.55, after the legacy combat forces
 ### Snapshot Boundary
 - ParticleSnapshot does not include weaveSlotId (not needed for rendering)
 - WorldSnapshot includes isPlayerWeaveActiveFlag for sprite animation hints
+
+## Radiant Tether Boss (BUILD 42)
+
+### Tick Pipeline Addition
+- Step 0.5d: `applyRadiantTetherAI(world)` — boss state machine and chain winching.
+- Boss clusters are skipped by standard enemy AI (`enemyAi.ts`) and ground movement.
+- Boss movement is handled entirely by the chain tension system.
+
+### Module Structure
+- `sim/clusters/radiantTetherConfig.ts` — all tunable constants.
+- `sim/clusters/radiantTetherAi.ts` — state machine (inactive→telegraph→lock→fire→move→reset→dead).
+- `sim/clusters/radiantTetherChains.ts` — chain lifecycle, raycasting, snap detection, sag calculation, player collision.
+- `render/clusters/radiantTetherRenderer.ts` — boss body, telegraph lasers, active chains, broken chains, debug overlay.
+
+### Chain State Management
+- Chain state (`RadiantTetherChainState`) is module-level in `radiantTetherAi.ts` (one boss per room).
+- Reset when `loadRoom()` is called via `resetRadiantTetherState()`.
+- Renderer accesses chain state via `getRadiantTetherChainState()`.
+
+### Snapshot Boundary
+- `ClusterSnapshot` includes: `isRadiantTetherFlag`, `radiantTetherState`, `radiantTetherStateTicks`, `radiantTetherBaseAngleRad`, `radiantTetherChainCount`.
+- Chain visual data (anchor positions, broken chain positions) is read directly from the module-level chain state by the renderer, not copied into the snapshot.
