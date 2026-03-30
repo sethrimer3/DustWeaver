@@ -38,6 +38,7 @@ const SLOT_COSTS: number[] = [
   4, // Lava       (16) — maximum cost (rare, devastating, slow)
   2, // Stone      (17) — moderate cost (physical shatter)
   0, // Gold       (18) — non-equippable grapple-chain placeholder
+  0, // Light      (19) — non-equippable boss light-chain placeholder
 ];
 
 if (SLOT_COSTS.length !== PARTICLE_KIND_COUNT) {
