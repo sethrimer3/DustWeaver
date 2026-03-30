@@ -75,6 +75,7 @@ export interface EditorEnemy {
   isRollingEnemyFlag: 0 | 1;
   rollingEnemySpriteIndex: number;
   isRockElementalFlag: 0 | 1;
+  isRadiantTetherFlag: 0 | 1;
 }
 
 export interface EditorTransition {
