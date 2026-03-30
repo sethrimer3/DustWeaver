@@ -277,6 +277,9 @@ const THIN_OBSTACLE_MAX_HEIGHT_WORLD = 34.0;
 // Collision helpers
 // ============================================================================
 
+/** Epsilon for sweep direction checks to absorb floating-point error. */
+const COLLISION_EPSILON = 0.5;
+
 /**
  * Resolves the cluster box against the world floor and thin platform top surfaces.
  * Resets isGroundedFlag to 0 on entry, then sets it to 1 if a landing is found.
@@ -325,12 +328,142 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
 }
 
 /**
- * Resolves the cluster against solid (thick) wall boxes using a sweep-based
- * axis-priority test.  Sets isGroundedFlag for top-surface landings.
+ * X-axis collision pass: resolve all wall overlaps on X only.
+ * Pushes cluster left/right out of walls and zeros velX on contact.
+ * Sets isTouchingWallLeftFlag / isTouchingWallRightFlag for player.
+ */
+function resolveWallsX(
+  cluster: import('./state').ClusterState,
+  world: WorldState,
+  prevXWorld: number,
+): void {
+  const hw = cluster.halfWidthWorld;
+  const hh = cluster.halfHeightWorld;
+
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const wallH = world.wallHWorld[wi];
+    if (wallH <= THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
+
+    const wallLeft   = world.wallXWorld[wi];
+    const wallTop    = world.wallYWorld[wi];
+    const wallRight  = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop  + wallH;
+
+    const left   = cluster.positionXWorld - hw;
+    const right  = cluster.positionXWorld + hw;
+    const top    = cluster.positionYWorld - hh;
+    const bottom = cluster.positionYWorld + hh;
+
+    // Skip if no overlap
+    if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
+
+    const prevRight = prevXWorld + hw;
+    const prevLeft  = prevXWorld - hw;
+
+    // Determine push direction from previous position
+    if (prevRight <= wallLeft + COLLISION_EPSILON) {
+      // Was to the left of wall — push out left
+      cluster.positionXWorld = wallLeft - hw;
+      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
+    } else if (prevLeft >= wallRight - COLLISION_EPSILON) {
+      // Was to the right of wall — push out right
+      cluster.positionXWorld = wallRight + hw;
+      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
+    } else {
+      // Fallback: push out on the shortest X-axis direction (comment: edge case
+      // where cluster was already overlapping on X at start of tick, e.g. spawn)
+      const penLeft  = right - wallLeft;
+      const penRight = wallRight - left;
+      if (penLeft < penRight) {
+        cluster.positionXWorld = wallLeft - hw;
+        if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+        if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
+      } else {
+        cluster.positionXWorld = wallRight + hw;
+        if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+        if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
+      }
+    }
+  }
+}
+
+/**
+ * Y-axis collision pass: resolve all wall overlaps on Y only.
+ * Pushes cluster up/down out of walls and zeros velY on contact.
+ * Sets isGroundedFlag when landing on a top face.
+ * Returns true if the cluster landed on a top surface.
+ */
+function resolveWallsY(
+  cluster: import('./state').ClusterState,
+  world: WorldState,
+  prevYWorld: number,
+): boolean {
+  const hw = cluster.halfWidthWorld;
+  const hh = cluster.halfHeightWorld;
+  let landed = false;
+
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const wallH = world.wallHWorld[wi];
+    if (wallH <= THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
+
+    const wallLeft   = world.wallXWorld[wi];
+    const wallTop    = world.wallYWorld[wi];
+    const wallRight  = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop  + wallH;
+
+    const left   = cluster.positionXWorld - hw;
+    const right  = cluster.positionXWorld + hw;
+    const top    = cluster.positionYWorld - hh;
+    const bottom = cluster.positionYWorld + hh;
+
+    // Skip if no overlap
+    if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
+
+    const prevBottom = prevYWorld + hh;
+    const prevTop    = prevYWorld - hh;
+
+    // Determine push direction from previous position
+    if (prevBottom <= wallTop + COLLISION_EPSILON && cluster.velocityYWorld >= 0) {
+      // Was above wall — land on top
+      cluster.positionYWorld = wallTop - hh;
+      cluster.velocityYWorld = 0;
+      cluster.isGroundedFlag = 1;
+      landed = true;
+    } else if (prevTop >= wallBottom - COLLISION_EPSILON && cluster.velocityYWorld <= 0) {
+      // Was below wall — push down
+      cluster.positionYWorld = wallBottom + hh;
+      if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+    } else {
+      // Fallback: push out on the shortest Y-axis direction (comment: edge case
+      // where cluster was already overlapping on Y at start of tick, e.g. spawn)
+      const penTop    = bottom - wallTop;
+      const penBottom = wallBottom - top;
+      if (penTop < penBottom) {
+        cluster.positionYWorld = wallTop - hh;
+        cluster.velocityYWorld = 0;
+        cluster.isGroundedFlag = 1;
+        landed = true;
+      } else {
+        cluster.positionYWorld = wallBottom + hh;
+        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+      }
+    }
+  }
+  return landed;
+}
+
+/**
+ * Axis-separated sweep collision resolver with sub-tick safety.
  *
- * Also sets isTouchingWallLeftFlag / isTouchingWallRightFlag on the player
- * cluster when it is pushed out of a wall's left or right face — these flags
- * are used this tick for wall-slide capping and next tick for wall-jump input.
+ * Two-pass approach:
+ *   X pass: apply velX, resolve all X overlaps.
+ *   Y pass: apply velY, resolve all Y overlaps.
+ *
+ * Each axis is sub-stepped if the movement distance exceeds half the
+ * cluster's dimension on that axis, preventing tunneling through thin
+ * walls at high speed (e.g. dash through a BLOCK_SIZE_SMALL = 3 unit wall).
  *
  * Returns true if the cluster landed on a top surface this tick.
  */
@@ -339,81 +472,39 @@ function resolveClusterSolidWallCollision(
   world: WorldState,
   prevX: number,
   prevY: number,
+  dtSec: number,
 ): boolean {
-  const hw = cluster.halfWidthWorld;
-  const hh = cluster.halfHeightWorld;
+  // Restore position to pre-integration state — we re-integrate per axis.
+  cluster.positionXWorld = prevX;
+  cluster.positionYWorld = prevY;
+
+  // ── X pass with sub-tick safety ──────────────────────────────────────────
+  const moveDistXWorld = Math.abs(cluster.velocityXWorld * dtSec);
+  const stepsX = moveDistXWorld > cluster.halfWidthWorld
+    ? Math.ceil(moveDistXWorld / cluster.halfWidthWorld)
+    : 1;
+  const dtX = dtSec / stepsX;
+  for (let i = 0; i < stepsX; i++) {
+    const subPrevX = cluster.positionXWorld;
+    cluster.positionXWorld += cluster.velocityXWorld * dtX;
+    resolveWallsX(cluster, world, subPrevX);
+  }
+
+  // ── Y pass with sub-tick safety ──────────────────────────────────────────
+  const moveDistYWorld = Math.abs(cluster.velocityYWorld * dtSec);
+  const stepsY = moveDistYWorld > cluster.halfHeightWorld
+    ? Math.ceil(moveDistYWorld / cluster.halfHeightWorld)
+    : 1;
+  const dtY = dtSec / stepsY;
   let landed = false;
-
-  for (let wi = 0; wi < world.wallCount; wi++) {
-    const wallLeft   = world.wallXWorld[wi];
-    const wallTop    = world.wallYWorld[wi];
-    const wallRight  = wallLeft + world.wallWWorld[wi];
-    const wallBottom = wallTop  + world.wallHWorld[wi];
-    const wallH      = world.wallHWorld[wi];
-    if (wallH <= THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
-
-    const left   = cluster.positionXWorld - hw;
-    const right  = cluster.positionXWorld + hw;
-    const top    = cluster.positionYWorld - hh;
-    const bottom = cluster.positionYWorld + hh;
-    if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
-
-    const prevLeft   = prevX - hw;
-    const prevRight  = prevX + hw;
-    const prevTop    = prevY - hh;
-    const prevBottom = prevY + hh;
-
-    // ── Sweep-based exact face detection ──────────────────────────────────
-    if (prevBottom <= wallTop && cluster.velocityYWorld >= 0) {
-      cluster.positionYWorld = wallTop - hh;
-      cluster.velocityYWorld = 0;
-      cluster.isGroundedFlag = 1;
+  for (let i = 0; i < stepsY; i++) {
+    const subPrevY = cluster.positionYWorld;
+    cluster.positionYWorld += cluster.velocityYWorld * dtY;
+    if (resolveWallsY(cluster, world, subPrevY)) {
       landed = true;
-      continue;
-    }
-    if (prevTop >= wallBottom && cluster.velocityYWorld <= 0) {
-      cluster.positionYWorld = wallBottom + hh;
-      if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
-      continue;
-    }
-    if (prevRight <= wallLeft && cluster.velocityXWorld >= 0) {
-      cluster.positionXWorld = wallLeft - hw;
-      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
-      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
-      continue;
-    }
-    if (prevLeft >= wallRight && cluster.velocityXWorld <= 0) {
-      cluster.positionXWorld = wallRight + hw;
-      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
-      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
-      continue;
-    }
-
-    // ── Fallback: minimum-penetration axis resolution ──────────────────────
-    const penLeft   = right  - wallLeft;
-    const penRight  = wallRight  - left;
-    const penTop    = bottom - wallTop;
-    const penBottom = wallBottom - top;
-    const minPen    = Math.min(penLeft, penRight, penTop, penBottom);
-
-    if (minPen === penTop) {
-      cluster.positionYWorld = wallTop - hh;
-      cluster.velocityYWorld = 0;
-      cluster.isGroundedFlag = 1;
-      landed = true;
-    } else if (minPen === penBottom) {
-      cluster.positionYWorld = wallBottom + hh;
-      if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
-    } else if (minPen === penLeft) {
-      cluster.positionXWorld = wallLeft - hw;
-      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
-      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
-    } else {
-      cluster.positionXWorld = wallRight + hw;
-      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
-      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
     }
   }
+
   return landed;
 }
 
@@ -787,11 +878,9 @@ export function applyClusterMovement(world: WorldState): void {
       }
     }
 
-    // ── Integrate position ─────────────────────────────────────────────────
+    // ── Store pre-integration position ───────────────────────────────────
     const prevX = cluster.positionXWorld;
     const prevY = cluster.positionYWorld;
-    cluster.positionXWorld += cluster.velocityXWorld * dtSec;
-    cluster.positionYWorld += cluster.velocityYWorld * dtSec;
 
     // ── Reset player wall-touch flags before collision resolution ──────────
     // Flags are re-populated by resolveClusterSolidWallCollision below.
@@ -804,7 +893,10 @@ export function applyClusterMovement(world: WorldState): void {
     }
 
     if (cluster.isFlyingEyeFlag === 1) {
-      // ── Flying eye: clamp to world bounds in both axes (no floor landing) ─
+      // ── Flying eye: integrate + clamp to world bounds (no wall collision) ─
+      cluster.positionXWorld += cluster.velocityXWorld * dtSec;
+      cluster.positionYWorld += cluster.velocityYWorld * dtSec;
+
       const hw = cluster.halfWidthWorld;
       const hh = cluster.halfHeightWorld;
       const minYEye = FLYING_EYE_VERTICAL_MARGIN_WORLD + hh;
@@ -824,7 +916,10 @@ export function applyClusterMovement(world: WorldState): void {
         if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
       }
     } else if (cluster.isRadiantTetherFlag === 1) {
-      // ── Radiant Tether boss: clamp to room bounds, skip floor/wall collision ─
+      // ── Radiant Tether boss: integrate + clamp to room bounds ────────────
+      cluster.positionXWorld += cluster.velocityXWorld * dtSec;
+      cluster.positionYWorld += cluster.velocityYWorld * dtSec;
+
       const hw = cluster.halfWidthWorld;
       const hh = cluster.halfHeightWorld;
       const margin = 20.0; // Keep boss away from absolute room edges
@@ -845,10 +940,15 @@ export function applyClusterMovement(world: WorldState): void {
         cluster.radiantTetherVelYWorld *= -0.3;
       }
     } else {
-      // ── Resolve floor / platform landing (ground entities only) ──────────
+      // ── Resolve ground entity collision (axis-separated sweep) ──────────
+      // resolveClusterSolidWallCollision handles its own integration internally
+      // (X pass then Y pass with sub-tick safety). It receives prevX/prevY and
+      // dtSec to integrate position per-axis.
       const wasGrounded = cluster.isGroundedFlag === 1;
+      const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY, dtSec);
+
+      // Thin platform / world floor check (position already integrated by solid wall resolver)
       const thinLanded  = resolveClusterFloorCollision(cluster, world);
-      const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY);
       const justLanded  = thinLanded || thickLanded;
 
       if (cluster.isPlayerFlag === 1) {

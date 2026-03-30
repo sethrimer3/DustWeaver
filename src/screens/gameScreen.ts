@@ -240,16 +240,93 @@ function spawnBackgroundFluidParticles(
   }
 }
 
-/** Loads wall definitions from a RoomDef into the WorldState wall buffers. */
+/**
+ * Loads wall definitions from a RoomDef into the WorldState wall buffers.
+ * After converting block units to world units, runs an iterative merge pass
+ * that combines axis-aligned, contiguous wall rectangles into larger AABBs.
+ * This eliminates internal seam edges that cause ghost collisions.
+ */
 function loadRoomWalls(world: WorldState, room: RoomDef): void {
-  const count = Math.min(room.walls.length, MAX_WALLS);
-  world.wallCount = count;
-  for (let wi = 0; wi < count; wi++) {
+  const rawCount = Math.min(room.walls.length, MAX_WALLS);
+
+  // Pre-allocated merge workspace (avoid per-call allocation)
+  // We use simple arrays here because this runs only at room load, not per-tick.
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const ws: number[] = [];
+  const hs: number[] = [];
+
+  // Convert block units to world units
+  for (let wi = 0; wi < rawCount; wi++) {
     const def = room.walls[wi];
-    world.wallXWorld[wi] = def.xBlock * BLOCK_SIZE_MEDIUM;
-    world.wallYWorld[wi] = def.yBlock * BLOCK_SIZE_MEDIUM;
-    world.wallWWorld[wi] = Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM);
-    world.wallHWorld[wi] = Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM);
+    xs.push(def.xBlock * BLOCK_SIZE_MEDIUM);
+    ys.push(def.yBlock * BLOCK_SIZE_MEDIUM);
+    ws.push(Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM));
+    hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
+  }
+
+  // ── Iterative merge pass ─────────────────────────────────────────────────
+  // Two rectangles may merge if they share a complete face:
+  //   - Same Y and height, contiguous on X (horizontal merge)
+  //   - Same X and width,  contiguous on Y (vertical merge)
+  let merged = true;
+  while (merged) {
+    merged = false;
+    for (let i = 0; i < xs.length; i++) {
+      for (let j = i + 1; j < xs.length; j++) {
+        // Horizontal merge: same Y, same H, contiguous on X axis
+        if (ys[i] === ys[j] && hs[i] === hs[j]) {
+          const rightI = xs[i] + ws[i];
+          const rightJ = xs[j] + ws[j];
+          if (rightI === xs[j]) {
+            // i is left of j — extend i to cover j
+            ws[i] += ws[j];
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            merged = true;
+            break;
+          }
+          if (rightJ === xs[i]) {
+            // j is left of i — extend i leftward to cover j
+            xs[i] = xs[j];
+            ws[i] += ws[j];
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            merged = true;
+            break;
+          }
+        }
+        // Vertical merge: same X, same W, contiguous on Y axis
+        if (xs[i] === xs[j] && ws[i] === ws[j]) {
+          const bottomI = ys[i] + hs[i];
+          const bottomJ = ys[j] + hs[j];
+          if (bottomI === ys[j]) {
+            // i is above j — extend i downward to cover j
+            hs[i] += hs[j];
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            merged = true;
+            break;
+          }
+          if (bottomJ === ys[i]) {
+            // j is above i — extend i upward to cover j
+            ys[i] = ys[j];
+            hs[i] += hs[j];
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            merged = true;
+            break;
+          }
+        }
+      }
+      if (merged) break;
+    }
+  }
+
+  // Write merged rectangles into wall buffers
+  const finalCount = Math.min(xs.length, MAX_WALLS);
+  world.wallCount = finalCount;
+  for (let wi = 0; wi < finalCount; wi++) {
+    world.wallXWorld[wi] = xs[wi];
+    world.wallYWorld[wi] = ys[wi];
+    world.wallWWorld[wi] = ws[wi];
+    world.wallHWorld[wi] = hs[wi];
   }
 }
 
