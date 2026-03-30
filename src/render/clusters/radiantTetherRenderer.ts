@@ -63,7 +63,7 @@ export function renderRadiantTether(
 
     // ── Telegraph / Lock lasers ─────────────────────────────────────────
     if (state === RT_STATE_TELEGRAPH || state === RT_STATE_LOCK) {
-      renderTelegraphs(ctx, cluster, screenX, screenY, scalePx, offsetXPx, offsetYPx, state);
+      renderTelegraphs(ctx, cluster, screenX, screenY, scalePx, state);
     }
 
     // ── Active chains ───────────────────────────────────────────────────
@@ -73,7 +73,7 @@ export function renderRadiantTether(
         if (chain.isActiveFlag === 0) continue;
         const anchorScreenX = chain.anchorXWorld * scalePx + offsetXPx;
         const anchorScreenY = chain.anchorYWorld * scalePx + offsetYPx;
-        renderChain(ctx, screenX, screenY, anchorScreenX, anchorScreenY, scalePx);
+        renderChain(ctx, screenX, screenY, anchorScreenX, anchorScreenY);
       }
     }
 
@@ -87,7 +87,7 @@ export function renderRadiantTether(
         const fsx = bc.freeEndXWorld * scalePx + offsetXPx;
         const fsy = bc.freeEndYWorld * scalePx + offsetYPx;
         const fadeAlpha = bc.lifetimeTicks / RT_BROKEN_CHAIN_LIFETIME_TICKS;
-        renderBrokenChain(ctx, asx, asy, fsx, fsy, scalePx, fadeAlpha);
+        renderBrokenChain(ctx, asx, asy, fsx, fsy, fadeAlpha);
       }
     }
 
@@ -110,7 +110,6 @@ function renderTelegraphs(
   cluster: ClusterSnapshot,
   screenX: number, screenY: number,
   scalePx: number,
-  _offsetXPx: number, _offsetYPx: number,
   state: number,
 ): void {
   const chainCount = cluster.radiantTetherChainCount;
@@ -145,7 +144,6 @@ function renderChain(
   ctx: CanvasRenderingContext2D,
   fromX: number, fromY: number,
   toX: number, toY: number,
-  _scalePx: number,
 ): void {
   // Compute sag points in screen space
   const points = computeChainSagPoints(
@@ -185,7 +183,6 @@ function renderBrokenChain(
   ctx: CanvasRenderingContext2D,
   anchorX: number, anchorY: number,
   freeEndX: number, freeEndY: number,
-  _scalePx: number,
   fadeAlpha: number,
 ): void {
   // Simple sag from anchor to free end

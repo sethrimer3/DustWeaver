@@ -149,7 +149,6 @@ export function applyRadiantTetherAI(world: WorldState): void {
             cluster.positionXWorld, cluster.positionYWorld,
             cluster.radiantTetherBaseAngleRad,
             chainCount,
-            world.rng,
           );
         }
         break;
@@ -212,16 +211,11 @@ export function applyRadiantTetherAI(world: WorldState): void {
     tickBrokenChains(cs);
 
     // Chain-player collision check (active during movement, firing, and reset)
+    // checkChainPlayerCollision also checks broken chains and ticks iframes.
     if (state >= RT_STATE_FIRING && state <= RT_STATE_RESET) {
       checkChainPlayerCollision(cs, world, cluster.positionXWorld, cluster.positionYWorld);
-    }
-    // Broken chains can also damage during any phase
-    if (cs.playerChainIframeTicks === 0) {
-      // Already checked inside checkChainPlayerCollision for active chains;
-      // broken chains are also checked there.
-      // But we need to tick iframes even outside collision phases
-    }
-    if (cs.playerChainIframeTicks > 0 && state < RT_STATE_FIRING) {
+    } else if (cs.playerChainIframeTicks > 0) {
+      // Tick down iframes even when boss is not in collision-active phases
       cs.playerChainIframeTicks--;
     }
   }

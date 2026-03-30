@@ -167,7 +167,6 @@ export function fireChains(
   bossXWorld: number, bossYWorld: number,
   baseAngleRad: number,
   chainCount: number,
-  _rng: RngState,
 ): void {
   const spacing = (Math.PI * 2) / chainCount;
   // Deactivate all first
@@ -486,6 +485,9 @@ export function getChainCountForHealth(
 ): number {
   if (maxHealthPoints <= 0) return minChains;
   const ratio = healthPoints / maxHealthPoints;
+  // Thresholds are descending (e.g., [0.85, 0.70, 0.55, 0.40, 0.25]).
+  // Each threshold crossed below adds one chain.
+  // ratio=0.90 → 3 chains, ratio=0.60 → 5 chains, ratio=0.10 → 8 chains.
   let count = minChains;
   for (let i = 0; i < thresholds.length; i++) {
     if (ratio < thresholds[i]) {
