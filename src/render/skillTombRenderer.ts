@@ -8,12 +8,12 @@
  * Also draws the "Press F to interact" prompt when the player is close.
  */
 
-import { BLOCK_SIZE_WORLD } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 
 const BASE = import.meta.env.BASE_URL;
 
 /** Distance in world units within which the tomb activates. */
-export const SKILL_TOMB_INTERACT_RADIUS_WORLD = 3 * BLOCK_SIZE_WORLD;
+export const SKILL_TOMB_INTERACT_RADIUS_WORLD = 3 * BLOCK_SIZE_MEDIUM;
 
 /** Number of decorative dust particles per tomb. */
 const DUST_PARTICLE_COUNT = 24;
@@ -86,8 +86,8 @@ export class SkillTombRenderer {
     this.tombStates.length = 0;
     const count = Math.min(tombs.length, MAX_TOMBS);
     for (let i = 0; i < count; i++) {
-      const centerXWorld = (tombs[i].xBlock + 0.5) * BLOCK_SIZE_WORLD;
-      const centerYWorld = (tombs[i].yBlock + 0.5) * BLOCK_SIZE_WORLD;
+      const centerXWorld = (tombs[i].xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+      const centerYWorld = (tombs[i].yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
 
       const particles: DustParticle[] = [];
       for (let p = 0; p < DUST_PARTICLE_COUNT; p++) {
@@ -279,8 +279,8 @@ export class SkillTombRenderer {
 
       // Draw sprite
       if (this.isSpriteLoaded) {
-        const spriteW = BLOCK_SIZE_WORLD * zoom;
-        const spriteH = BLOCK_SIZE_WORLD * zoom;
+        const spriteW = BLOCK_SIZE_MEDIUM * zoom;
+        const spriteH = BLOCK_SIZE_MEDIUM * zoom;
         ctx.drawImage(
           this.tombSprite,
           screenX - spriteW / 2,
@@ -313,7 +313,7 @@ export class SkillTombRenderer {
         ctx.font = `${14 * (zoom / 2.8)}px 'Cinzel', serif`;
         ctx.fillStyle = `rgba(212,168,75,${0.6 + 0.4 * tomb.activationFactor})`;
         ctx.textAlign = 'center';
-        ctx.fillText('Press F to interact', screenX, screenY - BLOCK_SIZE_WORLD * zoom * 0.8);
+        ctx.fillText('Press F to interact', screenX, screenY - BLOCK_SIZE_MEDIUM * zoom * 0.8);
         ctx.restore();
       }
     }

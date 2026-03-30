@@ -11,10 +11,16 @@
 
 ## Coordinate System
 - World space: floating-point units.
-- Screen space: pixels.
-- Scale: 1 world unit = 1 pixel at default zoom.
-- Camera zoom: default 2× (1 world unit = 2 screen pixels at default zoom).
+- Virtual canvas: 480×270 virtual pixels (fixed internal resolution).
+- Device canvas: window dimensions, used only as upscale target.
+- Scale: 1 world unit = 1 virtual pixel at zoom 1.0.
+- Camera zoom: 1.0 (1 world unit = 1 virtual pixel).
   Camera follows player, clamped to room bounds so viewport never shows void.
+- Upscale: `deviceCtx.drawImage(virtualCanvas, 0, 0, w, h)` with
+  `imageSmoothingEnabled = false` for crisp nearest-neighbor sampling.
+  At 1080p the scale factor is exactly 4× (each virtual pixel → 4×4 physical).
+- WebGL particle canvas also renders at 480×270 and is composited onto the
+  device canvas during the upscale pass.
 
 ## Metroidvania Room System (BUILD 24)
 - Game uses interconnected rooms instead of a level-select world map.
@@ -242,12 +248,35 @@ This prevents the acceleration model from fighting against the swing.
 ## BUILD 34 Changes
 
 ### Block Size Reduction
-`BLOCK_SIZE_WORLD` reduced from 15 to 11.25 (25% smaller).  All room dimensions
-(walls, enemy spawns, tunnel positions) are stored in block units and converted
-to world units at load time, so the entire geometry shrinks proportionally.
-Player and enemy physics constants (jump height, gravity, speed) remain in
-absolute world units and are therefore unaffected by the block size change —
-the player effectively becomes larger relative to each block.
+### Block Size Constants (BUILD 44)
+`BLOCK_SIZE_WORLD` (previously 11.25) replaced with three canonical constants:
+- `BLOCK_SIZE_SMALL  = 3`  → 3×3 virtual px, 12×12 physical px @ 4×
+- `BLOCK_SIZE_MEDIUM = 6`  → 6×6 virtual px, 24×24 physical px @ 4× (standard room unit)
+- `BLOCK_SIZE_LARGE  = 12` → 12×12 virtual px, 48×48 physical px @ 4×
+
+At zoom 1.0 with 480×270 virtual canvas: 80 medium blocks horizontally, 45 vertically.
+All room definitions remain in block units and are converted at load time.
+
+### Collision System Rewrite (BUILD 44)
+**Wall merging**: At room load time, contiguous axis-aligned wall rectangles are
+iteratively merged into single AABBs. This eliminates internal seam edges that
+caused ghost collisions when the player walked across adjacent blocks.
+
+**Axis-separated sweep**: `resolveClusterSolidWallCollision` rewritten with a
+strict two-pass approach:
+1. **X pass**: integrate posX, resolve all X-axis overlaps, zero velX on contact.
+2. **Y pass**: integrate posY, resolve all Y-axis overlaps, zero velY on contact,
+   set isGroundedFlag on top-surface landing.
+The passes are completely independent — X and Y resolution never mix. The old
+minimum-penetration fallback is removed as the primary resolver; each axis has
+its own directional fallback for edge-case overlaps (e.g. spawn inside a wall).
+
+**Epsilon guards**: `COLLISION_EPSILON = 0.5` world units applied to all sweep
+boundary checks to absorb floating-point error across ticks.
+
+**Sub-tick safety**: Each axis pass is sub-stepped when the movement distance
+exceeds half the cluster's dimension on that axis. This prevents tunneling
+through thin walls (BLOCK_SIZE_SMALL = 3 units) at dash speed (~9 units/tick).
 
 ### Jump Height Reduction
 `JUMP_HEIGHT_WORLD` reduced from 60 to 40 world units.  Derived constants

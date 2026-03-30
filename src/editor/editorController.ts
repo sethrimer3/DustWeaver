@@ -5,7 +5,7 @@
  * gameScreen.ts.
  */
 
-import { BLOCK_SIZE_WORLD } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RoomDef } from '../levels/roomDef';
 import type { CameraState } from '../render/camera';
 
@@ -26,7 +26,7 @@ import { showEditorWorldMap } from './editorWorldMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { exportRoomAsJson } from './editorExport';
 
-const BS = BLOCK_SIZE_WORLD;
+const BS = BLOCK_SIZE_MEDIUM;
 
 export interface EditorController {
   state: EditorState;
