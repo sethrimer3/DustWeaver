@@ -42,6 +42,11 @@ export interface RoomEnemyDef {
    * inactive/active states, orbits/fires brown-rock dust projectiles.
    */
   isRockElementalFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is the Radiant Tether boss — floating sphere of light
+   * with rotating laser telegraphs and anchored chains.
+   */
+  isRadiantTetherFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

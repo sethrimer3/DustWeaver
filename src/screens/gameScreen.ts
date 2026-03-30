@@ -25,6 +25,8 @@ import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout, WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from '../sim/weaves/playerLoadout';
+import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
+import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 
 const FIXED_DT_MS = 16.666;
 /** Canonical level-grid block size (sprites/objects snap to this). */
@@ -385,6 +387,9 @@ export function startGameScreen(
     world.isGrappleActiveFlag = 0;
     world.grappleParticleStartIndex = -1;
 
+    // Reset Radiant Tether boss state
+    resetRadiantTetherState();
+
     // Spawn player at the given block position
     const spawnXWorld = spawnXBlock * BLOCK_SIZE_PX;
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_PX;
@@ -425,6 +430,11 @@ export function startGameScreen(
         // Rock Elemental is slightly larger than regular enemies
         enemyCluster.halfWidthWorld = 4.5;
         enemyCluster.halfHeightWorld = 4.5;
+      } else if (enemyDef.isRadiantTetherFlag === 1) {
+        enemyCluster.isRadiantTetherFlag = 1;
+        enemyCluster.radiantTetherState = 0; // start inactive
+        enemyCluster.halfWidthWorld = 6.0;
+        enemyCluster.halfHeightWorld = 6.0;
       }
 
       world.clusters.push(enemyCluster);
@@ -723,6 +733,7 @@ export function startGameScreen(
         renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, eox, eoy);
         renderWalls(ctx, snapshot, eox, eoy, zoom, true);
         renderClusters(ctx, snapshot, eox, eoy, zoom, true);
+        renderRadiantTether(ctx, snapshot, eox, eoy, zoom, true);
         renderGrapple(ctx, snapshot, eox, eoy, zoom);
         drawTunnelDarkness(ctx, currentRoom, eox, eoy, zoom);
         environmentalDust.render(ctx, eox, eoy, zoom, true);
@@ -1007,6 +1018,7 @@ export function startGameScreen(
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode);
+    renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderGrapple(ctx, snapshot, ox, oy, zoom);
 
     // Tunnel darkness overlays

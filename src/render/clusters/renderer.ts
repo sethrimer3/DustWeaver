@@ -320,6 +320,10 @@ export function renderClusters(
         }
       }
 
+    } else if (cluster.isRadiantTetherFlag === 1) {
+      // Radiant Tether boss body is rendered by radiantTetherRenderer.ts
+      // Skip default cluster rendering; health bar drawn below.
+
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -370,6 +374,8 @@ export function renderClusters(
       barColor = getFlyingEyeColor(cluster.flyingEyeElementKind);
     } else if (cluster.isRockElementalFlag === 1) {
       barColor = '#8b6914'; // brown/amber for rock elemental
+    } else if (cluster.isRadiantTetherFlag === 1) {
+      barColor = '#fffde0'; // radiant white-gold for light boss
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

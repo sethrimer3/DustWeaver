@@ -578,6 +578,34 @@ const GOLD: ElementProfile = {
   regenerationRateTicks: 0,
 };
 
+/**
+ * Light — Radiant Tether boss particles.
+ * Bright, floaty, with moderate orbit.  Non-combat (damage is via chain system).
+ */
+const LIGHT: ElementProfile = {
+  massKg:               0.6,
+  drag:                 1.8,
+  attractionStrength:   120.0,
+  orbitalStrength:      55.0,
+  orbitRadiusWorld:     12.0,
+  noiseAmplitude:       8.0,
+  instability:          0.08,
+  curlStrength:         2.0,
+  diffusion:            0.6,
+  upwardBias:           3.0,
+  cohesion:             0.15,
+  separation:           0.10,
+  alignment:            0.05,
+  lifetimeBaseTicks:    600,
+  lifetimeVarianceTicks: 120,
+  temperature:          0.95,
+  stability:            0.85,
+  toughness:            1.0,
+  attackPower:          0.5,
+  maxPopulationCount:   50,
+  regenerationRateTicks: 30,
+};
+
 // ---- Lookup table --------------------------------------------------------
 
 /**
@@ -604,6 +632,7 @@ export const ELEMENT_PROFILES: ElementProfile[] = [
   LAVA,       // 16 — ParticleKind.Lava
   STONE,      // 17 — ParticleKind.Stone
   GOLD,       // 18 — ParticleKind.Gold
+  LIGHT,      // 19 — ParticleKind.Light
 ];
 
 /** Returns the profile for `kind`, falling back to Physical if out of range. */

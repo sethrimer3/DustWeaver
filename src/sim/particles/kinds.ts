@@ -24,10 +24,11 @@ export enum ParticleKind {
   Stone     = 17,  // Heavy, shatters on wall/enemy impact into fragments — World 2 stone theme
   // Special / ability particles (not equippable)
   Gold      = 18,  // Grappling hook chain — bright golden diamond sparkles
+  Light     = 19,  // Boss light chains — radiant white-gold glow
 }
 
 /** Total number of defined kinds — keep in sync with the enum above. */
-export const PARTICLE_KIND_COUNT = 19;
+export const PARTICLE_KIND_COUNT = 20;
 
 /**
  * Ordered list of particle kinds that players can equip.
@@ -97,6 +98,7 @@ export const KIND_SHAPE: ParticleShape[] = [
   ParticleShape.Circle,   // Lava  — molten circle (like fluid/water but fiery)
   ParticleShape.Triangle, // Stone — jagged triangle fragment
   ParticleShape.Diamond,  // Gold  — bright sparkle diamond
+  ParticleShape.Circle,   // Light — radiant boss glow
 ];
 
 /** Returns the rendered shape for the given kind index, defaulting to Circle. */

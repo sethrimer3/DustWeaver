@@ -67,6 +67,16 @@ export interface ClusterSnapshot {
   readonly rockElementalOrbitAngleRad: number;
   /** Number of orbiting dust particles. */
   readonly rockElementalDustCount: number;
+  /** 1 if this cluster is the Radiant Tether boss. */
+  readonly isRadiantTetherFlag: 0 | 1;
+  /** Current Radiant Tether state (0-6). */
+  readonly radiantTetherState: number;
+  /** Ticks elapsed in the current Radiant Tether state. */
+  readonly radiantTetherStateTicks: number;
+  /** Base angle (radians) for evenly-spaced chain/telegraph directions. */
+  readonly radiantTetherBaseAngleRad: number;
+  /** Current number of active chains. */
+  readonly radiantTetherChainCount: number;
 }
 
 export interface WallSnapshot {
@@ -128,6 +138,11 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       rockElementalActivationProgress:  c.rockElementalActivationProgress,
       rockElementalOrbitAngleRad:       c.rockElementalOrbitAngleRad,
       rockElementalDustCount:           c.rockElementalDustCount,
+      isRadiantTetherFlag:              c.isRadiantTetherFlag,
+      radiantTetherState:               c.radiantTetherState,
+      radiantTetherStateTicks:          c.radiantTetherStateTicks,
+      radiantTetherBaseAngleRad:        c.radiantTetherBaseAngleRad,
+      radiantTetherChainCount:          c.radiantTetherChainCount,
     });
   }
 

@@ -176,6 +176,34 @@ export interface ClusterState {
    */
   rockElementalActivationProgress: number;
 
+  // ---- Radiant Tether boss (populated only when isRadiantTetherFlag === 1) --
+  /**
+   * 1 if this cluster is the Radiant Tether boss — a floating sphere of light
+   * that uses rotating laser telegraphs and anchored chains of light.
+   */
+  isRadiantTetherFlag: 0 | 1;
+  /**
+   * Current Radiant Tether state:
+   *  0 = inactive (dormant, awaiting player proximity)
+   *  1 = telegraph (rotating laser preview lines)
+   *  2 = lock (lasers fixed for reaction window)
+   *  3 = firing (chains extending to anchors)
+   *  4 = movement (boss moves via chain winching)
+   *  5 = reset (retracting chains, preparing next cycle)
+   *  6 = dead
+   */
+  radiantTetherState: number;
+  /** Ticks elapsed in the current state. */
+  radiantTetherStateTicks: number;
+  /** Base angle (radians) for evenly-spaced telegraph / chain directions. */
+  radiantTetherBaseAngleRad: number;
+  /** Current number of active chains (determined by health thresholds). */
+  radiantTetherChainCount: number;
+  /** Boss horizontal velocity (world units/tick). */
+  radiantTetherVelXWorld: number;
+  /** Boss vertical velocity (world units/tick). */
+  radiantTetherVelYWorld: number;
+
   // ---- Player sprite rotation (populated only when isPlayerFlag === 1) -----
   /**
    * Accumulated rotation angle (radians) for the player sprite.
@@ -244,6 +272,13 @@ export function createClusterState(
     rockElementalOrbitAngleRad: 0,
     rockElementalRegenTicks: 0,
     rockElementalActivationProgress: 0,
+    isRadiantTetherFlag: 0,
+    radiantTetherState: 0,
+    radiantTetherStateTicks: 0,
+    radiantTetherBaseAngleRad: 0,
+    radiantTetherChainCount: 3,
+    radiantTetherVelXWorld: 0,
+    radiantTetherVelYWorld: 0,
     playerRotationAngleRad: 0,
   };
 }

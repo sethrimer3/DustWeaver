@@ -433,3 +433,62 @@ can verify the collision boundary matches the visual tile geometry.
 - Skill tome on plateau at (26, 18), 2 blocks right of spawn.
 - One Rock Elemental at (10, 20), >10 blocks from plateau center.
 - Left/right tunnel transitions preserved at row 16.
+
+## Radiant Tether Boss (BUILD 42)
+
+### Boss Concept
+- First boss: floating spherical entity made of light ("Radiant Tether").
+- Uses rotating laser telegraphs followed by chains of light anchored to walls.
+- Boss moves by changing chain lengths (winch behavior).
+- Chain count scales 3→8 as health drops (threshold-based).
+
+### Boss Room
+- 60×60 block square chamber ("Luminous Chamber"), world 1.
+- Accessible from W1 Room 1 via right tunnel.
+- Thick walls on all sides for reliable chain anchoring.
+- Small platforms for player cover/parkour.
+- Boss spawns at block (30, 20) with Holy + Lightning particles.
+
+### Attack Loop Phases
+1. **Telegraph** (90 ticks / 1.5s): Thin laser lines rotate around boss.
+2. **Lock** (30 ticks / 0.5s): Lasers freeze for player reaction.
+3. **Firing** (6 ticks / ~instant): Chains raycast to wall anchors.
+4. **Movement** (300 ticks / 5s): Boss winches via tighten/loosen chains.
+5. **Reset** (30 ticks / 0.5s): Retract chains, prepare next cycle.
+
+### Chain System
+- Chains fire along evenly-spaced angles (e.g., 4 chains = 90° apart).
+- Each chain raycasts from boss to nearest wall in its direction.
+- Retry with slight angle offsets if a direction misses terrain.
+- Visual: parabolic sag approximation (not full rope sim) for performance.
+- Damage: player takes 1 HP on chain contact + 60 ticks iframes.
+- Telegraphs do NOT deal damage.
+
+### Opposing-Chain Snap
+- When two chains are ~180° apart and both tightening with high tension,
+  they snap off the boss and swing from their wall anchors as broken chains.
+- Tunable thresholds: opposing angle tolerance (0.35 rad), straightness
+  threshold (0.92), tension ratio (0.55).
+- Broken chains persist as environmental hazards for 240 ticks (4s).
+
+### Chain Count Health Thresholds
+- ≥85% HP → 3 chains
+- ≥70% HP → 4 chains
+- ≥55% HP → 5 chains
+- ≥40% HP → 6 chains
+- ≥25% HP → 7 chains
+- <25% HP → 8 chains
+
+### Movement Physics
+- Boss has zero gravity (fully floating).
+- Position/velocity controlled by chain tension forces.
+- Boss bounces softly off room boundaries.
+- Standard enemy AI is skipped (dedicated state machine).
+
+### Files
+- Config: `sim/clusters/radiantTetherConfig.ts` (all tunable constants)
+- AI state machine: `sim/clusters/radiantTetherAi.ts`
+- Chain system: `sim/clusters/radiantTetherChains.ts`
+- Renderer: `render/clusters/radiantTetherRenderer.ts`
+- Room: `levels/rooms.ts` (ROOM_BOSS_RADIANT_TETHER)
+- Particle kind: `ParticleKind.Light` (kind 19)
