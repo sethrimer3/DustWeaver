@@ -77,7 +77,7 @@ Particle rendering and physics are performance-critical. The game must support t
 
 Booleans must start with `is`, `has`, `can`, `should`, or `needs`.
 
-✅ Good: `isAlive`, `hasTarget`, `canMerge`, `shouldEmit`, `needsRepath`
+✅ Good: `isAlive`, `hasTarget`, `canMerge`, `shouldEmit`, `needsRepath
 
 ❌ Bad: `alive`, `targeted`, `mergeable`
 
@@ -97,7 +97,7 @@ isActiveFlag: 0 | 1  // Packed boolean for performance in particle buffer
 Any numeric value representing a measurable quantity must include a unit suffix.
 
 - **Time**: `Ms`, `Ticks`, `Sec` — prefer `Ms` or `Ticks`. Examples: `lifetimeMs`, `spawnTick`, `cooldownMs`
-- **Distance**: `World` (simulation space) or `Px` (screen pixels). Examples: `radiusWorld`, `rangeWorld`, `offsetPx`
+- **Distance**: `World` (simulation/world space) or `Px` (virtual canvas pixels). Examples: `radiusWorld`, `rangeWorld`, `offsetPx`
 - **Angle**: `Rad` (preferred in code). Examples: `angleRad`, `emitDirectionRad`
 - **Mass / Charge**: `Kg`, `Units` as defined in `DECISIONS.md`
 
@@ -107,8 +107,9 @@ Never mix unit systems in one function without explicit conversion helpers.
 
 Use suffixes to distinguish coordinate spaces:
 
-- `Screen` — pixel coordinates on the canvas
-- `World` — simulation coordinate space
+- `Screen` — physical device pixel coordinates (after upscale). Avoid using these in game logic.
+- `Px` — virtual canvas pixel coordinates (480×270 space). Used by renderers.
+- `World` — simulation coordinate space (1 world unit = 1 virtual pixel at zoom 1.0).
 
 Conversion helpers must be named explicitly:
 - `screenToWorld(positionScreen: Vec2): Vec2`
@@ -240,12 +241,14 @@ Maintain the following files:
 - ❌ Creating objects or arrays in per-frame/per-particle loops
 - ❌ Making `sim/` depend on `render/`, `ui/`, or any DOM API
 - ❌ Using ambiguous variable names without proper suffixes
-- ❌ Mixing `Screen` and `World` coordinates without conversion helpers
+- ❌ Mixing `Screen`, `Px`, and `World` coordinates without conversion helpers
 - ❌ Mixing time units (e.g., seconds and milliseconds) without explicit conversion
 - ❌ Using boolean names without `is`, `has`, `can`, `should`, or `needs` prefix
 - ❌ Treating `Id` values as array indices
 - ❌ O(n²) neighbor search for large particle counts — use spatial partitioning
 - ❌ Removing the performance overlay without a replacement
+- ❌ Setting canvas dimensions to `window.innerWidth` / `window.innerHeight` — always render to the 480×270 virtual canvas and upscale
+- ❌ Using `BLOCK_SIZE_PX` or any stale block-size constant — use only `BLOCK_SIZE_SMALL`, `BLOCK_SIZE_MEDIUM`, or `BLOCK_SIZE_LARGE` from `src/levels/roomDef.ts`
 
 ---
 
@@ -282,9 +285,9 @@ Each distinct particle behavior gets its own `ParticleKind` enum value. When add
 
 Entities (player, enemies) are clusters of bound particles. When adding a new entity type:
 
-1. Create a factory file in `src/heroes/` (for the player) or `src/enemies/` (for enemies) — one file per entity type.
+1. Create a factory file in `src/heroes/` (for the player) or `src/sim/clusters/enemies/` (for enemies) — one file per entity type.
 2. The factory returns a `ClusterState` with an initial particle configuration.
-3. Define binding forces between the cluster's particles in `sim/clusters/`.
+3. Define binding forces between the cluster's particles in `src/sim/clusters/`.
 4. Define the entity's ability set in `src/abilities/`.
 5. Keep each cluster file focused on a single entity type — no shared "god" cluster files.
 
@@ -296,8 +299,8 @@ Entities (player, enemies) are clusters of bound particles. When adding a new en
 
 Particle rendering uses a two-canvas layering strategy:
 
-- **`WebGLParticleRenderer`** (`render/particles/webglRenderer.ts`) owns a WebGL canvas inserted *before* the 2D game-canvas in the DOM.  All particles are drawn on this canvas.
-- The **2D game-canvas** sits on top (transparent background when WebGL is active) and renders clusters, HUD, and text.
+- **`WebGLParticleRenderer`** (`render/particles/webglRenderer.ts`) owns a WebGL canvas inserted *after* the 2D game-canvas in the DOM via `insertAdjacentElement('afterend', ...)`, placing it visually on top. All particles are drawn on this canvas.
+- The **2D game-canvas** sits below (transparent background when WebGL is active) and renders clusters, HUD, and text.
 - If WebGL is unavailable, `WebGLParticleRenderer.isAvailable` is `false` and the caller falls back to the Canvas 2D arc renderer — never remove this fallback.
 
 ### Shader Rules
@@ -331,3 +334,100 @@ When adding a new per-particle visual property (e.g., speed glow, charge colour,
 - Never remove `render/particles/renderer.ts` (Canvas 2D arc renderer) — it is the mandatory fallback.
 - If shader compilation fails at runtime, `WebGLParticleRenderer.isAvailable` becomes `false`; errors are logged to the console, and the game falls back silently.
 - The visual quality difference between WebGL and Canvas 2D fallback is acceptable — correctness and playability take priority over beauty on low-end devices.
+
+---
+
+## 13. Coordinate System & World Scale (Authoritative Standard)
+
+This section is the single source of truth for all spatial constants. Any value in code that contradicts this section must be updated to conform.
+
+### Virtual Resolution
+
+The game renders to a **fixed internal virtual canvas of 480 × 270 virtual pixels**. This virtual canvas is then scaled up to the device display using **nearest-neighbor sampling** (`imageSmoothingEnabled = false`) for a crisp, pixelated retro look.
+
+```
+VIRTUAL_WIDTH_PX  = 480
+VIRTUAL_HEIGHT_PX = 270
+```
+
+At 1080p (1920 × 1080 physical pixels), the scale factor is exactly **4×** — each virtual pixel maps to a 4 × 4 physical pixel block.
+
+**All rendering code must target the 480 × 270 virtual canvas.** Never set canvas dimensions to `window.innerWidth` / `window.innerHeight` for the virtual canvas. The device-sized canvas is only used as the final upscale target.
+
+### World Units
+
+**1 world unit = 1 virtual pixel** at the default zoom of 1.0. This means all world-space measurements are directly comparable to virtual pixel counts. The camera zoom is **always 1.0** (no dynamic zoom) unless explicitly overridden for a special effect and documented in `DECISIONS.md`.
+
+### Block Sizes (Authoritative)
+
+All level geometry must be built from these three canonical block sizes, exported from `src/levels/roomDef.ts`. No other block size constants are permitted.
+
+| Constant            | World Units | Virtual Pixels | Physical Pixels @ 4× |
+|---------------------|-------------|----------------|----------------------|
+| `BLOCK_SIZE_SMALL`  | 3           | 3 × 3          | 12 × 12              |
+| `BLOCK_SIZE_MEDIUM` | 6           | 6 × 6          | 24 × 24              |
+| `BLOCK_SIZE_LARGE`  | 12          | 12 × 12        | 48 × 48              |
+
+The **medium block (6 world units)** is the standard room-building unit. At the default zoom and virtual resolution, exactly **45 medium blocks fit vertically** (270 ÷ 6 = 45) and **80 medium blocks fit horizontally** (480 ÷ 6 = 80).
+
+> ⚠️ The legacy constant `BLOCK_SIZE_PX` (previously `11.25` or `30`) is **removed**. Any reference to it in code must be replaced with the appropriate `BLOCK_SIZE_SMALL`, `BLOCK_SIZE_MEDIUM`, or `BLOCK_SIZE_LARGE`.
+
+### Camera & Zoom
+
+The camera zoom is defined as **virtual pixels per world unit**. At the standard zoom of 1.0:
+
+```
+screenXPx = worldX * zoom + offsetXPx   // zoom = 1.0
+screenYPx = worldY * zoom + offsetYPx
+```
+
+The camera viewport is always **480 × 270 virtual pixels**. Pass `VIRTUAL_WIDTH_PX` and `VIRTUAL_HEIGHT_PX` (not `canvas.width` / `canvas.height`) to all camera functions (`updateCamera`, `snapCamera`, `getCameraOffset`, `clampCameraToRoom`).
+
+### Upscale Pipeline
+
+The rendering pipeline has two stages:
+
+1. **Virtual render pass**: All game content (walls, clusters, particles, HUD) is drawn onto the 480 × 270 virtual canvas using world-space coordinates transformed by zoom + camera offset.
+2. **Upscale pass**: The virtual canvas is drawn onto the full device canvas using `ctx.drawImage(virtualCanvas, 0, 0, deviceWidth, deviceHeight)` with `imageSmoothingEnabled = false`.
+
+The WebGL particle canvas must match the same virtual resolution and be upscaled with the same transform, so particles remain pixel-aligned with the rest of the scene.
+
+---
+
+## 14. Collision System Requirements
+
+The collision system must be **unconditionally robust** — no tunneling, no clipping, no ghost forces at block seams, regardless of entity speed or direction.
+
+### Wall Merging (Pre-processing)
+
+At room load time, all wall rectangles that are axis-aligned and share a face (touching or overlapping on one edge) must be **merged into a single AABB** before being written into the world wall arrays. This is performed once in `loadRoomWalls()`.
+
+- Two walls should be merged if they are colinear on one axis and their extents on the other axis are contiguous (gap = 0).
+- Merge iteratively until no further merges are possible.
+- The result is that large contiguous block groups (e.g., a floor made of 20 adjacent medium blocks) are represented as a single wide rectangle — eliminating all internal seam edges.
+
+**Rationale**: Testing each block as a separate AABB causes the player to catch on internal seams between adjacent blocks, producing upward-clipping and sideways-sticking artifacts.
+
+### Axis-Separated Sweep Resolution
+
+`resolveClusterSolidWallCollision` must use a **two-pass axis-separated sweep**:
+
+1. **X pass**: Apply only the horizontal component of velocity to position (`posX += velX * dt`), then resolve all wall overlaps on the X axis only (push out left/right, zero X velocity on contact).
+2. **Y pass**: Apply only the vertical component of velocity to position (`posY += velY * dt`), then resolve all wall overlaps on the Y axis only (push out top/bottom, zero Y velocity on contact, set `isGroundedFlag` on top-surface landing).
+
+Each pass iterates over all merged walls independently. This ensures horizontal and vertical resolution never interfere with each other, which is the root cause of corner-clipping.
+
+> ❌ Never use minimum-penetration (shortest overlap axis) as the primary resolver. It will always produce incorrect results at corners and high velocities. It may only be used as a last-resort fallback with a clear comment explaining why it fired.
+
+### Epsilon Guards
+
+All sweep boundary checks must include a small epsilon (`COLLISION_EPSILON = 0.5` world units) to absorb floating-point error accumulated across ticks:
+
+```typescript
+// Example: was the cluster above the wall top last tick?
+if (prevBottom <= wallTop + COLLISION_EPSILON && velocityY >= 0) { ... }
+```
+
+### Sub-Tick Safety
+
+If `Math.abs(velocityX * dtSec) > cluster.halfWidthWorld` or `Math.abs(velocityY * dtSec) > cluster.halfHeightWorld`, the movement for that axis must be split into sub-steps (each step ≤ half the cluster's dimension) to prevent tunneling through thin walls at high speed. The dash speed (560 world units/s at 60fps = ~9.3 units/tick) must not tunnel through a small block (3 units wide) — sub-stepping is required.
