@@ -1,14 +1,29 @@
 /**
  * Room definition types for the Metroidvania-style interconnected world.
  *
- * All positions and sizes are in **block units** (1 block = 15 world units).
+ * All positions and sizes are in **block units**.
  * The game screen converts them to world units at load time.
+ *
+ * Block size constants (world units):
+ *   BLOCK_SIZE_SMALL  =  3  →  3×3  virtual px  (12×12 physical @ 4×)
+ *   BLOCK_SIZE_MEDIUM =  6  →  6×6  virtual px  (24×24 physical @ 4×)  — standard room unit
+ *   BLOCK_SIZE_LARGE  = 12  → 12×12 virtual px  (48×48 physical @ 4×)
+ *
+ * At zoom 1.0 with the 480×270 virtual canvas:
+ *   45 medium blocks fit vertically  (270 ÷ 6 = 45)
+ *   80 medium blocks fit horizontally (480 ÷ 6 = 80)
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
 
-/** Size of one block in world units (25 % smaller than the original 15). */
-export const BLOCK_SIZE_WORLD = 11.25;
+/** Small block size in world units (3×3 virtual px, 12×12 physical px @ 4×). */
+export const BLOCK_SIZE_SMALL  = 3;
+
+/** Medium block size in world units (6×6 virtual px, 24×24 physical px @ 4×) — standard room unit. */
+export const BLOCK_SIZE_MEDIUM = 6;
+
+/** Large block size in world units (12×12 virtual px, 48×48 physical px @ 4×). */
+export const BLOCK_SIZE_LARGE  = 12;
 
 /** An enemy cluster placed inside a room. */
 export interface RoomEnemyDef {

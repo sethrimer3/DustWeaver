@@ -214,7 +214,7 @@ const ENEMY_ENGAGE_DIST_WORLD = 60.0;
  * Maximum line-of-sight range for rolling enemies (world units).
  * Rolling enemies only chase the player when within this distance,
  * or when recently damaged (rollingEnemyAggressiveTicks > 0).
- * ~20 blocks at BLOCK_SIZE_WORLD = 15.
+ * ~20 blocks at BLOCK_SIZE_MEDIUM = 6.
  */
 const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 300.0;
 

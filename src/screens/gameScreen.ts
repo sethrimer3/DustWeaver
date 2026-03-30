@@ -13,7 +13,7 @@ import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
-import { RoomDef, BLOCK_SIZE_WORLD } from '../levels/roomDef';
+import { RoomDef, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
 import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
@@ -29,8 +29,10 @@ import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 
 const FIXED_DT_MS = 16.666;
-/** Canonical level-grid block size (sprites/objects snap to this). */
-const BLOCK_SIZE_PX = BLOCK_SIZE_WORLD;
+
+/** Virtual canvas resolution — all game content targets this fixed canvas. */
+const VIRTUAL_WIDTH_PX  = 480;
+const VIRTUAL_HEIGHT_PX = 270;
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
 /** Number of background Fluid particles filling the entire arena. */
@@ -49,7 +51,7 @@ const JOYSTICK_INNER_RADIUS_PX = 22;
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 /** Blocks of transition tunnel extending past room boundary. */
-const TUNNEL_DETECT_MARGIN_WORLD = 2 * BLOCK_SIZE_WORLD;
+const TUNNEL_DETECT_MARGIN_WORLD = 2 * BLOCK_SIZE_MEDIUM;
 
 export interface GameScreenCallbacks {
   onReturnToMenu: () => void;
@@ -244,10 +246,10 @@ function loadRoomWalls(world: WorldState, room: RoomDef): void {
   world.wallCount = count;
   for (let wi = 0; wi < count; wi++) {
     const def = room.walls[wi];
-    world.wallXWorld[wi] = def.xBlock * BLOCK_SIZE_PX;
-    world.wallYWorld[wi] = def.yBlock * BLOCK_SIZE_PX;
-    world.wallWWorld[wi] = Math.max(BLOCK_SIZE_PX, def.wBlock * BLOCK_SIZE_PX);
-    world.wallHWorld[wi] = Math.max(BLOCK_SIZE_PX, def.hBlock * BLOCK_SIZE_PX);
+    world.wallXWorld[wi] = def.xBlock * BLOCK_SIZE_MEDIUM;
+    world.wallYWorld[wi] = def.yBlock * BLOCK_SIZE_MEDIUM;
+    world.wallWWorld[wi] = Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM);
+    world.wallHWorld[wi] = Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM);
   }
 }
 
@@ -276,22 +278,22 @@ function drawTunnelDarkness(
   offsetYPx: number,
   zoom: number,
 ): void {
-  const roomWidthWorld = room.widthBlocks * BLOCK_SIZE_PX;
-  const fadeDepthWorld = 4 * BLOCK_SIZE_PX; // 4 blocks of fade
+  const roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
+  const fadeDepthWorld = 4 * BLOCK_SIZE_MEDIUM; // 4 blocks of fade
 
   ctx.save();
 
   for (let ti = 0; ti < room.transitions.length; ti++) {
     const t = room.transitions[ti];
-    const openTopWorld = t.positionBlock * BLOCK_SIZE_PX;
-    const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_PX;
+    const openTopWorld = t.positionBlock * BLOCK_SIZE_MEDIUM;
+    const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 
     if (t.direction === 'left') {
       // Fade from left room edge inward
       const x0Screen = 0 * zoom + offsetXPx;
       const x1Screen = fadeDepthWorld * zoom + offsetXPx;
-      const y0Screen = (openTopWorld - BLOCK_SIZE_PX) * zoom + offsetYPx;
-      const y1Screen = (openBottomWorld + BLOCK_SIZE_PX) * zoom + offsetYPx;
+      const y0Screen = (openTopWorld - BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
+      const y1Screen = (openBottomWorld + BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
 
       const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
       grad.addColorStop(0, 'rgba(0,0,0,1)');
@@ -302,8 +304,8 @@ function drawTunnelDarkness(
       // Fade from right room edge inward
       const x0Screen = (roomWidthWorld - fadeDepthWorld) * zoom + offsetXPx;
       const x1Screen = roomWidthWorld * zoom + offsetXPx;
-      const y0Screen = (openTopWorld - BLOCK_SIZE_PX) * zoom + offsetYPx;
-      const y1Screen = (openBottomWorld + BLOCK_SIZE_PX) * zoom + offsetYPx;
+      const y0Screen = (openTopWorld - BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
+      const y1Screen = (openBottomWorld + BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
 
       const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
@@ -317,13 +319,25 @@ function drawTunnelDarkness(
 }
 
 /**
- * Converts a screen-space aim position (mouse/touch in screen pixels)
+ * Converts a device-space aim position (mouse/touch in device pixels)
  * back to world coordinates given the current camera transform.
+ * First maps device coords to virtual canvas space, then applies camera inverse.
  */
-function screenToWorld(screenXPx: number, screenYPx: number, offsetXPx: number, offsetYPx: number, zoom: number): { xWorld: number; yWorld: number } {
+function screenToWorld(
+  deviceXPx: number,
+  deviceYPx: number,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+  deviceWidthPx: number,
+  deviceHeightPx: number,
+): { xWorld: number; yWorld: number } {
+  // Map device pixels to virtual canvas pixels
+  const virtualXPx = (deviceXPx / deviceWidthPx)  * VIRTUAL_WIDTH_PX;
+  const virtualYPx = (deviceYPx / deviceHeightPx) * VIRTUAL_HEIGHT_PX;
   return {
-    xWorld: (screenXPx - offsetXPx) / zoom,
-    yWorld: (screenYPx - offsetYPx) / zoom,
+    xWorld: (virtualXPx - offsetXPx) / zoom,
+    yWorld: (virtualYPx - offsetYPx) / zoom,
   };
 }
 
@@ -342,35 +356,48 @@ export function startGameScreen(
   let playerWeaveLoadout: PlayerWeaveLoadout = progress?.weaveLoadout
     ?? createDefaultWeaveLoadout();
 
+  // ── Virtual resolution pipeline ──────────────────────────────────────────
+  // Stage 1: All game content is drawn to a fixed 480×270 offscreen canvas.
+  // Stage 2: The offscreen canvas is upscaled to the device canvas each frame.
+  const virtualCanvas = document.createElement('canvas');
+  virtualCanvas.width  = VIRTUAL_WIDTH_PX;
+  virtualCanvas.height = VIRTUAL_HEIGHT_PX;
+  const virtualCtx = virtualCanvas.getContext('2d')!;
+
+  // The device-facing canvas is used only as the upscale target.
+  const deviceCtx = canvas.getContext('2d')!;
+
   function resizeCanvas(): void {
-    canvas.width = window.innerWidth;
+    canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
+    // WebGL particle canvas also renders at virtual resolution
     if (webglRenderer.isAvailable) {
-      webglRenderer.resize(canvas.width, canvas.height);
+      webglRenderer.resize(VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
     }
   }
 
   resizeCanvas();
 
   if (webglRenderer.isAvailable) {
-    canvas.insertAdjacentElement('afterend', webglRenderer.canvas);
+    // Hide the WebGL canvas from display — we'll drawImage it onto the device canvas
+    webglRenderer.canvas.style.display = 'none';
   }
 
-  const ctx = canvas.getContext('2d')!;
+  const ctx = virtualCtx;
   const camera = createCameraState();
 
   // ── Room state ────────────────────────────────────────────────────────────
   let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
   let bgColor = worldBgColor(currentRoom.worldNumber);
-  let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_PX;
-  let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_PX;
+  let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
+  let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
 
   /** Initialises (or re-initialises) world state for the given room. */
   function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void {
     currentRoom = room;
     bgColor = worldBgColor(room.worldNumber);
-    roomWidthWorld = room.widthBlocks * BLOCK_SIZE_PX;
-    roomHeightWorld = room.heightBlocks * BLOCK_SIZE_PX;
+    roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
+    roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
 
     // Apply world-specific block sprites and background
     setActiveBlockSpriteWorld(room.worldNumber);
@@ -391,8 +418,8 @@ export function startGameScreen(
     resetRadiantTetherState();
 
     // Spawn player at the given block position
-    const spawnXWorld = spawnXBlock * BLOCK_SIZE_PX;
-    const spawnYWorld = spawnYBlock * BLOCK_SIZE_PX;
+    const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
+    const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
     const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
     world.clusters.push(playerCluster);
     spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
@@ -405,8 +432,8 @@ export function startGameScreen(
     let nextEntityId = 2;
     for (let ei = 0; ei < room.enemies.length; ei++) {
       const enemyDef = room.enemies[ei];
-      const ex = enemyDef.xBlock * BLOCK_SIZE_PX;
-      const ey = enemyDef.yBlock * BLOCK_SIZE_PX;
+      const ex = enemyDef.xBlock * BLOCK_SIZE_MEDIUM;
+      const ey = enemyDef.yBlock * BLOCK_SIZE_MEDIUM;
       const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
       const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
 
@@ -462,7 +489,7 @@ export function startGameScreen(
     }
 
     // Snap camera to player position
-    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, canvas.width, canvas.height);
+    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
   }
 
   const world = createWorldState(FIXED_DT_MS, 42);
@@ -632,8 +659,8 @@ export function startGameScreen(
         if (tombPos) {
           progress.lastSaveRoomId = currentRoom.id;
           progress.lastSaveSpawnBlock = [
-            Math.round(tombPos.xWorld / BLOCK_SIZE_PX),
-            Math.round(tombPos.yWorld / BLOCK_SIZE_PX),
+            Math.round(tombPos.xWorld / BLOCK_SIZE_MEDIUM),
+            Math.round(tombPos.yWorld / BLOCK_SIZE_MEDIUM),
           ];
         }
       }
@@ -670,8 +697,8 @@ export function startGameScreen(
 
     for (let ti = 0; ti < currentRoom.transitions.length; ti++) {
       const t = currentRoom.transitions[ti];
-      const openTopWorld = t.positionBlock * BLOCK_SIZE_PX;
-      const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_PX;
+      const openTopWorld = t.positionBlock * BLOCK_SIZE_MEDIUM;
+      const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 
       let isInTunnel = false;
       if (t.direction === 'left') {
@@ -707,7 +734,7 @@ export function startGameScreen(
     }
 
     // ── Compute camera offset for screen → world conversion ──────────────
-    const { offsetXPx, offsetYPx } = getCameraOffset(camera, canvas.width, canvas.height);
+    const { offsetXPx, offsetYPx } = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
     const zoom = camera.zoom;
 
     // ── Editor mode gate ──────────────────────────────────────────────────
@@ -717,20 +744,20 @@ export function startGameScreen(
 
       if (isEditorConsuming) {
         // Still render the game world (walls, particles, etc.) as backdrop
-        const camOff = getCameraOffset(camera, canvas.width, canvas.height);
+        const camOff = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
         const snapshot = createSnapshot(world);
 
         if (webglRenderer.isAvailable) {
           webglRenderer.render(snapshot, eox, eoy, zoom);
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.clearRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
         } else {
           ctx.fillStyle = bgColor;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
         }
 
-        renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, eox, eoy);
+        renderWorldBackground(ctx, currentRoom.worldNumber, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX, eox, eoy);
         renderWalls(ctx, snapshot, eox, eoy, zoom, true);
         renderClusters(ctx, snapshot, eox, eoy, zoom, true);
         renderRadiantTether(ctx, snapshot, eox, eoy, zoom, true);
@@ -744,10 +771,17 @@ export function startGameScreen(
         }
 
         // Draw editor overlays on top
-        editorController.render(ctx, eox, eoy, zoom, canvas.width, canvas.height);
+        editorController.render(ctx, eox, eoy, zoom, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
 
         if (isDebugMode) {
           renderHudOverlay(ctx, hudState);
+        }
+
+        // ── Upscale virtual canvas to device canvas ──────────────────────
+        deviceCtx.imageSmoothingEnabled = false;
+        deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
+        if (webglRenderer.isAvailable) {
+          deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
         }
 
         rafHandle = requestAnimationFrame(frame);
@@ -783,7 +817,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveActivatePrimary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -795,7 +829,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveHoldPrimary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -813,7 +847,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -825,7 +859,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveHoldSecondary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -842,7 +876,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.GrappleFire) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
           fireGrapple(world, aim.xWorld, aim.yWorld);
         }
       } else if (cmd.kind === CommandKind.GrappleRelease) {
@@ -905,7 +939,7 @@ export function startGameScreen(
           world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
           world.playerDashDirYWorld = 0.0;
         } else {
-          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom);
+          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
           const dirX = aim.xWorld - playerForDash.positionXWorld;
           const absX = dirX < 0 ? -dirX : dirX;
           if (absX > 1.0) {
@@ -954,14 +988,14 @@ export function startGameScreen(
         playerForCamera.positionYWorld,
         roomWidthWorld,
         roomHeightWorld,
-        canvas.width,
-        canvas.height,
+        VIRTUAL_WIDTH_PX,
+        VIRTUAL_HEIGHT_PX,
         elapsedMs / 1000,
       );
     }
 
     // ── Recompute camera offset after update ─────────────────────────────────
-    const camOff = getCameraOffset(camera, canvas.width, canvas.height);
+    const camOff = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
     const ox = camOff.offsetXPx;
     const oy = camOff.offsetYPx;
 
@@ -1003,17 +1037,17 @@ export function startGameScreen(
 
     const snapshot = createSnapshot(world);
 
-    // ── Render ───────────────────────────────────────────────────────────────
+    // ── Render to virtual canvas (480×270) ────────────────────────────────
     if (webglRenderer.isAvailable) {
       webglRenderer.render(snapshot, ox, oy, zoom);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
     } else {
       ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
     }
 
     // ── World background with parallax (behind everything else) ───────────
-    renderWorldBackground(ctx, currentRoom.worldNumber, canvas.width, canvas.height, ox, oy);
+    renderWorldBackground(ctx, currentRoom.worldNumber, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX, ox, oy);
 
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
@@ -1030,9 +1064,7 @@ export function startGameScreen(
     skillTombRenderer.render(ctx, ox, oy, zoom);
 
     // Particles drawn on top of all game layers (Canvas 2D fallback only —
-    // WebGL draws on its own transparent canvas inserted after the 2D canvas in
-    // the DOM via insertAdjacentElement('afterend'), keeping it above all 2D
-    // layers; the transparent clear ensures game content shows through)
+    // WebGL renders to its own offscreen canvas at virtual resolution)
     if (!webglRenderer.isAvailable) {
       renderParticles(ctx, snapshot, ox, oy, zoom);
     }
@@ -1046,55 +1078,63 @@ export function startGameScreen(
       ctx.font = '13px monospace';
       const roomLabel = currentRoom.name;
       const labelW = ctx.measureText(roomLabel).width;
-      ctx.fillText(roomLabel, (canvas.width - labelW) / 2, 22);
+      ctx.fillText(roomLabel, (VIRTUAL_WIDTH_PX - labelW) / 2, 22);
     }
 
     if (interactInputPulseMs > 0) {
       interactInputPulseMs = Math.max(0, interactInputPulseMs - elapsedMs);
     }
 
-    // ── Touch joystick ───────────────────────────────────────────────────────
+    // ── Upscale virtual canvas to device canvas ────────────────────────────
+    deviceCtx.imageSmoothingEnabled = false;
+    deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
+    // Composite WebGL particle canvas on top (also at virtual resolution)
+    if (webglRenderer.isAvailable) {
+      deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
+    }
+
+    // ── Touch joystick (drawn on device canvas in screen space) ───────────
     if (inputState.isTouchJoystickActiveFlag === 1) {
       const bx = inputState.touchJoystickBaseXPx;
       const by = inputState.touchJoystickBaseYPx;
-      const cx = inputState.touchJoystickCurrentXPx;
-      const cy = inputState.touchJoystickCurrentYPx;
+      const jcx = inputState.touchJoystickCurrentXPx;
+      const jcy = inputState.touchJoystickCurrentYPx;
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(bx, by, JOYSTICK_OUTER_RADIUS_PX, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(0,207,255,0.35)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(0,207,255,0.08)';
-      ctx.fill();
+      deviceCtx.save();
+      deviceCtx.beginPath();
+      deviceCtx.arc(bx, by, JOYSTICK_OUTER_RADIUS_PX, 0, Math.PI * 2);
+      deviceCtx.strokeStyle = 'rgba(0,207,255,0.35)';
+      deviceCtx.lineWidth = 2;
+      deviceCtx.stroke();
+      deviceCtx.fillStyle = 'rgba(0,207,255,0.08)';
+      deviceCtx.fill();
 
-      const dx = cx - bx;
-      const dy = cy - by;
+      const dx = jcx - bx;
+      const dy = jcy - by;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      let thumbXPx = cx;
-      let thumbYPx = cy;
+      let thumbXPx = jcx;
+      let thumbYPx = jcy;
       if (dist > JOYSTICK_OUTER_RADIUS_PX) {
         thumbXPx = bx + (dx / dist) * JOYSTICK_OUTER_RADIUS_PX;
         thumbYPx = by + (dy / dist) * JOYSTICK_OUTER_RADIUS_PX;
       }
 
-      ctx.beginPath();
-      ctx.arc(thumbXPx, thumbYPx, JOYSTICK_INNER_RADIUS_PX, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,207,255,0.45)';
-      ctx.fill();
-      ctx.restore();
+      deviceCtx.beginPath();
+      deviceCtx.arc(thumbXPx, thumbYPx, JOYSTICK_INNER_RADIUS_PX, 0, Math.PI * 2);
+      deviceCtx.fillStyle = 'rgba(0,207,255,0.45)';
+      deviceCtx.fill();
+      deviceCtx.restore();
     }
 
-    // ── Control hints (debug only) ──────────────────────────────────────────
+    // ── Control hints (debug only, drawn on device canvas) ──────────────────
     if (isDebugMode) {
       const controlHintText = IS_TOUCH_DEVICE
         ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
         : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=menu';
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.font = '12px monospace';
-      const hintWidthPx = ctx.measureText(controlHintText).width;
-      ctx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
+      deviceCtx.fillStyle = 'rgba(255,255,255,0.3)';
+      deviceCtx.font = '12px monospace';
+      const hintWidthPx = deviceCtx.measureText(controlHintText).width;
+      deviceCtx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
     }
 
     rafHandle = requestAnimationFrame(frame);

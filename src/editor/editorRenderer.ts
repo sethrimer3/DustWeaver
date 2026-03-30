@@ -4,7 +4,7 @@
  * other editor visual feedback on the 2D canvas.
  */
 
-import { BLOCK_SIZE_WORLD } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { EditorState, EditorRoomData, EditorTransition } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview } from './editorTools';
@@ -25,7 +25,7 @@ const TOMB_SELECTED = 'rgba(212,168,75,0.9)';
 const PREVIEW_COLOR = 'rgba(0,200,255,0.25)';
 const CURSOR_COLOR = 'rgba(255,255,255,0.4)';
 
-const BS = BLOCK_SIZE_WORLD;
+const BS = BLOCK_SIZE_MEDIUM;
 
 /**
  * Renders all editor overlays on the 2D canvas.
