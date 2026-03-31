@@ -570,6 +570,8 @@ export function startGameScreen(
   }
 
   const world = createWorldState(FIXED_DT_MS, 42);
+  // Set the selected character on the world for rendering
+  world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
   const environmentalDust = new EnvironmentalDustLayer();
   const skillTombRenderer = new SkillTombRenderer();
@@ -1049,6 +1051,9 @@ export function startGameScreen(
           world.playerMoveInputDyWorld = 0.0;
         }
       }
+      // Pass sprint and crouch input to the sim
+      world.playerSprintHeldFlag = inputState.isSprintHeldFlag ? 1 : 0;
+      world.playerCrouchHeldFlag = inputState.isKeyS ? 1 : 0;
       tick(world);
       environmentalDust.update(world, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;

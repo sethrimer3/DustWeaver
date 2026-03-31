@@ -1,4 +1,4 @@
-import { WorldSnapshot } from '../snapshot';
+import { WorldSnapshot, ClusterSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_MEDIUM } from '../../levels/roomDef';
@@ -22,8 +22,52 @@ function _isSpriteReady(img: HTMLImageElement): boolean {
   return img.complete && img.naturalWidth > 0;
 }
 
-/** Player character sprite. */
-const _playerSprite: HTMLImageElement = _loadImg('SPRITES/player/player.png');
+// ── Character sprite sets ───────────────────────────────────────────────────
+
+interface CharacterSprites {
+  standing: HTMLImageElement;
+  idle1: HTMLImageElement;
+  idle2: HTMLImageElement;
+  idleBlink: HTMLImageElement;
+  sprinting: HTMLImageElement;
+  crouching: HTMLImageElement;
+  grappling: HTMLImageElement;
+}
+
+function _loadCharacterSprites(characterId: string): CharacterSprites {
+  const base = `SPRITES/PLAYERS/${characterId}/${characterId}`;
+  return {
+    standing:  _loadImg(`${base}_standing.png`),
+    idle1:     _loadImg(`${base}_idle1.png`),
+    idle2:     _loadImg(`${base}_idle2.png`),
+    idleBlink: _loadImg(`${base}_idleBlink.png`),
+    sprinting: _loadImg(`${base}_sprinting.png`),
+    crouching: _loadImg(`${base}_crouching.png`),
+    grappling: _loadImg(`${base}_grappling.png`),
+  };
+}
+
+/** Pre-loaded sprite sets for both characters. */
+const _characterSprites: Record<string, CharacterSprites> = {
+  knight:   _loadCharacterSprites('knight'),
+  demonFox: _loadCharacterSprites('demonFox'),
+};
+
+/**
+ * Returns the appropriate sprite for the current player state.
+ */
+function _getPlayerSprite(sprites: CharacterSprites, cluster: ClusterSnapshot, isGrappling: boolean): HTMLImageElement {
+  if (isGrappling) return sprites.grappling;
+  if (cluster.isCrouchingFlag === 1) return sprites.crouching;
+  if (cluster.isSprintingFlag === 1) return sprites.sprinting;
+  // Idle animation states: 0=standing, 1=idle1, 2=idle2, 3=idleBlink
+  switch (cluster.playerIdleAnimState) {
+    case 1: return sprites.idle1;
+    case 2: return sprites.idle2;
+    case 3: return sprites.idleBlink;
+    default: return sprites.standing;
+  }
+}
 
 /** Rolling enemy sprites indexed by spriteIndex (1–6). Index 0 is unused. */
 const _enemySprites: HTMLImageElement[] = [
@@ -213,13 +257,16 @@ export function renderClusters(
         healthRatio,
       );
     } else if (isPlayer) {
-      // ── Player: sprite (fitted to box, slowly rotating) ─────────────────
-      const rotAngle = cluster.playerRotationAngleRad;
-      const sprite   = _playerSprite;
+      // ── Player: character sprite (no rotation; flip when facing left) ────
+      const charSprites = _characterSprites[snapshot.characterId] ?? _characterSprites['knight'];
+      const isGrappling = snapshot.isGrappleActiveFlag === 1;
+      const sprite = _getPlayerSprite(charSprites, cluster, isGrappling);
       if (_isSpriteReady(sprite)) {
         ctx.save();
         ctx.translate(screenX, screenY);
-        ctx.rotate(rotAngle);
+        if (cluster.isFacingLeftFlag === 1) {
+          ctx.scale(-1, 1);
+        }
         ctx.drawImage(sprite, -boxHalfW, -boxHalfH, boxW, boxH);
         ctx.restore();
       } else {
@@ -397,8 +444,15 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
   }
   if (playerCluster === undefined && snapshot.grappleAttachFxTicks <= 0) return;
 
-  const px = playerCluster !== undefined ? playerCluster.positionXWorld * scalePx + offsetXPx : 0;
-  const py = playerCluster !== undefined ? playerCluster.positionYWorld * scalePx + offsetYPx : 0;
+  // Grapple visually originates from right-middle (or left-middle when facing left) of the sprite
+  let px = 0;
+  let py = 0;
+  if (playerCluster !== undefined) {
+    const halfW = playerCluster.halfWidthWorld * scalePx;
+    const offsetDir = playerCluster.isFacingLeftFlag === 1 ? -1 : 1;
+    px = playerCluster.positionXWorld * scalePx + offsetXPx + offsetDir * halfW;
+    py = playerCluster.positionYWorld * scalePx + offsetYPx;
+  }
   const ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
   const ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
 
