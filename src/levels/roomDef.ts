@@ -5,25 +5,45 @@
  * The game screen converts them to world units at load time.
  *
  * Block size constants (world units):
- *   BLOCK_SIZE_SMALL  =  3  →  3×3  virtual px  (12×12 physical @ 4×)
- *   BLOCK_SIZE_MEDIUM =  6  →  6×6  virtual px  (24×24 physical @ 4×)  — standard room unit
- *   BLOCK_SIZE_LARGE  = 12  → 12×12 virtual px  (48×48 physical @ 4×)
+ *   BLOCK_SIZE_SMALL  =  8  →  8×8  virtual px  (32×32 physical @ 4×)
+ *   BLOCK_SIZE_MEDIUM = 12  → 12×12 virtual px  (48×48 physical @ 4×)  — standard room unit
+ *   BLOCK_SIZE_LARGE  = 24  → 24×24 virtual px  (96×96 physical @ 4×)
  *
  * At zoom 1.0 with the 480×270 virtual canvas:
- *   45 medium blocks fit vertically  (270 ÷ 6 = 45)
- *   80 medium blocks fit horizontally (480 ÷ 6 = 80)
+ *   22.5 medium blocks fit vertically  (270 ÷ 12 = 22.5)
+ *   40   medium blocks fit horizontally (480 ÷ 12 = 40)
+ *
+ * Player size constants:
+ *   PLAYER_WIDTH_WORLD       =  8  (full width)
+ *   PLAYER_HEIGHT_WORLD      = 10  (full height)
+ *   PLAYER_HALF_WIDTH_WORLD  =  4
+ *   PLAYER_HALF_HEIGHT_WORLD =  5
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
 
-/** Small block size in world units (3×3 virtual px, 12×12 physical px @ 4×). */
-export const BLOCK_SIZE_SMALL  = 3;
+/** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
+export const BLOCK_SIZE_SMALL  = 8;
 
-/** Medium block size in world units (6×6 virtual px, 24×24 physical px @ 4×) — standard room unit. */
-export const BLOCK_SIZE_MEDIUM = 6;
+/** Medium block size in world units (12×12 virtual px, 48×48 physical px @ 4×) — standard room unit. */
+export const BLOCK_SIZE_MEDIUM = 12;
 
-/** Large block size in world units (12×12 virtual px, 48×48 physical px @ 4×). */
-export const BLOCK_SIZE_LARGE  = 12;
+/** Large block size in world units (24×24 virtual px, 96×96 physical px @ 4×). */
+export const BLOCK_SIZE_LARGE  = 24;
+
+// ── Player size constants ─────────────────────────────────────────────────────
+
+/** Player full width in world units. */
+export const PLAYER_WIDTH_WORLD = 8;
+
+/** Player full height in world units. */
+export const PLAYER_HEIGHT_WORLD = 10;
+
+/** Player half-width in world units. */
+export const PLAYER_HALF_WIDTH_WORLD = 4;
+
+/** Player half-height in world units. */
+export const PLAYER_HALF_HEIGHT_WORLD = 5;
 
 /** An enemy cluster placed inside a room. */
 export interface RoomEnemyDef {
