@@ -18,6 +18,11 @@ import {
   formatLastPlayed,
   SaveSlotData,
 } from '../progression/saveSlots';
+import {
+  getRenderSizeOptions,
+  getSelectedRenderSize,
+  setSelectedRenderSize,
+} from './renderSettings';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -143,6 +148,13 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   `;
   container.appendChild(saveSlotsEl);
 
+  const settingsEl = document.createElement('div');
+  settingsEl.style.cssText = `
+    display: none; flex-direction: column; align-items: center;
+    gap: 0.8rem; opacity: 0; transition: opacity 0.5s ease-in;
+  `;
+  container.appendChild(settingsEl);
+
   // ── Build menu buttons ───────────────────────────────────────────────────
   function createMenuButton(label: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
@@ -169,7 +181,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   }
 
   const btnPlay = createMenuButton('Play', showSaveSlots);
-  const btnSettings = createMenuButton('Settings', () => { /* placeholder */ });
+  const btnSettings = createMenuButton('Settings', showSettings);
   const btnExit = createMenuButton('Exit', () => {
     window.close();
   });
@@ -231,6 +243,29 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     saveSlotsEl.style.opacity = '0';
     setTimeout(() => {
       saveSlotsEl.style.display = 'none';
+      menuEl.style.display = 'flex';
+      requestAnimationFrame(() => {
+        menuEl.style.opacity = '1';
+      });
+    }, 300);
+  }
+
+  function showSettings(): void {
+    menuEl.style.opacity = '0';
+    setTimeout(() => {
+      menuEl.style.display = 'none';
+      buildSettingsUI();
+      settingsEl.style.display = 'flex';
+      requestAnimationFrame(() => {
+        settingsEl.style.opacity = '1';
+      });
+    }, 300);
+  }
+
+  function showMenuFromSettings(): void {
+    settingsEl.style.opacity = '0';
+    setTimeout(() => {
+      settingsEl.style.display = 'none';
       menuEl.style.display = 'flex';
       requestAnimationFrame(() => {
         menuEl.style.opacity = '1';
@@ -326,6 +361,86 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     });
     backBtn.addEventListener('click', showMenuFromSlots);
     saveSlotsEl.appendChild(backBtn);
+  }
+
+  function buildSettingsUI(): void {
+    settingsEl.innerHTML = '';
+    const selectedOption = getSelectedRenderSize();
+
+    const heading = document.createElement('h2');
+    heading.textContent = 'Render Size';
+    heading.style.cssText = `
+      color: #d4a84b; font-size: 1.8rem; margin-bottom: 0.2rem;
+      text-shadow: 0 0 20px rgba(212,168,75,0.3);
+      letter-spacing: 0.06em; font-weight: 400;
+    `;
+    settingsEl.appendChild(heading);
+
+    const helper = document.createElement('p');
+    helper.textContent = 'Uses your detected screen size by default (falls back to 1080p).';
+    helper.style.cssText = `
+      color: rgba(212,168,75,0.6); font-size: 0.85rem; margin-bottom: 0.7rem;
+      letter-spacing: 0.03em;
+    `;
+    settingsEl.appendChild(helper);
+
+    const options = getRenderSizeOptions();
+    for (let i = 0; i < options.length; i++) {
+      const option = options[i];
+      const optionBtn = document.createElement('button');
+      optionBtn.style.cssText = `
+        background: rgba(0,0,0,0.5); border: 1px solid rgba(212,168,75,0.3);
+        color: #d4a84b; padding: 0.9rem 1.4rem;
+        font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer; transition: all 0.25s;
+        border-radius: 3px; min-width: 340px; text-align: center; letter-spacing: 0.05em;
+      `;
+
+      const isSelected = option.id === selectedOption.id;
+      optionBtn.textContent = isSelected ? `✓ ${option.label}` : option.label;
+      if (isSelected) {
+        optionBtn.style.borderColor = 'rgba(212,168,75,0.85)';
+        optionBtn.style.background = 'rgba(212,168,75,0.15)';
+      }
+
+      optionBtn.addEventListener('mouseenter', () => {
+        optionBtn.style.background = 'rgba(212,168,75,0.1)';
+        optionBtn.style.borderColor = 'rgba(212,168,75,0.7)';
+      });
+      optionBtn.addEventListener('mouseleave', () => {
+        if (option.id === getSelectedRenderSize().id) {
+          optionBtn.style.background = 'rgba(212,168,75,0.15)';
+          optionBtn.style.borderColor = 'rgba(212,168,75,0.85)';
+        } else {
+          optionBtn.style.background = 'rgba(0,0,0,0.5)';
+          optionBtn.style.borderColor = 'rgba(212,168,75,0.3)';
+        }
+      });
+      optionBtn.addEventListener('click', () => {
+        setSelectedRenderSize(option.id);
+        buildSettingsUI();
+      });
+
+      settingsEl.appendChild(optionBtn);
+    }
+
+    const backBtn = document.createElement('button');
+    backBtn.textContent = 'Back';
+    backBtn.style.cssText = `
+      background: transparent; border: 1px solid rgba(212,168,75,0.25);
+      color: rgba(212,168,75,0.6); padding: 0.6rem 2.5rem; font-size: 0.9rem;
+      font-family: 'Cinzel', serif; cursor: pointer; transition: all 0.25s;
+      border-radius: 2px; letter-spacing: 0.1em; margin-top: 0.7rem;
+    `;
+    backBtn.addEventListener('mouseenter', () => {
+      backBtn.style.borderColor = 'rgba(212,168,75,0.6)';
+      backBtn.style.color = '#d4a84b';
+    });
+    backBtn.addEventListener('mouseleave', () => {
+      backBtn.style.borderColor = 'rgba(212,168,75,0.25)';
+      backBtn.style.color = 'rgba(212,168,75,0.6)';
+    });
+    backBtn.addEventListener('click', showMenuFromSettings);
+    settingsEl.appendChild(backBtn);
   }
 
   // ── Animation loop ───────────────────────────────────────────────────────
