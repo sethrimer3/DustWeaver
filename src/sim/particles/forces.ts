@@ -815,11 +815,25 @@ export function applyInterParticleForces(world: WorldState): void {
   }
   // A particle that enters an enemy cluster's core radius deals attackPower
   // damage to that cluster and is consumed.
+  // Special case: Enemy-to-player damage is random 1-4 minus armor (dust containers).
   const CORE_RADIUS_WORLD = 14.0;
+  const ENEMY_MIN_DAMAGE = 1;
+  const ENEMY_MAX_DAMAGE = 4;
+  const DUST_PARTICLES_PER_ARMOR = 4;
+
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
     const ownerI = ownerEntityId[i];
     if (ownerI === -1) continue; // unowned (Fluid)
+
+    // Find attacker cluster to determine if it's player or enemy
+    let attackerIsPlayer = false;
+    for (let ai = 0; ai < clusters.length; ai++) {
+      if (clusters[ai].entityId === ownerI) {
+        attackerIsPlayer = clusters[ai].isPlayerFlag === 1;
+        break;
+      }
+    }
 
     for (let ci = 0; ci < clusters.length; ci++) {
       const cluster = clusters[ci];
@@ -831,7 +845,29 @@ export function applyInterParticleForces(world: WorldState): void {
       if (dxc * dxc + dyc * dyc < CORE_RADIUS_WORLD * CORE_RADIUS_WORLD) {
         const profile = getElementProfile(kindBuffer[i]);
         if (cluster.healthPoints > 0) {
-          cluster.healthPoints -= profile.attackPower;
+          let damage: number;
+
+          if (!attackerIsPlayer && cluster.isPlayerFlag === 1) {
+            // Enemy-to-player damage: random 1-4 minus armor
+            const rngValue = nextFloat(world.rng);
+            const baseDamage = ENEMY_MIN_DAMAGE + Math.floor(rngValue * (ENEMY_MAX_DAMAGE - ENEMY_MIN_DAMAGE + 1));
+
+            // Calculate player's armor from dust particles
+            let playerDustCount = 0;
+            for (let pi = 0; pi < particleCount; pi++) {
+              if (ownerEntityId[pi] === cluster.entityId && isAliveFlag[pi] === 1) {
+                playerDustCount++;
+              }
+            }
+            const armor = Math.floor(playerDustCount / DUST_PARTICLES_PER_ARMOR);
+
+            damage = Math.max(0, baseDamage - armor);
+          } else {
+            // Player-to-enemy or enemy-to-enemy: use standard attackPower
+            damage = profile.attackPower;
+          }
+
+          cluster.healthPoints -= damage;
           if (cluster.healthPoints <= 0) {
             cluster.healthPoints = 0;
             cluster.isAliveFlag = 0;
