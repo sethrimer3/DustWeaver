@@ -30,9 +30,10 @@ import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 
 const FIXED_DT_MS = 16.666;
 
-/** Virtual canvas resolution — all game content targets this fixed canvas. */
-const VIRTUAL_WIDTH_PX  = 480;
-const VIRTUAL_HEIGHT_PX = 270;
+/** Baseline virtual width at 16:9; height is authoritative for fixed zoom. */
+const BASE_VIRTUAL_WIDTH_PX = 480;
+/** Fixed virtual height so world-to-pixel zoom stays constant on every display. */
+const FIXED_VIRTUAL_HEIGHT_PX = 270;
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
 /** Number of background Fluid particles filling the entire arena. */
@@ -408,10 +409,12 @@ function screenToWorld(
   zoom: number,
   deviceWidthPx: number,
   deviceHeightPx: number,
+  virtualWidthPx: number,
+  virtualHeightPx: number,
 ): { xWorld: number; yWorld: number } {
   // Map device pixels to virtual canvas pixels
-  const virtualXPx = (deviceXPx / deviceWidthPx)  * VIRTUAL_WIDTH_PX;
-  const virtualYPx = (deviceYPx / deviceHeightPx) * VIRTUAL_HEIGHT_PX;
+  const virtualXPx = (deviceXPx / deviceWidthPx)  * virtualWidthPx;
+  const virtualYPx = (deviceYPx / deviceHeightPx) * virtualHeightPx;
   return {
     xWorld: (virtualXPx - offsetXPx) / zoom,
     yWorld: (virtualYPx - offsetYPx) / zoom,
@@ -434,11 +437,13 @@ export function startGameScreen(
     ?? createDefaultWeaveLoadout();
 
   // ── Virtual resolution pipeline ──────────────────────────────────────────
-  // Stage 1: All game content is drawn to a fixed 480×270 offscreen canvas.
+  // Stage 1: All game content is drawn to a fixed-height offscreen canvas.
   // Stage 2: The offscreen canvas is upscaled to the device canvas each frame.
   const virtualCanvas = document.createElement('canvas');
-  virtualCanvas.width  = VIRTUAL_WIDTH_PX;
-  virtualCanvas.height = VIRTUAL_HEIGHT_PX;
+  let virtualWidthPx = BASE_VIRTUAL_WIDTH_PX;
+  const virtualHeightPx = FIXED_VIRTUAL_HEIGHT_PX;
+  virtualCanvas.width  = virtualWidthPx;
+  virtualCanvas.height = virtualHeightPx;
   const virtualCtx = virtualCanvas.getContext('2d')!;
 
   // The device-facing canvas is used only as the upscale target.
@@ -448,9 +453,12 @@ export function startGameScreen(
     const deviceScale = window.devicePixelRatio || 1;
     canvas.width  = Math.round(window.innerWidth  * deviceScale);
     canvas.height = Math.round(window.innerHeight * deviceScale);
+    virtualWidthPx = Math.max(1, Math.round((canvas.width / canvas.height) * virtualHeightPx));
+    virtualCanvas.width = virtualWidthPx;
+    virtualCanvas.height = virtualHeightPx;
     // WebGL particle canvas also renders at virtual resolution
     if (webglRenderer.isAvailable) {
-      webglRenderer.resize(VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+      webglRenderer.resize(virtualWidthPx, virtualHeightPx);
     }
   }
 
@@ -567,7 +575,7 @@ export function startGameScreen(
     }
 
     // Snap camera to player position
-    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
   }
 
   const world = createWorldState(FIXED_DT_MS, 42);
@@ -814,7 +822,7 @@ export function startGameScreen(
     }
 
     // ── Compute camera offset for screen → world conversion ──────────────
-    const { offsetXPx, offsetYPx } = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+    const { offsetXPx, offsetYPx } = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
     const zoom = camera.zoom;
 
     // ── Editor mode gate ──────────────────────────────────────────────────
@@ -824,24 +832,24 @@ export function startGameScreen(
 
       if (isEditorConsuming) {
         // Still render the game world (walls, particles, etc.) as backdrop
-        const camOff = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+        const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
         const snapshot = createSnapshot(world);
 
         if (webglRenderer.isAvailable) {
           webglRenderer.render(snapshot, eox, eoy, zoom);
-          ctx.clearRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+          ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
         } else {
           ctx.fillStyle = bgColor;
-          ctx.fillRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+          ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
         }
 
         renderWorldBackground(
           ctx,
           currentRoom.worldNumber,
-          VIRTUAL_WIDTH_PX,
-          VIRTUAL_HEIGHT_PX,
+          virtualWidthPx,
+          virtualHeightPx,
           eox,
           eoy,
           currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
@@ -861,7 +869,7 @@ export function startGameScreen(
         }
 
         // Draw editor overlays on top
-        editorController.render(ctx, eox, eoy, zoom, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+        editorController.render(ctx, eox, eoy, zoom, virtualWidthPx, virtualHeightPx);
 
         if (isDebugMode) {
           renderHudOverlay(ctx, hudState);
@@ -907,7 +915,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveActivatePrimary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -919,7 +927,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveHoldPrimary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -937,7 +945,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -949,7 +957,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveHoldSecondary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -966,7 +974,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.GrappleFire) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           fireGrapple(world, aim.xWorld, aim.yWorld);
         }
       } else if (cmd.kind === CommandKind.GrappleRelease) {
@@ -1029,7 +1037,7 @@ export function startGameScreen(
           world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
           world.playerDashDirYWorld = 0.0;
         } else {
-          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           const dirX = aim.xWorld - playerForDash.positionXWorld;
           const absX = dirX < 0 ? -dirX : dirX;
           if (absX > 1.0) {
@@ -1081,14 +1089,14 @@ export function startGameScreen(
         playerForCamera.positionYWorld,
         roomWidthWorld,
         roomHeightWorld,
-        VIRTUAL_WIDTH_PX,
-        VIRTUAL_HEIGHT_PX,
+        virtualWidthPx,
+        virtualHeightPx,
         elapsedMs / 1000,
       );
     }
 
     // ── Recompute camera offset after update ─────────────────────────────────
-    const camOff = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+    const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
     const ox = camOff.offsetXPx;
     const oy = camOff.offsetYPx;
 
@@ -1130,21 +1138,21 @@ export function startGameScreen(
 
     const snapshot = createSnapshot(world);
 
-    // ── Render to virtual canvas (480×270) ────────────────────────────────
+    // ── Render to virtual canvas (dynamic width × fixed height) ───────────
     if (webglRenderer.isAvailable) {
       webglRenderer.render(snapshot, ox, oy, zoom);
-      ctx.clearRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+      ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
     } else {
       ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+      ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
     }
 
     // ── World background with parallax (behind everything else) ───────────
     renderWorldBackground(
       ctx,
       currentRoom.worldNumber,
-      VIRTUAL_WIDTH_PX,
-      VIRTUAL_HEIGHT_PX,
+      virtualWidthPx,
+      virtualHeightPx,
       ox,
       oy,
       currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
@@ -1181,7 +1189,7 @@ export function startGameScreen(
       ctx.font = '13px monospace';
       const roomLabel = currentRoom.name;
       const labelW = ctx.measureText(roomLabel).width;
-      ctx.fillText(roomLabel, (VIRTUAL_WIDTH_PX - labelW) / 2, 22);
+      ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
     }
 
     if (interactInputPulseMs > 0) {
