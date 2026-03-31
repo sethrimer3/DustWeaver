@@ -21,7 +21,7 @@ export const MAX_DUST_BOOST_JARS = 16;
 export const MAX_FIREFLY_JARS = 16;
 /** Maximum number of active fireflies at once. */
 export const MAX_FIREFLIES = 32;
-/** Number of fireflies released per jar. */
+/** Number of fireflies spawned from each broken firefly jar. */
 export const FIREFLIES_PER_JAR = 4;
 
 export interface WorldState extends ParticleBuffers {

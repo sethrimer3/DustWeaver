@@ -242,7 +242,7 @@ export function renderHazards(
     // Firefly glow inside jar
     const glowPulse = 0.4 + Math.sin(tick * 0.08 + i * 3) * 0.2;
     ctx.fillStyle = `rgba(255,215,0,${glowPulse})`;
-    ctx.fillRect(jx - 1, jy - 1, 2 * zoom, 2 * zoom);
+    ctx.fillRect(jx - 1 * zoom, jy - 1 * zoom, 2 * zoom, 2 * zoom);
   }
 
   // ── Fireflies (2×2 golden pixels) ─────────────────────────────────────
