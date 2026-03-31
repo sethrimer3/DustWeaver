@@ -27,6 +27,7 @@ import { createEditorController, EditorController } from '../editor/editorContro
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout, WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from '../sim/weaves/playerLoadout';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
+import { getSelectedRenderSize } from '../ui/renderSettings';
 
 const FIXED_DT_MS = 16.666;
 
@@ -463,8 +464,9 @@ export function startGameScreen(
 
   function resizeCanvas(): void {
     const deviceScale = window.devicePixelRatio || 1;
-    canvas.width  = Math.round(window.innerWidth  * deviceScale);
-    canvas.height = Math.round(window.innerHeight * deviceScale);
+    const selectedRenderSize = getSelectedRenderSize();
+    canvas.width = Math.round(selectedRenderSize.widthPx * deviceScale);
+    canvas.height = Math.round(selectedRenderSize.heightPx * deviceScale);
     virtualWidthPx = Math.max(1, Math.round((canvas.width / canvas.height) * virtualHeightPx));
     virtualCanvas.width = virtualWidthPx;
     virtualCanvas.height = virtualHeightPx;
