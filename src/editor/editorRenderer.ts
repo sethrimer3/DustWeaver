@@ -210,7 +210,7 @@ function drawTransitionZone(
 export function renderEditorIndicator(ctx: CanvasRenderingContext2D, canvasWidth: number): void {
   ctx.save();
   ctx.fillStyle = 'rgba(0,200,100,0.85)';
-  ctx.font = 'bold 14px monospace';
+  ctx.font = 'bold 8px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText('WORLD EDITOR ON', canvasWidth / 2, 6);
