@@ -528,14 +528,22 @@ const GRAPPLE_MISS_GRAVITY_WORLD_PER_SEC2 = 500.0;
 /**
  * Maximum spring force between connected chain links (world units).
  * Keeps the chain from stretching too far apart.
+ * LINK_STRETCH_MULTIPLIER allows 30% stretch beyond evenly-spaced distance.
  */
-const GRAPPLE_MISS_LINK_MAX_DIST_WORLD = GRAPPLE_MAX_LENGTH_WORLD / GRAPPLE_SEGMENT_COUNT * 1.3;
+const GRAPPLE_MISS_LINK_STRETCH_MULTIPLIER = 1.3;
+const GRAPPLE_MISS_LINK_MAX_DIST_WORLD = GRAPPLE_MAX_LENGTH_WORLD / GRAPPLE_SEGMENT_COUNT * GRAPPLE_MISS_LINK_STRETCH_MULTIPLIER;
 
 /**
  * Drag applied to limp chain link velocities per second.
  * Provides "heavy inertia" feel.
  */
 const GRAPPLE_MISS_DRAG_PER_SEC = 0.8;
+
+/**
+ * Relaxation factor for the iterative constraint solver.
+ * 0.5 = split correction equally between both connected links.
+ */
+const GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR = 0.5;
 
 /** Duration in ticks after which the miss animation auto-cancels. */
 const GRAPPLE_MISS_MAX_TICKS = 90;
@@ -705,13 +713,13 @@ export function updateGrappleMissChain(world: WorldState): void {
 
         if (missLinkStuckFlag[i] === 0) {
           // Pull this link toward anchor
-          missLinkX[i] -= nx * excess * 0.5;
-          missLinkY[i] -= ny * excess * 0.5;
+          missLinkX[i] -= nx * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+          missLinkY[i] -= ny * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
         }
         if (i > 0 && missLinkStuckFlag[i - 1] === 0) {
           // Push previous link toward this one
-          missLinkX[i - 1] += nx * excess * 0.5;
-          missLinkY[i - 1] += ny * excess * 0.5;
+          missLinkX[i - 1] += nx * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+          missLinkY[i - 1] += ny * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
         }
       }
     }

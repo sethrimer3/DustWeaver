@@ -274,6 +274,9 @@ const SKID_FRICTION_MULTIPLIER = 1.5;
 /** Jump speed multiplier when jumping out of a skid (50% higher jump). */
 const SKID_JUMP_MULTIPLIER = 1.5;
 
+/** Velocity threshold (px/s) below which a player is considered "not moving" for skid detection. */
+const SKID_VELOCITY_THRESHOLD_WORLD = 5.0;
+
 // ── Player crouch ───────────────────────────────────────────────────────────
 
 /** Half-height of the player hitbox when crouching (world units). */
@@ -833,8 +836,8 @@ export function applyClusterMovement(world: WorldState): void {
       // to the facing direction (changing direction while sprinting).
       {
         const isFacingLeft = cluster.isFacingLeftFlag === 1;
-        const isMovingRight = cluster.velocityXWorld > 5.0;
-        const isMovingLeft = cluster.velocityXWorld < -5.0;
+        const isMovingRight = cluster.velocityXWorld > SKID_VELOCITY_THRESHOLD_WORLD;
+        const isMovingLeft = cluster.velocityXWorld < -SKID_VELOCITY_THRESHOLD_WORLD;
         const isTravelingOppositeToFacing =
           (isFacingLeft && isMovingRight) || (!isFacingLeft && isMovingLeft);
         if (world.playerSprintHeldFlag === 1 && isGrounded && isTravelingOppositeToFacing) {

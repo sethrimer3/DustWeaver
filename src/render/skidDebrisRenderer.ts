@@ -8,6 +8,12 @@ import { WorldState } from '../sim/world';
 const MAX_DEBRIS = 60;
 const DEBRIS_LIFETIME_MS = 400;
 const SPAWN_RATE_PER_TICK = 3;
+const DEBRIS_SPAWN_SPREAD_X_WORLD = 2;
+const DEBRIS_SPAWN_SPREAD_Y_WORLD = 1;
+const DEBRIS_VX_VARIANCE_WORLD = 30;
+const DEBRIS_VY_MIN_WORLD = 15;
+const DEBRIS_VY_RANGE_WORLD = 40;
+const DEBRIS_GRAVITY_WORLD_PER_SEC2 = 200;
 
 /** Debris particle color palette — earthy browns. */
 const COLORS = ['#8b7355', '#a08060', '#6b5330', '#c4a57b'];
@@ -39,11 +45,11 @@ export class SkidDebrisRenderer {
           this.recycleOldest();
         }
         const i = this.count;
-        this.xWorld[i] = world.skidDebrisXWorld + (this.nextRandom() - 0.5) * 2;
-        this.yWorld[i] = world.skidDebrisYWorld - this.nextRandom() * 1;
+        this.xWorld[i] = world.skidDebrisXWorld + (this.nextRandom() - 0.5) * DEBRIS_SPAWN_SPREAD_X_WORLD;
+        this.yWorld[i] = world.skidDebrisYWorld - this.nextRandom() * DEBRIS_SPAWN_SPREAD_Y_WORLD;
         // Debris flies upward and slightly outward
-        this.vxWorld[i] = (this.nextRandom() - 0.5) * 30;
-        this.vyWorld[i] = -(this.nextRandom() * 40 + 15);
+        this.vxWorld[i] = (this.nextRandom() - 0.5) * DEBRIS_VX_VARIANCE_WORLD;
+        this.vyWorld[i] = -(this.nextRandom() * DEBRIS_VY_RANGE_WORLD + DEBRIS_VY_MIN_WORLD);
         this.ageMs[i] = 0;
         this.colorIdx[i] = (this.nextRandom() * COLORS.length) | 0;
         this.count++;
@@ -65,7 +71,7 @@ export class SkidDebrisRenderer {
         continue;
       }
       // Apply gravity and integrate
-      this.vyWorld[i] += 200 * dt;
+      this.vyWorld[i] += DEBRIS_GRAVITY_WORLD_PER_SEC2 * dt;
       this.xWorld[i] += this.vxWorld[i] * dt;
       this.yWorld[i] += this.vyWorld[i] * dt;
     }

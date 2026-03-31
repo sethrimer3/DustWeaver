@@ -18,6 +18,11 @@ interface FieldDef {
   defaultValue: number;
 }
 
+/**
+ * Default values must be kept in sync with the constants defined in
+ * src/sim/clusters/movement.ts. These are duplicated here because the
+ * constants are module-private and cannot be imported.
+ */
 const FIELDS: readonly FieldDef[] = [
   { key: 'walkSpeedWorld',     label: 'Walk Speed',      defaultValue: 105.0 },
   { key: 'jumpSpeedWorld',     label: 'Jump Speed',      defaultValue: 300.0 },
