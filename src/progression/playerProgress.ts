@@ -54,6 +54,10 @@ export interface PlayerProgress {
   lastSaveSpawnBlock: [number, number] | null;
   /** Selected character identifier ('knight', 'demonFox', or 'princess'). */
   characterId: string;
+  /** Dust kinds the player has learned and can equip (unless dev mode is on). */
+  unlockedDustKinds: ParticleKind[];
+  /** Developer override: allow equipping all dust kinds in loadout UI. */
+  isDevModeDustUnlocked: boolean;
 }
 
 // ---- Factory / helpers ---------------------------------------------------
@@ -69,7 +73,7 @@ export function createDefaultProgress(): PlayerProgress {
   return {
     level,
     dustSlots: getDustSlots(level),
-    loadout: [ParticleKind.Fire, ParticleKind.Ice],
+    loadout: [],
     weaveLoadout,
     world1UnlockedCount: 1,
     world2UnlockedCount: 0,
@@ -77,6 +81,8 @@ export function createDefaultProgress(): PlayerProgress {
     lastSaveRoomId: null,
     lastSaveSpawnBlock: null,
     characterId: 'knight',
+    unlockedDustKinds: [],
+    isDevModeDustUnlocked: false,
   };
 }
 

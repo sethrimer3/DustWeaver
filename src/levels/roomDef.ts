@@ -150,4 +150,6 @@ export interface RoomDef {
   transitions: readonly RoomTransitionDef[];
   /** Skill tomb positions (block units). Empty array if none. */
   skillTombs: readonly { xBlock: number; yBlock: number }[];
+  /** Collectible skill book positions (block units). */
+  skillBooks?: readonly { xBlock: number; yBlock: number }[];
 }

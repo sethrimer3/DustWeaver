@@ -118,9 +118,9 @@ const PLAYER_SPRITE_HEIGHT_WORLD = 24;
 
 const _grappleDustSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust.png');
 const _grappleDustEndSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust_end.png');
-const GRAPPLE_DUST_SEGMENT_PX = 6;
-const GRAPPLE_DUST_SIZE_PX = 6;
-const GRAPPLE_DUST_END_SIZE_PX = 10;
+const GRAPPLE_DUST_SEGMENT_PX = 4;
+const GRAPPLE_DUST_SIZE_PX = 4;
+const GRAPPLE_DUST_END_SIZE_PX = 4;
 
 /** Returns the primary display colour for a flying eye by element kind. */
 function getFlyingEyeColor(elementKind: number): string {

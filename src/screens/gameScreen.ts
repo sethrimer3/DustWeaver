@@ -62,6 +62,10 @@ const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0
 
 /** Blocks of transition tunnel extending past room boundary. */
 const TUNNEL_DETECT_MARGIN_WORLD = 2 * BLOCK_SIZE_MEDIUM;
+/** Skillbook sprite size in world units (24×24 px; 3×3 tiles). */
+const SKILLBOOK_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
+/** Pickup radius for skillbook collection. */
+const SKILLBOOK_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
 
 export interface GameScreenCallbacks {
   onReturnToMenu: () => void;
@@ -185,7 +189,6 @@ function spawnWeaveLoadoutParticles(
   // Collect all dust from both bindings
   const allDust = [...weaveLoadout.primary.boundDust, ...weaveLoadout.secondary.boundDust];
   if (allDust.length === 0) {
-    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, ParticleKind.Physical, totalCount, rng);
     return;
   }
 
@@ -521,6 +524,10 @@ export function startGameScreen(
   let bgColor = worldBgColor(currentRoom.worldNumber);
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
   let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
+  const skillBookSprite = new Image();
+  skillBookSprite.src = `${BASE}SPRITES/objects/collectables/skillBook.png`;
+  let isSkillBookSpriteLoaded = false;
+  skillBookSprite.onload = () => { isSkillBookSpriteLoaded = true; };
 
   /** Initialises (or re-initialises) world state for the given room. */
   function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void {
@@ -1162,6 +1169,27 @@ export function startGameScreen(
     const playerForTomb = world.clusters[0];
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
+
+      // Skillbook pickup (lobby progression): learn Golden Dust when collected.
+      if (progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
+        const roomSkillBooks = currentRoom.skillBooks ?? [];
+        for (let i = 0; i < roomSkillBooks.length; i++) {
+          const sb = roomSkillBooks[i];
+          const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const sy = (sb.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const dx = playerForTomb.positionXWorld - sx;
+          const dy = playerForTomb.positionYWorld - sy;
+          if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
+            progress.unlockedDustKinds = [...progress.unlockedDustKinds, ParticleKind.Physical];
+            progress.loadout = Array.from(new Set([...progress.loadout, ParticleKind.Physical]));
+            if (!progress.weaveLoadout.primary.boundDust.includes(ParticleKind.Physical)) {
+              progress.weaveLoadout.primary.boundDust = [...progress.weaveLoadout.primary.boundDust, ParticleKind.Physical];
+            }
+            playerWeaveLoadout = JSON.parse(JSON.stringify(progress.weaveLoadout));
+            break;
+          }
+        }
+      }
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
@@ -1257,6 +1285,25 @@ export function startGameScreen(
 
     // Skill tombs (sprite + dust particles)
     skillTombRenderer.render(ctx, ox, oy, zoom);
+
+    // Skill books (collectibles)
+    if (isSkillBookSpriteLoaded && progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
+      const roomSkillBooks = currentRoom.skillBooks ?? [];
+      const bobOffsetWorld = Math.sin(performance.now() * 0.004) * 2.0;
+      for (let i = 0; i < roomSkillBooks.length; i++) {
+        const sb = roomSkillBooks[i];
+        const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+        const sy = (sb.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
+        const drawSize = SKILLBOOK_SIZE_WORLD * zoom;
+        ctx.drawImage(
+          skillBookSprite,
+          sx * zoom + ox - drawSize * 0.5,
+          sy * zoom + oy - drawSize * 0.5,
+          drawSize,
+          drawSize,
+        );
+      }
+    }
 
     // Particles drawn on top of all game layers (Canvas 2D fallback only —
     // WebGL renders to its own offscreen canvas at virtual resolution)
