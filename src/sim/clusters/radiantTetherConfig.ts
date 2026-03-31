@@ -36,12 +36,12 @@ export const RT_TELEGRAPH_ROTATION_SPEED_RAD = 0.035;
 export const RT_TELEGRAPH_LINE_WIDTH_PX = 1.5;
 
 /** Maximum draw length of telegraph laser (world units). */
-export const RT_TELEGRAPH_MAX_RANGE_WORLD = 600.0;
+export const RT_TELEGRAPH_MAX_RANGE_WORLD = 400.0;
 
 // ── Chain anchoring ─────────────────────────────────────────────────────────
 
 /** Maximum raycast range when searching for anchor terrain (world units). */
-export const RT_CHAIN_MAX_RANGE_WORLD = 600.0;
+export const RT_CHAIN_MAX_RANGE_WORLD = 400.0;
 
 /** Step size for raycasting toward walls (world units). */
 export const RT_CHAIN_RAYCAST_STEP_WORLD = 2.0;
@@ -66,10 +66,10 @@ export const RT_BROKEN_CHAIN_LINE_WIDTH_PX = 2.5;
 // ── Chain movement (winch) ────────────────────────────────────────────────
 
 /** Minimum chain-length change speed (world units/tick). */
-export const RT_REEL_SPEED_MIN_WORLD = 0.6;
+export const RT_REEL_SPEED_MIN_WORLD = 0.4;
 
 /** Maximum chain-length change speed (world units/tick). */
-export const RT_REEL_SPEED_MAX_WORLD = 2.0;
+export const RT_REEL_SPEED_MAX_WORLD = 1.3;
 
 /**
  * Probability that an individual chain is assigned to "tighten" during
@@ -78,10 +78,10 @@ export const RT_REEL_SPEED_MAX_WORLD = 2.0;
 export const RT_TIGHTEN_PROBABILITY = 0.5;
 
 /** Minimum allowed chain length during movement (world units). */
-export const RT_MIN_CHAIN_LENGTH_WORLD = 30.0;
+export const RT_MIN_CHAIN_LENGTH_WORLD = 20.0;
 
 /** Boss acceleration toward the net force from chain tensions (wu/tick²). */
-export const RT_BOSS_ACCEL_WORLD = 0.4;
+export const RT_BOSS_ACCEL_WORLD = 0.27;
 
 /** Drag coefficient applied to boss velocity each tick. */
 export const RT_BOSS_DRAG = 0.97;

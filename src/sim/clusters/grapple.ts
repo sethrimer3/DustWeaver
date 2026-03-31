@@ -77,7 +77,7 @@ import { INFLUENCE_RADIUS_WORLD } from './binding';
 export const GRAPPLE_MAX_LENGTH_WORLD = INFLUENCE_RADIUS_WORLD;
 
 /** Minimum rope length to prevent degenerate zero-length ropes. */
-const GRAPPLE_MIN_LENGTH_WORLD = 30;
+const GRAPPLE_MIN_LENGTH_WORLD = 20;
 
 /** Duration of the sparkle burst effect on attach (ticks). */
 const GRAPPLE_ATTACH_FX_TICKS = 14;
@@ -86,14 +86,14 @@ const GRAPPLE_ATTACH_FX_TICKS = 14;
  * Speed at which the rope shortens while the jump button is held (world units per second).
  * Shorter rope = tighter swing radius = faster rotation = bigger launch when released.
  */
-const GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC = 90.0;
+const GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC = 60.0;
 
 /**
  * Maximum total rope that can be pulled in before the grapple breaks (world units).
  * This is a tension limit — pulling too hard snaps the rope and the player flies
  * off with their accumulated swing momentum.  Acts as the skill ceiling for the mechanic.
  */
-const GRAPPLE_MAX_PULL_IN_WORLD = 150.0;
+const GRAPPLE_MAX_PULL_IN_WORLD = 100.0;
 
 /**
  * Maximum ratio by which tangential velocity can increase in a single tick due
@@ -124,7 +124,7 @@ const GRAPPLE_JUMP_TAP_THRESHOLD_TICKS = 6;
  * Applied by *subtracting* from velocityYWorld — negative Y is upward in this
  * coordinate system (Y increases downward on screen).
  */
-const GRAPPLE_TAP_HOP_SPEED_WORLD = 80.0;
+const GRAPPLE_TAP_HOP_SPEED_WORLD = 53.0;
 
 /** Number of Gold particles that form the visible chain between player and anchor. */
 export const GRAPPLE_SEGMENT_COUNT = 10;
