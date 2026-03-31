@@ -245,6 +245,10 @@ export const ROOM_LOBBY: RoomDef = {
     // Golden Dust skillbook in the lobby, left side of the plateau.
     { xBlock: 22, yBlock: 18 },
   ],
+  dustContainers: [
+    // Dust Container collectible, right side of the plateau.
+    { xBlock: 30, yBlock: 18 },
+  ],
 };
 
 // ── World 1, Room 1 ──────────────────────────────────────────────────────────
