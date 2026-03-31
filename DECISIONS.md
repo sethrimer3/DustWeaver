@@ -12,13 +12,18 @@
 ## Coordinate System
 - World space: floating-point units.
 - Virtual canvas: 480×270 virtual pixels (fixed internal resolution).
-- Device canvas: window dimensions, used only as upscale target.
+- Device canvas: sized in **physical pixels** (`window.innerWidth * devicePixelRatio`),
+  used only as upscale target. Its CSS size is always `100vw × 100vh` with
+  `image-rendering: pixelated` (+ `crisp-edges` for Firefox) so the browser
+  composites the element using nearest-neighbor — no browser-level blur.
+  The backing store (HTML width/height attributes) is set to physical pixels so
+  `drawImage` fills the entire physical screen without a secondary browser scale.
 - Scale: 1 world unit = 1 virtual pixel at zoom 1.0.
 - Camera zoom: 1.0 (1 world unit = 1 virtual pixel).
   Camera follows player, clamped to room bounds so viewport never shows void.
 - Upscale: `deviceCtx.drawImage(virtualCanvas, 0, 0, w, h)` with
   `imageSmoothingEnabled = false` for crisp nearest-neighbor sampling.
-  At 1080p the scale factor is exactly 4× (each virtual pixel → 4×4 physical).
+  At 1080p (1920×1080 physical) the scale factor is exactly 4× per virtual pixel.
 - WebGL particle canvas also renders at 480×270 and is composited onto the
   device canvas during the upscale pass.
 
