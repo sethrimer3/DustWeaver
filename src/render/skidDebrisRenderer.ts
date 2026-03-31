@@ -8,6 +8,8 @@ import { WorldState } from '../sim/world';
 const MAX_DEBRIS = 60;
 const DEBRIS_LIFETIME_MS = 400;
 const SPAWN_RATE_PER_TICK = 3;
+/** Spawn rate multiplier when the player is grapple-stuck and decelerating. */
+const GRAPPLE_STUCK_SPAWN_MULTIPLIER = 3;
 const DEBRIS_SPAWN_SPREAD_X_WORLD = 2;
 const DEBRIS_SPAWN_SPREAD_Y_WORLD = 1;
 const DEBRIS_VX_VARIANCE_WORLD = 30;
@@ -39,7 +41,11 @@ export class SkidDebrisRenderer {
 
     // Spawn new debris if skidding
     if (world.isPlayerSkiddingFlag === 1) {
-      for (let s = 0; s < SPAWN_RATE_PER_TICK; s++) {
+      // Spawn more debris when grapple-stuck for a dramatic skid effect
+      const rate = world.isGrappleStuckFlag === 1
+        ? SPAWN_RATE_PER_TICK * GRAPPLE_STUCK_SPAWN_MULTIPLIER
+        : SPAWN_RATE_PER_TICK;
+      for (let s = 0; s < rate; s++) {
         if (this.count >= MAX_DEBRIS) {
           // Recycle oldest
           this.recycleOldest();

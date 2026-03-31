@@ -127,6 +127,19 @@ export interface WorldState extends ParticleBuffers {
    */
   grappleJumpHeldTickCount: number;
 
+  // ---- Grapple top-surface mechanics ---------------------------------------
+  /** 1 when the active grapple is attached to the top surface of a wall block. */
+  isGrappleTopSurfaceFlag: 0 | 1;
+  /** 1 when the player has arrived at a top-surface grapple anchor and is sticking. */
+  isGrappleStuckFlag: 0 | 1;
+  /**
+   * Ticks since the player came to a complete stop while grapple-stuck.
+   * Used for super-jump detection: if the player jumps within 10 ticks
+   * of stopping, they receive 100% extra vertical jump height.
+   * 0 while still decelerating.
+   */
+  grappleStuckStoppedTickCount: number;
+
   // ---- Grapple miss state (limp chain) ------------------------------------
   /** 1 while the grapple chain is in "miss" mode (extended to full length, falling limp). */
   isGrappleMissActiveFlag: 0 | 1;
@@ -197,6 +210,9 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleAttachFxYWorld: 0.0,
     grappleParticleStartIndex: -1,
     grappleJumpHeldTickCount: 0,
+    isGrappleTopSurfaceFlag: 0,
+    isGrappleStuckFlag: 0,
+    grappleStuckStoppedTickCount: 0,
     isGrappleMissActiveFlag: 0,
     grappleMissDirXWorld: 0.0,
     grappleMissDirYWorld: 0.0,
