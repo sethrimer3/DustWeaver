@@ -81,7 +81,7 @@ export interface WorldState extends ParticleBuffers {
   playerSprintHeldFlag: 0 | 1;
   /** 1 while the crouch key (S / ArrowDown) is held and player is on the ground. */
   playerCrouchHeldFlag: 0 | 1;
-  /** Selected character identifier ('knight' or 'demonFox'). */
+  /** Selected character identifier ('knight', 'demonFox', or 'princess'). */
   characterId: string;
 
   // ---- Player jump (set each frame by game screen) ------------------------

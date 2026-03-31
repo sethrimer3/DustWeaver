@@ -52,7 +52,7 @@ export interface PlayerProgress {
   lastSaveRoomId: string | null;
   /** Block coordinates of the last save point used. */
   lastSaveSpawnBlock: [number, number] | null;
-  /** Selected character identifier ('knight' or 'demonFox'). */
+  /** Selected character identifier ('knight', 'demonFox', or 'princess'). */
   characterId: string;
 }
 

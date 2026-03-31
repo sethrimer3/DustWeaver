@@ -7,11 +7,12 @@
  * Press Enter or click the selected card to confirm.
  */
 
-const CHARACTER_IDS = ['knight', 'demonFox'] as const;
+const CHARACTER_IDS = ['knight', 'demonFox', 'princess'] as const;
 
 const CHARACTER_LABELS: Record<string, string> = {
   knight: 'Knight',
   demonFox: 'Demon Fox',
+  princess: 'Princess',
 };
 
 export interface CharacterSelectCallbacks {
