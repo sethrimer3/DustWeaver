@@ -45,7 +45,7 @@ import { getElementProfile } from '../particles/elementProfiles';
  * Radius (world units) within which a cluster can control its particles.
  * Exported so the renderer can draw the matching influence ring.
  */
-export const INFLUENCE_RADIUS_WORLD = 67.0;
+export const INFLUENCE_RADIUS_WORLD = 96.0;
 
 // ── Player-state behaviour constants ─────────────────────────────────────────
 

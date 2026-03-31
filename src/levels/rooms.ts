@@ -123,8 +123,8 @@ function buildTunnelWalls(
 
 // ── Room definitions ─────────────────────────────────────────────────────────
 
-const LOBBY_WIDTH = 48;
-const LOBBY_HEIGHT = 24;
+const LOBBY_WIDTH = 48 * 3;
+const LOBBY_HEIGHT = 24 * 3;
 const LOBBY_TUNNEL_Y = 16; // tunnel opening top row (above the floor)
 
 const W1_ROOM_WIDTH = 40;
