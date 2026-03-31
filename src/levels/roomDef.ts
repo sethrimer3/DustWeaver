@@ -152,4 +152,9 @@ export interface RoomDef {
   skillTombs: readonly { xBlock: number; yBlock: number }[];
   /** Collectible skill book positions (block units). */
   skillBooks?: readonly { xBlock: number; yBlock: number }[];
+  /**
+   * Collectible dust container positions (block units).
+   * Each pickup grants +4 dust particles to the player.
+   */
+  dustContainers?: readonly { xBlock: number; yBlock: number }[];
 }

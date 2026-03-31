@@ -69,6 +69,12 @@ const TUNNEL_DETECT_MARGIN_WORLD = 2 * BLOCK_SIZE_MEDIUM;
 const SKILLBOOK_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
 /** Pickup radius for skillbook collection. */
 const SKILLBOOK_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
+/** Dust container sprite size in world units (24×24 px). */
+const DUST_CONTAINER_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
+/** Pickup radius for dust container collection. */
+const DUST_CONTAINER_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
+/** Dust particles granted by one Dust Container collectible. */
+const DUST_CONTAINER_DUST_GAIN = 4;
 
 export interface GameScreenCallbacks {
   onReturnToMenu: () => void;
@@ -532,6 +538,12 @@ export function startGameScreen(
   skillBookSprite.src = `${BASE}SPRITES/objects/collectables/skillBook.png`;
   let isSkillBookSpriteLoaded = false;
   skillBookSprite.onload = () => { isSkillBookSpriteLoaded = true; };
+  const dustContainerSprite = new Image();
+  dustContainerSprite.src = `${BASE}SPRITES/objects/collectables/dust_container_stub.svg`;
+  let isDustContainerSpriteLoaded = false;
+  dustContainerSprite.onload = () => { isDustContainerSpriteLoaded = true; };
+  /** Keys in the format `${roomId}:${containerIndex}` for already-collected dust containers. */
+  const collectedDustContainerKeySet: Set<string> = new Set();
 
   /** Initialises (or re-initialises) world state for the given room. */
   function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void {
@@ -1208,6 +1220,31 @@ export function startGameScreen(
           }
         }
       }
+
+      // Dust container pickup: grants +4 dust particles (one full HUD container).
+      const roomDustContainers = currentRoom.dustContainers ?? [];
+      for (let i = 0; i < roomDustContainers.length; i++) {
+        const pickupKey = `${currentRoom.id}:${i}`;
+        if (collectedDustContainerKeySet.has(pickupKey)) continue;
+
+        const dc = roomDustContainers[i];
+        const cx = (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+        const cy = (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+        const dx = playerForTomb.positionXWorld - cx;
+        const dy = playerForTomb.positionYWorld - cy;
+        if (dx * dx + dy * dy <= DUST_CONTAINER_PICKUP_RADIUS_WORLD * DUST_CONTAINER_PICKUP_RADIUS_WORLD) {
+          collectedDustContainerKeySet.add(pickupKey);
+          spawnClusterParticles(
+            world,
+            playerForTomb.entityId,
+            playerForTomb.positionXWorld,
+            playerForTomb.positionYWorld,
+            ParticleKind.Physical,
+            DUST_CONTAINER_DUST_GAIN,
+            levelRng,
+          );
+        }
+      }
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
@@ -1321,6 +1358,28 @@ export function startGameScreen(
           skillBookSprite,
           sx * zoom + ox - drawSize * 0.5,
           sy * zoom + oy - drawSize * 0.5,
+          drawSize,
+          drawSize,
+        );
+      }
+    }
+
+    // Dust containers (collectibles)
+    if (isDustContainerSpriteLoaded) {
+      const roomDustContainers = currentRoom.dustContainers ?? [];
+      const bobOffsetWorld = Math.sin(performance.now() * 0.0032) * 1.5;
+      for (let i = 0; i < roomDustContainers.length; i++) {
+        const pickupKey = `${currentRoom.id}:${i}`;
+        if (collectedDustContainerKeySet.has(pickupKey)) continue;
+
+        const dc = roomDustContainers[i];
+        const dx = (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+        const dy = (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
+        const drawSize = DUST_CONTAINER_SIZE_WORLD * zoom;
+        ctx.drawImage(
+          dustContainerSprite,
+          dx * zoom + ox - drawSize * 0.5,
+          dy * zoom + oy - drawSize * 0.5,
           drawSize,
           drawSize,
         );
