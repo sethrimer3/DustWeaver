@@ -77,6 +77,12 @@ export interface WorldState extends ParticleBuffers {
    */
   playerMoveInputDxWorld: number;
   playerMoveInputDyWorld: number;
+  /** 1 while the sprint key (Shift) is held down. */
+  playerSprintHeldFlag: 0 | 1;
+  /** 1 while the crouch key (S / ArrowDown) is held and player is on the ground. */
+  playerCrouchHeldFlag: 0 | 1;
+  /** Selected character identifier ('knight' or 'demonFox'). */
+  characterId: string;
 
   // ---- Player jump (set each frame by game screen) ------------------------
   /** Set to 1 for one tick to trigger a player jump (cleared by applyClusterMovement). */
@@ -158,6 +164,9 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerDashDirYWorld: 0.0,
     playerMoveInputDxWorld: 0.0,
     playerMoveInputDyWorld: 0.0,
+    playerSprintHeldFlag: 0,
+    playerCrouchHeldFlag: 0,
+    characterId: 'knight',
     playerJumpTriggeredFlag: 0,
     playerJumpHeldFlag: 0,
     isGrappleActiveFlag: 0,

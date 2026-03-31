@@ -55,8 +55,17 @@ export interface ClusterSnapshot {
   readonly rollingEnemySpriteIndex: number;
   /** Accumulated roll angle (radians) used to rotate the enemy sprite. */
   readonly rollingEnemyRollAngleRad: number;
-  /** Player sprite accumulated rotation angle (radians). */
-  readonly playerRotationAngleRad: number;
+  /** 1 when the player is facing left (sprites face right by default). */
+  readonly isFacingLeftFlag: 0 | 1;
+  /** 1 while the player is sprinting. */
+  readonly isSprintingFlag: 0 | 1;
+  /** 1 while the player is crouching. */
+  readonly isCrouchingFlag: 0 | 1;
+  /**
+   * Current idle animation state:
+   *  0 = standing, 1 = idle1, 2 = idle2, 3 = idleBlink
+   */
+  readonly playerIdleAnimState: number;
   /** 1 if this cluster is a rock elemental. */
   readonly isRockElementalFlag: 0 | 1;
   /** Current rock elemental state (0-6). */
@@ -106,6 +115,8 @@ export interface WorldSnapshot {
   readonly isPlayerBlockingFlag: 0 | 1;
   /** 1 while the player has any sustained Weave active (primary or secondary). */
   readonly isPlayerWeaveActiveFlag: 0 | 1;
+  /** Selected character identifier ('knight' or 'demonFox'). */
+  readonly characterId: string;
 }
 
 export function createSnapshot(world: WorldState): WorldSnapshot {
@@ -132,7 +143,10 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       isRollingEnemyFlag:       c.isRollingEnemyFlag,
       rollingEnemySpriteIndex:  c.rollingEnemySpriteIndex,
       rollingEnemyRollAngleRad: c.rollingEnemyRollAngleRad,
-      playerRotationAngleRad:   c.playerRotationAngleRad,
+      isFacingLeftFlag:          c.isFacingLeftFlag,
+      isSprintingFlag:           c.isSprintingFlag,
+      isCrouchingFlag:           c.isCrouchingFlag,
+      playerIdleAnimState:       c.playerIdleAnimState,
       isRockElementalFlag:              c.isRockElementalFlag,
       rockElementalState:               c.rockElementalState,
       rockElementalActivationProgress:  c.rockElementalActivationProgress,
@@ -177,5 +191,6 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleAttachFxYWorld: world.grappleAttachFxYWorld,
     isPlayerBlockingFlag: world.isPlayerBlockingFlag,
     isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
+    characterId: world.characterId,
   };
 }

@@ -39,6 +39,8 @@
 
 import { WorldState } from '../world';
 import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD } from './dashConstants';
+import { PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
+import { nextUint32 } from '../rng';
 
 // ============================================================================
 // Jump physics — Celeste-inspired tuning
@@ -224,13 +226,23 @@ const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 300.0;
  */
 const ROLLING_ENEMY_SPRITE_RADIUS_WORLD = 5.0;
 
-// ── Player sprite rotation ──────────────────────────────────────────────────
+// ── Player sprint ───────────────────────────────────────────────────────────
 
-/** Rotation rate (radians/tick) for the player sprite while idle/moving. */
-const PLAYER_SPRITE_ROTATION_SLOW_RAD_PER_TICK = 0.012;
+/** Sprint speed multiplier applied to MAX_RUN_SPEED when sprinting on ground. */
+const SPRINT_SPEED_MULTIPLIER = 2.0;
 
-/** Rotation rate (radians/tick) for the player sprite while blocking. */
-const PLAYER_SPRITE_ROTATION_FAST_RAD_PER_TICK = 0.10;
+// ── Player crouch ───────────────────────────────────────────────────────────
+
+/** Half-height of the player hitbox when crouching (world units). */
+const CROUCH_HALF_HEIGHT_WORLD = 4;
+
+// ── Player idle animation ───────────────────────────────────────────────────
+
+/** Ticks of no movement before the idle animation cycle begins (1 second at 60fps). */
+const IDLE_TRIGGER_TICKS = 60;
+
+/** Ticks for idleBlink animation duration (0.5 seconds at 60fps). */
+const IDLE_BLINK_DURATION_TICKS = 30;
 
 // ============================================================================
 // Flying eye movement
@@ -563,14 +575,89 @@ export function applyClusterMovement(world: WorldState): void {
         cluster.varJumpTimerTicks -= 1;
       }
 
-      // ── Update player sprite rotation ─────────────────────────────────
+      // ── Update player facing direction ──────────────────────────────────
       {
-        const rotRate = world.isPlayerBlockingFlag === 1
-          ? PLAYER_SPRITE_ROTATION_FAST_RAD_PER_TICK
-          : PLAYER_SPRITE_ROTATION_SLOW_RAD_PER_TICK;
-        cluster.playerRotationAngleRad += rotRate;
-        if (cluster.playerRotationAngleRad >= Math.PI * 2.0) {
-          cluster.playerRotationAngleRad -= Math.PI * 2.0;
+        const inputDxForFacing = world.playerMoveInputDxWorld;
+        if (inputDxForFacing < 0) {
+          cluster.isFacingLeftFlag = 1;
+        } else if (inputDxForFacing > 0) {
+          cluster.isFacingLeftFlag = 0;
+        }
+      }
+
+      // ── Sprint state ──────────────────────────────────────────────────
+      {
+        const isMoving = world.playerMoveInputDxWorld !== 0;
+        if (world.playerSprintHeldFlag === 1 && cluster.isGroundedFlag === 1 && isMoving) {
+          cluster.isSprintingFlag = 1;
+        } else {
+          cluster.isSprintingFlag = 0;
+        }
+      }
+
+      // ── Crouch state ──────────────────────────────────────────────────
+      {
+        const wasCrouching = cluster.isCrouchingFlag === 1;
+        if (world.playerCrouchHeldFlag === 1 && cluster.isGroundedFlag === 1) {
+          cluster.isCrouchingFlag = 1;
+          if (!wasCrouching) {
+            // Entering crouch: shrink hitbox, keep bottom edge stable
+            const oldHalfH = cluster.halfHeightWorld;
+            cluster.halfHeightWorld = CROUCH_HALF_HEIGHT_WORLD;
+            cluster.positionYWorld += oldHalfH - CROUCH_HALF_HEIGHT_WORLD;
+          }
+        } else {
+          cluster.isCrouchingFlag = 0;
+          if (wasCrouching) {
+            // Exiting crouch: restore hitbox height, keep bottom edge stable
+            cluster.halfHeightWorld = PLAYER_HALF_HEIGHT_WORLD;
+            cluster.positionYWorld -= PLAYER_HALF_HEIGHT_WORLD - CROUCH_HALF_HEIGHT_WORLD;
+          }
+        }
+      }
+
+      // ── Idle animation state machine ──────────────────────────────────
+      {
+        const isMoving = world.playerMoveInputDxWorld !== 0;
+        if (isMoving || world.isGrappleActiveFlag === 1) {
+          // Reset idle state when moving or grappling
+          cluster.playerIdleTimerTicks = 0;
+          cluster.playerIdleAnimState = 0;
+          cluster.playerIdleNextSwitchTicks = 0;
+        } else {
+          cluster.playerIdleTimerTicks += 1;
+          if (cluster.playerIdleTimerTicks >= IDLE_TRIGGER_TICKS) {
+            if (cluster.playerIdleNextSwitchTicks > 0) {
+              cluster.playerIdleNextSwitchTicks -= 1;
+            }
+            if (cluster.playerIdleNextSwitchTicks <= 0) {
+              // Time to switch idle animation
+              if (cluster.playerIdleAnimState === 0) {
+                // Currently standing → pick an idle animation
+                const roll = nextUint32(world.rng) % 100;
+                if (roll < 1) {
+                  // 1/100 chance → idle2
+                  cluster.playerIdleAnimState = 2;
+                  // idle2 duration: 2 seconds ± 1 second (60-180 ticks)
+                  cluster.playerIdleNextSwitchTicks = 120 + (nextUint32(world.rng) % 121) - 60;
+                } else if (roll < 10) {
+                  // 9/100 chance → idleBlink
+                  cluster.playerIdleAnimState = 3;
+                  cluster.playerIdleNextSwitchTicks = IDLE_BLINK_DURATION_TICKS;
+                } else {
+                  // 90/100 chance → idle1
+                  cluster.playerIdleAnimState = 1;
+                  // idle1 duration: 2 seconds ± 1 second (60-180 ticks)
+                  cluster.playerIdleNextSwitchTicks = 120 + (nextUint32(world.rng) % 121) - 60;
+                }
+              } else {
+                // Was in an idle animation → return to standing
+                cluster.playerIdleAnimState = 0;
+                // Next switch in 2 seconds ± 1 second (60-180 ticks)
+                cluster.playerIdleNextSwitchTicks = 120 + (nextUint32(world.rng) % 121) - 60;
+              }
+            }
+          }
         }
       }
 
@@ -736,10 +823,14 @@ export function applyClusterMovement(world: WorldState): void {
           }
           cluster.velocityXWorld += inputDx * accel * dtSec;
           // Clamp to max run speed only in the direction of input
-          if (inputDx > 0 && cluster.velocityXWorld > MAX_RUN_SPEED_WORLD_PER_SEC) {
-            cluster.velocityXWorld = MAX_RUN_SPEED_WORLD_PER_SEC;
-          } else if (inputDx < 0 && cluster.velocityXWorld < -MAX_RUN_SPEED_WORLD_PER_SEC) {
-            cluster.velocityXWorld = -MAX_RUN_SPEED_WORLD_PER_SEC;
+          // Sprint doubles the max speed when grounded and holding shift
+          const maxSpeed = cluster.isSprintingFlag === 1
+            ? MAX_RUN_SPEED_WORLD_PER_SEC * SPRINT_SPEED_MULTIPLIER
+            : MAX_RUN_SPEED_WORLD_PER_SEC;
+          if (inputDx > 0 && cluster.velocityXWorld > maxSpeed) {
+            cluster.velocityXWorld = maxSpeed;
+          } else if (inputDx < 0 && cluster.velocityXWorld < -maxSpeed) {
+            cluster.velocityXWorld = -maxSpeed;
           }
         } else if (cluster.wallJumpForceTimeTicks <= 0) {
           // No horizontal input and not in force-time — decelerate toward zero

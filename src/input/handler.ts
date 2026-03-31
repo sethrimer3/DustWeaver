@@ -20,6 +20,8 @@ export interface InputState {
   isJoystickUpActiveFlag: boolean;
   /** Set to true for one collectCommands call to trigger a dash. */
   isDashTriggeredFlag: boolean;
+  /** True while the Shift key is physically held down (sprint). */
+  isSprintHeldFlag: boolean;
   mouseXPx: number;
   mouseYPx: number;
   // Touch joystick state (populated by touch listeners; read by renderer for visual feedback)
@@ -78,6 +80,7 @@ export function createInputState(): InputState {
     isJumpHeldFlag: false,
     isJoystickUpActiveFlag: false,
     isDashTriggeredFlag: false,
+    isSprintHeldFlag: false,
     mouseXPx: 0,
     mouseYPx: 0,
     isTouchJoystickActiveFlag: 0,
@@ -146,7 +149,8 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     }
     if (e.key === 'Shift') {
       e.preventDefault();
-      state.isDashTriggeredFlag = true;
+      state.isSprintHeldFlag = true;
+      if (!e.repeat) { state.isDashTriggeredFlag = true; }
     }
     if ((e.key === 'e' || e.key === 'E') && !e.repeat) {
       state.isGrappleHeldFlag = 1;
@@ -167,6 +171,9 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Escape') state.isEscapePressed = false;
     if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
       state.isJumpHeldFlag = false;
+    }
+    if (e.key === 'Shift') {
+      state.isSprintHeldFlag = false;
     }
     if (e.key === 'e' || e.key === 'E') {
       state.isGrappleHeldFlag = 0;
