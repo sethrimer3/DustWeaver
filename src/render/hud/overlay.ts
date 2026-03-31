@@ -65,9 +65,9 @@ export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): 
 
   const padXPx    = 8;
   const padYPx    = 8;
-  const lineHeightPx = 16;
-  const fontSizePx   = 12;
-  const panelWidth   = 290;
+  const lineHeightPx = 9;
+  const fontSizePx   = 7;
+  const panelWidth   = 180;
 
   ctx.save();
   ctx.font = `${fontSizePx}px monospace`;

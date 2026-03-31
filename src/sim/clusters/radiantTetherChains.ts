@@ -397,6 +397,9 @@ export function retractAllChains(cs: RadiantTetherChainState): void {
 
 // ── Chain-player collision ──────────────────────────────────────────────────
 
+/** Number of dust particles per armor point. */
+const DUST_PARTICLES_PER_ARMOR = 4;
+
 /**
  * Checks whether the player cluster overlaps any active chain or broken chain.
  * If a hit occurs and the player is not in iframes, deals damage and grants
@@ -423,7 +426,7 @@ export function checkChainPlayerCollision(
     if (chain.isActiveFlag === 0) continue;
     if (pointToSegmentDistSq(px, py, bossXWorld, bossYWorld, chain.anchorXWorld, chain.anchorYWorld)
         < RT_CHAIN_HITBOX_HALF_WIDTH_WORLD * RT_CHAIN_HITBOX_HALF_WIDTH_WORLD) {
-      applyChainDamage(player, cs);
+      applyChainDamage(player, cs, world);
       return;
     }
   }
@@ -434,17 +437,29 @@ export function checkChainPlayerCollision(
     if (bc.isActiveFlag === 0) continue;
     if (pointToSegmentDistSq(px, py, bc.anchorXWorld, bc.anchorYWorld, bc.freeEndXWorld, bc.freeEndYWorld)
         < RT_CHAIN_HITBOX_HALF_WIDTH_WORLD * RT_CHAIN_HITBOX_HALF_WIDTH_WORLD) {
-      applyChainDamage(player, cs);
+      applyChainDamage(player, cs, world);
       return;
     }
   }
 }
 
 function applyChainDamage(
-  player: { healthPoints: number; isAliveFlag: 0 | 1 },
+  player: { healthPoints: number; isAliveFlag: 0 | 1; entityId: number },
   cs: RadiantTetherChainState,
+  world: WorldState,
 ): void {
-  player.healthPoints -= RT_CHAIN_DAMAGE;
+  // Calculate player's armor from dust particles
+  let playerDustCount = 0;
+  for (let i = 0; i < world.particleCount; i++) {
+    if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1) {
+      playerDustCount++;
+    }
+  }
+  const armor = Math.floor(playerDustCount / DUST_PARTICLES_PER_ARMOR);
+
+  // Apply damage with armor reduction
+  const damage = Math.max(0, RT_CHAIN_DAMAGE - armor);
+  player.healthPoints -= damage;
   if (player.healthPoints <= 0) {
     player.healthPoints = 0;
     player.isAliveFlag = 0;

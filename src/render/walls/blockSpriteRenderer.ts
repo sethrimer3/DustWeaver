@@ -223,16 +223,19 @@ function _drawFallbackTile(
   tileY:       number,
   tileSizePx:  number,
 ): void {
+  const rx = Math.round(tileX);
+  const ry = Math.round(tileY);
+  const roundedSizePx = Math.round(tileSizePx);
   ctx.fillStyle = '#1a2535';
-  ctx.fillRect(tileX, tileY, tileSizePx, tileSizePx);
+  ctx.fillRect(rx, ry, roundedSizePx, roundedSizePx);
 
   ctx.fillStyle = 'rgba(80,120,180,0.18)';
-  ctx.fillRect(tileX, tileY, tileSizePx, 2);
-  ctx.fillRect(tileX, tileY, 2, tileSizePx);
+  ctx.fillRect(rx, ry, roundedSizePx, 2);
+  ctx.fillRect(rx, ry, 2, roundedSizePx);
 
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(tileX, tileY + tileSizePx - 2, tileSizePx, 2);
-  ctx.fillRect(tileX + tileSizePx - 2, tileY, 2, tileSizePx);
+  ctx.fillRect(rx, ry + roundedSizePx - 2, roundedSizePx, 2);
+  ctx.fillRect(rx + roundedSizePx - 2, ry, 2, roundedSizePx);
 }
 
 // ── Vertex overlay ────────────────────────────────────────────────────────────
@@ -263,28 +266,28 @@ function _drawVertexOverlays(
   // are solid but the diagonal cell is air (concave inner corner).
   if (northSolid && eastSolid && !_isOccupied(col + 1, row - 1)) {
     ctx.save();
-    ctx.translate(tileX + tileSizePx, tileY);
+    ctx.translate(Math.round(tileX + tileSizePx), Math.round(tileY));
     ctx.rotate(_HALF_PI);
     ctx.drawImage(vertexImg, 0, 0, qSizePx, qSizePx);
     ctx.restore();
   }
   if (southSolid && eastSolid && !_isOccupied(col + 1, row + 1)) {
     ctx.save();
-    ctx.translate(tileX + tileSizePx, tileY + tileSizePx);
+    ctx.translate(Math.round(tileX + tileSizePx), Math.round(tileY + tileSizePx));
     ctx.rotate(_PI);
     ctx.drawImage(vertexImg, 0, 0, qSizePx, qSizePx);
     ctx.restore();
   }
   if (southSolid && westSolid && !_isOccupied(col - 1, row + 1)) {
     ctx.save();
-    ctx.translate(tileX, tileY + tileSizePx);
+    ctx.translate(Math.round(tileX), Math.round(tileY + tileSizePx));
     ctx.rotate(-_HALF_PI);
     ctx.drawImage(vertexImg, 0, 0, qSizePx, qSizePx);
     ctx.restore();
   }
   if (northSolid && westSolid && !_isOccupied(col - 1, row - 1)) {
     ctx.save();
-    ctx.translate(tileX, tileY);
+    ctx.translate(Math.round(tileX), Math.round(tileY));
     ctx.rotate(0);
     ctx.drawImage(vertexImg, 0, 0, qSizePx, qSizePx);
     ctx.restore();
@@ -344,11 +347,11 @@ export function renderWallSprites(
     const spec = _TILE_TABLE[mask];
 
     // Convert world-space tile position to screen space for smooth scrolling
-    const tileX  = col * blockSizePx * scalePx + offsetXPx;
-    const tileY  = row * blockSizePx * scalePx + offsetYPx;
-    const halfSz = tileSizeScreen * 0.5;
-    const cx     = tileX + halfSz;
-    const cy     = tileY + halfSz;
+    const tileX  = Math.round(col * blockSizePx * scalePx + offsetXPx);
+    const tileY  = Math.round(row * blockSizePx * scalePx + offsetYPx);
+    const halfSz = Math.round(tileSizeScreen * 0.5);
+    const cx     = Math.round(tileX + tileSizeScreen * 0.5);
+    const cy     = Math.round(tileY + tileSizeScreen * 0.5);
 
     const img = _sprites[spec.variant];
 

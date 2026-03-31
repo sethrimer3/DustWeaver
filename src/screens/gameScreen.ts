@@ -30,9 +30,10 @@ import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 
 const FIXED_DT_MS = 16.666;
 
-/** Virtual canvas resolution — all game content targets this fixed canvas. */
-const VIRTUAL_WIDTH_PX  = 480;
-const VIRTUAL_HEIGHT_PX = 270;
+/** Baseline virtual width at 16:9; height is authoritative for fixed zoom. */
+const BASE_VIRTUAL_WIDTH_PX = 480;
+/** Fixed virtual height so world-to-pixel zoom stays constant on every display. */
+const FIXED_VIRTUAL_HEIGHT_PX = 270;
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 const PARTICLE_COUNT_PER_CLUSTER = 20;
 /** Number of background Fluid particles filling the entire arena. */
@@ -40,6 +41,15 @@ const BACKGROUND_FLUID_COUNT = 300;
 
 /** Boss clusters receive this multiplier on their base HP for extra durability. */
 const BOSS_HP_MULTIPLIER = 2;
+
+/** Initial player health (HP). */
+const PLAYER_INITIAL_HEALTH = 10;
+/** Number of particles per dust container for armor calculation. */
+const DUST_PARTICLES_PER_CONTAINER = 4;
+/** Duration (ms) to show health bar after taking damage. */
+const HEALTH_BAR_DISPLAY_MS = 3000;
+/** Vite base URL for assets. */
+const BASE = import.meta.env.BASE_URL;
 
 /** Half-width and half-height (world units) of a flying eye cluster hitbox. */
 const FLYING_EYE_HALF_SIZE_WORLD = 2.8;
@@ -408,10 +418,12 @@ function screenToWorld(
   zoom: number,
   deviceWidthPx: number,
   deviceHeightPx: number,
+  virtualWidthPx: number,
+  virtualHeightPx: number,
 ): { xWorld: number; yWorld: number } {
   // Map device pixels to virtual canvas pixels
-  const virtualXPx = (deviceXPx / deviceWidthPx)  * VIRTUAL_WIDTH_PX;
-  const virtualYPx = (deviceYPx / deviceHeightPx) * VIRTUAL_HEIGHT_PX;
+  const virtualXPx = (deviceXPx / deviceWidthPx)  * virtualWidthPx;
+  const virtualYPx = (deviceYPx / deviceHeightPx) * virtualHeightPx;
   return {
     xWorld: (virtualXPx - offsetXPx) / zoom,
     yWorld: (virtualYPx - offsetYPx) / zoom,
@@ -434,22 +446,28 @@ export function startGameScreen(
     ?? createDefaultWeaveLoadout();
 
   // ── Virtual resolution pipeline ──────────────────────────────────────────
-  // Stage 1: All game content is drawn to a fixed 480×270 offscreen canvas.
+  // Stage 1: All game content is drawn to a fixed-height offscreen canvas.
   // Stage 2: The offscreen canvas is upscaled to the device canvas each frame.
   const virtualCanvas = document.createElement('canvas');
-  virtualCanvas.width  = VIRTUAL_WIDTH_PX;
-  virtualCanvas.height = VIRTUAL_HEIGHT_PX;
+  let virtualWidthPx = BASE_VIRTUAL_WIDTH_PX;
+  const virtualHeightPx = FIXED_VIRTUAL_HEIGHT_PX;
+  virtualCanvas.width  = virtualWidthPx;
+  virtualCanvas.height = virtualHeightPx;
   const virtualCtx = virtualCanvas.getContext('2d')!;
 
   // The device-facing canvas is used only as the upscale target.
   const deviceCtx = canvas.getContext('2d')!;
 
   function resizeCanvas(): void {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const deviceScale = window.devicePixelRatio || 1;
+    canvas.width  = Math.round(window.innerWidth  * deviceScale);
+    canvas.height = Math.round(window.innerHeight * deviceScale);
+    virtualWidthPx = Math.max(1, Math.round((canvas.width / canvas.height) * virtualHeightPx));
+    virtualCanvas.width = virtualWidthPx;
+    virtualCanvas.height = virtualHeightPx;
     // WebGL particle canvas also renders at virtual resolution
     if (webglRenderer.isAvailable) {
-      webglRenderer.resize(VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+      webglRenderer.resize(virtualWidthPx, virtualHeightPx);
     }
   }
 
@@ -462,6 +480,41 @@ export function startGameScreen(
 
   const ctx = virtualCtx;
   const camera = createCameraState();
+
+  // ── Music system for world0 (brown rock cave) ─────────────────────────────
+  let currentWorldMusic: HTMLAudioElement | null = null;
+  let currentMusicWorldNumber: number | null = null;
+  let musicVolume = 0.7; // will be updated from pauseMenuState
+
+  function updateWorldMusic(worldNumber: number, volume: number): void {
+    musicVolume = volume;
+    // Only play thoughtfulLevel music in world0
+    if (worldNumber === 0) {
+      if (currentMusicWorldNumber !== 0) {
+        // Stop any existing music
+        if (currentWorldMusic !== null) {
+          currentWorldMusic.pause();
+          currentWorldMusic.src = '';
+        }
+        // Start world0 music
+        currentWorldMusic = new Audio(`${BASE}MUSIC/thoughtfulLevel.mp3`);
+        currentWorldMusic.loop = true;
+        currentWorldMusic.volume = volume;
+        currentWorldMusic.play().catch(() => { /* autoplay may be blocked */ });
+        currentMusicWorldNumber = 0;
+      } else if (currentWorldMusic !== null) {
+        currentWorldMusic.volume = volume;
+      }
+    } else {
+      // Stop music in other worlds
+      if (currentWorldMusic !== null) {
+        currentWorldMusic.pause();
+        currentWorldMusic.src = '';
+        currentWorldMusic = null;
+        currentMusicWorldNumber = null;
+      }
+    }
+  }
 
   // ── Room state ────────────────────────────────────────────────────────────
   let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
@@ -478,6 +531,9 @@ export function startGameScreen(
 
     // Apply world-specific block sprites and background
     setActiveBlockSpriteWorld(room.worldNumber);
+
+    // Update music for the current world
+    updateWorldMusic(room.worldNumber, musicVolume);
 
     // Reset world state
     world.tick = 0;
@@ -497,7 +553,7 @@ export function startGameScreen(
     // Spawn player at the given block position
     const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
-    const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
+    const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
     world.clusters.push(playerCluster);
     spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
 
@@ -566,13 +622,35 @@ export function startGameScreen(
     }
 
     // Snap camera to player position
-    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
   }
 
   const world = createWorldState(FIXED_DT_MS, 42);
+  // Set the selected character on the world for rendering
+  world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
   const environmentalDust = new EnvironmentalDustLayer();
   const skillTombRenderer = new SkillTombRenderer();
+
+  // ── Health bar state ─────────────────────────────────────────────────────
+  /** Map of entityId -> tick when health bar should hide. */
+  const healthBarDisplayUntilTick: Map<number, number> = new Map();
+  /** Previous health values to detect damage. */
+  const prevHealthMap: Map<number, number> = new Map();
+
+  // ── Dust container state (armor system) ─────────────────────────────────
+  /** Number of dust particles the player currently has. */
+  function getPlayerDustCount(): number {
+    const player = world.clusters[0];
+    if (player === undefined || player.isAliveFlag === 0) return 0;
+    let count = 0;
+    for (let i = 0; i < world.particleCount; i++) {
+      if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1) {
+        count++;
+      }
+    }
+    return count;
+  }
 
   // Track explored rooms
   if (progress && !progress.exploredRoomIds.includes(currentRoom.id)) {
@@ -811,7 +889,7 @@ export function startGameScreen(
     }
 
     // ── Compute camera offset for screen → world conversion ──────────────
-    const { offsetXPx, offsetYPx } = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+    const { offsetXPx, offsetYPx } = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
     const zoom = camera.zoom;
 
     // ── Editor mode gate ──────────────────────────────────────────────────
@@ -821,24 +899,24 @@ export function startGameScreen(
 
       if (isEditorConsuming) {
         // Still render the game world (walls, particles, etc.) as backdrop
-        const camOff = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+        const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
         const snapshot = createSnapshot(world);
 
         if (webglRenderer.isAvailable) {
           webglRenderer.render(snapshot, eox, eoy, zoom);
-          ctx.clearRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+          ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
         } else {
           ctx.fillStyle = bgColor;
-          ctx.fillRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+          ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
         }
 
         renderWorldBackground(
           ctx,
           currentRoom.worldNumber,
-          VIRTUAL_WIDTH_PX,
-          VIRTUAL_HEIGHT_PX,
+          virtualWidthPx,
+          virtualHeightPx,
           eox,
           eoy,
           currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
@@ -858,7 +936,7 @@ export function startGameScreen(
         }
 
         // Draw editor overlays on top
-        editorController.render(ctx, eox, eoy, zoom, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+        editorController.render(ctx, eox, eoy, zoom, virtualWidthPx, virtualHeightPx);
 
         if (isDebugMode) {
           renderHudOverlay(ctx, hudState);
@@ -904,19 +982,30 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveActivatePrimary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
-          let dirX = aim.xWorld - player.positionXWorld;
-          let dirY = aim.yWorld - player.positionYWorld;
-          const len = Math.sqrt(dirX * dirX + dirY * dirY);
-          if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
-          world.playerWeaveAimDirXWorld = dirX;
-          world.playerWeaveAimDirYWorld = dirY;
-          world.playerPrimaryWeaveTriggeredFlag = 1;
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
+          // Check if tapping/clicking on a skill tomb (save point)
+          const tombIndex = skillTombRenderer.getNearbyTombIndex(aim.xWorld, aim.yWorld);
+          if (tombIndex >= 0) {
+            // Player is also near the tomb — open the save menu
+            const playerNearby = skillTombRenderer.getNearbyTombIndex(player.positionXWorld, player.positionYWorld);
+            if (playerNearby >= 0) {
+              interactTriggered = true;
+            }
+          } else {
+            // Normal weave attack
+            let dirX = aim.xWorld - player.positionXWorld;
+            let dirY = aim.yWorld - player.positionYWorld;
+            const len = Math.sqrt(dirX * dirX + dirY * dirY);
+            if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
+            world.playerWeaveAimDirXWorld = dirX;
+            world.playerWeaveAimDirYWorld = dirY;
+            world.playerPrimaryWeaveTriggeredFlag = 1;
+          }
         }
       } else if (cmd.kind === CommandKind.WeaveHoldPrimary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -934,7 +1023,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -946,7 +1035,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.WeaveHoldSecondary) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           let dirX = aim.xWorld - player.positionXWorld;
           let dirY = aim.yWorld - player.positionYWorld;
           const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -963,7 +1052,7 @@ export function startGameScreen(
       } else if (cmd.kind === CommandKind.GrappleFire) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           fireGrapple(world, aim.xWorld, aim.yWorld);
         }
       } else if (cmd.kind === CommandKind.GrappleRelease) {
@@ -989,6 +1078,12 @@ export function startGameScreen(
 
     if (interactTriggered && progress) {
       openSkillTombMenu();
+    }
+
+    // Update music volume from pause menu settings
+    if (currentWorldMusic !== null && currentWorldMusic.volume !== pauseMenuState.musicVolume) {
+      currentWorldMusic.volume = pauseMenuState.musicVolume;
+      musicVolume = pauseMenuState.musicVolume;
     }
 
     // While paused or in a menu, still render the frozen scene but skip sim and transitions
@@ -1026,7 +1121,7 @@ export function startGameScreen(
           world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
           world.playerDashDirYWorld = 0.0;
         } else {
-          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height);
+          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           const dirX = aim.xWorld - playerForDash.positionXWorld;
           const absX = dirX < 0 ? -dirX : dirX;
           if (absX > 1.0) {
@@ -1049,6 +1144,9 @@ export function startGameScreen(
           world.playerMoveInputDyWorld = 0.0;
         }
       }
+      // Pass sprint and crouch input to the sim
+      world.playerSprintHeldFlag = inputState.isSprintHeldFlag ? 1 : 0;
+      world.playerCrouchHeldFlag = inputState.isKeyS ? 1 : 0;
       tick(world);
       environmentalDust.update(world, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
@@ -1075,14 +1173,14 @@ export function startGameScreen(
         playerForCamera.positionYWorld,
         roomWidthWorld,
         roomHeightWorld,
-        VIRTUAL_WIDTH_PX,
-        VIRTUAL_HEIGHT_PX,
+        virtualWidthPx,
+        virtualHeightPx,
         elapsedMs / 1000,
       );
     }
 
     // ── Recompute camera offset after update ─────────────────────────────────
-    const camOff = getCameraOffset(camera, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+    const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
     const ox = camOff.offsetXPx;
     const oy = camOff.offsetYPx;
 
@@ -1124,21 +1222,21 @@ export function startGameScreen(
 
     const snapshot = createSnapshot(world);
 
-    // ── Render to virtual canvas (480×270) ────────────────────────────────
+    // ── Render to virtual canvas (dynamic width × fixed height) ───────────
     if (webglRenderer.isAvailable) {
       webglRenderer.render(snapshot, ox, oy, zoom);
-      ctx.clearRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+      ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
     } else {
       ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
+      ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
     }
 
     // ── World background with parallax (behind everything else) ───────────
     renderWorldBackground(
       ctx,
       currentRoom.worldNumber,
-      VIRTUAL_WIDTH_PX,
-      VIRTUAL_HEIGHT_PX,
+      virtualWidthPx,
+      virtualHeightPx,
       ox,
       oy,
       currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
@@ -1172,10 +1270,88 @@ export function startGameScreen(
 
       // ── Room name banner (top-center) ──────────────────────────────────────
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = '13px monospace';
+      ctx.font = '7px monospace';
       const roomLabel = currentRoom.name;
       const labelW = ctx.measureText(roomLabel).width;
-      ctx.fillText(roomLabel, (VIRTUAL_WIDTH_PX - labelW) / 2, 22);
+      ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
+    }
+
+    // ── Dust container display (top-left) ─────────────────────────────────────
+    const dustCount = getPlayerDustCount();
+    const fullContainers = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
+    const partialDust = dustCount % DUST_PARTICLES_PER_CONTAINER;
+    const dustSquareSize = 8;
+    const dustPadding = 2;
+    const dustStartX = 8;
+    const dustStartY = 8;
+
+    ctx.save();
+    for (let i = 0; i < fullContainers + (partialDust > 0 ? 1 : 0); i++) {
+      const squareX = dustStartX + i * (dustSquareSize + dustPadding);
+      const isPartial = i === fullContainers;
+      const quadrantsActive = isPartial ? partialDust : DUST_PARTICLES_PER_CONTAINER;
+
+      // Draw square background
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(squareX, dustStartY, dustSquareSize, dustSquareSize);
+
+      // Draw quadrants (2x2 grid) - direct indexing to avoid allocation
+      const halfSize = dustSquareSize / 2;
+      // Quadrant positions: [top-left, top-right, bottom-left, bottom-right]
+      // x offsets: [0, halfSize, 0, halfSize]
+      // y offsets: [0, 0, halfSize, halfSize]
+
+      for (let q = 0; q < quadrantsActive; q++) {
+        const qx = (q % 2) * halfSize;
+        const qy = Math.floor(q / 2) * halfSize;
+        ctx.fillStyle = 'rgba(212,168,75,0.9)'; // golden dust color
+        ctx.fillRect(squareX + qx + 0.5, dustStartY + qy + 0.5, halfSize - 1, halfSize - 1);
+      }
+
+      // Draw border
+      ctx.strokeStyle = 'rgba(212,168,75,0.6)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(squareX + 0.5, dustStartY + 0.5, dustSquareSize - 1, dustSquareSize - 1);
+    }
+    ctx.restore();
+
+    // ── Health bar display (only when damaged) ───────────────────────────────
+    // Uses tick-based timing for determinism (HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS ticks)
+    const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
+    for (let ci = 0; ci < world.clusters.length; ci++) {
+      const cluster = world.clusters[ci];
+      if (cluster.isAliveFlag === 0) continue;
+
+      // Check for health changes to trigger display
+      const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
+      if (cluster.healthPoints < prevHealth) {
+        healthBarDisplayUntilTick.set(cluster.entityId, world.tick + healthBarDisplayTicks);
+      }
+      prevHealthMap.set(cluster.entityId, cluster.healthPoints);
+
+      // Only show health bar if recently damaged (tick-based)
+      const displayUntilTick = healthBarDisplayUntilTick.get(cluster.entityId) ?? 0;
+      if (world.tick > displayUntilTick) continue;
+
+      const healthFraction = cluster.healthPoints / cluster.maxHealthPoints;
+      const barWidth = 24;
+      const barHeight = 3;
+      const barX = cluster.positionXWorld * zoom + ox - barWidth / 2;
+      const barY = (cluster.positionYWorld - cluster.halfHeightWorld - 4) * zoom + oy;
+
+      ctx.save();
+      // Background
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+      // Health fill
+      const healthColor = cluster.isPlayerFlag === 1 ? '#00ff88' : '#ff4444';
+      ctx.fillStyle = healthColor;
+      ctx.fillRect(barX, barY, barWidth * healthFraction, barHeight);
+      // Border
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+      ctx.restore();
     }
 
     if (interactInputPulseMs > 0) {
@@ -1245,6 +1421,12 @@ export function startGameScreen(
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
     if (deathScreenCleanup !== null) deathScreenCleanup();
     if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
+    // Stop world music
+    if (currentWorldMusic !== null) {
+      currentWorldMusic.pause();
+      currentWorldMusic.src = '';
+      currentWorldMusic = null;
+    }
     editorController.destroy();
     removeEditorButton();
     detachInput();

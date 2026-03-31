@@ -1,5 +1,6 @@
 import { showMainMenu } from './ui/mainMenu';
 import { showLoadoutScreen } from './ui/weaveLoadout';
+import { showCharacterSelect } from './ui/characterSelect';
 import { startGameScreen } from './screens/gameScreen';
 import { ParticleKind } from './sim/particles/kinds';
 import { createDefaultProgress, PlayerProgress } from './progression/playerProgress';
@@ -32,7 +33,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   }
 
   function navigate(
-    to: 'mainMenu' | 'loadout' | 'gameplay',
+    to: 'mainMenu' | 'characterSelect' | 'loadout' | 'gameplay',
     loadout?: ParticleKind[],
   ): void {
     // Persist progress when leaving gameplay
@@ -51,13 +52,21 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           activeSaveData = saveData;
           progress = saveData.progress;
           sessionStartMs = performance.now();
-          // If the save has explored rooms (returning player), skip loadout
+          // If the save has explored rooms (returning player), skip loadout + character select
           if (progress.exploredRoomIds.length > 0) {
             navigate('gameplay', progress.loadout);
           } else {
-            navigate('loadout');
+            navigate('characterSelect');
           }
         },
+      });
+    } else if (to === 'characterSelect') {
+      cleanup = showCharacterSelect(uiRoot, {
+        onConfirm: (characterId) => {
+          progress.characterId = characterId;
+          navigate('loadout');
+        },
+        onCancel: () => navigate('mainMenu'),
       });
     } else if (to === 'loadout') {
       cleanup = showLoadoutScreen(uiRoot, progress, {

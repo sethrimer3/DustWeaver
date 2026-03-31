@@ -206,12 +206,25 @@ export interface ClusterState {
   /** Boss vertical velocity (world units/tick). */
   radiantTetherVelYWorld: number;
 
-  // ---- Player sprite rotation (populated only when isPlayerFlag === 1) -----
+  // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
+  /** 1 when the player is facing left (sprites face right by default). */
+  isFacingLeftFlag: 0 | 1;
+  /** 1 while the player is sprinting (shift held + grounded + moving). */
+  isSprintingFlag: 0 | 1;
+  /** 1 while the player is crouching (S/down held + grounded). */
+  isCrouchingFlag: 0 | 1;
+  /** Ticks since last horizontal movement input (for idle animation trigger). */
+  playerIdleTimerTicks: number;
   /**
-   * Accumulated rotation angle (radians) for the player sprite.
-   * Slowly increments each tick; speeds up while the player is blocking.
+   * Current idle animation state:
+   *  0 = standing (default)
+   *  1 = idle1
+   *  2 = idle2
+   *  3 = idleBlink
    */
-  playerRotationAngleRad: number;
+  playerIdleAnimState: number;
+  /** Ticks remaining until the next idle animation switch. */
+  playerIdleNextSwitchTicks: number;
 }
 
 export function createClusterState(
@@ -281,6 +294,11 @@ export function createClusterState(
     radiantTetherChainCount: 3,
     radiantTetherVelXWorld: 0,
     radiantTetherVelYWorld: 0,
-    playerRotationAngleRad: 0,
+    isFacingLeftFlag: 0,
+    isSprintingFlag: 0,
+    isCrouchingFlag: 0,
+    playerIdleTimerTicks: 0,
+    playerIdleAnimState: 0,
+    playerIdleNextSwitchTicks: 0,
   };
 }

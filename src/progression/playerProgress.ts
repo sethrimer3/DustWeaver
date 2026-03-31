@@ -52,6 +52,8 @@ export interface PlayerProgress {
   lastSaveRoomId: string | null;
   /** Block coordinates of the last save point used. */
   lastSaveSpawnBlock: [number, number] | null;
+  /** Selected character identifier ('knight' or 'demonFox'). */
+  characterId: string;
 }
 
 // ---- Factory / helpers ---------------------------------------------------
@@ -74,6 +76,7 @@ export function createDefaultProgress(): PlayerProgress {
     exploredRoomIds: [],
     lastSaveRoomId: null,
     lastSaveSpawnBlock: null,
+    characterId: 'knight',
   };
 }
 
