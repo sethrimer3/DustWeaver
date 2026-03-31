@@ -88,7 +88,7 @@ const NORMAL_GRAVITY_WORLD_PER_SEC2 = 900.0;
  *
  * Increased by 50% from original 200.0 for higher, faster jumps.
  */
-const PLAYER_JUMP_SPEED_WORLD = 300.0;
+export const PLAYER_JUMP_SPEED_WORLD = 300.0;
 
 /**
  * Jump-cut gravity multiplier.
@@ -106,7 +106,7 @@ const JUMP_CUT_GRAVITY_MULTIPLIER = 2.5;
 /** Duration of the variable-jump sustain window (seconds). */
 const VAR_JUMP_TIME_SEC = 0.20;
 /** Variable jump sustain window in ticks (60 fps). */
-const VAR_JUMP_TIME_TICKS = Math.round(VAR_JUMP_TIME_SEC * 60.0);
+export const VAR_JUMP_TIME_TICKS = Math.round(VAR_JUMP_TIME_SEC * 60.0);
 
 // ── Apex half-gravity ────────────────────────────────────────────────────────
 // Near the top of the jump arc, gravity is halved for a brief "floaty apex"

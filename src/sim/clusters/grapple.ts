@@ -68,6 +68,7 @@ import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { INFLUENCE_RADIUS_WORLD } from './binding';
+import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS } from './movement';
 
 // ============================================================================
 // Tuning constants — adjust these to dial in the grapple feel
@@ -156,16 +157,18 @@ const GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS = 10;
 const GRAPPLE_STUCK_SUPER_JUMP_MULTIPLIER = 2.0;
 
 /**
- * Player jump speed (world units/sec, applied upward = negated).
- * Must stay in sync with PLAYER_JUMP_SPEED_WORLD in movement.ts.
+ * Distance threshold (world units) within which the player is considered to
+ * have arrived at the zip destination.  Prevents overshooting the target on
+ * the final tick when the remaining distance is smaller than the zip step.
  */
-const GRAPPLE_PLAYER_JUMP_SPEED_WORLD = 300.0;
+const GRAPPLE_ZIP_ARRIVAL_THRESHOLD_WORLD = 1.0;
 
 /**
- * Variable-jump sustain window in ticks.
- * Must stay in sync with VAR_JUMP_TIME_TICKS in movement.ts.
+ * Minimum distance (world units) for computing a normalized direction toward
+ * the zip target.  Prevents division-by-near-zero when the player is
+ * essentially on top of the anchor.
  */
-const GRAPPLE_VAR_JUMP_TIME_TICKS = 12;
+const GRAPPLE_ZIP_MIN_DIST_WORLD = 0.01;
 
 /**
  * Behavior mode value used for grapple chain particles.
@@ -432,11 +435,11 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       const hasSuperJump = world.isGrappleStuckFlag === 1 &&
         world.grappleStuckStoppedTickCount > 0 &&
         world.grappleStuckStoppedTickCount <= GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS;
-      const jumpSpeed = GRAPPLE_PLAYER_JUMP_SPEED_WORLD *
+      const jumpSpeed = PLAYER_JUMP_SPEED_WORLD *
         (hasSuperJump ? GRAPPLE_STUCK_SUPER_JUMP_MULTIPLIER : 1.0);
       player.velocityYWorld = -jumpSpeed;
       player.isGroundedFlag = 0;
-      player.varJumpTimerTicks = GRAPPLE_VAR_JUMP_TIME_TICKS;
+      player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
       player.varJumpSpeedWorld = -jumpSpeed;
       releaseGrapple(world);
       return;
@@ -449,12 +452,12 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       const dist = Math.sqrt(dx * dx + dy * dy);
       const zipStep = GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * dtSec;
 
-      if (dist <= zipStep + 1.0) {
+      if (dist <= zipStep + GRAPPLE_ZIP_ARRIVAL_THRESHOLD_WORLD) {
         // Arrived — snap to target and transition to stuck
         player.positionXWorld = targetX;
         player.positionYWorld = targetY;
         // Preserve zip direction as velocity (for skid effect / release momentum)
-        if (dist > 0.01) {
+        if (dist > GRAPPLE_ZIP_MIN_DIST_WORLD) {
           const nd = 1.0 / dist;
           player.velocityXWorld = dx * nd * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
           player.velocityYWorld = dy * nd * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;

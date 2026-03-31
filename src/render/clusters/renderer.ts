@@ -558,20 +558,34 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
 
   // ── Top-surface grapple special effect: rotating golden starburst at anchor ─
   if (snapshot.isGrappleTopSurfaceFlag === 1 && snapshot.isGrappleActiveFlag === 1) {
+    /** Tick-to-radians scale for starburst rotation speed. */
+    const STARBURST_TIME_SCALE = 0.12;
+    /** Number of radiating rays in the starburst. */
+    const STARBURST_RAY_COUNT = 8;
+    /** Inner radius (px) where rays begin — keeps the center clear. */
+    const STARBURST_INNER_RADIUS_PX = 2;
+    /** Base outer radius (px) of the starburst rays. */
+    const STARBURST_OUTER_BASE_PX = 8;
+    /** Frequency of the pulsing outer-radius oscillation. */
+    const STARBURST_PULSE_FREQUENCY = 3.0;
+    /** Amplitude (px) of the pulsing oscillation on the outer radius. */
+    const STARBURST_PULSE_AMPLITUDE_PX = 3;
+    /** Radius (px) of the bright center glow circle. */
+    const STARBURST_CENTER_GLOW_RADIUS_PX = 3;
+
     const starAx = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
     const starAy = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
-    const time = snapshot.tick * 0.12;
-    const rays = 8;
-    const innerR = 2;
-    const pulseOuter = 8 + Math.sin(time * 3.0) * 3;
+    const time = snapshot.tick * STARBURST_TIME_SCALE;
+    const pulseOuter = STARBURST_OUTER_BASE_PX +
+      Math.sin(time * STARBURST_PULSE_FREQUENCY) * STARBURST_PULSE_AMPLITUDE_PX;
 
     // Radiating golden rays
-    for (let r = 0; r < rays; r++) {
-      const angle = time + (r / rays) * Math.PI * 2;
+    for (let r = 0; r < STARBURST_RAY_COUNT; r++) {
+      const angle = time + (r / STARBURST_RAY_COUNT) * Math.PI * 2;
       const cosA = Math.cos(angle);
       const sinA = Math.sin(angle);
       ctx.beginPath();
-      ctx.moveTo(starAx + cosA * innerR, starAy + sinA * innerR);
+      ctx.moveTo(starAx + cosA * STARBURST_INNER_RADIUS_PX, starAy + sinA * STARBURST_INNER_RADIUS_PX);
       ctx.lineTo(starAx + cosA * pulseOuter, starAy + sinA * pulseOuter);
       ctx.strokeStyle = 'rgba(255, 215, 0, 0.85)';
       ctx.lineWidth = 1.5;
@@ -580,7 +594,7 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
 
     // Bright center glow
     ctx.beginPath();
-    ctx.arc(starAx, starAy, 3, 0, Math.PI * 2);
+    ctx.arc(starAx, starAy, STARBURST_CENTER_GLOW_RADIUS_PX, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255, 255, 220, 0.95)';
     ctx.fill();
 
