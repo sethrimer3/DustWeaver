@@ -126,6 +126,24 @@ export interface WorldState extends ParticleBuffers {
    * Reset to 0 on grapple fire / release.
    */
   grappleJumpHeldTickCount: number;
+
+  // ---- Grapple miss state (limp chain) ------------------------------------
+  /** 1 while the grapple chain is in "miss" mode (extended to full length, falling limp). */
+  isGrappleMissActiveFlag: 0 | 1;
+  /** Direction X the grapple was fired in (normalized). */
+  grappleMissDirXWorld: number;
+  /** Direction Y the grapple was fired in (normalized). */
+  grappleMissDirYWorld: number;
+  /** Ticks since the grapple miss started. */
+  grappleMissTickCount: number;
+
+  // ---- Skid debris visual flag (read by renderer) -------------------------
+  /** 1 while the player is skidding and debris should be spawned. */
+  isPlayerSkiddingFlag: 0 | 1;
+  /** X position of the skid debris origin (bottom-front corner). */
+  skidDebrisXWorld: number;
+  /** Y position of the skid debris origin (bottom edge). */
+  skidDebrisYWorld: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -179,6 +197,13 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleAttachFxYWorld: 0.0,
     grappleParticleStartIndex: -1,
     grappleJumpHeldTickCount: 0,
+    isGrappleMissActiveFlag: 0,
+    grappleMissDirXWorld: 0.0,
+    grappleMissDirYWorld: 0.0,
+    grappleMissTickCount: 0,
+    isPlayerSkiddingFlag: 0,
+    skidDebrisXWorld: 0.0,
+    skidDebrisYWorld: 0.0,
     ...createParticleBuffers(),
   };
 }

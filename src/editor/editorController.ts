@@ -39,6 +39,10 @@ export interface EditorController {
     offsetXPx: number,
     offsetYPx: number,
     zoom: number,
+    deviceWidthPx: number,
+    deviceHeightPx: number,
+    virtualWidthPx: number,
+    virtualHeightPx: number,
   ) => boolean;
   /** Render editor overlays onto the 2D context. */
   render: (
@@ -154,6 +158,10 @@ export function createEditorController(
     offsetXPx: number,
     offsetYPx: number,
     zoom: number,
+    deviceWidthPx: number,
+    deviceHeightPx: number,
+    virtualWidthPx: number,
+    virtualHeightPx: number,
   ): boolean {
     if (!state.isActive) return false;
     if (state.isWorldMapOpen) return true;
@@ -167,9 +175,13 @@ export function createEditorController(
     };
     updateEditorCamera(camera, camInput, dtSec);
 
-    // Update cursor position (screen → world → block)
-    const worldX = (inputState.mouseScreenXPx - offsetXPx) / zoom;
-    const worldY = (inputState.mouseScreenYPx - offsetYPx) / zoom;
+    // Convert device screen mouse coordinates to virtual canvas coordinates
+    const virtualMouseX = (inputState.mouseScreenXPx / deviceWidthPx) * virtualWidthPx;
+    const virtualMouseY = (inputState.mouseScreenYPx / deviceHeightPx) * virtualHeightPx;
+
+    // Update cursor position (virtual → world → block)
+    const worldX = (virtualMouseX - offsetXPx) / zoom;
+    const worldY = (virtualMouseY - offsetYPx) / zoom;
     state.cursorWorldX = worldX;
     state.cursorWorldY = worldY;
     state.cursorBlockX = Math.floor(worldX / BS);
