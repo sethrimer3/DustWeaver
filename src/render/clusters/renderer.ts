@@ -4,9 +4,6 @@ import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_MEDIUM } from '../../levels/roomDef';
 import { ParticleKind } from '../../sim/particles/kinds';
 
-/** Block size in world units — walls are decomposed into tiles of this size. */
-const BLOCK_SIZE_PX = BLOCK_SIZE_MEDIUM;
-
 // ── Sprite loading ──────────────────────────────────────────────────────────
 
 /** Module-level image cache keyed by URL — populated once, reused forever. */
@@ -118,7 +115,7 @@ function renderFlyingEye(
  * that hitbox boundaries are visible during development.
  */
 export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
-  renderWallSprites(ctx, snapshot, offsetXPx, offsetYPx, scalePx, BLOCK_SIZE_PX);
+  renderWallSprites(ctx, snapshot, offsetXPx, offsetYPx, scalePx, BLOCK_SIZE_MEDIUM);
 
   if (isDebugMode) {
     ctx.save();

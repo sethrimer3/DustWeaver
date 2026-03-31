@@ -26,7 +26,7 @@
 - Game uses interconnected rooms instead of a level-select world map.
 - Player spawns in a central lobby (world 0) with tunnels leading left (world 2)
   and right (world 1).
-- Rooms are defined in block-unit coordinates (1 block = 30 world units).
+- Rooms are defined in block-unit coordinates (currently 1 block = BLOCK_SIZE_SMALL = 8 world units).
 - Room transitions are open tunnel passages at room edges; blocks line the
   tunnel ceiling/floor and a darkness gradient fades to 100% black at the edge.
 - When the player enters a transition zone, the current room is unloaded and
@@ -155,8 +155,9 @@ Direct acceleration model preserved. Retuned values:
 - Max run speed:       105 px/s
 
 ### Player Hitbox
-Changed from 8×12 to 10×10 px (halfWidth=5, halfHeight=5) to match the spec of
-exactly one-third of a standard block (30 px) in each dimension.
+Changed from 8×12 to 8×10 px (halfWidth=4, halfHeight=5). Player size constants
+are exported from `src/levels/roomDef.ts` as PLAYER_WIDTH_WORLD=8,
+PLAYER_HEIGHT_WORLD=10, PLAYER_HALF_WIDTH_WORLD=4, PLAYER_HALF_HEIGHT_WORLD=5.
 
 ### Wall Slide
 Wall slide descent capped at 25 px/s (reduced from 80) for deliberate, readable
@@ -219,7 +220,7 @@ This prevents the acceleration model from fighting against the swing.
 ## Skill Tomb Save Points (BUILD 27)
 - Skill tombs are placed in rooms via `skillTombs` array in `RoomDef`.
 - Uses `skill_tomb.png` sprite from `ASSETS/SPRITES/WORLDS/W-0/`.
-- Proximity detection radius: 3 blocks (90 world units).
+- Proximity detection radius: 3 blocks (3 × BLOCK_SIZE_MEDIUM world units).
 - Golden dust particles swirl around the tomb when the player is near;
   particles transition to dull gold and fall to the ground when the player leaves.
 - Press F to interact: saves progress and opens the Skill Tomb menu.
@@ -248,14 +249,22 @@ This prevents the acceleration model from fighting against the swing.
 ## BUILD 34 Changes
 
 ### Block Size Reduction
-### Block Size Constants (BUILD 44)
-`BLOCK_SIZE_WORLD` (previously 11.25) replaced with three canonical constants:
-- `BLOCK_SIZE_SMALL  = 3`  → 3×3 virtual px, 12×12 physical px @ 4×
-- `BLOCK_SIZE_MEDIUM = 6`  → 6×6 virtual px, 24×24 physical px @ 4× (standard room unit)
-- `BLOCK_SIZE_LARGE  = 12` → 12×12 virtual px, 48×48 physical px @ 4×
+### Block Size Constants (BUILD 45)
+`BLOCK_SIZE_WORLD` (previously 11.25) replaced with three canonical constants,
+updated from the BUILD 44 values (3/6/12) to the new standard:
+- `BLOCK_SIZE_SMALL  = 8`  → 8×8 virtual px, 32×32 physical px @ 4×
+- `BLOCK_SIZE_MEDIUM = 8`  → temporary alias of small tier while medium tier is disabled
+- `BLOCK_SIZE_LARGE  = 8`  → temporary alias of small tier while large tier is disabled
 
-At zoom 1.0 with 480×270 virtual canvas: 80 medium blocks horizontally, 45 vertically.
+At zoom 1.0 with 480×270 virtual canvas: 60 small blocks horizontally, 33.75 vertically.
 All room definitions remain in block units and are converted at load time.
+
+Player size constants are now exported from `src/levels/roomDef.ts`:
+- `PLAYER_WIDTH_WORLD = 8`, `PLAYER_HEIGHT_WORLD = 10`
+- `PLAYER_HALF_WIDTH_WORLD = 4`, `PLAYER_HALF_HEIGHT_WORLD = 5`
+
+The obsolete 30×30 tile model is fully removed. All block sizing uses the three-tier
+system above. Particle radius updated to 4/6 ≈ 0.667 world units (1/6 of player width).
 
 ### Collision System Rewrite (BUILD 44)
 **Wall merging**: At room load time, contiguous axis-aligned wall rectangles are
@@ -276,7 +285,7 @@ boundary checks to absorb floating-point error across ticks.
 
 **Sub-tick safety**: Each axis pass is sub-stepped when the movement distance
 exceeds half the cluster's dimension on that axis. This prevents tunneling
-through thin walls (BLOCK_SIZE_SMALL = 3 units) at dash speed (~9 units/tick).
+through thin walls (BLOCK_SIZE_SMALL = 8 units) at dash speed (~9 units/tick).
 
 ### Jump Height Reduction
 `JUMP_HEIGHT_WORLD` reduced from 60 to 40 world units.  Derived constants
