@@ -127,11 +127,11 @@ export function createDefaultWeaveLoadout(): PlayerWeaveLoadout {
   return {
     primary: {
       weaveId: WEAVE_SPIRE,
-      boundDust: [ParticleKind.Fire, ParticleKind.Physical],
+      boundDust: [],
     },
     secondary: {
       weaveId: WEAVE_AEGIS,
-      boundDust: [ParticleKind.Water, ParticleKind.Wind],
+      boundDust: [],
     },
   };
 }

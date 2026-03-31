@@ -47,6 +47,20 @@ export function showLoadoutScreen(
   let weaveLoadout: PlayerWeaveLoadout = progress.weaveLoadout
     ? JSON.parse(JSON.stringify(progress.weaveLoadout))
     : createDefaultWeaveLoadout();
+  let isDevModeDustUnlocked = progress.isDevModeDustUnlocked === true;
+
+  function getAvailableDustKinds(): ParticleKind[] {
+    if (isDevModeDustUnlocked) return [...EQUIPPABLE_KINDS];
+    const unlocked = new Set(progress.unlockedDustKinds ?? []);
+    return EQUIPPABLE_KINDS.filter(kind => unlocked.has(kind));
+  }
+
+  function sanitizeWeaveLoadoutToAvailableDust(): void {
+    const available = new Set(getAvailableDustKinds());
+    weaveLoadout.primary.boundDust = weaveLoadout.primary.boundDust.filter(kind => available.has(kind));
+    weaveLoadout.secondary.boundDust = weaveLoadout.secondary.boundDust.filter(kind => available.has(kind));
+  }
+  sanitizeWeaveLoadoutToAvailableDust();
 
   // ---- Root container --------------------------------------------------
   const el = document.createElement('div');
@@ -70,6 +84,27 @@ export function showLoadoutScreen(
     </p>
   `;
   el.appendChild(header);
+
+  const devModeRow = document.createElement('label');
+  devModeRow.style.cssText = 'display:flex; align-items:center; gap:8px; color:#c7c7c7; font-size:0.72rem; margin-bottom:10px;';
+  const devModeCheckbox = document.createElement('input');
+  devModeCheckbox.type = 'checkbox';
+  devModeCheckbox.checked = isDevModeDustUnlocked;
+  devModeCheckbox.style.cssText = 'width:12px; height:12px;';
+  devModeCheckbox.addEventListener('change', () => {
+    isDevModeDustUnlocked = devModeCheckbox.checked;
+    progress.isDevModeDustUnlocked = isDevModeDustUnlocked;
+    sanitizeWeaveLoadoutToAvailableDust();
+    panelRenderFns.get(primaryPanel)?.();
+    panelRenderFns.get(secondaryPanel)?.();
+    renderDustPool();
+    updateStartButton();
+  });
+  const devModeText = document.createElement('span');
+  devModeText.textContent = 'DEV MODE — unlock all dust';
+  devModeRow.appendChild(devModeCheckbox);
+  devModeRow.appendChild(devModeText);
+  el.appendChild(devModeRow);
 
   // ---- Weave panels container ------------------------------------------
   const panelsContainer = document.createElement('div');
@@ -287,8 +322,9 @@ export function showLoadoutScreen(
   function renderDustPool(): void {
     dustPoolEl.innerHTML = '';
 
-    for (let k = 0; k < EQUIPPABLE_KINDS.length; k++) {
-      const kind = EQUIPPABLE_KINDS[k];
+    const availableKinds = getAvailableDustKinds();
+    for (let k = 0; k < availableKinds.length; k++) {
+      const kind = availableKinds[k];
       const def = getDustDefinition(kind);
 
       const card = document.createElement('div');
@@ -350,6 +386,13 @@ export function showLoadoutScreen(
 
       dustPoolEl.appendChild(card);
     }
+
+    if (availableKinds.length === 0) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.style.cssText = 'grid-column:1/-1; color:#777; font-size:0.76rem; text-align:center; padding:10px 0;';
+      emptyMsg.textContent = 'No dust unlocked yet. Find a skillbook in the lobby.';
+      dustPoolEl.appendChild(emptyMsg);
+    }
   }
 
   renderDustPool();
@@ -383,8 +426,6 @@ export function showLoadoutScreen(
   `;
   startBtn.addEventListener('click', () => {
     if (!isLoadoutValid(weaveLoadout)) return;
-    const hasDust = weaveLoadout.primary.boundDust.length > 0 || weaveLoadout.secondary.boundDust.length > 0;
-    if (!hasDust) return;
     // Build legacy flat loadout from all bound dust for backward compat
     const flatLoadout = [...weaveLoadout.primary.boundDust, ...weaveLoadout.secondary.boundDust];
     const uniqueLoadout = Array.from(new Set(flatLoadout));
@@ -394,12 +435,11 @@ export function showLoadoutScreen(
 
   function updateStartButton(): void {
     const valid = isLoadoutValid(weaveLoadout);
-    const hasDust = weaveLoadout.primary.boundDust.length > 0 || weaveLoadout.secondary.boundDust.length > 0;
-    const canStart = valid && hasDust;
+    const canStart = valid;
     const totalDust = weaveLoadout.primary.boundDust.length + weaveLoadout.secondary.boundDust.length;
     startBtn.textContent = canStart
       ? `⚔ Enter Battle (${totalDust} dust bound)`
-      : 'Bind at least one Dust type';
+      : 'Loadout invalid';
     startBtn.disabled = !canStart;
     startBtn.style.opacity = canStart ? '1' : '0.4';
     startBtn.style.cursor = canStart ? 'pointer' : 'default';

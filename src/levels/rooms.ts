@@ -241,6 +241,10 @@ export const ROOM_LOBBY: RoomDef = {
     // Skill tome on plateau, 2 blocks right of spawn (24+2=26)
     { xBlock: 26, yBlock: 18 },
   ],
+  skillBooks: [
+    // Golden Dust skillbook in the lobby, left side of the plateau.
+    { xBlock: 22, yBlock: 18 },
+  ],
 };
 
 // ── World 1, Room 1 ──────────────────────────────────────────────────────────

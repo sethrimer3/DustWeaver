@@ -35,6 +35,10 @@ const DUST_FALL_LAUNCH_SPEED_WORLD = 18.0;
 
 /** Rendered size of each dust particle in screen pixels (uniform, 4×4). */
 const DUST_PIXEL_SIZE = 4;
+/** Skill tomb sprite width in world units (24px = 3 tiles). */
+const TOMB_SPRITE_WIDTH_WORLD = 3 * BLOCK_SIZE_MEDIUM;
+/** Skill tomb sprite height in world units (48px = 6 tiles). */
+const TOMB_SPRITE_HEIGHT_WORLD = 6 * BLOCK_SIZE_MEDIUM;
 
 interface DustParticle {
   /** Current position relative to tomb center (world units). */
@@ -284,8 +288,8 @@ export class SkillTombRenderer {
       const screenY = tomb.yWorld * zoom + offsetYPx;
 
       // Draw sprite (save tomb when idle, skill tomb when active)
-      const spriteW = BLOCK_SIZE_MEDIUM * zoom;
-      const spriteH = BLOCK_SIZE_MEDIUM * zoom;
+      const spriteW = TOMB_SPRITE_WIDTH_WORLD * zoom;
+      const spriteH = TOMB_SPRITE_HEIGHT_WORLD * zoom;
       if (tomb.activationFactor > 0.1 && this.isActiveSpriteLoaded) {
         ctx.drawImage(
           this.activeTombSprite,
