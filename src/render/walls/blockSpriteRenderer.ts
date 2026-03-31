@@ -1,7 +1,7 @@
 /**
  * Auto-tiling block sprite renderer.
  *
- * For every 30×30 block cell in each wall rectangle, this module:
+ * For every block cell (sized per the BLOCK_SIZE tier) in each wall rectangle, this module:
  *   1. Builds an occupancy grid (Set of "col,row" keys).
  *   2. Computes a 4-bit neighbor mask for each occupied cell.
  *   3. Selects one of six sprite variants (block, single, edge, corner, end,
@@ -304,7 +304,7 @@ function _drawVertexOverlays(
  * @param offsetXPx    Horizontal pixel offset (camera translation).
  * @param offsetYPx    Vertical pixel offset (camera translation).
  * @param scalePx      Scale factor (world units → screen pixels).
- * @param blockSizePx  Block/tile size in world units (typically 30).
+ * @param blockSizePx  Block/tile size in world units (e.g. BLOCK_SIZE_MEDIUM = 12).
  */
 export function renderWallSprites(
   ctx:         CanvasRenderingContext2D,

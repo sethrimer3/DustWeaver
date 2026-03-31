@@ -214,7 +214,7 @@ const ENEMY_ENGAGE_DIST_WORLD = 60.0;
  * Maximum line-of-sight range for rolling enemies (world units).
  * Rolling enemies only chase the player when within this distance,
  * or when recently damaged (rollingEnemyAggressiveTicks > 0).
- * ~20 blocks at BLOCK_SIZE_MEDIUM = 6.
+ * ~25 blocks at BLOCK_SIZE_MEDIUM = 12.
  */
 const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 300.0;
 
@@ -463,7 +463,7 @@ function resolveWallsY(
  *
  * Each axis is sub-stepped if the movement distance exceeds half the
  * cluster's dimension on that axis, preventing tunneling through thin
- * walls at high speed (e.g. dash through a BLOCK_SIZE_SMALL = 3 unit wall).
+ * walls at high speed (e.g. dash through a BLOCK_SIZE_SMALL = 8 unit wall).
  *
  * Returns true if the cluster landed on a top surface this tick.
  */

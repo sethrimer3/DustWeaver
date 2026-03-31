@@ -1,3 +1,5 @@
+import { PLAYER_HALF_WIDTH_WORLD, PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
+
 export interface ClusterState {
   entityId: number;
   positionXWorld: number;
@@ -230,8 +232,8 @@ export function createClusterState(
     healthPoints: maxHealthPoints,
     maxHealthPoints,
     isGroundedFlag: 0,
-    halfWidthWorld: 5,
-    halfHeightWorld: 5,
+    halfWidthWorld: PLAYER_HALF_WIDTH_WORLD,
+    halfHeightWorld: PLAYER_HALF_HEIGHT_WORLD,
     coyoteTimeTicks: 0,
     jumpBufferTicks: 0,
     prevJumpHeldFlag: 0,

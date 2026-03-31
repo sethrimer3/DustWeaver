@@ -9,7 +9,7 @@
  * Going LEFT leads to World 2 rooms.
  * Going further LEFT from World 2 leads to World 3 (fire/lava world).
  *
- * All coordinates are in block units (1 block = 30 world units).
+ * All coordinates are in block units (1 block = BLOCK_SIZE_MEDIUM world units).
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
