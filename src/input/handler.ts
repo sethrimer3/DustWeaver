@@ -150,6 +150,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Shift') {
       e.preventDefault();
       state.isSprintHeldFlag = true;
+      if (!e.repeat) { state.isDashTriggeredFlag = true; }
     }
     if ((e.key === 'e' || e.key === 'E') && !e.repeat) {
       state.isGrappleHeldFlag = 1;

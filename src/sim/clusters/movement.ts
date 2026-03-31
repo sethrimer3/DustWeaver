@@ -634,12 +634,12 @@ export function applyClusterMovement(world: WorldState): void {
               // Time to switch idle animation
               if (cluster.playerIdleAnimState === 0) {
                 // Currently standing → pick an idle animation
-                const roll = (nextUint32(world.rng) >>> 0) % 100;
+                const roll = nextUint32(world.rng) % 100;
                 if (roll < 1) {
                   // 1/100 chance → idle2
                   cluster.playerIdleAnimState = 2;
                   // idle2 duration: 2 seconds ± 1 second (60-180 ticks)
-                  cluster.playerIdleNextSwitchTicks = 120 + ((nextUint32(world.rng) >>> 0) % 121) - 60;
+                  cluster.playerIdleNextSwitchTicks = 120 + (nextUint32(world.rng) % 121) - 60;
                 } else if (roll < 10) {
                   // 9/100 chance → idleBlink
                   cluster.playerIdleAnimState = 3;
@@ -648,13 +648,13 @@ export function applyClusterMovement(world: WorldState): void {
                   // 90/100 chance → idle1
                   cluster.playerIdleAnimState = 1;
                   // idle1 duration: 2 seconds ± 1 second (60-180 ticks)
-                  cluster.playerIdleNextSwitchTicks = 120 + ((nextUint32(world.rng) >>> 0) % 121) - 60;
+                  cluster.playerIdleNextSwitchTicks = 120 + (nextUint32(world.rng) % 121) - 60;
                 }
               } else {
                 // Was in an idle animation → return to standing
                 cluster.playerIdleAnimState = 0;
                 // Next switch in 2 seconds ± 1 second (60-180 ticks)
-                cluster.playerIdleNextSwitchTicks = 120 + ((nextUint32(world.rng) >>> 0) % 121) - 60;
+                cluster.playerIdleNextSwitchTicks = 120 + (nextUint32(world.rng) % 121) - 60;
               }
             }
           }
