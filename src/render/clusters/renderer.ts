@@ -22,6 +22,18 @@ function _isSpriteReady(img: HTMLImageElement): boolean {
   return img.complete && img.naturalWidth > 0;
 }
 
+function _loadImgWithFallback(srcList: readonly string[]): HTMLImageElement {
+  const img = _loadImg(srcList[0]);
+  if (srcList.length <= 1) return img;
+
+  let candidateIndex = 1;
+  img.addEventListener('error', () => {
+    if (candidateIndex >= srcList.length) return;
+    img.src = srcList[candidateIndex++];
+  });
+  return img;
+}
+
 // ── Character sprite sets ───────────────────────────────────────────────────
 
 interface CharacterSprites {
@@ -36,14 +48,15 @@ interface CharacterSprites {
 
 function _loadCharacterSprites(characterId: string): CharacterSprites {
   const base = `SPRITES/PLAYERS/${characterId}/${characterId}`;
+  const standingSrc = `${base}_standing.png`;
   return {
-    standing:  _loadImg(`${base}_standing.png`),
-    idle1:     _loadImg(`${base}_idle1.png`),
-    idle2:     _loadImg(`${base}_idle2.png`),
-    idleBlink: _loadImg(`${base}_idleBlink.png`),
-    sprinting: _loadImg(`${base}_sprinting.png`),
-    crouching: _loadImg(`${base}_crouching.png`),
-    grappling: _loadImg(`${base}_grappling.png`),
+    standing:  _loadImg(standingSrc),
+    idle1:     _loadImgWithFallback([`${base}_idle1.png`, standingSrc]),
+    idle2:     _loadImgWithFallback([`${base}_idle2.png`, standingSrc]),
+    idleBlink: _loadImgWithFallback([`${base}_idleBlink.png`, standingSrc]),
+    sprinting: _loadImgWithFallback([`${base}_sprinting.png`, standingSrc]),
+    crouching: _loadImgWithFallback([`${base}_crouching.png`, standingSrc]),
+    grappling: _loadImgWithFallback([`${base}_grappling.png`, standingSrc]),
   };
 }
 
@@ -51,6 +64,7 @@ function _loadCharacterSprites(characterId: string): CharacterSprites {
 const _characterSprites: Record<string, CharacterSprites> = {
   knight:   _loadCharacterSprites('knight'),
   demonFox: _loadCharacterSprites('demonFox'),
+  princess: _loadCharacterSprites('princess'),
 };
 
 /**
@@ -101,6 +115,12 @@ const FLYING_EYE_RING_WIDTHS = [3.5, 2.5, 2.0, 1.5];
 const PLAYER_SPRITE_WIDTH_WORLD = 16;
 /** Player sprite render height in world units (virtual px at zoom 1). */
 const PLAYER_SPRITE_HEIGHT_WORLD = 24;
+
+const _grappleDustSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust.png');
+const _grappleDustEndSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust_end.png');
+const GRAPPLE_DUST_SEGMENT_PX = 6;
+const GRAPPLE_DUST_SIZE_PX = 6;
+const GRAPPLE_DUST_END_SIZE_PX = 10;
 
 /** Returns the primary display colour for a flying eye by element kind. */
 function getFlyingEyeColor(elementKind: number): string {
@@ -478,14 +498,46 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     ctx.setLineDash([]);
   }
 
-  // ── Anchor point circle ───────────────────────────────────────────────────
-  ctx.beginPath();
-  ctx.arc(ax, ay, 7, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.85)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 255, 200, 0.95)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  if (snapshot.isGrappleActiveFlag === 1 && playerCluster !== undefined) {
+    const dx = ax - px;
+    const dy = ay - py;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const segmentCount = Math.max(1, Math.floor(dist / GRAPPLE_DUST_SEGMENT_PX));
+    const dustSizePx = GRAPPLE_DUST_SIZE_PX * Math.max(1, scalePx * 0.5);
+
+    if (_isSpriteReady(_grappleDustSprite)) {
+      for (let segmentIndex = 0; segmentIndex <= segmentCount; segmentIndex++) {
+        const t = segmentCount > 0 ? segmentIndex / segmentCount : 0;
+        const sx = px + dx * t;
+        const sy = py + dy * t;
+        ctx.drawImage(_grappleDustSprite, sx - dustSizePx * 0.5, sy - dustSizePx * 0.5, dustSizePx, dustSizePx);
+      }
+    } else {
+      for (let segmentIndex = 0; segmentIndex <= segmentCount; segmentIndex++) {
+        const t = segmentCount > 0 ? segmentIndex / segmentCount : 0;
+        const sx = px + dx * t;
+        const sy = py + dy * t;
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
+        ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+      }
+    }
+  }
+
+  const endSizePx = GRAPPLE_DUST_END_SIZE_PX * Math.max(1, scalePx * 0.5);
+  if (_isSpriteReady(_grappleDustEndSprite)) {
+    ctx.drawImage(_grappleDustEndSprite, ax - endSizePx * 0.5, ay - endSizePx * 0.5, endSizePx, endSizePx);
+    if (snapshot.isGrappleActiveFlag === 1 && playerCluster !== undefined) {
+      ctx.drawImage(_grappleDustEndSprite, px - endSizePx * 0.5, py - endSizePx * 0.5, endSizePx, endSizePx);
+    }
+  } else {
+    ctx.beginPath();
+    ctx.arc(ax, ay, 7, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.85)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 200, 0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
 
   if (snapshot.grappleAttachFxTicks > 0) {
     const fxProgress = 1.0 - snapshot.grappleAttachFxTicks / 14.0;

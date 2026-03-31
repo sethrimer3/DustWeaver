@@ -611,7 +611,7 @@ export function startGameScreen(
     loadRoomWalls(world, room);
 
     // Init dust
-    environmentalDust.initFromWorld(world);
+    environmentalDust.initFromWorld(world, room.worldNumber);
 
     // Init skill tomb renderer
     skillTombRenderer.init(room.skillTombs);

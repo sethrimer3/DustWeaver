@@ -37,7 +37,7 @@ export interface DustDefinition {
  * Only equippable kinds are included (Fluid and Gold are excluded).
  */
 export const DUST_DEFINITIONS: ReadonlyMap<ParticleKind, DustDefinition> = new Map([
-  [ParticleKind.Physical,  { id: ParticleKind.Physical,  displayName: 'Steel Dust',     slotCost: 1, colorHex: '#7799aa', description: 'Dense, grounded particles. Gravitates toward the Weaver like orbiting bodies.' }],
+  [ParticleKind.Physical,  { id: ParticleKind.Physical,  displayName: 'Golden Dust',    slotCost: 1, colorHex: '#ffd700', description: 'Physical starter dust. Dense motes with a bright metallic glow.' }],
   [ParticleKind.Fire,      { id: ParticleKind.Fire,      displayName: 'Flame Dust',     slotCost: 2, colorHex: '#ff5500', description: 'Flickering embers that rise and bob with heat-like motion.' }],
   [ParticleKind.Ice,       { id: ParticleKind.Ice,       displayName: 'Frost Dust',     slotCost: 2, colorHex: '#88ddff', description: 'Crystalline shards that hang in place a moment before drifting back.' }],
   [ParticleKind.Lightning, { id: ParticleKind.Lightning,  displayName: 'Lightning Dust', slotCost: 3, colorHex: '#ffff44', description: 'Electric sparks. Explosive and volatile.' }],

@@ -10,6 +10,18 @@ const DISTURB_RADIUS_WORLD = 92.0;
 const LANDING_RADIUS_WORLD = 145.0;
 const LANDING_VERTICAL_SPEED_THRESHOLD = 80.0;
 const DUST_RENDER_SIZE_PX = 4;
+const LOBBY_WORLD_NUMBER = 0;
+
+
+const BASE = import.meta.env.BASE_URL;
+const GOLDEN_DUST_SPRITE_SRC = `${BASE}SPRITES/DUST/golden/goldenDust.png`;
+const BROWN_DUST_SPRITE_SRC = `${BASE}SPRITES/DUST/brownRock/brownRockDust.png`;
+
+function loadDustSprite(src: string): HTMLImageElement {
+  const image = new Image();
+  image.src = src;
+  return image;
+}
 
 interface SurfaceSegment {
   x0: number;
@@ -37,9 +49,13 @@ export class EnvironmentalDustLayer {
   private readonly prevGroundedFlags: number[] = [];
 
   private readonly surfaces: SurfaceSegment[] = [];
+  private readonly goldenDustSprite = loadDustSprite(GOLDEN_DUST_SPRITE_SRC);
+  private readonly brownDustSprite = loadDustSprite(BROWN_DUST_SPRITE_SRC);
+  private activeDustSprite: HTMLImageElement | null = null;
 
-  initFromWorld(world: WorldState): void {
+  initFromWorld(world: WorldState, worldNumber: number): void {
     this.buildSurfaceSegments(world);
+    this.activeDustSprite = worldNumber === LOBBY_WORLD_NUMBER ? this.goldenDustSprite : this.brownDustSprite;
 
     const targetCount = Math.min(
       MAX_DUST_PARTICLES,
@@ -146,12 +162,17 @@ export class EnvironmentalDustLayer {
         const size = DUST_RENDER_SIZE_PX * scalePx;
         const drawX = this.xWorld[i] * scalePx + offsetXPx;
         const drawY = this.yWorld[i] * scalePx + offsetYPx;
-        ctx.fillRect(
-          drawX,
-          drawY,
-          size,
-          size,
-        );
+        const sprite = this.activeDustSprite;
+        if (sprite !== null && sprite.complete && sprite.naturalWidth > 0) {
+          ctx.drawImage(sprite, drawX, drawY, size, size);
+        } else {
+          ctx.fillRect(
+            drawX,
+            drawY,
+            size,
+            size,
+          );
+        }
         if (showHitboxes) {
           ctx.strokeStyle = 'rgba(255, 230, 140, 0.9)';
           ctx.lineWidth = 0.75;

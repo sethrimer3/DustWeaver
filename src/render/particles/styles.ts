@@ -12,7 +12,7 @@ export interface ParticleStyle {
 // ---- Per-element colour palette (matches ELEMENT_COLORS in webglRenderer) -
 
 const STYLES: ParticleStyle[] = [
-  { colorHex: '#7799aa', radiusPx: 1 }, // Physical  — steel blue-grey
+  { colorHex: '#ffd700', radiusPx: 1 }, // Physical  — bright golden yellow
   { colorHex: '#ff5500', radiusPx: 1 }, // Fire      — hot orange
   { colorHex: '#88ddff', radiusPx: 1 }, // Ice       — cool light blue
   { colorHex: '#ffff44', radiusPx: 1 }, // Lightning — electric yellow

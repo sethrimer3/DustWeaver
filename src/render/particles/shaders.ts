@@ -99,7 +99,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 17) return vec3(0.53, 0.53, 0.60);  // Stone     — cool grey
     if (ki == 18) return vec3(1.00, 0.84, 0.00);  // Gold      — bright golden yellow
     if (ki == 19) return vec3(1.00, 0.99, 0.88);  // Light     — radiant white-gold
-    return vec3(0.47, 0.60, 0.67);                // Physical  — steel blue-grey
+    return vec3(1.00, 0.84, 0.00);                // Physical  — bright golden yellow
   }
 
   // Maps a ParticleKind to a shape index (0–7).
