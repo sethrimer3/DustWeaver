@@ -276,15 +276,6 @@ const FLYING_EYE_VERTICAL_MARGIN_WORLD = 30.0;
 /** Horizontal margin from world edges within which clusters are clamped. */
 const CLUSTER_EDGE_MARGIN_WORLD = 10.0;
 
-/**
- * Maximum vertical overlap (px) that still triggers a platform snap.
- * Must exceed the maximum cluster displacement per tick (≈ terminal vel / 60).
- */
-const PLATFORM_SNAP_TOLERANCE_WORLD = 20.0;
-
-/** Walls at or below this height are treated as top-surface-only thin platforms. */
-const THIN_OBSTACLE_MAX_HEIGHT_WORLD = 34.0;
-
 // ============================================================================
 // Collision helpers
 // ============================================================================
@@ -293,17 +284,14 @@ const THIN_OBSTACLE_MAX_HEIGHT_WORLD = 34.0;
 const COLLISION_EPSILON = 0.5;
 
 /**
- * Resolves the cluster box against the world floor and thin platform top surfaces.
+ * Resolves the cluster box against the world floor.
  * Resets isGroundedFlag to 0 on entry, then sets it to 1 if a landing is found.
  * Returns true if the cluster landed this tick.
  */
 function resolveClusterFloorCollision(cluster: import('./state').ClusterState, world: WorldState): boolean {
   cluster.isGroundedFlag = 0;
 
-  const hw = cluster.halfWidthWorld;
   const hh = cluster.halfHeightWorld;
-  const clusterLeft   = cluster.positionXWorld - hw;
-  const clusterRight  = cluster.positionXWorld + hw;
   const clusterBottom = cluster.positionYWorld + hh;
 
   // ── World floor ───────────────────────────────────────────────────────────
@@ -315,27 +303,8 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
     return true;
   }
 
-  // ── Thin wall top surfaces ─────────────────────────────────────────────────
-  for (let wi = 0; wi < world.wallCount; wi++) {
-    const wallLeft  = world.wallXWorld[wi];
-    const wallRight = wallLeft + world.wallWWorld[wi];
-    const wallTop   = world.wallYWorld[wi];
-    const wallH     = world.wallHWorld[wi];
-    if (wallH > THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
-
-    if (clusterRight <= wallLeft || clusterLeft >= wallRight) continue;
-
-    if (
-      clusterBottom >= wallTop &&
-      clusterBottom <= wallTop + PLATFORM_SNAP_TOLERANCE_WORLD &&
-      cluster.velocityYWorld >= 0
-    ) {
-      cluster.positionYWorld = wallTop - hh;
-      cluster.velocityYWorld = 0;
-      cluster.isGroundedFlag = 1;
-      return true;
-    }
-  }
+  // World floor only. Solid wall collisions (including top landings) are
+  // handled by axis-separated wall sweeps in resolveClusterSolidWallCollision.
   return false;
 }
 
@@ -353,13 +322,10 @@ function resolveWallsX(
   const hh = cluster.halfHeightWorld;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
-    const wallH = world.wallHWorld[wi];
-    if (wallH <= THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
-
     const wallLeft   = world.wallXWorld[wi];
     const wallTop    = world.wallYWorld[wi];
     const wallRight  = wallLeft + world.wallWWorld[wi];
-    const wallBottom = wallTop  + wallH;
+    const wallBottom = wallTop + world.wallHWorld[wi];
 
     const left   = cluster.positionXWorld - hw;
     const right  = cluster.positionXWorld + hw;
@@ -417,13 +383,10 @@ function resolveWallsY(
   let landed = false;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
-    const wallH = world.wallHWorld[wi];
-    if (wallH <= THIN_OBSTACLE_MAX_HEIGHT_WORLD) continue;
-
     const wallLeft   = world.wallXWorld[wi];
     const wallTop    = world.wallYWorld[wi];
     const wallRight  = wallLeft + world.wallWWorld[wi];
-    const wallBottom = wallTop  + wallH;
+    const wallBottom = wallTop + world.wallHWorld[wi];
 
     const left   = cluster.positionXWorld - hw;
     const right  = cluster.positionXWorld + hw;
