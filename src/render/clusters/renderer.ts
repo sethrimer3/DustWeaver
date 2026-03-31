@@ -556,5 +556,42 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     ctx.stroke();
   }
 
+  // ── Top-surface grapple special effect: rotating golden starburst at anchor ─
+  if (snapshot.isGrappleTopSurfaceFlag === 1 && snapshot.isGrappleActiveFlag === 1) {
+    const starAx = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
+    const starAy = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
+    const time = snapshot.tick * 0.12;
+    const rays = 8;
+    const innerR = 2;
+    const pulseOuter = 8 + Math.sin(time * 3.0) * 3;
+
+    // Radiating golden rays
+    for (let r = 0; r < rays; r++) {
+      const angle = time + (r / rays) * Math.PI * 2;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(starAx + cosA * innerR, starAy + sinA * innerR);
+      ctx.lineTo(starAx + cosA * pulseOuter, starAy + sinA * pulseOuter);
+      ctx.strokeStyle = 'rgba(255, 215, 0, 0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Bright center glow
+    ctx.beginPath();
+    ctx.arc(starAx, starAy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 220, 0.95)';
+    ctx.fill();
+
+    // Outer pulsing ring (brighter when stuck / decelerating)
+    const ringAlpha = snapshot.isGrappleStuckFlag === 1 ? 0.7 : 0.4;
+    ctx.beginPath();
+    ctx.arc(starAx, starAy, pulseOuter + 2, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 236, 170, ${ringAlpha})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
   ctx.restore();
 }

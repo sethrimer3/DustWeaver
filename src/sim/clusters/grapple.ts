@@ -129,6 +129,44 @@ const GRAPPLE_TAP_HOP_SPEED_WORLD = 53.0;
 /** Number of Gold particles that form the visible chain between player and anchor. */
 export const GRAPPLE_SEGMENT_COUNT = 10;
 
+// ── Top-surface grapple (zip + stick) ────────────────────────────────────────
+
+/**
+ * Speed at which the player zips toward a top-surface grapple anchor.
+ * 3× the player's top sprint speed: MAX_RUN_SPEED(105) × SPRINT(1.5) × 3.
+ */
+const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 472.5;
+
+/**
+ * Per-tick velocity multiplier while grapple-stuck, applied multiplicatively.
+ * 0.05 = 95% speed loss each tick — almost instant stop in 2–3 frames.
+ */
+const GRAPPLE_STUCK_DECEL_FACTOR = 0.05;
+
+/** Speed threshold (world units/sec) below which a stuck player is considered fully stopped. */
+const GRAPPLE_STUCK_STOP_THRESHOLD_WORLD = 1.0;
+
+/**
+ * Ticks after coming to a full stop while grapple-stuck during which a jump
+ * receives 100% extra vertical height (super jump).
+ */
+const GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS = 10;
+
+/** Jump speed multiplier for the super jump (2× = 100% extra height). */
+const GRAPPLE_STUCK_SUPER_JUMP_MULTIPLIER = 2.0;
+
+/**
+ * Player jump speed (world units/sec, applied upward = negated).
+ * Must stay in sync with PLAYER_JUMP_SPEED_WORLD in movement.ts.
+ */
+const GRAPPLE_PLAYER_JUMP_SPEED_WORLD = 300.0;
+
+/**
+ * Variable-jump sustain window in ticks.
+ * Must stay in sync with VAR_JUMP_TIME_TICKS in movement.ts.
+ */
+const GRAPPLE_VAR_JUMP_TIME_TICKS = 12;
+
 /**
  * Behavior mode value used for grapple chain particles.
  * Binding forces (binding.ts) already skip any particle whose behaviorMode !== 0,
@@ -231,6 +269,23 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
 }
 
 /**
+ * Returns true if the given hit point is on the top surface of any wall.
+ * Used to detect when the grapple attaches to a horizontal ledge.
+ */
+function isTopSurfaceHit(world: WorldState, hitX: number, hitY: number): boolean {
+  const eps = 0.5;
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const topY = world.wallYWorld[wi];
+    const leftX = world.wallXWorld[wi];
+    const rightX = leftX + world.wallWWorld[wi];
+    if (Math.abs(hitY - topY) < eps && hitX >= leftX - eps && hitX <= rightX + eps) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Fires the grapple, setting the anchor at the exact raycast hit point on a
  * wall surface.  Returns without attaching if the wall is too close (less than
  * GRAPPLE_MIN_LENGTH_WORLD away) to prevent degenerate behaviour.
@@ -282,6 +337,9 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // first tick after attachment.
   world.playerJumpTriggeredFlag = 0;
   world.isGrappleActiveFlag = 1;
+  world.isGrappleTopSurfaceFlag = isTopSurfaceHit(world, hit.x, hit.y) ? 1 : 0;
+  world.isGrappleStuckFlag = 0;
+  world.grappleStuckStoppedTickCount = 0;
   world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
   world.grappleAttachFxXWorld = world.grappleAnchorXWorld;
   world.grappleAttachFxYWorld = world.grappleAnchorYWorld;
@@ -305,6 +363,9 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
  */
 export function releaseGrapple(world: WorldState): void {
   world.isGrappleActiveFlag = 0;
+  world.isGrappleTopSurfaceFlag = 0;
+  world.isGrappleStuckFlag = 0;
+  world.grappleStuckStoppedTickCount = 0;
   world.grappleJumpHeldTickCount = 0;
 
   if (world.grappleParticleStartIndex >= 0) {
@@ -352,6 +413,99 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // can detect the rising edge of a jump press here.
   const jumpJustPressed = world.playerJumpTriggeredFlag === 1;
   world.playerJumpTriggeredFlag = 0; // consume — grapple owns the flag while active
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Top-surface grapple — zip toward anchor then stick
+  // ════════════════════════════════════════════════════════════════════════════
+  if (world.isGrappleTopSurfaceFlag === 1) {
+    const ax = world.grappleAnchorXWorld;
+    const ay = world.grappleAnchorYWorld;
+    // Target position: player center such that feet rest on the wall surface.
+    const targetX = ax;
+    const targetY = ay - player.halfHeightWorld;
+
+    // ── Jump input while in top-surface mode ──────────────────────────────
+    // Any jump press releases the grapple and launches the player upward.
+    // If the player has recently stopped while stuck, they receive 100% extra
+    // jump height (super jump).
+    if (jumpJustPressed || (world.playerJumpHeldFlag === 1 && world.isGrappleStuckFlag === 1)) {
+      const hasSuperJump = world.isGrappleStuckFlag === 1 &&
+        world.grappleStuckStoppedTickCount > 0 &&
+        world.grappleStuckStoppedTickCount <= GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS;
+      const jumpSpeed = GRAPPLE_PLAYER_JUMP_SPEED_WORLD *
+        (hasSuperJump ? GRAPPLE_STUCK_SUPER_JUMP_MULTIPLIER : 1.0);
+      player.velocityYWorld = -jumpSpeed;
+      player.isGroundedFlag = 0;
+      player.varJumpTimerTicks = GRAPPLE_VAR_JUMP_TIME_TICKS;
+      player.varJumpSpeedWorld = -jumpSpeed;
+      releaseGrapple(world);
+      return;
+    }
+
+    if (world.isGrappleStuckFlag === 0) {
+      // ── Zip phase: move player toward anchor at 3× sprint speed ────────
+      const dx = targetX - player.positionXWorld;
+      const dy = targetY - player.positionYWorld;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const zipStep = GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * dtSec;
+
+      if (dist <= zipStep + 1.0) {
+        // Arrived — snap to target and transition to stuck
+        player.positionXWorld = targetX;
+        player.positionYWorld = targetY;
+        // Preserve zip direction as velocity (for skid effect / release momentum)
+        if (dist > 0.01) {
+          const nd = 1.0 / dist;
+          player.velocityXWorld = dx * nd * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+          player.velocityYWorld = dy * nd * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+        }
+        world.isGrappleStuckFlag = 1;
+        world.grappleStuckStoppedTickCount = 0;
+      } else {
+        // Move toward anchor
+        const nd = 1.0 / dist;
+        const ndx = dx * nd;
+        const ndy = dy * nd;
+        player.positionXWorld += ndx * zipStep;
+        player.positionYWorld += ndy * zipStep;
+        player.velocityXWorld = ndx * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+        player.velocityYWorld = ndy * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+      }
+    }
+
+    if (world.isGrappleStuckFlag === 1) {
+      // ── Stuck phase: lock position, decelerate rapidly, spawn skid debris ─
+      player.positionXWorld = targetX;
+      player.positionYWorld = targetY;
+
+      const speed = Math.sqrt(
+        player.velocityXWorld * player.velocityXWorld +
+        player.velocityYWorld * player.velocityYWorld,
+      );
+
+      if (speed <= GRAPPLE_STUCK_STOP_THRESHOLD_WORLD) {
+        // Fully stopped
+        player.velocityXWorld = 0;
+        player.velocityYWorld = 0;
+        world.grappleStuckStoppedTickCount++;
+      } else {
+        // Heavy deceleration — almost instantly lose most speed
+        player.velocityXWorld *= GRAPPLE_STUCK_DECEL_FACTOR;
+        player.velocityYWorld *= GRAPPLE_STUCK_DECEL_FACTOR;
+
+        // Set skid debris flags for the renderer (large burst of debris)
+        world.isPlayerSkiddingFlag = 1;
+        world.skidDebrisXWorld = player.positionXWorld;
+        world.skidDebrisYWorld = player.positionYWorld + player.halfHeightWorld;
+      }
+    }
+
+    return; // skip normal pendulum physics
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Normal grapple — pendulum swing
+  // ════════════════════════════════════════════════════════════════════════════
 
   // Ultra-fast tap: pressed and released within a single frame (both keydown
   // and keyup fired between two ticks).  The triggered flag is set but the

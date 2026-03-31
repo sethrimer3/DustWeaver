@@ -103,6 +103,10 @@ export interface WorldSnapshot {
   readonly walls:     WallSnapshot;
   /** 1 while the player's grapple hook is attached; 0 otherwise. */
   readonly isGrappleActiveFlag:  0 | 1;
+  /** 1 when the grapple is attached to the top surface of a wall block. */
+  readonly isGrappleTopSurfaceFlag: 0 | 1;
+  /** 1 when the player has arrived at a top-surface grapple anchor and is sticking. */
+  readonly isGrappleStuckFlag: 0 | 1;
   /** World-space X of the grapple anchor point (only valid when isGrappleActiveFlag=1). */
   readonly grappleAnchorXWorld:  number;
   /** World-space Y of the grapple anchor point (only valid when isGrappleActiveFlag=1). */
@@ -184,6 +188,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       hWorld: world.wallHWorld,
     },
     isGrappleActiveFlag: world.isGrappleActiveFlag,
+    isGrappleTopSurfaceFlag: world.isGrappleTopSurfaceFlag,
+    isGrappleStuckFlag: world.isGrappleStuckFlag,
     grappleAnchorXWorld: world.grappleAnchorXWorld,
     grappleAnchorYWorld: world.grappleAnchorYWorld,
     grappleAttachFxTicks: world.grappleAttachFxTicks,
