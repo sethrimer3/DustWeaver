@@ -97,6 +97,10 @@ const FLYING_EYE_RING_SCALES = [1.0, 0.72, 0.50, 0.31];
 const FLYING_EYE_RING_OFFSETS = [0.0, 0.07, 0.14, 0.19];
 /** Stroke widths (screen pixels) for each ring, outer to inner. */
 const FLYING_EYE_RING_WIDTHS = [3.5, 2.5, 2.0, 1.5];
+/** Player sprite render width in world units (virtual px at zoom 1). */
+const PLAYER_SPRITE_WIDTH_WORLD = 16;
+/** Player sprite render height in world units (virtual px at zoom 1). */
+const PLAYER_SPRITE_HEIGHT_WORLD = 24;
 
 /** Returns the primary display colour for a flying eye by element kind. */
 function getFlyingEyeColor(elementKind: number): string {
@@ -261,23 +265,27 @@ export function renderClusters(
       const charSprites = _characterSprites[snapshot.characterId] ?? _characterSprites['knight'];
       const isGrappling = snapshot.isGrappleActiveFlag === 1;
       const sprite = _getPlayerSprite(charSprites, cluster, isGrappling);
+      const spriteHalfW = (PLAYER_SPRITE_WIDTH_WORLD * scalePx) * 0.5;
+      const spriteHalfH = (PLAYER_SPRITE_HEIGHT_WORLD * scalePx) * 0.5;
+      const spriteW = spriteHalfW * 2;
+      const spriteH = spriteHalfH * 2;
       if (_isSpriteReady(sprite)) {
         ctx.save();
         ctx.translate(screenX, screenY);
         if (cluster.isFacingLeftFlag === 1) {
           ctx.scale(-1, 1);
         }
-        ctx.drawImage(sprite, -boxHalfW, -boxHalfH, boxW, boxH);
+        ctx.drawImage(sprite, -spriteHalfW, -spriteHalfH, spriteW, spriteH);
         ctx.restore();
       } else {
         // Fallback while sprite loads: coloured box
         ctx.fillStyle = '#00ff99';
         ctx.globalAlpha = 0.75;
-        ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+        ctx.fillRect(screenX - spriteHalfW, screenY - spriteHalfH, spriteW, spriteH);
         ctx.globalAlpha = 1.0;
         ctx.strokeStyle = '#00ff99';
         ctx.lineWidth = 2;
-        ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+        ctx.strokeRect(screenX - spriteHalfW, screenY - spriteHalfH, spriteW, spriteH);
       }
     } else if (cluster.isRollingEnemyFlag === 1) {
       // ── Rolling enemy: sprite rotated by accumulated roll angle ──────────

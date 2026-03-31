@@ -234,7 +234,7 @@ const SPRINT_SPEED_MULTIPLIER = 2.0;
 // ── Player crouch ───────────────────────────────────────────────────────────
 
 /** Half-height of the player hitbox when crouching (world units). */
-const CROUCH_HALF_HEIGHT_WORLD = 4;
+const CROUCH_HALF_HEIGHT_WORLD = 7;
 
 // ── Player idle animation ───────────────────────────────────────────────────
 

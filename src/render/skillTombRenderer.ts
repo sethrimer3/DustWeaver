@@ -33,8 +33,8 @@ const DUST_CONTACT_RADIUS_WORLD = 2.0;
 /** Outward launch speed (world units/sec) given to dust particles when swirl deactivates. */
 const DUST_FALL_LAUNCH_SPEED_WORLD = 18.0;
 
-/** Rendered size of each dust particle in screen pixels (uniform, 2×2). */
-const DUST_PIXEL_SIZE = 2;
+/** Rendered size of each dust particle in screen pixels (uniform, 4×4). */
+const DUST_PIXEL_SIZE = 4;
 
 interface DustParticle {
   /** Current position relative to tomb center (world units). */
