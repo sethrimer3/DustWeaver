@@ -633,8 +633,8 @@ export function startGameScreen(
   const skillTombRenderer = new SkillTombRenderer();
 
   // ── Health bar state ─────────────────────────────────────────────────────
-  /** Map of entityId -> timestamp when health bar should hide (ms since page load). */
-  const healthBarDisplayUntilMs: Map<number, number> = new Map();
+  /** Map of entityId -> tick when health bar should hide. */
+  const healthBarDisplayUntilTick: Map<number, number> = new Map();
   /** Previous health values to detect damage. */
   const prevHealthMap: Map<number, number> = new Map();
 
@@ -1295,17 +1295,15 @@ export function startGameScreen(
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
       ctx.fillRect(squareX, dustStartY, dustSquareSize, dustSquareSize);
 
-      // Draw quadrants (2x2 grid)
+      // Draw quadrants (2x2 grid) - direct indexing to avoid allocation
       const halfSize = dustSquareSize / 2;
-      const quadrantPositions = [
-        [0, 0], // top-left
-        [halfSize, 0], // top-right
-        [0, halfSize], // bottom-left
-        [halfSize, halfSize], // bottom-right
-      ];
+      // Quadrant positions: [top-left, top-right, bottom-left, bottom-right]
+      // x offsets: [0, halfSize, 0, halfSize]
+      // y offsets: [0, 0, halfSize, halfSize]
 
       for (let q = 0; q < quadrantsActive; q++) {
-        const [qx, qy] = quadrantPositions[q];
+        const qx = (q % 2) * halfSize;
+        const qy = Math.floor(q / 2) * halfSize;
         ctx.fillStyle = 'rgba(212,168,75,0.9)'; // golden dust color
         ctx.fillRect(squareX + qx + 0.5, dustStartY + qy + 0.5, halfSize - 1, halfSize - 1);
       }
@@ -1318,7 +1316,8 @@ export function startGameScreen(
     ctx.restore();
 
     // ── Health bar display (only when damaged) ───────────────────────────────
-    const nowMs = performance.now();
+    // Uses tick-based timing for determinism (HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS ticks)
+    const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
     for (let ci = 0; ci < world.clusters.length; ci++) {
       const cluster = world.clusters[ci];
       if (cluster.isAliveFlag === 0) continue;
@@ -1326,13 +1325,13 @@ export function startGameScreen(
       // Check for health changes to trigger display
       const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
       if (cluster.healthPoints < prevHealth) {
-        healthBarDisplayUntilMs.set(cluster.entityId, nowMs + HEALTH_BAR_DISPLAY_MS);
+        healthBarDisplayUntilTick.set(cluster.entityId, world.tick + healthBarDisplayTicks);
       }
       prevHealthMap.set(cluster.entityId, cluster.healthPoints);
 
-      // Only show health bar if recently damaged
-      const displayUntil = healthBarDisplayUntilMs.get(cluster.entityId) ?? 0;
-      if (nowMs > displayUntil) continue;
+      // Only show health bar if recently damaged (tick-based)
+      const displayUntilTick = healthBarDisplayUntilTick.get(cluster.entityId) ?? 0;
+      if (world.tick > displayUntilTick) continue;
 
       const healthFraction = cluster.healthPoints / cluster.maxHealthPoints;
       const barWidth = 24;
