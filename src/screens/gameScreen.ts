@@ -445,8 +445,9 @@ export function startGameScreen(
   const deviceCtx = canvas.getContext('2d')!;
 
   function resizeCanvas(): void {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const deviceScale = window.devicePixelRatio || 1;
+    canvas.width  = Math.round(window.innerWidth  * deviceScale);
+    canvas.height = Math.round(window.innerHeight * deviceScale);
     // WebGL particle canvas also renders at virtual resolution
     if (webglRenderer.isAvailable) {
       webglRenderer.resize(VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
