@@ -42,6 +42,15 @@ const BACKGROUND_FLUID_COUNT = 300;
 /** Boss clusters receive this multiplier on their base HP for extra durability. */
 const BOSS_HP_MULTIPLIER = 2;
 
+/** Initial player health (HP). */
+const PLAYER_INITIAL_HEALTH = 10;
+/** Number of particles per dust container for armor calculation. */
+const DUST_PARTICLES_PER_CONTAINER = 4;
+/** Duration (ms) to show health bar after taking damage. */
+const HEALTH_BAR_DISPLAY_MS = 3000;
+/** Vite base URL for assets. */
+const BASE = import.meta.env.BASE_URL;
+
 /** Half-width and half-height (world units) of a flying eye cluster hitbox. */
 const FLYING_EYE_HALF_SIZE_WORLD = 2.8;
 
@@ -472,6 +481,41 @@ export function startGameScreen(
   const ctx = virtualCtx;
   const camera = createCameraState();
 
+  // ── Music system for world0 (brown rock cave) ─────────────────────────────
+  let currentWorldMusic: HTMLAudioElement | null = null;
+  let currentMusicWorldNumber: number | null = null;
+  let musicVolume = 0.7; // will be updated from pauseMenuState
+
+  function updateWorldMusic(worldNumber: number, volume: number): void {
+    musicVolume = volume;
+    // Only play thoughtfulLevel music in world0
+    if (worldNumber === 0) {
+      if (currentMusicWorldNumber !== 0) {
+        // Stop any existing music
+        if (currentWorldMusic !== null) {
+          currentWorldMusic.pause();
+          currentWorldMusic.src = '';
+        }
+        // Start world0 music
+        currentWorldMusic = new Audio(`${BASE}MUSIC/thoughtfulLevel.mp3`);
+        currentWorldMusic.loop = true;
+        currentWorldMusic.volume = volume;
+        currentWorldMusic.play().catch(() => { /* autoplay may be blocked */ });
+        currentMusicWorldNumber = 0;
+      } else if (currentWorldMusic !== null) {
+        currentWorldMusic.volume = volume;
+      }
+    } else {
+      // Stop music in other worlds
+      if (currentWorldMusic !== null) {
+        currentWorldMusic.pause();
+        currentWorldMusic.src = '';
+        currentWorldMusic = null;
+        currentMusicWorldNumber = null;
+      }
+    }
+  }
+
   // ── Room state ────────────────────────────────────────────────────────────
   let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
   let bgColor = worldBgColor(currentRoom.worldNumber);
@@ -487,6 +531,9 @@ export function startGameScreen(
 
     // Apply world-specific block sprites and background
     setActiveBlockSpriteWorld(room.worldNumber);
+
+    // Update music for the current world
+    updateWorldMusic(room.worldNumber, musicVolume);
 
     // Reset world state
     world.tick = 0;
@@ -506,7 +553,7 @@ export function startGameScreen(
     // Spawn player at the given block position
     const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
-    const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PARTICLE_COUNT_PER_CLUSTER);
+    const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
     world.clusters.push(playerCluster);
     spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
 
@@ -584,6 +631,26 @@ export function startGameScreen(
   const levelRng = createRng(12345);
   const environmentalDust = new EnvironmentalDustLayer();
   const skillTombRenderer = new SkillTombRenderer();
+
+  // ── Health bar state ─────────────────────────────────────────────────────
+  /** Map of entityId -> tick when health bar should hide. */
+  const healthBarDisplayUntilTick: Map<number, number> = new Map();
+  /** Previous health values to detect damage. */
+  const prevHealthMap: Map<number, number> = new Map();
+
+  // ── Dust container state (armor system) ─────────────────────────────────
+  /** Number of dust particles the player currently has. */
+  function getPlayerDustCount(): number {
+    const player = world.clusters[0];
+    if (player === undefined || player.isAliveFlag === 0) return 0;
+    let count = 0;
+    for (let i = 0; i < world.particleCount; i++) {
+      if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1) {
+        count++;
+      }
+    }
+    return count;
+  }
 
   // Track explored rooms
   if (progress && !progress.exploredRoomIds.includes(currentRoom.id)) {
@@ -916,13 +983,24 @@ export function startGameScreen(
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-          let dirX = aim.xWorld - player.positionXWorld;
-          let dirY = aim.yWorld - player.positionYWorld;
-          const len = Math.sqrt(dirX * dirX + dirY * dirY);
-          if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
-          world.playerWeaveAimDirXWorld = dirX;
-          world.playerWeaveAimDirYWorld = dirY;
-          world.playerPrimaryWeaveTriggeredFlag = 1;
+          // Check if tapping/clicking on a skill tomb (save point)
+          const tombIndex = skillTombRenderer.getNearbyTombIndex(aim.xWorld, aim.yWorld);
+          if (tombIndex >= 0) {
+            // Player is also near the tomb — open the save menu
+            const playerNearby = skillTombRenderer.getNearbyTombIndex(player.positionXWorld, player.positionYWorld);
+            if (playerNearby >= 0) {
+              interactTriggered = true;
+            }
+          } else {
+            // Normal weave attack
+            let dirX = aim.xWorld - player.positionXWorld;
+            let dirY = aim.yWorld - player.positionYWorld;
+            const len = Math.sqrt(dirX * dirX + dirY * dirY);
+            if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
+            world.playerWeaveAimDirXWorld = dirX;
+            world.playerWeaveAimDirYWorld = dirY;
+            world.playerPrimaryWeaveTriggeredFlag = 1;
+          }
         }
       } else if (cmd.kind === CommandKind.WeaveHoldPrimary) {
         const player = world.clusters[0];
@@ -1000,6 +1078,12 @@ export function startGameScreen(
 
     if (interactTriggered && progress) {
       openSkillTombMenu();
+    }
+
+    // Update music volume from pause menu settings
+    if (currentWorldMusic !== null && currentWorldMusic.volume !== pauseMenuState.musicVolume) {
+      currentWorldMusic.volume = pauseMenuState.musicVolume;
+      musicVolume = pauseMenuState.musicVolume;
     }
 
     // While paused or in a menu, still render the frozen scene but skip sim and transitions
@@ -1192,6 +1276,84 @@ export function startGameScreen(
       ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
     }
 
+    // ── Dust container display (top-left) ─────────────────────────────────────
+    const dustCount = getPlayerDustCount();
+    const fullContainers = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
+    const partialDust = dustCount % DUST_PARTICLES_PER_CONTAINER;
+    const dustSquareSize = 8;
+    const dustPadding = 2;
+    const dustStartX = 8;
+    const dustStartY = 8;
+
+    ctx.save();
+    for (let i = 0; i < fullContainers + (partialDust > 0 ? 1 : 0); i++) {
+      const squareX = dustStartX + i * (dustSquareSize + dustPadding);
+      const isPartial = i === fullContainers;
+      const quadrantsActive = isPartial ? partialDust : DUST_PARTICLES_PER_CONTAINER;
+
+      // Draw square background
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(squareX, dustStartY, dustSquareSize, dustSquareSize);
+
+      // Draw quadrants (2x2 grid) - direct indexing to avoid allocation
+      const halfSize = dustSquareSize / 2;
+      // Quadrant positions: [top-left, top-right, bottom-left, bottom-right]
+      // x offsets: [0, halfSize, 0, halfSize]
+      // y offsets: [0, 0, halfSize, halfSize]
+
+      for (let q = 0; q < quadrantsActive; q++) {
+        const qx = (q % 2) * halfSize;
+        const qy = Math.floor(q / 2) * halfSize;
+        ctx.fillStyle = 'rgba(212,168,75,0.9)'; // golden dust color
+        ctx.fillRect(squareX + qx + 0.5, dustStartY + qy + 0.5, halfSize - 1, halfSize - 1);
+      }
+
+      // Draw border
+      ctx.strokeStyle = 'rgba(212,168,75,0.6)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(squareX + 0.5, dustStartY + 0.5, dustSquareSize - 1, dustSquareSize - 1);
+    }
+    ctx.restore();
+
+    // ── Health bar display (only when damaged) ───────────────────────────────
+    // Uses tick-based timing for determinism (HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS ticks)
+    const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
+    for (let ci = 0; ci < world.clusters.length; ci++) {
+      const cluster = world.clusters[ci];
+      if (cluster.isAliveFlag === 0) continue;
+
+      // Check for health changes to trigger display
+      const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
+      if (cluster.healthPoints < prevHealth) {
+        healthBarDisplayUntilTick.set(cluster.entityId, world.tick + healthBarDisplayTicks);
+      }
+      prevHealthMap.set(cluster.entityId, cluster.healthPoints);
+
+      // Only show health bar if recently damaged (tick-based)
+      const displayUntilTick = healthBarDisplayUntilTick.get(cluster.entityId) ?? 0;
+      if (world.tick > displayUntilTick) continue;
+
+      const healthFraction = cluster.healthPoints / cluster.maxHealthPoints;
+      const barWidth = 24;
+      const barHeight = 3;
+      const barX = cluster.positionXWorld * zoom + ox - barWidth / 2;
+      const barY = (cluster.positionYWorld - cluster.halfHeightWorld - 4) * zoom + oy;
+
+      ctx.save();
+      // Background
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+      // Health fill
+      const healthColor = cluster.isPlayerFlag === 1 ? '#00ff88' : '#ff4444';
+      ctx.fillStyle = healthColor;
+      ctx.fillRect(barX, barY, barWidth * healthFraction, barHeight);
+      // Border
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+      ctx.restore();
+    }
+
     if (interactInputPulseMs > 0) {
       interactInputPulseMs = Math.max(0, interactInputPulseMs - elapsedMs);
     }
@@ -1259,6 +1421,12 @@ export function startGameScreen(
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
     if (deathScreenCleanup !== null) deathScreenCleanup();
     if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
+    // Stop world music
+    if (currentWorldMusic !== null) {
+      currentWorldMusic.pause();
+      currentWorldMusic.src = '';
+      currentWorldMusic = null;
+    }
     editorController.destroy();
     removeEditorButton();
     detachInput();
