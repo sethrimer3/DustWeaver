@@ -17,8 +17,8 @@
  *   • Direct acceleration model — no lerp/alpha blending; forces are applied
  *     per-frame so the player reaches top speed quickly and turns feel snappy.
  *   • Turn acceleration — higher acceleration rate when reversing direction.
- *   • Wall slide — pressing into a solid wall while falling caps descent at 25 px/s.
- *   • Wall jump — launch away at a strong diagonal (220 H × 220 V); a force-time
+ *   • Wall slide — pressing into a solid wall while falling caps descent at 17 px/s.
+ *   • Wall jump — launch away at a strong diagonal (147 H × 147 V); a force-time
  *     window overrides horizontal input to prevent immediate wall return.  A lockout
  *     prevents re-grab and infinite altitude climbing.
  *   • Dash — horizontal burst on a cooldown.
@@ -51,13 +51,13 @@ import { nextUint32 } from '../rng';
  * case.  Rise / fall asymmetry is achieved through jump-cut and apex modifiers,
  * not separate base gravities.
  */
-const NORMAL_GRAVITY_WORLD_PER_SEC2 = 900.0;
+const NORMAL_GRAVITY_WORLD_PER_SEC2 = 600.0;
 
 /**
  * Initial upward jump velocity (positive value; negated when applied).
  * Chosen to pair with NORMAL_GRAVITY for a clean Celeste-like arc.
  */
-const PLAYER_JUMP_SPEED_WORLD = 300.0;
+const PLAYER_JUMP_SPEED_WORLD = 200.0;
 
 /**
  * Jump-cut gravity multiplier.
@@ -88,23 +88,23 @@ const APEX_GRAVITY_MULTIPLIER = 0.5;
  * Vertical speed threshold (px/s) below which the apex gravity kicks in.
  * Only active when abs(vy) < this value and jump is held.
  */
-const APEX_THRESHOLD_WORLD_PER_SEC = 50.0;
+const APEX_THRESHOLD_WORLD_PER_SEC = 33.0;
 
 // ── Fall system (normal fall + fast fall) ────────────────────────────────────
 // By default gravity approaches normalMaxFall.  If the player holds down
 // while falling, the cap smoothly approaches fastMaxFall.
 
 /** Default maximum downward fall speed (px/s). */
-const NORMAL_MAX_FALL_WORLD_PER_SEC = 160.0;
+const NORMAL_MAX_FALL_WORLD_PER_SEC = 107.0;
 
 /** Maximum downward fall speed when holding down (px/s). */
-const FAST_MAX_FALL_WORLD_PER_SEC = 240.0;
+const FAST_MAX_FALL_WORLD_PER_SEC = 160.0;
 
 /**
  * Rate at which the current fall cap approaches fastMaxFall when holding
  * down (px/s per second — a speed-of-approach value, not acceleration).
  */
-const FAST_MAX_FALL_APPROACH_PER_SEC = 300.0;
+const FAST_MAX_FALL_APPROACH_PER_SEC = 200.0;
 
 // ============================================================================
 // Coyote time & jump buffer
@@ -128,28 +128,28 @@ const JUMP_BUFFER_TICKS = 6;
 // ============================================================================
 
 /** Maximum horizontal run speed (px/s). */
-const MAX_RUN_SPEED_WORLD_PER_SEC = 105.0;
+const MAX_RUN_SPEED_WORLD_PER_SEC = 70.0;
 
 /** Ground acceleration: how quickly the player builds up speed on the ground (px/s²). */
-const GROUND_ACCELERATION_PER_SEC2 = 1200.0;
+const GROUND_ACCELERATION_PER_SEC2 = 800.0;
 
 /** Ground deceleration: how quickly the player stops on the ground when no input (px/s²). */
-const GROUND_DECELERATION_PER_SEC2 = 1500.0;
+const GROUND_DECELERATION_PER_SEC2 = 1000.0;
 
 /** Air acceleration: slightly reduced control while airborne (px/s²). */
-const AIR_ACCELERATION_PER_SEC2 = 780.0;
+const AIR_ACCELERATION_PER_SEC2 = 520.0;
 
 /** Air deceleration: gentle slowdown while airborne with no input (px/s²). */
-const AIR_DECELERATION_PER_SEC2 = 900.0;
+const AIR_DECELERATION_PER_SEC2 = 600.0;
 
 /**
  * Turn acceleration: applied when reversing horizontal direction (px/s²).
  * Higher than ground acceleration so direction changes feel crisp and snappy.
  */
-const TURN_ACCELERATION_PER_SEC2 = 2200.0;
+const TURN_ACCELERATION_PER_SEC2 = 1466.7;
 
 /** Speed burst applied on a horizontal dash (px/s). */
-const PLAYER_DASH_SPEED_WORLD = 560.0;
+const PLAYER_DASH_SPEED_WORLD = 373.0;
 
 // ============================================================================
 // Wall slide
@@ -161,7 +161,7 @@ const PLAYER_DASH_SPEED_WORLD = 560.0;
  * Only active when the player is pushing toward the wall and the
  * wall-jump lockout is not running.
  */
-const WALL_SLIDE_MAX_FALL_SPEED = 25.0;
+const WALL_SLIDE_MAX_FALL_SPEED = 17.0;
 
 // ============================================================================
 // Wall jump
@@ -171,14 +171,14 @@ const WALL_SLIDE_MAX_FALL_SPEED = 25.0;
  * Horizontal launch speed away from the wall on a wall jump (px/s).
  * Strong outward push prevents rapid same-wall climbing.
  */
-const WALL_JUMP_X_SPEED_WORLD = 220.0;
+const WALL_JUMP_X_SPEED_WORLD = 147.0;
 
 /**
  * Vertical launch speed on a wall jump (px/s, applied upward).
  * Reduced from full ground-jump speed — paired with the strong horizontal
  * push to prevent net altitude gain on same-wall wall-jump chains.
  */
-const WALL_JUMP_Y_SPEED_WORLD = 220.0;
+const WALL_JUMP_Y_SPEED_WORLD = 147.0;
 
 /**
  * Ticks after a wall jump during which horizontal input is overridden by
@@ -201,7 +201,7 @@ const WALL_JUMP_LOCKOUT_TICKS = 12;
 // ============================================================================
 
 /** Maximum horizontal chase speed for enemy clusters (px/s). */
-const ENEMY_MAX_SPEED_WORLD_PER_SEC = 90.0;
+const ENEMY_MAX_SPEED_WORLD_PER_SEC = 60.0;
 
 /** Enemy horizontal acceleration rate (exponential blend factor per second). */
 const ENEMY_ACCEL_PER_SEC = 8.0;
@@ -210,15 +210,15 @@ const ENEMY_ACCEL_PER_SEC = 8.0;
  * Horizontal distance (px) below which enemies stop advancing.
  * Keeps them in a comfortable attack range.
  */
-const ENEMY_ENGAGE_DIST_WORLD = 60.0;
+const ENEMY_ENGAGE_DIST_WORLD = 40.0;
 
 /**
  * Maximum line-of-sight range for rolling enemies (world units).
  * Rolling enemies only chase the player when within this distance,
  * or when recently damaged (rollingEnemyAggressiveTicks > 0).
- * ~25 blocks at BLOCK_SIZE_MEDIUM = 12.
+ * ~25 blocks at BLOCK_SIZE_SMALL = 8.
  */
-const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 300.0;
+const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 200.0;
 
 /**
  * Effective rolling radius (world units) used to convert horizontal
@@ -249,7 +249,7 @@ const IDLE_BLINK_DURATION_TICKS = 30;
 // ============================================================================
 
 /** Maximum 2D flight speed of flying eye clusters (world units/s). */
-const FLYING_EYE_SPEED_WORLD_PER_SEC = 95.0;
+const FLYING_EYE_SPEED_WORLD_PER_SEC = 63.0;
 
 /** Acceleration alpha per second for flying eye 2D steering (exponential blend). */
 const FLYING_EYE_ACCEL_PER_SEC = 5.5;
@@ -258,23 +258,23 @@ const FLYING_EYE_ACCEL_PER_SEC = 5.5;
  * Preferred hover distance from the player.
  * The eye will approach if farther and retreat if closer.
  */
-const FLYING_EYE_PREFERRED_DIST_WORLD = 175.0;
+const FLYING_EYE_PREFERRED_DIST_WORLD = 117.0;
 
 /** Dead-band half-width around preferred hover distance.  Inside the band the eye orbits. */
-const FLYING_EYE_PREFERRED_BAND_WORLD = 35.0;
+const FLYING_EYE_PREFERRED_BAND_WORLD = 23.0;
 
 /** Angular rate (radians/second) at which the facing angle tracks the velocity direction. */
 const FLYING_EYE_TURN_RATE_PER_SEC = 7.0;
 
 /** Vertical margin from world top/bottom within which flying eyes are clamped. */
-const FLYING_EYE_VERTICAL_MARGIN_WORLD = 30.0;
+const FLYING_EYE_VERTICAL_MARGIN_WORLD = 20.0;
 
 // ============================================================================
 // World bounds
 // ============================================================================
 
 /** Horizontal margin from world edges within which clusters are clamped. */
-const CLUSTER_EDGE_MARGIN_WORLD = 10.0;
+const CLUSTER_EDGE_MARGIN_WORLD = 7.0;
 
 // ============================================================================
 // Collision helpers

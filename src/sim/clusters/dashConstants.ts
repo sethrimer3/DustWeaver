@@ -11,4 +11,4 @@ export const DASH_COOLDOWN_TICKS = 180;
 export const DASH_RECHARGE_ANIM_TICKS = 36;
 
 /** Lateral dodge speed used by enemy clusters during a weave burst (world units/sec). */
-export const ENEMY_DODGE_SPEED_WORLD = 220.0;
+export const ENEMY_DODGE_SPEED_WORLD = 147.0;

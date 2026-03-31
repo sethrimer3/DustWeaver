@@ -24,11 +24,11 @@ export { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD 
 // ---- AI tuning constants -------------------------------------------------
 
 /** Distance (world units) at which an enemy starts launching attacks. */
-const ENEMY_ATTACK_RANGE_WORLD = 320.0;
+const ENEMY_ATTACK_RANGE_WORLD = 213.0;
 /** Ticks between enemy attack launches (~2 seconds at 60 fps). */
 const ENEMY_ATTACK_COOLDOWN_TICKS = 120;
 /** Distance at which incoming player particles trigger a block response. */
-const ENEMY_BLOCK_DETECTION_RANGE_WORLD = 160.0;
+const ENEMY_BLOCK_DETECTION_RANGE_WORLD = 107.0;
 /** Ticks an enemy block stance lasts before auto-releasing. */
 const ENEMY_BLOCK_DURATION_TICKS = 55;
 /** Ticks between an enemy can block again after releasing. */

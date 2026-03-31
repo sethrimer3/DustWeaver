@@ -45,12 +45,12 @@ import { getElementProfile } from '../particles/elementProfiles';
  * Radius (world units) within which a cluster can control its particles.
  * Exported so the renderer can draw the matching influence ring.
  */
-export const INFLUENCE_RADIUS_WORLD = 100.0;
+export const INFLUENCE_RADIUS_WORLD = 67.0;
 
 // ── Player-state behaviour constants ─────────────────────────────────────────
 
 /** Speed (world units/sec) below which the player is considered standing still. */
-const STANDING_STILL_SPEED_WORLD = 30.0;
+const STANDING_STILL_SPEED_WORLD = 20.0;
 /** Fraction of normal orbitalStrength applied while standing still. */
 const STANDING_STILL_ORBITAL_SCALE = 0.15;
 /**
@@ -70,14 +70,14 @@ const JUMP_ORBITAL_SCALE = 0.25;
  * Minimum player speed (world units/sec) before the comet-tail offset begins.
  * Below this the particles just orbit normally even while airborne.
  */
-const TRAIL_MIN_SPEED_WORLD = 40.0;
+const TRAIL_MIN_SPEED_WORLD = 27.0;
 /**
  * Player speed (world units/sec) at which the tail offset reaches its maximum.
  * Scales linearly from TRAIL_MIN_SPEED_WORLD to this value.
  */
-const TRAIL_FULL_SPEED_WORLD = 500.0;
+const TRAIL_FULL_SPEED_WORLD = 333.0;
 /** Maximum distance (world units) the spring target is displaced behind the player. */
-const TRAIL_OFFSET_MAX_WORLD = 35.0;
+const TRAIL_OFFSET_MAX_WORLD = 23.0;
 
 /** Fraction of normal orbitalStrength applied while an attack is in flight. */
 const ATTACK_ORBITAL_SCALE = 2.5;
