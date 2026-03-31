@@ -41,6 +41,7 @@ import { WorldState } from '../world';
 import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD } from './dashConstants';
 import { PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
 import { nextUint32 } from '../rng';
+import { WATER_GRAVITY_MULTIPLIER } from '../hazards';
 
 // ============================================================================
 // Debug overrides — mutable values that can be live-tuned from the debug panel.
@@ -686,6 +687,8 @@ export function applyClusterMovement(world: WorldState): void {
       // apex modifier) for a natural pendulum feel.  The grapple constraint
       // (step 0.25) handles the actual swing physics.
       const baseGrav = ov(debugSpeedOverrides.gravityWorld, NORMAL_GRAVITY_WORLD_PER_SEC2);
+      // Water buoyancy reduces effective gravity when the player is submerged.
+      const waterMult = world.isPlayerInWaterFlag === 1 ? WATER_GRAVITY_MULTIPLIER : 1.0;
       let grav: number;
       if (world.isGrappleActiveFlag === 1) {
         // Consistent gravity for pendulum swing.
@@ -717,7 +720,7 @@ export function applyClusterMovement(world: WorldState): void {
           grav = baseGrav;
         }
       }
-      cluster.velocityYWorld += grav * dtSec;
+      cluster.velocityYWorld += grav * waterMult * dtSec;
 
       // ── Variable jump sustain ────────────────────────────────────────────
       // While the sustain timer is running and the player holds jump, prevent

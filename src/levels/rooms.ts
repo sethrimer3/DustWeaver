@@ -341,6 +341,30 @@ export const ROOM_W1_ROOM1: RoomDef = {
     },
   ],
   skillTombs: [],
+  // ── Environmental hazards ─────────────────────────────────────────────
+  spikes: [
+    // Spike pit below first platform
+    { xBlock: 8, yBlock: 22, direction: 'up' as const },
+    { xBlock: 9, yBlock: 22, direction: 'up' as const },
+    { xBlock: 10, yBlock: 22, direction: 'up' as const },
+  ],
+  springboards: [
+    // Springboard to reach higher platform
+    { xBlock: 14, yBlock: 22 },
+  ],
+  breakableBlocks: [
+    // Breakable wall blocking a shortcut
+    { xBlock: 25, yBlock: 16 },
+    { xBlock: 25, yBlock: 17 },
+  ],
+  dustBoostJars: [
+    // Fire dust boost jar
+    { xBlock: 30, yBlock: 18, dustKind: ParticleKind.Fire, dustCount: 12 },
+  ],
+  fireflyJars: [
+    // Firefly jar on a platform
+    { xBlock: 10, yBlock: 18 },
+  ],
 };
 
 // ── World 2, Room 1 ──────────────────────────────────────────────────────────
@@ -420,6 +444,14 @@ export const ROOM_W2_ROOM1: RoomDef = {
     },
   ],
   skillTombs: [],
+  // ── Environmental hazards ─────────────────────────────────────────────
+  waterZones: [
+    // Flooded lower section of the room
+    { xBlock: 1, yBlock: 19, wBlock: 38, hBlock: 4 },
+  ],
+  springboards: [
+    { xBlock: 8, yBlock: 22 },
+  ],
 };
 
 // ── World 3, Room 1 (Fire/Lava World) ────────────────────────────────────────
@@ -483,6 +515,21 @@ export const ROOM_W3_ROOM1: RoomDef = {
     },
   ],
   skillTombs: [],
+  // ── Environmental hazards ─────────────────────────────────────────────
+  lavaZones: [
+    // Lava pool at the bottom of the room
+    { xBlock: 1, yBlock: 21, wBlock: 42, hBlock: 2 },
+  ],
+  spikes: [
+    // Ceiling spikes above lava
+    { xBlock: 20, yBlock: 20, direction: 'down' as const },
+    { xBlock: 21, yBlock: 20, direction: 'down' as const },
+    { xBlock: 22, yBlock: 20, direction: 'down' as const },
+  ],
+  dustBoostJars: [
+    // Lava dust boost jar on a high platform
+    { xBlock: 20, yBlock: 11, dustKind: ParticleKind.Lava, dustCount: 12 },
+  ],
 };
 
 // ── Boss Room: Radiant Tether ────────────────────────────────────────────────
