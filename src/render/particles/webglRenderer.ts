@@ -25,9 +25,10 @@ import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shad
 /** [x, y, kind, normalizedAge, disturbanceFactor] per vertex */
 const FLOATS_PER_VERTEX = 5;
 const BYTES_PER_FLOAT   = 4;
-/** Visual diameter for each particle's point sprite, in world units (= 1/6th player size).
- *  Multiplied by scalePx in the render call to get the gl_PointSize in screen pixels. */
-const PARTICLE_DIAMETER_WORLD = 10.0 / 6.0;
+/** Visual diameter for each particle's point sprite, in world units (= 1/8th player size).
+ *  Multiplied by scalePx in the render call to get the gl_PointSize in screen pixels.
+ *  Tuned for the 480×270 virtual canvas so particles don't appear oversized. */
+const PARTICLE_DIAMETER_WORLD = 10.0 / 8.0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers

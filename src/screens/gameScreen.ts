@@ -1186,7 +1186,7 @@ export function startGameScreen(
 
       // ── Room name banner (top-center) ──────────────────────────────────────
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = '13px monospace';
+      ctx.font = '7px monospace';
       const roomLabel = currentRoom.name;
       const labelW = ctx.measureText(roomLabel).width;
       ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
