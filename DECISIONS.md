@@ -26,7 +26,7 @@
 - Game uses interconnected rooms instead of a level-select world map.
 - Player spawns in a central lobby (world 0) with tunnels leading left (world 2)
   and right (world 1).
-- Rooms are defined in block-unit coordinates (1 block = BLOCK_SIZE_MEDIUM world units).
+- Rooms are defined in block-unit coordinates (currently 1 block = BLOCK_SIZE_SMALL = 8 world units).
 - Room transitions are open tunnel passages at room edges; blocks line the
   tunnel ceiling/floor and a darkness gradient fades to 100% black at the edge.
 - When the player enters a transition zone, the current room is unloaded and
@@ -253,10 +253,10 @@ This prevents the acceleration model from fighting against the swing.
 `BLOCK_SIZE_WORLD` (previously 11.25) replaced with three canonical constants,
 updated from the BUILD 44 values (3/6/12) to the new standard:
 - `BLOCK_SIZE_SMALL  = 8`  → 8×8 virtual px, 32×32 physical px @ 4×
-- `BLOCK_SIZE_MEDIUM = 12` → 12×12 virtual px, 48×48 physical px @ 4× (standard room unit)
-- `BLOCK_SIZE_LARGE  = 24` → 24×24 virtual px, 96×96 physical px @ 4×
+- `BLOCK_SIZE_MEDIUM = 8`  → temporary alias of small tier while medium tier is disabled
+- `BLOCK_SIZE_LARGE  = 8`  → temporary alias of small tier while large tier is disabled
 
-At zoom 1.0 with 480×270 virtual canvas: 40 medium blocks horizontally, 22.5 vertically.
+At zoom 1.0 with 480×270 virtual canvas: 60 small blocks horizontally, 33.75 vertically.
 All room definitions remain in block units and are converted at load time.
 
 Player size constants are now exported from `src/levels/roomDef.ts`:

@@ -5,13 +5,14 @@
  * The game screen converts them to world units at load time.
  *
  * Block size constants (world units):
- *   BLOCK_SIZE_SMALL  =  8  →  8×8  virtual px  (32×32 physical @ 4×)
- *   BLOCK_SIZE_MEDIUM = 12  → 12×12 virtual px  (48×48 physical @ 4×)  — standard room unit
- *   BLOCK_SIZE_LARGE  = 24  → 24×24 virtual px  (96×96 physical @ 4×)
+ *   BLOCK_SIZE_SMALL  =  8  →  8×8 virtual px (32×32 physical @ 4×)
+ *
+ * Medium and large block tiers are temporarily disabled and aliased to
+ * the small block size so all terrain generation runs on an 8×8 tileset.
  *
  * At zoom 1.0 with the 480×270 virtual canvas:
- *   22.5 medium blocks fit vertically  (270 ÷ 12 = 22.5)
- *   40   medium blocks fit horizontally (480 ÷ 12 = 40)
+ *   33.75 small blocks fit vertically  (270 ÷ 8 = 33.75)
+ *   60    small blocks fit horizontally (480 ÷ 8 = 60)
  *
  * Player size constants:
  *   PLAYER_WIDTH_WORLD       =  8  (full width)
@@ -25,11 +26,17 @@ import { ParticleKind } from '../sim/particles/kinds';
 /** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
 export const BLOCK_SIZE_SMALL  = 8;
 
-/** Medium block size in world units (12×12 virtual px, 48×48 physical px @ 4×) — standard room unit. */
-export const BLOCK_SIZE_MEDIUM = 12;
+/**
+ * Medium block tier is disabled for now; kept as an alias for compatibility.
+ * All world generation should treat this as an 8×8 small tile.
+ */
+export const BLOCK_SIZE_MEDIUM = BLOCK_SIZE_SMALL;
 
-/** Large block size in world units (24×24 virtual px, 96×96 physical px @ 4×). */
-export const BLOCK_SIZE_LARGE  = 24;
+/**
+ * Large block tier is disabled for now; kept as an alias for compatibility.
+ * All world generation should treat this as an 8×8 small tile.
+ */
+export const BLOCK_SIZE_LARGE  = BLOCK_SIZE_SMALL;
 
 // ── Player size constants ─────────────────────────────────────────────────────
 
