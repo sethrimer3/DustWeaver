@@ -16,6 +16,13 @@ import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_R
 import { CommandKind } from '../input/commands';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
+import { renderHazards } from '../render/hazards';
+import {
+  SPIKE_DIR_UP,
+  SPIKE_DIR_DOWN,
+  SPIKE_DIR_LEFT,
+  SPIKE_DIR_RIGHT,
+} from '../sim/hazards';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
 import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
@@ -353,6 +360,120 @@ function loadRoomWalls(world: WorldState, room: RoomDef): void {
 }
 
 
+/**
+ * Loads environmental hazards from a RoomDef into the WorldState hazard buffers.
+ * Called once at room load time, after walls are loaded so breakable blocks can
+ * be added as walls and cross-referenced.
+ */
+function loadRoomHazards(world: WorldState, room: RoomDef): void {
+  // ── Reset all hazard state ────────────────────────────────────────────────
+  world.spikeCount = 0;
+  world.spikeInvulnTicks = 0;
+  world.springboardCount = 0;
+  world.waterZoneCount = 0;
+  world.lavaZoneCount = 0;
+  world.lavaInvulnTicks = 0;
+  world.breakableBlockCount = 0;
+  world.dustBoostJarCount = 0;
+  world.fireflyJarCount = 0;
+  world.fireflyCount = 0;
+  world.isPlayerInWaterFlag = 0;
+
+  // ── Spikes ────────────────────────────────────────────────────────────────
+  const spikeDefs = room.spikes ?? [];
+  for (let i = 0; i < spikeDefs.length && world.spikeCount < world.spikeXWorld.length; i++) {
+    const s = spikeDefs[i];
+    const si = world.spikeCount++;
+    world.spikeXWorld[si] = (s.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.spikeYWorld[si] = (s.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    switch (s.direction) {
+      case 'up':    world.spikeDirection[si] = SPIKE_DIR_UP; break;
+      case 'down':  world.spikeDirection[si] = SPIKE_DIR_DOWN; break;
+      case 'left':  world.spikeDirection[si] = SPIKE_DIR_LEFT; break;
+      case 'right': world.spikeDirection[si] = SPIKE_DIR_RIGHT; break;
+    }
+  }
+
+  // ── Springboards ──────────────────────────────────────────────────────────
+  const springDefs = room.springboards ?? [];
+  for (let i = 0; i < springDefs.length && world.springboardCount < world.springboardXWorld.length; i++) {
+    const s = springDefs[i];
+    const si = world.springboardCount++;
+    world.springboardXWorld[si] = (s.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.springboardYWorld[si] = (s.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.springboardAnimTicks[si] = 0;
+  }
+
+  // ── Water zones ───────────────────────────────────────────────────────────
+  const waterDefs = room.waterZones ?? [];
+  for (let i = 0; i < waterDefs.length && world.waterZoneCount < world.waterZoneXWorld.length; i++) {
+    const w = waterDefs[i];
+    const wi = world.waterZoneCount++;
+    world.waterZoneXWorld[wi] = w.xBlock * BLOCK_SIZE_MEDIUM;
+    world.waterZoneYWorld[wi] = w.yBlock * BLOCK_SIZE_MEDIUM;
+    world.waterZoneWWorld[wi] = w.wBlock * BLOCK_SIZE_MEDIUM;
+    world.waterZoneHWorld[wi] = w.hBlock * BLOCK_SIZE_MEDIUM;
+  }
+
+  // ── Lava zones ────────────────────────────────────────────────────────────
+  const lavaDefs = room.lavaZones ?? [];
+  for (let i = 0; i < lavaDefs.length && world.lavaZoneCount < world.lavaZoneXWorld.length; i++) {
+    const l = lavaDefs[i];
+    const li = world.lavaZoneCount++;
+    world.lavaZoneXWorld[li] = l.xBlock * BLOCK_SIZE_MEDIUM;
+    world.lavaZoneYWorld[li] = l.yBlock * BLOCK_SIZE_MEDIUM;
+    world.lavaZoneWWorld[li] = l.wBlock * BLOCK_SIZE_MEDIUM;
+    world.lavaZoneHWorld[li] = l.hBlock * BLOCK_SIZE_MEDIUM;
+  }
+
+  // ── Breakable blocks ──────────────────────────────────────────────────────
+  // Each breakable block is added as a wall AND tracked in the breakable arrays.
+  const breakDefs = room.breakableBlocks ?? [];
+  for (let i = 0; i < breakDefs.length && world.breakableBlockCount < world.breakableBlockXWorld.length; i++) {
+    const b = breakDefs[i];
+    const bx = (b.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    const by = (b.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+
+    // Add as a wall
+    let wallIdx = -1;
+    if (world.wallCount < MAX_WALLS) {
+      wallIdx = world.wallCount++;
+      world.wallXWorld[wallIdx] = b.xBlock * BLOCK_SIZE_MEDIUM;
+      world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
+      world.wallWWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
+      world.wallHWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
+    }
+
+    const bi = world.breakableBlockCount++;
+    world.breakableBlockXWorld[bi] = bx;
+    world.breakableBlockYWorld[bi] = by;
+    world.isBreakableBlockActiveFlag[bi] = 1;
+    world.breakableBlockWallIndex[bi] = wallIdx;
+  }
+
+  // ── Dust boost jars ───────────────────────────────────────────────────────
+  const dustJarDefs = room.dustBoostJars ?? [];
+  for (let i = 0; i < dustJarDefs.length && world.dustBoostJarCount < world.dustBoostJarXWorld.length; i++) {
+    const j = dustJarDefs[i];
+    const ji = world.dustBoostJarCount++;
+    world.dustBoostJarXWorld[ji] = (j.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.dustBoostJarYWorld[ji] = (j.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.isDustBoostJarActiveFlag[ji] = 1;
+    world.dustBoostJarKind[ji] = j.dustKind;
+    world.dustBoostJarDustCount[ji] = j.dustCount;
+  }
+
+  // ── Firefly jars ──────────────────────────────────────────────────────────
+  const fireflyJarDefs = room.fireflyJars ?? [];
+  for (let i = 0; i < fireflyJarDefs.length && world.fireflyJarCount < world.fireflyJarXWorld.length; i++) {
+    const j = fireflyJarDefs[i];
+    const ji = world.fireflyJarCount++;
+    world.fireflyJarXWorld[ji] = (j.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.fireflyJarYWorld[ji] = (j.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.isFireflyJarActiveFlag[ji] = 1;
+  }
+}
+
 
 /** Background fill colour for each world number. */
 function worldBgColor(worldNumber: number): string {
@@ -632,6 +753,9 @@ export function startGameScreen(
 
     // Load walls
     loadRoomWalls(world, room);
+
+    // Load environmental hazards (after walls so breakable blocks can be added as walls)
+    loadRoomHazards(world, room);
 
     // Init dust
     environmentalDust.initFromWorld(world, room.worldNumber);
@@ -960,6 +1084,7 @@ export function startGameScreen(
           zoom,
         );
         renderWalls(ctx, snapshot, eox, eoy, zoom, true);
+        renderHazards(ctx, world, eox, eoy, zoom, world.tick);
         renderClusters(ctx, snapshot, eox, eoy, zoom, true);
         renderRadiantTether(ctx, snapshot, eox, eoy, zoom, true);
         renderGrapple(ctx, snapshot, eox, eoy, zoom);
@@ -1245,6 +1370,27 @@ export function startGameScreen(
           );
         }
       }
+
+      // Dust boost jar pickup: spawn temporary dust particles of the jar's kind.
+      // The sim (hazards.ts) sets isDustBoostJarActiveFlag=0 on contact; we detect
+      // the transition here and spawn particles on the renderer side.
+      for (let i = 0; i < world.dustBoostJarCount; i++) {
+        const jarKey = `dustjar:${currentRoom.id}:${i}`;
+        if (world.isDustBoostJarActiveFlag[i] === 0 && !collectedDustContainerKeySet.has(jarKey)) {
+          collectedDustContainerKeySet.add(jarKey);
+          const dustKind = world.dustBoostJarKind[i] as ParticleKind;
+          const dustCount = world.dustBoostJarDustCount[i];
+          spawnClusterParticles(
+            world,
+            playerForTomb.entityId,
+            playerForTomb.positionXWorld,
+            playerForTomb.positionYWorld,
+            dustKind,
+            dustCount,
+            levelRng,
+          );
+        }
+      }
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
@@ -1332,6 +1478,10 @@ export function startGameScreen(
 
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
+
+    // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
+    renderHazards(ctx, world, ox, oy, zoom, world.tick);
+
     renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
     renderGrapple(ctx, snapshot, ox, oy, zoom);

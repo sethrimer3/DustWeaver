@@ -128,6 +128,53 @@ export interface RoomTransitionDef {
   targetSpawnBlock: readonly [number, number];
 }
 
+/** Direction a spike faces (the pointy end). */
+export type SpikeDirection = 'up' | 'down' | 'left' | 'right';
+
+/** A spike tile placed in the room. */
+export interface RoomSpikeDef {
+  xBlock: number;
+  yBlock: number;
+  /** Direction the spike points (the dangerous end). */
+  direction: SpikeDirection;
+}
+
+/** A springboard tile that bounces the player upward. */
+export interface RoomSpringboardDef {
+  xBlock: number;
+  yBlock: number;
+}
+
+/** An axis-aligned rectangular zone (water or lava). */
+export interface RoomZoneDef {
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
+/** A breakable block that shatters when the player hits it with high momentum. */
+export interface RoomBreakableBlockDef {
+  xBlock: number;
+  yBlock: number;
+}
+
+/** A jar that grants temporary dust particles when broken. */
+export interface RoomDustBoostJarDef {
+  xBlock: number;
+  yBlock: number;
+  /** Particle kind granted by the jar. */
+  dustKind: ParticleKind;
+  /** Number of temporary dust particles granted. */
+  dustCount: number;
+}
+
+/** A jar that releases golden fireflies when broken. */
+export interface RoomFireflyJarDef {
+  xBlock: number;
+  yBlock: number;
+}
+
 /** Full definition for a single room in the Metroidvania world. */
 export interface RoomDef {
   /** Unique identifier for this room. */
@@ -157,4 +204,20 @@ export interface RoomDef {
    * Each pickup grants +4 dust particles to the player.
    */
   dustContainers?: readonly { xBlock: number; yBlock: number }[];
+
+  // ── Environmental hazards ────────────────────────────────────────────────
+  /** Spike tiles that damage the player on contact. */
+  spikes?: readonly RoomSpikeDef[];
+  /** Springboard tiles that bounce the player upward. */
+  springboards?: readonly RoomSpringboardDef[];
+  /** Water zones where the player floats (buoyancy). */
+  waterZones?: readonly RoomZoneDef[];
+  /** Lava zones that damage the player. */
+  lavaZones?: readonly RoomZoneDef[];
+  /** Breakable blocks that shatter from high-momentum player impact. */
+  breakableBlocks?: readonly RoomBreakableBlockDef[];
+  /** Jars that grant temporary dust particles when broken by the player. */
+  dustBoostJars?: readonly RoomDustBoostJarDef[];
+  /** Jars that release golden fireflies when broken by the player. */
+  fireflyJars?: readonly RoomFireflyJarDef[];
 }

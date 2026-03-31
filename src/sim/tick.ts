@@ -35,12 +35,16 @@ import { applyWallForces, applyWallBounce } from './particles/walls';
 import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
+import { applyHazards } from './hazards';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
 
   // 0. Cluster movement — smooth acceleration/deceleration for player and enemies
   applyClusterMovement(world);
+
+  // 0.1. Environmental hazards — spikes, springs, water buoyancy, lava, breakables, jars, fireflies
+  applyHazards(world);
 
   // 0.25. Grapple rope constraint — corrects player cluster position/velocity
   applyGrappleClusterConstraint(world);

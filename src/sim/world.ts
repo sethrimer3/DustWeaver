@@ -5,6 +5,25 @@ import { RngState, createRng } from './rng';
 /** Maximum number of axis-aligned wall rectangles supported per world. */
 export const MAX_WALLS = 64;
 
+/** Maximum number of spike hazards per room. */
+export const MAX_SPIKES = 32;
+/** Maximum number of springboards per room. */
+export const MAX_SPRINGBOARDS = 16;
+/** Maximum number of water zones per room. */
+export const MAX_WATER_ZONES = 8;
+/** Maximum number of lava zones per room. */
+export const MAX_LAVA_ZONES = 8;
+/** Maximum number of breakable blocks per room. */
+export const MAX_BREAKABLE_BLOCKS = 32;
+/** Maximum number of dust boost jars per room. */
+export const MAX_DUST_BOOST_JARS = 16;
+/** Maximum number of firefly jars per room. */
+export const MAX_FIREFLY_JARS = 16;
+/** Maximum number of active fireflies at once. */
+export const MAX_FIREFLIES = 32;
+/** Number of fireflies spawned from each broken firefly jar. */
+export const FIREFLIES_PER_JAR = 4;
+
 export interface WorldState extends ParticleBuffers {
   tick: number;
   dtMs: number;
@@ -157,6 +176,113 @@ export interface WorldState extends ParticleBuffers {
   skidDebrisXWorld: number;
   /** Y position of the skid debris origin (bottom edge). */
   skidDebrisYWorld: number;
+
+  // ---- Environmental hazards -----------------------------------------------
+
+  // ── Spikes ─────────────────────────────────────────────────────────────────
+  /** Number of active spikes. */
+  spikeCount: number;
+  /** Center X of each spike (world units). */
+  spikeXWorld: Float32Array;
+  /** Center Y of each spike (world units). */
+  spikeYWorld: Float32Array;
+  /**
+   * Direction each spike points: 0=up, 1=down, 2=left, 3=right.
+   * Encoded as Uint8 for hot-path reads.
+   */
+  spikeDirection: Uint8Array;
+  /** Invulnerability cooldown ticks after spike damage. */
+  spikeInvulnTicks: number;
+
+  // ── Springboards ───────────────────────────────────────────────────────────
+  /** Number of active springboards. */
+  springboardCount: number;
+  /** Center X of each springboard (world units). */
+  springboardXWorld: Float32Array;
+  /** Center Y of each springboard (world units). */
+  springboardYWorld: Float32Array;
+  /** Animation timer per springboard (ticks remaining in bounce anim). */
+  springboardAnimTicks: Uint8Array;
+
+  // ── Water zones ────────────────────────────────────────────────────────────
+  /** Number of active water zones. */
+  waterZoneCount: number;
+  /** Left edge X of each water zone (world units). */
+  waterZoneXWorld: Float32Array;
+  /** Top edge Y of each water zone (world units). */
+  waterZoneYWorld: Float32Array;
+  /** Width of each water zone (world units). */
+  waterZoneWWorld: Float32Array;
+  /** Height of each water zone (world units). */
+  waterZoneHWorld: Float32Array;
+
+  // ── Lava zones ─────────────────────────────────────────────────────────────
+  /** Number of active lava zones. */
+  lavaZoneCount: number;
+  /** Left edge X of each lava zone (world units). */
+  lavaZoneXWorld: Float32Array;
+  /** Top edge Y of each lava zone (world units). */
+  lavaZoneYWorld: Float32Array;
+  /** Width of each lava zone (world units). */
+  lavaZoneWWorld: Float32Array;
+  /** Height of each lava zone (world units). */
+  lavaZoneHWorld: Float32Array;
+  /** Invulnerability cooldown ticks after lava damage. */
+  lavaInvulnTicks: number;
+
+  // ── Breakable blocks ───────────────────────────────────────────────────────
+  /** Number of breakable blocks (active + broken). */
+  breakableBlockCount: number;
+  /** Center X of each breakable block (world units). */
+  breakableBlockXWorld: Float32Array;
+  /** Center Y of each breakable block (world units). */
+  breakableBlockYWorld: Float32Array;
+  /** 1 if block is still intact, 0 if broken. */
+  isBreakableBlockActiveFlag: Uint8Array;
+  /**
+   * Wall index in the wall arrays that corresponds to each breakable block.
+   * -1 if no corresponding wall (should not happen in practice).
+   */
+  breakableBlockWallIndex: Int8Array;
+
+  // ── Dust boost jars ────────────────────────────────────────────────────────
+  /** Number of dust boost jars (active + broken). */
+  dustBoostJarCount: number;
+  /** Center X of each dust boost jar (world units). */
+  dustBoostJarXWorld: Float32Array;
+  /** Center Y of each dust boost jar (world units). */
+  dustBoostJarYWorld: Float32Array;
+  /** 1 if jar is still intact, 0 if broken. */
+  isDustBoostJarActiveFlag: Uint8Array;
+  /** Particle kind granted by each jar. */
+  dustBoostJarKind: Uint8Array;
+  /** Particle count granted by each jar. */
+  dustBoostJarDustCount: Uint8Array;
+
+  // ── Firefly jars ───────────────────────────────────────────────────────────
+  /** Number of firefly jars (active + broken). */
+  fireflyJarCount: number;
+  /** Center X of each firefly jar (world units). */
+  fireflyJarXWorld: Float32Array;
+  /** Center Y of each firefly jar (world units). */
+  fireflyJarYWorld: Float32Array;
+  /** 1 if jar is still intact, 0 if broken. */
+  isFireflyJarActiveFlag: Uint8Array;
+
+  // ── Fireflies ──────────────────────────────────────────────────────────────
+  /** Number of active fireflies. */
+  fireflyCount: number;
+  /** X position of each firefly (world units). */
+  fireflyXWorld: Float32Array;
+  /** Y position of each firefly (world units). */
+  fireflyYWorld: Float32Array;
+  /** X velocity of each firefly (world units/s). */
+  fireflyVelXWorld: Float32Array;
+  /** Y velocity of each firefly (world units/s). */
+  fireflyVelYWorld: Float32Array;
+
+  /** 1 while the player cluster is inside a water zone this tick. */
+  isPlayerInWaterFlag: 0 | 1;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -220,6 +346,48 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isPlayerSkiddingFlag: 0,
     skidDebrisXWorld: 0.0,
     skidDebrisYWorld: 0.0,
+    // ── Environmental hazards ─────────────────────────────────────────
+    spikeCount: 0,
+    spikeXWorld: new Float32Array(MAX_SPIKES),
+    spikeYWorld: new Float32Array(MAX_SPIKES),
+    spikeDirection: new Uint8Array(MAX_SPIKES),
+    spikeInvulnTicks: 0,
+    springboardCount: 0,
+    springboardXWorld: new Float32Array(MAX_SPRINGBOARDS),
+    springboardYWorld: new Float32Array(MAX_SPRINGBOARDS),
+    springboardAnimTicks: new Uint8Array(MAX_SPRINGBOARDS),
+    waterZoneCount: 0,
+    waterZoneXWorld: new Float32Array(MAX_WATER_ZONES),
+    waterZoneYWorld: new Float32Array(MAX_WATER_ZONES),
+    waterZoneWWorld: new Float32Array(MAX_WATER_ZONES),
+    waterZoneHWorld: new Float32Array(MAX_WATER_ZONES),
+    lavaZoneCount: 0,
+    lavaZoneXWorld: new Float32Array(MAX_LAVA_ZONES),
+    lavaZoneYWorld: new Float32Array(MAX_LAVA_ZONES),
+    lavaZoneWWorld: new Float32Array(MAX_LAVA_ZONES),
+    lavaZoneHWorld: new Float32Array(MAX_LAVA_ZONES),
+    lavaInvulnTicks: 0,
+    breakableBlockCount: 0,
+    breakableBlockXWorld: new Float32Array(MAX_BREAKABLE_BLOCKS),
+    breakableBlockYWorld: new Float32Array(MAX_BREAKABLE_BLOCKS),
+    isBreakableBlockActiveFlag: new Uint8Array(MAX_BREAKABLE_BLOCKS),
+    breakableBlockWallIndex: new Int8Array(MAX_BREAKABLE_BLOCKS),
+    dustBoostJarCount: 0,
+    dustBoostJarXWorld: new Float32Array(MAX_DUST_BOOST_JARS),
+    dustBoostJarYWorld: new Float32Array(MAX_DUST_BOOST_JARS),
+    isDustBoostJarActiveFlag: new Uint8Array(MAX_DUST_BOOST_JARS),
+    dustBoostJarKind: new Uint8Array(MAX_DUST_BOOST_JARS),
+    dustBoostJarDustCount: new Uint8Array(MAX_DUST_BOOST_JARS),
+    fireflyJarCount: 0,
+    fireflyJarXWorld: new Float32Array(MAX_FIREFLY_JARS),
+    fireflyJarYWorld: new Float32Array(MAX_FIREFLY_JARS),
+    isFireflyJarActiveFlag: new Uint8Array(MAX_FIREFLY_JARS),
+    fireflyCount: 0,
+    fireflyXWorld: new Float32Array(MAX_FIREFLIES),
+    fireflyYWorld: new Float32Array(MAX_FIREFLIES),
+    fireflyVelXWorld: new Float32Array(MAX_FIREFLIES),
+    fireflyVelYWorld: new Float32Array(MAX_FIREFLIES),
+    isPlayerInWaterFlag: 0,
     ...createParticleBuffers(),
   };
 }
