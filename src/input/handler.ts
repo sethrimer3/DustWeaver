@@ -135,6 +135,18 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   // Track joystick touch ID so multi-touch doesn't confuse movement with aiming
   let joystickTouchId = -1;
 
+  function clientToCanvasPx(clientXPx: number, clientYPx: number): { xPx: number; yPx: number } {
+    const rect = canvas.getBoundingClientRect();
+    const xCssPx = clientXPx - rect.left;
+    const yCssPx = clientYPx - rect.top;
+    const xNormalized = rect.width > 0 ? xCssPx / rect.width : 0.0;
+    const yNormalized = rect.height > 0 ? yCssPx / rect.height : 0.0;
+    return {
+      xPx: xNormalized * canvas.width,
+      yPx: yNormalized * canvas.height,
+    };
+  }
+
   function onKeyDown(e: KeyboardEvent): void {
     if (e.key === 'a' || e.key === 'A') state.isKeyA = true;
     if (e.key === 'd' || e.key === 'D') state.isKeyD = true;
@@ -181,15 +193,17 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     }
   }
   function onMouseMove(e: MouseEvent): void {
-    state.mouseXPx = e.clientX;
-    state.mouseYPx = e.clientY;
+    const mouse = clientToCanvasPx(e.clientX, e.clientY);
+    state.mouseXPx = mouse.xPx;
+    state.mouseYPx = mouse.yPx;
   }
   function onMouseDown(e: MouseEvent): void {
+    const mouse = clientToCanvasPx(e.clientX, e.clientY);
     if (e.button === 0) {
       state.isMouseDownFlag = 1;
       state.mouseDownTimeMs = performance.now();
-      state.mouseDownXPx = e.clientX;
-      state.mouseDownYPx = e.clientY;
+      state.mouseDownXPx = mouse.xPx;
+      state.mouseDownYPx = mouse.yPx;
     } else if (e.button === 2) {
       state.isRightMouseDownFlag = 1;
     }
@@ -204,9 +218,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         // (isMouseDownFlag=0 && isBlockingFlag=1 triggers the BlockEnd path)
       } else if (holdMs < ATTACK_HOLD_THRESHOLD_MS) {
         // Quick click — attack toward current mouse cursor position (gameScreen converts to direction)
+        const mouse = clientToCanvasPx(e.clientX, e.clientY);
         state.isAttackFiredFlag = 1;
-        state.attackDirXPx = e.clientX;
-        state.attackDirYPx = e.clientY;
+        state.attackDirXPx = mouse.xPx;
+        state.attackDirYPx = mouse.yPx;
       }
     } else if (e.button === 2) {
       state.isRightMouseDownFlag = 0;
@@ -217,26 +232,27 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     e.preventDefault();
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
+      const touch = clientToCanvasPx(t.clientX, t.clientY);
       if (joystickTouchId === -1) {
         // First touch becomes the movement joystick
         joystickTouchId = t.identifier;
         state.isTouchJoystickActiveFlag = 1;
-        state.touchJoystickBaseXPx = t.clientX;
-        state.touchJoystickBaseYPx = t.clientY;
-        state.touchJoystickCurrentXPx = t.clientX;
-        state.touchJoystickCurrentYPx = t.clientY;
+        state.touchJoystickBaseXPx = touch.xPx;
+        state.touchJoystickBaseYPx = touch.yPx;
+        state.touchJoystickCurrentXPx = touch.xPx;
+        state.touchJoystickCurrentYPx = touch.yPx;
       } else if (state.secondTouchId === -1) {
         // Second finger — attack/block gesture
         state.secondTouchId = t.identifier;
-        state.secondTouchStartXPx = t.clientX;
-        state.secondTouchStartYPx = t.clientY;
+        state.secondTouchStartXPx = touch.xPx;
+        state.secondTouchStartYPx = touch.yPx;
         state.secondTouchStartTimeMs = performance.now();
-        state.secondTouchCurrentXPx = t.clientX;
-        state.secondTouchCurrentYPx = t.clientY;
+        state.secondTouchCurrentXPx = touch.xPx;
+        state.secondTouchCurrentYPx = touch.yPx;
       } else {
         // Additional touches update the aim/mouse position
-        state.mouseXPx = t.clientX;
-        state.mouseYPx = t.clientY;
+        state.mouseXPx = touch.xPx;
+        state.mouseYPx = touch.yPx;
       }
     }
   }
@@ -245,9 +261,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     e.preventDefault();
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
+      const touch = clientToCanvasPx(t.clientX, t.clientY);
       if (t.identifier === joystickTouchId) {
-        const dx = t.clientX - state.touchJoystickBaseXPx;
-        const dy = t.clientY - state.touchJoystickBaseYPx;
+        const dx = touch.xPx - state.touchJoystickBaseXPx;
+        const dy = touch.yPx - state.touchJoystickBaseYPx;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > JOYSTICK_MAX_RADIUS_PX) {
           // Slide the base so the visual thumb never escapes the outer ring
@@ -255,15 +272,15 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
           state.touchJoystickBaseXPx += dx * scale;
           state.touchJoystickBaseYPx += dy * scale;
         }
-        state.touchJoystickCurrentXPx = t.clientX;
-        state.touchJoystickCurrentYPx = t.clientY;
+        state.touchJoystickCurrentXPx = touch.xPx;
+        state.touchJoystickCurrentYPx = touch.yPx;
         applyJoystickToKeys(state);
       } else if (t.identifier === state.secondTouchId) {
-        state.secondTouchCurrentXPx = t.clientX;
-        state.secondTouchCurrentYPx = t.clientY;
+        state.secondTouchCurrentXPx = touch.xPx;
+        state.secondTouchCurrentYPx = touch.yPx;
       } else {
-        state.mouseXPx = t.clientX;
-        state.mouseYPx = t.clientY;
+        state.mouseXPx = touch.xPx;
+        state.mouseYPx = touch.yPx;
       }
     }
   }
