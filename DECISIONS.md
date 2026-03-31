@@ -535,3 +535,41 @@ can verify the collision boundary matches the visual tile geometry.
 - Renderer: `render/clusters/radiantTetherRenderer.ts`
 - Room: `levels/rooms.ts` (ROOM_BOSS_RADIANT_TETHER)
 - Particle kind: `ParticleKind.Light` (kind 19)
+
+## Player Movement Overhaul (BUILD 59)
+
+### Speed Changes
+- Walk speed: 70 → 105 (+50%)
+- Jump speed: 200 → 300 (+50%)
+- Gravity: 600 → 900 (+50%)
+- Normal fall cap: 107 → 160.5 (+50%)
+- Fast fall cap: 160 → 240 (+50%)
+- Sprint multiplier: 2.0x → 1.5x (relative to already-increased base)
+
+### Shift Mechanics
+- Holding shift increases run speed by 50% (sprint multiplier 1.5x)
+- Holding shift decreases ground friction by 50%
+- Skidding: when sprinting and moving opposite to facing direction, spawn
+  debris particles (1×1 px) from bottom-front corner, increase friction by 50%
+- Skid jump: jumping while skidding boosts jump height by 50%
+
+### Down Key Behavior
+- Holding down without shift blocks left/right acceleration (no movement)
+- Holding shift+down = sliding (normal movement is allowed)
+
+### Grapple Hook Miss
+- When raycast hits no wall, chain extends to full influence radius
+- Chain links have heavy inertia (gravity + drag) and fall limp
+- Links stay connected via distance constraints
+- If tip link hits a surface, grapple attaches there
+- Auto-cancels after 90 ticks if nothing is hit
+
+### Debug Speed Panel
+- All player speed constants are exposed as editable textboxes in the debug panel
+- Debug panel appears when debug mode is toggled on (via pause menu)
+- Values written to `debugSpeedOverrides` in `movement.ts` for live playtesting
+
+### Level Editor Resolution Fix
+- Editor mouse coordinates now properly convert from device pixels to
+  virtual canvas coordinates (480×270) before computing world positions
+- Editor passes device and virtual canvas dimensions through the update pipeline

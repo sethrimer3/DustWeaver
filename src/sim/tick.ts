@@ -20,7 +20,7 @@
 
 import { WorldState } from './world';
 import { applyClusterMovement } from './clusters/movement';
-import { applyGrappleClusterConstraint, updateGrappleChainParticles } from './clusters/grapple';
+import { applyGrappleClusterConstraint, updateGrappleChainParticles, updateGrappleMissChain } from './clusters/grapple';
 import { applyEnemyAI } from './clusters/enemyAi';
 import { applyRockElementalAI } from './clusters/rockElementalAi';
 import { updateRockElementalDust } from './clusters/rockElementalDust';
@@ -97,6 +97,9 @@ export function tick(world: WorldState): void {
 
   // 6.75. Grapple chain particle update — reposition Gold chain particles along rope
   updateGrappleChainParticles(world);
+
+  // 6.76. Grapple miss chain update — limp chain physics when grapple missed
+  updateGrappleMissChain(world);
 
   // 7. Lifetime: age particles; cycle owned particles or respawn combat-killed ones
   updateParticleLifetimes(world);

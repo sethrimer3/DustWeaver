@@ -10,6 +10,7 @@ import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
 import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
+import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
@@ -18,6 +19,7 @@ import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
 import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
+import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
 import { renderWorldBackground } from '../render/backgroundRenderer';
 import { showDeathScreen } from '../ui/deathScreen';
 import { showSkillTombMenu } from '../ui/skillTombMenu';
@@ -639,6 +641,7 @@ export function startGameScreen(
   world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
   const environmentalDust = new EnvironmentalDustLayer();
+  const skidDebris = new SkidDebrisRenderer();
   const skillTombRenderer = new SkillTombRenderer();
 
   // ── Health bar state ─────────────────────────────────────────────────────
@@ -698,6 +701,7 @@ export function startGameScreen(
 
   // "World Editor" toggle button — shown when debug mode is on
   let editorToggleBtn: HTMLButtonElement | null = null;
+  let debugPanel: DebugPanel | null = null;
   function ensureEditorButton(): void {
     if (editorToggleBtn !== null) return;
     editorToggleBtn = document.createElement('button');
@@ -715,11 +719,19 @@ export function startGameScreen(
       editorToggleBtn!.style.color = editorController.state.isActive ? '#ff6644' : '#00c864';
     });
     uiRoot.appendChild(editorToggleBtn);
+    // Show debug speed panel alongside editor button
+    if (debugPanel === null) {
+      debugPanel = createDebugPanel(uiRoot);
+    }
   }
   function removeEditorButton(): void {
     if (editorToggleBtn !== null && editorToggleBtn.parentElement) {
       editorToggleBtn.parentElement.removeChild(editorToggleBtn);
       editorToggleBtn = null;
+    }
+    if (debugPanel !== null) {
+      debugPanel.destroy();
+      debugPanel = null;
     }
   }
 
@@ -904,7 +916,10 @@ export function startGameScreen(
     // ── Editor mode gate ──────────────────────────────────────────────────
     // When the editor is active, it takes over camera and input; skip gameplay.
     if (editorController.state.isActive) {
-      const isEditorConsuming = editorController.update(elapsedMs / 1000, camera, offsetXPx, offsetYPx, zoom);
+      const isEditorConsuming = editorController.update(
+        elapsedMs / 1000, camera, offsetXPx, offsetYPx, zoom,
+        canvas.width, canvas.height, virtualWidthPx, virtualHeightPx,
+      );
 
       if (isEditorConsuming) {
         // Still render the game world (walls, particles, etc.) as backdrop
@@ -1158,6 +1173,7 @@ export function startGameScreen(
       world.playerCrouchHeldFlag = inputState.isKeyS ? 1 : 0;
       tick(world);
       environmentalDust.update(world, FIXED_DT_MS);
+      skidDebris.update(world, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
     }
 
@@ -1235,6 +1251,9 @@ export function startGameScreen(
           isGrappleActive:      world.isGrappleActiveFlag === 1,
           grappleLengthWorld:   world.grappleLengthWorld,
           grapplePullInAmountWorld: world.grapplePullInAmountWorld,
+          isSkidding:           playerClusterForHud.isSkiddingFlag === 1,
+          isSliding:            playerClusterForHud.isSlidingFlag === 1,
+          isSprinting:          playerClusterForHud.isSprintingFlag === 1,
           inputUp: inputState.isJumpHeldFlag || inputState.isJumpTriggeredFlag,
           inputLeft: inputState.isKeyA,
           inputRight: inputState.isKeyD,
@@ -1284,6 +1303,7 @@ export function startGameScreen(
     drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
 
     environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
+    skidDebris.render(ctx, ox, oy, zoom);
 
     // Skill tombs (sprite + dust particles)
     skillTombRenderer.render(ctx, ox, oy, zoom);

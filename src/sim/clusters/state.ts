@@ -225,6 +225,12 @@ export interface ClusterState {
   playerIdleAnimState: number;
   /** Ticks remaining until the next idle animation switch. */
   playerIdleNextSwitchTicks: number;
+
+  // ---- Player skid / slide state -------------------------------------------
+  /** 1 while the player is skidding (sprint + traveling opposite to facing). */
+  isSkiddingFlag: 0 | 1;
+  /** 1 while the player is sliding (sprint + crouch/down on ground). */
+  isSlidingFlag: 0 | 1;
 }
 
 export function createClusterState(
@@ -300,5 +306,7 @@ export function createClusterState(
     playerIdleTimerTicks: 0,
     playerIdleAnimState: 0,
     playerIdleNextSwitchTicks: 0,
+    isSkiddingFlag: 0,
+    isSlidingFlag: 0,
   };
 }

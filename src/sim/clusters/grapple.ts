@@ -240,6 +240,11 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return;
 
+  // Cancel any active miss animation
+  if (world.isGrappleMissActiveFlag === 1) {
+    cancelGrappleMiss(world);
+  }
+
   const dx = anchorXWorld - player.positionXWorld;
   const dy = anchorYWorld - player.positionYWorld;
   const dist = Math.sqrt(dx * dx + dy * dy);
@@ -250,7 +255,13 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const dirY = dy * invDist;
   const maxCastDist = Math.min(dist, GRAPPLE_MAX_LENGTH_WORLD);
   const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
-  if (hit === null) return;
+
+  if (hit === null) {
+    // No wall hit — start the miss animation.
+    // Chain extends to full influence radius, then falls limp.
+    startGrappleMiss(world, dirX, dirY);
+    return;
+  }
 
   const hitDist = Math.sqrt((hit.x - player.positionXWorld) ** 2 + (hit.y - player.positionYWorld) ** 2);
 
@@ -495,5 +506,234 @@ export function updateGrappleChainParticles(world: WorldState): void {
     world.velocityYWorld[idx] = 0.0;
     world.forceX[idx]         = 0.0;
     world.forceY[idx]         = 0.0;
+  }
+}
+
+// ============================================================================
+// Grapple miss — limp chain physics
+// ============================================================================
+
+/**
+ * Speed at which the grapple chain extends outward when fired (world units/sec).
+ * Slightly slower than the max range to give a visible "throw" animation.
+ */
+const GRAPPLE_MISS_EXTEND_SPEED_WORLD_PER_SEC = 400.0;
+
+/**
+ * Gravity applied to limp chain links after full extension (world units/sec²).
+ * Heavier than normal gravity for a weighty feel.
+ */
+const GRAPPLE_MISS_GRAVITY_WORLD_PER_SEC2 = 500.0;
+
+/**
+ * Maximum spring force between connected chain links (world units).
+ * Keeps the chain from stretching too far apart.
+ * LINK_STRETCH_MULTIPLIER allows 30% stretch beyond evenly-spaced distance.
+ */
+const GRAPPLE_MISS_LINK_STRETCH_MULTIPLIER = 1.3;
+const GRAPPLE_MISS_LINK_MAX_DIST_WORLD = GRAPPLE_MAX_LENGTH_WORLD / GRAPPLE_SEGMENT_COUNT * GRAPPLE_MISS_LINK_STRETCH_MULTIPLIER;
+
+/**
+ * Drag applied to limp chain link velocities per second.
+ * Provides "heavy inertia" feel.
+ */
+const GRAPPLE_MISS_DRAG_PER_SEC = 0.8;
+
+/**
+ * Relaxation factor for the iterative constraint solver.
+ * 0.5 = split correction equally between both connected links.
+ */
+const GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR = 0.5;
+
+/** Duration in ticks after which the miss animation auto-cancels. */
+const GRAPPLE_MISS_MAX_TICKS = 90;
+
+/**
+ * Pre-allocated position/velocity arrays for the limp chain simulation.
+ * These store independent per-link physics separate from the particle buffer
+ * (we write the final positions into the particle buffer each tick).
+ */
+const missLinkX = new Float32Array(GRAPPLE_SEGMENT_COUNT);
+const missLinkY = new Float32Array(GRAPPLE_SEGMENT_COUNT);
+const missLinkVx = new Float32Array(GRAPPLE_SEGMENT_COUNT);
+const missLinkVy = new Float32Array(GRAPPLE_SEGMENT_COUNT);
+
+/** 1 if a link has attached to a surface and is now anchored. */
+const missLinkStuckFlag = new Uint8Array(GRAPPLE_SEGMENT_COUNT);
+
+function startGrappleMiss(world: WorldState, dirX: number, dirY: number): void {
+  const player = world.clusters[0];
+  if (player === undefined) return;
+  if (world.grappleParticleStartIndex < 0) return;
+
+  world.isGrappleMissActiveFlag = 1;
+  world.grappleMissDirXWorld = dirX;
+  world.grappleMissDirYWorld = dirY;
+  world.grappleMissTickCount = 0;
+
+  // Position chain links along the fire direction from the player,
+  // evenly spaced, with outward velocity.
+  const start = world.grappleParticleStartIndex;
+  for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+    const t = (i + 1) / (GRAPPLE_SEGMENT_COUNT + 1);
+    // Initial position: start near the player, spread outward
+    missLinkX[i] = player.positionXWorld + dirX * t * 10;
+    missLinkY[i] = player.positionYWorld + dirY * t * 10;
+    // Initial velocity: throw outward, each further link is faster
+    const speedScale = 0.7 + 0.3 * t;
+    missLinkVx[i] = dirX * GRAPPLE_MISS_EXTEND_SPEED_WORLD_PER_SEC * speedScale;
+    missLinkVy[i] = dirY * GRAPPLE_MISS_EXTEND_SPEED_WORLD_PER_SEC * speedScale;
+    missLinkStuckFlag[i] = 0;
+
+    // Activate the chain particle
+    const idx = start + i;
+    world.isAliveFlag[idx] = 1;
+    world.ageTicks[idx] = 0.0;
+  }
+}
+
+function cancelGrappleMiss(world: WorldState): void {
+  world.isGrappleMissActiveFlag = 0;
+  world.grappleMissTickCount = 0;
+  if (world.grappleParticleStartIndex >= 0) {
+    const start = world.grappleParticleStartIndex;
+    for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+      world.isAliveFlag[start + i] = 0;
+    }
+  }
+}
+
+/**
+ * Step 6.75 (alt) — Update limp chain physics when the grapple missed.
+ * Chain links fly outward, fall under gravity, and stick to the first
+ * surface they touch. If any link hits a wall, the grapple attaches there.
+ */
+export function updateGrappleMissChain(world: WorldState): void {
+  if (world.isGrappleMissActiveFlag === 0) return;
+  if (world.grappleParticleStartIndex < 0) return;
+
+  const player = world.clusters[0];
+  if (player === undefined || player.isAliveFlag === 0) {
+    cancelGrappleMiss(world);
+    return;
+  }
+
+  world.grappleMissTickCount++;
+  if (world.grappleMissTickCount > GRAPPLE_MISS_MAX_TICKS) {
+    cancelGrappleMiss(world);
+    return;
+  }
+
+  const dtSec = world.dtMs / 1000.0;
+  const dragFactor = Math.max(0.0, 1.0 - GRAPPLE_MISS_DRAG_PER_SEC * dtSec);
+
+  // ── Integrate link physics ────────────────────────────────────────────────
+  for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+    if (missLinkStuckFlag[i] === 1) continue; // stuck links don't move
+
+    // Apply gravity
+    missLinkVy[i] += GRAPPLE_MISS_GRAVITY_WORLD_PER_SEC2 * dtSec;
+
+    // Apply drag for heavy inertia feel
+    missLinkVx[i] *= dragFactor;
+    missLinkVy[i] *= dragFactor;
+
+    // Integrate position
+    missLinkX[i] += missLinkVx[i] * dtSec;
+    missLinkY[i] += missLinkVy[i] * dtSec;
+
+    // ── Check wall collision — stick on contact ──────────────────────────
+    for (let wi = 0; wi < world.wallCount; wi++) {
+      const wx = world.wallXWorld[wi];
+      const wy = world.wallYWorld[wi];
+      const ww = world.wallWWorld[wi];
+      const wh = world.wallHWorld[wi];
+
+      if (missLinkX[i] >= wx && missLinkX[i] <= wx + ww &&
+          missLinkY[i] >= wy && missLinkY[i] <= wy + wh) {
+        // This link hit a wall! Stick it here.
+        missLinkStuckFlag[i] = 1;
+        missLinkVx[i] = 0;
+        missLinkVy[i] = 0;
+
+        // If this is the tip (last link), attach the grapple here
+        if (i === GRAPPLE_SEGMENT_COUNT - 1) {
+          // Check if distance is valid for grapple attachment
+          const hitDist = Math.sqrt(
+            (missLinkX[i] - player.positionXWorld) ** 2 +
+            (missLinkY[i] - player.positionYWorld) ** 2,
+          );
+          if (hitDist >= GRAPPLE_MIN_LENGTH_WORLD) {
+            // Attach grapple at this point
+            world.grappleAnchorXWorld = missLinkX[i];
+            world.grappleAnchorYWorld = missLinkY[i];
+            world.grappleLengthWorld = hitDist;
+            world.grapplePullInAmountWorld = 0.0;
+            world.grappleJumpHeldTickCount = 0;
+            world.playerJumpTriggeredFlag = 0;
+            world.isGrappleActiveFlag = 1;
+            world.isGrappleMissActiveFlag = 0;
+            world.grappleMissTickCount = 0;
+            world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
+            world.grappleAttachFxXWorld = missLinkX[i];
+            world.grappleAttachFxYWorld = missLinkY[i];
+            return;
+          }
+        }
+        break;
+      }
+    }
+
+    // ── Check world floor ────────────────────────────────────────────────
+    if (missLinkY[i] >= world.worldHeightWorld) {
+      missLinkY[i] = world.worldHeightWorld - 0.5;
+      missLinkStuckFlag[i] = 1;
+      missLinkVx[i] = 0;
+      missLinkVy[i] = 0;
+    }
+  }
+
+  // ── Enforce link connectivity ─────────────────────────────────────────────
+  // Each link must stay within max distance of its neighbor.
+  // Link 0 is connected to the player, link N to link N-1.
+  for (let iter = 0; iter < 3; iter++) {
+    for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+      // Anchor point: player position for first link, previous link for others
+      const anchorX = i === 0 ? player.positionXWorld : missLinkX[i - 1];
+      const anchorY = i === 0 ? player.positionYWorld : missLinkY[i - 1];
+
+      const ddx = missLinkX[i] - anchorX;
+      const ddy = missLinkY[i] - anchorY;
+      const linkDist = Math.sqrt(ddx * ddx + ddy * ddy);
+
+      if (linkDist > GRAPPLE_MISS_LINK_MAX_DIST_WORLD && linkDist > 0.01) {
+        const excess = linkDist - GRAPPLE_MISS_LINK_MAX_DIST_WORLD;
+        const nx = ddx / linkDist;
+        const ny = ddy / linkDist;
+
+        if (missLinkStuckFlag[i] === 0) {
+          // Pull this link toward anchor
+          missLinkX[i] -= nx * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+          missLinkY[i] -= ny * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+        }
+        if (i > 0 && missLinkStuckFlag[i - 1] === 0) {
+          // Push previous link toward this one
+          missLinkX[i - 1] += nx * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+          missLinkY[i - 1] += ny * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+        }
+      }
+    }
+  }
+
+  // ── Write positions to particle buffer ────────────────────────────────────
+  const start = world.grappleParticleStartIndex;
+  for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+    const idx = start + i;
+    world.positionXWorld[idx] = missLinkX[i];
+    world.positionYWorld[idx] = missLinkY[i];
+    world.velocityXWorld[idx] = 0.0;
+    world.velocityYWorld[idx] = 0.0;
+    world.forceX[idx] = 0.0;
+    world.forceY[idx] = 0.0;
   }
 }
