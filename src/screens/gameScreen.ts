@@ -13,7 +13,7 @@ import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { CommandKind } from '../input/commands';
-import { RoomDef, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
 import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
@@ -834,7 +834,17 @@ export function startGameScreen(
           ctx.fillRect(0, 0, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX);
         }
 
-        renderWorldBackground(ctx, currentRoom.worldNumber, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX, eox, eoy);
+        renderWorldBackground(
+          ctx,
+          currentRoom.worldNumber,
+          VIRTUAL_WIDTH_PX,
+          VIRTUAL_HEIGHT_PX,
+          eox,
+          eoy,
+          currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
+          currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
+          zoom,
+        );
         renderWalls(ctx, snapshot, eox, eoy, zoom, true);
         renderClusters(ctx, snapshot, eox, eoy, zoom, true);
         renderRadiantTether(ctx, snapshot, eox, eoy, zoom, true);
@@ -1124,7 +1134,17 @@ export function startGameScreen(
     }
 
     // ── World background with parallax (behind everything else) ───────────
-    renderWorldBackground(ctx, currentRoom.worldNumber, VIRTUAL_WIDTH_PX, VIRTUAL_HEIGHT_PX, ox, oy);
+    renderWorldBackground(
+      ctx,
+      currentRoom.worldNumber,
+      VIRTUAL_WIDTH_PX,
+      VIRTUAL_HEIGHT_PX,
+      ox,
+      oy,
+      currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
+      currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
+      zoom,
+    );
 
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);

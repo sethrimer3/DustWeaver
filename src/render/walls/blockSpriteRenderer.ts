@@ -63,13 +63,14 @@ function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
   const dir = `SPRITES/WORLDS/W-${worldNumber}/blocks`;
   let sprites: BlockSpriteSet;
   if (worldNumber === 0) {
+    const brownRockBlockSprite = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_block.png');
     sprites = {
-      block:  _loadImage('SPRITES/BLOCKS/brownRock/brownRock_block_1.png'),
-      single: _loadImage('SPRITES/BLOCKS/brownRock/brownRock_block_3.png'),
-      edge:   _loadImage('SPRITES/BLOCKS/brownRock/brownRock_block_2.png'),
-      corner: _loadImage('SPRITES/BLOCKS/brownRock/brownRock_block_2.png'),
-      end:    _loadImage('SPRITES/BLOCKS/brownRock/brownRock_block_3.png'),
-      vertex: _loadImage('SPRITES/BLOCKS/brownRock/brownRock_block_1.png'),
+      block:  brownRockBlockSprite,
+      single: brownRockBlockSprite,
+      edge:   brownRockBlockSprite,
+      corner: brownRockBlockSprite,
+      end:    brownRockBlockSprite,
+      vertex: brownRockBlockSprite,
     };
   } else if (worldNumber <= 2) {
     sprites = {

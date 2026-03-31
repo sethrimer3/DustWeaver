@@ -12,7 +12,7 @@
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 /** Parallax factor: 0 = fully fixed, 1 = moves with foreground. */
-const PARALLAX_FACTOR = 0.3;
+const PARALLAX_FACTOR = 0.2;
 
 /** Vite base URL for public assets. */
 const BASE = import.meta.env.BASE_URL;
@@ -77,7 +77,7 @@ function wrapToTileStart(offset: number, tileSize: number): number {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Renders the tiled background for the current world with parallax scrolling.
+ * Renders the room background for the current world with parallax scrolling.
  *
  * @param ctx               The 2D canvas context.
  * @param worldNumber       Active world number (0, 1, 2, …).
@@ -85,6 +85,9 @@ function wrapToTileStart(offset: number, tileSize: number): number {
  * @param viewportHeightPx  Canvas height in pixels.
  * @param cameraOffsetXPx   Full camera X offset (foreground).
  * @param cameraOffsetYPx   Full camera Y offset (foreground).
+ * @param roomWidthWorld    Room width in world units.
+ * @param roomHeightWorld   Room height in world units.
+ * @param zoom              Active camera zoom.
  */
 export function renderWorldBackground(
   ctx: CanvasRenderingContext2D,
@@ -93,6 +96,9 @@ export function renderWorldBackground(
   viewportHeightPx: number,
   cameraOffsetXPx: number,
   cameraOffsetYPx: number,
+  roomWidthWorld: number,
+  roomHeightWorld: number,
+  zoom: number,
 ): void {
   const img = _getBgImage(worldNumber);
 
@@ -107,11 +113,19 @@ export function renderWorldBackground(
   const th = img.naturalHeight;
   if (tw === 0 || th === 0) return;
 
-  // Parallax offset: moves slower than the foreground
-  const pxOff = cameraOffsetXPx * PARALLAX_FACTOR;
-  const pyOff = cameraOffsetYPx * PARALLAX_FACTOR;
+  // Anchor background to room centre, then apply relative camera parallax.
+  const roomCenterOffsetXPx = viewportWidthPx * 0.5 - (roomWidthWorld * 0.5 * zoom);
+  const roomCenterOffsetYPx = viewportHeightPx * 0.5 - (roomHeightWorld * 0.5 * zoom);
+  const relCameraOffsetXPx = cameraOffsetXPx - roomCenterOffsetXPx;
+  const relCameraOffsetYPx = cameraOffsetYPx - roomCenterOffsetYPx;
 
-  // Compute starting tile position so tiles seamlessly cover the viewport
+  // Keep a centred tiled origin so the room centre maps to image centre.
+  const centeredOriginXPx = (viewportWidthPx - tw) * 0.5;
+  const centeredOriginYPx = (viewportHeightPx - th) * 0.5;
+  const pxOff = centeredOriginXPx + relCameraOffsetXPx * PARALLAX_FACTOR;
+  const pyOff = centeredOriginYPx + relCameraOffsetYPx * PARALLAX_FACTOR;
+
+  // Compute starting tile position so tiles seamlessly cover the viewport.
   const startX = wrapToTileStart(pxOff, tw);
   const startY = wrapToTileStart(pyOff, th);
 
