@@ -1,8 +1,8 @@
 /**
  * GLSL shader sources for WebGL particle rendering.
  *
- * Vertex format (per particle): [x, y, kind, normalizedAge, disturbanceFactor]
- *                                (5 floats)
+ * Vertex format (per particle): [x, y, kind, normalizedAge, disturbanceFactor, isOffensive]
+ *                                (6 floats)
  *
  * Design goals:
  *  - Single draw call for all particles via gl.POINTS / point sprites.
@@ -23,6 +23,7 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
   attribute float a_kind;
   attribute float a_normalizedAge;
   attribute float a_disturbanceFactor;
+  attribute float a_isOffensive;
 
   uniform vec2  u_resolution;
   uniform float u_pointSizePx;
@@ -36,8 +37,9 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
     clip.y = -clip.y;
     gl_Position = vec4(clip, 0.0, 1.0);
 
-    // Particles shrink to ~60 % of their base size as they age out.
-    float sizeFactor = 1.0 - a_normalizedAge * 0.40;
+    // Offensive particles stay at their full 4x4 size throughout their lifetime.
+    // Orbit/shield particles shrink to ~60 % of their base size as they age out.
+    float sizeFactor = a_isOffensive > 0.5 ? 1.0 : (1.0 - a_normalizedAge * 0.40);
     gl_PointSize = u_pointSizePx * sizeFactor;
 
     v_kind              = a_kind;

@@ -20,6 +20,12 @@ export interface ParticleSnapshot {
    * Non-zero only for Fluid background particles; drives their alpha.
    */
   readonly disturbanceFactor: Float32Array;
+  /**
+   * Behavior mode for each particle (matches sim/particles/state.ts).
+   * 0 = orbit, 1 = attack (offensive), 2 = shield.
+   * Used by the renderer to keep offensive particles at their full 4×4 size.
+   */
+  readonly behaviorMode:      Uint8Array;
   readonly particleCount:     number;
 }
 
@@ -181,6 +187,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       ageTicks:          world.ageTicks,
       lifetimeTicks:     world.lifetimeTicks,
       disturbanceFactor: world.disturbanceFactor,
+      behaviorMode:      world.behaviorMode,
       particleCount:     world.particleCount,
     },
     clusters: clusterSnapshots,
