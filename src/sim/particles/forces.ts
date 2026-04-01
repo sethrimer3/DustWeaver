@@ -561,6 +561,8 @@ export function applyInterParticleForces(world: WorldState): void {
     const ai = scratchDestroyA[k];
     const bi = scratchDestroyB[k];
     if (isAliveFlag[ai] === 0 || isAliveFlag[bi] === 0) continue;
+    // Grapple chain particles (behaviorMode=3) are not part of combat — skip.
+    if (behaviorMode[ai] === 3 || behaviorMode[bi] === 3) continue;
 
     const kindA = kindBuffer[ai];
     const kindB = kindBuffer[bi];
@@ -832,7 +834,7 @@ export function applyInterParticleForces(world: WorldState): void {
   const playerCluster = clusters[0];
   if (playerCluster !== undefined && playerCluster.isPlayerFlag === 1) {
     for (let pi = 0; pi < particleCount; pi++) {
-      if (ownerEntityId[pi] === playerCluster.entityId && isAliveFlag[pi] === 1) {
+      if (ownerEntityId[pi] === playerCluster.entityId && isAliveFlag[pi] === 1 && isTransientFlag[pi] === 0) {
         playerDustCount++;
       }
     }

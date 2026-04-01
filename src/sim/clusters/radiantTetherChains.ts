@@ -451,7 +451,7 @@ function applyChainDamage(
   // Calculate player's armor from dust particles
   let playerDustCount = 0;
   for (let i = 0; i < world.particleCount; i++) {
-    if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1) {
+    if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1 && world.isTransientFlag[i] === 0) {
       playerDustCount++;
     }
   }

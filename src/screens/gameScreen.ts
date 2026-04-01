@@ -799,7 +799,7 @@ export function startGameScreen(
     if (player === undefined || player.isAliveFlag === 0) return 0;
     let count = 0;
     for (let i = 0; i < world.particleCount; i++) {
-      if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1) {
+      if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1 && world.isTransientFlag[i] === 0) {
         count++;
       }
     }
