@@ -175,6 +175,13 @@ const GRAPPLE_ZIP_MIN_DIST_WORLD = 0.01;
  */
 const BEHAVIOR_MODE_GRAPPLE_CHAIN = 3;
 
+/**
+ * Lifetime (ticks) assigned to grapple chain particles — effectively infinite.
+ * Chain particle lifetime is managed by the grapple system directly; using a
+ * very large value prevents the standard particle lifetime loop from expiring them.
+ */
+const GRAPPLE_CHAIN_LIFETIME_TICKS = 9999999.0;
+
 interface RayHit {
   t: number;
   x: number;
@@ -256,7 +263,7 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
     world.anchorRadiusWorld[idx] = 0.0;
     world.disturbanceFactor[idx] = 0.0;
     world.ageTicks[idx]          = 0.0;
-    world.lifetimeTicks[idx]     = 9999999.0;  // never expires naturally
+    world.lifetimeTicks[idx]     = GRAPPLE_CHAIN_LIFETIME_TICKS;
     world.noiseTickSeed[idx]     = (0xdeadbe00 + i) >>> 0;
     world.behaviorMode[idx]      = BEHAVIOR_MODE_GRAPPLE_CHAIN;
     world.particleDurability[idx]  = profile.toughness;
@@ -316,11 +323,6 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // Grapple charge: cannot fire when spent
   if (world.hasGrappleChargeFlag === 0) return;
 
-  // Cancel any active miss animation
-  if (world.isGrappleMissActiveFlag === 1) {
-    cancelGrappleMiss(world);
-  }
-
   const dx = anchorXWorld - player.positionXWorld;
   const dy = anchorYWorld - player.positionYWorld;
   const dist = Math.sqrt(dx * dx + dy * dy);
@@ -333,8 +335,15 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
 
   if (hit === null) {
-    // No wall hit — start the miss animation.
-    // Chain extends to full influence radius, then falls limp.
+    // No wall hit. If a retract animation is already in progress, leave it
+    // running — cancelling it and switching to physics mode can cause the chain
+    // tip to accidentally re-attach to a wall, creating a phantom grapple that
+    // drains the charge with no way to escape without pressing Jump.
+    if (world.isGrappleRetractingFlag === 1) return;
+    // Cancel any pre-existing miss animation, then start a new one.
+    if (world.isGrappleMissActiveFlag === 1) {
+      cancelGrappleMiss(world);
+    }
     startGrappleMiss(world, dirX, dirY);
     return;
   }
@@ -345,6 +354,11 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // so would place the anchor inside the block geometry, which causes the
   // visible dot to appear embedded in the tile and produces erratic physics.
   if (hitDist < GRAPPLE_MIN_LENGTH_WORLD) return;
+
+  // Confirmed wall hit — cancel any active miss/retract before attaching.
+  if (world.isGrappleMissActiveFlag === 1) {
+    cancelGrappleMiss(world);
+  }
 
   // Detect top-surface hit and snap anchor Y to exact wall surface
   const isTopHit = isTopSurfaceHit(world, hit.x, hit.y, _topSurfaceOut);
@@ -379,15 +393,25 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
     world.hasGrappleChargeFlag = 0;
   }
 
-  // Activate chain particles
+  // Activate chain particles — fully reinitialise fields that may have been
+  // overwritten while the slots were reused by stone shards or other transient
+  // particles (e.g. lifetimeTicks, kindBuffer, behaviorMode).  Without this
+  // reset, chain particles can expire mid-swing and the renderer falls back to
+  // displaying the rope attached to the old anchor position.
   if (world.grappleParticleStartIndex >= 0) {
     const start = world.grappleParticleStartIndex;
+    const chainProfile = getElementProfile(ParticleKind.Gold);
     for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
       const idx = start + i;
-      world.isAliveFlag[idx]  = 1;
-      world.ageTicks[idx]     = 0.0;
-      world.velocityXWorld[idx] = 0.0;
-      world.velocityYWorld[idx] = 0.0;
+      world.isAliveFlag[idx]        = 1;
+      world.ageTicks[idx]           = 0.0;
+      world.lifetimeTicks[idx]      = GRAPPLE_CHAIN_LIFETIME_TICKS;
+      world.kindBuffer[idx]         = ParticleKind.Gold;
+      world.behaviorMode[idx]       = BEHAVIOR_MODE_GRAPPLE_CHAIN;
+      world.particleDurability[idx] = chainProfile.toughness;
+      world.respawnDelayTicks[idx]  = 0;
+      world.velocityXWorld[idx]     = 0.0;
+      world.velocityYWorld[idx]     = 0.0;
     }
   }
 }
@@ -860,6 +884,7 @@ function startGrappleRetract(world: WorldState): void {
   world.grappleMissTickCount = 0;
 
   const start = world.grappleParticleStartIndex;
+  const chainProfile = getElementProfile(ParticleKind.Gold);
   for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
     const idx = start + i;
     missLinkX[i] = world.positionXWorld[idx];
@@ -867,7 +892,15 @@ function startGrappleRetract(world: WorldState): void {
     missLinkVx[i] = 0.0;
     missLinkVy[i] = 0.0;
     missLinkStuckFlag[i] = 0;
-    world.isAliveFlag[idx] = 1;
+    // Fully reinitialise fields so stale lifetime/kind data from slot reuse
+    // cannot cause chain particles to die during the retract animation.
+    world.isAliveFlag[idx]        = 1;
+    world.ageTicks[idx]           = 0.0;
+    world.lifetimeTicks[idx]      = GRAPPLE_CHAIN_LIFETIME_TICKS;
+    world.kindBuffer[idx]         = ParticleKind.Gold;
+    world.behaviorMode[idx]       = BEHAVIOR_MODE_GRAPPLE_CHAIN;
+    world.particleDurability[idx] = chainProfile.toughness;
+    world.respawnDelayTicks[idx]  = 0;
   }
 }
 
@@ -1020,9 +1053,14 @@ export function updateGrappleMissChain(world: WorldState): void {
   }
 
   // ── Write positions to particle buffer ────────────────────────────────────
+  // Also force isAliveFlag = 1: if a chain particle was killed mid-retract by
+  // combat damage or lifetime expiry the renderer would fall back to rendering
+  // the rope at grappleAnchorXWorld/Y (the original fixed anchor), making it
+  // look like the grapple is still attached while the player falls.
   const start = world.grappleParticleStartIndex;
   for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
     const idx = start + i;
+    world.isAliveFlag[idx]    = 1;
     world.positionXWorld[idx] = missLinkX[i];
     world.positionYWorld[idx] = missLinkY[i];
     world.velocityXWorld[idx] = 0.0;
