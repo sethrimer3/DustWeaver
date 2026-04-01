@@ -29,18 +29,22 @@
  *    second) the player barely notices energy loss within a single swing but
  *    will feel it after 3–4 full oscillations.
  *
- * 4. Tap Jump vs Hold Jump Detection
- *    While the grapple is active, the jump button has dual purpose:
- *      • Tap  (press + release within GRAPPLE_JUMP_TAP_THRESHOLD_TICKS) →
- *        instantly release the grapple.  The player flies off with exactly
- *        the velocity they had at the instant of release.
- *      • Hold (held beyond the threshold) → retract the rope, building
- *        angular speed via conservation of angular momentum.
- *    Retraction begins immediately (no delay), so the hold feels responsive.
- *    If the player releases within the tap window, the tiny amount of
- *    retraction that occurred (~7 px) is imperceptible.
- *    An ultra-fast tap (pressed and released within a single frame) is
- *    detected via the playerJumpTriggeredFlag and triggers an immediate release.
+ * 4. Jump Off Grapple
+ *    While the grapple is active, pressing jump immediately releases the
+ *    grapple and adds an upward velocity impulse (equal to the normal jump
+ *    speed).  This lets the player "jump off" the rope at any point in their
+ *    swing, combining their swing momentum with the upward boost.
+ *
+ * 5. Rope Retraction (Hold Down/S)
+ *    While the grapple is active, holding down/S retracts the rope.  As the
+ *    rope shortens, angular momentum is conserved (v_tang × radius = const),
+ *    so the player swings faster.  If the accumulated retraction exceeds
+ *    GRAPPLE_MAX_PULL_IN_WORLD the rope snaps.
+ *
+ * 6. Single Grapple Charge
+ *    The player can only grapple once until they touch the ground or grapple
+ *    onto a top surface (which instantly refreshes the charge).  This prevents
+ *    infinite air grappling while still allowing ledge-to-ledge chaining.
  *
  * ═══════════════════════════════════════════════════════════════════════════════
  *
@@ -48,10 +52,11 @@
  * world-space anchor point. Each tick two operations are performed:
  *
  *   applyGrappleClusterConstraint  (step 0.25, after cluster movement)
- *     • Detects tap-vs-hold jump input and either releases or retracts.
- *     • On retraction, conserves angular momentum (tangential speed × radius).
+ *     • If jump pressed: releases grapple with upward velocity impulse.
+ *     • While down/S held: retracts the rope, conserving angular momentum.
  *     • Enforces the rope length: snaps the player back onto the rope circle
  *       and removes the outward radial velocity component.
+ *     • Runs a post-constraint wall collision check to prevent ground clipping.
  *     • Applies subtle tangential damping.
  *
  *   updateGrappleChainParticles    (step 6.75, after particle integration)
@@ -112,20 +117,12 @@ const GRAPPLE_MAX_RETRACT_SPEED_RATIO = 1.1;
 const GRAPPLE_SWING_DAMPING_PER_SEC = 0.12;
 
 /**
- * Number of ticks the jump button can be held before it is considered a "hold"
- * rather than a "tap".  At 60 fps, 6 ticks ≈ 100 ms — fast enough to feel
- * instant as a tap, long enough to reliably distinguish from a deliberate hold.
- */
-const GRAPPLE_JUMP_TAP_THRESHOLD_TICKS = 6;
-
-/**
  * Upward velocity impulse (world units/second) added to the player when they
- * tap-release the grapple.  Gives a small "hop" on release so the player can
- * pop off ledges or continue upward momentum after a swing.
- * Applied by *subtracting* from velocityYWorld — negative Y is upward in this
- * coordinate system (Y increases downward on screen).
+ * press jump to release the grapple.  This is a "jump off the rope" that adds
+ * upward momentum to whatever swing velocity the player has.
+ * Applied by *subtracting* from velocityYWorld — negative Y is upward.
  */
-const GRAPPLE_TAP_HOP_SPEED_WORLD = 53.0;
+const GRAPPLE_JUMP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD;
 
 /** Number of Gold particles that form the visible chain between player and anchor. */
 export const GRAPPLE_SEGMENT_COUNT = 10;
@@ -273,9 +270,10 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
 
 /**
  * Returns true if the given hit point is on the top surface of any wall.
- * Used to detect when the grapple attaches to a horizontal ledge.
+ * When true, also writes the exact wall top-Y into the provided output object
+ * so the caller can snap the anchor to the precise surface.
  */
-function isTopSurfaceHit(world: WorldState, hitX: number, hitY: number): boolean {
+function isTopSurfaceHit(world: WorldState, hitX: number, hitY: number, out: { snappedY: number }): boolean {
   const eps = 0.5;
   for (let wi = 0; wi < world.wallCount; wi++) {
     const topY = world.wallYWorld[wi];
@@ -292,21 +290,31 @@ function isTopSurfaceHit(world: WorldState, hitX: number, hitY: number): boolean
       return false;
     }
     if (isNearTopSurface) {
+      out.snappedY = topY;
       return true;
     }
   }
   return false;
 }
 
+/** Reusable output object for isTopSurfaceHit to avoid per-call allocation. */
+const _topSurfaceOut = { snappedY: 0 };
+
 /**
  * Fires the grapple, setting the anchor at the exact raycast hit point on a
  * wall surface.  Returns without attaching if the wall is too close (less than
  * GRAPPLE_MIN_LENGTH_WORLD away) to prevent degenerate behaviour.
  * Activates the chain particles.
+ *
+ * The player can only grapple once until they touch the ground or grapple onto
+ * a top surface (which instantly refreshes the charge).
  */
 export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorld: number): void {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return;
+
+  // Grapple charge: cannot fire when spent
+  if (world.hasGrappleChargeFlag === 0) return;
 
   // Cancel any active miss animation
   if (world.isGrappleMissActiveFlag === 1) {
@@ -338,10 +346,16 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // visible dot to appear embedded in the tile and produces erratic physics.
   if (hitDist < GRAPPLE_MIN_LENGTH_WORLD) return;
 
-  // Place the anchor exactly at the raycast surface hit point.
-  world.grappleAnchorXWorld = hit.x;
-  world.grappleAnchorYWorld = hit.y;
-  world.grappleLengthWorld  = hitDist;
+  // Detect top-surface hit and snap anchor Y to exact wall surface
+  const isTopHit = isTopSurfaceHit(world, hit.x, hit.y, _topSurfaceOut);
+  const anchorX = hit.x;
+  const anchorY = isTopHit ? _topSurfaceOut.snappedY : hit.y;
+  const anchorDist = Math.sqrt((anchorX - player.positionXWorld) ** 2 + (anchorY - player.positionYWorld) ** 2);
+
+  // Place the anchor exactly at the (potentially snapped) surface hit point.
+  world.grappleAnchorXWorld = anchorX;
+  world.grappleAnchorYWorld = anchorY;
+  world.grappleLengthWorld  = anchorDist;
   world.grapplePullInAmountWorld = 0.0;  // reset pull-in counter for this new attachment
   world.grappleJumpHeldTickCount = 0;   // reset tap/hold tracker
   // Clear any pending jump trigger so that a jump press made on the same frame
@@ -350,12 +364,20 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // first tick after attachment.
   world.playerJumpTriggeredFlag = 0;
   world.isGrappleActiveFlag = 1;
-  world.isGrappleTopSurfaceFlag = isTopSurfaceHit(world, hit.x, hit.y) ? 1 : 0;
+  world.isGrappleTopSurfaceFlag = isTopHit ? 1 : 0;
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
-  world.grappleAttachFxXWorld = world.grappleAnchorXWorld;
-  world.grappleAttachFxYWorld = world.grappleAnchorYWorld;
+  world.grappleAttachFxXWorld = anchorX;
+  world.grappleAttachFxYWorld = anchorY;
+
+  // Consume grapple charge. Top-surface grapples instantly refresh the charge
+  // so the player can chain grapple between ledges.
+  if (isTopHit) {
+    world.hasGrappleChargeFlag = 1;
+  } else {
+    world.hasGrappleChargeFlag = 0;
+  }
 
   // Activate chain particles
   if (world.grappleParticleStartIndex >= 0) {
@@ -404,20 +426,24 @@ export function releaseGrapple(world: WorldState): void {
  * Called after applyClusterMovement (which applies gravity and floor collision)
  * so the constraint acts on the fully-updated cluster position and velocity.
  *
+ * Controls:
+ *   • Jump (W/Space/Up) → release grapple + upward velocity impulse.
+ *   • Down (S/ArrowDown) held → retract (shorten) the rope.
+ *     Shortening conserves angular momentum so the player swings faster.
+ *
  * Pipeline per tick:
  *   1. Consume playerJumpTriggeredFlag (movement.ts preserves it when grappling).
- *   2. Detect ultra-fast tap (triggered + not held) → immediate release.
- *   3. Track jump hold duration for tap-vs-hold detection.
- *   4. On jump release within tap window → release grapple.
- *   5. While jump held (retraction):
+ *   2. If jump pressed → release grapple with upward impulse.
+ *   3. While down held (retraction):
  *      a. Decompose velocity into radial + tangential components.
  *      b. Shorten the rope.
  *      c. Scale tangential velocity by (oldLength / newLength) to conserve
  *         angular momentum.
  *      d. Recompose velocity from radial + boosted tangential.
- *   6. Enforce rope length: if player distance > ropeLength, snap position
+ *   4. Enforce rope length: if player distance > ropeLength, snap position
  *      onto the rope circle and remove the outward radial velocity component.
- *   7. Apply subtle tangential damping (air resistance / friction).
+ *   5. Post-constraint wall collision check to prevent ground clipping.
+ *   6. Apply subtle tangential damping (air resistance / friction).
  */
 export function applyGrappleClusterConstraint(world: WorldState): void {
   if (world.isGrappleActiveFlag === 0) return;
@@ -430,7 +456,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
 
   const dtSec = world.dtMs / 1000.0;
 
-  // ── Tap / hold jump detection ─────────────────────────────────────────────
+  // ── Jump input: release grapple with upward impulse ───────────────────────
   // movement.ts preserves playerJumpTriggeredFlag when grapple is active so we
   // can detect the rising edge of a jump press here.
   const jumpJustPressed = world.playerJumpTriggeredFlag === 1;
@@ -529,54 +555,36 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // Normal grapple — pendulum swing
   // ════════════════════════════════════════════════════════════════════════════
 
-  // Ultra-fast tap: pressed and released within a single frame (both keydown
-  // and keyup fired between two ticks).  The triggered flag is set but the
-  // held flag is already false.
-  if (jumpJustPressed && world.playerJumpHeldFlag === 0) {
-    // Give the player a small upward "hop" on release so they can pop off
-    // surfaces or continue upward momentum out of a swing.
-    player.velocityYWorld -= GRAPPLE_TAP_HOP_SPEED_WORLD;
+  // ── Jump input: release grapple + upward impulse ──────────────────────────
+  // Any jump press immediately releases the grapple and gives the player an
+  // upward velocity boost so they can "jump off" the rope.
+  if (jumpJustPressed) {
+    player.velocityYWorld -= GRAPPLE_JUMP_OFF_SPEED_WORLD;
+    player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
+    player.varJumpSpeedWorld = player.velocityYWorld;
     releaseGrapple(world);
     return;
-  }
-
-  if (world.playerJumpHeldFlag === 1) {
-    // Jump is currently held — increment the hold counter.
-    // Retraction begins immediately so the hold feels responsive; if the
-    // player releases within the tap window the tiny retraction is imperceptible.
-    world.grappleJumpHeldTickCount++;
-  } else if (world.grappleJumpHeldTickCount > 0) {
-    // Jump was just released.  If the hold was short enough → tap → release.
-    if (world.grappleJumpHeldTickCount <= GRAPPLE_JUMP_TAP_THRESHOLD_TICKS) {
-      world.grappleJumpHeldTickCount = 0;
-      // Give the player a small upward "hop" on release.
-      player.velocityYWorld -= GRAPPLE_TAP_HOP_SPEED_WORLD;
-      releaseGrapple(world);
-      return;
-    }
-    // Long hold ended — stop retracting but stay attached.
-    world.grappleJumpHeldTickCount = 0;
   }
 
   // ── Compute radial direction from anchor to player ────────────────────────
   const ax = world.grappleAnchorXWorld;
   const ay = world.grappleAnchorYWorld;
-  const dx = player.positionXWorld - ax;
-  const dy = player.positionYWorld - ay;
-  const dist = Math.sqrt(dx * dx + dy * dy);
+  let dx = player.positionXWorld - ax;
+  let dy = player.positionYWorld - ay;
+  let dist = Math.sqrt(dx * dx + dy * dy);
 
   if (dist < 1.0) return; // degenerate — player at anchor point
 
-  const invDist = 1.0 / dist;
+  let invDist = 1.0 / dist;
   // Unit vector pointing from anchor toward player (outward / radial direction)
-  const nx = dx * invDist;
-  const ny = dy * invDist;
+  let nx = dx * invDist;
+  let ny = dy * invDist;
 
-  // ── Rope retraction (hold jump) ───────────────────────────────────────────
-  // While the jump button is held the rope shortens, and angular momentum is
+  // ── Rope retraction (hold down / S) ───────────────────────────────────────
+  // While the down key is held the rope shortens, and angular momentum is
   // conserved: v_tangential_new = v_tangential_old × (L_old / L_new).
   // This is why figure skaters spin faster when they pull their arms in.
-  if (world.playerJumpHeldFlag === 1) {
+  if (world.playerCrouchHeldFlag === 1) {
     const pullThisTick = GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC * dtSec;
     const oldLength = world.grappleLengthWorld;
     const newLength = Math.max(oldLength - pullThisTick, GRAPPLE_MIN_LENGTH_WORLD);
@@ -626,6 +634,67 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       player.velocityYWorld -= velDotN * ny;
     }
   }
+
+  // ── Post-constraint wall collision (last-resort fallback) ──────────────────
+  // The primary collision resolver is the axis-separated sweep in movement.ts
+  // (step 0).  This minimum-penetration push-out is a *fallback safety net*
+  // that only fires when the rope constraint (above) re-introduces a small
+  // overlap — typically when the anchor is on a nearby floor and the rope pulls
+  // the player downward into geometry.  Because the overlap is always small
+  // (≤ one tick of rope correction) and velocities are low at this point,
+  // minimum-penetration is acceptable here.  The axis-separated sweep is not
+  // re-run because it would require re-doing the full X-then-Y integration
+  // pass, which is disproportionate to the tiny correction needed.
+  {
+    const halfW = player.halfWidthWorld;
+    const halfH = player.halfHeightWorld;
+    const pLeft   = player.positionXWorld - halfW;
+    const pRight  = player.positionXWorld + halfW;
+    const pTop    = player.positionYWorld - halfH;
+    const pBottom = player.positionYWorld + halfH;
+    for (let wi = 0; wi < world.wallCount; wi++) {
+      const wLeft   = world.wallXWorld[wi];
+      const wTop    = world.wallYWorld[wi];
+      const wRight  = wLeft + world.wallWWorld[wi];
+      const wBottom = wTop + world.wallHWorld[wi];
+      // Check AABB overlap
+      if (pRight > wLeft && pLeft < wRight && pBottom > wTop && pTop < wBottom) {
+        // Find minimum penetration axis
+        const overlapLeft   = pRight - wLeft;
+        const overlapRight  = wRight - pLeft;
+        const overlapTop    = pBottom - wTop;
+        const overlapBottom = wBottom - pTop;
+        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+        if (minOverlap === overlapTop) {
+          // Push up (landing on top surface)
+          player.positionYWorld = wTop - halfH;
+          if (player.velocityYWorld > 0) player.velocityYWorld = 0;
+        } else if (minOverlap === overlapBottom) {
+          // Push down (hitting bottom surface)
+          player.positionYWorld = wBottom + halfH;
+          if (player.velocityYWorld < 0) player.velocityYWorld = 0;
+        } else if (minOverlap === overlapLeft) {
+          // Push left
+          player.positionXWorld = wLeft - halfW;
+          if (player.velocityXWorld > 0) player.velocityXWorld = 0;
+        } else {
+          // Push right
+          player.positionXWorld = wRight + halfW;
+          if (player.velocityXWorld < 0) player.velocityXWorld = 0;
+        }
+        break; // resolve one wall per tick — sufficient for the grapple correction
+      }
+    }
+  }
+
+  // Recompute radial direction after potential wall correction
+  dx = player.positionXWorld - ax;
+  dy = player.positionYWorld - ay;
+  dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 1.0) return;
+  invDist = 1.0 / dist;
+  nx = dx * invDist;
+  ny = dy * invDist;
 
   // ── Swing damping (subtle air resistance on tangential velocity) ──────────
   // Only the tangential component is damped so gravity's natural acceleration

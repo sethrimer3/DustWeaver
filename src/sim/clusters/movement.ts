@@ -1145,6 +1145,13 @@ export function applyClusterMovement(world: WorldState): void {
           // Player walked off a ledge — start coyote time
           cluster.coyoteTimeTicks = COYOTE_TIME_TICKS;
         }
+
+        // ── Grapple charge refresh on ground contact ─────────────────────────
+        // The player can only grapple once while airborne.  Touching the ground
+        // restores the charge so they can grapple again.
+        if (cluster.isGroundedFlag === 1) {
+          world.hasGrappleChargeFlag = 1;
+        }
       }
 
       // ── Clamp horizontal world bounds (ground entities) ─────────────────
