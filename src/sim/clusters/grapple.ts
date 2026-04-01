@@ -375,11 +375,20 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
  * The player retains their current velocity (built-up swing momentum).
  */
 export function releaseGrapple(world: WorldState): void {
+  const shouldRetractFromActiveGrapple = world.isGrappleActiveFlag === 1;
+  const shouldRetractFromMiss = world.isGrappleMissActiveFlag === 1;
+
   world.isGrappleActiveFlag = 0;
   world.isGrappleTopSurfaceFlag = 0;
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   world.grappleJumpHeldTickCount = 0;
+  world.grapplePullInAmountWorld = 0.0;
+
+  if (shouldRetractFromActiveGrapple || shouldRetractFromMiss) {
+    startGrappleRetract(world);
+    return;
+  }
 
   if (world.grappleParticleStartIndex >= 0) {
     const start = world.grappleParticleStartIndex;
@@ -714,6 +723,7 @@ const GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR = 0.5;
 
 /** Duration in ticks after which the miss animation auto-cancels. */
 const GRAPPLE_MISS_MAX_TICKS = 90;
+const GRAPPLE_RETRACT_SPEED_WORLD_PER_SEC = 900.0;
 
 /**
  * Pre-allocated position/velocity arrays for the limp chain simulation.
@@ -734,6 +744,7 @@ function startGrappleMiss(world: WorldState, dirX: number, dirY: number): void {
   if (world.grappleParticleStartIndex < 0) return;
 
   world.isGrappleMissActiveFlag = 1;
+  world.isGrappleRetractingFlag = 0;
   world.grappleMissDirXWorld = dirX;
   world.grappleMissDirYWorld = dirY;
   world.grappleMissTickCount = 0;
@@ -761,12 +772,33 @@ function startGrappleMiss(world: WorldState, dirX: number, dirY: number): void {
 
 function cancelGrappleMiss(world: WorldState): void {
   world.isGrappleMissActiveFlag = 0;
+  world.isGrappleRetractingFlag = 0;
   world.grappleMissTickCount = 0;
   if (world.grappleParticleStartIndex >= 0) {
     const start = world.grappleParticleStartIndex;
     for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
       world.isAliveFlag[start + i] = 0;
     }
+  }
+}
+
+function startGrappleRetract(world: WorldState): void {
+  const player = world.clusters[0];
+  if (player === undefined || world.grappleParticleStartIndex < 0) return;
+
+  world.isGrappleMissActiveFlag = 1;
+  world.isGrappleRetractingFlag = 1;
+  world.grappleMissTickCount = 0;
+
+  const start = world.grappleParticleStartIndex;
+  for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+    const idx = start + i;
+    missLinkX[i] = world.positionXWorld[idx];
+    missLinkY[i] = world.positionYWorld[idx];
+    missLinkVx[i] = 0.0;
+    missLinkVy[i] = 0.0;
+    missLinkStuckFlag[i] = 0;
+    world.isAliveFlag[idx] = 1;
   }
 }
 
@@ -794,99 +826,125 @@ export function updateGrappleMissChain(world: WorldState): void {
   const dtSec = world.dtMs / 1000.0;
   const dragFactor = Math.max(0.0, 1.0 - GRAPPLE_MISS_DRAG_PER_SEC * dtSec);
 
-  // ── Integrate link physics ────────────────────────────────────────────────
-  for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
-    if (missLinkStuckFlag[i] === 1) continue; // stuck links don't move
+  if (world.isGrappleRetractingFlag === 1) {
+    let hasAnyLinkFarFromPlayerFlag: 0 | 1 = 0;
+    for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+      const dx = player.positionXWorld - missLinkX[i];
+      const dy = player.positionYWorld - missLinkY[i];
+      const distanceWorld = Math.sqrt(dx * dx + dy * dy);
 
-    // Apply gravity
-    missLinkVy[i] += GRAPPLE_MISS_GRAVITY_WORLD_PER_SEC2 * dtSec;
+      if (distanceWorld > 0.001) {
+        const moveWorld = Math.min(GRAPPLE_RETRACT_SPEED_WORLD_PER_SEC * dtSec, distanceWorld);
+        const invDistance = 1.0 / distanceWorld;
+        missLinkX[i] += dx * invDistance * moveWorld;
+        missLinkY[i] += dy * invDistance * moveWorld;
+      }
 
-    // Apply drag for heavy inertia feel
-    missLinkVx[i] *= dragFactor;
-    missLinkVy[i] *= dragFactor;
-
-    // Integrate position
-    missLinkX[i] += missLinkVx[i] * dtSec;
-    missLinkY[i] += missLinkVy[i] * dtSec;
-
-    // ── Check wall collision — stick on contact ──────────────────────────
-    for (let wi = 0; wi < world.wallCount; wi++) {
-      const wx = world.wallXWorld[wi];
-      const wy = world.wallYWorld[wi];
-      const ww = world.wallWWorld[wi];
-      const wh = world.wallHWorld[wi];
-
-      if (missLinkX[i] >= wx && missLinkX[i] <= wx + ww &&
-          missLinkY[i] >= wy && missLinkY[i] <= wy + wh) {
-        // This link hit a wall! Stick it here.
-        missLinkStuckFlag[i] = 1;
-        missLinkVx[i] = 0;
-        missLinkVy[i] = 0;
-
-        // If this is the tip (last link), attach the grapple here
-        if (i === GRAPPLE_SEGMENT_COUNT - 1) {
-          // Check if distance is valid for grapple attachment
-          const hitDist = Math.sqrt(
-            (missLinkX[i] - player.positionXWorld) ** 2 +
-            (missLinkY[i] - player.positionYWorld) ** 2,
-          );
-          if (hitDist >= GRAPPLE_MIN_LENGTH_WORLD) {
-            // Attach grapple at this point
-            world.grappleAnchorXWorld = missLinkX[i];
-            world.grappleAnchorYWorld = missLinkY[i];
-            world.grappleLengthWorld = hitDist;
-            world.grapplePullInAmountWorld = 0.0;
-            world.grappleJumpHeldTickCount = 0;
-            world.playerJumpTriggeredFlag = 0;
-            world.isGrappleActiveFlag = 1;
-            world.isGrappleMissActiveFlag = 0;
-            world.grappleMissTickCount = 0;
-            world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
-            world.grappleAttachFxXWorld = missLinkX[i];
-            world.grappleAttachFxYWorld = missLinkY[i];
-            return;
-          }
-        }
-        break;
+      if (distanceWorld > 1.0) {
+        hasAnyLinkFarFromPlayerFlag = 1;
       }
     }
 
-    // ── Check world floor ────────────────────────────────────────────────
-    if (missLinkY[i] >= world.worldHeightWorld) {
-      missLinkY[i] = world.worldHeightWorld - 0.5;
-      missLinkStuckFlag[i] = 1;
-      missLinkVx[i] = 0;
-      missLinkVy[i] = 0;
+    if (hasAnyLinkFarFromPlayerFlag === 0) {
+      cancelGrappleMiss(world);
+      return;
     }
-  }
-
-  // ── Enforce link connectivity ─────────────────────────────────────────────
-  // Each link must stay within max distance of its neighbor.
-  // Link 0 is connected to the player, link N to link N-1.
-  for (let iter = 0; iter < 3; iter++) {
+  } else {
+    // ── Integrate link physics ──────────────────────────────────────────────
     for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
-      // Anchor point: player position for first link, previous link for others
-      const anchorX = i === 0 ? player.positionXWorld : missLinkX[i - 1];
-      const anchorY = i === 0 ? player.positionYWorld : missLinkY[i - 1];
+      if (missLinkStuckFlag[i] === 1) continue; // stuck links don't move
+
+      // Apply gravity
+      missLinkVy[i] += GRAPPLE_MISS_GRAVITY_WORLD_PER_SEC2 * dtSec;
+
+      // Apply drag for heavy inertia feel
+      missLinkVx[i] *= dragFactor;
+      missLinkVy[i] *= dragFactor;
+
+      // Integrate position
+      missLinkX[i] += missLinkVx[i] * dtSec;
+      missLinkY[i] += missLinkVy[i] * dtSec;
+
+      // ── Check wall collision — stick on contact ──────────────────────────
+      for (let wi = 0; wi < world.wallCount; wi++) {
+        const wx = world.wallXWorld[wi];
+        const wy = world.wallYWorld[wi];
+        const ww = world.wallWWorld[wi];
+        const wh = world.wallHWorld[wi];
+
+        if (missLinkX[i] >= wx && missLinkX[i] <= wx + ww &&
+          missLinkY[i] >= wy && missLinkY[i] <= wy + wh) {
+          // This link hit a wall! Stick it here.
+          missLinkStuckFlag[i] = 1;
+          missLinkVx[i] = 0;
+          missLinkVy[i] = 0;
+
+          // If this is the tip (last link), attach the grapple here
+          if (i === GRAPPLE_SEGMENT_COUNT - 1) {
+            // Check if distance is valid for grapple attachment
+            const hitDist = Math.sqrt(
+              (missLinkX[i] - player.positionXWorld) ** 2 +
+              (missLinkY[i] - player.positionYWorld) ** 2,
+            );
+            if (hitDist >= GRAPPLE_MIN_LENGTH_WORLD) {
+              // Attach grapple at this point
+              world.grappleAnchorXWorld = missLinkX[i];
+              world.grappleAnchorYWorld = missLinkY[i];
+              world.grappleLengthWorld = hitDist;
+              world.grapplePullInAmountWorld = 0.0;
+              world.grappleJumpHeldTickCount = 0;
+              world.playerJumpTriggeredFlag = 0;
+              world.isGrappleActiveFlag = 1;
+              world.isGrappleMissActiveFlag = 0;
+              world.isGrappleRetractingFlag = 0;
+              world.grappleMissTickCount = 0;
+              world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
+              world.grappleAttachFxXWorld = missLinkX[i];
+              world.grappleAttachFxYWorld = missLinkY[i];
+              return;
+            }
+          }
+          break;
+        }
+      }
+
+      // ── Check world floor ────────────────────────────────────────────────
+      if (missLinkY[i] >= world.worldHeightWorld) {
+        missLinkY[i] = world.worldHeightWorld - 0.5;
+        missLinkStuckFlag[i] = 1;
+        missLinkVx[i] = 0;
+        missLinkVy[i] = 0;
+      }
+    }
+
+    // ── Enforce link connectivity ───────────────────────────────────────────
+    // Each link must stay within max distance of its neighbor.
+    // Link 0 is connected to the player, link N to link N-1.
+    for (let iter = 0; iter < 3; iter++) {
+      for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+        // Anchor point: player position for first link, previous link for others
+        const anchorX = i === 0 ? player.positionXWorld : missLinkX[i - 1];
+        const anchorY = i === 0 ? player.positionYWorld : missLinkY[i - 1];
 
       const ddx = missLinkX[i] - anchorX;
       const ddy = missLinkY[i] - anchorY;
       const linkDist = Math.sqrt(ddx * ddx + ddy * ddy);
 
-      if (linkDist > GRAPPLE_MISS_LINK_MAX_DIST_WORLD && linkDist > 0.01) {
-        const excess = linkDist - GRAPPLE_MISS_LINK_MAX_DIST_WORLD;
-        const nx = ddx / linkDist;
-        const ny = ddy / linkDist;
+        if (linkDist > GRAPPLE_MISS_LINK_MAX_DIST_WORLD && linkDist > 0.01) {
+          const excess = linkDist - GRAPPLE_MISS_LINK_MAX_DIST_WORLD;
+          const nx = ddx / linkDist;
+          const ny = ddy / linkDist;
 
-        if (missLinkStuckFlag[i] === 0) {
-          // Pull this link toward anchor
-          missLinkX[i] -= nx * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
-          missLinkY[i] -= ny * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
-        }
-        if (i > 0 && missLinkStuckFlag[i - 1] === 0) {
-          // Push previous link toward this one
-          missLinkX[i - 1] += nx * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
-          missLinkY[i - 1] += ny * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+          if (missLinkStuckFlag[i] === 0) {
+            // Pull this link toward anchor
+            missLinkX[i] -= nx * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+            missLinkY[i] -= ny * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+          }
+          if (i > 0 && missLinkStuckFlag[i - 1] === 0) {
+            // Push previous link toward this one
+            missLinkX[i - 1] += nx * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+            missLinkY[i - 1] += ny * excess * GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR;
+          }
         }
       }
     }

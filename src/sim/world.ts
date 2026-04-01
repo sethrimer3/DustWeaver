@@ -156,6 +156,8 @@ export interface WorldState extends ParticleBuffers {
   // ---- Grapple miss state (limp chain) ------------------------------------
   /** 1 while the grapple chain is in "miss" mode (extended to full length, falling limp). */
   isGrappleMissActiveFlag: 0 | 1;
+  /** 1 while the grapple chain is retracting back to the player and cannot attach. */
+  isGrappleRetractingFlag: 0 | 1;
   /** Direction X the grapple was fired in (normalized). */
   grappleMissDirXWorld: number;
   /** Direction Y the grapple was fired in (normalized). */
@@ -331,6 +333,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isGrappleStuckFlag: 0,
     grappleStuckStoppedTickCount: 0,
     isGrappleMissActiveFlag: 0,
+    isGrappleRetractingFlag: 0,
     grappleMissDirXWorld: 0.0,
     grappleMissDirYWorld: 0.0,
     grappleMissTickCount: 0,
