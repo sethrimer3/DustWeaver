@@ -11,6 +11,41 @@ to skip or change a step, document why in a note next to the item.
 
 ---
 
+## Agent Execution Protocol
+
+Use this protocol for every refactor PR so parallel agents can coordinate safely.
+
+1. **Claim scope first**
+   - Add your name/handle and the exact checklist item(s) you are taking in the
+     **Progress Log** before editing code.
+   - If another agent has already claimed an item, coordinate in that row before
+     proceeding.
+
+2. **Work in small slices**
+   - Prefer one checklist item per PR/commit when feasible.
+   - Keep behavior identical during file moves/splits; do not mix gameplay
+     balance changes into refactor-only commits.
+
+3. **Mandatory progress notes**
+   - After each completed item, mark `[x]` and append:
+     `— completed by <agent> on <YYYY-MM-DD>, commit <sha>`.
+   - If partially done, keep `[ ]` and append:
+     `— in progress by <agent>: <what remains>`.
+   - If skipped/changed, append:
+     `— skipped by <agent> on <YYYY-MM-DD>: <reason>`.
+
+4. **Verification checklist per item**
+   - Run `npm run build`.
+   - Run targeted manual smoke test for the affected feature area.
+   - Note results in the **Progress Log** row for the date.
+
+5. **Handoff requirements**
+   - Include touched files and remaining risks in the Progress Log summary.
+   - If follow-up work is needed, add a new unchecked checklist bullet directly
+     under the relevant section so it is visible to the next agent.
+
+---
+
 ## Guiding Principles
 
 - Every split must preserve the existing public API so call-sites need no edits,

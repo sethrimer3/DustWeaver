@@ -1,6 +1,6 @@
 /**
  * Debug speed panel — HTML overlay with editable textboxes for all player
- * speed constants.  Reads/writes the mutable debugSpeedOverrides object
+ * speed constants. Reads/writes the mutable debugSpeedOverrides object
  * in movement.ts for live playtesting.
  */
 
@@ -27,8 +27,8 @@ const FIELDS: readonly FieldDef[] = [
   { key: 'walkSpeedWorld',     label: 'Walk Speed',      defaultValue: 105.0 },
   { key: 'jumpSpeedWorld',     label: 'Jump Speed',      defaultValue: 300.0 },
   { key: 'gravityWorld',       label: 'Gravity',         defaultValue: 900.0 },
-  { key: 'normalFallCapWorld', label: 'Normal Fall Cap',  defaultValue: 160.5 },
-  { key: 'fastFallCapWorld',   label: 'Fast Fall Cap',    defaultValue: 240.0 },
+  { key: 'normalFallCapWorld', label: 'Normal Fall Cap', defaultValue: 160.5 },
+  { key: 'fastFallCapWorld',   label: 'Fast Fall Cap',   defaultValue: 240.0 },
   { key: 'sprintMultiplier',   label: 'Sprint Mult',     defaultValue: 1.5 },
   { key: 'groundAccelWorld',   label: 'Ground Accel',    defaultValue: 800.0 },
   { key: 'groundDecelWorld',   label: 'Ground Decel',    defaultValue: 1000.0 },
@@ -47,17 +47,40 @@ export function createDebugPanel(root: HTMLElement): DebugPanel {
   const container = document.createElement('div');
   container.id = 'debug-speed-panel';
   container.style.cssText = `
-    position: absolute; top: 8px; right: 8px; width: 200px;
+    position: absolute; top: 74px; right: 16px; width: 220px;
     background: ${PANEL_BG}; border: 1px solid ${PANEL_BORDER};
     color: ${TEXT_COLOR}; font-family: monospace; font-size: 10px;
     padding: 6px; box-sizing: border-box; z-index: 850;
-    pointer-events: auto; max-height: 80%; overflow-y: auto;
+    pointer-events: auto; border-radius: 6px;
   `;
 
-  const title = document.createElement('div');
-  title.textContent = '⚙ Speed Overrides';
-  title.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
-  container.appendChild(title);
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.style.cssText = `
+    width: 100%; display: flex; justify-content: space-between; align-items: center;
+    background: rgba(0,0,0,0.35); border: 1px solid ${PANEL_BORDER}; color: ${TEXT_COLOR};
+    padding: 6px 8px; font-size: 10px; font-family: monospace; cursor: pointer;
+    border-radius: 4px;
+  `;
+
+  const body = document.createElement('div');
+  body.style.cssText = 'margin-top: 6px; max-height: 44vh; overflow-y: auto;';
+
+  let isExpanded = false;
+  const refreshToggleText = (): void => {
+    toggleBtn.textContent = isExpanded
+      ? '⚙ Movement Tuning ▾'
+      : '⚙ Movement Tuning ▸';
+    body.style.display = isExpanded ? 'block' : 'none';
+  };
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isExpanded = !isExpanded;
+    refreshToggleText();
+  });
+
+  container.appendChild(toggleBtn);
 
   for (const field of FIELDS) {
     const row = document.createElement('div');
@@ -97,7 +120,7 @@ export function createDebugPanel(root: HTMLElement): DebugPanel {
 
     row.appendChild(lbl);
     row.appendChild(input);
-    container.appendChild(row);
+    body.appendChild(row);
   }
 
   // Reset button
@@ -115,7 +138,7 @@ export function createDebugPanel(root: HTMLElement): DebugPanel {
       debugSpeedOverrides[field.key] = NaN;
     }
     // Refresh input values
-    const inputs = container.querySelectorAll('input');
+    const inputs = body.querySelectorAll('input');
     let idx = 0;
     for (const field of FIELDS) {
       if (idx < inputs.length) {
@@ -125,8 +148,10 @@ export function createDebugPanel(root: HTMLElement): DebugPanel {
       idx++;
     }
   });
-  container.appendChild(resetBtn);
+  body.appendChild(resetBtn);
 
+  container.appendChild(body);
+  refreshToggleText();
   root.appendChild(container);
 
   return {
