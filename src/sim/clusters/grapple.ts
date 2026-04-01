@@ -279,9 +279,19 @@ function isTopSurfaceHit(world: WorldState, hitX: number, hitY: number): boolean
   const eps = 0.5;
   for (let wi = 0; wi < world.wallCount; wi++) {
     const topY = world.wallYWorld[wi];
+    const bottomY = topY + world.wallHWorld[wi];
     const leftX = world.wallXWorld[wi];
     const rightX = leftX + world.wallWWorld[wi];
-    if (Math.abs(hitY - topY) < eps && hitX >= leftX - eps && hitX <= rightX + eps) {
+    const isNearTopSurface = Math.abs(hitY - topY) < eps && hitX >= leftX - eps && hitX <= rightX + eps;
+    const isNearVerticalSide = (Math.abs(hitX - leftX) < eps || Math.abs(hitX - rightX) < eps)
+      && hitY >= topY - eps
+      && hitY <= bottomY + eps;
+    // Corner edge-case handling: when a grapple ray hits exactly at/near a
+    // corner, prefer the vertical side classification over the horizontal top.
+    if (isNearVerticalSide) {
+      return false;
+    }
+    if (isNearTopSurface) {
       return true;
     }
   }
