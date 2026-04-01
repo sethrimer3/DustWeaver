@@ -66,8 +66,7 @@ export interface EditorController {
 
 /**
  * Creates the editor controller. Call once at game screen init.
- * @param onEditorClose Called when the editor closes (confirm or cancel),
- *        with the RoomDef to load and a flag indicating confirm vs cancel.
+ * @param onEditorClose Called when the editor closes via confirm or cancel.
  */
 export function createEditorController(
   canvas: HTMLCanvasElement,

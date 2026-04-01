@@ -61,8 +61,8 @@ export function attachEditorInputListeners(
   function onKeyDown(e: KeyboardEvent): void {
     if (!editorState.isActive) return;
 
+    if (e.key === 'Shift') state.isShiftHeld = true;
     const key = e.key.toLowerCase();
-    if (key === 'shift' || e.shiftKey) state.isShiftHeld = true;
     if (key === 'w') { state.isCamUp = true; e.preventDefault(); }
     if (key === 's') { state.isCamDown = true; e.preventDefault(); }
     if (key === 'a') { state.isCamLeft = true; e.preventDefault(); }
