@@ -1,52 +1,98 @@
 # MOVESET
 
-This document lists the player movement actions and advanced movement techniques currently implemented in DustWeaver.
+This document lists the currently implemented movement techniques and their exact tuning values (60 FPS reference).
 
 ## Core Ground / Air Movement
 
-- **Run (Left / Right):** Standard horizontal movement with separate ground and air acceleration.
-- **Sprint (hold Shift):** Increases grounded top speed.
-- **Crouch (hold S):** Enters crouch state while grounded.
-- **Jump:** Standard grounded jump.
-- **Variable Jump Height:** Hold jump for a higher jump; release early for a short hop.
-- **Apex Float:** Near the top of the arc, holding jump softens gravity briefly.
-- **Fast Fall:** Hold down while airborne/falling to increase max downward speed.
+- **Run (Left / Right)**
+  - Max run speed: **105 world units/sec**.
+  - Ground acceleration: **800 units/sec²**.
+  - Air acceleration: **520 units/sec²**.
+  - Turn acceleration: **1466.7 units/sec²**.
+- **Sprint (hold Shift)**
+  - Grounded sprint top-speed multiplier: **1.5×** (run speed becomes **157.5 units/sec**).
+  - Extra sprint friction multiplier while slowing down: **0.5×** (slides longer than normal run).
+- **Crouch (hold S / ArrowDown while grounded)**
+  - Input condition: grounded + crouch input held (binary state toggle).
+- **Jump (ground jump)**
+  - Initial jump speed: **300 units/sec** upward.
+- **Variable Jump Height**
+  - Sustain window: **12 ticks** (**0.20s**) while jump is held.
+  - Early release applies stronger jump-cut gravity (**2.5× gravity** while rising).
+- **Apex Float**
+  - Applies when |vertical speed| < **33 units/sec** and jump is held.
+  - Gravity multiplier at apex: **0.5×**.
+- **Fast Fall**
+  - Normal fall cap: **160.5 units/sec**.
+  - Fast-fall cap: **240 units/sec**.
+  - Fast-fall cap approach rate: **300 units/sec²**.
 
 ## Jump Forgiveness Systems
 
-- **Coyote Time:** Jump can still trigger for a short window after leaving a ledge.
-- **Jump Buffer:** Jump input made slightly before landing is buffered and fires on landing.
+- **Coyote Time**
+  - Duration: **6 ticks** (~**0.10s**) after walking off a ledge.
+- **Jump Buffer**
+  - Duration: **6 ticks** (~**0.10s**) before landing.
 
 ## Wall Movement
 
-- **Wall Slide:** While falling and pressing into a wall, descent is capped to a slower slide speed.
-- **Wall Jump:** Jump away from a wall with a strong outward + upward launch.
-- **Wall Jump Force-Time:** Briefly preserves outward momentum so you cannot instantly steer back into the same wall.
-- **Wall Jump Lockout:** Short lockout that prevents same-wall climb spam.
+- **Wall Slide**
+  - Max slide descent speed: **17 units/sec**.
+- **Wall Jump**
+  - Horizontal launch speed: **147 units/sec** away from wall.
+  - Vertical launch speed: **147 units/sec** upward.
+- **Wall Jump Force-Time**
+  - Input override window: **10 ticks** (~**0.167s**).
+- **Wall Jump Lockout**
+  - Same-wall re-grab suppression: **12 ticks** (**0.20s**).
 
-## Dash / Skid Tech
+## Skid Tech
 
-- **Dash:** Quick horizontal burst with cooldown.
-- **Skid:** If sprinting and reversing direction on ground, enters skid state.
-- **Skid Jump Boost:** Jumping out of a skid gives extra jump height.
-- **Skid Debris (visual):** Debris particles spawn from the bottom-front foot while skidding.
+- **Skid**
+  - Triggers when sprinting, grounded, and reversing direction while speed exceeds threshold.
+  - Velocity threshold to qualify for skid direction checks: **5 units/sec**.
+  - Skid deceleration multiplier: **1.5×**.
+- **Skid Jump Boost**
+  - Jump speed multiplier while skidding: **1.5×**.
+- **Skid Debris (visual)**
+  - Debris spawns at the bottom-front foot while skidding.
 
 ## Grapple Movement (Special Techniques)
 
-- **Grapple Fire:** Shoot hook toward aim point; attaches to valid wall hit.
-- **Pendulum Swing:** Rope constraint preserves tangential velocity for natural swinging.
-- **Tap Release:** Quick jump tap while grappling releases the hook (includes a small hop boost).
-- **Hold Retract:** Holding jump while grappling shortens rope and increases swing speed.
-- **Rope Break on Over-Pull:** Retracting past max pull-in snaps rope and launches player with built momentum.
-- **Top-Surface Grapple Attach:** Grapple can detect and attach to horizontal ledge top surfaces.
-- **Top-Surface Zip:** Player zips toward top-surface anchor point.
-- **Top-Surface Stick:** On arrival, player sticks and rapidly decelerates to near-stop.
-- **Stuck Super Jump Window:** If you jump shortly after coming to a full stuck stop, jump gets a major height boost.
-- **Grapple Miss Mode:** Missed grapple shots still show an extended chain that goes limp/falls.
+- **Grapple Fire**
+  - Max cast length: **96 units**.
+  - Minimum valid attach distance: **20 units**.
+- **Pendulum Swing**
+  - Rope is inextensible; outward radial velocity is removed at rope limit.
+  - Tangential damping: **0.12/sec**.
+- **Tap Release**
+  - Tap window: **6 ticks** (~**0.10s**).
+  - Tap-release hop boost: **53 units/sec** upward.
+- **Hold Retract**
+  - Pull-in speed: **60 units/sec**.
+  - Max retract speed ratio per tick: **1.1×**.
+- **Rope Break on Over-Pull**
+  - Rope snaps after cumulative pull-in exceeds **100 units**.
+- **Top-Surface Grapple Attach**
+  - Can attach to horizontal top surfaces.
+  - **Corner rule:** if the hit is on a block corner, it is treated as a **vertical side hit**, not a top-surface hit.
+- **Top-Surface Zip**
+  - Zip speed: **472.5 units/sec**.
+  - Arrival threshold: **1.0 unit**.
+- **Top-Surface Stick**
+  - Velocity decay factor: **0.05/tick** while stuck.
+  - Considered stopped below **1.0 units/sec**.
+- **Stuck Super Jump Window**
+  - Window after fully stopping: **10 ticks** (~**0.167s**).
+  - Jump multiplier in window: **2.0×** vertical jump speed.
+- **Grapple Miss Mode**
+  - Chain extension speed: **400 units/sec**.
+  - Miss mode timeout: **90 ticks** (**1.5s**).
 
 ## Notes
 
 - Current movement tuning constants and logic live in:
   - `src/sim/clusters/movement.ts`
   - `src/sim/clusters/grapple.ts`
+  - `src/sim/clusters/dashConstants.ts` (enemy dodge cooldown/recharge constants)
 - Debug HUD can display movement flags/counters for testing (grounded, coyote, wall slide, grapple state, skid, sprint, etc.).
