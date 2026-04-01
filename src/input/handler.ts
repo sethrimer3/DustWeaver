@@ -128,6 +128,10 @@ function clearJoystickKeys(state: InputState): void {
   state.isKeyD = false;
 }
 
+function isShiftKey(e: KeyboardEvent): boolean {
+  return e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
+}
+
 export function attachInputListeners(canvas: HTMLCanvasElement, state: InputState): () => void {
   // Track joystick touch ID so multi-touch doesn't confuse movement with aiming
   let joystickTouchId = -1;
@@ -156,7 +160,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       if (!e.repeat) { state.isJumpTriggeredFlag = true; }
       state.isJumpHeldFlag = true;
     }
-    if (e.key === 'Shift') {
+    if (isShiftKey(e)) {
       e.preventDefault();
       state.isSprintHeldFlag = true;
     }
@@ -180,7 +184,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
       state.isJumpHeldFlag = false;
     }
-    if (e.key === 'Shift') {
+    if (isShiftKey(e)) {
       state.isSprintHeldFlag = false;
     }
     if (e.key === 'e' || e.key === 'E') {
