@@ -2,7 +2,7 @@
  * Main simulation tick pipeline.
  *
  * Order matters — each pass reads forces accumulated by previous passes:
- *   0.   Cluster movement — smooth acceleration/deceleration + player sprint boost   → clusters/movement.ts
+ *   0.   Cluster movement — smooth acceleration/deceleration   → clusters/movement.ts
  *   0.5. Enemy AI — attack / block / dodge decisions                          → clusters/enemyAi.ts
  *   1.   Clear forces
  *   2.   Per-element forces (noise, curl, buoyancy)                           → elementForces.ts

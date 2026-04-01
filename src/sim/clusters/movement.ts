@@ -21,7 +21,6 @@
  *   • Wall jump — launch away at a strong diagonal (147 H × 147 V); a force-time
  *     window overrides horizontal input to prevent immediate wall return.  A lockout
  *     prevents re-grab and infinite altitude climbing.
- *   • Sprint burst — horizontal boost triggered by sprint on a cooldown.
  *
  * === Enemy movement ===
  *   • Walk horizontally toward the player with exponential-blend acceleration.
@@ -38,7 +37,7 @@
  */
 
 import { WorldState } from '../world';
-import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD } from './dashConstants';
+import { DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD } from './dashConstants';
 import { PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
 import { nextUint32 } from '../rng';
 import { WATER_GRAVITY_MULTIPLIER } from '../hazards';
@@ -60,7 +59,6 @@ export const debugSpeedOverrides = {
   groundDecelWorld: NaN,
   airAccelWorld: NaN,
   airDecelWorld: NaN,
-  sprintBoostSpeedWorld: NaN,
   wallJumpXWorld: NaN,
   wallJumpYWorld: NaN,
 };
@@ -180,9 +178,6 @@ const AIR_DECELERATION_PER_SEC2 = 600.0;
  * Higher than ground acceleration so direction changes feel crisp and snappy.
  */
 const TURN_ACCELERATION_PER_SEC2 = 1466.7;
-
-/** Speed burst applied on a horizontal sprint boost (px/s). */
-const PLAYER_SPRINT_BOOST_SPEED_WORLD = 373.0;
 
 // ============================================================================
 // Wall slide
@@ -763,13 +758,6 @@ export function applyClusterMovement(world: WorldState): void {
         }
       }
 
-      // ── Sprint burst (one-shot horizontal impulse) ─────────────────────────
-      if (world.playerSprintBoostTriggeredFlag === 1 && cluster.dashCooldownTicks === 0) {
-        const ddx = world.playerSprintBoostDirXWorld;
-        const sprintBoostDirX = ddx !== 0 ? (ddx > 0 ? 1 : -1) : (cluster.velocityXWorld >= 0 ? 1 : -1);
-        cluster.velocityXWorld = sprintBoostDirX * ov(debugSpeedOverrides.sprintBoostSpeedWorld, PLAYER_SPRINT_BOOST_SPEED_WORLD);
-        cluster.dashCooldownTicks = DASH_COOLDOWN_TICKS;
-      }
 
       // ── Jump trigger ─────────────────────────────────────────────────────
       // While the grapple is active the jump button controls rope pull-in
@@ -1206,7 +1194,6 @@ export function applyClusterMovement(world: WorldState): void {
   // (step 0.25) can detect the rising edge of a jump press for tap/hold detection.
   world.playerMoveInputDxWorld  = 0.0;
   world.playerMoveInputDyWorld  = 0.0;
-  world.playerSprintBoostTriggeredFlag = 0;
   if (world.isGrappleActiveFlag === 0) {
     world.playerJumpTriggeredFlag = 0;
   }

@@ -81,12 +81,6 @@ export interface WorldState extends ParticleBuffers {
   playerWeaveAimDirXWorld: number;
   playerWeaveAimDirYWorld: number;
 
-  // ---- Player sprint burst ------------------------------------------------
-  /** Set to 1 for one tick to trigger a player sprint burst. */
-  playerSprintBoostTriggeredFlag: 0 | 1;
-  /** Normalized direction of the sprint burst (set alongside playerSprintBoostTriggeredFlag). */
-  playerSprintBoostDirXWorld: number;
-  playerSprintBoostDirYWorld: number;
 
   // ---- Player movement input (set each frame by game screen) --------------
   /**
@@ -316,9 +310,6 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerSecondaryWeaveEndFlag: 0,
     playerWeaveAimDirXWorld: 1.0,
     playerWeaveAimDirYWorld: 0.0,
-    playerSprintBoostTriggeredFlag: 0,
-    playerSprintBoostDirXWorld: 1.0,
-    playerSprintBoostDirYWorld: 0.0,
     playerMoveInputDxWorld: 0.0,
     playerMoveInputDyWorld: 0.0,
     playerSprintHeldFlag: 0,

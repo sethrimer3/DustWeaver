@@ -1,6 +1,6 @@
 # MOVESET
 
-This document lists the currently implemented movement techniques and their key tuning values (60 FPS reference).
+This document lists the currently implemented movement techniques and their exact tuning values (60 FPS reference).
 
 ## Core Ground / Air Movement
 
@@ -12,12 +12,8 @@ This document lists the currently implemented movement techniques and their key 
 - **Sprint (hold Shift)**
   - Grounded sprint top-speed multiplier: **1.5×** (run speed becomes **157.5 units/sec**).
   - Extra sprint friction multiplier while slowing down: **0.5×** (slides longer than normal run).
-- **Sprint Burst (tap Shift)**
-  - One-shot horizontal speed set to **373 units/sec**.
-  - Cooldown: **180 ticks** (**3.0s**).
-  - Recharge ring animation: **36 ticks** (**0.6s**) after cooldown completes.
 - **Crouch (hold S / ArrowDown while grounded)**
-  - Enters crouch state while grounded.
+  - Input condition: grounded + crouch input held (binary state toggle).
 - **Jump (ground jump)**
   - Initial jump speed: **300 units/sec** upward.
 - **Variable Jump Height**
@@ -50,7 +46,7 @@ This document lists the currently implemented movement techniques and their key 
 - **Wall Jump Lockout**
   - Same-wall re-grab suppression: **12 ticks** (**0.20s**).
 
-## Sprint Burst / Skid Tech
+## Skid Tech
 
 - **Skid**
   - Triggers when sprinting, grounded, and reversing direction while speed exceeds threshold.
@@ -64,7 +60,7 @@ This document lists the currently implemented movement techniques and their key 
 ## Grapple Movement (Special Techniques)
 
 - **Grapple Fire**
-  - Max cast length: **influence radius** (`GRAPPLE_MAX_LENGTH_WORLD`).
+  - Max cast length: **96 units**.
   - Minimum valid attach distance: **20 units**.
 - **Pendulum Swing**
   - Rope is inextensible; outward radial velocity is removed at rope limit.
@@ -98,5 +94,5 @@ This document lists the currently implemented movement techniques and their key 
 - Current movement tuning constants and logic live in:
   - `src/sim/clusters/movement.ts`
   - `src/sim/clusters/grapple.ts`
-  - `src/sim/clusters/dashConstants.ts` (shared cooldown/recharge constants, now used by sprint burst)
+  - `src/sim/clusters/dashConstants.ts` (enemy dodge cooldown/recharge constants)
 - Debug HUD can display movement flags/counters for testing (grounded, coyote, wall slide, grapple state, skid, sprint, etc.).

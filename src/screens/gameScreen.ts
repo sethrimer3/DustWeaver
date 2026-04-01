@@ -1122,7 +1122,6 @@ export function startGameScreen(
     const commands = collectCommands(inputState);
     let openPause = false;
     let moveDx = 0;
-    let sprintBoostTriggered = false;
     let jumpTriggered = false;
     let interactTriggered = false;
     for (let ci = 0; ci < commands.length; ci++) {
@@ -1133,8 +1132,6 @@ export function startGameScreen(
         moveDx = cmd.dx;
       } else if (cmd.kind === CommandKind.Jump) {
         jumpTriggered = true;
-      } else if (cmd.kind === CommandKind.SprintBoost) {
-        sprintBoostTriggered = true;
       } else if (cmd.kind === CommandKind.Attack) {
         // Legacy attack command — no longer used for player (enemies still use it internally)
         // Kept for backward compatibility; ignored for player
@@ -1268,7 +1265,7 @@ export function startGameScreen(
       return;
     }
 
-    // Latch one-shot jump/sprint-boost inputs into world state before ticking.
+    // Latch one-shot jump inputs into world state before ticking.
     // This preserves edge-triggered inputs on high-refresh frames where no
     // fixed sim tick runs (accumulator < FIXED_DT_MS).
     if (jumpTriggered) {
@@ -1276,19 +1273,6 @@ export function startGameScreen(
     }
     world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
 
-    if (sprintBoostTriggered) {
-      world.playerSprintBoostTriggeredFlag = 1;
-      const playerForSprintBoost = world.clusters[0];
-      if (playerForSprintBoost !== undefined) {
-        if (moveDx !== 0) {
-          world.playerSprintBoostDirXWorld = moveDx > 0 ? 1.0 : -1.0;
-          world.playerSprintBoostDirYWorld = 0.0;
-        } else {
-          world.playerSprintBoostDirXWorld = playerForSprintBoost.velocityXWorld >= 0 ? 1.0 : -1.0;
-          world.playerSprintBoostDirYWorld = 0.0;
-        }
-      }
-    }
 
     // ── Sim ticks ──────────────────────────────────────────────────────────
     accumulatorMs += elapsedMs;
