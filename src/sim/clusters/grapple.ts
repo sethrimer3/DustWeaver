@@ -117,15 +117,6 @@ const GRAPPLE_MAX_RETRACT_SPEED_RATIO = 1.1;
 const GRAPPLE_SWING_DAMPING_PER_SEC = 0.12;
 
 /**
- * Number of ticks the jump button can be held before it is considered a "hold"
- * rather than a "tap".  At 60 fps, 6 ticks ≈ 100 ms — fast enough to feel
- * instant as a tap, long enough to reliably distinguish from a deliberate hold.
- * NOTE: no longer used for tap/hold detection — jump always releases grapple.
- * Retained as documentation of the previous design.
- */
-// const GRAPPLE_JUMP_TAP_THRESHOLD_TICKS = 6;
-
-/**
  * Upward velocity impulse (world units/second) added to the player when they
  * press jump to release the grapple.  This is a "jump off the rope" that adds
  * upward momentum to whatever swing velocity the player has.
@@ -644,10 +635,16 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     }
   }
 
-  // ── Post-constraint wall collision check ──────────────────────────────────
-  // The rope constraint can pull the player into the ground when the anchor is
-  // on a nearby floor surface.  Run a quick overlap check and push the player
-  // out of any wall they now overlap with.
+  // ── Post-constraint wall collision (last-resort fallback) ──────────────────
+  // The primary collision resolver is the axis-separated sweep in movement.ts
+  // (step 0).  This minimum-penetration push-out is a *fallback safety net*
+  // that only fires when the rope constraint (above) re-introduces a small
+  // overlap — typically when the anchor is on a nearby floor and the rope pulls
+  // the player downward into geometry.  Because the overlap is always small
+  // (≤ one tick of rope correction) and velocities are low at this point,
+  // minimum-penetration is acceptable here.  The axis-separated sweep is not
+  // re-run because it would require re-doing the full X-then-Y integration
+  // pass, which is disproportionate to the tiny correction needed.
   {
     const halfW = player.halfWidthWorld;
     const halfH = player.halfHeightWorld;
