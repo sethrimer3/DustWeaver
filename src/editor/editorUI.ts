@@ -35,6 +35,8 @@ export interface EditorUICallbacks {
   onExport: () => void;
   onLinkTransition: () => void;
   onPropertyChange: (prop: string, value: string | number) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
 }
 
 export function createEditorUI(root: HTMLElement): EditorUI {
@@ -55,6 +57,25 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   title.textContent = '🛠 World Editor';
   title.style.cssText = `font-size: 15px; color: ${GREEN}; margin-bottom: 12px; font-weight: bold;`;
   container.appendChild(title);
+
+  // ── Confirm / Cancel bar ─────────────────────────────────────────────────
+  const confirmCancelBar = document.createElement('div');
+  confirmCancelBar.style.cssText = 'display: flex; gap: 4px; margin-bottom: 10px;';
+
+  const confirmBtn = makeBtn('✔ Confirm', () => callbacks?.onConfirm());
+  confirmBtn.style.cssText += `
+    flex: 1; padding: 8px; font-size: 12px;
+    background: rgba(0,100,50,0.4); border-color: ${GREEN}; color: ${GREEN};
+  `;
+  confirmCancelBar.appendChild(confirmBtn);
+
+  const cancelBtn = makeBtn('✕ Cancel', () => callbacks?.onCancel());
+  cancelBtn.style.cssText += `
+    flex: 1; padding: 8px; font-size: 12px;
+    background: rgba(100,30,20,0.4); border-color: #ff6644; color: #ff6644;
+  `;
+  confirmCancelBar.appendChild(cancelBtn);
+  container.appendChild(confirmCancelBar);
 
   // ── Tool buttons ─────────────────────────────────────────────────────────
   const toolBar = document.createElement('div');
@@ -92,12 +113,20 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
   container.appendChild(paletteDiv);
 
+  // Track rendered palette state to avoid recreating buttons every frame
+  let renderedCategory: PaletteCategory | null = null;
+  let paletteBtns: { btn: HTMLButtonElement; itemId: string }[] = [];
+
   // ── Inspector ────────────────────────────────────────────────────────────
   const inspectorDiv = document.createElement('div');
   inspectorDiv.style.cssText = `
     border-top: 1px solid ${PANEL_BORDER}; padding-top: 10px; margin-top: 8px;
   `;
   container.appendChild(inspectorDiv);
+
+  // Track rendered inspector state to avoid recreating fields every frame
+  let inspectorElementUid: number = -1;
+  let inspectorElementType: string = '';
 
   // ── Export button ────────────────────────────────────────────────────────
   const exportBtn = makeBtn('📥 Export Room JSON', () => callbacks?.onExport());
@@ -118,10 +147,35 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     for (const btn of catBtns) {
       btn.style.background = btn.dataset.category === state.activeCategory ? ACTIVE_BG : BTN_BG;
     }
-    // Update palette items
-    updatePalette(paletteDiv, state, callbacks);
-    // Update inspector
-    updateInspector(inspectorDiv, state, callbacks);
+    // Update palette items (only recreate when category changes)
+    if (renderedCategory !== state.activeCategory) {
+      renderedCategory = state.activeCategory;
+      paletteDiv.innerHTML = '';
+      paletteBtns = [];
+      const items = PALETTE_ITEMS.filter(i => i.category === state.activeCategory);
+      for (const item of items) {
+        const btn = makeBtn(item.label, () => callbacks?.onPaletteItemSelect(item));
+        btn.style.width = '100%';
+        btn.style.marginBottom = '3px';
+        btn.style.textAlign = 'left';
+        paletteBtns.push({ btn, itemId: item.id });
+        paletteDiv.appendChild(btn);
+      }
+    }
+    // Update palette selection highlight
+    for (const { btn, itemId } of paletteBtns) {
+      const isSelected = state.selectedPaletteItem?.id === itemId;
+      btn.style.background = isSelected ? ACTIVE_BG : BTN_BG;
+      btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
+    }
+    // Update inspector (only recreate when selected element changes)
+    const selUid = state.selectedElement?.uid ?? -1;
+    const selType = state.selectedElement?.type ?? '';
+    if (inspectorElementUid !== selUid || inspectorElementType !== selType) {
+      inspectorElementUid = selUid;
+      inspectorElementType = selType;
+      updateInspector(inspectorDiv, state, callbacks);
+    }
   }
 
   return {
@@ -129,6 +183,10 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     update,
     setCallbacks: (cbs: EditorUICallbacks) => { callbacks = cbs; },
     destroy: () => {
+      renderedCategory = null;
+      paletteBtns = [];
+      inspectorElementUid = -1;
+      inspectorElementType = '';
       if (container.parentElement) container.parentElement.removeChild(container);
     },
   };
@@ -148,26 +206,6 @@ function makeBtn(label: string, onClick: () => void): HTMLButtonElement {
   btn.addEventListener('mouseleave', () => { btn.style.background = BTN_BG; });
   btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   return btn;
-}
-
-function updatePalette(
-  div: HTMLDivElement,
-  state: EditorState,
-  callbacks: EditorUICallbacks | null,
-): void {
-  div.innerHTML = '';
-  const items = PALETTE_ITEMS.filter(i => i.category === state.activeCategory);
-  for (const item of items) {
-    const btn = makeBtn(item.label, () => callbacks?.onPaletteItemSelect(item));
-    btn.style.width = '100%';
-    btn.style.marginBottom = '3px';
-    btn.style.textAlign = 'left';
-    if (state.selectedPaletteItem?.id === item.id) {
-      btn.style.background = ACTIVE_BG;
-      btn.style.borderColor = GREEN;
-    }
-    div.appendChild(btn);
-  }
 }
 
 function updateInspector(

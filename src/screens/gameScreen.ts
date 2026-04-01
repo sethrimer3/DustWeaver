@@ -839,6 +839,13 @@ export function startGameScreen(
   // ── World Editor ────────────────────────────────────────────────────────
   const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY) => {
     loadRoom(roomDef, spawnX, spawnY);
+  }, () => {
+    // Called when editor closes (confirm or cancel)
+    if (editorToggleBtn) {
+      editorToggleBtn.textContent = 'World Editor';
+      editorToggleBtn.style.borderColor = '#00c864';
+      editorToggleBtn.style.color = '#00c864';
+    }
   });
 
   // "World Editor" toggle button — shown when debug mode is on
@@ -1058,9 +1065,11 @@ export function startGameScreen(
     // ── Editor mode gate ──────────────────────────────────────────────────
     // When the editor is active, it takes over camera and input; skip gameplay.
     if (editorController.state.isActive) {
+      // Use CSS display dimensions for mouse coordinate mapping (not buffer dimensions)
+      const canvasRect = canvas.getBoundingClientRect();
       const isEditorConsuming = editorController.update(
         elapsedMs / 1000, camera, offsetXPx, offsetYPx, zoom,
-        canvas.width, canvas.height, virtualWidthPx, virtualHeightPx,
+        canvasRect.width, canvasRect.height, virtualWidthPx, virtualHeightPx,
       );
 
       if (isEditorConsuming) {
