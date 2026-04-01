@@ -103,6 +103,10 @@ export interface WorldSnapshot {
   readonly walls:     WallSnapshot;
   /** 1 while the player's grapple hook is attached; 0 otherwise. */
   readonly isGrappleActiveFlag:  0 | 1;
+  /** 1 while a fired grapple is in-flight/missed and simulating limp chain links. */
+  readonly isGrappleMissActiveFlag: 0 | 1;
+  /** Start index in particle buffers for grapple chain links (or -1 if unavailable). */
+  readonly grappleParticleStartIndex: number;
   /** 1 when the grapple is attached to the top surface of a wall block. */
   readonly isGrappleTopSurfaceFlag: 0 | 1;
   /** 1 when the player has arrived at a top-surface grapple anchor and is sticking. */
@@ -188,6 +192,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       hWorld: world.wallHWorld,
     },
     isGrappleActiveFlag: world.isGrappleActiveFlag,
+    isGrappleMissActiveFlag: world.isGrappleMissActiveFlag,
+    grappleParticleStartIndex: world.grappleParticleStartIndex,
     isGrappleTopSurfaceFlag: world.isGrappleTopSurfaceFlag,
     isGrappleStuckFlag: world.isGrappleStuckFlag,
     grappleAnchorXWorld: world.grappleAnchorXWorld,
