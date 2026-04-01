@@ -37,6 +37,7 @@ import { PlayerWeaveLoadout, createDefaultWeaveLoadout, WEAVE_SLOT_PRIMARY, WEAV
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize } from '../ui/renderSettings';
+import { isTheroShowcaseRoom, renderTheroShowcaseEffect } from '../render/effects/theroEffectManager';
 
 const FIXED_DT_MS = 16.666;
 
@@ -1083,6 +1084,9 @@ export function startGameScreen(
           currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
           zoom,
         );
+        if (isTheroShowcaseRoom(currentRoom.id)) {
+          renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
+        }
         renderWalls(ctx, snapshot, eox, eoy, zoom, true);
         renderHazards(ctx, world, eox, eoy, zoom, world.tick);
         renderClusters(ctx, snapshot, eox, eoy, zoom, true);
@@ -1475,6 +1479,11 @@ export function startGameScreen(
       currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
       zoom,
     );
+
+    // ── Thero effect showcase overlay (worldNumber=99 rooms) ──────────────
+    if (isTheroShowcaseRoom(currentRoom.id)) {
+      renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
+    }
 
     // Walls before cluster indicators so clusters are drawn on top
     renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
