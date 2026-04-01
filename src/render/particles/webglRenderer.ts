@@ -22,8 +22,8 @@ import { MAX_PARTICLES } from '../../sim/particles/state';
 import { WorldSnapshot } from '../snapshot';
 import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shaders';
 
-/** [x, y, kind, normalizedAge, disturbanceFactor] per vertex */
-const FLOATS_PER_VERTEX = 5;
+/** [x, y, kind, normalizedAge, disturbanceFactor, isOffensive] per vertex */
+const FLOATS_PER_VERTEX = 6;
 const BYTES_PER_FLOAT   = 4;
 /** Visual diameter for each particle's point sprite, in world units.
  *  4 world units at zoom 1.0 = 4×4 in-game (virtual) pixels per mote. */
@@ -103,11 +103,12 @@ export class WebGLParticleRenderer {
   private readonly attrKind:              number = -1;
   private readonly attrNormalizedAge:     number = -1;
   private readonly attrDisturbanceFactor: number = -1;
+  private readonly attrIsOffensive:       number = -1;
   private readonly uResolution:    WebGLUniformLocation | null = null;
   private readonly uPointSizePx:   WebGLUniformLocation | null = null;
 
   /**
-   * Pre-allocated CPU vertex data: [x, y, kind, normalizedAge] per particle.
+   * Pre-allocated CPU vertex data: [x, y, kind, normalizedAge, disturbanceFactor, isOffensive] per particle.
    * Packed each frame; never reallocated.
    */
   private readonly packedVertexData: Float32Array =
@@ -152,6 +153,7 @@ export class WebGLParticleRenderer {
     this.attrKind              = gl.getAttribLocation(program, 'a_kind');
     this.attrNormalizedAge     = gl.getAttribLocation(program, 'a_normalizedAge');
     this.attrDisturbanceFactor = gl.getAttribLocation(program, 'a_disturbanceFactor');
+    this.attrIsOffensive       = gl.getAttribLocation(program, 'a_isOffensive');
     this.uResolution           = gl.getUniformLocation(program, 'u_resolution');
     this.uPointSizePx          = gl.getUniformLocation(program, 'u_pointSizePx');
 
@@ -203,7 +205,7 @@ export class WebGLParticleRenderer {
       particleCount, isAliveFlag,
       positionXWorld, positionYWorld,
       kindBuffer, ageTicks, lifetimeTicks,
-      disturbanceFactor,
+      disturbanceFactor, behaviorMode,
     } = particles;
 
     // ---- Pack alive-particle vertex data (no allocations) ---------------
@@ -219,6 +221,7 @@ export class WebGLParticleRenderer {
       packed[base + 2] = kindBuffer[i];
       packed[base + 3] = normAge;
       packed[base + 4] = disturbanceFactor[i];
+      packed[base + 5] = behaviorMode[i] === 1 ? 1.0 : 0.0;
       vertexCount++;
     }
 
@@ -247,6 +250,8 @@ export class WebGLParticleRenderer {
     gl.vertexAttribPointer(this.attrNormalizedAge,     1, gl.FLOAT, false, stride, 3 * BYTES_PER_FLOAT);
     gl.enableVertexAttribArray(this.attrDisturbanceFactor);
     gl.vertexAttribPointer(this.attrDisturbanceFactor, 1, gl.FLOAT, false, stride, 4 * BYTES_PER_FLOAT);
+    gl.enableVertexAttribArray(this.attrIsOffensive);
+    gl.vertexAttribPointer(this.attrIsOffensive,       1, gl.FLOAT, false, stride, 5 * BYTES_PER_FLOAT);
 
     gl.drawArrays(gl.POINTS, 0, vertexCount);
   }
