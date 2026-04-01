@@ -28,6 +28,9 @@ import { exportRoomAsJson } from './editorExport';
 
 const BS = BLOCK_SIZE_MEDIUM;
 
+/** Width of the editor UI panel in CSS pixels. */
+const EDITOR_PANEL_WIDTH_CSS_PX = 260;
+
 export interface EditorController {
   state: EditorState;
   /** Toggle editor on/off. */
@@ -39,8 +42,8 @@ export interface EditorController {
     offsetXPx: number,
     offsetYPx: number,
     zoom: number,
-    deviceWidthPx: number,
-    deviceHeightPx: number,
+    cssWidthPx: number,
+    cssHeightPx: number,
     virtualWidthPx: number,
     virtualHeightPx: number,
   ) => boolean;
@@ -63,11 +66,14 @@ export interface EditorController {
 
 /**
  * Creates the editor controller. Call once at game screen init.
+ * @param onEditorClose Called when the editor closes (confirm or cancel),
+ *        with the RoomDef to load and a flag indicating confirm vs cancel.
  */
 export function createEditorController(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
   onLoadRoom: (room: RoomDef, spawnXBlock: number, spawnYBlock: number) => void,
+  onEditorClose?: () => void,
 ): EditorController {
   const state = createEditorState();
   const inputState = createEditorInputState();
@@ -79,10 +85,16 @@ export function createEditorController(
   let linkSourceRoomData: typeof state.roomData = null;
   let linkTargetRoomId = '';
 
+  // Original room snapshot for cancel/revert
+  let originalRoomDef: RoomDef | null = null;
+
   function toggle(currentRoom: RoomDef): void {
     state.isActive = !state.isActive;
 
     if (state.isActive) {
+      // Save original room for cancel/revert
+      originalRoomDef = currentRoom;
+
       // Initialize editor
       loadRoomForEditing(currentRoom);
 
@@ -106,15 +118,45 @@ export function createEditorController(
           }
         },
         onPropertyChange: handlePropertyChange,
+        onConfirm: () => confirmEdits(),
+        onCancel: () => cancelEdits(),
       });
     } else {
-      // Cleanup editor
-      if (inputCleanup) { inputCleanup(); inputCleanup = null; }
-      if (ui) { ui.destroy(); ui = null; }
-      if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
-      cancelTransitionLink(state);
-      state.roomData = null;
-      state.selectedElement = null;
+      closeEditor();
+    }
+  }
+
+  function closeEditor(): void {
+    if (inputCleanup) { inputCleanup(); inputCleanup = null; }
+    if (ui) { ui.destroy(); ui = null; }
+    if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
+    cancelTransitionLink(state);
+    state.isActive = false;
+    state.roomData = null;
+    state.selectedElement = null;
+    originalRoomDef = null;
+    onEditorClose?.();
+  }
+
+  function confirmEdits(): void {
+    // Build a RoomDef from the current editor data and load it
+    if (state.roomData) {
+      const newRoomDef = editorRoomDataToRoomDef(state.roomData);
+      const sx = state.roomData.playerSpawnBlock[0];
+      const sy = state.roomData.playerSpawnBlock[1];
+      closeEditor();
+      onLoadRoom(newRoomDef, sx, sy);
+    } else {
+      closeEditor();
+    }
+  }
+
+  function cancelEdits(): void {
+    // Restore the original room
+    const saved = originalRoomDef;
+    closeEditor();
+    if (saved) {
+      onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
     }
   }
 
@@ -158,26 +200,29 @@ export function createEditorController(
     offsetXPx: number,
     offsetYPx: number,
     zoom: number,
-    deviceWidthPx: number,
-    deviceHeightPx: number,
+    cssWidthPx: number,
+    cssHeightPx: number,
     virtualWidthPx: number,
     virtualHeightPx: number,
   ): boolean {
     if (!state.isActive) return false;
     if (state.isWorldMapOpen) return true;
 
-    // Camera movement
+    // Camera movement (shift doubles speed)
     const camInput: EditorCameraInput = {
       isUp: inputState.isCamUp,
       isDown: inputState.isCamDown,
       isLeft: inputState.isCamLeft,
       isRight: inputState.isCamRight,
+      isShiftHeld: inputState.isShiftHeld,
     };
     updateEditorCamera(camera, camInput, dtSec);
 
-    // Convert device screen mouse coordinates to virtual canvas coordinates
-    const virtualMouseX = (inputState.mouseScreenXPx / deviceWidthPx) * virtualWidthPx;
-    const virtualMouseY = (inputState.mouseScreenYPx / deviceHeightPx) * virtualHeightPx;
+    // Convert CSS screen mouse coordinates to virtual canvas coordinates.
+    // e.clientX/clientY are in CSS pixels; cssWidthPx/cssHeightPx must be
+    // the CSS display dimensions (not the canvas buffer dimensions).
+    const virtualMouseX = (inputState.mouseScreenXPx / cssWidthPx) * virtualWidthPx;
+    const virtualMouseY = (inputState.mouseScreenYPx / cssHeightPx) * virtualHeightPx;
 
     // Update cursor position (virtual → world → block)
     const worldX = (virtualMouseX - offsetXPx) / zoom;
@@ -217,8 +262,8 @@ export function createEditorController(
 
     // Click handling
     if (inputState.isClickFired && state.roomData !== null) {
-      // Ignore clicks on the UI panel area
-      if (inputState.clickScreenXPx > 260) {
+      // Ignore clicks on the UI panel area (CSS pixel comparison)
+      if (inputState.clickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
         if (state.isLinkingTransition) {
           // In link mode: clicking a transition completes the link
           const clicked = selectAtCursor(state);
