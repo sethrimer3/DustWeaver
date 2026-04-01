@@ -14,6 +14,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import { RoomDef } from './roomDef';
+import { THERO_SHOWCASE_ROOMS } from './effectShowcaseRooms';
 
 // ── Tunnel constants ──────────────────────────────────────────────────────────
 
@@ -604,6 +605,8 @@ export const ROOM_REGISTRY: ReadonlyMap<string, RoomDef> = new Map([
   [ROOM_W2_ROOM1.id, ROOM_W2_ROOM1],
   [ROOM_W3_ROOM1.id, ROOM_W3_ROOM1],
   [ROOM_BOSS_RADIANT_TETHER.id, ROOM_BOSS_RADIANT_TETHER],
+  // Thero effect showcase rooms (worldNumber=99, solid-black background + effect overlay)
+  ...THERO_SHOWCASE_ROOMS.map(r => [r.id, r] as [string, RoomDef]),
 ]);
 
 /** The room the player starts in. */

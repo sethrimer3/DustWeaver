@@ -102,6 +102,13 @@ export function renderWorldBackground(
 ): void {
   const img = _getBgImage(worldNumber);
 
+  // Thero showcase rooms use solid black — no parallax background image.
+  if (worldNumber === 99) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
+    return;
+  }
+
   if (img === null) {
     // Image not loaded yet — draw solid fallback colour
     ctx.fillStyle = worldFallbackColor(worldNumber);
