@@ -34,7 +34,7 @@ const FIELDS: readonly FieldDef[] = [
   { key: 'groundDecelWorld',   label: 'Ground Decel',    defaultValue: 1000.0 },
   { key: 'airAccelWorld',      label: 'Air Accel',       defaultValue: 520.0 },
   { key: 'airDecelWorld',      label: 'Air Decel',       defaultValue: 600.0 },
-  { key: 'dashSpeedWorld',     label: 'Dash Speed',      defaultValue: 373.0 },
+  { key: 'sprintBoostSpeedWorld', label: 'Sprint Boost',   defaultValue: 373.0 },
   { key: 'wallJumpXWorld',     label: 'Wall Jump X',     defaultValue: 147.0 },
   { key: 'wallJumpYWorld',     label: 'Wall Jump Y',     defaultValue: 147.0 },
 ];

@@ -5,7 +5,7 @@ export enum CommandKind {
   BlockStart = 3,
   BlockUpdate = 4,
   BlockEnd = 5,
-  Dash = 6,
+  SprintBoost = 6,
   Jump = 7,
   GrappleFire = 8,
   GrappleRelease = 9,
@@ -69,14 +69,8 @@ export interface BlockEndCommand {
   kind: CommandKind.BlockEnd;
 }
 
-export interface DashCommand {
-  kind: CommandKind.Dash;
-  /**
-   * Preferred dash direction in screen space (absolute pixels, from player toward cursor).
-   * Falls back to current movement direction when no explicit direction is given.
-   */
-  aimXPx: number;
-  aimYPx: number;
+export interface SprintBoostCommand {
+  kind: CommandKind.SprintBoost;
 }
 
 export interface JumpCommand {
@@ -146,7 +140,7 @@ export type GameCommand =
   | BlockStartCommand
   | BlockUpdateCommand
   | BlockEndCommand
-  | DashCommand
+  | SprintBoostCommand
   | JumpCommand
   | GrappleFireCommand
   | GrappleReleaseCommand

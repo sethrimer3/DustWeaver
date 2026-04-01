@@ -1122,8 +1122,7 @@ export function startGameScreen(
     const commands = collectCommands(inputState);
     let openPause = false;
     let moveDx = 0;
-    let dashAimXPx = 0;
-    let dashTriggered = false;
+    let sprintBoostTriggered = false;
     let jumpTriggered = false;
     let interactTriggered = false;
     for (let ci = 0; ci < commands.length; ci++) {
@@ -1134,9 +1133,8 @@ export function startGameScreen(
         moveDx = cmd.dx;
       } else if (cmd.kind === CommandKind.Jump) {
         jumpTriggered = true;
-      } else if (cmd.kind === CommandKind.Dash) {
-        dashTriggered = true;
-        dashAimXPx = cmd.aimXPx;
+      } else if (cmd.kind === CommandKind.SprintBoost) {
+        sprintBoostTriggered = true;
       } else if (cmd.kind === CommandKind.Attack) {
         // Legacy attack command — no longer used for player (enemies still use it internally)
         // Kept for backward compatibility; ignored for player
@@ -1270,7 +1268,7 @@ export function startGameScreen(
       return;
     }
 
-    // Latch one-shot jump/dash inputs into world state before ticking.
+    // Latch one-shot jump/sprint-boost inputs into world state before ticking.
     // This preserves edge-triggered inputs on high-refresh frames where no
     // fixed sim tick runs (accumulator < FIXED_DT_MS).
     if (jumpTriggered) {
@@ -1278,23 +1276,16 @@ export function startGameScreen(
     }
     world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
 
-    if (dashTriggered) {
-      world.playerDashTriggeredFlag = 1;
-      const playerForDash = world.clusters[0];
-      if (playerForDash !== undefined) {
+    if (sprintBoostTriggered) {
+      world.playerSprintBoostTriggeredFlag = 1;
+      const playerForSprintBoost = world.clusters[0];
+      if (playerForSprintBoost !== undefined) {
         if (moveDx !== 0) {
-          world.playerDashDirXWorld = moveDx > 0 ? 1.0 : -1.0;
-          world.playerDashDirYWorld = 0.0;
+          world.playerSprintBoostDirXWorld = moveDx > 0 ? 1.0 : -1.0;
+          world.playerSprintBoostDirYWorld = 0.0;
         } else {
-          const aim = screenToWorld(dashAimXPx, 0, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-          const dirX = aim.xWorld - playerForDash.positionXWorld;
-          const absX = dirX < 0 ? -dirX : dirX;
-          if (absX > 1.0) {
-            world.playerDashDirXWorld = dirX > 0 ? 1.0 : -1.0;
-          } else {
-            world.playerDashDirXWorld = playerForDash.velocityXWorld >= 0 ? 1.0 : -1.0;
-          }
-          world.playerDashDirYWorld = 0.0;
+          world.playerSprintBoostDirXWorld = playerForSprintBoost.velocityXWorld >= 0 ? 1.0 : -1.0;
+          world.playerSprintBoostDirYWorld = 0.0;
         }
       }
     }
@@ -1690,7 +1681,7 @@ export function startGameScreen(
     if (isDebugMode) {
       const controlHintText = IS_TOUCH_DEVICE
         ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
-        : 'A/D=walk  |  W/Space/↑=jump  |  Shift=dash  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=menu';
+        : 'A/D=walk  |  W/Space/↑=jump  |  Shift=sprint  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=menu';
       deviceCtx.fillStyle = 'rgba(255,255,255,0.3)';
       deviceCtx.font = '12px monospace';
       const hintWidthPx = deviceCtx.measureText(controlHintText).width;

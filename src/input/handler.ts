@@ -18,8 +18,8 @@ export interface InputState {
   isJumpHeldFlag: boolean;
   /** Tracks whether the joystick is already past the up-flick threshold (edge-detect). */
   isJoystickUpActiveFlag: boolean;
-  /** Set to true for one collectCommands call to trigger a dash. */
-  isDashTriggeredFlag: boolean;
+  /** Set to true for one collectCommands call to trigger a sprint boost. */
+  isSprintBoostTriggeredFlag: boolean;
   /** True while the Shift key is physically held down (sprint). */
   isSprintHeldFlag: boolean;
   mouseXPx: number;
@@ -79,7 +79,7 @@ export function createInputState(): InputState {
     isJumpTriggeredFlag: false,
     isJumpHeldFlag: false,
     isJoystickUpActiveFlag: false,
-    isDashTriggeredFlag: false,
+    isSprintBoostTriggeredFlag: false,
     isSprintHeldFlag: false,
     mouseXPx: 0,
     mouseYPx: 0,
@@ -162,7 +162,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Shift') {
       e.preventDefault();
       state.isSprintHeldFlag = true;
-      if (!e.repeat) { state.isDashTriggeredFlag = true; }
+      if (!e.repeat) { state.isSprintBoostTriggeredFlag = true; }
     }
     if ((e.key === 'e' || e.key === 'E') && !e.repeat) {
       state.isGrappleHeldFlag = 1;
@@ -359,10 +359,10 @@ export function collectCommands(input: InputState): GameCommand[] {
     commands.push({ kind: CommandKind.Jump });
   }
 
-  // ---- Dash command --------------------------------------------------------
-  if (input.isDashTriggeredFlag) {
-    input.isDashTriggeredFlag = false;
-    commands.push({ kind: CommandKind.Dash, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
+  // ---- Sprint boost command ------------------------------------------------
+  if (input.isSprintBoostTriggeredFlag) {
+    input.isSprintBoostTriggeredFlag = false;
+    commands.push({ kind: CommandKind.SprintBoost });
   }
 
   // ---- Attack / block commands (LEGACY — kept for enemy AI compatibility) ---

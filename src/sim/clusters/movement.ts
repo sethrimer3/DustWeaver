@@ -21,7 +21,7 @@
  *   • Wall jump — launch away at a strong diagonal (147 H × 147 V); a force-time
  *     window overrides horizontal input to prevent immediate wall return.  A lockout
  *     prevents re-grab and infinite altitude climbing.
- *   • Dash — horizontal burst on a cooldown.
+ *   • Sprint burst — horizontal boost triggered by sprint on a cooldown.
  *
  * === Enemy movement ===
  *   • Walk horizontally toward the player with exponential-blend acceleration.
@@ -60,7 +60,7 @@ export const debugSpeedOverrides = {
   groundDecelWorld: NaN,
   airAccelWorld: NaN,
   airDecelWorld: NaN,
-  dashSpeedWorld: NaN,
+  sprintBoostSpeedWorld: NaN,
   wallJumpXWorld: NaN,
   wallJumpYWorld: NaN,
 };
@@ -181,8 +181,8 @@ const AIR_DECELERATION_PER_SEC2 = 600.0;
  */
 const TURN_ACCELERATION_PER_SEC2 = 1466.7;
 
-/** Speed burst applied on a horizontal dash (px/s). */
-const PLAYER_DASH_SPEED_WORLD = 373.0;
+/** Speed burst applied on a horizontal sprint boost (px/s). */
+const PLAYER_SPRINT_BOOST_SPEED_WORLD = 373.0;
 
 // ============================================================================
 // Wall slide
@@ -485,7 +485,7 @@ function resolveWallsY(
  *
  * Each axis is sub-stepped if the movement distance exceeds half the
  * cluster's dimension on that axis, preventing tunneling through thin
- * walls at high speed (e.g. dash through a BLOCK_SIZE_SMALL = 8 unit wall).
+ * walls at high speed (e.g. sprint-boost through a BLOCK_SIZE_SMALL = 8 unit wall).
  *
  * Returns true if the cluster landed on a top surface this tick.
  */
@@ -763,11 +763,11 @@ export function applyClusterMovement(world: WorldState): void {
         }
       }
 
-      // ── Dash burst (one-shot horizontal impulse) ─────────────────────────
-      if (world.playerDashTriggeredFlag === 1 && cluster.dashCooldownTicks === 0) {
-        const ddx = world.playerDashDirXWorld;
-        const dashDirX = ddx !== 0 ? (ddx > 0 ? 1 : -1) : (cluster.velocityXWorld >= 0 ? 1 : -1);
-        cluster.velocityXWorld = dashDirX * ov(debugSpeedOverrides.dashSpeedWorld, PLAYER_DASH_SPEED_WORLD);
+      // ── Sprint burst (one-shot horizontal impulse) ─────────────────────────
+      if (world.playerSprintBoostTriggeredFlag === 1 && cluster.dashCooldownTicks === 0) {
+        const ddx = world.playerSprintBoostDirXWorld;
+        const sprintBoostDirX = ddx !== 0 ? (ddx > 0 ? 1 : -1) : (cluster.velocityXWorld >= 0 ? 1 : -1);
+        cluster.velocityXWorld = sprintBoostDirX * ov(debugSpeedOverrides.sprintBoostSpeedWorld, PLAYER_SPRINT_BOOST_SPEED_WORLD);
         cluster.dashCooldownTicks = DASH_COOLDOWN_TICKS;
       }
 
@@ -1206,7 +1206,7 @@ export function applyClusterMovement(world: WorldState): void {
   // (step 0.25) can detect the rising edge of a jump press for tap/hold detection.
   world.playerMoveInputDxWorld  = 0.0;
   world.playerMoveInputDyWorld  = 0.0;
-  world.playerDashTriggeredFlag = 0;
+  world.playerSprintBoostTriggeredFlag = 0;
   if (world.isGrappleActiveFlag === 0) {
     world.playerJumpTriggeredFlag = 0;
   }
