@@ -30,6 +30,10 @@ const w3r1TunnelWalls = buildTunnelWalls(W3_ROOM_WIDTH, w3r1Tunnels);
 // Used by world2Rooms.ts for transitions
 export { W3_TUNNEL_Y };
 
+// W2 tunnel Y duplicated here to avoid circular import (world2Rooms → world3Rooms → world2Rooms).
+// Must match W2_TUNNEL_Y in world2Rooms.ts.
+const W2_TUNNEL_Y_FOR_SPAWN = 16;
+
 export const ROOM_W3_ROOM1: RoomDef = {
   id: 'w3_room1',
   name: 'Crucible Depths',
@@ -76,8 +80,7 @@ export const ROOM_W3_ROOM1: RoomDef = {
       targetRoomId: 'w2_room1',
       positionBlock: W3_TUNNEL_Y,
       openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
-      // W2_TUNNEL_Y = 16, literal to avoid circular import with world2Rooms
-      targetSpawnBlock: [3, 16 + 2],
+      targetSpawnBlock: [3, W2_TUNNEL_Y_FOR_SPAWN + 2],
     },
   ],
   skillTombs: [],

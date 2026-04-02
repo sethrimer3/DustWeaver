@@ -32,6 +32,10 @@ const w2r1TunnelWalls = buildTunnelWalls(W2_ROOM_WIDTH, w2r1Tunnels);
 // Re-export for convenience (used by lobbyRoom.ts)
 export { W2_TUNNEL_Y };
 
+// Lobby tunnel Y duplicated here to avoid circular import (lobbyRoom → world2Rooms → lobbyRoom).
+// Must match LOBBY_TUNNEL_Y in lobbyRoom.ts.
+const LOBBY_TUNNEL_Y_FOR_SPAWN = 16;
+
 export const ROOM_W2_ROOM1: RoomDef = {
   id: 'w2_room1',
   name: 'Ember Threshold',
@@ -86,8 +90,7 @@ export const ROOM_W2_ROOM1: RoomDef = {
       targetRoomId: 'lobby',
       positionBlock: W2_TUNNEL_Y,
       openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
-      // LOBBY_TUNNEL_Y = 16, literal to avoid circular import with lobbyRoom
-      targetSpawnBlock: [3, 16 + 2],
+      targetSpawnBlock: [3, LOBBY_TUNNEL_Y_FOR_SPAWN + 2],
     },
     {
       direction: 'left',

@@ -34,6 +34,11 @@ const w1r1TunnelWalls = buildTunnelWalls(W1_ROOM_WIDTH, w1r1Tunnels);
 // These are imported by lobbyRoom.ts and bossRooms.ts — re-export for convenience
 export { W1_TUNNEL_Y, BOSS_TUNNEL_Y };
 
+// Lobby constants duplicated here to avoid circular import (lobbyRoom → world1Rooms → lobbyRoom).
+// Must match LOBBY_WIDTH and LOBBY_TUNNEL_Y in lobbyRoom.ts.
+const LOBBY_WIDTH_FOR_SPAWN = 48 * 3;
+const LOBBY_TUNNEL_Y_FOR_SPAWN = 16;
+
 export const ROOM_W1_ROOM1: RoomDef = {
   id: 'w1_room1',
   name: 'Stone Crossing',
@@ -97,9 +102,7 @@ export const ROOM_W1_ROOM1: RoomDef = {
       targetRoomId: 'lobby',
       positionBlock: W1_TUNNEL_Y,
       openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
-      // LOBBY_WIDTH and LOBBY_TUNNEL_Y are used here but to avoid circular
-      // imports we use literal values matching lobbyRoom.ts constants.
-      targetSpawnBlock: [48 * 3 - 4, 16 + 2],
+      targetSpawnBlock: [LOBBY_WIDTH_FOR_SPAWN - 4, LOBBY_TUNNEL_Y_FOR_SPAWN + 2],
     },
     {
       direction: 'right',
