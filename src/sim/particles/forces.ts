@@ -28,9 +28,17 @@ import { getElementalMultiplier } from './negation';
 import { ParticleKind } from './kinds';
 import { nextFloat } from '../rng';
 import {
-  _findFreeSlot, _spawnStoneShards, _spawnLavaTrailFire,
+  _spawnStoneShards, _spawnLavaTrailFire,
   _spawnCrystalShards, _spawnPoisonCloud, _spawnChainLightning,
 } from './elementEffectSpawners';
+import { MAX_PARTICLES } from './state';
+import { resetBoidAccumulators, accumulateBoidPair, applyBoidForces } from './boidForces';
+import {
+  resetEffectCounters,
+  recordIceChillEvent, recordShadowKillEvent, recordWindScatterEvent,
+  applyIceChillEffects, applyShadowLifestealEffects, applyWindScatterEffects,
+  applyHolyHealingAura,
+} from './elementEffectHandlers';
 
 // Particle half-size: 1/6th of the player's full width (8 world units) divided by 2.
 // Square hitbox side = 8/6 ≈ 1.333 wu; radius = side/2 ≈ 0.667 wu.
@@ -43,7 +51,7 @@ const CONTACT_DIST_WORLD = PARTICLE_RADIUS_WORLD * 2.0;
 
 // Boid neighbor range — larger than repulsion so cohesion/alignment can act
 // across a wider neighbourhood without requiring a second grid pass.
-const BOID_RANGE_WORLD = 36.0;
+export const BOID_RANGE_WORLD = 36.0;
 
 // Single grid covers the larger of the two query radii.
 const GRID_CELL_SIZE = BOID_RANGE_WORLD * 2.0;
@@ -70,25 +78,6 @@ const _lavaTrailPosY  = new Float32Array(64);
 const _lavaTrailOwner = new Int32Array(64);
 let _lavaTrailCount   = 0;
 
-/** Radius of ice chill slow effect after an ice kill (world units). */
-const ICE_CHILL_RANGE_WORLD = 55.0;
-/** Velocity scale applied to particles hit by ice chill (0–1; lower = slower). */
-const ICE_CHILL_VELOCITY_DECAY = 0.35;
-/** Radius of wind scatter knockback burst after a wind kill (world units). */
-const WIND_SCATTER_RANGE_WORLD = 75.0;
-/** Velocity impulse magnitude of wind scatter knockback. */
-const WIND_SCATTER_IMPULSE_WORLD = 180.0;
-/** Durability restored per tick by the Holy healing aura to nearby player particles. */
-const HOLY_HEAL_RATE_PER_TICK = 0.004;
-/** Durability restored to the most-wounded particle per shadow kill (lifesteal). */
-const SHADOW_LIFESTEAL_HEAL_AMOUNT = 0.4;
-
-// Pre-allocated scratch for ice chill slow events
-const _iceChillPosX        = new Float32Array(64);
-const _iceChillPosY        = new Float32Array(64);
-const _iceChillKillerOwner = new Int32Array(64);
-let _iceChillCount = 0;
-
 // Pre-allocated scratch for crystal shard spawn events
 const _crystalShardPosX  = new Float32Array(128);
 const _crystalShardPosY  = new Float32Array(128);
@@ -96,16 +85,6 @@ const _crystalShardVelX  = new Float32Array(128);
 const _crystalShardVelY  = new Float32Array(128);
 const _crystalShardOwner = new Int32Array(128);
 let _crystalShardCount = 0;
-
-// Pre-allocated scratch for shadow lifesteal events (owner entity IDs)
-const _shadowKillOwnerIds = new Int32Array(32);
-let _shadowKillCount = 0;
-
-// Pre-allocated scratch for wind scatter knockback events
-const _windScatterPosX        = new Float32Array(32);
-const _windScatterPosY        = new Float32Array(32);
-const _windScatterKillerOwner = new Int32Array(32);
-let _windScatterCount = 0;
 
 // Pre-allocated scratch for poison cloud spawn events
 const _poisonCloudPosX  = new Float32Array(64);
@@ -119,17 +98,6 @@ const _chainLightningPosY        = new Float32Array(32);
 const _chainLightningKillerOwner = new Int32Array(32);
 const _chainLightningVictimOwner = new Int32Array(32);
 let _chainLightningCount = 0;
-
-// ---- Boid accumulator scratch -------------------------------------------
-// Per-particle accumulators for same-owner neighbour sums.
-// Re-used each tick; indexed by particleIndex — pre-allocated once.
-import { MAX_PARTICLES } from './state';
-
-const _cohesionX   = new Float32Array(MAX_PARTICLES);
-const _cohesionY   = new Float32Array(MAX_PARTICLES);
-const _alignX      = new Float32Array(MAX_PARTICLES);
-const _alignY      = new Float32Array(MAX_PARTICLES);
-const _neighborCount = new Uint16Array(MAX_PARTICLES);
 
 // ---- Main export --------------------------------------------------------
 
@@ -152,11 +120,7 @@ export function applyInterParticleForces(world: WorldState): void {
   }
 
   // ---- Reset boid accumulators (trivial fill) -------------------------
-  _cohesionX.fill(0, 0, particleCount);
-  _cohesionY.fill(0, 0, particleCount);
-  _alignX.fill(0, 0, particleCount);
-  _alignY.fill(0, 0, particleCount);
-  _neighborCount.fill(0, 0, particleCount);
+  resetBoidAccumulators(particleCount);
 
   scratchDestroyCount = 0;
 
@@ -232,27 +196,15 @@ export function applyInterParticleForces(world: WorldState): void {
         // ---- Same-owner, non-Fluid: boid accumulation (within boid range) --
         // ownerI === -1 means both are unowned Fluid particles; skip boid.
         if (dist < BOID_RANGE_WORLD) {
-          _cohesionX[i] += positionXWorld[j];
-          _cohesionY[i] += positionYWorld[j];
-          _cohesionX[j] += px;
-          _cohesionY[j] += py;
-          _alignX[i]  += velocityXWorld[j];
-          _alignY[i]  += velocityYWorld[j];
-          _alignX[j]  += velocityXWorld[i];
-          _alignY[j]  += velocityYWorld[i];
-          _neighborCount[i]++;
-          _neighborCount[j]++;
-
-          // Separation: profile.separation weight; repel inside half range
-          if (dist < BOID_RANGE_WORLD * 0.45) {
-            const sep = profileI.separation * (1.0 - dist / (BOID_RANGE_WORLD * 0.45)) / dist;
-            const sfx = -dx * sep * 30.0;
-            const sfy = -dy * sep * 30.0;
-            forceX[i] += sfx;
-            forceY[i] += sfy;
-            forceX[j] -= sfx;
-            forceY[j] -= sfy;
-          }
+          accumulateBoidPair(
+            i, j,
+            positionXWorld, positionYWorld,
+            velocityXWorld, velocityYWorld,
+            forceX, forceY,
+            dist, dx, dy,
+            profileI.separation,
+            BOID_RANGE_WORLD,
+          );
         }
       }
     }
@@ -261,54 +213,28 @@ export function applyInterParticleForces(world: WorldState): void {
     // Orbit-mode Holy particles slowly restore durability to nearby wounded
     // allies, reusing the neighbor query already computed above.
     if (kindBuffer[i] === ParticleKind.Holy && behaviorMode[i] === 0 && ownerI !== -1) {
-      for (let ni = 0; ni < neighborCount; ni++) {
-        const j = sharedSpatialGrid.queryResult[ni];
-        if (isAliveFlag[j] === 0) continue;
-        if (ownerEntityId[j] !== ownerI) continue;
-        if (isTransientFlag[j] === 1) continue;
-        const maxDur = getElementProfile(kindBuffer[j]).toughness;
-        if (particleDurability[j] < maxDur) {
-          particleDurability[j] = Math.min(
-            particleDurability[j] + HOLY_HEAL_RATE_PER_TICK, maxDur,
-          );
-        }
-      }
+      applyHolyHealingAura(
+        i, neighborCount, sharedSpatialGrid.queryResult,
+        kindBuffer, isAliveFlag, ownerEntityId,
+        isTransientFlag, particleDurability,
+        ownerI,
+      );
     }
   }
 
   // ---- Apply accumulated boid forces ----------------------------------
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 0) continue;
-    const nc = _neighborCount[i];
-    if (nc === 0) continue;
-
-    const profile = getElementProfile(kindBuffer[i]);
-    const invNc = 1.0 / nc;
-
-    // Cohesion: steer toward average neighbor position
-    if (profile.cohesion > 0.0) {
-      const avgX = _cohesionX[i] * invNc;
-      const avgY = _cohesionY[i] * invNc;
-      forceX[i] += (avgX - positionXWorld[i]) * profile.cohesion * 2.0;
-      forceY[i] += (avgY - positionYWorld[i]) * profile.cohesion * 2.0;
-    }
-
-    // Alignment: match average neighbor velocity
-    if (profile.alignment > 0.0) {
-      const avgVx = _alignX[i] * invNc;
-      const avgVy = _alignY[i] * invNc;
-      forceX[i] += (avgVx - velocityXWorld[i]) * profile.alignment * 0.5;
-      forceY[i] += (avgVy - velocityYWorld[i]) * profile.alignment * 0.5;
-    }
-  }
+  applyBoidForces(
+    particleCount, isAliveFlag, kindBuffer,
+    positionXWorld, positionYWorld,
+    velocityXWorld, velocityYWorld,
+    forceX, forceY,
+  );
 
   // ---- Apply deferred contact resolution (elemental durability model) ----
   _shatterCount = 0;
   _lavaTrailCount = 0;
-  _iceChillCount = 0;
+  resetEffectCounters();
   _crystalShardCount = 0;
-  _shadowKillCount = 0;
-  _windScatterCount = 0;
   _poisonCloudCount = 0;
   _chainLightningCount = 0;
 
@@ -386,22 +312,16 @@ export function applyInterParticleForces(world: WorldState): void {
         _poisonCloudCount++;
       }
       // Ice chill — ice kill area-slows nearby enemies
-      if (kindA === ParticleKind.Ice && _iceChillCount < _iceChillPosX.length) {
-        _iceChillPosX[_iceChillCount] = positionXWorld[bi];
-        _iceChillPosY[_iceChillCount] = positionYWorld[bi];
-        _iceChillKillerOwner[_iceChillCount] = ownerEntityId[ai];
-        _iceChillCount++;
+      if (kindA === ParticleKind.Ice) {
+        recordIceChillEvent(positionXWorld[bi], positionYWorld[bi], ownerEntityId[ai]);
       }
       // Shadow lifesteal — shadow killer heals its most-wounded particle
-      if (kindA === ParticleKind.Shadow && isTransientFlag[ai] === 0 && _shadowKillCount < _shadowKillOwnerIds.length) {
-        _shadowKillOwnerIds[_shadowKillCount++] = ownerEntityId[ai];
+      if (kindA === ParticleKind.Shadow && isTransientFlag[ai] === 0) {
+        recordShadowKillEvent(ownerEntityId[ai]);
       }
       // Wind scatter — wind kill knocks back nearby enemies
-      if (kindA === ParticleKind.Wind && isTransientFlag[ai] === 0 && _windScatterCount < _windScatterPosX.length) {
-        _windScatterPosX[_windScatterCount] = positionXWorld[bi];
-        _windScatterPosY[_windScatterCount] = positionYWorld[bi];
-        _windScatterKillerOwner[_windScatterCount] = ownerEntityId[ai];
-        _windScatterCount++;
+      if (kindA === ParticleKind.Wind && isTransientFlag[ai] === 0) {
+        recordWindScatterEvent(positionXWorld[bi], positionYWorld[bi], ownerEntityId[ai]);
       }
       // Lightning chain arc — only from non-transient lightning kills
       if (kindA === ParticleKind.Lightning && isTransientFlag[ai] === 0 && _chainLightningCount < _chainLightningPosX.length) {
@@ -451,22 +371,16 @@ export function applyInterParticleForces(world: WorldState): void {
         _poisonCloudCount++;
       }
       // Ice chill — ice kill area-slows nearby enemies
-      if (kindB === ParticleKind.Ice && _iceChillCount < _iceChillPosX.length) {
-        _iceChillPosX[_iceChillCount] = positionXWorld[ai];
-        _iceChillPosY[_iceChillCount] = positionYWorld[ai];
-        _iceChillKillerOwner[_iceChillCount] = ownerEntityId[bi];
-        _iceChillCount++;
+      if (kindB === ParticleKind.Ice) {
+        recordIceChillEvent(positionXWorld[ai], positionYWorld[ai], ownerEntityId[bi]);
       }
       // Shadow lifesteal — shadow killer heals its most-wounded particle
-      if (kindB === ParticleKind.Shadow && isTransientFlag[bi] === 0 && _shadowKillCount < _shadowKillOwnerIds.length) {
-        _shadowKillOwnerIds[_shadowKillCount++] = ownerEntityId[bi];
+      if (kindB === ParticleKind.Shadow && isTransientFlag[bi] === 0) {
+        recordShadowKillEvent(ownerEntityId[bi]);
       }
       // Wind scatter — wind kill knocks back nearby enemies
-      if (kindB === ParticleKind.Wind && isTransientFlag[bi] === 0 && _windScatterCount < _windScatterPosX.length) {
-        _windScatterPosX[_windScatterCount] = positionXWorld[ai];
-        _windScatterPosY[_windScatterCount] = positionYWorld[ai];
-        _windScatterKillerOwner[_windScatterCount] = ownerEntityId[bi];
-        _windScatterCount++;
+      if (kindB === ParticleKind.Wind && isTransientFlag[bi] === 0) {
+        recordWindScatterEvent(positionXWorld[ai], positionYWorld[ai], ownerEntityId[bi]);
       }
       // Lightning chain arc — only from non-transient lightning kills
       if (kindB === ParticleKind.Lightning && isTransientFlag[bi] === 0 && _chainLightningCount < _chainLightningPosX.length) {
@@ -515,61 +429,13 @@ export function applyInterParticleForces(world: WorldState): void {
   }
 
   // ── Ice chill — area-slow enemy particles near ice kill location ──────────
-  for (let c = 0; c < _iceChillCount; c++) {
-    const cx = _iceChillPosX[c];
-    const cy = _iceChillPosY[c];
-    const killerOwner = _iceChillKillerOwner[c];
-    for (let i = 0; i < particleCount; i++) {
-      if (isAliveFlag[i] === 0) continue;
-      if (ownerEntityId[i] === killerOwner || ownerEntityId[i] === -1) continue;
-      const dx = positionXWorld[i] - cx;
-      const dy = positionYWorld[i] - cy;
-      if (dx * dx + dy * dy < ICE_CHILL_RANGE_WORLD * ICE_CHILL_RANGE_WORLD) {
-        velocityXWorld[i] *= ICE_CHILL_VELOCITY_DECAY;
-        velocityYWorld[i] *= ICE_CHILL_VELOCITY_DECAY;
-      }
-    }
-  }
+  applyIceChillEffects(world);
 
   // ── Shadow lifesteal — heal most-wounded player particle after shadow kill ─
-  for (let s = 0; s < _shadowKillCount; s++) {
-    const shadowOwner = _shadowKillOwnerIds[s];
-    let lowestDurability = Infinity;
-    let lowestIdx = -1;
-    for (let i = 0; i < particleCount; i++) {
-      if (isAliveFlag[i] === 0) continue;
-      if (ownerEntityId[i] !== shadowOwner) continue;
-      if (isTransientFlag[i] === 1) continue;
-      if (particleDurability[i] < lowestDurability) {
-        lowestDurability = particleDurability[i];
-        lowestIdx = i;
-      }
-    }
-    if (lowestIdx >= 0) {
-      const maxDur = getElementProfile(kindBuffer[lowestIdx]).toughness;
-      particleDurability[lowestIdx] = Math.min(particleDurability[lowestIdx] + SHADOW_LIFESTEAL_HEAL_AMOUNT, maxDur);
-    }
-  }
+  applyShadowLifestealEffects(world);
 
   // ── Wind scatter — knockback burst to nearby enemies after wind kill ───────
-  for (let w = 0; w < _windScatterCount; w++) {
-    const wx = _windScatterPosX[w];
-    const wy = _windScatterPosY[w];
-    const killerOwner = _windScatterKillerOwner[w];
-    for (let i = 0; i < particleCount; i++) {
-      if (isAliveFlag[i] === 0) continue;
-      if (ownerEntityId[i] === killerOwner || ownerEntityId[i] === -1) continue;
-      const dx = positionXWorld[i] - wx;
-      const dy = positionYWorld[i] - wy;
-      const dSq = dx * dx + dy * dy;
-      if (dSq < WIND_SCATTER_RANGE_WORLD * WIND_SCATTER_RANGE_WORLD && dSq > 0.001) {
-        const d = Math.sqrt(dSq);
-        const impulse = WIND_SCATTER_IMPULSE_WORLD * (1.0 - d / WIND_SCATTER_RANGE_WORLD) / d;
-        velocityXWorld[i] += dx * impulse;
-        velocityYWorld[i] += dy * impulse;
-      }
-    }
-  }
+  applyWindScatterEffects(world);
   // A particle that enters an enemy cluster's core radius deals attackPower
   // damage to that cluster and is consumed.
   // Special case: Enemy-to-player damage is random 1-4 minus armor (dust containers).

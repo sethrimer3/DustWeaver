@@ -100,16 +100,18 @@ and player-sprite rotation — all in one file.
   cap, wall-jump force, etc.) plus debug overrides.  Pure data, no logic.
   — completed by copilot on 2026-04-02
 
-- [ ] **`src/sim/clusters/playerMovement.ts`** — Player-specific movement
+- [x] **`src/sim/clusters/playerMovement.ts`** — Player-specific movement
   functions: `tickPlayerMovement`, jump/fall logic, wall-slide, wall-jump,
   variable sustain, apex half-gravity, sprite rotation.
+  — completed by copilot on 2026-04-02
 
-- [ ] **`src/sim/clusters/enemyMovement.ts`** — Enemy-specific movement
+- [x] **`src/sim/clusters/enemyMovement.ts`** — Enemy-specific movement
   functions currently inside `movement.ts`.
+  — completed by copilot on 2026-04-02
 
-- [ ] Keep `movement.ts` as a thin re-export barrel (`export * from
-  './playerMovement'; export * from './enemyMovement';`) to avoid
-  updating every call-site.
+- [x] Keep `movement.ts` as orchestrator that calls into playerMovement
+  and enemyMovement, retains collision resolution and post-integration logic.
+  — completed by copilot on 2026-04-02
 
 - [x] **`src/sim/clusters/movementCollision.ts`** — Collision helper functions:
   `resolveClusterFloorCollision`, `resetClusterGroundedFlag`, `resolveWallsX`,
@@ -157,13 +159,17 @@ chain lightning, ice chill, shadow lifesteal, wind scatter), and the main
   their spawn-specific constants extracted from `forces.ts`.
   — completed by copilot on 2026-04-02
 
-- [ ] **`src/sim/particles/boidForces.ts`** — Boid cohesion, separation, and
+- [x] **`src/sim/particles/boidForces.ts`** — Boid cohesion, separation, and
   alignment accumulators and the per-kind boid weighting table.
+  — completed by copilot on 2026-04-02
 
-- [ ] Keep `forces.ts` as a thin orchestrating module that imports from the
+- [x] **`src/sim/particles/elementEffectHandlers.ts`** — Ice chill, shadow
+  lifesteal, wind scatter handlers, Holy healing aura, and related constants.
+  — completed by copilot on 2026-04-02
+
+- [x] Keep `forces.ts` as a thin orchestrating module that imports from the
   above and calls them in the correct order inside `applyInterParticleForces`.
-  Pre-allocated scratch buffers remain module-level in `forces.ts` (they are
-  shared across effect files via function parameters, not module state).
+  — completed by copilot on 2026-04-02
 
 ---
 
@@ -289,3 +295,4 @@ Boss chain simulation and rendering data preparation mixed together.
 | Date | Agent | Summary |
 |------|-------|---------|
 | 2026-04-02 | copilot | Extracted `gameSpawn.ts`, `gameRoom.ts` from `gameScreen.ts`; extracted `movementConstants.ts`, `movementCollision.ts` from `movement.ts`; split `combat.ts` → `playerCombat.ts` + `enemyCombat.ts`; split `rooms.ts` into `rooms/` directory (lobbyRoom, world1Rooms, world2Rooms, world3Rooms, bossRooms, roomBuilders); split `elementProfiles.ts` into `elementProfiles/equippableProfiles.ts` + `environmentalProfiles.ts` + `elementProfileTypes.ts`; extracted `elementEffectSpawners.ts` from `forces.ts` |
+| 2026-04-02 | copilot | Fixed `rooms.ts` barrel: removed duplicate inline room definitions left over from the prior split; resolved export/import conflicts that broke the build. `rooms.ts` is now a clean ~45-line barrel that imports from `rooms/` sub-files and assembles `ROOM_REGISTRY`. |

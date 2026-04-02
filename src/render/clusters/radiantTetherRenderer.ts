@@ -27,7 +27,7 @@ import {
   RT_BROKEN_CHAIN_LIFETIME_TICKS,
   RT_DEBUG_ENABLED,
 } from '../../sim/clusters/radiantTetherConfig';
-import { computeChainSagPoints } from '../../sim/clusters/radiantTetherChains';
+import { computeChainSagPoints } from './radiantTetherChainRenderer';
 
 // ── Colors ──────────────────────────────────────────────────────────────────
 
