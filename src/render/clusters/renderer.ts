@@ -425,6 +425,9 @@ export function renderClusters(
     }
 
     // ── Health bar (above the body) ───────────────────────────────────────
+    // Player health bar is drawn in the HUD (top-left), not over the character.
+    if (isPlayer) continue;
+
     const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
     // For flying eyes the health bar is anchored above the outer diamond ring;
     // for regular clusters it sits above the box.

@@ -38,6 +38,8 @@ import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize } from '../ui/renderSettings';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect } from '../render/effects/theroEffectManager';
+import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
+import { performEarlyAutoAssignment } from '../progression/unlocks';
 
 const FIXED_DT_MS = 16.666;
 
@@ -167,8 +169,7 @@ function spawnLoadoutParticles(
   rng: RngState,
 ): void {
   if (loadout.length === 0) {
-    // Fallback to Physical if somehow the loadout is empty
-    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, ParticleKind.Physical, totalCount, rng);
+    // Empty loadout — spawn no particles (brand new profile with nothing)
     return;
   }
 
@@ -705,7 +706,28 @@ export function startGameScreen(
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
     const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
     world.clusters.push(playerCluster);
-    spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+
+    // Spawn player dust particles based on capacity model.
+    // If the player has dust containers and unlocked dust, use capacity-based spawning.
+    // If the player has a weave loadout with bound dust, use that for weave-slot assignment.
+    // Otherwise (brand new profile with nothing), spawn no particles.
+    const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
+    const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
+      || playerWeaveLoadout.secondary.boundDust.length > 0;
+
+    if (hasWeaveBoundDust) {
+      // Player has dust bound to weaves — use weave loadout spawning
+      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+    } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
+      // Player has unlocked dust and capacity but no weave bindings.
+      // Spawn particles based on capacity (e.g., auto-assigned Golden Dust).
+      const dustKind = progress.unlockedDustKinds[0];
+      const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
+      if (particleCount > 0) {
+        spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+      }
+    }
+    // else: brand new profile with nothing — no particles spawned
 
     // Apply weave IDs to world state for combat dispatch
     world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
@@ -1318,8 +1340,9 @@ export function startGameScreen(
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
-      // Skillbook pickup (lobby progression): learn Golden Dust when collected.
-      if (progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
+      // Skillbook pickup (lobby progression): triggers the early auto-assignment.
+      // Grants Cycle passive, Golden Dust, and 2 containers on first pickup.
+      if (progress && !progress.hasCompletedEarlyAutoAssignment) {
         const roomSkillBooks = currentRoom.skillBooks ?? [];
         for (let i = 0; i < roomSkillBooks.length; i++) {
           const sb = roomSkillBooks[i];
@@ -1328,18 +1351,24 @@ export function startGameScreen(
           const dx = playerForTomb.positionXWorld - sx;
           const dy = playerForTomb.positionYWorld - sy;
           if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
-            progress.unlockedDustKinds = [...progress.unlockedDustKinds, ParticleKind.Physical];
-            progress.loadout = Array.from(new Set([...progress.loadout, ParticleKind.Physical]));
-            if (!progress.weaveLoadout.primary.boundDust.includes(ParticleKind.Physical)) {
-              progress.weaveLoadout.primary.boundDust = [...progress.weaveLoadout.primary.boundDust, ParticleKind.Physical];
-            }
-            playerWeaveLoadout = JSON.parse(JSON.stringify(progress.weaveLoadout));
+            // Perform the early auto-assignment: Cycle + Golden Dust + 2 containers
+            const goldenDustCount = performEarlyAutoAssignment(progress);
+            // Spawn the auto-assigned Golden Dust particles immediately
+            spawnClusterParticles(
+              world,
+              playerForTomb.entityId,
+              playerForTomb.positionXWorld,
+              playerForTomb.positionYWorld,
+              ParticleKind.Physical,
+              goldenDustCount,
+              levelRng,
+            );
             break;
           }
         }
       }
 
-      // Dust container pickup: grants +4 dust particles (one full HUD container).
+      // Dust container pickup: grants +1 dust container (+4 capacity) and spawns particles.
       const roomDustContainers = currentRoom.dustContainers ?? [];
       for (let i = 0; i < roomDustContainers.length; i++) {
         const pickupKey = `${currentRoom.id}:${i}`;
@@ -1352,6 +1381,10 @@ export function startGameScreen(
         const dy = playerForTomb.positionYWorld - cy;
         if (dx * dx + dy * dy <= DUST_CONTAINER_PICKUP_RADIUS_WORLD * DUST_CONTAINER_PICKUP_RADIUS_WORLD) {
           collectedDustContainerKeySet.add(pickupKey);
+          // Grant a container to the player's progression state
+          if (progress) {
+            progress.dustContainerCount += 1;
+          }
           spawnClusterParticles(
             world,
             playerForTomb.entityId,
@@ -1552,14 +1585,40 @@ export function startGameScreen(
       ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
     }
 
-    // ── Dust container display (top-left) ─────────────────────────────────────
+    // ── Player health bar in HUD (top-left, above dust display) ─────────────
+    const HUD_HEALTH_BAR_X_PX = 8;
+    const HUD_HEALTH_BAR_Y_PX = 8;
+    const HUD_HEALTH_BAR_WIDTH_PX = 50;
+    const HUD_HEALTH_BAR_HEIGHT_PX = 4;
+    const HUD_HEALTH_DUST_GAP_PX = 3;
+    {
+      const playerForHealth = world.clusters[0];
+      if (playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
+        const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
+
+        ctx.save();
+        // Background
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX, HUD_HEALTH_BAR_HEIGHT_PX);
+        // Health fill
+        ctx.fillStyle = '#00ff88';
+        ctx.fillRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX * healthFraction, HUD_HEALTH_BAR_HEIGHT_PX);
+        // Border
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX, HUD_HEALTH_BAR_HEIGHT_PX);
+        ctx.restore();
+      }
+    }
+
+    // ── Dust container display (top-left, below health bar) ───────────────────
     const dustCount = getPlayerDustCount();
     const fullContainers = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
     const partialDust = dustCount % DUST_PARTICLES_PER_CONTAINER;
     const dustSquareSize = 8;
     const dustPadding = 2;
     const dustStartX = 8;
-    const dustStartY = 8;
+    const dustStartY = HUD_HEALTH_BAR_Y_PX + HUD_HEALTH_BAR_HEIGHT_PX + HUD_HEALTH_DUST_GAP_PX;
 
     ctx.save();
     for (let i = 0; i < fullContainers + (partialDust > 0 ? 1 : 0); i++) {
@@ -1591,12 +1650,18 @@ export function startGameScreen(
     }
     ctx.restore();
 
-    // ── Health bar display (only when damaged) ───────────────────────────────
+    // ── Enemy health bar display (only when damaged) ──────────────────────────
+    // Player health bar is in the HUD; this loop draws over-character bars for enemies only.
     // Uses tick-based timing for determinism (HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS ticks)
     const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
     for (let ci = 0; ci < world.clusters.length; ci++) {
       const cluster = world.clusters[ci];
       if (cluster.isAliveFlag === 0) continue;
+      // Skip the player — their health bar is in the HUD, not over their character
+      if (cluster.isPlayerFlag === 1) {
+        prevHealthMap.set(cluster.entityId, cluster.healthPoints);
+        continue;
+      }
 
       // Check for health changes to trigger display
       const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
@@ -1619,9 +1684,8 @@ export function startGameScreen(
       // Background
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(barX, barY, barWidth, barHeight);
-      // Health fill
-      const healthColor = cluster.isPlayerFlag === 1 ? '#00ff88' : '#ff4444';
-      ctx.fillStyle = healthColor;
+      // Health fill — enemies only (player skipped above)
+      ctx.fillStyle = '#ff4444';
       ctx.fillRect(barX, barY, barWidth * healthFraction, barHeight);
       // Border
       ctx.strokeStyle = 'rgba(255,255,255,0.3)';

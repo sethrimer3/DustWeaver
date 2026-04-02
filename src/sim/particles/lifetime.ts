@@ -91,10 +91,29 @@ export function updateParticleLifetimes(world: WorldState): void {
     worldWidthWorld, worldHeightWorld,
   } = world;
 
+  // ---- Pre-compute player cluster state for grounded-only recharge --------
+  // Finding the player once avoids an O(n×m) nested loop in the respawn path.
+  let playerEntityId = -1;
+  let isPlayerGroundedFlag: 0 | 1 = 1;
+  for (let ci = 0; ci < clusters.length; ci++) {
+    if (clusters[ci].isPlayerFlag === 1 && clusters[ci].isAliveFlag === 1) {
+      playerEntityId = clusters[ci].entityId;
+      isPlayerGroundedFlag = clusters[ci].isGroundedFlag;
+      break;
+    }
+  }
+
   // ---- Respawn delay countdown (combat-killed particles) -----------------
+  // Player-owned dust only recharges while the player is grounded.
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 1) continue;          // only dead particles
     if (respawnDelayTicks[i] <= 0) continue;     // no pending respawn
+
+    // If this particle is owned by the player and player is airborne,
+    // freeze the respawn countdown (dust only recharges while grounded).
+    if (ownerEntityId[i] === playerEntityId && isPlayerGroundedFlag === 0) {
+      continue;
+    }
 
     respawnDelayTicks[i] -= 1.0;
     if (respawnDelayTicks[i] > 0) continue;
