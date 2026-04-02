@@ -1149,7 +1149,7 @@ export function applyClusterMovement(world: WorldState): void {
         // ── Grapple charge refresh on ground contact ─────────────────────────
         // The player can only grapple once while airborne.  Touching the ground
         // restores the charge so they can grapple again.
-        if (cluster.isGroundedFlag === 1) {
+        if (cluster.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1) {
           world.hasGrappleChargeFlag = 1;
         }
       }

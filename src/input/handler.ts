@@ -65,6 +65,8 @@ export interface InputState {
   grappleAimYPx: number;
   /** Set to true for one collectCommands call to trigger an interact (F key). */
   isInteractTriggeredFlag: boolean;
+  /** Set to true for one collectCommands call to request fullscreen toggle (P key). */
+  isFullscreenToggleTriggeredFlag: boolean;
 }
 
 export function createInputState(): InputState {
@@ -106,6 +108,7 @@ export function createInputState(): InputState {
     grappleAimXPx: 0,
     grappleAimYPx: 0,
     isInteractTriggeredFlag: false,
+    isFullscreenToggleTriggeredFlag: false,
   };
 }
 
@@ -160,7 +163,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       if (!e.repeat) { state.isJumpTriggeredFlag = true; }
       state.isJumpHeldFlag = true;
     }
-    if (isShiftKey(e)) {
+    if (e.shiftKey || isShiftKey(e)) {
       e.preventDefault();
       state.isSprintHeldFlag = true;
     }
@@ -172,6 +175,9 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     }
     if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
       state.isInteractTriggeredFlag = true;
+    }
+    if ((e.key === 'p' || e.key === 'P') && !e.repeat) {
+      state.isFullscreenToggleTriggeredFlag = true;
     }
   }
   function onKeyUp(e: KeyboardEvent): void {
@@ -186,6 +192,8 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     }
     if (isShiftKey(e)) {
       state.isSprintHeldFlag = false;
+    } else if (e.shiftKey) {
+      state.isSprintHeldFlag = true;
     }
     if (e.key === 'e' || e.key === 'E') {
       state.isGrappleHeldFlag = 0;
@@ -285,6 +293,18 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     }
   }
 
+
+  function onWindowBlur(): void {
+    state.isKeyA = false;
+    state.isKeyD = false;
+    state.isKeyS = false;
+    state.isJumpHeldFlag = false;
+    state.isSprintHeldFlag = false;
+    state.isGrappleHeldFlag = 0;
+    state.isRightMouseDownFlag = 0;
+    state.isMouseDownFlag = 0;
+  }
+
   function onTouchEnd(e: TouchEvent): void {
     e.preventDefault();
     for (let i = 0; i < e.changedTouches.length; i++) {
@@ -309,6 +329,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
 
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onWindowBlur);
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
   canvas.addEventListener('mouseup', onMouseUp);
@@ -323,6 +344,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   return () => {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', onWindowBlur);
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('mousedown', onMouseDown);
     canvas.removeEventListener('mouseup', onMouseUp);
@@ -452,6 +474,11 @@ export function collectCommands(input: InputState): GameCommand[] {
   if (input.isInteractTriggeredFlag) {
     input.isInteractTriggeredFlag = false;
     commands.push({ kind: CommandKind.Interact });
+  }
+
+  if (input.isFullscreenToggleTriggeredFlag) {
+    input.isFullscreenToggleTriggeredFlag = false;
+    commands.push({ kind: CommandKind.ToggleFullscreen });
   }
 
   return commands;

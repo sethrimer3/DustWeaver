@@ -21,6 +21,7 @@ export enum CommandKind {
   WeaveHoldSecondary = 14,
   /** Release/end the secondary Weave hold. */
   WeaveEndSecondary = 15,
+  ToggleFullscreen = 16,
 }
 
 export interface MovePlayerCommand {
@@ -128,6 +129,10 @@ export interface WeaveEndSecondaryCommand {
   kind: CommandKind.WeaveEndSecondary;
 }
 
+export interface ToggleFullscreenCommand {
+  kind: CommandKind.ToggleFullscreen;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
@@ -144,4 +149,5 @@ export type GameCommand =
   | WeaveEndPrimaryCommand
   | WeaveActivateSecondaryCommand
   | WeaveHoldSecondaryCommand
-  | WeaveEndSecondaryCommand;
+  | WeaveEndSecondaryCommand
+  | ToggleFullscreenCommand;
