@@ -355,14 +355,14 @@ export function renderFrame(r: RenderFrameContext): void {
     deviceCtx.fillStyle = 'rgba(0,207,255,0.08)';
     deviceCtx.fill();
 
-    const jdx = joystickCurrentXPx - bx;
-    const jdy = joystickCurrentYPx - by;
-    const dist = Math.sqrt(jdx * jdx + jdy * jdy);
+    const joystickDx = joystickCurrentXPx - bx;
+    const joystickDy = joystickCurrentYPx - by;
+    const dist = Math.sqrt(joystickDx * joystickDx + joystickDy * joystickDy);
     let thumbXPx = joystickCurrentXPx;
     let thumbYPx = joystickCurrentYPx;
     if (dist > JOYSTICK_OUTER_RADIUS_PX) {
-      thumbXPx = bx + (jdx / dist) * JOYSTICK_OUTER_RADIUS_PX;
-      thumbYPx = by + (jdy / dist) * JOYSTICK_OUTER_RADIUS_PX;
+      thumbXPx = bx + (joystickDx / dist) * JOYSTICK_OUTER_RADIUS_PX;
+      thumbYPx = by + (joystickDy / dist) * JOYSTICK_OUTER_RADIUS_PX;
     }
 
     deviceCtx.beginPath();
