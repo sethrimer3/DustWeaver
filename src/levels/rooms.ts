@@ -1,18 +1,14 @@
 /**
- * Metroidvania room definitions.
+ * Metroidvania room definitions — barrel file.
  *
  * Layout:
  *   World 3 ← World 2 ← [LOBBY] → World 1
  *
- * The lobby is a neutral hub (world 0) with exits left and right.
- * Going RIGHT leads to World 1 rooms.
- * Going LEFT leads to World 2 rooms.
- * Going further LEFT from World 2 leads to World 3 (fire/lava world).
- *
- * All coordinates are in block units (currently 1 block = BLOCK_SIZE_SMALL = 8 world units).
+ * Room definitions are split by world into sub-files under ./rooms/.
+ * This file re-exports everything for backward compatibility and
+ * assembles the unified ROOM_REGISTRY.
  */
 
-import { ParticleKind } from '../sim/particles/kinds';
 import { RoomDef } from './roomDef';
 import { THERO_SHOWCASE_ROOMS } from './effectShowcaseRooms';
 
@@ -579,62 +575,18 @@ const bossRoomTunnels: TunnelOpening[] = [
   { direction: 'left', positionBlock: BOSS_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
 ];
 
-const bossRoomBoundary = buildBoundaryWalls(BOSS_ROOM_WIDTH, BOSS_ROOM_HEIGHT, bossRoomTunnels);
-const bossRoomTunnelWalls = buildTunnelWalls(BOSS_ROOM_WIDTH, bossRoomTunnels);
+export { ROOM_LOBBY } from './rooms/lobbyRoom';
+export { ROOM_W1_ROOM1 } from './rooms/world1Rooms';
+export { ROOM_W2_ROOM1 } from './rooms/world2Rooms';
+export { ROOM_W3_ROOM1 } from './rooms/world3Rooms';
+export { ROOM_BOSS_RADIANT_TETHER } from './rooms/bossRooms';
 
-export const ROOM_BOSS_RADIANT_TETHER: RoomDef = {
-  id: 'boss_radiant_tether',
-  name: 'Luminous Chamber',
-  worldNumber: 1,
-  widthBlocks: BOSS_ROOM_WIDTH,
-  heightBlocks: BOSS_ROOM_HEIGHT,
-  walls: [
-    ...bossRoomBoundary,
-    ...bossRoomTunnelWalls,
-    // Square chamber — thick walls on all sides for solid chain anchoring
-    // Thicken left wall (cols 1-2)
-    { xBlock: 1, yBlock: 1, wBlock: 2, hBlock: 20 },
-    { xBlock: 1, yBlock: 22, wBlock: 1, hBlock: 16 },
-    { xBlock: 1, yBlock: 46, wBlock: 2, hBlock: 13 },
-    // Thicken right wall (cols 57-58)
-    { xBlock: 57, yBlock: 1, wBlock: 2, hBlock: 20 },
-    { xBlock: 58, yBlock: 22, wBlock: 1, hBlock: 16 },
-    { xBlock: 57, yBlock: 46, wBlock: 2, hBlock: 13 },
-    // Thicken ceiling (rows 1-2)
-    { xBlock: 3, yBlock: 1, wBlock: 54, hBlock: 2 },
-    // Thicken floor (rows 57-58)
-    { xBlock: 3, yBlock: 57, wBlock: 54, hBlock: 2 },
-    // Small platforms for player to use as cover / parkour
-    { xBlock: 10, yBlock: 48, wBlock: 5, hBlock: 1 },
-    { xBlock: 45, yBlock: 48, wBlock: 5, hBlock: 1 },
-    { xBlock: 25, yBlock: 45, wBlock: 10, hBlock: 1 },
-    { xBlock: 8,  yBlock: 35, wBlock: 4, hBlock: 1 },
-    { xBlock: 48, yBlock: 35, wBlock: 4, hBlock: 1 },
-    { xBlock: 15, yBlock: 25, wBlock: 4, hBlock: 1 },
-    { xBlock: 41, yBlock: 25, wBlock: 4, hBlock: 1 },
-  ],
-  enemies: [
-    {
-      xBlock: 30,
-      yBlock: 20,
-      kinds: [ParticleKind.Holy, ParticleKind.Lightning],
-      particleCount: 50,
-      isBossFlag: 1,
-      isRadiantTetherFlag: 1,
-    },
-  ],
-  playerSpawnBlock: [3, BOSS_TUNNEL_Y + 2],
-  transitions: [
-    {
-      direction: 'left',
-      targetRoomId: 'w1_room1',
-      positionBlock: BOSS_TUNNEL_Y,
-      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
-      targetSpawnBlock: [W1_ROOM_WIDTH - 4, W1_TUNNEL_Y + 2],
-    },
-  ],
-  skillTombs: [],
-};
+// Import concrete values for registry assembly
+import { ROOM_LOBBY } from './rooms/lobbyRoom';
+import { ROOM_W1_ROOM1 } from './rooms/world1Rooms';
+import { ROOM_W2_ROOM1 } from './rooms/world2Rooms';
+import { ROOM_W3_ROOM1 } from './rooms/world3Rooms';
+import { ROOM_BOSS_RADIANT_TETHER } from './rooms/bossRooms';
 
 // ── Room registry ────────────────────────────────────────────────────────────
 

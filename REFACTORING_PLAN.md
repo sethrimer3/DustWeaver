@@ -66,14 +66,15 @@ spawning helpers, room-loading, camera/rendering orchestration, the main
 
 ### Proposed splits
 
-- [ ] **`src/screens/gameSpawn.ts`** — Extract the three particle-spawning
+- [x] **`src/screens/gameSpawn.ts`** — Extract the three particle-spawning
   helpers: `spawnClusterParticles`, `spawnLoadoutParticles`,
   `spawnWeaveLoadoutParticles`, and `spawnBackgroundFluidParticles`.  These
   are pure sim-setup functions with no render dependency.
+  — completed by copilot on 2026-04-02
 
-- [ ] **`src/screens/gameRoom.ts`** — Extract `loadRoomWalls`, the room
-  transition logic (teleport / tunnel detection), and enemy spawn logic that
-  is currently embedded in the main `startGameScreen` closure.
+- [x] **`src/screens/gameRoom.ts`** — Extract `loadRoomWalls`, `loadRoomHazards`,
+  `worldBgColor`, `drawTunnelDarkness`, `screenToWorld` and related constants.
+  — completed by copilot on 2026-04-02
 
 - [ ] **`src/screens/gameRender.ts`** — Extract the rendering orchestration
   block (all canvas draw calls, background, HUD, tunnel darkness, debug
@@ -94,9 +95,10 @@ and player-sprite rotation — all in one file.
 
 ### Proposed splits
 
-- [ ] **`src/sim/clusters/movementConstants.ts`** — All tunable numeric
+- [x] **`src/sim/clusters/movementConstants.ts`** — All tunable numeric
   constants (gravity, jump heights, fall speeds, coyote time, wall-slide
-  cap, wall-jump force, etc.).  Pure data, no logic.
+  cap, wall-jump force, etc.) plus debug overrides.  Pure data, no logic.
+  — completed by copilot on 2026-04-02
 
 - [ ] **`src/sim/clusters/playerMovement.ts`** — Player-specific movement
   functions: `tickPlayerMovement`, jump/fall logic, wall-slide, wall-jump,
@@ -108,6 +110,11 @@ and player-sprite rotation — all in one file.
 - [ ] Keep `movement.ts` as a thin re-export barrel (`export * from
   './playerMovement'; export * from './enemyMovement';`) to avoid
   updating every call-site.
+
+- [x] **`src/sim/clusters/movementCollision.ts`** — Collision helper functions:
+  `resolveClusterFloorCollision`, `resetClusterGroundedFlag`, `resolveWallsX`,
+  `resolveWallsY`, `resolveClusterSolidWallCollision`.
+  — completed by copilot on 2026-04-02
 
 ---
 
@@ -143,6 +150,12 @@ chain lightning, ice chill, shadow lifesteal, wind scatter), and the main
 
 - [ ] **`src/sim/particles/elementEffects/windScatter.ts`** — Wind scatter
   knockback logic.
+
+- [x] **`src/sim/particles/elementEffectSpawners.ts`** — All five element-effect
+  spawn helper functions (`_spawnStoneShards`, `_spawnLavaTrailFire`,
+  `_spawnCrystalShards`, `_spawnPoisonCloud`, `_spawnChainLightning`) and
+  their spawn-specific constants extracted from `forces.ts`.
+  — completed by copilot on 2026-04-02
 
 - [ ] **`src/sim/particles/boidForces.ts`** — Boid cohesion, separation, and
   alignment accumulators and the per-kind boid weighting table.
@@ -181,14 +194,17 @@ positioning, enemy attack/block, and the top-level `applyCombatForces`.
 
 ### Proposed splits
 
-- [ ] **`src/sim/particles/playerCombat.ts`** — `triggerAttackLaunch`,
+- [x] **`src/sim/particles/playerCombat.ts`** — `triggerAttackLaunch`,
   `tickAttackMode`, block-shield positioning and `applyBlockForces`.
+  — completed by copilot on 2026-04-02
 
-- [ ] **`src/sim/particles/enemyCombat.ts`** — `triggerEnemyAttackLaunch`,
+- [x] **`src/sim/particles/enemyCombat.ts`** — `triggerEnemyAttackLaunch`,
   `applyEnemyBlockForces`, and enemy-specific combat helpers.
+  — completed by copilot on 2026-04-02
 
-- [ ] Keep `combat.ts` as the orchestrating module exporting
+- [x] Keep `combat.ts` as the orchestrating module exporting
   `applyCombatForces` (calls into both player and enemy modules).
+  — completed by copilot on 2026-04-02
 
 ---
 
@@ -199,15 +215,22 @@ each containing dozens of tuning constants.
 
 ### Proposed splits
 
-- [ ] **`src/sim/particles/elementProfiles/equippableProfiles.ts`** — Profiles
-  for the equippable kinds (Physical through Void, indices 0–13).
+- [x] **`src/sim/particles/elementProfileTypes.ts`** — `ElementProfile` interface
+  (shared type, avoids circular dependency between barrel and sub-files).
+  — completed by copilot on 2026-04-02
 
-- [ ] **`src/sim/particles/elementProfiles/environmentalProfiles.ts`** — Profiles
+- [x] **`src/sim/particles/elementProfiles/equippableProfiles.ts`** — Profiles
+  for the equippable kinds (Physical through Void, indices 0–13).
+  — completed by copilot on 2026-04-02
+
+- [x] **`src/sim/particles/elementProfiles/environmentalProfiles.ts`** — Profiles
   for non-equippable / environmental kinds (Fluid, Water, Lava, Stone, Gold,
   Light, indices 14–19).
+  — completed by copilot on 2026-04-02
 
-- [ ] Keep `elementProfiles.ts` as the barrel that assembles the
+- [x] Keep `elementProfiles.ts` as the barrel that assembles the
   `ELEMENT_PROFILES` array and exports `getElementProfile`.
+  — completed by copilot on 2026-04-02
 
 ---
 
@@ -218,17 +241,29 @@ become unwieldy.
 
 ### Proposed splits
 
-- [ ] **`src/levels/rooms/lobby.ts`** — Stone Hollow (lobby) room definition.
+- [x] **`src/levels/rooms/lobbyRoom.ts`** — Stone Hollow (lobby) room definition.
+  — completed by copilot on 2026-04-02
 
-- [ ] **`src/levels/rooms/world1Rooms.ts`** — All World 1 room definitions.
+- [x] **`src/levels/rooms/world1Rooms.ts`** — All World 1 room definitions.
+  — completed by copilot on 2026-04-02
 
-- [ ] **`src/levels/rooms/world2Rooms.ts`** — All World 2 room definitions.
+- [x] **`src/levels/rooms/world2Rooms.ts`** — All World 2 room definitions.
+  — completed by copilot on 2026-04-02
 
-- [ ] **`src/levels/rooms/bossRooms.ts`** — Boss-room definitions (Luminous
+- [x] **`src/levels/rooms/world3Rooms.ts`** — All World 3 room definitions.
+  — completed by copilot on 2026-04-02
+
+- [x] **`src/levels/rooms/bossRooms.ts`** — Boss-room definitions (Luminous
   Chamber and any future boss rooms).
+  — completed by copilot on 2026-04-02
 
-- [ ] Keep `rooms.ts` as an index that re-exports all rooms and the
-  `getRoomById` / `getAllRooms` helpers.
+- [x] **`src/levels/rooms/roomBuilders.ts`** — Shared tunnel/boundary wall
+  helper functions (`buildBoundaryWalls`, `buildSideWall`, `buildTunnelWalls`).
+  — completed by copilot on 2026-04-02
+
+- [x] Keep `rooms.ts` as an index that re-exports all rooms and the
+  `ROOM_REGISTRY` / `STARTING_ROOM_ID` helpers.
+  — completed by copilot on 2026-04-02
 
 ---
 
@@ -253,4 +288,4 @@ Boss chain simulation and rendering data preparation mixed together.
 
 | Date | Agent | Summary |
 |------|-------|---------|
-| *(none yet)* | — | — |
+| 2026-04-02 | copilot | Extracted `gameSpawn.ts`, `gameRoom.ts` from `gameScreen.ts`; extracted `movementConstants.ts`, `movementCollision.ts` from `movement.ts`; split `combat.ts` → `playerCombat.ts` + `enemyCombat.ts`; split `rooms.ts` into `rooms/` directory (lobbyRoom, world1Rooms, world2Rooms, world3Rooms, bossRooms, roomBuilders); split `elementProfiles.ts` into `elementProfiles/equippableProfiles.ts` + `environmentalProfiles.ts` + `elementProfileTypes.ts`; extracted `elementEffectSpawners.ts` from `forces.ts` |
