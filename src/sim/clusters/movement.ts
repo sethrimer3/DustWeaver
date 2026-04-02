@@ -327,12 +327,10 @@ const COLLISION_EPSILON = 0.5;
 
 /**
  * Resolves the cluster box against the world floor.
- * Resets isGroundedFlag to 0 on entry, then sets it to 1 if a landing is found.
+ * Sets isGroundedFlag to 1 when a floor landing is found.
  * Returns true if the cluster landed this tick.
  */
 function resolveClusterFloorCollision(cluster: import('./state').ClusterState, world: WorldState): boolean {
-  cluster.isGroundedFlag = 0;
-
   const hh = cluster.halfHeightWorld;
   const clusterBottom = cluster.positionYWorld + hh;
 
@@ -348,6 +346,11 @@ function resolveClusterFloorCollision(cluster: import('./state').ClusterState, w
   // World floor only. Solid wall collisions (including top landings) are
   // handled by axis-separated wall sweeps in resolveClusterSolidWallCollision.
   return false;
+}
+
+/** Clears grounded state before collision passes rebuild it for this tick. */
+function resetClusterGroundedFlag(cluster: import('./state').ClusterState): void {
+  cluster.isGroundedFlag = 0;
 }
 
 /**
@@ -1099,6 +1102,8 @@ export function applyClusterMovement(world: WorldState): void {
       // (X pass then Y pass with sub-tick safety). It receives prevX/prevY and
       // dtSec to integrate position per-axis.
       const wasGrounded = cluster.isGroundedFlag === 1;
+      // Grounding for this tick is rebuilt by collision passes below.
+      resetClusterGroundedFlag(cluster);
       const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY, dtSec);
 
       // Thin platform / world floor check (position already integrated by solid wall resolver)

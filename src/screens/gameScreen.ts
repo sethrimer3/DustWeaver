@@ -1475,6 +1475,7 @@ export function startGameScreen(
           inputLeft: inputState.isKeyA,
           inputRight: inputState.isKeyD,
           inputDown: inputState.isKeyS,
+          inputShift: inputState.isSprintHeldFlag,
           inputLeftClick: inputState.isMouseDownFlag === 1,
           inputRightClick: inputState.isRightMouseDownFlag === 1,
           inputGrapple: inputState.isGrappleHeldFlag === 1,
