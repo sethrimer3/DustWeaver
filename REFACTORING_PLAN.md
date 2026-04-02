@@ -66,14 +66,15 @@ spawning helpers, room-loading, camera/rendering orchestration, the main
 
 ### Proposed splits
 
-- [ ] **`src/screens/gameSpawn.ts`** — Extract the three particle-spawning
+- [x] **`src/screens/gameSpawn.ts`** — Extract the three particle-spawning
   helpers: `spawnClusterParticles`, `spawnLoadoutParticles`,
   `spawnWeaveLoadoutParticles`, and `spawnBackgroundFluidParticles`.  These
   are pure sim-setup functions with no render dependency.
+  — completed by copilot on 2026-04-02
 
-- [ ] **`src/screens/gameRoom.ts`** — Extract `loadRoomWalls`, the room
-  transition logic (teleport / tunnel detection), and enemy spawn logic that
-  is currently embedded in the main `startGameScreen` closure.
+- [x] **`src/screens/gameRoom.ts`** — Extract `loadRoomWalls`, `loadRoomHazards`,
+  `worldBgColor`, `drawTunnelDarkness`, `screenToWorld` and related constants.
+  — completed by copilot on 2026-04-02
 
 - [ ] **`src/screens/gameRender.ts`** — Extract the rendering orchestration
   block (all canvas draw calls, background, HUD, tunnel darkness, debug
@@ -94,9 +95,10 @@ and player-sprite rotation — all in one file.
 
 ### Proposed splits
 
-- [ ] **`src/sim/clusters/movementConstants.ts`** — All tunable numeric
+- [x] **`src/sim/clusters/movementConstants.ts`** — All tunable numeric
   constants (gravity, jump heights, fall speeds, coyote time, wall-slide
-  cap, wall-jump force, etc.).  Pure data, no logic.
+  cap, wall-jump force, etc.) plus debug overrides.  Pure data, no logic.
+  — completed by copilot on 2026-04-02
 
 - [ ] **`src/sim/clusters/playerMovement.ts`** — Player-specific movement
   functions: `tickPlayerMovement`, jump/fall logic, wall-slide, wall-jump,
@@ -108,6 +110,11 @@ and player-sprite rotation — all in one file.
 - [ ] Keep `movement.ts` as a thin re-export barrel (`export * from
   './playerMovement'; export * from './enemyMovement';`) to avoid
   updating every call-site.
+
+- [x] **`src/sim/clusters/movementCollision.ts`** — Collision helper functions:
+  `resolveClusterFloorCollision`, `resetClusterGroundedFlag`, `resolveWallsX`,
+  `resolveWallsY`, `resolveClusterSolidWallCollision`.
+  — completed by copilot on 2026-04-02
 
 ---
 
