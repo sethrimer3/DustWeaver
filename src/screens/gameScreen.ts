@@ -38,6 +38,7 @@ import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize } from '../ui/renderSettings';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect } from '../render/effects/theroEffectManager';
+import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
 
 const FIXED_DT_MS = 16.666;
 
@@ -167,8 +168,7 @@ function spawnLoadoutParticles(
   rng: RngState,
 ): void {
   if (loadout.length === 0) {
-    // Fallback to Physical if somehow the loadout is empty
-    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, ParticleKind.Physical, totalCount, rng);
+    // Empty loadout — spawn no particles (brand new profile with nothing)
     return;
   }
 
@@ -705,7 +705,28 @@ export function startGameScreen(
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
     const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
     world.clusters.push(playerCluster);
-    spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+
+    // Spawn player dust particles based on capacity model.
+    // If the player has dust containers and unlocked dust, use capacity-based spawning.
+    // If the player has a weave loadout with bound dust, use that for weave-slot assignment.
+    // Otherwise (brand new profile with nothing), spawn no particles.
+    const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
+    const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
+      || playerWeaveLoadout.secondary.boundDust.length > 0;
+
+    if (hasWeaveBoundDust) {
+      // Player has dust bound to weaves — use weave loadout spawning
+      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+    } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
+      // Player has unlocked dust and capacity but no weave bindings.
+      // Spawn particles based on capacity (e.g., auto-assigned Golden Dust).
+      const dustKind = progress.unlockedDustKinds[0];
+      const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
+      if (particleCount > 0) {
+        spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+      }
+    }
+    // else: brand new profile with nothing — no particles spawned
 
     // Apply weave IDs to world state for combat dispatch
     world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
@@ -1552,14 +1573,39 @@ export function startGameScreen(
       ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
     }
 
-    // ── Dust container display (top-left) ─────────────────────────────────────
+    // ── Player health bar in HUD (top-left, above dust display) ─────────────
+    {
+      const playerForHealth = world.clusters[0];
+      if (playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
+        const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
+        const hudHealthBarX = 8;
+        const hudHealthBarY = 8;
+        const hudHealthBarWidth = 50;
+        const hudHealthBarHeight = 4;
+
+        ctx.save();
+        // Background
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(hudHealthBarX, hudHealthBarY, hudHealthBarWidth, hudHealthBarHeight);
+        // Health fill
+        ctx.fillStyle = '#00ff88';
+        ctx.fillRect(hudHealthBarX, hudHealthBarY, hudHealthBarWidth * healthFraction, hudHealthBarHeight);
+        // Border
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(hudHealthBarX, hudHealthBarY, hudHealthBarWidth, hudHealthBarHeight);
+        ctx.restore();
+      }
+    }
+
+    // ── Dust container display (top-left, below health bar) ───────────────────
     const dustCount = getPlayerDustCount();
     const fullContainers = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
     const partialDust = dustCount % DUST_PARTICLES_PER_CONTAINER;
     const dustSquareSize = 8;
     const dustPadding = 2;
     const dustStartX = 8;
-    const dustStartY = 8;
+    const dustStartY = 15; // Below health bar (8 + 4 height + 3 gap)
 
     ctx.save();
     for (let i = 0; i < fullContainers + (partialDust > 0 ? 1 : 0); i++) {
@@ -1591,12 +1637,18 @@ export function startGameScreen(
     }
     ctx.restore();
 
-    // ── Health bar display (only when damaged) ───────────────────────────────
+    // ── Enemy health bar display (only when damaged) ──────────────────────────
+    // Player health bar is in the HUD; this loop draws over-character bars for enemies only.
     // Uses tick-based timing for determinism (HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS ticks)
     const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
     for (let ci = 0; ci < world.clusters.length; ci++) {
       const cluster = world.clusters[ci];
       if (cluster.isAliveFlag === 0) continue;
+      // Skip the player — their health bar is in the HUD, not over their character
+      if (cluster.isPlayerFlag === 1) {
+        prevHealthMap.set(cluster.entityId, cluster.healthPoints);
+        continue;
+      }
 
       // Check for health changes to trigger display
       const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
@@ -1619,9 +1671,8 @@ export function startGameScreen(
       // Background
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(barX, barY, barWidth, barHeight);
-      // Health fill
-      const healthColor = cluster.isPlayerFlag === 1 ? '#00ff88' : '#ff4444';
-      ctx.fillStyle = healthColor;
+      // Health fill — enemies only (player skipped above)
+      ctx.fillStyle = '#ff4444';
       ctx.fillRect(barX, barY, barWidth * healthFraction, barHeight);
       // Border
       ctx.strokeStyle = 'rgba(255,255,255,0.3)';

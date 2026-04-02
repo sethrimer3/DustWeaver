@@ -1,10 +1,18 @@
 /**
  * Player progression state — level, dust slots, loadout, and world progress.
+ *
+ * Cleanly separates:
+ *   - Passive techniques (e.g., Cycle) — always active once unlocked
+ *   - Dust types (e.g., Golden Dust, Fire Dust) — unlocked independently
+ *   - Active weaves (e.g., Spire, Aegis) — bound to LMB/RMB
+ *   - Dust containers — each grants 4 capacity; different dust types cost different amounts
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
 import { getSlotCost, totalSlotCost } from '../sim/particles/slotCost';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
+import { PassiveTechniqueId } from './passiveTechniques';
+import { WeaveId } from '../sim/weaves/weaveDefinition';
 
 export { getSlotCost, totalSlotCost };
 
@@ -58,14 +66,37 @@ export interface PlayerProgress {
   unlockedDustKinds: ParticleKind[];
   /** Developer override: allow equipping all dust kinds in loadout UI. */
   isDevModeDustUnlocked: boolean;
+
+  // ---- Progression system fields (added for early-game rework) ----
+
+  /** Passive techniques the player has unlocked (e.g., 'cycle'). */
+  unlockedPassiveTechniques: PassiveTechniqueId[];
+  /** Active weave IDs the player has unlocked and can equip. */
+  unlockedActiveWeaves: WeaveId[];
+  /** Number of dust containers the player owns. Total capacity = dustContainerCount × 4. */
+  dustContainerCount: number;
+  /**
+   * Whether the early auto-assignment step has been completed.
+   * When Golden Dust + 2 containers are first unlocked, they are auto-configured.
+   * This flag prevents re-triggering the auto-assignment on subsequent loads.
+   */
+  hasCompletedEarlyAutoAssignment: boolean;
 }
 
 // ---- Factory / helpers ---------------------------------------------------
 
 /**
- * Creates the default starting PlayerProgress (level 1, Fire + Ice loadout).
- * Total slot cost = 2 (Fire) + 2 (Ice) = 4, which fits within the 5-slot budget.
- * Only World 1 Level 1 is unlocked initially.
+ * Creates the default starting PlayerProgress for a brand new profile.
+ *
+ * The player starts as a blank slate:
+ *   - 0 dust containers (0 total capacity)
+ *   - No unlocked dust types
+ *   - No unlocked active weaves
+ *   - No unlocked passive techniques
+ *   - No active weave assignments (LMB/RMB both empty)
+ *   - No loadout choices
+ *
+ * The early progression sequence will unlock things step by step.
  */
 export function createDefaultProgress(): PlayerProgress {
   const level = 1;
@@ -83,6 +114,11 @@ export function createDefaultProgress(): PlayerProgress {
     characterId: 'knight',
     unlockedDustKinds: [],
     isDevModeDustUnlocked: false,
+    // New profile starts with nothing unlocked
+    unlockedPassiveTechniques: [],
+    unlockedActiveWeaves: [],
+    dustContainerCount: 0,
+    hasCompletedEarlyAutoAssignment: false,
   };
 }
 

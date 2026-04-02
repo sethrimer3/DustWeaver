@@ -92,9 +92,22 @@ export function updateParticleLifetimes(world: WorldState): void {
   } = world;
 
   // ---- Respawn delay countdown (combat-killed particles) -----------------
+  // Player-owned dust only recharges while the player is grounded.
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 1) continue;          // only dead particles
     if (respawnDelayTicks[i] <= 0) continue;     // no pending respawn
+
+    // Check if this particle is owned by the player and player is airborne.
+    // If so, freeze the respawn countdown (dust only recharges while grounded).
+    const respawnOwnerId = ownerEntityId[i];
+    let isOwnerPlayerAirborne = false;
+    for (let ci = 0; ci < clusters.length; ci++) {
+      if (clusters[ci].entityId === respawnOwnerId && clusters[ci].isPlayerFlag === 1) {
+        isOwnerPlayerAirborne = clusters[ci].isGroundedFlag === 0;
+        break;
+      }
+    }
+    if (isOwnerPlayerAirborne) continue; // skip countdown while player is airborne
 
     respawnDelayTicks[i] -= 1.0;
     if (respawnDelayTicks[i] > 0) continue;
