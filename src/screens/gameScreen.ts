@@ -39,6 +39,7 @@ import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize } from '../ui/renderSettings';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect } from '../render/effects/theroEffectManager';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
+import { performEarlyAutoAssignment } from '../progression/unlocks';
 
 const FIXED_DT_MS = 16.666;
 
@@ -1339,8 +1340,9 @@ export function startGameScreen(
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
-      // Skillbook pickup (lobby progression): learn Golden Dust when collected.
-      if (progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
+      // Skillbook pickup (lobby progression): triggers the early auto-assignment.
+      // Grants Cycle passive, Golden Dust, and 2 containers on first pickup.
+      if (progress && !progress.hasCompletedEarlyAutoAssignment) {
         const roomSkillBooks = currentRoom.skillBooks ?? [];
         for (let i = 0; i < roomSkillBooks.length; i++) {
           const sb = roomSkillBooks[i];
@@ -1349,18 +1351,24 @@ export function startGameScreen(
           const dx = playerForTomb.positionXWorld - sx;
           const dy = playerForTomb.positionYWorld - sy;
           if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
-            progress.unlockedDustKinds = [...progress.unlockedDustKinds, ParticleKind.Physical];
-            progress.loadout = Array.from(new Set([...progress.loadout, ParticleKind.Physical]));
-            if (!progress.weaveLoadout.primary.boundDust.includes(ParticleKind.Physical)) {
-              progress.weaveLoadout.primary.boundDust = [...progress.weaveLoadout.primary.boundDust, ParticleKind.Physical];
-            }
-            playerWeaveLoadout = JSON.parse(JSON.stringify(progress.weaveLoadout));
+            // Perform the early auto-assignment: Cycle + Golden Dust + 2 containers
+            const goldenDustCount = performEarlyAutoAssignment(progress);
+            // Spawn the auto-assigned Golden Dust particles immediately
+            spawnClusterParticles(
+              world,
+              playerForTomb.entityId,
+              playerForTomb.positionXWorld,
+              playerForTomb.positionYWorld,
+              ParticleKind.Physical,
+              goldenDustCount,
+              levelRng,
+            );
             break;
           }
         }
       }
 
-      // Dust container pickup: grants +4 dust particles (one full HUD container).
+      // Dust container pickup: grants +1 dust container (+4 capacity) and spawns particles.
       const roomDustContainers = currentRoom.dustContainers ?? [];
       for (let i = 0; i < roomDustContainers.length; i++) {
         const pickupKey = `${currentRoom.id}:${i}`;
@@ -1373,6 +1381,10 @@ export function startGameScreen(
         const dy = playerForTomb.positionYWorld - cy;
         if (dx * dx + dy * dy <= DUST_CONTAINER_PICKUP_RADIUS_WORLD * DUST_CONTAINER_PICKUP_RADIUS_WORLD) {
           collectedDustContainerKeySet.add(pickupKey);
+          // Grant a container to the player's progression state
+          if (progress) {
+            progress.dustContainerCount += 1;
+          }
           spawnClusterParticles(
             world,
             playerForTomb.entityId,
