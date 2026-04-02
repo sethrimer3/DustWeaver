@@ -319,6 +319,7 @@ const _topSurfaceOut = { snappedY: 0 };
 export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorld: number): void {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return;
+  const playerEntityId = player.entityId;
 
   const isRefireDuringRetract = world.isGrappleRetractingFlag === 1;
   // Grapple charge: cannot fire when spent, except while retracting.
@@ -404,7 +405,9 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
       world.ageTicks[idx]           = 0.0;
       world.lifetimeTicks[idx]      = GRAPPLE_CHAIN_LIFETIME_TICKS;
       world.kindBuffer[idx]         = ParticleKind.Gold;
+      world.ownerEntityId[idx]      = playerEntityId;
       world.behaviorMode[idx]       = BEHAVIOR_MODE_GRAPPLE_CHAIN;
+      world.isTransientFlag[idx]    = 1;
       world.particleDurability[idx] = chainProfile.toughness;
       world.respawnDelayTicks[idx]  = 0;
       world.velocityXWorld[idx]     = 0.0;
@@ -832,6 +835,8 @@ function startGrappleMiss(world: WorldState, dirX: number, dirY: number): void {
   const player = world.clusters[0];
   if (player === undefined) return;
   if (world.grappleParticleStartIndex < 0) return;
+  const playerEntityId = player.entityId;
+  const chainProfile = getElementProfile(ParticleKind.Gold);
 
   world.isGrappleMissActiveFlag = 1;
   world.isGrappleRetractingFlag = 0;
@@ -857,6 +862,13 @@ function startGrappleMiss(world: WorldState, dirX: number, dirY: number): void {
     const idx = start + i;
     world.isAliveFlag[idx] = 1;
     world.ageTicks[idx] = 0.0;
+    world.lifetimeTicks[idx] = GRAPPLE_CHAIN_LIFETIME_TICKS;
+    world.kindBuffer[idx] = ParticleKind.Gold;
+    world.ownerEntityId[idx] = playerEntityId;
+    world.behaviorMode[idx] = BEHAVIOR_MODE_GRAPPLE_CHAIN;
+    world.isTransientFlag[idx] = 1;
+    world.particleDurability[idx] = chainProfile.toughness;
+    world.respawnDelayTicks[idx] = 0;
   }
 }
 
@@ -875,6 +887,7 @@ function cancelGrappleMiss(world: WorldState): void {
 function startGrappleRetract(world: WorldState): void {
   const player = world.clusters[0];
   if (player === undefined || world.grappleParticleStartIndex < 0) return;
+  const playerEntityId = player.entityId;
 
   world.isGrappleMissActiveFlag = 1;
   world.isGrappleRetractingFlag = 1;
@@ -895,7 +908,9 @@ function startGrappleRetract(world: WorldState): void {
     world.ageTicks[idx]           = 0.0;
     world.lifetimeTicks[idx]      = GRAPPLE_CHAIN_LIFETIME_TICKS;
     world.kindBuffer[idx]         = ParticleKind.Gold;
+    world.ownerEntityId[idx]      = playerEntityId;
     world.behaviorMode[idx]       = BEHAVIOR_MODE_GRAPPLE_CHAIN;
+    world.isTransientFlag[idx]    = 1;
     world.particleDurability[idx] = chainProfile.toughness;
     world.respawnDelayTicks[idx]  = 0;
   }
