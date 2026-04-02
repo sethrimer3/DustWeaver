@@ -1586,26 +1586,27 @@ export function startGameScreen(
     }
 
     // ── Player health bar in HUD (top-left, above dust display) ─────────────
+    const HUD_HEALTH_BAR_X_PX = 8;
+    const HUD_HEALTH_BAR_Y_PX = 8;
+    const HUD_HEALTH_BAR_WIDTH_PX = 50;
+    const HUD_HEALTH_BAR_HEIGHT_PX = 4;
+    const HUD_HEALTH_DUST_GAP_PX = 3;
     {
       const playerForHealth = world.clusters[0];
       if (playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
         const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
-        const hudHealthBarX = 8;
-        const hudHealthBarY = 8;
-        const hudHealthBarWidth = 50;
-        const hudHealthBarHeight = 4;
 
         ctx.save();
         // Background
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(hudHealthBarX, hudHealthBarY, hudHealthBarWidth, hudHealthBarHeight);
+        ctx.fillRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX, HUD_HEALTH_BAR_HEIGHT_PX);
         // Health fill
         ctx.fillStyle = '#00ff88';
-        ctx.fillRect(hudHealthBarX, hudHealthBarY, hudHealthBarWidth * healthFraction, hudHealthBarHeight);
+        ctx.fillRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX * healthFraction, HUD_HEALTH_BAR_HEIGHT_PX);
         // Border
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 0.5;
-        ctx.strokeRect(hudHealthBarX, hudHealthBarY, hudHealthBarWidth, hudHealthBarHeight);
+        ctx.strokeRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX, HUD_HEALTH_BAR_HEIGHT_PX);
         ctx.restore();
       }
     }
@@ -1617,7 +1618,7 @@ export function startGameScreen(
     const dustSquareSize = 8;
     const dustPadding = 2;
     const dustStartX = 8;
-    const dustStartY = 15; // Below health bar (8 + 4 height + 3 gap)
+    const dustStartY = HUD_HEALTH_BAR_Y_PX + HUD_HEALTH_BAR_HEIGHT_PX + HUD_HEALTH_DUST_GAP_PX;
 
     ctx.save();
     for (let i = 0; i < fullContainers + (partialDust > 0 ? 1 : 0); i++) {
