@@ -289,3 +289,4 @@ Boss chain simulation and rendering data preparation mixed together.
 | Date | Agent | Summary |
 |------|-------|---------|
 | 2026-04-02 | copilot | Extracted `gameSpawn.ts`, `gameRoom.ts` from `gameScreen.ts`; extracted `movementConstants.ts`, `movementCollision.ts` from `movement.ts`; split `combat.ts` → `playerCombat.ts` + `enemyCombat.ts`; split `rooms.ts` into `rooms/` directory (lobbyRoom, world1Rooms, world2Rooms, world3Rooms, bossRooms, roomBuilders); split `elementProfiles.ts` into `elementProfiles/equippableProfiles.ts` + `environmentalProfiles.ts` + `elementProfileTypes.ts`; extracted `elementEffectSpawners.ts` from `forces.ts` |
+| 2026-04-02 | copilot | Fixed `rooms.ts` barrel: removed duplicate inline room definitions left over from the prior split; resolved export/import conflicts that broke the build. `rooms.ts` is now a clean ~45-line barrel that imports from `rooms/` sub-files and assembles `ROOM_REGISTRY`. |
