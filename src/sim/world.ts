@@ -3,7 +3,7 @@ import { ClusterState } from './clusters/state';
 import { RngState, createRng } from './rng';
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
-export const MAX_WALLS = 64;
+export const MAX_WALLS = 128;
 
 /** Maximum number of spike hazards per room. */
 export const MAX_SPIKES = 32;
