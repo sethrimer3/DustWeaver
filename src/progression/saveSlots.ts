@@ -63,6 +63,15 @@ export function saveSaveSlot(slotIndex: number, data: SaveSlotData): void {
   }
 }
 
+/** Deletes a save slot from localStorage. */
+export function deleteSaveSlot(slotIndex: number): void {
+  try {
+    localStorage.removeItem(slotKey(slotIndex));
+  } catch {
+    // Storage disabled — silently ignore.
+  }
+}
+
 /** Creates a brand-new save slot with default progress and zero play time. */
 export function createNewSaveSlot(): SaveSlotData {
   return {
