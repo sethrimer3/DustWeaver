@@ -14,10 +14,12 @@ import {
   loadSaveSlot,
   createNewSaveSlot,
   saveSaveSlot,
+  deleteSaveSlot,
   formatPlayTimeMs,
   formatLastPlayed,
   SaveSlotData,
 } from '../progression/saveSlots';
+import { BUILD_NUMBER } from '../build-info';
 import {
   getRenderSizeOptions,
   getSelectedRenderSize,
@@ -155,6 +157,17 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   `;
   container.appendChild(settingsEl);
 
+  const buildBadgeEl = document.createElement('div');
+  buildBadgeEl.textContent = `Build ${BUILD_NUMBER}`;
+  buildBadgeEl.style.cssText = `
+    position: absolute; top: 1rem; left: 1rem;
+    background: rgba(0,0,0,0.45); border: 1px solid rgba(212,168,75,0.35);
+    color: rgba(212,168,75,0.9); padding: 0.45rem 0.7rem; font-size: 0.8rem;
+    letter-spacing: 0.08em; border-radius: 2px; text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(212,168,75,0.25); pointer-events: none;
+  `;
+  container.appendChild(buildBadgeEl);
+
   // ── Build menu buttons ───────────────────────────────────────────────────
   function createMenuButton(label: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
@@ -285,16 +298,93 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     `;
     saveSlotsEl.appendChild(heading);
 
+    function showDeleteConfirmation(slotIndex: number): void {
+      const confirmOverlayEl = document.createElement('div');
+      confirmOverlayEl.style.cssText = `
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.7); z-index: 4;
+      `;
+
+      const panelEl = document.createElement('div');
+      panelEl.style.cssText = `
+        min-width: 340px; background: rgba(0,0,0,0.85); border: 1px solid rgba(212,168,75,0.55);
+        border-radius: 3px; padding: 1.1rem 1.2rem 1rem; text-align: center;
+      `;
+
+      const promptEl = document.createElement('div');
+      promptEl.textContent = 'DELETE Save File?';
+      promptEl.style.cssText = `
+        color: #d4a84b; font-size: 1rem; letter-spacing: 0.08em; margin-bottom: 0.9rem;
+        text-transform: uppercase;
+      `;
+      panelEl.appendChild(promptEl);
+
+      const actionsEl = document.createElement('div');
+      actionsEl.style.cssText = 'display: flex; gap: 0.7rem; justify-content: center;';
+      panelEl.appendChild(actionsEl);
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = `
+        background: transparent; border: 1px solid rgba(212,168,75,0.35);
+        color: rgba(212,168,75,0.7); padding: 0.45rem 1rem; font-size: 0.85rem;
+        font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.06em;
+      `;
+      cancelBtn.addEventListener('click', () => {
+        if (confirmOverlayEl.parentElement !== null) {
+          confirmOverlayEl.parentElement.removeChild(confirmOverlayEl);
+        }
+      });
+      actionsEl.appendChild(cancelBtn);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'DELETE';
+      deleteBtn.style.cssText = `
+        background: rgba(115,0,0,0.35); border: 1px solid rgba(225,88,88,0.65);
+        color: #ffb3b3; padding: 0.45rem 1rem; font-size: 0.85rem;
+        font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.06em;
+      `;
+      actionsEl.appendChild(deleteBtn);
+
+      let hasConfirmedDeletion = false;
+      deleteBtn.addEventListener('click', () => {
+        if (!hasConfirmedDeletion) {
+          hasConfirmedDeletion = true;
+          promptEl.textContent = 'Are you sure?';
+          deleteBtn.textContent = 'DELETE!';
+          return;
+        }
+        deleteSaveSlot(slotIndex);
+        buildSaveSlotUI();
+      });
+
+      panelEl.addEventListener('click', (e) => e.stopPropagation());
+      confirmOverlayEl.addEventListener('click', () => {
+        if (confirmOverlayEl.parentElement !== null) {
+          confirmOverlayEl.parentElement.removeChild(confirmOverlayEl);
+        }
+      });
+
+      confirmOverlayEl.appendChild(panelEl);
+      saveSlotsEl.appendChild(confirmOverlayEl);
+    }
+
     for (let i = 0; i < SAVE_SLOT_COUNT; i++) {
       const slotData = loadSaveSlot(i);
       const hasData = slotData !== null;
+
+      const slotRowEl = document.createElement('div');
+      slotRowEl.style.cssText = `
+        display: flex; align-items: stretch; gap: 0.45rem; width: 100%;
+        justify-content: center;
+      `;
 
       const slotBtn = document.createElement('button');
       slotBtn.style.cssText = `
         background: rgba(0,0,0,0.5); border: 1px solid rgba(212,168,75,0.3);
         color: #d4a84b; padding: 1.2rem 2rem;
         font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer; transition: all 0.25s;
-        border-radius: 3px; min-width: 340px; text-align: center;
+        border-radius: 3px; min-width: 300px; text-align: center;
       `;
 
       if (hasData) {
@@ -339,7 +429,31 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
         callbacks.onPlay(slotIndex, data);
       });
 
-      saveSlotsEl.appendChild(slotBtn);
+      slotRowEl.appendChild(slotBtn);
+
+      const deleteSlotBtn = document.createElement('button');
+      deleteSlotBtn.textContent = 'x';
+      deleteSlotBtn.title = `Delete Save Slot ${slotIndex + 1}`;
+      deleteSlotBtn.style.cssText = `
+        width: 44px; min-width: 44px; border-radius: 3px; border: 1px solid rgba(225,88,88,0.6);
+        background: rgba(90,0,0,0.42); color: #ffb3b3; cursor: pointer;
+        font-family: 'Cinzel', serif; font-size: 1rem; text-transform: uppercase;
+      `;
+      deleteSlotBtn.addEventListener('mouseenter', () => {
+        deleteSlotBtn.style.background = 'rgba(130,0,0,0.5)';
+        deleteSlotBtn.style.borderColor = 'rgba(255,130,130,0.85)';
+      });
+      deleteSlotBtn.addEventListener('mouseleave', () => {
+        deleteSlotBtn.style.background = 'rgba(90,0,0,0.42)';
+        deleteSlotBtn.style.borderColor = 'rgba(225,88,88,0.6)';
+      });
+      deleteSlotBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showDeleteConfirmation(slotIndex);
+      });
+
+      slotRowEl.appendChild(deleteSlotBtn);
+      saveSlotsEl.appendChild(slotRowEl);
     }
 
     // Back button
