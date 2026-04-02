@@ -12,7 +12,568 @@
 import { RoomDef } from './roomDef';
 import { THERO_SHOWCASE_ROOMS } from './effectShowcaseRooms';
 
-// ── Re-exports (backward compatibility) ──────────────────────────────────────
+// ── Tunnel constants ──────────────────────────────────────────────────────────
+
+/** Height of tunnel openings in blocks. */
+const TUNNEL_HEIGHT_BLOCKS = 5;
+/** Extra blocks of tunnel corridor extending past the room boundary. */
+const TUNNEL_OVERHANG_BLOCKS = 4;
+
+// ── Helper: build boundary walls with optional tunnel openings ──────────────
+
+interface TunnelOpening {
+  direction: 'left' | 'right';
+  positionBlock: number;
+  sizeBlocks: number;
+}
+
+/**
+ * Creates boundary wall segments for a room, with gaps for tunnel openings.
+ * Returns wall definitions in block units.
+ *
+ * Room layout convention:
+ *  - Top wall:    row 0, spans full width
+ *  - Bottom wall: row (h-1), spans full width
+ *  - Left wall:   col 0, spans full height (minus tunnels)
+ *  - Right wall:  col (w-1), spans full height (minus tunnels)
+ */
+function buildBoundaryWalls(
+  widthBlocks: number,
+  heightBlocks: number,
+  tunnels: readonly TunnelOpening[],
+): { xBlock: number; yBlock: number; wBlock: number; hBlock: number }[] {
+  const walls: { xBlock: number; yBlock: number; wBlock: number; hBlock: number }[] = [];
+
+  // Top wall (full width)
+  walls.push({ xBlock: 0, yBlock: 0, wBlock: widthBlocks, hBlock: 1 });
+  // Bottom wall (full width)
+  walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1 });
+
+  // Left wall — split around tunnel openings
+  const leftTunnels = tunnels.filter(t => t.direction === 'left');
+  buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
+
+  // Right wall — split around tunnel openings
+  const rightTunnels = tunnels.filter(t => t.direction === 'right');
+  buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
+
+  return walls;
+}
+
+function buildSideWall(
+  out: { xBlock: number; yBlock: number; wBlock: number; hBlock: number }[],
+  xBlock: number,
+  startYBlock: number,
+  totalHeightBlocks: number,
+  tunnels: readonly TunnelOpening[],
+): void {
+  // Sort tunnels by position
+  const sorted = [...tunnels].sort((a, b) => a.positionBlock - b.positionBlock);
+
+  let currentY = startYBlock;
+  const endY = startYBlock + totalHeightBlocks;
+
+  for (const tunnel of sorted) {
+    const tunnelTop = tunnel.positionBlock;
+    const tunnelBottom = tunnel.positionBlock + tunnel.sizeBlocks;
+
+    // Wall segment above tunnel
+    if (tunnelTop > currentY) {
+      out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: tunnelTop - currentY });
+    }
+    currentY = tunnelBottom;
+  }
+
+  // Wall segment below last tunnel
+  if (currentY < endY) {
+    out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: endY - currentY });
+  }
+}
+
+/**
+ * Builds tunnel corridor walls (top and bottom lining blocks extending
+ * past the room boundary for visual continuity).
+ */
+function buildTunnelWalls(
+  roomWidthBlocks: number,
+  tunnels: readonly TunnelOpening[],
+): { xBlock: number; yBlock: number; wBlock: number; hBlock: number }[] {
+  const walls: { xBlock: number; yBlock: number; wBlock: number; hBlock: number }[] = [];
+
+  for (const tunnel of tunnels) {
+    const topY = tunnel.positionBlock - 1;    // ceiling row
+    const bottomY = tunnel.positionBlock + tunnel.sizeBlocks; // floor row
+
+    if (tunnel.direction === 'left') {
+      // Tunnel extends leftward from col 0
+      walls.push({ xBlock: -TUNNEL_OVERHANG_BLOCKS, yBlock: topY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
+      walls.push({ xBlock: -TUNNEL_OVERHANG_BLOCKS, yBlock: bottomY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
+    } else {
+      // Tunnel extends rightward from col (w-1)
+      walls.push({ xBlock: roomWidthBlocks - 1, yBlock: topY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
+      walls.push({ xBlock: roomWidthBlocks - 1, yBlock: bottomY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
+    }
+  }
+
+  return walls;
+}
+
+// ── Room definitions ─────────────────────────────────────────────────────────
+
+const LOBBY_WIDTH = 48 * 3;
+const LOBBY_HEIGHT = 24 * 3;
+const LOBBY_TUNNEL_Y = 16; // tunnel opening top row (above the floor)
+
+const W1_ROOM_WIDTH = 40;
+const W1_ROOM_HEIGHT = 24;
+
+const W2_ROOM_WIDTH = 40;
+const W2_ROOM_HEIGHT = 24;
+
+const W3_ROOM_WIDTH = 44;
+const W3_ROOM_HEIGHT = 24;
+
+// ── Lobby (World 0) ──────────────────────────────────────────────────────────
+
+const lobbyTunnels: TunnelOpening[] = [
+  { direction: 'right', positionBlock: LOBBY_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+  { direction: 'left',  positionBlock: LOBBY_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+];
+
+const lobbyBoundary = buildBoundaryWalls(LOBBY_WIDTH, LOBBY_HEIGHT, lobbyTunnels);
+const lobbyTunnelWalls = buildTunnelWalls(LOBBY_WIDTH, lobbyTunnels);
+
+export const ROOM_LOBBY: RoomDef = {
+  id: 'lobby',
+  name: 'Stone Hollow',
+  worldNumber: 0,
+  widthBlocks: LOBBY_WIDTH,
+  heightBlocks: LOBBY_HEIGHT,
+  walls: [
+    ...lobbyBoundary,
+    ...lobbyTunnelWalls,
+
+    // ── Stalactite ceiling — irregular hanging formations across full width ──
+    { xBlock: 2,   yBlock: 1, wBlock: 3, hBlock: 6  },
+    { xBlock: 7,   yBlock: 1, wBlock: 1, hBlock: 9  },
+    { xBlock: 10,  yBlock: 1, wBlock: 2, hBlock: 4  },
+    { xBlock: 14,  yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 19,  yBlock: 1, wBlock: 1, hBlock: 8  },
+    { xBlock: 23,  yBlock: 1, wBlock: 4, hBlock: 3  },
+    { xBlock: 29,  yBlock: 1, wBlock: 2, hBlock: 7  },
+    { xBlock: 33,  yBlock: 1, wBlock: 1, hBlock: 11 },
+    { xBlock: 37,  yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 42,  yBlock: 1, wBlock: 2, hBlock: 9  },
+    { xBlock: 46,  yBlock: 1, wBlock: 4, hBlock: 4  },
+    { xBlock: 52,  yBlock: 1, wBlock: 1, hBlock: 7  },
+    { xBlock: 55,  yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 60,  yBlock: 1, wBlock: 2, hBlock: 8  },
+    { xBlock: 64,  yBlock: 1, wBlock: 3, hBlock: 6  },
+    { xBlock: 69,  yBlock: 1, wBlock: 2, hBlock: 4  },
+    { xBlock: 71,  yBlock: 1, wBlock: 1, hBlock: 13 },  // dramatic center spike
+    { xBlock: 73,  yBlock: 1, wBlock: 2, hBlock: 7  },
+    { xBlock: 77,  yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 82,  yBlock: 1, wBlock: 2, hBlock: 8  },
+    { xBlock: 86,  yBlock: 1, wBlock: 3, hBlock: 6  },
+    { xBlock: 91,  yBlock: 1, wBlock: 1, hBlock: 5  },
+    { xBlock: 94,  yBlock: 1, wBlock: 4, hBlock: 3  },
+    { xBlock: 100, yBlock: 1, wBlock: 2, hBlock: 9  },
+    { xBlock: 104, yBlock: 1, wBlock: 1, hBlock: 6  },
+    { xBlock: 107, yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 112, yBlock: 1, wBlock: 2, hBlock: 7  },
+    { xBlock: 116, yBlock: 1, wBlock: 1, hBlock: 10 },
+    { xBlock: 119, yBlock: 1, wBlock: 4, hBlock: 4  },
+    { xBlock: 124, yBlock: 1, wBlock: 2, hBlock: 6  },
+    { xBlock: 128, yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 133, yBlock: 1, wBlock: 1, hBlock: 8  },
+    { xBlock: 136, yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 141, yBlock: 1, wBlock: 2, hBlock: 7  },
+
+    // ── Left cave wall — organic insets above tunnel ──────────────────────
+    { xBlock: 1, yBlock: 3,  wBlock: 4, hBlock: 3 },
+    { xBlock: 1, yBlock: 8,  wBlock: 3, hBlock: 2 },
+    { xBlock: 1, yBlock: 12, wBlock: 5, hBlock: 3 },
+
+    // ── Left side ledge path — 4 steps from floor (y=45) to tunnel (y=16–20)
+    // Each step surface is 6 blocks apart = 6 × BLOCK_SIZE_SMALL(8) = 48 world units,
+    // just within the ~50-world-unit maximum jump height.
+    // Player ascends: floor(y=45) → step4(y=39) → step3(y=33) → step2(y=27) → tunnel access(y=21)
+    { xBlock: 1, yBlock: 22, wBlock: 14, hBlock: 2 },  // surface y=21 (tunnel access)
+    { xBlock: 1, yBlock: 28, wBlock: 17, hBlock: 2 },  // surface y=27
+    { xBlock: 1, yBlock: 34, wBlock: 19, hBlock: 2 },  // surface y=33
+    { xBlock: 1, yBlock: 40, wBlock: 21, hBlock: 2 },  // surface y=39
+
+    // ── Right cave wall — organic insets above tunnel ─────────────────────
+    { xBlock: 139, yBlock: 3,  wBlock: 4, hBlock: 3 },
+    { xBlock: 140, yBlock: 8,  wBlock: 3, hBlock: 2 },
+    { xBlock: 138, yBlock: 12, wBlock: 5, hBlock: 3 },
+
+    // ── Right side ledge path (mirror of left) ────────────────────────────
+    { xBlock: 129, yBlock: 22, wBlock: 14, hBlock: 2 },  // x = 143−14
+    { xBlock: 126, yBlock: 28, wBlock: 17, hBlock: 2 },  // x = 143−17
+    { xBlock: 124, yBlock: 34, wBlock: 19, hBlock: 2 },  // x = 143−19
+    { xBlock: 122, yBlock: 40, wBlock: 21, hBlock: 2 },  // x = 143−21
+
+    // ── Main cave floor (fills from y=46 to room bottom) ─────────────────
+    { xBlock: 1, yBlock: 46, wBlock: 142, hBlock: 25 },
+
+    // ── Rocky floor surface — irregular bumps atop the main floor ─────────
+    { xBlock: 8,   yBlock: 44, wBlock: 5, hBlock: 2 },
+    { xBlock: 22,  yBlock: 44, wBlock: 6, hBlock: 2 },
+    { xBlock: 38,  yBlock: 44, wBlock: 4, hBlock: 2 },
+    { xBlock: 53,  yBlock: 44, wBlock: 5, hBlock: 2 },
+    { xBlock: 85,  yBlock: 44, wBlock: 5, hBlock: 2 },
+    { xBlock: 100, yBlock: 44, wBlock: 5, hBlock: 2 },
+    { xBlock: 116, yBlock: 44, wBlock: 6, hBlock: 2 },
+    { xBlock: 130, yBlock: 44, wBlock: 5, hBlock: 2 },
+
+    // ── Interior cave formations ──────────────────────────────────────────
+    // Left standing column — rises from floor, narrows at top
+    { xBlock: 30,  yBlock: 37, wBlock: 5, hBlock: 9 },
+    { xBlock: 31,  yBlock: 35, wBlock: 3, hBlock: 2 },
+    // Right standing column (mirror)
+    { xBlock: 108, yBlock: 37, wBlock: 5, hBlock: 9 },
+    { xBlock: 109, yBlock: 35, wBlock: 3, hBlock: 2 },
+    // Center-left rocky outcrop
+    { xBlock: 56,  yBlock: 41, wBlock: 4, hBlock: 5 },
+    // Center-right rocky outcrop
+    { xBlock: 83,  yBlock: 41, wBlock: 4, hBlock: 5 },
+  ],
+  enemies: [
+    // Rock Elemental — left side of cave floor
+    {
+      xBlock: 42,
+      yBlock: 44,
+      kinds: [ParticleKind.Earth],
+      particleCount: 12,
+      isBossFlag: 0,
+      isRockElementalFlag: 1,
+    },
+    // Rock Elemental — right side of cave floor
+    {
+      xBlock: 98,
+      yBlock: 44,
+      kinds: [ParticleKind.Earth],
+      particleCount: 12,
+      isBossFlag: 0,
+      isRockElementalFlag: 1,
+    },
+  ],
+  // Player spawns on the main cave floor center (row 45 = 1 block above floor at row 46)
+  playerSpawnBlock: [72, 45],
+  transitions: [
+    {
+      direction: 'right',
+      targetRoomId: 'w1_room1',
+      positionBlock: LOBBY_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [3, W1_ROOM_HEIGHT - 5],
+    },
+    {
+      direction: 'left',
+      targetRoomId: 'w2_room1',
+      positionBlock: LOBBY_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [W2_ROOM_WIDTH - 4, W2_ROOM_HEIGHT - 5],
+    },
+  ],
+  skillTombs: [
+    { xBlock: 75, yBlock: 45 },
+  ],
+  skillBooks: [
+    { xBlock: 65, yBlock: 45 },
+  ],
+  dustContainers: [
+    { xBlock: 81, yBlock: 45 },
+  ],
+};
+
+// ── World 1, Room 1 ──────────────────────────────────────────────────────────
+
+const W1_TUNNEL_Y = 16;
+
+const BOSS_ROOM_WIDTH = 60;
+const BOSS_ROOM_HEIGHT = 60;
+const BOSS_TUNNEL_Y = 40;
+
+const w1r1Tunnels: TunnelOpening[] = [
+  { direction: 'left', positionBlock: W1_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+  { direction: 'right', positionBlock: W1_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+];
+
+const w1r1Boundary = buildBoundaryWalls(W1_ROOM_WIDTH, W1_ROOM_HEIGHT, w1r1Tunnels);
+const w1r1TunnelWalls = buildTunnelWalls(W1_ROOM_WIDTH, w1r1Tunnels);
+
+export const ROOM_W1_ROOM1: RoomDef = {
+  id: 'w1_room1',
+  name: 'Stone Crossing',
+  worldNumber: 1,
+  widthBlocks: W1_ROOM_WIDTH,
+  heightBlocks: W1_ROOM_HEIGHT,
+  walls: [
+    ...w1r1Boundary,
+    ...w1r1TunnelWalls,
+    // Interior platforms
+    { xBlock: 8,  yBlock: 19, wBlock: 5, hBlock: 1 },
+    { xBlock: 18, yBlock: 17, wBlock: 4, hBlock: 1 },
+    { xBlock: 26, yBlock: 15, wBlock: 5, hBlock: 1 },
+    { xBlock: 14, yBlock: 13, wBlock: 6, hBlock: 1 },
+    { xBlock: 32, yBlock: 19, wBlock: 4, hBlock: 1 },
+  ],
+  enemies: [
+    // Rolling enemy 1 — Physical dust
+    {
+      xBlock: 20,
+      yBlock: 15,
+      kinds: [ParticleKind.Physical],
+      particleCount: 18,
+      isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 1,
+    },
+    // Rolling enemy 2 — Metal dust
+    {
+      xBlock: 32,
+      yBlock: 17,
+      kinds: [ParticleKind.Metal],
+      particleCount: 14,
+      isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 2,
+    },
+    // Flying Eye (Fire) — hovers mid-room
+    {
+      xBlock: 12,
+      yBlock: 9,
+      kinds: [ParticleKind.Fire],
+      particleCount: 16,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 1,
+    },
+    // Flying Eye (Wind) — hovers right side
+    {
+      xBlock: 30,
+      yBlock: 7,
+      kinds: [ParticleKind.Wind],
+      particleCount: 16,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 1,
+    },
+  ],
+  playerSpawnBlock: [3, W1_ROOM_HEIGHT - 5],
+  transitions: [
+    {
+      direction: 'left',
+      targetRoomId: 'lobby',
+      positionBlock: W1_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [LOBBY_WIDTH - 4, LOBBY_TUNNEL_Y + 2],
+    },
+    {
+      direction: 'right',
+      targetRoomId: 'boss_radiant_tether',
+      positionBlock: W1_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [3, BOSS_TUNNEL_Y + 2],
+    },
+  ],
+  skillTombs: [],
+  // ── Environmental hazards ─────────────────────────────────────────────
+  spikes: [
+    // Spike pit below first platform
+    { xBlock: 8, yBlock: 22, direction: 'up' as const },
+    { xBlock: 9, yBlock: 22, direction: 'up' as const },
+    { xBlock: 10, yBlock: 22, direction: 'up' as const },
+  ],
+  springboards: [
+    // Springboard to reach higher platform
+    { xBlock: 14, yBlock: 22 },
+  ],
+  breakableBlocks: [
+    // Breakable wall blocking a shortcut
+    { xBlock: 25, yBlock: 16 },
+    { xBlock: 25, yBlock: 17 },
+  ],
+  dustBoostJars: [
+    // Fire dust boost jar
+    { xBlock: 30, yBlock: 18, dustKind: ParticleKind.Fire, dustCount: 12 },
+  ],
+  fireflyJars: [
+    // Firefly jar on a platform
+    { xBlock: 10, yBlock: 18 },
+  ],
+};
+
+// ── World 2, Room 1 ──────────────────────────────────────────────────────────
+
+const W2_TUNNEL_Y = 16;
+
+const w2r1Tunnels: TunnelOpening[] = [
+  { direction: 'right', positionBlock: W2_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+  { direction: 'left',  positionBlock: W2_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+];
+
+const w2r1Boundary = buildBoundaryWalls(W2_ROOM_WIDTH, W2_ROOM_HEIGHT, w2r1Tunnels);
+const w2r1TunnelWalls = buildTunnelWalls(W2_ROOM_WIDTH, w2r1Tunnels);
+
+export const ROOM_W2_ROOM1: RoomDef = {
+  id: 'w2_room1',
+  name: 'Ember Threshold',
+  worldNumber: 2,
+  widthBlocks: W2_ROOM_WIDTH,
+  heightBlocks: W2_ROOM_HEIGHT,
+  walls: [
+    ...w2r1Boundary,
+    ...w2r1TunnelWalls,
+    // Interior platforms
+    { xBlock: 6,  yBlock: 15, wBlock: 5, hBlock: 1 },
+    { xBlock: 15, yBlock: 18, wBlock: 4, hBlock: 1 },
+    { xBlock: 22, yBlock: 16, wBlock: 5, hBlock: 1 },
+    { xBlock: 30, yBlock: 13, wBlock: 4, hBlock: 1 },
+    { xBlock: 10, yBlock: 20, wBlock: 6, hBlock: 1 },
+  ],
+  enemies: [
+    // Rolling enemy 3 — Water dust
+    {
+      xBlock: 12,
+      yBlock: 16,
+      kinds: [ParticleKind.Water],
+      particleCount: 18,
+      isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 3,
+    },
+    // Rolling enemy 4 — Ice dust
+    {
+      xBlock: 28,
+      yBlock: 14,
+      kinds: [ParticleKind.Ice],
+      particleCount: 14,
+      isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 4,
+    },
+    // Flying Eye (Ice) — hovers mid-room
+    {
+      xBlock: 20,
+      yBlock: 8,
+      kinds: [ParticleKind.Ice],
+      particleCount: 16,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 1,
+    },
+  ],
+  playerSpawnBlock: [W2_ROOM_WIDTH - 4, W2_ROOM_HEIGHT - 5],
+  transitions: [
+    {
+      direction: 'right',
+      targetRoomId: 'lobby',
+      positionBlock: W2_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [3, LOBBY_TUNNEL_Y + 2],
+    },
+    {
+      direction: 'left',
+      targetRoomId: 'w3_room1',
+      positionBlock: W2_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [W3_ROOM_WIDTH - 4, W2_TUNNEL_Y + 2],
+    },
+  ],
+  skillTombs: [],
+  // ── Environmental hazards ─────────────────────────────────────────────
+  waterZones: [
+    // Flooded lower section of the room
+    { xBlock: 1, yBlock: 19, wBlock: 38, hBlock: 4 },
+  ],
+  springboards: [
+    { xBlock: 8, yBlock: 22 },
+  ],
+};
+
+// ── World 3, Room 1 (Fire/Lava World) ────────────────────────────────────────
+
+const W3_TUNNEL_Y = 16;
+
+const w3r1Tunnels: TunnelOpening[] = [
+  { direction: 'right', positionBlock: W3_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+];
+
+const w3r1Boundary = buildBoundaryWalls(W3_ROOM_WIDTH, W3_ROOM_HEIGHT, w3r1Tunnels);
+const w3r1TunnelWalls = buildTunnelWalls(W3_ROOM_WIDTH, w3r1Tunnels);
+
+export const ROOM_W3_ROOM1: RoomDef = {
+  id: 'w3_room1',
+  name: 'Crucible Depths',
+  worldNumber: 3,
+  widthBlocks: W3_ROOM_WIDTH,
+  heightBlocks: W3_ROOM_HEIGHT,
+  walls: [
+    ...w3r1Boundary,
+    ...w3r1TunnelWalls,
+    // Interior platforms — rugged, asymmetric terrain
+    { xBlock: 5,  yBlock: 19, wBlock: 6, hBlock: 1 },
+    { xBlock: 14, yBlock: 16, wBlock: 5, hBlock: 1 },
+    { xBlock: 24, yBlock: 18, wBlock: 4, hBlock: 1 },
+    { xBlock: 32, yBlock: 14, wBlock: 5, hBlock: 1 },
+    { xBlock: 18, yBlock: 12, wBlock: 6, hBlock: 1 },
+    { xBlock: 8,  yBlock: 13, wBlock: 4, hBlock: 1 },
+  ],
+  enemies: [
+    // Rolling enemy 5 — Fire dust
+    {
+      xBlock: 16,
+      yBlock: 15,
+      kinds: [ParticleKind.Fire],
+      particleCount: 18,
+      isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 5,
+    },
+    // Rolling enemy 6 — Lava dust
+    {
+      xBlock: 32,
+      yBlock: 13,
+      kinds: [ParticleKind.Lava],
+      particleCount: 20,
+      isBossFlag: 0,
+      isRollingEnemyFlag: 1,
+      rollingEnemySpriteIndex: 6,
+    },
+  ],
+  playerSpawnBlock: [W3_ROOM_WIDTH - 4, W3_ROOM_HEIGHT - 5],
+  transitions: [
+    {
+      direction: 'right',
+      targetRoomId: 'w2_room1',
+      positionBlock: W3_TUNNEL_Y,
+      openingSizeBlocks: TUNNEL_HEIGHT_BLOCKS,
+      targetSpawnBlock: [3, W2_TUNNEL_Y + 2],
+    },
+  ],
+  skillTombs: [],
+  // ── Environmental hazards ─────────────────────────────────────────────
+  lavaZones: [
+    // Lava pool at the bottom of the room
+    { xBlock: 1, yBlock: 21, wBlock: 42, hBlock: 2 },
+  ],
+  spikes: [
+    // Ceiling spikes above lava
+    { xBlock: 20, yBlock: 20, direction: 'down' as const },
+    { xBlock: 21, yBlock: 20, direction: 'down' as const },
+    { xBlock: 22, yBlock: 20, direction: 'down' as const },
+  ],
+  dustBoostJars: [
+    // Lava dust boost jar on a high platform
+    { xBlock: 20, yBlock: 11, dustKind: ParticleKind.Lava, dustCount: 12 },
+  ],
+};
+
+// ── Boss Room: Radiant Tether ────────────────────────────────────────────────
+
+const bossRoomTunnels: TunnelOpening[] = [
+  { direction: 'left', positionBlock: BOSS_TUNNEL_Y, sizeBlocks: TUNNEL_HEIGHT_BLOCKS },
+];
 
 export { ROOM_LOBBY } from './rooms/lobbyRoom';
 export { ROOM_W1_ROOM1 } from './rooms/world1Rooms';
