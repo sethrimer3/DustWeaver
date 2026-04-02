@@ -10,6 +10,7 @@
 /** Optional per-tick player movement debug data shown in the debug panel. */
 export interface HudDebugState {
   isGrounded: boolean;
+  isStandingOnSurface: boolean;
   coyoteTimeTicks: number;
   jumpBufferTicks: number;
   isWallSlidingFlag: boolean;
@@ -52,6 +53,7 @@ export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): 
     const d = hud.debug;
     debugLines = [
       `Grounded: ${d.isGrounded ? 'Y' : 'N'}`,
+      `OnSurface: ${d.isStandingOnSurface ? 'Y' : 'N'}`,
       `Coyote:   ${d.coyoteTimeTicks}t`,
       `JumpBuf:  ${d.jumpBufferTicks}t`,
       `WallL/R:  ${d.isTouchingWallLeft ? 'L' : '-'}${d.isTouchingWallRight ? 'R' : '-'}` +

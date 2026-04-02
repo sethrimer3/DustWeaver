@@ -1253,6 +1253,11 @@ export function startGameScreen(
         }
       } else if (cmd.kind === CommandKind.GrappleRelease) {
         releaseGrapple(world);
+      } else if (cmd.kind === CommandKind.ToggleFullscreen) {
+        if (!document.fullscreenElement) {
+          // Enter fullscreen on key press (requires user gesture; keydown path satisfies this).
+          void document.documentElement.requestFullscreen().catch(() => {});
+        }
       } else if (cmd.kind === CommandKind.Interact) {
         interactInputPulseMs = 150;
         // Check if player is near a skill tomb
@@ -1449,8 +1454,11 @@ export function startGameScreen(
     if (isDebugMode) {
       const playerClusterForHud = world.clusters[0];
       if (playerClusterForHud !== undefined && playerClusterForHud.isAliveFlag === 1) {
+        const isStandingOnSurface =
+          playerClusterForHud.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1;
         const dbg: HudDebugState = {
           isGrounded:           playerClusterForHud.isGroundedFlag === 1,
+          isStandingOnSurface,
           coyoteTimeTicks:      playerClusterForHud.coyoteTimeTicks,
           jumpBufferTicks:      playerClusterForHud.jumpBufferTicks,
           isWallSlidingFlag:    playerClusterForHud.isWallSlidingFlag === 1,
