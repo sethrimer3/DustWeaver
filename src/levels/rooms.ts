@@ -157,71 +157,114 @@ export const ROOM_LOBBY: RoomDef = {
     ...lobbyBoundary,
     ...lobbyTunnelWalls,
 
-    // ── Uneven ceiling stalactites (interior ceiling bumps, row 1–3) ───────
-    { xBlock: 5,  yBlock: 1, wBlock: 2, hBlock: 2 },
-    { xBlock: 10, yBlock: 1, wBlock: 3, hBlock: 1 },
-    { xBlock: 16, yBlock: 1, wBlock: 1, hBlock: 3 },
-    { xBlock: 17, yBlock: 1, wBlock: 2, hBlock: 2 },
-    { xBlock: 22, yBlock: 1, wBlock: 4, hBlock: 1 },
-    { xBlock: 28, yBlock: 1, wBlock: 2, hBlock: 2 },
-    { xBlock: 33, yBlock: 1, wBlock: 1, hBlock: 3 },
-    { xBlock: 37, yBlock: 1, wBlock: 3, hBlock: 1 },
-    { xBlock: 42, yBlock: 1, wBlock: 2, hBlock: 2 },
+    // ── Stalactite ceiling — irregular hanging formations across full width ──
+    { xBlock: 2,   yBlock: 1, wBlock: 3, hBlock: 6  },
+    { xBlock: 7,   yBlock: 1, wBlock: 1, hBlock: 9  },
+    { xBlock: 10,  yBlock: 1, wBlock: 2, hBlock: 4  },
+    { xBlock: 14,  yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 19,  yBlock: 1, wBlock: 1, hBlock: 8  },
+    { xBlock: 23,  yBlock: 1, wBlock: 4, hBlock: 3  },
+    { xBlock: 29,  yBlock: 1, wBlock: 2, hBlock: 7  },
+    { xBlock: 33,  yBlock: 1, wBlock: 1, hBlock: 11 },
+    { xBlock: 37,  yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 42,  yBlock: 1, wBlock: 2, hBlock: 9  },
+    { xBlock: 46,  yBlock: 1, wBlock: 4, hBlock: 4  },
+    { xBlock: 52,  yBlock: 1, wBlock: 1, hBlock: 7  },
+    { xBlock: 55,  yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 60,  yBlock: 1, wBlock: 2, hBlock: 8  },
+    { xBlock: 64,  yBlock: 1, wBlock: 3, hBlock: 6  },
+    { xBlock: 69,  yBlock: 1, wBlock: 2, hBlock: 4  },
+    { xBlock: 71,  yBlock: 1, wBlock: 1, hBlock: 13 },  // dramatic center spike
+    { xBlock: 73,  yBlock: 1, wBlock: 2, hBlock: 7  },
+    { xBlock: 77,  yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 82,  yBlock: 1, wBlock: 2, hBlock: 8  },
+    { xBlock: 86,  yBlock: 1, wBlock: 3, hBlock: 6  },
+    { xBlock: 91,  yBlock: 1, wBlock: 1, hBlock: 5  },
+    { xBlock: 94,  yBlock: 1, wBlock: 4, hBlock: 3  },
+    { xBlock: 100, yBlock: 1, wBlock: 2, hBlock: 9  },
+    { xBlock: 104, yBlock: 1, wBlock: 1, hBlock: 6  },
+    { xBlock: 107, yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 112, yBlock: 1, wBlock: 2, hBlock: 7  },
+    { xBlock: 116, yBlock: 1, wBlock: 1, hBlock: 10 },
+    { xBlock: 119, yBlock: 1, wBlock: 4, hBlock: 4  },
+    { xBlock: 124, yBlock: 1, wBlock: 2, hBlock: 6  },
+    { xBlock: 128, yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 133, yBlock: 1, wBlock: 1, hBlock: 8  },
+    { xBlock: 136, yBlock: 1, wBlock: 3, hBlock: 5  },
+    { xBlock: 141, yBlock: 1, wBlock: 2, hBlock: 7  },
 
-    // ── Irregular left wall insets (thicken left boundary, cols 1–3) ───────
-    { xBlock: 1, yBlock: 2,  wBlock: 2, hBlock: 3 },
-    { xBlock: 1, yBlock: 7,  wBlock: 1, hBlock: 4 },
-    { xBlock: 1, yBlock: 12, wBlock: 3, hBlock: 2 },
-    { xBlock: 1, yBlock: 21, wBlock: 2, hBlock: 2 },
+    // ── Left cave wall — organic insets above tunnel ──────────────────────
+    { xBlock: 1, yBlock: 3,  wBlock: 4, hBlock: 3 },
+    { xBlock: 1, yBlock: 8,  wBlock: 3, hBlock: 2 },
+    { xBlock: 1, yBlock: 12, wBlock: 5, hBlock: 3 },
 
-    // ── Irregular right wall insets (thicken right boundary) ───────────────
-    { xBlock: 45, yBlock: 2,  wBlock: 2, hBlock: 3 },
-    { xBlock: 46, yBlock: 7,  wBlock: 1, hBlock: 3 },
-    { xBlock: 44, yBlock: 12, wBlock: 3, hBlock: 2 },
-    { xBlock: 45, yBlock: 21, wBlock: 2, hBlock: 2 },
+    // ── Left side ledge path — 4 steps from floor (y=45) to tunnel (y=16–20)
+    // Each step surface is 6 blocks apart = 6 × BLOCK_SIZE_SMALL(8) = 48 world units,
+    // just within the ~50-world-unit maximum jump height.
+    // Player ascends: floor(y=45) → step4(y=39) → step3(y=33) → step2(y=27) → tunnel access(y=21)
+    { xBlock: 1, yBlock: 22, wBlock: 14, hBlock: 2 },  // surface y=21 (tunnel access)
+    { xBlock: 1, yBlock: 28, wBlock: 17, hBlock: 2 },  // surface y=27
+    { xBlock: 1, yBlock: 34, wBlock: 19, hBlock: 2 },  // surface y=33
+    { xBlock: 1, yBlock: 40, wBlock: 21, hBlock: 2 },  // surface y=39
 
-    // ── Uneven floor — main cave floor (row 20–22, not flat) ──────────────
-    // Left floor section (stepped up slightly on the far left)
-    { xBlock: 1,  yBlock: 21, wBlock: 4, hBlock: 2 },
-    { xBlock: 5,  yBlock: 22, wBlock: 5, hBlock: 1 },
-    { xBlock: 10, yBlock: 21, wBlock: 3, hBlock: 2 },
-    { xBlock: 13, yBlock: 22, wBlock: 3, hBlock: 1 },
+    // ── Right cave wall — organic insets above tunnel ─────────────────────
+    { xBlock: 139, yBlock: 3,  wBlock: 4, hBlock: 3 },
+    { xBlock: 140, yBlock: 8,  wBlock: 3, hBlock: 2 },
+    { xBlock: 138, yBlock: 12, wBlock: 5, hBlock: 3 },
 
-    // Left dip / lower floor area (row 22 only — a small valley)
-    { xBlock: 16, yBlock: 22, wBlock: 2, hBlock: 1 },
+    // ── Right side ledge path (mirror of left) ────────────────────────────
+    { xBlock: 129, yBlock: 22, wBlock: 14, hBlock: 2 },  // x = 143−14
+    { xBlock: 126, yBlock: 28, wBlock: 17, hBlock: 2 },  // x = 143−17
+    { xBlock: 124, yBlock: 34, wBlock: 19, hBlock: 2 },  // x = 143−19
+    { xBlock: 122, yBlock: 40, wBlock: 21, hBlock: 2 },  // x = 143−21
 
-    // Central plateau — 8 blocks wide, top at row 19 (3 blocks above row 22 baseline)
-    { xBlock: 20, yBlock: 19, wBlock: 8, hBlock: 4 },
+    // ── Main cave floor (fills from y=46 to room bottom) ─────────────────
+    { xBlock: 1, yBlock: 46, wBlock: 142, hBlock: 25 },
 
-    // Right floor section (stepped and uneven)
-    { xBlock: 28, yBlock: 22, wBlock: 3, hBlock: 1 },
-    { xBlock: 31, yBlock: 21, wBlock: 3, hBlock: 2 },
-    { xBlock: 34, yBlock: 22, wBlock: 4, hBlock: 1 },
-    { xBlock: 38, yBlock: 21, wBlock: 3, hBlock: 2 },
-    { xBlock: 41, yBlock: 22, wBlock: 3, hBlock: 1 },
-    { xBlock: 44, yBlock: 21, wBlock: 3, hBlock: 2 },
+    // ── Rocky floor surface — irregular bumps atop the main floor ─────────
+    { xBlock: 8,   yBlock: 44, wBlock: 5, hBlock: 2 },
+    { xBlock: 22,  yBlock: 44, wBlock: 6, hBlock: 2 },
+    { xBlock: 38,  yBlock: 44, wBlock: 4, hBlock: 2 },
+    { xBlock: 53,  yBlock: 44, wBlock: 5, hBlock: 2 },
+    { xBlock: 85,  yBlock: 44, wBlock: 5, hBlock: 2 },
+    { xBlock: 100, yBlock: 44, wBlock: 5, hBlock: 2 },
+    { xBlock: 116, yBlock: 44, wBlock: 6, hBlock: 2 },
+    { xBlock: 130, yBlock: 44, wBlock: 5, hBlock: 2 },
 
-    // ── Rocky outcrops / small ledges for visual interest ──────────────────
-    { xBlock: 7,  yBlock: 17, wBlock: 3, hBlock: 1 },  // left ledge
-    { xBlock: 38, yBlock: 17, wBlock: 3, hBlock: 1 },  // right ledge
-
-    // ── Stepped edges connecting to plateau (avoid floating terrain) ───────
-    { xBlock: 18, yBlock: 21, wBlock: 2, hBlock: 2 },  // left step to plateau
-    { xBlock: 28, yBlock: 21, wBlock: 2, hBlock: 2 },  // right step from plateau
+    // ── Interior cave formations ──────────────────────────────────────────
+    // Left standing column — rises from floor, narrows at top
+    { xBlock: 30,  yBlock: 37, wBlock: 5, hBlock: 9 },
+    { xBlock: 31,  yBlock: 35, wBlock: 3, hBlock: 2 },
+    // Right standing column (mirror)
+    { xBlock: 108, yBlock: 37, wBlock: 5, hBlock: 9 },
+    { xBlock: 109, yBlock: 35, wBlock: 3, hBlock: 2 },
+    // Center-left rocky outcrop
+    { xBlock: 56,  yBlock: 41, wBlock: 4, hBlock: 5 },
+    // Center-right rocky outcrop
+    { xBlock: 83,  yBlock: 41, wBlock: 4, hBlock: 5 },
   ],
   enemies: [
-    // Rock Elemental — on lower floor, >10 blocks from plateau center (x=24)
+    // Rock Elemental — left side of cave floor
     {
-      xBlock: 10,
-      yBlock: 20,
+      xBlock: 42,
+      yBlock: 44,
+      kinds: [ParticleKind.Earth],
+      particleCount: 12,
+      isBossFlag: 0,
+      isRockElementalFlag: 1,
+    },
+    // Rock Elemental — right side of cave floor
+    {
+      xBlock: 98,
+      yBlock: 44,
       kinds: [ParticleKind.Earth],
       particleCount: 12,
       isBossFlag: 0,
       isRockElementalFlag: 1,
     },
   ],
-  // Player spawn centered on plateau top (plateau x=20..28, top=row 19, spawn on 18=row above)
-  playerSpawnBlock: [24, 18],
+  // Player spawns on the main cave floor center (row 45 = 1 block above floor at row 46)
+  playerSpawnBlock: [72, 45],
   transitions: [
     {
       direction: 'right',
@@ -239,16 +282,13 @@ export const ROOM_LOBBY: RoomDef = {
     },
   ],
   skillTombs: [
-    // Skill tome on plateau, 2 blocks right of spawn (24+2=26)
-    { xBlock: 26, yBlock: 18 },
+    { xBlock: 75, yBlock: 45 },
   ],
   skillBooks: [
-    // Golden Dust skillbook in the lobby, left side of the plateau.
-    { xBlock: 22, yBlock: 18 },
+    { xBlock: 65, yBlock: 45 },
   ],
   dustContainers: [
-    // Dust Container collectible, right side of the plateau.
-    { xBlock: 30, yBlock: 18 },
+    { xBlock: 81, yBlock: 45 },
   ],
 };
 
