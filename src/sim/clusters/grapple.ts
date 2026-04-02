@@ -320,8 +320,9 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return;
 
-  // Grapple charge: cannot fire when spent
-  if (world.hasGrappleChargeFlag === 0) return;
+  const isRefireDuringRetract = world.isGrappleRetractingFlag === 1;
+  // Grapple charge: cannot fire when spent, except while retracting.
+  if (world.hasGrappleChargeFlag === 0 && !isRefireDuringRetract) return;
 
   const dx = anchorXWorld - player.positionXWorld;
   const dy = anchorYWorld - player.positionYWorld;
@@ -335,12 +336,8 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
 
   if (hit === null) {
-    // No wall hit. If a retract animation is already in progress, leave it
-    // running — cancelling it and switching to physics mode can cause the chain
-    // tip to accidentally re-attach to a wall, creating a phantom grapple that
-    // drains the charge with no way to escape without pressing Jump.
-    if (world.isGrappleRetractingFlag === 1) return;
-    // Cancel any pre-existing miss animation, then start a new one.
+    // No wall hit. Cancel any pre-existing miss/retract animation, then start
+    // a fresh miss throw from the current player position.
     if (world.isGrappleMissActiveFlag === 1) {
       cancelGrappleMiss(world);
     }
@@ -816,7 +813,7 @@ const GRAPPLE_MISS_CONSTRAINT_RELAX_FACTOR = 0.5;
 
 /** Duration in ticks after which the miss animation auto-cancels. */
 const GRAPPLE_MISS_MAX_TICKS = 90;
-const GRAPPLE_RETRACT_SPEED_WORLD_PER_SEC = 900.0;
+const GRAPPLE_RETRACT_SPEED_WORLD_PER_SEC = 6000.0;
 
 /**
  * Pre-allocated position/velocity arrays for the limp chain simulation.
