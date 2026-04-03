@@ -89,6 +89,8 @@ export interface RoomEnemyDef {
    * with rotating laser telegraphs and anchored chains.
    */
   isRadiantTetherFlag?: 0 | 1;
+  /** 1 if this enemy is a grapple hunter — ground enemy that fires slow grapple hooks at the player. */
+  isGrappleHunterFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

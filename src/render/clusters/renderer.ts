@@ -396,6 +396,39 @@ export function renderClusters(
       // Radiant Tether boss body is rendered by radiantTetherRenderer.ts
       // Skip default cluster rendering; health bar drawn below.
 
+    } else if (cluster.isGrappleHunterFlag === 1) {
+      // ── Grapple Hunter: dark purple box with hook accent ────────────────
+      ctx.fillStyle = '#8833cc';
+      ctx.globalAlpha = 0.8;
+      ctx.fillRect(boxLeft, boxTop, boxW, boxH);
+      ctx.globalAlpha = 1.0;
+      ctx.strokeStyle = '#aa55ee';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(boxLeft, boxTop, boxW, boxH);
+      // Inner highlight
+      ctx.fillStyle = 'rgba(200,150,255,0.3)';
+      ctx.fillRect(boxLeft + 2, boxTop + 2, boxW - 4, 3);
+
+      // Draw grapple chain during attack/reel states
+      if (cluster.grappleHunterState === 2 || cluster.grappleHunterState === 3) {
+        const tipScreenX = cluster.grappleHunterTipXWorld * scalePx + offsetXPx;
+        const tipScreenY = cluster.grappleHunterTipYWorld * scalePx + offsetYPx;
+        // Gold chain line
+        ctx.beginPath();
+        ctx.moveTo(screenX, screenY);
+        ctx.lineTo(tipScreenX, tipScreenY);
+        ctx.strokeStyle = 'rgba(255, 180, 50, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Tip dot
+        ctx.beginPath();
+        ctx.arc(tipScreenX, tipScreenY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffcc00';
+        ctx.fill();
+      }
+
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -451,6 +484,8 @@ export function renderClusters(
       barColor = '#8b6914'; // brown/amber for rock elemental
     } else if (cluster.isRadiantTetherFlag === 1) {
       barColor = '#fffde0'; // radiant white-gold for light boss
+    } else if (cluster.isGrappleHunterFlag === 1) {
+      barColor = '#aa55ee'; // purple for grapple hunter
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

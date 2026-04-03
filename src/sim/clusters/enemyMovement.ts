@@ -126,6 +126,33 @@ export function tickEnemyMovement(
     // Movement is handled by the chain winching system in radiantTetherAi.ts
     // No gravity, no enemy walk logic — boss moves purely via chain tension.
 
+  } else if (cluster.isGrappleHunterFlag === 1) {
+    // ── Grapple Hunter: ground-based with gravity ───────────────────────
+    // Gravity always applies.
+    cluster.velocityYWorld += NORMAL_GRAVITY_WORLD_PER_SEC2 * dtSec;
+    if (cluster.velocityYWorld > FAST_MAX_FALL_WORLD_PER_SEC) {
+      cluster.velocityYWorld = FAST_MAX_FALL_WORLD_PER_SEC;
+    }
+
+    // During attack / reel / recover, horizontal movement is managed by
+    // grappleHunterAi.ts — skip the standard chase logic.
+    const ghState = cluster.grappleHunterState;
+    if (ghState === 2 || ghState === 3 || ghState === 4) {
+      // Do nothing — AI drives velocity in these states.
+    } else if (isPlayerFound) {
+      // Chase state: walk toward player at moderate speed
+      const GRAPPLE_HUNTER_WALK_SPEED_WORLD_PER_SEC = 50.0;
+      const dxToPlayer = playerXWorld - cluster.positionXWorld;
+      const absDx = dxToPlayer < 0 ? -dxToPlayer : dxToPlayer;
+      let targetVelX = 0.0;
+      if (absDx > 6.0) {
+        targetVelX = (dxToPlayer > 0 ? 1 : -1) * GRAPPLE_HUNTER_WALK_SPEED_WORLD_PER_SEC;
+      }
+      const alpha = ENEMY_ACCEL_PER_SEC * dtSec;
+      const clampedAlpha = alpha < 1.0 ? alpha : 1.0;
+      cluster.velocityXWorld += (targetVelX - cluster.velocityXWorld) * clampedAlpha;
+    }
+
   } else {
     // ── Ground enemy: gravity ───────────────────────────────────────────────
     cluster.velocityYWorld += NORMAL_GRAVITY_WORLD_PER_SEC2 * dtSec;

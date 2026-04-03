@@ -76,6 +76,7 @@ export interface EditorEnemy {
   rollingEnemySpriteIndex: number;
   isRockElementalFlag: 0 | 1;
   isRadiantTetherFlag: 0 | 1;
+  isGrappleHunterFlag: 0 | 1;
 }
 
 export interface EditorTransition {

@@ -143,6 +143,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       rollingEnemySpriteIndex: e.rollingEnemySpriteIndex,
       isRockElementalFlag: e.isRockElemental ? 1 as const : 0 as const,
       isRadiantTetherFlag: e.isRadiantTether ? 1 as const : 0 as const,
+      isGrappleHunterFlag: e.isGrappleHunter ? 1 as const : 0 as const,
     };
   });
 

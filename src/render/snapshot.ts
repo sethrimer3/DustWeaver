@@ -92,6 +92,16 @@ export interface ClusterSnapshot {
   readonly radiantTetherBaseAngleRad: number;
   /** Current number of active chains. */
   readonly radiantTetherChainCount: number;
+  /** 1 if this cluster is a grapple hunter. */
+  readonly isGrappleHunterFlag: 0 | 1;
+  /** Current grapple hunter state (0-4). */
+  readonly grappleHunterState: number;
+  /** Start index for grapple hunter chain particles (-1 if none). */
+  readonly grappleHunterChainStartIndex: number;
+  /** X of grapple chain tip (world units). */
+  readonly grappleHunterTipXWorld: number;
+  /** Y of grapple chain tip (world units). */
+  readonly grappleHunterTipYWorld: number;
 }
 
 export interface WallSnapshot {
@@ -171,6 +181,11 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       radiantTetherStateTicks:          c.radiantTetherStateTicks,
       radiantTetherBaseAngleRad:        c.radiantTetherBaseAngleRad,
       radiantTetherChainCount:          c.radiantTetherChainCount,
+      isGrappleHunterFlag:              c.isGrappleHunterFlag,
+      grappleHunterState:               c.grappleHunterState,
+      grappleHunterChainStartIndex:     c.grappleHunterChainStartIndex,
+      grappleHunterTipXWorld:           c.grappleHunterTipXWorld,
+      grappleHunterTipYWorld:           c.grappleHunterTipYWorld,
     });
   }
 

@@ -28,6 +28,7 @@ import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
+import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize } from '../ui/renderSettings';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect } from '../render/effects/theroEffectManager';
@@ -275,6 +276,11 @@ export function startGameScreen(
         enemyCluster.radiantTetherState = 0; // start inactive
         enemyCluster.halfWidthWorld = 6.0;
         enemyCluster.halfHeightWorld = 6.0;
+      } else if (enemyDef.isGrappleHunterFlag === 1) {
+        enemyCluster.isGrappleHunterFlag = 1;
+        enemyCluster.grappleHunterState = 0;
+        enemyCluster.halfWidthWorld = 5.0;
+        enemyCluster.halfHeightWorld = 5.0;
       }
 
       world.clusters.push(enemyCluster);
@@ -286,6 +292,14 @@ export function startGameScreen(
 
     // Reserve grapple chain particle slots
     initGrappleChainParticles(world, 1);
+
+    // Reserve grapple hunter chain particle slots
+    for (let ci = 0; ci < world.clusters.length; ci++) {
+      const cl = world.clusters[ci];
+      if (cl.isGrappleHunterFlag === 1) {
+        initGrappleHunterChainParticles(world, cl);
+      }
+    }
 
     // Load walls
     loadRoomWalls(world, room);
