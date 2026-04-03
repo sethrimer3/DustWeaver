@@ -49,6 +49,7 @@ interface BlockSpriteSet {
 
 /** Cache of loaded sprite sets keyed by worldNumber. */
 const _spriteSets = new Map<number, BlockSpriteSet>();
+const _brownRockBlockBySize = new Map<number, HTMLImageElement>();
 
 /**
  * Returns the sprite set for a given world number, loading on first access.
@@ -63,7 +64,7 @@ function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
   const dir = `SPRITES/WORLDS/W-${worldNumber}/blocks`;
   let sprites: BlockSpriteSet;
   if (worldNumber === 0) {
-    const brownRockBlockSprite = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_block.png');
+    const brownRockBlockSprite = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_8x8.png');
     sprites = {
       block:  brownRockBlockSprite,
       single: brownRockBlockSprite,
@@ -98,13 +99,31 @@ function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
 
 /** Active sprite set — updated when setActiveWorld() is called. */
 let _sprites: BlockSpriteSet = getBlockSpriteSet(0);
+let _activeWorldNumber = 0;
 
 /**
  * Set the active world number for block sprite rendering.
  * Call this when the player enters a new room with a different worldNumber.
  */
 export function setActiveBlockSpriteWorld(worldNumber: number): void {
+  _activeWorldNumber = worldNumber;
   _sprites = getBlockSpriteSet(worldNumber);
+}
+
+function getBrownRockSpriteForTileSize(blockSizePx: number): HTMLImageElement {
+  const cached = _brownRockBlockBySize.get(blockSizePx);
+  if (cached !== undefined) return cached;
+
+  const spritePath =
+    blockSizePx >= 32
+      ? 'SPRITES/BLOCKS/brownRock/brownRock_32x32.png'
+      : blockSizePx >= 16
+        ? 'SPRITES/BLOCKS/brownRock/brownRock_16x16.png'
+        : 'SPRITES/BLOCKS/brownRock/brownRock_8x8.png';
+
+  const sprite = _loadImage(spritePath);
+  _brownRockBlockBySize.set(blockSizePx, sprite);
+  return sprite;
 }
 
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
@@ -322,6 +341,10 @@ export function renderWallSprites(
   if (walls.count === 0) return;
 
   const tileSizeScreen = blockSizePx * scalePx;
+  const baseTileSprite =
+    _activeWorldNumber === 0
+      ? getBrownRockSpriteForTileSize(blockSizePx)
+      : null;
 
   _buildOccupancy(walls, blockSizePx);
 
@@ -353,7 +376,7 @@ export function renderWallSprites(
     const cx     = Math.round(tileX + tileSizeScreen * 0.5);
     const cy     = Math.round(tileY + tileSizeScreen * 0.5);
 
-    const img = _sprites[spec.variant];
+    const img = baseTileSprite ?? _sprites[spec.variant];
 
     if (isSpriteReady(img)) {
       if (spec.rotationRad === 0) {
