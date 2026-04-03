@@ -80,6 +80,12 @@ export function createEditorController(
   let ui: EditorUI | null = null;
   let worldMapCleanup: (() => void) | null = null;
 
+  // Drag-paint tracking: last block position where Place/Delete acted during a drag
+  // Initialized to out-of-range sentinels so the first drag always triggers.
+  const INVALID_DRAG_BLOCK = -0x7fff;
+  let lastDragBlockX = INVALID_DRAG_BLOCK;
+  let lastDragBlockY = INVALID_DRAG_BLOCK;
+
   // Saved source room data for transition linking across rooms
   let linkSourceRoomData: typeof state.roomData = null;
   let linkTargetRoomId = '';
@@ -117,6 +123,7 @@ export function createEditorController(
           }
         },
         onPropertyChange: handlePropertyChange,
+        onRoomDimensionsChange: handleRoomDimensionsChange,
         onConfirm: () => confirmEdits(),
         onCancel: () => cancelEdits(),
       });
@@ -259,7 +266,7 @@ export function createEditorController(
       }
     }
 
-    // Click handling
+    // Click handling (one-shot on press)
     if (inputState.isClickFired && state.roomData !== null) {
       // Ignore clicks on the UI panel area (CSS pixel comparison)
       if (inputState.clickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
@@ -283,6 +290,31 @@ export function createEditorController(
         } else if (state.activeTool === EditorTool.Select) {
           state.selectedElement = selectAtCursor(state);
         } else if (state.activeTool === EditorTool.Place) {
+          placeAtCursor(state);
+          lastDragBlockX = state.cursorBlockX;
+          lastDragBlockY = state.cursorBlockY;
+        } else if (state.activeTool === EditorTool.Delete) {
+          deleteAtCursor(state);
+          lastDragBlockX = state.cursorBlockX;
+          lastDragBlockY = state.cursorBlockY;
+        }
+      }
+    }
+
+    // Drag-paint: continue Place/Delete while mouse is held and cursor moves to a new block
+    const canDragPaint =
+      !inputState.isClickFired &&
+      inputState.isMouseDown &&
+      state.roomData !== null &&
+      !state.isLinkingTransition &&
+      inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX &&
+      (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete);
+
+    if (canDragPaint) {
+      if (state.cursorBlockX !== lastDragBlockX || state.cursorBlockY !== lastDragBlockY) {
+        lastDragBlockX = state.cursorBlockX;
+        lastDragBlockY = state.cursorBlockY;
+        if (state.activeTool === EditorTool.Place) {
           placeAtCursor(state);
         } else if (state.activeTool === EditorTool.Delete) {
           deleteAtCursor(state);
@@ -320,6 +352,16 @@ export function createEditorController(
     if (inputCleanup) { inputCleanup(); inputCleanup = null; }
     if (ui) { ui.destroy(); ui = null; }
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
+  }
+
+  function handleRoomDimensionsChange(prop: 'widthBlocks' | 'heightBlocks', value: number): void {
+    if (!state.roomData) return;
+    const clamped = Math.max(10, value);
+    if (prop === 'widthBlocks') {
+      state.roomData.widthBlocks = clamped;
+    } else {
+      state.roomData.heightBlocks = clamped;
+    }
   }
 
   function handlePropertyChange(prop: string, value: string | number): void {

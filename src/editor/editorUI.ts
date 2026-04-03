@@ -35,6 +35,7 @@ export interface EditorUICallbacks {
   onExport: () => void;
   onLinkTransition: () => void;
   onPropertyChange: (prop: string, value: string | number) => void;
+  onRoomDimensionsChange: (prop: 'widthBlocks' | 'heightBlocks', value: number) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -95,7 +96,23 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   }
   container.appendChild(toolBar);
 
-  // ── Category tabs ────────────────────────────────────────────────────────
+  // ── Room dimensions ──────────────────────────────────────────────────────
+  const roomDimDiv = document.createElement('div');
+  roomDimDiv.style.cssText = `
+    border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
+    padding: 6px 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2);
+  `;
+  const roomDimTitle = document.createElement('div');
+  roomDimTitle.textContent = 'Room Dimensions';
+  roomDimTitle.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
+  roomDimDiv.appendChild(roomDimTitle);
+  container.appendChild(roomDimDiv);
+
+  let lastRenderedRoomId = '';
+  let lastRenderedWidthBlocks = -1;
+  let lastRenderedHeightBlocks = -1;
+  let dimWidthInput: HTMLInputElement | null = null;
+  let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
   catBar.style.cssText = 'display: flex; gap: 4px; margin-bottom: 8px;';
   const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers'];
@@ -147,6 +164,36 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     for (const btn of catBtns) {
       btn.style.background = btn.dataset.category === state.activeCategory ? ACTIVE_BG : BTN_BG;
     }
+    // Update room dimensions section: create inputs on first load, then update values in-place
+    const roomId = state.roomData?.id ?? '';
+    const widthBlocks = state.roomData?.widthBlocks ?? 0;
+    const heightBlocks = state.roomData?.heightBlocks ?? 0;
+    if (roomId !== lastRenderedRoomId) {
+      // Different room loaded — recreate inputs with correct callbacks
+      lastRenderedRoomId = roomId;
+      lastRenderedWidthBlocks = widthBlocks;
+      lastRenderedHeightBlocks = heightBlocks;
+      if (dimWidthInput) dimWidthInput.parentElement?.remove();
+      if (dimHeightInput) dimHeightInput.parentElement?.remove();
+      dimWidthInput = null;
+      dimHeightInput = null;
+      if (state.roomData !== null) {
+        dimWidthInput = addDimField(roomDimDiv, 'Width (blocks)', widthBlocks,
+          v => callbacks?.onRoomDimensionsChange('widthBlocks', v));
+        dimHeightInput = addDimField(roomDimDiv, 'Height (blocks)', heightBlocks,
+          v => callbacks?.onRoomDimensionsChange('heightBlocks', v));
+      }
+    } else if (widthBlocks !== lastRenderedWidthBlocks || heightBlocks !== lastRenderedHeightBlocks) {
+      // Same room, dimensions changed externally — update values in-place (only if not focused)
+      lastRenderedWidthBlocks = widthBlocks;
+      lastRenderedHeightBlocks = heightBlocks;
+      if (dimWidthInput && document.activeElement !== dimWidthInput) {
+        dimWidthInput.value = String(widthBlocks);
+      }
+      if (dimHeightInput && document.activeElement !== dimHeightInput) {
+        dimHeightInput.value = String(heightBlocks);
+      }
+    }
     // Update palette items (only recreate when category changes)
     if (renderedCategory !== state.activeCategory) {
       renderedCategory = state.activeCategory;
@@ -187,6 +234,11 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       paletteBtns = [];
       inspectorElementUid = -1;
       inspectorElementType = '';
+      lastRenderedRoomId = '';
+      lastRenderedWidthBlocks = -1;
+      lastRenderedHeightBlocks = -1;
+      dimWidthInput = null;
+      dimHeightInput = null;
       if (container.parentElement) container.parentElement.removeChild(container);
     },
   };
@@ -376,4 +428,36 @@ function addCheckbox(
   row.appendChild(lbl);
   row.appendChild(cb);
   parent.appendChild(row);
+}
+
+function addDimField(
+  parent: HTMLElement, label: string, value: number,
+  onChange: (v: number) => void,
+): HTMLInputElement {
+  const row = document.createElement('div');
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+
+  const lbl = document.createElement('span');
+  lbl.textContent = label;
+  lbl.style.cssText = `min-width: 100px; font-size: 11px; color: rgba(200,255,200,0.7);`;
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.value = String(value);
+  input.min = '10';
+  input.style.cssText = `
+    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 3px 5px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  input.addEventListener('change', () => {
+    const v = parseInt(input.value, 10);
+    if (!isNaN(v) && v >= 10) onChange(v);
+  });
+  input.addEventListener('click', (e) => e.stopPropagation());
+
+  row.appendChild(lbl);
+  row.appendChild(input);
+  parent.appendChild(row);
+  return input;
 }

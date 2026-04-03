@@ -31,6 +31,14 @@ function hitTestTransition(t: EditorTransition, bx: number, by: number, roomData
   }
 }
 
+/** Returns true if two wall rectangles (in block coordinates) overlap. */
+function wallsOverlap(a: EditorWall, bx: number, by: number, bw: number, bh: number): boolean {
+  return a.xBlock < bx + bw &&
+         a.xBlock + a.wBlock > bx &&
+         a.yBlock < by + bh &&
+         a.yBlock + a.hBlock > by;
+}
+
 // ── Select tool ──────────────────────────────────────────────────────────────
 
 /**
@@ -96,6 +104,9 @@ export function placeAtCursor(state: EditorState): void {
   if (item.category === 'blocks') {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
+    // Prevent overlapping walls
+    const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
+    if (overlaps) return;
     room.interiorWalls.push({
       uid: allocateUid(state),
       xBlock: bx,
