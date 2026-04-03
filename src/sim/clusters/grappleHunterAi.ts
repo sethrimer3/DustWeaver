@@ -291,13 +291,13 @@ function tipHitsCluster(tipX: number, tipY: number, target: ClusterState): boole
 
 /** Check if a point is inside any wall rectangle (with epsilon tolerance). */
 function tipHitsWall(world: WorldState, tipX: number, tipY: number): boolean {
-  const eps = 0.5; // absorb float error from accumulated tip position
+  const wallCollisionEpsilonWorld = 0.5; // absorb float error from accumulated tip position
   for (let wi = 0; wi < world.wallCount; wi++) {
     const wx = world.wallXWorld[wi];
     const wy = world.wallYWorld[wi];
     if (
-      tipX >= wx - eps && tipX <= wx + world.wallWWorld[wi] + eps &&
-      tipY >= wy - eps && tipY <= wy + world.wallHWorld[wi] + eps
+      tipX >= wx - wallCollisionEpsilonWorld && tipX <= wx + world.wallWWorld[wi] + wallCollisionEpsilonWorld &&
+      tipY >= wy - wallCollisionEpsilonWorld && tipY <= wy + world.wallHWorld[wi] + wallCollisionEpsilonWorld
     ) {
       return true;
     }

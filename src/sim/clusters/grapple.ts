@@ -292,9 +292,9 @@ function isTopSurfaceHit(
   dirY: number,
   out: { snappedY: number },
 ): boolean {
-  const topEps = 1.5;          // generous vertical tolerance for top surface
-  const sideEps = 0.5;         // tighter tolerance for vertical sides
-  const horizontalPad = 0.5;   // horizontal tolerance to accept hits near wall edges
+  const topEpsilonWorld = 1.5;          // generous vertical tolerance for top surface
+  const sideEpsilonWorld = 0.5;         // tighter tolerance for vertical sides
+  const horizontalPadWorld = 0.5;   // horizontal tolerance to accept hits near wall edges
 
   for (let wi = 0; wi < world.wallCount; wi++) {
     const topY = world.wallYWorld[wi];
@@ -303,15 +303,15 @@ function isTopSurfaceHit(
     const rightX = leftX + world.wallWWorld[wi];
 
     // Is the hit near this wall's top surface?
-    const isNearTopSurface = hitY >= topY - topEps && hitY <= topY + topEps
-      && hitX >= leftX - horizontalPad && hitX <= rightX + horizontalPad;
+    const isNearTopSurface = hitY >= topY - topEpsilonWorld && hitY <= topY + topEpsilonWorld
+      && hitX >= leftX - horizontalPadWorld && hitX <= rightX + horizontalPadWorld;
 
     if (!isNearTopSurface) continue;
 
     // Check if the hit is also near a vertical side edge
-    const isNearVerticalSide = (Math.abs(hitX - leftX) < sideEps || Math.abs(hitX - rightX) < sideEps)
-      && hitY >= topY - sideEps
-      && hitY <= bottomY + sideEps;
+    const isNearVerticalSide = (Math.abs(hitX - leftX) < sideEpsilonWorld || Math.abs(hitX - rightX) < sideEpsilonWorld)
+      && hitY >= topY - sideEpsilonWorld
+      && hitY <= bottomY + sideEpsilonWorld;
 
     if (isNearVerticalSide) {
       // Corner edge case: the hit is near both the top and a side.
@@ -1121,14 +1121,14 @@ export function updateGrappleMissChain(world: WorldState): void {
         const anchorX = i === 0 ? player.positionXWorld : missLinkX[i - 1];
         const anchorY = i === 0 ? player.positionYWorld : missLinkY[i - 1];
 
-        const ddx = missLinkX[i] - anchorX;
-        const ddy = missLinkY[i] - anchorY;
-        const linkDist = Math.sqrt(ddx * ddx + ddy * ddy);
+        const linkDxWorld = missLinkX[i] - anchorX;
+        const linkDyWorld = missLinkY[i] - anchorY;
+        const linkDist = Math.sqrt(linkDxWorld * linkDxWorld + linkDyWorld * linkDyWorld);
 
         if (linkDist > GRAPPLE_MISS_LINK_MAX_DIST_WORLD && linkDist > 0.01) {
           const excess = linkDist - GRAPPLE_MISS_LINK_MAX_DIST_WORLD;
-          const nx = ddx / linkDist;
-          const ny = ddy / linkDist;
+          const nx = linkDxWorld / linkDist;
+          const ny = linkDyWorld / linkDist;
 
           if (missLinkStuckFlag[i] === 0) {
             // Pull this link toward anchor
