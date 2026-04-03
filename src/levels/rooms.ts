@@ -4,37 +4,36 @@
  * Layout:
  *   World 3 ← World 2 ← [LOBBY] → World 1
  *
- * Room definitions are split by world into sub-files under ./rooms/.
- * This file re-exports everything for backward compatibility and
- * assembles the unified ROOM_REGISTRY.
+ * Room data is loaded at startup from individual JSON files in ASSETS/ROOMS/.
+ * Each room has its own .json file, listed in ASSETS/ROOMS/manifest.json.
+ *
+ * Call `initRoomRegistry()` at startup (before starting the game) to
+ * populate the registry from the JSON data files.
  */
 
 import { RoomDef } from './roomDef';
-import { THERO_SHOWCASE_ROOMS } from './effectShowcaseRooms';
-
-// ── Import room definitions from split files ─────────────────────────────────
-
-import { ROOM_LOBBY } from './rooms/lobbyRoom';
-import { ROOM_W1_ROOM1 } from './rooms/world1Rooms';
-import { ROOM_W2_ROOM1 } from './rooms/world2Rooms';
-import { ROOM_W3_ROOM1 } from './rooms/world3Rooms';
-import { ROOM_BOSS_RADIANT_TETHER } from './rooms/bossRooms';
-
-// Re-export individual rooms for backward compatibility
-export { ROOM_LOBBY, ROOM_W1_ROOM1, ROOM_W2_ROOM1, ROOM_W3_ROOM1, ROOM_BOSS_RADIANT_TETHER };
+import { loadRoomJsonFiles } from './roomJsonLoader';
 
 // ── Room registry ────────────────────────────────────────────────────────────
 
+/** Mutable backing store — populated by initRoomRegistry(). */
+const registryMap = new Map<string, RoomDef>();
+
 /** All rooms keyed by id for quick lookup. */
-export const ROOM_REGISTRY: ReadonlyMap<string, RoomDef> = new Map([
-  [ROOM_LOBBY.id, ROOM_LOBBY],
-  [ROOM_W1_ROOM1.id, ROOM_W1_ROOM1],
-  [ROOM_W2_ROOM1.id, ROOM_W2_ROOM1],
-  [ROOM_W3_ROOM1.id, ROOM_W3_ROOM1],
-  [ROOM_BOSS_RADIANT_TETHER.id, ROOM_BOSS_RADIANT_TETHER],
-  // Thero effect showcase rooms (worldNumber=99, solid-black background + effect overlay)
-  ...THERO_SHOWCASE_ROOMS.map(r => [r.id, r] as [string, RoomDef]),
-]);
+export const ROOM_REGISTRY: ReadonlyMap<string, RoomDef> = registryMap;
 
 /** The room the player starts in. */
 export const STARTING_ROOM_ID = 'lobby';
+
+/**
+ * Loads all room JSON files from ASSETS/ROOMS/ and populates ROOM_REGISTRY.
+ * Must be called (and awaited) before the game starts.
+ */
+export async function initRoomRegistry(): Promise<void> {
+  const rooms = await loadRoomJsonFiles();
+  registryMap.clear();
+  for (const [id, room] of rooms) {
+    registryMap.set(id, room);
+  }
+  console.log(`[rooms] Loaded ${registryMap.size} rooms from JSON`);
+}
