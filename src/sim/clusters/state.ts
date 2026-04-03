@@ -178,6 +178,35 @@ export interface ClusterState {
    */
   rockElementalActivationProgress: number;
 
+  // ---- Grapple Hunter (populated only when isGrappleHunterFlag === 1) --------
+  /** 1 if this cluster is a grapple hunter — walks, jumps, fires a slow grapple at the player. */
+  isGrappleHunterFlag: 0 | 1;
+  /**
+   * Grapple Hunter AI state:
+   *  0 = idle (waiting, not engaged)
+   *  1 = chase (walking toward player)
+   *  2 = attack (extending grapple chain toward player)
+   *  3 = reel (zip-pulling toward player after hit)
+   *  4 = recover (cooldown after attack or miss)
+   */
+  grappleHunterState: number;
+  /** Ticks elapsed in the current grapple hunter state. */
+  grappleHunterStateTicks: number;
+  /** Cooldown ticks before grapple hunter can attack again. */
+  grappleHunterCooldownTicks: number;
+  /** Start index in particle buffer for this hunter's grapple chain (8 segments). -1 if not allocated. */
+  grappleHunterChainStartIndex: number;
+  /** X position of the grapple chain tip during attack. */
+  grappleHunterTipXWorld: number;
+  /** Y position of the grapple chain tip during attack. */
+  grappleHunterTipYWorld: number;
+  /** Direction the grapple was fired (normalized X). */
+  grappleHunterFireDirX: number;
+  /** Direction the grapple was fired (normalized Y). */
+  grappleHunterFireDirY: number;
+  /** 1 if the grapple tip has hit the player during this attack. */
+  grappleHunterHasHitPlayerFlag: 0 | 1;
+
   // ---- Radiant Tether boss (populated only when isRadiantTetherFlag === 1) --
   /**
    * 1 if this cluster is the Radiant Tether boss — a floating sphere of light
@@ -300,6 +329,16 @@ export function createClusterState(
     radiantTetherChainCount: 3,
     radiantTetherVelXWorld: 0,
     radiantTetherVelYWorld: 0,
+    isGrappleHunterFlag: 0,
+    grappleHunterState: 0,
+    grappleHunterStateTicks: 0,
+    grappleHunterCooldownTicks: 0,
+    grappleHunterChainStartIndex: -1,
+    grappleHunterTipXWorld: 0,
+    grappleHunterTipYWorld: 0,
+    grappleHunterFireDirX: 0,
+    grappleHunterFireDirY: 0,
+    grappleHunterHasHitPlayerFlag: 0,
     isFacingLeftFlag: 0,
     isSprintingFlag: 0,
     isCrouchingFlag: 0,

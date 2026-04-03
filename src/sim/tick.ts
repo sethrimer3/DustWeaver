@@ -25,6 +25,7 @@ import { applyEnemyAI } from './clusters/enemyAi';
 import { applyRockElementalAI } from './clusters/rockElementalAi';
 import { updateRockElementalDust } from './clusters/rockElementalDust';
 import { applyRadiantTetherAI } from './clusters/radiantTetherAi';
+import { applyGrappleHunterAI } from './clusters/grappleHunterAi';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
 import { applyBindingForces } from './clusters/binding';
@@ -60,6 +61,9 @@ export function tick(world: WorldState): void {
 
   // 0.5d. Radiant Tether AI — light-chain boss state machine
   applyRadiantTetherAI(world);
+
+  // 0.5e. Grapple Hunter AI — grapple attack state machine
+  applyGrappleHunterAI(world);
 
   // 1. Clear accumulated forces from previous tick
   for (let i = 0; i < world.particleCount; i++) {

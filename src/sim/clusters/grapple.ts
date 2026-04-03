@@ -279,27 +279,58 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
  * Returns true if the given hit point is on the top surface of any wall.
  * When true, also writes the exact wall top-Y into the provided output object
  * so the caller can snap the anchor to the precise surface.
+ *
+ * Uses a generous top-surface tolerance zone and considers the incoming ray
+ * direction to disambiguate corner cases: when the ray approaches from below
+ * (dirY < 0, shooting upward), top-surface classification is preferred.
  */
-function isTopSurfaceHit(world: WorldState, hitX: number, hitY: number, out: { snappedY: number }): boolean {
-  const eps = 0.5;
+function isTopSurfaceHit(
+  world: WorldState,
+  hitX: number,
+  hitY: number,
+  dirX: number,
+  dirY: number,
+  out: { snappedY: number },
+): boolean {
+  const topEpsilonWorld = 1.5;          // generous vertical tolerance for top surface
+  const sideEpsilonWorld = 0.5;         // tighter tolerance for vertical sides
+  const horizontalPadWorld = 0.5;   // horizontal tolerance to accept hits near wall edges
+
   for (let wi = 0; wi < world.wallCount; wi++) {
     const topY = world.wallYWorld[wi];
     const bottomY = topY + world.wallHWorld[wi];
     const leftX = world.wallXWorld[wi];
     const rightX = leftX + world.wallWWorld[wi];
-    const isNearTopSurface = Math.abs(hitY - topY) < eps && hitX >= leftX - eps && hitX <= rightX + eps;
-    const isNearVerticalSide = (Math.abs(hitX - leftX) < eps || Math.abs(hitX - rightX) < eps)
-      && hitY >= topY - eps
-      && hitY <= bottomY + eps;
-    // Corner edge-case handling: when a grapple ray hits exactly at/near a
-    // corner, prefer the vertical side classification over the horizontal top.
+
+    // Is the hit near this wall's top surface?
+    const isNearTopSurface = hitY >= topY - topEpsilonWorld && hitY <= topY + topEpsilonWorld
+      && hitX >= leftX - horizontalPadWorld && hitX <= rightX + horizontalPadWorld;
+
+    if (!isNearTopSurface) continue;
+
+    // Check if the hit is also near a vertical side edge
+    const isNearVerticalSide = (Math.abs(hitX - leftX) < sideEpsilonWorld || Math.abs(hitX - rightX) < sideEpsilonWorld)
+      && hitY >= topY - sideEpsilonWorld
+      && hitY <= bottomY + sideEpsilonWorld;
+
     if (isNearVerticalSide) {
-      return false;
+      // Corner edge case: the hit is near both the top and a side.
+      // Use the ray direction to disambiguate:
+      //   - If the ray is shooting upward (dirY < 0), the player aimed at the
+      //     top of the block, so prefer top-surface classification.
+      //   - If the ray is shooting horizontally into the side (|dirX| > |dirY|),
+      //     prefer side classification.
+      const isShootingUpward = dirY < -0.1;
+      const isMoreHorizontal = Math.abs(dirX) > Math.abs(dirY) * 1.5;
+      if (isMoreHorizontal && !isShootingUpward) {
+        // Clearly aimed at the side — not a top-surface hit for this wall.
+        continue;
+      }
     }
-    if (isNearTopSurface) {
-      out.snappedY = topY;
-      return true;
-    }
+
+    // Confirmed top-surface hit — snap anchor Y to exact wall top.
+    out.snappedY = topY;
+    return true;
   }
   return false;
 }
@@ -321,9 +352,11 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   if (player === undefined || player.isAliveFlag === 0) return;
   const playerEntityId = player.entityId;
 
-  const isRefireDuringRetract = world.isGrappleRetractingFlag === 1;
-  // Grapple charge: cannot fire when spent, except while retracting.
-  if (world.hasGrappleChargeFlag === 0 && !isRefireDuringRetract) return;
+  // Grapple charge: cannot fire when spent.  The refire-during-retract
+  // shortcut is intentionally removed — the charge system already refreshes
+  // after top-surface grapples and ground contact, so a genuine refire only
+  // succeeds when the player actually has a charge.
+  if (world.hasGrappleChargeFlag === 0) return;
 
   const dx = anchorXWorld - player.positionXWorld;
   const dy = anchorYWorld - player.positionYWorld;
@@ -359,7 +392,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   }
 
   // Detect top-surface hit and snap anchor Y to exact wall surface
-  const isTopHit = isTopSurfaceHit(world, hit.x, hit.y, _topSurfaceOut);
+  const isTopHit = isTopSurfaceHit(world, hit.x, hit.y, dirX, dirY, _topSurfaceOut);
   const anchorX = hit.x;
   const anchorY = isTopHit ? _topSurfaceOut.snappedY : hit.y;
   const anchorDist = Math.sqrt((anchorX - player.positionXWorld) ** 2 + (anchorY - player.positionYWorld) ** 2);
@@ -1001,20 +1034,45 @@ export function updateGrappleMissChain(world: WorldState): void {
               (missLinkY[i] - player.positionYWorld) ** 2,
             );
             if (hitDist >= GRAPPLE_MIN_LENGTH_WORLD) {
+              // Detect top-surface for charge refresh and zip behavior
+              const missDir = world.grappleMissDirXWorld !== 0 || world.grappleMissDirYWorld !== 0
+                ? { x: world.grappleMissDirXWorld, y: world.grappleMissDirYWorld }
+                : { x: 0, y: -1 };
+              const isMissTopHit = isTopSurfaceHit(
+                world, missLinkX[i], missLinkY[i],
+                missDir.x, missDir.y, _topSurfaceOut,
+              );
+              const missAnchorX = missLinkX[i];
+              const missAnchorY = isMissTopHit ? _topSurfaceOut.snappedY : missLinkY[i];
+              const missAnchorDist = Math.sqrt(
+                (missAnchorX - player.positionXWorld) ** 2 +
+                (missAnchorY - player.positionYWorld) ** 2,
+              );
+
               // Attach grapple at this point
-              world.grappleAnchorXWorld = missLinkX[i];
-              world.grappleAnchorYWorld = missLinkY[i];
-              world.grappleLengthWorld = hitDist;
+              world.grappleAnchorXWorld = missAnchorX;
+              world.grappleAnchorYWorld = missAnchorY;
+              world.grappleLengthWorld = missAnchorDist;
               world.grapplePullInAmountWorld = 0.0;
               world.grappleJumpHeldTickCount = 0;
               world.playerJumpTriggeredFlag = 0;
               world.isGrappleActiveFlag = 1;
+              world.isGrappleTopSurfaceFlag = isMissTopHit ? 1 : 0;
+              world.isGrappleStuckFlag = 0;
+              world.grappleStuckStoppedTickCount = 0;
               world.isGrappleMissActiveFlag = 0;
               world.isGrappleRetractingFlag = 0;
               world.grappleMissTickCount = 0;
               world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
-              world.grappleAttachFxXWorld = missLinkX[i];
-              world.grappleAttachFxYWorld = missLinkY[i];
+              world.grappleAttachFxXWorld = missAnchorX;
+              world.grappleAttachFxYWorld = missAnchorY;
+
+              // Charge: top-surface refreshes charge, wall consumes it
+              if (isMissTopHit) {
+                world.hasGrappleChargeFlag = 1;
+              } else {
+                world.hasGrappleChargeFlag = 0;
+              }
               return;
             }
           }
@@ -1029,6 +1087,29 @@ export function updateGrappleMissChain(world: WorldState): void {
         missLinkVx[i] = 0;
         missLinkVy[i] = 0;
       }
+
+      // ── Clamp to circle of influence ─────────────────────────────────────
+      // The grapple tip (and all chain links) must never extend beyond the
+      // player's influence radius.  If a link drifts outside, snap it back
+      // onto the circle edge and zero its outward velocity component.
+      {
+        const cdx = missLinkX[i] - player.positionXWorld;
+        const cdy = missLinkY[i] - player.positionYWorld;
+        const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+        if (cdist > GRAPPLE_MAX_LENGTH_WORLD) {
+          const inv = 1.0 / cdist;
+          const cnx = cdx * inv;
+          const cny = cdy * inv;
+          missLinkX[i] = player.positionXWorld + cnx * GRAPPLE_MAX_LENGTH_WORLD;
+          missLinkY[i] = player.positionYWorld + cny * GRAPPLE_MAX_LENGTH_WORLD;
+          // Remove outward velocity component so the link stays on the edge
+          const vDotN = missLinkVx[i] * cnx + missLinkVy[i] * cny;
+          if (vDotN > 0) {
+            missLinkVx[i] -= vDotN * cnx;
+            missLinkVy[i] -= vDotN * cny;
+          }
+        }
+      }
     }
 
     // ── Enforce link connectivity ───────────────────────────────────────────
@@ -1040,14 +1121,14 @@ export function updateGrappleMissChain(world: WorldState): void {
         const anchorX = i === 0 ? player.positionXWorld : missLinkX[i - 1];
         const anchorY = i === 0 ? player.positionYWorld : missLinkY[i - 1];
 
-      const ddx = missLinkX[i] - anchorX;
-      const ddy = missLinkY[i] - anchorY;
-      const linkDist = Math.sqrt(ddx * ddx + ddy * ddy);
+        const linkDxWorld = missLinkX[i] - anchorX;
+        const linkDyWorld = missLinkY[i] - anchorY;
+        const linkDist = Math.sqrt(linkDxWorld * linkDxWorld + linkDyWorld * linkDyWorld);
 
         if (linkDist > GRAPPLE_MISS_LINK_MAX_DIST_WORLD && linkDist > 0.01) {
           const excess = linkDist - GRAPPLE_MISS_LINK_MAX_DIST_WORLD;
-          const nx = ddx / linkDist;
-          const ny = ddy / linkDist;
+          const nx = linkDxWorld / linkDist;
+          const ny = linkDyWorld / linkDist;
 
           if (missLinkStuckFlag[i] === 0) {
             // Pull this link toward anchor
