@@ -20,6 +20,12 @@ export interface ParticleSnapshot {
    * Non-zero only for Fluid background particles; drives their alpha.
    */
   readonly disturbanceFactor: Float32Array;
+  /**
+   * Behavior mode for each particle (matches sim/particles/state.ts).
+   * 0 = orbit, 1 = attack (offensive), 2 = shield.
+   * Used by the renderer to keep offensive particles at their full 4×4 size.
+   */
+  readonly behaviorMode:      Uint8Array;
   readonly particleCount:     number;
 }
 
@@ -103,6 +109,10 @@ export interface WorldSnapshot {
   readonly walls:     WallSnapshot;
   /** 1 while the player's grapple hook is attached; 0 otherwise. */
   readonly isGrappleActiveFlag:  0 | 1;
+  /** 1 while a fired grapple is in-flight/missed and simulating limp chain links. */
+  readonly isGrappleMissActiveFlag: 0 | 1;
+  /** Start index in particle buffers for grapple chain links (or -1 if unavailable). */
+  readonly grappleParticleStartIndex: number;
   /** 1 when the grapple is attached to the top surface of a wall block. */
   readonly isGrappleTopSurfaceFlag: 0 | 1;
   /** 1 when the player has arrived at a top-surface grapple anchor and is sticking. */
@@ -177,6 +187,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       ageTicks:          world.ageTicks,
       lifetimeTicks:     world.lifetimeTicks,
       disturbanceFactor: world.disturbanceFactor,
+      behaviorMode:      world.behaviorMode,
       particleCount:     world.particleCount,
     },
     clusters: clusterSnapshots,
@@ -188,6 +199,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       hWorld: world.wallHWorld,
     },
     isGrappleActiveFlag: world.isGrappleActiveFlag,
+    isGrappleMissActiveFlag: world.isGrappleMissActiveFlag,
+    grappleParticleStartIndex: world.grappleParticleStartIndex,
     isGrappleTopSurfaceFlag: world.isGrappleTopSurfaceFlag,
     isGrappleStuckFlag: world.isGrappleStuckFlag,
     grappleAnchorXWorld: world.grappleAnchorXWorld,

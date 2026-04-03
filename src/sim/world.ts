@@ -3,7 +3,7 @@ import { ClusterState } from './clusters/state';
 import { RngState, createRng } from './rng';
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
-export const MAX_WALLS = 64;
+export const MAX_WALLS = 128;
 
 /** Maximum number of spike hazards per room. */
 export const MAX_SPIKES = 32;
@@ -140,6 +140,13 @@ export interface WorldState extends ParticleBuffers {
    */
   grappleJumpHeldTickCount: number;
 
+  /**
+   * 1 when the player has a grapple charge available; 0 when spent.
+   * Resets to 1 when the player touches the ground or grapples onto a top surface.
+   * Prevents firing a second grapple until recharged.
+   */
+  hasGrappleChargeFlag: 0 | 1;
+
   // ---- Grapple top-surface mechanics ---------------------------------------
   /** 1 when the active grapple is attached to the top surface of a wall block. */
   isGrappleTopSurfaceFlag: 0 | 1;
@@ -156,6 +163,8 @@ export interface WorldState extends ParticleBuffers {
   // ---- Grapple miss state (limp chain) ------------------------------------
   /** 1 while the grapple chain is in "miss" mode (extended to full length, falling limp). */
   isGrappleMissActiveFlag: 0 | 1;
+  /** 1 while the grapple chain is retracting back to the player and cannot attach. */
+  isGrappleRetractingFlag: 0 | 1;
   /** Direction X the grapple was fired in (normalized). */
   grappleMissDirXWorld: number;
   /** Direction Y the grapple was fired in (normalized). */
@@ -327,10 +336,12 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleAttachFxYWorld: 0.0,
     grappleParticleStartIndex: -1,
     grappleJumpHeldTickCount: 0,
+    hasGrappleChargeFlag: 1,
     isGrappleTopSurfaceFlag: 0,
     isGrappleStuckFlag: 0,
     grappleStuckStoppedTickCount: 0,
     isGrappleMissActiveFlag: 0,
+    isGrappleRetractingFlag: 0,
     grappleMissDirXWorld: 0.0,
     grappleMissDirYWorld: 0.0,
     grappleMissTickCount: 0,

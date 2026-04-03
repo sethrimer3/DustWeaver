@@ -11,6 +11,8 @@ export interface EditorInputState {
   isCamDown: boolean;
   isCamLeft: boolean;
   isCamRight: boolean;
+  /** Shift key held (doubles camera pan speed). */
+  isShiftHeld: boolean;
   /** M key toggles world map. */
   isMapToggled: boolean;
   /** Left mouse click fired (one-shot). */
@@ -34,6 +36,7 @@ export function createEditorInputState(): EditorInputState {
     isCamDown: false,
     isCamLeft: false,
     isCamRight: false,
+    isShiftHeld: false,
     isMapToggled: false,
     isClickFired: false,
     clickScreenXPx: 0,
@@ -58,6 +61,7 @@ export function attachEditorInputListeners(
   function onKeyDown(e: KeyboardEvent): void {
     if (!editorState.isActive) return;
 
+    if (e.key === 'Shift') state.isShiftHeld = true;
     const key = e.key.toLowerCase();
     if (key === 'w') { state.isCamUp = true; e.preventDefault(); }
     if (key === 's') { state.isCamDown = true; e.preventDefault(); }
@@ -74,6 +78,7 @@ export function attachEditorInputListeners(
     if (!editorState.isActive) return;
 
     const key = e.key.toLowerCase();
+    if (key === 'shift') state.isShiftHeld = false;
     if (key === 'w') state.isCamUp = false;
     if (key === 's') state.isCamDown = false;
     if (key === 'a') state.isCamLeft = false;

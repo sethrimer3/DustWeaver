@@ -573,3 +573,34 @@ can verify the collision boundary matches the visual tile geometry.
 - Editor mouse coordinates now properly convert from device pixels to
   virtual canvas coordinates (480×270) before computing world positions
 - Editor passes device and virtual canvas dimensions through the update pipeline
+
+## Progression System Rework (BUILD 74)
+
+### Capacity Model
+- Replaced vague slot-based dust system with explicit container-based capacity model
+- Each dust container grants 4 capacity
+- Different dust types consume different capacity per particle (Physical=1, Fire=2, etc.)
+- This reuses the existing `slotCost` table from `sim/particles/slotCost.ts`
+
+### Passive Techniques vs Active Weaves
+- Passive techniques (e.g., Cycle) are a separate category from active weaves
+- Passive techniques are always active once unlocked, never bound to LMB/RMB
+- Active weaves remain bindable to LMB/RMB as before
+- This separation is enforced by distinct types: `PassiveTechniqueId` vs `WeaveId`
+
+### New Profile Flow
+- New profiles skip the loadout screen entirely and load straight into gameplay
+- Player starts as a blank slate: 0 containers, 0 dust, no unlocked types/weaves
+- The early auto-assignment (Golden Dust + 2 containers) is a one-time event
+- After auto-assignment, loadout changes only happen at save tombs
+
+### Dust Recharge Behavior
+- Player-owned dust only recharges (respawn delay countdown) while the player is grounded
+- Enemy dust recharges normally regardless of state
+- This adds a meaningful risk/reward dynamic to aerial combat
+
+### Health Bar Placement
+- Player health bar moved from over-character to the top-left HUD
+- Now always visible and screen-anchored (not camera-relative)
+- Positioned above the dust container display
+- Enemy health bars remain over their characters (shown when recently damaged)

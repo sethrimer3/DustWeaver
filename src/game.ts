@@ -52,10 +52,12 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           activeSaveData = saveData;
           progress = saveData.progress;
           sessionStartMs = performance.now();
-          // If the save has explored rooms (returning player), skip loadout + character select
+          // Returning player (has explored rooms): skip straight to gameplay
           if (progress.exploredRoomIds.length > 0) {
             navigate('gameplay', progress.loadout);
           } else {
+            // Brand new profile: go to character select, then straight to gameplay
+            // Do NOT open the loadout screen — the player starts with nothing.
             navigate('characterSelect');
           }
         },
@@ -64,11 +66,15 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       cleanup = showCharacterSelect(uiRoot, {
         onConfirm: (characterId) => {
           progress.characterId = characterId;
-          navigate('loadout');
+          // New profile: skip loadout screen entirely, go straight to gameplay.
+          // The player starts as a blank slate with nothing equipped.
+          navigate('gameplay', []);
         },
         onCancel: () => navigate('mainMenu'),
       });
     } else if (to === 'loadout') {
+      // Loadout screen is now only used at save tombs, not during the initial flow.
+      // Keep this branch for backward compatibility / explicit navigation.
       cleanup = showLoadoutScreen(uiRoot, progress, {
         onConfirm: (chosenLoadout, chosenWeaveLoadout) => {
           progress.loadout = chosenLoadout.slice();

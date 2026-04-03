@@ -10,6 +10,7 @@
 /** Optional per-tick player movement debug data shown in the debug panel. */
 export interface HudDebugState {
   isGrounded: boolean;
+  isStandingOnSurface: boolean;
   coyoteTimeTicks: number;
   jumpBufferTicks: number;
   isWallSlidingFlag: boolean;
@@ -26,6 +27,7 @@ export interface HudDebugState {
   inputLeft: boolean;
   inputRight: boolean;
   inputDown: boolean;
+  inputShift: boolean;
   inputLeftClick: boolean;
   inputRightClick: boolean;
   inputGrapple: boolean;
@@ -52,6 +54,7 @@ export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): 
     const d = hud.debug;
     debugLines = [
       `Grounded: ${d.isGrounded ? 'Y' : 'N'}`,
+      `OnSurface: ${d.isStandingOnSurface ? 'Y' : 'N'}`,
       `Coyote:   ${d.coyoteTimeTicks}t`,
       `JumpBuf:  ${d.jumpBufferTicks}t`,
       `WallL/R:  ${d.isTouchingWallLeft ? 'L' : '-'}${d.isTouchingWallRight ? 'R' : '-'}` +
@@ -59,7 +62,7 @@ export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): 
       `WallLock: ${d.wallJumpLockoutTicks}t`,
       `Sprint:${d.isSprinting ? 'Y' : 'N'} Skid:${d.isSkidding ? 'Y' : 'N'} Sld:${d.isSliding ? 'Y' : 'N'}`,
       `Grapple:  ${d.isGrappleActive ? `len=${d.grappleLengthWorld.toFixed(0)} pull=${d.grapplePullInAmountWorld.toFixed(0)}` : 'off'}`,
-      `Input U/L/R/D: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}`,
+      `Input U/L/R/D/Sh: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}${d.inputShift ? 'S' : '-'}`,
       `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
       `Input Grap/Int: ${d.inputGrapple ? 'G' : '-'} / ${d.inputInteract ? 'I' : '-'}`,
     ];

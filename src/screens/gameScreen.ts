@@ -1,10 +1,9 @@
-import { createWorldState, WorldState, MAX_PARTICLES, MAX_WALLS } from '../sim/world';
+import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { initGrappleChainParticles, fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
-import { getElementProfile } from '../sim/particles/elementProfiles';
 import { tick } from '../sim/tick';
-import { RngState, createRng, nextFloat, nextFloatRange } from '../sim/rng';
+import { createRng } from '../sim/rng';
 import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
@@ -12,17 +11,11 @@ import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
-import { createInputState, attachInputListeners, collectCommands, JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
+import { createInputState, attachInputListeners, collectCommands } from '../input/handler';
 import { CommandKind } from '../input/commands';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
-import {
-  SPIKE_DIR_UP,
-  SPIKE_DIR_DOWN,
-  SPIKE_DIR_LEFT,
-  SPIKE_DIR_RIGHT,
-} from '../sim/hazards';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
 import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
@@ -33,11 +26,36 @@ import { showSkillTombMenu } from '../ui/skillTombMenu';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
-import { PlayerWeaveLoadout, createDefaultWeaveLoadout, WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from '../sim/weaves/playerLoadout';
+import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize } from '../ui/renderSettings';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect } from '../render/effects/theroEffectManager';
+import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
+import { performEarlyAutoAssignment } from '../progression/unlocks';
+import {
+  spawnClusterParticles,
+  spawnLoadoutParticles,
+  spawnWeaveLoadoutParticles,
+  spawnBackgroundFluidParticles,
+  PARTICLE_COUNT_PER_CLUSTER,
+  BACKGROUND_FLUID_COUNT,
+  BOSS_HP_MULTIPLIER,
+  PLAYER_INITIAL_HEALTH,
+} from './gameSpawn';
+import {
+  loadRoomWalls,
+  loadRoomHazards,
+  worldBgColor,
+  drawTunnelDarkness,
+  screenToWorld,
+  TUNNEL_DETECT_MARGIN_WORLD,
+  SKILLBOOK_PICKUP_RADIUS_WORLD,
+  DUST_CONTAINER_PICKUP_RADIUS_WORLD,
+  DUST_CONTAINER_DUST_GAIN,
+  FLYING_EYE_HALF_SIZE_WORLD,
+} from './gameRoom';
+import { renderFrame } from './gameRender';
 
 const FIXED_DT_MS = 16.666;
 
@@ -45,523 +63,14 @@ const FIXED_DT_MS = 16.666;
 const BASE_VIRTUAL_WIDTH_PX = 480;
 /** Fixed virtual height so world-to-pixel zoom stays constant on every display. */
 const FIXED_VIRTUAL_HEIGHT_PX = 270;
-/** Total particles spawned for the player cluster — distributed across loadout kinds. */
-const PARTICLE_COUNT_PER_CLUSTER = 20;
-/** Number of background Fluid particles filling the entire arena. */
-const BACKGROUND_FLUID_COUNT = 300;
-
-/** Boss clusters receive this multiplier on their base HP for extra durability. */
-const BOSS_HP_MULTIPLIER = 2;
-
-/** Initial player health (HP). */
-const PLAYER_INITIAL_HEALTH = 10;
-/** Number of particles per dust container for armor calculation. */
-const DUST_PARTICLES_PER_CONTAINER = 4;
-/** Duration (ms) to show health bar after taking damage. */
-const HEALTH_BAR_DISPLAY_MS = 3000;
 /** Vite base URL for assets. */
 const BASE = import.meta.env.BASE_URL;
 
-/** Half-width and half-height (world units) of a flying eye cluster hitbox. */
-const FLYING_EYE_HALF_SIZE_WORLD = 2.8;
-
-// Touch joystick visual constants (outer radius matches the max drag radius exported from handler.ts)
-const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
-const JOYSTICK_INNER_RADIUS_PX = 22;
-
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-/** Blocks of transition tunnel extending past room boundary. */
-const TUNNEL_DETECT_MARGIN_WORLD = 2 * BLOCK_SIZE_MEDIUM;
-/** Skillbook sprite size in world units (24×24 px; 3×3 tiles). */
-const SKILLBOOK_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
-/** Pickup radius for skillbook collection. */
-const SKILLBOOK_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
-/** Dust container sprite size in world units (24×24 px). */
-const DUST_CONTAINER_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
-/** Pickup radius for dust container collection. */
-const DUST_CONTAINER_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
-/** Dust particles granted by one Dust Container collectible. */
-const DUST_CONTAINER_DUST_GAIN = 4;
 
 export interface GameScreenCallbacks {
   onReturnToMenu: () => void;
   onSave?: () => void;
-}
-
-/**
- * Spawns `count` particles of `kind` orbiting the given cluster position.
- * Sets all new particle buffer fields including anchor, lifetime, and noise seed.
- */
-function spawnClusterParticles(
-  world: WorldState,
-  clusterEntityId: number,
-  clusterXWorld: number,
-  clusterYWorld: number,
-  kind: ParticleKind,
-  count: number,
-  rng: RngState,
-): void {
-  const profile = getElementProfile(kind);
-
-  for (let i = 0; i < count; i++) {
-    if (world.particleCount >= MAX_PARTICLES) break;
-    const idx = world.particleCount++;
-
-    // Evenly-spaced anchor angles with a small random offset
-    const baseAngleRad = (i / count) * Math.PI * 2;
-    const jitter = nextFloatRange(rng, -0.3, 0.3);
-    const anchorAngleRad = baseAngleRad + jitter;
-
-    const radiusVariance = profile.orbitRadiusWorld * 0.25;
-    const anchorRadius   = profile.orbitRadiusWorld
-      + nextFloatRange(rng, -radiusVariance, radiusVariance);
-
-    // Spawn position at anchor target
-    world.positionXWorld[idx] = clusterXWorld + Math.cos(anchorAngleRad) * anchorRadius;
-    world.positionYWorld[idx] = clusterYWorld + Math.sin(anchorAngleRad) * anchorRadius;
-
-    const spawnSpeed = 15.0;
-    world.velocityXWorld[idx] = nextFloatRange(rng, -spawnSpeed, spawnSpeed);
-    world.velocityYWorld[idx] = nextFloatRange(rng, -spawnSpeed, spawnSpeed);
-
-    world.forceX[idx]            = 0;
-    world.forceY[idx]            = 0;
-    world.massKg[idx]            = profile.massKg;
-    world.chargeUnits[idx]       = 0;
-    world.isAliveFlag[idx]       = 1;
-    world.kindBuffer[idx]        = kind;
-    world.ownerEntityId[idx]     = clusterEntityId;
-    world.anchorAngleRad[idx]    = anchorAngleRad;
-    world.anchorRadiusWorld[idx] = anchorRadius;
-
-    // Stagger initial age so particles don't all respawn simultaneously
-    const ageOffsetTicks = nextFloatRange(rng, 0, profile.lifetimeBaseTicks);
-    const lifetimeVariance = nextFloatRange(
-      rng, -profile.lifetimeVarianceTicks, profile.lifetimeVarianceTicks,
-    );
-    world.lifetimeTicks[idx] = Math.max(2.0, profile.lifetimeBaseTicks + lifetimeVariance);
-    world.ageTicks[idx]      = ageOffsetTicks;
-
-    // Unique per-particle noise phase so particles don't all jitter in unison
-    world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
-
-    world.behaviorMode[idx]        = 0;
-    world.particleDurability[idx]  = profile.toughness;
-    world.respawnDelayTicks[idx]   = 0;
-    world.attackModeTicksLeft[idx] = 0;
-  }
-}
-
-/**
- * Distributes `totalCount` particles across the kinds in `loadout`,
- * spreading them as evenly as possible.
- */
-function spawnLoadoutParticles(
-  world: WorldState,
-  clusterEntityId: number,
-  clusterXWorld: number,
-  clusterYWorld: number,
-  loadout: ParticleKind[],
-  totalCount: number,
-  rng: RngState,
-): void {
-  if (loadout.length === 0) {
-    // Fallback to Physical if somehow the loadout is empty
-    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, ParticleKind.Physical, totalCount, rng);
-    return;
-  }
-
-  const baseCount = Math.floor(totalCount / loadout.length);
-  let remainder   = totalCount - baseCount * loadout.length;
-
-  for (let k = 0; k < loadout.length; k++) {
-    const extraCount = remainder > 0 ? 1 : 0;
-    remainder -= extraCount;
-    spawnClusterParticles(
-      world,
-      clusterEntityId,
-      clusterXWorld,
-      clusterYWorld,
-      loadout[k],
-      baseCount + extraCount,
-      rng,
-    );
-  }
-}
-
-/**
- * Spawns particles for a Weave loadout, assigning weaveSlotId to each particle
- * based on which Weave binding owns the dust type.
- */
-function spawnWeaveLoadoutParticles(
-  world: WorldState,
-  clusterEntityId: number,
-  clusterXWorld: number,
-  clusterYWorld: number,
-  weaveLoadout: PlayerWeaveLoadout,
-  totalCount: number,
-  rng: RngState,
-): void {
-  // Collect all dust from both bindings
-  const allDust = [...weaveLoadout.primary.boundDust, ...weaveLoadout.secondary.boundDust];
-  if (allDust.length === 0) {
-    return;
-  }
-
-  // Distribute totalCount across all bound dust types
-  const baseCount = Math.floor(totalCount / allDust.length);
-  let remainder = totalCount - baseCount * allDust.length;
-
-  // Track the particle index range for each dust entry so we can assign weave slots
-  const primaryCount = weaveLoadout.primary.boundDust.length;
-
-  for (let k = 0; k < allDust.length; k++) {
-    const extraCount = remainder > 0 ? 1 : 0;
-    remainder -= extraCount;
-    const count = baseCount + extraCount;
-
-    const startIdx = world.particleCount;
-    spawnClusterParticles(world, clusterEntityId, clusterXWorld, clusterYWorld, allDust[k], count, rng);
-    const endIdx = world.particleCount;
-
-    // Assign weave slot based on which binding this dust came from
-    const weaveSlot = k < primaryCount ? WEAVE_SLOT_PRIMARY : WEAVE_SLOT_SECONDARY;
-    for (let i = startIdx; i < endIdx; i++) {
-      world.weaveSlotId[i] = weaveSlot;
-    }
-  }
-}
-
-/**
- * Scatters `count` background Fluid particles randomly across the world area.
- */
-function spawnBackgroundFluidParticles(
-  world: WorldState,
-  count: number,
-  rng: RngState,
-): void {
-  const profile = getElementProfile(ParticleKind.Fluid);
-
-  for (let i = 0; i < count; i++) {
-    if (world.particleCount >= MAX_PARTICLES) break;
-    const idx = world.particleCount++;
-
-    world.positionXWorld[idx] = nextFloat(rng) * world.worldWidthWorld;
-    world.positionYWorld[idx] = nextFloat(rng) * world.worldHeightWorld;
-    world.velocityXWorld[idx] = 0.0;
-    world.velocityYWorld[idx] = 0.0;
-    world.forceX[idx]            = 0.0;
-    world.forceY[idx]            = 0.0;
-    world.massKg[idx]            = profile.massKg;
-    world.chargeUnits[idx]       = 0.0;
-    world.isAliveFlag[idx]       = 1;
-    world.kindBuffer[idx]        = ParticleKind.Fluid;
-    world.ownerEntityId[idx]     = -1;
-    world.anchorAngleRad[idx]    = 0.0;
-    world.anchorRadiusWorld[idx] = 0.0;
-    world.disturbanceFactor[idx] = 0.0;
-
-    const lifetimeVariance = nextFloatRange(rng, -profile.lifetimeVarianceTicks, profile.lifetimeVarianceTicks);
-    world.lifetimeTicks[idx] = Math.max(2.0, profile.lifetimeBaseTicks + lifetimeVariance);
-    world.ageTicks[idx]      = nextFloat(rng) * profile.lifetimeBaseTicks;
-
-    world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
-  }
-}
-
-/**
- * Loads wall definitions from a RoomDef into the WorldState wall buffers.
- * After converting block units to world units, runs an iterative merge pass
- * that combines axis-aligned, contiguous wall rectangles into larger AABBs.
- * This eliminates internal seam edges that cause ghost collisions.
- */
-function loadRoomWalls(world: WorldState, room: RoomDef): void {
-  const rawCount = Math.min(room.walls.length, MAX_WALLS);
-
-  // Pre-allocated merge workspace (avoid per-call allocation)
-  // We use simple arrays here because this runs only at room load, not per-tick.
-  const xs: number[] = [];
-  const ys: number[] = [];
-  const ws: number[] = [];
-  const hs: number[] = [];
-
-  // Convert block units to world units
-  for (let wi = 0; wi < rawCount; wi++) {
-    const def = room.walls[wi];
-    xs.push(def.xBlock * BLOCK_SIZE_MEDIUM);
-    ys.push(def.yBlock * BLOCK_SIZE_MEDIUM);
-    ws.push(Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM));
-    hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
-  }
-
-  // ── Iterative merge pass ─────────────────────────────────────────────────
-  // Two rectangles may merge if they share a complete face:
-  //   - Same Y and height, contiguous on X (horizontal merge)
-  //   - Same X and width,  contiguous on Y (vertical merge)
-  let merged = true;
-  while (merged) {
-    merged = false;
-    for (let i = 0; i < xs.length; i++) {
-      for (let j = i + 1; j < xs.length; j++) {
-        // Horizontal merge: same Y, same H, contiguous on X axis
-        if (ys[i] === ys[j] && hs[i] === hs[j]) {
-          const rightI = xs[i] + ws[i];
-          const rightJ = xs[j] + ws[j];
-          if (rightI === xs[j]) {
-            // i is left of j — extend i to cover j
-            ws[i] += ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
-            merged = true;
-            break;
-          }
-          if (rightJ === xs[i]) {
-            // j is left of i — extend i leftward to cover j
-            xs[i] = xs[j];
-            ws[i] += ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
-            merged = true;
-            break;
-          }
-        }
-        // Vertical merge: same X, same W, contiguous on Y axis
-        if (xs[i] === xs[j] && ws[i] === ws[j]) {
-          const bottomI = ys[i] + hs[i];
-          const bottomJ = ys[j] + hs[j];
-          if (bottomI === ys[j]) {
-            // i is above j — extend i downward to cover j
-            hs[i] += hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
-            merged = true;
-            break;
-          }
-          if (bottomJ === ys[i]) {
-            // j is above i — extend i upward to cover j
-            ys[i] = ys[j];
-            hs[i] += hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
-            merged = true;
-            break;
-          }
-        }
-      }
-      if (merged) break;
-    }
-  }
-
-  // Write merged rectangles into wall buffers
-  const finalCount = Math.min(xs.length, MAX_WALLS);
-  world.wallCount = finalCount;
-  for (let wi = 0; wi < finalCount; wi++) {
-    world.wallXWorld[wi] = xs[wi];
-    world.wallYWorld[wi] = ys[wi];
-    world.wallWWorld[wi] = ws[wi];
-    world.wallHWorld[wi] = hs[wi];
-  }
-}
-
-
-/**
- * Loads environmental hazards from a RoomDef into the WorldState hazard buffers.
- * Called once at room load time, after walls are loaded so breakable blocks can
- * be added as walls and cross-referenced.
- */
-function loadRoomHazards(world: WorldState, room: RoomDef): void {
-  // ── Reset all hazard state ────────────────────────────────────────────────
-  world.spikeCount = 0;
-  world.spikeInvulnTicks = 0;
-  world.springboardCount = 0;
-  world.waterZoneCount = 0;
-  world.lavaZoneCount = 0;
-  world.lavaInvulnTicks = 0;
-  world.breakableBlockCount = 0;
-  world.dustBoostJarCount = 0;
-  world.fireflyJarCount = 0;
-  world.fireflyCount = 0;
-  world.isPlayerInWaterFlag = 0;
-
-  // ── Spikes ────────────────────────────────────────────────────────────────
-  const spikeDefs = room.spikes ?? [];
-  for (let i = 0; i < spikeDefs.length && world.spikeCount < world.spikeXWorld.length; i++) {
-    const s = spikeDefs[i];
-    const si = world.spikeCount++;
-    world.spikeXWorld[si] = (s.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.spikeYWorld[si] = (s.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    switch (s.direction) {
-      case 'up':    world.spikeDirection[si] = SPIKE_DIR_UP; break;
-      case 'down':  world.spikeDirection[si] = SPIKE_DIR_DOWN; break;
-      case 'left':  world.spikeDirection[si] = SPIKE_DIR_LEFT; break;
-      case 'right': world.spikeDirection[si] = SPIKE_DIR_RIGHT; break;
-    }
-  }
-
-  // ── Springboards ──────────────────────────────────────────────────────────
-  const springDefs = room.springboards ?? [];
-  for (let i = 0; i < springDefs.length && world.springboardCount < world.springboardXWorld.length; i++) {
-    const s = springDefs[i];
-    const si = world.springboardCount++;
-    world.springboardXWorld[si] = (s.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.springboardYWorld[si] = (s.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.springboardAnimTicks[si] = 0;
-  }
-
-  // ── Water zones ───────────────────────────────────────────────────────────
-  const waterDefs = room.waterZones ?? [];
-  for (let i = 0; i < waterDefs.length && world.waterZoneCount < world.waterZoneXWorld.length; i++) {
-    const w = waterDefs[i];
-    const wi = world.waterZoneCount++;
-    world.waterZoneXWorld[wi] = w.xBlock * BLOCK_SIZE_MEDIUM;
-    world.waterZoneYWorld[wi] = w.yBlock * BLOCK_SIZE_MEDIUM;
-    world.waterZoneWWorld[wi] = w.wBlock * BLOCK_SIZE_MEDIUM;
-    world.waterZoneHWorld[wi] = w.hBlock * BLOCK_SIZE_MEDIUM;
-  }
-
-  // ── Lava zones ────────────────────────────────────────────────────────────
-  const lavaDefs = room.lavaZones ?? [];
-  for (let i = 0; i < lavaDefs.length && world.lavaZoneCount < world.lavaZoneXWorld.length; i++) {
-    const l = lavaDefs[i];
-    const li = world.lavaZoneCount++;
-    world.lavaZoneXWorld[li] = l.xBlock * BLOCK_SIZE_MEDIUM;
-    world.lavaZoneYWorld[li] = l.yBlock * BLOCK_SIZE_MEDIUM;
-    world.lavaZoneWWorld[li] = l.wBlock * BLOCK_SIZE_MEDIUM;
-    world.lavaZoneHWorld[li] = l.hBlock * BLOCK_SIZE_MEDIUM;
-  }
-
-  // ── Breakable blocks ──────────────────────────────────────────────────────
-  // Each breakable block is added as a wall AND tracked in the breakable arrays.
-  const breakDefs = room.breakableBlocks ?? [];
-  for (let i = 0; i < breakDefs.length && world.breakableBlockCount < world.breakableBlockXWorld.length; i++) {
-    const b = breakDefs[i];
-    const bx = (b.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    const by = (b.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-
-    // Add as a wall
-    let wallIdx = -1;
-    if (world.wallCount < MAX_WALLS) {
-      wallIdx = world.wallCount++;
-      world.wallXWorld[wallIdx] = b.xBlock * BLOCK_SIZE_MEDIUM;
-      world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
-      world.wallWWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
-      world.wallHWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
-    }
-
-    const bi = world.breakableBlockCount++;
-    world.breakableBlockXWorld[bi] = bx;
-    world.breakableBlockYWorld[bi] = by;
-    world.isBreakableBlockActiveFlag[bi] = 1;
-    world.breakableBlockWallIndex[bi] = wallIdx;
-  }
-
-  // ── Dust boost jars ───────────────────────────────────────────────────────
-  const dustJarDefs = room.dustBoostJars ?? [];
-  for (let i = 0; i < dustJarDefs.length && world.dustBoostJarCount < world.dustBoostJarXWorld.length; i++) {
-    const j = dustJarDefs[i];
-    const ji = world.dustBoostJarCount++;
-    world.dustBoostJarXWorld[ji] = (j.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.dustBoostJarYWorld[ji] = (j.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.isDustBoostJarActiveFlag[ji] = 1;
-    world.dustBoostJarKind[ji] = j.dustKind;
-    world.dustBoostJarDustCount[ji] = j.dustCount;
-  }
-
-  // ── Firefly jars ──────────────────────────────────────────────────────────
-  const fireflyJarDefs = room.fireflyJars ?? [];
-  for (let i = 0; i < fireflyJarDefs.length && world.fireflyJarCount < world.fireflyJarXWorld.length; i++) {
-    const j = fireflyJarDefs[i];
-    const ji = world.fireflyJarCount++;
-    world.fireflyJarXWorld[ji] = (j.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.fireflyJarYWorld[ji] = (j.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.isFireflyJarActiveFlag[ji] = 1;
-  }
-}
-
-
-/** Background fill colour for each world number. */
-function worldBgColor(worldNumber: number): string {
-  switch (worldNumber) {
-    case 0:  return '#0d1a0f'; // pale dark green
-    case 1:  return '#051408'; // deep dark green
-    case 2:  return '#080c1a'; // dark blue
-    case 3:  return '#1a0500'; // deep dark red-orange (fire/lava world)
-    default: return '#0a0a12';
-  }
-}
-
-
-/**
- * Draws a gradient darkness overlay at room transition tunnel edges.
- * The gradient goes from transparent to 100% black at the very edge.
- */
-function drawTunnelDarkness(
-  ctx: CanvasRenderingContext2D,
-  room: RoomDef,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  const roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
-  const fadeDepthWorld = 4 * BLOCK_SIZE_MEDIUM; // 4 blocks of fade
-
-  ctx.save();
-
-  for (let ti = 0; ti < room.transitions.length; ti++) {
-    const t = room.transitions[ti];
-    const openTopWorld = t.positionBlock * BLOCK_SIZE_MEDIUM;
-    const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
-
-    if (t.direction === 'left') {
-      // Fade from left room edge inward
-      const x0Screen = 0 * zoom + offsetXPx;
-      const x1Screen = fadeDepthWorld * zoom + offsetXPx;
-      const y0Screen = (openTopWorld - BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
-      const y1Screen = (openBottomWorld + BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
-
-      const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
-      grad.addColorStop(0, 'rgba(0,0,0,1)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(x0Screen - 200, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
-    } else if (t.direction === 'right') {
-      // Fade from right room edge inward
-      const x0Screen = (roomWidthWorld - fadeDepthWorld) * zoom + offsetXPx;
-      const x1Screen = roomWidthWorld * zoom + offsetXPx;
-      const y0Screen = (openTopWorld - BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
-      const y1Screen = (openBottomWorld + BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
-
-      const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,1)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(x0Screen, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
-    }
-  }
-
-  ctx.restore();
-}
-
-/**
- * Converts a device-space aim position (mouse/touch in device pixels)
- * back to world coordinates given the current camera transform.
- * First maps device coords to virtual canvas space, then applies camera inverse.
- */
-function screenToWorld(
-  deviceXPx: number,
-  deviceYPx: number,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-  deviceWidthPx: number,
-  deviceHeightPx: number,
-  virtualWidthPx: number,
-  virtualHeightPx: number,
-): { xWorld: number; yWorld: number } {
-  // Map device pixels to virtual canvas pixels
-  const virtualXPx = (deviceXPx / deviceWidthPx)  * virtualWidthPx;
-  const virtualYPx = (deviceYPx / deviceHeightPx) * virtualHeightPx;
-  return {
-    xWorld: (virtualXPx - offsetXPx) / zoom,
-    yWorld: (virtualYPx - offsetYPx) / zoom,
-  };
 }
 
 export function startGameScreen(
@@ -689,7 +198,12 @@ export function startGameScreen(
     world.worldHeightWorld = roomHeightWorld;
 
     // Reset grapple state
-    world.isGrappleActiveFlag = 0;
+    world.isGrappleActiveFlag     = 0;
+    world.isGrappleMissActiveFlag = 0;
+    world.isGrappleRetractingFlag = 0;
+    world.isGrappleTopSurfaceFlag = 0;
+    world.isGrappleStuckFlag      = 0;
+    world.hasGrappleChargeFlag    = 1;
     world.grappleParticleStartIndex = -1;
 
     // Reset Radiant Tether boss state
@@ -700,7 +214,28 @@ export function startGameScreen(
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
     const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
     world.clusters.push(playerCluster);
-    spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+
+    // Spawn player dust particles based on capacity model.
+    // If the player has dust containers and unlocked dust, use capacity-based spawning.
+    // If the player has a weave loadout with bound dust, use that for weave-slot assignment.
+    // Otherwise (brand new profile with nothing), spawn no particles.
+    const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
+    const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
+      || playerWeaveLoadout.secondary.boundDust.length > 0;
+
+    if (hasWeaveBoundDust) {
+      // Player has dust bound to weaves — use weave loadout spawning
+      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+    } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
+      // Player has unlocked dust and capacity but no weave bindings.
+      // Spawn particles based on capacity (e.g., auto-assigned Golden Dust).
+      const dustKind = progress.unlockedDustKinds[0];
+      const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
+      if (particleCount > 0) {
+        spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+      }
+    }
+    // else: brand new profile with nothing — no particles spawned
 
     // Apply weave IDs to world state for combat dispatch
     world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
@@ -794,7 +329,7 @@ export function startGameScreen(
     if (player === undefined || player.isAliveFlag === 0) return 0;
     let count = 0;
     for (let i = 0; i < world.particleCount; i++) {
-      if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1) {
+      if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1 && world.isTransientFlag[i] === 0) {
         count++;
       }
     }
@@ -834,6 +369,13 @@ export function startGameScreen(
   // ── World Editor ────────────────────────────────────────────────────────
   const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY) => {
     loadRoom(roomDef, spawnX, spawnY);
+  }, () => {
+    // Called when editor closes (confirm or cancel)
+    if (editorToggleBtn) {
+      editorToggleBtn.textContent = 'World Editor';
+      editorToggleBtn.style.borderColor = '#00c864';
+      editorToggleBtn.style.color = '#00c864';
+    }
   });
 
   // "World Editor" toggle button — shown when debug mode is on
@@ -1053,9 +595,11 @@ export function startGameScreen(
     // ── Editor mode gate ──────────────────────────────────────────────────
     // When the editor is active, it takes over camera and input; skip gameplay.
     if (editorController.state.isActive) {
+      // Use CSS display dimensions for mouse coordinate mapping (not buffer dimensions)
+      const canvasRect = canvas.getBoundingClientRect();
       const isEditorConsuming = editorController.update(
         elapsedMs / 1000, camera, offsetXPx, offsetYPx, zoom,
-        canvas.width, canvas.height, virtualWidthPx, virtualHeightPx,
+        canvasRect.width, canvasRect.height, virtualWidthPx, virtualHeightPx,
       );
 
       if (isEditorConsuming) {
@@ -1217,6 +761,11 @@ export function startGameScreen(
         }
       } else if (cmd.kind === CommandKind.GrappleRelease) {
         releaseGrapple(world);
+      } else if (cmd.kind === CommandKind.ToggleFullscreen) {
+        if (!document.fullscreenElement) {
+          // Enter fullscreen on key press (requires user gesture; keydown path satisfies this).
+          void document.documentElement.requestFullscreen().catch(() => {});
+        }
       } else if (cmd.kind === CommandKind.Interact) {
         interactInputPulseMs = 150;
         // Check if player is near a skill tomb
@@ -1304,8 +853,9 @@ export function startGameScreen(
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
-      // Skillbook pickup (lobby progression): learn Golden Dust when collected.
-      if (progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
+      // Skillbook pickup (lobby progression): triggers the early auto-assignment.
+      // Grants Cycle passive, Golden Dust, and 2 containers on first pickup.
+      if (progress && !progress.hasCompletedEarlyAutoAssignment) {
         const roomSkillBooks = currentRoom.skillBooks ?? [];
         for (let i = 0; i < roomSkillBooks.length; i++) {
           const sb = roomSkillBooks[i];
@@ -1314,18 +864,24 @@ export function startGameScreen(
           const dx = playerForTomb.positionXWorld - sx;
           const dy = playerForTomb.positionYWorld - sy;
           if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
-            progress.unlockedDustKinds = [...progress.unlockedDustKinds, ParticleKind.Physical];
-            progress.loadout = Array.from(new Set([...progress.loadout, ParticleKind.Physical]));
-            if (!progress.weaveLoadout.primary.boundDust.includes(ParticleKind.Physical)) {
-              progress.weaveLoadout.primary.boundDust = [...progress.weaveLoadout.primary.boundDust, ParticleKind.Physical];
-            }
-            playerWeaveLoadout = JSON.parse(JSON.stringify(progress.weaveLoadout));
+            // Perform the early auto-assignment: Cycle + Golden Dust + 2 containers
+            const goldenDustCount = performEarlyAutoAssignment(progress);
+            // Spawn the auto-assigned Golden Dust particles immediately
+            spawnClusterParticles(
+              world,
+              playerForTomb.entityId,
+              playerForTomb.positionXWorld,
+              playerForTomb.positionYWorld,
+              ParticleKind.Physical,
+              goldenDustCount,
+              levelRng,
+            );
             break;
           }
         }
       }
 
-      // Dust container pickup: grants +4 dust particles (one full HUD container).
+      // Dust container pickup: grants +1 dust container (+4 capacity) and spawns particles.
       const roomDustContainers = currentRoom.dustContainers ?? [];
       for (let i = 0; i < roomDustContainers.length; i++) {
         const pickupKey = `${currentRoom.id}:${i}`;
@@ -1338,6 +894,10 @@ export function startGameScreen(
         const dy = playerForTomb.positionYWorld - cy;
         if (dx * dx + dy * dy <= DUST_CONTAINER_PICKUP_RADIUS_WORLD * DUST_CONTAINER_PICKUP_RADIUS_WORLD) {
           collectedDustContainerKeySet.add(pickupKey);
+          // Grant a container to the player's progression state
+          if (progress) {
+            progress.dustContainerCount += 1;
+          }
           spawnClusterParticles(
             world,
             playerForTomb.entityId,
@@ -1402,8 +962,11 @@ export function startGameScreen(
     if (isDebugMode) {
       const playerClusterForHud = world.clusters[0];
       if (playerClusterForHud !== undefined && playerClusterForHud.isAliveFlag === 1) {
+        const isStandingOnSurface =
+          playerClusterForHud.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1;
         const dbg: HudDebugState = {
           isGrounded:           playerClusterForHud.isGroundedFlag === 1,
+          isStandingOnSurface,
           coyoteTimeTicks:      playerClusterForHud.coyoteTimeTicks,
           jumpBufferTicks:      playerClusterForHud.jumpBufferTicks,
           isWallSlidingFlag:    playerClusterForHud.isWallSlidingFlag === 1,
@@ -1420,6 +983,7 @@ export function startGameScreen(
           inputLeft: inputState.isKeyA,
           inputRight: inputState.isKeyD,
           inputDown: inputState.isKeyS,
+          inputShift: inputState.isSprintHeldFlag,
           inputLeftClick: inputState.isMouseDownFlag === 1,
           inputRightClick: inputState.isRightMouseDownFlag === 1,
           inputGrapple: inputState.isGrappleHeldFlag === 1,
@@ -1431,246 +995,24 @@ export function startGameScreen(
       hudState.debug = undefined;
     }
 
-    const snapshot = createSnapshot(world);
-
-    // ── Render to virtual canvas (dynamic width × fixed height) ───────────
-    if (webglRenderer.isAvailable) {
-      webglRenderer.render(snapshot, ox, oy, zoom);
-      ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
-    } else {
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
-    }
-
-    // ── World background with parallax (behind everything else) ───────────
-    renderWorldBackground(
-      ctx,
-      currentRoom.worldNumber,
-      virtualWidthPx,
-      virtualHeightPx,
-      ox,
-      oy,
-      currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
-      currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
-      zoom,
-    );
-
-    // ── Thero effect showcase overlay (worldNumber=99 rooms) ──────────────
-    if (isTheroShowcaseRoom(currentRoom.id)) {
-      renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
-    }
-
-    // Walls before cluster indicators so clusters are drawn on top
-    renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
-
-    // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
-    renderHazards(ctx, world, ox, oy, zoom, world.tick);
-
-    renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode);
-    renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
-    renderGrapple(ctx, snapshot, ox, oy, zoom);
-
-    // Tunnel darkness overlays
-    drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
-
-    environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
-    skidDebris.render(ctx, ox, oy, zoom);
-
-    // Skill tombs (sprite + dust particles)
-    skillTombRenderer.render(ctx, ox, oy, zoom);
-
-    // Skill books (collectibles)
-    if (isSkillBookSpriteLoaded && progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
-      const roomSkillBooks = currentRoom.skillBooks ?? [];
-      const bobOffsetWorld = Math.sin(performance.now() * 0.004) * 2.0;
-      for (let i = 0; i < roomSkillBooks.length; i++) {
-        const sb = roomSkillBooks[i];
-        const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-        const sy = (sb.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
-        const drawSize = SKILLBOOK_SIZE_WORLD * zoom;
-        ctx.drawImage(
-          skillBookSprite,
-          sx * zoom + ox - drawSize * 0.5,
-          sy * zoom + oy - drawSize * 0.5,
-          drawSize,
-          drawSize,
-        );
-      }
-    }
-
-    // Dust containers (collectibles)
-    if (isDustContainerSpriteLoaded) {
-      const roomDustContainers = currentRoom.dustContainers ?? [];
-      const bobOffsetWorld = Math.sin(performance.now() * 0.0032) * 1.5;
-      for (let i = 0; i < roomDustContainers.length; i++) {
-        const pickupKey = `${currentRoom.id}:${i}`;
-        if (collectedDustContainerKeySet.has(pickupKey)) continue;
-
-        const dc = roomDustContainers[i];
-        const dx = (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-        const dy = (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
-        const drawSize = DUST_CONTAINER_SIZE_WORLD * zoom;
-        ctx.drawImage(
-          dustContainerSprite,
-          dx * zoom + ox - drawSize * 0.5,
-          dy * zoom + oy - drawSize * 0.5,
-          drawSize,
-          drawSize,
-        );
-      }
-    }
-
-    // Particles drawn on top of all game layers (Canvas 2D fallback only —
-    // WebGL renders to its own offscreen canvas at virtual resolution)
-    if (!webglRenderer.isAvailable) {
-      renderParticles(ctx, snapshot, ox, oy, zoom);
-    }
-
-    // Debug-only HUD and room name
-    if (isDebugMode) {
-      renderHudOverlay(ctx, hudState);
-
-      // ── Room name banner (top-center) ──────────────────────────────────────
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = '7px monospace';
-      const roomLabel = currentRoom.name;
-      const labelW = ctx.measureText(roomLabel).width;
-      ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
-    }
-
-    // ── Dust container display (top-left) ─────────────────────────────────────
-    const dustCount = getPlayerDustCount();
-    const fullContainers = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
-    const partialDust = dustCount % DUST_PARTICLES_PER_CONTAINER;
-    const dustSquareSize = 8;
-    const dustPadding = 2;
-    const dustStartX = 8;
-    const dustStartY = 8;
-
-    ctx.save();
-    for (let i = 0; i < fullContainers + (partialDust > 0 ? 1 : 0); i++) {
-      const squareX = dustStartX + i * (dustSquareSize + dustPadding);
-      const isPartial = i === fullContainers;
-      const quadrantsActive = isPartial ? partialDust : DUST_PARTICLES_PER_CONTAINER;
-
-      // Draw square background
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(squareX, dustStartY, dustSquareSize, dustSquareSize);
-
-      // Draw quadrants (2x2 grid) - direct indexing to avoid allocation
-      const halfSize = dustSquareSize / 2;
-      // Quadrant positions: [top-left, top-right, bottom-left, bottom-right]
-      // x offsets: [0, halfSize, 0, halfSize]
-      // y offsets: [0, 0, halfSize, halfSize]
-
-      for (let q = 0; q < quadrantsActive; q++) {
-        const qx = (q % 2) * halfSize;
-        const qy = Math.floor(q / 2) * halfSize;
-        ctx.fillStyle = 'rgba(212,168,75,0.9)'; // golden dust color
-        ctx.fillRect(squareX + qx + 0.5, dustStartY + qy + 0.5, halfSize - 1, halfSize - 1);
-      }
-
-      // Draw border
-      ctx.strokeStyle = 'rgba(212,168,75,0.6)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(squareX + 0.5, dustStartY + 0.5, dustSquareSize - 1, dustSquareSize - 1);
-    }
-    ctx.restore();
-
-    // ── Health bar display (only when damaged) ───────────────────────────────
-    // Uses tick-based timing for determinism (HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS ticks)
-    const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
-    for (let ci = 0; ci < world.clusters.length; ci++) {
-      const cluster = world.clusters[ci];
-      if (cluster.isAliveFlag === 0) continue;
-
-      // Check for health changes to trigger display
-      const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
-      if (cluster.healthPoints < prevHealth) {
-        healthBarDisplayUntilTick.set(cluster.entityId, world.tick + healthBarDisplayTicks);
-      }
-      prevHealthMap.set(cluster.entityId, cluster.healthPoints);
-
-      // Only show health bar if recently damaged (tick-based)
-      const displayUntilTick = healthBarDisplayUntilTick.get(cluster.entityId) ?? 0;
-      if (world.tick > displayUntilTick) continue;
-
-      const healthFraction = cluster.healthPoints / cluster.maxHealthPoints;
-      const barWidth = 24;
-      const barHeight = 3;
-      const barX = cluster.positionXWorld * zoom + ox - barWidth / 2;
-      const barY = (cluster.positionYWorld - cluster.halfHeightWorld - 4) * zoom + oy;
-
-      ctx.save();
-      // Background
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(barX, barY, barWidth, barHeight);
-      // Health fill
-      const healthColor = cluster.isPlayerFlag === 1 ? '#00ff88' : '#ff4444';
-      ctx.fillStyle = healthColor;
-      ctx.fillRect(barX, barY, barWidth * healthFraction, barHeight);
-      // Border
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(barX, barY, barWidth, barHeight);
-      ctx.restore();
-    }
-
     if (interactInputPulseMs > 0) {
       interactInputPulseMs = Math.max(0, interactInputPulseMs - elapsedMs);
     }
 
-    // ── Upscale virtual canvas to device canvas ────────────────────────────
-    deviceCtx.imageSmoothingEnabled = false;
-    deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
-    // Composite WebGL particle canvas on top (also at virtual resolution)
-    if (webglRenderer.isAvailable) {
-      deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
-    }
-
-    // ── Touch joystick (drawn on device canvas in screen space) ───────────
-    if (inputState.isTouchJoystickActiveFlag === 1) {
-      const bx = inputState.touchJoystickBaseXPx;
-      const by = inputState.touchJoystickBaseYPx;
-      const joystickCurrentXPx = inputState.touchJoystickCurrentXPx;
-      const joystickCurrentYPx = inputState.touchJoystickCurrentYPx;
-
-      deviceCtx.save();
-      deviceCtx.beginPath();
-      deviceCtx.arc(bx, by, JOYSTICK_OUTER_RADIUS_PX, 0, Math.PI * 2);
-      deviceCtx.strokeStyle = 'rgba(0,207,255,0.35)';
-      deviceCtx.lineWidth = 2;
-      deviceCtx.stroke();
-      deviceCtx.fillStyle = 'rgba(0,207,255,0.08)';
-      deviceCtx.fill();
-
-      const dx = joystickCurrentXPx - bx;
-      const dy = joystickCurrentYPx - by;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      let thumbXPx = joystickCurrentXPx;
-      let thumbYPx = joystickCurrentYPx;
-      if (dist > JOYSTICK_OUTER_RADIUS_PX) {
-        thumbXPx = bx + (dx / dist) * JOYSTICK_OUTER_RADIUS_PX;
-        thumbYPx = by + (dy / dist) * JOYSTICK_OUTER_RADIUS_PX;
-      }
-
-      deviceCtx.beginPath();
-      deviceCtx.arc(thumbXPx, thumbYPx, JOYSTICK_INNER_RADIUS_PX, 0, Math.PI * 2);
-      deviceCtx.fillStyle = 'rgba(0,207,255,0.45)';
-      deviceCtx.fill();
-      deviceCtx.restore();
-    }
-
-    // ── Control hints (debug only, drawn on device canvas) ──────────────────
-    if (isDebugMode) {
-      const controlHintText = IS_TOUCH_DEVICE
-        ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
-        : 'A/D=walk  |  W/Space/↑=jump  |  Shift=sprint  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=menu';
-      deviceCtx.fillStyle = 'rgba(255,255,255,0.3)';
-      deviceCtx.font = '12px monospace';
-      const hintWidthPx = deviceCtx.measureText(controlHintText).width;
-      deviceCtx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
-    }
+    // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
+    renderFrame({
+      ctx, deviceCtx, virtualCanvas, canvas,
+      webglRenderer, environmentalDust, skidDebris, skillTombRenderer,
+      world, currentRoom,
+      ox, oy, zoom, virtualWidthPx, virtualHeightPx,
+      bgColor, isDebugMode, hudState, inputState,
+      prevHealthMap, healthBarDisplayUntilTick,
+      collectedDustContainerKeySet,
+      isSkillBookSpriteLoaded, isDustContainerSpriteLoaded,
+      skillBookSprite, dustContainerSprite,
+      progress,
+      getPlayerDustCount,
+    });
 
     rafHandle = requestAnimationFrame(frame);
   }

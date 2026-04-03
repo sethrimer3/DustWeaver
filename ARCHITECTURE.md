@@ -162,7 +162,45 @@ The world editor is an in-game level editing tool accessible via the debug UI.
 - The editor calls `loadRoom()` to apply changes to the runtime world when jumping rooms.
 
 
-## Weave Combat System (BUILD 39)
+## Progression System (BUILD 74)
+
+### Module Layout
+```
+src/progression/
+  playerProgress.ts      — PlayerProgress type, default factory, slot helpers
+  saveSlots.ts           — localStorage persistence (3 slots, auto-migration)
+  passiveTechniques.ts   — Passive technique definitions (e.g., Cycle)
+  dustCapacity.ts        — Container-based capacity model
+  unlocks.ts             — Progression unlock functions
+```
+
+### Clean Category Separation
+- **Passive techniques** (e.g., Cycle) — always active once unlocked, NOT bindable to LMB/RMB
+- **Dust types** (e.g., Golden Dust, Fire Dust) — unlocked independently
+- **Active weaves** (e.g., Spire, Aegis) — bound to LMB/RMB via WeaveBinding
+- **Dust containers** — each grants 4 capacity; different dust types cost different amounts
+
+### Capacity Model
+- Each dust container grants `CAPACITY_PER_CONTAINER = 4` capacity
+- Total capacity = `dustContainerCount × 4`
+- Golden Dust (Physical) costs 1 capacity per particle → 8 particles with 2 containers
+- Fire Dust costs 2 capacity per particle → 4 particles with 2 containers
+
+### Early Game Progression Flow
+1. New profile starts empty (0 containers, 0 dust, no weaves, no techniques)
+2. Loadout screen is NOT shown for new profiles
+3. Early unlock: Cycle passive technique (dust orbits the player)
+4. Next unlock: Golden Dust + 2 dust containers (auto-configured, no menu needed)
+5. After auto-assignment, loadout changes only happen at save tombs
+
+### Dust Recharge Rule
+- Player-owned dust only recharges (respawn delay countdown) while the player is grounded
+- Enemy dust recharges normally regardless of grounded state
+- Implemented in `sim/particles/lifetime.ts`
+
+### HUD Layout (top-left)
+1. Health bar (always visible, screen-anchored)
+2. Dust container display (below health bar)
 
 ### Module Layout
 ```

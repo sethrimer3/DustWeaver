@@ -1,6 +1,7 @@
 /**
  * Editor camera — free WASD panning independent of the player.
  * Smoothly moves at a constant speed in world units per second.
+ * Hold Shift to double the pan speed.
  */
 
 import type { CameraState } from '../render/camera';
@@ -8,11 +9,15 @@ import type { CameraState } from '../render/camera';
 /** Camera pan speed in world units per second. */
 const EDITOR_CAMERA_SPEED_WORLD = 200;
 
+/** Multiplier applied when Shift is held. */
+const SHIFT_SPEED_MULTIPLIER = 2;
+
 export interface EditorCameraInput {
   isUp: boolean;
   isDown: boolean;
   isLeft: boolean;
   isRight: boolean;
+  isShiftHeld: boolean;
 }
 
 /**
@@ -38,6 +43,10 @@ export function updateEditorCamera(
     dy *= inv;
   }
 
-  camera.centerXWorld += dx * EDITOR_CAMERA_SPEED_WORLD * dtSec;
-  camera.centerYWorld += dy * EDITOR_CAMERA_SPEED_WORLD * dtSec;
+  const speed = input.isShiftHeld
+    ? EDITOR_CAMERA_SPEED_WORLD * SHIFT_SPEED_MULTIPLIER
+    : EDITOR_CAMERA_SPEED_WORLD;
+
+  camera.centerXWorld += dx * speed * dtSec;
+  camera.centerYWorld += dy * speed * dtSec;
 }
