@@ -1,0 +1,12 @@
+{
+  "id": "thero_prologue",
+  "name": "Prologue – Shape Glow",
+  "worldNumber": 99,
+  "widthBlocks": 60,
+  "heightBlocks": 34,
+  "playerSpawnBlock": [30, 30],
+  "interiorWalls": [],
+  "enemies": [],
+  "transitions": [],
+  "skillTombs": []
+}

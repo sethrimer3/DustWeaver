@@ -1,0 +1,75 @@
+{
+  "id": "w2_room1",
+  "name": "Ember Threshold",
+  "worldNumber": 2,
+  "widthBlocks": 40,
+  "heightBlocks": 24,
+  "playerSpawnBlock": [36, 19],
+  "interiorWalls": [
+    { "xBlock": 6, "yBlock": 15, "wBlock": 5, "hBlock": 1 },
+    { "xBlock": 15, "yBlock": 18, "wBlock": 4, "hBlock": 1 },
+    { "xBlock": 22, "yBlock": 16, "wBlock": 5, "hBlock": 1 },
+    { "xBlock": 30, "yBlock": 13, "wBlock": 4, "hBlock": 1 },
+    { "xBlock": 10, "yBlock": 20, "wBlock": 6, "hBlock": 1 }
+  ],
+  "enemies": [
+    {
+      "xBlock": 12,
+      "yBlock": 16,
+      "kinds": ["Water"],
+      "particleCount": 18,
+      "isBoss": false,
+      "isFlyingEye": false,
+      "isRollingEnemy": true,
+      "rollingEnemySpriteIndex": 3,
+      "isRockElemental": false,
+      "isRadiantTether": false
+    },
+    {
+      "xBlock": 28,
+      "yBlock": 14,
+      "kinds": ["Ice"],
+      "particleCount": 14,
+      "isBoss": false,
+      "isFlyingEye": false,
+      "isRollingEnemy": true,
+      "rollingEnemySpriteIndex": 4,
+      "isRockElemental": false,
+      "isRadiantTether": false
+    },
+    {
+      "xBlock": 20,
+      "yBlock": 8,
+      "kinds": ["Ice"],
+      "particleCount": 16,
+      "isBoss": false,
+      "isFlyingEye": true,
+      "isRollingEnemy": false,
+      "isRockElemental": false,
+      "isRadiantTether": false
+    }
+  ],
+  "transitions": [
+    {
+      "direction": "right",
+      "targetRoomId": "lobby",
+      "positionBlock": 16,
+      "openingSizeBlocks": 5,
+      "targetSpawnBlock": [3, 18]
+    },
+    {
+      "direction": "left",
+      "targetRoomId": "w3_room1",
+      "positionBlock": 16,
+      "openingSizeBlocks": 5,
+      "targetSpawnBlock": [40, 18]
+    }
+  ],
+  "skillTombs": [],
+  "waterZones": [
+    { "xBlock": 1, "yBlock": 19, "wBlock": 38, "hBlock": 4 }
+  ],
+  "springboards": [
+    { "xBlock": 8, "yBlock": 22 }
+  ]
+}

@@ -82,6 +82,41 @@ export interface RoomJsonSkillTomb {
   yBlock: number;
 }
 
+export interface RoomJsonSpike {
+  xBlock: number;
+  yBlock: number;
+  direction: 'up' | 'down' | 'left' | 'right';
+}
+
+export interface RoomJsonSpringboard {
+  xBlock: number;
+  yBlock: number;
+}
+
+export interface RoomJsonZone {
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
+export interface RoomJsonBreakableBlock {
+  xBlock: number;
+  yBlock: number;
+}
+
+export interface RoomJsonDustBoostJar {
+  xBlock: number;
+  yBlock: number;
+  dustKind: string;
+  dustCount: number;
+}
+
+export interface RoomJsonFireflyJar {
+  xBlock: number;
+  yBlock: number;
+}
+
 export interface RoomJsonDef {
   id: string;
   name: string;
@@ -94,6 +129,18 @@ export interface RoomJsonDef {
   enemies: RoomJsonEnemy[];
   transitions: RoomJsonTransition[];
   skillTombs: RoomJsonSkillTomb[];
+  /** Collectible skill book positions (block units). */
+  skillBooks?: RoomJsonSkillTomb[];
+  /** Collectible dust container positions (block units). */
+  dustContainers?: RoomJsonSkillTomb[];
+  // ── Environmental hazards (all optional) ──────────────────────────────────
+  spikes?: RoomJsonSpike[];
+  springboards?: RoomJsonSpringboard[];
+  waterZones?: RoomJsonZone[];
+  lavaZones?: RoomJsonZone[];
+  breakableBlocks?: RoomJsonBreakableBlock[];
+  dustBoostJars?: RoomJsonDustBoostJar[];
+  fireflyJars?: RoomJsonFireflyJar[];
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
