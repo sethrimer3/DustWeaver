@@ -15,6 +15,8 @@ export interface EditorInputState {
   isShiftHeld: boolean;
   /** M key toggles world map. */
   isMapToggled: boolean;
+  /** Left mouse button currently held down (persistent, not one-shot). */
+  isMouseDown: boolean;
   /** Left mouse click fired (one-shot). */
   isClickFired: boolean;
   clickScreenXPx: number;
@@ -38,6 +40,7 @@ export function createEditorInputState(): EditorInputState {
     isCamRight: false,
     isShiftHeld: false,
     isMapToggled: false,
+    isMouseDown: false,
     isClickFired: false,
     clickScreenXPx: 0,
     clickScreenYPx: 0,
@@ -93,9 +96,16 @@ export function attachEditorInputListeners(
   function onMouseDown(e: MouseEvent): void {
     if (!editorState.isActive) return;
     if (e.button === 0) {
+      state.isMouseDown = true;
       state.isClickFired = true;
       state.clickScreenXPx = e.clientX;
       state.clickScreenYPx = e.clientY;
+    }
+  }
+
+  function onMouseUp(e: MouseEvent): void {
+    if (e.button === 0) {
+      state.isMouseDown = false;
     }
   }
 
@@ -107,6 +117,7 @@ export function attachEditorInputListeners(
 
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('mouseup', onMouseUp);
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
   canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -114,6 +125,7 @@ export function attachEditorInputListeners(
   return () => {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('mouseup', onMouseUp);
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('mousedown', onMouseDown);
     canvas.removeEventListener('wheel', onWheel);
