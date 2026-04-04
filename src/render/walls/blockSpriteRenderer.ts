@@ -18,7 +18,7 @@
  */
 
 import { WallSnapshot } from '../snapshot';
-import type { BlockTheme } from '../../levels/roomDef';
+import type { BlockTheme, LightingEffect } from '../../levels/roomDef';
 
 // ── Sprite loading ──────────────────────────────────────────────────────────
 
@@ -166,6 +166,9 @@ let _activeWorldNumber = 0;
  * world-number-based sprite selection.
  */
 let _activeBlockTheme: BlockTheme | null = null;
+let _activeLightingEffect: LightingEffect = 'DEFAULT';
+let _activeRoomWidthBlocks = 0;
+let _activeRoomHeightBlocks = 0;
 
 /**
  * Set the active world number for block sprite rendering.
@@ -183,6 +186,13 @@ export function setActiveBlockSpriteWorld(worldNumber: number): void {
  */
 export function setActiveBlockSpriteTheme(theme: BlockTheme): void {
   _activeBlockTheme = theme;
+}
+
+/** Sets the active lighting model and room bounds used for block shading. */
+export function setActiveBlockLighting(effect: LightingEffect, roomWidthBlocks: number, roomHeightBlocks: number): void {
+  _activeLightingEffect = effect;
+  _activeRoomWidthBlocks = roomWidthBlocks;
+  _activeRoomHeightBlocks = roomHeightBlocks;
 }
 
 function _getBrownRockSpriteForBlockSize(blockSizePx: number): HTMLImageElement {
@@ -343,6 +353,10 @@ function _isOccupied(col: number, row: number): boolean {
   return _occupied.has(_tileKey(col, row));
 }
 
+function _isInsideActiveRoom(col: number, row: number): boolean {
+  return col >= 0 && col < _activeRoomWidthBlocks && row >= 0 && row < _activeRoomHeightBlocks;
+}
+
 /**
  * Returns how many solid tiles lie directly above this tile before open air.
  * 0 means this tile is directly exposed to air from above.
@@ -355,6 +369,78 @@ function _blocksToOpenAirAbove(col: number, row: number): number {
     scanRow--;
   }
   return depth;
+}
+
+function _buildDefaultLightingDepths(): Map<string, number> {
+  const depths = new Map<string, number>();
+  if (_activeRoomWidthBlocks <= 0 || _activeRoomHeightBlocks <= 0) return depths;
+
+  const qCols: number[] = [];
+  const qRows: number[] = [];
+  const qDepths: number[] = [];
+  let qIndex = 0;
+
+  for (const key of _occupied) {
+    const commaIdx = key.indexOf(',');
+    const col = parseInt(key.slice(0, commaIdx), 10);
+    const row = parseInt(key.slice(commaIdx + 1), 10);
+    if (!_isInsideActiveRoom(col, row)) continue;
+
+    let touchesOpenAir = false;
+    for (let dy = -1; dy <= 1 && !touchesOpenAir; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nc = col + dx;
+        const nr = row + dy;
+        if (!_isInsideActiveRoom(nc, nr)) continue; // outside room counts as solid
+        if (!_isOccupied(nc, nr)) {
+          touchesOpenAir = true;
+          break;
+        }
+      }
+    }
+
+    if (touchesOpenAir) {
+      depths.set(key, 0);
+      qCols.push(col);
+      qRows.push(row);
+      qDepths.push(0);
+    }
+  }
+
+  while (qIndex < qCols.length) {
+    const col = qCols[qIndex];
+    const row = qRows[qIndex];
+    const depth = qDepths[qIndex];
+    qIndex++;
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nc = col + dx;
+        const nr = row + dy;
+        if (!_isInsideActiveRoom(nc, nr) || !_isOccupied(nc, nr)) continue;
+        const neighborKey = _tileKey(nc, nr);
+        if (depths.has(neighborKey)) continue;
+        const nextDepth = depth + 1;
+        depths.set(neighborKey, nextDepth);
+        qCols.push(nc);
+        qRows.push(nr);
+        qDepths.push(nextDepth);
+      }
+    }
+  }
+
+  const maxFallbackDepth = Math.max(_activeRoomWidthBlocks, _activeRoomHeightBlocks);
+  for (const key of _occupied) {
+    const commaIdx = key.indexOf(',');
+    const col = parseInt(key.slice(0, commaIdx), 10);
+    const row = parseInt(key.slice(commaIdx + 1), 10);
+    if (!_isInsideActiveRoom(col, row)) continue;
+    if (!depths.has(key)) depths.set(key, maxFallbackDepth);
+  }
+
+  return depths;
 }
 
 /**
@@ -506,6 +592,9 @@ export function renderWallSprites(
   const isWorldMode = (theme === null) && !isLegacyBlackRock;
 
   _buildOccupancy(walls, blockSizePx);
+  const defaultLightingDepths = _activeLightingEffect === 'DEFAULT'
+    ? _buildDefaultLightingDepths()
+    : null;
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -531,6 +620,7 @@ export function renderWallSprites(
     // Convert world-space tile position to screen space for smooth scrolling
     const tileX  = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY  = Math.round(row * blockSizePx * scalePx + offsetYPx);
+    const tileKey = _tileKey(col, row);
     const halfSz = Math.round(tileSizeScreen * 0.5);
     const cx     = Math.round(tileX + tileSizeScreen * 0.5);
     const cy     = Math.round(tileY + tileSizeScreen * 0.5);
@@ -567,8 +657,9 @@ export function renderWallSprites(
       _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
     }
 
-    // Darken each tile by 10% for each solid block between it and open air.
-    const airDepth = _blocksToOpenAirAbove(col, row);
+    const airDepth = _activeLightingEffect === 'DEFAULT'
+      ? (defaultLightingDepths?.get(tileKey) ?? 0)
+      : _blocksToOpenAirAbove(col, row);
     const darknessAlpha = Math.min(1, airDepth * 0.1);
     if (darknessAlpha > 0) {
       ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
@@ -611,7 +702,10 @@ export function renderWallSprites(
       _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
     }
 
-    const airDepth = _blocksToOpenAirAbove(col, row);
+    const tileKey = _tileKey(col, row);
+    const airDepth = _activeLightingEffect === 'DEFAULT'
+      ? (defaultLightingDepths?.get(tileKey) ?? 0)
+      : _blocksToOpenAirAbove(col, row);
     const darknessAlpha = Math.min(1, airDepth * 0.1);
     if (darknessAlpha > 0) {
       ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;

@@ -12,7 +12,7 @@ import type { CameraState } from '../render/camera';
 import {
   EditorState, createEditorState, EditorTool,
   EditorWall, EditorEnemy, EditorTransition, EditorSkillTomb,
-  BlockTheme, BackgroundId,
+  BlockTheme, BackgroundId, LightingEffect,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
@@ -127,6 +127,9 @@ export function createEditorController(
         onRoomDimensionsChange: handleRoomDimensionsChange,
         onBlockThemeChange: (theme: BlockTheme) => {
           if (state.roomData) state.roomData.blockTheme = theme;
+        },
+        onLightingEffectChange: (lightingEffect: LightingEffect) => {
+          if (state.roomData) state.roomData.lightingEffect = lightingEffect;
         },
         onBackgroundChange: (bgId: BackgroundId) => {
           if (state.roomData) state.roomData.backgroundId = bgId;

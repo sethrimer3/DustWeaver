@@ -5,8 +5,8 @@
 
 import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
-  PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS,
-  BlockTheme, BackgroundId,
+  PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS,
+  BlockTheme, BackgroundId, LightingEffect,
 } from './editorState';
 
 // ── Style constants ──────────────────────────────────────────────────────────
@@ -38,6 +38,7 @@ export interface EditorUICallbacks {
   onPropertyChange: (prop: string, value: string | number) => void;
   onRoomDimensionsChange: (prop: 'widthBlocks' | 'heightBlocks', value: number) => void;
   onBlockThemeChange: (theme: BlockTheme) => void;
+  onLightingEffectChange: (effect: LightingEffect) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -184,6 +185,31 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   blockThemeSelect.addEventListener('click', (e) => e.stopPropagation());
   blockThemeDiv.appendChild(blockThemeSelect);
 
+  // ── Lighting dropdown (shown only when "blocks" category is active) ─────
+  const lightingDiv = document.createElement('div');
+  lightingDiv.style.cssText = `margin-bottom: 8px;`;
+  const lightingLabel = document.createElement('div');
+  lightingLabel.textContent = 'Lighting';
+  lightingLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
+  lightingDiv.appendChild(lightingLabel);
+  const lightingSelect = document.createElement('select');
+  lightingSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of LIGHTING_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    lightingSelect.appendChild(o);
+  }
+  lightingSelect.addEventListener('change', () => {
+    callbacks?.onLightingEffectChange(lightingSelect.value as LightingEffect);
+  });
+  lightingSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(lightingSelect);
+
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
@@ -192,6 +218,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   // Track rendered palette state to avoid recreating buttons every frame
   let renderedCategory: PaletteCategory | null = null;
   let lastRenderedBlockTheme = '';
+  let lastRenderedLightingEffect = '';
   let paletteBtns: { btn: HTMLButtonElement; itemId: string }[] = [];
 
   // ── Inspector ────────────────────────────────────────────────────────────
@@ -274,9 +301,13 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       // Add block theme dropdown above palette items when blocks category is active
       if (state.activeCategory === 'blocks') {
         paletteDiv.appendChild(blockThemeDiv);
+        paletteDiv.appendChild(lightingDiv);
         const th = state.roomData?.blockTheme ?? 'blackRock';
+        const lighting = state.roomData?.lightingEffect ?? 'DEFAULT';
         lastRenderedBlockTheme = th;
+        lastRenderedLightingEffect = lighting;
         blockThemeSelect.value = th;
+        lightingSelect.value = lighting;
       }
 
       const items = PALETTE_ITEMS.filter(i => i.category === state.activeCategory);
@@ -294,6 +325,11 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       if (th !== lastRenderedBlockTheme && document.activeElement !== blockThemeSelect) {
         lastRenderedBlockTheme = th;
         blockThemeSelect.value = th;
+      }
+      const lighting = state.roomData?.lightingEffect ?? 'DEFAULT';
+      if (lighting !== lastRenderedLightingEffect && document.activeElement !== lightingSelect) {
+        lastRenderedLightingEffect = lighting;
+        lightingSelect.value = lighting;
       }
     }
 
@@ -328,6 +364,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       lastRenderedHeightBlocks = -1;
       lastRenderedBackgroundId = '';
       lastRenderedBlockTheme = '';
+      lastRenderedLightingEffect = '';
       dimWidthInput = null;
       dimHeightInput = null;
       if (container.parentElement) container.parentElement.removeChild(container);

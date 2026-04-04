@@ -42,6 +42,13 @@ export type BackgroundId =
   | 'world3'
   | 'crystallineCracks';
 
+/**
+ * Lighting model used when shading block tiles in a room.
+ * - DEFAULT: distance-to-open-air in any direction (intended behavior)
+ * - Above:   legacy top-down depth shading effect
+ */
+export type LightingEffect = 'DEFAULT' | 'Above';
+
 /** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
 export const BLOCK_SIZE_SMALL  = 8;
 
@@ -219,6 +226,10 @@ export interface RoomDef {
    * image.  Falls back to worldNumber if not set.
    */
   backgroundId?: BackgroundId;
+  /**
+   * Block lighting model. Falls back to 'DEFAULT' when not set.
+   */
+  lightingEffect?: LightingEffect;
   /** Room width in blocks. */
   widthBlocks: number;
   /** Room height in blocks. */
