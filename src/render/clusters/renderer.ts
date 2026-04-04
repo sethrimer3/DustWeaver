@@ -114,7 +114,7 @@ const FLYING_EYE_RING_WIDTHS = [3.5, 2.5, 2.0, 1.5];
 /** Player sprite render width in world units (virtual px at zoom 1). */
 const PLAYER_SPRITE_WIDTH_WORLD = 16;
 /** Player sprite render height in world units (virtual px at zoom 1). */
-const PLAYER_SPRITE_HEIGHT_WORLD = 24;
+const PLAYER_SPRITE_HEIGHT_WORLD = 16;
 
 const _grappleDustSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust.png');
 const _grappleDustEndSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust_end.png');

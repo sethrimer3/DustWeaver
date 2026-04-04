@@ -15,10 +15,10 @@
  *   60    small blocks fit horizontally (480 ÷ 8 = 60)
  *
  * Player hitbox constants (standing):
- *   PLAYER_WIDTH_WORLD       = 14  (full width)
- *   PLAYER_HEIGHT_WORLD      = 20  (full height)
- *   PLAYER_HALF_WIDTH_WORLD  =  7
- *   PLAYER_HALF_HEIGHT_WORLD = 10
+ *   PLAYER_WIDTH_WORLD       = 15  (full width)
+ *   PLAYER_HEIGHT_WORLD      = 15  (full height)
+ *   PLAYER_HALF_WIDTH_WORLD  =  7.5
+ *   PLAYER_HALF_HEIGHT_WORLD =  7.5
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
@@ -41,16 +41,16 @@ export const BLOCK_SIZE_LARGE  = BLOCK_SIZE_SMALL;
 // ── Player size constants ─────────────────────────────────────────────────────
 
 /** Player full width in world units. */
-export const PLAYER_WIDTH_WORLD = 14;
+export const PLAYER_WIDTH_WORLD = 15;
 
 /** Player full height in world units. */
-export const PLAYER_HEIGHT_WORLD = 20;
+export const PLAYER_HEIGHT_WORLD = 15;
 
 /** Player half-width in world units. */
-export const PLAYER_HALF_WIDTH_WORLD = 7;
+export const PLAYER_HALF_WIDTH_WORLD = 7.5;
 
 /** Player half-height in world units. */
-export const PLAYER_HALF_HEIGHT_WORLD = 10;
+export const PLAYER_HALF_HEIGHT_WORLD = 7.5;
 
 /** An enemy cluster placed inside a room. */
 export interface RoomEnemyDef {
