@@ -49,9 +49,9 @@ export const NORMAL_GRAVITY_WORLD_PER_SEC2 = 900.0;
  * Initial upward jump velocity (positive value; negated when applied).
  * Chosen to pair with NORMAL_GRAVITY for a clean Celeste-like arc.
  *
- * Increased by 50% from original 200.0 for higher, faster jumps.
+ * Tuned to target roughly 6 medium blocks of jump height.
  */
-export const PLAYER_JUMP_SPEED_WORLD = 300.0;
+export const PLAYER_JUMP_SPEED_WORLD = 255.0;
 
 /**
  * Jump-cut gravity multiplier.
