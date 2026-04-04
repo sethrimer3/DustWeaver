@@ -25,6 +25,8 @@ export const DUST_CONTAINER_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
 export const DUST_CONTAINER_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
 /** Dust particles granted by one Dust Container collectible. */
 export const DUST_CONTAINER_DUST_GAIN = 4;
+/** Epsilon used when deciding whether wall edges are contiguous during merge. */
+const WALL_MERGE_EPSILON_WORLD = 0.001;
 
 /**
  * Loads wall definitions from a RoomDef into the WorldState wall buffers.
@@ -66,40 +68,48 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
         // Only merge walls of the same type (both solid or both platform)
         if (fs[i] !== fs[j]) continue;
         // Horizontal merge: same Y, same H, contiguous on X axis
-        if (ys[i] === ys[j] && hs[i] === hs[j]) {
+        if (
+          Math.abs(ys[i] - ys[j]) <= WALL_MERGE_EPSILON_WORLD &&
+          Math.abs(hs[i] - hs[j]) <= WALL_MERGE_EPSILON_WORLD
+        ) {
+          const leftI = xs[i];
           const rightI = xs[i] + ws[i];
+          const leftJ = xs[j];
           const rightJ = xs[j] + ws[j];
-          if (rightI === xs[j]) {
-            // i is left of j — extend i to cover j
-            ws[i] += ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
-            merged = true;
-            break;
-          }
-          if (rightJ === xs[i]) {
-            // j is left of i — extend i leftward to cover j
-            xs[i] = xs[j];
-            ws[i] += ws[j];
+          const hasOverlapOrTouch =
+            rightI >= leftJ - WALL_MERGE_EPSILON_WORLD &&
+            rightJ >= leftI - WALL_MERGE_EPSILON_WORLD;
+          if (hasOverlapOrTouch) {
+            const mergedLeft = leftI < leftJ ? leftI : leftJ;
+            const mergedRight = rightI > rightJ ? rightI : rightJ;
+            xs[i] = mergedLeft;
+            ws[i] = mergedRight - mergedLeft;
+            ys[i] = ys[i] < ys[j] ? ys[i] : ys[j];
+            hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
             merged = true;
             break;
           }
         }
         // Vertical merge: same X, same W, contiguous on Y axis
-        if (xs[i] === xs[j] && ws[i] === ws[j]) {
+        if (
+          Math.abs(xs[i] - xs[j]) <= WALL_MERGE_EPSILON_WORLD &&
+          Math.abs(ws[i] - ws[j]) <= WALL_MERGE_EPSILON_WORLD
+        ) {
+          const topI = ys[i];
           const bottomI = ys[i] + hs[i];
+          const topJ = ys[j];
           const bottomJ = ys[j] + hs[j];
-          if (bottomI === ys[j]) {
-            // i is above j — extend i downward to cover j
-            hs[i] += hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
-            merged = true;
-            break;
-          }
-          if (bottomJ === ys[i]) {
-            // j is above i — extend i upward to cover j
-            ys[i] = ys[j];
-            hs[i] += hs[j];
+          const hasOverlapOrTouch =
+            bottomI >= topJ - WALL_MERGE_EPSILON_WORLD &&
+            bottomJ >= topI - WALL_MERGE_EPSILON_WORLD;
+          if (hasOverlapOrTouch) {
+            const mergedTop = topI < topJ ? topI : topJ;
+            const mergedBottom = bottomI > bottomJ ? bottomI : bottomJ;
+            ys[i] = mergedTop;
+            hs[i] = mergedBottom - mergedTop;
+            xs[i] = xs[i] < xs[j] ? xs[i] : xs[j];
+            ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
             merged = true;
             break;

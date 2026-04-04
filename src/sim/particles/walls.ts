@@ -22,6 +22,8 @@ import { nextFloat } from '../rng';
 
 /** Distance at which wall repulsion starts (world units). */
 const WALL_MARGIN_WORLD = 18.0;
+/** Tiny expansion applied to particle-vs-wall AABBs to seal micro seams. */
+const PARTICLE_WALL_SEAM_EPSILON_WORLD = 0.35;
 /** Force magnitude at the wall face (fully penetrated). */
 const WALL_FORCE_MAX = 2800.0;
 
@@ -64,10 +66,14 @@ export function applyWallForces(world: WorldState): void {
       const wy = wallYWorld[wi];
       const ww = wallWWorld[wi];
       const wh = wallHWorld[wi];
+      const minX = wx - PARTICLE_WALL_SEAM_EPSILON_WORLD;
+      const minY = wy - PARTICLE_WALL_SEAM_EPSILON_WORLD;
+      const maxX = wx + ww + PARTICLE_WALL_SEAM_EPSILON_WORLD;
+      const maxY = wy + wh + PARTICLE_WALL_SEAM_EPSILON_WORLD;
 
       // Closest point on wall AABB to particle
-      const clampedX = px < wx ? wx : px > wx + ww ? wx + ww : px;
-      const clampedY = py < wy ? wy : py > wy + wh ? wy + wh : py;
+      const clampedX = px < minX ? minX : px > maxX ? maxX : px;
+      const clampedY = py < minY ? minY : py > maxY ? maxY : py;
 
       const dx = px - clampedX;
       const dy = py - clampedY;
@@ -139,10 +145,14 @@ export function applyWallBounce(world: WorldState): void {
       const wy = wallYWorld[wi];
       const ww = wallWWorld[wi];
       const wh = wallHWorld[wi];
+      const minX = wx - PARTICLE_WALL_SEAM_EPSILON_WORLD;
+      const minY = wy - PARTICLE_WALL_SEAM_EPSILON_WORLD;
+      const maxX = wx + ww + PARTICLE_WALL_SEAM_EPSILON_WORLD;
+      const maxY = wy + wh + PARTICLE_WALL_SEAM_EPSILON_WORLD;
 
       // Closest point on wall AABB to particle
-      const clampedX = px < wx ? wx : px > wx + ww ? wx + ww : px;
-      const clampedY = py < wy ? wy : py > wy + wh ? wy + wh : py;
+      const clampedX = px < minX ? minX : px > maxX ? maxX : px;
+      const clampedY = py < minY ? minY : py > maxY ? maxY : py;
 
       const dx = px - clampedX;
       const dy = py - clampedY;
@@ -270,4 +280,3 @@ function _findFreeSlot(world: WorldState): number {
   }
   return -1;
 }
-
