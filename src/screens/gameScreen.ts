@@ -13,7 +13,7 @@ import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands } from '../input/handler';
 import { CommandKind } from '../input/commands';
-import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { RoomDef, RoomTransitionDef, TransitionDirection, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
@@ -557,6 +557,41 @@ export function startGameScreen(
   }
   window.addEventListener('resize', onResize);
 
+  const TRANSITION_SPAWN_INSET_BLOCKS = 3;
+
+  function getOppositeTransitionDirection(direction: TransitionDirection): TransitionDirection {
+    if (direction === 'left') return 'right';
+    if (direction === 'right') return 'left';
+    if (direction === 'up') return 'down';
+    return 'up';
+  }
+
+  function computeSpawnBlockForTransition(room: RoomDef, transition: RoomTransitionDef): readonly [number, number] {
+    const openingCenterOffsetBlocks = Math.floor(transition.openingSizeBlocks / 2);
+    if (transition.direction === 'left') {
+      return [
+        TRANSITION_SPAWN_INSET_BLOCKS,
+        transition.positionBlock + openingCenterOffsetBlocks,
+      ] as const;
+    }
+    if (transition.direction === 'right') {
+      return [
+        room.widthBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1,
+        transition.positionBlock + openingCenterOffsetBlocks,
+      ] as const;
+    }
+    if (transition.direction === 'up') {
+      return [
+        transition.positionBlock + openingCenterOffsetBlocks,
+        TRANSITION_SPAWN_INSET_BLOCKS,
+      ] as const;
+    }
+    return [
+      transition.positionBlock + openingCenterOffsetBlocks,
+      room.heightBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1,
+    ] as const;
+  }
+
   /**
    * Check if the player has entered a transition tunnel and should move
    * to the adjacent room.
@@ -583,7 +618,18 @@ export function startGameScreen(
       if (isInTunnel) {
         const targetRoom = ROOM_REGISTRY.get(t.targetRoomId);
         if (targetRoom !== undefined) {
-          loadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1]);
+          const oppositeDirection = getOppositeTransitionDirection(t.direction);
+          const targetReturnTransition = targetRoom.transitions.find((targetTransition) =>
+            targetTransition.targetRoomId === currentRoom.id
+            && targetTransition.direction === oppositeDirection,
+          );
+
+          if (targetReturnTransition !== undefined) {
+            const spawnBlock = computeSpawnBlockForTransition(targetRoom, targetReturnTransition);
+            loadRoom(targetRoom, spawnBlock[0], spawnBlock[1]);
+          } else {
+            loadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1]);
+          }
           return true;
         }
       }
