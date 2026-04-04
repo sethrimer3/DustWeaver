@@ -17,7 +17,7 @@ import { RoomDef, RoomTransitionDef, TransitionDirection, BLOCK_SIZE_MEDIUM, BLO
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
-import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme } from '../render/walls/blockSpriteRenderer';
+import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
 import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
 import { renderWorldBackground } from '../render/backgroundRenderer';
@@ -190,6 +190,7 @@ export function startGameScreen(
     } else {
       setActiveBlockSpriteWorld(room.worldNumber);
     }
+    setActiveBlockLighting(room.lightingEffect ?? 'DEFAULT', room.widthBlocks, room.heightBlocks);
 
     // Update music for the current world
     updateWorldMusic(room.worldNumber, musicVolume);

@@ -9,7 +9,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
 import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSkillTomb } from './editorState';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
@@ -128,6 +128,8 @@ export interface RoomJsonDef {
   blockTheme?: BlockTheme;
   /** Background visual ID. Falls back to worldNumber if not set. */
   backgroundId?: BackgroundId;
+  /** Lighting model. Falls back to 'DEFAULT' if not set. */
+  lightingEffect?: LightingEffect;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];
@@ -174,6 +176,9 @@ export function validateRoomJson(data: unknown): ValidationError[] {
   }
   if (typeof obj.worldNumber !== 'number') {
     errors.push({ path: 'worldNumber', message: 'Must be a number' });
+  }
+  if (obj.lightingEffect !== undefined && obj.lightingEffect !== 'DEFAULT' && obj.lightingEffect !== 'Above') {
+    errors.push({ path: 'lightingEffect', message: 'Must be DEFAULT|Above' });
   }
   if (typeof obj.widthBlocks !== 'number' || (obj.widthBlocks as number) < 10) {
     errors.push({ path: 'widthBlocks', message: 'Must be a number >= 10' });
@@ -267,6 +272,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       worldNumber: json.worldNumber,
       blockTheme: json.blockTheme ?? 'blackRock',
       backgroundId: json.backgroundId ?? 'brownRock',
+      lightingEffect: json.lightingEffect ?? 'DEFAULT',
       widthBlocks: json.widthBlocks,
       heightBlocks: json.heightBlocks,
       playerSpawnBlock: [...json.playerSpawnBlock] as [number, number],
@@ -327,6 +333,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   // Always write blockTheme and backgroundId when present
   if (data.blockTheme) json.blockTheme = data.blockTheme;
   if (data.backgroundId) json.backgroundId = data.backgroundId;
+  if (data.lightingEffect) json.lightingEffect = data.lightingEffect;
   return json;
 }
 
@@ -462,6 +469,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     worldNumber: data.worldNumber,
     blockTheme: data.blockTheme,
     backgroundId: data.backgroundId,
+    lightingEffect: data.lightingEffect,
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     walls: allWalls,
@@ -543,6 +551,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       worldNumber: room.worldNumber,
       blockTheme: room.blockTheme ?? 'blackRock',
       backgroundId: room.backgroundId ?? 'brownRock',
+      lightingEffect: room.lightingEffect ?? 'DEFAULT',
       widthBlocks: room.widthBlocks,
       heightBlocks: room.heightBlocks,
       playerSpawnBlock: [room.playerSpawnBlock[0], room.playerSpawnBlock[1]],

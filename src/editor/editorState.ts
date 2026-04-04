@@ -6,10 +6,10 @@
  * which can be exported to JSON and later rebuilt into a RoomDef.
  */
 
-import type { TransitionDirection, BlockTheme, BackgroundId } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
 
 // Re-export for convenience in editor modules
-export type { BlockTheme, BackgroundId } from '../levels/roomDef';
+export type { BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
 
 // ── Editor tool enum ─────────────────────────────────────────────────────────
 
@@ -67,6 +67,12 @@ export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] 
   { id: 'crystallineCracks', label: 'Crystalline Cracks' },
 ];
 
+/** Available lighting models for the editor dropdown. */
+export const LIGHTING_OPTIONS: readonly { id: LightingEffect; label: string }[] = [
+  { id: 'DEFAULT', label: 'DEFAULT' },
+  { id: 'Above', label: 'Above' },
+];
+
 // ── Mutable editor room data (authored content) ─────────────────────────────
 
 export interface EditorWall {
@@ -118,6 +124,8 @@ export interface EditorRoomData {
   blockTheme: BlockTheme;
   /** Background visual for this room. */
   backgroundId: BackgroundId;
+  /** Lighting model for this room. */
+  lightingEffect: LightingEffect;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];

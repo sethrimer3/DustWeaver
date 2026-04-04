@@ -218,6 +218,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   // Propagate optional theme/background fields
   if (json.blockTheme) room.blockTheme = json.blockTheme;
   if (json.backgroundId) room.backgroundId = json.backgroundId;
+  if (json.lightingEffect) room.lightingEffect = json.lightingEffect;
 
   // Add optional fields only if present
   if (json.skillBooks && json.skillBooks.length > 0) {
