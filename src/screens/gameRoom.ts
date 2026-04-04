@@ -275,8 +275,8 @@ export function drawTunnelDarkness(
       // Fade from left room edge inward
       const x0Screen = 0 * zoom + offsetXPx;
       const x1Screen = fadeDepthWorld * zoom + offsetXPx;
-      const y0Screen = (openTopWorld - BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
-      const y1Screen = (openBottomWorld + BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
+      const y0Screen = openTopWorld * zoom + offsetYPx;
+      const y1Screen = openBottomWorld * zoom + offsetYPx;
 
       const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
       grad.addColorStop(0, 'rgba(0,0,0,1)');
@@ -287,8 +287,8 @@ export function drawTunnelDarkness(
       // Fade from right room edge inward
       const x0Screen = (roomWidthWorld - fadeDepthWorld) * zoom + offsetXPx;
       const x1Screen = roomWidthWorld * zoom + offsetXPx;
-      const y0Screen = (openTopWorld - BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
-      const y1Screen = (openBottomWorld + BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
+      const y0Screen = openTopWorld * zoom + offsetYPx;
+      const y1Screen = openBottomWorld * zoom + offsetYPx;
 
       const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
