@@ -225,14 +225,9 @@ function _pickBlackRockVariant(
   // it equals (northSolid?_N:0)|(eastSolid?_E:0)|(southSolid?_S:0)|(westSolid?_W:0).
   mask: number,
 ): HTMLImageElement {
-  // Thin one-way top platform tiles: exposed top with support below.
-  const isPlatformTile = !northSolid && southSolid;
   // Thin pillar tiles: vertically connected and narrow in width.
   const isPillarTile = northSolid && southSolid && !eastSolid && !westSolid;
   const hash = _hashTileCoord(col, row);
-  if (isPlatformTile) {
-    return _blackRockPlatformVariants[hash % _blackRockPlatformVariants.length];
-  }
   if (isPillarTile) {
     return _blackRockPillarVariants[hash % _blackRockPillarVariants.length];
   }
@@ -335,6 +330,8 @@ const _TILE_TABLE: TileSpec[] = ((): TileSpec[] => {
 
 /** Reusable occupancy set; cleared at the start of each renderWallSprites call. */
 const _occupied = new Set<string>();
+/** Reusable occupancy set for one-way platform tiles. */
+const _platformOccupied = new Set<string>();
 
 /** Returns the string key for a tile grid coordinate. */
 function _tileKey(col: number, row: number): string {
@@ -358,6 +355,7 @@ function _buildOccupancy(
   blockSizePx:   number,
 ): void {
   _occupied.clear();
+  _platformOccupied.clear();
 
   for (let wi = 0; wi < walls.count; wi++) {
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
@@ -367,7 +365,11 @@ function _buildOccupancy(
 
     for (let r = 0; r < rowCount; r++) {
       for (let c = 0; c < colCount; c++) {
-        _occupied.add(_tileKey(colStart + c, rowStart + r));
+        if (walls.isPlatformFlag[wi] === 1) {
+          _platformOccupied.add(_tileKey(colStart + c, rowStart + r));
+        } else {
+          _occupied.add(_tileKey(colStart + c, rowStart + r));
+        }
       }
     }
   }
@@ -558,6 +560,33 @@ export function renderWallSprites(
         ctx, col, row, tileX, tileY, tileSizeScreen,
         northSolid, eastSolid, southSolid, westSolid,
       );
+    }
+  }
+
+  for (const key of _platformOccupied) {
+    const commaIdx = key.indexOf(',');
+    const col = parseInt(key.slice(0, commaIdx), 10);
+    const row = parseInt(key.slice(commaIdx + 1), 10);
+
+    const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
+    const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
+    const hash = _hashTileCoord(col, row);
+
+    let img: HTMLImageElement;
+    if (theme === 'blackRock' || isLegacyBlackRock) {
+      img = _blackRockPlatformVariants[hash % _blackRockPlatformVariants.length];
+    } else if (theme === 'brownRock') {
+      img = _getBrownRockSpriteForBlockSize(blockSizePx);
+    } else if (theme === 'dirt') {
+      img = _dirtBlockSprite;
+    } else {
+      img = _sprites.end;
+    }
+
+    if (isSpriteReady(img)) {
+      ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
+    } else {
+      _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
     }
   }
 
