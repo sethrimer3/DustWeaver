@@ -50,6 +50,40 @@ interface BlockSpriteSet {
 /** Cache of loaded sprite sets keyed by worldNumber. */
 const _spriteSets = new Map<number, BlockSpriteSet>();
 const _brownRockBlockBySize = new Map<number, HTMLImageElement>();
+const _blackRockBlockVariants: readonly HTMLImageElement[] = [
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (1).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (2).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (3).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (4).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (5).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (6).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (7).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (8).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (9).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (10).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (11).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (12).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (13).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (14).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (15).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (16).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (17).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (18).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (19).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (20).png'),
+];
+const _blackRockPlatformVariants: readonly HTMLImageElement[] = [
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (1).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (2).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (3).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (4).png'),
+];
+const _blackRockPillarVariants: readonly HTMLImageElement[] = [
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (1).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (2).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (3).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (4).png'),
+];
 
 /**
  * Returns the sprite set for a given world number, loading on first access.
@@ -124,6 +158,37 @@ function getBrownRockSpriteForTileSize(blockSizePx: number): HTMLImageElement {
   const sprite = _loadImage(spritePath);
   _brownRockBlockBySize.set(blockSizePx, sprite);
   return sprite;
+}
+
+function _hashTileCoord(col: number, row: number): number {
+  let seed = (col * 73856093) ^ (row * 19349663) ^ (_activeWorldNumber * 83492791);
+  seed |= 0;
+  seed ^= seed >>> 16;
+  seed = Math.imul(seed, 2246822519);
+  seed ^= seed >>> 13;
+  return seed >>> 0;
+}
+
+function _pickBlackRockVariant(
+  col: number,
+  row: number,
+  northSolid: boolean,
+  eastSolid: boolean,
+  southSolid: boolean,
+  westSolid: boolean,
+): HTMLImageElement {
+  // Thin one-way top platform tiles: exposed top with support below.
+  const isPlatformTile = !northSolid && southSolid;
+  // Thin pillar tiles: vertically connected and narrow in width.
+  const isPillarTile = northSolid && southSolid && !eastSolid && !westSolid;
+  const hash = _hashTileCoord(col, row);
+  if (isPlatformTile) {
+    return _blackRockPlatformVariants[hash % _blackRockPlatformVariants.length];
+  }
+  if (isPillarTile) {
+    return _blackRockPillarVariants[hash % _blackRockPillarVariants.length];
+  }
+  return _blackRockBlockVariants[hash % _blackRockBlockVariants.length];
 }
 
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
@@ -341,8 +406,9 @@ export function renderWallSprites(
   if (walls.count === 0) return;
 
   const tileSizeScreen = blockSizePx * scalePx;
+  const isWorld0BlackRock = _activeWorldNumber === 0;
   const baseTileSprite =
-    _activeWorldNumber === 0
+    isWorld0BlackRock
       ? getBrownRockSpriteForTileSize(blockSizePx)
       : null;
 
@@ -376,10 +442,12 @@ export function renderWallSprites(
     const cx     = Math.round(tileX + tileSizeScreen * 0.5);
     const cy     = Math.round(tileY + tileSizeScreen * 0.5);
 
-    const img = baseTileSprite ?? _sprites[spec.variant];
+    const img = isWorld0BlackRock
+      ? _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid)
+      : (baseTileSprite ?? _sprites[spec.variant]);
 
     if (isSpriteReady(img)) {
-      if (spec.rotationRad === 0) {
+      if (isWorld0BlackRock || spec.rotationRad === 0) {
         ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
         ctx.save();
@@ -393,7 +461,7 @@ export function renderWallSprites(
     }
 
     // Draw vertex overlay at concave inner corners of corner tiles.
-    if (spec.variant === 'corner') {
+    if (!isWorld0BlackRock && spec.variant === 'corner') {
       _drawVertexOverlays(
         ctx, col, row, tileX, tileY, tileSizeScreen,
         northSolid, eastSolid, southSolid, westSolid,
