@@ -344,6 +344,20 @@ function _isOccupied(col: number, row: number): boolean {
 }
 
 /**
+ * Returns how many solid tiles lie directly above this tile before open air.
+ * 0 means this tile is directly exposed to air from above.
+ */
+function _blocksToOpenAirAbove(col: number, row: number): number {
+  let depth = 0;
+  let scanRow = row - 1;
+  while (_isOccupied(col, scanRow)) {
+    depth++;
+    scanRow--;
+  }
+  return depth;
+}
+
+/**
  * Populates _occupied from all wall AABBs in world-space tile coordinates.
  *
  * Using world-space coordinates (instead of screen-space) ensures the tile
@@ -553,6 +567,14 @@ export function renderWallSprites(
       _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
     }
 
+    // Darken each tile by 10% for each solid block between it and open air.
+    const airDepth = _blocksToOpenAirAbove(col, row);
+    const darknessAlpha = Math.min(1, airDepth * 0.1);
+    if (darknessAlpha > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
+      ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+    }
+
     // Draw vertex overlays only in world 1+ legacy mode (those worlds have vertex.png).
     // Theme-based modes and world-0 blackRock do not use vertex overlays.
     if (isWorldMode && spec.variant === 'corner') {
@@ -587,6 +609,13 @@ export function renderWallSprites(
       ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
     } else {
       _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
+    }
+
+    const airDepth = _blocksToOpenAirAbove(col, row);
+    const darknessAlpha = Math.min(1, airDepth * 0.1);
+    if (darknessAlpha > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
+      ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
     }
   }
 

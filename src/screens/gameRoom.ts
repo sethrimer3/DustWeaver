@@ -262,7 +262,7 @@ export function drawTunnelDarkness(
   zoom: number,
 ): void {
   const roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
-  const fadeDepthWorld = 4 * BLOCK_SIZE_MEDIUM; // 4 blocks of fade
+  const fadeDepthWorld = 1.5 * BLOCK_SIZE_MEDIUM; // quick fade to black near boundary
 
   ctx.save();
 
