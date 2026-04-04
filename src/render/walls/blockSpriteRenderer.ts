@@ -18,6 +18,7 @@
  */
 
 import { WallSnapshot } from '../snapshot';
+import type { BlockTheme } from '../../levels/roomDef';
 
 // ── Sprite loading ──────────────────────────────────────────────────────────
 
@@ -47,9 +48,9 @@ interface BlockSpriteSet {
   vertex: HTMLImageElement;
 }
 
-/** Cache of loaded sprite sets keyed by worldNumber. */
-const _spriteSets = new Map<number, BlockSpriteSet>();
-const _brownRockBlockBySize = new Map<number, HTMLImageElement>();
+// ── Block-theme sprite pre-loads ────────────────────────────────────────────
+
+// Black Rock sprites
 const _blackRockBlockVariants: readonly HTMLImageElement[] = [
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock (1).png'),
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock (2).png'),
@@ -72,6 +73,19 @@ const _blackRockBlockVariants: readonly HTMLImageElement[] = [
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock (19).png'),
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock (20).png'),
 ];
+const _blackRockCornerVariants: readonly HTMLImageElement[] = [
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (1).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (2).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (3).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (4).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (5).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (6).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (7).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (8).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (9).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (10).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (11).png'),
+];
 const _blackRockPlatformVariants: readonly HTMLImageElement[] = [
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (1).png'),
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (2).png'),
@@ -84,6 +98,19 @@ const _blackRockPillarVariants: readonly HTMLImageElement[] = [
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (3).png'),
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (4).png'),
 ];
+
+// Brown Rock sprites (single flat sprite, no auto-tiling variants)
+const _brownRockSprite8 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_8x8.png');
+const _brownRockSprite16 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_16x16.png');
+const _brownRockSprite32 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_32x32.png');
+
+// Dirt sprites (edge/corner auto-tiling at 8x8)
+const _dirtBlockSprite = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8.png');
+const _dirtEdgeSprite  = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8_edge.png');
+const _dirtCornerSprite = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8_corner.png');
+
+/** Cache of loaded sprite sets keyed by worldNumber (for legacy world-number mode). */
+const _spriteSets = new Map<number, BlockSpriteSet>();
 
 /**
  * Returns the sprite set for a given world number, loading on first access.
@@ -98,14 +125,13 @@ function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
   const dir = `SPRITES/WORLDS/W-${worldNumber}/blocks`;
   let sprites: BlockSpriteSet;
   if (worldNumber === 0) {
-    const brownRockBlockSprite = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_8x8.png');
     sprites = {
-      block:  brownRockBlockSprite,
-      single: brownRockBlockSprite,
-      edge:   brownRockBlockSprite,
-      corner: brownRockBlockSprite,
-      end:    brownRockBlockSprite,
-      vertex: brownRockBlockSprite,
+      block:  _brownRockSprite8,
+      single: _brownRockSprite8,
+      edge:   _brownRockSprite8,
+      corner: _brownRockSprite8,
+      end:    _brownRockSprite8,
+      vertex: _brownRockSprite8,
     };
   } else if (worldNumber <= 2) {
     sprites = {
@@ -131,33 +157,46 @@ function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
   return sprites;
 }
 
-/** Active sprite set — updated when setActiveWorld() is called. */
+/** Active sprite set for world-number mode. */
 let _sprites: BlockSpriteSet = getBlockSpriteSet(0);
 let _activeWorldNumber = 0;
 
 /**
+ * Active block theme.  When non-null, theme-based rendering overrides the
+ * world-number-based sprite selection.
+ */
+let _activeBlockTheme: BlockTheme | null = null;
+
+/**
  * Set the active world number for block sprite rendering.
- * Call this when the player enters a new room with a different worldNumber.
+ * Call this when the player enters a room without an explicit blockTheme.
  */
 export function setActiveBlockSpriteWorld(worldNumber: number): void {
   _activeWorldNumber = worldNumber;
   _sprites = getBlockSpriteSet(worldNumber);
+  _activeBlockTheme = null;
 }
 
-function getBrownRockSpriteForTileSize(blockSizePx: number): HTMLImageElement {
-  const cached = _brownRockBlockBySize.get(blockSizePx);
-  if (cached !== undefined) return cached;
+/**
+ * Set the active block theme for rendering.
+ * Overrides world-number-based sprite selection until setActiveBlockSpriteWorld is called.
+ */
+export function setActiveBlockSpriteTheme(theme: BlockTheme): void {
+  _activeBlockTheme = theme;
+}
 
-  const spritePath =
-    blockSizePx >= 32
-      ? 'SPRITES/BLOCKS/brownRock/brownRock_32x32.png'
-      : blockSizePx >= 16
-        ? 'SPRITES/BLOCKS/brownRock/brownRock_16x16.png'
-        : 'SPRITES/BLOCKS/brownRock/brownRock_8x8.png';
+function _getBrownRockSpriteForBlockSize(blockSizePx: number): HTMLImageElement {
+  if (blockSizePx >= 32) return _brownRockSprite32;
+  if (blockSizePx >= 16) return _brownRockSprite16;
+  return _brownRockSprite8;
+}
 
-  const sprite = _loadImage(spritePath);
-  _brownRockBlockBySize.set(blockSizePx, sprite);
-  return sprite;
+function _getDirtSprite(variant: TileVariant): HTMLImageElement {
+  switch (variant) {
+    case 'edge':   return _dirtEdgeSprite;
+    case 'corner': return _dirtCornerSprite;
+    default:       return _dirtBlockSprite;
+  }
 }
 
 function _hashTileCoord(col: number, row: number): number {
@@ -169,6 +208,12 @@ function _hashTileCoord(col: number, row: number): number {
   return seed >>> 0;
 }
 
+// Neighbor-mask constants for corner detection
+const _CORNER_MASK_SW = 4 | 8;   // _S | _W
+const _CORNER_MASK_NE = 1 | 2;   // _N | _E
+const _CORNER_MASK_SE = 4 | 2;   // _S | _E
+const _CORNER_MASK_NW = 1 | 8;   // _N | _W
+
 function _pickBlackRockVariant(
   col: number,
   row: number,
@@ -176,6 +221,7 @@ function _pickBlackRockVariant(
   eastSolid: boolean,
   southSolid: boolean,
   westSolid: boolean,
+  mask: number,
 ): HTMLImageElement {
   // Thin one-way top platform tiles: exposed top with support below.
   const isPlatformTile = !northSolid && southSolid;
@@ -188,7 +234,34 @@ function _pickBlackRockVariant(
   if (isPillarTile) {
     return _blackRockPillarVariants[hash % _blackRockPillarVariants.length];
   }
+  // Use dedicated corner sprites for 2-adjacent-neighbor (L-shaped) tiles.
+  if (mask === _CORNER_MASK_SW || mask === _CORNER_MASK_NE ||
+      mask === _CORNER_MASK_SE || mask === _CORNER_MASK_NW) {
+    return _blackRockCornerVariants[hash % _blackRockCornerVariants.length];
+  }
   return _blackRockBlockVariants[hash % _blackRockBlockVariants.length];
+}
+
+/**
+ * Returns the sprite for a block cell, based on the active block theme and
+ * the cell's auto-tile variant.
+ */
+function _getSpriteForTheme(
+  theme: BlockTheme,
+  col: number, row: number,
+  northSolid: boolean, eastSolid: boolean, southSolid: boolean, westSolid: boolean,
+  mask: number,
+  variant: TileVariant,
+  blockSizePx: number,
+): HTMLImageElement {
+  switch (theme) {
+    case 'blackRock':
+      return _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid, mask);
+    case 'brownRock':
+      return _getBrownRockSpriteForBlockSize(blockSizePx);
+    case 'dirt':
+      return _getDirtSprite(variant);
+  }
 }
 
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
@@ -392,7 +465,7 @@ function _drawVertexOverlays(
  * @param offsetXPx    Horizontal pixel offset (camera translation).
  * @param offsetYPx    Vertical pixel offset (camera translation).
  * @param scalePx      Scale factor (world units → screen pixels).
- * @param blockSizePx  Block/tile size in world units (e.g. BLOCK_SIZE_MEDIUM = 12).
+ * @param blockSizePx  Block/tile size in world units (e.g. BLOCK_SIZE_MEDIUM = 8).
  */
 export function renderWallSprites(
   ctx:         CanvasRenderingContext2D,
@@ -406,11 +479,13 @@ export function renderWallSprites(
   if (walls.count === 0) return;
 
   const tileSizeScreen = blockSizePx * scalePx;
-  const isWorld0BlackRock = _activeWorldNumber === 0;
-  const baseTileSprite =
-    isWorld0BlackRock
-      ? getBrownRockSpriteForTileSize(blockSizePx)
-      : null;
+
+  // Determine rendering mode
+  const theme = _activeBlockTheme;
+  // In world-number mode, world 0 uses blackRock sprites (legacy behaviour)
+  const isLegacyBlackRock = (theme === null) && (_activeWorldNumber === 0);
+  // World-number mode for worlds 1+ uses the world-specific sprite set
+  const isWorldMode = (theme === null) && !isLegacyBlackRock;
 
   _buildOccupancy(walls, blockSizePx);
 
@@ -442,12 +517,26 @@ export function renderWallSprites(
     const cx     = Math.round(tileX + tileSizeScreen * 0.5);
     const cy     = Math.round(tileY + tileSizeScreen * 0.5);
 
-    const img = isWorld0BlackRock
-      ? _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid)
-      : (baseTileSprite ?? _sprites[spec.variant]);
+    let img: HTMLImageElement;
+    let skipRotation: boolean;
+
+    if (theme !== null) {
+      // Theme-based rendering (new system)
+      img = _getSpriteForTheme(theme, col, row, northSolid, eastSolid, southSolid, westSolid, mask, spec.variant, blockSizePx);
+      // Only blackRock and brownRock skip rotation (flat/random tiles)
+      skipRotation = (theme === 'blackRock' || theme === 'brownRock');
+    } else if (isLegacyBlackRock) {
+      // World 0 legacy: blackRock sprites
+      img = _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid, mask);
+      skipRotation = true;
+    } else {
+      // World 1+ legacy: world-specific auto-tiling sprites
+      img = _sprites[spec.variant];
+      skipRotation = false;
+    }
 
     if (isSpriteReady(img)) {
-      if (isWorld0BlackRock || spec.rotationRad === 0) {
+      if (skipRotation || spec.rotationRad === 0) {
         ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
         ctx.save();
@@ -460,8 +549,9 @@ export function renderWallSprites(
       _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
     }
 
-    // Draw vertex overlay at concave inner corners of corner tiles.
-    if (!isWorld0BlackRock && spec.variant === 'corner') {
+    // Draw vertex overlays only in world 1+ legacy mode (those worlds have vertex.png).
+    // Theme-based modes and world-0 blackRock do not use vertex overlays.
+    if (isWorldMode && spec.variant === 'corner') {
       _drawVertexOverlays(
         ctx, col, row, tileX, tileY, tileSizeScreen,
         northSolid, eastSolid, southSolid, westSolid,

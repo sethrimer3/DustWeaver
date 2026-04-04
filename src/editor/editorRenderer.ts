@@ -12,6 +12,8 @@ import { getPlacementPreview } from './editorTools';
 const GRID_COLOR = 'rgba(255,255,255,0.06)';
 const WALL_HIGHLIGHT = 'rgba(100,200,255,0.3)';
 const WALL_SELECTED = 'rgba(0,200,255,0.6)';
+const PLATFORM_HIGHLIGHT = 'rgba(255,200,50,0.35)';
+const PLATFORM_SELECTED = 'rgba(255,200,50,0.8)';
 const ENEMY_COLOR = 'rgba(255,80,80,0.5)';
 const ENEMY_SELECTED = 'rgba(255,80,80,0.9)';
 const TRANSITION_COLOR = 'rgba(80,255,80,0.35)';
@@ -50,8 +52,14 @@ export function renderEditorOverlays(
   // ── Interior walls ────────────────────────────────────────────────────────
   for (const w of room.interiorWalls) {
     const isSelected = state.selectedElement?.type === 'wall' && state.selectedElement.uid === w.uid;
-    drawBlockRect(ctx, w.xBlock, w.yBlock, w.wBlock, w.hBlock, offsetXPx, offsetYPx, zoom,
-      isSelected ? WALL_SELECTED : WALL_HIGHLIGHT, isSelected ? 2 : 1);
+    const isPlatform = w.isPlatformFlag === 1;
+    let color: string;
+    if (isPlatform) {
+      color = isSelected ? PLATFORM_SELECTED : PLATFORM_HIGHLIGHT;
+    } else {
+      color = isSelected ? WALL_SELECTED : WALL_HIGHLIGHT;
+    }
+    drawBlockRect(ctx, w.xBlock, w.yBlock, w.wBlock, w.hBlock, offsetXPx, offsetYPx, zoom, color, isSelected ? 2 : 1);
   }
 
   // ── Enemies ──────────────────────────────────────────────────────────────

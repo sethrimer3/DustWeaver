@@ -9,7 +9,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId } from '../levels/roomDef';
 import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSkillTomb } from './editorState';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
@@ -68,6 +68,8 @@ export interface RoomJsonWall {
   yBlock: number;
   wBlock: number;
   hBlock: number;
+  /** true if this is a one-way platform block. */
+  isPlatform?: boolean;
 }
 
 export interface RoomJsonTransition {
@@ -122,6 +124,10 @@ export interface RoomJsonDef {
   id: string;
   name: string;
   worldNumber: number;
+  /** Block sprite theme. Defaults to 'blackRock' if not set. */
+  blockTheme?: BlockTheme;
+  /** Background visual ID. Falls back to worldNumber if not set. */
+  backgroundId?: BackgroundId;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];
@@ -221,6 +227,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     yBlock: w.yBlock,
     wBlock: w.wBlock,
     hBlock: w.hBlock,
+    isPlatformFlag: w.isPlatform ? 1 : 0,
   }));
 
   const enemies: EditorEnemy[] = json.enemies.map(e => ({
@@ -258,6 +265,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       id: json.id,
       name: json.name,
       worldNumber: json.worldNumber,
+      blockTheme: json.blockTheme ?? 'blackRock',
+      backgroundId: json.backgroundId ?? 'brownRock',
       widthBlocks: json.widthBlocks,
       heightBlocks: json.heightBlocks,
       playerSpawnBlock: [...json.playerSpawnBlock] as [number, number],
@@ -273,19 +282,23 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
 // ── Conversion: EditorRoomData → RoomJsonDef ─────────────────────────────────
 
 export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
-  return {
+  const json: RoomJsonDef = {
     id: data.id,
     name: data.name,
     worldNumber: data.worldNumber,
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     playerSpawnBlock: [...data.playerSpawnBlock],
-    interiorWalls: data.interiorWalls.map(w => ({
-      xBlock: w.xBlock,
-      yBlock: w.yBlock,
-      wBlock: w.wBlock,
-      hBlock: w.hBlock,
-    })),
+    interiorWalls: data.interiorWalls.map(w => {
+      const wall: RoomJsonWall = {
+        xBlock: w.xBlock,
+        yBlock: w.yBlock,
+        wBlock: w.wBlock,
+        hBlock: w.hBlock,
+      };
+      if (w.isPlatformFlag === 1) wall.isPlatform = true;
+      return wall;
+    }),
     enemies: data.enemies.map(e => ({
       xBlock: e.xBlock,
       yBlock: e.yBlock,
@@ -311,6 +324,12 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: s.yBlock,
     })),
   };
+  // Only include blockTheme and backgroundId if they differ from the defaults,
+  // to keep existing room JSON files clean.
+  if (data.blockTheme && data.blockTheme !== 'blackRock') json.blockTheme = data.blockTheme;
+  else if (data.blockTheme === 'blackRock') json.blockTheme = data.blockTheme;
+  if (data.backgroundId) json.backgroundId = data.backgroundId;
+  return json;
 }
 
 // ── Conversion: EditorRoomData → RoomDef (for runtime loading) ───────────────
@@ -404,6 +423,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     yBlock: w.yBlock,
     wBlock: w.wBlock,
     hBlock: w.hBlock,
+    isPlatformFlag: w.isPlatformFlag,
   }));
 
   const allWalls: RoomWallDef[] = [...boundaryWalls, ...tunnelWalls, ...interiorWalls];
@@ -442,6 +462,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     id: data.id,
     name: data.name,
     worldNumber: data.worldNumber,
+    blockTheme: data.blockTheme,
+    backgroundId: data.backgroundId,
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     walls: allWalls,
@@ -483,6 +505,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     yBlock: w.yBlock,
     wBlock: w.wBlock,
     hBlock: w.hBlock,
+    isPlatformFlag: (w.isPlatformFlag ?? 0) as 0 | 1,
   }));
 
   const enemies: EditorEnemy[] = room.enemies.map(e => ({
@@ -520,6 +543,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       id: room.id,
       name: room.name,
       worldNumber: room.worldNumber,
+      blockTheme: room.blockTheme ?? 'blackRock',
+      backgroundId: room.backgroundId ?? 'brownRock',
       widthBlocks: room.widthBlocks,
       heightBlocks: room.heightBlocks,
       playerSpawnBlock: [room.playerSpawnBlock[0], room.playerSpawnBlock[1]],

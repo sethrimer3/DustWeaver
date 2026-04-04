@@ -23,6 +23,25 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 
+// ── Block theme and background types ─────────────────────────────────────────
+
+/**
+ * Visual theme for block sprites in a room.
+ * Controls which sprite set is used by the block renderer.
+ */
+export type BlockTheme = 'blackRock' | 'brownRock' | 'dirt';
+
+/**
+ * Background visual identifier for a room.
+ * Controls the parallax background image (or effect) shown behind the level.
+ */
+export type BackgroundId =
+  | 'brownRock'
+  | 'world1'
+  | 'world2'
+  | 'world3'
+  | 'crystallineCracks';
+
 /** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
 export const BLOCK_SIZE_SMALL  = 8;
 
@@ -99,6 +118,11 @@ export interface RoomWallDef {
   yBlock: number;
   wBlock: number;
   hBlock: number;
+  /**
+   * 1 if this wall is a one-way platform — the player can pass upward through
+   * it but lands on top when falling down.  Platforms have no side collision.
+   */
+  isPlatformFlag?: 0 | 1;
 }
 
 /** Direction a transition tunnel faces. */
@@ -185,6 +209,16 @@ export interface RoomDef {
   name: string;
   /** World number — determines block sprites and background colour. */
   worldNumber: number;
+  /**
+   * Visual theme for block sprites.  When set, overrides the worldNumber-based
+   * sprite selection.  Falls back to worldNumber if not set.
+   */
+  blockTheme?: BlockTheme;
+  /**
+   * Background visual ID.  When set, overrides the worldNumber-based background
+   * image.  Falls back to worldNumber if not set.
+   */
+  backgroundId?: BackgroundId;
   /** Room width in blocks. */
   widthBlocks: number;
   /** Room height in blocks. */

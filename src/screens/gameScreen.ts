@@ -17,7 +17,7 @@ import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef'
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
-import { setActiveBlockSpriteWorld } from '../render/walls/blockSpriteRenderer';
+import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
 import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
 import { renderWorldBackground } from '../render/backgroundRenderer';
@@ -31,7 +31,7 @@ import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize } from '../ui/renderSettings';
-import { isTheroShowcaseRoom, renderTheroShowcaseEffect } from '../render/effects/theroEffectManager';
+import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
 import { performEarlyAutoAssignment } from '../progression/unlocks';
 import {
@@ -185,7 +185,11 @@ export function startGameScreen(
     roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
 
     // Apply world-specific block sprites and background
-    setActiveBlockSpriteWorld(room.worldNumber);
+    if (room.blockTheme) {
+      setActiveBlockSpriteTheme(room.blockTheme);
+    } else {
+      setActiveBlockSpriteWorld(room.worldNumber);
+    }
 
     // Update music for the current world
     updateWorldMusic(room.worldNumber, musicVolume);
@@ -641,9 +645,13 @@ export function startGameScreen(
           currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
           currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
           zoom,
+          currentRoom.backgroundId,
         );
         if (isTheroShowcaseRoom(currentRoom.id)) {
           renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
+        }
+        if (currentRoom.backgroundId === 'crystallineCracks') {
+          renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
         }
         renderWalls(ctx, snapshot, eox, eoy, zoom, true);
         renderHazards(ctx, world, eox, eoy, zoom, world.tick);

@@ -104,6 +104,7 @@ export function placeAtCursor(state: EditorState): void {
   if (item.category === 'blocks') {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
+    const isPlatformFlag: 0 | 1 = item.isPlatformItem === 1 ? 1 : 0;
     // Prevent overlapping walls
     const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
     if (overlaps) return;
@@ -113,6 +114,7 @@ export function placeAtCursor(state: EditorState): void {
       yBlock: by,
       wBlock,
       hBlock,
+      isPlatformFlag,
     });
   } else if (item.id === 'enemy_rolling') {
     room.enemies.push({
