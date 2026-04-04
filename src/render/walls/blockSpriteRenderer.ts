@@ -221,6 +221,8 @@ function _pickBlackRockVariant(
   eastSolid: boolean,
   southSolid: boolean,
   westSolid: boolean,
+  // mask is pre-computed by the caller to avoid recomputing per call site;
+  // it equals (northSolid?_N:0)|(eastSolid?_E:0)|(southSolid?_S:0)|(westSolid?_W:0).
   mask: number,
 ): HTMLImageElement {
   // Thin one-way top platform tiles: exposed top with support below.

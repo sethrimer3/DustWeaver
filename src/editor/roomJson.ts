@@ -324,10 +324,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: s.yBlock,
     })),
   };
-  // Only include blockTheme and backgroundId if they differ from the defaults,
-  // to keep existing room JSON files clean.
-  if (data.blockTheme && data.blockTheme !== 'blackRock') json.blockTheme = data.blockTheme;
-  else if (data.blockTheme === 'blackRock') json.blockTheme = data.blockTheme;
+  // Always write blockTheme and backgroundId when present
+  if (data.blockTheme) json.blockTheme = data.blockTheme;
   if (data.backgroundId) json.backgroundId = data.backgroundId;
   return json;
 }
