@@ -39,6 +39,17 @@ function wallsOverlap(a: EditorWall, bx: number, by: number, bw: number, bh: num
          a.yBlock + a.hBlock > by;
 }
 
+
+function isInsideRoom(room: EditorRoomData, xBlock: number, yBlock: number): boolean {
+  return xBlock >= 0 && yBlock >= 0 && xBlock < room.widthBlocks && yBlock < room.heightBlocks;
+}
+
+function rectFitsInsideRoom(room: EditorRoomData, xBlock: number, yBlock: number, wBlock: number, hBlock: number): boolean {
+  return xBlock >= 0 && yBlock >= 0 &&
+    xBlock + wBlock <= room.widthBlocks &&
+    yBlock + hBlock <= room.heightBlocks;
+}
+
 // ── Select tool ──────────────────────────────────────────────────────────────
 
 /**
@@ -101,10 +112,13 @@ export function placeAtCursor(state: EditorState): void {
   const bx = state.cursorBlockX;
   const by = state.cursorBlockY;
 
+  if (!isInsideRoom(room, bx, by)) return;
+
   if (item.category === 'blocks') {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
     const isPlatformFlag: 0 | 1 = item.isPlatformItem === 1 ? 1 : 0;
+    if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
     // Prevent overlapping walls
     const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
     if (overlaps) return;
@@ -171,11 +185,19 @@ export function placeAtCursor(state: EditorState): void {
     else if (by <= 1) direction = 'up';
     else if (by >= room.heightBlocks - 2) direction = 'down';
 
+    const openingSizeBlocks = direction === 'left' || direction === 'right'
+      ? Math.max(1, Math.min(5, room.heightBlocks - 2))
+      : Math.max(1, Math.min(5, room.widthBlocks - 2));
+
+    const positionBlock = direction === 'left' || direction === 'right'
+      ? Math.min(Math.max(1, by), room.heightBlocks - 1 - openingSizeBlocks)
+      : Math.min(Math.max(1, bx), room.widthBlocks - 1 - openingSizeBlocks);
+
     room.transitions.push({
       uid: allocateUid(state),
       direction,
-      positionBlock: by,
-      openingSizeBlocks: 5,
+      positionBlock,
+      openingSizeBlocks,
       targetRoomId: '',
       targetSpawnBlock: [3, by + 2],
     });
