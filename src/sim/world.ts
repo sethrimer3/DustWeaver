@@ -47,6 +47,11 @@ export interface WorldState extends ParticleBuffers {
   wallWWorld: Float32Array;
   /** Height of each wall (world units). */
   wallHWorld: Float32Array;
+  /**
+   * 1 if the corresponding wall is a one-way platform — only collides from
+   * above; the player can pass upward through it.
+   */
+  wallIsPlatformFlag: Uint8Array;
 
   // ---- Player combat state ------------------------------------------------
   /** Set to 1 for exactly one tick to trigger attack launch. */
@@ -302,6 +307,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallYWorld: new Float32Array(MAX_WALLS),
     wallWWorld: new Float32Array(MAX_WALLS),
     wallHWorld: new Float32Array(MAX_WALLS),
+    wallIsPlatformFlag: new Uint8Array(MAX_WALLS),
     playerAttackTriggeredFlag: 0,
     playerAttackDirXWorld: 1.0,
     playerAttackDirYWorld: 0.0,

@@ -24,7 +24,7 @@ import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
-import { isTheroShowcaseRoom, renderTheroShowcaseEffect } from '../render/effects/theroEffectManager';
+import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
@@ -147,11 +147,17 @@ export function renderFrame(r: RenderFrameContext): void {
     currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
     currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
     zoom,
+    currentRoom.backgroundId,
   );
 
   // ── Thero effect showcase overlay (worldNumber=99 rooms) ────────────────
   if (isTheroShowcaseRoom(currentRoom.id)) {
     renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
+  }
+
+  // ── Crystalline Cracks procedural background effect ──────────────────────
+  if (currentRoom.backgroundId === 'crystallineCracks') {
+    renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
   }
 
   // Walls before cluster indicators so clusters are drawn on top

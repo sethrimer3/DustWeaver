@@ -113,3 +113,33 @@ export function resetAllTheroEffects(): void {
     effect.reset();
   }
 }
+
+// ── Crystalline Cracks background effect ─────────────────────────────────────
+
+/**
+ * Singleton SubstrateEffect instance for the Crystalline Cracks room background.
+ * Shared across any room that has backgroundId='crystallineCracks'.
+ */
+let _crystallineCracksEffect: TheroBackgroundEffect | null = null;
+
+/**
+ * Render the Crystalline Cracks procedural background effect.
+ * Call this each frame after drawing the solid-black background.
+ *
+ * @param ctx       The 2D canvas context (virtual 480×270 space).
+ * @param widthPx   Virtual canvas width (480).
+ * @param heightPx  Virtual canvas height (270).
+ * @param nowMs     Current timestamp in ms (e.g. performance.now()).
+ */
+export function renderCrystallineCracksBackground(
+  ctx: CanvasRenderingContext2D,
+  widthPx: number,
+  heightPx: number,
+  nowMs: number,
+): void {
+  if (!_crystallineCracksEffect) {
+    _crystallineCracksEffect = createSubstrateEffect();
+  }
+  _crystallineCracksEffect.update(nowMs, widthPx, heightPx);
+  _crystallineCracksEffect.draw(ctx);
+}

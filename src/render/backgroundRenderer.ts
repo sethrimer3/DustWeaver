@@ -9,6 +9,8 @@
  * as a deterministic fallback (no procedural generation).
  */
 
+import type { BackgroundId } from '../levels/roomDef';
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 /** Parallax factor: 0 = fully fixed, 1 = moves with foreground. */
@@ -25,6 +27,21 @@ function worldBgImagePath(worldNumber: number): string {
   return `${BASE}SPRITES/WORLDS/W-${worldNumber}/background/background.png`;
 }
 
+/**
+ * Returns the image path for a named BackgroundId, or null for procedural
+ * backgrounds (e.g. crystallineCracks) that have no static image.
+ */
+function backgroundIdToImagePath(id: BackgroundId): string | null {
+  switch (id) {
+    case 'brownRock':        return `${BASE}SPRITES/BACKGROUNDS/brownRock_background_1.png`;
+    case 'world1':           return `${BASE}SPRITES/WORLDS/W-1/background/background.png`;
+    case 'world2':           return `${BASE}SPRITES/WORLDS/W-2/background/background.png`;
+    case 'world3':           return `${BASE}SPRITES/WORLDS/W-3/background/background.png`;
+    case 'crystallineCracks': return null;  // solid black + procedural effect
+    default:                 return null;
+  }
+}
+
 /** Solid fallback colour per world (shown while the image is loading). */
 function worldFallbackColor(worldNumber: number): string {
   switch (worldNumber) {
@@ -38,28 +55,28 @@ function worldFallbackColor(worldNumber: number): string {
 
 // ─── Image cache ─────────────────────────────────────────────────────────────
 
-/** Caches loaded background images per world number. */
-const _bgImageCache = new Map<number, HTMLImageElement>();
+/** Caches loaded background images per image URL. */
+const _bgImageCache = new Map<string, HTMLImageElement>();
 
-/** Tracks which worlds have started loading. */
-const _bgLoadStarted = new Set<number>();
+/** Tracks which URLs have started loading. */
+const _bgLoadStarted = new Set<string>();
 
 /**
- * Returns the cached background image for the given world, or null if not
- * yet loaded.  Triggers an async load on the first call for each world.
+ * Returns the cached background image for the given URL, or null if not
+ * yet loaded.  Triggers an async load on the first call for each URL.
  */
-function _getBgImage(worldNumber: number): HTMLImageElement | null {
-  const cached = _bgImageCache.get(worldNumber);
+function _getBgImageByUrl(url: string): HTMLImageElement | null {
+  const cached = _bgImageCache.get(url);
   if (cached !== undefined && cached.complete && cached.naturalWidth > 0) {
     return cached;
   }
 
-  if (!_bgLoadStarted.has(worldNumber)) {
-    _bgLoadStarted.add(worldNumber);
+  if (!_bgLoadStarted.has(url)) {
+    _bgLoadStarted.add(url);
     const img = new Image();
-    img.src = worldBgImagePath(worldNumber);
+    img.src = url;
     img.onload = () => {
-      _bgImageCache.set(worldNumber, img);
+      _bgImageCache.set(url, img);
     };
   }
 
@@ -79,8 +96,12 @@ function wrapToTileStart(offset: number, tileSize: number): number {
 /**
  * Renders the room background for the current world with parallax scrolling.
  *
+ * If `backgroundId` is provided it overrides `worldNumber` for image selection.
+ * For `backgroundId='crystallineCracks'`, a solid black fill is drawn — the
+ * caller is responsible for rendering the procedural effect on top.
+ *
  * @param ctx               The 2D canvas context.
- * @param worldNumber       Active world number (0, 1, 2, …).
+ * @param worldNumber       Active world number (0, 1, 2, …) — used as fallback.
  * @param viewportWidthPx   Canvas width in pixels.
  * @param viewportHeightPx  Canvas height in pixels.
  * @param cameraOffsetXPx   Full camera X offset (foreground).
@@ -88,6 +109,7 @@ function wrapToTileStart(offset: number, tileSize: number): number {
  * @param roomWidthWorld    Room width in world units.
  * @param roomHeightWorld   Room height in world units.
  * @param zoom              Active camera zoom.
+ * @param backgroundId      Optional named background override.
  */
 export function renderWorldBackground(
   ctx: CanvasRenderingContext2D,
@@ -99,15 +121,28 @@ export function renderWorldBackground(
   roomWidthWorld: number,
   roomHeightWorld: number,
   zoom: number,
+  backgroundId?: BackgroundId,
 ): void {
-  const img = _getBgImage(worldNumber);
-
-  // Thero showcase rooms use solid black — no parallax background image.
-  if (worldNumber === 99) {
+  // Thero showcase rooms and Crystalline Cracks use solid black — no parallax image.
+  if (worldNumber === 99 || backgroundId === 'crystallineCracks') {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
     return;
   }
+
+  // Determine the image URL to use
+  const imgUrl = backgroundId != null
+    ? backgroundIdToImagePath(backgroundId)
+    : worldBgImagePath(worldNumber);
+
+  if (imgUrl === null) {
+    // Procedural background with no image — solid black
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
+    return;
+  }
+
+  const img = _getBgImageByUrl(imgUrl);
 
   if (img === null) {
     // Image not loaded yet — draw solid fallback colour

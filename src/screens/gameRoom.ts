@@ -41,6 +41,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
   const ys: number[] = [];
   const ws: number[] = [];
   const hs: number[] = [];
+  const fs: number[] = []; // isPlatformFlag (0 or 1)
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -49,10 +50,12 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     ys.push(def.yBlock * BLOCK_SIZE_MEDIUM);
     ws.push(Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM));
     hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
+    fs.push(def.isPlatformFlag === 1 ? 1 : 0);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
-  // Two rectangles may merge if they share a complete face:
+  // Two rectangles may merge if they share a complete face AND have the same
+  // isPlatformFlag (platform walls must not merge with solid walls):
   //   - Same Y and height, contiguous on X (horizontal merge)
   //   - Same X and width,  contiguous on Y (vertical merge)
   let merged = true;
@@ -60,6 +63,8 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     merged = false;
     for (let i = 0; i < xs.length; i++) {
       for (let j = i + 1; j < xs.length; j++) {
+        // Only merge walls of the same type (both solid or both platform)
+        if (fs[i] !== fs[j]) continue;
         // Horizontal merge: same Y, same H, contiguous on X axis
         if (ys[i] === ys[j] && hs[i] === hs[j]) {
           const rightI = xs[i] + ws[i];
@@ -67,7 +72,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
           if (rightI === xs[j]) {
             // i is left of j — extend i to cover j
             ws[i] += ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
             merged = true;
             break;
           }
@@ -75,7 +80,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             // j is left of i — extend i leftward to cover j
             xs[i] = xs[j];
             ws[i] += ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
             merged = true;
             break;
           }
@@ -87,7 +92,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
           if (bottomI === ys[j]) {
             // i is above j — extend i downward to cover j
             hs[i] += hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
             merged = true;
             break;
           }
@@ -95,7 +100,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             // j is above i — extend i upward to cover j
             ys[i] = ys[j];
             hs[i] += hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
             merged = true;
             break;
           }
@@ -113,6 +118,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     world.wallYWorld[wi] = ys[wi];
     world.wallWWorld[wi] = ws[wi];
     world.wallHWorld[wi] = hs[wi];
+    world.wallIsPlatformFlag[wi] = fs[wi];
   }
 }
 
