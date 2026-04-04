@@ -339,6 +339,22 @@ function isTopSurfaceHit(
 const _topSurfaceOut = { snappedY: 0 };
 
 /**
+ * Returns true when a top-surface grapple should trigger the special
+ * top-surface zip/stick behavior.
+ *
+ * Requirement: the top surface must be below the player's feet at the moment
+ * of attachment. This prevents the special move from activating when grappling
+ * onto ledges that are above or level with the player's feet.
+ */
+function isSpecialTopSurfaceGrapple(
+  player: { positionYWorld: number; halfHeightWorld: number },
+  topSurfaceYWorld: number,
+): boolean {
+  const playerFeetY = player.positionYWorld + player.halfHeightWorld;
+  return topSurfaceYWorld > playerFeetY;
+}
+
+/**
  * Fires the grapple, setting the anchor at the exact raycast hit point on a
  * wall surface.  Returns without attaching if the wall is too close (less than
  * GRAPPLE_MIN_LENGTH_WORLD away) to prevent degenerate behaviour.
@@ -393,6 +409,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
 
   // Detect top-surface hit and snap anchor Y to exact wall surface
   const isTopHit = isTopSurfaceHit(world, hit.x, hit.y, dirX, dirY, _topSurfaceOut);
+  const isSpecialTopHit = isTopHit && isSpecialTopSurfaceGrapple(player, _topSurfaceOut.snappedY);
   const anchorX = hit.x;
   const anchorY = isTopHit ? _topSurfaceOut.snappedY : hit.y;
   const anchorDist = Math.sqrt((anchorX - player.positionXWorld) ** 2 + (anchorY - player.positionYWorld) ** 2);
@@ -409,7 +426,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // first tick after attachment.
   world.playerJumpTriggeredFlag = 0;
   world.isGrappleActiveFlag = 1;
-  world.isGrappleTopSurfaceFlag = isTopHit ? 1 : 0;
+  world.isGrappleTopSurfaceFlag = isSpecialTopHit ? 1 : 0;
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
@@ -418,7 +435,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
 
   // Consume grapple charge. Top-surface grapples instantly refresh the charge
   // so the player can chain grapple between ledges.
-  if (isTopHit) {
+  if (isSpecialTopHit) {
     world.hasGrappleChargeFlag = 1;
   } else {
     world.hasGrappleChargeFlag = 0;
@@ -1042,6 +1059,8 @@ export function updateGrappleMissChain(world: WorldState): void {
                 world, missLinkX[i], missLinkY[i],
                 missDir.x, missDir.y, _topSurfaceOut,
               );
+              const isMissSpecialTopHit = isMissTopHit
+                && isSpecialTopSurfaceGrapple(player, _topSurfaceOut.snappedY);
               const missAnchorX = missLinkX[i];
               const missAnchorY = isMissTopHit ? _topSurfaceOut.snappedY : missLinkY[i];
               const missAnchorDist = Math.sqrt(
@@ -1057,7 +1076,7 @@ export function updateGrappleMissChain(world: WorldState): void {
               world.grappleJumpHeldTickCount = 0;
               world.playerJumpTriggeredFlag = 0;
               world.isGrappleActiveFlag = 1;
-              world.isGrappleTopSurfaceFlag = isMissTopHit ? 1 : 0;
+              world.isGrappleTopSurfaceFlag = isMissSpecialTopHit ? 1 : 0;
               world.isGrappleStuckFlag = 0;
               world.grappleStuckStoppedTickCount = 0;
               world.isGrappleMissActiveFlag = 0;
@@ -1068,7 +1087,7 @@ export function updateGrappleMissChain(world: WorldState): void {
               world.grappleAttachFxYWorld = missAnchorY;
 
               // Charge: top-surface refreshes charge, wall consumes it
-              if (isMissTopHit) {
+              if (isMissSpecialTopHit) {
                 world.hasGrappleChargeFlag = 1;
               } else {
                 world.hasGrappleChargeFlag = 0;
