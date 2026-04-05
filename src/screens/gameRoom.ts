@@ -25,6 +25,8 @@ export const DUST_CONTAINER_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
 export const DUST_CONTAINER_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
 /** Dust particles granted by one Dust Container collectible. */
 export const DUST_CONTAINER_DUST_GAIN = 4;
+/** Epsilon used when deciding whether wall edges are contiguous during merge. */
+const WALL_MERGE_EPSILON_WORLD = 0.001;
 
 /**
  * Loads wall definitions from a RoomDef into the WorldState wall buffers.
@@ -41,6 +43,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
   const ys: number[] = [];
   const ws: number[] = [];
   const hs: number[] = [];
+  const fs: number[] = []; // isPlatformFlag (0 or 1)
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -49,10 +52,12 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     ys.push(def.yBlock * BLOCK_SIZE_MEDIUM);
     ws.push(Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM));
     hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
+    fs.push(def.isPlatformFlag === 1 ? 1 : 0);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
-  // Two rectangles may merge if they share a complete face:
+  // Two rectangles may merge if they share a complete face AND have the same
+  // isPlatformFlag (platform walls must not merge with solid walls):
   //   - Same Y and height, contiguous on X (horizontal merge)
   //   - Same X and width,  contiguous on Y (vertical merge)
   let merged = true;
@@ -60,42 +65,52 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     merged = false;
     for (let i = 0; i < xs.length; i++) {
       for (let j = i + 1; j < xs.length; j++) {
+        // Only merge walls of the same type (both solid or both platform)
+        if (fs[i] !== fs[j]) continue;
         // Horizontal merge: same Y, same H, contiguous on X axis
-        if (ys[i] === ys[j] && hs[i] === hs[j]) {
+        if (
+          Math.abs(ys[i] - ys[j]) <= WALL_MERGE_EPSILON_WORLD &&
+          Math.abs(hs[i] - hs[j]) <= WALL_MERGE_EPSILON_WORLD
+        ) {
+          const leftI = xs[i];
           const rightI = xs[i] + ws[i];
+          const leftJ = xs[j];
           const rightJ = xs[j] + ws[j];
-          if (rightI === xs[j]) {
-            // i is left of j — extend i to cover j
-            ws[i] += ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
-            merged = true;
-            break;
-          }
-          if (rightJ === xs[i]) {
-            // j is left of i — extend i leftward to cover j
-            xs[i] = xs[j];
-            ws[i] += ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+          const hasOverlapOrTouch =
+            rightI >= leftJ - WALL_MERGE_EPSILON_WORLD &&
+            rightJ >= leftI - WALL_MERGE_EPSILON_WORLD;
+          if (hasOverlapOrTouch) {
+            const mergedLeft = leftI < leftJ ? leftI : leftJ;
+            const mergedRight = rightI > rightJ ? rightI : rightJ;
+            xs[i] = mergedLeft;
+            ws[i] = mergedRight - mergedLeft;
+            ys[i] = ys[i] < ys[j] ? ys[i] : ys[j];
+            hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
             merged = true;
             break;
           }
         }
         // Vertical merge: same X, same W, contiguous on Y axis
-        if (xs[i] === xs[j] && ws[i] === ws[j]) {
+        if (
+          Math.abs(xs[i] - xs[j]) <= WALL_MERGE_EPSILON_WORLD &&
+          Math.abs(ws[i] - ws[j]) <= WALL_MERGE_EPSILON_WORLD
+        ) {
+          const topI = ys[i];
           const bottomI = ys[i] + hs[i];
+          const topJ = ys[j];
           const bottomJ = ys[j] + hs[j];
-          if (bottomI === ys[j]) {
-            // i is above j — extend i downward to cover j
-            hs[i] += hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
-            merged = true;
-            break;
-          }
-          if (bottomJ === ys[i]) {
-            // j is above i — extend i upward to cover j
-            ys[i] = ys[j];
-            hs[i] += hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+          const hasOverlapOrTouch =
+            bottomI >= topJ - WALL_MERGE_EPSILON_WORLD &&
+            bottomJ >= topI - WALL_MERGE_EPSILON_WORLD;
+          if (hasOverlapOrTouch) {
+            const mergedTop = topI < topJ ? topI : topJ;
+            const mergedBottom = bottomI > bottomJ ? bottomI : bottomJ;
+            ys[i] = mergedTop;
+            hs[i] = mergedBottom - mergedTop;
+            xs[i] = xs[i] < xs[j] ? xs[i] : xs[j];
+            ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
             merged = true;
             break;
           }
@@ -113,6 +128,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     world.wallYWorld[wi] = ys[wi];
     world.wallWWorld[wi] = ws[wi];
     world.wallHWorld[wi] = hs[wi];
+    world.wallIsPlatformFlag[wi] = fs[wi];
   }
 }
 
@@ -256,7 +272,7 @@ export function drawTunnelDarkness(
   zoom: number,
 ): void {
   const roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
-  const fadeDepthWorld = 4 * BLOCK_SIZE_MEDIUM; // 4 blocks of fade
+  const fadeDepthWorld = 1.5 * BLOCK_SIZE_MEDIUM; // quick fade to black near boundary
 
   ctx.save();
 
@@ -269,8 +285,8 @@ export function drawTunnelDarkness(
       // Fade from left room edge inward
       const x0Screen = 0 * zoom + offsetXPx;
       const x1Screen = fadeDepthWorld * zoom + offsetXPx;
-      const y0Screen = (openTopWorld - BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
-      const y1Screen = (openBottomWorld + BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
+      const y0Screen = openTopWorld * zoom + offsetYPx;
+      const y1Screen = openBottomWorld * zoom + offsetYPx;
 
       const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
       grad.addColorStop(0, 'rgba(0,0,0,1)');
@@ -281,8 +297,8 @@ export function drawTunnelDarkness(
       // Fade from right room edge inward
       const x0Screen = (roomWidthWorld - fadeDepthWorld) * zoom + offsetXPx;
       const x1Screen = roomWidthWorld * zoom + offsetXPx;
-      const y0Screen = (openTopWorld - BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
-      const y1Screen = (openBottomWorld + BLOCK_SIZE_MEDIUM) * zoom + offsetYPx;
+      const y0Screen = openTopWorld * zoom + offsetYPx;
+      const y1Screen = openBottomWorld * zoom + offsetYPx;
 
       const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
       grad.addColorStop(0, 'rgba(0,0,0,0)');

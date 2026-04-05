@@ -5,7 +5,8 @@
 
 import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
-  PaletteItem,
+  PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS,
+  BlockTheme, BackgroundId, LightingEffect,
 } from './editorState';
 
 // ── Style constants ──────────────────────────────────────────────────────────
@@ -36,6 +37,9 @@ export interface EditorUICallbacks {
   onLinkTransition: () => void;
   onPropertyChange: (prop: string, value: string | number) => void;
   onRoomDimensionsChange: (prop: 'widthBlocks' | 'heightBlocks', value: number) => void;
+  onBlockThemeChange: (theme: BlockTheme) => void;
+  onLightingEffectChange: (effect: LightingEffect) => void;
+  onBackgroundChange: (backgroundId: BackgroundId) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -108,9 +112,40 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   roomDimDiv.appendChild(roomDimTitle);
   container.appendChild(roomDimDiv);
 
+  // ── Background dropdown ──────────────────────────────────────────────────
+  const bgDiv = document.createElement('div');
+  bgDiv.style.cssText = `
+    border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
+    padding: 6px 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2);
+  `;
+  const bgTitle = document.createElement('div');
+  bgTitle.textContent = 'Background';
+  bgTitle.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
+  bgDiv.appendChild(bgTitle);
+  const bgSelect = document.createElement('select');
+  bgSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of BACKGROUND_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    bgSelect.appendChild(o);
+  }
+  bgSelect.addEventListener('change', () => {
+    callbacks?.onBackgroundChange(bgSelect.value as BackgroundId);
+  });
+  bgSelect.addEventListener('click', (e) => e.stopPropagation());
+  bgDiv.appendChild(bgSelect);
+  container.appendChild(bgDiv);
+
+  // ── Category tabs ────────────────────────────────────────────────────────
   let lastRenderedRoomId = '';
   let lastRenderedWidthBlocks = -1;
   let lastRenderedHeightBlocks = -1;
+  let lastRenderedBackgroundId = '';
   let dimWidthInput: HTMLInputElement | null = null;
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
@@ -125,6 +160,56 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   }
   container.appendChild(catBar);
 
+  // ── Block Theme dropdown (shown only when "blocks" category is active) ───
+  const blockThemeDiv = document.createElement('div');
+  blockThemeDiv.style.cssText = `margin-bottom: 8px;`;
+  const blockThemeLabel = document.createElement('div');
+  blockThemeLabel.textContent = 'Block Theme';
+  blockThemeLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
+  blockThemeDiv.appendChild(blockThemeLabel);
+  const blockThemeSelect = document.createElement('select');
+  blockThemeSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const th of BLOCK_THEMES) {
+    const o = document.createElement('option');
+    o.value = th.id;
+    o.textContent = th.label;
+    blockThemeSelect.appendChild(o);
+  }
+  blockThemeSelect.addEventListener('change', () => {
+    callbacks?.onBlockThemeChange(blockThemeSelect.value as BlockTheme);
+  });
+  blockThemeSelect.addEventListener('click', (e) => e.stopPropagation());
+  blockThemeDiv.appendChild(blockThemeSelect);
+
+  // ── Lighting dropdown (shown only when "blocks" category is active) ─────
+  const lightingDiv = document.createElement('div');
+  lightingDiv.style.cssText = `margin-bottom: 8px;`;
+  const lightingLabel = document.createElement('div');
+  lightingLabel.textContent = 'Lighting';
+  lightingLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
+  lightingDiv.appendChild(lightingLabel);
+  const lightingSelect = document.createElement('select');
+  lightingSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of LIGHTING_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    lightingSelect.appendChild(o);
+  }
+  lightingSelect.addEventListener('change', () => {
+    callbacks?.onLightingEffectChange(lightingSelect.value as LightingEffect);
+  });
+  lightingSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(lightingSelect);
+
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
@@ -132,6 +217,8 @@ export function createEditorUI(root: HTMLElement): EditorUI {
 
   // Track rendered palette state to avoid recreating buttons every frame
   let renderedCategory: PaletteCategory | null = null;
+  let lastRenderedBlockTheme = '';
+  let lastRenderedLightingEffect = '';
   let paletteBtns: { btn: HTMLButtonElement; itemId: string }[] = [];
 
   // ── Inspector ────────────────────────────────────────────────────────────
@@ -164,6 +251,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     for (const btn of catBtns) {
       btn.style.background = btn.dataset.category === state.activeCategory ? ACTIVE_BG : BTN_BG;
     }
+
     // Update room dimensions section: create inputs on first load, then update values in-place
     const roomId = state.roomData?.id ?? '';
     const widthBlocks = state.roomData?.widthBlocks ?? 0;
@@ -194,11 +282,34 @@ export function createEditorUI(root: HTMLElement): EditorUI {
         dimHeightInput.value = String(heightBlocks);
       }
     }
-    // Update palette items (only recreate when category changes)
+
+    // Update background dropdown
+    const currentBgId = state.roomData?.backgroundId ?? 'brownRock';
+    if (currentBgId !== lastRenderedBackgroundId) {
+      lastRenderedBackgroundId = currentBgId;
+      if (document.activeElement !== bgSelect) {
+        bgSelect.value = currentBgId;
+      }
+    }
+
+    // Update palette area (only recreate when category changes)
     if (renderedCategory !== state.activeCategory) {
       renderedCategory = state.activeCategory;
       paletteDiv.innerHTML = '';
       paletteBtns = [];
+
+      // Add block theme dropdown above palette items when blocks category is active
+      if (state.activeCategory === 'blocks') {
+        paletteDiv.appendChild(blockThemeDiv);
+        paletteDiv.appendChild(lightingDiv);
+        const th = state.roomData?.blockTheme ?? 'blackRock';
+        const lighting = state.roomData?.lightingEffect ?? 'DEFAULT';
+        lastRenderedBlockTheme = th;
+        lastRenderedLightingEffect = lighting;
+        blockThemeSelect.value = th;
+        lightingSelect.value = lighting;
+      }
+
       const items = PALETTE_ITEMS.filter(i => i.category === state.activeCategory);
       for (const item of items) {
         const btn = makeBtn(item.label, () => callbacks?.onPaletteItemSelect(item));
@@ -208,13 +319,27 @@ export function createEditorUI(root: HTMLElement): EditorUI {
         paletteBtns.push({ btn, itemId: item.id });
         paletteDiv.appendChild(btn);
       }
+    } else if (state.activeCategory === 'blocks') {
+      // Update block theme select if it changed without category change
+      const th = state.roomData?.blockTheme ?? 'blackRock';
+      if (th !== lastRenderedBlockTheme && document.activeElement !== blockThemeSelect) {
+        lastRenderedBlockTheme = th;
+        blockThemeSelect.value = th;
+      }
+      const lighting = state.roomData?.lightingEffect ?? 'DEFAULT';
+      if (lighting !== lastRenderedLightingEffect && document.activeElement !== lightingSelect) {
+        lastRenderedLightingEffect = lighting;
+        lightingSelect.value = lighting;
+      }
     }
+
     // Update palette selection highlight
     for (const { btn, itemId } of paletteBtns) {
       const isSelected = state.selectedPaletteItem?.id === itemId;
       btn.style.background = isSelected ? ACTIVE_BG : BTN_BG;
       btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
     }
+
     // Update inspector (only recreate when selected element changes)
     const selUid = state.selectedElement?.uid ?? -1;
     const selType = state.selectedElement?.type ?? '';
@@ -237,6 +362,9 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       lastRenderedRoomId = '';
       lastRenderedWidthBlocks = -1;
       lastRenderedHeightBlocks = -1;
+      lastRenderedBackgroundId = '';
+      lastRenderedBlockTheme = '';
+      lastRenderedLightingEffect = '';
       dimWidthInput = null;
       dimHeightInput = null;
       if (container.parentElement) container.parentElement.removeChild(container);
@@ -286,6 +414,11 @@ function updateInspector(
       addField(div, 'yBlock', String(wall.yBlock), v => callbacks?.onPropertyChange('wall.yBlock', parseInt(v)));
       addField(div, 'wBlock', String(wall.wBlock), v => callbacks?.onPropertyChange('wall.wBlock', parseInt(v)));
       addField(div, 'hBlock', String(wall.hBlock), v => callbacks?.onPropertyChange('wall.hBlock', parseInt(v)));
+      const typeLabel = wall.isPlatformFlag === 1 ? 'Platform (one-way)' : 'Solid Block';
+      const typeDiv = document.createElement('div');
+      typeDiv.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.5); margin-top: 4px;`;
+      typeDiv.textContent = `Type: ${typeLabel}`;
+      div.appendChild(typeDiv);
     }
   } else if (el.type === 'enemy') {
     const enemy = room.enemies.find(e => e.uid === el.uid);

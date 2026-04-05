@@ -12,6 +12,7 @@ import type { CameraState } from '../render/camera';
 import {
   EditorState, createEditorState, EditorTool,
   EditorWall, EditorEnemy, EditorTransition, EditorSkillTomb,
+  BlockTheme, BackgroundId, LightingEffect,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
@@ -124,6 +125,15 @@ export function createEditorController(
         },
         onPropertyChange: handlePropertyChange,
         onRoomDimensionsChange: handleRoomDimensionsChange,
+        onBlockThemeChange: (theme: BlockTheme) => {
+          if (state.roomData) state.roomData.blockTheme = theme;
+        },
+        onLightingEffectChange: (lightingEffect: LightingEffect) => {
+          if (state.roomData) state.roomData.lightingEffect = lightingEffect;
+        },
+        onBackgroundChange: (bgId: BackgroundId) => {
+          if (state.roomData) state.roomData.backgroundId = bgId;
+        },
         onConfirm: () => confirmEdits(),
         onCancel: () => cancelEdits(),
       });
@@ -356,11 +366,57 @@ export function createEditorController(
 
   function handleRoomDimensionsChange(prop: 'widthBlocks' | 'heightBlocks', value: number): void {
     if (!state.roomData) return;
+
+    const room = state.roomData;
     const clamped = Math.max(10, value);
     if (prop === 'widthBlocks') {
-      state.roomData.widthBlocks = clamped;
+      room.widthBlocks = clamped;
     } else {
-      state.roomData.heightBlocks = clamped;
+      room.heightBlocks = clamped;
+    }
+
+    const maxX = room.widthBlocks - 1;
+    const maxY = room.heightBlocks - 1;
+
+    // Keep spawn and point entities inside the new room bounds.
+    room.playerSpawnBlock[0] = Math.min(Math.max(0, room.playerSpawnBlock[0]), maxX);
+    room.playerSpawnBlock[1] = Math.min(Math.max(0, room.playerSpawnBlock[1]), maxY);
+
+    for (const enemy of room.enemies) {
+      enemy.xBlock = Math.min(Math.max(0, enemy.xBlock), maxX);
+      enemy.yBlock = Math.min(Math.max(0, enemy.yBlock), maxY);
+    }
+
+    for (const tomb of room.skillTombs) {
+      tomb.xBlock = Math.min(Math.max(0, tomb.xBlock), maxX);
+      tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
+    }
+
+    // Clamp interior wall rectangles so they stay fully inside the room.
+    for (const wall of room.interiorWalls) {
+      wall.wBlock = Math.max(1, Math.min(wall.wBlock, room.widthBlocks));
+      wall.hBlock = Math.max(1, Math.min(wall.hBlock, room.heightBlocks));
+      wall.xBlock = Math.min(Math.max(0, wall.xBlock), room.widthBlocks - wall.wBlock);
+      wall.yBlock = Math.min(Math.max(0, wall.yBlock), room.heightBlocks - wall.hBlock);
+    }
+
+    // Keep transitions valid for the updated room dimensions.
+    for (const trans of room.transitions) {
+      if (trans.direction === 'left' || trans.direction === 'right') {
+        const maxOpening = Math.max(1, room.heightBlocks - 2);
+        trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
+        trans.positionBlock = Math.min(
+          Math.max(1, trans.positionBlock),
+          room.heightBlocks - 1 - trans.openingSizeBlocks,
+        );
+      } else {
+        const maxOpening = Math.max(1, room.widthBlocks - 2);
+        trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
+        trans.positionBlock = Math.min(
+          Math.max(1, trans.positionBlock),
+          room.widthBlocks - 1 - trans.openingSizeBlocks,
+        );
+      }
     }
   }
 

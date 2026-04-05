@@ -43,6 +43,7 @@ export function resetClusterGroundedFlag(cluster: ClusterState): void {
  * X-axis collision pass: resolve all wall overlaps on X only.
  * Pushes cluster left/right out of walls and zeros velX on contact.
  * Sets isTouchingWallLeftFlag / isTouchingWallRightFlag for player.
+ * Platform walls (wallIsPlatformFlag=1) are skipped — no side collision.
  */
 export function resolveWallsX(
   cluster: ClusterState,
@@ -53,6 +54,9 @@ export function resolveWallsX(
   const hh = cluster.halfHeightWorld;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
+    // Platforms have no horizontal collision
+    if (world.wallIsPlatformFlag[wi] === 1) continue;
+
     const wallLeft   = world.wallXWorld[wi];
     const wallTop    = world.wallYWorld[wi];
     const wallRight  = wallLeft + world.wallWWorld[wi];
@@ -102,6 +106,8 @@ export function resolveWallsX(
  * Y-axis collision pass: resolve all wall overlaps on Y only.
  * Pushes cluster up/down out of walls and zeros velY on contact.
  * Sets isGroundedFlag when landing on a top face.
+ * Platform walls (wallIsPlatformFlag=1) only collide from above — the
+ * cluster can pass upward through them but lands when falling down.
  * Returns true if the cluster landed on a top surface.
  */
 export function resolveWallsY(
@@ -128,6 +134,19 @@ export function resolveWallsY(
     if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
 
     const prevBottom = prevYWorld + hh;
+
+    if (world.wallIsPlatformFlag[wi] === 1) {
+      // Platform: only land on top surface when falling (velocityY >= 0 and was above)
+      if (prevBottom <= wallTop + COLLISION_EPSILON && cluster.velocityYWorld >= 0) {
+        cluster.positionYWorld = wallTop - hh;
+        cluster.velocityYWorld = 0;
+        cluster.isGroundedFlag = 1;
+        landed = true;
+      }
+      // Never push from below — pass through
+      continue;
+    }
+
     const prevTop    = prevYWorld - hh;
 
     // Determine push direction from previous position

@@ -18,6 +18,7 @@
  */
 
 import { WallSnapshot } from '../snapshot';
+import type { BlockTheme, LightingEffect } from '../../levels/roomDef';
 
 // ── Sprite loading ──────────────────────────────────────────────────────────
 
@@ -47,9 +48,69 @@ interface BlockSpriteSet {
   vertex: HTMLImageElement;
 }
 
-/** Cache of loaded sprite sets keyed by worldNumber. */
+// ── Block-theme sprite pre-loads ────────────────────────────────────────────
+
+// Black Rock sprites
+const _blackRockBlockVariants: readonly HTMLImageElement[] = [
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (1).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (2).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (3).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (4).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (5).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (6).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (7).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (8).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (9).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (10).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (11).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (12).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (13).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (14).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (15).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (16).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (17).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (18).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (19).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (20).png'),
+];
+const _blackRockCornerVariants: readonly HTMLImageElement[] = [
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (1).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (2).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (3).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (4).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (5).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (6).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (7).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (8).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (9).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (10).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (11).png'),
+];
+const _blackRockPlatformVariants: readonly HTMLImageElement[] = [
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (1).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (2).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (3).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (4).png'),
+];
+const _blackRockPillarVariants: readonly HTMLImageElement[] = [
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (1).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (2).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (3).png'),
+  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (4).png'),
+];
+
+// Brown Rock sprites (single flat sprite, no auto-tiling variants)
+const _brownRockSprite8 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_8x8.png');
+const _brownRockSprite16 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_16x16.png');
+const _brownRockSprite32 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_32x32.png');
+
+// Dirt sprites (edge/corner auto-tiling at 8x8)
+const _dirtBlockSprite = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8.png');
+const _dirtEdgeSprite  = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8_edge.png');
+const _dirtCornerSprite = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8_corner.png');
+
+/** Cache of loaded sprite sets keyed by worldNumber (for legacy world-number mode). */
 const _spriteSets = new Map<number, BlockSpriteSet>();
-const _brownRockBlockBySize = new Map<number, HTMLImageElement>();
 
 /**
  * Returns the sprite set for a given world number, loading on first access.
@@ -64,14 +125,13 @@ function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
   const dir = `SPRITES/WORLDS/W-${worldNumber}/blocks`;
   let sprites: BlockSpriteSet;
   if (worldNumber === 0) {
-    const brownRockBlockSprite = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_8x8.png');
     sprites = {
-      block:  brownRockBlockSprite,
-      single: brownRockBlockSprite,
-      edge:   brownRockBlockSprite,
-      corner: brownRockBlockSprite,
-      end:    brownRockBlockSprite,
-      vertex: brownRockBlockSprite,
+      block:  _brownRockSprite8,
+      single: _brownRockSprite8,
+      edge:   _brownRockSprite8,
+      corner: _brownRockSprite8,
+      end:    _brownRockSprite8,
+      vertex: _brownRockSprite8,
     };
   } else if (worldNumber <= 2) {
     sprites = {
@@ -97,33 +157,118 @@ function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
   return sprites;
 }
 
-/** Active sprite set — updated when setActiveWorld() is called. */
+/** Active sprite set for world-number mode. */
 let _sprites: BlockSpriteSet = getBlockSpriteSet(0);
 let _activeWorldNumber = 0;
 
 /**
+ * Active block theme.  When non-null, theme-based rendering overrides the
+ * world-number-based sprite selection.
+ */
+let _activeBlockTheme: BlockTheme | null = null;
+let _activeLightingEffect: LightingEffect = 'DEFAULT';
+let _activeRoomWidthBlocks = 0;
+let _activeRoomHeightBlocks = 0;
+
+/**
  * Set the active world number for block sprite rendering.
- * Call this when the player enters a new room with a different worldNumber.
+ * Call this when the player enters a room without an explicit blockTheme.
  */
 export function setActiveBlockSpriteWorld(worldNumber: number): void {
   _activeWorldNumber = worldNumber;
   _sprites = getBlockSpriteSet(worldNumber);
+  _activeBlockTheme = null;
 }
 
-function getBrownRockSpriteForTileSize(blockSizePx: number): HTMLImageElement {
-  const cached = _brownRockBlockBySize.get(blockSizePx);
-  if (cached !== undefined) return cached;
+/**
+ * Set the active block theme for rendering.
+ * Overrides world-number-based sprite selection until setActiveBlockSpriteWorld is called.
+ */
+export function setActiveBlockSpriteTheme(theme: BlockTheme): void {
+  _activeBlockTheme = theme;
+}
 
-  const spritePath =
-    blockSizePx >= 32
-      ? 'SPRITES/BLOCKS/brownRock/brownRock_32x32.png'
-      : blockSizePx >= 16
-        ? 'SPRITES/BLOCKS/brownRock/brownRock_16x16.png'
-        : 'SPRITES/BLOCKS/brownRock/brownRock_8x8.png';
+/** Sets the active lighting model and room bounds used for block shading. */
+export function setActiveBlockLighting(effect: LightingEffect, roomWidthBlocks: number, roomHeightBlocks: number): void {
+  _activeLightingEffect = effect;
+  _activeRoomWidthBlocks = roomWidthBlocks;
+  _activeRoomHeightBlocks = roomHeightBlocks;
+}
 
-  const sprite = _loadImage(spritePath);
-  _brownRockBlockBySize.set(blockSizePx, sprite);
-  return sprite;
+function _getBrownRockSpriteForBlockSize(blockSizePx: number): HTMLImageElement {
+  if (blockSizePx >= 32) return _brownRockSprite32;
+  if (blockSizePx >= 16) return _brownRockSprite16;
+  return _brownRockSprite8;
+}
+
+function _getDirtSprite(variant: TileVariant): HTMLImageElement {
+  switch (variant) {
+    case 'edge':   return _dirtEdgeSprite;
+    case 'corner': return _dirtCornerSprite;
+    default:       return _dirtBlockSprite;
+  }
+}
+
+function _hashTileCoord(col: number, row: number): number {
+  let seed = (col * 73856093) ^ (row * 19349663) ^ (_activeWorldNumber * 83492791);
+  seed |= 0;
+  seed ^= seed >>> 16;
+  seed = Math.imul(seed, 2246822519);
+  seed ^= seed >>> 13;
+  return seed >>> 0;
+}
+
+// Neighbor-mask constants for corner detection
+const _CORNER_MASK_SW = 4 | 8;   // _S | _W
+const _CORNER_MASK_NE = 1 | 2;   // _N | _E
+const _CORNER_MASK_SE = 4 | 2;   // _S | _E
+const _CORNER_MASK_NW = 1 | 8;   // _N | _W
+
+function _pickBlackRockVariant(
+  col: number,
+  row: number,
+  northSolid: boolean,
+  eastSolid: boolean,
+  southSolid: boolean,
+  westSolid: boolean,
+  // mask is pre-computed by the caller to avoid recomputing per call site;
+  // it equals (northSolid?_N:0)|(eastSolid?_E:0)|(southSolid?_S:0)|(westSolid?_W:0).
+  mask: number,
+): HTMLImageElement {
+  // Thin pillar tiles: vertically connected and narrow in width.
+  const isPillarTile = northSolid && southSolid && !eastSolid && !westSolid;
+  const hash = _hashTileCoord(col, row);
+  if (isPillarTile) {
+    return _blackRockPillarVariants[hash % _blackRockPillarVariants.length];
+  }
+  // Use dedicated corner sprites for 2-adjacent-neighbor (L-shaped) tiles.
+  if (mask === _CORNER_MASK_SW || mask === _CORNER_MASK_NE ||
+      mask === _CORNER_MASK_SE || mask === _CORNER_MASK_NW) {
+    return _blackRockCornerVariants[hash % _blackRockCornerVariants.length];
+  }
+  return _blackRockBlockVariants[hash % _blackRockBlockVariants.length];
+}
+
+/**
+ * Returns the sprite for a block cell, based on the active block theme and
+ * the cell's auto-tile variant.
+ */
+function _getSpriteForTheme(
+  theme: BlockTheme,
+  col: number, row: number,
+  northSolid: boolean, eastSolid: boolean, southSolid: boolean, westSolid: boolean,
+  mask: number,
+  variant: TileVariant,
+  blockSizePx: number,
+): HTMLImageElement {
+  switch (theme) {
+    case 'blackRock':
+      return _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid, mask);
+    case 'brownRock':
+      return _getBrownRockSpriteForBlockSize(blockSizePx);
+    case 'dirt':
+      return _getDirtSprite(variant);
+  }
 }
 
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
@@ -193,8 +338,24 @@ const _TILE_TABLE: TileSpec[] = ((): TileSpec[] => {
 
 // ── Occupancy grid ───────────────────────────────────────────────────────────
 
-/** Reusable occupancy set; cleared at the start of each renderWallSprites call. */
-const _occupied = new Set<string>();
+interface CachedTileCoord {
+  readonly key: string;
+  readonly col: number;
+  readonly row: number;
+}
+
+interface CachedWallLayout {
+  signature: string;
+  blockSizePx: number;
+  occupied: Set<string>;
+  platformOccupied: Set<string>;
+  occupiedTiles: CachedTileCoord[];
+  platformTiles: CachedTileCoord[];
+  aboveLightingDepths: Map<string, number>;
+  defaultLightingDepthByRoomKey: Map<string, Map<string, number>>;
+}
+
+let _cachedWallLayout: CachedWallLayout | null = null;
 
 /** Returns the string key for a tile grid coordinate. */
 function _tileKey(col: number, row: number): string {
@@ -202,22 +363,114 @@ function _tileKey(col: number, row: number): string {
 }
 
 /** Returns true if the cell at (col, row) is occupied by a solid wall block. */
-function _isOccupied(col: number, row: number): boolean {
-  return _occupied.has(_tileKey(col, row));
+function _isOccupied(occupied: Set<string>, col: number, row: number): boolean {
+  return occupied.has(_tileKey(col, row));
+}
+
+function _isInsideActiveRoom(col: number, row: number): boolean {
+  return col >= 0 && col < _activeRoomWidthBlocks && row >= 0 && row < _activeRoomHeightBlocks;
 }
 
 /**
- * Populates _occupied from all wall AABBs in world-space tile coordinates.
+ * Returns how many solid tiles lie directly above this tile before open air.
+ * 0 means this tile is directly exposed to air from above.
+ */
+function _buildDefaultLightingDepths(occupied: Set<string>): Map<string, number> {
+  const depths = new Map<string, number>();
+  if (_activeRoomWidthBlocks <= 0 || _activeRoomHeightBlocks <= 0) return depths;
+
+  const qCols: number[] = [];
+  const qRows: number[] = [];
+  const qDepths: number[] = [];
+  let qIndex = 0;
+
+  for (const key of occupied) {
+    const commaIdx = key.indexOf(',');
+    const col = parseInt(key.slice(0, commaIdx), 10);
+    const row = parseInt(key.slice(commaIdx + 1), 10);
+    if (!_isInsideActiveRoom(col, row)) continue;
+
+    let touchesOpenAir = false;
+    for (let dy = -1; dy <= 1 && !touchesOpenAir; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nc = col + dx;
+        const nr = row + dy;
+        if (!_isInsideActiveRoom(nc, nr)) continue; // outside room counts as solid
+        if (!_isOccupied(occupied, nc, nr)) {
+          touchesOpenAir = true;
+          break;
+        }
+      }
+    }
+
+    if (touchesOpenAir) {
+      depths.set(key, 0);
+      qCols.push(col);
+      qRows.push(row);
+      qDepths.push(0);
+    }
+  }
+
+  while (qIndex < qCols.length) {
+    const col = qCols[qIndex];
+    const row = qRows[qIndex];
+    const depth = qDepths[qIndex];
+    qIndex++;
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nc = col + dx;
+        const nr = row + dy;
+        if (!_isInsideActiveRoom(nc, nr) || !_isOccupied(occupied, nc, nr)) continue;
+        const neighborKey = _tileKey(nc, nr);
+        if (depths.has(neighborKey)) continue;
+        const nextDepth = depth + 1;
+        depths.set(neighborKey, nextDepth);
+        qCols.push(nc);
+        qRows.push(nr);
+        qDepths.push(nextDepth);
+      }
+    }
+  }
+
+  const maxFallbackDepth = Math.max(_activeRoomWidthBlocks, _activeRoomHeightBlocks);
+  for (const key of occupied) {
+    const commaIdx = key.indexOf(',');
+    const col = parseInt(key.slice(0, commaIdx), 10);
+    const row = parseInt(key.slice(commaIdx + 1), 10);
+    if (!_isInsideActiveRoom(col, row)) continue;
+    if (!depths.has(key)) depths.set(key, maxFallbackDepth);
+  }
+
+  return depths;
+}
+
+/**
+ * Builds and caches occupancy data from wall AABBs in world-space tile coordinates.
  *
  * Using world-space coordinates (instead of screen-space) ensures the tile
  * grid is stable — blocks translate smoothly with the camera offset rather
  * than snapping to screen-aligned grid positions.
  */
-function _buildOccupancy(
-  walls:         WallSnapshot,
-  blockSizePx:   number,
-): void {
-  _occupied.clear();
+function _buildWallLayoutCache(
+  walls: WallSnapshot,
+  blockSizePx: number,
+): CachedWallLayout {
+  let signature = `${blockSizePx}|${walls.count}`;
+  for (let wi = 0; wi < walls.count; wi++) {
+    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]}`;
+  }
+
+  if (_cachedWallLayout !== null &&
+      _cachedWallLayout.signature === signature &&
+      _cachedWallLayout.blockSizePx === blockSizePx) {
+    return _cachedWallLayout;
+  }
+
+  const occupied = new Set<string>();
+  const platformOccupied = new Set<string>();
 
   for (let wi = 0; wi < walls.count; wi++) {
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
@@ -227,10 +480,82 @@ function _buildOccupancy(
 
     for (let r = 0; r < rowCount; r++) {
       for (let c = 0; c < colCount; c++) {
-        _occupied.add(_tileKey(colStart + c, rowStart + r));
+        const col = colStart + c;
+        const row = rowStart + r;
+        const key = _tileKey(col, row);
+        if (walls.isPlatformFlag[wi] === 1) {
+          platformOccupied.add(key);
+        } else {
+          occupied.add(key);
+        }
       }
     }
   }
+
+  const occupiedTiles: CachedTileCoord[] = [];
+  for (const key of occupied) {
+    const commaIdx = key.indexOf(',');
+    occupiedTiles.push({
+      key,
+      col: parseInt(key.slice(0, commaIdx), 10),
+      row: parseInt(key.slice(commaIdx + 1), 10),
+    });
+  }
+
+  const platformTiles: CachedTileCoord[] = [];
+  for (const key of platformOccupied) {
+    const commaIdx = key.indexOf(',');
+    platformTiles.push({
+      key,
+      col: parseInt(key.slice(0, commaIdx), 10),
+      row: parseInt(key.slice(commaIdx + 1), 10),
+    });
+  }
+
+  const aboveLightingDepths = new Map<string, number>();
+  for (let i = 0; i < occupiedTiles.length; i++) {
+    const tile = occupiedTiles[i];
+    let depth = 0;
+    let scanRow = tile.row - 1;
+    while (_isOccupied(occupied, tile.col, scanRow)) {
+      depth++;
+      scanRow--;
+    }
+    aboveLightingDepths.set(tile.key, depth);
+  }
+  for (let i = 0; i < platformTiles.length; i++) {
+    const tile = platformTiles[i];
+    let depth = 0;
+    let scanRow = tile.row - 1;
+    while (_isOccupied(occupied, tile.col, scanRow)) {
+      depth++;
+      scanRow--;
+    }
+    aboveLightingDepths.set(tile.key, depth);
+  }
+
+  _cachedWallLayout = {
+    signature,
+    blockSizePx,
+    occupied,
+    platformOccupied,
+    occupiedTiles,
+    platformTiles,
+    aboveLightingDepths,
+    defaultLightingDepthByRoomKey: new Map<string, Map<string, number>>(),
+  };
+
+  return _cachedWallLayout;
+}
+
+function _getDefaultLightingDepths(layout: CachedWallLayout): Map<string, number> {
+  const roomKey = `${_activeRoomWidthBlocks}x${_activeRoomHeightBlocks}`;
+  const cached = layout.defaultLightingDepthByRoomKey.get(roomKey);
+  if (cached !== undefined) return cached;
+
+  const depths = _buildDefaultLightingDepths(layout.occupied);
+  layout.defaultLightingDepthByRoomKey.set(roomKey, depths);
+  return depths;
 }
 
 // ── Solid-colour fallback ─────────────────────────────────────────────────────
@@ -266,6 +591,7 @@ function _drawFallbackTile(
  */
 function _drawVertexOverlays(
   ctx:         CanvasRenderingContext2D,
+  occupied:    Set<string>,
   col:         number,
   row:         number,
   tileX:       number,
@@ -283,28 +609,28 @@ function _drawVertexOverlays(
 
   // Each diagonal corner: draw vertex overlay when both adjacent cardinals
   // are solid but the diagonal cell is air (concave inner corner).
-  if (northSolid && eastSolid && !_isOccupied(col + 1, row - 1)) {
+  if (northSolid && eastSolid && !_isOccupied(occupied, col + 1, row - 1)) {
     ctx.save();
     ctx.translate(Math.round(tileX + tileSizePx), Math.round(tileY));
     ctx.rotate(_HALF_PI);
     ctx.drawImage(vertexImg, 0, 0, qSizePx, qSizePx);
     ctx.restore();
   }
-  if (southSolid && eastSolid && !_isOccupied(col + 1, row + 1)) {
+  if (southSolid && eastSolid && !_isOccupied(occupied, col + 1, row + 1)) {
     ctx.save();
     ctx.translate(Math.round(tileX + tileSizePx), Math.round(tileY + tileSizePx));
     ctx.rotate(_PI);
     ctx.drawImage(vertexImg, 0, 0, qSizePx, qSizePx);
     ctx.restore();
   }
-  if (southSolid && westSolid && !_isOccupied(col - 1, row + 1)) {
+  if (southSolid && westSolid && !_isOccupied(occupied, col - 1, row + 1)) {
     ctx.save();
     ctx.translate(Math.round(tileX), Math.round(tileY + tileSizePx));
     ctx.rotate(-_HALF_PI);
     ctx.drawImage(vertexImg, 0, 0, qSizePx, qSizePx);
     ctx.restore();
   }
-  if (northSolid && westSolid && !_isOccupied(col - 1, row - 1)) {
+  if (northSolid && westSolid && !_isOccupied(occupied, col - 1, row - 1)) {
     ctx.save();
     ctx.translate(Math.round(tileX), Math.round(tileY));
     ctx.rotate(0);
@@ -327,7 +653,7 @@ function _drawVertexOverlays(
  * @param offsetXPx    Horizontal pixel offset (camera translation).
  * @param offsetYPx    Vertical pixel offset (camera translation).
  * @param scalePx      Scale factor (world units → screen pixels).
- * @param blockSizePx  Block/tile size in world units (e.g. BLOCK_SIZE_MEDIUM = 12).
+ * @param blockSizePx  Block/tile size in world units (e.g. BLOCK_SIZE_MEDIUM = 8).
  */
 export function renderWallSprites(
   ctx:         CanvasRenderingContext2D,
@@ -341,25 +667,32 @@ export function renderWallSprites(
   if (walls.count === 0) return;
 
   const tileSizeScreen = blockSizePx * scalePx;
-  const baseTileSprite =
-    _activeWorldNumber === 0
-      ? getBrownRockSpriteForTileSize(blockSizePx)
-      : null;
 
-  _buildOccupancy(walls, blockSizePx);
+  // Determine rendering mode
+  const theme = _activeBlockTheme;
+  // In world-number mode, world 0 uses blackRock sprites (legacy behaviour)
+  const isLegacyBlackRock = (theme === null) && (_activeWorldNumber === 0);
+  // World-number mode for worlds 1+ uses the world-specific sprite set
+  const isWorldMode = (theme === null) && !isLegacyBlackRock;
+
+  const wallLayout = _buildWallLayoutCache(walls, blockSizePx);
+  const defaultLightingDepths = _activeLightingEffect === 'DEFAULT'
+    ? _getDefaultLightingDepths(wallLayout)
+    : null;
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  for (const key of _occupied) {
-    const commaIdx = key.indexOf(',');
-    const col = parseInt(key.slice(0, commaIdx), 10);
-    const row = parseInt(key.slice(commaIdx + 1), 10);
+  for (let ti = 0; ti < wallLayout.occupiedTiles.length; ti++) {
+    const tile = wallLayout.occupiedTiles[ti];
+    const key = tile.key;
+    const col = tile.col;
+    const row = tile.row;
 
-    const northSolid = _isOccupied(col,     row - 1);
-    const eastSolid  = _isOccupied(col + 1, row    );
-    const southSolid = _isOccupied(col,     row + 1);
-    const westSolid  = _isOccupied(col - 1, row    );
+    const northSolid = _isOccupied(wallLayout.occupied, col,     row - 1);
+    const eastSolid  = _isOccupied(wallLayout.occupied, col + 1, row    );
+    const southSolid = _isOccupied(wallLayout.occupied, col,     row + 1);
+    const westSolid  = _isOccupied(wallLayout.occupied, col - 1, row    );
 
     const mask =
       (northSolid ? _N : 0) |
@@ -372,14 +705,31 @@ export function renderWallSprites(
     // Convert world-space tile position to screen space for smooth scrolling
     const tileX  = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY  = Math.round(row * blockSizePx * scalePx + offsetYPx);
+    const tileKey = key;
     const halfSz = Math.round(tileSizeScreen * 0.5);
     const cx     = Math.round(tileX + tileSizeScreen * 0.5);
     const cy     = Math.round(tileY + tileSizeScreen * 0.5);
 
-    const img = baseTileSprite ?? _sprites[spec.variant];
+    let img: HTMLImageElement;
+    let skipRotation: boolean;
+
+    if (theme !== null) {
+      // Theme-based rendering (new system)
+      img = _getSpriteForTheme(theme, col, row, northSolid, eastSolid, southSolid, westSolid, mask, spec.variant, blockSizePx);
+      // Only blackRock and brownRock skip rotation (flat/random tiles)
+      skipRotation = (theme === 'blackRock' || theme === 'brownRock');
+    } else if (isLegacyBlackRock) {
+      // World 0 legacy: blackRock sprites
+      img = _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid, mask);
+      skipRotation = true;
+    } else {
+      // World 1+ legacy: world-specific auto-tiling sprites
+      img = _sprites[spec.variant];
+      skipRotation = false;
+    }
 
     if (isSpriteReady(img)) {
-      if (spec.rotationRad === 0) {
+      if (skipRotation || spec.rotationRad === 0) {
         ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
         ctx.save();
@@ -392,12 +742,60 @@ export function renderWallSprites(
       _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
     }
 
-    // Draw vertex overlay at concave inner corners of corner tiles.
-    if (spec.variant === 'corner') {
+    const airDepth = _activeLightingEffect === 'DEFAULT'
+      ? (defaultLightingDepths?.get(tileKey) ?? 0)
+      : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+    const darknessAlpha = Math.min(1, airDepth * 0.1);
+    if (darknessAlpha > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
+      ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+    }
+
+    // Draw vertex overlays only in world 1+ legacy mode (those worlds have vertex.png).
+    // Theme-based modes and world-0 blackRock do not use vertex overlays.
+    if (isWorldMode && spec.variant === 'corner') {
       _drawVertexOverlays(
-        ctx, col, row, tileX, tileY, tileSizeScreen,
+        ctx, wallLayout.occupied, col, row, tileX, tileY, tileSizeScreen,
         northSolid, eastSolid, southSolid, westSolid,
       );
+    }
+  }
+
+  for (let ti = 0; ti < wallLayout.platformTiles.length; ti++) {
+    const tile = wallLayout.platformTiles[ti];
+    const key = tile.key;
+    const col = tile.col;
+    const row = tile.row;
+
+    const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
+    const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
+    const hash = _hashTileCoord(col, row);
+
+    let img: HTMLImageElement;
+    if (theme === 'blackRock' || isLegacyBlackRock) {
+      img = _blackRockPlatformVariants[hash % _blackRockPlatformVariants.length];
+    } else if (theme === 'brownRock') {
+      img = _getBrownRockSpriteForBlockSize(blockSizePx);
+    } else if (theme === 'dirt') {
+      img = _dirtBlockSprite;
+    } else {
+      img = _sprites.end;
+    }
+
+    if (isSpriteReady(img)) {
+      ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
+    } else {
+      _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
+    }
+
+    const tileKey = key;
+    const airDepth = _activeLightingEffect === 'DEFAULT'
+      ? (defaultLightingDepths?.get(tileKey) ?? 0)
+      : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+    const darknessAlpha = Math.min(1, airDepth * 0.1);
+    if (darknessAlpha > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
+      ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
     }
   }
 

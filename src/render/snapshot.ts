@@ -110,6 +110,7 @@ export interface WallSnapshot {
   readonly yWorld:  Float32Array;
   readonly wWorld:  Float32Array;
   readonly hWorld:  Float32Array;
+  readonly isPlatformFlag: Uint8Array;
 }
 
 export interface WorldSnapshot {
@@ -212,6 +213,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       yWorld: world.wallYWorld,
       wWorld: world.wallWWorld,
       hWorld: world.wallHWorld,
+      isPlatformFlag: world.wallIsPlatformFlag,
     },
     isGrappleActiveFlag: world.isGrappleActiveFlag,
     isGrappleMissActiveFlag: world.isGrappleMissActiveFlag,

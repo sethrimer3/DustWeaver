@@ -15,13 +15,39 @@
  *   60    small blocks fit horizontally (480 ÷ 8 = 60)
  *
  * Player hitbox constants (standing):
- *   PLAYER_WIDTH_WORLD       = 14  (full width)
- *   PLAYER_HEIGHT_WORLD      = 20  (full height)
- *   PLAYER_HALF_WIDTH_WORLD  =  7
- *   PLAYER_HALF_HEIGHT_WORLD = 10
+ *   PLAYER_WIDTH_WORLD       = 15  (full width)
+ *   PLAYER_HEIGHT_WORLD      = 15  (full height)
+ *   PLAYER_HALF_WIDTH_WORLD  =  7.5
+ *   PLAYER_HALF_HEIGHT_WORLD =  7.5
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
+
+// ── Block theme and background types ─────────────────────────────────────────
+
+/**
+ * Visual theme for block sprites in a room.
+ * Controls which sprite set is used by the block renderer.
+ */
+export type BlockTheme = 'blackRock' | 'brownRock' | 'dirt';
+
+/**
+ * Background visual identifier for a room.
+ * Controls the parallax background image (or effect) shown behind the level.
+ */
+export type BackgroundId =
+  | 'brownRock'
+  | 'world1'
+  | 'world2'
+  | 'world3'
+  | 'crystallineCracks';
+
+/**
+ * Lighting model used when shading block tiles in a room.
+ * - DEFAULT: distance-to-open-air in any direction (intended behavior)
+ * - Above:   legacy top-down depth shading effect
+ */
+export type LightingEffect = 'DEFAULT' | 'Above';
 
 /** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
 export const BLOCK_SIZE_SMALL  = 8;
@@ -41,16 +67,16 @@ export const BLOCK_SIZE_LARGE  = BLOCK_SIZE_SMALL;
 // ── Player size constants ─────────────────────────────────────────────────────
 
 /** Player full width in world units. */
-export const PLAYER_WIDTH_WORLD = 14;
+export const PLAYER_WIDTH_WORLD = 15;
 
 /** Player full height in world units. */
-export const PLAYER_HEIGHT_WORLD = 20;
+export const PLAYER_HEIGHT_WORLD = 15;
 
 /** Player half-width in world units. */
-export const PLAYER_HALF_WIDTH_WORLD = 7;
+export const PLAYER_HALF_WIDTH_WORLD = 7.5;
 
 /** Player half-height in world units. */
-export const PLAYER_HALF_HEIGHT_WORLD = 10;
+export const PLAYER_HALF_HEIGHT_WORLD = 7.5;
 
 /** An enemy cluster placed inside a room. */
 export interface RoomEnemyDef {
@@ -99,6 +125,11 @@ export interface RoomWallDef {
   yBlock: number;
   wBlock: number;
   hBlock: number;
+  /**
+   * 1 if this wall is a one-way platform — the player can pass upward through
+   * it but lands on top when falling down.  Platforms have no side collision.
+   */
+  isPlatformFlag?: 0 | 1;
 }
 
 /** Direction a transition tunnel faces. */
@@ -185,6 +216,20 @@ export interface RoomDef {
   name: string;
   /** World number — determines block sprites and background colour. */
   worldNumber: number;
+  /**
+   * Visual theme for block sprites.  When set, overrides the worldNumber-based
+   * sprite selection.  Falls back to worldNumber if not set.
+   */
+  blockTheme?: BlockTheme;
+  /**
+   * Background visual ID.  When set, overrides the worldNumber-based background
+   * image.  Falls back to worldNumber if not set.
+   */
+  backgroundId?: BackgroundId;
+  /**
+   * Block lighting model. Falls back to 'DEFAULT' when not set.
+   */
+  lightingEffect?: LightingEffect;
   /** Room width in blocks. */
   widthBlocks: number;
   /** Room height in blocks. */

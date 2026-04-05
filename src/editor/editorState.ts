@@ -6,7 +6,10 @@
  * which can be exported to JSON and later rebuilt into a RoomDef.
  */
 
-import type { TransitionDirection } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
+
+// Re-export for convenience in editor modules
+export type { BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
 
 // ── Editor tool enum ─────────────────────────────────────────────────────────
 
@@ -28,21 +31,16 @@ export interface PaletteItem {
   defaultWidthBlocks?: number;
   /** Default height in blocks (for walls). */
   defaultHeightBlocks?: number;
+  /** 1 if this palette item places a one-way platform. */
+  isPlatformItem?: 1;
 }
 
 /** Built-in palette items available in the editor. */
 export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Blocks / terrain
-  { id: 'wall_1x1', label: 'Wall 1×1', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
-  { id: 'wall_2x1', label: 'Wall 2×1', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1 },
-  { id: 'wall_4x1', label: 'Platform 4×1', category: 'blocks', defaultWidthBlocks: 4, defaultHeightBlocks: 1 },
-  { id: 'wall_6x1', label: 'Platform 6×1', category: 'blocks', defaultWidthBlocks: 6, defaultHeightBlocks: 1 },
-  { id: 'wall_1x4', label: 'Pillar 1×4', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
-  { id: 'wall_3x3', label: 'Block 3×3', category: 'blocks', defaultWidthBlocks: 3, defaultHeightBlocks: 3 },
-  { id: 'brownRock_1x1_v1', label: 'Brown Rock 1', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
-  { id: 'brownRock_1x1_v2', label: 'Brown Rock 2', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
-  { id: 'brownRock_1x1_v3', label: 'Brown Rock 3', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
-  { id: 'brownRock_2x2',    label: 'Brown Rock Large', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
+  { id: 'block_1x1', label: '1×1 Block',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'block_2x2', label: '2×2 Block',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
+  { id: 'platform',  label: 'Platform',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPlatformItem: 1 },
   // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },
@@ -53,6 +51,28 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'skill_tomb', label: 'Skill Tomb', category: 'triggers' },
 ];
 
+/** Available block themes for the editor dropdown. */
+export const BLOCK_THEMES: readonly { id: BlockTheme; label: string }[] = [
+  { id: 'blackRock', label: 'Black Rock' },
+  { id: 'brownRock', label: 'Brown Rock' },
+  { id: 'dirt',      label: 'Dirt' },
+];
+
+/** Available background options for the editor dropdown. */
+export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] = [
+  { id: 'brownRock',        label: 'Brown Rock Cave' },
+  { id: 'world1',           label: 'World 1' },
+  { id: 'world2',           label: 'World 2' },
+  { id: 'world3',           label: 'World 3' },
+  { id: 'crystallineCracks', label: 'Crystalline Cracks' },
+];
+
+/** Available lighting models for the editor dropdown. */
+export const LIGHTING_OPTIONS: readonly { id: LightingEffect; label: string }[] = [
+  { id: 'DEFAULT', label: 'DEFAULT' },
+  { id: 'Above', label: 'Above' },
+];
+
 // ── Mutable editor room data (authored content) ─────────────────────────────
 
 export interface EditorWall {
@@ -61,6 +81,8 @@ export interface EditorWall {
   yBlock: number;
   wBlock: number;
   hBlock: number;
+  /** 1 if this wall is a one-way platform. */
+  isPlatformFlag: 0 | 1;
 }
 
 export interface EditorEnemy {
@@ -98,6 +120,12 @@ export interface EditorRoomData {
   id: string;
   name: string;
   worldNumber: number;
+  /** Block sprite theme for this room. Defaults to 'blackRock'. */
+  blockTheme: BlockTheme;
+  /** Background visual for this room. */
+  backgroundId: BackgroundId;
+  /** Lighting model for this room. */
+  lightingEffect: LightingEffect;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];

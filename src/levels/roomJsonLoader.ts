@@ -26,7 +26,6 @@ import {
   stringToParticleKind,
 } from '../editor/roomJson';
 import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
-
 // ── Vite base URL ────────────────────────────────────────────────────────────
 
 const BASE = import.meta.env.BASE_URL;
@@ -121,6 +120,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     yBlock: w.yBlock,
     wBlock: w.wBlock,
     hBlock: w.hBlock,
+    isPlatformFlag: w.isPlatform ? (1 as const) : (0 as const),
   }));
 
   const allWalls: RoomWallDef[] = [...boundaryWalls, ...tunnelWalls, ...interiorWalls];
@@ -214,6 +214,11 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     transitions,
     skillTombs: json.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
   };
+
+  // Propagate optional theme/background fields
+  if (json.blockTheme) room.blockTheme = json.blockTheme;
+  if (json.backgroundId) room.backgroundId = json.backgroundId;
+  if (json.lightingEffect) room.lightingEffect = json.lightingEffect;
 
   // Add optional fields only if present
   if (json.skillBooks && json.skillBooks.length > 0) {
