@@ -121,6 +121,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     wBlock: w.wBlock,
     hBlock: w.hBlock,
     isPlatformFlag: w.isPlatform ? (1 as const) : (0 as const),
+    blockTheme: w.blockTheme,
   }));
 
   const allWalls: RoomWallDef[] = [...boundaryWalls, ...tunnelWalls, ...interiorWalls];

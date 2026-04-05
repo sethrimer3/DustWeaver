@@ -31,6 +31,27 @@ import { ParticleKind } from '../sim/particles/kinds';
  */
 export type BlockTheme = 'blackRock' | 'brownRock' | 'dirt';
 
+/** Maps a BlockTheme string to a compact numeric index for typed arrays. */
+export function blockThemeToIndex(theme: BlockTheme): number {
+  switch (theme) {
+    case 'blackRock': return 0;
+    case 'brownRock': return 1;
+    case 'dirt':      return 2;
+  }
+}
+
+/** Maps a numeric theme index back to a BlockTheme string. */
+export function indexToBlockTheme(index: number): BlockTheme {
+  switch (index) {
+    case 1:  return 'brownRock';
+    case 2:  return 'dirt';
+    default: return 'blackRock';
+  }
+}
+
+/** Sentinel value: wall uses room-level default theme. */
+export const WALL_THEME_DEFAULT_INDEX = 255;
+
 /**
  * Background visual identifier for a room.
  * Controls the parallax background image (or effect) shown behind the level.
@@ -130,6 +151,9 @@ export interface RoomWallDef {
    * it but lands on top when falling down.  Platforms have no side collision.
    */
   isPlatformFlag?: 0 | 1;
+  /** Per-wall block theme override.  When set, this wall renders with the
+   *  specified theme instead of the room-level default. */
+  blockTheme?: BlockTheme;
 }
 
 /** Direction a transition tunnel faces. */

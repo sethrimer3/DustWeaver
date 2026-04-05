@@ -19,6 +19,7 @@
 
 import { WallSnapshot } from '../snapshot';
 import type { BlockTheme, LightingEffect } from '../../levels/roomDef';
+import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 
 // ── Sprite loading ──────────────────────────────────────────────────────────
 
@@ -210,11 +211,32 @@ function _getDirtSprite(variant: TileVariant): HTMLImageElement {
   }
 }
 
+/**
+ * Returns the 2x2 full sprite for themes that use a single dedicated 16x16
+ * texture (brownRock, dirt).  For blackRock, returns null — blackRock 2x2
+ * blocks use per-block variant selection in _getBlackRock2x2Sprite.
+ */
 function _getFullSpriteFor2x2(theme: BlockTheme | null, blockSizePx: number): HTMLImageElement | null {
   if (blockSizePx !== 8) return null;
   if (theme === 'brownRock') return _brownRockSprite16;
   if (theme === 'dirt') return _dirtSprite16;
   return null;
+}
+
+/** Returns true if the active theme supports 2x2 full-sprite rendering. */
+function _themeSupports2x2(theme: BlockTheme | null, blockSizePx: number): boolean {
+  if (blockSizePx !== 8) return false;
+  return theme === 'brownRock' || theme === 'dirt' || theme === 'blackRock';
+}
+
+/**
+ * Returns a blackRock variant sprite for a 2x2 block at the given top-left
+ * tile coordinate.  The existing 16×16 source sprites are drawn at their
+ * native resolution (16 game-pixels) to fill the 2x2 area.
+ */
+function _getBlackRock2x2Sprite(col: number, row: number): HTMLImageElement {
+  const hash = _hashTileCoord(col, row);
+  return _blackRockBlockVariants[hash % _blackRockBlockVariants.length];
 }
 
 function _hashTileCoord(col: number, row: number): number {
@@ -359,6 +381,8 @@ interface CachedWallLayout {
   platformOccupied: Set<string>;
   occupiedTiles: CachedTileCoord[];
   platformTiles: CachedTileCoord[];
+  /** Per-tile theme: maps tile key → BlockTheme (null = use room default). */
+  tileTheme: Map<string, BlockTheme | null>;
   aboveLightingDepths: Map<string, number>;
   defaultLightingDepthByRoomKey: Map<string, Map<string, number>>;
 }
@@ -468,7 +492,7 @@ function _buildWallLayoutCache(
 ): CachedWallLayout {
   let signature = `${blockSizePx}|${walls.count}`;
   for (let wi = 0; wi < walls.count; wi++) {
-    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]}`;
+    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.themeIndex[wi]}`;
   }
 
   if (_cachedWallLayout !== null &&
@@ -479,12 +503,17 @@ function _buildWallLayoutCache(
 
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
+  const tileTheme = new Map<string, BlockTheme | null>();
 
   for (let wi = 0; wi < walls.count; wi++) {
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
     const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
     const rowCount = Math.max(1, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
+
+    const wallTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
+      ? indexToBlockTheme(walls.themeIndex[wi])
+      : null;
 
     for (let r = 0; r < rowCount; r++) {
       for (let c = 0; c < colCount; c++) {
@@ -495,6 +524,9 @@ function _buildWallLayoutCache(
           platformOccupied.add(key);
         } else {
           occupied.add(key);
+        }
+        if (wallTheme !== null) {
+          tileTheme.set(key, wallTheme);
         }
       }
     }
@@ -549,6 +581,7 @@ function _buildWallLayoutCache(
     platformOccupied,
     occupiedTiles,
     platformTiles,
+    tileTheme,
     aboveLightingDepths,
     defaultLightingDepthByRoomKey: new Map<string, Map<string, number>>(),
   };
@@ -566,9 +599,10 @@ function _getDefaultLightingDepths(layout: CachedWallLayout): Map<string, number
   return depths;
 }
 
-function _collectSolid2x2WallTopLefts(walls: WallSnapshot, blockSizePx: number): Set<string> {
-  const topLeftKeys = new Set<string>();
-  if (blockSizePx !== 8) return topLeftKeys;
+/** Collects 2x2 wall top-left keys with their per-wall theme index. */
+function _collectSolid2x2WallTopLefts(walls: WallSnapshot, blockSizePx: number): Map<string, number> {
+  const topLeftMap = new Map<string, number>();
+  if (blockSizePx !== 8) return topLeftMap;
 
   for (let wi = 0; wi < walls.count; wi++) {
     if (walls.isPlatformFlag[wi] === 1) continue;
@@ -578,10 +612,10 @@ function _collectSolid2x2WallTopLefts(walls: WallSnapshot, blockSizePx: number):
     const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
     const rowCount = Math.max(1, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
     if (colCount !== 2 || rowCount !== 2) continue;
-    topLeftKeys.add(_tileKey(colStart, rowStart));
+    topLeftMap.set(_tileKey(colStart, rowStart), walls.themeIndex[wi]);
   }
 
-  return topLeftKeys;
+  return topLeftMap;
 }
 
 // ── Solid-colour fallback ─────────────────────────────────────────────────────
@@ -694,29 +728,33 @@ export function renderWallSprites(
 
   const tileSizeScreen = blockSizePx * scalePx;
 
-  // Determine rendering mode
-  const theme = _activeBlockTheme;
+  // Determine rendering mode: room-level default theme
+  const roomTheme = _activeBlockTheme;
   // In world-number mode, world 0 uses blackRock sprites (legacy behaviour)
-  const isLegacyBlackRock = (theme === null) && (_activeWorldNumber === 0);
+  const isLegacyBlackRock = (roomTheme === null) && (_activeWorldNumber === 0);
   // World-number mode for worlds 1+ uses the world-specific sprite set
-  const isWorldMode = (theme === null) && !isLegacyBlackRock;
+  const isWorldMode = (roomTheme === null) && !isLegacyBlackRock;
 
   const wallLayout = _buildWallLayoutCache(walls, blockSizePx);
-  const solid2x2TopLeftKeys = _collectSolid2x2WallTopLefts(walls, blockSizePx);
-  const fullSprite2x2 = _getFullSpriteFor2x2(theme, blockSizePx);
+  const solid2x2Map = _collectSolid2x2WallTopLefts(walls, blockSizePx);
   const coveredBy2x2Keys = new Set<string>();
-  if (fullSprite2x2 !== null) {
-    for (const topLeftKey of solid2x2TopLeftKeys) {
-      const commaIdx = topLeftKey.indexOf(',');
-      const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
-      const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
 
-      coveredBy2x2Keys.add(_tileKey(col, row));
-      coveredBy2x2Keys.add(_tileKey(col + 1, row));
-      coveredBy2x2Keys.add(_tileKey(col, row + 1));
-      coveredBy2x2Keys.add(_tileKey(col + 1, row + 1));
-    }
+  // Determine which 2x2 blocks should render as full sprites.
+  // Mark covered tiles for each 2x2 block whose resolved theme supports 2x2.
+  for (const [topLeftKey, wallThemeIdx] of solid2x2Map) {
+    const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
+      ? indexToBlockTheme(wallThemeIdx)
+      : roomTheme;
+    if (!_themeSupports2x2(resolvedTheme, blockSizePx)) continue;
+    const commaIdx = topLeftKey.indexOf(',');
+    const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
+    const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
+    coveredBy2x2Keys.add(_tileKey(col, row));
+    coveredBy2x2Keys.add(_tileKey(col + 1, row));
+    coveredBy2x2Keys.add(_tileKey(col, row + 1));
+    coveredBy2x2Keys.add(_tileKey(col + 1, row + 1));
   }
+
   const defaultLightingDepths = _activeLightingEffect === 'DEFAULT'
     ? _getDefaultLightingDepths(wallLayout)
     : null;
@@ -724,15 +762,34 @@ export function renderWallSprites(
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  if (fullSprite2x2 !== null && isSpriteReady(fullSprite2x2)) {
+  // Draw 2x2 full sprites (brownRock/dirt use a single dedicated 16x16 image,
+  // blackRock uses per-block hash-selected variants from the existing 16x16 sources).
+  if (coveredBy2x2Keys.size > 0) {
     const drawSize = tileSizeScreen * 2;
-    for (const topLeftKey of solid2x2TopLeftKeys) {
+    for (const [topLeftKey, wallThemeIdx] of solid2x2Map) {
+      const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
+        ? indexToBlockTheme(wallThemeIdx)
+        : roomTheme;
+      if (!_themeSupports2x2(resolvedTheme, blockSizePx)) continue;
+
       const commaIdx = topLeftKey.indexOf(',');
       const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
       const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
       const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
       const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
-      ctx.drawImage(fullSprite2x2, tileX, tileY, drawSize, drawSize);
+
+      let sprite: HTMLImageElement;
+      if (resolvedTheme === 'blackRock') {
+        sprite = _getBlackRock2x2Sprite(col, row);
+      } else {
+        sprite = _getFullSpriteFor2x2(resolvedTheme, blockSizePx)!;
+      }
+
+      if (isSpriteReady(sprite)) {
+        ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
+      } else {
+        _drawFallbackTile(ctx, tileX, tileY, drawSize);
+      }
     }
   }
 
@@ -776,15 +833,18 @@ export function renderWallSprites(
     const cx     = Math.round(tileX + tileSizeScreen * 0.5);
     const cy     = Math.round(tileY + tileSizeScreen * 0.5);
 
+    // Resolve per-tile theme: use tile-level override if present, else room default
+    const tileTheme: BlockTheme | null = wallLayout.tileTheme.get(tileKey) ?? roomTheme;
+    const tileIsLegacyBlackRock = (tileTheme === null) && (_activeWorldNumber === 0);
+
     let img: HTMLImageElement;
     let skipRotation: boolean;
 
-    if (theme !== null) {
-      // Theme-based rendering (new system)
-      img = _getSpriteForTheme(theme, col, row, northSolid, eastSolid, southSolid, westSolid, mask, spec.variant, blockSizePx);
-      // Only blackRock and brownRock skip rotation (flat/random tiles)
-      skipRotation = (theme === 'blackRock' || theme === 'brownRock');
-    } else if (isLegacyBlackRock) {
+    if (tileTheme !== null) {
+      // Theme-based rendering
+      img = _getSpriteForTheme(tileTheme, col, row, northSolid, eastSolid, southSolid, westSolid, mask, spec.variant, blockSizePx);
+      skipRotation = (tileTheme === 'blackRock' || tileTheme === 'brownRock');
+    } else if (tileIsLegacyBlackRock) {
       // World 0 legacy: blackRock sprites
       img = _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid, mask);
       skipRotation = true;
@@ -837,12 +897,16 @@ export function renderWallSprites(
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
     const hash = _hashTileCoord(col, row);
 
+    // Resolve per-tile theme for platform
+    const platTheme: BlockTheme | null = wallLayout.tileTheme.get(key) ?? roomTheme;
+    const platIsLegacyBlackRock = (platTheme === null) && (_activeWorldNumber === 0);
+
     let img: HTMLImageElement;
-    if (theme === 'blackRock' || isLegacyBlackRock) {
+    if (platTheme === 'blackRock' || platIsLegacyBlackRock) {
       img = _blackRockPlatformVariants[hash % _blackRockPlatformVariants.length];
-    } else if (theme === 'brownRock') {
+    } else if (platTheme === 'brownRock') {
       img = _getBrownRockSpriteForBlockSize(blockSizePx);
-    } else if (theme === 'dirt') {
+    } else if (platTheme === 'dirt') {
       img = _dirtBlockSprite;
     } else {
       img = _sprites.end;
