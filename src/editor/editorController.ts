@@ -854,11 +854,12 @@ export function createEditorController(
 
   function pasteFromClipboard(s: EditorState): void {
     if (!s.roomData || !s.clipboard) return;
-    const data = JSON.parse(s.clipboard) as {
-      walls: EditorWall[];
-      enemies: EditorEnemy[];
-      skillTombs: EditorSkillTomb[];
-    };
+    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[] };
+    try {
+      data = JSON.parse(s.clipboard) as typeof data;
+    } catch {
+      return;
+    }
 
     const newElements: SelectedElement[] = [];
     // Offset paste by 1 block from cursor

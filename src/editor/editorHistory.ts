@@ -27,18 +27,28 @@ export function pushSnapshot(history: EditorHistory, data: EditorRoomData): void
 
 export function undo(history: EditorHistory, currentData: EditorRoomData): EditorRoomData | null {
   if (history.undoStack.length === 0) return null;
-  // Save current state to redo stack
-  history.redoStack.push(JSON.stringify(currentData));
   const snapshot = history.undoStack.pop()!;
-  return JSON.parse(snapshot) as EditorRoomData;
+  try {
+    const restored = JSON.parse(snapshot) as EditorRoomData;
+    // Save current state to redo stack only after successful parse
+    history.redoStack.push(JSON.stringify(currentData));
+    return restored;
+  } catch {
+    return null;
+  }
 }
 
 export function redo(history: EditorHistory, currentData: EditorRoomData): EditorRoomData | null {
   if (history.redoStack.length === 0) return null;
-  // Save current state to undo stack
-  history.undoStack.push(JSON.stringify(currentData));
   const snapshot = history.redoStack.pop()!;
-  return JSON.parse(snapshot) as EditorRoomData;
+  try {
+    const restored = JSON.parse(snapshot) as EditorRoomData;
+    // Save current state to undo stack only after successful parse
+    history.undoStack.push(JSON.stringify(currentData));
+    return restored;
+  } catch {
+    return null;
+  }
 }
 
 export function clearHistory(history: EditorHistory): void {

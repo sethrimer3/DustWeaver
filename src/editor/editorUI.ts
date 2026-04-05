@@ -5,7 +5,7 @@
 
 import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
-  PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS,
+  PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS, FADE_COLOR_OPTIONS,
   BlockTheme, BackgroundId, LightingEffect,
 } from './editorState';
 
@@ -480,7 +480,7 @@ function updateInspector(
           v => callbacks?.onPropertyChange('wall.blockTheme', v));
       } else if (type === 'transition') {
         addSelect(div, 'fadeColor',
-          [{ label: 'Black', value: '#000000' }, { label: 'Warm Sunlight White', value: '#FFF4D6' }],
+          FADE_COLOR_OPTIONS,
           '(mixed)',
           v => callbacks?.onPropertyChange('transition.fadeColor', v));
       }
@@ -563,7 +563,7 @@ function updateInspector(
 
       // Fade color dropdown
       addSelect(div, 'fadeColor',
-        [{ label: 'Black', value: '#000000' }, { label: 'Warm Sunlight White', value: '#FFF4D6' }],
+        FADE_COLOR_OPTIONS,
         trans.fadeColor ?? '#000000',
         v => callbacks?.onPropertyChange('transition.fadeColor', v));
 
@@ -620,7 +620,7 @@ function addField(
 
 function addSelect(
   parent: HTMLElement, label: string,
-  options: { label: string; value: string }[],
+  options: readonly { label: string; value: string }[],
   current: string,
   onChange: (v: string) => void,
 ): void {

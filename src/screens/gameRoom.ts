@@ -293,13 +293,18 @@ export function drawTunnelDarkness(
     let fadeOpaqueColor: string;
     let fadeTransparentColor: string;
     const fc = t.fadeColor;
-    if (fc && fc !== '#000000') {
-      // Parse hex color to rgba
+    if (fc && fc.length === 7 && fc[0] === '#' && fc !== '#000000') {
+      // Parse hex color to rgba (validated 7-char hex format)
       const r = parseInt(fc.slice(1, 3), 16);
       const g = parseInt(fc.slice(3, 5), 16);
       const b = parseInt(fc.slice(5, 7), 16);
-      fadeOpaqueColor = `rgba(${r},${g},${b},1)`;
-      fadeTransparentColor = `rgba(${r},${g},${b},0)`;
+      if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+        fadeOpaqueColor = `rgba(${r},${g},${b},1)`;
+        fadeTransparentColor = `rgba(${r},${g},${b},0)`;
+      } else {
+        fadeOpaqueColor = 'rgba(0,0,0,1)';
+        fadeTransparentColor = 'rgba(0,0,0,0)';
+      }
     } else {
       fadeOpaqueColor = 'rgba(0,0,0,1)';
       fadeTransparentColor = 'rgba(0,0,0,0)';

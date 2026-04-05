@@ -73,6 +73,12 @@ export const LIGHTING_OPTIONS: readonly { id: LightingEffect; label: string }[] 
   { id: 'Above', label: 'Above' },
 ];
 
+/** Available fade color options for room transitions. */
+export const FADE_COLOR_OPTIONS: readonly { label: string; value: string }[] = [
+  { label: 'Black', value: '#000000' },
+  { label: 'Warm Sunlight White', value: '#FFF4D6' },
+];
+
 // ── Mutable editor room data (authored content) ─────────────────────────────
 
 export interface EditorWall {
