@@ -276,82 +276,53 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
 }
 
 /**
- * Returns true if the given hit point is on the top surface of any wall.
- * When true, also writes the exact wall top-Y into the provided output object
- * so the caller can snap the anchor to the precise surface.
- *
- * Uses a generous top-surface tolerance zone and considers the incoming ray
- * direction to disambiguate corner cases: when the ray approaches from below
- * (dirY < 0, shooting upward), top-surface classification is preferred.
+ * Minimum vertical drop from player feet to anchor required to trigger the
+ * grapple zip/stick behavior.
  */
-function isTopSurfaceHit(
-  world: WorldState,
-  hitX: number,
-  hitY: number,
-  dirX: number,
-  dirY: number,
-  out: { snappedY: number },
-): boolean {
-  const topEpsilonWorld = 1.5;          // generous vertical tolerance for top surface
-  const sideEpsilonWorld = 0.5;         // tighter tolerance for vertical sides
-  const horizontalPadWorld = 0.5;   // horizontal tolerance to accept hits near wall edges
-
-  for (let wi = 0; wi < world.wallCount; wi++) {
-    const topY = world.wallYWorld[wi];
-    const bottomY = topY + world.wallHWorld[wi];
-    const leftX = world.wallXWorld[wi];
-    const rightX = leftX + world.wallWWorld[wi];
-
-    // Is the hit near this wall's top surface?
-    const isNearTopSurface = hitY >= topY - topEpsilonWorld && hitY <= topY + topEpsilonWorld
-      && hitX >= leftX - horizontalPadWorld && hitX <= rightX + horizontalPadWorld;
-
-    if (!isNearTopSurface) continue;
-
-    // Check if the hit is also near a vertical side edge
-    const isNearVerticalSide = (Math.abs(hitX - leftX) < sideEpsilonWorld || Math.abs(hitX - rightX) < sideEpsilonWorld)
-      && hitY >= topY - sideEpsilonWorld
-      && hitY <= bottomY + sideEpsilonWorld;
-
-    if (isNearVerticalSide) {
-      // Corner edge case: the hit is near both the top and a side.
-      // Use the ray direction to disambiguate:
-      //   - If the ray is shooting upward (dirY < 0), the player aimed at the
-      //     top of the block, so prefer top-surface classification.
-      //   - If the ray is shooting horizontally into the side (|dirX| > |dirY|),
-      //     prefer side classification.
-      const isShootingUpward = dirY < -0.1;
-      const isMoreHorizontal = Math.abs(dirX) > Math.abs(dirY) * 1.5;
-      if (isMoreHorizontal && !isShootingUpward) {
-        // Clearly aimed at the side — not a top-surface hit for this wall.
-        continue;
-      }
-    }
-
-    // Confirmed top-surface hit — snap anchor Y to exact wall top.
-    out.snappedY = topY;
-    return true;
-  }
-  return false;
-}
-
-/** Reusable output object for isTopSurfaceHit to avoid per-call allocation. */
-const _topSurfaceOut = { snappedY: 0 };
+const GRAPPLE_SPECIAL_ZIP_MIN_DROP_WORLD = 16.0;
 
 /**
- * Returns true when a top-surface grapple should trigger the special
- * top-surface zip/stick behavior.
+ * Returns true when the grapple should use the special zip/stick behavior.
  *
- * Requirement: the top surface must be below the player's feet at the moment
- * of attachment. This prevents the special move from activating when grappling
- * onto ledges that are above or level with the player's feet.
+ * Requirements:
+ *   1) Anchor must be at least GRAPPLE_SPECIAL_ZIP_MIN_DROP_WORLD below feet.
+ *   2) Straight path from player center to anchor has no obstruction before
+ *      the anchor point.
  */
-function isSpecialTopSurfaceGrapple(
-  player: { positionYWorld: number; halfHeightWorld: number },
-  topSurfaceYWorld: number,
+function isSpecialZipGrapple(
+  world: WorldState,
+  player: { positionXWorld: number; positionYWorld: number; halfHeightWorld: number },
+  anchorXWorld: number,
+  anchorYWorld: number,
 ): boolean {
-  const playerFeetY = player.positionYWorld + player.halfHeightWorld;
-  return topSurfaceYWorld > playerFeetY;
+  const playerFeetYWorld = player.positionYWorld + player.halfHeightWorld;
+  if (anchorYWorld < playerFeetYWorld + GRAPPLE_SPECIAL_ZIP_MIN_DROP_WORLD) {
+    return false;
+  }
+
+  const dxWorld = anchorXWorld - player.positionXWorld;
+  const dyWorld = anchorYWorld - player.positionYWorld;
+  const distanceWorld = Math.sqrt(dxWorld * dxWorld + dyWorld * dyWorld);
+  if (distanceWorld <= 0.0001) return false;
+
+  const inverseDistance = 1.0 / distanceWorld;
+  const dirXWorld = dxWorld * inverseDistance;
+  const dirYWorld = dyWorld * inverseDistance;
+  const firstHit = raycastWalls(
+    world,
+    player.positionXWorld,
+    player.positionYWorld,
+    dirXWorld,
+    dirYWorld,
+    distanceWorld + 0.5,
+  );
+  if (firstHit === null) return true;
+
+  const firstHitDistanceWorld = Math.sqrt(
+    (firstHit.x - player.positionXWorld) ** 2 +
+    (firstHit.y - player.positionYWorld) ** 2,
+  );
+  return firstHitDistanceWorld >= distanceWorld - 0.5;
 }
 
 /**
@@ -407,12 +378,10 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
     cancelGrappleMiss(world);
   }
 
-  // Detect top-surface hit and snap anchor Y to exact wall surface
-  const isTopHit = isTopSurfaceHit(world, hit.x, hit.y, dirX, dirY, _topSurfaceOut);
-  const isSpecialTopHit = isTopHit && isSpecialTopSurfaceGrapple(player, _topSurfaceOut.snappedY);
   const anchorX = hit.x;
-  const anchorY = isTopHit ? _topSurfaceOut.snappedY : hit.y;
+  const anchorY = hit.y;
   const anchorDist = Math.sqrt((anchorX - player.positionXWorld) ** 2 + (anchorY - player.positionYWorld) ** 2);
+  const isSpecialTopHit = isSpecialZipGrapple(world, player, anchorX, anchorY);
 
   // Place the anchor exactly at the (potentially snapped) surface hit point.
   world.grappleAnchorXWorld = anchorX;
@@ -1051,22 +1020,13 @@ export function updateGrappleMissChain(world: WorldState): void {
               (missLinkY[i] - player.positionYWorld) ** 2,
             );
             if (hitDist >= GRAPPLE_MIN_LENGTH_WORLD) {
-              // Detect top-surface for charge refresh and zip behavior
-              const missDir = world.grappleMissDirXWorld !== 0 || world.grappleMissDirYWorld !== 0
-                ? { x: world.grappleMissDirXWorld, y: world.grappleMissDirYWorld }
-                : { x: 0, y: -1 };
-              const isMissTopHit = isTopSurfaceHit(
-                world, missLinkX[i], missLinkY[i],
-                missDir.x, missDir.y, _topSurfaceOut,
-              );
-              const isMissSpecialTopHit = isMissTopHit
-                && isSpecialTopSurfaceGrapple(player, _topSurfaceOut.snappedY);
               const missAnchorX = missLinkX[i];
-              const missAnchorY = isMissTopHit ? _topSurfaceOut.snappedY : missLinkY[i];
+              const missAnchorY = missLinkY[i];
               const missAnchorDist = Math.sqrt(
                 (missAnchorX - player.positionXWorld) ** 2 +
                 (missAnchorY - player.positionYWorld) ** 2,
               );
+              const isMissSpecialTopHit = isSpecialZipGrapple(world, player, missAnchorX, missAnchorY);
 
               // Attach grapple at this point
               world.grappleAnchorXWorld = missAnchorX;
