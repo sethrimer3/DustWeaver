@@ -54,6 +54,8 @@ export interface WorldState extends ParticleBuffers {
   wallIsPlatformFlag: Uint8Array;
   /** Per-wall theme index: 0=blackRock, 1=brownRock, 2=dirt.  255=use room default. */
   wallThemeIndex: Uint8Array;
+  /** 1 if the corresponding wall is invisible (collision-only boundary, not rendered). */
+  wallIsInvisibleFlag: Uint8Array;
 
   // ---- Player combat state ------------------------------------------------
   /** Set to 1 for exactly one tick to trigger attack launch. */
@@ -311,6 +313,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallHWorld: new Float32Array(MAX_WALLS),
     wallIsPlatformFlag: new Uint8Array(MAX_WALLS),
     wallThemeIndex: new Uint8Array(MAX_WALLS),
+    wallIsInvisibleFlag: new Uint8Array(MAX_WALLS),
     playerAttackTriggeredFlag: 0,
     playerAttackDirXWorld: 1.0,
     playerAttackDirYWorld: 0.0,

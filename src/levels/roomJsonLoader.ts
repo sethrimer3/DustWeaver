@@ -41,16 +41,16 @@ function buildBoundaryWalls(
 ): RoomWallDef[] {
   const walls: RoomWallDef[] = [];
 
-  // Top wall (full width)
-  walls.push({ xBlock: 0, yBlock: 0, wBlock: widthBlocks, hBlock: 1 });
-  // Bottom wall (full width)
-  walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1 });
+  // Top wall (full width) — invisible boundary
+  walls.push({ xBlock: 0, yBlock: 0, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
+  // Bottom wall (full width) — invisible boundary
+  walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
 
-  // Left wall — split around tunnel openings
+  // Left wall — split around tunnel openings (invisible boundary)
   const leftTunnels = transitions.filter(t => t.direction === 'left');
   buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
 
-  // Right wall — split around tunnel openings
+  // Right wall — split around tunnel openings (invisible boundary)
   const rightTunnels = transitions.filter(t => t.direction === 'right');
   buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
 
@@ -72,13 +72,13 @@ function buildSideWall(
     const tunnelTop = tunnel.positionBlock;
     const tunnelBottom = tunnel.positionBlock + tunnel.openingSizeBlocks;
     if (tunnelTop > currentY) {
-      out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: tunnelTop - currentY });
+      out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: tunnelTop - currentY, isInvisibleFlag: 1 });
     }
     currentY = tunnelBottom;
   }
 
   if (currentY < endY) {
-    out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: endY - currentY });
+    out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: endY - currentY, isInvisibleFlag: 1 });
   }
 }
 
@@ -154,6 +154,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     positionBlock: t.positionBlock,
     openingSizeBlocks: t.openingSizeBlocks,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
+    fadeColor: t.fadeColor,
   }));
 
   // ── Hazards ──────────────────────────────────────────────────────────────

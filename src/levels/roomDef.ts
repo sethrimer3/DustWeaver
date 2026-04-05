@@ -154,6 +154,8 @@ export interface RoomWallDef {
   /** Per-wall block theme override.  When set, this wall renders with the
    *  specified theme instead of the room-level default. */
   blockTheme?: BlockTheme;
+  /** 1 if this wall is an invisible collision boundary (not rendered). */
+  isInvisibleFlag?: 0 | 1;
 }
 
 /** Direction a transition tunnel faces. */
@@ -183,6 +185,8 @@ export interface RoomTransitionDef {
    * [xBlock, yBlock]
    */
   targetSpawnBlock: readonly [number, number];
+  /** Color used for the tunnel fade gradient. Defaults to black if unset. */
+  fadeColor?: string;
 }
 
 /** Direction a spike faces (the pointy end). */

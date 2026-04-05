@@ -228,7 +228,7 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestTransition(room.transitions[i], bx, by, room)) {
       const removedUid = room.transitions[i].uid;
       room.transitions.splice(i, 1);
-      if (state.selectedElement?.uid === removedUid) state.selectedElement = null;
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
   }
@@ -236,8 +236,9 @@ export function deleteAtCursor(state: EditorState): void {
   // Check enemies
   for (let i = 0; i < room.enemies.length; i++) {
     if (hitTestPoint(room.enemies[i].xBlock, room.enemies[i].yBlock, bx, by)) {
+      const removedUid = room.enemies[i].uid;
       room.enemies.splice(i, 1);
-      state.selectedElement = null;
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
   }
@@ -245,8 +246,9 @@ export function deleteAtCursor(state: EditorState): void {
   // Check skill tombs
   for (let i = 0; i < room.skillTombs.length; i++) {
     if (hitTestPoint(room.skillTombs[i].xBlock, room.skillTombs[i].yBlock, bx, by)) {
+      const removedUid = room.skillTombs[i].uid;
       room.skillTombs.splice(i, 1);
-      state.selectedElement = null;
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
   }
@@ -254,8 +256,9 @@ export function deleteAtCursor(state: EditorState): void {
   // Check walls
   for (let i = 0; i < room.interiorWalls.length; i++) {
     if (hitTestWall(room.interiorWalls[i], bx, by)) {
+      const removedUid = room.interiorWalls[i].uid;
       room.interiorWalls.splice(i, 1);
-      state.selectedElement = null;
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
   }
@@ -296,13 +299,75 @@ export function getPlacementPreview(state: EditorState): { wBlock: number; hBloc
  * Rotates the currently selected wall by 90° (swaps width and height).
  */
 export function rotateSelectedElement(state: EditorState): void {
-  if (state.selectedElement === null || state.roomData === null) return;
-  if (state.selectedElement.type === 'wall') {
-    const wall = state.roomData.interiorWalls.find(w => w.uid === state.selectedElement!.uid);
+  const sel = state.selectedElements[0] ?? null;
+  if (sel === null || state.roomData === null) return;
+  if (sel.type === 'wall') {
+    const wall = state.roomData.interiorWalls.find(w => w.uid === sel.uid);
     if (wall) {
       const tmp = wall.wBlock;
       wall.wBlock = wall.hBlock;
       wall.hBlock = tmp;
     }
   }
+}
+
+// ── Multi-selection helpers ──────────────────────────────────────────────────
+
+/**
+ * Returns all elements whose block-space bounding box overlaps the given rect.
+ */
+export function getAllElementsInRect(
+  room: EditorRoomData,
+  x1: number, y1: number,
+  x2: number, y2: number,
+): SelectedElement[] {
+  const minX = Math.min(x1, x2);
+  const maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+  const results: SelectedElement[] = [];
+
+  for (const w of room.interiorWalls) {
+    if (w.xBlock + w.wBlock > minX && w.xBlock < maxX + 1 &&
+        w.yBlock + w.hBlock > minY && w.yBlock < maxY + 1) {
+      results.push({ type: 'wall', uid: w.uid });
+    }
+  }
+  for (const e of room.enemies) {
+    if (e.xBlock >= minX && e.xBlock <= maxX && e.yBlock >= minY && e.yBlock <= maxY) {
+      results.push({ type: 'enemy', uid: e.uid });
+    }
+  }
+  for (const s of room.skillTombs) {
+    if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
+      results.push({ type: 'skillTomb', uid: s.uid });
+    }
+  }
+  if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&
+      room.playerSpawnBlock[1] >= minY && room.playerSpawnBlock[1] <= maxY) {
+    results.push({ type: 'playerSpawn', uid: 0 });
+  }
+  for (const t of room.transitions) {
+    if (hitTestTransitionRect(t, minX, minY, maxX, maxY, room)) {
+      results.push({ type: 'transition', uid: t.uid });
+    }
+  }
+  return results;
+}
+
+function hitTestTransitionRect(
+  t: EditorTransition, minX: number, minY: number, maxX: number, maxY: number,
+  room: EditorRoomData,
+): boolean {
+  let tx: number, ty: number, tw: number, th: number;
+  if (t.direction === 'left') {
+    tx = 0; ty = t.positionBlock; tw = 1; th = t.openingSizeBlocks;
+  } else if (t.direction === 'right') {
+    tx = room.widthBlocks - 1; ty = t.positionBlock; tw = 1; th = t.openingSizeBlocks;
+  } else if (t.direction === 'up') {
+    tx = t.positionBlock; ty = 0; tw = t.openingSizeBlocks; th = 1;
+  } else {
+    tx = t.positionBlock; ty = room.heightBlocks - 1; tw = t.openingSizeBlocks; th = 1;
+  }
+  return tx + tw > minX && tx < maxX + 1 && ty + th > minY && ty < maxY + 1;
 }

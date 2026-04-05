@@ -117,6 +117,8 @@ export interface WallSnapshot {
   readonly isPlatformFlag: Uint8Array;
   /** Per-wall theme index: 0=blackRock, 1=brownRock, 2=dirt.  Uses room default when 255. */
   readonly themeIndex: Uint8Array;
+  /** 1 if the wall is an invisible collision boundary (not rendered). */
+  readonly isInvisibleFlag: Uint8Array;
 }
 
 export interface WorldSnapshot {
@@ -223,6 +225,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       hWorld: world.wallHWorld,
       isPlatformFlag: world.wallIsPlatformFlag,
       themeIndex: world.wallThemeIndex,
+      isInvisibleFlag: world.wallIsInvisibleFlag,
     },
     isGrappleActiveFlag: world.isGrappleActiveFlag,
     isGrappleMissActiveFlag: world.isGrappleMissActiveFlag,

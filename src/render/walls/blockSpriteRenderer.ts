@@ -492,7 +492,7 @@ function _buildWallLayoutCache(
 ): CachedWallLayout {
   let signature = `${blockSizePx}|${walls.count}`;
   for (let wi = 0; wi < walls.count; wi++) {
-    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.themeIndex[wi]}`;
+    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.themeIndex[wi]},${walls.isInvisibleFlag[wi]}`;
   }
 
   if (_cachedWallLayout !== null &&
@@ -506,6 +506,9 @@ function _buildWallLayoutCache(
   const tileTheme = new Map<string, BlockTheme | null>();
 
   for (let wi = 0; wi < walls.count; wi++) {
+    // Skip invisible boundary walls
+    if (walls.isInvisibleFlag[wi] === 1) continue;
+
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
     const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
@@ -606,6 +609,7 @@ function _collectSolid2x2WallTopLefts(walls: WallSnapshot, blockSizePx: number):
 
   for (let wi = 0; wi < walls.count; wi++) {
     if (walls.isPlatformFlag[wi] === 1) continue;
+    if (walls.isInvisibleFlag[wi] === 1) continue;
 
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);

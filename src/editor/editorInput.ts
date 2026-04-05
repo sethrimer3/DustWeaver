@@ -32,6 +32,21 @@ export interface EditorInputState {
   isEscapePressed: boolean;
   /** 1–3 number key pressed (tool shortcuts). */
   toolKeyPressed: number;
+  /** Right mouse click fired (one-shot). */
+  isRightClickFired: boolean;
+  rightClickScreenXPx: number;
+  rightClickScreenYPx: number;
+  /** Ctrl+Z pressed (one-shot). */
+  isUndoPressed: boolean;
+  /** Ctrl+Y pressed (one-shot). */
+  isRedoPressed: boolean;
+  /** Ctrl+C pressed (one-shot). */
+  isCopyPressed: boolean;
+  /** Ctrl+V pressed (one-shot). */
+  isPastePressed: boolean;
+  /** World coordinates at drag start. */
+  dragStartWorldX: number;
+  dragStartWorldY: number;
 }
 
 export function createEditorInputState(): EditorInputState {
@@ -52,6 +67,15 @@ export function createEditorInputState(): EditorInputState {
     wheelDelta: 0,
     isEscapePressed: false,
     toolKeyPressed: 0,
+    isRightClickFired: false,
+    rightClickScreenXPx: 0,
+    rightClickScreenYPx: 0,
+    isUndoPressed: false,
+    isRedoPressed: false,
+    isCopyPressed: false,
+    isPastePressed: false,
+    dragStartWorldX: 0,
+    dragStartWorldY: 0,
   };
 }
 
@@ -79,6 +103,12 @@ export function attachEditorInputListeners(
     if (key === '1') state.toolKeyPressed = 1;
     if (key === '2') state.toolKeyPressed = 2;
     if (key === '3') state.toolKeyPressed = 3;
+    // Ctrl+Z → undo, Ctrl+Y → redo
+    if ((e.ctrlKey || e.metaKey) && key === 'z' && !e.shiftKey) { state.isUndoPressed = true; e.preventDefault(); }
+    if ((e.ctrlKey || e.metaKey) && key === 'y') { state.isRedoPressed = true; e.preventDefault(); }
+    // Ctrl+C → copy, Ctrl+V → paste
+    if ((e.ctrlKey || e.metaKey) && key === 'c') { state.isCopyPressed = true; e.preventDefault(); }
+    if ((e.ctrlKey || e.metaKey) && key === 'v') { state.isPastePressed = true; e.preventDefault(); }
   }
 
   function onKeyUp(e: KeyboardEvent): void {
@@ -104,6 +134,10 @@ export function attachEditorInputListeners(
       state.isClickFired = true;
       state.clickScreenXPx = e.clientX;
       state.clickScreenYPx = e.clientY;
+    } else if (e.button === 2) {
+      state.isRightClickFired = true;
+      state.rightClickScreenXPx = e.clientX;
+      state.rightClickScreenYPx = e.clientY;
     }
   }
 
@@ -119,12 +153,17 @@ export function attachEditorInputListeners(
     state.wheelDelta += e.deltaY > 0 ? 1 : -1;
   }
 
+  function onContextMenu(e: MouseEvent): void {
+    if (editorState.isActive) e.preventDefault();
+  }
+
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('mouseup', onMouseUp);
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
   canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('contextmenu', onContextMenu);
 
   return () => {
     window.removeEventListener('keydown', onKeyDown);
@@ -133,6 +172,7 @@ export function attachEditorInputListeners(
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('mousedown', onMouseDown);
     canvas.removeEventListener('wheel', onWheel);
+    canvas.removeEventListener('contextmenu', onContextMenu);
   };
 }
 
@@ -146,4 +186,9 @@ export function clearEditorOneShots(state: EditorInputState): void {
   state.wheelDelta = 0;
   state.isEscapePressed = false;
   state.toolKeyPressed = 0;
+  state.isRightClickFired = false;
+  state.isUndoPressed = false;
+  state.isRedoPressed = false;
+  state.isCopyPressed = false;
+  state.isPastePressed = false;
 }

@@ -26,6 +26,8 @@ const TOMB_COLOR = 'rgba(212,168,75,0.5)';
 const TOMB_SELECTED = 'rgba(212,168,75,0.9)';
 const PREVIEW_COLOR = 'rgba(0,200,255,0.25)';
 const CURSOR_COLOR = 'rgba(255,255,255,0.4)';
+const SELECTION_BOX_COLOR = 'rgba(100,200,255,0.25)';
+const SELECTION_BOX_BORDER = 'rgba(100,200,255,0.7)';
 
 const BS = BLOCK_SIZE_MEDIUM;
 
@@ -46,12 +48,15 @@ export function renderEditorOverlays(
 
   ctx.save();
 
+  const isElementSelected = (type: string, uid: number): boolean =>
+    state.selectedElements.some(e => e.type === type && e.uid === uid);
+
   // ── Grid ─────────────────────────────────────────────────────────────────
   drawGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
 
   // ── Interior walls ────────────────────────────────────────────────────────
   for (const w of room.interiorWalls) {
-    const isSelected = state.selectedElement?.type === 'wall' && state.selectedElement.uid === w.uid;
+    const isSelected = isElementSelected('wall', w.uid);
     const isPlatform = w.isPlatformFlag === 1;
     let color: string;
     if (isPlatform) {
@@ -64,7 +69,7 @@ export function renderEditorOverlays(
 
   // ── Enemies ──────────────────────────────────────────────────────────────
   for (const e of room.enemies) {
-    const isSelected = state.selectedElement?.type === 'enemy' && state.selectedElement.uid === e.uid;
+    const isSelected = isElementSelected('enemy', e.uid);
     drawMarker(ctx, e.xBlock, e.yBlock, offsetXPx, offsetYPx, zoom,
       isSelected ? ENEMY_SELECTED : ENEMY_COLOR, e.isFlyingEyeFlag === 1 ? '👁' : '⚔');
   }
@@ -72,7 +77,7 @@ export function renderEditorOverlays(
   // ── Transitions ──────────────────────────────────────────────────────────
   for (let tIndex = 0; tIndex < room.transitions.length; tIndex++) {
     const t = room.transitions[tIndex];
-    const isSelected = state.selectedElement?.type === 'transition' && state.selectedElement.uid === t.uid;
+    const isSelected = isElementSelected('transition', t.uid);
     const isLinkSource = state.isLinkingTransition && state.linkSourceTransitionUid === t.uid;
     const isLinkCandidate = state.isLinkingTransition && state.linkSourceTransitionUid !== t.uid;
     let color = TRANSITION_COLOR;
@@ -84,14 +89,14 @@ export function renderEditorOverlays(
 
   // ── Player spawn ─────────────────────────────────────────────────────────
   {
-    const isSelected = state.selectedElement?.type === 'playerSpawn';
+    const isSelected = isElementSelected('playerSpawn', 0);
     drawMarker(ctx, room.playerSpawnBlock[0], room.playerSpawnBlock[1], offsetXPx, offsetYPx, zoom,
       isSelected ? SPAWN_SELECTED : SPAWN_COLOR, '🏠');
   }
 
   // ── Skill tombs ─────────────────────────────────────────────────────────
   for (const s of room.skillTombs) {
-    const isSelected = state.selectedElement?.type === 'skillTomb' && state.selectedElement.uid === s.uid;
+    const isSelected = isElementSelected('skillTomb', s.uid);
     drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom,
       isSelected ? TOMB_SELECTED : TOMB_COLOR, '⛩');
   }
@@ -103,6 +108,23 @@ export function renderEditorOverlays(
       drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
         preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 2);
     }
+  }
+
+  // ── Selection box ────────────────────────────────────────────────────────
+  if (state.isSelectionBoxActive) {
+    const x1 = Math.min(state.selectionBoxStartBlockX, state.cursorBlockX);
+    const y1 = Math.min(state.selectionBoxStartBlockY, state.cursorBlockY);
+    const x2 = Math.max(state.selectionBoxStartBlockX, state.cursorBlockX);
+    const y2 = Math.max(state.selectionBoxStartBlockY, state.cursorBlockY);
+    const sx = x1 * BS * zoom + offsetXPx;
+    const sy = y1 * BS * zoom + offsetYPx;
+    const sw = (x2 - x1 + 1) * BS * zoom;
+    const sh = (y2 - y1 + 1) * BS * zoom;
+    ctx.fillStyle = SELECTION_BOX_COLOR;
+    ctx.fillRect(sx, sy, sw, sh);
+    ctx.strokeStyle = SELECTION_BOX_BORDER;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx, sy, sw, sh);
   }
 
   // ── Cursor highlight ─────────────────────────────────────────────────────
