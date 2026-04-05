@@ -140,7 +140,7 @@ export interface WorldSnapshot {
   readonly isPlayerBlockingFlag: 0 | 1;
   /** 1 while the player has any sustained Weave active (primary or secondary). */
   readonly isPlayerWeaveActiveFlag: 0 | 1;
-  /** Selected character identifier ('knight', 'demonFox', or 'princess'). */
+  /** Selected character identifier ('knight', 'demonFox', 'princess', or 'outcast'). */
   readonly characterId: string;
 }
 

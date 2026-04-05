@@ -60,7 +60,7 @@ export interface PlayerProgress {
   lastSaveRoomId: string | null;
   /** Block coordinates of the last save point used. */
   lastSaveSpawnBlock: [number, number] | null;
-  /** Selected character identifier ('knight', 'demonFox', or 'princess'). */
+  /** Selected character identifier ('knight', 'demonFox', 'princess', or 'outcast'). */
   characterId: string;
   /** Dust kinds the player has learned and can equip (unless dev mode is on). */
   unlockedDustKinds: ParticleKind[];
