@@ -80,6 +80,7 @@ export interface RoomJsonTransition {
   openingSizeBlocks: number;
   targetRoomId: string;
   targetSpawnBlock: [number, number];
+  fadeColor?: string;
 }
 
 export interface RoomJsonSkillTomb {
@@ -260,6 +261,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     openingSizeBlocks: t.openingSizeBlocks,
     targetRoomId: t.targetRoomId,
     targetSpawnBlock: [...t.targetSpawnBlock] as [number, number],
+    fadeColor: t.fadeColor,
   }));
 
   const skillTombs: EditorSkillTomb[] = json.skillTombs.map(s => ({
@@ -322,13 +324,17 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isRadiantTether: e.isRadiantTetherFlag === 1,
       isGrappleHunter: e.isGrappleHunterFlag === 1,
     })),
-    transitions: data.transitions.map(t => ({
-      direction: t.direction,
-      positionBlock: t.positionBlock,
-      openingSizeBlocks: t.openingSizeBlocks,
-      targetRoomId: t.targetRoomId,
-      targetSpawnBlock: [...t.targetSpawnBlock],
-    })),
+    transitions: data.transitions.map(t => {
+      const jt: RoomJsonTransition = {
+        direction: t.direction,
+        positionBlock: t.positionBlock,
+        openingSizeBlocks: t.openingSizeBlocks,
+        targetRoomId: t.targetRoomId,
+        targetSpawnBlock: [...t.targetSpawnBlock],
+      };
+      if (t.fadeColor) jt.fadeColor = t.fadeColor;
+      return jt;
+    }),
     skillTombs: data.skillTombs.map(s => ({
       xBlock: s.xBlock,
       yBlock: s.yBlock,
@@ -354,16 +360,16 @@ function buildBoundaryWalls(
 ): RoomWallDef[] {
   const walls: RoomWallDef[] = [];
 
-  // Top wall (full width)
-  walls.push({ xBlock: 0, yBlock: 0, wBlock: widthBlocks, hBlock: 1 });
-  // Bottom wall (full width)
-  walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1 });
+  // Top wall (full width) — invisible boundary
+  walls.push({ xBlock: 0, yBlock: 0, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
+  // Bottom wall (full width) — invisible boundary
+  walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
 
-  // Left wall — split around tunnel openings
+  // Left wall — split around tunnel openings (invisible boundary)
   const leftTunnels = transitions.filter(t => t.direction === 'left');
   buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
 
-  // Right wall — split around tunnel openings
+  // Right wall — split around tunnel openings (invisible boundary)
   const rightTunnels = transitions.filter(t => t.direction === 'right');
   buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
 
@@ -385,13 +391,13 @@ function buildSideWall(
     const tunnelTop = tunnel.positionBlock;
     const tunnelBottom = tunnel.positionBlock + tunnel.openingSizeBlocks;
     if (tunnelTop > currentY) {
-      out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: tunnelTop - currentY });
+      out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: tunnelTop - currentY, isInvisibleFlag: 1 });
     }
     currentY = tunnelBottom;
   }
 
   if (currentY < endY) {
-    out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: endY - currentY });
+    out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: endY - currentY, isInvisibleFlag: 1 });
   }
 }
 
@@ -466,6 +472,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     positionBlock: t.positionBlock,
     openingSizeBlocks: t.openingSizeBlocks,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
+    fadeColor: t.fadeColor,
   }));
 
   return {
@@ -542,6 +549,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     openingSizeBlocks: t.openingSizeBlocks,
     targetRoomId: t.targetRoomId,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as [number, number],
+    fadeColor: t.fadeColor,
   }));
 
   const skillTombs: EditorSkillTomb[] = room.skillTombs.map(s => ({

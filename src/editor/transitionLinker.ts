@@ -15,10 +15,11 @@ import type { EditorState, EditorTransition } from './editorState';
  * Sets state flags so the editor knows we're in linking mode.
  */
 export function beginTransitionLink(state: EditorState): boolean {
-  if (state.selectedElement === null || state.selectedElement.type !== 'transition') return false;
+  const sel = state.selectedElements[0] ?? null;
+  if (sel === null || sel.type !== 'transition') return false;
   if (state.roomData === null) return false;
 
-  const sourceTrans = state.roomData.transitions.find(t => t.uid === state.selectedElement!.uid);
+  const sourceTrans = state.roomData.transitions.find(t => t.uid === sel.uid);
   if (!sourceTrans) return false;
 
   state.isLinkingTransition = true;

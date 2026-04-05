@@ -45,6 +45,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
   const hs: number[] = [];
   const fs: number[] = []; // isPlatformFlag (0 or 1)
   const ts: number[] = []; // themeIndex
+  const iv: number[] = []; // isInvisibleFlag (0 or 1)
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -55,6 +56,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
     fs.push(def.isPlatformFlag === 1 ? 1 : 0);
     ts.push(def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX);
+    iv.push(def.isInvisibleFlag === 1 ? 1 : 0);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
@@ -70,6 +72,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
         // Only merge walls of the same type (both solid or both platform) and same theme
         if (fs[i] !== fs[j]) continue;
         if (ts[i] !== ts[j]) continue;
+        if (iv[i] !== iv[j]) continue;
         // Horizontal merge: same Y, same H, contiguous on X axis
         if (
           Math.abs(ys[i] - ys[j]) <= WALL_MERGE_EPSILON_WORLD &&
@@ -89,7 +92,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             ws[i] = mergedRight - mergedLeft;
             ys[i] = ys[i] < ys[j] ? ys[i] : ys[j];
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
             merged = true;
             break;
           }
@@ -113,7 +116,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             hs[i] = mergedBottom - mergedTop;
             xs[i] = xs[i] < xs[j] ? xs[i] : xs[j];
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
             merged = true;
             break;
           }
@@ -133,6 +136,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     world.wallHWorld[wi] = hs[wi];
     world.wallIsPlatformFlag[wi] = fs[wi];
     world.wallThemeIndex[wi] = ts[wi];
+    world.wallIsInvisibleFlag[wi] = iv[wi];
   }
 }
 
@@ -285,6 +289,17 @@ export function drawTunnelDarkness(
     const openTopWorld = t.positionBlock * BLOCK_SIZE_MEDIUM;
     const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 
+    // Determine fade colors based on transition fadeColor
+    let fadeOpaqueColor: string;
+    let fadeTransparentColor: string;
+    if (t.fadeColor === '#FFF4D6') {
+      fadeOpaqueColor = 'rgba(255,244,214,1)';
+      fadeTransparentColor = 'rgba(255,244,214,0)';
+    } else {
+      fadeOpaqueColor = 'rgba(0,0,0,1)';
+      fadeTransparentColor = 'rgba(0,0,0,0)';
+    }
+
     if (t.direction === 'left') {
       // Fade from left room edge inward
       const x0Screen = 0 * zoom + offsetXPx;
@@ -293,8 +308,8 @@ export function drawTunnelDarkness(
       const y1Screen = openBottomWorld * zoom + offsetYPx;
 
       const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
-      grad.addColorStop(0, 'rgba(0,0,0,1)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      grad.addColorStop(0, fadeOpaqueColor);
+      grad.addColorStop(1, fadeTransparentColor);
       ctx.fillStyle = grad;
       ctx.fillRect(x0Screen - 200, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
     } else if (t.direction === 'right') {
@@ -305,8 +320,8 @@ export function drawTunnelDarkness(
       const y1Screen = openBottomWorld * zoom + offsetYPx;
 
       const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,1)');
+      grad.addColorStop(0, fadeTransparentColor);
+      grad.addColorStop(1, fadeOpaqueColor);
       ctx.fillStyle = grad;
       ctx.fillRect(x0Screen, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
     }

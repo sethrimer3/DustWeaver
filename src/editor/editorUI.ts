@@ -268,6 +268,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   // Track rendered inspector state to avoid recreating fields every frame
   let inspectorElementUid: number = -1;
   let inspectorElementType: string = '';
+  let inspectorElementCount: number = 0;
 
   // ── Export button ────────────────────────────────────────────────────────
   const exportBtn = makeBtn('📥 Export Room JSON', () => callbacks?.onExport());
@@ -378,11 +379,13 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     }
 
     // Update inspector (only recreate when selected element changes)
-    const selUid = state.selectedElement?.uid ?? -1;
-    const selType = state.selectedElement?.type ?? '';
-    if (inspectorElementUid !== selUid || inspectorElementType !== selType) {
+    const selUid = state.selectedElements.length > 0 ? state.selectedElements[0].uid : -1;
+    const selType = state.selectedElements.length > 0 ? state.selectedElements[0].type : '';
+    const selCount = state.selectedElements.length;
+    if (inspectorElementUid !== selUid || inspectorElementType !== selType || inspectorElementCount !== selCount) {
       inspectorElementUid = selUid;
       inspectorElementType = selType;
+      inspectorElementCount = selCount;
       updateInspector(inspectorDiv, state, callbacks);
     }
   }
@@ -396,6 +399,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       paletteBtns = [];
       inspectorElementUid = -1;
       inspectorElementType = '';
+      inspectorElementCount = 0;
       lastRenderedRoomId = '';
       lastRenderedWidthBlocks = -1;
       lastRenderedHeightBlocks = -1;
@@ -446,13 +450,46 @@ function updateInspector(
   callbacks: EditorUICallbacks | null,
 ): void {
   div.innerHTML = '';
-  if (state.selectedElement === null || state.roomData === null) {
+  if (state.selectedElements.length === 0 || state.roomData === null) {
     div.innerHTML = `<div style="color: rgba(200,255,200,0.4); font-size: 11px;">Select an element to inspect</div>`;
     return;
   }
 
-  const el = state.selectedElement;
   const room = state.roomData;
+
+  // Multi-selection: show count
+  if (state.selectedElements.length > 1) {
+    const heading = document.createElement('div');
+    heading.textContent = `Inspector: ${state.selectedElements.length} elements`;
+    heading.style.cssText = `color: ${GREEN}; font-size: 13px; margin-bottom: 8px; font-weight: bold;`;
+    div.appendChild(heading);
+
+    // Show shared properties for multi-selection
+    const types = new Set(state.selectedElements.map(e => e.type));
+    if (types.size === 1) {
+      const type = state.selectedElements[0].type;
+      const typeLabel = document.createElement('div');
+      typeLabel.textContent = `All: ${type}`;
+      typeLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.5); margin-bottom: 4px;`;
+      div.appendChild(typeLabel);
+
+      if (type === 'wall') {
+        addSelect(div, 'blockTheme',
+          BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
+          '(mixed)',
+          v => callbacks?.onPropertyChange('wall.blockTheme', v));
+      }
+    } else {
+      const typeInfo = document.createElement('div');
+      typeInfo.textContent = `Mixed types: ${[...types].join(', ')}`;
+      typeInfo.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.5); margin-bottom: 4px;`;
+      div.appendChild(typeInfo);
+    }
+    return;
+  }
+
+  // Single selection
+  const el = state.selectedElements[0];
 
   const heading = document.createElement('div');
   heading.textContent = `Inspector: ${el.type}`;
@@ -518,6 +555,12 @@ function updateInspector(
         v => callbacks?.onPropertyChange('transition.targetSpawnBlockX', parseInt(v)));
       addField(div, 'targetSpawnY', String(trans.targetSpawnBlock[1]),
         v => callbacks?.onPropertyChange('transition.targetSpawnBlockY', parseInt(v)));
+
+      // Fade color dropdown
+      addSelect(div, 'fadeColor',
+        [{ label: 'Black', value: '#000000' }, { label: 'Warm Sunlight White', value: '#FFF4D6' }],
+        trans.fadeColor ?? '#000000',
+        v => callbacks?.onPropertyChange('transition.fadeColor', v));
 
       // Link Transition button
       const linkBtn = makeBtn('🔗 Link Transition', () => callbacks?.onLinkTransition());

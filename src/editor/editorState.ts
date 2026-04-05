@@ -110,6 +110,7 @@ export interface EditorTransition {
   openingSizeBlocks: number;
   targetRoomId: string;
   targetSpawnBlock: [number, number];
+  fadeColor?: string;
 }
 
 export interface EditorSkillTomb {
@@ -153,7 +154,7 @@ export interface EditorState {
   activeTool: EditorTool;
   activeCategory: PaletteCategory;
   selectedPaletteItem: PaletteItem | null;
-  selectedElement: SelectedElement | null;
+  selectedElements: SelectedElement[];
   /** Current placement rotation in 90° steps (0, 1, 2, 3). */
   placementRotationSteps: number;
   /** Mouse position in block units (snapped to grid). */
@@ -174,6 +175,18 @@ export interface EditorState {
   roomData: EditorRoomData | null;
   /** Next unique ID for placed elements. */
   nextUid: number;
+  /** Whether the user is dragging selected elements. */
+  isDragging: boolean;
+  /** Block coordinates where drag started. */
+  dragStartBlockX: number;
+  dragStartBlockY: number;
+  /** Whether a drag selection box is active. */
+  isSelectionBoxActive: boolean;
+  /** Block coordinates where selection box started. */
+  selectionBoxStartBlockX: number;
+  selectionBoxStartBlockY: number;
+  /** Serialized clipboard data for copy/paste. */
+  clipboard: string | null;
 }
 
 export function createEditorState(): EditorState {
@@ -182,7 +195,7 @@ export function createEditorState(): EditorState {
     activeTool: EditorTool.Select,
     activeCategory: 'blocks',
     selectedPaletteItem: null,
-    selectedElement: null,
+    selectedElements: [],
     placementRotationSteps: 0,
     cursorBlockX: 0,
     cursorBlockY: 0,
@@ -194,6 +207,13 @@ export function createEditorState(): EditorState {
     linkSourceTransitionUid: -1,
     roomData: null,
     nextUid: 1,
+    isDragging: false,
+    dragStartBlockX: 0,
+    dragStartBlockY: 0,
+    isSelectionBoxActive: false,
+    selectionBoxStartBlockX: 0,
+    selectionBoxStartBlockY: 0,
+    clipboard: null,
   };
 }
 

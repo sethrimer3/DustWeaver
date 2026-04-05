@@ -13,6 +13,7 @@ import {
   EditorState, createEditorState, EditorTool,
   EditorWall, EditorEnemy, EditorTransition, EditorSkillTomb,
   BlockTheme, BackgroundId, LightingEffect,
+  SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
@@ -20,7 +21,7 @@ import {
   createEditorInputState,
   attachEditorInputListeners, clearEditorOneShots,
 } from './editorInput';
-import { selectAtCursor, placeAtCursor, deleteAtCursor, rotateSelectedElement } from './editorTools';
+import { selectAtCursor, placeAtCursor, deleteAtCursor, rotateSelectedElement, getAllElementsInRect } from './editorTools';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
@@ -28,6 +29,8 @@ import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { exportRoomAsJson } from './editorExport';
+import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
+import type { EditorHistory } from './editorHistory';
 
 const BS = BLOCK_SIZE_MEDIUM;
 
@@ -79,6 +82,7 @@ export function createEditorController(
 ): EditorController {
   const state = createEditorState();
   const inputState = createEditorInputState();
+  const history: EditorHistory = createEditorHistory();
   let inputCleanup: (() => void) | null = null;
   let ui: EditorUI | null = null;
   let worldMapCleanup: (() => void) | null = null;
@@ -97,6 +101,9 @@ export function createEditorController(
   // Original room snapshot for cancel/revert
   let originalRoomDef: RoomDef | null = null;
 
+  // Drag-to-move: original positions of selected elements at drag start
+  let dragOriginalPositions: Map<number, { xBlock: number; yBlock: number }> = new Map();
+
   function toggle(currentRoom: RoomDef): void {
     state.isActive = !state.isActive;
 
@@ -111,7 +118,7 @@ export function createEditorController(
 
       ui = createEditorUI(uiRoot);
       ui.setCallbacks({
-        onToolChange: (tool) => { state.activeTool = tool; state.selectedElement = null; },
+        onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; },
         onCategoryChange: (cat) => { state.activeCategory = cat; },
         onPaletteItemSelect: (item) => {
           state.selectedPaletteItem = item;
@@ -166,8 +173,11 @@ export function createEditorController(
     cancelTransitionLink(state);
     state.isActive = false;
     state.roomData = null;
-    state.selectedElement = null;
+    state.selectedElements = [];
+    state.isDragging = false;
+    state.isSelectionBoxActive = false;
     originalRoomDef = null;
+    clearHistory(history);
     onEditorClose?.();
   }
 
@@ -210,7 +220,7 @@ export function createEditorController(
     const result = roomDefToEditorRoomData(room, state.nextUid);
     state.roomData = result.data;
     state.nextUid = result.nextUid;
-    state.selectedElement = null;
+    state.selectedElements = [];
   }
 
   function openWorldMap(): void {
@@ -339,7 +349,7 @@ export function createEditorController(
     if (inputState.wheelDelta !== 0) {
       if (state.activeTool === EditorTool.Place) {
         state.placementRotationSteps = (state.placementRotationSteps + (inputState.wheelDelta > 0 ? 1 : 3)) % 4;
-      } else if (state.activeTool === EditorTool.Select && state.selectedElement) {
+      } else if (state.activeTool === EditorTool.Select && state.selectedElements.length > 0) {
         rotateSelectedElement(state);
       }
     }
@@ -359,8 +369,39 @@ export function createEditorController(
       if (state.isLinkingTransition) {
         cancelTransitionLink(state);
       } else {
-        state.selectedElement = null;
+        state.selectedElements = [];
       }
+    }
+
+    // Undo/Redo
+    if (inputState.isUndoPressed && state.roomData) {
+      const restored = undo(history, state.roomData);
+      if (restored) {
+        state.roomData = restored;
+        state.selectedElements = [];
+        applyEdits();
+      }
+    }
+    if (inputState.isRedoPressed && state.roomData) {
+      const restored = redo(history, state.roomData);
+      if (restored) {
+        state.roomData = restored;
+        state.selectedElements = [];
+        applyEdits();
+      }
+    }
+
+    // Copy (Ctrl+C)
+    if (inputState.isCopyPressed && state.roomData && state.selectedElements.length > 0) {
+      const clipData = serializeSelectedElements(state.roomData, state.selectedElements);
+      state.clipboard = clipData;
+    }
+
+    // Paste (Ctrl+V)
+    if (inputState.isPastePressed && state.roomData && state.clipboard) {
+      pushSnapshot(history, state.roomData);
+      pasteFromClipboard(state);
+      applyEdits();
     }
 
     // Click handling (one-shot on press)
@@ -385,17 +426,104 @@ export function createEditorController(
             }
           }
         } else if (state.activeTool === EditorTool.Select) {
-          state.selectedElement = selectAtCursor(state);
+          const clicked = selectAtCursor(state);
+          if (clicked) {
+            if (inputState.isShiftHeld) {
+              // Shift-click: toggle selection
+              const idx = state.selectedElements.findIndex(e => e.type === clicked.type && e.uid === clicked.uid);
+              if (idx >= 0) {
+                state.selectedElements.splice(idx, 1);
+              } else {
+                state.selectedElements.push(clicked);
+              }
+            } else {
+              // Normal click on object: select it
+              state.selectedElements = [clicked];
+            }
+          } else if (!inputState.isShiftHeld) {
+            // Click on empty space without shift: begin selection box
+            state.selectedElements = [];
+            state.isSelectionBoxActive = true;
+            state.selectionBoxStartBlockX = state.cursorBlockX;
+            state.selectionBoxStartBlockY = state.cursorBlockY;
+          }
         } else if (state.activeTool === EditorTool.Place) {
+          pushSnapshot(history, state.roomData);
           placeAtCursor(state);
           applyEdits();
           lastDragBlockX = state.cursorBlockX;
           lastDragBlockY = state.cursorBlockY;
         } else if (state.activeTool === EditorTool.Delete) {
+          pushSnapshot(history, state.roomData);
           deleteAtCursor(state);
           applyEdits();
           lastDragBlockX = state.cursorBlockX;
           lastDragBlockY = state.cursorBlockY;
+        }
+      }
+    }
+
+    // Right-click delete (one-shot)
+    if (inputState.isRightClickFired && state.roomData !== null) {
+      if (inputState.rightClickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
+        pushSnapshot(history, state.roomData);
+        deleteAtCursor(state);
+        applyEdits();
+      }
+    }
+
+    // Drag-to-move for Select tool
+    if (state.activeTool === EditorTool.Select && inputState.isMouseDown && state.selectedElements.length > 0 && !state.isLinkingTransition && !state.isSelectionBoxActive) {
+      if (!state.isDragging) {
+        const dxPx = inputState.mouseScreenXPx - inputState.clickScreenXPx;
+        const dyPx = inputState.mouseScreenYPx - inputState.clickScreenYPx;
+        if (Math.abs(dxPx) > 2 || Math.abs(dyPx) > 2) {
+          state.isDragging = true;
+          state.dragStartBlockX = state.cursorBlockX;
+          state.dragStartBlockY = state.cursorBlockY;
+          pushSnapshot(history, state.roomData!);
+          storeDragStartPositions(state, dragOriginalPositions);
+        }
+      }
+      if (state.isDragging && state.roomData) {
+        const deltaX = state.cursorBlockX - state.dragStartBlockX;
+        const deltaY = state.cursorBlockY - state.dragStartBlockY;
+        moveSelectedElements(state, dragOriginalPositions, deltaX, deltaY);
+      }
+    }
+
+    // Selection box dragging
+    if (state.isSelectionBoxActive && inputState.isMouseDown && state.activeTool === EditorTool.Select) {
+      // Box is being drawn — no action needed; rendering handles the visual
+    }
+
+    // Mouse release
+    if (!inputState.isMouseDown) {
+      if (state.isDragging) {
+        state.isDragging = false;
+        dragOriginalPositions.clear();
+        applyEdits();
+      }
+      if (state.isSelectionBoxActive) {
+        state.isSelectionBoxActive = false;
+        if (state.roomData) {
+          const boxElements = getAllElementsInRect(
+            state.roomData,
+            Math.min(state.selectionBoxStartBlockX, state.cursorBlockX),
+            Math.min(state.selectionBoxStartBlockY, state.cursorBlockY),
+            Math.max(state.selectionBoxStartBlockX, state.cursorBlockX),
+            Math.max(state.selectionBoxStartBlockY, state.cursorBlockY),
+          );
+          if (inputState.isShiftHeld) {
+            // Add to existing selection
+            for (const el of boxElements) {
+              if (!state.selectedElements.some(e => e.type === el.type && e.uid === el.uid)) {
+                state.selectedElements.push(el);
+              }
+            }
+          } else {
+            state.selectedElements = boxElements;
+          }
         }
       }
     }
@@ -406,6 +534,8 @@ export function createEditorController(
       inputState.isMouseDown &&
       state.roomData !== null &&
       !state.isLinkingTransition &&
+      !state.isDragging &&
+      !state.isSelectionBoxActive &&
       inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX &&
       (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete);
 
@@ -520,6 +650,7 @@ export function createEditorController(
    */
   function handleEdgeResize(edge: RoomEdge, delta: 1 | -1): void {
     if (!state.roomData) return;
+    pushSnapshot(history, state.roomData);
     const room = state.roomData;
 
     const isHorizontal = edge === 'left' || edge === 'right';
@@ -576,8 +707,18 @@ export function createEditorController(
   }
 
   function handlePropertyChange(prop: string, value: string | number): void {
-    if (!state.roomData || !state.selectedElement) return;
-    const el = state.selectedElement;
+    if (!state.roomData || state.selectedElements.length === 0) return;
+
+    if (state.roomData) pushSnapshot(history, state.roomData);
+
+    // Apply property to all selected elements of matching type
+    for (const el of state.selectedElements) {
+      applyPropertyToElement(el, prop, value);
+    }
+  }
+
+  function applyPropertyToElement(el: SelectedElement, prop: string, value: string | number): void {
+    if (!state.roomData) return;
     const room = state.roomData;
     const numVal = typeof value === 'number' ? value : parseInt(value as string, 10);
 
@@ -628,6 +769,7 @@ export function createEditorController(
         if (prop === 'transition.targetRoomId' && typeof value === 'string') trans.targetRoomId = value;
         if (prop === 'transition.targetSpawnBlockX' && !isNaN(numVal)) trans.targetSpawnBlock[0] = numVal;
         if (prop === 'transition.targetSpawnBlockY' && !isNaN(numVal)) trans.targetSpawnBlock[1] = numVal;
+        if (prop === 'transition.fadeColor' && typeof value === 'string') trans.fadeColor = value;
       }
     } else if (el.type === 'playerSpawn') {
       if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;
@@ -639,6 +781,126 @@ export function createEditorController(
         if (prop === 'skillTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
       }
     }
+  }
+
+  // ── Drag-to-move helpers ─────────────────────────────────────────────────
+
+  function storeDragStartPositions(s: EditorState, positions: Map<number, { xBlock: number; yBlock: number }>): void {
+    positions.clear();
+    if (!s.roomData) return;
+    for (const el of s.selectedElements) {
+      if (el.type === 'wall') {
+        const w = s.roomData.interiorWalls.find(w2 => w2.uid === el.uid);
+        if (w) positions.set(el.uid, { xBlock: w.xBlock, yBlock: w.yBlock });
+      } else if (el.type === 'enemy') {
+        const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
+        if (e) positions.set(el.uid, { xBlock: e.xBlock, yBlock: e.yBlock });
+      } else if (el.type === 'skillTomb') {
+        const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
+        if (t) positions.set(el.uid, { xBlock: t.xBlock, yBlock: t.yBlock });
+      } else if (el.type === 'playerSpawn') {
+        positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
+      }
+    }
+  }
+
+  function moveSelectedElements(
+    s: EditorState,
+    positions: Map<number, { xBlock: number; yBlock: number }>,
+    deltaX: number, deltaY: number,
+  ): void {
+    if (!s.roomData) return;
+    for (const el of s.selectedElements) {
+      const orig = positions.get(el.uid);
+      if (!orig) continue;
+      if (el.type === 'wall') {
+        const w = s.roomData.interiorWalls.find(w2 => w2.uid === el.uid);
+        if (w) { w.xBlock = orig.xBlock + deltaX; w.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'enemy') {
+        const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
+        if (e) { e.xBlock = orig.xBlock + deltaX; e.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'skillTomb') {
+        const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
+        if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'playerSpawn') {
+        s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
+        s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
+      }
+    }
+  }
+
+  // ── Copy/Paste helpers ───────────────────────────────────────────────────
+
+  function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
+    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[] } = {
+      walls: [], enemies: [], skillTombs: [],
+    };
+    for (const el of elements) {
+      if (el.type === 'wall') {
+        const w = room.interiorWalls.find(w2 => w2.uid === el.uid);
+        if (w) data.walls.push({ ...w });
+      } else if (el.type === 'enemy') {
+        const e = room.enemies.find(e2 => e2.uid === el.uid);
+        if (e) data.enemies.push({ ...e });
+      } else if (el.type === 'skillTomb') {
+        const t = room.skillTombs.find(t2 => t2.uid === el.uid);
+        if (t) data.skillTombs.push({ ...t });
+      }
+    }
+    return JSON.stringify(data);
+  }
+
+  function pasteFromClipboard(s: EditorState): void {
+    if (!s.roomData || !s.clipboard) return;
+    const data = JSON.parse(s.clipboard) as {
+      walls: EditorWall[];
+      enemies: EditorEnemy[];
+      skillTombs: EditorSkillTomb[];
+    };
+
+    const newElements: SelectedElement[] = [];
+    // Offset paste by 1 block from cursor
+    const offsetX = s.cursorBlockX;
+    const offsetY = s.cursorBlockY;
+    // Find min coords from clipboard to compute relative offsets
+    let minX = Infinity, minY = Infinity;
+    for (const w of data.walls) { minX = Math.min(minX, w.xBlock); minY = Math.min(minY, w.yBlock); }
+    for (const e of data.enemies) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
+    for (const t of data.skillTombs) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
+    if (!isFinite(minX)) minX = 0;
+    if (!isFinite(minY)) minY = 0;
+
+    for (const w of data.walls) {
+      const newUid = allocateUid(s);
+      s.roomData.interiorWalls.push({
+        ...w,
+        uid: newUid,
+        xBlock: w.xBlock - minX + offsetX,
+        yBlock: w.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'wall', uid: newUid });
+    }
+    for (const e of data.enemies) {
+      const newUid = allocateUid(s);
+      s.roomData.enemies.push({
+        ...e,
+        uid: newUid,
+        xBlock: e.xBlock - minX + offsetX,
+        yBlock: e.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'enemy', uid: newUid });
+    }
+    for (const t of data.skillTombs) {
+      const newUid = allocateUid(s);
+      s.roomData.skillTombs.push({
+        ...t,
+        uid: newUid,
+        xBlock: t.xBlock - minX + offsetX,
+        yBlock: t.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'skillTomb', uid: newUid });
+    }
+    s.selectedElements = newElements;
   }
 
   return {
