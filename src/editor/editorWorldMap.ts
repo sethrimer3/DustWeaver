@@ -202,6 +202,7 @@ export function showEditorWorldMap(
   function onKey(e: KeyboardEvent): void {
     if (e.key === 'Escape' || e.key.toLowerCase() === 'm') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       destroy();
       callbacks.onClose();
     }

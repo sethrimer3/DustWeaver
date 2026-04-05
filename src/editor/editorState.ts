@@ -164,6 +164,8 @@ export interface EditorState {
   cursorWorldY: number;
   /** Whether the world map overlay is open in editor mode. */
   isWorldMapOpen: boolean;
+  /** Whether the visual world map editor is open (N key). */
+  isVisualMapOpen: boolean;
   /** Whether we are in transition link mode. */
   isLinkingTransition: boolean;
   /** UID of the source transition being linked. */
@@ -187,6 +189,7 @@ export function createEditorState(): EditorState {
     cursorWorldX: 0,
     cursorWorldY: 0,
     isWorldMapOpen: false,
+    isVisualMapOpen: false,
     isLinkingTransition: false,
     linkSourceTransitionUid: -1,
     roomData: null,

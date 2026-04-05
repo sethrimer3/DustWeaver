@@ -15,6 +15,8 @@ export interface EditorInputState {
   isShiftHeld: boolean;
   /** M key toggles world map. */
   isMapToggled: boolean;
+  /** N key toggles visual world map editor. */
+  isVisualMapToggled: boolean;
   /** Left mouse button currently held down (persistent, not one-shot). */
   isMouseDown: boolean;
   /** Left mouse click fired (one-shot). */
@@ -40,6 +42,7 @@ export function createEditorInputState(): EditorInputState {
     isCamRight: false,
     isShiftHeld: false,
     isMapToggled: false,
+    isVisualMapToggled: false,
     isMouseDown: false,
     isClickFired: false,
     clickScreenXPx: 0,
@@ -71,6 +74,7 @@ export function attachEditorInputListeners(
     if (key === 'a') { state.isCamLeft = true; e.preventDefault(); }
     if (key === 'd') { state.isCamRight = true; e.preventDefault(); }
     if (key === 'm' && !e.repeat) { state.isMapToggled = true; e.preventDefault(); }
+    if (key === 'n' && !e.repeat) { state.isVisualMapToggled = true; e.preventDefault(); }
     if (key === 'escape') { state.isEscapePressed = true; e.preventDefault(); }
     if (key === '1') state.toolKeyPressed = 1;
     if (key === '2') state.toolKeyPressed = 2;
@@ -138,6 +142,7 @@ export function attachEditorInputListeners(
 export function clearEditorOneShots(state: EditorInputState): void {
   state.isClickFired = false;
   state.isMapToggled = false;
+  state.isVisualMapToggled = false;
   state.wheelDelta = 0;
   state.isEscapePressed = false;
   state.toolKeyPressed = 0;

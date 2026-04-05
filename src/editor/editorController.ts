@@ -25,6 +25,7 @@ import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
 import { showEditorWorldMap } from './editorWorldMap';
+import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { exportRoomAsJson } from './editorExport';
 
@@ -81,6 +82,7 @@ export function createEditorController(
   let inputCleanup: (() => void) | null = null;
   let ui: EditorUI | null = null;
   let worldMapCleanup: (() => void) | null = null;
+  let visualMapCleanup: (() => void) | null = null;
 
   // Drag-paint tracking: last block position where Place/Delete acted during a drag
   // Initialized to out-of-range sentinels so the first drag always triggers.
@@ -160,6 +162,7 @@ export function createEditorController(
     if (inputCleanup) { inputCleanup(); inputCleanup = null; }
     if (ui) { ui.destroy(); ui = null; }
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
+    if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
     cancelTransitionLink(state);
     state.isActive = false;
     state.roomData = null;
@@ -268,6 +271,27 @@ export function createEditorController(
     });
   }
 
+  function openVisualMap(): void {
+    if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
+    state.isVisualMapOpen = true;
+
+    visualMapCleanup = showVisualWorldMap(uiRoot, state.roomData?.id ?? '', {
+      onJumpToRoom: (room) => {
+        state.isVisualMapOpen = false;
+        visualMapCleanup = null;
+
+        // Load the room for editing
+        loadRoomForEditing(room);
+        const roomDef = editorRoomDataToRoomDef(state.roomData!);
+        onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+      },
+      onClose: () => {
+        state.isVisualMapOpen = false;
+        visualMapCleanup = null;
+      },
+    });
+  }
+
   function update(
     dtSec: number,
     camera: CameraState,
@@ -280,7 +304,7 @@ export function createEditorController(
     virtualHeightPx: number,
   ): boolean {
     if (!state.isActive) return false;
-    if (state.isWorldMapOpen) return true;
+    if (state.isWorldMapOpen || state.isVisualMapOpen) return true;
 
     // Camera movement (shift doubles speed)
     const camInput: EditorCameraInput = {
@@ -323,6 +347,11 @@ export function createEditorController(
     // M key → world map
     if (inputState.isMapToggled) {
       openWorldMap();
+    }
+
+    // N key → visual world map editor
+    if (inputState.isVisualMapToggled) {
+      openVisualMap();
     }
 
     // ESC → cancel linking or deselect
@@ -424,6 +453,7 @@ export function createEditorController(
     if (inputCleanup) { inputCleanup(); inputCleanup = null; }
     if (ui) { ui.destroy(); ui = null; }
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
+    if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
   }
 
   function handleRoomDimensionsChange(prop: 'widthBlocks' | 'heightBlocks', value: number): void {
