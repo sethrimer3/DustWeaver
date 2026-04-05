@@ -7,6 +7,7 @@ import { createRng } from '../sim/rng';
 import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
+import { PlayerCloak } from '../render/clusters/playerCloak';
 import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
@@ -323,6 +324,9 @@ export function startGameScreen(
     // Init dust
     environmentalDust.initFromWorld(world, room.worldNumber);
 
+    // Reset procedural cloak on room transition
+    playerCloak.reset();
+
     // Init skill tomb renderer
     skillTombRenderer.init(room.skillTombs);
 
@@ -342,6 +346,7 @@ export function startGameScreen(
   const environmentalDust = new EnvironmentalDustLayer();
   const skidDebris = new SkidDebrisRenderer();
   const skillTombRenderer = new SkillTombRenderer();
+  const playerCloak = new PlayerCloak();
 
   // ── Health bar state ─────────────────────────────────────────────────────
   /** Map of entityId -> tick when health bar should hide. */
@@ -1076,10 +1081,29 @@ export function startGameScreen(
       interactInputPulseMs = Math.max(0, interactInputPulseMs - elapsedMs);
     }
 
+    // ── Update procedural cloak (per-frame visual, not per-tick sim) ──────
+    const cloakPlayer = world.clusters[0];
+    if (cloakPlayer !== undefined && cloakPlayer.isAliveFlag === 1 && cloakPlayer.isPlayerFlag === 1) {
+      playerCloak.update(elapsedMs / 1000, {
+        positionXWorld: cloakPlayer.positionXWorld,
+        positionYWorld: cloakPlayer.positionYWorld,
+        velocityXWorld: cloakPlayer.velocityXWorld,
+        velocityYWorld: cloakPlayer.velocityYWorld,
+        isFacingLeftFlag: cloakPlayer.isFacingLeftFlag,
+        isGroundedFlag: cloakPlayer.isGroundedFlag,
+        isSprintingFlag: cloakPlayer.isSprintingFlag,
+        isCrouchingFlag: cloakPlayer.isCrouchingFlag,
+        isWallSlidingFlag: cloakPlayer.isWallSlidingFlag,
+        halfWidthWorld: cloakPlayer.halfWidthWorld,
+        halfHeightWorld: cloakPlayer.halfHeightWorld,
+      });
+    }
+
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, skillTombRenderer, bloomSystem,
+      playerCloak,
       world, currentRoom,
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,
       bgColor, isDebugMode, hudState, inputState,

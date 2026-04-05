@@ -25,6 +25,7 @@ import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
+import type { PlayerCloak } from '../render/clusters/playerCloak';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { InputState } from '../input/handler';
@@ -189,6 +190,7 @@ export interface RenderFrameContext {
   skidDebris: SkidDebrisRenderer;
   skillTombRenderer: SkillTombRenderer;
   bloomSystem: BloomSystem;
+  playerCloak: PlayerCloak;
 
   // World / room
   world: WorldState;
@@ -234,6 +236,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, skillTombRenderer, bloomSystem,
+    playerCloak,
     world, currentRoom,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
     bgColor, isDebugMode, hudState, inputState,
@@ -306,7 +309,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
   renderHazards(ctx, world, ox, oy, zoom, world.tick);
 
-  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, /* isDebugCloak */ isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom);
   drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
