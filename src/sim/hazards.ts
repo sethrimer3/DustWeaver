@@ -19,6 +19,7 @@
 import { WorldState, MAX_FIREFLIES, FIREFLIES_PER_JAR } from './world';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { nextFloat, nextFloatRange } from './rng';
+import { applyPlayerDamageWithKnockback } from './playerDamage';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -26,8 +27,6 @@ import { nextFloat, nextFloatRange } from './rng';
 const SPIKE_DAMAGE = 2;
 /** Invulnerability ticks after taking spike damage (60 ticks ≈ 1 second). */
 const SPIKE_INVULN_TICKS = 60;
-/** Knockback speed applied when hitting a spike (world units/s). */
-const SPIKE_KNOCKBACK_SPEED_WORLD = 180.0;
 
 /** Upward launch speed when bouncing off a springboard (world units/s). */
 const SPRINGBOARD_LAUNCH_SPEED_WORLD = 420.0;
@@ -47,8 +46,6 @@ export const WATER_BUOYANCY_FORCE_WORLD = 280.0;
 const LAVA_ZONE_DAMAGE = 1;
 /** Invulnerability ticks after taking lava damage (30 ticks ≈ 0.5 second). */
 const LAVA_ZONE_INVULN_TICKS = 30;
-/** Knockback speed when taking lava damage (world units/s). */
-const LAVA_ZONE_KNOCKBACK_SPEED_WORLD = 120.0;
 
 /**
  * Minimum momentum (speed × mass approximation) to break a breakable block.
@@ -124,25 +121,10 @@ export function applyHazards(world: WorldState): void {
       const sBottom = sy + SPIKE_HALF_SIZE_WORLD;
 
       if (clusterOverlapsAABB(px, py, phw, phh, sLeft, sTop, sRight, sBottom)) {
-        // Deal damage
-        player.healthPoints -= SPIKE_DAMAGE;
-        if (player.healthPoints <= 0) {
-          player.healthPoints = 0;
-          player.isAliveFlag = 0;
-        }
+        const sourceXWorld = sx;
+        const sourceYWorld = sy;
+        applyPlayerDamageWithKnockback(player, SPIKE_DAMAGE, sourceXWorld, sourceYWorld);
         world.spikeInvulnTicks = SPIKE_INVULN_TICKS;
-
-        // Knockback away from spike
-        const dir = world.spikeDirection[i];
-        if (dir === SPIKE_DIR_UP) {
-          player.velocityYWorld = SPIKE_KNOCKBACK_SPEED_WORLD;
-        } else if (dir === SPIKE_DIR_DOWN) {
-          player.velocityYWorld = -SPIKE_KNOCKBACK_SPEED_WORLD;
-        } else if (dir === SPIKE_DIR_LEFT) {
-          player.velocityXWorld = SPIKE_KNOCKBACK_SPEED_WORLD;
-        } else {
-          player.velocityXWorld = -SPIKE_KNOCKBACK_SPEED_WORLD;
-        }
         break; // one spike hit per tick
       }
     }
@@ -216,15 +198,11 @@ export function applyHazards(world: WorldState): void {
       const lBottom = lTop + world.lavaZoneHWorld[i];
 
       if (clusterOverlapsAABB(px, py, phw, phh, lLeft, lTop, lRight, lBottom)) {
-        player.healthPoints -= LAVA_ZONE_DAMAGE;
-        if (player.healthPoints <= 0) {
-          player.healthPoints = 0;
-          player.isAliveFlag = 0;
-        }
+        // Source point is the nearest point on the lava AABB to the player center.
+        const sourceXWorld = Math.max(lLeft, Math.min(px, lRight));
+        const sourceYWorld = Math.max(lTop, Math.min(py, lBottom));
+        applyPlayerDamageWithKnockback(player, LAVA_ZONE_DAMAGE, sourceXWorld, sourceYWorld);
         world.lavaInvulnTicks = LAVA_ZONE_INVULN_TICKS;
-
-        // Knockback upward (lava is typically at the bottom)
-        player.velocityYWorld = -LAVA_ZONE_KNOCKBACK_SPEED_WORLD;
         break;
       }
     }

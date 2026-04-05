@@ -14,6 +14,7 @@ import { WorldState } from '../world';
 import { ClusterState } from './state';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
+import { applyPlayerDamageWithKnockback } from '../playerDamage';
 
 // ============================================================================
 // Constants
@@ -194,11 +195,12 @@ export function applyGrappleHunterAI(world: WorldState): void {
         // Check tip-to-player AABB collision
         if (player !== null && tipHitsCluster(c.grappleHunterTipXWorld, c.grappleHunterTipYWorld, player)) {
           // Hit the player — deal damage
-          player.healthPoints -= GRAPPLE_HIT_DAMAGE;
-          if (player.healthPoints <= 0) {
-            player.healthPoints = 0;
-            player.isAliveFlag = 0;
-          }
+          applyPlayerDamageWithKnockback(
+            player,
+            GRAPPLE_HIT_DAMAGE,
+            c.grappleHunterTipXWorld,
+            c.grappleHunterTipYWorld,
+          );
           c.grappleHunterHasHitPlayerFlag = 1;
           transitionTo(c, 3);
           break;
@@ -239,11 +241,12 @@ export function applyGrappleHunterAI(world: WorldState): void {
 
         // Check arrival — slam damage
         if (distToPlayer < REEL_ARRIVAL_DIST_WORLD) {
-          player.healthPoints -= SLAM_DAMAGE;
-          if (player.healthPoints <= 0) {
-            player.healthPoints = 0;
-            player.isAliveFlag = 0;
-          }
+          applyPlayerDamageWithKnockback(
+            player,
+            SLAM_DAMAGE,
+            c.positionXWorld,
+            c.positionYWorld,
+          );
           transitionTo(c, 4);
           c.grappleHunterCooldownTicks = ATTACK_COOLDOWN_TICKS;
           c.velocityXWorld = 0;
