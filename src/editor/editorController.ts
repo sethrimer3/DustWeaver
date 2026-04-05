@@ -22,6 +22,7 @@ import {
 } from './editorInput';
 import { selectAtCursor, placeAtCursor, deleteAtCursor, rotateSelectedElement } from './editorTools';
 import { createEditorUI, EditorUI } from './editorUI';
+import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
 import { showEditorWorldMap } from './editorWorldMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
@@ -131,6 +132,10 @@ export function createEditorController(
           handleRoomDimensionsChange(dimProp, value);
           applyEdits();
         },
+        onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => {
+          handleEdgeResize(edge, delta);
+          applyEdits();
+        },
         onBlockThemeChange: (theme: BlockTheme) => {
           if (state.roomData) state.roomData.blockTheme = theme;
           applyEdits();
@@ -209,14 +214,12 @@ export function createEditorController(
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
     state.isWorldMapOpen = true;
 
-    worldMapCleanup = showEditorWorldMap(uiRoot, state.roomData?.id ?? '', {
+    const isLinkMode = state.isLinkingTransition;
+
+    worldMapCleanup = showEditorWorldMap(uiRoot, state.roomData?.id ?? '', isLinkMode, {
       onSelectRoom: (room) => {
         state.isWorldMapOpen = false;
         worldMapCleanup = null;
-
-        if (state.isLinkingTransition) {
-          linkTargetRoomId = room.id;
-        }
 
         // Load the new room for editing
         loadRoomForEditing(room);
@@ -225,9 +228,42 @@ export function createEditorController(
         const roomDef = editorRoomDataToRoomDef(state.roomData!);
         onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
       },
+      onLinkTransition: (room, transitionIndex) => {
+        state.isWorldMapOpen = false;
+        worldMapCleanup = null;
+
+        // Complete the link using the selected transition from the target room
+        if (linkSourceRoomData && room.transitions[transitionIndex]) {
+          const targetTrans = room.transitions[transitionIndex];
+          // Build a temporary EditorTransition for completeTransitionLink
+          const editorTargetTrans: EditorTransition = {
+            uid: -1,
+            direction: targetTrans.direction,
+            positionBlock: targetTrans.positionBlock,
+            openingSizeBlocks: targetTrans.openingSizeBlocks,
+            targetRoomId: '',
+            targetSpawnBlock: [targetTrans.targetSpawnBlock[0], targetTrans.targetSpawnBlock[1]],
+          };
+          completeTransitionLink(
+            state,
+            linkSourceRoomData.transitions,
+            room.id,
+            editorTargetTrans,
+            room.widthBlocks,
+          );
+          linkSourceRoomData = null;
+          linkTargetRoomId = '';
+
+          // Rebuild the current room to reflect the change
+          applyEdits();
+        }
+      },
       onClose: () => {
         state.isWorldMapOpen = false;
         worldMapCleanup = null;
+        if (isLinkMode) {
+          cancelTransitionLink(state);
+        }
       },
     });
   }
@@ -444,6 +480,69 @@ export function createEditorController(
         );
       }
     }
+  }
+
+  /**
+   * Add or remove one row/column from the given edge.
+   * Adding to top/left shifts all content. Adding to bottom/right just extends.
+   * Removing from top/left shifts content the other direction.
+   * Minimum room size is 10×10.
+   */
+  function handleEdgeResize(edge: RoomEdge, delta: 1 | -1): void {
+    if (!state.roomData) return;
+    const room = state.roomData;
+
+    const isHorizontal = edge === 'left' || edge === 'right';
+    const prop = isHorizontal ? 'widthBlocks' : 'heightBlocks';
+    const currentSize = room[prop];
+    const newSize = currentSize + delta;
+
+    // Enforce minimum room size of 10
+    if (newSize < 10) return;
+
+    room[prop] = newSize;
+
+    // When adding/removing from top or left, we need to shift all content
+    const needsShift = edge === 'top' || edge === 'left';
+    if (needsShift) {
+      const shiftX = edge === 'left' ? delta : 0;
+      const shiftY = edge === 'top' ? delta : 0;
+
+      // Shift player spawn
+      room.playerSpawnBlock[0] += shiftX;
+      room.playerSpawnBlock[1] += shiftY;
+
+      // Shift enemies
+      for (const enemy of room.enemies) {
+        enemy.xBlock += shiftX;
+        enemy.yBlock += shiftY;
+      }
+
+      // Shift skill tombs
+      for (const tomb of room.skillTombs) {
+        tomb.xBlock += shiftX;
+        tomb.yBlock += shiftY;
+      }
+
+      // Shift interior walls
+      for (const wall of room.interiorWalls) {
+        wall.xBlock += shiftX;
+        wall.yBlock += shiftY;
+      }
+
+      // Shift transitions along the shifted axis
+      for (const trans of room.transitions) {
+        if (edge === 'top' && (trans.direction === 'left' || trans.direction === 'right')) {
+          trans.positionBlock += shiftY;
+        }
+        if (edge === 'left' && (trans.direction === 'up' || trans.direction === 'down')) {
+          trans.positionBlock += shiftX;
+        }
+      }
+    }
+
+    // Re-clamp everything to new bounds
+    handleRoomDimensionsChange(prop, newSize);
   }
 
   function handlePropertyChange(prop: string, value: string | number): void {

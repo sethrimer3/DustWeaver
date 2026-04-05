@@ -70,7 +70,8 @@ export function renderEditorOverlays(
   }
 
   // ── Transitions ──────────────────────────────────────────────────────────
-  for (const t of room.transitions) {
+  for (let tIndex = 0; tIndex < room.transitions.length; tIndex++) {
+    const t = room.transitions[tIndex];
     const isSelected = state.selectedElement?.type === 'transition' && state.selectedElement.uid === t.uid;
     const isLinkSource = state.isLinkingTransition && state.linkSourceTransitionUid === t.uid;
     const isLinkCandidate = state.isLinkingTransition && state.linkSourceTransitionUid !== t.uid;
@@ -78,7 +79,7 @@ export function renderEditorOverlays(
     if (isLinkSource) color = TRANSITION_LINK_SOURCE;
     else if (isLinkCandidate) color = TRANSITION_LINK_CANDIDATE;
     else if (isSelected) color = TRANSITION_SELECTED;
-    drawTransitionZone(ctx, t, room, offsetXPx, offsetYPx, zoom, color);
+    drawTransitionZone(ctx, t, room, offsetXPx, offsetYPx, zoom, color, tIndex + 1);
   }
 
   // ── Player spawn ─────────────────────────────────────────────────────────
@@ -187,6 +188,7 @@ function drawTransitionZone(
   room: EditorRoomData,
   ox: number, oy: number, zoom: number,
   color: string,
+  doorNumber: number,
 ): void {
   let xBlock: number, yBlock: number, wBlock: number, hBlock: number;
   if (t.direction === 'left') {
@@ -201,14 +203,14 @@ function drawTransitionZone(
 
   drawBlockRect(ctx, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom, color, 2);
 
-  // Draw label
+  // Draw label with door number
   const cx = (xBlock + wBlock / 2) * BS * zoom + ox;
   const cy = (yBlock + hBlock / 2) * BS * zoom + oy;
   ctx.fillStyle = '#fff';
   ctx.font = '11px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const label = t.targetRoomId ? `→${t.targetRoomId}` : '(unlinked)';
+  const label = t.targetRoomId ? `#${doorNumber} →${t.targetRoomId}` : `#${doorNumber} (unlinked)`;
   ctx.fillText(label, cx, cy);
 }
 

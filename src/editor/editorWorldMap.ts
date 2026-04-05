@@ -2,27 +2,35 @@
  * Editor world map — shows a list of all rooms in the game.
  * In editor mode, pressing M opens this overlay.
  * Clicking a room jumps the editor to that room.
+ *
+ * When in transition-linking mode, clicking a room shows its transitions;
+ * clicking a transition completes the link.
  */
 
 import { ROOM_REGISTRY } from '../levels/rooms';
-import type { RoomDef } from '../levels/roomDef';
+import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
 
 const PANEL_BG = 'rgba(10,10,15,0.95)';
 const PANEL_BORDER = 'rgba(0,200,100,0.4)';
 const GREEN = '#00c864';
 const TEXT_COLOR = '#c0ffd0';
+const LINK_BLUE = 'rgba(0,150,255,0.5)';
 
 export interface EditorWorldMapCallbacks {
   onSelectRoom: (room: RoomDef) => void;
+  /** Called when a transition is selected in link mode.  */
+  onLinkTransition: (room: RoomDef, transitionIndex: number) => void;
   onClose: () => void;
 }
 
 /**
  * Shows the editor world map overlay. Returns a cleanup function.
+ * @param isLinkMode When true, rooms expand to show transitions for linking.
  */
 export function showEditorWorldMap(
   root: HTMLElement,
   currentRoomId: string,
+  isLinkMode: boolean,
   callbacks: EditorWorldMapCallbacks,
 ): () => void {
   const overlay = document.createElement('div');
@@ -41,12 +49,14 @@ export function showEditorWorldMap(
   `;
 
   const title = document.createElement('h3');
-  title.textContent = '🗺 Editor World Map';
-  title.style.cssText = `color: ${GREEN}; font-family: 'Cinzel', serif; margin: 0 0 16px 0; font-size: 1.2rem;`;
+  title.textContent = isLinkMode ? '🔗 Link Transition — Select Room & Door' : '🗺 Editor World Map';
+  title.style.cssText = `color: ${isLinkMode ? '#4488ff' : GREEN}; font-family: 'Cinzel', serif; margin: 0 0 16px 0; font-size: 1.2rem;`;
   panel.appendChild(title);
 
   const hint = document.createElement('p');
-  hint.textContent = 'Click a room to jump to it. Press M or ESC to close.';
+  hint.textContent = isLinkMode
+    ? 'Click a room to see its doors, then click a door to link.'
+    : 'Click a room to jump to it. Press M or ESC to close.';
   hint.style.cssText = `color: rgba(200,255,200,0.5); font-size: 11px; margin: 0 0 12px 0;`;
   panel.appendChild(hint);
 
@@ -57,6 +67,9 @@ export function showEditorWorldMap(
     list.push(room);
     roomsByWorld.set(room.worldNumber, list);
   }
+
+  // Track the expanded room in link mode (shows transitions)
+  let expandedRoomElement: HTMLElement | null = null;
 
   const sortedWorlds = [...roomsByWorld.keys()].sort((a, b) => a - b);
   for (const worldNum of sortedWorlds) {
@@ -72,13 +85,20 @@ export function showEditorWorldMap(
     const rooms = roomsByWorld.get(worldNum)!;
     for (const room of rooms) {
       const isCurrent = room.id === currentRoomId;
+
+      // Room container (button + optional transition list)
+      const roomContainer = document.createElement('div');
+      roomContainer.style.cssText = 'margin-bottom: 4px;';
+
       const btn = document.createElement('button');
-      btn.textContent = `${room.name} (${room.id})${isCurrent ? ' ◀' : ''}`;
+      const transCount = room.transitions.length;
+      const transLabel = isLinkMode ? ` [${transCount} door${transCount !== 1 ? 's' : ''}]` : '';
+      btn.textContent = `${room.name} (${room.id})${transLabel}${isCurrent ? ' ◀' : ''}`;
       btn.style.cssText = `
         display: block; width: 100%; text-align: left;
         background: ${isCurrent ? 'rgba(0,200,100,0.15)' : 'rgba(30,30,40,0.7)'};
         color: ${isCurrent ? GREEN : TEXT_COLOR}; border: 1px solid ${PANEL_BORDER};
-        padding: 8px 10px; margin-bottom: 4px; font-size: 12px;
+        padding: 8px 10px; font-size: 12px;
         font-family: monospace; cursor: pointer; border-radius: 3px;
         transition: background 0.1s;
       `;
@@ -88,11 +108,76 @@ export function showEditorWorldMap(
       btn.addEventListener('mouseleave', () => {
         btn.style.background = isCurrent ? 'rgba(0,200,100,0.15)' : 'rgba(30,30,40,0.7)';
       });
-      btn.addEventListener('click', () => {
-        destroy();
-        callbacks.onSelectRoom(room);
-      });
-      panel.appendChild(btn);
+
+      if (isLinkMode) {
+        // In link mode: clicking room expands to show transitions
+        btn.addEventListener('click', () => {
+          // Collapse any previously expanded room
+          if (expandedRoomElement && expandedRoomElement !== roomContainer) {
+            const prevList = expandedRoomElement.querySelector('.transition-list');
+            if (prevList) prevList.remove();
+          }
+
+          // Toggle expansion
+          const existingList = roomContainer.querySelector('.transition-list');
+          if (existingList) {
+            existingList.remove();
+            expandedRoomElement = null;
+            return;
+          }
+
+          expandedRoomElement = roomContainer;
+
+          // Build transition list
+          const transListDiv = document.createElement('div');
+          transListDiv.className = 'transition-list';
+          transListDiv.style.cssText = 'margin-left: 16px; margin-top: 2px;';
+
+          if (room.transitions.length === 0) {
+            const noTrans = document.createElement('div');
+            noTrans.textContent = '(No doors in this room)';
+            noTrans.style.cssText = 'color: rgba(200,200,200,0.4); font-size: 11px; padding: 4px 0;';
+            transListDiv.appendChild(noTrans);
+          } else {
+            for (let i = 0; i < room.transitions.length; i++) {
+              const trans = room.transitions[i];
+              const transBtn = document.createElement('button');
+              transBtn.textContent = `Door #${i + 1}: ${trans.direction} @ pos ${trans.positionBlock}, size ${trans.openingSizeBlocks}`;
+              transBtn.style.cssText = `
+                display: block; width: 100%; text-align: left;
+                background: rgba(0,80,200,0.15);
+                color: #88bbff; border: 1px solid ${LINK_BLUE};
+                padding: 6px 8px; font-size: 11px; margin-bottom: 2px;
+                font-family: monospace; cursor: pointer; border-radius: 3px;
+                transition: background 0.1s;
+              `;
+              transBtn.addEventListener('mouseenter', () => {
+                transBtn.style.background = 'rgba(0,120,255,0.3)';
+              });
+              transBtn.addEventListener('mouseleave', () => {
+                transBtn.style.background = 'rgba(0,80,200,0.15)';
+              });
+              transBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                destroy();
+                callbacks.onLinkTransition(room, i);
+              });
+              transListDiv.appendChild(transBtn);
+            }
+          }
+
+          roomContainer.appendChild(transListDiv);
+        });
+      } else {
+        // Normal mode: clicking room navigates
+        btn.addEventListener('click', () => {
+          destroy();
+          callbacks.onSelectRoom(room);
+        });
+      }
+
+      roomContainer.appendChild(btn);
+      panel.appendChild(roomContainer);
     }
   }
 
@@ -129,4 +214,11 @@ export function showEditorWorldMap(
   }
 
   return destroy;
+}
+
+/**
+ * Returns a human-readable label for a transition, including its numeric index.
+ */
+export function transitionLabel(trans: RoomTransitionDef, index: number): string {
+  return `#${index + 1} ${trans.direction} (pos:${trans.positionBlock} size:${trans.openingSizeBlocks})`;
 }
