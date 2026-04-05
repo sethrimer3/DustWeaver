@@ -906,11 +906,9 @@ export function startGameScreen(
     accumulatorMs += elapsedMs;
     while (accumulatorMs >= FIXED_DT_MS) {
       const player = world.clusters[0];
-      if (moveDx !== 0) {
-        if (player !== undefined) {
-          world.playerMoveInputDxWorld = moveDx > 0 ? 1.0 : -1.0;
-          world.playerMoveInputDyWorld = 0.0;
-        }
+      if (player !== undefined) {
+        world.playerMoveInputDxWorld = moveDx !== 0 ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
+        world.playerMoveInputDyWorld = inputState.isKeyS ? 1.0 : 0.0;
       }
       // Pass sprint and crouch input to the sim
       world.playerSprintHeldFlag = inputState.isSprintHeldFlag ? 1 : 0;

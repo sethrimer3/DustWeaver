@@ -33,6 +33,10 @@ export interface ClusterSnapshot {
   readonly entityId:              number;
   readonly positionXWorld:        number;
   readonly positionYWorld:        number;
+  /** Horizontal velocity (world units/sec), used for high-speed VFX. */
+  readonly velocityXWorld:        number;
+  /** Vertical velocity (world units/sec), used for high-speed VFX. */
+  readonly velocityYWorld:        number;
   readonly isAliveFlag:           0 | 1;
   readonly isPlayerFlag:          0 | 1;
   readonly healthPoints:          number;
@@ -152,6 +156,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       entityId:              c.entityId,
       positionXWorld:        c.positionXWorld,
       positionYWorld:        c.positionYWorld,
+      velocityXWorld:        c.velocityXWorld,
+      velocityYWorld:        c.velocityYWorld,
       isAliveFlag:           c.isAliveFlag,
       isPlayerFlag:          c.isPlayerFlag,
       healthPoints:          c.healthPoints,
