@@ -292,9 +292,14 @@ export function drawTunnelDarkness(
     // Determine fade colors based on transition fadeColor
     let fadeOpaqueColor: string;
     let fadeTransparentColor: string;
-    if (t.fadeColor === '#FFF4D6') {
-      fadeOpaqueColor = 'rgba(255,244,214,1)';
-      fadeTransparentColor = 'rgba(255,244,214,0)';
+    const fc = t.fadeColor;
+    if (fc && fc !== '#000000') {
+      // Parse hex color to rgba
+      const r = parseInt(fc.slice(1, 3), 16);
+      const g = parseInt(fc.slice(3, 5), 16);
+      const b = parseInt(fc.slice(5, 7), 16);
+      fadeOpaqueColor = `rgba(${r},${g},${b},1)`;
+      fadeTransparentColor = `rgba(${r},${g},${b},0)`;
     } else {
       fadeOpaqueColor = 'rgba(0,0,0,1)';
       fadeTransparentColor = 'rgba(0,0,0,0)';

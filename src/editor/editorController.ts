@@ -709,7 +709,7 @@ export function createEditorController(
   function handlePropertyChange(prop: string, value: string | number): void {
     if (!state.roomData || state.selectedElements.length === 0) return;
 
-    if (state.roomData) pushSnapshot(history, state.roomData);
+    pushSnapshot(history, state.roomData);
 
     // Apply property to all selected elements of matching type
     for (const el of state.selectedElements) {
@@ -789,15 +789,16 @@ export function createEditorController(
     positions.clear();
     if (!s.roomData) return;
     for (const el of s.selectedElements) {
+      const key = el.type === 'playerSpawn' ? 0 : el.uid;
       if (el.type === 'wall') {
         const w = s.roomData.interiorWalls.find(w2 => w2.uid === el.uid);
-        if (w) positions.set(el.uid, { xBlock: w.xBlock, yBlock: w.yBlock });
+        if (w) positions.set(key, { xBlock: w.xBlock, yBlock: w.yBlock });
       } else if (el.type === 'enemy') {
         const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
-        if (e) positions.set(el.uid, { xBlock: e.xBlock, yBlock: e.yBlock });
+        if (e) positions.set(key, { xBlock: e.xBlock, yBlock: e.yBlock });
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
-        if (t) positions.set(el.uid, { xBlock: t.xBlock, yBlock: t.yBlock });
+        if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
       } else if (el.type === 'playerSpawn') {
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
       }
@@ -811,7 +812,8 @@ export function createEditorController(
   ): void {
     if (!s.roomData) return;
     for (const el of s.selectedElements) {
-      const orig = positions.get(el.uid);
+      const key = el.type === 'playerSpawn' ? 0 : el.uid;
+      const orig = positions.get(key);
       if (!orig) continue;
       if (el.type === 'wall') {
         const w = s.roomData.interiorWalls.find(w2 => w2.uid === el.uid);
