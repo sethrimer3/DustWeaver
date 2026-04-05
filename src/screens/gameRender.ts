@@ -309,7 +309,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
   renderHazards(ctx, world, ox, oy, zoom, world.tick);
 
-  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, isDebugMode);
+  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, /* isDebugCloak */ isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom);
   drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);

@@ -80,10 +80,16 @@ export class PlayerCloak {
   private readonly pointCount: number;
 
   // Parallel arrays for chain point state (world-space floats).
-  private readonly posXWorld: Float64Array;
-  private readonly posYWorld: Float64Array;
-  private readonly velXWorld: Float64Array;
-  private readonly velYWorld: Float64Array;
+  private readonly posXWorld: Float32Array;
+  private readonly posYWorld: Float32Array;
+  private readonly velXWorld: Float32Array;
+  private readonly velYWorld: Float32Array;
+
+  // Pre-allocated render buffers (reused each frame to avoid per-frame allocations).
+  private readonly leftXPx: Float32Array;
+  private readonly leftYPx: Float32Array;
+  private readonly rightXPx: Float32Array;
+  private readonly rightYPx: Float32Array;
 
   // Previous-frame facing direction for turn detection.
   private prevIsFacingLeftFlag: 0 | 1 = 0;
@@ -95,10 +101,14 @@ export class PlayerCloak {
 
   constructor() {
     this.pointCount = 1 + CLOAK_SEGMENT_COUNT;
-    this.posXWorld = new Float64Array(this.pointCount);
-    this.posYWorld = new Float64Array(this.pointCount);
-    this.velXWorld = new Float64Array(this.pointCount);
-    this.velYWorld = new Float64Array(this.pointCount);
+    this.posXWorld = new Float32Array(this.pointCount);
+    this.posYWorld = new Float32Array(this.pointCount);
+    this.velXWorld = new Float32Array(this.pointCount);
+    this.velYWorld = new Float32Array(this.pointCount);
+    this.leftXPx = new Float32Array(this.pointCount);
+    this.leftYPx = new Float32Array(this.pointCount);
+    this.rightXPx = new Float32Array(this.pointCount);
+    this.rightYPx = new Float32Array(this.pointCount);
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -141,6 +151,9 @@ export class PlayerCloak {
     const facingSignX = player.isFacingLeftFlag === 1 ? 1 : -1; // backward direction
 
     // ── 6. Update trailing points ─────────────────────────────────────
+    // Pre-compute clamped dt divisor to avoid repeated Math.max calls in the loop.
+    const dtClamped = Math.max(dt, CLOAK_MIN_DT_SEC);
+
     for (let i = 1; i < this.pointCount; i++) {
       // Velocity inheritance from player.
       this.velXWorld[i] += player.velocityXWorld * CLOAK_VELOCITY_INHERITANCE * dt;
@@ -156,12 +169,12 @@ export class PlayerCloak {
       const targetY = prevY + restDir[1];
       const biasX = (targetX - this.posXWorld[i]) * CLOAK_REST_BIAS_STRENGTH;
       const biasY = (targetY - this.posYWorld[i]) * CLOAK_REST_BIAS_STRENGTH;
-      this.velXWorld[i] += biasX / Math.max(dt, CLOAK_MIN_DT_SEC);
-      this.velYWorld[i] += biasY / Math.max(dt, CLOAK_MIN_DT_SEC);
+      this.velXWorld[i] += biasX / dtClamped;
+      this.velYWorld[i] += biasY / dtClamped;
 
       // Turn impulse.
       if (isTurning) {
-        this.velXWorld[i] += CLOAK_TURN_IMPULSE_WORLD * facingSignX / Math.max(dt, CLOAK_MIN_DT_SEC);
+        this.velXWorld[i] += CLOAK_TURN_IMPULSE_WORLD * facingSignX / dtClamped;
       }
 
       // Landing impulse.
@@ -233,12 +246,12 @@ export class PlayerCloak {
   ): void {
     if (!this.isInitialisedFlag || this.pointCount < 2) return;
 
-    // Build screen-space points for the polygon.
+    // Build screen-space points for the polygon using pre-allocated buffers.
     // The cloak is a tapered shape: left edge, then right edge reversed.
-    const leftXPx: number[] = [];
-    const leftYPx: number[] = [];
-    const rightXPx: number[] = [];
-    const rightYPx: number[] = [];
+    const leftXPx = this.leftXPx;
+    const leftYPx = this.leftYPx;
+    const rightXPx = this.rightXPx;
+    const rightYPx = this.rightYPx;
 
     for (let i = 0; i < this.pointCount; i++) {
       const screenX = Math.round(this.posXWorld[i] * scalePx + offsetXPx);
@@ -274,10 +287,10 @@ export class PlayerCloak {
         perpY = 0;
       }
 
-      leftXPx.push(Math.round(screenX + perpX * halfWidth));
-      leftYPx.push(Math.round(screenY + perpY * halfWidth));
-      rightXPx.push(Math.round(screenX - perpX * halfWidth));
-      rightYPx.push(Math.round(screenY - perpY * halfWidth));
+      leftXPx[i] = Math.round(screenX + perpX * halfWidth);
+      leftYPx[i] = Math.round(screenY + perpY * halfWidth);
+      rightXPx[i] = Math.round(screenX - perpX * halfWidth);
+      rightYPx[i] = Math.round(screenY - perpY * halfWidth);
     }
 
     // Draw filled polygon: left edge forward, then right edge backward.
