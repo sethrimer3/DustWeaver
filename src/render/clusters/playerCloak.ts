@@ -43,6 +43,12 @@ import {
   CLOAK_WIDTH_ROOT_WORLD,
   CLOAK_WIDTH_TIP_WORLD,
   CLOAK_DEBUG_POINT_RADIUS_PX,
+  CLOAK_MAX_FRAME_DT_SEC,
+  CLOAK_MIN_DT_SEC,
+  CLOAK_MIN_DISTANCE_WORLD,
+  CLOAK_MIN_TANGENT_LENGTH,
+  CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD,
+  CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD,
 } from './cloakConstants';
 
 // ── Player sprite metrics (duplicated from renderer.ts to avoid circular) ──
@@ -104,7 +110,7 @@ export class PlayerCloak {
    */
   update(dtSec: number, player: CloakPlayerState): void {
     // Clamp dt to avoid explosion on tab-switch / large frame gaps.
-    const dt = Math.min(dtSec, 0.05);
+    const dt = Math.min(dtSec, CLOAK_MAX_FRAME_DT_SEC);
 
     // ── 1. Compute root anchor world position ─────────────────────────
     const rootWorldX = this._anchorWorldX(player);
@@ -150,12 +156,12 @@ export class PlayerCloak {
       const targetY = prevY + restDir[1];
       const biasX = (targetX - this.posXWorld[i]) * CLOAK_REST_BIAS_STRENGTH;
       const biasY = (targetY - this.posYWorld[i]) * CLOAK_REST_BIAS_STRENGTH;
-      this.velXWorld[i] += biasX / Math.max(dt, 0.001);
-      this.velYWorld[i] += biasY / Math.max(dt, 0.001);
+      this.velXWorld[i] += biasX / Math.max(dt, CLOAK_MIN_DT_SEC);
+      this.velYWorld[i] += biasY / Math.max(dt, CLOAK_MIN_DT_SEC);
 
       // Turn impulse.
       if (isTurning) {
-        this.velXWorld[i] += CLOAK_TURN_IMPULSE_WORLD * facingSignX / Math.max(dt, 0.001);
+        this.velXWorld[i] += CLOAK_TURN_IMPULSE_WORLD * facingSignX / Math.max(dt, CLOAK_MIN_DT_SEC);
       }
 
       // Landing impulse.
@@ -180,7 +186,7 @@ export class PlayerCloak {
         let dx = this.posXWorld[i] - parentX;
         let dy = this.posYWorld[i] - parentY;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 0.001) {
+        if (dist > CLOAK_MIN_DISTANCE_WORLD) {
           const targetDist = CLOAK_SEGMENT_LENGTH_WORLD;
           const diff = (dist - targetDist) / dist;
           // Only child point moves (parent is pinned or already resolved).
@@ -259,7 +265,7 @@ export class PlayerCloak {
       const tangentLen = Math.sqrt(tangentX * tangentX + tangentY * tangentY);
       let perpX = 0;
       let perpY = 0;
-      if (tangentLen > 0.001) {
+      if (tangentLen > CLOAK_MIN_TANGENT_LENGTH) {
         // Perpendicular = rotate tangent 90 degrees.
         perpX = -tangentY / tangentLen;
         perpY = tangentX / tangentLen;
@@ -411,13 +417,13 @@ export class PlayerCloak {
 
     // Airborne states.
     if (player.isGroundedFlag === 0) {
-      if (player.velocityYWorld < -10) return CLOAK_REST_JUMPING;
+      if (player.velocityYWorld < CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD) return CLOAK_REST_JUMPING;
       return CLOAK_REST_FALLING;
     }
 
     // Grounded states.
     if (player.isSprintingFlag === 1) return CLOAK_REST_SPRINTING;
-    const isMovingHorizontally = Math.abs(player.velocityXWorld) > 15;
+    const isMovingHorizontally = Math.abs(player.velocityXWorld) > CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD;
     if (isMovingHorizontally) return CLOAK_REST_RUNNING;
     return CLOAK_REST_IDLE;
   }

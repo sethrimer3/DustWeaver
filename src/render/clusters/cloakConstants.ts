@@ -87,3 +87,21 @@ export const CLOAK_WIDTH_TIP_WORLD = 2;
 
 /** Debug point radius (screen pixels). */
 export const CLOAK_DEBUG_POINT_RADIUS_PX = 2;
+
+// ── Simulation thresholds ─────────────────────────────────────────────────
+
+/** Maximum render-frame dt (seconds) — clamps large gaps from tab-switch. */
+export const CLOAK_MAX_FRAME_DT_SEC = 0.05;
+/** Minimum dt divisor (seconds) — avoids division by near-zero. */
+export const CLOAK_MIN_DT_SEC = 0.001;
+/** Minimum distance for constraint normalisation (world units). */
+export const CLOAK_MIN_DISTANCE_WORLD = 0.001;
+/** Minimum tangent length for perpendicular calculation (screen px). */
+export const CLOAK_MIN_TANGENT_LENGTH = 0.001;
+
+// ── State detection thresholds ────────────────────────────────────────────
+
+/** Vertical velocity below which the player is considered jumping upward (world units/sec). */
+export const CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD = -10;
+/** Horizontal speed above which the player is considered running (world units/sec). */
+export const CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD = 15;
