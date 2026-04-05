@@ -73,6 +73,11 @@ export interface ClusterState {
    * Used during the force-time window to maintain outward velocity.
    */
   wallJumpDirX: number;
+  /**
+   * 1 after any wall jump has been used since the last reset point.
+   * Reset points: touching ground or attaching a grapple.
+   */
+  hasUsedWallJumpSinceResetFlag: 0 | 1;
 
   // ---- Dash (player and enemy) -------------------------------------------
   /** Remaining cooldown ticks before dash is available again.  0 = ready. */
@@ -293,6 +298,7 @@ export function createClusterState(
     wallJumpLockoutTicks: 0,
     wallJumpForceTimeTicks: 0,
     wallJumpDirX: 0,
+    hasUsedWallJumpSinceResetFlag: 0,
     dashCooldownTicks: 0,
     dashRechargeAnimTicks: 0,
     enemyAiAttackCooldownTicks: 30,

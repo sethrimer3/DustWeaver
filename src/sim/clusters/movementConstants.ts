@@ -170,7 +170,13 @@ export const WALL_JUMP_X_SPEED_WORLD = 147.0;
  * Reduced from full ground-jump speed — paired with the strong horizontal
  * push to prevent net altitude gain on same-wall wall-jump chains.
  */
-export const WALL_JUMP_Y_SPEED_WORLD = 147.0;
+export const WALL_JUMP_Y_SPEED_WORLD = 142.0;
+
+/**
+ * Extra upward launch speed applied only to the first wall jump after a reset.
+ * Reset conditions: touching ground or attaching a grapple.
+ */
+export const WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD = 10.0;
 
 /**
  * Ticks after a wall jump during which horizontal input is overridden by

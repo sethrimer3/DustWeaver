@@ -226,6 +226,9 @@ export function applyClusterMovement(world: WorldState): void {
         if (cluster.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1) {
           world.hasGrappleChargeFlag = 1;
         }
+        if (cluster.isGroundedFlag === 1) {
+          cluster.hasUsedWallJumpSinceResetFlag = 0;
+        }
       }
 
       // ── Clamp horizontal world bounds (ground entities) ─────────────────
