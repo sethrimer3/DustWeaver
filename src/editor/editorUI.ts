@@ -478,6 +478,11 @@ function updateInspector(
           BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
           '(mixed)',
           v => callbacks?.onPropertyChange('wall.blockTheme', v));
+      } else if (type === 'transition') {
+        addSelect(div, 'fadeColor',
+          [{ label: 'Black', value: '#000000' }, { label: 'Warm Sunlight White', value: '#FFF4D6' }],
+          '(mixed)',
+          v => callbacks?.onPropertyChange('transition.fadeColor', v));
       }
     } else {
       const typeInfo = document.createElement('div');
