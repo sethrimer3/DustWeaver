@@ -37,10 +37,15 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
     clip.y = -clip.y;
     gl_Position = vec4(clip, 0.0, 1.0);
 
-    // Offensive particles stay at their full 4x4 size throughout their lifetime.
+    // Offensive particles stay at their full size throughout their lifetime.
+    // They are clamped to at least 2x2 in-game pixels for readability.
     // Orbit/shield particles shrink to ~60 % of their base size as they age out.
     float sizeFactor = a_isOffensive > 0.5 ? 1.0 : (1.0 - a_normalizedAge * 0.40);
-    gl_PointSize = u_pointSizePx * sizeFactor;
+    float pointSize = u_pointSizePx * sizeFactor;
+    if (a_isOffensive > 0.5) {
+      pointSize = max(2.0, pointSize);
+    }
+    gl_PointSize = pointSize;
 
     v_kind              = a_kind;
     v_normalizedAge     = a_normalizedAge;
@@ -243,5 +248,4 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     gl_FragColor = vec4(color, alpha);
   }
 `.trim();
-
 

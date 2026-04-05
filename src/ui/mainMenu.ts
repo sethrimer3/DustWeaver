@@ -24,6 +24,8 @@ import {
   getRenderSizeOptions,
   getSelectedRenderSize,
   setSelectedRenderSize,
+  isOffensiveDustOutlineEnabled,
+  setOffensiveDustOutlineEnabled,
 } from './renderSettings';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -487,6 +489,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   function buildSettingsUI(): void {
     settingsEl.innerHTML = '';
     const selectedOption = getSelectedRenderSize();
+    const outlineEnabled = isOffensiveDustOutlineEnabled();
 
     const heading = document.createElement('h2');
     heading.textContent = 'Render Size';
@@ -504,6 +507,38 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
       letter-spacing: 0.03em;
     `;
     settingsEl.appendChild(helper);
+
+    const outlineToggleBtn = document.createElement('button');
+    outlineToggleBtn.style.cssText = `
+      background: rgba(0,0,0,0.5); border: 1px solid rgba(212,168,75,0.3);
+      color: #d4a84b; padding: 0.9rem 1.4rem;
+      font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer; transition: all 0.25s;
+      border-radius: 3px; min-width: 340px; text-align: center; letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    `;
+    outlineToggleBtn.textContent = `Offensive Dust Outline: ${outlineEnabled ? 'On' : 'Off'}`;
+    if (outlineEnabled) {
+      outlineToggleBtn.style.borderColor = 'rgba(212,168,75,0.85)';
+      outlineToggleBtn.style.background = 'rgba(212,168,75,0.15)';
+    }
+    outlineToggleBtn.addEventListener('mouseenter', () => {
+      outlineToggleBtn.style.background = 'rgba(212,168,75,0.1)';
+      outlineToggleBtn.style.borderColor = 'rgba(212,168,75,0.7)';
+    });
+    outlineToggleBtn.addEventListener('mouseleave', () => {
+      if (isOffensiveDustOutlineEnabled()) {
+        outlineToggleBtn.style.background = 'rgba(212,168,75,0.15)';
+        outlineToggleBtn.style.borderColor = 'rgba(212,168,75,0.85)';
+      } else {
+        outlineToggleBtn.style.background = 'rgba(0,0,0,0.5)';
+        outlineToggleBtn.style.borderColor = 'rgba(212,168,75,0.3)';
+      }
+    });
+    outlineToggleBtn.addEventListener('click', () => {
+      setOffensiveDustOutlineEnabled(!isOffensiveDustOutlineEnabled());
+      buildSettingsUI();
+    });
+    settingsEl.appendChild(outlineToggleBtn);
 
     const options = getRenderSizeOptions();
     for (let i = 0; i < options.length; i++) {

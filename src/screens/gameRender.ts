@@ -37,6 +37,7 @@ import {
   HEALTH_BAR_DISPLAY_MS,
 } from './gameRoom';
 import type { PlayerProgress } from '../progression/playerProgress';
+import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -57,6 +58,8 @@ const HUD_HEALTH_BAR_HEIGHT_PX = 4;
 const HUD_HEALTH_DUST_GAP_PX = 3;
 /** Visual spacing between grapple bloom dots along the chain (virtual px). */
 const GRAPPLE_BLOOM_SEGMENT_PX = 6;
+const OUTLINE_BASE_WIDTH_1080P_PX = 2;
+const OFFENSIVE_DUST_BASE_DIAMETER_WORLD = 2.0;
 
 function drawGrappleBloom(
   bloomSystem: BloomSystem,
@@ -122,6 +125,52 @@ function drawGrappleBloom(
       color: '#ffe79d',
     },
   });
+}
+
+function drawOffensiveDustOutlineOverlay(
+  deviceCtx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  canvasWidthPx: number,
+  canvasHeightPx: number,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  if (!isOffensiveDustOutlineEnabled()) return;
+
+  const outlineScale = Math.min(canvasWidthPx / 1920.0, canvasHeightPx / 1080.0);
+  const lineWidthPx = OUTLINE_BASE_WIDTH_1080P_PX * outlineScale;
+  const worldDiameterPx = OFFENSIVE_DUST_BASE_DIAMETER_WORLD * scalePx;
+  const radiusPx = Math.max(lineWidthPx * 0.6, worldDiameterPx * 0.6);
+  const halfPixelAdjust = ((lineWidthPx % 2) === 0) ? 0.5 : 0;
+
+  deviceCtx.save();
+  deviceCtx.strokeStyle = '#ff1a1a';
+  deviceCtx.lineWidth = lineWidthPx;
+
+  const particles = snapshot.particles;
+  for (let i = 0; i < particles.particleCount; i++) {
+    if (particles.isAliveFlag[i] === 0) continue;
+    if (particles.behaviorMode[i] !== 1) continue;
+
+    const ownerEntityId = particles.ownerEntityId[i];
+    let isEnemyOwned = false;
+    for (let ci = 0; ci < snapshot.clusters.length; ci++) {
+      const cluster = snapshot.clusters[ci];
+      if (cluster.entityId !== ownerEntityId) continue;
+      isEnemyOwned = cluster.isPlayerFlag === 0 && cluster.isAliveFlag === 1;
+      break;
+    }
+    if (!isEnemyOwned) continue;
+
+    const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
+    const sy = particles.positionYWorld[i] * scalePx + offsetYPx;
+
+    deviceCtx.beginPath();
+    deviceCtx.arc(sx + halfPixelAdjust, sy + halfPixelAdjust, radiusPx, 0, Math.PI * 2);
+    deviceCtx.stroke();
+  }
+  deviceCtx.restore();
 }
 
 // ── Public interface ───────────────────────────────────────────────────────
@@ -432,6 +481,7 @@ export function renderFrame(r: RenderFrameContext): void {
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
   }
   bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
+  drawOffensiveDustOutlineOverlay(deviceCtx, snapshot, canvas.width, canvas.height, ox, oy, zoom);
 
   // ── Touch joystick (drawn on device canvas in screen space) ───────────
   if (inputState.isTouchJoystickActiveFlag === 1) {

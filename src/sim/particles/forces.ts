@@ -446,8 +446,13 @@ export function applyInterParticleForces(world: WorldState): void {
 
   // Pre-compute cluster lookups to avoid O(n²) within particle loop
   const ownerIsPlayerMap = new Map<number, boolean>();
+  const ownerIsRadiantTetherMap = new Map<number, boolean>();
+  const ownerHasTakenDamageMap = new Map<number, boolean>();
   for (let ci = 0; ci < clusters.length; ci++) {
-    ownerIsPlayerMap.set(clusters[ci].entityId, clusters[ci].isPlayerFlag === 1);
+    const cluster = clusters[ci];
+    ownerIsPlayerMap.set(cluster.entityId, cluster.isPlayerFlag === 1);
+    ownerIsRadiantTetherMap.set(cluster.entityId, cluster.isRadiantTetherFlag === 1);
+    ownerHasTakenDamageMap.set(cluster.entityId, cluster.healthPoints < cluster.maxHealthPoints);
   }
 
   // Pre-compute player's dust count for armor calculation (only once per tick)
@@ -469,6 +474,8 @@ export function applyInterParticleForces(world: WorldState): void {
 
     // Fast lookup for attacker's player status
     const attackerIsPlayer = ownerIsPlayerMap.get(ownerI) ?? false;
+    const attackerIsRadiantTether = ownerIsRadiantTetherMap.get(ownerI) ?? false;
+    const attackerHasTakenDamage = ownerHasTakenDamageMap.get(ownerI) ?? false;
 
     for (let ci = 0; ci < clusters.length; ci++) {
       const cluster = clusters[ci];
@@ -478,6 +485,14 @@ export function applyInterParticleForces(world: WorldState): void {
       const dxc = positionXWorld[i] - cluster.positionXWorld;
       const dyc = positionYWorld[i] - cluster.positionYWorld;
       if (dxc * dxc + dyc * dyc < CORE_RADIUS_WORLD * CORE_RADIUS_WORLD) {
+        if (
+          attackerIsRadiantTether &&
+          !attackerHasTakenDamage &&
+          cluster.isPlayerFlag === 1
+        ) {
+          // Radiant Tether dust remains non-offensive until the boss is damaged.
+          break;
+        }
         const profile = getElementProfile(kindBuffer[i]);
         if (cluster.healthPoints > 0) {
           let damage: number;

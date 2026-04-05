@@ -51,6 +51,12 @@ export const RT_STATE_DEAD      = 6;
 
 /** Distance at which the boss activates (world units). */
 const RT_ACTIVATION_RANGE_WORLD = 250.0;
+const RT_SPORE_FALL_ACCEL_WORLD = 30.0;
+const RT_SPORE_FALL_SPEED_MAX_WORLD = 24.0;
+const RT_SPORE_SWAY_ACCEL_WORLD = 18.0;
+const RT_SPORE_SWAY_FREQ_RAD = 0.11;
+const RT_SPORE_DRAG_FACTOR = 0.985;
+const RT_SPORE_ATTACK_MODE_TICKS = 3.0;
 
 // ── Module-level chain state (one boss per room) ────────────────────────────
 
@@ -94,6 +100,22 @@ export function applyRadiantTetherAI(world: WorldState): void {
     }
 
     const cs = ensureChainState();
+    if (cs.bossEntityId !== cluster.entityId) {
+      cs.bossEntityId = cluster.entityId;
+      cs.bossLastHealthPoints = cluster.healthPoints;
+      cs.hasBossTakenDamageFlag = 0;
+    }
+    if (cluster.healthPoints < cs.bossLastHealthPoints) {
+      cs.hasBossTakenDamageFlag = 1;
+    }
+    cs.bossLastHealthPoints = cluster.healthPoints;
+
+    if (cs.hasBossTakenDamageFlag === 1) {
+      releaseRadiantTetherSpores(world, cluster.entityId);
+    } else {
+      suppressRadiantTetherDustAttacks(world, cluster.entityId);
+    }
+
     const state = cluster.radiantTetherState;
     cluster.radiantTetherStateTicks += 1;
 
@@ -226,4 +248,36 @@ function ensureChainState(): RadiantTetherChainState {
     _chainState = createRadiantTetherChainState();
   }
   return _chainState;
+}
+
+function suppressRadiantTetherDustAttacks(world: WorldState, bossEntityId: number): void {
+  for (let i = 0; i < world.particleCount; i++) {
+    if (world.isAliveFlag[i] === 0) continue;
+    if (world.ownerEntityId[i] !== bossEntityId) continue;
+    if (world.isTransientFlag[i] === 1) continue;
+    if (world.behaviorMode[i] !== 0) {
+      world.behaviorMode[i] = 0;
+      world.attackModeTicksLeft[i] = 0;
+    }
+  }
+}
+
+function releaseRadiantTetherSpores(world: WorldState, bossEntityId: number): void {
+  const dtSec = world.dtMs / 1000.0;
+  for (let i = 0; i < world.particleCount; i++) {
+    if (world.isAliveFlag[i] === 0) continue;
+    if (world.ownerEntityId[i] !== bossEntityId) continue;
+    if (world.isTransientFlag[i] === 1) continue;
+
+    world.behaviorMode[i] = 1;
+    world.attackModeTicksLeft[i] = RT_SPORE_ATTACK_MODE_TICKS;
+
+    const swayAccelWorld = Math.sin((world.tick + world.noiseTickSeed[i]) * RT_SPORE_SWAY_FREQ_RAD) * RT_SPORE_SWAY_ACCEL_WORLD;
+    world.velocityXWorld[i] += swayAccelWorld * dtSec;
+    world.velocityXWorld[i] *= RT_SPORE_DRAG_FACTOR;
+    world.velocityYWorld[i] += RT_SPORE_FALL_ACCEL_WORLD * dtSec;
+    if (world.velocityYWorld[i] > RT_SPORE_FALL_SPEED_MAX_WORLD) {
+      world.velocityYWorld[i] = RT_SPORE_FALL_SPEED_MAX_WORLD;
+    }
+  }
 }
