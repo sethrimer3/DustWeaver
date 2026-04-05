@@ -8,7 +8,7 @@
  */
 
 import { ROOM_REGISTRY } from '../levels/rooms';
-import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
+import type { RoomDef } from '../levels/roomDef';
 
 const PANEL_BG = 'rgba(10,10,15,0.95)';
 const PANEL_BORDER = 'rgba(0,200,100,0.4)';
@@ -215,11 +215,4 @@ export function showEditorWorldMap(
   }
 
   return destroy;
-}
-
-/**
- * Returns a human-readable label for a transition, including its numeric index.
- */
-export function transitionLabel(trans: RoomTransitionDef, index: number): string {
-  return `#${index + 1} ${trans.direction} (pos:${trans.positionBlock} size:${trans.openingSizeBlocks})`;
 }

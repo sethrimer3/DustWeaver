@@ -31,14 +31,14 @@ const TEXT_COLOR = '#c0ffd0';
 const GREEN = '#00c864';
 
 /** Scale factor: map units per block. Rooms are drawn at this scale. */
-const DEFAULT_CELL_SIZE = 4;
+const DEFAULT_ZOOM_SCALE = 4;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface MapRoomPlacement {
   room: RoomDef;
-  mapXPx: number;
-  mapYPx: number;
+  mapXWorld: number;
+  mapYWorld: number;
 }
 
 interface DoorHitArea {
@@ -136,7 +136,7 @@ export function showVisualWorldMap(
   computeAutoLayout(placements, currentRoomId);
 
   // ── View state ─────────────────────────────────────────────────────────
-  let zoom = DEFAULT_CELL_SIZE;
+  let zoom = DEFAULT_ZOOM_SCALE;
   let panXPx = 0;
   let panYPx = 0;
   let isDraggingRoom = false;
@@ -179,31 +179,28 @@ export function showVisualWorldMap(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w / dpr, h / dpr);
 
-    const canvasWCss = w / dpr;
-    const canvasHCss = h / dpr;
-
     doorHitAreas = [];
 
     // Draw connection lines between linked rooms
-    drawConnectionLines(ctx, placements, canvasWCss, canvasHCss);
+    drawConnectionLines(ctx, placements);
 
     // Draw rooms
     for (const [roomId, placement] of placements) {
-      drawRoom(ctx, placement, roomId === currentRoomId, canvasWCss, canvasHCss);
+      drawRoom(ctx, placement, roomId === currentRoomId);
     }
 
     // Draw active link line (after rooms, so door hit areas are populated)
     if (linkSourceRoomId && linkSourceTransIndex >= 0) {
-      drawActiveLinkLine(ctx, canvasWCss, canvasHCss);
+      drawActiveLinkLine(ctx);
     }
   }
 
-  function worldToScreen(wxPx: number, wyPx: number): [number, number] {
+  function worldToScreen(xWorld: number, yWorld: number): [number, number] {
     const canvasWCss = canvas.width / window.devicePixelRatio;
     const canvasHCss = canvas.height / window.devicePixelRatio;
     return [
-      canvasWCss / 2 + panXPx + wxPx * zoom,
-      canvasHCss / 2 + panYPx + wyPx * zoom,
+      canvasWCss / 2 + panXPx + xWorld * zoom,
+      canvasHCss / 2 + panYPx + yWorld * zoom,
     ];
   }
 
@@ -211,11 +208,9 @@ export function showVisualWorldMap(
     ctx2d: CanvasRenderingContext2D,
     placement: MapRoomPlacement,
     isCurrent: boolean,
-    _canvasW: number,
-    _canvasH: number,
   ): void {
     const room = placement.room;
-    const [sx, sy] = worldToScreen(placement.mapXPx, placement.mapYPx);
+    const [sx, sy] = worldToScreen(placement.mapXWorld, placement.mapYWorld);
     const rw = room.widthBlocks * zoom;
     const rh = room.heightBlocks * zoom;
 
@@ -242,14 +237,13 @@ export function showVisualWorldMap(
 
     // Draw doors (transitions)
     for (let i = 0; i < room.transitions.length; i++) {
-      drawDoor(ctx2d, room, placement, i, sx, sy, rw, rh);
+      drawDoor(ctx2d, room, i, sx, sy, rw, rh);
     }
   }
 
   function drawDoor(
     ctx2d: CanvasRenderingContext2D,
     room: RoomDef,
-    _placement: MapRoomPlacement,
     transIndex: number,
     roomSx: number,
     roomSy: number,
@@ -314,8 +308,6 @@ export function showVisualWorldMap(
   function drawConnectionLines(
     ctx2d: CanvasRenderingContext2D,
     allPlacements: Map<string, MapRoomPlacement>,
-    _canvasW: number,
-    _canvasH: number,
   ): void {
     ctx2d.strokeStyle = LINK_LINE_COLOR;
     ctx2d.lineWidth = 1.5;
@@ -338,7 +330,7 @@ export function showVisualWorldMap(
         drawn.add(pairKey);
 
         // Get door center positions
-        const [sx, sy] = worldToScreen(placement.mapXPx, placement.mapYPx);
+        const [sx, sy] = worldToScreen(placement.mapXWorld, placement.mapYWorld);
         const rw = room.widthBlocks * zoom;
         const rh = room.heightBlocks * zoom;
         const srcPos = getDoorCenter(trans, sx, sy, rw, rh);
@@ -346,7 +338,7 @@ export function showVisualWorldMap(
         // Find reverse transition in target room
         const targetRoom = targetPlacement.room;
         const reverseTrans = targetRoom.transitions.find(t => t.targetRoomId === roomId);
-        const [tsx, tsy] = worldToScreen(targetPlacement.mapXPx, targetPlacement.mapYPx);
+        const [tsx, tsy] = worldToScreen(targetPlacement.mapXWorld, targetPlacement.mapYWorld);
         const trw = targetRoom.widthBlocks * zoom;
         const trh = targetRoom.heightBlocks * zoom;
 
@@ -387,8 +379,6 @@ export function showVisualWorldMap(
 
   function drawActiveLinkLine(
     ctx2d: CanvasRenderingContext2D,
-    _canvasW: number,
-    _canvasH: number,
   ): void {
     const sourceDoor = findDoorHitArea(linkSourceRoomId, linkSourceTransIndex);
     if (!sourceDoor) return;
@@ -423,8 +413,8 @@ export function showVisualWorldMap(
     const placement = placements.get(roomId);
     if (!placement) return;
     const room = placement.room;
-    panXPx = -(placement.mapXPx + room.widthBlocks / 2) * zoom;
-    panYPx = -(placement.mapYPx + room.heightBlocks / 2) * zoom;
+    panXPx = -(placement.mapXWorld + room.widthBlocks / 2) * zoom;
+    panYPx = -(placement.mapYWorld + room.heightBlocks / 2) * zoom;
   }
 
   // ── Hit testing ────────────────────────────────────────────────────────
@@ -439,7 +429,7 @@ export function showVisualWorldMap(
 
   function hitTestRoom(sxPx: number, syPx: number): string | null {
     for (const [roomId, placement] of placements) {
-      const [sx, sy] = worldToScreen(placement.mapXPx, placement.mapYPx);
+      const [sx, sy] = worldToScreen(placement.mapXWorld, placement.mapYWorld);
       const rw = placement.room.widthBlocks * zoom;
       const rh = placement.room.heightBlocks * zoom;
       if (sxPx >= sx && sxPx <= sx + rw && syPx >= sy && syPx <= sy + rh) {
@@ -469,8 +459,8 @@ export function showVisualWorldMap(
       const dy = e.clientY - dragStartYPx;
       const placement = placements.get(dragRoomId);
       if (placement) {
-        placement.mapXPx = dragRoomStartXPx + dx / zoom;
-        placement.mapYPx = dragRoomStartYPx + dy / zoom;
+        placement.mapXWorld = dragRoomStartXPx + dx / zoom;
+        placement.mapYWorld = dragRoomStartYPx + dy / zoom;
       }
       render();
     } else if (isDraggingPan) {
@@ -532,8 +522,8 @@ export function showVisualWorldMap(
       dragStartYPx = e.clientY;
       const placement = placements.get(roomId);
       if (placement) {
-        dragRoomStartXPx = placement.mapXPx;
-        dragRoomStartYPx = placement.mapYPx;
+        dragRoomStartXPx = placement.mapXWorld;
+        dragRoomStartYPx = placement.mapYWorld;
       }
       canvas.style.cursor = 'grabbing';
       return;
@@ -673,12 +663,12 @@ function computeAutoLayout(
   if (allRooms.length === 0) return;
 
   const startRoom = ROOM_REGISTRY.get(startRoomId) ?? allRooms[0];
-  placements.set(startRoom.id, { room: startRoom, mapXPx: 0, mapYPx: 0 });
+  placements.set(startRoom.id, { room: startRoom, mapXWorld: 0, mapYWorld: 0 });
 
   const queue = [startRoom];
   const visited = new Set<string>([startRoom.id]);
 
-  const GAP = 6; // gap between rooms in blocks
+  const GAP_BLOCKS = 6; // gap between rooms in blocks
 
   while (queue.length > 0) {
     const current = queue.shift()!;
@@ -692,19 +682,19 @@ function computeAutoLayout(
       let offsetX = 0;
       let offsetY = 0;
       if (transition.direction === 'right') {
-        offsetX = current.widthBlocks + GAP;
+        offsetX = current.widthBlocks + GAP_BLOCKS;
       } else if (transition.direction === 'left') {
-        offsetX = -(targetRoom.widthBlocks + GAP);
+        offsetX = -(targetRoom.widthBlocks + GAP_BLOCKS);
       } else if (transition.direction === 'down') {
-        offsetY = current.heightBlocks + GAP;
+        offsetY = current.heightBlocks + GAP_BLOCKS;
       } else if (transition.direction === 'up') {
-        offsetY = -(targetRoom.heightBlocks + GAP);
+        offsetY = -(targetRoom.heightBlocks + GAP_BLOCKS);
       }
 
       placements.set(targetRoom.id, {
         room: targetRoom,
-        mapXPx: currentPlacement.mapXPx + offsetX,
-        mapYPx: currentPlacement.mapYPx + offsetY,
+        mapXWorld: currentPlacement.mapXWorld + offsetX,
+        mapYWorld: currentPlacement.mapYWorld + offsetY,
       });
       visited.add(targetRoom.id);
       queue.push(targetRoom);
@@ -715,15 +705,15 @@ function computeAutoLayout(
   let unvisitedX = 0;
   let maxYPx = 0;
   for (const [, p] of placements) {
-    maxYPx = Math.max(maxYPx, p.mapYPx + p.room.heightBlocks);
+    maxYPx = Math.max(maxYPx, p.mapYWorld + p.room.heightBlocks);
   }
 
   for (const room of allRooms) {
     if (!visited.has(room.id)) {
       placements.set(room.id, {
         room,
-        mapXPx: unvisitedX,
-        mapYPx: maxYPx + 10,
+        mapXWorld: unvisitedX,
+        mapYWorld: maxYPx + 10,
       });
       unvisitedX += room.widthBlocks + 6;
       visited.add(room.id);
