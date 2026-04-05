@@ -46,6 +46,123 @@ interface CharacterSprites {
   grappling: HTMLImageElement;
 }
 
+/** 1 virtual pixel outline thickness around player sprites. */
+const PLAYER_OUTLINE_THICKNESS_WORLD = 1;
+/** Precomputed outer-edge outline masks keyed by source player sprite image. */
+const _playerOutlineMaskCache = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+/** 8-neighbour offsets used to detect silhouette edges (includes diagonals). */
+const _outlineNeighborOffsets: ReadonlyArray<readonly [number, number]> = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1,  0],          [1,  0],
+  [-1,  1], [0,  1], [1,  1],
+];
+
+/**
+ * Builds a black outline mask for the sprite's outer silhouette only.
+ * Internal transparent holes are excluded by flood-filling only the
+ * transparency region connected to the texture border.
+ */
+function _getOrCreateOuterOutlineMask(sprite: HTMLImageElement): HTMLCanvasElement {
+  const cached = _playerOutlineMaskCache.get(sprite);
+  if (cached !== undefined) return cached;
+
+  const spriteWidthPx = sprite.naturalWidth;
+  const spriteHeightPx = sprite.naturalHeight;
+  const paddedWidthPx = spriteWidthPx + 2;
+  const paddedHeightPx = spriteHeightPx + 2;
+  const pixelCount = paddedWidthPx * paddedHeightPx;
+
+  const alphaCanvas = document.createElement('canvas');
+  alphaCanvas.width = paddedWidthPx;
+  alphaCanvas.height = paddedHeightPx;
+  const alphaCtx = alphaCanvas.getContext('2d');
+  if (alphaCtx === null) {
+    _playerOutlineMaskCache.set(sprite, alphaCanvas);
+    return alphaCanvas;
+  }
+  alphaCtx.clearRect(0, 0, paddedWidthPx, paddedHeightPx);
+  alphaCtx.drawImage(sprite, 1, 1);
+  const alphaData = alphaCtx.getImageData(0, 0, paddedWidthPx, paddedHeightPx).data;
+
+  const isOpaqueFlag = new Uint8Array(pixelCount);
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
+    isOpaqueFlag[pixelIndex] = alphaData[pixelIndex * 4 + 3] > 0 ? 1 : 0;
+  }
+
+  const isOutsideFlag = new Uint8Array(pixelCount);
+  const queueX = new Int16Array(pixelCount);
+  const queueY = new Int16Array(pixelCount);
+  let queueReadIndex = 0;
+  let queueWriteIndex = 0;
+
+  const enqueueIfOutside = (xPx: number, yPx: number): void => {
+    const idx = yPx * paddedWidthPx + xPx;
+    if (isOpaqueFlag[idx] === 1 || isOutsideFlag[idx] === 1) return;
+    isOutsideFlag[idx] = 1;
+    queueX[queueWriteIndex] = xPx;
+    queueY[queueWriteIndex] = yPx;
+    queueWriteIndex++;
+  };
+
+  for (let xPx = 0; xPx < paddedWidthPx; xPx++) {
+    enqueueIfOutside(xPx, 0);
+    enqueueIfOutside(xPx, paddedHeightPx - 1);
+  }
+  for (let yPx = 1; yPx < paddedHeightPx - 1; yPx++) {
+    enqueueIfOutside(0, yPx);
+    enqueueIfOutside(paddedWidthPx - 1, yPx);
+  }
+
+  while (queueReadIndex < queueWriteIndex) {
+    const xPx = queueX[queueReadIndex];
+    const yPx = queueY[queueReadIndex];
+    queueReadIndex++;
+
+    if (xPx > 0) enqueueIfOutside(xPx - 1, yPx);
+    if (xPx < paddedWidthPx - 1) enqueueIfOutside(xPx + 1, yPx);
+    if (yPx > 0) enqueueIfOutside(xPx, yPx - 1);
+    if (yPx < paddedHeightPx - 1) enqueueIfOutside(xPx, yPx + 1);
+  }
+
+  const outlineCanvas = document.createElement('canvas');
+  outlineCanvas.width = paddedWidthPx;
+  outlineCanvas.height = paddedHeightPx;
+  const outlineCtx = outlineCanvas.getContext('2d');
+  if (outlineCtx === null) {
+    _playerOutlineMaskCache.set(sprite, outlineCanvas);
+    return outlineCanvas;
+  }
+
+  const outlineImage = outlineCtx.createImageData(paddedWidthPx, paddedHeightPx);
+  const outlinePixels = outlineImage.data;
+  for (let yPx = 1; yPx < paddedHeightPx - 1; yPx++) {
+    for (let xPx = 1; xPx < paddedWidthPx - 1; xPx++) {
+      const idx = yPx * paddedWidthPx + xPx;
+      if (isOutsideFlag[idx] === 0) continue;
+
+      let hasOpaqueNeighbor = false;
+      for (let n = 0; n < _outlineNeighborOffsets.length; n++) {
+        const nx = xPx + _outlineNeighborOffsets[n][0];
+        const ny = yPx + _outlineNeighborOffsets[n][1];
+        if (isOpaqueFlag[ny * paddedWidthPx + nx] === 1) {
+          hasOpaqueNeighbor = true;
+          break;
+        }
+      }
+      if (!hasOpaqueNeighbor) continue;
+
+      const dataIndex = idx * 4;
+      outlinePixels[dataIndex] = 0;
+      outlinePixels[dataIndex + 1] = 0;
+      outlinePixels[dataIndex + 2] = 0;
+      outlinePixels[dataIndex + 3] = 255;
+    }
+  }
+  outlineCtx.putImageData(outlineImage, 0, 0);
+  _playerOutlineMaskCache.set(sprite, outlineCanvas);
+  return outlineCanvas;
+}
+
 function _loadCharacterSprites(characterId: string): CharacterSprites {
   const base = `SPRITES/PLAYERS/${characterId}/${characterId}`;
   const standingSrc = `${base}_standing.png`;
@@ -290,11 +407,21 @@ export function renderClusters(
       const spriteW = spriteHalfW * 2;
       const spriteH = spriteHalfH * 2;
       if (_isSpriteReady(sprite)) {
+        const outlineThicknessPx = PLAYER_OUTLINE_THICKNESS_WORLD * scalePx;
+        const outlineMask = _getOrCreateOuterOutlineMask(sprite);
         ctx.save();
         ctx.translate(screenX, screenY);
         if (cluster.isFacingLeftFlag === 1) {
           ctx.scale(-1, 1);
         }
+        // Draw black outer silhouette first, then the original sprite on top.
+        ctx.drawImage(
+          outlineMask,
+          -spriteHalfW - outlineThicknessPx,
+          -spriteHalfH - outlineThicknessPx,
+          spriteW + outlineThicknessPx * 2,
+          spriteH + outlineThicknessPx * 2,
+        );
         ctx.drawImage(sprite, -spriteHalfW, -spriteHalfH, spriteW, spriteH);
         ctx.restore();
       } else {
