@@ -126,6 +126,8 @@ export function renderFrame(r: RenderFrameContext): void {
   } = r;
 
   const snapshot = createSnapshot(world);
+  // Keep sprite sampling nearest-neighbour even if context state changed.
+  ctx.imageSmoothingEnabled = false;
 
   // ── Clear / fill virtual canvas ─────────────────────────────────────────
   if (webglRenderer.isAvailable) {
