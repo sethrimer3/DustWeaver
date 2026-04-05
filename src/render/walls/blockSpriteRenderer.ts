@@ -108,6 +108,7 @@ const _brownRockSprite32 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_32x32.
 const _dirtBlockSprite = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8.png');
 const _dirtEdgeSprite  = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8_edge.png');
 const _dirtCornerSprite = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8_corner.png');
+const _dirtSprite16 = _loadImage('SPRITES/BLOCKS/dirt/dirt_16x16.png');
 
 /** Cache of loaded sprite sets keyed by worldNumber (for legacy world-number mode). */
 const _spriteSets = new Map<number, BlockSpriteSet>();
@@ -207,6 +208,13 @@ function _getDirtSprite(variant: TileVariant): HTMLImageElement {
     case 'corner': return _dirtCornerSprite;
     default:       return _dirtBlockSprite;
   }
+}
+
+function _getFullSpriteFor2x2(theme: BlockTheme | null, blockSizePx: number): HTMLImageElement | null {
+  if (blockSizePx !== 8) return null;
+  if (theme === 'brownRock') return _brownRockSprite16;
+  if (theme === 'dirt') return _dirtSprite16;
+  return null;
 }
 
 function _hashTileCoord(col: number, row: number): number {
@@ -558,6 +566,24 @@ function _getDefaultLightingDepths(layout: CachedWallLayout): Map<string, number
   return depths;
 }
 
+function _collectSolid2x2WallTopLefts(walls: WallSnapshot, blockSizePx: number): Set<string> {
+  const topLeftKeys = new Set<string>();
+  if (blockSizePx !== 8) return topLeftKeys;
+
+  for (let wi = 0; wi < walls.count; wi++) {
+    if (walls.isPlatformFlag[wi] === 1) continue;
+
+    const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
+    const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
+    const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
+    const rowCount = Math.max(1, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
+    if (colCount !== 2 || rowCount !== 2) continue;
+    topLeftKeys.add(_tileKey(colStart, rowStart));
+  }
+
+  return topLeftKeys;
+}
+
 // ── Solid-colour fallback ─────────────────────────────────────────────────────
 
 /** Draws a single tile as a solid-colour rectangle (used when sprites are loading). */
@@ -676,12 +702,39 @@ export function renderWallSprites(
   const isWorldMode = (theme === null) && !isLegacyBlackRock;
 
   const wallLayout = _buildWallLayoutCache(walls, blockSizePx);
+  const solid2x2TopLeftKeys = _collectSolid2x2WallTopLefts(walls, blockSizePx);
+  const fullSprite2x2 = _getFullSpriteFor2x2(theme, blockSizePx);
+  const coveredBy2x2Keys = new Set<string>();
+  if (fullSprite2x2 !== null) {
+    for (const topLeftKey of solid2x2TopLeftKeys) {
+      const commaIdx = topLeftKey.indexOf(',');
+      const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
+      const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
+
+      coveredBy2x2Keys.add(_tileKey(col, row));
+      coveredBy2x2Keys.add(_tileKey(col + 1, row));
+      coveredBy2x2Keys.add(_tileKey(col, row + 1));
+      coveredBy2x2Keys.add(_tileKey(col + 1, row + 1));
+    }
+  }
   const defaultLightingDepths = _activeLightingEffect === 'DEFAULT'
     ? _getDefaultLightingDepths(wallLayout)
     : null;
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
+
+  if (fullSprite2x2 !== null && isSpriteReady(fullSprite2x2)) {
+    const drawSize = tileSizeScreen * 2;
+    for (const topLeftKey of solid2x2TopLeftKeys) {
+      const commaIdx = topLeftKey.indexOf(',');
+      const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
+      const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
+      const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
+      const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
+      ctx.drawImage(fullSprite2x2, tileX, tileY, drawSize, drawSize);
+    }
+  }
 
   for (let ti = 0; ti < wallLayout.occupiedTiles.length; ti++) {
     const tile = wallLayout.occupiedTiles[ti];
@@ -706,6 +759,19 @@ export function renderWallSprites(
     const tileX  = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY  = Math.round(row * blockSizePx * scalePx + offsetYPx);
     const tileKey = key;
+
+    if (coveredBy2x2Keys.has(tileKey)) {
+      const airDepth = _activeLightingEffect === 'DEFAULT'
+        ? (defaultLightingDepths?.get(tileKey) ?? 0)
+        : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+      const darknessAlpha = Math.min(1, airDepth * 0.1);
+      if (darknessAlpha > 0) {
+        ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
+        ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+      }
+      continue;
+    }
+
     const halfSz = Math.round(tileSizeScreen * 0.5);
     const cx     = Math.round(tileX + tileSizeScreen * 0.5);
     const cy     = Math.round(tileY + tileSizeScreen * 0.5);
