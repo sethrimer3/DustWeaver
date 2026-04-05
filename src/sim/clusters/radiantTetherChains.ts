@@ -85,6 +85,12 @@ export interface RadiantTetherChainState {
   brokenChains: BrokenChain[];
   /** Player invulnerability ticks remaining from chain damage. */
   playerChainIframeTicks: number;
+  /** Entity id of the active Radiant Tether boss in the room. */
+  bossEntityId: number;
+  /** Last recorded boss HP to detect first-damage transition deterministically. */
+  bossLastHealthPoints: number;
+  /** Set once the boss has taken damage and should release attack spores. */
+  hasBossTakenDamageFlag: 0 | 1;
 }
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -98,7 +104,14 @@ export function createRadiantTetherChainState(): RadiantTetherChainState {
   for (let i = 0; i < RT_MAX_BROKEN_CHAINS; i++) {
     brokenChains.push(createInactiveBrokenChain());
   }
-  return { chains, brokenChains, playerChainIframeTicks: 0 };
+  return {
+    chains,
+    brokenChains,
+    playerChainIframeTicks: 0,
+    bossEntityId: -1,
+    bossLastHealthPoints: 0,
+    hasBossTakenDamageFlag: 0,
+  };
 }
 
 function createInactiveChain(): ActiveChain {
@@ -415,17 +428,29 @@ export function checkChainPlayerCollision(
     return;
   }
 
-  const player = world.clusters[0];
+  let player = world.clusters[0];
+  if (player === undefined || player.isAliveFlag === 0 || player.isPlayerFlag !== 1) {
+    for (let i = 0; i < world.clusters.length; i++) {
+      const candidate = world.clusters[i];
+      if (candidate.isPlayerFlag === 1 && candidate.isAliveFlag === 1) {
+        player = candidate;
+        break;
+      }
+    }
+  }
   if (player === undefined || player.isAliveFlag === 0 || player.isPlayerFlag !== 1) return;
   const px = player.positionXWorld;
   const py = player.positionYWorld;
+  const playerRadiusWorld = Math.max(player.halfWidthWorld, player.halfHeightWorld);
+  const chainHitRadiusWorld = RT_CHAIN_HITBOX_HALF_WIDTH_WORLD + playerRadiusWorld;
+  const chainHitRadiusSq = chainHitRadiusWorld * chainHitRadiusWorld;
 
   // Check active chains
   for (let i = 0; i < cs.chains.length; i++) {
     const chain = cs.chains[i];
     if (chain.isActiveFlag === 0) continue;
     if (pointToSegmentDistSq(px, py, bossXWorld, bossYWorld, chain.anchorXWorld, chain.anchorYWorld)
-        < RT_CHAIN_HITBOX_HALF_WIDTH_WORLD * RT_CHAIN_HITBOX_HALF_WIDTH_WORLD) {
+        <= chainHitRadiusSq) {
       applyChainDamage(player, cs, world);
       return;
     }
@@ -436,7 +461,7 @@ export function checkChainPlayerCollision(
     const bc = cs.brokenChains[i];
     if (bc.isActiveFlag === 0) continue;
     if (pointToSegmentDistSq(px, py, bc.anchorXWorld, bc.anchorYWorld, bc.freeEndXWorld, bc.freeEndYWorld)
-        < RT_CHAIN_HITBOX_HALF_WIDTH_WORLD * RT_CHAIN_HITBOX_HALF_WIDTH_WORLD) {
+        <= chainHitRadiusSq) {
       applyChainDamage(player, cs, world);
       return;
     }
@@ -458,7 +483,7 @@ function applyChainDamage(
   const armor = Math.floor(playerDustCount / DUST_PARTICLES_PER_ARMOR);
 
   // Apply damage with armor reduction
-  const damage = Math.max(0, RT_CHAIN_DAMAGE - armor);
+  const damage = Math.max(1, RT_CHAIN_DAMAGE - armor);
   player.healthPoints -= damage;
   if (player.healthPoints <= 0) {
     player.healthPoints = 0;
@@ -514,4 +539,3 @@ export function getChainCountForHealth(
   if (count > maxChains) count = maxChains;
   return count;
 }
-

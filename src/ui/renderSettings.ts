@@ -6,6 +6,7 @@ export interface RenderSizeOption {
 }
 
 const RENDER_SIZE_STORAGE_KEY = 'dustweaver-render-size-id';
+const OFFENSIVE_DUST_OUTLINE_STORAGE_KEY = 'dustweaver-offensive-dust-outline-enabled';
 const DEFAULT_RENDER_SIZE_ID = '1080p';
 
 const RENDER_SIZE_OPTIONS: RenderSizeOption[] = [
@@ -77,4 +78,13 @@ export function setSelectedRenderSize(renderSizeId: string): RenderSizeOption {
   const option = getOptionById(renderSizeId) ?? getOptionById(DEFAULT_RENDER_SIZE_ID) ?? RENDER_SIZE_OPTIONS[0];
   localStorage.setItem(RENDER_SIZE_STORAGE_KEY, option.id);
   return option;
+}
+
+export function isOffensiveDustOutlineEnabled(): boolean {
+  const value = localStorage.getItem(OFFENSIVE_DUST_OUTLINE_STORAGE_KEY);
+  return value === '1';
+}
+
+export function setOffensiveDustOutlineEnabled(isEnabled: boolean): void {
+  localStorage.setItem(OFFENSIVE_DUST_OUTLINE_STORAGE_KEY, isEnabled ? '1' : '0');
 }
