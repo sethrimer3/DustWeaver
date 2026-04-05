@@ -3,6 +3,7 @@ import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_MEDIUM } from '../../levels/roomDef';
 import { ParticleKind } from '../../sim/particles/kinds';
+import type { PlayerCloak } from './playerCloak';
 
 // ── Sprite loading ──────────────────────────────────────────────────────────
 
@@ -333,6 +334,8 @@ export function renderClusters(
   offsetYPx: number,
   scalePx: number,
   showHitboxes = false,
+  playerCloak?: PlayerCloak,
+  isDebugCloak = false,
 ): void {
   ctx.save();
   // Pixel-art safety: simulation/camera may be subpixel, but sprite draws
@@ -418,6 +421,26 @@ export function renderClusters(
       const spriteH = spriteHalfH * 2;
       const spriteCenterY = screenY + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD * scalePx;
       if (_isSpriteReady(sprite)) {
+        // ── Procedural cloak (drawn behind the player body sprite) ──────
+        if (playerCloak !== undefined) {
+          playerCloak.render(ctx, offsetXPx, offsetYPx, scalePx);
+          if (isDebugCloak) {
+            playerCloak.renderDebug(ctx, offsetXPx, offsetYPx, scalePx, {
+              positionXWorld: cluster.positionXWorld,
+              positionYWorld: cluster.positionYWorld,
+              velocityXWorld: cluster.velocityXWorld,
+              velocityYWorld: cluster.velocityYWorld,
+              isFacingLeftFlag: cluster.isFacingLeftFlag,
+              isGroundedFlag: cluster.isGroundedFlag,
+              isSprintingFlag: cluster.isSprintingFlag,
+              isCrouchingFlag: cluster.isCrouchingFlag,
+              isWallSlidingFlag: cluster.isWallSlidingFlag,
+              halfWidthWorld: cluster.halfWidthWorld,
+              halfHeightWorld: cluster.halfHeightWorld,
+            });
+          }
+        }
+
         const outlineThicknessPx = PLAYER_OUTLINE_THICKNESS_WORLD * scalePx;
         const outlineMask = _getOrCreateOuterOutlineMask(sprite);
         const speedXWorldPerSec = cluster.velocityXWorld;

@@ -71,6 +71,10 @@ export interface ClusterSnapshot {
   readonly isSprintingFlag: 0 | 1;
   /** 1 while the player is crouching. */
   readonly isCrouchingFlag: 0 | 1;
+  /** 1 when the cluster is resting on a surface (floor or platform top). */
+  readonly isGroundedFlag: 0 | 1;
+  /** 1 while the player is performing a controlled wall slide. */
+  readonly isWallSlidingFlag: 0 | 1;
   /**
    * Current idle animation state:
    *  0 = standing, 1 = idle1, 2 = idle2, 3 = idleBlink
@@ -181,6 +185,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       isFacingLeftFlag:          c.isFacingLeftFlag,
       isSprintingFlag:           c.isSprintingFlag,
       isCrouchingFlag:           c.isCrouchingFlag,
+      isGroundedFlag:            c.isGroundedFlag,
+      isWallSlidingFlag:         c.isWallSlidingFlag,
       playerIdleAnimState:       c.playerIdleAnimState,
       isRockElementalFlag:              c.isRockElementalFlag,
       rockElementalState:               c.rockElementalState,
