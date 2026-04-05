@@ -41,6 +41,7 @@ import {
   TURN_ACCELERATION_PER_SEC2,
   WALL_JUMP_X_SPEED_WORLD,
   WALL_JUMP_Y_SPEED_WORLD,
+  WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD,
   WALL_JUMP_FORCE_TIME_TICKS,
   WALL_JUMP_LOCKOUT_TICKS,
   SPRINT_SPEED_MULTIPLIER,
@@ -86,6 +87,10 @@ export function tickPlayerMovement(
   }
   if (cluster.varJumpTimerTicks > 0) {
     cluster.varJumpTimerTicks -= 1;
+  }
+  // Grappling resets the "first wall jump" bonus state.
+  if (world.isGrappleActiveFlag === 1 || world.isGrappleStuckFlag === 1) {
+    cluster.hasUsedWallJumpSinceResetFlag = 0;
   }
 
   // ── Update player facing direction ──────────────────────────────────
@@ -293,7 +298,10 @@ export function tickPlayerMovement(
 
       if (canJumpFromLeft || canJumpFromRight) {
         const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, WALL_JUMP_X_SPEED_WORLD);
-        const wallJumpY = ov(debugSpeedOverrides.wallJumpYWorld, WALL_JUMP_Y_SPEED_WORLD);
+        const wallJumpYBase = ov(debugSpeedOverrides.wallJumpYWorld, WALL_JUMP_Y_SPEED_WORLD);
+        const wallJumpY = cluster.hasUsedWallJumpSinceResetFlag === 0
+          ? wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD
+          : wallJumpYBase;
         // wallDir = +1 if wall is to the right, -1 if wall is to the left
         const wallDir = canJumpFromRight ? 1 : -1;
         // Launch away: strong diagonal push prevents same-wall climbing.
@@ -304,6 +312,7 @@ export function tickPlayerMovement(
         cluster.wallJumpDirX            = -wallDir; // outward direction
         cluster.isWallSlidingFlag       = 0;
         cluster.coyoteTimeTicks         = 0;
+        cluster.hasUsedWallJumpSinceResetFlag = 1;
         // Start variable jump sustain for wall jumps too.
         cluster.varJumpTimerTicks       = VAR_JUMP_TIME_TICKS;
         cluster.varJumpSpeedWorld       = -wallJumpY;
