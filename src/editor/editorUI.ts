@@ -29,6 +29,8 @@ export interface EditorUI {
   destroy: () => void;
 }
 
+export type RoomEdge = 'top' | 'bottom' | 'left' | 'right';
+
 export interface EditorUICallbacks {
   onToolChange: (tool: EditorTool) => void;
   onCategoryChange: (category: PaletteCategory) => void;
@@ -37,6 +39,8 @@ export interface EditorUICallbacks {
   onLinkTransition: () => void;
   onPropertyChange: (prop: string, value: string | number) => void;
   onRoomDimensionsChange: (prop: 'widthBlocks' | 'heightBlocks', value: number) => void;
+  /** Add or remove one row/column from the given edge. delta is +1 (add) or -1 (remove). */
+  onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => void;
   onBlockThemeChange: (theme: BlockTheme) => void;
   onLightingEffectChange: (effect: LightingEffect) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
@@ -110,6 +114,39 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   roomDimTitle.textContent = 'Room Dimensions';
   roomDimTitle.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
   roomDimDiv.appendChild(roomDimTitle);
+
+  // Edge resize buttons (add/remove row/column from each edge)
+  const edgeResizeDiv = document.createElement('div');
+  edgeResizeDiv.style.cssText = `margin-top: 6px;`;
+
+  const edgeResizeTitle = document.createElement('div');
+  edgeResizeTitle.textContent = 'Add / Remove Row or Column';
+  edgeResizeTitle.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.5); margin-bottom: 4px;`;
+  edgeResizeDiv.appendChild(edgeResizeTitle);
+
+  const edges: { edge: RoomEdge; label: string }[] = [
+    { edge: 'top', label: 'Top' },
+    { edge: 'bottom', label: 'Bottom' },
+    { edge: 'left', label: 'Left' },
+    { edge: 'right', label: 'Right' },
+  ];
+  for (const { edge, label } of edges) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display: flex; align-items: center; gap: 4px; margin-bottom: 2px;';
+
+    const lbl = document.createElement('span');
+    lbl.textContent = label;
+    lbl.style.cssText = `min-width: 50px; font-size: 11px; color: rgba(200,255,200,0.7);`;
+    row.appendChild(lbl);
+
+    const addBtn = makeEdgeBtn('+', () => callbacks?.onEdgeResize(edge, 1));
+    const removeBtn = makeEdgeBtn('−', () => callbacks?.onEdgeResize(edge, -1));
+    row.appendChild(addBtn);
+    row.appendChild(removeBtn);
+    edgeResizeDiv.appendChild(row);
+  }
+  roomDimDiv.appendChild(edgeResizeDiv);
+
   container.appendChild(roomDimDiv);
 
   // ── Background dropdown ──────────────────────────────────────────────────
@@ -388,6 +425,21 @@ function makeBtn(label: string, onClick: () => void): HTMLButtonElement {
   return btn;
 }
 
+function makeEdgeBtn(label: string, onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  btn.style.cssText = `
+    background: ${BTN_BG}; color: ${TEXT_COLOR}; border: 1px solid ${PANEL_BORDER};
+    width: 28px; height: 22px; font-size: 13px; font-family: monospace; cursor: pointer;
+    border-radius: 3px; transition: background 0.1s; text-align: center; padding: 0;
+    line-height: 22px;
+  `;
+  btn.addEventListener('mouseenter', () => { btn.style.background = ACTIVE_BG; });
+  btn.addEventListener('mouseleave', () => { btn.style.background = BTN_BG; });
+  btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+  return btn;
+}
+
 function updateInspector(
   div: HTMLDivElement,
   state: EditorState,
@@ -446,6 +498,13 @@ function updateInspector(
   } else if (el.type === 'transition') {
     const trans = room.transitions.find(t => t.uid === el.uid);
     if (trans) {
+      // Show door number
+      const doorIndex = room.transitions.indexOf(trans);
+      const doorLabel = document.createElement('div');
+      doorLabel.textContent = `Door #${doorIndex + 1}`;
+      doorLabel.style.cssText = `font-size: 12px; color: #88bbff; margin-bottom: 6px; font-weight: bold;`;
+      div.appendChild(doorLabel);
+
       addSelect(div, 'direction',
         ['left', 'right', 'up', 'down'].map(d => ({ label: d, value: d })),
         trans.direction, v => callbacks?.onPropertyChange('transition.direction', v));
