@@ -246,18 +246,35 @@ export function renderFrame(r: RenderFrameContext): void {
   } = r;
 
   const snapshot = createSnapshot(world);
+  const roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_SMALL;
+  const roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_SMALL;
+  const roomScreenXPx = ox;
+  const roomScreenYPx = oy;
+  const roomScreenWidthPx = roomWidthWorld * zoom;
+  const roomScreenHeightPx = roomHeightWorld * zoom;
   // Keep sprite sampling nearest-neighbour even if context state changed.
   ctx.imageSmoothingEnabled = false;
   bloomSystem.beginFrame();
 
   // ── Clear / fill virtual canvas ─────────────────────────────────────────
+  // Always start from black so anything outside the room remains pure black.
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
   if (webglRenderer.isAvailable) {
     webglRenderer.render(snapshot, ox, oy, zoom);
-    ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
-  } else {
+  } else if (bgColor !== '#000000') {
+    // Keep legacy room-local background tinting behavior when no WebGL layer
+    // is active, while preserving black room margins via clipping below.
     ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
+    ctx.fillRect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
   }
+
+  // Constrain all world-space rendering to the room rectangle so out-of-room
+  // areas remain black even when camera framing shows beyond room extents.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
+  ctx.clip();
 
   // ── World background with parallax ──────────────────────────────────────
   renderWorldBackground(
@@ -267,8 +284,8 @@ export function renderFrame(r: RenderFrameContext): void {
     virtualHeightPx,
     ox,
     oy,
-    currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
-    currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
+    roomWidthWorld,
+    roomHeightWorld,
     zoom,
     currentRoom.backgroundId,
   );
@@ -361,6 +378,9 @@ export function renderFrame(r: RenderFrameContext): void {
   if (!webglRenderer.isAvailable) {
     renderParticles(ctx, snapshot, ox, oy, zoom);
   }
+
+  // End room clip before any HUD/screen-space overlays are drawn.
+  ctx.restore();
 
   // Debug-only HUD and room name
   if (isDebugMode) {
