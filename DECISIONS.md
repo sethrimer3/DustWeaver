@@ -604,3 +604,25 @@ can verify the collision boundary matches the visual tile geometry.
 - Now always visible and screen-anchored (not camera-relative)
 - Positioned above the dust container display
 - Enemy health bars remain over their characters (shown when recently damaged)
+
+## Per-Wall Block Theme (BUILD 107)
+- Each wall can optionally have its own `blockTheme` that overrides the room default
+- Stored as an optional `blockTheme?: BlockTheme` field on `RoomWallDef`, `EditorWall`, and `RoomJsonWall`
+- At runtime, `wallThemeIndex` (Uint8Array) in WorldState maps 0=blackRock, 1=brownRock, 2=dirt; 255=use room default
+- The renderer resolves per-tile theme from wall layout cache, falling back to room-level `_activeBlockTheme`
+- Wall merge only combines walls with matching theme index (in addition to matching platform flag)
+- The Block Theme dropdown in the editor sets which theme newly placed blocks receive
+- Individual wall themes can be changed via the inspector when a wall is selected
+
+## 2x2 BlackRock Block Sprites (BUILD 107)
+- blackRock 1x1 sprites are 16×16 source images drawn at 8×8 virtual pixels (downscaled)
+- For 2x2 blocks (16×16 virtual pixels), blackRock reuses the existing 16×16 source sprites at native resolution
+- Hash-based variant selection (`_getBlackRock2x2Sprite`) picks from 20 variants per 2x2 block
+- brownRock and dirt continue using dedicated `_16x16.png` sprites for 2x2 blocks
+
+## Editor Immediate Preview (BUILD 107)
+- Every editor action (place, delete, property change, theme/lighting/background change, dimension change)
+  triggers `applyEdits()` which rebuilds the RoomDef and calls `loadRoom()`
+- This gives instant visual feedback: blocks appear/disappear immediately, theme changes apply instantly
+- Player and enemies reset to spawn positions on each edit (time stays frozen in editor)
+- The editor remains active throughout the reload

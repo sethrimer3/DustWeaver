@@ -115,6 +115,8 @@ export interface WallSnapshot {
   readonly wWorld:  Float32Array;
   readonly hWorld:  Float32Array;
   readonly isPlatformFlag: Uint8Array;
+  /** Per-wall theme index: 0=blackRock, 1=brownRock, 2=dirt.  Uses room default when 255. */
+  readonly themeIndex: Uint8Array;
 }
 
 export interface WorldSnapshot {
@@ -220,6 +222,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       wWorld: world.wallWWorld,
       hWorld: world.wallHWorld,
       isPlatformFlag: world.wallIsPlatformFlag,
+      themeIndex: world.wallThemeIndex,
     },
     isGrappleActiveFlag: world.isGrappleActiveFlag,
     isGrappleMissActiveFlag: world.isGrappleMissActiveFlag,

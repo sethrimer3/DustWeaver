@@ -1,5 +1,5 @@
 import { WorldState, MAX_WALLS } from '../sim/world';
-import { RoomDef, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import { RoomDef, BLOCK_SIZE_MEDIUM, blockThemeToIndex, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,
@@ -44,6 +44,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
   const ws: number[] = [];
   const hs: number[] = [];
   const fs: number[] = []; // isPlatformFlag (0 or 1)
+  const ts: number[] = []; // themeIndex
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -53,6 +54,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     ws.push(Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM));
     hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
     fs.push(def.isPlatformFlag === 1 ? 1 : 0);
+    ts.push(def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
@@ -65,8 +67,9 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     merged = false;
     for (let i = 0; i < xs.length; i++) {
       for (let j = i + 1; j < xs.length; j++) {
-        // Only merge walls of the same type (both solid or both platform)
+        // Only merge walls of the same type (both solid or both platform) and same theme
         if (fs[i] !== fs[j]) continue;
+        if (ts[i] !== ts[j]) continue;
         // Horizontal merge: same Y, same H, contiguous on X axis
         if (
           Math.abs(ys[i] - ys[j]) <= WALL_MERGE_EPSILON_WORLD &&
@@ -86,7 +89,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             ws[i] = mergedRight - mergedLeft;
             ys[i] = ys[i] < ys[j] ? ys[i] : ys[j];
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1);
             merged = true;
             break;
           }
@@ -110,7 +113,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             hs[i] = mergedBottom - mergedTop;
             xs[i] = xs[i] < xs[j] ? xs[i] : xs[j];
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1);
             merged = true;
             break;
           }
@@ -129,6 +132,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     world.wallWWorld[wi] = ws[wi];
     world.wallHWorld[wi] = hs[wi];
     world.wallIsPlatformFlag[wi] = fs[wi];
+    world.wallThemeIndex[wi] = ts[wi];
   }
 }
 

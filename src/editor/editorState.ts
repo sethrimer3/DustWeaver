@@ -83,6 +83,8 @@ export interface EditorWall {
   hBlock: number;
   /** 1 if this wall is a one-way platform. */
   isPlatformFlag: 0 | 1;
+  /** Per-wall block theme override (defaults to room-level theme). */
+  blockTheme?: BlockTheme;
 }
 
 export interface EditorEnemy {

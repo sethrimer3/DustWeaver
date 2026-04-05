@@ -164,7 +164,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   const blockThemeDiv = document.createElement('div');
   blockThemeDiv.style.cssText = `margin-bottom: 8px;`;
   const blockThemeLabel = document.createElement('div');
-  blockThemeLabel.textContent = 'Block Theme';
+  blockThemeLabel.textContent = 'New Block Theme';
   blockThemeLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
   blockThemeDiv.appendChild(blockThemeLabel);
   const blockThemeSelect = document.createElement('select');
@@ -414,6 +414,10 @@ function updateInspector(
       addField(div, 'yBlock', String(wall.yBlock), v => callbacks?.onPropertyChange('wall.yBlock', parseInt(v)));
       addField(div, 'wBlock', String(wall.wBlock), v => callbacks?.onPropertyChange('wall.wBlock', parseInt(v)));
       addField(div, 'hBlock', String(wall.hBlock), v => callbacks?.onPropertyChange('wall.hBlock', parseInt(v)));
+      addSelect(div, 'blockTheme',
+        BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
+        wall.blockTheme ?? room.blockTheme,
+        v => callbacks?.onPropertyChange('wall.blockTheme', v));
       const typeLabel = wall.isPlatformFlag === 1 ? 'Platform (one-way)' : 'Solid Block';
       const typeDiv = document.createElement('div');
       typeDiv.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.5); margin-top: 4px;`;
