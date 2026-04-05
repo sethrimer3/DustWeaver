@@ -329,13 +329,16 @@ export function renderClusters(
   showHitboxes = false,
 ): void {
   ctx.save();
+  // Pixel-art safety: simulation/camera may be subpixel, but sprite draws
+  // should land on integer screen pixels to avoid texture interpolation blur.
+  ctx.imageSmoothingEnabled = false;
 
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {
     const cluster = snapshot.clusters[ci];
     if (cluster.isAliveFlag === 0) continue;
 
-    const screenX = cluster.positionXWorld * scalePx + offsetXPx;
-    const screenY = cluster.positionYWorld * scalePx + offsetYPx;
+    const screenX = Math.round(cluster.positionXWorld * scalePx + offsetXPx);
+    const screenY = Math.round(cluster.positionYWorld * scalePx + offsetYPx);
 
     const isPlayer = cluster.isPlayerFlag === 1;
 

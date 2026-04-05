@@ -98,6 +98,7 @@ export function startGameScreen(
   virtualCanvas.width  = virtualWidthPx;
   virtualCanvas.height = virtualHeightPx;
   const virtualCtx = virtualCanvas.getContext('2d')!;
+  virtualCtx.imageSmoothingEnabled = false;
 
   // The device-facing canvas is used only as the upscale target.
   const deviceCtx = canvas.getContext('2d')!;
@@ -110,6 +111,9 @@ export function startGameScreen(
     virtualWidthPx = Math.max(1, Math.round((canvas.width / canvas.height) * virtualHeightPx));
     virtualCanvas.width = virtualWidthPx;
     virtualCanvas.height = virtualHeightPx;
+    // Canvas resize resets 2D context state, so enforce nearest-neighbour
+    // sampling again for pixel-art sprite rendering.
+    virtualCtx.imageSmoothingEnabled = false;
     // WebGL particle canvas also renders at virtual resolution
     if (webglRenderer.isAvailable) {
       webglRenderer.resize(virtualWidthPx, virtualHeightPx);
