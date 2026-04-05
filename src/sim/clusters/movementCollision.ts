@@ -10,6 +10,59 @@
 import type { WorldState } from '../world';
 import type { ClusterState } from './state';
 import { COLLISION_EPSILON } from './movementConstants';
+import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
+
+/** Maximum auto step-up height (single block only). */
+const PLAYER_STEP_UP_MAX_HEIGHT_WORLD = BLOCK_SIZE_SMALL;
+
+function hasWallOverlapAtPosition(
+  cluster: ClusterState,
+  world: WorldState,
+  positionXWorld: number,
+  positionYWorld: number,
+): boolean {
+  const hw = cluster.halfWidthWorld;
+  const hh = cluster.halfHeightWorld;
+  const left = positionXWorld - hw;
+  const right = positionXWorld + hw;
+  const top = positionYWorld - hh;
+  const bottom = positionYWorld + hh;
+
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const wallLeft = world.wallXWorld[wi];
+    const wallTop = world.wallYWorld[wi];
+    const wallRight = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop + world.wallHWorld[wi];
+    if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
+    return true;
+  }
+  return false;
+}
+
+function tryStepUpSingleBlock(
+  cluster: ClusterState,
+  world: WorldState,
+  wallTopWorld: number,
+  requiredInputDirX: -1 | 1,
+): boolean {
+  if (cluster.isPlayerFlag === 0) return false;
+  if (cluster.velocityYWorld < 0) return false;
+
+  const inputDxWorld = world.playerMoveInputDxWorld;
+  if (inputDxWorld * requiredInputDirX <= 0) return false;
+
+  const playerBottomWorld = cluster.positionYWorld + cluster.halfHeightWorld;
+  const stepUpHeightWorld = playerBottomWorld - wallTopWorld;
+  if (stepUpHeightWorld <= 0 || stepUpHeightWorld > PLAYER_STEP_UP_MAX_HEIGHT_WORLD) return false;
+
+  const targetYWorld = wallTopWorld - cluster.halfHeightWorld;
+  if (hasWallOverlapAtPosition(cluster, world, cluster.positionXWorld, targetYWorld)) return false;
+
+  cluster.positionYWorld = targetYWorld;
+  cluster.velocityYWorld = 0;
+  cluster.isGroundedFlag = 1;
+  return true;
+}
 
 /**
  * Resolves the cluster box against the world floor.
@@ -75,11 +128,13 @@ export function resolveWallsX(
 
     // Determine push direction from previous position
     if (prevRight <= wallLeft + COLLISION_EPSILON) {
+      if (tryStepUpSingleBlock(cluster, world, wallTop, 1)) continue;
       // Was to the left of wall — push out left
       cluster.positionXWorld = wallLeft - hw;
       if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
       if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
     } else if (prevLeft >= wallRight - COLLISION_EPSILON) {
+      if (tryStepUpSingleBlock(cluster, world, wallTop, -1)) continue;
       // Was to the right of wall — push out right
       cluster.positionXWorld = wallRight + hw;
       if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
