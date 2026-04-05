@@ -32,6 +32,8 @@ import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize } from '../ui/renderSettings';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
+import { BloomSystem } from '../render/effects/bloomSystem';
+import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
 import { performEarlyAutoAssignment } from '../progression/unlocks';
 import {
@@ -83,6 +85,7 @@ export function startGameScreen(
   progress?: PlayerProgress,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
+  const bloomSystem = new BloomSystem(DEFAULT_BLOOM_CONFIG);
 
   // ── Weave loadout (replaces flat particle loadout for combat) ──────────
   // Initialize from progress if available, otherwise create default
@@ -118,6 +121,7 @@ export function startGameScreen(
     if (webglRenderer.isAvailable) {
       webglRenderer.resize(virtualWidthPx, virtualHeightPx);
     }
+    bloomSystem.resize(virtualWidthPx, virtualHeightPx);
   }
 
   resizeCanvas();
@@ -673,6 +677,7 @@ export function startGameScreen(
 
       if (isEditorConsuming) {
         // Still render the game world (walls, particles, etc.) as backdrop
+        bloomSystem.beginFrame();
         const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
@@ -730,6 +735,7 @@ export function startGameScreen(
         if (webglRenderer.isAvailable) {
           deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
         }
+        bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
 
         rafHandle = requestAnimationFrame(frame);
         return;
@@ -1075,7 +1081,7 @@ export function startGameScreen(
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
-      webglRenderer, environmentalDust, skidDebris, skillTombRenderer,
+      webglRenderer, environmentalDust, skidDebris, skillTombRenderer, bloomSystem,
       world, currentRoom,
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,
       bgColor, isDebugMode, hudState, inputState,

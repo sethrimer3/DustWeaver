@@ -104,6 +104,11 @@ This order is important because each pass consumes/modifies state produced by pr
 - Hybrid renderer:
   - **WebGL layer** (if available) for high-volume particle point-sprite rendering with glow-like additive blending.
   - **Canvas 2D layer** for walls, clusters, HP bars, HUD overlay, control hints, and fallback particle rendering when WebGL is unavailable.
+- Selective bloom pipeline (`BloomSystem`) for emissive-only glow:
+  - Base scene stays crisp at native virtual resolution (`imageSmoothingEnabled=false` on main passes).
+  - Glow-enabled elements are drawn separately through `GlowPass` (`drawSprite`/`drawCircle`) into an emissive target.
+  - Emissive target is downscaled, blurred, then additively composited on top of final output.
+  - Global tuning lives in `DEFAULT_BLOOM_CONFIG` (`enabled`, `intensity`, `blurRadiusPx`, `threshold`, `glowTargetScale`).
 - Always-on HUD overlay reports FPS, frame time, and alive particle count.
 - Snapshot boundary prevents render code from mutating simulation state.
 

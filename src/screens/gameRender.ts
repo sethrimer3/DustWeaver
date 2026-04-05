@@ -25,6 +25,7 @@ import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
+import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
@@ -69,6 +70,7 @@ export interface RenderFrameContext {
   environmentalDust: EnvironmentalDustLayer;
   skidDebris: SkidDebrisRenderer;
   skillTombRenderer: SkillTombRenderer;
+  bloomSystem: BloomSystem;
 
   // World / room
   world: WorldState;
@@ -113,7 +115,7 @@ export interface RenderFrameContext {
 export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
-    webglRenderer, environmentalDust, skidDebris, skillTombRenderer,
+    webglRenderer, environmentalDust, skidDebris, skillTombRenderer, bloomSystem,
     world, currentRoom,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
     bgColor, isDebugMode, hudState, inputState,
@@ -128,6 +130,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const snapshot = createSnapshot(world);
   // Keep sprite sampling nearest-neighbour even if context state changed.
   ctx.imageSmoothingEnabled = false;
+  bloomSystem.beginFrame();
 
   // ── Clear / fill virtual canvas ─────────────────────────────────────────
   if (webglRenderer.isAvailable) {
@@ -197,6 +200,18 @@ export function renderFrame(r: RenderFrameContext): void {
         drawSize,
         drawSize,
       );
+      bloomSystem.glowPass.drawSprite({
+        image: skillBookSprite,
+        x: sx * zoom + ox - drawSize * 0.5,
+        y: sy * zoom + oy - drawSize * 0.5,
+        width: drawSize,
+        height: drawSize,
+        glow: {
+          enabled: true,
+          intensity: 0.75,
+          color: '#b8a2ff',
+        },
+      });
     }
   }
 
@@ -346,6 +361,7 @@ export function renderFrame(r: RenderFrameContext): void {
   if (webglRenderer.isAvailable) {
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
   }
+  bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
 
   // ── Touch joystick (drawn on device canvas in screen space) ───────────
   if (inputState.isTouchJoystickActiveFlag === 1) {
