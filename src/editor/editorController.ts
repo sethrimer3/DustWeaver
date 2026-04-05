@@ -123,16 +123,25 @@ export function createEditorController(
             openWorldMap();
           }
         },
-        onPropertyChange: handlePropertyChange,
-        onRoomDimensionsChange: handleRoomDimensionsChange,
+        onPropertyChange: (prop: string, value: string | number) => {
+          handlePropertyChange(prop, value);
+          applyEdits();
+        },
+        onRoomDimensionsChange: (dimProp: 'widthBlocks' | 'heightBlocks', value: number) => {
+          handleRoomDimensionsChange(dimProp, value);
+          applyEdits();
+        },
         onBlockThemeChange: (theme: BlockTheme) => {
           if (state.roomData) state.roomData.blockTheme = theme;
+          applyEdits();
         },
         onLightingEffectChange: (lightingEffect: LightingEffect) => {
           if (state.roomData) state.roomData.lightingEffect = lightingEffect;
+          applyEdits();
         },
         onBackgroundChange: (bgId: BackgroundId) => {
           if (state.roomData) state.roomData.backgroundId = bgId;
+          applyEdits();
         },
         onConfirm: () => confirmEdits(),
         onCancel: () => cancelEdits(),
@@ -174,6 +183,19 @@ export function createEditorController(
     if (saved) {
       onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
     }
+  }
+
+  /**
+   * Rebuild and reload the room from current editor data so changes are
+   * immediately visible.  The editor stays active; time remains frozen;
+   * player and enemies revert to their spawn positions.
+   */
+  function applyEdits(): void {
+    if (!state.roomData) return;
+    const roomDef = editorRoomDataToRoomDef(state.roomData);
+    const sx = state.roomData.playerSpawnBlock[0];
+    const sy = state.roomData.playerSpawnBlock[1];
+    onLoadRoom(roomDef, sx, sy);
   }
 
   function loadRoomForEditing(room: RoomDef): void {
@@ -301,10 +323,12 @@ export function createEditorController(
           state.selectedElement = selectAtCursor(state);
         } else if (state.activeTool === EditorTool.Place) {
           placeAtCursor(state);
+          applyEdits();
           lastDragBlockX = state.cursorBlockX;
           lastDragBlockY = state.cursorBlockY;
         } else if (state.activeTool === EditorTool.Delete) {
           deleteAtCursor(state);
+          applyEdits();
           lastDragBlockX = state.cursorBlockX;
           lastDragBlockY = state.cursorBlockY;
         }
@@ -326,8 +350,10 @@ export function createEditorController(
         lastDragBlockY = state.cursorBlockY;
         if (state.activeTool === EditorTool.Place) {
           placeAtCursor(state);
+          applyEdits();
         } else if (state.activeTool === EditorTool.Delete) {
           deleteAtCursor(state);
+          applyEdits();
         }
       }
     }
@@ -433,6 +459,9 @@ export function createEditorController(
         if (prop === 'wall.yBlock' && !isNaN(numVal)) wall.yBlock = numVal;
         if (prop === 'wall.wBlock' && !isNaN(numVal)) wall.wBlock = Math.max(1, numVal);
         if (prop === 'wall.hBlock' && !isNaN(numVal)) wall.hBlock = Math.max(1, numVal);
+        if (prop === 'wall.blockTheme' && typeof value === 'string') {
+          wall.blockTheme = value as BlockTheme;
+        }
       }
     } else if (el.type === 'enemy') {
       const enemy = room.enemies.find((e: EditorEnemy) => e.uid === el.uid);

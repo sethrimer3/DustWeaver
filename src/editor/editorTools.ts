@@ -129,6 +129,7 @@ export function placeAtCursor(state: EditorState): void {
       wBlock,
       hBlock,
       isPlatformFlag,
+      blockTheme: room.blockTheme,
     });
   } else if (item.id === 'enemy_rolling') {
     room.enemies.push({
