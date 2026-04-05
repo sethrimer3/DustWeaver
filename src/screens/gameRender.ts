@@ -382,7 +382,7 @@ export function renderFrame(r: RenderFrameContext): void {
   if (isDebugMode) {
     const controlHintText = IS_TOUCH_DEVICE
       ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
-      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=sprint  |  Click=attack  |  Hold=block  |  Hold E=grapple  |  ESC=menu';
+      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=sprint  |  Click=attack  |  Hold=block  |  Hold Left Click=grapple  |  ESC=menu';
     deviceCtx.fillStyle = 'rgba(255,255,255,0.3)';
     deviceCtx.font = '12px monospace';
     const hintWidthPx = deviceCtx.measureText(controlHintText).width;

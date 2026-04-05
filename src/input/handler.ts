@@ -54,11 +54,11 @@ export interface InputState {
   secondTouchCurrentXPx: number;
   secondTouchCurrentYPx: number;
   // ---- Grapple hook -------------------------------------------------------
-  /** True while the grapple key (E) is physically held down. */
+  /** True while the grapple input (left click) is physically held down. */
   isGrappleHeldFlag: 0 | 1;
-  /** Set to 1 for one frame when grapple should fire (E pressed). */
+  /** Set to 1 for one frame when grapple should fire (left click pressed). */
   isGrappleFireTriggeredFlag: 0 | 1;
-  /** Set to 1 for one frame when grapple should release (E released). */
+  /** Set to 1 for one frame when grapple should release (left click released). */
   isGrappleReleaseTriggeredFlag: 0 | 1;
   /** Screen-space aim position where the grapple fires. */
   grappleAimXPx: number;
@@ -167,12 +167,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       e.preventDefault();
       state.isSprintHeldFlag = true;
     }
-    if ((e.key === 'e' || e.key === 'E') && !e.repeat) {
-      state.isGrappleHeldFlag = 1;
-      state.isGrappleFireTriggeredFlag = 1;
-      state.grappleAimXPx = state.mouseXPx;
-      state.grappleAimYPx = state.mouseYPx;
-    }
     if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
       state.isInteractTriggeredFlag = true;
     }
@@ -195,10 +189,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     } else if (e.shiftKey) {
       state.isSprintHeldFlag = true;
     }
-    if (e.key === 'e' || e.key === 'E') {
-      state.isGrappleHeldFlag = 0;
-      state.isGrappleReleaseTriggeredFlag = 1;
-    }
   }
   function onMouseMove(e: MouseEvent): void {
     const mouse = clientToCanvasPx(e.clientX, e.clientY);
@@ -212,6 +202,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       state.mouseDownTimeMs = performance.now();
       state.mouseDownXPx = mouse.xPx;
       state.mouseDownYPx = mouse.yPx;
+      state.isGrappleHeldFlag = 1;
+      state.isGrappleFireTriggeredFlag = 1;
+      state.grappleAimXPx = mouse.xPx;
+      state.grappleAimYPx = mouse.yPx;
     } else if (e.button === 2) {
       state.isRightMouseDownFlag = 1;
     }
@@ -220,6 +214,8 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.button === 0) {
       if (state.isMouseDownFlag === 0) return;
       state.isMouseDownFlag = 0;
+      state.isGrappleHeldFlag = 0;
+      state.isGrappleReleaseTriggeredFlag = 1;
       const holdMs = performance.now() - state.mouseDownTimeMs;
       if (state.isBlockingFlag === 1) {
         // Was blocking — collectCommands will emit BlockEnd on next frame
