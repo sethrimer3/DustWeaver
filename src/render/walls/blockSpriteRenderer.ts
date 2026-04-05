@@ -778,14 +778,14 @@ export function renderWallSprites(
       const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
       const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
-      let sprite: HTMLImageElement;
+      let sprite: HTMLImageElement | null;
       if (resolvedTheme === 'blackRock') {
         sprite = _getBlackRock2x2Sprite(col, row);
       } else {
-        sprite = _getFullSpriteFor2x2(resolvedTheme, blockSizePx)!;
+        sprite = _getFullSpriteFor2x2(resolvedTheme, blockSizePx);
       }
 
-      if (isSpriteReady(sprite)) {
+      if (sprite !== null && isSpriteReady(sprite)) {
         ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
       } else {
         _drawFallbackTile(ctx, tileX, tileY, drawSize);
