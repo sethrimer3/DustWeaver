@@ -36,6 +36,7 @@ import {
   RT_CHAIN_HITBOX_HALF_WIDTH_WORLD,
   RT_CHAIN_IFRAMES_TICKS,
 } from './radiantTetherConfig';
+import { applyPlayerDamageWithKnockback } from '../playerDamage';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -449,9 +450,9 @@ export function checkChainPlayerCollision(
   for (let i = 0; i < cs.chains.length; i++) {
     const chain = cs.chains[i];
     if (chain.isActiveFlag === 0) continue;
-    if (pointToSegmentDistSq(px, py, bossXWorld, bossYWorld, chain.anchorXWorld, chain.anchorYWorld)
-        <= chainHitRadiusSq) {
-      applyChainDamage(player, cs, world);
+    const activeClosest = closestPointOnSegment(px, py, bossXWorld, bossYWorld, chain.anchorXWorld, chain.anchorYWorld);
+    if (activeClosest.distSq <= chainHitRadiusSq) {
+      applyChainDamage(player, cs, world, activeClosest.xWorld, activeClosest.yWorld);
       return;
     }
   }
@@ -460,18 +461,20 @@ export function checkChainPlayerCollision(
   for (let i = 0; i < cs.brokenChains.length; i++) {
     const bc = cs.brokenChains[i];
     if (bc.isActiveFlag === 0) continue;
-    if (pointToSegmentDistSq(px, py, bc.anchorXWorld, bc.anchorYWorld, bc.freeEndXWorld, bc.freeEndYWorld)
-        <= chainHitRadiusSq) {
-      applyChainDamage(player, cs, world);
+    const brokenClosest = closestPointOnSegment(px, py, bc.anchorXWorld, bc.anchorYWorld, bc.freeEndXWorld, bc.freeEndYWorld);
+    if (brokenClosest.distSq <= chainHitRadiusSq) {
+      applyChainDamage(player, cs, world, brokenClosest.xWorld, brokenClosest.yWorld);
       return;
     }
   }
 }
 
 function applyChainDamage(
-  player: { healthPoints: number; isAliveFlag: 0 | 1; entityId: number },
+  player: { healthPoints: number; isAliveFlag: 0 | 1; entityId: number; positionXWorld: number; positionYWorld: number; velocityXWorld: number; velocityYWorld: number; isGroundedFlag: 0 | 1 },
   cs: RadiantTetherChainState,
   world: WorldState,
+  sourceXWorld: number,
+  sourceYWorld: number,
 ): void {
   // Calculate player's armor from dust particles
   let playerDustCount = 0;
@@ -484,34 +487,40 @@ function applyChainDamage(
 
   // Apply damage with armor reduction
   const damage = Math.max(1, RT_CHAIN_DAMAGE - armor);
-  player.healthPoints -= damage;
-  if (player.healthPoints <= 0) {
-    player.healthPoints = 0;
-    player.isAliveFlag = 0;
-  }
+  applyPlayerDamageWithKnockback(player, damage, sourceXWorld, sourceYWorld);
   cs.playerChainIframeTicks = RT_CHAIN_IFRAMES_TICKS;
 }
 
-/** Squared distance from point P to line segment AB. */
-function pointToSegmentDistSq(
+/** Closest point on segment AB to point P, with squared distance. */
+function closestPointOnSegment(
   px: number, py: number,
   ax: number, ay: number,
   bx: number, by: number,
-): number {
+): { xWorld: number; yWorld: number; distSq: number } {
   const abx = bx - ax;
   const aby = by - ay;
   const apx = px - ax;
   const apy = py - ay;
   const abLenSq = abx * abx + aby * aby;
-  if (abLenSq < 0.001) return apx * apx + apy * apy;
+  if (abLenSq < 0.001) {
+    return {
+      xWorld: ax,
+      yWorld: ay,
+      distSq: apx * apx + apy * apy,
+    };
+  }
   let t = (apx * abx + apy * aby) / abLenSq;
   if (t < 0) t = 0;
   if (t > 1) t = 1;
-  const closestX = ax + t * abx;
-  const closestY = ay + t * aby;
-  const dx = px - closestX;
-  const dy = py - closestY;
-  return dx * dx + dy * dy;
+  const xWorld = ax + t * abx;
+  const yWorld = ay + t * aby;
+  const dx = px - xWorld;
+  const dy = py - yWorld;
+  return {
+    xWorld,
+    yWorld,
+    distSq: dx * dx + dy * dy,
+  };
 }
 
 // ── Chain count from health ─────────────────────────────────────────────────

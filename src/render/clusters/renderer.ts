@@ -233,6 +233,8 @@ const FLYING_EYE_RING_WIDTHS = [3.5, 2.5, 2.0, 1.5];
 const PLAYER_SPRITE_WIDTH_WORLD = 16;
 /** Player sprite render height in world units (virtual px at zoom 1). */
 const PLAYER_SPRITE_HEIGHT_WORLD = 24;
+/** Vertical offset from hitbox center to sprite center so feet align to hitbox bottom. */
+const PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD = -1;
 /** Minimum speed (world units/sec) before subtle player afterimages appear. */
 const PLAYER_AFTERIMAGE_MIN_SPEED_WORLD_PER_SEC = 185;
 /** Number of faint trailing afterimages to draw at high speed. */
@@ -414,6 +416,7 @@ export function renderClusters(
       const spriteHalfH = (PLAYER_SPRITE_HEIGHT_WORLD * scalePx) * 0.5;
       const spriteW = spriteHalfW * 2;
       const spriteH = spriteHalfH * 2;
+      const spriteCenterY = screenY + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD * scalePx;
       if (_isSpriteReady(sprite)) {
         const outlineThicknessPx = PLAYER_OUTLINE_THICKNESS_WORLD * scalePx;
         const outlineMask = _getOrCreateOuterOutlineMask(sprite);
@@ -429,7 +432,7 @@ export function renderClusters(
             const t = (afterimageIndex + 1) / PLAYER_AFTERIMAGE_COUNT;
             const spacingPx = 3.0 * t;
             const drawCenterX = screenX - normX * spacingPx;
-            const drawCenterY = screenY - normY * spacingPx;
+            const drawCenterY = spriteCenterY - normY * spacingPx;
             const alpha = 0.085 * (1.0 - t * 0.35);
             ctx.save();
             ctx.translate(Math.round(drawCenterX), Math.round(drawCenterY));
@@ -449,7 +452,7 @@ export function renderClusters(
           }
         }
         ctx.save();
-        ctx.translate(screenX, screenY);
+        ctx.translate(screenX, spriteCenterY);
         if (cluster.isFacingLeftFlag === 1) {
           ctx.scale(-1, 1);
         }
@@ -467,11 +470,11 @@ export function renderClusters(
         // Fallback while sprite loads: coloured box
         ctx.fillStyle = '#00ff99';
         ctx.globalAlpha = 0.75;
-        ctx.fillRect(screenX - spriteHalfW, screenY - spriteHalfH, spriteW, spriteH);
+        ctx.fillRect(screenX - spriteHalfW, spriteCenterY - spriteHalfH, spriteW, spriteH);
         ctx.globalAlpha = 1.0;
         ctx.strokeStyle = '#00ff99';
         ctx.lineWidth = 2;
-        ctx.strokeRect(screenX - spriteHalfW, screenY - spriteHalfH, spriteW, spriteH);
+        ctx.strokeRect(screenX - spriteHalfW, spriteCenterY - spriteHalfH, spriteW, spriteH);
       }
     } else if (cluster.isRollingEnemyFlag === 1) {
       // ── Rolling enemy: sprite rotated by accumulated roll angle ──────────
