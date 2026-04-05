@@ -233,6 +233,10 @@ const FLYING_EYE_RING_WIDTHS = [3.5, 2.5, 2.0, 1.5];
 const PLAYER_SPRITE_WIDTH_WORLD = 16;
 /** Player sprite render height in world units (virtual px at zoom 1). */
 const PLAYER_SPRITE_HEIGHT_WORLD = 24;
+/** Minimum speed (world units/sec) before subtle player afterimages appear. */
+const PLAYER_AFTERIMAGE_MIN_SPEED_WORLD_PER_SEC = 185;
+/** Number of faint trailing afterimages to draw at high speed. */
+const PLAYER_AFTERIMAGE_COUNT = 2;
 
 const _grappleDustSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust.png');
 const _grappleDustEndSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust_end.png');
@@ -413,6 +417,37 @@ export function renderClusters(
       if (_isSpriteReady(sprite)) {
         const outlineThicknessPx = PLAYER_OUTLINE_THICKNESS_WORLD * scalePx;
         const outlineMask = _getOrCreateOuterOutlineMask(sprite);
+        const speedXWorldPerSec = cluster.velocityXWorld;
+        const speedYWorldPerSec = cluster.velocityYWorld;
+        const speedWorldPerSec = Math.sqrt(
+          speedXWorldPerSec * speedXWorldPerSec + speedYWorldPerSec * speedYWorldPerSec,
+        );
+        if (speedWorldPerSec > PLAYER_AFTERIMAGE_MIN_SPEED_WORLD_PER_SEC) {
+          const normX = speedXWorldPerSec / speedWorldPerSec;
+          const normY = speedYWorldPerSec / speedWorldPerSec;
+          for (let afterimageIndex = 0; afterimageIndex < PLAYER_AFTERIMAGE_COUNT; afterimageIndex++) {
+            const t = (afterimageIndex + 1) / PLAYER_AFTERIMAGE_COUNT;
+            const spacingPx = 3.0 * t;
+            const drawCenterX = screenX - normX * spacingPx;
+            const drawCenterY = screenY - normY * spacingPx;
+            const alpha = 0.085 * (1.0 - t * 0.35);
+            ctx.save();
+            ctx.translate(Math.round(drawCenterX), Math.round(drawCenterY));
+            if (cluster.isFacingLeftFlag === 1) {
+              ctx.scale(-1, 1);
+            }
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(
+              outlineMask,
+              -spriteHalfW - outlineThicknessPx,
+              -spriteHalfH - outlineThicknessPx,
+              spriteW + outlineThicknessPx * 2,
+              spriteH + outlineThicknessPx * 2,
+            );
+            ctx.drawImage(sprite, -spriteHalfW, -spriteHalfH, spriteW, spriteH);
+            ctx.restore();
+          }
+        }
         ctx.save();
         ctx.translate(screenX, screenY);
         if (cluster.isFacingLeftFlag === 1) {

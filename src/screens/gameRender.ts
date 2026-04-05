@@ -10,6 +10,7 @@
  */
 
 import { createSnapshot } from '../render/snapshot';
+import type { WorldSnapshot } from '../render/snapshot';
 import type { WorldState } from '../sim/world';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ParticleKind } from '../sim/particles/kinds';
@@ -54,6 +55,74 @@ const HUD_HEALTH_BAR_Y_PX = 8;
 const HUD_HEALTH_BAR_WIDTH_PX = 50;
 const HUD_HEALTH_BAR_HEIGHT_PX = 4;
 const HUD_HEALTH_DUST_GAP_PX = 3;
+/** Visual spacing between grapple bloom dots along the chain (virtual px). */
+const GRAPPLE_BLOOM_SEGMENT_PX = 6;
+
+function drawGrappleBloom(
+  bloomSystem: BloomSystem,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  const hasActiveOrMiss = snapshot.isGrappleActiveFlag === 1 || snapshot.isGrappleMissActiveFlag === 1;
+  if (!hasActiveOrMiss) return;
+
+  let playerCluster: (typeof snapshot.clusters)[0] | undefined;
+  for (let ci = 0; ci < snapshot.clusters.length; ci++) {
+    const candidate = snapshot.clusters[ci];
+    if (candidate.isPlayerFlag === 1 && candidate.isAliveFlag === 1) {
+      playerCluster = candidate;
+      break;
+    }
+  }
+  if (playerCluster === undefined) return;
+
+  const playerHalfWidthPx = playerCluster.halfWidthWorld * scalePx;
+  const offsetDir = playerCluster.isFacingLeftFlag === 1 ? -1 : 1;
+  const px = playerCluster.positionXWorld * scalePx + offsetXPx + offsetDir * playerHalfWidthPx;
+  const py = playerCluster.positionYWorld * scalePx + offsetYPx;
+
+  let ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
+  let ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
+  if (snapshot.isGrappleMissActiveFlag === 1 && snapshot.grappleParticleStartIndex >= 0) {
+    const tipIndex = snapshot.grappleParticleStartIndex + 9;
+    const isTipAlive = tipIndex < snapshot.particles.particleCount && snapshot.particles.isAliveFlag[tipIndex] === 1;
+    if (isTipAlive) {
+      ax = snapshot.particles.positionXWorld[tipIndex] * scalePx + offsetXPx;
+      ay = snapshot.particles.positionYWorld[tipIndex] * scalePx + offsetYPx;
+    }
+  }
+
+  const dx = ax - px;
+  const dy = ay - py;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const segmentCount = Math.max(1, Math.floor(dist / GRAPPLE_BLOOM_SEGMENT_PX));
+  for (let segmentIndex = 0; segmentIndex <= segmentCount; segmentIndex++) {
+    const t = segmentCount > 0 ? segmentIndex / segmentCount : 0;
+    bloomSystem.glowPass.drawCircle({
+      x: px + dx * t,
+      y: py + dy * t,
+      radius: 1.2,
+      glow: {
+        enabled: true,
+        intensity: 0.28,
+        color: '#ffd972',
+      },
+    });
+  }
+
+  bloomSystem.glowPass.drawCircle({
+    x: ax,
+    y: ay,
+    radius: 3.0,
+    glow: {
+      enabled: true,
+      intensity: 0.62,
+      color: '#ffe79d',
+    },
+  });
+}
 
 // ── Public interface ───────────────────────────────────────────────────────
 
@@ -174,6 +243,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom);
+  drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
 
   // Tunnel darkness overlays
   drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);

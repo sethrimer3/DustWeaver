@@ -246,8 +246,10 @@ export function tickPlayerMovement(
   if (world.isGrappleActiveFlag === 0 && cluster.velocityYWorld > 0) {
     const normalFallCap = ov(debugSpeedOverrides.normalFallCapWorld, NORMAL_MAX_FALL_WORLD_PER_SEC);
     const fastFallCap = ov(debugSpeedOverrides.fastFallCapWorld, FAST_MAX_FALL_WORLD_PER_SEC);
-    // Determine current max fall speed: fast fall if holding down
-    const isHoldingDown = world.playerMoveInputDyWorld > 0;
+    // Determine current max fall speed: fast fall if holding down in midair.
+    // Use crouch-held input as the authoritative "down" signal because
+    // playerMoveInputDyWorld is not guaranteed on keyboard movement paths.
+    const isHoldingDown = world.playerMoveInputDyWorld > 0 || world.playerCrouchHeldFlag === 1;
     let maxFall: number;
     if (isHoldingDown) {
       // Smoothly approach fastMaxFall from the current cap
