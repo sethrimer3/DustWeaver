@@ -1,16 +1,18 @@
 /**
- * playerCloak.ts — Procedural cloak system for the player character.
+ * playerCloak.ts — Two-layer procedural cloak system for the player character.
  *
- * Simulates a short point-chain cloak attached to the player sprite's upper
- * back / shoulder area.  The simulation runs in world-space floats; positions
- * are pixel-snapped only at final render time.
+ * A single connected garment with:
+ *   • One shared simulation chain (point-based trailing motion)
+ *   • One shared cloak state (spread, openness, tip, corners, front fold)
+ *   • Two rendered surfaces derived from that shared state:
+ *       – Back cloak: darker blue, renders behind the body
+ *       – Front cloak: lighter blue/white, renders in front of the body
  *
  * Architecture:
- *   • PlayerCloak class owns the chain state and exposes update() / render().
- *   • update() is called once per render frame, NOT per sim tick, because
- *     the cloak is a visual-only effect that reads from the snapshot.
- *   • render() draws the filled cloak polygon + outline behind the body sprite.
- *   • renderDebug() optionally visualises anchor, chain points, and polygon.
+ *   • PlayerCloak class owns chain + shape state.
+ *   • update() advances simulation and computes shape parameters once per render frame.
+ *   • renderBack() / renderFront() draw the two polygon layers.
+ *   • renderDebug() visualises anchor, chain, control points, and shape values.
  *
  * The cloak does NOT live in sim/ — it is purely a render-side visual.
  */
@@ -35,13 +37,25 @@ import {
   CLOAK_REST_WALL_SLIDE,
   CLOAK_REST_CROUCHING,
   CLOAK_TURN_IMPULSE_WORLD,
+  CLOAK_TURN_OVERSHOOT_DURATION_SEC,
+  CLOAK_TURN_OVERSHOOT_SPREAD_MULTIPLIER,
   CLOAK_LANDING_IMPULSE_WORLD_PER_SEC,
+  CLOAK_LANDING_DURATION_SEC,
+  CLOAK_LANDING_COMPRESSION,
   CLOAK_CONSTRAINT_ITERATIONS,
-  CLOAK_FILL_COLOR,
-  CLOAK_OUTLINE_COLOR,
-  CLOAK_OUTLINE_WIDTH_WORLD,
-  CLOAK_WIDTH_ROOT_WORLD,
-  CLOAK_WIDTH_TIP_WORLD,
+  CLOAK_BACK_WIDTH_ROOT_WORLD,
+  CLOAK_BACK_WIDTH_TIP_WORLD,
+  CLOAK_BACK_FAST_FALL_TIP_EXTRA_WORLD,
+  CLOAK_BACK_FILL_COLOR,
+  CLOAK_BACK_OUTLINE_COLOR,
+  CLOAK_BACK_OUTLINE_WIDTH_WORLD,
+  CLOAK_FRONT_FILL_COLOR,
+  CLOAK_FRONT_OUTLINE_COLOR,
+  CLOAK_FRONT_OUTLINE_WIDTH_WORLD,
+  CLOAK_FRONT_WIDTH_RATIO,
+  CLOAK_FRONT_PROJECTION_WORLD,
+  CLOAK_FRONT_LENGTH_RATIO,
+  CLOAK_FAST_FALL_CORNER_SHARPNESS,
   CLOAK_DEBUG_POINT_RADIUS_PX,
   CLOAK_MAX_FRAME_DT_SEC,
   CLOAK_MIN_DT_SEC,
@@ -49,6 +63,22 @@ import {
   CLOAK_MIN_TANGENT_LENGTH,
   CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD,
   CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD,
+  CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD,
+  CLOAK_SPREAD_IDLE,
+  CLOAK_SPREAD_RUNNING,
+  CLOAK_SPREAD_SPRINTING,
+  CLOAK_SPREAD_JUMPING,
+  CLOAK_SPREAD_FALLING,
+  CLOAK_SPREAD_FAST_FALL,
+  CLOAK_SPREAD_WALL_SLIDE,
+  CLOAK_SPREAD_CROUCHING,
+  CLOAK_OPENNESS_IDLE,
+  CLOAK_OPENNESS_RUNNING,
+  CLOAK_OPENNESS_JUMPING,
+  CLOAK_OPENNESS_FALLING,
+  CLOAK_OPENNESS_FAST_FALL,
+  CLOAK_OPENNESS_WALL_SLIDE,
+  CLOAK_SHAPE_LERP_SPEED,
 } from './cloakConstants';
 
 // ── Player sprite metrics (duplicated from renderer.ts to avoid circular) ──
@@ -85,19 +115,41 @@ export class PlayerCloak {
   private readonly velXWorld: Float32Array;
   private readonly velYWorld: Float32Array;
 
-  // Pre-allocated render buffers (reused each frame to avoid per-frame allocations).
-  private readonly leftXPx: Float32Array;
-  private readonly leftYPx: Float32Array;
-  private readonly rightXPx: Float32Array;
-  private readonly rightYPx: Float32Array;
+  // Pre-allocated render buffers for back cloak (reused each frame).
+  private readonly backLeftXPx: Float32Array;
+  private readonly backLeftYPx: Float32Array;
+  private readonly backRightXPx: Float32Array;
+  private readonly backRightYPx: Float32Array;
 
-  // Previous-frame facing direction for turn detection.
+  // Pre-allocated render buffers for front cloak.
+  private readonly frontLeftXPx: Float32Array;
+  private readonly frontLeftYPx: Float32Array;
+  private readonly frontRightXPx: Float32Array;
+  private readonly frontRightYPx: Float32Array;
+
+  // Previous-frame state for event detection.
   private prevIsFacingLeftFlag: 0 | 1 = 0;
-  // Previous-frame grounded flag for landing detection.
   private prevIsGroundedFlag: 0 | 1 = 0;
 
   /** Whether the chain has been initialised to a valid world position. */
   private isInitialisedFlag = false;
+
+  // ── Shared shape state (smoothly interpolated) ──────────────────────
+  /** Current spread amount (0 = compact, 1 = fully open). */
+  private spreadAmount = 0;
+  /** Current openness amount (0 = closed, 1 = fully open). */
+  private opennessAmount = 0;
+  /** Whether fast-fall visual state is active. */
+  private isFastFallActiveFlag = false;
+
+  // ── State timers ────────────────────────────────────────────────────
+  /** Remaining turn overshoot timer (seconds). */
+  private turnTimerSec = 0;
+  /** Remaining landing compression timer (seconds). */
+  private landingTimerSec = 0;
+
+  // ── Front cloak point count (derived from main chain) ───────────────
+  private readonly frontPointCount: number;
 
   constructor() {
     this.pointCount = 1 + CLOAK_SEGMENT_COUNT;
@@ -105,10 +157,17 @@ export class PlayerCloak {
     this.posYWorld = new Float32Array(this.pointCount);
     this.velXWorld = new Float32Array(this.pointCount);
     this.velYWorld = new Float32Array(this.pointCount);
-    this.leftXPx = new Float32Array(this.pointCount);
-    this.leftYPx = new Float32Array(this.pointCount);
-    this.rightXPx = new Float32Array(this.pointCount);
-    this.rightYPx = new Float32Array(this.pointCount);
+    this.backLeftXPx = new Float32Array(this.pointCount);
+    this.backLeftYPx = new Float32Array(this.pointCount);
+    this.backRightXPx = new Float32Array(this.pointCount);
+    this.backRightYPx = new Float32Array(this.pointCount);
+
+    // Front cloak uses fewer points (shorter garment).
+    this.frontPointCount = Math.max(2, Math.ceil(this.pointCount * CLOAK_FRONT_LENGTH_RATIO));
+    this.frontLeftXPx = new Float32Array(this.frontPointCount);
+    this.frontLeftYPx = new Float32Array(this.frontPointCount);
+    this.frontRightXPx = new Float32Array(this.frontPointCount);
+    this.frontRightYPx = new Float32Array(this.frontPointCount);
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -119,7 +178,6 @@ export class PlayerCloak {
    * @param player Snapshot of the player state this frame.
    */
   update(dtSec: number, player: CloakPlayerState): void {
-    // Clamp dt to avoid explosion on tab-switch / large frame gaps.
     const dt = Math.min(dtSec, CLOAK_MAX_FRAME_DT_SEC);
 
     // ── 1. Compute root anchor world position ─────────────────────────
@@ -145,13 +203,35 @@ export class PlayerCloak {
     const isTurning = player.isFacingLeftFlag !== this.prevIsFacingLeftFlag;
     const isLanding = player.isGroundedFlag === 1 && this.prevIsGroundedFlag === 0;
 
+    if (isTurning) this.turnTimerSec = CLOAK_TURN_OVERSHOOT_DURATION_SEC;
+    if (isLanding) this.landingTimerSec = CLOAK_LANDING_DURATION_SEC;
+
     // ── 5. Determine state-based rest bias direction ──────────────────
     const restDir = this._getRestDirection(player);
-    // Convert to world-relative: backward = opposite facing.
     const facingSignX = player.isFacingLeftFlag === 1 ? 1 : -1; // backward direction
 
-    // ── 6. Update trailing points ─────────────────────────────────────
-    // Pre-compute clamped dt divisor to avoid repeated Math.max calls in the loop.
+    // ── 6. Determine fast-fall state ──────────────────────────────────
+    this.isFastFallActiveFlag = player.isGroundedFlag === 0
+      && player.velocityYWorld > CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD;
+
+    // ── 7. Compute target spread & openness from player state ─────────
+    const targetSpread = this._getTargetSpread(player);
+    const targetOpenness = this._getTargetOpenness(player);
+
+    // Apply turn overshoot multiplier.
+    const turnMultiplier = this.turnTimerSec > 0 ? CLOAK_TURN_OVERSHOOT_SPREAD_MULTIPLIER : 1.0;
+    const adjustedTargetSpread = Math.min(1.0, targetSpread * turnMultiplier);
+
+    // Smooth lerp toward targets.
+    const lerpT = 1 - Math.exp(-CLOAK_SHAPE_LERP_SPEED * dt);
+    this.spreadAmount += (adjustedTargetSpread - this.spreadAmount) * lerpT;
+    this.opennessAmount += (targetOpenness - this.opennessAmount) * lerpT;
+
+    // ── 8. Tick down timers ───────────────────────────────────────────
+    if (this.turnTimerSec > 0) this.turnTimerSec = Math.max(0, this.turnTimerSec - dt);
+    if (this.landingTimerSec > 0) this.landingTimerSec = Math.max(0, this.landingTimerSec - dt);
+
+    // ── 9. Update trailing points ─────────────────────────────────────
     const dtClamped = Math.max(dt, CLOAK_MIN_DT_SEC);
 
     for (let i = 1; i < this.pointCount; i++) {
@@ -159,10 +239,10 @@ export class PlayerCloak {
       this.velXWorld[i] += player.velocityXWorld * CLOAK_VELOCITY_INHERITANCE * dt;
       this.velYWorld[i] += player.velocityYWorld * CLOAK_VELOCITY_INHERITANCE * dt;
 
-      // Gravity (mild, purely visual).
+      // Gravity.
       this.velYWorld[i] += CLOAK_GRAVITY_WORLD_PER_SEC2 * dt;
 
-      // State-aware rest bias: pull toward preferred pose.
+      // State-aware rest bias.
       const prevX = this.posXWorld[i - 1];
       const prevY = this.posYWorld[i - 1];
       const targetX = prevX + restDir[0] * facingSignX;
@@ -191,7 +271,7 @@ export class PlayerCloak {
       this.posYWorld[i] += this.velYWorld[i] * dt;
     }
 
-    // ── 7. Distance constraints (iterated relaxation) ─────────────────
+    // ── 10. Distance constraints (iterated relaxation) ────────────────
     for (let iter = 0; iter < CLOAK_CONSTRAINT_ITERATIONS; iter++) {
       for (let i = 1; i < this.pointCount; i++) {
         const parentX = this.posXWorld[i - 1];
@@ -202,21 +282,19 @@ export class PlayerCloak {
         if (dist > CLOAK_MIN_DISTANCE_WORLD) {
           const targetDist = CLOAK_SEGMENT_LENGTH_WORLD;
           const diff = (dist - targetDist) / dist;
-          // Only child point moves (parent is pinned or already resolved).
           this.posXWorld[i] -= dx * diff;
           this.posYWorld[i] -= dy * diff;
         }
       }
     }
 
-    // ── 8. Max extension clamp from root ──────────────────────────────
+    // ── 11. Max extension clamp from root ─────────────────────────────
     const tipIdx = this.pointCount - 1;
     const extDx = this.posXWorld[tipIdx] - rootWorldX;
     const extDy = this.posYWorld[tipIdx] - rootWorldY;
     const extDist = Math.sqrt(extDx * extDx + extDy * extDy);
     if (extDist > CLOAK_MAX_EXTENSION_WORLD) {
       const scale = CLOAK_MAX_EXTENSION_WORLD / extDist;
-      // Proportionally pull all points toward root.
       for (let i = 1; i < this.pointCount; i++) {
         const t = i / (this.pointCount - 1);
         this.posXWorld[i] = rootWorldX + (this.posXWorld[i] - rootWorldX) * (1 - t + t * scale);
@@ -224,102 +302,68 @@ export class PlayerCloak {
       }
     }
 
-    // ── 9. Store previous-frame state for next frame ──────────────────
+    // ── 12. Store previous-frame state for next frame ─────────────────
     this.prevIsFacingLeftFlag = player.isFacingLeftFlag;
     this.prevIsGroundedFlag = player.isGroundedFlag;
   }
 
   /**
-   * Render the filled cloak polygon + outline behind the player body.
-   * Should be called BEFORE the player sprite is drawn.
-   *
-   * @param ctx     2D canvas context (virtual canvas).
-   * @param offsetXPx Camera offset X (virtual px).
-   * @param offsetYPx Camera offset Y (virtual px).
-   * @param scalePx  Zoom scale (world units → virtual px).
+   * Render the back cloak polygon — drawn BEFORE the player body sprite.
    */
-  render(
+  renderBack(
     ctx: CanvasRenderingContext2D,
     offsetXPx: number,
     offsetYPx: number,
     scalePx: number,
   ): void {
     if (!this.isInitialisedFlag || this.pointCount < 2) return;
-
-    // Build screen-space points for the polygon using pre-allocated buffers.
-    // The cloak is a tapered shape: left edge, then right edge reversed.
-    const leftXPx = this.leftXPx;
-    const leftYPx = this.leftYPx;
-    const rightXPx = this.rightXPx;
-    const rightYPx = this.rightYPx;
-
-    for (let i = 0; i < this.pointCount; i++) {
-      const screenX = Math.round(this.posXWorld[i] * scalePx + offsetXPx);
-      const screenY = Math.round(this.posYWorld[i] * scalePx + offsetYPx);
-
-      // Interpolate width from root to tip.
-      const t = i / (this.pointCount - 1);
-      const halfWidth = ((CLOAK_WIDTH_ROOT_WORLD * (1 - t) + CLOAK_WIDTH_TIP_WORLD * t) * scalePx) * 0.5;
-
-      // Perpendicular direction: approximate from chain segment tangent.
-      let tangentX = 0;
-      let tangentY = 1;
-      if (i < this.pointCount - 1) {
-        const nextScreenX = Math.round(this.posXWorld[i + 1] * scalePx + offsetXPx);
-        const nextScreenY = Math.round(this.posYWorld[i + 1] * scalePx + offsetYPx);
-        tangentX = nextScreenX - screenX;
-        tangentY = nextScreenY - screenY;
-      } else if (i > 0) {
-        const prevScreenX = Math.round(this.posXWorld[i - 1] * scalePx + offsetXPx);
-        const prevScreenY = Math.round(this.posYWorld[i - 1] * scalePx + offsetYPx);
-        tangentX = screenX - prevScreenX;
-        tangentY = screenY - prevScreenY;
-      }
-      const tangentLen = Math.sqrt(tangentX * tangentX + tangentY * tangentY);
-      let perpX = 0;
-      let perpY = 0;
-      if (tangentLen > CLOAK_MIN_TANGENT_LENGTH) {
-        // Perpendicular = rotate tangent 90 degrees.
-        perpX = -tangentY / tangentLen;
-        perpY = tangentX / tangentLen;
-      } else {
-        perpX = 1;
-        perpY = 0;
-      }
-
-      leftXPx[i] = Math.round(screenX + perpX * halfWidth);
-      leftYPx[i] = Math.round(screenY + perpY * halfWidth);
-      rightXPx[i] = Math.round(screenX - perpX * halfWidth);
-      rightYPx[i] = Math.round(screenY - perpY * halfWidth);
-    }
-
-    // Draw filled polygon: left edge forward, then right edge backward.
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(leftXPx[0], leftYPx[0]);
-    for (let i = 1; i < this.pointCount; i++) {
-      ctx.lineTo(leftXPx[i], leftYPx[i]);
-    }
-    for (let i = this.pointCount - 1; i >= 0; i--) {
-      ctx.lineTo(rightXPx[i], rightYPx[i]);
-    }
-    ctx.closePath();
-
-    // Fill.
-    ctx.fillStyle = CLOAK_FILL_COLOR;
-    ctx.fill();
-
-    // Outline.
-    ctx.strokeStyle = CLOAK_OUTLINE_COLOR;
-    ctx.lineWidth = CLOAK_OUTLINE_WIDTH_WORLD * scalePx;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-
-    ctx.restore();
+    this._buildBackPolygon(offsetXPx, offsetYPx, scalePx);
+    this._drawPolygon(
+      ctx,
+      this.backLeftXPx, this.backLeftYPx,
+      this.backRightXPx, this.backRightYPx,
+      this.pointCount,
+      CLOAK_BACK_FILL_COLOR,
+      CLOAK_BACK_OUTLINE_COLOR,
+      CLOAK_BACK_OUTLINE_WIDTH_WORLD * scalePx,
+    );
   }
 
   /**
-   * Debug overlay: draw anchor, shoulder reference, chain points, polygon edges.
+   * Render the front cloak polygon — drawn AFTER the player body sprite.
+   */
+  renderFront(
+    ctx: CanvasRenderingContext2D,
+    offsetXPx: number,
+    offsetYPx: number,
+    scalePx: number,
+    player: CloakPlayerState,
+  ): void {
+    if (!this.isInitialisedFlag || this.pointCount < 2) return;
+    this._buildFrontPolygon(offsetXPx, offsetYPx, scalePx, player);
+    this._drawPolygon(
+      ctx,
+      this.frontLeftXPx, this.frontLeftYPx,
+      this.frontRightXPx, this.frontRightYPx,
+      this.frontPointCount,
+      CLOAK_FRONT_FILL_COLOR,
+      CLOAK_FRONT_OUTLINE_COLOR,
+      CLOAK_FRONT_OUTLINE_WIDTH_WORLD * scalePx,
+    );
+  }
+
+  // Legacy API — renders only back cloak (for backwards compat if called).
+  render(
+    ctx: CanvasRenderingContext2D,
+    offsetXPx: number,
+    offsetYPx: number,
+    scalePx: number,
+  ): void {
+    this.renderBack(ctx, offsetXPx, offsetYPx, scalePx);
+  }
+
+  /**
+   * Debug overlay: anchor, shoulder, chain points, polygon edges, shape values.
    */
   renderDebug(
     ctx: CanvasRenderingContext2D,
@@ -369,6 +413,52 @@ export class PlayerCloak {
       }
     }
 
+    // Back polygon outline (magenta, dashed).
+    this._buildBackPolygon(offsetXPx, offsetYPx, scalePx);
+    ctx.strokeStyle = '#ff00ff';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(this.backLeftXPx[0], this.backLeftYPx[0]);
+    for (let i = 1; i < this.pointCount; i++) {
+      ctx.lineTo(this.backLeftXPx[i], this.backLeftYPx[i]);
+    }
+    for (let i = this.pointCount - 1; i >= 0; i--) {
+      ctx.lineTo(this.backRightXPx[i], this.backRightYPx[i]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Front polygon outline (green, dashed).
+    this._buildFrontPolygon(offsetXPx, offsetYPx, scalePx, player);
+    ctx.strokeStyle = '#00ff00';
+    ctx.beginPath();
+    ctx.moveTo(this.frontLeftXPx[0], this.frontLeftYPx[0]);
+    for (let i = 1; i < this.frontPointCount; i++) {
+      ctx.lineTo(this.frontLeftXPx[i], this.frontLeftYPx[i]);
+    }
+    for (let i = this.frontPointCount - 1; i >= 0; i--) {
+      ctx.lineTo(this.frontRightXPx[i], this.frontRightYPx[i]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Shape value text.
+    const textX = anchorSX + 12;
+    let textY = anchorSY - 20;
+    ctx.font = '8px monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`spread: ${this.spreadAmount.toFixed(2)}`, textX, textY); textY += 10;
+    ctx.fillText(`openness: ${this.opennessAmount.toFixed(2)}`, textX, textY); textY += 10;
+    ctx.fillText(`fastFall: ${this.isFastFallActiveFlag ? 'YES' : 'no'}`, textX, textY); textY += 10;
+    if (this.turnTimerSec > 0) {
+      ctx.fillText(`turn: ${this.turnTimerSec.toFixed(2)}s`, textX, textY); textY += 10;
+    }
+    if (this.landingTimerSec > 0) {
+      ctx.fillText(`land: ${this.landingTimerSec.toFixed(2)}s`, textX, textY);
+    }
+
     ctx.restore();
   }
 
@@ -379,31 +469,206 @@ export class PlayerCloak {
     this.posYWorld.fill(0);
     this.velXWorld.fill(0);
     this.velYWorld.fill(0);
+    this.spreadAmount = 0;
+    this.opennessAmount = 0;
+    this.isFastFallActiveFlag = false;
+    this.turnTimerSec = 0;
+    this.landingTimerSec = 0;
   }
 
-  // ── Private helpers ─────────────────────────────────────────────────────
+  // ── Private: polygon builders ──────────────────────────────────────────
 
   /**
-   * Compute the world-space X of the cloak anchor, accounting for sprite
-   * centering and horizontal flip.
+   * Build the back cloak polygon edges into pre-allocated buffers.
+   * Shape is wider at spread, with sharp outer corners during fast fall.
    */
+  private _buildBackPolygon(
+    offsetXPx: number,
+    offsetYPx: number,
+    scalePx: number,
+  ): void {
+    const spread = this.spreadAmount;
+    const isFastFall = this.isFastFallActiveFlag;
+    const landingScale = this.landingTimerSec > 0
+      ? CLOAK_LANDING_COMPRESSION + (1 - CLOAK_LANDING_COMPRESSION) * (1 - this.landingTimerSec / CLOAK_LANDING_DURATION_SEC)
+      : 1.0;
+
+    for (let i = 0; i < this.pointCount; i++) {
+      const screenX = Math.round(this.posXWorld[i] * scalePx + offsetXPx);
+      const screenY = Math.round(this.posYWorld[i] * scalePx + offsetYPx);
+
+      // Interpolate base width from root to tip.
+      const t = i / (this.pointCount - 1);
+      const baseRootW = CLOAK_BACK_WIDTH_ROOT_WORLD;
+      let baseTipW = CLOAK_BACK_WIDTH_TIP_WORLD;
+
+      // During fast fall, tip widens dramatically.
+      if (isFastFall) {
+        baseTipW += CLOAK_BACK_FAST_FALL_TIP_EXTRA_WORLD * spread;
+      }
+
+      const baseWidth = baseRootW * (1 - t) + baseTipW * t;
+      // Apply spread multiplier: spread makes the whole cloak wider.
+      const widthWorld = baseWidth * (1 + spread * 0.8) * landingScale;
+      const halfWidth = (widthWorld * scalePx) * 0.5;
+
+      // Compute perpendicular from chain tangent.
+      const perp = this._getPerp(i, offsetXPx, offsetYPx, scalePx, screenX, screenY);
+
+      // During fast fall, push outer corners outward at sharp angles.
+      let cornerSharpX = 0;
+      let cornerSharpY = 0;
+      if (isFastFall && t > 0.5) {
+        const cornerT = (t - 0.5) * 2; // 0..1 over bottom half
+        cornerSharpX = perp[0] * CLOAK_FAST_FALL_CORNER_SHARPNESS * cornerT * spread * scalePx * 2;
+        cornerSharpY = -Math.abs(perp[1]) * CLOAK_FAST_FALL_CORNER_SHARPNESS * cornerT * spread * scalePx;
+      }
+
+      this.backLeftXPx[i] = Math.round(screenX + perp[0] * halfWidth + cornerSharpX);
+      this.backLeftYPx[i] = Math.round(screenY + perp[1] * halfWidth + cornerSharpY);
+      this.backRightXPx[i] = Math.round(screenX - perp[0] * halfWidth - cornerSharpX);
+      this.backRightYPx[i] = Math.round(screenY - perp[1] * halfWidth + cornerSharpY);
+    }
+  }
+
+  /**
+   * Build the front cloak polygon edges — shorter, narrower, offset toward player front.
+   */
+  private _buildFrontPolygon(
+    offsetXPx: number,
+    offsetYPx: number,
+    scalePx: number,
+    player: CloakPlayerState,
+  ): void {
+    const spread = this.spreadAmount;
+    const openness = this.opennessAmount;
+    // Front fold direction: toward the player's facing side.
+    const foldDirX = player.isFacingLeftFlag === 1 ? -1 : 1;
+    const projectionPx = CLOAK_FRONT_PROJECTION_WORLD * openness * scalePx * foldDirX;
+
+    const landingScale = this.landingTimerSec > 0
+      ? CLOAK_LANDING_COMPRESSION + (1 - CLOAK_LANDING_COMPRESSION) * (1 - this.landingTimerSec / CLOAK_LANDING_DURATION_SEC)
+      : 1.0;
+
+    for (let i = 0; i < this.frontPointCount; i++) {
+      // Map front index to the chain (front is shorter, so use proportional indexing).
+      const chainT = i / (this.frontPointCount - 1);
+      const chainIdx = Math.min(this.pointCount - 1, chainT * (this.pointCount - 1));
+      const lowerIdx = Math.floor(chainIdx);
+      const upperIdx = Math.min(this.pointCount - 1, lowerIdx + 1);
+      const frac = chainIdx - lowerIdx;
+
+      // Interpolated chain position.
+      const worldX = this.posXWorld[lowerIdx] + (this.posXWorld[upperIdx] - this.posXWorld[lowerIdx]) * frac;
+      const worldY = this.posYWorld[lowerIdx] + (this.posYWorld[upperIdx] - this.posYWorld[lowerIdx]) * frac;
+      const screenX = Math.round(worldX * scalePx + offsetXPx);
+      const screenY = Math.round(worldY * scalePx + offsetYPx);
+
+      // Front cloak width: narrower via FRONT_WIDTH_RATIO, modulated by spread.
+      const t = i / (this.frontPointCount - 1);
+      const backWidth = CLOAK_BACK_WIDTH_ROOT_WORLD * (1 - t) + CLOAK_BACK_WIDTH_TIP_WORLD * t;
+      const frontWidth = backWidth * CLOAK_FRONT_WIDTH_RATIO * (1 + spread * 0.4) * landingScale;
+      const halfWidth = (frontWidth * scalePx) * 0.5;
+
+      // Perpendicular from nearest chain segment.
+      const perpIdx = Math.min(lowerIdx, this.pointCount - 2);
+      const perp = this._getPerp(perpIdx, offsetXPx, offsetYPx, scalePx, screenX, screenY);
+
+      // Offset toward front (projection).
+      const projX = projectionPx * (1 - t * 0.6); // Root projects more, tip less.
+
+      this.frontLeftXPx[i] = Math.round(screenX + perp[0] * halfWidth + projX);
+      this.frontLeftYPx[i] = Math.round(screenY + perp[1] * halfWidth);
+      this.frontRightXPx[i] = Math.round(screenX - perp[0] * halfWidth + projX);
+      this.frontRightYPx[i] = Math.round(screenY - perp[1] * halfWidth);
+    }
+  }
+
+  // ── Private: render helpers ────────────────────────────────────────────
+
+  /** Draw a tapered polygon from left/right edge buffers. */
+  private _drawPolygon(
+    ctx: CanvasRenderingContext2D,
+    leftX: Float32Array, leftY: Float32Array,
+    rightX: Float32Array, rightY: Float32Array,
+    count: number,
+    fillColor: string,
+    outlineColor: string,
+    outlineWidth: number,
+  ): void {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(leftX[0], leftY[0]);
+    for (let i = 1; i < count; i++) {
+      ctx.lineTo(leftX[i], leftY[i]);
+    }
+    for (let i = count - 1; i >= 0; i--) {
+      ctx.lineTo(rightX[i], rightY[i]);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.strokeStyle = outlineColor;
+    ctx.lineWidth = outlineWidth;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Private: perpendicular calculation ─────────────────────────────────
+
+  // Scratch perpendicular to avoid allocation.
+  private readonly _scratchPerp: [number, number] = [0, 0];
+
+  /** Get perpendicular unit vector at chain index. Returns shared scratch buffer. */
+  private _getPerp(
+    i: number,
+    offsetXPx: number,
+    offsetYPx: number,
+    scalePx: number,
+    screenX: number,
+    screenY: number,
+  ): readonly [number, number] {
+    let tangentX = 0;
+    let tangentY = 1;
+    if (i < this.pointCount - 1) {
+      const nextSX = Math.round(this.posXWorld[i + 1] * scalePx + offsetXPx);
+      const nextSY = Math.round(this.posYWorld[i + 1] * scalePx + offsetYPx);
+      tangentX = nextSX - screenX;
+      tangentY = nextSY - screenY;
+    } else if (i > 0) {
+      const prevSX = Math.round(this.posXWorld[i - 1] * scalePx + offsetXPx);
+      const prevSY = Math.round(this.posYWorld[i - 1] * scalePx + offsetYPx);
+      tangentX = screenX - prevSX;
+      tangentY = screenY - prevSY;
+    }
+    const len = Math.sqrt(tangentX * tangentX + tangentY * tangentY);
+    if (len > CLOAK_MIN_TANGENT_LENGTH) {
+      this._scratchPerp[0] = -tangentY / len;
+      this._scratchPerp[1] = tangentX / len;
+    } else {
+      this._scratchPerp[0] = 1;
+      this._scratchPerp[1] = 0;
+    }
+    return this._scratchPerp;
+  }
+
+  // ── Private: anchor / shoulder helpers ─────────────────────────────────
+
   private _anchorWorldX(player: CloakPlayerState): number {
     const spriteLeftWorldX = player.positionXWorld - PLAYER_SPRITE_WIDTH_WORLD * 0.5;
     if (player.isFacingLeftFlag === 1) {
-      // Mirror: anchor from right edge of sprite.
       return spriteLeftWorldX + (PLAYER_SPRITE_WIDTH_WORLD - CLOAK_ANCHOR_LOCAL_X);
     }
     return spriteLeftWorldX + CLOAK_ANCHOR_LOCAL_X;
   }
 
-  /** Compute the world-space Y of the cloak anchor. */
   private _anchorWorldY(player: CloakPlayerState): number {
     const spriteTopWorldY = player.positionYWorld + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD
       - PLAYER_SPRITE_HEIGHT_WORLD * 0.5;
     return spriteTopWorldY + CLOAK_ANCHOR_LOCAL_Y;
   }
 
-  /** Compute the world-space X of the shoulder reference point. */
   private _shoulderWorldX(player: CloakPlayerState): number {
     const spriteLeftWorldX = player.positionXWorld - PLAYER_SPRITE_WIDTH_WORLD * 0.5;
     if (player.isFacingLeftFlag === 1) {
@@ -412,38 +677,54 @@ export class PlayerCloak {
     return spriteLeftWorldX + CLOAK_SHOULDER_LOCAL_X;
   }
 
-  /** Compute the world-space Y of the shoulder reference point. */
   private _shoulderWorldY(player: CloakPlayerState): number {
     const spriteTopWorldY = player.positionYWorld + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD
       - PLAYER_SPRITE_HEIGHT_WORLD * 0.5;
     return spriteTopWorldY + CLOAK_SHOULDER_LOCAL_Y;
   }
 
-  /**
-   * Select a rest-pose offset based on the player's current movement state.
-   * Returns [dx_backward, dy_downward] per segment in facing-local space.
-   */
+  // ── Private: state-to-shape mapping ────────────────────────────────────
+
+  /** Select rest-pose direction based on movement state. */
   private _getRestDirection(player: CloakPlayerState): readonly [number, number] {
-    // Crouching takes priority over grounded states.
     if (player.isCrouchingFlag === 1) return CLOAK_REST_CROUCHING;
     if (player.isWallSlidingFlag === 1) return CLOAK_REST_WALL_SLIDE;
-
-    // Airborne states.
     if (player.isGroundedFlag === 0) {
       if (player.velocityYWorld < CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD) return CLOAK_REST_JUMPING;
       return CLOAK_REST_FALLING;
     }
-
-    // Grounded states.
     if (player.isSprintingFlag === 1) return CLOAK_REST_SPRINTING;
-    const isMovingHorizontally = Math.abs(player.velocityXWorld) > CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD;
-    if (isMovingHorizontally) return CLOAK_REST_RUNNING;
+    if (Math.abs(player.velocityXWorld) > CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD) return CLOAK_REST_RUNNING;
     return CLOAK_REST_IDLE;
   }
 
-  /**
-   * Place all chain points at their rest pose relative to the root anchor.
-   */
+  /** Get target spread from player state (0–1). */
+  private _getTargetSpread(player: CloakPlayerState): number {
+    if (player.isCrouchingFlag === 1) return CLOAK_SPREAD_CROUCHING;
+    if (player.isWallSlidingFlag === 1) return CLOAK_SPREAD_WALL_SLIDE;
+    if (player.isGroundedFlag === 0) {
+      if (player.velocityYWorld > CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD) return CLOAK_SPREAD_FAST_FALL;
+      if (player.velocityYWorld < CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD) return CLOAK_SPREAD_JUMPING;
+      return CLOAK_SPREAD_FALLING;
+    }
+    if (player.isSprintingFlag === 1) return CLOAK_SPREAD_SPRINTING;
+    if (Math.abs(player.velocityXWorld) > CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD) return CLOAK_SPREAD_RUNNING;
+    return CLOAK_SPREAD_IDLE;
+  }
+
+  /** Get target openness from player state (0–1). */
+  private _getTargetOpenness(player: CloakPlayerState): number {
+    if (player.isWallSlidingFlag === 1) return CLOAK_OPENNESS_WALL_SLIDE;
+    if (player.isGroundedFlag === 0) {
+      if (player.velocityYWorld > CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD) return CLOAK_OPENNESS_FAST_FALL;
+      if (player.velocityYWorld < CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD) return CLOAK_OPENNESS_JUMPING;
+      return CLOAK_OPENNESS_FALLING;
+    }
+    if (Math.abs(player.velocityXWorld) > CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD) return CLOAK_OPENNESS_RUNNING;
+    return CLOAK_OPENNESS_IDLE;
+  }
+
+  /** Place all chain points at their rest pose relative to the root anchor. */
   private _initChain(rootX: number, rootY: number, player: CloakPlayerState): void {
     const restDir = this._getRestDirection(player);
     const facingSignX = player.isFacingLeftFlag === 1 ? 1 : -1;
