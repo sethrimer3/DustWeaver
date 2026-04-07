@@ -55,6 +55,7 @@ import {
   CLOAK_FRONT_WIDTH_RATIO,
   CLOAK_FRONT_PROJECTION_WORLD,
   CLOAK_FRONT_LENGTH_RATIO,
+  CLOAK_FRONT_PROJECTION_TAPER,
   CLOAK_FAST_FALL_CORNER_SHARPNESS,
   CLOAK_DEBUG_POINT_RADIUS_PX,
   CLOAK_MAX_FRAME_DT_SEC,
@@ -162,8 +163,8 @@ export class PlayerCloak {
     this.backRightXPx = new Float32Array(this.pointCount);
     this.backRightYPx = new Float32Array(this.pointCount);
 
-    // Front cloak uses fewer points (shorter garment).
-    this.frontPointCount = Math.max(2, Math.ceil(this.pointCount * CLOAK_FRONT_LENGTH_RATIO));
+    // Front cloak uses fewer points (shorter garment). Clamped to never exceed main chain.
+    this.frontPointCount = Math.min(this.pointCount, Math.max(2, Math.ceil(this.pointCount * CLOAK_FRONT_LENGTH_RATIO)));
     this.frontLeftXPx = new Float32Array(this.frontPointCount);
     this.frontLeftYPx = new Float32Array(this.frontPointCount);
     this.frontRightXPx = new Float32Array(this.frontPointCount);
@@ -515,7 +516,9 @@ export class PlayerCloak {
       // Compute perpendicular from chain tangent.
       const perp = this._getPerp(i, offsetXPx, offsetYPx, scalePx, screenX, screenY);
 
-      // During fast fall, push outer corners outward at sharp angles.
+      // During fast fall, push outer corners outward for a sharper silhouette.
+      // cornerSharpX uses 2× horizontal emphasis for a visually dramatic wing-out.
+      // cornerSharpY forces upward (negative) to lift corners regardless of perp direction.
       let cornerSharpX = 0;
       let cornerSharpY = 0;
       if (isFastFall && t > 0.5) {
@@ -575,7 +578,8 @@ export class PlayerCloak {
       const perp = this._getPerp(perpIdx, offsetXPx, offsetYPx, scalePx, screenX, screenY);
 
       // Offset toward front (projection).
-      const projX = projectionPx * (1 - t * 0.6); // Root projects more, tip less.
+      // Root projects more, tip less — creates a front fold that tapers toward the cloak's end.
+      const projX = projectionPx * (1 - t * CLOAK_FRONT_PROJECTION_TAPER);
 
       this.frontLeftXPx[i] = Math.round(screenX + perp[0] * halfWidth + projX);
       this.frontLeftYPx[i] = Math.round(screenY + perp[1] * halfWidth);

@@ -130,6 +130,8 @@ export const CLOAK_FRONT_WIDTH_RATIO = 0.55;
 export const CLOAK_FRONT_PROJECTION_WORLD = 1.5;
 /** Front cloak length ratio relative to back cloak (0–1). */
 export const CLOAK_FRONT_LENGTH_RATIO = 0.65;
+/** How quickly the front fold projection tapers from root to tip (0–1). */
+export const CLOAK_FRONT_PROJECTION_TAPER = 0.6;
 
 // ── Fast-fall sharp corner intensity ──────────────────────────────────────
 
