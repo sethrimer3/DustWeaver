@@ -252,3 +252,25 @@ The Weave combat system is injected at step 4.55, after the legacy combat forces
 ### Snapshot Boundary
 - `ClusterSnapshot` includes: `isRadiantTetherFlag`, `radiantTetherState`, `radiantTetherStateTicks`, `radiantTetherBaseAngleRad`, `radiantTetherChainCount`.
 - Chain visual data (anchor positions, broken chain positions) is read directly from the module-level chain state by the renderer, not copied into the snapshot.
+
+## Two-Layer Procedural Cloak (BUILD 111)
+
+The player cloak is a single connected garment rendered as two visual layers: a darker **back cloak** behind the body and a lighter **front cloak** in front of the body. Both layers are driven by one shared simulation (point chain + shape state).
+
+### Render Order
+1. Back cloak (`renderBack`) — behind player body
+2. Player body sprite (outline mask + sprite)
+3. Front cloak (`renderFront`) — in front of player body
+
+### Module Structure
+- `render/clusters/cloakConstants.ts` — all tunable constants (anchor, shape, spread, openness, colors, thresholds).
+- `render/clusters/playerCloak.ts` — `PlayerCloak` class: chain simulation, shared shape state (spread, openness, fast-fall, timers), polygon builders for back/front, debug overlay.
+
+### Shape State Model
+The shared cloak state computes:
+- `spreadAmount` (0–1): how wide the cloak opens, varies by movement state.
+- `opennessAmount` (0–1): how far front/back layers separate.
+- `isFastFallActiveFlag`: triggers dramatic widening with sharp outer corners.
+- `turnTimerSec` / `landingTimerSec`: drive overshoot and compression effects.
+
+Both cloak polygons derive from the same chain points and shape state, with the front cloak shorter, narrower, and offset toward the player's facing direction.

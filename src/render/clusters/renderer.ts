@@ -420,27 +420,28 @@ export function renderClusters(
       const spriteW = spriteHalfW * 2;
       const spriteH = spriteHalfH * 2;
       const spriteCenterY = screenY + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD * scalePx;
+      // Build player state for cloak rendering (shared by back + front).
+      const cloakPlayerState = playerCloak !== undefined ? {
+        positionXWorld: cluster.positionXWorld,
+        positionYWorld: cluster.positionYWorld,
+        velocityXWorld: cluster.velocityXWorld,
+        velocityYWorld: cluster.velocityYWorld,
+        isFacingLeftFlag: cluster.isFacingLeftFlag,
+        isGroundedFlag: cluster.isGroundedFlag,
+        isSprintingFlag: cluster.isSprintingFlag,
+        isCrouchingFlag: cluster.isCrouchingFlag,
+        isWallSlidingFlag: cluster.isWallSlidingFlag,
+        halfWidthWorld: cluster.halfWidthWorld,
+        halfHeightWorld: cluster.halfHeightWorld,
+      } : undefined;
+
       if (_isSpriteReady(sprite)) {
-        // ── Procedural cloak (drawn behind the player body sprite) ──────
+        // ── Layer 1: Back cloak (behind body) ──────────────────────────
         if (playerCloak !== undefined) {
-          playerCloak.render(ctx, offsetXPx, offsetYPx, scalePx);
-          if (isDebugCloak) {
-            playerCloak.renderDebug(ctx, offsetXPx, offsetYPx, scalePx, {
-              positionXWorld: cluster.positionXWorld,
-              positionYWorld: cluster.positionYWorld,
-              velocityXWorld: cluster.velocityXWorld,
-              velocityYWorld: cluster.velocityYWorld,
-              isFacingLeftFlag: cluster.isFacingLeftFlag,
-              isGroundedFlag: cluster.isGroundedFlag,
-              isSprintingFlag: cluster.isSprintingFlag,
-              isCrouchingFlag: cluster.isCrouchingFlag,
-              isWallSlidingFlag: cluster.isWallSlidingFlag,
-              halfWidthWorld: cluster.halfWidthWorld,
-              halfHeightWorld: cluster.halfHeightWorld,
-            });
-          }
+          playerCloak.renderBack(ctx, offsetXPx, offsetYPx, scalePx);
         }
 
+        // ── Layer 2: Player body sprite ────────────────────────────────
         const outlineThicknessPx = PLAYER_OUTLINE_THICKNESS_WORLD * scalePx;
         const outlineMask = _getOrCreateOuterOutlineMask(sprite);
         const speedXWorldPerSec = cluster.velocityXWorld;
@@ -489,6 +490,16 @@ export function renderClusters(
         );
         ctx.drawImage(sprite, -spriteHalfW, -spriteHalfH, spriteW, spriteH);
         ctx.restore();
+
+        // ── Layer 3: Front cloak (in front of body) ────────────────────
+        if (playerCloak !== undefined && cloakPlayerState !== undefined) {
+          playerCloak.renderFront(ctx, offsetXPx, offsetYPx, scalePx, cloakPlayerState);
+        }
+
+        // ── Debug overlay (both cloak polygons + control points) ───────
+        if (playerCloak !== undefined && isDebugCloak && cloakPlayerState !== undefined) {
+          playerCloak.renderDebug(ctx, offsetXPx, offsetYPx, scalePx, cloakPlayerState);
+        }
       } else {
         // Fallback while sprite loads: coloured box
         ctx.fillStyle = '#00ff99';
