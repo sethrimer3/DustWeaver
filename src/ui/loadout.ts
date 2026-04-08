@@ -27,27 +27,11 @@ interface KindMeta {
 }
 
 /**
- * Indexed in the same order as EQUIPPABLE_KINDS (Physical, Fire, ..., Water, Lava, Stone).
+ * Indexed in the same order as EQUIPPABLE_KINDS (Physical only).
  * Must stay in sync with EQUIPPABLE_KINDS.
  */
 const KIND_META: KindMeta[] = [
-  { name: 'Physical',  colorHex: '#7799aa', description: 'Dense, grounded particles. Steady and reliable.' },
-  { name: 'Fire',      colorHex: '#ff5500', description: 'Flickering flames. Chaotic and short-lived.' },
-  { name: 'Ice',       colorHex: '#88ddff', description: 'Crystalline frost. Structured and long-lived.' },
-  { name: 'Lightning', colorHex: '#ffff44', description: 'Electric sparks. Explosive and volatile.' },
-  { name: 'Poison',    colorHex: '#44ff44', description: 'Toxic cloud. Sticky and diffuse.' },
-  { name: 'Arcane',    colorHex: '#cc44ff', description: 'Mystic spiral. Strange turbulence.' },
-  { name: 'Wind',      colorHex: '#88ffee', description: 'Rushing gusts. Fast and highly aligned.' },
-  { name: 'Holy',      colorHex: '#ffeeaa', description: 'Sacred light. Rising and orderly.' },
-  { name: 'Shadow',    colorHex: '#9966ff', description: 'Dark tendrils. Sinking and unstable.' },
-  { name: 'Metal',     colorHex: '#aabbcc', description: 'Iron shards. Dense, durable. Reflects damage when blocking.' },
-  { name: 'Earth',     colorHex: '#aa8833', description: 'Stone fragments. Grounded and steady.' },
-  { name: 'Nature',    colorHex: '#44cc44', description: 'Living vines. Organic and gentle.' },
-  { name: 'Crystal',   colorHex: '#aaeeff', description: 'Prismatic shards. Precise and brilliant.' },
-  { name: 'Void',      colorHex: '#9933cc', description: 'Dark matter rings. Exotic and powerful.' },
-  { name: 'Water',     colorHex: '#2299ee', description: 'Flowing currents. Fluid and persistent.' },
-  { name: 'Lava',      colorHex: '#ff2200', description: 'Molten rock. Slow, devastating, burns everything near it.' },
-  { name: 'Stone',     colorHex: '#888899', description: 'Rock fragments. Shatters into smaller pieces on impact.' },
+  { name: 'Golden Dust',  colorHex: '#ffd700', description: 'Dense golden motes with a bright metallic glow.' },
 ];
 
 if (KIND_META.length !== EQUIPPABLE_KINDS.length) {

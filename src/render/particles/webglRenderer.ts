@@ -26,8 +26,8 @@ import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shad
 const FLOATS_PER_VERTEX = 6;
 const BYTES_PER_FLOAT   = 4;
 /** Visual diameter for each particle's point sprite, in world units.
- *  4 world units at zoom 1.0 = 4×4 in-game (virtual) pixels per mote. */
-const PARTICLE_DIAMETER_WORLD = 4.0;
+ *  3 world units at zoom 1.0 = 3×3 in-game (virtual) pixels per mote. */
+const PARTICLE_DIAMETER_WORLD = 3.0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers

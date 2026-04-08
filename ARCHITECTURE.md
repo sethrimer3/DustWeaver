@@ -274,3 +274,34 @@ The shared cloak state computes:
 - `turnTimerSec` / `landingTimerSec`: drive overshoot and compression effects.
 
 Both cloak polygons derive from the same chain points and shape state, with the front cloak shorter, narrower, and offset toward the player's facing direction.
+
+## Dust Combat Pipeline (BUILD 113)
+
+### Weave Combat Flow
+Each tick, `applyPlayerWeaveCombat()` in `sim/weaves/weaveCombat.ts` runs two passes:
+
+1. **Storm Attraction** (always active):
+   - Scans all alive, unowned, Physical particles within 80 world units of the player
+   - Applies radial attraction force (strength 120, distance falloff)
+   - Claims particles within 12 world units (resets owner, lifetime, behavior to orbit)
+
+2. **Shield Crescent** (when mouse button held):
+   - Collects all player-owned alive particles (excluding grapple chain)
+   - Computes arc size: `halfArc = 0.15 + min(1, count/30) × (π/2 - 0.15)`
+   - Distributes particles evenly across the arc centered on aim direction
+   - Applies spring force (600) toward target positions
+   - Sets particles to `behaviorMode = 2` (block) while active
+   - On mouse release, resets all block-mode particles to orbit (`behaviorMode = 0`)
+
+### Dust Pile Spawning
+- Room definitions include optional `dustPiles: RoomDustPileDef[]`
+- At room load, `gameRoom.ts` loads pile positions into WorldState arrays
+- `gameScreen.ts` calls `spawnDustPileParticles()` for each pile
+- Spawned particles are unowned (entityId = -1), transient, Physical kind with 99999-tick lifetime
+- Environmental dust layer skips procedural generation in lobby rooms (worldNumber 0)
+
+### Dust Rendering
+- Particles render as 3×3 virtual pixel squares (diameter 3 world units)
+- WebGL: shape index 2 (Square) via `KIND_SHAPE[0]` and GLSL `kindShape()` default return
+- Canvas 2D fallback: `fillRect` in `drawParticleShape()` for `ParticleShape.Square`
+- Additive glow: `drawParticleGlow()` in `gameRender.ts` adds bloom circles for Physical/Gold particles

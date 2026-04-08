@@ -1,452 +1,221 @@
 /**
- * Weave Combat System — activates bound dust according to the equipped Weave pattern.
+ * Weave Combat System — Storm and Shield weaves.
  *
- * This module replaces the old per-element attack/block system with a Weave-driven
- * model. When a Weave is activated:
- *   1. Only dust particles bound to that Weave respond
- *   2. Particles move according to the Weave's pattern, not their dust type
- *   3. Dust type still governs visual appearance and elemental interactions
- *
- * Behavior modes:
- *   0 = passive orbit (dust type motion)
- *   1 = attack (legacy — used by enemies only)
- *   2 = block  (legacy — used by enemies only)
- *   3 = weave active (particle executing a Weave pattern)
- *   4 = returning (transitioning from weave back to passive)
- *
- * Weave patterns:
- *   - Aegis:   orbiting shield ring around player (sustained)
- *   - Bastion: directional wall in front of player (sustained)
- *   - Spire:   straight line shot in aimed direction (burst)
+ * Storm Weave: passive attraction of nearby unowned Gold Dust to the player.
+ * Shield Weave: crescent formation of player dust in the aimed direction.
  */
 
 import { WorldState } from '../world';
-import {
-  WeaveId,
-  getWeaveDefinition,
-  WEAVE_AEGIS,
-  WEAVE_BASTION,
-  WEAVE_SPIRE,
-} from './weaveDefinition';
-import { WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from './playerLoadout';
+import { ParticleKind } from '../particles/kinds';
+import { getElementProfile } from '../particles/elementProfiles';
 
-// ---- Constants --------------------------------------------------------------
+// ── Storm Weave constants ───────────────────────────────────────────────────
 
-/** Spring strength (force per world unit of displacement) pulling weave-active particles toward their pattern positions. */
-const WEAVE_SPRING_STRENGTH = 400.0;
+/** Maximum distance (world units) at which unowned dust is attracted. */
+const STORM_ATTRACT_RADIUS_WORLD = 80.0;
+/** Force strength applied toward the player (scales with distance falloff). */
+const STORM_ATTRACT_STRENGTH = 120.0;
+/** Distance (world units) at which attracted dust is claimed by the player. */
+const STORM_CLAIM_RADIUS_WORLD = 12.0;
+/** Minimum lifetime (ticks) assigned to newly claimed dust to prevent instant expiration. */
+const MIN_CLAIMED_DUST_LIFETIME_TICKS = 2.0;
 
-/** Distance from owner center for Aegis orbit ring (world units). */
-const AEGIS_ORBIT_DIST_WORLD = 8.0;
-/** Aegis orbital rotation rate (radians per tick). */
-const AEGIS_ORBIT_ROTATION_RATE_RAD = 0.06;
+// ── Shield Weave constants ──────────────────────────────────────────────────
 
-/** Distance from owner center for Bastion wall (world units). */
-const BASTION_WALL_DIST_WORLD = 7.5;
-/** Spacing between Bastion wall particles (world units). */
-const BASTION_SPACING_WORLD = 10.0 / 6.0;
-
-/** Spring strength (force per world unit) for returning particles pulling back to orbit. */
-const RETURN_SPRING_STRENGTH = 200.0;
-/** Ticks for return transition. */
-const RETURN_DURATION_TICKS = 20;
-
-// ---- Aegis pattern (orbiting shield) ----------------------------------------
-
-function applyAegisPattern(
-  world: WorldState,
-  playerEntityId: number,
-  playerX: number,
-  playerY: number,
-  weaveSlot: number,
-): void {
-  const {
-    isAliveFlag, ownerEntityId,
-    positionXWorld, positionYWorld,
-    forceX, forceY,
-    behaviorMode, weaveSlotId, isTransientFlag,
-    particleCount,
-  } = world;
-
-  // Count bound particles for this weave
-  let total = 0;
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId
-      && weaveSlotId[i] === weaveSlot && isTransientFlag[i] === 0) {
-      total++;
-    }
-  }
-  if (total === 0) return;
-
-  let slotIdx = 0;
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 0) continue;
-    if (ownerEntityId[i] !== playerEntityId) continue;
-    if (weaveSlotId[i] !== weaveSlot) continue;
-    if (isTransientFlag[i] === 1) continue;
-
-    behaviorMode[i] = 3; // weave active
-
-    // Distribute evenly around the circle, rotating each tick
-    const angleRad = (slotIdx / total) * Math.PI * 2.0 + world.tick * AEGIS_ORBIT_ROTATION_RATE_RAD;
-    const targetX = playerX + Math.cos(angleRad) * AEGIS_ORBIT_DIST_WORLD;
-    const targetY = playerY + Math.sin(angleRad) * AEGIS_ORBIT_DIST_WORLD;
-
-    const dx = targetX - positionXWorld[i];
-    const dy = targetY - positionYWorld[i];
-    forceX[i] += dx * WEAVE_SPRING_STRENGTH;
-    forceY[i] += dy * WEAVE_SPRING_STRENGTH;
-
-    slotIdx++;
-  }
-}
-
-// ---- Bastion pattern (directional wall) -------------------------------------
-
-function applyBastionPattern(
-  world: WorldState,
-  playerEntityId: number,
-  playerX: number,
-  playerY: number,
-  dirX: number,
-  dirY: number,
-  weaveSlot: number,
-): void {
-  const {
-    isAliveFlag, ownerEntityId,
-    positionXWorld, positionYWorld,
-    forceX, forceY,
-    behaviorMode, weaveSlotId, isTransientFlag,
-    particleCount,
-  } = world;
-
-  // Perpendicular to aim direction
-  const perpX = -dirY;
-  const perpY =  dirX;
-
-  // Count bound particles
-  let total = 0;
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId
-      && weaveSlotId[i] === weaveSlot && isTransientFlag[i] === 0) {
-      total++;
-    }
-  }
-  if (total === 0) return;
-
-  let slotIdx = 0;
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 0) continue;
-    if (ownerEntityId[i] !== playerEntityId) continue;
-    if (weaveSlotId[i] !== weaveSlot) continue;
-    if (isTransientFlag[i] === 1) continue;
-
-    behaviorMode[i] = 3; // weave active
-
-    // Straight wall perpendicular to aim direction
-    const halfCount = (total - 1) * 0.5;
-    const slotOffset = (slotIdx - halfCount) * BASTION_SPACING_WORLD;
-
-    const targetX = playerX + dirX * BASTION_WALL_DIST_WORLD + perpX * slotOffset;
-    const targetY = playerY + dirY * BASTION_WALL_DIST_WORLD + perpY * slotOffset;
-
-    const dx = targetX - positionXWorld[i];
-    const dy = targetY - positionYWorld[i];
-    forceX[i] += dx * WEAVE_SPRING_STRENGTH;
-    forceY[i] += dy * WEAVE_SPRING_STRENGTH;
-
-    slotIdx++;
-  }
-}
-
-// ---- Spire pattern (straight line shot) -------------------------------------
-
-function triggerSpireLaunch(
-  world: WorldState,
-  playerEntityId: number,
-  dirX: number,
-  dirY: number,
-  weaveSlot: number,
-): void {
-  const {
-    isAliveFlag, ownerEntityId,
-    velocityXWorld, velocityYWorld,
-    behaviorMode, weaveSlotId, attackModeTicksLeft, isTransientFlag,
-    particleCount,
-  } = world;
-
-  const weaveDef = getWeaveDefinition(WEAVE_SPIRE);
-  const speed = weaveDef.deploySpeedWorld;
-  const halfSpread = weaveDef.spreadRad;
-  const duration = weaveDef.durationTicks;
-
-  // Count bound particles
-  let total = 0;
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId
-      && weaveSlotId[i] === weaveSlot && isTransientFlag[i] === 0
-      && behaviorMode[i] === 0) {
-      total++;
-    }
-  }
-  if (total === 0) return;
-
-  const baseAngleRad = Math.atan2(dirY, dirX);
-  let slotIdx = 0;
-
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 0) continue;
-    if (ownerEntityId[i] !== playerEntityId) continue;
-    if (weaveSlotId[i] !== weaveSlot) continue;
-    if (isTransientFlag[i] === 1) continue;
-    if (behaviorMode[i] !== 0) continue; // skip particles already in flight
-
-    // Distribute within the narrow spread
-    let angleOffset: number;
-    if (total === 1) {
-      angleOffset = 0;
-    } else {
-      angleOffset = -halfSpread + (slotIdx / (total - 1)) * halfSpread * 2.0;
-    }
-
-    const launchAngle = baseAngleRad + angleOffset;
-    velocityXWorld[i] = Math.cos(launchAngle) * speed;
-    velocityYWorld[i] = Math.sin(launchAngle) * speed;
-
-    behaviorMode[i] = 3; // weave active
-    attackModeTicksLeft[i] = duration;
-
-    slotIdx++;
-  }
-}
-
-// ---- Weave activation tick-down (for burst weaves) --------------------------
-
+/** Distance (world units) from player center at which the crescent forms. */
+const SHIELD_CRESCENT_RADIUS_WORLD = 12.0;
+/** Minimum half-arc angle (radians) for 1 particle. */
+const SHIELD_MIN_HALF_ARC_RAD = 0.15;
+/** Maximum half-arc angle (radians) for maximum particles. */
+const SHIELD_MAX_HALF_ARC_RAD = Math.PI * 0.5;
+/** Spring force strength pulling particles toward their crescent position. */
+const SHIELD_SPRING_STRENGTH = 600.0;
 /**
- * Ticks down weave-active particles that have a finite duration.
- * When their time runs out, transitions them to returning state.
+ * Number of particles at which the crescent reaches maximum arc.
+ * Beyond this, particles pack more densely rather than widening further.
  */
-function tickWeaveActiveParticles(world: WorldState): void {
-  const { isAliveFlag, behaviorMode, attackModeTicksLeft, particleCount } = world;
+const SHIELD_MAX_ARC_PARTICLE_COUNT = 30;
 
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 0) continue;
-    if (behaviorMode[i] !== 3) continue;
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-    // Only tick down burst-type weave particles (duration > 0 at launch)
-    if (attackModeTicksLeft[i] > 0) {
-      attackModeTicksLeft[i] -= 1.0;
-      if (attackModeTicksLeft[i] <= 0) {
-        // Transition to returning
-        behaviorMode[i] = 4;
-        attackModeTicksLeft[i] = RETURN_DURATION_TICKS;
-      }
+/** Finds the player cluster and returns its entity ID and position, or null. */
+function findPlayerCluster(world: WorldState): { entityId: number; xWorld: number; yWorld: number } | null {
+  for (let ci = 0; ci < world.clusters.length; ci++) {
+    if (world.clusters[ci].isPlayerFlag === 1 && world.clusters[ci].isAliveFlag === 1) {
+      return {
+        entityId: world.clusters[ci].entityId,
+        xWorld: world.clusters[ci].positionXWorld,
+        yWorld: world.clusters[ci].positionYWorld,
+      };
     }
-    // Sustained weaves (attackModeTicksLeft === 0) stay in mode 3 until released
   }
+  return null;
 }
 
-/**
- * Applies gentle return-to-orbit forces for particles in returning state (mode 4).
- * After RETURN_DURATION_TICKS, reverts to passive orbit (mode 0).
- */
-function tickReturningParticles(world: WorldState): void {
+// ── Storm Weave: passive attraction ─────────────────────────────────────────
+
+function applyStormAttraction(world: WorldState): void {
+  const player = findPlayerCluster(world);
+  if (player === null) return;
+  const { entityId: playerEntityId, xWorld: playerX, yWorld: playerY } = player;
+
   const {
-    isAliveFlag, ownerEntityId, clusters,
+    isAliveFlag, ownerEntityId, kindBuffer,
     positionXWorld, positionYWorld,
     forceX, forceY,
     anchorAngleRad, anchorRadiusWorld,
-    behaviorMode, attackModeTicksLeft,
-    particleCount,
+    lifetimeTicks, ageTicks,
+    behaviorMode, particleDurability,
+    respawnDelayTicks, attackModeTicksLeft,
+    isTransientFlag, weaveSlotId,
   } = world;
 
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 0) continue;
-    if (behaviorMode[i] !== 4) continue;
+  const profile = getElementProfile(ParticleKind.Physical);
+  const attractRadSq = STORM_ATTRACT_RADIUS_WORLD * STORM_ATTRACT_RADIUS_WORLD;
+  const claimRadSq = STORM_CLAIM_RADIUS_WORLD * STORM_CLAIM_RADIUS_WORLD;
 
-    attackModeTicksLeft[i] -= 1.0;
-    if (attackModeTicksLeft[i] <= 0) {
-      behaviorMode[i] = 0; // back to passive orbit
+  for (let i = 0; i < world.particleCount; i++) {
+    if (isAliveFlag[i] === 0) continue;
+    // Only attract unowned Gold Dust (Physical kind)
+    if (ownerEntityId[i] !== -1) continue;
+    if (kindBuffer[i] !== ParticleKind.Physical) continue;
+
+    const dx = playerX - positionXWorld[i];
+    const dy = playerY - positionYWorld[i];
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq > attractRadSq || distSq < 0.001) continue;
+
+    // Claim particle if within claim radius
+    if (distSq < claimRadSq) {
+      ownerEntityId[i] = playerEntityId;
+      behaviorMode[i] = 0; // orbit
+      anchorAngleRad[i] = Math.atan2(dy, dx);
+      anchorRadiusWorld[i] = profile.orbitRadiusWorld;
+      particleDurability[i] = profile.toughness;
+      respawnDelayTicks[i] = 0;
       attackModeTicksLeft[i] = 0;
+      isTransientFlag[i] = 0;
+      weaveSlotId[i] = 0;
+      // Reset lifetime so newly claimed particles don't immediately expire
+      lifetimeTicks[i] = Math.max(MIN_CLAIMED_DUST_LIFETIME_TICKS, profile.lifetimeBaseTicks);
+      ageTicks[i] = 0;
       continue;
     }
 
-    // Pull toward anchor position on owner
-    const ownerId = ownerEntityId[i];
-    let ownerX = 0;
-    let ownerY = 0;
-    for (let ci = 0; ci < clusters.length; ci++) {
-      if (clusters[ci].entityId === ownerId) {
-        ownerX = clusters[ci].positionXWorld;
-        ownerY = clusters[ci].positionYWorld;
-        break;
-      }
-    }
-
-    const anchorX = ownerX + Math.cos(anchorAngleRad[i]) * anchorRadiusWorld[i];
-    const anchorY = ownerY + Math.sin(anchorAngleRad[i]) * anchorRadiusWorld[i];
-
-    const dx = anchorX - positionXWorld[i];
-    const dy = anchorY - positionYWorld[i];
-    forceX[i] += dx * RETURN_SPRING_STRENGTH;
-    forceY[i] += dy * RETURN_SPRING_STRENGTH;
+    // Apply attraction force toward player
+    const dist = Math.sqrt(distSq);
+    const invDist = 1.0 / dist;
+    const falloff = 1.0 - dist / STORM_ATTRACT_RADIUS_WORLD;
+    forceX[i] += dx * invDist * STORM_ATTRACT_STRENGTH * falloff;
+    forceY[i] += dy * invDist * STORM_ATTRACT_STRENGTH * falloff;
   }
 }
 
-// ---- Release sustained weave ------------------------------------------------
+// ── Shield Weave: crescent formation ────────────────────────────────────────
 
-/**
- * Releases all particles in a sustained weave (Aegis/Bastion) back to passive.
- * Called when the player releases the input for a sustained weave.
- */
-function releaseSustainedWeave(
+function applyShieldCrescent(
   world: WorldState,
   playerEntityId: number,
-  weaveSlot: number,
+  playerX: number,
+  playerY: number,
+  aimDirX: number,
+  aimDirY: number,
 ): void {
-  const { isAliveFlag, ownerEntityId, behaviorMode, weaveSlotId, attackModeTicksLeft, particleCount } = world;
+  // Collect indices of player-owned, alive, non-grapple particles
+  const indices: number[] = [];
+  for (let i = 0; i < world.particleCount; i++) {
+    if (world.isAliveFlag[i] === 0) continue;
+    if (world.ownerEntityId[i] !== playerEntityId) continue;
+    // Skip grapple chain particles (behaviorMode 3)
+    if (world.behaviorMode[i] === 3) continue;
+    indices.push(i);
+  }
 
-  for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 0) continue;
-    if (ownerEntityId[i] !== playerEntityId) continue;
-    if (weaveSlotId[i] !== weaveSlot) continue;
-    if (behaviorMode[i] !== 3) continue;
+  const total = indices.length;
+  if (total === 0) return;
 
-    // Transition to returning
-    behaviorMode[i] = 4;
-    attackModeTicksLeft[i] = RETURN_DURATION_TICKS;
+  // Calculate arc half-angle — scales with particle count
+  const arcT = Math.min(1.0, total / SHIELD_MAX_ARC_PARTICLE_COUNT);
+  const halfArcRad = SHIELD_MIN_HALF_ARC_RAD + arcT * (SHIELD_MAX_HALF_ARC_RAD - SHIELD_MIN_HALF_ARC_RAD);
+
+  // Center angle from aim direction
+  const centerAngle = Math.atan2(aimDirY, aimDirX);
+
+  for (let idx = 0; idx < total; idx++) {
+    const i = indices[idx];
+    // Distribute evenly across the arc, centered
+    const t = total > 1 ? idx / (total - 1) : 0.5;
+    const angle = centerAngle - halfArcRad + t * 2.0 * halfArcRad;
+
+    // Target position on the crescent
+    const targetX = playerX + Math.cos(angle) * SHIELD_CRESCENT_RADIUS_WORLD;
+    const targetY = playerY + Math.sin(angle) * SHIELD_CRESCENT_RADIUS_WORLD;
+
+    // Spring force toward target position
+    const dx = targetX - world.positionXWorld[i];
+    const dy = targetY - world.positionYWorld[i];
+    world.forceX[i] += dx * SHIELD_SPRING_STRENGTH;
+    world.forceY[i] += dy * SHIELD_SPRING_STRENGTH;
+
+    // Set to block mode so binding forces don't interfere
+    world.behaviorMode[i] = 2;
   }
 }
 
-// ---- Main entry point -------------------------------------------------------
-
-/**
- * Returns true if the given weave is a sustained (hold) type.
- * Sustained weaves have durationTicks === 0.
- */
-function isSustainedWeave(weaveId: WeaveId): boolean {
-  return getWeaveDefinition(weaveId).durationTicks === 0;
-}
+// ── Public entry point ──────────────────────────────────────────────────────
 
 /**
  * Applies weave combat forces for the player each tick.
  *
- * This is called from tick.ts in place of the old player attack/block logic.
- * Enemy combat still uses the legacy system.
+ * Called from tick.ts. Handles:
+ *   1. Storm Weave — passive attraction of nearby unowned Gold Dust
+ *   2. Shield Weave — crescent formation when primary/secondary is held
  */
 export function applyPlayerWeaveCombat(world: WorldState): void {
-  // Find the player cluster
-  let playerEntityId = -1;
-  let playerX = 0;
-  let playerY = 0;
-  for (let ci = 0; ci < world.clusters.length; ci++) {
-    if (world.clusters[ci].isPlayerFlag === 1 && world.clusters[ci].isAliveFlag === 1) {
-      playerEntityId = world.clusters[ci].entityId;
-      playerX = world.clusters[ci].positionXWorld;
-      playerY = world.clusters[ci].positionYWorld;
-      break;
-    }
-  }
-  if (playerEntityId === -1) return;
+  // ── Storm Weave (always active) ─────────────────────────────────────────
+  applyStormAttraction(world);
 
-  // ── Primary Weave ─────────────────────────────────────────────────────────
+  // ── Shield Weave (mouse-button driven) ─────────────────────────────────
+  const player = findPlayerCluster(world);
+  if (player === null) return;
+  const { entityId: playerEntityId, xWorld: playerX, yWorld: playerY } = player;
+
+  // Primary mouse button → shield
   if (world.playerPrimaryWeaveTriggeredFlag === 1) {
     world.playerPrimaryWeaveTriggeredFlag = 0;
-    const weaveId = world.playerPrimaryWeaveId;
-    if (isSustainedWeave(weaveId)) {
-      world.isPlayerPrimaryWeaveActiveFlag = 1;
-    } else {
-      // Burst weave — trigger once
-      applyBurstWeave(world, playerEntityId, weaveId,
-        world.playerWeaveAimDirXWorld, world.playerWeaveAimDirYWorld,
-        WEAVE_SLOT_PRIMARY);
-    }
+    world.isPlayerPrimaryWeaveActiveFlag = 1;
   }
-
-  if (world.isPlayerPrimaryWeaveActiveFlag === 1) {
-    const weaveId = world.playerPrimaryWeaveId;
-    applySustainedWeave(world, playerEntityId, playerX, playerY, weaveId,
-      world.playerWeaveAimDirXWorld, world.playerWeaveAimDirYWorld,
-      WEAVE_SLOT_PRIMARY);
-  }
-
   if (world.playerPrimaryWeaveEndFlag === 1) {
     world.playerPrimaryWeaveEndFlag = 0;
     world.isPlayerPrimaryWeaveActiveFlag = 0;
-    releaseSustainedWeave(world, playerEntityId, WEAVE_SLOT_PRIMARY);
-  }
-
-  // ── Secondary Weave ───────────────────────────────────────────────────────
-  if (world.playerSecondaryWeaveTriggeredFlag === 1) {
-    world.playerSecondaryWeaveTriggeredFlag = 0;
-    const weaveId = world.playerSecondaryWeaveId;
-    if (isSustainedWeave(weaveId)) {
-      world.isPlayerSecondaryWeaveActiveFlag = 1;
-    } else {
-      applyBurstWeave(world, playerEntityId, weaveId,
-        world.playerWeaveAimDirXWorld, world.playerWeaveAimDirYWorld,
-        WEAVE_SLOT_SECONDARY);
+    // Release particles back to orbit
+    for (let i = 0; i < world.particleCount; i++) {
+      if (world.isAliveFlag[i] === 1 && world.ownerEntityId[i] === playerEntityId && world.behaviorMode[i] === 2) {
+        world.behaviorMode[i] = 0;
+      }
     }
   }
 
-  if (world.isPlayerSecondaryWeaveActiveFlag === 1) {
-    const weaveId = world.playerSecondaryWeaveId;
-    applySustainedWeave(world, playerEntityId, playerX, playerY, weaveId,
-      world.playerWeaveAimDirXWorld, world.playerWeaveAimDirYWorld,
-      WEAVE_SLOT_SECONDARY);
+  // Secondary mouse button → shield
+  if (world.playerSecondaryWeaveTriggeredFlag === 1) {
+    world.playerSecondaryWeaveTriggeredFlag = 0;
+    world.isPlayerSecondaryWeaveActiveFlag = 1;
   }
-
   if (world.playerSecondaryWeaveEndFlag === 1) {
     world.playerSecondaryWeaveEndFlag = 0;
     world.isPlayerSecondaryWeaveActiveFlag = 0;
-    releaseSustainedWeave(world, playerEntityId, WEAVE_SLOT_SECONDARY);
+    for (let i = 0; i < world.particleCount; i++) {
+      if (world.isAliveFlag[i] === 1 && world.ownerEntityId[i] === playerEntityId && world.behaviorMode[i] === 2) {
+        world.behaviorMode[i] = 0;
+      }
+    }
   }
 
-  // ── Tick-down and return transitions ───────────────────────────────────────
-  tickWeaveActiveParticles(world);
-  tickReturningParticles(world);
-}
-
-// ---- Helpers ----------------------------------------------------------------
-
-function applySustainedWeave(
-  world: WorldState,
-  playerEntityId: number,
-  playerX: number,
-  playerY: number,
-  weaveId: WeaveId,
-  aimDirX: number,
-  aimDirY: number,
-  weaveSlot: number,
-): void {
-  switch (weaveId) {
-    case WEAVE_AEGIS:
-      applyAegisPattern(world, playerEntityId, playerX, playerY, weaveSlot);
-      break;
-    case WEAVE_BASTION:
-      applyBastionPattern(world, playerEntityId, playerX, playerY, aimDirX, aimDirY, weaveSlot);
-      break;
-    default:
-      // Fallback for any sustained weave that doesn't have a specific pattern
-      applyAegisPattern(world, playerEntityId, playerX, playerY, weaveSlot);
-      break;
-  }
-}
-
-function applyBurstWeave(
-  world: WorldState,
-  playerEntityId: number,
-  weaveId: WeaveId,
-  aimDirX: number,
-  aimDirY: number,
-  weaveSlot: number,
-): void {
-  switch (weaveId) {
-    case WEAVE_SPIRE:
-      triggerSpireLaunch(world, playerEntityId, aimDirX, aimDirY, weaveSlot);
-      break;
-    default:
-      // Fallback for burst weaves without specific pattern — use Spire
-      triggerSpireLaunch(world, playerEntityId, aimDirX, aimDirY, weaveSlot);
-      break;
+  // Apply crescent forces while shield is active
+  if (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) {
+    const aimX = world.playerWeaveAimDirXWorld;
+    const aimY = world.playerWeaveAimDirYWorld;
+    applyShieldCrescent(world, playerEntityId, playerX, playerY, aimX, aimY);
   }
 }

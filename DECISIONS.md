@@ -626,3 +626,30 @@ can verify the collision boundary matches the visual tile geometry.
 - This gives instant visual feedback: blocks appear/disappear immediately, theme changes apply instantly
 - Player and enemies reset to spawn positions on each edit (time stays frozen in editor)
 - The editor remains active throughout the reload
+
+## Dust Combat Rework (BUILD 113)
+
+### Dust Types
+- All dust types removed from player equipment except Gold Dust (Physical, kind 0)
+- Legacy kinds (Fire through Void, plus Water/Lava/Stone) retained for enemy use and backward compatibility
+- Full documentation of removed types and their mechanics preserved in `DUST_TYPES_ARCHIVE.md`
+
+### Weave System
+- Old weave patterns (Aegis, Bastion, Spire, Torrent, Comet, Scatter) removed
+- Two new weaves implemented:
+  - **Storm Weave**: Passive attraction — always active, attracts unowned Gold Dust within 80 world units, claims particles within 12 world units
+  - **Shield Weave**: Crescent formation — activated by mouse button, forms particles in a crescent arc in the aim direction. Arc size scales with particle count (min 0.15 rad, max π/2 rad). Spring force of 600 pulls particles to crescent positions. Particles slide inward to fill gaps as outer particles are destroyed.
+- Storm Weave is the first pickup; Shield Weave assigned to a mouse button
+
+### Dust Rendering
+- Particle visual diameter changed from 4 to 3 world units (3×3 virtual pixels per mote)
+- Physical (Gold Dust) particles render as squares (GLSL shape 2, Canvas 2D fillRect)
+- Additive glow added via bloom system: each Gold Dust particle emits a circular glow (radius 2.5× scale, intensity 0.6, gold color #ffd700) that blends additively — multiple overlapping particles produce stronger combined glow
+
+### Editor-Placed Dust Piles
+- Gold dust on the ground is no longer procedurally generated in the lobby (worldNumber 0)
+- New `dustPile` editor palette item for placing gold dust piles at specific positions
+- Each pile has configurable `dustCount` (default 5)
+- At room load, piles spawn unowned Physical particles with near-permanent lifetime (99999 ticks)
+- Storm Weave attracts and claims these particles when the player is nearby
+- Environmental dust layer skips procedural generation in lobby rooms to avoid duplication

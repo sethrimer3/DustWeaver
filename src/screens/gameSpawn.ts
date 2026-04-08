@@ -196,3 +196,49 @@ export function spawnBackgroundFluidParticles(
     world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
   }
 }
+
+// ── Dust pile particle spawning ──────────────────────────────────────────────
+
+/** Near-permanent lifetime for dust pile particles — they persist until claimed. */
+const DUST_PILE_PARTICLE_LIFETIME_TICKS = 99999;
+
+/**
+ * Spawns unowned Gold Dust particles scattered around a dust pile position.
+ * These persist until claimed by the Storm Weave.
+ */
+export function spawnDustPileParticles(
+  world: WorldState,
+  xWorld: number,
+  yWorld: number,
+  count: number,
+  rng: RngState,
+): void {
+  const profile = getElementProfile(ParticleKind.Physical);
+  for (let i = 0; i < count; i++) {
+    if (world.particleCount >= MAX_PARTICLES) break;
+    const idx = world.particleCount++;
+    world.positionXWorld[idx] = xWorld + nextFloatRange(rng, -4, 4);
+    world.positionYWorld[idx] = yWorld + nextFloatRange(rng, -2, 0);
+    world.velocityXWorld[idx] = 0;
+    world.velocityYWorld[idx] = 0;
+    world.forceX[idx] = 0;
+    world.forceY[idx] = 0;
+    world.massKg[idx] = profile.massKg;
+    world.chargeUnits[idx] = 0;
+    world.isAliveFlag[idx] = 1;
+    world.kindBuffer[idx] = ParticleKind.Physical;
+    world.ownerEntityId[idx] = -1;
+    world.anchorAngleRad[idx] = 0;
+    world.anchorRadiusWorld[idx] = 0;
+    world.lifetimeTicks[idx] = DUST_PILE_PARTICLE_LIFETIME_TICKS;
+    world.ageTicks[idx] = 0;
+    world.noiseTickSeed[idx] = (nextFloat(rng) * 0xffffffff) >>> 0;
+    world.behaviorMode[idx] = 0;
+    world.particleDurability[idx] = profile.toughness;
+    world.respawnDelayTicks[idx] = 0;
+    world.attackModeTicksLeft[idx] = 0;
+    world.disturbanceFactor[idx] = 0;
+    world.isTransientFlag[idx] = 1;
+    world.weaveSlotId[idx] = 0;
+  }
+}

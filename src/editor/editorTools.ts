@@ -84,6 +84,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check dust piles
+  for (const p of room.dustPiles) {
+    if (hitTestPoint(p.xBlock, p.yBlock, bx, by)) {
+      return { type: 'dustPile', uid: p.uid };
+    }
+  }
+
   // Check player spawn
   if (hitTestPoint(room.playerSpawnBlock[0], room.playerSpawnBlock[1], bx, by)) {
     return { type: 'playerSpawn', uid: 0 };
@@ -208,6 +215,13 @@ export function placeAtCursor(state: EditorState): void {
       xBlock: bx,
       yBlock: by,
     });
+  } else if (item.id === 'dust_pile') {
+    room.dustPiles.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      dustCount: 5,
+    });
   }
 }
 
@@ -248,6 +262,16 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestPoint(room.skillTombs[i].xBlock, room.skillTombs[i].yBlock, bx, by)) {
       const removedUid = room.skillTombs[i].uid;
       room.skillTombs.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check dust piles
+  for (let i = 0; i < room.dustPiles.length; i++) {
+    if (hitTestPoint(room.dustPiles[i].xBlock, room.dustPiles[i].yBlock, bx, by)) {
+      const removedUid = room.dustPiles[i].uid;
+      room.dustPiles.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
@@ -341,6 +365,11 @@ export function getAllElementsInRect(
   for (const s of room.skillTombs) {
     if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
       results.push({ type: 'skillTomb', uid: s.uid });
+    }
+  }
+  for (const p of room.dustPiles) {
+    if (p.xBlock >= minX && p.xBlock <= maxX && p.yBlock >= minY && p.yBlock <= maxY) {
+      results.push({ type: 'dustPile', uid: p.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&

@@ -236,6 +236,14 @@ export interface RoomFireflyJarDef {
   yBlock: number;
 }
 
+/** A pile of gold dust placed on the ground that can be attracted by the Storm Weave. */
+export interface RoomDustPileDef {
+  xBlock: number;
+  yBlock: number;
+  /** Number of dust particles in this pile (default: 5). */
+  dustCount: number;
+}
+
 /** Full definition for a single room in the Metroidvania world. */
 export interface RoomDef {
   /** Unique identifier for this room. */
@@ -295,4 +303,6 @@ export interface RoomDef {
   dustBoostJars?: readonly RoomDustBoostJarDef[];
   /** Jars that release golden fireflies when broken by the player. */
   fireflyJars?: readonly RoomFireflyJarDef[];
+  /** Piles of gold dust placed on the ground (attracted by Storm Weave). */
+  dustPiles?: readonly RoomDustPileDef[];
 }

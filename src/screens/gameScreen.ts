@@ -42,6 +42,7 @@ import {
   spawnLoadoutParticles,
   spawnWeaveLoadoutParticles,
   spawnBackgroundFluidParticles,
+  spawnDustPileParticles,
   PARTICLE_COUNT_PER_CLUSTER,
   BACKGROUND_FLUID_COUNT,
   BOSS_HP_MULTIPLIER,
@@ -320,6 +321,17 @@ export function startGameScreen(
 
     // Load environmental hazards (after walls so breakable blocks can be added as walls)
     loadRoomHazards(world, room);
+
+    // Spawn dust pile particles (unowned Gold Dust for Storm Weave attraction)
+    for (let i = 0; i < world.dustPileCount; i++) {
+      spawnDustPileParticles(
+        world,
+        world.dustPileXWorld[i],
+        world.dustPileYWorld[i],
+        world.dustPileDustCount[i],
+        world.rng,
+      );
+    }
 
     // Init dust
     environmentalDust.initFromWorld(world, room.worldNumber);

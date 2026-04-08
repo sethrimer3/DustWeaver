@@ -11,7 +11,7 @@ import type { CameraState } from '../render/camera';
 
 import {
   EditorState, createEditorState, EditorTool,
-  EditorWall, EditorEnemy, EditorTransition, EditorSkillTomb,
+  EditorWall, EditorEnemy, EditorTransition, EditorSkillTomb, EditorDustPile,
   BlockTheme, BackgroundId, LightingEffect,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
@@ -614,6 +614,11 @@ export function createEditorController(
       tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
     }
 
+    for (const pile of room.dustPiles) {
+      pile.xBlock = Math.min(Math.max(0, pile.xBlock), maxX);
+      pile.yBlock = Math.min(Math.max(0, pile.yBlock), maxY);
+    }
+
     // Clamp interior wall rectangles so they stay fully inside the room.
     for (const wall of room.interiorWalls) {
       wall.wBlock = Math.max(1, Math.min(wall.wBlock, room.widthBlocks));
@@ -683,6 +688,12 @@ export function createEditorController(
       for (const tomb of room.skillTombs) {
         tomb.xBlock += shiftX;
         tomb.yBlock += shiftY;
+      }
+
+      // Shift dust piles
+      for (const pile of room.dustPiles) {
+        pile.xBlock += shiftX;
+        pile.yBlock += shiftY;
       }
 
       // Shift interior walls
@@ -780,6 +791,13 @@ export function createEditorController(
         if (prop === 'skillTomb.xBlock' && !isNaN(numVal)) tomb.xBlock = numVal;
         if (prop === 'skillTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
       }
+    } else if (el.type === 'dustPile') {
+      const pile = room.dustPiles.find((p: EditorDustPile) => p.uid === el.uid);
+      if (pile) {
+        if (prop === 'dustPile.xBlock' && !isNaN(numVal)) pile.xBlock = numVal;
+        if (prop === 'dustPile.yBlock' && !isNaN(numVal)) pile.yBlock = numVal;
+        if (prop === 'dustPile.dustCount' && !isNaN(numVal)) pile.dustCount = Math.max(1, numVal);
+      }
     }
   }
 
@@ -799,6 +817,9 @@ export function createEditorController(
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
+      } else if (el.type === 'dustPile') {
+        const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
+        if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
       } else if (el.type === 'playerSpawn') {
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
       }
@@ -824,6 +845,9 @@ export function createEditorController(
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'dustPile') {
+        const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
+        if (p) { p.xBlock = orig.xBlock + deltaX; p.yBlock = orig.yBlock + deltaY; }
       } else if (el.type === 'playerSpawn') {
         s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
         s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
@@ -834,8 +858,8 @@ export function createEditorController(
   // ── Copy/Paste helpers ───────────────────────────────────────────────────
 
   function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
-    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[] } = {
-      walls: [], enemies: [], skillTombs: [],
+    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] } = {
+      walls: [], enemies: [], skillTombs: [], dustPiles: [],
     };
     for (const el of elements) {
       if (el.type === 'wall') {
@@ -847,6 +871,9 @@ export function createEditorController(
       } else if (el.type === 'skillTomb') {
         const t = room.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) data.skillTombs.push({ ...t });
+      } else if (el.type === 'dustPile') {
+        const p = room.dustPiles.find(p2 => p2.uid === el.uid);
+        if (p) data.dustPiles.push({ ...p });
       }
     }
     return JSON.stringify(data);
@@ -854,7 +881,7 @@ export function createEditorController(
 
   function pasteFromClipboard(s: EditorState): void {
     if (!s.roomData || !s.clipboard) return;
-    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[] };
+    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] };
     try {
       data = JSON.parse(s.clipboard) as typeof data;
     } catch {
@@ -870,6 +897,7 @@ export function createEditorController(
     for (const w of data.walls) { minX = Math.min(minX, w.xBlock); minY = Math.min(minY, w.yBlock); }
     for (const e of data.enemies) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
     for (const t of data.skillTombs) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
+    for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
     if (!isFinite(minX)) minX = 0;
     if (!isFinite(minY)) minY = 0;
 
@@ -902,6 +930,16 @@ export function createEditorController(
         yBlock: t.yBlock - minY + offsetY,
       });
       newElements.push({ type: 'skillTomb', uid: newUid });
+    }
+    for (const p of (data.dustPiles ?? [])) {
+      const newUid = allocateUid(s);
+      s.roomData.dustPiles.push({
+        ...p,
+        uid: newUid,
+        xBlock: p.xBlock - minX + offsetX,
+        yBlock: p.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'dustPile', uid: newUid });
     }
     s.selectedElements = newElements;
   }

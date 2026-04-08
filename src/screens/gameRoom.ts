@@ -1,4 +1,4 @@
-import { WorldState, MAX_WALLS } from '../sim/world';
+import { WorldState, MAX_WALLS, MAX_DUST_PILES } from '../sim/world';
 import { RoomDef, BLOCK_SIZE_MEDIUM, blockThemeToIndex, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
 import {
   SPIKE_DIR_UP,
@@ -159,6 +159,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.fireflyJarCount = 0;
   world.fireflyCount = 0;
   world.isPlayerInWaterFlag = 0;
+  world.dustPileCount = 0;
 
   // ── Spikes ────────────────────────────────────────────────────────────────
   const spikeDefs = room.spikes ?? [];
@@ -252,6 +253,17 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.fireflyJarXWorld[ji] = (j.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
     world.fireflyJarYWorld[ji] = (j.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
     world.isFireflyJarActiveFlag[ji] = 1;
+  }
+
+  // ── Dust piles ──────────────────────────────────────────────────────────
+  const dustPileDefs = room.dustPiles ?? [];
+  for (let i = 0; i < dustPileDefs.length && world.dustPileCount < MAX_DUST_PILES; i++) {
+    const p = dustPileDefs[i];
+    const pi = world.dustPileCount++;
+    world.dustPileXWorld[pi] = (p.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.dustPileYWorld[pi] = (p.yBlock + 1.0) * BLOCK_SIZE_MEDIUM; // bottom of block
+    world.dustPileDustCount[pi] = p.dustCount;
+    world.isDustPileActiveFlag[pi] = 1;
   }
 }
 
