@@ -128,6 +128,48 @@ function drawGrappleBloom(
   });
 }
 
+/**
+ * Draws additive glow for gold dust particles into the bloom system's glow pass.
+ * Multiple overlapping particles produce a stronger combined glow (additive blend).
+ */
+function drawParticleGlow(
+  bloomSystem: BloomSystem,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  const particles = snapshot.particles;
+  /** Glow radius is slightly larger than the 3×3 dust square for a soft halo. */
+  const glowRadius = 2.5 * scalePx;
+
+  for (let i = 0; i < particles.particleCount; i++) {
+    if (particles.isAliveFlag[i] === 0) continue;
+    // Only glow gold dust (Physical) particles
+    const kind = particles.kindBuffer[i];
+    if (kind !== ParticleKind.Physical && kind !== ParticleKind.Gold) continue;
+
+    const lt = particles.lifetimeTicks[i];
+    const normAge = lt > 0 ? Math.min(1.0, particles.ageTicks[i] / lt) : 0.0;
+    const ageFade = 1.0 - normAge;
+    if (ageFade < 0.05) continue;
+
+    const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
+    const sy = particles.positionYWorld[i] * scalePx + offsetYPx;
+
+    bloomSystem.glowPass.drawCircle({
+      x: sx,
+      y: sy,
+      radius: glowRadius,
+      glow: {
+        enabled: true,
+        intensity: 0.6 * ageFade,
+        color: '#ffd700',
+      },
+    });
+  }
+}
+
 function drawOffensiveDustOutlineOverlay(
   deviceCtx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,
@@ -313,6 +355,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom);
   drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
+  drawParticleGlow(bloomSystem, snapshot, ox, oy, zoom);
 
   // Tunnel darkness overlays
   drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);

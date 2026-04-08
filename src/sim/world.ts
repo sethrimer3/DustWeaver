@@ -321,8 +321,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerBlockDirXWorld: 1.0,
     playerBlockDirYWorld: 0.0,
     // Weave combat state
-    playerPrimaryWeaveId: 'spire',
-    playerSecondaryWeaveId: 'aegis',
+    playerPrimaryWeaveId: 'storm',
+    playerSecondaryWeaveId: 'shield',
     playerPrimaryWeaveTriggeredFlag: 0,
     playerSecondaryWeaveTriggeredFlag: 0,
     isPlayerPrimaryWeaveActiveFlag: 0,

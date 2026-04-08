@@ -132,7 +132,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 17) return 3.0; // Stone     → Triangle (rocky, jagged)
     if (ki == 18) return 1.0; // Gold      → Diamond (sparkle)
     if (ki == 19) return 0.0; // Light     → Circle (radiant glow)
-    return 0.0;               // Physical  → Circle (default)
+    return 2.0;               // Physical  → Square (gold dust mote)
   }
 
   // Returns true if the point coord (in [-0.5, 0.5] space) lies outside the
