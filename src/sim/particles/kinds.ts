@@ -65,9 +65,9 @@ export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 1
  * Physical uses Circle; all other kinds use non-circle polygons.
  */
 export enum ParticleShape {
-  Circle   = 0,  // Physical, Nature
-  Diamond  = 1,  // Lightning, Wind
-  Square   = 2,  // Shadow, Metal
+  Circle   = 0,  // Nature, Fluid, Water, Light
+  Diamond  = 1,  // Lightning, Wind, Gold
+  Square   = 2,  // Physical, Shadow, Metal
   Triangle = 3,  // Fire, Earth
   Hexagon  = 4,  // Ice, Crystal
   Cross    = 5,  // Holy

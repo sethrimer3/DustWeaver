@@ -57,6 +57,12 @@ export class EnvironmentalDustLayer {
     this.buildSurfaceSegments(world);
     this.activeDustSprite = worldNumber === LOBBY_WORLD_NUMBER ? this.goldenDustSprite : this.brownDustSprite;
 
+    // In the lobby, gold dust is placed via editor dust piles — skip procedural generation
+    if (worldNumber === LOBBY_WORLD_NUMBER) {
+      this.particleCount = 0;
+      return;
+    }
+
     const targetCount = Math.min(
       MAX_DUST_PARTICLES,
       Math.max(300, Math.floor((world.worldWidthWorld / 1000) * DUST_DENSITY_PER_1000PX)),

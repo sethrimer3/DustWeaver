@@ -10,7 +10,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSkillTomb } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSkillTomb, EditorDustPile } from './editorState';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -123,6 +123,12 @@ export interface RoomJsonFireflyJar {
   yBlock: number;
 }
 
+export interface RoomJsonDustPile {
+  xBlock: number;
+  yBlock: number;
+  dustCount: number;
+}
+
 export interface RoomJsonDef {
   id: string;
   name: string;
@@ -153,6 +159,7 @@ export interface RoomJsonDef {
   breakableBlocks?: RoomJsonBreakableBlock[];
   dustBoostJars?: RoomJsonDustBoostJar[];
   fireflyJars?: RoomJsonFireflyJar[];
+  dustPiles?: RoomJsonDustPile[];
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
@@ -270,6 +277,13 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     yBlock: s.yBlock,
   }));
 
+  const dustPiles: EditorDustPile[] = (json.dustPiles ?? []).map(p => ({
+    uid: uid++,
+    xBlock: p.xBlock,
+    yBlock: p.yBlock,
+    dustCount: p.dustCount,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -285,6 +299,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       enemies,
       transitions,
       skillTombs,
+      dustPiles,
     },
     nextUid: uid,
   };
@@ -344,6 +359,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.blockTheme) json.blockTheme = data.blockTheme;
   if (data.backgroundId) json.backgroundId = data.backgroundId;
   if (data.lightingEffect) json.lightingEffect = data.lightingEffect;
+  if (data.dustPiles.length > 0) {
+    json.dustPiles = data.dustPiles.map(p => ({
+      xBlock: p.xBlock,
+      yBlock: p.yBlock,
+      dustCount: p.dustCount,
+    }));
+  }
   return json;
 }
 
@@ -489,6 +511,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     playerSpawnBlock: [data.playerSpawnBlock[0], data.playerSpawnBlock[1]],
     transitions,
     skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount })),
   };
 }
 
@@ -558,6 +581,13 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     yBlock: s.yBlock,
   }));
 
+  const dustPiles: EditorDustPile[] = (room.dustPiles ?? []).map(p => ({
+    uid: uid++,
+    xBlock: p.xBlock,
+    yBlock: p.yBlock,
+    dustCount: p.dustCount,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -573,6 +603,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       enemies,
       transitions,
       skillTombs,
+      dustPiles,
     },
     nextUid: uid,
   };

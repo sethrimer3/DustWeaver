@@ -101,6 +101,13 @@ export function renderEditorOverlays(
       isSelected ? TOMB_SELECTED : TOMB_COLOR, '⛩');
   }
 
+  // ── Dust piles ──────────────────────────────────────────────────────────
+  for (const p of room.dustPiles) {
+    const isSelected = isElementSelected('dustPile', p.uid);
+    drawMarker(ctx, p.xBlock, p.yBlock, offsetXPx, offsetYPx, zoom,
+      isSelected ? 'rgba(255,215,0,0.8)' : 'rgba(255,215,0,0.4)', '✦');
+  }
+
   // ── Placement preview ────────────────────────────────────────────────────
   if (state.activeTool === EditorTool.Place && state.selectedPaletteItem !== null) {
     const preview = getPlacementPreview(state);

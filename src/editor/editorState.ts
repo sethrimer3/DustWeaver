@@ -49,6 +49,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
   { id: 'skill_tomb', label: 'Skill Tomb', category: 'triggers' },
+  { id: 'dust_pile', label: 'Dust Pile', category: 'triggers' },
 ];
 
 /** Available block themes for the editor dropdown. */
@@ -125,6 +126,13 @@ export interface EditorSkillTomb {
   yBlock: number;
 }
 
+export interface EditorDustPile {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  dustCount: number;
+}
+
 export interface EditorRoomData {
   id: string;
   name: string;
@@ -142,11 +150,12 @@ export interface EditorRoomData {
   enemies: EditorEnemy[];
   transitions: EditorTransition[];
   skillTombs: EditorSkillTomb[];
+  dustPiles: EditorDustPile[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'skillTomb' | 'playerSpawn';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'skillTomb' | 'dustPile' | 'playerSpawn';
 
 export interface SelectedElement {
   type: SelectedElementType;

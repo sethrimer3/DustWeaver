@@ -23,6 +23,8 @@ export const MAX_FIREFLY_JARS = 16;
 export const MAX_FIREFLIES = 32;
 /** Number of fireflies spawned from each broken firefly jar. */
 export const FIREFLIES_PER_JAR = 4;
+/** Maximum number of dust piles per room. */
+export const MAX_DUST_PILES = 32;
 
 export interface WorldState extends ParticleBuffers {
   tick: number;
@@ -295,6 +297,18 @@ export interface WorldState extends ParticleBuffers {
 
   /** 1 while the player cluster is inside a water zone this tick. */
   isPlayerInWaterFlag: 0 | 1;
+
+  // ── Dust piles ────────────────────────────────────────────────────────────
+  /** Number of dust piles loaded in the current room. */
+  dustPileCount: number;
+  /** Center X of each dust pile (world units). */
+  dustPileXWorld: Float32Array;
+  /** Center Y of each dust pile (world units). */
+  dustPileYWorld: Float32Array;
+  /** Particle count per dust pile. */
+  dustPileDustCount: Uint8Array;
+  /** 1 if the dust pile is still active (not yet fully claimed). */
+  isDustPileActiveFlag: Uint8Array;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -402,6 +416,12 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     fireflyVelXWorld: new Float32Array(MAX_FIREFLIES),
     fireflyVelYWorld: new Float32Array(MAX_FIREFLIES),
     isPlayerInWaterFlag: 0,
+    // ── Dust piles ───────────────────────────────────────────────────
+    dustPileCount: 0,
+    dustPileXWorld: new Float32Array(MAX_DUST_PILES),
+    dustPileYWorld: new Float32Array(MAX_DUST_PILES),
+    dustPileDustCount: new Uint8Array(MAX_DUST_PILES),
+    isDustPileActiveFlag: new Uint8Array(MAX_DUST_PILES),
     ...createParticleBuffers(),
   };
 }

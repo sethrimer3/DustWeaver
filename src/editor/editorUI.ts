@@ -588,6 +588,16 @@ function updateInspector(
       addField(div, 'yBlock', String(tomb.yBlock),
         v => callbacks?.onPropertyChange('skillTomb.yBlock', parseInt(v)));
     }
+  } else if (el.type === 'dustPile') {
+    const pile = room.dustPiles.find(p => p.uid === el.uid);
+    if (pile) {
+      addField(div, 'xBlock', String(pile.xBlock),
+        v => callbacks?.onPropertyChange('dustPile.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(pile.yBlock),
+        v => callbacks?.onPropertyChange('dustPile.yBlock', parseInt(v)));
+      addField(div, 'dustCount', String(pile.dustCount),
+        v => callbacks?.onPropertyChange('dustPile.dustCount', parseInt(v)));
+    }
   }
 }
 
