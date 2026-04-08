@@ -1,7 +1,8 @@
 /**
  * Equippable element profiles — Physical through Void (ParticleKind indices 0–13).
  *
- * These are the 14 kinds players can equip and use in combat.
+ * Only Physical (Gold Dust) is player-equippable now.
+ * The remaining profiles are legacy — enemies may still reference them.
  */
 
 import type { ElementProfile } from '../elementProfileTypes';

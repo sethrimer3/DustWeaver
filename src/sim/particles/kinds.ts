@@ -1,27 +1,42 @@
 /** Each kind has a distinct motion signature driven by its ElementProfile. */
 export enum ParticleKind {
+  /** Gold Dust — the player's only equippable dust type. */
   Physical  = 0,
+  // ── Legacy kinds (removed from player equipment, kept for backward compat) ──
+  /** @deprecated Removed from player equipment. Enemies may still use. */
   Fire      = 1,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
   Ice       = 2,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
   Lightning = 3,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
   Poison    = 4,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
   Arcane    = 5,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
   Wind      = 6,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
   Holy      = 7,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
   Shadow    = 8,
-  // New particle types
-  Metal     = 9,   // Heavy, dense, squared — high cost; reflects damage when blocking
-  Earth     = 10,  // Grounded, steady, triangular — medium cost
-  Nature    = 11,  // Organic, tendrils, circular — low cost
-  Crystal   = 12,  // Precise, geometric, hexagonal — high cost
-  Void      = 13,  // Dark matter ring — very high cost
+  /** @deprecated Removed from player equipment. Enemies may still use. */
+  Metal     = 9,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
+  Earth     = 10,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
+  Nature    = 11,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
+  Crystal   = 12,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
+  Void      = 13,
   // Background / environmental (not equippable by players)
   Fluid     = 14,  // Background fluid particle — invisible until disturbed
-  // World 1 themes
-  Water     = 15,  // Flowing, turbulent — World 1 water enemy theme
-  // World 2 themes
-  Lava      = 16,  // Slow, powerful, few particles, burning aura — World 2 lava theme
-  Stone     = 17,  // Heavy, shatters on wall/enemy impact into fragments — World 2 stone theme
+  /** @deprecated Removed from player equipment. Enemies may still use. */
+  Water     = 15,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
+  Lava      = 16,
+  /** @deprecated Removed from player equipment. Enemies may still use. */
+  Stone     = 17,
   // Special / ability particles (not equippable)
   Gold      = 18,  // Grappling hook chain — bright golden diamond sparkles
   Light     = 19,  // Boss light chains — radiant white-gold glow
@@ -32,35 +47,18 @@ export const PARTICLE_KIND_COUNT = 20;
 
 /**
  * Ordered list of particle kinds that players can equip.
- * Fluid (14) is intentionally excluded as it is a background-only kind.
- * All other kinds including Water (15), Lava (16), and Stone (17) are equippable.
+ * Only Gold Dust (Physical) is equippable; all other kinds have been removed
+ * from player equipment (enemies may still use them).
  */
 export const EQUIPPABLE_KINDS: readonly ParticleKind[] = [
   ParticleKind.Physical,
-  ParticleKind.Fire,
-  ParticleKind.Ice,
-  ParticleKind.Lightning,
-  ParticleKind.Poison,
-  ParticleKind.Arcane,
-  ParticleKind.Wind,
-  ParticleKind.Holy,
-  ParticleKind.Shadow,
-  ParticleKind.Metal,
-  ParticleKind.Earth,
-  ParticleKind.Nature,
-  ParticleKind.Crystal,
-  ParticleKind.Void,
-  // Fluid (14) intentionally skipped
-  ParticleKind.Water,
-  ParticleKind.Lava,
-  ParticleKind.Stone,
 ];
 
 /**
  * Number of kinds that players can equip.
  * Equals EQUIPPABLE_KINDS.length; use this for iteration counts.
  */
-export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 17
+export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 1
 
 /**
  * Particle shape enum — controls how each particle kind is rendered.
@@ -79,7 +77,7 @@ export enum ParticleShape {
 
 /** Maps each ParticleKind to its rendered shape. */
 export const KIND_SHAPE: ParticleShape[] = [
-  ParticleShape.Circle,   // Physical
+  ParticleShape.Square,   // Physical — square gold dust mote
   ParticleShape.Triangle, // Fire
   ParticleShape.Hexagon,  // Ice
   ParticleShape.Diamond,  // Lightning

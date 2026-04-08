@@ -2,20 +2,13 @@
  * Player Loadout — Weave equipment and dust binding.
  *
  * The loadout defines:
- *   - Primary Weave (left click)
- *   - Secondary Weave (right click)
+ *   - Primary Weave (Storm — passive attraction, always active)
+ *   - Secondary Weave (Shield — crescent shield in aim direction)
  *   - Which dust types are bound to each Weave
- *   - Validation that dust assignments do not exceed Weave slot capacity
- *
- * Example:
- *   Primary: Spire Weave (3 dust slots)
- *     Bound: Flame Dust (2 slots) + Steel Dust (1 slot) = 3/3
- *   Secondary: Aegis Weave (4 dust slots)
- *     Bound: Water Dust (2 slots) + Wind Dust (2 slots) = 4/4
  */
 
 import { ParticleKind } from '../particles/kinds';
-import { WeaveId, getWeaveDefinition, WEAVE_SPIRE, WEAVE_AEGIS } from './weaveDefinition';
+import { WeaveId, getWeaveDefinition, WEAVE_STORM, WEAVE_SHIELD } from './weaveDefinition';
 import { getDustSlotCost } from './dustDefinition';
 
 // ---- Weave Binding ---------------------------------------------------------
@@ -120,17 +113,17 @@ export function getAllBoundDustFlat(loadout: PlayerWeaveLoadout): ParticleKind[]
 /**
  * Creates the default starting loadout for a new game.
  *
- * Primary: Spire Weave with Flame Dust (2 slots) + Steel/Physical Dust (1 slot) = 3/3
- * Secondary: Aegis Weave with Water Dust (2 slots) + Wind Dust (2 slots) = 4/4
+ * Primary: Storm Weave (passive attraction — always active, no bound dust)
+ * Secondary: Shield Weave (crescent shield — no bound dust by default)
  */
 export function createDefaultWeaveLoadout(): PlayerWeaveLoadout {
   return {
     primary: {
-      weaveId: WEAVE_SPIRE,
+      weaveId: WEAVE_STORM,
       boundDust: [],
     },
     secondary: {
-      weaveId: WEAVE_AEGIS,
+      weaveId: WEAVE_SHIELD,
       boundDust: [],
     },
   };
