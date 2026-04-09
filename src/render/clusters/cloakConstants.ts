@@ -189,3 +189,77 @@ export const CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD = -10;
 export const CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD = 15;
 /** Vertical velocity above which fast-fall state activates (world units/sec, downward positive). */
 export const CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD = 180;
+
+export interface CloakDebugOverrides {
+  damping: number;
+  gravityWorldPerSec2: number;
+  velocityInheritance: number;
+  restBiasStrength: number;
+  turnImpulseWorld: number;
+  turnOvershootDurationSec: number;
+  turnOvershootSpreadMultiplier: number;
+  landingImpulseWorldPerSec: number;
+  landingDurationSec: number;
+  landingCompression: number;
+  spreadIdle: number;
+  spreadRunning: number;
+  spreadSprinting: number;
+  spreadJumping: number;
+  spreadFalling: number;
+  spreadFastFall: number;
+  spreadWallSlide: number;
+  spreadCrouching: number;
+  opennessIdle: number;
+  opennessRunning: number;
+  opennessJumping: number;
+  opennessFalling: number;
+  opennessFastFall: number;
+  opennessWallSlide: number;
+  shapeLerpSpeed: number;
+  jumpingVelocityThresholdWorld: number;
+  runningVelocityThresholdWorld: number;
+  fastFallVelocityThresholdWorld: number;
+}
+
+/**
+ * Runtime cloak tuning overrides for debug mode.
+ * Any field set to NaN falls back to the corresponding CLOAK_* constant.
+ */
+export const debugCloakOverrides: CloakDebugOverrides = {
+  damping: NaN,
+  gravityWorldPerSec2: NaN,
+  velocityInheritance: NaN,
+  restBiasStrength: NaN,
+  turnImpulseWorld: NaN,
+  turnOvershootDurationSec: NaN,
+  turnOvershootSpreadMultiplier: NaN,
+  landingImpulseWorldPerSec: NaN,
+  landingDurationSec: NaN,
+  landingCompression: NaN,
+  spreadIdle: NaN,
+  spreadRunning: NaN,
+  spreadSprinting: NaN,
+  spreadJumping: NaN,
+  spreadFalling: NaN,
+  spreadFastFall: NaN,
+  spreadWallSlide: NaN,
+  spreadCrouching: NaN,
+  opennessIdle: NaN,
+  opennessRunning: NaN,
+  opennessJumping: NaN,
+  opennessFalling: NaN,
+  opennessFastFall: NaN,
+  opennessWallSlide: NaN,
+  shapeLerpSpeed: NaN,
+  jumpingVelocityThresholdWorld: NaN,
+  runningVelocityThresholdWorld: NaN,
+  fastFallVelocityThresholdWorld: NaN,
+};
+
+export function getCloakTuningValue(
+  value: number,
+  overrideKey: keyof CloakDebugOverrides,
+): number {
+  const overrideValue = debugCloakOverrides[overrideKey];
+  return Number.isFinite(overrideValue) ? overrideValue : value;
+}
