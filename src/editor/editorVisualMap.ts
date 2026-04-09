@@ -26,9 +26,10 @@ import {
   setRoomWorldOverride,
   registerRoom,
 } from '../levels/rooms';
-import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
+import type { RoomDef, RoomTransitionDef, TransitionDirection } from '../levels/roomDef';
 import { roomJsonDefToRoomDef } from '../levels/roomJsonLoader';
 import { exportWorldMapJson } from './editorExport';
+import { createSubstrateEffect } from '../render/effects/substrateEffect';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,17 @@ const LINK_LINE_COLOR = 'rgba(100,200,255,0.6)';
 const LINK_LINE_ACTIVE = 'rgba(255,255,100,0.8)';
 const TEXT_COLOR = '#c0ffd0';
 const GREEN = '#00c864';
+
+/** Screen-pixel distance within which two facing doorways snap together. */
+const SNAP_THRESHOLD_PX = 40;
+/** Highlight color for doorways that are about to snap together. */
+const DOOR_SNAP_COLOR = '#ffe840';
+/** Preset palette offered in the room color picker. */
+const COLOR_PRESETS = [
+  '#1e2837', '#1a3020', '#2a1a20', '#2a2010', '#18202a',
+  '#004080', '#006040', '#602000', '#400060', '#604010',
+  '#0050a0', '#00884c', '#c84000', '#8800c8', '#c8a000',
+];
 
 /** Scale factor: screen pixels per map world unit at default zoom. */
 const DEFAULT_ZOOM_SCALE = 4;
@@ -65,6 +77,14 @@ interface DoorHitArea {
   yPx: number;
   wPx: number;
   hPx: number;
+}
+
+/** Tracks which two doorways are about to snap together during a room drag. */
+interface SnapIndicator {
+  srcRoomId: string;
+  srcTransIdx: number;
+  tgtRoomId: string;
+  tgtTransIdx: number;
 }
 
 // ── Callbacks ────────────────────────────────────────────────────────────────
@@ -158,7 +178,7 @@ export function showVisualWorldMap(
   header.appendChild(exportBtn);
 
   const hintEl = document.createElement('span');
-  hintEl.textContent = 'Drag rooms \u2022 Click door to link \u2022 Double-click to jump \u2022 Right-click room for options \u2022 Arrow keys nudge selected \u2022 N/ESC to close';
+  hintEl.textContent = 'Drag rooms \u2022 Doors snap when close \u2022 Click door to link \u2022 Double-click to jump \u2022 Right-click room for options \u2022 Arrow keys nudge selected \u2022 N/ESC to close';
   hintEl.style.cssText = `color: rgba(200,255,200,0.4); font-size: 10px; font-family: monospace; margin-left: auto;`;
   header.appendChild(hintEl);
 
@@ -191,6 +211,12 @@ export function showVisualWorldMap(
 
   const ctx = canvas.getContext('2d')!;
 
+  // ── Substrate background effect ────────────────────────────────────────
+  const substrateEffect = createSubstrateEffect();
+
+  // ── Per-room color overrides (in-session, not persisted) ──────────────
+  const roomColorOverrides = new Map<string, string>();
+
   // ── Compute room placements ────────────────────────────────────────────
   const placements = new Map<string, MapRoomPlacement>();
   computeAutoLayout(placements, currentRoomId);
@@ -217,6 +243,9 @@ export function showVisualWorldMap(
   let linkSourceTransIndex = -1;
   let hoveredDoor: DoorHitArea | null = null;
 
+  // Active door snap indicator (shown while dragging near a compatible doorway)
+  let snapIndicator: SnapIndicator | null = null;
+
   // Door hit areas (rebuilt every frame)
   let doorHitAreas: DoorHitArea[] = [];
 
@@ -239,8 +268,14 @@ export function showVisualWorldMap(
     const w = canvas.width;
     const h = canvas.height;
     const dpr = window.devicePixelRatio;
+    const cssCssW = w / dpr;
+    const cssCssH = h / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w / dpr, h / dpr);
+    ctx.clearRect(0, 0, cssCssW, cssCssH);
+
+    // ── Substrate background ────────────────────────────────────────────
+    substrateEffect.update(performance.now(), cssCssW, cssCssH);
+    substrateEffect.draw(ctx);
 
     doorHitAreas = [];
 
@@ -248,6 +283,10 @@ export function showVisualWorldMap(
 
     for (const [roomId, placement] of placements) {
       drawRoom(ctx, placement, roomId === currentRoomId, roomId === selectedRoomId);
+    }
+
+    if (snapIndicator) {
+      drawSnapIndicator(ctx);
     }
 
     if (linkSourceRoomId && linkSourceTransIndex >= 0) {
@@ -275,17 +314,25 @@ export function showVisualWorldMap(
     const rw = room.widthBlocks * zoom;
     const rh = room.heightBlocks * zoom;
 
+    const customColor = roomColorOverrides.get(room.id);
+
     // Selection highlight (behind room fill)
     if (isSelected) {
-      ctx2d.strokeStyle = ROOM_SELECTED_STROKE;
+      ctx2d.strokeStyle = customColor ?? ROOM_SELECTED_STROKE;
       ctx2d.lineWidth = 3;
       ctx2d.strokeRect(sx - 3, sy - 3, rw + 6, rh + 6);
     }
 
     // Room rectangle
-    ctx2d.fillStyle = isCurrent ? ROOM_CURRENT_FILL : ROOM_FILL;
+    if (customColor) {
+      // Parse hex into rgba for fill (semi-transparent) and stroke (solid)
+      ctx2d.fillStyle = hexToRgba(customColor, isCurrent ? 0.55 : 0.35);
+      ctx2d.strokeStyle = customColor;
+    } else {
+      ctx2d.fillStyle = isCurrent ? ROOM_CURRENT_FILL : ROOM_FILL;
+      ctx2d.strokeStyle = isCurrent ? ROOM_CURRENT_STROKE : ROOM_STROKE;
+    }
     ctx2d.fillRect(sx, sy, rw, rh);
-    ctx2d.strokeStyle = isCurrent ? ROOM_CURRENT_STROKE : ROOM_STROKE;
     ctx2d.lineWidth = isCurrent ? 2 : 1;
     ctx2d.strokeRect(sx, sy, rw, rh);
 
@@ -472,6 +519,54 @@ export function showVisualWorldMap(
     return null;
   }
 
+  /** Draws a visual snap indicator for the two doorways about to be aligned. */
+  function drawSnapIndicator(ctx2d: CanvasRenderingContext2D): void {
+    if (!snapIndicator) return;
+
+    const srcDoor = findDoorHitArea(snapIndicator.srcRoomId, snapIndicator.srcTransIdx);
+    const tgtDoor = findDoorHitArea(snapIndicator.tgtRoomId, snapIndicator.tgtTransIdx);
+    if (!srcDoor || !tgtDoor) return;
+
+    const srcCx = srcDoor.xPx + srcDoor.wPx / 2;
+    const srcCy = srcDoor.yPx + srcDoor.hPx / 2;
+    const tgtCx = tgtDoor.xPx + tgtDoor.wPx / 2;
+    const tgtCy = tgtDoor.yPx + tgtDoor.hPx / 2;
+
+    // Highlight glow around both snapping doors
+    for (const door of [srcDoor, tgtDoor]) {
+      const glowSize = door.wPx + 6;
+      ctx2d.save();
+      ctx2d.globalAlpha = 0.55;
+      ctx2d.fillStyle = DOOR_SNAP_COLOR;
+      ctx2d.fillRect(
+        door.xPx - 3, door.yPx - 3, glowSize, glowSize,
+      );
+      ctx2d.restore();
+    }
+
+    // Solid snap-line between the two door centers
+    ctx2d.save();
+    ctx2d.strokeStyle = DOOR_SNAP_COLOR;
+    ctx2d.lineWidth = 2;
+    ctx2d.setLineDash([]);
+    ctx2d.beginPath();
+    ctx2d.moveTo(srcCx, srcCy);
+    ctx2d.lineTo(tgtCx, tgtCy);
+    ctx2d.stroke();
+    ctx2d.restore();
+
+    // "SNAP" label at midpoint
+    const midX = (srcCx + tgtCx) / 2;
+    const midY = (srcCy + tgtCy) / 2;
+    ctx2d.save();
+    ctx2d.fillStyle = DOOR_SNAP_COLOR;
+    ctx2d.font = 'bold 9px monospace';
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.fillText('SNAP', midX, midY - 8);
+    ctx2d.restore();
+  }
+
   // ── Center view on a room ──────────────────────────────────────────────
   function centerOnRoom(roomId: string): void {
     const placement = placements.get(roomId);
@@ -522,8 +617,11 @@ export function showVisualWorldMap(
       const dy = e.clientY - dragStartYPx;
       const placement = placements.get(dragRoomId);
       if (placement) {
+        // Free drag position
         placement.mapXWorld = dragRoomStartXPx + dx / zoom;
         placement.mapYWorld = dragRoomStartYPx + dy / zoom;
+        // Doorway snap: adjust position if a compatible door pair is close enough
+        snapIndicator = applyDoorSnap(dragRoomId, placement);
       }
       render();
     } else if (isDraggingPan) {
@@ -619,8 +717,16 @@ export function showVisualWorldMap(
         const placement = placements.get(dragRoomId);
         if (placement) {
           setRoomMapPosition(dragRoomId, placement.mapXWorld, placement.mapYWorld);
+          if (snapIndicator) {
+            statusBar.textContent =
+              `Snapped: ${effectiveRoomName(dragRoomId)} door #${snapIndicator.srcTransIdx + 1}` +
+              ` aligned with ${effectiveRoomName(snapIndicator.tgtRoomId)} door #${snapIndicator.tgtTransIdx + 1}` +
+              ' \u2014 open rooms in editor to link the transitions';
+            statusBar.style.color = DOOR_SNAP_COLOR;
+          }
         }
       }
+      snapIndicator = null;
       isDraggingRoom = false;
       dragRoomId = '';
       isDraggingPan = false;
@@ -753,6 +859,10 @@ export function showVisualWorldMap(
 
     addMenuItem(`\ud83c\udf10 Move to World\u2026 (now: ${worldDisplayName(wId)})`, () => {
       showMoveToWorldDialog(roomId, wId);
+    });
+
+    addMenuItem('\ud83c\udfa8 Change Color\u2026', () => {
+      showColorPickerDialog(roomId);
     });
 
     addMenuSep();
@@ -1002,7 +1112,119 @@ export function showVisualWorldMap(
     nameInput.focus();
   }
 
-  // ── Modal helper ───────────────────────────────────────────────────────
+  // ── Color picker dialog ────────────────────────────────────────────────
+  function showColorPickerDialog(roomId: string): void {
+    const modal = createModal();
+    const roomName = effectiveRoomName(roomId);
+    const currentColor = roomColorOverrides.get(roomId) ?? '';
+
+    const title = document.createElement('h3');
+    title.textContent = `\ud83c\udfa8 Room Color: "${roomName}"`;
+    title.style.cssText = `color: ${GREEN}; margin: 0 0 12px; font-family: 'Cinzel', serif; font-size: 13px;`;
+    modal.panel.appendChild(title);
+
+    // Preset swatch grid
+    const swatchLbl = document.createElement('div');
+    swatchLbl.textContent = 'Preset colors:';
+    swatchLbl.style.cssText = 'color: rgba(200,255,200,0.6); font-size: 11px; font-family: monospace; margin-bottom: 6px;';
+    modal.panel.appendChild(swatchLbl);
+
+    const swatchGrid = document.createElement('div');
+    swatchGrid.style.cssText = 'display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px;';
+
+    let selectedHex = currentColor;
+
+    const swatchBtns: HTMLButtonElement[] = [];
+
+    function refreshSwatches(): void {
+      for (const btn of swatchBtns) {
+        btn.style.outline = btn.dataset['color'] === selectedHex
+          ? '2px solid #fff'
+          : '1px solid rgba(255,255,255,0.2)';
+      }
+    }
+
+    for (const hex of COLOR_PRESETS) {
+      const btn = document.createElement('button');
+      btn.dataset['color'] = hex;
+      btn.style.cssText = `
+        width: 24px; height: 24px; background: ${hex};
+        border: none; border-radius: 3px; cursor: pointer;
+        outline: 1px solid rgba(255,255,255,0.2);
+      `;
+      btn.title = hex;
+      btn.addEventListener('click', () => {
+        selectedHex = hex;
+        nativeInput.value = hex;
+        refreshSwatches();
+      });
+      swatchBtns.push(btn);
+      swatchGrid.appendChild(btn);
+    }
+
+    modal.panel.appendChild(swatchGrid);
+
+    // Native color input for full freedom
+    const nativeRow = document.createElement('div');
+    nativeRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 12px;';
+
+    const nativeLbl = document.createElement('label');
+    nativeLbl.textContent = 'Custom:';
+    nativeLbl.style.cssText = 'color: rgba(200,255,200,0.6); font-size: 11px; font-family: monospace; white-space: nowrap;';
+
+    const nativeInput = document.createElement('input');
+    nativeInput.type = 'color';
+    nativeInput.value = currentColor || '#1e2837';
+    nativeInput.style.cssText = 'width: 40px; height: 24px; border: none; background: transparent; cursor: pointer;';
+    nativeInput.addEventListener('input', () => {
+      selectedHex = nativeInput.value;
+      refreshSwatches();
+    });
+
+    nativeRow.appendChild(nativeLbl);
+    nativeRow.appendChild(nativeInput);
+    modal.panel.appendChild(nativeRow);
+
+    refreshSwatches();
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display: flex; gap: 8px;';
+
+    const applyBtn = makeHeaderBtn('Apply', '#44cc88');
+    applyBtn.style.cssText += ' flex: 1;';
+    applyBtn.addEventListener('click', () => {
+      if (selectedHex) {
+        roomColorOverrides.set(roomId, selectedHex);
+        statusBar.textContent = `Color set for "${roomName}": ${selectedHex}`;
+        statusBar.style.color = selectedHex;
+      } else {
+        roomColorOverrides.delete(roomId);
+        statusBar.textContent = `Color reset for "${roomName}"`;
+        statusBar.style.color = 'rgba(200,255,200,0.6)';
+      }
+      modal.destroy();
+      render();
+    });
+
+    const clearBtn = makeHeaderBtn('Reset', '#888888');
+    clearBtn.style.cssText += ' flex: 1;';
+    clearBtn.addEventListener('click', () => {
+      roomColorOverrides.delete(roomId);
+      statusBar.textContent = `Color reset for "${roomName}"`;
+      statusBar.style.color = 'rgba(200,255,200,0.6)';
+      modal.destroy();
+      render();
+    });
+
+    const cancelBtn = makeHeaderBtn('Cancel', '#555555');
+    cancelBtn.style.cssText += ' flex: 1;';
+    cancelBtn.addEventListener('click', () => modal.destroy());
+
+    btnRow.appendChild(applyBtn);
+    btnRow.appendChild(clearBtn);
+    btnRow.appendChild(cancelBtn);
+    modal.panel.appendChild(btnRow);
+  }
   function createModal(): { panel: HTMLElement; destroy: () => void } {
     const backdrop = document.createElement('div');
     backdrop.style.cssText = `
@@ -1030,6 +1252,97 @@ export function showVisualWorldMap(
     });
 
     return { panel, destroy: destroyFn };
+  }
+
+  // ── Door snap helpers ─────────────────────────────────────────────────
+
+  /**
+   * Returns the door's centre in map-world coordinates given its containing
+   * room's current placement.
+   */
+  function getDoorCenterWorld(
+    trans: RoomTransitionDef,
+    placement: MapRoomPlacement,
+  ): [number, number] {
+    const room = placement.room;
+    const cx = placement.mapXWorld;
+    const cy = placement.mapYWorld;
+    const mid = trans.positionBlock + trans.openingSizeBlocks / 2;
+    if (trans.direction === 'left')  return [cx,                  cy + mid];
+    if (trans.direction === 'right') return [cx + room.widthBlocks, cy + mid];
+    if (trans.direction === 'up')    return [cx + mid,             cy];
+    /* down */                       return [cx + mid,             cy + room.heightBlocks];
+  }
+
+  /** True when direction `a` and `b` face each other (and can be aligned). */
+  function isOppositeDoor(a: TransitionDirection, b: TransitionDirection): boolean {
+    return (a === 'left'  && b === 'right') ||
+           (a === 'right' && b === 'left')  ||
+           (a === 'up'    && b === 'down')  ||
+           (a === 'down'  && b === 'up');
+  }
+
+  /**
+   * Checks all pairs of (dragged-room door, other-room door) for compatible
+   * facing pairs within SNAP_THRESHOLD_PX on screen.  When found, the
+   * dragged room's placement is moved so the door centres coincide (seamless
+   * wall-to-wall alignment).  Returns a SnapIndicator when snapping occurred.
+   */
+  function applyDoorSnap(
+    draggingRoomId: string,
+    draggingPlacement: MapRoomPlacement,
+  ): SnapIndicator | null {
+    const draggingRoom = draggingPlacement.room;
+
+    let bestDistPx = SNAP_THRESHOLD_PX;
+    let bestSnap: {
+      worldDX: number;
+      worldDY: number;
+      srcTransIdx: number;
+      tgtRoomId: string;
+      tgtTransIdx: number;
+    } | null = null;
+
+    for (let si = 0; si < draggingRoom.transitions.length; si++) {
+      const srcTrans = draggingRoom.transitions[si];
+      const [srcWx, srcWy] = getDoorCenterWorld(srcTrans, draggingPlacement);
+      const [srcSx, srcSy] = worldToScreen(srcWx, srcWy);
+
+      for (const [otherId, otherPlacement] of placements) {
+        if (otherId === draggingRoomId) continue;
+        for (let ti = 0; ti < otherPlacement.room.transitions.length; ti++) {
+          const tgtTrans = otherPlacement.room.transitions[ti];
+          if (!isOppositeDoor(srcTrans.direction, tgtTrans.direction)) continue;
+
+          const [tgtWx, tgtWy] = getDoorCenterWorld(tgtTrans, otherPlacement);
+          const [tgtSx, tgtSy] = worldToScreen(tgtWx, tgtWy);
+          const distPx = Math.hypot(srcSx - tgtSx, srcSy - tgtSy);
+
+          if (distPx < bestDistPx) {
+            bestDistPx = distPx;
+            bestSnap = {
+              worldDX: tgtWx - srcWx,
+              worldDY: tgtWy - srcWy,
+              srcTransIdx: si,
+              tgtRoomId: otherId,
+              tgtTransIdx: ti,
+            };
+          }
+        }
+      }
+    }
+
+    if (bestSnap) {
+      draggingPlacement.mapXWorld += bestSnap.worldDX;
+      draggingPlacement.mapYWorld += bestSnap.worldDY;
+      return {
+        srcRoomId: draggingRoomId,
+        srcTransIdx: bestSnap.srcTransIdx,
+        tgtRoomId: bestSnap.tgtRoomId,
+        tgtTransIdx: bestSnap.tgtTransIdx,
+      };
+    }
+    return null;
   }
 
   // ── Keyboard ───────────────────────────────────────────────────────────
@@ -1081,6 +1394,7 @@ export function showVisualWorldMap(
 
   function destroy(): void {
     dismissContextMenu();
+    substrateEffect.reset();
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('mousedown', onMouseDown);
     canvas.removeEventListener('mouseup', onMouseUp);
@@ -1095,6 +1409,26 @@ export function showVisualWorldMap(
 }
 
 // ── Auto-layout via BFS ──────────────────────────────────────────────────────
+
+/**
+ * Converts a CSS hex colour (#rrggbb or #rgb) to an rgba() string with the
+ * given alpha.  Falls back to a dark default when the input is malformed.
+ */
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  let r: number, g: number, b: number;
+  if (clean.length === 3) {
+    r = parseInt(clean[0] + clean[0], 16);
+    g = parseInt(clean[1] + clean[1], 16);
+    b = parseInt(clean[2] + clean[2], 16);
+  } else {
+    r = parseInt(clean.slice(0, 2), 16);
+    g = parseInt(clean.slice(2, 4), 16);
+    b = parseInt(clean.slice(4, 6), 16);
+  }
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(30,40,55,${alpha})`;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 function computeAutoLayout(
   placements: Map<string, MapRoomPlacement>,
