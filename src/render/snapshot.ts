@@ -150,6 +150,8 @@ export interface WorldSnapshot {
   readonly grappleAttachFxYWorld: number;
   /** 1 while the player is holding block or a sustained weave — used to drive player sprite rotation speed. */
   readonly isPlayerBlockingFlag: 0 | 1;
+  /** 1 when the player has a grapple charge available (grapple hook is equipped). */
+  readonly hasGrappleChargeFlag: 0 | 1;
   /** 1 while the player has any sustained Weave active (primary or secondary). */
   readonly isPlayerWeaveActiveFlag: 0 | 1;
   /** Selected character identifier ('knight', 'demonFox', 'princess', or 'outcast'). */
@@ -244,6 +246,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleAttachFxXWorld: world.grappleAttachFxXWorld,
     grappleAttachFxYWorld: world.grappleAttachFxYWorld,
     isPlayerBlockingFlag: world.isPlayerBlockingFlag,
+    hasGrappleChargeFlag: world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
     characterId: world.characterId,
   };

@@ -7,6 +7,8 @@ export interface RenderSizeOption {
 
 const RENDER_SIZE_STORAGE_KEY = 'dustweaver-render-size-id';
 const OFFENSIVE_DUST_OUTLINE_STORAGE_KEY = 'dustweaver-offensive-dust-outline-enabled';
+const REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY = 'dustweaver-reachable-edge-glow-opacity';
+const INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY = 'dustweaver-influence-circle-opacity';
 const DEFAULT_RENDER_SIZE_ID = '1080p';
 
 const RENDER_SIZE_OPTIONS: RenderSizeOption[] = [
@@ -87,4 +89,36 @@ export function isOffensiveDustOutlineEnabled(): boolean {
 
 export function setOffensiveDustOutlineEnabled(isEnabled: boolean): void {
   localStorage.setItem(OFFENSIVE_DUST_OUTLINE_STORAGE_KEY, isEnabled ? '1' : '0');
+}
+
+// ── Reachable Edge Glow Opacity ─────────────────────────────────────────────
+
+const DEFAULT_REACHABLE_EDGE_GLOW_OPACITY = 0.5;
+
+export function getReachableEdgeGlowOpacity(): number {
+  const value = localStorage.getItem(REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY);
+  return value !== null ? parseFloat(value) : DEFAULT_REACHABLE_EDGE_GLOW_OPACITY;
+}
+
+export function setReachableEdgeGlowOpacity(opacity: number): void {
+  localStorage.setItem(
+    REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY,
+    String(Math.max(0, Math.min(1, opacity))),
+  );
+}
+
+// ── Influence Circle Opacity ────────────────────────────────────────────────
+
+const DEFAULT_INFLUENCE_CIRCLE_OPACITY = 0.5;
+
+export function getInfluenceCircleOpacity(): number {
+  const value = localStorage.getItem(INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY);
+  return value !== null ? parseFloat(value) : DEFAULT_INFLUENCE_CIRCLE_OPACITY;
+}
+
+export function setInfluenceCircleOpacity(opacity: number): void {
+  localStorage.setItem(
+    INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY,
+    String(Math.max(0, Math.min(1, opacity))),
+  );
 }
