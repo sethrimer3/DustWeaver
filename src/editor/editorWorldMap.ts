@@ -479,7 +479,7 @@ export function showEditorWorldMap(
       font-size: 11px; cursor: pointer;
     `;
     createBtn2.addEventListener('click', () => {
-      const id = idInput.value.trim().replace(/\s+/g, '_');
+      const id = idInput.value.trim().replace(/\s+/g, '_').replace(/_+/g, '_');
       const name = nameInput.value.trim() || id;
       const worldId = parseInt(worldSel.value, 10);
       const w = Math.max(10, parseInt(wInput.value, 10) || 40);
@@ -488,6 +488,9 @@ export function showEditorWorldMap(
       if (!id) { errEl.textContent = 'Room ID is required.'; return; }
       if (ROOM_REGISTRY.has(id)) { errEl.textContent = `Room ID "${id}" already exists.`; return; }
 
+      // Creates a blank room (perimeter walls only, no interior content).
+      // Double-click it in the visual map or select it from this list to
+      // open it in the room editor and design its gameplay content.
       const roomDef = roomJsonDefToRoomDef({
         id, name, worldNumber: worldId,
         widthBlocks: w, heightBlocks: h,

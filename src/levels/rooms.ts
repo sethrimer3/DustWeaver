@@ -103,8 +103,20 @@ export async function initRoomRegistry(): Promise<void> {
     }
     for (const r of worldMap.rooms) {
       worldMapPositions.set(r.id, { mapX: r.mapX, mapY: r.mapY });
-      roomNameOverridesMap.set(r.id, r.name);
-      roomWorldOverridesMap.set(r.id, r.worldId);
+      // Only set name/world overrides when they differ from the room JSON,
+      // so that updating the room JSON later is not silently masked.
+      const room = registryMap.get(r.id);
+      if (room && r.name !== room.name) {
+        roomNameOverridesMap.set(r.id, r.name);
+      } else if (!room) {
+        // Room not in registry yet — still record the override
+        roomNameOverridesMap.set(r.id, r.name);
+      }
+      if (room && r.worldId !== room.worldNumber) {
+        roomWorldOverridesMap.set(r.id, r.worldId);
+      } else if (!room) {
+        roomWorldOverridesMap.set(r.id, r.worldId);
+      }
     }
     console.log(`[rooms] Loaded world-map.json: ${worldMap.worlds.length} worlds, ${worldMap.rooms.length} room entries`);
   }

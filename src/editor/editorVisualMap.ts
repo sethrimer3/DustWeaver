@@ -890,7 +890,7 @@ export function showVisualWorldMap(
     const createBtn = makeHeaderBtn('Create Room', '#44cc88');
     createBtn.style.cssText += ' flex: 1;';
     createBtn.addEventListener('click', () => {
-      const id = idInput.value.trim().replace(/\s+/g, '_');
+      const id = idInput.value.trim().replace(/\s+/g, '_').replace(/_+/g, '_');
       const name = nameInput.value.trim() || id;
       const worldId = parseInt(worldSel.value, 10);
       const w = Math.max(10, parseInt(wInput.value, 10) || 40);
@@ -899,6 +899,8 @@ export function showVisualWorldMap(
       if (!id) { errEl.textContent = 'Room ID is required.'; return; }
       if (ROOM_REGISTRY.has(id)) { errEl.textContent = `Room ID "${id}" already exists.`; return; }
 
+      // Creates a blank room (perimeter walls only, no interior content).
+      // Double-click it in the visual map to open it in the room editor.
       const roomDef = roomJsonDefToRoomDef({
         id,
         name,
@@ -1111,18 +1113,16 @@ function computeAutoLayout(
     }
   }
 
-  // BFS from start room for rooms not yet positioned
+  // BFS from start room only, for rooms not yet positioned via stored positions.
+  // Stored positions take precedence; BFS only assigns positions to rooms
+  // that have no stored position, expanding from the start room outward.
   const startRoom = ROOM_REGISTRY.get(startRoomId) ?? allRooms[0];
   if (!placements.has(startRoom.id)) {
     placements.set(startRoom.id, { room: startRoom, mapXWorld: 0, mapYWorld: 0 });
   }
 
-  const queue: RoomDef[] = [];
+  const queue: RoomDef[] = [startRoom];
   const visited = new Set<string>([...placements.keys()]);
-  // Seed BFS with all rooms that already have positions
-  for (const room of allRooms) {
-    if (visited.has(room.id)) queue.push(room);
-  }
 
   const GAP_BLOCKS = 6;
 
