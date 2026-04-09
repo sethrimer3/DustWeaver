@@ -97,7 +97,11 @@ const DEFAULT_REACHABLE_EDGE_GLOW_OPACITY = 0.5;
 
 export function getReachableEdgeGlowOpacity(): number {
   const value = localStorage.getItem(REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY);
-  return value !== null ? parseFloat(value) : DEFAULT_REACHABLE_EDGE_GLOW_OPACITY;
+  if (value !== null) {
+    const parsed = parseFloat(value);
+    return !isNaN(parsed) ? parsed : DEFAULT_REACHABLE_EDGE_GLOW_OPACITY;
+  }
+  return DEFAULT_REACHABLE_EDGE_GLOW_OPACITY;
 }
 
 export function setReachableEdgeGlowOpacity(opacity: number): void {
@@ -113,7 +117,11 @@ const DEFAULT_INFLUENCE_CIRCLE_OPACITY = 0.5;
 
 export function getInfluenceCircleOpacity(): number {
   const value = localStorage.getItem(INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY);
-  return value !== null ? parseFloat(value) : DEFAULT_INFLUENCE_CIRCLE_OPACITY;
+  if (value !== null) {
+    const parsed = parseFloat(value);
+    return !isNaN(parsed) ? parsed : DEFAULT_INFLUENCE_CIRCLE_OPACITY;
+  }
+  return DEFAULT_INFLUENCE_CIRCLE_OPACITY;
 }
 
 export function setInfluenceCircleOpacity(opacity: number): void {
