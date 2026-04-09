@@ -88,8 +88,16 @@ export function attachEditorInputListeners(
   state: EditorInputState,
   editorState: EditorState,
 ): () => void {
+  function isTypingIntoField(e: KeyboardEvent): boolean {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return false;
+    const tagName = target.tagName;
+    return target.isContentEditable || tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+  }
+
   function onKeyDown(e: KeyboardEvent): void {
     if (!editorState.isActive) return;
+    if (isTypingIntoField(e)) return;
 
     if (e.key === 'Shift') state.isShiftHeld = true;
     const key = e.key.toLowerCase();

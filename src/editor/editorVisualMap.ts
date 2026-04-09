@@ -1353,7 +1353,15 @@ export function showVisualWorldMap(
   }
 
   // ── Keyboard ───────────────────────────────────────────────────────────
+  function isTypingIntoField(e: KeyboardEvent): boolean {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return false;
+    const tagName = target.tagName;
+    return target.isContentEditable || tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+  }
+
   function onKey(e: KeyboardEvent): void {
+    if (isTypingIntoField(e)) return;
     const key = e.key.toLowerCase();
 
     // Arrow key nudge for selected room (1 map world unit = 1 virtual pixel at zoom 1)

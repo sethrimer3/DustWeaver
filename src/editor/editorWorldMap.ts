@@ -608,7 +608,15 @@ export function showEditorWorldMap(
 
   // ── ESC / M to close ──────────────────────────────────────────────────────
 
+  function isTypingIntoField(e: KeyboardEvent): boolean {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return false;
+    const tagName = target.tagName;
+    return target.isContentEditable || tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+  }
+
   function onKey(e: KeyboardEvent): void {
+    if (isTypingIntoField(e)) return;
     if (e.key === 'Escape' || e.key.toLowerCase() === 'm') {
       e.preventDefault();
       e.stopImmediatePropagation();
