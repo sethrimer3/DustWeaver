@@ -58,6 +58,12 @@ const COLOR_PRESETS = [
   '#004080', '#006040', '#602000', '#400060', '#604010',
   '#0050a0', '#00884c', '#c84000', '#8800c8', '#c8a000',
 ];
+/** Outline used for the currently selected colour swatch in the picker. */
+const SWATCH_SELECTED_OUTLINE = '2px solid #fff';
+/** Default outline for unselected colour swatches in the picker. */
+const SWATCH_DEFAULT_OUTLINE = '1px solid rgba(255,255,255,0.2)';
+/** Fallback dark-blue fill colour used by hexToRgba when hex parsing fails. */
+const HEX_TO_RGBA_FALLBACK_RGB = '30,40,55';
 
 /** Scale factor: screen pixels per map world unit at default zoom. */
 const DEFAULT_ZOOM_SCALE = 4;
@@ -268,13 +274,13 @@ export function showVisualWorldMap(
     const w = canvas.width;
     const h = canvas.height;
     const dpr = window.devicePixelRatio;
-    const cssCssW = w / dpr;
-    const cssCssH = h / dpr;
+    const cssW = w / dpr;
+    const cssH = h / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssCssW, cssCssH);
+    ctx.clearRect(0, 0, cssW, cssH);
 
     // ── Substrate background ────────────────────────────────────────────
-    substrateEffect.update(performance.now(), cssCssW, cssCssH);
+    substrateEffect.update(performance.now(), cssW, cssH);
     substrateEffect.draw(ctx);
 
     doorHitAreas = [];
@@ -534,13 +540,12 @@ export function showVisualWorldMap(
 
     // Highlight glow around both snapping doors
     for (const door of [srcDoor, tgtDoor]) {
-      const glowSize = door.wPx + 6;
+      const glowW = door.wPx + 6;
+      const glowH = door.hPx + 6;
       ctx2d.save();
       ctx2d.globalAlpha = 0.55;
       ctx2d.fillStyle = DOOR_SNAP_COLOR;
-      ctx2d.fillRect(
-        door.xPx - 3, door.yPx - 3, glowSize, glowSize,
-      );
+      ctx2d.fillRect(door.xPx - 3, door.yPx - 3, glowW, glowH);
       ctx2d.restore();
     }
 
@@ -1139,8 +1144,8 @@ export function showVisualWorldMap(
     function refreshSwatches(): void {
       for (const btn of swatchBtns) {
         btn.style.outline = btn.dataset['color'] === selectedHex
-          ? '2px solid #fff'
-          : '1px solid rgba(255,255,255,0.2)';
+          ? SWATCH_SELECTED_OUTLINE
+          : SWATCH_DEFAULT_OUTLINE;
       }
     }
 
@@ -1150,7 +1155,7 @@ export function showVisualWorldMap(
       btn.style.cssText = `
         width: 24px; height: 24px; background: ${hex};
         border: none; border-radius: 3px; cursor: pointer;
-        outline: 1px solid rgba(255,255,255,0.2);
+        outline: ${SWATCH_DEFAULT_OUTLINE};
       `;
       btn.title = hex;
       btn.addEventListener('click', () => {
@@ -1268,10 +1273,12 @@ export function showVisualWorldMap(
     const cx = placement.mapXWorld;
     const cy = placement.mapYWorld;
     const mid = trans.positionBlock + trans.openingSizeBlocks / 2;
-    if (trans.direction === 'left')  return [cx,                  cy + mid];
+    if (trans.direction === 'left')  return [cx,                   cy + mid];
     if (trans.direction === 'right') return [cx + room.widthBlocks, cy + mid];
-    if (trans.direction === 'up')    return [cx + mid,             cy];
-    /* down */                       return [cx + mid,             cy + room.heightBlocks];
+    if (trans.direction === 'up')    return [cx + mid,              cy];
+    if (trans.direction === 'down')  return [cx + mid,              cy + room.heightBlocks];
+    // Exhaustive check for TransitionDirection — should never reach here
+    throw new Error(`Unknown transition direction: ${(trans as RoomTransitionDef).direction}`);
   }
 
   /** True when direction `a` and `b` face each other (and can be aligned). */
@@ -1426,7 +1433,7 @@ function hexToRgba(hex: string, alpha: number): string {
     g = parseInt(clean.slice(2, 4), 16);
     b = parseInt(clean.slice(4, 6), 16);
   }
-  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(30,40,55,${alpha})`;
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(${HEX_TO_RGBA_FALLBACK_RGB},${alpha})`;
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
