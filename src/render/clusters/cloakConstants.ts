@@ -141,9 +141,9 @@ export const CLOAK_FAST_FALL_CORNER_SHARPNESS = 0.7;
 // ── Back cloak render constants ───────────────────────────────────────────
 
 /** Width of the back cloak at the root (world units). */
-export const CLOAK_BACK_WIDTH_ROOT_WORLD = 5;
-/** Width of the back cloak at the tip (world units). */
-export const CLOAK_BACK_WIDTH_TIP_WORLD = 2;
+export const CLOAK_BACK_WIDTH_ROOT_WORLD = 4.5;
+/** Width of the back cloak at the tip (world units). Kept wider for a cape-like silhouette. */
+export const CLOAK_BACK_WIDTH_TIP_WORLD = 8.5;
 /** Additional widening at tip during fast fall (world units). */
 export const CLOAK_BACK_FAST_FALL_TIP_EXTRA_WORLD = 4;
 /** Fill colour of the back cloak — darker blue tones. */
