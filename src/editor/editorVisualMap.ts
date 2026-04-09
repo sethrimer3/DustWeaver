@@ -7,12 +7,28 @@
  * small colored squares on the edges. Rooms can be dragged to rearrange.
  * Doors can be clicked to initiate or complete a link.
  *
- * Room positions are auto-laid-out via BFS on first open, and the user
- * can drag them to adjust.
+ * Room positions, world names, and room name/world overrides are persisted
+ * via the "Export World Map" button, which downloads world-map.json.
+ *
+ * Selecting a room (single click) and pressing arrow keys nudges it by
+ * 1 map world unit per keypress.
  */
 
 import { ROOM_REGISTRY } from '../levels/rooms';
+import {
+  WORLD_NAMES,
+  WORLD_MAP_POSITIONS,
+  ROOM_NAME_OVERRIDES,
+  ROOM_WORLD_OVERRIDES,
+  setWorldName,
+  setRoomMapPosition,
+  setRoomNameOverride,
+  setRoomWorldOverride,
+  registerRoom,
+} from '../levels/rooms';
 import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
+import { roomJsonDefToRoomDef } from '../levels/roomJsonLoader';
+import { exportWorldMapJson } from './editorExport';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -21,6 +37,7 @@ const ROOM_FILL = 'rgba(30,40,55,0.9)';
 const ROOM_STROKE = 'rgba(0,200,100,0.6)';
 const ROOM_CURRENT_FILL = 'rgba(0,80,40,0.5)';
 const ROOM_CURRENT_STROKE = '#00c864';
+const ROOM_SELECTED_STROKE = '#ffffff';
 const DOOR_SIZE = 8;
 const DOOR_FILL_LINKED = '#44aaff';
 const DOOR_FILL_UNLINKED = '#ff8844';
@@ -30,7 +47,7 @@ const LINK_LINE_ACTIVE = 'rgba(255,255,100,0.8)';
 const TEXT_COLOR = '#c0ffd0';
 const GREEN = '#00c864';
 
-/** Scale factor: map units per block. Rooms are drawn at this scale. */
+/** Scale factor: screen pixels per map world unit at default zoom. */
 const DEFAULT_ZOOM_SCALE = 4;
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -59,6 +76,20 @@ export interface VisualMapCallbacks {
   onClose: () => void;
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function effectiveRoomName(roomId: string): string {
+  return ROOM_NAME_OVERRIDES.get(roomId) ?? (ROOM_REGISTRY.get(roomId)?.name ?? roomId);
+}
+
+function effectiveWorldId(roomId: string): number {
+  return ROOM_WORLD_OVERRIDES.get(roomId) ?? (ROOM_REGISTRY.get(roomId)?.worldNumber ?? 0);
+}
+
+function worldDisplayName(worldId: number): string {
+  return WORLD_NAMES.get(worldId) ?? `World ${worldId}`;
+}
+
 // ── Public entry point ───────────────────────────────────────────────────────
 
 /**
@@ -82,27 +113,56 @@ export function showVisualWorldMap(
   // ── Header bar ─────────────────────────────────────────────────────────
   const header = document.createElement('div');
   header.style.cssText = `
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     padding: 8px 16px; background: rgba(0,0,0,0.5);
     border-bottom: 1px solid rgba(0,200,100,0.3);
   `;
 
   const titleEl = document.createElement('span');
   titleEl.textContent = '🗺 Visual World Map Editor';
-  titleEl.style.cssText = `color: ${GREEN}; font-family: 'Cinzel', serif; font-size: 14px; font-weight: bold;`;
+  titleEl.style.cssText = `color: ${GREEN}; font-family: 'Cinzel', serif; font-size: 14px; font-weight: bold; margin-right: 8px;`;
   header.appendChild(titleEl);
 
+  function makeHeaderBtn(label: string, color: string): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.style.cssText = `
+      background: rgba(0,0,0,0.4); color: ${color}; border: 1px solid ${color};
+      font-family: monospace; font-size: 11px; cursor: pointer; border-radius: 3px;
+      padding: 3px 8px; white-space: nowrap;
+    `;
+    return btn;
+  }
+
+  const addRoomBtn = makeHeaderBtn('+ Add Room', '#44cc88');
+  addRoomBtn.title = 'Create a new blank room';
+  addRoomBtn.addEventListener('click', () => showAddRoomDialog());
+  header.appendChild(addRoomBtn);
+
+  const addWorldBtn = makeHeaderBtn('+ Add World', '#6688cc');
+  addWorldBtn.title = 'Create a new world group';
+  addWorldBtn.addEventListener('click', () => showAddWorldDialog());
+  header.appendChild(addWorldBtn);
+
+  const exportBtn = makeHeaderBtn('\u2b07 Export World Map', '#cccc44');
+  exportBtn.title = 'Download world-map.json — place it in ASSETS/ROOMS/ to persist changes';
+  exportBtn.addEventListener('click', () => {
+    // Flush current placement positions before export
+    for (const [roomId, placement] of placements) {
+      setRoomMapPosition(roomId, placement.mapXWorld, placement.mapYWorld);
+    }
+    exportWorldMapJson();
+    statusBar.textContent = 'world-map.json downloaded — save it to ASSETS/ROOMS/ to persist.';
+    statusBar.style.color = '#cccc44';
+  });
+  header.appendChild(exportBtn);
+
   const hintEl = document.createElement('span');
-  hintEl.textContent = 'Drag rooms to arrange • Click door to start link • Double-click room to jump • N/ESC to close';
-  hintEl.style.cssText = `color: rgba(200,255,200,0.5); font-size: 11px; font-family: monospace;`;
+  hintEl.textContent = 'Drag rooms \u2022 Click door to link \u2022 Double-click to jump \u2022 Right-click room for options \u2022 Arrow keys nudge selected \u2022 N/ESC to close';
+  hintEl.style.cssText = `color: rgba(200,255,200,0.4); font-size: 10px; font-family: monospace; margin-left: auto;`;
   header.appendChild(hintEl);
 
-  const closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕ Close';
-  closeBtn.style.cssText = `
-    background: rgba(100,0,0,0.3); color: #ff8888; border: 1px solid rgba(255,100,100,0.3);
-    font-family: monospace; font-size: 12px; cursor: pointer; border-radius: 3px; padding: 4px 10px;
-  `;
+  const closeBtn = makeHeaderBtn('\u2715 Close', '#ff8888');
   closeBtn.addEventListener('click', () => {
     destroy();
     callbacks.onClose();
@@ -119,7 +179,7 @@ export function showVisualWorldMap(
     color: rgba(200,255,200,0.6); font-size: 11px; font-family: monospace;
     min-height: 20px;
   `;
-  statusBar.textContent = 'Ready';
+  statusBar.textContent = 'Ready \u2014 right-click a room to rename or move it between worlds';
   overlay.appendChild(statusBar);
 
   // ── Canvas ─────────────────────────────────────────────────────────────
@@ -131,7 +191,7 @@ export function showVisualWorldMap(
 
   const ctx = canvas.getContext('2d')!;
 
-  // ── Compute room placements via BFS ────────────────────────────────────
+  // ── Compute room placements ────────────────────────────────────────────
   const placements = new Map<string, MapRoomPlacement>();
   computeAutoLayout(placements, currentRoomId);
 
@@ -148,6 +208,9 @@ export function showVisualWorldMap(
   let dragStartPanYPx = 0;
   let dragRoomStartXPx = 0;
   let dragRoomStartYPx = 0;
+
+  // Selection
+  let selectedRoomId = '';
 
   // Door linking state
   let linkSourceRoomId = '';
@@ -181,15 +244,12 @@ export function showVisualWorldMap(
 
     doorHitAreas = [];
 
-    // Draw connection lines between linked rooms
     drawConnectionLines(ctx, placements);
 
-    // Draw rooms
     for (const [roomId, placement] of placements) {
-      drawRoom(ctx, placement, roomId === currentRoomId);
+      drawRoom(ctx, placement, roomId === currentRoomId, roomId === selectedRoomId);
     }
 
-    // Draw active link line (after rooms, so door hit areas are populated)
     if (linkSourceRoomId && linkSourceTransIndex >= 0) {
       drawActiveLinkLine(ctx);
     }
@@ -208,11 +268,19 @@ export function showVisualWorldMap(
     ctx2d: CanvasRenderingContext2D,
     placement: MapRoomPlacement,
     isCurrent: boolean,
+    isSelected: boolean,
   ): void {
     const room = placement.room;
     const [sx, sy] = worldToScreen(placement.mapXWorld, placement.mapYWorld);
     const rw = room.widthBlocks * zoom;
     const rh = room.heightBlocks * zoom;
+
+    // Selection highlight (behind room fill)
+    if (isSelected) {
+      ctx2d.strokeStyle = ROOM_SELECTED_STROKE;
+      ctx2d.lineWidth = 3;
+      ctx2d.strokeRect(sx - 3, sy - 3, rw + 6, rh + 6);
+    }
 
     // Room rectangle
     ctx2d.fillStyle = isCurrent ? ROOM_CURRENT_FILL : ROOM_FILL;
@@ -221,19 +289,25 @@ export function showVisualWorldMap(
     ctx2d.lineWidth = isCurrent ? 2 : 1;
     ctx2d.strokeRect(sx, sy, rw, rh);
 
-    // Room label
+    // Room name
     const fontSize = Math.max(8, Math.min(12, zoom * 2));
     ctx2d.fillStyle = TEXT_COLOR;
     ctx2d.font = `${fontSize}px monospace`;
     ctx2d.textAlign = 'center';
     ctx2d.textBaseline = 'middle';
-    const label = room.name || room.id;
-    ctx2d.fillText(label, sx + rw / 2, sy + rh / 2 - fontSize * 0.6, rw - 4);
+    const label = effectiveRoomName(room.id);
+    ctx2d.fillText(label, sx + rw / 2, sy + rh / 2 - fontSize * 0.9, rw - 4);
 
-    // Room ID below name
-    ctx2d.fillStyle = 'rgba(200,255,200,0.4)';
+    // Room ID
+    ctx2d.fillStyle = 'rgba(200,255,200,0.35)';
     ctx2d.font = `${Math.max(7, fontSize - 2)}px monospace`;
-    ctx2d.fillText(room.id, sx + rw / 2, sy + rh / 2 + fontSize * 0.5, rw - 4);
+    ctx2d.fillText(room.id, sx + rw / 2, sy + rh / 2 + fontSize * 0.1, rw - 4);
+
+    // World label
+    const wId = effectiveWorldId(room.id);
+    ctx2d.fillStyle = 'rgba(150,200,255,0.4)';
+    ctx2d.font = `${Math.max(6, fontSize - 3)}px monospace`;
+    ctx2d.fillText(worldDisplayName(wId), sx + rw / 2, sy + rh / 2 + fontSize * 0.9, rw - 4);
 
     // Draw doors (transitions)
     for (let i = 0; i < room.transitions.length; i++) {
@@ -253,7 +327,6 @@ export function showVisualWorldMap(
     const trans = room.transitions[transIndex];
     const ds = Math.max(4, Math.min(DOOR_SIZE, zoom * 1.5));
 
-    // Position the door on the edge of the room
     let dx: number, dy: number;
     if (trans.direction === 'left') {
       dx = roomSx - ds / 2;
@@ -265,7 +338,6 @@ export function showVisualWorldMap(
       dx = roomSx + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom - ds / 2;
       dy = roomSy - ds / 2;
     } else {
-      // down
       dx = roomSx + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom - ds / 2;
       dy = roomSy + roomH - ds / 2;
     }
@@ -286,7 +358,6 @@ export function showVisualWorldMap(
     ctx2d.lineWidth = 1;
     ctx2d.strokeRect(dx, dy, ds, ds);
 
-    // Door number label
     const numSize = Math.max(6, ds - 1);
     ctx2d.fillStyle = '#000';
     ctx2d.font = `bold ${numSize}px monospace`;
@@ -294,7 +365,6 @@ export function showVisualWorldMap(
     ctx2d.textBaseline = 'middle';
     ctx2d.fillText(String(transIndex + 1), dx + ds / 2, dy + ds / 2);
 
-    // Register hit area
     doorHitAreas.push({
       roomId: room.id,
       transitionIndex: transIndex,
@@ -324,18 +394,15 @@ export function showVisualWorldMap(
         const targetPlacement = allPlacements.get(trans.targetRoomId);
         if (!targetPlacement) continue;
 
-        // Avoid drawing duplicate lines
         const pairKey = [roomId, trans.targetRoomId].sort().join('|');
         if (drawn.has(pairKey)) continue;
         drawn.add(pairKey);
 
-        // Get door center positions
         const [sx, sy] = worldToScreen(placement.mapXWorld, placement.mapYWorld);
         const rw = room.widthBlocks * zoom;
         const rh = room.heightBlocks * zoom;
         const srcPos = getDoorCenter(trans, sx, sy, rw, rh);
 
-        // Find reverse transition in target room
         const targetRoom = targetPlacement.room;
         const reverseTrans = targetRoom.transitions.find(t => t.targetRoomId === roomId);
         const [tsx, tsy] = worldToScreen(targetPlacement.mapXWorld, targetPlacement.mapYWorld);
@@ -377,16 +444,13 @@ export function showVisualWorldMap(
     }
   }
 
-  function drawActiveLinkLine(
-    ctx2d: CanvasRenderingContext2D,
-  ): void {
+  function drawActiveLinkLine(ctx2d: CanvasRenderingContext2D): void {
     const sourceDoor = findDoorHitArea(linkSourceRoomId, linkSourceTransIndex);
     if (!sourceDoor) return;
 
     const srcCx = sourceDoor.xPx + sourceDoor.wPx / 2;
     const srcCy = sourceDoor.yPx + sourceDoor.hPx / 2;
 
-    // Draw line to mouse position
     const rect = canvas.getBoundingClientRect();
     const mx = lastMouseXPx - rect.left;
     const my = lastMouseYPx - rect.top;
@@ -451,7 +515,6 @@ export function showVisualWorldMap(
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
 
-    // Update hovered door
     hoveredDoor = hitTestDoor(mx, my);
 
     if (isDraggingRoom && dragRoomId) {
@@ -467,14 +530,10 @@ export function showVisualWorldMap(
       panXPx = dragStartPanXPx + (e.clientX - dragStartXPx);
       panYPx = dragStartPanYPx + (e.clientY - dragStartYPx);
       render();
-    } else if (linkSourceRoomId) {
-      // Redraw to update active link line
-      render();
     } else {
       render();
     }
 
-    // Update cursor
     if (hoveredDoor) {
       canvas.style.cursor = 'pointer';
     } else if (hitTestRoom(mx, my)) {
@@ -485,37 +544,48 @@ export function showVisualWorldMap(
   }
 
   function onMouseDown(e: MouseEvent): void {
-    if (e.button !== 0) return;
+    dismissContextMenu();
 
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
 
-    // Check door click first
+    // Right-click: context menu on room
+    if (e.button === 2) {
+      const roomId = hitTestRoom(mx, my);
+      if (roomId) {
+        selectedRoomId = roomId;
+        render();
+        showContextMenu(e.clientX, e.clientY, roomId);
+      }
+      return;
+    }
+
+    if (e.button !== 0) return;
+
+    // Door click
     const door = hitTestDoor(mx, my);
     if (door) {
       if (linkSourceRoomId) {
-        // Complete the link
         completeDoorLink(door);
       } else {
-        // Start a new link
         linkSourceRoomId = door.roomId;
         linkSourceTransIndex = door.transitionIndex;
-        statusBar.textContent = `Linking: ${door.roomId} Door #${door.transitionIndex + 1} — click another door to link, or ESC to cancel`;
+        statusBar.textContent = `Linking: ${door.roomId} Door #${door.transitionIndex + 1} \u2014 click another door to link, or ESC to cancel`;
         render();
       }
       return;
     }
 
-    // If clicking empty space while linking, cancel
     if (linkSourceRoomId) {
       cancelDoorLink();
       return;
     }
 
-    // Check room drag
+    // Room click: select + start drag
     const roomId = hitTestRoom(mx, my);
     if (roomId) {
+      selectedRoomId = roomId;
       isDraggingRoom = true;
       dragRoomId = roomId;
       dragStartXPx = e.clientX;
@@ -526,23 +596,36 @@ export function showVisualWorldMap(
         dragRoomStartYPx = placement.mapYWorld;
       }
       canvas.style.cursor = 'grabbing';
+      statusBar.textContent = `Selected: ${effectiveRoomName(roomId)} (${roomId}) \u2014 ${worldDisplayName(effectiveWorldId(roomId))} \u2014 arrow keys to nudge`;
+      statusBar.style.color = 'rgba(200,255,200,0.6)';
+      render();
       return;
     }
 
-    // Pan
+    // Deselect + pan
+    selectedRoomId = '';
     isDraggingPan = true;
     dragStartXPx = e.clientX;
     dragStartYPx = e.clientY;
     dragStartPanXPx = panXPx;
     dragStartPanYPx = panYPx;
     canvas.style.cursor = 'grabbing';
+    render();
   }
 
-  function onMouseUp(_e: MouseEvent): void {
-    isDraggingRoom = false;
-    dragRoomId = '';
-    isDraggingPan = false;
-    canvas.style.cursor = 'grab';
+  function onMouseUp(e: MouseEvent): void {
+    if (e.button === 0) {
+      if (isDraggingRoom && dragRoomId) {
+        const placement = placements.get(dragRoomId);
+        if (placement) {
+          setRoomMapPosition(dragRoomId, placement.mapXWorld, placement.mapYWorld);
+        }
+      }
+      isDraggingRoom = false;
+      dragRoomId = '';
+      isDraggingPan = false;
+      canvas.style.cursor = 'grab';
+    }
   }
 
   function onDblClick(e: MouseEvent): void {
@@ -573,7 +656,6 @@ export function showVisualWorldMap(
       zoom = Math.max(0.5, zoom / 1.15);
     }
 
-    // Zoom towards mouse position
     const canvasWCss = canvas.width / window.devicePixelRatio;
     const canvasHCss = canvas.height / window.devicePixelRatio;
     const worldX = (mx - canvasWCss / 2 - panXPx) / oldZoom;
@@ -585,17 +667,14 @@ export function showVisualWorldMap(
   }
 
   function completeDoorLink(targetDoor: DoorHitArea): void {
-    // We don't modify RoomDef directly (it's readonly). Instead, show a status message.
-    // The actual link is done through the room editor's transition linker.
     const sourceRoom = ROOM_REGISTRY.get(linkSourceRoomId);
     const targetRoom = ROOM_REGISTRY.get(targetDoor.roomId);
     if (sourceRoom && targetRoom) {
       statusBar.textContent =
-        `Linked: ${linkSourceRoomId} Door #${linkSourceTransIndex + 1} → ${targetDoor.roomId} Door #${targetDoor.transitionIndex + 1}` +
+        `Linked: ${linkSourceRoomId} Door #${linkSourceTransIndex + 1} \u2192 ${targetDoor.roomId} Door #${targetDoor.transitionIndex + 1}` +
         ' (open rooms in editor to save changes)';
       statusBar.style.color = '#88ff88';
     }
-
     linkSourceRoomId = '';
     linkSourceTransIndex = -1;
     render();
@@ -609,12 +688,372 @@ export function showVisualWorldMap(
     render();
   }
 
+  // ── Context menu ───────────────────────────────────────────────────────
+  let contextMenuEl: HTMLElement | null = null;
+
+  function dismissContextMenu(): void {
+    if (contextMenuEl?.parentElement) {
+      contextMenuEl.parentElement.removeChild(contextMenuEl);
+    }
+    contextMenuEl = null;
+  }
+
+  function showContextMenu(clientX: number, clientY: number, roomId: string): void {
+    dismissContextMenu();
+
+    const menu = document.createElement('div');
+    menu.style.cssText = `
+      position: absolute; z-index: 1200;
+      background: rgba(10,10,20,0.97); border: 1px solid rgba(0,200,100,0.5);
+      border-radius: 4px; padding: 4px 0; min-width: 200px;
+      font-family: monospace; font-size: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    `;
+
+    const overlayRect = overlay.getBoundingClientRect();
+    menu.style.left = `${clientX - overlayRect.left + 2}px`;
+    menu.style.top = `${clientY - overlayRect.top + 2}px`;
+
+    const roomName = effectiveRoomName(roomId);
+    const wId = effectiveWorldId(roomId);
+
+    const menuHeader = document.createElement('div');
+    menuHeader.textContent = `${roomName} (${roomId})`;
+    menuHeader.style.cssText = `padding: 5px 12px 4px; color: ${GREEN}; font-size: 11px; border-bottom: 1px solid rgba(0,200,100,0.3);`;
+    menu.appendChild(menuHeader);
+
+    function addMenuItem(label: string, onClick: () => void): void {
+      const item = document.createElement('div');
+      item.textContent = label;
+      item.style.cssText = `padding: 6px 12px; color: #c0ffd0; cursor: pointer;`;
+      item.addEventListener('mouseenter', () => { item.style.background = 'rgba(0,200,100,0.15)'; });
+      item.addEventListener('mouseleave', () => { item.style.background = ''; });
+      item.addEventListener('click', () => {
+        dismissContextMenu();
+        onClick();
+      });
+      menu.appendChild(item);
+    }
+
+    function addMenuSep(): void {
+      const sep = document.createElement('div');
+      sep.style.cssText = `height: 1px; background: rgba(0,200,100,0.2); margin: 2px 0;`;
+      menu.appendChild(sep);
+    }
+
+    addMenuItem('\u270f Rename Room\u2026', () => {
+      const newName = window.prompt('New name for room:', roomName);
+      if (newName !== null && newName.trim() !== '') {
+        setRoomNameOverride(roomId, newName.trim());
+        statusBar.textContent = `Renamed "${roomId}" \u2192 "${newName.trim()}"`;
+        statusBar.style.color = '#88ff88';
+        render();
+      }
+    });
+
+    addMenuItem(`\ud83c\udf10 Move to World\u2026 (now: ${worldDisplayName(wId)})`, () => {
+      showMoveToWorldDialog(roomId, wId);
+    });
+
+    addMenuSep();
+
+    addMenuItem('\u2715 Cancel', () => { /* auto-dismissed */ });
+
+    overlay.appendChild(menu);
+    contextMenuEl = menu;
+  }
+
+  // ── Move to World dialog ───────────────────────────────────────────────
+  function showMoveToWorldDialog(roomId: string, currentWorldId: number): void {
+    const worldIdSet = new Set<number>();
+    for (const [id] of WORLD_NAMES) worldIdSet.add(id);
+    for (const [, room] of ROOM_REGISTRY) {
+      worldIdSet.add(ROOM_WORLD_OVERRIDES.get(room.id) ?? room.worldNumber);
+    }
+    const sorted = [...worldIdSet].sort((a, b) => a - b);
+
+    const modal = createModal();
+
+    const title = document.createElement('h3');
+    title.textContent = `Move "${effectiveRoomName(roomId)}" to World`;
+    title.style.cssText = `color: ${GREEN}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
+    modal.panel.appendChild(title);
+
+    const sel = document.createElement('select');
+    sel.style.cssText = `
+      width: 100%; padding: 6px; background: rgba(20,20,30,0.9);
+      color: #c0ffd0; border: 1px solid rgba(0,200,100,0.4);
+      border-radius: 3px; font-family: monospace; font-size: 12px; margin-bottom: 12px;
+    `;
+    for (const id of sorted) {
+      const opt = document.createElement('option');
+      opt.value = String(id);
+      opt.textContent = `${worldDisplayName(id)} (id: ${id})`;
+      if (id === currentWorldId) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    modal.panel.appendChild(sel);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display: flex; gap: 8px;';
+
+    const okBtn = makeHeaderBtn('Move', '#44cc88');
+    okBtn.style.cssText += ' flex: 1;';
+    okBtn.addEventListener('click', () => {
+      const newWorldId = parseInt(sel.value, 10);
+      setRoomWorldOverride(roomId, newWorldId);
+      statusBar.textContent = `Moved "${effectiveRoomName(roomId)}" to ${worldDisplayName(newWorldId)}`;
+      statusBar.style.color = '#88ff88';
+      modal.destroy();
+      render();
+    });
+
+    const cancelBtn = makeHeaderBtn('Cancel', '#888888');
+    cancelBtn.style.cssText += ' flex: 1;';
+    cancelBtn.addEventListener('click', () => modal.destroy());
+
+    btnRow.appendChild(okBtn);
+    btnRow.appendChild(cancelBtn);
+    modal.panel.appendChild(btnRow);
+  }
+
+  // ── Add Room dialog ────────────────────────────────────────────────────
+  function showAddRoomDialog(): void {
+    const modal = createModal();
+
+    const title = document.createElement('h3');
+    title.textContent = '+ Add New Room';
+    title.style.cssText = `color: ${GREEN}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
+    modal.panel.appendChild(title);
+
+    function makeField(labelText: string, input: HTMLInputElement | HTMLSelectElement): void {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom: 10px;';
+      const lbl = document.createElement('label');
+      lbl.textContent = labelText;
+      lbl.style.cssText = 'display: block; color: rgba(200,255,200,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
+      input.style.cssText = (input.style.cssText || '') + `
+        width: 100%; box-sizing: border-box; padding: 5px 8px;
+        background: rgba(20,20,30,0.9); color: #c0ffd0;
+        border: 1px solid rgba(0,200,100,0.4); border-radius: 3px;
+        font-family: monospace; font-size: 12px;
+      `;
+      row.appendChild(lbl);
+      row.appendChild(input);
+      modal.panel.appendChild(row);
+    }
+
+    const idInput = document.createElement('input');
+    idInput.type = 'text';
+    idInput.placeholder = 'e.g. my_new_room';
+    makeField('Room ID (unique, no spaces)', idInput);
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = 'e.g. My New Room';
+    makeField('Room Name', nameInput);
+
+    const worldSel = document.createElement('select');
+    const worldIdSet = new Set<number>();
+    for (const [id] of WORLD_NAMES) worldIdSet.add(id);
+    for (const [, room] of ROOM_REGISTRY) {
+      worldIdSet.add(ROOM_WORLD_OVERRIDES.get(room.id) ?? room.worldNumber);
+    }
+    const sortedWorlds = [...worldIdSet].sort((a, b) => a - b);
+    for (const id of sortedWorlds) {
+      const opt = document.createElement('option');
+      opt.value = String(id);
+      opt.textContent = `${worldDisplayName(id)} (id: ${id})`;
+      worldSel.appendChild(opt);
+    }
+    makeField('World', worldSel);
+
+    const wInput = document.createElement('input');
+    wInput.type = 'number';
+    wInput.value = '40';
+    wInput.min = '10';
+    makeField('Width (blocks)', wInput);
+
+    const hInput = document.createElement('input');
+    hInput.type = 'number';
+    hInput.value = '30';
+    hInput.min = '10';
+    makeField('Height (blocks)', hInput);
+
+    const errEl = document.createElement('div');
+    errEl.style.cssText = 'color: #ff8888; font-size: 11px; min-height: 16px; font-family: monospace; margin-bottom: 8px;';
+    modal.panel.appendChild(errEl);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display: flex; gap: 8px;';
+
+    const createBtn = makeHeaderBtn('Create Room', '#44cc88');
+    createBtn.style.cssText += ' flex: 1;';
+    createBtn.addEventListener('click', () => {
+      const id = idInput.value.trim().replace(/\s+/g, '_');
+      const name = nameInput.value.trim() || id;
+      const worldId = parseInt(worldSel.value, 10);
+      const w = Math.max(10, parseInt(wInput.value, 10) || 40);
+      const h = Math.max(10, parseInt(hInput.value, 10) || 30);
+
+      if (!id) { errEl.textContent = 'Room ID is required.'; return; }
+      if (ROOM_REGISTRY.has(id)) { errEl.textContent = `Room ID "${id}" already exists.`; return; }
+
+      const roomDef = roomJsonDefToRoomDef({
+        id,
+        name,
+        worldNumber: worldId,
+        widthBlocks: w,
+        heightBlocks: h,
+        playerSpawnBlock: [Math.floor(w / 2), Math.floor(h / 2)],
+        interiorWalls: [],
+        enemies: [],
+        transitions: [],
+        skillTombs: [],
+      });
+
+      registerRoom(roomDef);
+      setRoomNameOverride(id, name);
+      setRoomWorldOverride(id, worldId);
+
+      const canvasWCss = canvas.width / window.devicePixelRatio;
+      const canvasHCss = canvas.height / window.devicePixelRatio;
+      const centerWorldX = (canvasWCss / 2 - panXPx) / zoom;
+      const centerWorldY = (canvasHCss / 2 - panYPx) / zoom;
+      const mapX = centerWorldX + 10;
+      const mapY = centerWorldY + 10;
+      placements.set(id, { room: roomDef, mapXWorld: mapX, mapYWorld: mapY });
+      setRoomMapPosition(id, mapX, mapY);
+
+      selectedRoomId = id;
+      modal.destroy();
+      render();
+      statusBar.textContent = `Room "${name}" created \u2014 double-click to edit it, export room JSON to save gameplay content.`;
+      statusBar.style.color = '#88ff88';
+    });
+
+    const cancelBtn = makeHeaderBtn('Cancel', '#888888');
+    cancelBtn.style.cssText += ' flex: 1;';
+    cancelBtn.addEventListener('click', () => modal.destroy());
+
+    btnRow.appendChild(createBtn);
+    btnRow.appendChild(cancelBtn);
+    modal.panel.appendChild(btnRow);
+
+    idInput.focus();
+  }
+
+  // ── Add World dialog ───────────────────────────────────────────────────
+  function showAddWorldDialog(): void {
+    const modal = createModal();
+
+    const title = document.createElement('h3');
+    title.textContent = '+ Add New World';
+    title.style.cssText = `color: ${GREEN}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
+    modal.panel.appendChild(title);
+
+    let maxId = 0;
+    for (const [id] of WORLD_NAMES) maxId = Math.max(maxId, id);
+    for (const [, room] of ROOM_REGISTRY) {
+      maxId = Math.max(maxId, ROOM_WORLD_OVERRIDES.get(room.id) ?? room.worldNumber);
+    }
+    const nextId = maxId + 1;
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = `World ${nextId}`;
+    nameInput.style.cssText = `
+      width: 100%; box-sizing: border-box; padding: 6px 8px;
+      background: rgba(20,20,30,0.9); color: #c0ffd0;
+      border: 1px solid rgba(0,200,100,0.4); border-radius: 3px;
+      font-family: monospace; font-size: 12px; margin-bottom: 12px;
+    `;
+
+    const lbl = document.createElement('label');
+    lbl.textContent = `World Name (will be assigned id: ${nextId})`;
+    lbl.style.cssText = 'display: block; color: rgba(200,255,200,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
+    modal.panel.appendChild(lbl);
+    modal.panel.appendChild(nameInput);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display: flex; gap: 8px;';
+
+    const createBtn = makeHeaderBtn('Create World', '#6688cc');
+    createBtn.style.cssText += ' flex: 1;';
+    createBtn.addEventListener('click', () => {
+      const name = nameInput.value.trim() || `World ${nextId}`;
+      setWorldName(nextId, name);
+      modal.destroy();
+      statusBar.textContent = `World "${name}" (id: ${nextId}) created \u2014 right-click rooms to move them into it.`;
+      statusBar.style.color = '#88ff88';
+      render();
+    });
+
+    const cancelBtn = makeHeaderBtn('Cancel', '#888888');
+    cancelBtn.style.cssText += ' flex: 1;';
+    cancelBtn.addEventListener('click', () => modal.destroy());
+
+    btnRow.appendChild(createBtn);
+    btnRow.appendChild(cancelBtn);
+    modal.panel.appendChild(btnRow);
+
+    nameInput.focus();
+  }
+
+  // ── Modal helper ───────────────────────────────────────────────────────
+  function createModal(): { panel: HTMLElement; destroy: () => void } {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = `
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); z-index: 1150;
+      display: flex; align-items: center; justify-content: center;
+    `;
+
+    const panel = document.createElement('div');
+    panel.style.cssText = `
+      background: rgba(10,10,20,0.98); border: 1px solid rgba(0,200,100,0.5);
+      border-radius: 6px; padding: 20px; min-width: 280px; max-width: 400px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+    `;
+
+    backdrop.appendChild(panel);
+    overlay.appendChild(backdrop);
+
+    const destroyFn = (): void => {
+      if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
+    };
+
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) destroyFn();
+    });
+
+    return { panel, destroy: destroyFn };
+  }
+
   // ── Keyboard ───────────────────────────────────────────────────────────
   function onKey(e: KeyboardEvent): void {
     const key = e.key.toLowerCase();
+
+    // Arrow key nudge for selected room (1 map world unit = 1 virtual pixel at zoom 1)
+    if (selectedRoomId && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const placement = placements.get(selectedRoomId);
+      if (placement) {
+        if (e.key === 'ArrowLeft')  placement.mapXWorld -= 1;
+        if (e.key === 'ArrowRight') placement.mapXWorld += 1;
+        if (e.key === 'ArrowUp')    placement.mapYWorld -= 1;
+        if (e.key === 'ArrowDown')  placement.mapYWorld += 1;
+        setRoomMapPosition(selectedRoomId, placement.mapXWorld, placement.mapYWorld);
+        render();
+      }
+      return;
+    }
+
     if (key === 'escape') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      dismissContextMenu();
       if (linkSourceRoomId) {
         cancelDoorLink();
       } else {
@@ -635,9 +1074,11 @@ export function showVisualWorldMap(
   canvas.addEventListener('mouseup', onMouseUp);
   canvas.addEventListener('dblclick', onDblClick);
   canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   window.addEventListener('keydown', onKey);
 
   function destroy(): void {
+    dismissContextMenu();
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('mousedown', onMouseDown);
     canvas.removeEventListener('mouseup', onMouseUp);
@@ -662,13 +1103,28 @@ function computeAutoLayout(
 
   if (allRooms.length === 0) return;
 
+  // Use stored positions from world-map.json for rooms that have them
+  for (const room of allRooms) {
+    const stored = WORLD_MAP_POSITIONS.get(room.id);
+    if (stored) {
+      placements.set(room.id, { room, mapXWorld: stored.mapX, mapYWorld: stored.mapY });
+    }
+  }
+
+  // BFS from start room for rooms not yet positioned
   const startRoom = ROOM_REGISTRY.get(startRoomId) ?? allRooms[0];
-  placements.set(startRoom.id, { room: startRoom, mapXWorld: 0, mapYWorld: 0 });
+  if (!placements.has(startRoom.id)) {
+    placements.set(startRoom.id, { room: startRoom, mapXWorld: 0, mapYWorld: 0 });
+  }
 
-  const queue = [startRoom];
-  const visited = new Set<string>([startRoom.id]);
+  const queue: RoomDef[] = [];
+  const visited = new Set<string>([...placements.keys()]);
+  // Seed BFS with all rooms that already have positions
+  for (const room of allRooms) {
+    if (visited.has(room.id)) queue.push(room);
+  }
 
-  const GAP_BLOCKS = 6; // gap between rooms in blocks
+  const GAP_BLOCKS = 6;
 
   while (queue.length > 0) {
     const current = queue.shift()!;
@@ -701,11 +1157,11 @@ function computeAutoLayout(
     }
   }
 
-  // Place any unvisited rooms in a row below
+  // Place any unvisited rooms in a row below all currently placed rooms
   let unvisitedX = 0;
-  let maxYPx = 0;
+  let maxY = 0;
   for (const [, p] of placements) {
-    maxYPx = Math.max(maxYPx, p.mapYWorld + p.room.heightBlocks);
+    maxY = Math.max(maxY, p.mapYWorld + p.room.heightBlocks);
   }
 
   for (const room of allRooms) {
@@ -713,7 +1169,7 @@ function computeAutoLayout(
       placements.set(room.id, {
         room,
         mapXWorld: unvisitedX,
-        mapYWorld: maxYPx + 10,
+        mapYWorld: maxY + 10,
       });
       unvisitedX += room.widthBlocks + 6;
       visited.add(room.id);

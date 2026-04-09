@@ -26,6 +26,8 @@ import {
   stringToParticleKind,
 } from '../editor/roomJson';
 import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
+import type { WorldMapJsonDef } from '../editor/worldMapData';
+
 // ── Vite base URL ────────────────────────────────────────────────────────────
 
 const BASE = import.meta.env.BASE_URL;
@@ -289,4 +291,32 @@ export async function loadRoomJsonFiles(): Promise<Map<string, RoomDef>> {
 
   await Promise.all(fetches);
   return rooms;
+}
+
+// ── World-map.json loader ─────────────────────────────────────────────────────
+
+/**
+ * Fetches the optional ASSETS/ROOMS/world-map.json file.
+ * Returns the parsed WorldMapJsonDef, or null if the file is absent or invalid.
+ */
+export async function loadWorldMapJson(): Promise<WorldMapJsonDef | null> {
+  try {
+    const resp = await fetch(`${BASE}ROOMS/world-map.json`);
+    if (!resp.ok) {
+      // 404 is normal when no world-map.json has been saved yet
+      if (resp.status !== 404) {
+        console.warn(`[roomJsonLoader] world-map.json fetch failed: ${resp.status}`);
+      }
+      return null;
+    }
+    const data = await resp.json() as WorldMapJsonDef;
+    if (!Array.isArray(data.worlds) || !Array.isArray(data.rooms)) {
+      console.warn('[roomJsonLoader] world-map.json has unexpected shape');
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.warn('[roomJsonLoader] Could not load world-map.json:', err);
+    return null;
+  }
 }
