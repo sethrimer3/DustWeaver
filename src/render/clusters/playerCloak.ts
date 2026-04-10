@@ -80,6 +80,7 @@ import {
   CLOAK_OPENNESS_FAST_FALL,
   CLOAK_OPENNESS_WALL_SLIDE,
   CLOAK_SHAPE_LERP_SPEED,
+  getCloakTuningValue,
 } from './cloakConstants';
 
 // ── Player sprite metrics (duplicated from renderer.ts to avoid circular) ──
@@ -152,6 +153,10 @@ export class PlayerCloak {
   // ── Front cloak point count (derived from main chain) ───────────────
   private readonly frontPointCount: number;
 
+  private _tunedValue(value: number, overrideKey: Parameters<typeof getCloakTuningValue>[1]): number {
+    return getCloakTuningValue(value, overrideKey);
+  }
+
   constructor() {
     this.pointCount = 1 + CLOAK_SEGMENT_COUNT;
     this.posXWorld = new Float32Array(this.pointCount);
@@ -204,8 +209,8 @@ export class PlayerCloak {
     const isTurning = player.isFacingLeftFlag !== this.prevIsFacingLeftFlag;
     const isLanding = player.isGroundedFlag === 1 && this.prevIsGroundedFlag === 0;
 
-    if (isTurning) this.turnTimerSec = CLOAK_TURN_OVERSHOOT_DURATION_SEC;
-    if (isLanding) this.landingTimerSec = CLOAK_LANDING_DURATION_SEC;
+    if (isTurning) this.turnTimerSec = this._tunedValue(CLOAK_TURN_OVERSHOOT_DURATION_SEC, 'turnOvershootDurationSec');
+    if (isLanding) this.landingTimerSec = this._tunedValue(CLOAK_LANDING_DURATION_SEC, 'landingDurationSec');
 
     // ── 5. Determine state-based rest bias direction ──────────────────
     const restDir = this._getRestDirection(player);
@@ -213,18 +218,18 @@ export class PlayerCloak {
 
     // ── 6. Determine fast-fall state ──────────────────────────────────
     this.isFastFallActiveFlag = player.isGroundedFlag === 0
-      && player.velocityYWorld > CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD;
+      && player.velocityYWorld > this._tunedValue(CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD, 'fastFallVelocityThresholdWorld');
 
     // ── 7. Compute target spread & openness from player state ─────────
     const targetSpread = this._getTargetSpread(player);
     const targetOpenness = this._getTargetOpenness(player);
 
     // Apply turn overshoot multiplier.
-    const turnMultiplier = this.turnTimerSec > 0 ? CLOAK_TURN_OVERSHOOT_SPREAD_MULTIPLIER : 1.0;
+    const turnMultiplier = this.turnTimerSec > 0 ? this._tunedValue(CLOAK_TURN_OVERSHOOT_SPREAD_MULTIPLIER, 'turnOvershootSpreadMultiplier') : 1.0;
     const adjustedTargetSpread = Math.min(1.0, targetSpread * turnMultiplier);
 
     // Smooth lerp toward targets.
-    const lerpT = 1 - Math.exp(-CLOAK_SHAPE_LERP_SPEED * dt);
+    const lerpT = 1 - Math.exp(-this._tunedValue(CLOAK_SHAPE_LERP_SPEED, 'shapeLerpSpeed') * dt);
     this.spreadAmount += (adjustedTargetSpread - this.spreadAmount) * lerpT;
     this.opennessAmount += (targetOpenness - this.opennessAmount) * lerpT;
 
@@ -237,35 +242,38 @@ export class PlayerCloak {
 
     for (let i = 1; i < this.pointCount; i++) {
       // Velocity inheritance from player.
-      this.velXWorld[i] += player.velocityXWorld * CLOAK_VELOCITY_INHERITANCE * dt;
-      this.velYWorld[i] += player.velocityYWorld * CLOAK_VELOCITY_INHERITANCE * dt;
+      const velocityInheritance = this._tunedValue(CLOAK_VELOCITY_INHERITANCE, 'velocityInheritance');
+      this.velXWorld[i] += player.velocityXWorld * velocityInheritance * dt;
+      this.velYWorld[i] += player.velocityYWorld * velocityInheritance * dt;
 
       // Gravity.
-      this.velYWorld[i] += CLOAK_GRAVITY_WORLD_PER_SEC2 * dt;
+      this.velYWorld[i] += this._tunedValue(CLOAK_GRAVITY_WORLD_PER_SEC2, 'gravityWorldPerSec2') * dt;
 
       // State-aware rest bias.
       const prevX = this.posXWorld[i - 1];
       const prevY = this.posYWorld[i - 1];
       const targetX = prevX + restDir[0] * facingSignX;
       const targetY = prevY + restDir[1];
-      const biasX = (targetX - this.posXWorld[i]) * CLOAK_REST_BIAS_STRENGTH;
-      const biasY = (targetY - this.posYWorld[i]) * CLOAK_REST_BIAS_STRENGTH;
+      const restBiasStrength = this._tunedValue(CLOAK_REST_BIAS_STRENGTH, 'restBiasStrength');
+      const biasX = (targetX - this.posXWorld[i]) * restBiasStrength;
+      const biasY = (targetY - this.posYWorld[i]) * restBiasStrength;
       this.velXWorld[i] += biasX / dtClamped;
       this.velYWorld[i] += biasY / dtClamped;
 
       // Turn impulse.
       if (isTurning) {
-        this.velXWorld[i] += CLOAK_TURN_IMPULSE_WORLD * facingSignX / dtClamped;
+        this.velXWorld[i] += this._tunedValue(CLOAK_TURN_IMPULSE_WORLD, 'turnImpulseWorld') * facingSignX / dtClamped;
       }
 
       // Landing impulse.
       if (isLanding) {
-        this.velYWorld[i] += CLOAK_LANDING_IMPULSE_WORLD_PER_SEC;
+        this.velYWorld[i] += this._tunedValue(CLOAK_LANDING_IMPULSE_WORLD_PER_SEC, 'landingImpulseWorldPerSec');
       }
 
       // Damping.
-      this.velXWorld[i] *= (1 - CLOAK_DAMPING);
-      this.velYWorld[i] *= (1 - CLOAK_DAMPING);
+      const damping = this._tunedValue(CLOAK_DAMPING, 'damping');
+      this.velXWorld[i] *= (1 - damping);
+      this.velYWorld[i] *= (1 - damping);
 
       // Integrate position.
       this.posXWorld[i] += this.velXWorld[i] * dt;
@@ -491,7 +499,9 @@ export class PlayerCloak {
     const spread = this.spreadAmount;
     const isFastFall = this.isFastFallActiveFlag;
     const landingScale = this.landingTimerSec > 0
-      ? CLOAK_LANDING_COMPRESSION + (1 - CLOAK_LANDING_COMPRESSION) * (1 - this.landingTimerSec / CLOAK_LANDING_DURATION_SEC)
+      ? this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression')
+        + (1 - this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression'))
+          * (1 - this.landingTimerSec / this._tunedValue(CLOAK_LANDING_DURATION_SEC, 'landingDurationSec'))
       : 1.0;
 
     for (let i = 0; i < this.pointCount; i++) {
@@ -550,7 +560,9 @@ export class PlayerCloak {
     const projectionPx = CLOAK_FRONT_PROJECTION_WORLD * openness * scalePx * foldDirX;
 
     const landingScale = this.landingTimerSec > 0
-      ? CLOAK_LANDING_COMPRESSION + (1 - CLOAK_LANDING_COMPRESSION) * (1 - this.landingTimerSec / CLOAK_LANDING_DURATION_SEC)
+      ? this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression')
+        + (1 - this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression'))
+          * (1 - this.landingTimerSec / this._tunedValue(CLOAK_LANDING_DURATION_SEC, 'landingDurationSec'))
       : 1.0;
 
     for (let i = 0; i < this.frontPointCount; i++) {
@@ -694,38 +706,50 @@ export class PlayerCloak {
     if (player.isCrouchingFlag === 1) return CLOAK_REST_CROUCHING;
     if (player.isWallSlidingFlag === 1) return CLOAK_REST_WALL_SLIDE;
     if (player.isGroundedFlag === 0) {
-      if (player.velocityYWorld < CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD) return CLOAK_REST_JUMPING;
+      if (player.velocityYWorld < this._tunedValue(CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD, 'jumpingVelocityThresholdWorld')) return CLOAK_REST_JUMPING;
       return CLOAK_REST_FALLING;
     }
     if (player.isSprintingFlag === 1) return CLOAK_REST_SPRINTING;
-    if (Math.abs(player.velocityXWorld) > CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD) return CLOAK_REST_RUNNING;
+    if (Math.abs(player.velocityXWorld) > this._tunedValue(CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD, 'runningVelocityThresholdWorld')) return CLOAK_REST_RUNNING;
     return CLOAK_REST_IDLE;
   }
 
   /** Get target spread from player state (0–1). */
   private _getTargetSpread(player: CloakPlayerState): number {
-    if (player.isCrouchingFlag === 1) return CLOAK_SPREAD_CROUCHING;
-    if (player.isWallSlidingFlag === 1) return CLOAK_SPREAD_WALL_SLIDE;
+    if (player.isCrouchingFlag === 1) return this._tunedValue(CLOAK_SPREAD_CROUCHING, 'spreadCrouching');
+    if (player.isWallSlidingFlag === 1) return this._tunedValue(CLOAK_SPREAD_WALL_SLIDE, 'spreadWallSlide');
     if (player.isGroundedFlag === 0) {
-      if (player.velocityYWorld > CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD) return CLOAK_SPREAD_FAST_FALL;
-      if (player.velocityYWorld < CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD) return CLOAK_SPREAD_JUMPING;
-      return CLOAK_SPREAD_FALLING;
+      if (player.velocityYWorld > this._tunedValue(CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD, 'fastFallVelocityThresholdWorld')) {
+        return this._tunedValue(CLOAK_SPREAD_FAST_FALL, 'spreadFastFall');
+      }
+      if (player.velocityYWorld < this._tunedValue(CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD, 'jumpingVelocityThresholdWorld')) {
+        return this._tunedValue(CLOAK_SPREAD_JUMPING, 'spreadJumping');
+      }
+      return this._tunedValue(CLOAK_SPREAD_FALLING, 'spreadFalling');
     }
-    if (player.isSprintingFlag === 1) return CLOAK_SPREAD_SPRINTING;
-    if (Math.abs(player.velocityXWorld) > CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD) return CLOAK_SPREAD_RUNNING;
-    return CLOAK_SPREAD_IDLE;
+    if (player.isSprintingFlag === 1) return this._tunedValue(CLOAK_SPREAD_SPRINTING, 'spreadSprinting');
+    if (Math.abs(player.velocityXWorld) > this._tunedValue(CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD, 'runningVelocityThresholdWorld')) {
+      return this._tunedValue(CLOAK_SPREAD_RUNNING, 'spreadRunning');
+    }
+    return this._tunedValue(CLOAK_SPREAD_IDLE, 'spreadIdle');
   }
 
   /** Get target openness from player state (0–1). */
   private _getTargetOpenness(player: CloakPlayerState): number {
-    if (player.isWallSlidingFlag === 1) return CLOAK_OPENNESS_WALL_SLIDE;
+    if (player.isWallSlidingFlag === 1) return this._tunedValue(CLOAK_OPENNESS_WALL_SLIDE, 'opennessWallSlide');
     if (player.isGroundedFlag === 0) {
-      if (player.velocityYWorld > CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD) return CLOAK_OPENNESS_FAST_FALL;
-      if (player.velocityYWorld < CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD) return CLOAK_OPENNESS_JUMPING;
-      return CLOAK_OPENNESS_FALLING;
+      if (player.velocityYWorld > this._tunedValue(CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD, 'fastFallVelocityThresholdWorld')) {
+        return this._tunedValue(CLOAK_OPENNESS_FAST_FALL, 'opennessFastFall');
+      }
+      if (player.velocityYWorld < this._tunedValue(CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD, 'jumpingVelocityThresholdWorld')) {
+        return this._tunedValue(CLOAK_OPENNESS_JUMPING, 'opennessJumping');
+      }
+      return this._tunedValue(CLOAK_OPENNESS_FALLING, 'opennessFalling');
     }
-    if (Math.abs(player.velocityXWorld) > CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD) return CLOAK_OPENNESS_RUNNING;
-    return CLOAK_OPENNESS_IDLE;
+    if (Math.abs(player.velocityXWorld) > this._tunedValue(CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD, 'runningVelocityThresholdWorld')) {
+      return this._tunedValue(CLOAK_OPENNESS_RUNNING, 'opennessRunning');
+    }
+    return this._tunedValue(CLOAK_OPENNESS_IDLE, 'opennessIdle');
   }
 
   /** Place all chain points at their rest pose relative to the root anchor. */

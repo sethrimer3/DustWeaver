@@ -39,6 +39,8 @@ import {
 } from './gameRoom';
 import type { PlayerProgress } from '../progression/playerProgress';
 import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
+import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity } from '../ui/renderSettings';
+import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -347,6 +349,17 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // Walls before cluster indicators so clusters are drawn on top
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
+
+  // Grapple influence visuals (golden circle + edge glow) drawn on top of walls
+  // but behind clusters/particles so they don't obscure the action.
+  renderGrappleInfluenceVisuals(
+    ctx, snapshot, ox, oy, zoom,
+    inputState.mouseXPx, inputState.mouseYPx,
+    canvas.width, canvas.height,
+    virtualWidthPx, virtualHeightPx,
+    getReachableEdgeGlowOpacity(),
+    getInfluenceCircleOpacity(),
+  );
 
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
   renderHazards(ctx, world, ox, oy, zoom, world.tick);

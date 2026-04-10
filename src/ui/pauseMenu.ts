@@ -11,6 +11,11 @@
  *   - Graphics tab: Low / Med / High quality buttons
  */
 
+import {
+  getReachableEdgeGlowOpacity, setReachableEdgeGlowOpacity,
+  getInfluenceCircleOpacity, setInfluenceCircleOpacity,
+} from './renderSettings';
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface PauseMenuCallbacks {
@@ -261,6 +266,21 @@ export function showPauseMenu(
       btnRow.appendChild(medBtn);
       btnRow.appendChild(highBtn);
       optionsPanel.appendChild(btnRow);
+
+      // Visual effect opacity sliders
+      const edgeGlowSlider = makeSlider(
+        'Reachable Edge Glow Opacity',
+        getReachableEdgeGlowOpacity(),
+        (v) => { setReachableEdgeGlowOpacity(v); },
+      );
+      optionsPanel.appendChild(edgeGlowSlider);
+
+      const influenceCircleSlider = makeSlider(
+        'Influence Circle Opacity',
+        getInfluenceCircleOpacity(),
+        (v) => { setInfluenceCircleOpacity(v); },
+      );
+      optionsPanel.appendChild(influenceCircleSlider);
     }
 
     // Back button
