@@ -80,6 +80,12 @@ import {
   CLOAK_OPENNESS_FAST_FALL,
   CLOAK_OPENNESS_WALL_SLIDE,
   CLOAK_SHAPE_LERP_SPEED,
+  PLAYER_BACK_X,
+  PLAYER_BACK_TOP,
+  PLAYER_BACK_BOTTOM,
+  BACK_COLLISION_STRENGTH,
+  BACK_COLLISION_DAMPING,
+  BACK_COMPRESSION_AMOUNT,
   getCloakTuningValue,
 } from './cloakConstants';
 
@@ -297,6 +303,10 @@ export class PlayerCloak {
       }
     }
 
+    // ── 10b. Back collision constraint ─────────────────────────────────
+    // Prevents cloak from passing through the player's back.
+    this._applyBackCollision(player, dtClamped);
+
     // ── 11. Max extension clamp from root ─────────────────────────────
     const tipIdx = this.pointCount - 1;
     const extDx = this.posXWorld[tipIdx] - rootWorldX;
@@ -465,8 +475,49 @@ export class PlayerCloak {
       ctx.fillText(`turn: ${this.turnTimerSec.toFixed(2)}s`, textX, textY); textY += 10;
     }
     if (this.landingTimerSec > 0) {
-      ctx.fillText(`land: ${this.landingTimerSec.toFixed(2)}s`, textX, textY);
+      ctx.fillText(`land: ${this.landingTimerSec.toFixed(2)}s`, textX, textY); textY += 10;
     }
+
+    // ── Back collision boundary line (orange) ──────────────────────────
+    const backBoundX = this._backBoundaryWorldX(player);
+    const backTopY = this._backBoundaryTopWorldY(player);
+    const backBottomY = this._backBoundaryBottomWorldY(player);
+    const backLineSX = Math.round(backBoundX * scalePx + offsetXPx);
+    const backLineTopSY = Math.round(backTopY * scalePx + offsetYPx);
+    const backLineBottomSY = Math.round(backBottomY * scalePx + offsetYPx);
+
+    ctx.strokeStyle = '#ff8800';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(backLineSX, backLineTopSY);
+    ctx.lineTo(backLineSX, backLineBottomSY);
+    ctx.stroke();
+
+    // Back boundary top/bottom markers (small horizontal ticks).
+    const tickHalfLenPx = 2;
+    ctx.beginPath();
+    ctx.moveTo(backLineSX - tickHalfLenPx, backLineTopSY);
+    ctx.lineTo(backLineSX + tickHalfLenPx, backLineTopSY);
+    ctx.moveTo(backLineSX - tickHalfLenPx, backLineBottomSY);
+    ctx.lineTo(backLineSX + tickHalfLenPx, backLineBottomSY);
+    ctx.stroke();
+
+    // Highlight cloak points that are within the back boundary Y range.
+    for (let i = 1; i < this.pointCount; i++) {
+      const py = this.posYWorld[i];
+      if (py >= backTopY && py <= backBottomY) {
+        const sx = Math.round(this.posXWorld[i] * scalePx + offsetXPx);
+        const sy = Math.round(py * scalePx + offsetYPx);
+        ctx.fillStyle = '#ff4400';
+        ctx.beginPath();
+        ctx.arc(sx, sy, CLOAK_DEBUG_POINT_RADIUS_PX + 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.fillStyle = '#ff8800';
+    ctx.fillText('backCol', backLineSX + 4, backLineTopSY - 2);
 
     ctx.restore();
   }
@@ -750,6 +801,107 @@ export class PlayerCloak {
       return this._tunedValue(CLOAK_OPENNESS_RUNNING, 'opennessRunning');
     }
     return this._tunedValue(CLOAK_OPENNESS_IDLE, 'opennessIdle');
+  }
+
+  // ── Private: back collision helpers ──────────────────────────────────
+
+  /**
+   * Compute the world-space X of the player's back boundary line,
+   * correctly mirrored for facing direction.
+   */
+  private _backBoundaryWorldX(player: CloakPlayerState): number {
+    const spriteLeftWorldX = player.positionXWorld - PLAYER_SPRITE_WIDTH_WORLD * 0.5;
+    if (player.isFacingLeftFlag === 1) {
+      // Facing left: "back" is on the right side of the sprite.
+      return spriteLeftWorldX + (PLAYER_SPRITE_WIDTH_WORLD - PLAYER_BACK_X);
+    }
+    // Facing right: "back" is on the left side of the sprite.
+    return spriteLeftWorldX + PLAYER_BACK_X;
+  }
+
+  /** World-space Y of the top of the back boundary. */
+  private _backBoundaryTopWorldY(player: CloakPlayerState): number {
+    const spriteTopWorldY = player.positionYWorld + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD
+      - PLAYER_SPRITE_HEIGHT_WORLD * 0.5;
+    return spriteTopWorldY + PLAYER_BACK_TOP;
+  }
+
+  /** World-space Y of the bottom of the back boundary. */
+  private _backBoundaryBottomWorldY(player: CloakPlayerState): number {
+    const spriteTopWorldY = player.positionYWorld + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD
+      - PLAYER_SPRITE_HEIGHT_WORLD * 0.5;
+    return spriteTopWorldY + PLAYER_BACK_BOTTOM;
+  }
+
+  /**
+   * Apply soft back collision to all trailing cloak points (skip root).
+   * If a point crosses the back boundary into the body, push it back
+   * toward the boundary with damping. Preserves vertical motion so the
+   * cloak slides down naturally.
+   */
+  private _applyBackCollision(player: CloakPlayerState, dtSec: number): void {
+    const backX = this._backBoundaryWorldX(player);
+    const backTopY = this._backBoundaryTopWorldY(player);
+    const backBottomY = this._backBoundaryBottomWorldY(player);
+
+    const strength = this._tunedValue(BACK_COLLISION_STRENGTH, 'backCollisionStrength');
+    const damping = this._tunedValue(BACK_COLLISION_DAMPING, 'backCollisionDamping');
+    const compression = this._tunedValue(BACK_COMPRESSION_AMOUNT, 'backCompressionAmount');
+
+    // Determine if player is moving backward relative to facing.
+    // Facing right (isFacingLeftFlag=0): backward = negative X velocity.
+    // Facing left  (isFacingLeftFlag=1): backward = positive X velocity.
+    const isMovingBackwardFlag = player.isFacingLeftFlag === 1
+      ? player.velocityXWorld > 0
+      : player.velocityXWorld < 0;
+
+    // "Forward" direction for each facing — the direction from back toward body interior.
+    // Facing right: forward = +X, so crossing means point.x < backX.
+    // Facing left:  forward = -X, so crossing means point.x > backX.
+    const isFacingRight = player.isFacingLeftFlag === 0;
+
+    for (let i = 1; i < this.pointCount; i++) {
+      const py = this.posYWorld[i];
+
+      // Only apply constraint within the vertical extent of the back.
+      if (py < backTopY || py > backBottomY) continue;
+
+      const px = this.posXWorld[i];
+
+      // Check if point has crossed the back boundary into the body.
+      // Facing right: body is to the +X side of the back line, so violation = px > backX.
+      // Facing left: body is to the -X side of the back line, so violation = px < backX.
+      const penetration = isFacingRight ? (px - backX) : (backX - px);
+
+      if (penetration > 0) {
+        // Soft push: move point back toward boundary proportional to strength.
+        const pushBack = penetration * strength;
+
+        if (isFacingRight) {
+          this.posXWorld[i] -= pushBack;
+          // Damp X velocity when contacting the boundary.
+          this.velXWorld[i] *= (1 - damping);
+        } else {
+          this.posXWorld[i] += pushBack;
+          this.velXWorld[i] *= (1 - damping);
+        }
+      }
+
+      // Extra compression when moving backward: gently push point toward boundary.
+      if (isMovingBackwardFlag) {
+        const distFromBack = isFacingRight ? (backX - px) : (px - backX);
+        // Only compress points within a small zone behind the back line
+        // (2× compression amount) to avoid affecting distant trailing segments.
+        if (distFromBack >= 0 && distFromBack < compression * 2) {
+          const compressionPush = compression * dtSec;
+          if (isFacingRight) {
+            this.posXWorld[i] += compressionPush;
+          } else {
+            this.posXWorld[i] -= compressionPush;
+          }
+        }
+      }
+    }
   }
 
   /** Place all chain points at their rest pose relative to the root anchor. */

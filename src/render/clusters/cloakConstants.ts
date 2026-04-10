@@ -165,6 +165,24 @@ export const CLOAK_FRONT_OUTLINE_WIDTH_WORLD = 1;
 /** Outline width for the back cloak (world units). */
 export const CLOAK_BACK_OUTLINE_WIDTH_WORLD = 1;
 
+// ── Back collision surface (sprite-local, top-left origin, unflipped) ─────
+//    Defines a vertical "wall" along the player's back.
+//    Mirrored automatically when the sprite flips horizontally.
+
+/** Sprite-local X of the player's back boundary line. */
+export const PLAYER_BACK_X = 7;
+/** Sprite-local Y of the top of the back boundary. */
+export const PLAYER_BACK_TOP = 12;
+/** Sprite-local Y of the bottom of the back boundary. */
+export const PLAYER_BACK_BOTTOM = 24;
+
+/** Soft collision push-back strength (0–1). Higher = harder clamp. */
+export const BACK_COLLISION_STRENGTH = 0.85;
+/** Velocity damping applied when a point contacts the back boundary (0–1). */
+export const BACK_COLLISION_DAMPING = 0.6;
+/** Extra inward compression when the player moves backward (world units). */
+export const BACK_COMPRESSION_AMOUNT = 0.5;
+
 // ── Debug ─────────────────────────────────────────────────────────────────
 
 /** Debug point radius (screen pixels). */
@@ -219,6 +237,9 @@ export interface CloakDebugOverrides {
   jumpingVelocityThresholdWorld: number;
   runningVelocityThresholdWorld: number;
   fastFallVelocityThresholdWorld: number;
+  backCollisionStrength: number;
+  backCollisionDamping: number;
+  backCompressionAmount: number;
 }
 
 /**
@@ -254,6 +275,9 @@ export const debugCloakOverrides: CloakDebugOverrides = {
   jumpingVelocityThresholdWorld: NaN,
   runningVelocityThresholdWorld: NaN,
   fastFallVelocityThresholdWorld: NaN,
+  backCollisionStrength: NaN,
+  backCollisionDamping: NaN,
+  backCompressionAmount: NaN,
 };
 
 export function getCloakTuningValue(
