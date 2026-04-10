@@ -39,7 +39,7 @@ export const CLOAK_GRAVITY_WORLD_PER_SEC2 = 55.0;
 /** How much of the player's velocity is inherited by each trailing point (0–1). */
 export const CLOAK_VELOCITY_INHERITANCE = 0.45;
 /** Strength of the rest-pose bias that pulls points toward their preferred direction. */
-export const CLOAK_REST_BIAS_STRENGTH = 0.22;
+export const CLOAK_REST_BIAS_STRENGTH = 0.5;
 
 // ── State-aware directional bias (rest-pose target offsets per segment) ───
 //    Each entry is [dx, dy] per segment relative to the previous point,
@@ -183,6 +183,23 @@ export const BACK_COLLISION_DAMPING = 0.6;
 /** Extra inward compression when the player moves backward (world units). */
 export const BACK_COMPRESSION_AMOUNT = 0.5;
 
+// ── Back-surface drape / slide parameters ─────────────────────────────────
+//    Controls how constrained cloak points redistribute along the back
+//    instead of bunching near the shoulder attachment.
+
+/** Blend strength for sliding constrained points toward drape targets (0–1). */
+export const BACK_SLIDE_STRENGTH = 0.45;
+/** Desired vertical spacing between consecutive drape points on the back (world units). */
+export const BACK_DRAPE_SPACING = 2.8;
+/** Minimum vertical spacing between consecutive drape points on the back (world units). */
+export const BACK_DRAPE_MIN_SPACING = 1.4;
+/** Velocity damping applied to tangential (vertical) motion while on the back surface (0–1). */
+export const BACK_DRAPE_DAMPING = 0.3;
+/** Extra downward gravity bias for points on the back surface (world units/sec²). */
+export const BACK_SURFACE_GRAVITY_BIAS = 35.0;
+/** Blend strength for the bunching-fix redistribution pass (0–1). */
+export const BACK_BUNCHING_FIX_BLEND = 0.6;
+
 // ── Debug ─────────────────────────────────────────────────────────────────
 
 /** Debug point radius (screen pixels). */
@@ -240,6 +257,12 @@ export interface CloakDebugOverrides {
   backCollisionStrength: number;
   backCollisionDamping: number;
   backCompressionAmount: number;
+  backSlideStrength: number;
+  backDrapeSpacing: number;
+  backDrapeMinSpacing: number;
+  backDrapeDamping: number;
+  backSurfaceGravityBias: number;
+  backBunchingFixBlend: number;
 }
 
 /**
@@ -278,6 +301,12 @@ export const debugCloakOverrides: CloakDebugOverrides = {
   backCollisionStrength: NaN,
   backCollisionDamping: NaN,
   backCompressionAmount: NaN,
+  backSlideStrength: NaN,
+  backDrapeSpacing: NaN,
+  backDrapeMinSpacing: NaN,
+  backDrapeDamping: NaN,
+  backSurfaceGravityBias: NaN,
+  backBunchingFixBlend: NaN,
 };
 
 export function getCloakTuningValue(
