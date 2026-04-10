@@ -510,7 +510,7 @@ export class PlayerCloak {
     ctx.stroke();
 
     // Highlight cloak points that are within the back boundary Y range.
-    const backTolerance = 1.5;
+    const backToleranceWorld = 1.5;
     const isFacingRight = player.isFacingLeftFlag === 0;
     for (let i = 1; i < this.pointCount; i++) {
       const py = this.posYWorld[i];
@@ -521,7 +521,7 @@ export class PlayerCloak {
         // Check if point is on the back surface (constrained).
         const px = this.posXWorld[i];
         const distFromBack = isFacingRight ? (backBoundX - px) : (px - backBoundX);
-        const isConstrained = distFromBack >= -0.5 && distFromBack <= backTolerance;
+        const isConstrained = distFromBack >= -0.5 && distFromBack <= backToleranceWorld;
 
         ctx.fillStyle = isConstrained ? '#ff00ff' : '#ff4400';
         ctx.beginPath();
@@ -952,10 +952,10 @@ export class PlayerCloak {
     // Re-check which points are now on the back surface after clamping.
     // A point is "on the back" if its X is very close to the back boundary
     // and its Y is within the back range.
-    const backTolerance = 1.5; // world units — how close to backX counts as "on surface"
+    const backToleranceWorld = 1.5; // world units — how close to backX counts as "on surface"
 
     // Build ordered list of constrained point indices.
-    let constrainedCount = 0;
+    let constrainedPointCount = 0;
     // Reuse a stack-local array approach — pointCount is small (4), safe to iterate.
     // We avoid allocation by using two passes.
 
@@ -967,17 +967,17 @@ export class PlayerCloak {
       const px = this.posXWorld[i];
       const distFromBack = isFacingRight ? (backX - px) : (px - backX);
       // Point is on the back surface if it's within tolerance.
-      if (distFromBack >= -0.5 && distFromBack <= backTolerance) {
-        constrainedCount++;
+      if (distFromBack >= -0.5 && distFromBack <= backToleranceWorld) {
+        constrainedPointCount++;
       }
     }
 
     // Only run redistribution if at least 2 points are constrained (can bunch).
-    if (constrainedCount >= 2) {
+    if (constrainedPointCount >= 2) {
       // Compute ideal drape target Y for each constrained point.
       // Start from the anchor (root) Y and space downward by drapeSpacing.
       const anchorY = this.posYWorld[0];
-      let drapeIdx = 0;
+      let drapeIndex = 0;
 
       for (let i = 1; i < this.pointCount; i++) {
         const py = this.posYWorld[i];
@@ -985,7 +985,7 @@ export class PlayerCloak {
 
         const px = this.posXWorld[i];
         const distFromBack = isFacingRight ? (backX - px) : (px - backX);
-        if (distFromBack >= -0.5 && distFromBack <= backTolerance) {
+        if (distFromBack >= -0.5 && distFromBack <= backToleranceWorld) {
           // Compute target Y: anchor + (chainIndex * drapeSpacing), clamped to back range.
           const idealY = anchorY + (i * drapeSpacing);
           const targetY = Math.min(Math.max(idealY, backTopY), backBottomY);
@@ -995,7 +995,7 @@ export class PlayerCloak {
           const dy = targetY - currentY;
           this.posYWorld[i] += dy * slideStrength * bunchingFixBlend;
 
-          drapeIdx++;
+          drapeIndex++;
         }
       }
 
@@ -1010,7 +1010,7 @@ export class PlayerCloak {
 
         const px = this.posXWorld[i];
         const distFromBack = isFacingRight ? (backX - px) : (px - backX);
-        if (distFromBack >= -0.5 && distFromBack <= backTolerance) {
+        if (distFromBack >= -0.5 && distFromBack <= backToleranceWorld) {
           const minY = prevConstrainedY + drapeMinSpacing;
           if (this.posYWorld[i] < minY) {
             // Blend toward minimum to prevent hard snapping.
