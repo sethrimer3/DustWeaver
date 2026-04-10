@@ -190,6 +190,8 @@ export interface WorldState extends ParticleBuffers {
   skidDebrisXWorld: number;
   /** Y position of the skid debris origin (bottom edge). */
   skidDebrisYWorld: number;
+  /** 1 for a single tick to force a skid-debris burst from an initial wall jump. */
+  wallJumpSkidDebrisBurstFlag: 0 | 1;
 
   // ---- Environmental hazards -----------------------------------------------
 
@@ -374,6 +376,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isPlayerSkiddingFlag: 0,
     skidDebrisXWorld: 0.0,
     skidDebrisYWorld: 0.0,
+    wallJumpSkidDebrisBurstFlag: 0,
     // ── Environmental hazards ─────────────────────────────────────────
     spikeCount: 0,
     spikeXWorld: new Float32Array(MAX_SPIKES),
