@@ -31,7 +31,7 @@ import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/pla
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
-import { getSelectedRenderSize } from '../ui/renderSettings';
+import { getSelectedRenderSize, getMusicVolume, getSfxVolume } from '../ui/renderSettings';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { BloomSystem } from '../render/effects/bloomSystem';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
@@ -474,8 +474,8 @@ export function startGameScreen(
   let isDebugMode = false;
   const pauseMenuState: PauseMenuState = {
     isDebugOn: false,
-    musicVolume: 0.7,
-    sfxVolume: 0.7,
+    musicVolume: getMusicVolume(),
+    sfxVolume: getSfxVolume(),
     graphicsQuality: 'med',
   };
 

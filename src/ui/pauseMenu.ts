@@ -14,6 +14,7 @@
 import {
   getReachableEdgeGlowOpacity, setReachableEdgeGlowOpacity,
   getInfluenceCircleOpacity, setInfluenceCircleOpacity,
+  setMusicVolume, setSfxVolume,
 } from './renderSettings';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -229,12 +230,14 @@ export function showPauseMenu(
       // Music volume slider
       const musicSlider = makeSlider('Music', state.musicVolume, (v) => {
         state.musicVolume = v;
+        setMusicVolume(v);
       });
       optionsPanel.appendChild(musicSlider);
 
       // SFX volume slider
       const sfxSlider = makeSlider('SFX', state.sfxVolume, (v) => {
         state.sfxVolume = v;
+        setSfxVolume(v);
       });
       optionsPanel.appendChild(sfxSlider);
     } else {
