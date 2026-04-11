@@ -196,6 +196,38 @@ function isEdgeOccluded(
   return false;
 }
 
+/**
+ * Probes a point just outside an edge to determine whether open air exists
+ * in front of it.  Returns false if the probe point falls inside any solid
+ * (visible) wall other than `excludeIndex`, meaning the edge is buried
+ * against an adjacent wall and should not be highlighted.
+ */
+/** Distance (world units) to probe outside an edge to check for open air. */
+const OPEN_AIR_PROBE_DISTANCE_WORLD = 1.0;
+
+function isOpenAirInFront(
+  probeXWorld: number,
+  probeYWorld: number,
+  walls: WallSnapshot,
+  excludeIndex: number,
+): boolean {
+  for (let wj = 0; wj < walls.count; wj++) {
+    if (wj === excludeIndex) continue;
+    if (walls.isInvisibleFlag[wj] === 1) continue;
+    const minX = walls.xWorld[wj];
+    const minY = walls.yWorld[wj];
+    const maxX = minX + walls.wWorld[wj];
+    const maxY = minY + walls.hWorld[wj];
+    // Open intervals intentional: probe landing exactly on a wall boundary
+    // (not inside it) still counts as open air.
+    if (probeXWorld > minX && probeXWorld < maxX &&
+        probeYWorld > minY && probeYWorld < maxY) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // ── Reachable Edge Glow ─────────────────────────────────────────────────────
 
 /**
@@ -259,6 +291,7 @@ function drawReachableEdgeGlow(
       const edgeDxSq = (cpX - playerXWorld) * (cpX - playerXWorld);
       const edgeDySq = (wallMinYWorld - playerYWorld) * (wallMinYWorld - playerYWorld);
       if (edgeDxSq + edgeDySq <= influenceRadiusSq &&
+          isOpenAirInFront(edgeMidXWorld, wallMinYWorld - OPEN_AIR_PROBE_DISTANCE_WORLD, walls, wi) &&
           !isEdgeOccluded(playerXWorld, playerYWorld, edgeMidXWorld, wallMinYWorld, walls, wi)) {
         drawEdgeSegment(ctx, sMinX, sMinY, sMaxX, sMinY,
           playerXWorld, playerYWorld, edgeMidXWorld, wallMinYWorld,
@@ -272,6 +305,7 @@ function drawReachableEdgeGlow(
       const edgeDxSq = (cpX - playerXWorld) * (cpX - playerXWorld);
       const edgeDySq = (wallMaxYWorld - playerYWorld) * (wallMaxYWorld - playerYWorld);
       if (edgeDxSq + edgeDySq <= influenceRadiusSq &&
+          isOpenAirInFront(edgeMidXWorld, wallMaxYWorld + OPEN_AIR_PROBE_DISTANCE_WORLD, walls, wi) &&
           !isEdgeOccluded(playerXWorld, playerYWorld, edgeMidXWorld, wallMaxYWorld, walls, wi)) {
         drawEdgeSegment(ctx, sMinX, sMaxY, sMaxX, sMaxY,
           playerXWorld, playerYWorld, edgeMidXWorld, wallMaxYWorld,
@@ -285,6 +319,7 @@ function drawReachableEdgeGlow(
       const edgeDxSq = (wallMinXWorld - playerXWorld) * (wallMinXWorld - playerXWorld);
       const edgeDySq = (cpY - playerYWorld) * (cpY - playerYWorld);
       if (edgeDxSq + edgeDySq <= influenceRadiusSq &&
+          isOpenAirInFront(wallMinXWorld - OPEN_AIR_PROBE_DISTANCE_WORLD, edgeMidYWorld, walls, wi) &&
           !isEdgeOccluded(playerXWorld, playerYWorld, wallMinXWorld, edgeMidYWorld, walls, wi)) {
         drawEdgeSegment(ctx, sMinX, sMinY, sMinX, sMaxY,
           playerXWorld, playerYWorld, wallMinXWorld, edgeMidYWorld,
@@ -298,6 +333,7 @@ function drawReachableEdgeGlow(
       const edgeDxSq = (wallMaxXWorld - playerXWorld) * (wallMaxXWorld - playerXWorld);
       const edgeDySq = (cpY - playerYWorld) * (cpY - playerYWorld);
       if (edgeDxSq + edgeDySq <= influenceRadiusSq &&
+          isOpenAirInFront(wallMaxXWorld + OPEN_AIR_PROBE_DISTANCE_WORLD, edgeMidYWorld, walls, wi) &&
           !isEdgeOccluded(playerXWorld, playerYWorld, wallMaxXWorld, edgeMidYWorld, walls, wi)) {
         drawEdgeSegment(ctx, sMaxX, sMinY, sMaxX, sMaxY,
           playerXWorld, playerYWorld, wallMaxXWorld, edgeMidYWorld,
