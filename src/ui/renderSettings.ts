@@ -1,3 +1,54 @@
+// ── Audio Volume ─────────────────────────────────────────────────────────────
+
+const MUSIC_VOLUME_STORAGE_KEY = 'dustweaver-music-volume';
+const SFX_VOLUME_STORAGE_KEY = 'dustweaver-sfx-volume';
+const DEFAULT_MUSIC_VOLUME = 0.7;
+const DEFAULT_SFX_VOLUME = 0.7;
+
+export function getMusicVolume(): number {
+  const value = localStorage.getItem(MUSIC_VOLUME_STORAGE_KEY);
+  if (value !== null) {
+    const parsed = parseFloat(value);
+    return !isNaN(parsed) ? Math.max(0, Math.min(1, parsed)) : DEFAULT_MUSIC_VOLUME;
+  }
+  return DEFAULT_MUSIC_VOLUME;
+}
+
+export function setMusicVolume(volume: number): void {
+  localStorage.setItem(MUSIC_VOLUME_STORAGE_KEY, String(Math.max(0, Math.min(1, volume))));
+}
+
+export function getSfxVolume(): number {
+  const value = localStorage.getItem(SFX_VOLUME_STORAGE_KEY);
+  if (value !== null) {
+    const parsed = parseFloat(value);
+    return !isNaN(parsed) ? Math.max(0, Math.min(1, parsed)) : DEFAULT_SFX_VOLUME;
+  }
+  return DEFAULT_SFX_VOLUME;
+}
+
+export function setSfxVolume(volume: number): void {
+  localStorage.setItem(SFX_VOLUME_STORAGE_KEY, String(Math.max(0, Math.min(1, volume))));
+}
+
+// ── Graphics Quality ─────────────────────────────────────────────────────────
+
+const GRAPHICS_QUALITY_STORAGE_KEY = 'dustweaver-graphics-quality';
+export type GraphicsQuality = 'low' | 'high';
+const DEFAULT_GRAPHICS_QUALITY: GraphicsQuality = 'high';
+
+export function getGraphicsQuality(): GraphicsQuality {
+  const value = localStorage.getItem(GRAPHICS_QUALITY_STORAGE_KEY);
+  if (value === 'low' || value === 'high') return value;
+  return DEFAULT_GRAPHICS_QUALITY;
+}
+
+export function setGraphicsQuality(quality: GraphicsQuality): void {
+  localStorage.setItem(GRAPHICS_QUALITY_STORAGE_KEY, quality);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface RenderSizeOption {
   id: string;
   label: string;
