@@ -100,6 +100,8 @@ export interface VisualMapCallbacks {
   onJumpToRoom: (room: RoomDef) => void;
   /** Called when the visual map closes. */
   onClose: () => void;
+  /** Called whenever world-map metadata is mutated (rename, move, add room/world, door link). */
+  onWorldMapDataChanged?: () => void;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -722,6 +724,7 @@ export function showVisualWorldMap(
         const placement = placements.get(dragRoomId);
         if (placement) {
           setRoomMapPosition(dragRoomId, placement.mapXWorld, placement.mapYWorld);
+          callbacks.onWorldMapDataChanged?.();
           if (snapIndicator) {
             statusBar.textContent =
               `Snapped: ${effectiveRoomName(dragRoomId)} door #${snapIndicator.srcTransIdx + 1}` +
@@ -856,6 +859,7 @@ export function showVisualWorldMap(
       const newName = window.prompt('New name for room:', roomName);
       if (newName !== null && newName.trim() !== '') {
         setRoomNameOverride(roomId, newName.trim());
+        callbacks.onWorldMapDataChanged?.();
         statusBar.textContent = `Renamed "${roomId}" \u2192 "${newName.trim()}"`;
         statusBar.style.color = '#88ff88';
         render();
@@ -917,6 +921,7 @@ export function showVisualWorldMap(
     okBtn.addEventListener('click', () => {
       const newWorldId = parseInt(sel.value, 10);
       setRoomWorldOverride(roomId, newWorldId);
+      callbacks.onWorldMapDataChanged?.();
       statusBar.textContent = `Moved "${effectiveRoomName(roomId)}" to ${worldDisplayName(newWorldId)}`;
       statusBar.style.color = '#88ff88';
       modal.destroy();
@@ -1032,6 +1037,7 @@ export function showVisualWorldMap(
       registerRoom(roomDef);
       setRoomNameOverride(id, name);
       setRoomWorldOverride(id, worldId);
+      callbacks.onWorldMapDataChanged?.();
 
       const canvasWCss = canvas.width / window.devicePixelRatio;
       const canvasHCss = canvas.height / window.devicePixelRatio;
@@ -1100,6 +1106,7 @@ export function showVisualWorldMap(
     createBtn.addEventListener('click', () => {
       const name = nameInput.value.trim() || `World ${nextId}`;
       setWorldName(nextId, name);
+      callbacks.onWorldMapDataChanged?.();
       modal.destroy();
       statusBar.textContent = `World "${name}" (id: ${nextId}) created \u2014 right-click rooms to move them into it.`;
       statusBar.style.color = '#88ff88';
@@ -1375,6 +1382,7 @@ export function showVisualWorldMap(
         if (e.key === 'ArrowUp')    placement.mapYWorld -= 1;
         if (e.key === 'ArrowDown')  placement.mapYWorld += 1;
         setRoomMapPosition(selectedRoomId, placement.mapXWorld, placement.mapYWorld);
+        callbacks.onWorldMapDataChanged?.();
         render();
       }
       return;

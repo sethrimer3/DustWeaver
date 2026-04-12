@@ -36,6 +36,8 @@ export interface EditorWorldMapCallbacks {
   /** Called when a transition is selected in link mode.  */
   onLinkTransition: (room: RoomDef, transitionIndex: number) => void;
   onClose: () => void;
+  /** Called whenever world-map metadata is mutated (rename, move, add room/world). */
+  onWorldMapDataChanged?: () => void;
 }
 
 /**
@@ -141,6 +143,7 @@ export function showEditorWorldMap(
           const newName = window.prompt(`Rename world "${worldDisplayName(worldNum)}":`, worldDisplayName(worldNum));
           if (newName !== null && newName.trim()) {
             setWorldName(worldNum, newName.trim());
+            callbacks.onWorldMapDataChanged?.();
             rebuildList();
           }
         });
@@ -252,6 +255,7 @@ export function showEditorWorldMap(
             const newName = window.prompt(`Rename "${effectiveRoomName(room.id)}":`, effectiveRoomName(room.id));
             if (newName !== null && newName.trim()) {
               setRoomNameOverride(room.id, newName.trim());
+              callbacks.onWorldMapDataChanged?.();
               rebuildList();
             }
           });
@@ -312,6 +316,7 @@ export function showEditorWorldMap(
       `;
       wBtn.addEventListener('click', () => {
         setRoomWorldOverride(roomId, wId);
+        callbacks.onWorldMapDataChanged?.();
         if (dropDiv.parentElement) dropDiv.parentElement.removeChild(dropDiv);
         openMoveDropdown = null;
         rebuildList();
@@ -502,6 +507,7 @@ export function showEditorWorldMap(
       setRoomNameOverride(id, name);
       setRoomWorldOverride(id, worldId);
       setRoomMapPosition(id, 0, 0);
+      callbacks.onWorldMapDataChanged?.();
 
       if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
       rebuildList();
@@ -583,6 +589,7 @@ export function showEditorWorldMap(
     createBtn3.addEventListener('click', () => {
       const name = nameInput2.value.trim() || `World ${nextId}`;
       setWorldName(nextId, name);
+      callbacks.onWorldMapDataChanged?.();
       if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
       rebuildList();
     });
