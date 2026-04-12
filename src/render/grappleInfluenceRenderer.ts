@@ -67,8 +67,9 @@ const CIRCLE_ARC_SEGMENTS = 64;
  * Draws the influence-radius circle as a series of arcs whose colour and
  * opacity fade from the mouse direction outward.
  *
- * @param highlightWidthFraction Fraction of the full circumference (0–1) that
- *   is highlighted.  0.25 = 25% (90° arc centred on mouse).  1.0 = full ring.
+ * @param highlightWidthFraction Fraction of the full 360° circumference (0–1) that
+ *   is highlighted.  0.25 → 90° total arc (25% of 360°) centred on mouse.  1.0 → full ring.
+ *   Converts to half-angle via: halfAngleRad = fraction × π.
  */
 function drawInfluenceCircle(
   ctx: CanvasRenderingContext2D,
