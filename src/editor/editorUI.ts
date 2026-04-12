@@ -46,6 +46,7 @@ export interface EditorUICallbacks {
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  onExportAllChanges: () => void;
 }
 
 export function createEditorUI(root: HTMLElement): EditorUI {
@@ -85,6 +86,14 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   `;
   confirmCancelBar.appendChild(cancelBtn);
   container.appendChild(confirmCancelBar);
+
+  // ── Export All Changes button ────────────────────────────────────────────
+  const exportAllBtn = makeBtn('📦 Export All Changes', () => callbacks?.onExportAllChanges());
+  exportAllBtn.style.cssText += `
+    width: 100%; padding: 8px; font-size: 12px; margin-bottom: 10px;
+    background: rgba(80,60,0,0.4); border-color: #ccaa00; color: #ccaa00;
+  `;
+  container.appendChild(exportAllBtn);
 
   // ── Tool buttons ─────────────────────────────────────────────────────────
   const toolBar = document.createElement('div');

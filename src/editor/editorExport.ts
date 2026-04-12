@@ -4,6 +4,7 @@
 
 import type { EditorRoomData } from './editorState';
 import { editorRoomDataToJson } from './roomJson';
+import { roomDefToEditorRoomData } from './roomJson';
 import type { WorldMapJsonDef } from './worldMapData';
 import {
   ROOM_REGISTRY,
@@ -79,4 +80,37 @@ export function exportWorldMapJson(): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Exports all changed or newly-added rooms and, if the world map metadata
+ * was changed, the world-map.json.
+ *
+ * @param pendingRoomEdits  Map of roomId → EditorRoomData for rooms explicitly
+ *                          saved during this editor session.
+ * @param initialRoomIds    Set of room IDs that existed when the editor session
+ *                          started (used to identify newly-added rooms).
+ * @param isWorldMapDirty   True if world-map metadata was changed this session.
+ */
+export function exportAllChanges(
+  pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
+  initialRoomIds: ReadonlySet<string>,
+  isWorldMapDirty: boolean,
+): void {
+  // Export every room in the pending-edits store.
+  for (const [, data] of pendingRoomEdits) {
+    exportRoomAsJson(data);
+  }
+
+  // Export newly-added rooms that were never explicitly saved (blank rooms).
+  for (const [id, roomDef] of ROOM_REGISTRY) {
+    if (!initialRoomIds.has(id) && !pendingRoomEdits.has(id)) {
+      const { data } = roomDefToEditorRoomData(roomDef, 1);
+      exportRoomAsJson(data);
+    }
+  }
+
+  if (isWorldMapDirty) {
+    exportWorldMapJson();
+  }
 }

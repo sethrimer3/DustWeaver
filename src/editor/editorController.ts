@@ -28,7 +28,8 @@ import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
 import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
-import { exportRoomAsJson } from './editorExport';
+import { exportRoomAsJson, exportAllChanges } from './editorExport';
+import { ROOM_REGISTRY } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 
@@ -104,10 +105,28 @@ export function createEditorController(
   // Drag-to-move: original positions of selected elements at drag start
   let dragOriginalPositions: Map<number, { xBlock: number; yBlock: number }> = new Map();
 
+  // ── Pending-edits persistence for multi-room editing ────────────────────
+  // Stores EditorRoomData snapshots saved by the user as they navigate rooms.
+  const pendingRoomEdits = new Map<string, EditorRoomData>();
+  // Room IDs that existed when the editor session started (identifies new rooms).
+  let initialRoomIds = new Set<string>();
+  // True if any world-map metadata (names, positions, world assignments) changed.
+  let isWorldMapDirty = false;
+  // True if the current room has unsaved edits since it was last loaded.
+  let isCurrentRoomDirty = false;
+
   function toggle(currentRoom: RoomDef): void {
     state.isActive = !state.isActive;
 
     if (state.isActive) {
+      // Snapshot which rooms already exist so we can identify newly-added ones.
+      initialRoomIds = new Set(
+        [...ROOM_REGISTRY.keys()]
+      );
+      isWorldMapDirty = false;
+      isCurrentRoomDirty = false;
+      pendingRoomEdits.clear();
+
       // Save original room for cancel/revert
       originalRoomDef = currentRoom;
 
@@ -159,6 +178,14 @@ export function createEditorController(
         },
         onConfirm: () => confirmEdits(),
         onCancel: () => cancelEdits(),
+        onExportAllChanges: () => {
+          // Auto-save current room to pending before exporting so it's included.
+          if (isCurrentRoomDirty && state.roomData) {
+            pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            isCurrentRoomDirty = false;
+          }
+          exportAllChanges(pendingRoomEdits, initialRoomIds, isWorldMapDirty);
+        },
       });
     } else {
       closeEditor();
@@ -177,6 +204,10 @@ export function createEditorController(
     state.isDragging = false;
     state.isSelectionBoxActive = false;
     originalRoomDef = null;
+    pendingRoomEdits.clear();
+    initialRoomIds = new Set();
+    isWorldMapDirty = false;
+    isCurrentRoomDirty = false;
     clearHistory(history);
     onEditorClose?.();
   }
@@ -195,11 +226,28 @@ export function createEditorController(
   }
 
   function cancelEdits(): void {
-    // Restore the original room
-    const saved = originalRoomDef;
-    closeEditor();
-    if (saved) {
-      onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
+    // If the current room has unsaved changes, ask whether to save them first.
+    if (isCurrentRoomDirty && state.roomData) {
+      showSaveChangesDialog(uiRoot, () => {
+        // YES — save to pending, then exit
+        if (state.roomData) {
+          pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+        }
+        isCurrentRoomDirty = false;
+        const saved = originalRoomDef;
+        closeEditor();
+        if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
+      }, () => {
+        // NO — exit without saving
+        const saved = originalRoomDef;
+        closeEditor();
+        if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
+      });
+    } else {
+      // No unsaved changes — exit immediately
+      const saved = originalRoomDef;
+      closeEditor();
+      if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
     }
   }
 
@@ -210,6 +258,7 @@ export function createEditorController(
    */
   function applyEdits(): void {
     if (!state.roomData) return;
+    isCurrentRoomDirty = true;
     const roomDef = editorRoomDataToRoomDef(state.roomData);
     const sx = state.roomData.playerSpawnBlock[0];
     const sy = state.roomData.playerSpawnBlock[1];
@@ -217,10 +266,25 @@ export function createEditorController(
   }
 
   function loadRoomForEditing(room: RoomDef): void {
-    const result = roomDefToEditorRoomData(room, state.nextUid);
-    state.roomData = result.data;
-    state.nextUid = result.nextUid;
+    const pending = pendingRoomEdits.get(room.id);
+    if (pending) {
+      // Restore previously-saved edits for this room.
+      state.roomData = deepCloneRoomData(pending);
+      // Recalculate nextUid to be above all existing element UIDs.
+      let maxUid = state.nextUid;
+      for (const w of state.roomData.interiorWalls)  maxUid = Math.max(maxUid, w.uid + 1);
+      for (const e of state.roomData.enemies)        maxUid = Math.max(maxUid, e.uid + 1);
+      for (const t of state.roomData.transitions)    maxUid = Math.max(maxUid, t.uid + 1);
+      for (const s of state.roomData.skillTombs)     maxUid = Math.max(maxUid, s.uid + 1);
+      for (const p of state.roomData.dustPiles)      maxUid = Math.max(maxUid, p.uid + 1);
+      state.nextUid = maxUid;
+    } else {
+      const result = roomDefToEditorRoomData(room, state.nextUid);
+      state.roomData = result.data;
+      state.nextUid = result.nextUid;
+    }
     state.selectedElements = [];
+    isCurrentRoomDirty = false;
   }
 
   function openWorldMap(): void {
@@ -234,12 +298,26 @@ export function createEditorController(
         state.isWorldMapOpen = false;
         worldMapCleanup = null;
 
-        // Load the new room for editing
-        loadRoomForEditing(room);
+        const doSwitch = () => {
+          loadRoomForEditing(room);
+          const roomDef = editorRoomDataToRoomDef(state.roomData!);
+          onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+        };
 
-        // Build a RoomDef and use the game's loadRoom to set up runtime state
-        const roomDef = editorRoomDataToRoomDef(state.roomData!);
-        onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+        if (isCurrentRoomDirty && state.roomData) {
+          showSaveChangesDialog(uiRoot, () => {
+            if (state.roomData) {
+              pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            }
+            isCurrentRoomDirty = false;
+            doSwitch();
+          }, () => {
+            isCurrentRoomDirty = false;
+            doSwitch();
+          });
+        } else {
+          doSwitch();
+        }
       },
       onLinkTransition: (room, transitionIndex) => {
         state.isWorldMapOpen = false;
@@ -278,6 +356,7 @@ export function createEditorController(
           cancelTransitionLink(state);
         }
       },
+      onWorldMapDataChanged: () => { isWorldMapDirty = true; },
     });
   }
 
@@ -290,15 +369,32 @@ export function createEditorController(
         state.isVisualMapOpen = false;
         visualMapCleanup = null;
 
-        // Load the room for editing
-        loadRoomForEditing(room);
-        const roomDef = editorRoomDataToRoomDef(state.roomData!);
-        onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+        const doSwitch = () => {
+          loadRoomForEditing(room);
+          const roomDef = editorRoomDataToRoomDef(state.roomData!);
+          onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+        };
+
+        if (isCurrentRoomDirty && state.roomData) {
+          showSaveChangesDialog(uiRoot, () => {
+            if (state.roomData) {
+              pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            }
+            isCurrentRoomDirty = false;
+            doSwitch();
+          }, () => {
+            isCurrentRoomDirty = false;
+            doSwitch();
+          });
+        } else {
+          doSwitch();
+        }
       },
       onClose: () => {
         state.isVisualMapOpen = false;
         visualMapCleanup = null;
       },
+      onWorldMapDataChanged: () => { isWorldMapDirty = true; },
     });
   }
 
@@ -966,4 +1062,88 @@ export function createEditorController(
     getRoomDef,
     destroy,
   };
+}
+
+// ── Module-level helpers ──────────────────────────────────────────────────────
+
+/**
+ * Deep-clones an EditorRoomData object via JSON round-trip.
+ * Safe because EditorRoomData contains only plain JSON-serialisable values.
+ */
+function deepCloneRoomData(data: EditorRoomData): EditorRoomData {
+  return JSON.parse(JSON.stringify(data)) as EditorRoomData;
+}
+
+/**
+ * Shows a modal "Save Changes?" dialog with a green YES and a red NO button.
+ * The dialog is appended to `root` and removed when the user picks an option.
+ *
+ * @param root    DOM element to append the dialog to (should be the UI overlay root).
+ * @param onYes   Called when the user clicks YES.
+ * @param onNo    Called when the user clicks NO.
+ */
+function showSaveChangesDialog(root: HTMLElement, onYes: () => void, onNo: () => void): void {
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = `
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto;
+  `;
+
+  const panel = document.createElement('div');
+  panel.style.cssText = `
+    background: rgba(10,12,20,0.97); border: 1px solid rgba(0,200,100,0.5);
+    border-radius: 8px; padding: 24px 32px; display: flex; flex-direction: column;
+    align-items: center; gap: 20px; font-family: 'Cinzel', monospace;
+    min-width: 260px; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+  `;
+
+  const question = document.createElement('div');
+  question.textContent = 'Save Changes?';
+  question.style.cssText = `
+    font-size: 16px; font-weight: bold; color: #c0ffd0; letter-spacing: 0.05em;
+  `;
+  panel.appendChild(question);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display: flex; gap: 16px;';
+
+  const yesBtn = document.createElement('button');
+  yesBtn.textContent = 'YES';
+  yesBtn.style.cssText = `
+    min-width: 90px; padding: 10px 20px; font-size: 14px; font-weight: bold;
+    font-family: 'Cinzel', monospace; cursor: pointer; border-radius: 4px;
+    background: rgba(0,140,60,0.6); color: #44ff88;
+    border: 2px solid #44ff88; transition: background 0.15s;
+  `;
+  yesBtn.addEventListener('mouseenter', () => { yesBtn.style.background = 'rgba(0,180,80,0.8)'; });
+  yesBtn.addEventListener('mouseleave', () => { yesBtn.style.background = 'rgba(0,140,60,0.6)'; });
+  yesBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
+    onYes();
+  });
+
+  const noBtn = document.createElement('button');
+  noBtn.textContent = 'NO';
+  noBtn.style.cssText = `
+    min-width: 90px; padding: 10px 20px; font-size: 14px; font-weight: bold;
+    font-family: 'Cinzel', monospace; cursor: pointer; border-radius: 4px;
+    background: rgba(160,30,20,0.6); color: #ff6644;
+    border: 2px solid #ff6644; transition: background 0.15s;
+  `;
+  noBtn.addEventListener('mouseenter', () => { noBtn.style.background = 'rgba(200,40,30,0.8)'; });
+  noBtn.addEventListener('mouseleave', () => { noBtn.style.background = 'rgba(160,30,20,0.6)'; });
+  noBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
+    onNo();
+  });
+
+  btnRow.appendChild(yesBtn);
+  btnRow.appendChild(noBtn);
+  panel.appendChild(btnRow);
+  backdrop.appendChild(panel);
+  root.appendChild(backdrop);
 }
