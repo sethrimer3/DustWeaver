@@ -48,9 +48,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'ramp_1x1',  label: '1×1 Ramp',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isRampItem: 1 },
   { id: 'ramp_1x2',  label: '1×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isRampItem: 1 },
   { id: 'ramp_2x2',  label: '2×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isRampItem: 1 },
-  { id: 'pillar',    label: 'Pillar',       category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 2 },
-  { id: 'pillar_half', label: 'Pillar (Half)', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 2, isPillarHalfWidthItem: 1 },
-  // Enemies
+  { id: 'pillar_full', label: 'Pillar',           category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 2 },
+  { id: 'pillar_half', label: 'Pillar (Half)',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 2, isPillarHalfWidthItem: 1 },  // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },
   { id: 'enemy_rock_elemental', label: 'Rock Elemental', category: 'enemies' },

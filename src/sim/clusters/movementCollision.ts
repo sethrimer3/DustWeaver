@@ -213,8 +213,12 @@ export function resolveWallsY(
           landed = true;
         }
       }
-      // Left/right platforms handled in resolveWallsX would be needed here;
-      // for now they are treated as top-edge platforms in the Y pass.
+      // Left/right platforms (edge 2 or 3) are not currently implemented as
+      // special collision surfaces; they fall through to the top-edge platform
+      // handling above (which does nothing for them since prevBottom and
+      // velocityYWorld conditions won't typically match). This is intentional:
+      // left/right platform edges are a visual/data feature reserved for future
+      // directional one-way wall support.
       continue;
     }
 

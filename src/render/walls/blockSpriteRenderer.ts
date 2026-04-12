@@ -366,6 +366,8 @@ interface CachedTileCoord {
   readonly key: string;
   readonly col: number;
   readonly row: number;
+  /** platformEdge for platform tiles: 0=top, 1=bottom, 2=left, 3=right. Only meaningful for platformTiles. */
+  readonly platformEdge: number;
 }
 
 interface RampWallInfo {
@@ -509,6 +511,7 @@ function _buildWallLayoutCache(
 
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
+  const platformEdgeByKey = new Map<string, number>();
   const tileTheme = new Map<string, BlockTheme | null>();
   const rampWalls: RampWallInfo[] = [];
   const halfPillarWalls: HalfPillarWallInfo[] = [];
@@ -560,6 +563,7 @@ function _buildWallLayoutCache(
         const key = _tileKey(col, row);
         if (walls.isPlatformFlag[wi] === 1) {
           platformOccupied.add(key);
+          platformEdgeByKey.set(key, walls.platformEdge[wi]);
         } else {
           occupied.add(key);
         }
@@ -577,6 +581,7 @@ function _buildWallLayoutCache(
       key,
       col: parseInt(key.slice(0, commaIdx), 10),
       row: parseInt(key.slice(commaIdx + 1), 10),
+      platformEdge: 0,
     });
   }
 
@@ -587,6 +592,7 @@ function _buildWallLayoutCache(
       key,
       col: parseInt(key.slice(0, commaIdx), 10),
       row: parseInt(key.slice(commaIdx + 1), 10),
+      platformEdge: platformEdgeByKey.get(key) ?? 0,
     });
   }
 
@@ -937,26 +943,8 @@ export function renderWallSprites(
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
-    // Draw a thin 3-pixel line on the platform's one-way surface edge.
-    // Determine edge from the wall that placed this tile.
-    let platformEdgeForTile = 0; // default: top
-    for (let wi = 0; wi < walls.count; wi++) {
-      if (walls.isPlatformFlag[wi] !== 1) continue;
-      if (walls.isInvisibleFlag[wi] === 1) continue;
-      const wxLeft = walls.xWorld[wi];
-      const wyTop  = walls.yWorld[wi];
-      const wxRight  = wxLeft + walls.wWorld[wi];
-      const wyBottom = wyTop + walls.hWorld[wi];
-      const tileWorldLeft  = col * blockSizePx;
-      const tileWorldTop   = row * blockSizePx;
-      const tileWorldRight  = tileWorldLeft + blockSizePx;
-      const tileWorldBottom = tileWorldTop  + blockSizePx;
-      if (tileWorldLeft < wxRight && tileWorldRight > wxLeft &&
-          tileWorldTop < wyBottom && tileWorldBottom > wyTop) {
-        platformEdgeForTile = walls.platformEdge[wi];
-        break;
-      }
-    }
+    // platformEdge is stored in the tile from the cache building pass (no per-draw wall scan).
+    const platformEdgeForTile = tile.platformEdge;
 
     // Resolve theme color for the platform line
     const platTheme: BlockTheme | null = wallLayout.tileTheme.get(key) ?? roomTheme;

@@ -342,7 +342,7 @@ function drawHalfPillarRect(
   const y  = w.yBlock * BS * zoom + oy;
   const ww = w.wBlock * BS * zoom;
   const wh = w.hBlock * BS * zoom;
-  // Half-width pillar = 4px wide in block units (half of BLOCK_SIZE_MEDIUM=8)
+  // Half-width pillar = 3 world units wide (half of BLOCK_SIZE_MEDIUM=6)
   const halfW = ww / 2;
 
   ctx.fillStyle = color;
