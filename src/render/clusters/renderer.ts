@@ -359,18 +359,6 @@ export function renderClusters(
     const boxW     = boxHalfW * 2;
     const boxH     = boxHalfH * 2;
 
-    // ── Influence ring (faint, dashed) ─────────────────────────────────────
-    const influenceRadiusPx = cluster.influenceRadiusWorld * scalePx;
-    ctx.beginPath();
-    ctx.arc(screenX, screenY, influenceRadiusPx, 0, Math.PI * 2);
-    ctx.strokeStyle = isPlayer
-      ? 'rgba(0,255,153,0.10)'
-      : 'rgba(255,102,0,0.08)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([8, 6]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
     // ── Dash recharge golden ring animation ───────────────────────────────
     if (isPlayer && cluster.dashRechargeAnimTicks > 0) {
       const animProgress = 1.0 - cluster.dashRechargeAnimTicks / DASH_RECHARGE_ANIM_TICKS;

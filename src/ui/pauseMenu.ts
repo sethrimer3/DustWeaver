@@ -14,6 +14,7 @@
 import {
   getReachableEdgeGlowOpacity, setReachableEdgeGlowOpacity,
   getInfluenceCircleOpacity, setInfluenceCircleOpacity,
+  getInfluenceHighlightWidth, setInfluenceHighlightWidth,
   setMusicVolume, setSfxVolume,
 } from './renderSettings';
 
@@ -277,6 +278,13 @@ export function showPauseMenu(
         (v) => { setReachableEdgeGlowOpacity(v); },
       );
       optionsPanel.appendChild(edgeGlowSlider);
+
+      const influenceWidthSlider = makeSlider(
+        'Influence Highlight Width',
+        getInfluenceHighlightWidth(),
+        (v) => { setInfluenceHighlightWidth(v); },
+      );
+      optionsPanel.appendChild(influenceWidthSlider);
 
       const influenceCircleSlider = makeSlider(
         'Influence Circle Opacity',

@@ -60,6 +60,7 @@ const RENDER_SIZE_STORAGE_KEY = 'dustweaver-render-size-id';
 const OFFENSIVE_DUST_OUTLINE_STORAGE_KEY = 'dustweaver-offensive-dust-outline-enabled';
 const REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY = 'dustweaver-reachable-edge-glow-opacity';
 const INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY = 'dustweaver-influence-circle-opacity';
+const INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY = 'dustweaver-influence-highlight-width';
 const DEFAULT_RENDER_SIZE_ID = '1080p';
 
 const RENDER_SIZE_OPTIONS: RenderSizeOption[] = [
@@ -179,5 +180,26 @@ export function setInfluenceCircleOpacity(opacity: number): void {
   localStorage.setItem(
     INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY,
     String(Math.max(0, Math.min(1, opacity))),
+  );
+}
+
+// ── Influence Highlight Width ────────────────────────────────────────────────
+
+/** Fraction of the circle circumference that is highlighted (0–1). Default 25%. */
+const DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH = 0.25;
+
+export function getInfluenceHighlightWidth(): number {
+  const value = localStorage.getItem(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY);
+  if (value !== null) {
+    const parsed = parseFloat(value);
+    return !isNaN(parsed) ? Math.max(0, Math.min(1, parsed)) : DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH;
+  }
+  return DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH;
+}
+
+export function setInfluenceHighlightWidth(width: number): void {
+  localStorage.setItem(
+    INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY,
+    String(Math.max(0, Math.min(1, width))),
   );
 }
