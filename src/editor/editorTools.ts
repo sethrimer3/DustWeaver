@@ -125,6 +125,24 @@ export function placeAtCursor(state: EditorState): void {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
     const isPlatformFlag: 0 | 1 = item.isPlatformItem === 1 ? 1 : 0;
+
+    // Compute ramp orientation from rotation steps and flip
+    let rampOrientation: 0 | 1 | 2 | 3 | undefined;
+    if (item.isRampItem === 1) {
+      const base = state.placementRotationSteps % 4;
+      // flipH toggles within pairs: 0↔1, 2↔3
+      rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+    }
+
+    // Compute platform edge from rotation steps
+    // R=0→top(0), R=1→right(3), R=2→bottom(1), R=3→left(2)
+    const platformEdgeMap: readonly (0 | 1 | 2 | 3)[] = [0, 3, 1, 2];
+    const platformEdge: 0 | 1 | 2 | 3 = isPlatformFlag === 1
+      ? platformEdgeMap[state.placementRotationSteps % 4]
+      : 0;
+
+    const isPillarHalfWidthFlag: 0 | 1 = item.isPillarHalfWidthItem === 1 ? 1 : 0;
+
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
     // Prevent overlapping walls
     const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
@@ -136,7 +154,10 @@ export function placeAtCursor(state: EditorState): void {
       wBlock,
       hBlock,
       isPlatformFlag,
+      platformEdge,
       blockTheme: room.blockTheme,
+      rampOrientation,
+      isPillarHalfWidthFlag,
     });
   } else if (item.id === 'enemy_rolling') {
     room.enemies.push({

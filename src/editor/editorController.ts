@@ -354,6 +354,11 @@ export function createEditorController(
       }
     }
 
+    // F key → flip placement horizontally
+    if (inputState.isFlipPressed && state.activeTool === EditorTool.Place) {
+      state.placementFlipH = !state.placementFlipH;
+    }
+
     // M key → world map
     if (inputState.isMapToggled) {
       openWorldMap();
@@ -570,7 +575,7 @@ export function createEditorController(
   ): void {
     if (!state.isActive) return;
 
-    renderEditorIndicator(ctx, canvasWidth);
+    renderEditorIndicator(ctx, canvasWidth, state);
     renderEditorOverlays(ctx, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
   }
 

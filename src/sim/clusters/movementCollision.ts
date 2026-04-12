@@ -97,6 +97,7 @@ export function resetClusterGroundedFlag(cluster: ClusterState): void {
  * Pushes cluster left/right out of walls and zeros velX on contact.
  * Sets isTouchingWallLeftFlag / isTouchingWallRightFlag for player.
  * Platform walls (wallIsPlatformFlag=1) are skipped — no side collision.
+ * Ramp walls (wallRampOrientationIndex !== 255) are skipped — handled by resolveRampSurfaces.
  */
 export function resolveWallsX(
   cluster: ClusterState,
@@ -107,8 +108,9 @@ export function resolveWallsX(
   const hh = cluster.halfHeightWorld;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
-    // Platforms have no horizontal collision
+    // Platforms and ramps have no horizontal collision
     if (world.wallIsPlatformFlag[wi] === 1) continue;
+    if (world.wallRampOrientationIndex[wi] !== 255) continue;
 
     const wallLeft   = world.wallXWorld[wi];
     const wallTop    = world.wallYWorld[wi];
@@ -161,8 +163,8 @@ export function resolveWallsX(
  * Y-axis collision pass: resolve all wall overlaps on Y only.
  * Pushes cluster up/down out of walls and zeros velY on contact.
  * Sets isGroundedFlag when landing on a top face.
- * Platform walls (wallIsPlatformFlag=1) only collide from above — the
- * cluster can pass upward through them but lands when falling down.
+ * Platform walls (wallIsPlatformFlag=1) only collide from the configured edge.
+ * Ramp walls (wallRampOrientationIndex !== 255) are skipped — handled by resolveRampSurfaces.
  * Returns true if the cluster landed on a top surface.
  */
 export function resolveWallsY(
@@ -175,6 +177,9 @@ export function resolveWallsY(
   let landed = false;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
+    // Skip ramps — handled by resolveRampSurfaces
+    if (world.wallRampOrientationIndex[wi] !== 255) continue;
+
     const wallLeft   = world.wallXWorld[wi];
     const wallTop    = world.wallYWorld[wi];
     const wallRight  = wallLeft + world.wallWWorld[wi];
@@ -191,14 +196,29 @@ export function resolveWallsY(
     const prevBottom = prevYWorld + hh;
 
     if (world.wallIsPlatformFlag[wi] === 1) {
-      // Platform: only land on top surface when falling (velocityY >= 0 and was above)
-      if (prevBottom <= wallTop + COLLISION_EPSILON && cluster.velocityYWorld >= 0) {
-        cluster.positionYWorld = wallTop - hh;
-        cluster.velocityYWorld = 0;
-        cluster.isGroundedFlag = 1;
-        landed = true;
+      const edge = world.wallPlatformEdge[wi];
+      if (edge === 1) {
+        // Bottom-edge platform: land on bottom surface when moving up
+        const prevTop = prevYWorld - hh;
+        if (prevTop >= wallBottom - COLLISION_EPSILON && cluster.velocityYWorld <= 0) {
+          cluster.positionYWorld = wallBottom + hh;
+          if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+        }
+      } else {
+        // Top-edge platform (default): only land on top surface when falling
+        if (prevBottom <= wallTop + COLLISION_EPSILON && cluster.velocityYWorld >= 0) {
+          cluster.positionYWorld = wallTop - hh;
+          cluster.velocityYWorld = 0;
+          cluster.isGroundedFlag = 1;
+          landed = true;
+        }
       }
-      // Never push from below — pass through
+      // Left/right platforms (edge 2 or 3) are not currently implemented as
+      // special collision surfaces; they fall through to the top-edge platform
+      // handling above (which does nothing for them since prevBottom and
+      // velocityYWorld conditions won't typically match). This is intentional:
+      // left/right platform edges are a visual/data feature reserved for future
+      // directional one-way wall support.
       continue;
     }
 
@@ -285,5 +305,94 @@ export function resolveClusterSolidWallCollision(
     }
   }
 
+  return landed;
+}
+
+/**
+ * Ramp surface collision resolver.
+ * Called AFTER resolveClusterSolidWallCollision for each cluster.
+ *
+ * For each ramp wall the cluster overlaps horizontally, computes the ramp
+ * surface height at the cluster's center X and pushes the cluster up onto
+ * the surface if its feet are at or below it (floor ramps, ori 0 and 1).
+ * For ceiling ramps (ori 2 and 3), pushes the cluster down off the surface
+ * if its head is at or above it.
+ *
+ * Returns true if the cluster landed on a floor ramp surface this tick.
+ */
+export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): boolean {
+  const hh = cluster.halfHeightWorld;
+  const hw = cluster.halfWidthWorld;
+  let landed = false;
+
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const ori = world.wallRampOrientationIndex[wi];
+    if (ori === 255) continue; // not a ramp
+
+    const wallLeft   = world.wallXWorld[wi];
+    const wallTop    = world.wallYWorld[wi];
+    const wallRight  = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop + world.wallHWorld[wi];
+    const wallWidth  = world.wallWWorld[wi];
+    const wallHeight = world.wallHWorld[wi];
+
+    const clusterLeft   = cluster.positionXWorld - hw;
+    const clusterRight  = cluster.positionXWorld + hw;
+    const clusterBottom = cluster.positionYWorld + hh;
+    const clusterTop    = cluster.positionYWorld - hh;
+
+    // Quick horizontal bounds check
+    if (clusterRight <= wallLeft || clusterLeft >= wallRight) continue;
+
+    // Clamp cluster center to wall x range for surface height computation
+    const cx = cluster.positionXWorld < wallLeft ? wallLeft
+      : cluster.positionXWorld > wallRight ? wallRight
+      : cluster.positionXWorld;
+    const t = wallWidth > 0 ? (cx - wallLeft) / wallWidth : 0; // 0..1
+
+    if (ori === 0) {
+      // Rises going right (/): surface at x goes from wallBottom (left) to wallTop (right)
+      // y_surface = wallBottom - t * wallHeight
+      const surfaceY = wallBottom - t * wallHeight;
+      if (clusterBottom >= surfaceY - COLLISION_EPSILON &&
+          clusterBottom <= surfaceY + wallHeight + hh * 2 &&
+          cluster.velocityYWorld >= 0) {
+        cluster.positionYWorld = surfaceY - hh;
+        cluster.velocityYWorld = 0;
+        cluster.isGroundedFlag = 1;
+        landed = true;
+      }
+    } else if (ori === 1) {
+      // Rises going left (\): surface at x goes from wallTop (left) to wallBottom (right)
+      // y_surface = wallTop + t * wallHeight
+      const surfaceY = wallTop + t * wallHeight;
+      if (clusterBottom >= surfaceY - COLLISION_EPSILON &&
+          clusterBottom <= surfaceY + wallHeight + hh * 2 &&
+          cluster.velocityYWorld >= 0) {
+        cluster.positionYWorld = surfaceY - hh;
+        cluster.velocityYWorld = 0;
+        cluster.isGroundedFlag = 1;
+        landed = true;
+      }
+    } else if (ori === 2) {
+      // Ceiling ramp (⌐, upside-down /): ceiling goes from wallTop (left) to wallBottom (right)
+      const surfaceY = wallTop + t * wallHeight;
+      if (clusterTop <= surfaceY + COLLISION_EPSILON &&
+          clusterTop >= surfaceY - wallHeight - hh * 2 &&
+          cluster.velocityYWorld <= 0) {
+        cluster.positionYWorld = surfaceY + hh;
+        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+      }
+    } else if (ori === 3) {
+      // Ceiling ramp (¬, upside-down \): ceiling goes from wallBottom (left) to wallTop (right)
+      const surfaceY = wallBottom - t * wallHeight;
+      if (clusterTop <= surfaceY + COLLISION_EPSILON &&
+          clusterTop >= surfaceY - wallHeight - hh * 2 &&
+          cluster.velocityYWorld <= 0) {
+        cluster.positionYWorld = surfaceY + hh;
+        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+      }
+    }
+  }
   return landed;
 }

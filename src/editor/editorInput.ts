@@ -44,6 +44,8 @@ export interface EditorInputState {
   isCopyPressed: boolean;
   /** Ctrl+V pressed (one-shot). */
   isPastePressed: boolean;
+  /** F key pressed (one-shot) — flips the current placement horizontally. */
+  isFlipPressed: boolean;
   /** World coordinates at drag start. */
   dragStartWorldX: number;
   dragStartWorldY: number;
@@ -74,6 +76,7 @@ export function createEditorInputState(): EditorInputState {
     isRedoPressed: false,
     isCopyPressed: false,
     isPastePressed: false,
+    isFlipPressed: false,
     dragStartWorldX: 0,
     dragStartWorldY: 0,
   };
@@ -117,6 +120,7 @@ export function attachEditorInputListeners(
     // Ctrl+C → copy, Ctrl+V → paste
     if ((e.ctrlKey || e.metaKey) && key === 'c') { state.isCopyPressed = true; e.preventDefault(); }
     if ((e.ctrlKey || e.metaKey) && key === 'v') { state.isPastePressed = true; e.preventDefault(); }
+    if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isFlipPressed = true; e.preventDefault(); }
   }
 
   function onKeyUp(e: KeyboardEvent): void {
@@ -199,4 +203,5 @@ export function clearEditorOneShots(state: EditorInputState): void {
   state.isRedoPressed = false;
   state.isCopyPressed = false;
   state.isPastePressed = false;
+  state.isFlipPressed = false;
 }

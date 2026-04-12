@@ -70,8 +70,20 @@ export interface RoomJsonWall {
   hBlock: number;
   /** true if this is a one-way platform block. */
   isPlatform?: boolean;
+  /**
+   * Which edge is the one-way surface. Only meaningful when isPlatform=true.
+   * 0=top (default), 1=bottom, 2=left, 3=right.
+   */
+  platformEdge?: 0 | 1 | 2 | 3;
   /** Per-wall block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
+  /**
+   * Ramp orientation. When present, this wall is a diagonal triangle.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** true if this pillar wall is half-block wide (4 px). */
+  isPillarHalfWidth?: boolean;
 }
 
 export interface RoomJsonTransition {
@@ -243,7 +255,10 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     wBlock: w.wBlock,
     hBlock: w.hBlock,
     isPlatformFlag: w.isPlatform ? 1 : 0,
+    platformEdge: w.platformEdge ?? 0,
     blockTheme: w.blockTheme,
+    rampOrientation: w.rampOrientation,
+    isPillarHalfWidthFlag: w.isPillarHalfWidth ? 1 : 0,
   }));
 
   const enemies: EditorEnemy[] = json.enemies.map(e => ({
@@ -322,8 +337,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         wBlock: w.wBlock,
         hBlock: w.hBlock,
       };
-      if (w.isPlatformFlag === 1) wall.isPlatform = true;
+      if (w.isPlatformFlag === 1) {
+        wall.isPlatform = true;
+        if (w.platformEdge !== 0 && w.platformEdge !== undefined) wall.platformEdge = w.platformEdge;
+      }
       if (w.blockTheme !== undefined) wall.blockTheme = w.blockTheme;
+      if (w.rampOrientation !== undefined) wall.rampOrientation = w.rampOrientation;
+      if (w.isPillarHalfWidthFlag === 1) wall.isPillarHalfWidth = true;
       return wall;
     }),
     enemies: data.enemies.map(e => ({
@@ -461,7 +481,10 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     wBlock: w.wBlock,
     hBlock: w.hBlock,
     isPlatformFlag: w.isPlatformFlag,
+    platformEdge: w.platformEdge,
     blockTheme: w.blockTheme,
+    rampOrientation: w.rampOrientation,
+    isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
   }));
 
   const allWalls: RoomWallDef[] = [...boundaryWalls, ...tunnelWalls, ...interiorWalls];
@@ -547,7 +570,10 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     wBlock: w.wBlock,
     hBlock: w.hBlock,
     isPlatformFlag: (w.isPlatformFlag ?? 0) as 0 | 1,
+    platformEdge: (w.platformEdge ?? 0) as 0 | 1 | 2 | 3,
     blockTheme: w.blockTheme,
+    rampOrientation: w.rampOrientation,
+    isPillarHalfWidthFlag: (w.isPillarHalfWidthFlag ?? 0) as 0 | 1,
   }));
 
   const enemies: EditorEnemy[] = room.enemies.map(e => ({

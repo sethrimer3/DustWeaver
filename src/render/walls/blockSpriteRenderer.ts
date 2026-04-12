@@ -87,12 +87,6 @@ const _blackRockCornerVariants: readonly HTMLImageElement[] = [
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (10).png'),
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (11).png'),
 ];
-const _blackRockPlatformVariants: readonly HTMLImageElement[] = [
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (1).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (2).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (3).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (4).png'),
-];
 const _blackRockPillarVariants: readonly HTMLImageElement[] = [
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (1).png'),
   _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (2).png'),
@@ -372,6 +366,16 @@ interface CachedTileCoord {
   readonly key: string;
   readonly col: number;
   readonly row: number;
+  /** platformEdge for platform tiles: 0=top, 1=bottom, 2=left, 3=right. Only meaningful for platformTiles. */
+  readonly platformEdge: number;
+}
+
+interface RampWallInfo {
+  readonly wallIndex: number;
+}
+
+interface HalfPillarWallInfo {
+  readonly wallIndex: number;
 }
 
 interface CachedWallLayout {
@@ -381,6 +385,10 @@ interface CachedWallLayout {
   platformOccupied: Set<string>;
   occupiedTiles: CachedTileCoord[];
   platformTiles: CachedTileCoord[];
+  /** Ramp walls (rampOrientationIndex !== 255): rendered as filled triangles. */
+  rampWalls: RampWallInfo[];
+  /** Half-pillar walls (isPillarHalfWidthFlag === 1): rendered narrow. */
+  halfPillarWalls: HalfPillarWallInfo[];
   /** Per-tile theme: maps tile key → BlockTheme (null = use room default). */
   tileTheme: Map<string, BlockTheme | null>;
   aboveLightingDepths: Map<string, number>;
@@ -492,7 +500,7 @@ function _buildWallLayoutCache(
 ): CachedWallLayout {
   let signature = `${blockSizePx}|${walls.count}`;
   for (let wi = 0; wi < walls.count; wi++) {
-    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.themeIndex[wi]},${walls.isInvisibleFlag[wi]}`;
+    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.platformEdge[wi]},${walls.themeIndex[wi]},${walls.isInvisibleFlag[wi]},${walls.rampOrientationIndex[wi]},${walls.isPillarHalfWidthFlag[wi]}`;
   }
 
   if (_cachedWallLayout !== null &&
@@ -503,11 +511,20 @@ function _buildWallLayoutCache(
 
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
+  const platformEdgeByKey = new Map<string, number>();
   const tileTheme = new Map<string, BlockTheme | null>();
+  const rampWalls: RampWallInfo[] = [];
+  const halfPillarWalls: HalfPillarWallInfo[] = [];
 
   for (let wi = 0; wi < walls.count; wi++) {
     // Skip invisible boundary walls
     if (walls.isInvisibleFlag[wi] === 1) continue;
+
+    // Ramp walls render as triangles — skip them from the regular tile grid
+    if (walls.rampOrientationIndex[wi] !== 255) {
+      rampWalls.push({ wallIndex: wi });
+      continue;
+    }
 
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
@@ -518,6 +535,27 @@ function _buildWallLayoutCache(
       ? indexToBlockTheme(walls.themeIndex[wi])
       : null;
 
+    // Half-pillar walls: add to normal occupied for lighting/neighbor purposes but
+    // record for separate narrow rendering.
+    const isHalfPillar = walls.isPillarHalfWidthFlag[wi] === 1;
+    if (isHalfPillar) {
+      halfPillarWalls.push({ wallIndex: wi });
+      // Add to occupied so neighbor detection works; these tiles still block movement.
+      for (let r = 0; r < rowCount; r++) {
+        for (let c = 0; c < colCount; c++) {
+          occupied.add(_tileKey(colStart + c, rowStart + r));
+        }
+      }
+      if (wallTheme !== null) {
+        for (let r = 0; r < rowCount; r++) {
+          for (let c = 0; c < colCount; c++) {
+            tileTheme.set(_tileKey(colStart + c, rowStart + r), wallTheme);
+          }
+        }
+      }
+      continue;
+    }
+
     for (let r = 0; r < rowCount; r++) {
       for (let c = 0; c < colCount; c++) {
         const col = colStart + c;
@@ -525,6 +563,7 @@ function _buildWallLayoutCache(
         const key = _tileKey(col, row);
         if (walls.isPlatformFlag[wi] === 1) {
           platformOccupied.add(key);
+          platformEdgeByKey.set(key, walls.platformEdge[wi]);
         } else {
           occupied.add(key);
         }
@@ -542,6 +581,7 @@ function _buildWallLayoutCache(
       key,
       col: parseInt(key.slice(0, commaIdx), 10),
       row: parseInt(key.slice(commaIdx + 1), 10),
+      platformEdge: 0,
     });
   }
 
@@ -552,6 +592,7 @@ function _buildWallLayoutCache(
       key,
       col: parseInt(key.slice(0, commaIdx), 10),
       row: parseInt(key.slice(commaIdx + 1), 10),
+      platformEdge: platformEdgeByKey.get(key) ?? 0,
     });
   }
 
@@ -584,6 +625,8 @@ function _buildWallLayoutCache(
     platformOccupied,
     occupiedTiles,
     platformTiles,
+    rampWalls,
+    halfPillarWalls,
     tileTheme,
     aboveLightingDepths,
     defaultLightingDepthByRoomKey: new Map<string, Map<string, number>>(),
@@ -899,27 +942,37 @@ export function renderWallSprites(
 
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
-    const hash = _hashTileCoord(col, row);
 
-    // Resolve per-tile theme for platform
+    // platformEdge is stored in the tile from the cache building pass (no per-draw wall scan).
+    const platformEdgeForTile = tile.platformEdge;
+
+    // Resolve theme color for the platform line
     const platTheme: BlockTheme | null = wallLayout.tileTheme.get(key) ?? roomTheme;
-    const platIsLegacyBlackRock = (platTheme === null) && (_activeWorldNumber === 0);
-
-    let img: HTMLImageElement;
-    if (platTheme === 'blackRock' || platIsLegacyBlackRock) {
-      img = _blackRockPlatformVariants[hash % _blackRockPlatformVariants.length];
-    } else if (platTheme === 'brownRock') {
-      img = _getBrownRockSpriteForBlockSize(blockSizePx);
-    } else if (platTheme === 'dirt') {
-      img = _dirtBlockSprite;
+    const isLegacyBlackRockPlatform = (platTheme === null) && (_activeWorldNumber === 0);
+    let lineColor: string;
+    if (platTheme === 'dirt') {
+      lineColor = '#8b6914';
+    } else if (platTheme === 'brownRock' || (platTheme === null && !isLegacyBlackRockPlatform)) {
+      lineColor = '#8a7050';
     } else {
-      img = _sprites.end;
+      lineColor = '#8899aa'; // blackRock platform color
     }
 
-    if (isSpriteReady(img)) {
-      ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
-    } else {
-      _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
+    const LINE_PX = Math.max(1, Math.round(3 * scalePx));
+    ctx.fillStyle = lineColor;
+    switch (platformEdgeForTile) {
+      case 0: // top edge
+        ctx.fillRect(tileX, tileY, tileSizeScreen, LINE_PX);
+        break;
+      case 1: // bottom edge
+        ctx.fillRect(tileX, tileY + tileSizeScreen - LINE_PX, tileSizeScreen, LINE_PX);
+        break;
+      case 2: // left edge
+        ctx.fillRect(tileX, tileY, LINE_PX, tileSizeScreen);
+        break;
+      case 3: // right edge
+        ctx.fillRect(tileX + tileSizeScreen - LINE_PX, tileY, LINE_PX, tileSizeScreen);
+        break;
     }
 
     const tileKey = key;
@@ -931,6 +984,115 @@ export function renderWallSprites(
       ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
       ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
     }
+  }
+
+  // ── Ramp triangles ────────────────────────────────────────────────────────
+  // Draw each ramp wall as a filled triangle.
+  for (let ri = 0; ri < wallLayout.rampWalls.length; ri++) {
+    const wi = wallLayout.rampWalls[ri].wallIndex;
+    const ori = walls.rampOrientationIndex[wi];
+    const wxPx   = walls.xWorld[wi] * scalePx + offsetXPx;
+    const wyPx   = walls.yWorld[wi] * scalePx + offsetYPx;
+    const wwPx   = walls.wWorld[wi] * scalePx;
+    const whPx   = walls.hWorld[wi] * scalePx;
+
+    // Resolve fill color from theme
+    const rampTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
+      ? indexToBlockTheme(walls.themeIndex[wi])
+      : roomTheme;
+    const isLegacyBR = (rampTheme === null) && (_activeWorldNumber === 0);
+    let fillColor: string;
+    if (rampTheme === 'dirt') {
+      fillColor = '#5a3e1b';
+    } else if (rampTheme === 'brownRock' || (rampTheme === null && !isLegacyBR)) {
+      fillColor = '#4a3828';
+    } else {
+      fillColor = '#1a2535'; // blackRock
+    }
+    let edgeColor: string;
+    if (rampTheme === 'dirt') {
+      edgeColor = '#8b6914';
+    } else if (rampTheme === 'brownRock' || (rampTheme === null && !isLegacyBR)) {
+      edgeColor = '#7a5840';
+    } else {
+      edgeColor = '#5080b0'; // blackRock highlight
+    }
+
+    // The four orientation triangles (see RoomWallDef.rampOrientation docs):
+    //   0 = rises right (/): vertices BL, BR, TR
+    //   1 = rises left  (\): vertices BL, BR, TL
+    //   2 = ceiling ramp (⌐): vertices TL, TR, BL (top-left corner filled)
+    //   3 = ceiling ramp (¬): vertices TL, TR, BR (top-right corner filled)
+    const x0 = wxPx; const y0 = wyPx;           // top-left
+    const x1 = wxPx + wwPx; const y1 = wyPx;    // top-right
+    const x2 = wxPx; const y2 = wyPx + whPx;    // bottom-left
+    const x3 = wxPx + wwPx; const y3 = wyPx + whPx; // bottom-right
+
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    switch (ori) {
+      case 0: // / ramp: solid bottom-left triangle (BL, BR, TR)
+        ctx.moveTo(x2, y2); ctx.lineTo(x3, y3); ctx.lineTo(x1, y1);
+        break;
+      case 1: // \ ramp: solid bottom-right triangle (BL, BR, TL)
+        ctx.moveTo(x2, y2); ctx.lineTo(x3, y3); ctx.lineTo(x0, y0);
+        break;
+      case 2: // ⌐ ceiling: solid top-left (TL, TR, BL)
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2);
+        break;
+      case 3: // ¬ ceiling: solid top-right (TL, TR, BR)
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x3, y3);
+        break;
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw hypotenuse edge highlight
+    ctx.strokeStyle = edgeColor;
+    ctx.lineWidth = Math.max(1, scalePx);
+    ctx.beginPath();
+    switch (ori) {
+      case 0: ctx.moveTo(x2, y2); ctx.lineTo(x1, y1); break; // BL→TR
+      case 1: ctx.moveTo(x3, y3); ctx.lineTo(x0, y0); break; // BR→TL
+      case 2: ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); break; // TR→BL
+      case 3: ctx.moveTo(x0, y0); ctx.lineTo(x3, y3); break; // TL→BR
+    }
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
+  // ── Half-pillar walls ─────────────────────────────────────────────────────
+  // Draw half-width pillars as centered narrow rectangles.
+  for (let pi = 0; pi < wallLayout.halfPillarWalls.length; pi++) {
+    const wi = wallLayout.halfPillarWalls[pi].wallIndex;
+    const wxPx = walls.xWorld[wi] * scalePx + offsetXPx;
+    const wyPx = walls.yWorld[wi] * scalePx + offsetYPx;
+    const wwPx = walls.wWorld[wi] * scalePx;
+    const whPx = walls.hWorld[wi] * scalePx;
+
+    // Resolve theme color
+    const pillarTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
+      ? indexToBlockTheme(walls.themeIndex[wi])
+      : roomTheme;
+    const isLegacyBR2 = (pillarTheme === null) && (_activeWorldNumber === 0);
+    let pillarFill: string;
+    let pillarEdge: string;
+    if (pillarTheme === 'dirt') {
+      pillarFill = '#5a3e1b'; pillarEdge = '#8b6914';
+    } else if (pillarTheme === 'brownRock' || (pillarTheme === null && !isLegacyBR2)) {
+      pillarFill = '#4a3828'; pillarEdge = '#7a5840';
+    } else {
+      pillarFill = '#1a2535'; pillarEdge = '#5080b0';
+    }
+
+    // Draw the pillar centered horizontally within its AABB
+    const pillarWidthPx = wwPx; // width already 4 px (half BLOCK_SIZE_MEDIUM)
+    ctx.fillStyle = pillarFill;
+    ctx.fillRect(Math.round(wxPx), Math.round(wyPx), Math.round(pillarWidthPx), Math.round(whPx));
+    ctx.strokeStyle = pillarEdge;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(wxPx) + 0.5, Math.round(wyPx) + 0.5,
+      Math.round(pillarWidthPx) - 1, Math.round(whPx) - 1);
   }
 
   ctx.restore();

@@ -33,15 +33,23 @@ export interface PaletteItem {
   defaultHeightBlocks?: number;
   /** 1 if this palette item places a one-way platform. */
   isPlatformItem?: 1;
+  /** 1 if this palette item places a ramp (diagonal triangle). */
+  isRampItem?: 1;
+  /** 1 if this palette item places a half-width pillar (4 px wide). */
+  isPillarHalfWidthItem?: 1;
 }
 
 /** Built-in palette items available in the editor. */
 export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Blocks / terrain
-  { id: 'block_1x1', label: '1×1 Block',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
-  { id: 'block_2x2', label: '2×2 Block',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
-  { id: 'platform',  label: 'Platform',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPlatformItem: 1 },
-  // Enemies
+  { id: 'block_1x1', label: '1×1 Block',   category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'block_2x2', label: '2×2 Block',   category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
+  { id: 'platform',  label: 'Platform',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPlatformItem: 1 },
+  { id: 'ramp_1x1',  label: '1×1 Ramp',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isRampItem: 1 },
+  { id: 'ramp_1x2',  label: '1×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isRampItem: 1 },
+  { id: 'ramp_2x2',  label: '2×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isRampItem: 1 },
+  { id: 'pillar_full', label: 'Pillar',           category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 2 },
+  { id: 'pillar_half', label: 'Pillar (Half)',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 2, isPillarHalfWidthItem: 1 },  // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },
   { id: 'enemy_rock_elemental', label: 'Rock Elemental', category: 'enemies' },
@@ -90,8 +98,20 @@ export interface EditorWall {
   hBlock: number;
   /** 1 if this wall is a one-way platform. */
   isPlatformFlag: 0 | 1;
+  /**
+   * Which edge of this platform block is the one-way surface.
+   * 0 = top (default), 1 = bottom, 2 = left, 3 = right.
+   */
+  platformEdge: 0 | 1 | 2 | 3;
   /** Per-wall block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
+  /**
+   * Ramp orientation (0-3). Undefined or -1 = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** 1 if this pillar wall should be rendered and collide at half-block width. */
+  isPillarHalfWidthFlag: 0 | 1;
 }
 
 export interface EditorEnemy {
@@ -172,6 +192,8 @@ export interface EditorState {
   selectedElements: SelectedElement[];
   /** Current placement rotation in 90° steps (0, 1, 2, 3). */
   placementRotationSteps: number;
+  /** Whether the current placement is horizontally flipped. */
+  placementFlipH: boolean;
   /** Mouse position in block units (snapped to grid). */
   cursorBlockX: number;
   cursorBlockY: number;
@@ -212,6 +234,7 @@ export function createEditorState(): EditorState {
     selectedPaletteItem: null,
     selectedElements: [],
     placementRotationSteps: 0,
+    placementFlipH: false,
     cursorBlockX: 0,
     cursorBlockY: 0,
     cursorWorldX: 0,
