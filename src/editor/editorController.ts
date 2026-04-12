@@ -77,7 +77,7 @@ export interface EditorController {
 export function createEditorController(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
-  onLoadRoom: (room: RoomDef, spawnXBlock: number, spawnYBlock: number) => void,
+  onLoadRoom: (room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera?: boolean) => void,
   onEditorClose?: () => void,
 ): EditorController {
   const state = createEditorState();
@@ -213,7 +213,7 @@ export function createEditorController(
     const roomDef = editorRoomDataToRoomDef(state.roomData);
     const sx = state.roomData.playerSpawnBlock[0];
     const sy = state.roomData.playerSpawnBlock[1];
-    onLoadRoom(roomDef, sx, sy);
+    onLoadRoom(roomDef, sx, sy, true); // preserve camera while in editor
   }
 
   function loadRoomForEditing(room: RoomDef): void {
@@ -352,6 +352,14 @@ export function createEditorController(
       } else if (state.activeTool === EditorTool.Select && state.selectedElements.length > 0) {
         rotateSelectedElement(state);
       }
+    }
+
+    // Q/E keys → rotate placement (Q = counter-clockwise, E = clockwise)
+    if (inputState.isRotateLeftPressed && state.activeTool === EditorTool.Place) {
+      state.placementRotationSteps = (state.placementRotationSteps + 3) % 4;
+    }
+    if (inputState.isRotateRightPressed && state.activeTool === EditorTool.Place) {
+      state.placementRotationSteps = (state.placementRotationSteps + 1) % 4;
     }
 
     // F key → flip placement horizontally
