@@ -44,26 +44,36 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
   const ws: number[] = [];
   const hs: number[] = [];
   const fs: number[] = []; // isPlatformFlag (0 or 1)
+  const pe: number[] = []; // platformEdge (0=top,1=bottom,2=left,3=right)
   const ts: number[] = []; // themeIndex
   const iv: number[] = []; // isInvisibleFlag (0 or 1)
+  const ro: number[] = []; // rampOrientationIndex (255 = not a ramp)
+  const ph: number[] = []; // isPillarHalfWidthFlag (0 or 1)
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
     const def = room.walls[wi];
+    const isHalfWidthPillar = def.isPillarHalfWidthFlag === 1;
+    // Half-width pillars use half BLOCK_SIZE_MEDIUM for width; minimum is still enforced per-axis.
+    const rawWWorld = isHalfWidthPillar
+      ? Math.max(BLOCK_SIZE_MEDIUM / 2, def.wBlock * (BLOCK_SIZE_MEDIUM / 2))
+      : Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM);
     xs.push(def.xBlock * BLOCK_SIZE_MEDIUM);
     ys.push(def.yBlock * BLOCK_SIZE_MEDIUM);
-    ws.push(Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM));
+    ws.push(rawWWorld);
     hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
     fs.push(def.isPlatformFlag === 1 ? 1 : 0);
+    pe.push(def.platformEdge ?? 0);
     ts.push(def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX);
     iv.push(def.isInvisibleFlag === 1 ? 1 : 0);
+    ro.push(def.rampOrientation !== undefined ? def.rampOrientation : 255);
+    ph.push(isHalfWidthPillar ? 1 : 0);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
   // Two rectangles may merge if they share a complete face AND have the same
-  // isPlatformFlag (platform walls must not merge with solid walls):
-  //   - Same Y and height, contiguous on X (horizontal merge)
-  //   - Same X and width,  contiguous on Y (vertical merge)
+  // isPlatformFlag (platform walls must not merge with solid walls).
+  // Ramps (ro !== 255) and half-width pillars (ph === 1) are never merged.
   let merged = true;
   while (merged) {
     merged = false;
@@ -73,6 +83,9 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
         if (fs[i] !== fs[j]) continue;
         if (ts[i] !== ts[j]) continue;
         if (iv[i] !== iv[j]) continue;
+        // Never merge ramps or half-width pillars
+        if (ro[i] !== 255 || ro[j] !== 255) continue;
+        if (ph[i] !== 0 || ph[j] !== 0) continue;
         // Horizontal merge: same Y, same H, contiguous on X axis
         if (
           Math.abs(ys[i] - ys[j]) <= WALL_MERGE_EPSILON_WORLD &&
@@ -92,7 +105,9 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             ws[i] = mergedRight - mergedLeft;
             ys[i] = ys[i] < ys[j] ? ys[i] : ys[j];
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1);
             merged = true;
             break;
           }
@@ -116,7 +131,9 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             hs[i] = mergedBottom - mergedTop;
             xs[i] = xs[i] < xs[j] ? xs[i] : xs[j];
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1);
             merged = true;
             break;
           }
@@ -135,8 +152,11 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     world.wallWWorld[wi] = ws[wi];
     world.wallHWorld[wi] = hs[wi];
     world.wallIsPlatformFlag[wi] = fs[wi];
+    world.wallPlatformEdge[wi] = pe[wi];
     world.wallThemeIndex[wi] = ts[wi];
     world.wallIsInvisibleFlag[wi] = iv[wi];
+    world.wallRampOrientationIndex[wi] = ro[wi];
+    world.wallIsPillarHalfWidthFlag[wi] = ph[wi];
   }
 }
 

@@ -151,11 +151,32 @@ export interface RoomWallDef {
    * it but lands on top when falling down.  Platforms have no side collision.
    */
   isPlatformFlag?: 0 | 1;
+  /**
+   * Which edge of this platform block is the one-way surface.
+   * Only meaningful when isPlatformFlag === 1.
+   * 0 = top (default), 1 = bottom, 2 = left, 3 = right.
+   */
+  platformEdge?: 0 | 1 | 2 | 3;
   /** Per-wall block theme override.  When set, this wall renders with the
    *  specified theme instead of the room-level default. */
   blockTheme?: BlockTheme;
   /** 1 if this wall is an invisible collision boundary (not rendered). */
   isInvisibleFlag?: 0 | 1;
+  /**
+   * Ramp orientation. When set, this wall is a diagonal triangle (ramp) rather
+   * than a full rectangle. The four orientations are:
+   *   0 = ramp rises going right  ( / shape, hypotenuse from bottom-left to top-right )
+   *   1 = ramp rises going left   ( \ shape, hypotenuse from bottom-right to top-left )
+   *   2 = ceiling ramp going left ( ⌐ shape, upside-down /, hypotenuse top-left to bottom-right )
+   *   3 = ceiling ramp going right( ¬ shape, upside-down \, hypotenuse top-right to bottom-left )
+   * Omit (or set to undefined) for a normal rectangular wall.
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * 1 if this pillar wall is rendered and collides at half-block width (4 px).
+   * Only meaningful for walls that are 1×2 blocks and serve as pillars.
+   */
+  isPillarHalfWidthFlag?: 0 | 1;
 }
 
 /** Direction a transition tunnel faces. */

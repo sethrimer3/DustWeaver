@@ -51,13 +51,28 @@ export interface WorldState extends ParticleBuffers {
   wallHWorld: Float32Array;
   /**
    * 1 if the corresponding wall is a one-way platform — only collides from
-   * above; the player can pass upward through it.
+   * the specified edge; the player can pass through from the other direction.
    */
   wallIsPlatformFlag: Uint8Array;
+  /**
+   * Which edge of the platform is the one-way surface.
+   * 0=top, 1=bottom, 2=left, 3=right.  Irrelevant when wallIsPlatformFlag=0.
+   */
+  wallPlatformEdge: Uint8Array;
   /** Per-wall theme index: 0=blackRock, 1=brownRock, 2=dirt.  255=use room default. */
   wallThemeIndex: Uint8Array;
   /** 1 if the corresponding wall is invisible (collision-only boundary, not rendered). */
   wallIsInvisibleFlag: Uint8Array;
+  /**
+   * Ramp orientation index. 255 = not a ramp (treat as full AABB).
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  wallRampOrientationIndex: Uint8Array;
+  /**
+   * 1 if the corresponding wall is a half-width pillar (4 px wide).
+   * Only meaningful for 1×2 pillar walls.
+   */
+  wallIsPillarHalfWidthFlag: Uint8Array;
 
   // ---- Player combat state ------------------------------------------------
   /** Set to 1 for exactly one tick to trigger attack launch. */
@@ -328,8 +343,11 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallWWorld: new Float32Array(MAX_WALLS),
     wallHWorld: new Float32Array(MAX_WALLS),
     wallIsPlatformFlag: new Uint8Array(MAX_WALLS),
+    wallPlatformEdge: new Uint8Array(MAX_WALLS),
     wallThemeIndex: new Uint8Array(MAX_WALLS),
     wallIsInvisibleFlag: new Uint8Array(MAX_WALLS),
+    wallRampOrientationIndex: new Uint8Array(MAX_WALLS).fill(255),
+    wallIsPillarHalfWidthFlag: new Uint8Array(MAX_WALLS),
     playerAttackTriggeredFlag: 0,
     playerAttackDirXWorld: 1.0,
     playerAttackDirYWorld: 0.0,
