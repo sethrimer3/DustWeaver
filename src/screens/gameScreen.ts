@@ -188,7 +188,7 @@ export function startGameScreen(
   const collectedDustContainerKeySet: Set<string> = new Set();
 
   /** Initialises (or re-initialises) world state for the given room. */
-  function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void {
+  function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera = false): void {
     currentRoom = room;
     bgColor = worldBgColor(room.worldNumber);
     roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
@@ -347,8 +347,10 @@ export function startGameScreen(
       progress.exploredRoomIds.push(room.id);
     }
 
-    // Snap camera to player position
-    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
+    // Snap camera to player position (skip when called from editor to preserve editor camera)
+    if (!preserveCamera) {
+      snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
+    }
   }
 
   const world = createWorldState(FIXED_DT_MS, 42);
@@ -411,8 +413,8 @@ export function startGameScreen(
   }
 
   // ── World Editor ────────────────────────────────────────────────────────
-  const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY) => {
-    loadRoom(roomDef, spawnX, spawnY);
+  const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY, preserveCamera) => {
+    loadRoom(roomDef, spawnX, spawnY, preserveCamera);
   }, () => {
     // Called when editor closes (confirm or cancel)
     if (editorToggleBtn) {

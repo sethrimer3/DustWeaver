@@ -46,6 +46,10 @@ export interface EditorInputState {
   isPastePressed: boolean;
   /** F key pressed (one-shot) — flips the current placement horizontally. */
   isFlipPressed: boolean;
+  /** Q key pressed (one-shot) — rotates placement counter-clockwise. */
+  isRotateLeftPressed: boolean;
+  /** E key pressed (one-shot) — rotates placement clockwise. */
+  isRotateRightPressed: boolean;
   /** World coordinates at drag start. */
   dragStartWorldX: number;
   dragStartWorldY: number;
@@ -77,6 +81,8 @@ export function createEditorInputState(): EditorInputState {
     isCopyPressed: false,
     isPastePressed: false,
     isFlipPressed: false,
+    isRotateLeftPressed: false,
+    isRotateRightPressed: false,
     dragStartWorldX: 0,
     dragStartWorldY: 0,
   };
@@ -121,6 +127,8 @@ export function attachEditorInputListeners(
     if ((e.ctrlKey || e.metaKey) && key === 'c') { state.isCopyPressed = true; e.preventDefault(); }
     if ((e.ctrlKey || e.metaKey) && key === 'v') { state.isPastePressed = true; e.preventDefault(); }
     if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isFlipPressed = true; e.preventDefault(); }
+    if (key === 'q' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isRotateLeftPressed = true; e.preventDefault(); }
+    if (key === 'e' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isRotateRightPressed = true; e.preventDefault(); }
   }
 
   function onKeyUp(e: KeyboardEvent): void {
@@ -204,4 +212,6 @@ export function clearEditorOneShots(state: EditorInputState): void {
   state.isCopyPressed = false;
   state.isPastePressed = false;
   state.isFlipPressed = false;
+  state.isRotateLeftPressed = false;
+  state.isRotateRightPressed = false;
 }

@@ -322,7 +322,6 @@ export function resolveClusterSolidWallCollision(
  */
 export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): boolean {
   const hh = cluster.halfHeightWorld;
-  const hw = cluster.halfWidthWorld;
   let landed = false;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
@@ -336,26 +335,26 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
     const wallWidth  = world.wallWWorld[wi];
     const wallHeight = world.wallHWorld[wi];
 
-    const clusterLeft   = cluster.positionXWorld - hw;
-    const clusterRight  = cluster.positionXWorld + hw;
     const clusterBottom = cluster.positionYWorld + hh;
     const clusterTop    = cluster.positionYWorld - hh;
 
-    // Quick horizontal bounds check
-    if (clusterRight <= wallLeft || clusterLeft >= wallRight) continue;
+    // Horizontal bounds check using cluster center — avoids premature catch from adjacent
+    // blocks when the hitbox spans a block boundary, and eliminates the clamped-cx "ledge"
+    // effect that caused a visible jump at the top of each ramp block.
+    if (cluster.positionXWorld < wallLeft || cluster.positionXWorld > wallRight) continue;
 
-    // Clamp cluster center to wall x range for surface height computation
-    const cx = cluster.positionXWorld < wallLeft ? wallLeft
-      : cluster.positionXWorld > wallRight ? wallRight
-      : cluster.positionXWorld;
+    // Center is guaranteed within [wallLeft, wallRight] by the check above, no clamping needed.
+    const cx = cluster.positionXWorld;
     const t = wallWidth > 0 ? (cx - wallLeft) / wallWidth : 0; // 0..1
 
     if (ori === 0) {
       // Rises going right (/): surface at x goes from wallBottom (left) to wallTop (right)
       // y_surface = wallBottom - t * wallHeight
       const surfaceY = wallBottom - t * wallHeight;
+      // Catch range limited to hh below the surface so that ramp blocks higher up in the
+      // geometry cannot teleport the player upward from a surface they are legitimately on.
       if (clusterBottom >= surfaceY - COLLISION_EPSILON &&
-          clusterBottom <= surfaceY + wallHeight + hh * 2 &&
+          clusterBottom <= surfaceY + hh + COLLISION_EPSILON &&
           cluster.velocityYWorld >= 0) {
         cluster.positionYWorld = surfaceY - hh;
         cluster.velocityYWorld = 0;
@@ -367,7 +366,7 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
       // y_surface = wallTop + t * wallHeight
       const surfaceY = wallTop + t * wallHeight;
       if (clusterBottom >= surfaceY - COLLISION_EPSILON &&
-          clusterBottom <= surfaceY + wallHeight + hh * 2 &&
+          clusterBottom <= surfaceY + hh + COLLISION_EPSILON &&
           cluster.velocityYWorld >= 0) {
         cluster.positionYWorld = surfaceY - hh;
         cluster.velocityYWorld = 0;
@@ -378,7 +377,7 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
       // Ceiling ramp (⌐, upside-down /): ceiling goes from wallTop (left) to wallBottom (right)
       const surfaceY = wallTop + t * wallHeight;
       if (clusterTop <= surfaceY + COLLISION_EPSILON &&
-          clusterTop >= surfaceY - wallHeight - hh * 2 &&
+          clusterTop >= surfaceY - hh - COLLISION_EPSILON &&
           cluster.velocityYWorld <= 0) {
         cluster.positionYWorld = surfaceY + hh;
         if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
@@ -387,7 +386,7 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
       // Ceiling ramp (¬, upside-down \): ceiling goes from wallBottom (left) to wallTop (right)
       const surfaceY = wallBottom - t * wallHeight;
       if (clusterTop <= surfaceY + COLLISION_EPSILON &&
-          clusterTop >= surfaceY - wallHeight - hh * 2 &&
+          clusterTop >= surfaceY - hh - COLLISION_EPSILON &&
           cluster.velocityYWorld <= 0) {
         cluster.positionYWorld = surfaceY + hh;
         if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
