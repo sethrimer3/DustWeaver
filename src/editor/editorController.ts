@@ -120,9 +120,7 @@ export function createEditorController(
 
     if (state.isActive) {
       // Snapshot which rooms already exist so we can identify newly-added ones.
-      initialRoomIds = new Set(
-        [...ROOM_REGISTRY.keys()]
-      );
+      initialRoomIds = new Set(ROOM_REGISTRY.keys());
       isWorldMapDirty = false;
       isCurrentRoomDirty = false;
       pendingRoomEdits.clear();
@@ -271,13 +269,15 @@ export function createEditorController(
       // Restore previously-saved edits for this room.
       state.roomData = deepCloneRoomData(pending);
       // Recalculate nextUid to be above all existing element UIDs.
-      let maxUid = state.nextUid;
+      let maxUid = 0;
       for (const w of state.roomData.interiorWalls)  maxUid = Math.max(maxUid, w.uid + 1);
       for (const e of state.roomData.enemies)        maxUid = Math.max(maxUid, e.uid + 1);
       for (const t of state.roomData.transitions)    maxUid = Math.max(maxUid, t.uid + 1);
       for (const s of state.roomData.skillTombs)     maxUid = Math.max(maxUid, s.uid + 1);
       for (const p of state.roomData.dustPiles)      maxUid = Math.max(maxUid, p.uid + 1);
-      state.nextUid = maxUid;
+      // Ensure nextUid never regresses below its current value (other rooms may
+      // already have used higher UIDs during this session).
+      state.nextUid = Math.max(state.nextUid, maxUid);
     } else {
       const result = roomDefToEditorRoomData(room, state.nextUid);
       state.roomData = result.data;
@@ -1067,11 +1067,11 @@ export function createEditorController(
 // ── Module-level helpers ──────────────────────────────────────────────────────
 
 /**
- * Deep-clones an EditorRoomData object via JSON round-trip.
- * Safe because EditorRoomData contains only plain JSON-serialisable values.
+ * Deep-clones an EditorRoomData object using structuredClone.
+ * Safe because EditorRoomData contains only plain, structured-cloneable values.
  */
 function deepCloneRoomData(data: EditorRoomData): EditorRoomData {
-  return JSON.parse(JSON.stringify(data)) as EditorRoomData;
+  return structuredClone(data) as EditorRoomData;
 }
 
 /**
