@@ -37,6 +37,8 @@ import {
   setReachableEdgeGlowOpacity,
   getInfluenceCircleOpacity,
   setInfluenceCircleOpacity,
+  getInfluenceHighlightWidth,
+  setInfluenceHighlightWidth,
 } from './renderSettings';
 import {
   KB_ACTIONS,
@@ -816,6 +818,13 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
       tabContent.appendChild(
         makeSettingsSlider('Highlight Opacity', getReachableEdgeGlowOpacity(), (v) => {
           setReachableEdgeGlowOpacity(v);
+        }),
+      );
+
+      tabContent.appendChild(makeLabel('Influence Highlight Width'));
+      tabContent.appendChild(
+        makeSettingsSlider('Highlight Width', getInfluenceHighlightWidth(), (v) => {
+          setInfluenceHighlightWidth(v);
         }),
       );
 

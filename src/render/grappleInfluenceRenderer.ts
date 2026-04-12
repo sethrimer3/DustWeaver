@@ -29,8 +29,6 @@ const DARK_GOLD_B = 0;
 
 // ── Angular fade helpers ────────────────────────────────────────────────────
 
-/** Half-angle (radians) for the influence circle fade arc. */
-const INFLUENCE_CIRCLE_HALF_ANGLE_RAD = (45 * Math.PI) / 180;
 /** Half-angle (radians) for the reachable edge glow fade arc. */
 const EDGE_GLOW_HALF_ANGLE_RAD = (30 * Math.PI) / 180;
 
@@ -68,6 +66,9 @@ const CIRCLE_ARC_SEGMENTS = 64;
 /**
  * Draws the influence-radius circle as a series of arcs whose colour and
  * opacity fade from the mouse direction outward.
+ *
+ * @param highlightWidthFraction Fraction of the full circumference (0–1) that
+ *   is highlighted.  0.25 = 25% (90° arc centred on mouse).  1.0 = full ring.
  */
 function drawInfluenceCircle(
   ctx: CanvasRenderingContext2D,
@@ -76,8 +77,12 @@ function drawInfluenceCircle(
   radiusScreenPx: number,
   mouseAngleRad: number,
   maxOpacity: number,
+  highlightWidthFraction: number,
 ): void {
   if (maxOpacity <= 0) return;
+
+  // Convert fraction of circumference to half-angle: fraction=0.25 → 45°
+  const halfAngleRad = highlightWidthFraction * Math.PI;
 
   const segAngle = (2 * Math.PI) / CIRCLE_ARC_SEGMENTS;
   ctx.lineWidth = 1.5;
@@ -86,7 +91,7 @@ function drawInfluenceCircle(
     const segStartAngle = -Math.PI + i * segAngle;
     const segMidAngle = segStartAngle + segAngle * 0.5;
 
-    const fade = angularFade(segMidAngle, mouseAngleRad, INFLUENCE_CIRCLE_HALF_ANGLE_RAD);
+    const fade = angularFade(segMidAngle, mouseAngleRad, halfAngleRad);
     if (fade <= 0) continue;
 
     const alpha = maxOpacity * fade;
@@ -400,6 +405,7 @@ export function renderGrappleInfluenceVisuals(
   virtualHeightPx: number,
   edgeGlowMaxOpacity: number,
   influenceCircleMaxOpacity: number,
+  influenceHighlightWidth: number,
 ): void {
   // Only show when the player has a grapple charge
   if (snapshot.hasGrappleChargeFlag !== 1) return;
@@ -436,7 +442,7 @@ export function renderGrappleInfluenceVisuals(
 
   // Draw influence circle
   const radiusScreenPx = INFLUENCE_RADIUS_WORLD * scalePx;
-  drawInfluenceCircle(ctx, playerScreenXPx, playerScreenYPx, radiusScreenPx, mouseAngleRad, influenceCircleMaxOpacity);
+  drawInfluenceCircle(ctx, playerScreenXPx, playerScreenYPx, radiusScreenPx, mouseAngleRad, influenceCircleMaxOpacity, influenceHighlightWidth);
 
   // Draw reachable edge glow on walls within range
   drawReachableEdgeGlow(ctx, snapshot, playerXWorld, playerYWorld, mouseAngleRad, edgeGlowMaxOpacity, offsetXPx, offsetYPx, scalePx);

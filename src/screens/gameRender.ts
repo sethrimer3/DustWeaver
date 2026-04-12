@@ -39,7 +39,7 @@ import {
 } from './gameRoom';
 import type { PlayerProgress } from '../progression/playerProgress';
 import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
-import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity } from '../ui/renderSettings';
+import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -359,6 +359,7 @@ export function renderFrame(r: RenderFrameContext): void {
     virtualWidthPx, virtualHeightPx,
     getReachableEdgeGlowOpacity(),
     getInfluenceCircleOpacity(),
+    getInfluenceHighlightWidth(),
   );
 
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
