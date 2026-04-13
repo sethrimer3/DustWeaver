@@ -236,12 +236,13 @@ export function placeAtCursor(state: EditorState): void {
       xBlock: bx,
       yBlock: by,
     });
-  } else if (item.id === 'dust_pile') {
+  } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
+    const dustCount = item.id === 'dust_pile_small' ? 3 : item.id === 'dust_pile_large' ? 8 : 5;
     room.dustPiles.push({
       uid: allocateUid(state),
       xBlock: bx,
       yBlock: by,
-      dustCount: 5,
+      dustCount,
     });
   }
 }

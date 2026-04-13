@@ -32,7 +32,7 @@ import { applyBindingForces } from './clusters/binding';
 import { applyCombatForces } from './particles/combat';
 import { applyLavaEffect } from './particles/lavaEffect';
 import { applyInterParticleForces } from './particles/forces';
-import { applyWallForces, applyWallBounce } from './particles/walls';
+import { applyWallForces, applyWallBounce, settleFloorDust } from './particles/walls';
 import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
@@ -102,6 +102,10 @@ export function tick(world: WorldState): void {
   // 6.5. Wall velocity bounce — reflect particles off wall faces with damping;
   //      stone shatter events are processed here too.
   applyWallBounce(world);
+
+  // 6.8. Floor settle — hard-snap unowned Physical (gold dust pile) particles
+  //      to the nearest wall surface so they don't fall through block seams.
+  settleFloorDust(world);
 
   // 6.75. Grapple chain particle update — reposition Gold chain particles along rope
   updateGrappleChainParticles(world);

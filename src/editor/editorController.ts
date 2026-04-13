@@ -931,6 +931,10 @@ export function createEditorController(
         if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
       } else if (el.type === 'playerSpawn') {
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
+      } else if (el.type === 'transition') {
+        const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
+        // Store positionBlock in xBlock; we'll apply the correct delta axis in moveSelectedElements.
+        if (tr) positions.set(key, { xBlock: tr.positionBlock, yBlock: tr.positionBlock });
       }
     }
   }
@@ -960,6 +964,17 @@ export function createEditorController(
       } else if (el.type === 'playerSpawn') {
         s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
         s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
+      } else if (el.type === 'transition') {
+        const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
+        if (tr) {
+          // Left/right transitions slide vertically (Y axis); up/down slide horizontally (X axis).
+          const delta = (tr.direction === 'left' || tr.direction === 'right') ? deltaY : deltaX;
+          const newPos = orig.xBlock + delta;
+          const roomLimit = (tr.direction === 'left' || tr.direction === 'right')
+            ? s.roomData.heightBlocks
+            : s.roomData.widthBlocks;
+          tr.positionBlock = Math.max(1, Math.min(roomLimit - tr.openingSizeBlocks - 1, newPos));
+        }
       }
     }
   }

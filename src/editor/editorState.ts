@@ -57,6 +57,10 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
   { id: 'skill_tomb', label: 'Skill Tomb', category: 'triggers' },
+  { id: 'dust_pile_small',  label: 'Dust Pile (S)',  category: 'triggers' },
+  { id: 'dust_pile_medium', label: 'Dust Pile (M)',  category: 'triggers' },
+  { id: 'dust_pile_large',  label: 'Dust Pile (L)',  category: 'triggers' },
+  // Legacy alias kept for backward-compat with older room exports
   { id: 'dust_pile', label: 'Dust Pile', category: 'triggers' },
 ];
 
