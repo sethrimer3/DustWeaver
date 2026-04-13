@@ -304,6 +304,13 @@ const FLOOR_DUST_X_EPSILON_WORLD = 2.0;
 const FLOOR_DUST_REST_OFFSET_WORLD = 1.0;
 
 /**
+ * Per-tick horizontal velocity multiplier for settled dust particles.
+ * Retains 88 % of horizontal speed each tick, giving gentle deceleration
+ * without an abrupt hard stop; prevents particles from sliding off block edges.
+ */
+const FLOOR_DUST_HORIZONTAL_DAMP = 0.88;
+
+/**
  * Hard floor-settle pass for unowned Physical (gold dust pile) particles —
  * step 6.8 of the tick pipeline, after wall bounce.
  *
@@ -376,6 +383,6 @@ export function settleFloorDust(world: WorldState): void {
     }
 
     // Dampen horizontal drift so particles don't slide off block edges.
-    velocityXWorld[i] *= 0.88;
+    velocityXWorld[i] *= FLOOR_DUST_HORIZONTAL_DAMP;
   }
 }

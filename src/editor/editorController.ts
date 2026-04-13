@@ -933,8 +933,8 @@ export function createEditorController(
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
       } else if (el.type === 'transition') {
         const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
-        // Store positionBlock in xBlock; we'll apply the correct delta axis in moveSelectedElements.
-        if (tr) positions.set(key, { xBlock: tr.positionBlock, yBlock: tr.positionBlock });
+        // For transitions, positionBlock is stored in xBlock; yBlock is unused.
+        if (tr) positions.set(key, { xBlock: tr.positionBlock, yBlock: 0 });
       }
     }
   }
