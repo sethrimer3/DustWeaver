@@ -56,7 +56,12 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Triggers
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
+  { id: 'save_tomb', label: 'Save Tomb', category: 'triggers' },
   { id: 'skill_tomb', label: 'Skill Tomb', category: 'triggers' },
+  { id: 'dust_pile_small',  label: 'Dust Pile (S)',  category: 'triggers' },
+  { id: 'dust_pile_medium', label: 'Dust Pile (M)',  category: 'triggers' },
+  { id: 'dust_pile_large',  label: 'Dust Pile (L)',  category: 'triggers' },
+  // Legacy alias kept for backward-compat with older room exports
   { id: 'dust_pile', label: 'Dust Pile', category: 'triggers' },
 ];
 
@@ -146,10 +151,20 @@ export interface EditorTransition {
   depthBlock?: number;
 }
 
+/** Save Tomb — where the player saves their progress. */
+export interface EditorSaveTomb {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
+/** Skill Tomb — grants the player a specific dust skill/weave when interacted with. */
 export interface EditorSkillTomb {
   uid: number;
   xBlock: number;
   yBlock: number;
+  /** The weave ID unlocked by this tomb. */
+  weaveId: string;
 }
 
 export interface EditorDustPile {
@@ -175,13 +190,14 @@ export interface EditorRoomData {
   interiorWalls: EditorWall[];
   enemies: EditorEnemy[];
   transitions: EditorTransition[];
+  saveTombs: EditorSaveTomb[];
   skillTombs: EditorSkillTomb[];
   dustPiles: EditorDustPile[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'skillTomb' | 'dustPile' | 'playerSpawn';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'playerSpawn';
 
 export interface SelectedElement {
   type: SelectedElementType;

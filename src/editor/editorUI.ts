@@ -591,6 +591,14 @@ function updateInspector(
       v => callbacks?.onPropertyChange('playerSpawn.xBlock', parseInt(v)));
     addField(div, 'yBlock', String(room.playerSpawnBlock[1]),
       v => callbacks?.onPropertyChange('playerSpawn.yBlock', parseInt(v)));
+  } else if (el.type === 'saveTomb') {
+    const tomb = room.saveTombs.find(s => s.uid === el.uid);
+    if (tomb) {
+      addField(div, 'xBlock', String(tomb.xBlock),
+        v => callbacks?.onPropertyChange('saveTomb.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(tomb.yBlock),
+        v => callbacks?.onPropertyChange('saveTomb.yBlock', parseInt(v)));
+    }
   } else if (el.type === 'skillTomb') {
     const tomb = room.skillTombs.find(s => s.uid === el.uid);
     if (tomb) {
@@ -598,6 +606,13 @@ function updateInspector(
         v => callbacks?.onPropertyChange('skillTomb.xBlock', parseInt(v)));
       addField(div, 'yBlock', String(tomb.yBlock),
         v => callbacks?.onPropertyChange('skillTomb.yBlock', parseInt(v)));
+      addSelect(div, 'weaveId',
+        [
+          { label: 'Storm Weave', value: 'storm' },
+          { label: 'Shield Weave', value: 'shield' },
+        ],
+        tomb.weaveId,
+        v => callbacks?.onPropertyChange('skillTomb.weaveId', v));
     }
   } else if (el.type === 'dustPile') {
     const pile = room.dustPiles.find(p => p.uid === el.uid);

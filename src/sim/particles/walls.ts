@@ -51,12 +51,16 @@ export function applyWallForces(world: WorldState): void {
   const {
     positionXWorld, positionYWorld,
     forceX, forceY,
-    isAliveFlag, particleCount,
+    isAliveFlag, ownerEntityId, kindBuffer, particleCount,
     wallXWorld, wallYWorld, wallWWorld, wallHWorld, wallCount,
   } = world;
 
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
+
+    // Unowned Physical (floor dust) particles skip soft repulsion forces —
+    // they rely on settleFloorDust for hard surface snapping instead.
+    if (ownerEntityId[i] === -1 && kindBuffer[i] === ParticleKind.Physical) continue;
 
     const px = positionXWorld[i];
     const py = positionYWorld[i];
@@ -279,4 +283,106 @@ function _findFreeSlot(world: WorldState): number {
     return world.particleCount++;
   }
   return -1;
+}
+
+// ── Floor dust settling ─────────────────────────────────────────────────────
+
+/**
+ * How far (world units) below a wall's top surface we search for particles
+ * to snap back.  Must be large enough to catch any particle that has tunnelled
+ * through a block at normal gameplay speeds.
+ */
+const FLOOR_DUST_SETTLE_DIST_WORLD = 20.0;
+
+/**
+ * Small X epsilon used when testing whether a particle is "covered" by a wall.
+ * This seals micro-gaps at the junctions of adjacent merged walls.
+ */
+const FLOOR_DUST_SEAM_EPSILON_WORLD = 2.0;
+
+/** Particle rests this many world units above the wall top surface. */
+const FLOOR_DUST_REST_OFFSET_WORLD = 1.0;
+
+/**
+ * Per-tick horizontal velocity multiplier for settled dust particles.
+ * Retains 88 % of horizontal speed each tick, giving gentle deceleration
+ * without an abrupt hard stop; prevents particles from sliding off block edges.
+ */
+const FLOOR_DUST_HORIZONTAL_DAMP = 0.88;
+
+/**
+ * Hard floor-settle pass for unowned Physical (gold dust pile) particles —
+ * step 6.8 of the tick pipeline, after wall bounce.
+ *
+ * These particles skip the soft wall-repulsion forces (applyWallForces) so
+ * they don't orbit wildly above the floor.  Instead this pass snaps each
+ * such particle to the nearest wall top surface beneath it, zeroes its
+ * downward velocity, and damps horizontal drift so particles don't slide
+ * off block edges.
+ */
+export function settleFloorDust(world: WorldState): void {
+  if (world.wallCount === 0) return;
+
+  const {
+    positionXWorld, positionYWorld,
+    velocityXWorld, velocityYWorld,
+    isAliveFlag, ownerEntityId, kindBuffer,
+    particleCount,
+    wallXWorld, wallYWorld, wallWWorld, wallCount,
+    worldHeightWorld,
+  } = world;
+
+  for (let i = 0; i < particleCount; i++) {
+    if (isAliveFlag[i] === 0) continue;
+    if (ownerEntityId[i] !== -1) continue;
+    if (kindBuffer[i] !== ParticleKind.Physical) continue;
+
+    const px = positionXWorld[i];
+    const py = positionYWorld[i];
+
+    // Find the nearest wall top surface that the particle has fallen through
+    // or is about to fall through.  We want the smallest wy (highest surface
+    // in screen space) that is:
+    //   (a) covers the particle's X position (± seam epsilon), and
+    //   (b) is within FLOOR_DUST_SETTLE_DIST_WORLD units of the particle.
+    //
+    // In world-space Y-down coordinates:
+    //   • smaller wy  → higher on screen
+    //   • particle at rest should have py ≈ wy - REST_OFFSET  (just above the surface)
+    //   • particle that has fallen through has py > wy
+    let nearestFloorY = -1;
+
+    for (let wi = 0; wi < wallCount; wi++) {
+      const wx = wallXWorld[wi];
+      const wy = wallYWorld[wi];
+      const ww = wallWWorld[wi];
+
+      // Wall must cover the particle's X (with seam epsilon to close tiny gaps)
+      if (px < wx - FLOOR_DUST_SEAM_EPSILON_WORLD || px > wx + ww + FLOOR_DUST_SEAM_EPSILON_WORLD) continue;
+
+      // Wall top must be within the search window:
+      //   py - SETTLE_DIST  ≤  wy  (otherwise wall is far above; particle is still falling)
+      if (wy < py - FLOOR_DUST_SETTLE_DIST_WORLD) continue;
+
+      // Among candidates, select the one closest to the particle from above
+      // (smallest wy = highest surface in screen space).
+      if (nearestFloorY < 0 || wy < nearestFloorY) {
+        nearestFloorY = wy;
+      }
+    }
+
+    // Fall back to the world floor if no wall was found.
+    if (nearestFloorY < 0) nearestFloorY = worldHeightWorld;
+
+    const restY = nearestFloorY - FLOOR_DUST_REST_OFFSET_WORLD;
+    if (py > restY) {
+      positionYWorld[i] = restY;
+      if (velocityYWorld[i] > 0) {
+        velocityYWorld[i] = 0;
+      }
+    }
+
+    // Dampen horizontal drift so particles don't slide off block edges.
+    velocityXWorld[i] *= FLOOR_DUST_HORIZONTAL_DAMP;
+  }
 }

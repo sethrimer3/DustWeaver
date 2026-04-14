@@ -133,6 +133,7 @@ function drawGrappleBloom(
 /**
  * Draws additive glow for gold dust particles into the bloom system's glow pass.
  * Multiple overlapping particles produce a stronger combined glow (additive blend).
+ * Glow intensity scales with particle speed — faster-moving particles glow brighter.
  */
 function drawParticleGlow(
   bloomSystem: BloomSystem,
@@ -145,6 +146,13 @@ function drawParticleGlow(
   /** Glow radius is slightly larger than the 3×3 dust square for a soft halo. */
   const glowRadius = 2.5 * scalePx;
 
+  /** Speed (world units/s) at which glow reaches full intensity. */
+  const MAX_GLOW_SPEED_WORLD_PER_SEC = 120.0;
+  /** Base glow intensity for a resting particle. */
+  const BASE_GLOW_INTENSITY = 0.25;
+  /** Additional glow intensity added at maximum speed. */
+  const SPEED_GLOW_RANGE = 0.65;
+
   for (let i = 0; i < particles.particleCount; i++) {
     if (particles.isAliveFlag[i] === 0) continue;
     // Only glow gold dust (Physical) particles
@@ -156,6 +164,13 @@ function drawParticleGlow(
     const ageFade = 1.0 - normAge;
     if (ageFade < 0.05) continue;
 
+    // Velocity-based brightness: faster particles glow brighter.
+    const vx = particles.velocityXWorld[i];
+    const vy = particles.velocityYWorld[i];
+    const speedWorld = Math.sqrt(vx * vx + vy * vy);
+    const speedFactor = Math.min(1.0, speedWorld / MAX_GLOW_SPEED_WORLD_PER_SEC);
+    const intensity = (BASE_GLOW_INTENSITY + SPEED_GLOW_RANGE * speedFactor) * ageFade;
+
     const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
     const sy = particles.positionYWorld[i] * scalePx + offsetYPx;
 
@@ -165,7 +180,7 @@ function drawParticleGlow(
       radius: glowRadius,
       glow: {
         enabled: true,
-        intensity: 0.6 * ageFade,
+        intensity,
         color: '#ffd700',
       },
     });

@@ -36,7 +36,7 @@ import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracks
 import { BloomSystem } from '../render/effects/bloomSystem';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
-import { performEarlyAutoAssignment } from '../progression/unlocks';
+import { performEarlyAutoAssignment, unlockActiveWeave } from '../progression/unlocks';
 import {
   spawnClusterParticles,
   spawnLoadoutParticles,
@@ -340,7 +340,7 @@ export function startGameScreen(
     playerCloak.reset();
 
     // Init skill tomb renderer
-    skillTombRenderer.init(room.skillTombs);
+    skillTombRenderer.init(room.saveTombs);
 
     // Track explored room
     if (progress && !progress.exploredRoomIds.includes(room.id)) {
@@ -985,6 +985,23 @@ export function startGameScreen(
               levelRng,
             );
             break;
+          }
+        }
+      }
+
+      // Skill Tomb interaction: unlocks a dust weave when the player walks close.
+      // Each tomb is one-time per session (not per-game-save); once unlocked it stays
+      // in progress.unlockedActiveWeaves and the pickup is idempotent.
+      if (progress) {
+        const roomSkillTombs = currentRoom.skillTombs ?? [];
+        for (let i = 0; i < roomSkillTombs.length; i++) {
+          const st = roomSkillTombs[i];
+          const tx = (st.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const ty = (st.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const dx = playerForTomb.positionXWorld - tx;
+          const dy = playerForTomb.positionYWorld - ty;
+          if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
+            unlockActiveWeave(progress, st.weaveId);
           }
         }
       }

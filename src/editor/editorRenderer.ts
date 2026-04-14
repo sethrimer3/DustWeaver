@@ -110,11 +110,18 @@ export function renderEditorOverlays(
       isSelected ? SPAWN_SELECTED : SPAWN_COLOR, '🏠');
   }
 
-  // ── Skill tombs ─────────────────────────────────────────────────────────
+  // ── Save tombs ──────────────────────────────────────────────────────────
+  for (const s of room.saveTombs) {
+    const isSelected = isElementSelected('saveTomb', s.uid);
+    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom,
+      isSelected ? TOMB_SELECTED : TOMB_COLOR, '⛩');
+  }
+
+  // ── Skill tombs (dust skill unlocks) ────────────────────────────────────
   for (const s of room.skillTombs) {
     const isSelected = isElementSelected('skillTomb', s.uid);
     drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom,
-      isSelected ? TOMB_SELECTED : TOMB_COLOR, '⛩');
+      isSelected ? 'rgba(160,120,255,0.9)' : 'rgba(120,80,220,0.55)', '✦');
   }
 
   // ── Dust piles ──────────────────────────────────────────────────────────

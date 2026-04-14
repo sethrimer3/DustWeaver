@@ -11,7 +11,7 @@ import type { CameraState } from '../render/camera';
 
 import {
   EditorState, createEditorState, EditorTool,
-  EditorWall, EditorEnemy, EditorTransition, EditorSkillTomb, EditorDustPile,
+  EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile,
   BlockTheme, BackgroundId, LightingEffect,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
@@ -275,6 +275,7 @@ export function createEditorController(
       for (const w of state.roomData.interiorWalls)  maxUid = Math.max(maxUid, w.uid + 1);
       for (const e of state.roomData.enemies)        maxUid = Math.max(maxUid, e.uid + 1);
       for (const t of state.roomData.transitions)    maxUid = Math.max(maxUid, t.uid + 1);
+      for (const s of state.roomData.saveTombs)      maxUid = Math.max(maxUid, s.uid + 1);
       for (const s of state.roomData.skillTombs)     maxUid = Math.max(maxUid, s.uid + 1);
       for (const p of state.roomData.dustPiles)      maxUid = Math.max(maxUid, p.uid + 1);
       // Ensure nextUid never regresses below its current value (other rooms may
@@ -720,6 +721,11 @@ export function createEditorController(
       enemy.yBlock = Math.min(Math.max(0, enemy.yBlock), maxY);
     }
 
+    for (const tomb of room.saveTombs) {
+      tomb.xBlock = Math.min(Math.max(0, tomb.xBlock), maxX);
+      tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
+    }
+
     for (const tomb of room.skillTombs) {
       tomb.xBlock = Math.min(Math.max(0, tomb.xBlock), maxX);
       tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
@@ -799,6 +805,12 @@ export function createEditorController(
       for (const enemy of room.enemies) {
         enemy.xBlock += shiftX;
         enemy.yBlock += shiftY;
+      }
+
+      // Shift save tombs
+      for (const tomb of room.saveTombs) {
+        tomb.xBlock += shiftX;
+        tomb.yBlock += shiftY;
       }
 
       // Shift skill tombs
@@ -909,11 +921,18 @@ export function createEditorController(
     } else if (el.type === 'playerSpawn') {
       if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;
       if (prop === 'playerSpawn.yBlock' && !isNaN(numVal)) room.playerSpawnBlock[1] = numVal;
+    } else if (el.type === 'saveTomb') {
+      const tomb = room.saveTombs.find((s: EditorSaveTomb) => s.uid === el.uid);
+      if (tomb) {
+        if (prop === 'saveTomb.xBlock' && !isNaN(numVal)) tomb.xBlock = numVal;
+        if (prop === 'saveTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
+      }
     } else if (el.type === 'skillTomb') {
       const tomb = room.skillTombs.find((s: EditorSkillTomb) => s.uid === el.uid);
       if (tomb) {
         if (prop === 'skillTomb.xBlock' && !isNaN(numVal)) tomb.xBlock = numVal;
         if (prop === 'skillTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
+        if (prop === 'skillTomb.weaveId' && typeof value === 'string') tomb.weaveId = value;
       }
     } else if (el.type === 'dustPile') {
       const pile = room.dustPiles.find((p: EditorDustPile) => p.uid === el.uid);
@@ -938,6 +957,9 @@ export function createEditorController(
       } else if (el.type === 'enemy') {
         const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
         if (e) positions.set(key, { xBlock: e.xBlock, yBlock: e.yBlock });
+      } else if (el.type === 'saveTomb') {
+        const t = s.roomData.saveTombs.find(t2 => t2.uid === el.uid);
+        if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
@@ -981,6 +1003,9 @@ export function createEditorController(
       } else if (el.type === 'enemy') {
         const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
         if (e) { e.xBlock = orig.xBlock + deltaX; e.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'saveTomb') {
+        const t = s.roomData.saveTombs.find(t2 => t2.uid === el.uid);
+        if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
@@ -1018,8 +1043,8 @@ export function createEditorController(
   // ── Copy/Paste helpers ───────────────────────────────────────────────────
 
   function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
-    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] } = {
-      walls: [], enemies: [], skillTombs: [], dustPiles: [],
+    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] } = {
+      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [],
     };
     for (const el of elements) {
       if (el.type === 'wall') {
@@ -1028,6 +1053,9 @@ export function createEditorController(
       } else if (el.type === 'enemy') {
         const e = room.enemies.find(e2 => e2.uid === el.uid);
         if (e) data.enemies.push({ ...e });
+      } else if (el.type === 'saveTomb') {
+        const t = room.saveTombs.find(t2 => t2.uid === el.uid);
+        if (t) data.saveTombs.push({ ...t });
       } else if (el.type === 'skillTomb') {
         const t = room.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) data.skillTombs.push({ ...t });
@@ -1041,7 +1069,7 @@ export function createEditorController(
 
   function pasteFromClipboard(s: EditorState): void {
     if (!s.roomData || !s.clipboard) return;
-    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] };
+    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] };
     try {
       data = JSON.parse(s.clipboard) as typeof data;
     } catch {
@@ -1056,7 +1084,8 @@ export function createEditorController(
     let minX = Infinity, minY = Infinity;
     for (const w of data.walls) { minX = Math.min(minX, w.xBlock); minY = Math.min(minY, w.yBlock); }
     for (const e of data.enemies) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
-    for (const t of data.skillTombs) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
+    for (const t of (data.saveTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
+    for (const t of (data.skillTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
     for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
     if (!isFinite(minX)) minX = 0;
     if (!isFinite(minY)) minY = 0;
@@ -1081,7 +1110,17 @@ export function createEditorController(
       });
       newElements.push({ type: 'enemy', uid: newUid });
     }
-    for (const t of data.skillTombs) {
+    for (const t of (data.saveTombs ?? [])) {
+      const newUid = allocateUid(s);
+      s.roomData.saveTombs.push({
+        ...t,
+        uid: newUid,
+        xBlock: t.xBlock - minX + offsetX,
+        yBlock: t.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'saveTomb', uid: newUid });
+    }
+    for (const t of (data.skillTombs ?? [])) {
       const newUid = allocateUid(s);
       s.roomData.skillTombs.push({
         ...t,

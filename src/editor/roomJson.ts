@@ -10,7 +10,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSkillTomb, EditorDustPile } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile } from './editorState';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -96,9 +96,18 @@ export interface RoomJsonTransition {
   depthBlock?: number;
 }
 
+/** Save Tomb — where the player saves their progress. Uses "skillTombs" JSON key for backward compat. */
 export interface RoomJsonSkillTomb {
   xBlock: number;
   yBlock: number;
+}
+
+/** Skill Tomb — grants a specific dust skill/weave when interacted with. */
+export interface RoomJsonDustSkillTomb {
+  xBlock: number;
+  yBlock: number;
+  /** The weave ID unlocked by this tomb. */
+  weaveId: string;
 }
 
 export interface RoomJsonSpike {
@@ -159,7 +168,10 @@ export interface RoomJsonDef {
   interiorWalls: RoomJsonWall[];
   enemies: RoomJsonEnemy[];
   transitions: RoomJsonTransition[];
+  /** Save Tombs (stored as "skillTombs" for backward compatibility with existing room files). */
   skillTombs: RoomJsonSkillTomb[];
+  /** Skill Tombs — grant dust skills/weaves when interacted with. */
+  dustSkillTombs?: RoomJsonDustSkillTomb[];
   /** Collectible skill book positions (block units). */
   skillBooks?: RoomJsonSkillTomb[];
   /** Collectible dust container positions (block units). */
@@ -288,10 +300,17 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     depthBlock: t.depthBlock,
   }));
 
-  const skillTombs: EditorSkillTomb[] = json.skillTombs.map(s => ({
+  const saveTombs: EditorSaveTomb[] = json.skillTombs.map(s => ({
     uid: uid++,
     xBlock: s.xBlock,
     yBlock: s.yBlock,
+  }));
+
+  const skillTombs: EditorSkillTomb[] = (json.dustSkillTombs ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    weaveId: s.weaveId,
   }));
 
   const dustPiles: EditorDustPile[] = (json.dustPiles ?? []).map(p => ({
@@ -315,6 +334,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       interiorWalls,
       enemies,
       transitions,
+      saveTombs,
       skillTombs,
       dustPiles,
     },
@@ -373,7 +393,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (t.depthBlock !== undefined) jt.depthBlock = t.depthBlock;
       return jt;
     }),
-    skillTombs: data.skillTombs.map(s => ({
+    skillTombs: data.saveTombs.map(s => ({
       xBlock: s.xBlock,
       yBlock: s.yBlock,
     })),
@@ -382,6 +402,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.blockTheme) json.blockTheme = data.blockTheme;
   if (data.backgroundId) json.backgroundId = data.backgroundId;
   if (data.lightingEffect) json.lightingEffect = data.lightingEffect;
+  if (data.skillTombs.length > 0) {
+    json.dustSkillTombs = data.skillTombs.map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      weaveId: s.weaveId,
+    }));
+  }
   if (data.dustPiles.length > 0) {
     json.dustPiles = data.dustPiles.map(p => ({
       xBlock: p.xBlock,
@@ -540,7 +567,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     enemies,
     playerSpawnBlock: [data.playerSpawnBlock[0], data.playerSpawnBlock[1]],
     transitions,
-    skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    saveTombs: data.saveTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount })),
   };
 }
@@ -608,10 +636,17 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     fadeColor: t.fadeColor,
   }));
 
-  const skillTombs: EditorSkillTomb[] = room.skillTombs.map(s => ({
+  const saveTombs: EditorSaveTomb[] = room.saveTombs.map(s => ({
     uid: uid++,
     xBlock: s.xBlock,
     yBlock: s.yBlock,
+  }));
+
+  const skillTombs: EditorSkillTomb[] = (room.skillTombs ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    weaveId: s.weaveId,
   }));
 
   const dustPiles: EditorDustPile[] = (room.dustPiles ?? []).map(p => ({
@@ -635,6 +670,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       interiorWalls,
       enemies,
       transitions,
+      saveTombs,
       skillTombs,
       dustPiles,
     },

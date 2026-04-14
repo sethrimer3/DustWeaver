@@ -157,8 +157,8 @@ export function buildMapTab(
         }
       }
 
-      // Draw skill tombs
-      for (const tomb of room.skillTombs) {
+      // Draw save tombs (save points shown on map)
+      for (const tomb of room.saveTombs) {
         const screenX = centerX + (mapXBlock + tomb.xBlock) * cellSize;
         const screenY = centerY + (mapYBlock + tomb.yBlock) * cellSize;
         mapCtx.fillStyle = '#d4a84b';
