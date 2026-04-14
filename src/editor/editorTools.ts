@@ -20,14 +20,19 @@ function hitTestPoint(xBlock: number, yBlock: number, bx: number, by: number): b
 }
 
 function hitTestTransition(t: EditorTransition, bx: number, by: number, roomData: EditorRoomData): boolean {
-  if (t.direction === 'left') {
-    return bx <= 1 && by >= t.positionBlock && by < t.positionBlock + t.openingSizeBlocks;
-  } else if (t.direction === 'right') {
-    return bx >= roomData.widthBlocks - 2 && by >= t.positionBlock && by < t.positionBlock + t.openingSizeBlocks;
-  } else if (t.direction === 'up') {
-    return by <= 1 && bx >= t.positionBlock && bx < t.positionBlock + t.openingSizeBlocks;
+  const DEPTH = 6;
+  if (t.direction === 'left' || t.direction === 'right') {
+    const zoneX = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'left' ? 0 : roomData.widthBlocks - DEPTH);
+    return bx >= zoneX && bx < zoneX + DEPTH
+      && by >= t.positionBlock && by < t.positionBlock + t.openingSizeBlocks;
   } else {
-    return by >= roomData.heightBlocks - 2 && bx >= t.positionBlock && bx < t.positionBlock + t.openingSizeBlocks;
+    const zoneY = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'up' ? 0 : roomData.heightBlocks - DEPTH);
+    return by >= zoneY && by < zoneY + DEPTH
+      && bx >= t.positionBlock && bx < t.positionBlock + t.openingSizeBlocks;
   }
 }
 
@@ -207,20 +212,43 @@ export function placeAtCursor(state: EditorState): void {
   } else if (item.id === 'player_spawn') {
     room.playerSpawnBlock = [bx, by];
   } else if (item.id === 'room_transition') {
-    // Determine direction from cursor position
-    let direction: 'left' | 'right' | 'up' | 'down' = 'right';
-    if (bx <= 1) direction = 'left';
-    else if (bx >= room.widthBlocks - 2) direction = 'right';
-    else if (by <= 1) direction = 'up';
-    else if (by >= room.heightBlocks - 2) direction = 'down';
+    // Determine direction from the nearest room edge
+    const distLeft   = bx;
+    const distRight  = room.widthBlocks  - 1 - bx;
+    const distTop    = by;
+    const distBottom = room.heightBlocks - 1 - by;
+    const minDist    = Math.min(distLeft, distRight, distTop, distBottom);
+    let direction: 'left' | 'right' | 'up' | 'down' =
+      minDist === distLeft   ? 'left'  :
+      minDist === distRight  ? 'right' :
+      minDist === distTop    ? 'up'    : 'down';
 
-    const openingSizeBlocks = direction === 'left' || direction === 'right'
-      ? Math.max(1, Math.min(5, room.heightBlocks - 2))
-      : Math.max(1, Math.min(5, room.widthBlocks - 2));
+    const OPENING_SIZE = 6;
+    const isHoriz = direction === 'left' || direction === 'right';
 
-    const positionBlock = direction === 'left' || direction === 'right'
-      ? Math.min(Math.max(1, by), room.heightBlocks - 1 - openingSizeBlocks)
-      : Math.min(Math.max(1, bx), room.widthBlocks - 1 - openingSizeBlocks);
+    const openingSizeBlocks = isHoriz
+      ? Math.max(1, Math.min(OPENING_SIZE, room.heightBlocks - 2))
+      : Math.max(1, Math.min(OPENING_SIZE, room.widthBlocks - 2));
+
+    const positionBlock = isHoriz
+      ? Math.min(Math.max(1, by - Math.floor(openingSizeBlocks / 2)), room.heightBlocks - 1 - openingSizeBlocks)
+      : Math.min(Math.max(1, bx - Math.floor(openingSizeBlocks / 2)), room.widthBlocks - 1 - openingSizeBlocks);
+
+    // Determine whether this is an interior transition (cursor not at the boundary edge)
+    const ZONE_DEPTH = 6;
+    const isEdge =
+      (direction === 'left'  && bx <= ZONE_DEPTH)      ||
+      (direction === 'right' && bx >= room.widthBlocks - ZONE_DEPTH) ||
+      (direction === 'up'    && by <= ZONE_DEPTH)      ||
+      (direction === 'down'  && by >= room.heightBlocks - ZONE_DEPTH);
+
+    let depthBlock: number | undefined;
+    if (!isEdge) {
+      // Interior: anchor the zone so the cursor is at the entry side
+      depthBlock = isHoriz
+        ? Math.min(Math.max(0, bx), room.widthBlocks - ZONE_DEPTH)
+        : Math.min(Math.max(0, by), room.heightBlocks - ZONE_DEPTH);
+    }
 
     room.transitions.push({
       uid: allocateUid(state),
@@ -229,6 +257,7 @@ export function placeAtCursor(state: EditorState): void {
       openingSizeBlocks,
       targetRoomId: '',
       targetSpawnBlock: [3, by + 2],
+      depthBlock,
     });
   } else if (item.id === 'skill_tomb') {
     room.skillTombs.push({
@@ -409,15 +438,18 @@ function hitTestTransitionRect(
   t: EditorTransition, minX: number, minY: number, maxX: number, maxY: number,
   room: EditorRoomData,
 ): boolean {
+  const DEPTH = 6;
   let tx: number, ty: number, tw: number, th: number;
-  if (t.direction === 'left') {
-    tx = 0; ty = t.positionBlock; tw = 1; th = t.openingSizeBlocks;
-  } else if (t.direction === 'right') {
-    tx = room.widthBlocks - 1; ty = t.positionBlock; tw = 1; th = t.openingSizeBlocks;
-  } else if (t.direction === 'up') {
-    tx = t.positionBlock; ty = 0; tw = t.openingSizeBlocks; th = 1;
+  if (t.direction === 'left' || t.direction === 'right') {
+    const zoneX = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'left' ? 0 : room.widthBlocks - DEPTH);
+    tx = zoneX; ty = t.positionBlock; tw = DEPTH; th = t.openingSizeBlocks;
   } else {
-    tx = t.positionBlock; ty = room.heightBlocks - 1; tw = t.openingSizeBlocks; th = 1;
+    const zoneY = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'up' ? 0 : room.heightBlocks - DEPTH);
+    tx = t.positionBlock; ty = zoneY; tw = t.openingSizeBlocks; th = DEPTH;
   }
   return tx + tw > minX && tx < maxX + 1 && ty + th > minY && ty < maxY + 1;
 }

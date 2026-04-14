@@ -93,6 +93,7 @@ export interface RoomJsonTransition {
   targetRoomId: string;
   targetSpawnBlock: [number, number];
   fadeColor?: string;
+  depthBlock?: number;
 }
 
 export interface RoomJsonSkillTomb {
@@ -284,6 +285,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     targetRoomId: t.targetRoomId,
     targetSpawnBlock: [...t.targetSpawnBlock] as [number, number],
     fadeColor: t.fadeColor,
+    depthBlock: t.depthBlock,
   }));
 
   const skillTombs: EditorSkillTomb[] = json.skillTombs.map(s => ({
@@ -368,6 +370,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         targetSpawnBlock: [...t.targetSpawnBlock],
       };
       if (t.fadeColor) jt.fadeColor = t.fadeColor;
+      if (t.depthBlock !== undefined) jt.depthBlock = t.depthBlock;
       return jt;
     }),
     skillTombs: data.skillTombs.map(s => ({
@@ -392,8 +395,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
 // ── Conversion: EditorRoomData → RoomDef (for runtime loading) ───────────────
 
 /**
- * Builds boundary walls with gaps for transition tunnel openings.
- * Mirrors the logic in rooms.ts but works from EditorRoomData.
+ * Builds boundary walls with gaps for edge-transition tunnel openings.
+ * Interior transitions (depthBlock defined) do not create gaps.
  */
 function buildBoundaryWalls(
   widthBlocks: number,
@@ -407,12 +410,12 @@ function buildBoundaryWalls(
   // Bottom wall (full width) — invisible boundary
   walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
 
-  // Left wall — split around tunnel openings (invisible boundary)
-  const leftTunnels = transitions.filter(t => t.direction === 'left');
+  // Left wall — split around edge-transition openings only
+  const leftTunnels = transitions.filter(t => t.direction === 'left' && t.depthBlock === undefined);
   buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
 
-  // Right wall — split around tunnel openings (invisible boundary)
-  const rightTunnels = transitions.filter(t => t.direction === 'right');
+  // Right wall — split around edge-transition openings only
+  const rightTunnels = transitions.filter(t => t.direction === 'right' && t.depthBlock === undefined);
   buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
 
   return walls;
@@ -450,7 +453,10 @@ function buildTunnelWalls(
   const walls: RoomWallDef[] = [];
   const TUNNEL_OVERHANG_BLOCKS = 4;
 
+  // Only edge transitions (depthBlock undefined) get physical corridor walls.
   for (const tunnel of transitions) {
+    if (tunnel.depthBlock !== undefined) continue; // interior transition — no corridor walls
+
     const topY = tunnel.positionBlock - 1;
     const bottomY = tunnel.positionBlock + tunnel.openingSizeBlocks;
 
@@ -518,6 +524,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     openingSizeBlocks: t.openingSizeBlocks,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
     fadeColor: t.fadeColor,
+    depthBlock: t.depthBlock,
   }));
 
   return {
