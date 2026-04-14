@@ -392,15 +392,18 @@ function drawTransitionZone(
   color: string,
   doorNumber: number,
 ): void {
+  const DEPTH = 6;
   let xBlock: number, yBlock: number, wBlock: number, hBlock: number;
-  if (t.direction === 'left') {
-    xBlock = -1; yBlock = t.positionBlock; wBlock = 2; hBlock = t.openingSizeBlocks;
-  } else if (t.direction === 'right') {
-    xBlock = room.widthBlocks - 1; yBlock = t.positionBlock; wBlock = 2; hBlock = t.openingSizeBlocks;
-  } else if (t.direction === 'up') {
-    xBlock = t.positionBlock; yBlock = -1; wBlock = t.openingSizeBlocks; hBlock = 2;
+  if (t.direction === 'left' || t.direction === 'right') {
+    const zoneX = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'left' ? 0 : room.widthBlocks - DEPTH);
+    xBlock = zoneX; yBlock = t.positionBlock; wBlock = DEPTH; hBlock = t.openingSizeBlocks;
   } else {
-    xBlock = t.positionBlock; yBlock = room.heightBlocks - 1; wBlock = t.openingSizeBlocks; hBlock = 2;
+    const zoneY = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'up' ? 0 : room.heightBlocks - DEPTH);
+    xBlock = t.positionBlock; yBlock = zoneY; wBlock = t.openingSizeBlocks; hBlock = DEPTH;
   }
 
   drawBlockRect(ctx, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom, color, 2);

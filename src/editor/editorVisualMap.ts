@@ -383,7 +383,19 @@ export function showVisualWorldMap(
     const ds = Math.max(4, Math.min(DOOR_SIZE, zoom * 1.5));
 
     let dx: number, dy: number;
-    if (trans.direction === 'left') {
+    const DEPTH = 6;
+    if (trans.depthBlock !== undefined) {
+      // Interior transition: show door at center of the zone
+      const depthMid = (trans.depthBlock + DEPTH / 2) * zoom;
+      const posMid   = (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom;
+      if (trans.direction === 'left' || trans.direction === 'right') {
+        dx = roomSx + depthMid - ds / 2;
+        dy = roomSy + posMid   - ds / 2;
+      } else {
+        dx = roomSx + posMid   - ds / 2;
+        dy = roomSy + depthMid - ds / 2;
+      }
+    } else if (trans.direction === 'left') {
       dx = roomSx - ds / 2;
       dy = roomSy + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom - ds / 2;
     } else if (trans.direction === 'right') {
@@ -488,14 +500,24 @@ export function showVisualWorldMap(
     roomW: number,
     roomH: number,
   ): [number, number] {
+    const DEPTH = 6;
+    const posMid = (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom;
+    if (trans.depthBlock !== undefined) {
+      const depthMid = (trans.depthBlock + DEPTH / 2) * zoom;
+      if (trans.direction === 'left' || trans.direction === 'right') {
+        return [roomSx + depthMid, roomSy + posMid];
+      } else {
+        return [roomSx + posMid, roomSy + depthMid];
+      }
+    }
     if (trans.direction === 'left') {
-      return [roomSx, roomSy + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom];
+      return [roomSx, roomSy + posMid];
     } else if (trans.direction === 'right') {
-      return [roomSx + roomW, roomSy + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom];
+      return [roomSx + roomW, roomSy + posMid];
     } else if (trans.direction === 'up') {
-      return [roomSx + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom, roomSy];
+      return [roomSx + posMid, roomSy];
     } else {
-      return [roomSx + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom, roomSy + roomH];
+      return [roomSx + posMid, roomSy + roomH];
     }
   }
 
@@ -624,9 +646,9 @@ export function showVisualWorldMap(
       const dy = e.clientY - dragStartYPx;
       const placement = placements.get(dragRoomId);
       if (placement) {
-        // Free drag position
-        placement.mapXWorld = dragRoomStartXPx + dx / zoom;
-        placement.mapYWorld = dragRoomStartYPx + dy / zoom;
+        // Snap dragged position to integer block grid
+        placement.mapXWorld = Math.round(dragRoomStartXPx + dx / zoom);
+        placement.mapYWorld = Math.round(dragRoomStartYPx + dy / zoom);
         // Doorway snap: adjust position if a compatible door pair is close enough
         snapIndicator = applyDoorSnap(dragRoomId, placement);
       }
@@ -1280,6 +1302,16 @@ export function showVisualWorldMap(
     const cx = placement.mapXWorld;
     const cy = placement.mapYWorld;
     const mid = trans.positionBlock + trans.openingSizeBlocks / 2;
+    const DEPTH = 6;
+    if (trans.depthBlock !== undefined) {
+      // Interior transition: report center of the zone
+      const depthMid = trans.depthBlock + DEPTH / 2;
+      if (trans.direction === 'left' || trans.direction === 'right') {
+        return [cx + depthMid, cy + mid];
+      } else {
+        return [cx + mid, cy + depthMid];
+      }
+    }
     if (trans.direction === 'left')  return [cx,                   cy + mid];
     if (trans.direction === 'right') return [cx + room.widthBlocks, cy + mid];
     if (trans.direction === 'up')    return [cx + mid,              cy];

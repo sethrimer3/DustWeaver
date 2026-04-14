@@ -29,7 +29,7 @@ import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { exportRoomAsJson, exportAllChanges } from './editorExport';
-import { ROOM_REGISTRY } from '../levels/rooms';
+import { ROOM_REGISTRY, registerRoom } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 
@@ -214,6 +214,7 @@ export function createEditorController(
     // Build a RoomDef from the current editor data and load it
     if (state.roomData) {
       const newRoomDef = editorRoomDataToRoomDef(state.roomData);
+      registerRoom(newRoomDef); // update ROOM_REGISTRY so visual map sees new transitions
       const sx = state.roomData.playerSpawnBlock[0];
       const sy = state.roomData.playerSpawnBlock[1];
       closeEditor();
@@ -258,6 +259,7 @@ export function createEditorController(
     if (!state.roomData) return;
     isCurrentRoomDirty = true;
     const roomDef = editorRoomDataToRoomDef(state.roomData);
+    registerRoom(roomDef); // keep ROOM_REGISTRY in sync while editing
     const sx = state.roomData.playerSpawnBlock[0];
     const sy = state.roomData.playerSpawnBlock[1];
     onLoadRoom(roomDef, sx, sy, true); // preserve camera while in editor
@@ -751,6 +753,9 @@ export function createEditorController(
           Math.max(1, trans.positionBlock),
           room.heightBlocks - 1 - trans.openingSizeBlocks,
         );
+        if (trans.depthBlock !== undefined) {
+          trans.depthBlock = Math.min(Math.max(0, trans.depthBlock), room.widthBlocks - 6);
+        }
       } else {
         const maxOpening = Math.max(1, room.widthBlocks - 2);
         trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
@@ -758,6 +763,9 @@ export function createEditorController(
           Math.max(1, trans.positionBlock),
           room.widthBlocks - 1 - trans.openingSizeBlocks,
         );
+        if (trans.depthBlock !== undefined) {
+          trans.depthBlock = Math.min(Math.max(0, trans.depthBlock), room.heightBlocks - 6);
+        }
       }
     }
   }
@@ -902,6 +910,13 @@ export function createEditorController(
         if (prop === 'transition.targetSpawnBlockX' && !isNaN(numVal)) trans.targetSpawnBlock[0] = numVal;
         if (prop === 'transition.targetSpawnBlockY' && !isNaN(numVal)) trans.targetSpawnBlock[1] = numVal;
         if (prop === 'transition.fadeColor' && typeof value === 'string') trans.fadeColor = value;
+        if (prop === 'transition.depthBlock') {
+          if (value === '' || value === '-' || (typeof value === 'number' && isNaN(value))) {
+            trans.depthBlock = undefined; // clear = edge transition
+          } else if (!isNaN(numVal)) {
+            trans.depthBlock = Math.max(0, numVal);
+          }
+        }
       }
     } else if (el.type === 'playerSpawn') {
       if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;
@@ -953,6 +968,21 @@ export function createEditorController(
         if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
       } else if (el.type === 'playerSpawn') {
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
+      } else if (el.type === 'transition') {
+        const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
+        if (tr) {
+          const isHoriz = tr.direction === 'left' || tr.direction === 'right';
+          const edgeDepth = isHoriz
+            ? (tr.direction === 'left' ? 0 : s.roomData.widthBlocks - 6)
+            : (tr.direction === 'up' ? 0 : s.roomData.heightBlocks - 6);
+          const depth = tr.depthBlock !== undefined ? tr.depthBlock : edgeDepth;
+          // xBlock = depth for left/right, positionBlock for up/down
+          // yBlock = positionBlock for left/right, depth for up/down
+          positions.set(key, {
+            xBlock: isHoriz ? depth : tr.positionBlock,
+            yBlock: isHoriz ? tr.positionBlock : depth,
+          });
+        }
       }
     }
   }
@@ -985,6 +1015,27 @@ export function createEditorController(
       } else if (el.type === 'playerSpawn') {
         s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
         s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
+      } else if (el.type === 'transition') {
+        const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
+        if (tr) {
+          const isHoriz = tr.direction === 'left' || tr.direction === 'right';
+          const room = s.roomData;
+          if (isHoriz) {
+            // Y drag → positionBlock, X drag → depthBlock
+            const maxPos = room.heightBlocks - 1 - tr.openingSizeBlocks;
+            tr.positionBlock = Math.min(Math.max(0, orig.yBlock + deltaY), maxPos);
+            const newDepth = orig.xBlock + deltaX;
+            const maxDepth = room.widthBlocks - 6;
+            tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
+          } else {
+            // X drag → positionBlock, Y drag → depthBlock
+            const maxPos = room.widthBlocks - 1 - tr.openingSizeBlocks;
+            tr.positionBlock = Math.min(Math.max(0, orig.xBlock + deltaX), maxPos);
+            const newDepth = orig.yBlock + deltaY;
+            const maxDepth = room.heightBlocks - 6;
+            tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
+          }
+        }
       }
     }
   }

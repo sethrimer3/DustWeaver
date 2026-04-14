@@ -563,6 +563,8 @@ function updateInspector(
         v => callbacks?.onPropertyChange('transition.positionBlock', parseInt(v)));
       addField(div, 'openingSizeBlocks', String(trans.openingSizeBlocks),
         v => callbacks?.onPropertyChange('transition.openingSizeBlocks', parseInt(v)));
+      addField(div, 'depthBlock (blank=edge)', trans.depthBlock !== undefined ? String(trans.depthBlock) : '',
+        v => callbacks?.onPropertyChange('transition.depthBlock', v.trim() === '' ? '' : parseInt(v)));
       addField(div, 'targetRoomId', trans.targetRoomId,
         v => callbacks?.onPropertyChange('transition.targetRoomId', v));
       addField(div, 'targetSpawnX', String(trans.targetSpawnBlock[0]),

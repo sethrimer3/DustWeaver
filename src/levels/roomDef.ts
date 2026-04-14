@@ -208,6 +208,13 @@ export interface RoomTransitionDef {
   targetSpawnBlock: readonly [number, number];
   /** Color used for the tunnel fade gradient. Defaults to black if unset. */
   fadeColor?: string;
+  /**
+   * Left edge (for left/right) or top edge (for up/down) of the 6-block-deep
+   * transition zone, in block units. When undefined the transition is an edge
+   * transition sitting against the room boundary; when defined it is an
+   * interior transition that can be placed anywhere inside the room.
+   */
+  depthBlock?: number;
 }
 
 /** Direction a spike faces (the pointy end). */

@@ -48,12 +48,12 @@ function buildBoundaryWalls(
   // Bottom wall (full width) — invisible boundary
   walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
 
-  // Left wall — split around tunnel openings (invisible boundary)
-  const leftTunnels = transitions.filter(t => t.direction === 'left');
+  // Left wall — split around edge-transition openings only (interior transitions keep wall intact)
+  const leftTunnels = transitions.filter(t => t.direction === 'left' && t.depthBlock === undefined);
   buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
 
-  // Right wall — split around tunnel openings (invisible boundary)
-  const rightTunnels = transitions.filter(t => t.direction === 'right');
+  // Right wall — split around edge-transition openings only
+  const rightTunnels = transitions.filter(t => t.direction === 'right' && t.depthBlock === undefined);
   buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
 
   return walls;
@@ -90,7 +90,10 @@ function buildTunnelWalls(
 ): RoomWallDef[] {
   const walls: RoomWallDef[] = [];
 
+  // Only edge transitions (depthBlock undefined) get physical corridor walls.
   for (const tunnel of transitions) {
+    if (tunnel.depthBlock !== undefined) continue; // interior transition — no corridor walls
+
     const topY = tunnel.positionBlock - 1;
     const bottomY = tunnel.positionBlock + tunnel.openingSizeBlocks;
 
@@ -160,6 +163,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     openingSizeBlocks: t.openingSizeBlocks,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
     fadeColor: t.fadeColor,
+    depthBlock: t.depthBlock,
   }));
 
   // ── Hazards ──────────────────────────────────────────────────────────────

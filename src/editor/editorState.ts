@@ -143,6 +143,12 @@ export interface EditorTransition {
   targetRoomId: string;
   targetSpawnBlock: [number, number];
   fadeColor?: string;
+  /**
+   * Left edge (for left/right) or top edge (for up/down) of the 6-block-deep
+   * transition zone. When undefined the transition sits on the room boundary.
+   * When defined the transition is an interior zone at this block position.
+   */
+  depthBlock?: number;
 }
 
 /** Save Tomb — where the player saves their progress. */

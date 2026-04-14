@@ -148,7 +148,15 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     };
   }
 
+  function isTypingIntoField(e: KeyboardEvent): boolean {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+
   function onKeyDown(e: KeyboardEvent): void {
+    if (isTypingIntoField(e)) return;
     const b = getKeyboardBindings();
     if (keyMatches(e.key, b.moveLeft) || e.key === 'ArrowLeft') state.isKeyA = true;
     if (keyMatches(e.key, b.moveRight) || e.key === 'ArrowRight') state.isKeyD = true;
