@@ -298,7 +298,7 @@ const FLOOR_DUST_SETTLE_DIST_WORLD = 20.0;
  * Small X epsilon used when testing whether a particle is "covered" by a wall.
  * This seals micro-gaps at the junctions of adjacent merged walls.
  */
-const FLOOR_DUST_X_EPSILON_WORLD = 2.0;
+const FLOOR_DUST_SEAM_EPSILON_WORLD = 2.0;
 
 /** Particle rests this many world units above the wall top surface. */
 const FLOOR_DUST_REST_OFFSET_WORLD = 1.0;
@@ -358,7 +358,7 @@ export function settleFloorDust(world: WorldState): void {
       const ww = wallWWorld[wi];
 
       // Wall must cover the particle's X (with seam epsilon to close tiny gaps)
-      if (px < wx - FLOOR_DUST_X_EPSILON_WORLD || px > wx + ww + FLOOR_DUST_X_EPSILON_WORLD) continue;
+      if (px < wx - FLOOR_DUST_SEAM_EPSILON_WORLD || px > wx + ww + FLOOR_DUST_SEAM_EPSILON_WORLD) continue;
 
       // Wall top must be within the search window:
       //   py - SETTLE_DIST  ≤  wy  (otherwise wall is far above; particle is still falling)

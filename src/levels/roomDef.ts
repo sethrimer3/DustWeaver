@@ -299,8 +299,10 @@ export interface RoomDef {
   playerSpawnBlock: readonly [number, number];
   /** Transition tunnels connecting to other rooms. */
   transitions: readonly RoomTransitionDef[];
-  /** Skill tomb positions (block units). Empty array if none. */
-  skillTombs: readonly { xBlock: number; yBlock: number }[];
+  /** Save tomb positions (block units) — where the player saves their progress. */
+  saveTombs: readonly { xBlock: number; yBlock: number }[];
+  /** Skill Tomb definitions (block units) — grant dust skills/weaves when interacted with. */
+  skillTombs?: readonly { xBlock: number; yBlock: number; weaveId: string }[];
   /** Collectible skill book positions (block units). */
   skillBooks?: readonly { xBlock: number; yBlock: number }[];
   /**

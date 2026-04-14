@@ -219,7 +219,8 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     enemies,
     playerSpawnBlock: [json.playerSpawnBlock[0], json.playerSpawnBlock[1]],
     transitions,
-    skillTombs: json.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    saveTombs: json.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    skillTombs: (json.dustSkillTombs ?? []).map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
   };
 
   // Propagate optional theme/background fields

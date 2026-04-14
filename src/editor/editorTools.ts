@@ -77,6 +77,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check save tombs
+  for (const s of room.saveTombs) {
+    if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) {
+      return { type: 'saveTomb', uid: s.uid };
+    }
+  }
+
   // Check skill tombs
   for (const s of room.skillTombs) {
     if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) {
@@ -230,11 +237,18 @@ export function placeAtCursor(state: EditorState): void {
       targetRoomId: '',
       targetSpawnBlock: [3, by + 2],
     });
+  } else if (item.id === 'save_tomb') {
+    room.saveTombs.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+    });
   } else if (item.id === 'skill_tomb') {
     room.skillTombs.push({
       uid: allocateUid(state),
       xBlock: bx,
       yBlock: by,
+      weaveId: 'storm',
     });
   } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
     let dustCount: number;
@@ -281,6 +295,16 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestPoint(room.enemies[i].xBlock, room.enemies[i].yBlock, bx, by)) {
       const removedUid = room.enemies[i].uid;
       room.enemies.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check save tombs
+  for (let i = 0; i < room.saveTombs.length; i++) {
+    if (hitTestPoint(room.saveTombs[i].xBlock, room.saveTombs[i].yBlock, bx, by)) {
+      const removedUid = room.saveTombs[i].uid;
+      room.saveTombs.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
@@ -389,6 +413,11 @@ export function getAllElementsInRect(
   for (const e of room.enemies) {
     if (e.xBlock >= minX && e.xBlock <= maxX && e.yBlock >= minY && e.yBlock <= maxY) {
       results.push({ type: 'enemy', uid: e.uid });
+    }
+  }
+  for (const s of room.saveTombs) {
+    if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
+      results.push({ type: 'saveTomb', uid: s.uid });
     }
   }
   for (const s of room.skillTombs) {

@@ -147,7 +147,7 @@ function drawParticleGlow(
   const glowRadius = 2.5 * scalePx;
 
   /** Speed (world units/s) at which glow reaches full intensity. */
-  const MAX_GLOW_SPEED_WORLD = 120.0;
+  const MAX_GLOW_SPEED_WORLD_PER_SEC = 120.0;
   /** Base glow intensity for a resting particle. */
   const BASE_GLOW_INTENSITY = 0.25;
   /** Additional glow intensity added at maximum speed. */
@@ -168,7 +168,7 @@ function drawParticleGlow(
     const vx = particles.velocityXWorld[i];
     const vy = particles.velocityYWorld[i];
     const speedWorld = Math.sqrt(vx * vx + vy * vy);
-    const speedFactor = Math.min(1.0, speedWorld / MAX_GLOW_SPEED_WORLD);
+    const speedFactor = Math.min(1.0, speedWorld / MAX_GLOW_SPEED_WORLD_PER_SEC);
     const intensity = (BASE_GLOW_INTENSITY + SPEED_GLOW_RANGE * speedFactor) * ageFade;
 
     const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
