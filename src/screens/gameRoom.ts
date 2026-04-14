@@ -359,8 +359,8 @@ export function drawTunnelDarkness(
       grad.addColorStop(0, fadeOpaqueColor);
       grad.addColorStop(1, fadeTransparentColor);
       ctx.fillStyle = grad;
-      // Extend fill leftward to cover area outside the room (tunnel / edge)
-      const fillLeft = t.depthBlock !== undefined ? zlScreen : Math.min(zlScreen, 0);
+      // For edge transitions extend fill leftward past the room boundary to cover the tunnel corridor.
+      const fillLeft = t.depthBlock !== undefined ? zlScreen : 0;
       ctx.fillRect(fillLeft, y0Screen, zrScreen - fillLeft, y1Screen - y0Screen);
 
     } else if (t.direction === 'right') {
@@ -376,8 +376,8 @@ export function drawTunnelDarkness(
       grad.addColorStop(0, fadeTransparentColor);
       grad.addColorStop(1, fadeOpaqueColor);
       ctx.fillStyle = grad;
-      // Extend fill rightward to cover tunnel / edge
-      const fillRight = t.depthBlock !== undefined ? zrScreen : Math.max(zrScreen, x1Screen);
+      // For edge transitions extend fill rightward past the room boundary to cover the tunnel corridor.
+      const fillRight = t.depthBlock !== undefined ? zrScreen : x1Screen;
       ctx.fillRect(zlScreen, y0Screen, fillRight - zlScreen, y1Screen - y0Screen);
 
     } else if (t.direction === 'up') {
@@ -395,7 +395,8 @@ export function drawTunnelDarkness(
       grad.addColorStop(0, fadeOpaqueColor);
       grad.addColorStop(1, fadeTransparentColor);
       ctx.fillStyle = grad;
-      const fillTop = t.depthBlock !== undefined ? ztScreen : Math.min(ztScreen, 0);
+      // For edge transitions extend fill upward past the room boundary.
+      const fillTop = t.depthBlock !== undefined ? ztScreen : 0;
       ctx.fillRect(x0s, fillTop, x1s - x0s, zbScreen - fillTop);
 
     } else if (t.direction === 'down') {
@@ -415,7 +416,8 @@ export function drawTunnelDarkness(
       grad.addColorStop(0, fadeTransparentColor);
       grad.addColorStop(1, fadeOpaqueColor);
       ctx.fillStyle = grad;
-      const fillBottom = t.depthBlock !== undefined ? zbScreen : Math.max(zbScreen, roomHeightWorld * zoom + offsetYPx);
+      // For edge transitions extend fill downward past the room boundary.
+      const fillBottom = t.depthBlock !== undefined ? zbScreen : roomHeightWorld * zoom + offsetYPx;
       ctx.fillRect(x0s, ztScreen, x1s - x0s, fillBottom - ztScreen);
     }
   }

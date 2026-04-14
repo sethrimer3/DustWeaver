@@ -1002,9 +1002,6 @@ export function createEditorController(
             const newDepth = orig.xBlock + deltaX;
             const maxDepth = room.widthBlocks - 6;
             tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
-            // If dragged back to the edge default, clear depthBlock (restore edge behaviour)
-            const edgeDefault = tr.direction === 'left' ? 0 : maxDepth;
-            if (tr.depthBlock === edgeDefault && deltaX === 0) tr.depthBlock = undefined;
           } else {
             // X drag → positionBlock, Y drag → depthBlock
             const maxPos = room.widthBlocks - 1 - tr.openingSizeBlocks;
@@ -1012,8 +1009,6 @@ export function createEditorController(
             const newDepth = orig.yBlock + deltaY;
             const maxDepth = room.heightBlocks - 6;
             tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
-            const edgeDefault = tr.direction === 'up' ? 0 : maxDepth;
-            if (tr.depthBlock === edgeDefault && deltaY === 0) tr.depthBlock = undefined;
           }
         }
       }
