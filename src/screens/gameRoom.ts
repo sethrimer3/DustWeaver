@@ -311,14 +311,16 @@ export function drawTunnelDarkness(
   offsetYPx: number,
   zoom: number,
 ): void {
-  const roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
-  const fadeDepthWorld = 1.5 * BLOCK_SIZE_MEDIUM; // quick fade to black near boundary
+  const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
+  const roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
+  const FADE_BLOCKS = 6;
+  const fadeDepthWorld = FADE_BLOCKS * BLOCK_SIZE_MEDIUM;
 
   ctx.save();
 
   for (let ti = 0; ti < room.transitions.length; ti++) {
     const t = room.transitions[ti];
-    const openTopWorld = t.positionBlock * BLOCK_SIZE_MEDIUM;
+    const openTopWorld    = t.positionBlock * BLOCK_SIZE_MEDIUM;
     const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 
     // Determine fade colors based on transition fadeColor
@@ -342,30 +344,79 @@ export function drawTunnelDarkness(
       fadeTransparentColor = 'rgba(0,0,0,0)';
     }
 
-    if (t.direction === 'left') {
-      // Fade from left room edge inward
-      const x0Screen = 0 * zoom + offsetXPx;
-      const x1Screen = fadeDepthWorld * zoom + offsetXPx;
-      const y0Screen = openTopWorld * zoom + offsetYPx;
-      const y1Screen = openBottomWorld * zoom + offsetYPx;
+    const y0Screen = openTopWorld    * zoom + offsetYPx;
+    const y1Screen = openBottomWorld * zoom + offsetYPx;
+    const x1Screen = roomWidthWorld  * zoom + offsetXPx;
 
-      const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
+    if (t.direction === 'left') {
+      // Zone starts at depthBlock (or room left edge) and extends inward 6 blocks
+      const zoneLeft  = (t.depthBlock !== undefined ? t.depthBlock * BLOCK_SIZE_MEDIUM : 0);
+      const zoneRight = zoneLeft + fadeDepthWorld;
+      const zlScreen  = zoneLeft  * zoom + offsetXPx;
+      const zrScreen  = zoneRight * zoom + offsetXPx;
+
+      const grad = ctx.createLinearGradient(zlScreen, 0, zrScreen, 0);
       grad.addColorStop(0, fadeOpaqueColor);
       grad.addColorStop(1, fadeTransparentColor);
       ctx.fillStyle = grad;
-      ctx.fillRect(x0Screen - 200, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
-    } else if (t.direction === 'right') {
-      // Fade from right room edge inward
-      const x0Screen = (roomWidthWorld - fadeDepthWorld) * zoom + offsetXPx;
-      const x1Screen = roomWidthWorld * zoom + offsetXPx;
-      const y0Screen = openTopWorld * zoom + offsetYPx;
-      const y1Screen = openBottomWorld * zoom + offsetYPx;
+      // Extend fill leftward to cover area outside the room (tunnel / edge)
+      const fillLeft = t.depthBlock !== undefined ? zlScreen : Math.min(zlScreen, 0);
+      ctx.fillRect(fillLeft, y0Screen, zrScreen - fillLeft, y1Screen - y0Screen);
 
-      const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
+    } else if (t.direction === 'right') {
+      // Zone starts 6 blocks from right (or at depthBlock) and exits right
+      const zoneLeft  = t.depthBlock !== undefined
+        ? t.depthBlock * BLOCK_SIZE_MEDIUM
+        : roomWidthWorld - fadeDepthWorld;
+      const zoneRight = zoneLeft + fadeDepthWorld;
+      const zlScreen  = zoneLeft  * zoom + offsetXPx;
+      const zrScreen  = zoneRight * zoom + offsetXPx;
+
+      const grad = ctx.createLinearGradient(zlScreen, 0, zrScreen, 0);
       grad.addColorStop(0, fadeTransparentColor);
       grad.addColorStop(1, fadeOpaqueColor);
       ctx.fillStyle = grad;
-      ctx.fillRect(x0Screen, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
+      // Extend fill rightward to cover tunnel / edge
+      const fillRight = t.depthBlock !== undefined ? zrScreen : Math.max(zrScreen, x1Screen);
+      ctx.fillRect(zlScreen, y0Screen, fillRight - zlScreen, y1Screen - y0Screen);
+
+    } else if (t.direction === 'up') {
+      const openLeftWorld  = t.positionBlock * BLOCK_SIZE_MEDIUM;
+      const openRightWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
+      const x0s = openLeftWorld  * zoom + offsetXPx;
+      const x1s = openRightWorld * zoom + offsetXPx;
+
+      const zoneTop    = (t.depthBlock !== undefined ? t.depthBlock * BLOCK_SIZE_MEDIUM : 0);
+      const zoneBottom = zoneTop + fadeDepthWorld;
+      const ztScreen   = zoneTop    * zoom + offsetYPx;
+      const zbScreen   = zoneBottom * zoom + offsetYPx;
+
+      const grad = ctx.createLinearGradient(0, ztScreen, 0, zbScreen);
+      grad.addColorStop(0, fadeOpaqueColor);
+      grad.addColorStop(1, fadeTransparentColor);
+      ctx.fillStyle = grad;
+      const fillTop = t.depthBlock !== undefined ? ztScreen : Math.min(ztScreen, 0);
+      ctx.fillRect(x0s, fillTop, x1s - x0s, zbScreen - fillTop);
+
+    } else if (t.direction === 'down') {
+      const openLeftWorld  = t.positionBlock * BLOCK_SIZE_MEDIUM;
+      const openRightWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
+      const x0s = openLeftWorld  * zoom + offsetXPx;
+      const x1s = openRightWorld * zoom + offsetXPx;
+
+      const zoneTop    = t.depthBlock !== undefined
+        ? t.depthBlock * BLOCK_SIZE_MEDIUM
+        : roomHeightWorld - fadeDepthWorld;
+      const zoneBottom = zoneTop + fadeDepthWorld;
+      const ztScreen   = zoneTop    * zoom + offsetYPx;
+      const zbScreen   = zoneBottom * zoom + offsetYPx;
+
+      const grad = ctx.createLinearGradient(0, ztScreen, 0, zbScreen);
+      grad.addColorStop(0, fadeTransparentColor);
+      grad.addColorStop(1, fadeOpaqueColor);
+      ctx.fillStyle = grad;
+      const fillBottom = t.depthBlock !== undefined ? zbScreen : Math.max(zbScreen, roomHeightWorld * zoom + offsetYPx);
+      ctx.fillRect(x0s, ztScreen, x1s - x0s, fillBottom - ztScreen);
     }
   }
 

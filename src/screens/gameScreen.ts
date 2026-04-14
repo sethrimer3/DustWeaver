@@ -637,7 +637,19 @@ export function startGameScreen(
       const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 
       let isInTunnel = false;
-      if (t.direction === 'left') {
+      if (t.depthBlock !== undefined) {
+        // Interior transition: fire when the player's center enters the zone
+        const FADE_DEPTH = 6 * BLOCK_SIZE_MEDIUM;
+        const zoneStartWorld = t.depthBlock * BLOCK_SIZE_MEDIUM;
+        const zoneEndWorld   = zoneStartWorld + FADE_DEPTH;
+        isInTunnel = px >= zoneStartWorld && px <= zoneEndWorld
+          && py >= openTopWorld && py <= openBottomWorld;
+        // For up/down interior transitions
+        if (t.direction === 'up' || t.direction === 'down') {
+          isInTunnel = py >= zoneStartWorld && py <= zoneEndWorld
+            && px >= openTopWorld && px <= openBottomWorld;
+        }
+      } else if (t.direction === 'left') {
         isInTunnel = px < TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
       } else if (t.direction === 'right') {
         isInTunnel = px > roomWidthWorld - TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
