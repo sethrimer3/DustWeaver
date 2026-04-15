@@ -184,6 +184,7 @@ export function createEditorController(
           }
           exportAllChanges(pendingRoomEdits, initialRoomIds, isWorldMapDirty);
         },
+        onOpenVisualMap: () => openVisualMap(),
       });
     } else {
       closeEditor();
@@ -466,12 +467,12 @@ export function createEditorController(
       state.placementFlipH = !state.placementFlipH;
     }
 
-    // M key → world map
+    // N key → world map list
     if (inputState.isMapToggled) {
       openWorldMap();
     }
 
-    // N key → visual world map editor
+    // M key → visual world map editor
     if (inputState.isVisualMapToggled) {
       openVisualMap();
     }
