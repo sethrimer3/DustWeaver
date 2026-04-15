@@ -265,7 +265,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   let renderedCategory: PaletteCategory | null = null;
   let lastRenderedBlockTheme = '';
   let lastRenderedLightingEffect = '';
-  let paletteBtns: { btn: HTMLElement; itemId: string }[] = [];
+  let paletteItems: { btn: HTMLElement; itemId: string }[] = [];
 
   // ── Inspector ────────────────────────────────────────────────────────────
   const inspectorDiv = document.createElement('div');
@@ -364,7 +364,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       lastRenderedBlockTheme = currentTheme;
       lastRenderedLightingEffect = currentLighting;
       paletteDiv.innerHTML = '';
-      paletteBtns = [];
+      paletteItems = [];
 
       if (state.activeCategory === 'blocks') {
         // ── Visual block theme selector ─────────────────────────────────────
@@ -406,7 +406,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
           const card = makeBlockPreviewCard(item, currentTheme, () => {
             callbacks?.onPaletteItemSelect(item);
           });
-          paletteBtns.push({ btn: card, itemId: item.id });
+          paletteItems.push({ btn: card, itemId: item.id });
           grid.appendChild(card);
         }
         paletteDiv.appendChild(grid);
@@ -419,7 +419,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
           btn.style.width = '100%';
           btn.style.marginBottom = '3px';
           btn.style.textAlign = 'left';
-          paletteBtns.push({ btn, itemId: item.id });
+          paletteItems.push({ btn, itemId: item.id });
           paletteDiv.appendChild(btn);
         }
       }
@@ -432,7 +432,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     }
 
     // Update palette selection highlight
-    for (const { btn, itemId } of paletteBtns) {
+    for (const { btn, itemId } of paletteItems) {
       const isSelected = state.selectedPaletteItem?.id === itemId;
       btn.style.background = isSelected ? ACTIVE_BG : BTN_BG;
       btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
@@ -456,7 +456,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     setCallbacks: (cbs: EditorUICallbacks) => { callbacks = cbs; },
     destroy: () => {
       renderedCategory = null;
-      paletteBtns = [];
+      paletteItems = [];
       inspectorElementUid = -1;
       inspectorElementType = '';
       inspectorElementCount = 0;
