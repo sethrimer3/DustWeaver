@@ -13,9 +13,9 @@ export interface EditorInputState {
   isCamRight: boolean;
   /** Shift key held (doubles camera pan speed). */
   isShiftHeld: boolean;
-  /** M key toggles world map. */
+  /** N key toggles world map list. */
   isMapToggled: boolean;
-  /** N key toggles visual world map editor. */
+  /** M key toggles visual world map editor. */
   isVisualMapToggled: boolean;
   /** Left mouse button currently held down (persistent, not one-shot). */
   isMouseDown: boolean;
@@ -114,8 +114,8 @@ export function attachEditorInputListeners(
     if (key === 's') { state.isCamDown = true; e.preventDefault(); }
     if (key === 'a') { state.isCamLeft = true; e.preventDefault(); }
     if (key === 'd') { state.isCamRight = true; e.preventDefault(); }
-    if (key === 'm' && !e.repeat) { state.isMapToggled = true; e.preventDefault(); }
-    if (key === 'n' && !e.repeat) { state.isVisualMapToggled = true; e.preventDefault(); }
+    if (key === 'n' && !e.repeat) { state.isMapToggled = true; e.preventDefault(); }
+    if (key === 'm' && !e.repeat) { state.isVisualMapToggled = true; e.preventDefault(); }
     if (key === 'escape') { state.isEscapePressed = true; e.preventDefault(); }
     if (key === '1') state.toolKeyPressed = 1;
     if (key === '2') state.toolKeyPressed = 2;
