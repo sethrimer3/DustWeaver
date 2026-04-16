@@ -225,7 +225,7 @@ export function placeAtCursor(state: EditorState): void {
     const distTop    = by;
     const distBottom = room.heightBlocks - 1 - by;
     const minDist    = Math.min(distLeft, distRight, distTop, distBottom);
-    let direction: 'left' | 'right' | 'up' | 'down' =
+    const direction: 'left' | 'right' | 'up' | 'down' =
       minDist === distLeft   ? 'left'  :
       minDist === distRight  ? 'right' :
       minDist === distTop    ? 'up'    : 'down';

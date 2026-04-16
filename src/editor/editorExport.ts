@@ -98,7 +98,7 @@ export function exportAllChanges(
   isWorldMapDirty: boolean,
 ): void {
   // Export every room in the pending-edits store.
-  for (const [_roomId, data] of pendingRoomEdits) {
+  for (const [, data] of pendingRoomEdits) {
     exportRoomAsJson(data);
   }
 

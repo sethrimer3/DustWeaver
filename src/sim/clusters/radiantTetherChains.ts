@@ -275,10 +275,10 @@ export function tickChains(
     }
   }
 
-  let vx = (bossVelXWorld + forceX) * RT_BOSS_DRAG;
-  let vy = (bossVelYWorld + forceY) * RT_BOSS_DRAG;
-  let px = bossXWorld + vx;
-  let py = bossYWorld + vy;
+  const vx = (bossVelXWorld + forceX) * RT_BOSS_DRAG;
+  const vy = (bossVelYWorld + forceY) * RT_BOSS_DRAG;
+  const px = bossXWorld + vx;
+  const py = bossYWorld + vy;
 
   return { newVelX: vx, newVelY: vy, newPosX: px, newPosY: py };
 }
