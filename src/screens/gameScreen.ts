@@ -91,7 +91,7 @@ export function startGameScreen(
 
   // ── Weave loadout (replaces flat particle loadout for combat) ──────────
   // Initialize from progress if available, otherwise create default
-  let playerWeaveLoadout: PlayerWeaveLoadout = progress?.weaveLoadout
+  const playerWeaveLoadout: PlayerWeaveLoadout = progress?.weaveLoadout
     ?? createDefaultWeaveLoadout();
 
   // ── Virtual resolution pipeline ──────────────────────────────────────────

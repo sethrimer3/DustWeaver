@@ -297,8 +297,8 @@ export class PlayerCloak {
       for (let i = 1; i < this.pointCount; i++) {
         const parentX = this.posXWorld[i - 1];
         const parentY = this.posYWorld[i - 1];
-        let dx = this.posXWorld[i] - parentX;
-        let dy = this.posYWorld[i] - parentY;
+        const dx = this.posXWorld[i] - parentX;
+        const dy = this.posYWorld[i] - parentY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > CLOAK_MIN_DISTANCE_WORLD) {
           const targetDist = CLOAK_SEGMENT_LENGTH_WORLD;
