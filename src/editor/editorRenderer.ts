@@ -441,7 +441,7 @@ export function renderEditorIndicator(
       state.selectedPaletteItem.category === 'blocks') {
     const rampLabels = ['/', '\\', '⌐', '¬'];
     const item = state.selectedPaletteItem;
-    let rotHint = '';
+    let rotHint: string;
     if (item.isRampItem === 1) {
       const base = state.placementRotationSteps % 4;
       const ori = state.placementFlipH ? (base ^ 1) : base;

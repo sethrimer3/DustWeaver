@@ -481,7 +481,7 @@ export class PlayerCloak {
       ctx.fillText(`turn: ${this.turnTimerSec.toFixed(2)}s`, textX, textY); textY += 10;
     }
     if (this.landingTimerSec > 0) {
-      ctx.fillText(`land: ${this.landingTimerSec.toFixed(2)}s`, textX, textY); textY += 10;
+      ctx.fillText(`land: ${this.landingTimerSec.toFixed(2)}s`, textX, textY);
     }
 
     // ── Back collision boundary line (orange) ──────────────────────────
@@ -977,7 +977,6 @@ export class PlayerCloak {
       // Compute ideal drape target Y for each constrained point.
       // Start from the anchor (root) Y and space downward by drapeSpacing.
       const anchorY = this.posYWorld[0];
-      let drapeIndex = 0;
 
       for (let i = 1; i < this.pointCount; i++) {
         const py = this.posYWorld[i];
@@ -994,8 +993,6 @@ export class PlayerCloak {
           const currentY = this.posYWorld[i];
           const dy = targetY - currentY;
           this.posYWorld[i] += dy * slideStrength * bunchingFixBlend;
-
-          drapeIndex++;
         }
       }
 
