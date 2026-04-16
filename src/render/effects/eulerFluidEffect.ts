@@ -11,6 +11,7 @@
  */
 
 import { TheroBackgroundEffect } from './theroBackgroundEffect';
+import { clamp as clampN } from '../../utils/math';
 
 // ─── Simulation tuning ───────────────────────────────────────────────────────
 
@@ -57,10 +58,6 @@ interface Particle {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function clampN(n: number, lo: number, hi: number): number {
-  return n < lo ? lo : n > hi ? hi : n;
-}
 
 function buildSegments(pts: { x: number; y: number }[]): PathSegment[] {
   const segs: PathSegment[] = [];

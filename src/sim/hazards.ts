@@ -20,6 +20,7 @@ import { WorldState, MAX_FIREFLIES, FIREFLIES_PER_JAR } from './world';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { nextFloat, nextFloatRange } from './rng';
 import { applyPlayerDamageWithKnockback } from './playerDamage';
+import { overlapAABB } from './physics/collision';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -78,14 +79,15 @@ export const SPIKE_DIR_LEFT = 2;
 export const SPIKE_DIR_RIGHT = 3;
 
 /**
- * Checks whether a cluster center point overlaps an AABB.
- * Uses the cluster's half-width and half-height for box–box overlap.
+ * Bounces a firefly along one axis: clamps `pos` to [min, max] and reflects
+ * `vel` so the firefly always moves away from whichever edge it hit.
  */
-function clusterOverlapsAABB(
-  cx: number, cy: number, hw: number, hh: number,
-  left: number, top: number, right: number, bottom: number,
-): boolean {
-  return cx + hw > left && cx - hw < right && cy + hh > top && cy - hh < bottom;
+function bounceAxis(
+  pos: number, vel: number, min: number, max: number,
+): { pos: number; vel: number } {
+  if (pos < min) return { pos: min, vel: Math.abs(vel) };
+  if (pos > max) return { pos: max, vel: -Math.abs(vel) };
+  return { pos, vel };
 }
 
 /**
@@ -120,7 +122,7 @@ export function applyHazards(world: WorldState): void {
       const sTop = sy - SPIKE_HALF_SIZE_WORLD;
       const sBottom = sy + SPIKE_HALF_SIZE_WORLD;
 
-      if (clusterOverlapsAABB(px, py, phw, phh, sLeft, sTop, sRight, sBottom)) {
+      if (overlapAABB(px, py, phw, phh, sLeft, sTop, sRight, sBottom)) {
         const sourceXWorld = sx;
         const sourceYWorld = sy;
         applyPlayerDamageWithKnockback(player, SPIKE_DAMAGE, sourceXWorld, sourceYWorld);
@@ -197,7 +199,7 @@ export function applyHazards(world: WorldState): void {
       const lRight = lLeft + world.lavaZoneWWorld[i];
       const lBottom = lTop + world.lavaZoneHWorld[i];
 
-      if (clusterOverlapsAABB(px, py, phw, phh, lLeft, lTop, lRight, lBottom)) {
+      if (overlapAABB(px, py, phw, phh, lLeft, lTop, lRight, lBottom)) {
         // Source point is the nearest point on the lava AABB to the player center.
         const sourceXWorld = Math.max(lLeft, Math.min(px, lRight));
         const sourceYWorld = Math.max(lTop, Math.min(py, lBottom));
@@ -227,7 +229,7 @@ export function applyHazards(world: WorldState): void {
       const bBottom = by + bHalf;
 
       if (
-        clusterOverlapsAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom) &&
+        overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom) &&
         playerSpeed >= BREAKABLE_MOMENTUM_THRESHOLD_WORLD
       ) {
         // Break the block
@@ -294,19 +296,11 @@ export function applyHazards(world: WorldState): void {
     world.fireflyYWorld[i] += world.fireflyVelYWorld[i] * dtSec;
 
     // Clamp to world bounds and bounce
-    if (world.fireflyXWorld[i] < FIREFLY_EDGE_MARGIN_WORLD) {
-      world.fireflyXWorld[i] = FIREFLY_EDGE_MARGIN_WORLD;
-      world.fireflyVelXWorld[i] = Math.abs(world.fireflyVelXWorld[i]);
-    } else if (world.fireflyXWorld[i] > world.worldWidthWorld - FIREFLY_EDGE_MARGIN_WORLD) {
-      world.fireflyXWorld[i] = world.worldWidthWorld - FIREFLY_EDGE_MARGIN_WORLD;
-      world.fireflyVelXWorld[i] = -Math.abs(world.fireflyVelXWorld[i]);
-    }
-    if (world.fireflyYWorld[i] < FIREFLY_EDGE_MARGIN_WORLD) {
-      world.fireflyYWorld[i] = FIREFLY_EDGE_MARGIN_WORLD;
-      world.fireflyVelYWorld[i] = Math.abs(world.fireflyVelYWorld[i]);
-    } else if (world.fireflyYWorld[i] > world.worldHeightWorld - FIREFLY_EDGE_MARGIN_WORLD) {
-      world.fireflyYWorld[i] = world.worldHeightWorld - FIREFLY_EDGE_MARGIN_WORLD;
-      world.fireflyVelYWorld[i] = -Math.abs(world.fireflyVelYWorld[i]);
-    }
+    const bx = bounceAxis(world.fireflyXWorld[i], world.fireflyVelXWorld[i], FIREFLY_EDGE_MARGIN_WORLD, world.worldWidthWorld  - FIREFLY_EDGE_MARGIN_WORLD);
+    world.fireflyXWorld[i]    = bx.pos;
+    world.fireflyVelXWorld[i] = bx.vel;
+    const by = bounceAxis(world.fireflyYWorld[i], world.fireflyVelYWorld[i], FIREFLY_EDGE_MARGIN_WORLD, world.worldHeightWorld - FIREFLY_EDGE_MARGIN_WORLD);
+    world.fireflyYWorld[i]    = by.pos;
+    world.fireflyVelYWorld[i] = by.vel;
   }
 }

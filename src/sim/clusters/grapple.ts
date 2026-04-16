@@ -74,6 +74,7 @@ import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { INFLUENCE_RADIUS_WORLD } from './binding';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS } from './movement';
+import { resolveAABBPenetration } from '../physics/collision';
 
 // ============================================================================
 // Tuning constants — adjust these to dial in the grapple feel
@@ -691,40 +692,12 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   {
     const halfW = player.halfWidthWorld;
     const halfH = player.halfHeightWorld;
-    const pLeft   = player.positionXWorld - halfW;
-    const pRight  = player.positionXWorld + halfW;
-    const pTop    = player.positionYWorld - halfH;
-    const pBottom = player.positionYWorld + halfH;
     for (let wi = 0; wi < world.wallCount; wi++) {
       const wLeft   = world.wallXWorld[wi];
       const wTop    = world.wallYWorld[wi];
       const wRight  = wLeft + world.wallWWorld[wi];
       const wBottom = wTop + world.wallHWorld[wi];
-      // Check AABB overlap
-      if (pRight > wLeft && pLeft < wRight && pBottom > wTop && pTop < wBottom) {
-        // Find minimum penetration axis
-        const overlapLeft   = pRight - wLeft;
-        const overlapRight  = wRight - pLeft;
-        const overlapTop    = pBottom - wTop;
-        const overlapBottom = wBottom - pTop;
-        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
-        if (minOverlap === overlapTop) {
-          // Push up (landing on top surface)
-          player.positionYWorld = wTop - halfH;
-          if (player.velocityYWorld > 0) player.velocityYWorld = 0;
-        } else if (minOverlap === overlapBottom) {
-          // Push down (hitting bottom surface)
-          player.positionYWorld = wBottom + halfH;
-          if (player.velocityYWorld < 0) player.velocityYWorld = 0;
-        } else if (minOverlap === overlapLeft) {
-          // Push left
-          player.positionXWorld = wLeft - halfW;
-          if (player.velocityXWorld > 0) player.velocityXWorld = 0;
-        } else {
-          // Push right
-          player.positionXWorld = wRight + halfW;
-          if (player.velocityXWorld < 0) player.velocityXWorld = 0;
-        }
+      if (resolveAABBPenetration(player, halfW, halfH, wLeft, wTop, wRight, wBottom)) {
         break; // resolve one wall per tick — sufficient for the grapple correction
       }
     }

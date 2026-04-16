@@ -1,3 +1,5 @@
+import { getStoredFloat, setStoredFloat } from '../utils/storage';
+
 // ── Audio Volume ─────────────────────────────────────────────────────────────
 
 const MUSIC_VOLUME_STORAGE_KEY = 'dustweaver-music-volume';
@@ -6,29 +8,19 @@ const DEFAULT_MUSIC_VOLUME = 0.7;
 const DEFAULT_SFX_VOLUME = 0.7;
 
 export function getMusicVolume(): number {
-  const value = localStorage.getItem(MUSIC_VOLUME_STORAGE_KEY);
-  if (value !== null) {
-    const parsed = parseFloat(value);
-    return !isNaN(parsed) ? Math.max(0, Math.min(1, parsed)) : DEFAULT_MUSIC_VOLUME;
-  }
-  return DEFAULT_MUSIC_VOLUME;
+  return getStoredFloat(MUSIC_VOLUME_STORAGE_KEY, DEFAULT_MUSIC_VOLUME, 0, 1);
 }
 
 export function setMusicVolume(volume: number): void {
-  localStorage.setItem(MUSIC_VOLUME_STORAGE_KEY, String(Math.max(0, Math.min(1, volume))));
+  setStoredFloat(MUSIC_VOLUME_STORAGE_KEY, volume, 0, 1);
 }
 
 export function getSfxVolume(): number {
-  const value = localStorage.getItem(SFX_VOLUME_STORAGE_KEY);
-  if (value !== null) {
-    const parsed = parseFloat(value);
-    return !isNaN(parsed) ? Math.max(0, Math.min(1, parsed)) : DEFAULT_SFX_VOLUME;
-  }
-  return DEFAULT_SFX_VOLUME;
+  return getStoredFloat(SFX_VOLUME_STORAGE_KEY, DEFAULT_SFX_VOLUME, 0, 1);
 }
 
 export function setSfxVolume(volume: number): void {
-  localStorage.setItem(SFX_VOLUME_STORAGE_KEY, String(Math.max(0, Math.min(1, volume))));
+  setStoredFloat(SFX_VOLUME_STORAGE_KEY, volume, 0, 1);
 }
 
 // ── Graphics Quality ─────────────────────────────────────────────────────────
@@ -148,19 +140,11 @@ export function setOffensiveDustOutlineEnabled(isEnabled: boolean): void {
 const DEFAULT_REACHABLE_EDGE_GLOW_OPACITY = 0.5;
 
 export function getReachableEdgeGlowOpacity(): number {
-  const value = localStorage.getItem(REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY);
-  if (value !== null) {
-    const parsed = parseFloat(value);
-    return !isNaN(parsed) ? parsed : DEFAULT_REACHABLE_EDGE_GLOW_OPACITY;
-  }
-  return DEFAULT_REACHABLE_EDGE_GLOW_OPACITY;
+  return getStoredFloat(REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY, DEFAULT_REACHABLE_EDGE_GLOW_OPACITY);
 }
 
 export function setReachableEdgeGlowOpacity(opacity: number): void {
-  localStorage.setItem(
-    REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY,
-    String(Math.max(0, Math.min(1, opacity))),
-  );
+  setStoredFloat(REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY, opacity, 0, 1);
 }
 
 // ── Influence Circle Opacity ────────────────────────────────────────────────
@@ -168,19 +152,11 @@ export function setReachableEdgeGlowOpacity(opacity: number): void {
 const DEFAULT_INFLUENCE_CIRCLE_OPACITY = 0.5;
 
 export function getInfluenceCircleOpacity(): number {
-  const value = localStorage.getItem(INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY);
-  if (value !== null) {
-    const parsed = parseFloat(value);
-    return !isNaN(parsed) ? parsed : DEFAULT_INFLUENCE_CIRCLE_OPACITY;
-  }
-  return DEFAULT_INFLUENCE_CIRCLE_OPACITY;
+  return getStoredFloat(INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY, DEFAULT_INFLUENCE_CIRCLE_OPACITY);
 }
 
 export function setInfluenceCircleOpacity(opacity: number): void {
-  localStorage.setItem(
-    INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY,
-    String(Math.max(0, Math.min(1, opacity))),
-  );
+  setStoredFloat(INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY, opacity, 0, 1);
 }
 
 // ── Influence Highlight Width ────────────────────────────────────────────────
@@ -189,17 +165,10 @@ export function setInfluenceCircleOpacity(opacity: number): void {
 const DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH = 0.25;
 
 export function getInfluenceHighlightWidth(): number {
-  const value = localStorage.getItem(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY);
-  if (value !== null) {
-    const parsed = parseFloat(value);
-    return !isNaN(parsed) ? Math.max(0, Math.min(1, parsed)) : DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH;
-  }
-  return DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH;
+  return getStoredFloat(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY, DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH, 0, 1);
 }
 
 export function setInfluenceHighlightWidth(width: number): void {
-  localStorage.setItem(
-    INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY,
-    String(Math.max(0, Math.min(1, width))),
-  );
+  setStoredFloat(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY, width, 0, 1);
 }
+
