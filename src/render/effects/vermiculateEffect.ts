@@ -9,6 +9,7 @@
  */
 
 import { TheroBackgroundEffect } from './theroBackgroundEffect';
+import { clamp } from '../../utils/math';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -85,10 +86,6 @@ interface HitResult {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 function pickColor(): PaletteColor {
   return PALETTE[Math.floor(Math.random() * PALETTE.length)];

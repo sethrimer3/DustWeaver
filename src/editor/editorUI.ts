@@ -8,6 +8,7 @@ import {
   PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS, FADE_COLOR_OPTIONS,
   BlockTheme, BackgroundId, LightingEffect,
 } from './editorState';
+import { addHoverStyle } from '../ui/helpers';
 
 // ── Style constants ──────────────────────────────────────────────────────────
 
@@ -484,8 +485,7 @@ function makeBtn(label: string, onClick: () => void): HTMLButtonElement {
     padding: 6px 8px; font-size: 11px; font-family: monospace; cursor: pointer;
     border-radius: 3px; transition: background 0.1s;
   `;
-  btn.addEventListener('mouseenter', () => { btn.style.background = ACTIVE_BG; });
-  btn.addEventListener('mouseleave', () => { btn.style.background = BTN_BG; });
+  addHoverStyle(btn, { background: ACTIVE_BG }, { background: BTN_BG });
   btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   return btn;
 }
@@ -499,8 +499,7 @@ function makeEdgeBtn(label: string, onClick: () => void): HTMLButtonElement {
     border-radius: 3px; transition: background 0.1s; text-align: center; padding: 0;
     line-height: 22px;
   `;
-  btn.addEventListener('mouseenter', () => { btn.style.background = ACTIVE_BG; });
-  btn.addEventListener('mouseleave', () => { btn.style.background = BTN_BG; });
+  addHoverStyle(btn, { background: ACTIVE_BG }, { background: BTN_BG });
   btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   return btn;
 }
