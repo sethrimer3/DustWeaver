@@ -35,18 +35,28 @@ export function tickGrasshoppers(world: WorldState): void {
   let nearestThreatYWorld = 0;
   let hasThreat = false;
 
+  // Prefer player as the threat; fall back to first alive enemy.
+  let firstEnemyXWorld = 0;
+  let firstEnemyYWorld = 0;
+  let hasEnemy = false;
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const c = world.clusters[ci];
     if (c.isAliveFlag === 0) continue;
-    if (!hasThreat) {
+    if (c.isPlayerFlag === 1) {
       nearestThreatXWorld = c.positionXWorld;
       nearestThreatYWorld = c.positionYWorld;
       hasThreat = true;
-    } else if (c.isPlayerFlag === 1) {
-      nearestThreatXWorld = c.positionXWorld;
-      nearestThreatYWorld = c.positionYWorld;
       break;
+    } else if (!hasEnemy) {
+      firstEnemyXWorld = c.positionXWorld;
+      firstEnemyYWorld = c.positionYWorld;
+      hasEnemy = true;
     }
+  }
+  if (!hasThreat && hasEnemy) {
+    nearestThreatXWorld = firstEnemyXWorld;
+    nearestThreatYWorld = firstEnemyYWorld;
+    hasThreat = true;
   }
 
   for (let i = 0; i < world.grasshopperCount; i++) {

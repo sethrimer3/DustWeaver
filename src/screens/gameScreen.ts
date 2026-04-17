@@ -69,8 +69,8 @@ import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS } from '../sim/wo
 
 const FIXED_DT_MS = 16.666;
 
-const SLIME_HOP_INTERVAL_INITIAL = 30;
-const LARGE_SLIME_HOP_INTERVAL_INITIAL = 45;
+const SLIME_HOP_INTERVAL_INITIAL_TICKS = 30;
+const LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS = 45;
 
 /** Baseline virtual width at 16:9; height is authoritative for fixed zoom. */
 const BASE_VIRTUAL_WIDTH_PX = 480;
@@ -277,7 +277,7 @@ export function startGameScreen(
         enemyCluster.isSlimeFlag = 1;
         enemyCluster.halfWidthWorld = SLIME_HALF_SIZE_WORLD;
         enemyCluster.halfHeightWorld = SLIME_HALF_SIZE_WORLD;
-        enemyCluster.slimeHopTimerTicks = SLIME_HOP_INTERVAL_INITIAL;
+        enemyCluster.slimeHopTimerTicks = SLIME_HOP_INTERVAL_INITIAL_TICKS;
       } else if (enemyDef.isLargeSlimeFlag === 1) {
         enemyCluster.isLargeSlimeFlag = 1;
         enemyCluster.halfWidthWorld = LARGE_SLIME_HALF_SIZE_WORLD;

@@ -151,7 +151,7 @@ export function processLargeSlimeSplits(world: WorldState): ClusterState[] {
       child.isSlimeFlag = 1;
       child.halfWidthWorld = SLIME_HALF_SIZE_WORLD;
       child.halfHeightWorld = SLIME_HALF_SIZE_WORLD;
-      child.slimeHopTimerTicks = 20 + Math.floor(nextFloat(world.rng) * 20);
+      child.slimeHopTimerTicks = 20 + ((nextFloat(world.rng) * 20) | 0);
       child.velocityYWorld = -80;
       toAdd.push(child);
     }
