@@ -10,7 +10,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, RoomSongId } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
@@ -62,6 +62,9 @@ export interface RoomJsonEnemy {
   isRockElemental: boolean;
   isRadiantTether: boolean;
   isGrappleHunter: boolean;
+  isSlime?: boolean;
+  isLargeSlime?: boolean;
+  isWheelEnemy?: boolean;
 }
 
 export interface RoomJsonWall {
@@ -152,6 +155,14 @@ export interface RoomJsonDustPile {
   dustCount: number;
 }
 
+export interface RoomJsonGrasshopperArea {
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  count: number;
+}
+
 export interface RoomJsonDef {
   id: string;
   name: string;
@@ -195,6 +206,7 @@ export interface RoomJsonDef {
   dustBoostJars?: RoomJsonDustBoostJar[];
   fireflyJars?: RoomJsonFireflyJar[];
   dustPiles?: RoomJsonDustPile[];
+  grasshopperAreas?: RoomJsonGrasshopperArea[];
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
@@ -320,6 +332,9 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isRockElementalFlag: e.isRockElemental ? 1 : 0,
     isRadiantTetherFlag: e.isRadiantTether ? 1 : 0,
     isGrappleHunterFlag: e.isGrappleHunter ? 1 : 0,
+    isSlimeFlag: (e.isSlime ?? false) ? 1 : 0,
+    isLargeSlimeFlag: (e.isLargeSlime ?? false) ? 1 : 0,
+    isWheelEnemyFlag: (e.isWheelEnemy ?? false) ? 1 : 0,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => ({
@@ -353,6 +368,15 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     dustCount: p.dustCount,
   }));
 
+  const grasshopperAreas: EditorGrasshopperArea[] = (json.grasshopperAreas ?? []).map(a => ({
+    uid: uid++,
+    xBlock: a.xBlock,
+    yBlock: a.yBlock,
+    wBlock: a.wBlock,
+    hBlock: a.hBlock,
+    count: a.count,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -373,6 +397,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       saveTombs,
       skillTombs,
       dustPiles,
+      grasshopperAreas,
     },
     nextUid: uid,
   };
@@ -418,6 +443,9 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isRockElemental: e.isRockElementalFlag === 1,
       isRadiantTether: e.isRadiantTetherFlag === 1,
       isGrappleHunter: e.isGrappleHunterFlag === 1,
+      isSlime: e.isSlimeFlag === 1,
+      isLargeSlime: e.isLargeSlimeFlag === 1,
+      isWheelEnemy: e.isWheelEnemyFlag === 1,
     })),
     transitions: data.transitions.map(t => {
       const jt: RoomJsonTransition = {
@@ -454,6 +482,15 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       xBlock: p.xBlock,
       yBlock: p.yBlock,
       dustCount: p.dustCount,
+    }));
+  }
+  if ((data.grasshopperAreas ?? []).length > 0) {
+    json.grasshopperAreas = data.grasshopperAreas.map(a => ({
+      xBlock: a.xBlock,
+      yBlock: a.yBlock,
+      wBlock: a.wBlock,
+      hBlock: a.hBlock,
+      count: a.count,
     }));
   }
   return json;
@@ -581,6 +618,9 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isRockElementalFlag: e.isRockElementalFlag,
       isRadiantTetherFlag: e.isRadiantTetherFlag,
       isGrappleHunterFlag: e.isGrappleHunterFlag,
+      isSlimeFlag: e.isSlimeFlag,
+      isLargeSlimeFlag: e.isLargeSlimeFlag,
+      isWheelEnemyFlag: e.isWheelEnemyFlag,
     };
   });
 
@@ -613,6 +653,13 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     saveTombs: data.saveTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
     skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount })),
+    grasshopperAreas: data.grasshopperAreas.map(a => ({
+      xBlock: a.xBlock,
+      yBlock: a.yBlock,
+      wBlock: a.wBlock,
+      hBlock: a.hBlock,
+      count: a.count,
+    })),
   };
 }
 
@@ -667,6 +714,9 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isRockElementalFlag: (e.isRockElementalFlag ?? 0) as 0 | 1,
     isRadiantTetherFlag: (e.isRadiantTetherFlag ?? 0) as 0 | 1,
     isGrappleHunterFlag: (e.isGrappleHunterFlag ?? 0) as 0 | 1,
+    isSlimeFlag: (e.isSlimeFlag ?? 0) as 0 | 1,
+    isLargeSlimeFlag: (e.isLargeSlimeFlag ?? 0) as 0 | 1,
+    isWheelEnemyFlag: (e.isWheelEnemyFlag ?? 0) as 0 | 1,
   }));
 
   const transitions: EditorTransition[] = room.transitions.map(t => ({
@@ -699,6 +749,15 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     dustCount: p.dustCount,
   }));
 
+  const grasshopperAreas: EditorGrasshopperArea[] = (room.grasshopperAreas ?? []).map(a => ({
+    uid: uid++,
+    xBlock: a.xBlock,
+    yBlock: a.yBlock,
+    wBlock: a.wBlock,
+    hBlock: a.hBlock,
+    count: a.count,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -719,6 +778,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       saveTombs,
       skillTombs,
       dustPiles,
+      grasshopperAreas,
     },
     nextUid: uid,
   };

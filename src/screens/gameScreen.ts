@@ -3,7 +3,7 @@ import { createClusterState } from '../sim/clusters/state';
 import { initGrappleChainParticles, fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
-import { createRng } from '../sim/rng';
+import { createRng, nextFloat } from '../sim/rng';
 import { createSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
@@ -62,8 +62,15 @@ import {
   FLYING_EYE_HALF_SIZE_WORLD,
 } from './gameRoom';
 import { renderFrame } from './gameRender';
+import { processLargeSlimeSplits, SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
+import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
+import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
+import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS } from '../sim/world';
 
 const FIXED_DT_MS = 16.666;
+
+const SLIME_HOP_INTERVAL_INITIAL_TICKS = 30;
+const LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS = 45;
 
 /** Baseline virtual width at 16:9; height is authoritative for fixed zoom. */
 const BASE_VIRTUAL_WIDTH_PX = 480;
@@ -266,6 +273,20 @@ export function startGameScreen(
         enemyCluster.grappleHunterState = 0;
         enemyCluster.halfWidthWorld = 5.0;
         enemyCluster.halfHeightWorld = 5.0;
+      } else if (enemyDef.isSlimeFlag === 1) {
+        enemyCluster.isSlimeFlag = 1;
+        enemyCluster.halfWidthWorld = SLIME_HALF_SIZE_WORLD;
+        enemyCluster.halfHeightWorld = SLIME_HALF_SIZE_WORLD;
+        enemyCluster.slimeHopTimerTicks = SLIME_HOP_INTERVAL_INITIAL_TICKS;
+      } else if (enemyDef.isLargeSlimeFlag === 1) {
+        enemyCluster.isLargeSlimeFlag = 1;
+        enemyCluster.halfWidthWorld = LARGE_SLIME_HALF_SIZE_WORLD;
+        enemyCluster.halfHeightWorld = LARGE_SLIME_HALF_SIZE_WORLD;
+        enemyCluster.slimeHopTimerTicks = LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS;
+      } else if (enemyDef.isWheelEnemyFlag === 1) {
+        enemyCluster.isWheelEnemyFlag = 1;
+        enemyCluster.halfWidthWorld = WHEEL_ENEMY_HALF_SIZE_WORLD;
+        enemyCluster.halfHeightWorld = WHEEL_ENEMY_HALF_SIZE_WORLD;
       }
 
       world.clusters.push(enemyCluster);
@@ -291,6 +312,26 @@ export function startGameScreen(
 
     // Load environmental hazards (after walls so breakable blocks can be added as walls)
     loadRoomHazards(world, room);
+
+    // Reset and spawn grasshoppers
+    world.grasshopperCount = 0;
+    if (room.grasshopperAreas) {
+      for (const area of room.grasshopperAreas) {
+        const areaXWorld = area.xBlock * BLOCK_SIZE_MEDIUM;
+        const areaYWorld = area.yBlock * BLOCK_SIZE_MEDIUM;
+        const areaWidthWorld = area.wBlock * BLOCK_SIZE_MEDIUM;
+        const areaHeightWorld = area.hBlock * BLOCK_SIZE_MEDIUM;
+        for (let g = 0; g < area.count && world.grasshopperCount < MAX_GRASSHOPPERS; g++) {
+          const gi = world.grasshopperCount++;
+          world.grasshopperXWorld[gi] = areaXWorld + nextFloat(world.rng) * areaWidthWorld;
+          world.grasshopperYWorld[gi] = areaYWorld + nextFloat(world.rng) * areaHeightWorld;
+          world.grasshopperVelXWorld[gi] = 0;
+          world.grasshopperVelYWorld[gi] = 0;
+          world.grasshopperHopTimerTicks[gi] = nextFloat(world.rng) * GRASSHOPPER_INITIAL_TIMER_MAX_TICKS;
+          world.isGrasshopperAliveFlag[gi] = 1;
+        }
+      }
+    }
 
     // Spawn dust pile particles (unowned Gold Dust for Storm Weave attraction)
     for (let i = 0; i < world.dustPileCount; i++) {
@@ -713,6 +754,7 @@ export function startGameScreen(
         renderWalls(ctx, snapshot, eox, eoy, zoom, true);
         renderHazards(ctx, world, eox, eoy, zoom, world.tick);
         renderClusters(ctx, snapshot, eox, eoy, zoom, true);
+        renderGrasshoppers(ctx, snapshot, eox, eoy, zoom);
         renderRadiantTether(ctx, snapshot, eox, eoy, zoom, true);
         renderGrapple(ctx, snapshot, eox, eoy, zoom);
         drawTunnelDarkness(ctx, currentRoom, eox, eoy, zoom);
@@ -912,6 +954,11 @@ export function startGameScreen(
       world.playerSprintHeldFlag = inputState.isSprintHeldFlag ? 1 : 0;
       world.playerCrouchHeldFlag = inputState.isKeyS ? 1 : 0;
       tick(world);
+      // Process large slime splits (spawn child slimes when large slime dies)
+      const newSlimes = processLargeSlimeSplits(world);
+      for (let s = 0; s < newSlimes.length; s++) {
+        world.clusters.push(newSlimes[s]);
+      }
       environmentalDust.update(world, FIXED_DT_MS);
       skidDebris.update(world, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;

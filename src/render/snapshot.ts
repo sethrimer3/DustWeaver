@@ -120,6 +120,16 @@ export interface ClusterSnapshot {
    * Non-zero while the player sprite should show damage tint / flash.
    */
   readonly hurtTicks: number;
+  /** 1 if this cluster is a slime enemy. */
+  readonly isSlimeFlag: 0 | 1;
+  /** 1 if this cluster is a large dust slime enemy. */
+  readonly isLargeSlimeFlag: 0 | 1;
+  /** Accumulated orbit angle (radians) for large slime dust visual. */
+  readonly largeSlimeDustOrbitAngleRad: number;
+  /** 1 if this cluster is a wheel enemy. */
+  readonly isWheelEnemyFlag: 0 | 1;
+  /** Accumulated roll angle (radians) for wheel enemy spoke renderer. */
+  readonly wheelRollAngleRad: number;
 }
 
 export interface WallSnapshot {
@@ -172,6 +182,14 @@ export interface WorldSnapshot {
   readonly isPlayerWeaveActiveFlag: 0 | 1;
   /** Selected character identifier ('knight', 'demonFox', 'princess', or 'outcast'). */
   readonly characterId: string;
+  /** Number of active grasshoppers. */
+  readonly grasshopperCount: number;
+  /** X positions of grasshoppers (world units). */
+  readonly grasshopperXWorld: Float32Array;
+  /** Y positions of grasshoppers (world units). */
+  readonly grasshopperYWorld: Float32Array;
+  /** Per-grasshopper alive flags. */
+  readonly isGrasshopperAliveFlag: Uint8Array;
 }
 
 export function createSnapshot(world: WorldState): WorldSnapshot {
@@ -223,6 +241,11 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       grappleHunterTipYWorld:           c.grappleHunterTipYWorld,
       invulnerabilityTicks:             c.invulnerabilityTicks,
       hurtTicks:                        c.hurtTicks,
+      isSlimeFlag:                c.isSlimeFlag,
+      isLargeSlimeFlag:           c.isLargeSlimeFlag,
+      largeSlimeDustOrbitAngleRad: c.largeSlimeDustOrbitAngleRad,
+      isWheelEnemyFlag:           c.isWheelEnemyFlag,
+      wheelRollAngleRad:          c.wheelRollAngleRad,
     });
   }
 
@@ -270,5 +293,9 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     hasGrappleChargeFlag: world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
     characterId: world.characterId,
+    grasshopperCount:       world.grasshopperCount,
+    grasshopperXWorld:      world.grasshopperXWorld,
+    grasshopperYWorld:      world.grasshopperYWorld,
+    isGrasshopperAliveFlag: world.isGrasshopperAliveFlag,
   };
 }

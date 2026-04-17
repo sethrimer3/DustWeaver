@@ -277,6 +277,26 @@ export interface ClusterState {
    * While > 0 the player sprite shows a damage tint / flash.
    */
   hurtTicks: number;
+
+  // ---- Slime enemy (populated only when isSlimeFlag === 1) ----------------
+  /** 1 if this cluster is a slime — hops toward player each interval. */
+  isSlimeFlag: 0 | 1;
+  /** Countdown ticks until next hop. */
+  slimeHopTimerTicks: number;
+
+  // ---- Large Dust Slime (populated only when isLargeSlimeFlag === 1) ------
+  /** 1 if this cluster is a large dust slime — larger, slower, orbiting dust, splits on death. */
+  isLargeSlimeFlag: 0 | 1;
+  /** Accumulated orbit angle (radians) for dust visual. */
+  largeSlimeDustOrbitAngleRad: number;
+  /** 1 once the split-on-death has been triggered so it only fires once. */
+  largeSlimeSplitDoneFlag: 0 | 1;
+
+  // ---- Wheel enemy (populated only when isWheelEnemyFlag === 1) -----------
+  /** 1 if this cluster is a wheel enemy — rolls along surfaces toward the player. */
+  isWheelEnemyFlag: 0 | 1;
+  /** Accumulated roll angle (radians) — drives spoke rotation renderer. */
+  wheelRollAngleRad: number;
 }
 
 export function createClusterState(
@@ -367,5 +387,12 @@ export function createClusterState(
     isSlidingFlag: 0,
     invulnerabilityTicks: 0,
     hurtTicks: 0,
+    isSlimeFlag: 0,
+    slimeHopTimerTicks: 0,
+    isLargeSlimeFlag: 0,
+    largeSlimeDustOrbitAngleRad: 0,
+    largeSlimeSplitDoneFlag: 0,
+    isWheelEnemyFlag: 0,
+    wheelRollAngleRad: 0,
   };
 }

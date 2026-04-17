@@ -26,6 +26,14 @@ export const FIREFLIES_PER_JAR = 4;
 /** Maximum number of dust piles per room. */
 export const MAX_DUST_PILES = 32;
 
+/** Maximum number of grasshopper critters per room. */
+export const MAX_GRASSHOPPERS = 32;
+/**
+ * Max ticks for the initial staggered hop timer (so grasshoppers don't all
+ * hop on tick 0).
+ */
+export const GRASSHOPPER_INITIAL_TIMER_MAX_TICKS = 60;
+
 export interface WorldState extends ParticleBuffers {
   tick: number;
   dtMs: number;
@@ -326,6 +334,22 @@ export interface WorldState extends ParticleBuffers {
   dustPileDustCount: Uint8Array;
   /** 1 if the dust pile is still active (not yet fully claimed). */
   isDustPileActiveFlag: Uint8Array;
+
+  // ── Grasshopper critters ───────────────────────────────────────────────────
+  /** Number of alive grasshoppers in the current room. */
+  grasshopperCount: number;
+  /** X position (world units) of each grasshopper. */
+  grasshopperXWorld: Float32Array;
+  /** Y position (world units) of each grasshopper. */
+  grasshopperYWorld: Float32Array;
+  /** X velocity (world units/s). */
+  grasshopperVelXWorld: Float32Array;
+  /** Y velocity (world units/s). */
+  grasshopperVelYWorld: Float32Array;
+  /** Countdown ticks until next hop. */
+  grasshopperHopTimerTicks: Float32Array;
+  /** 1 if this grasshopper slot is alive. */
+  isGrasshopperAliveFlag: Uint8Array;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -443,6 +467,13 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     dustPileYWorld: new Float32Array(MAX_DUST_PILES),
     dustPileDustCount: new Uint8Array(MAX_DUST_PILES),
     isDustPileActiveFlag: new Uint8Array(MAX_DUST_PILES),
+    grasshopperCount: 0,
+    grasshopperXWorld: new Float32Array(MAX_GRASSHOPPERS),
+    grasshopperYWorld: new Float32Array(MAX_GRASSHOPPERS),
+    grasshopperVelXWorld: new Float32Array(MAX_GRASSHOPPERS),
+    grasshopperVelYWorld: new Float32Array(MAX_GRASSHOPPERS),
+    grasshopperHopTimerTicks: new Float32Array(MAX_GRASSHOPPERS),
+    isGrasshopperAliveFlag: new Uint8Array(MAX_GRASSHOPPERS),
     ...createParticleBuffers(),
   };
 }

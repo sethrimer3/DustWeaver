@@ -63,6 +63,9 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },
   { id: 'enemy_rock_elemental', label: 'Rock Elemental', category: 'enemies' },
+  { id: 'enemy_slime', label: 'Slime', category: 'enemies' },
+  { id: 'enemy_slime_large', label: 'Dust Slime (L)', category: 'enemies' },
+  { id: 'enemy_wheel', label: 'Wheel Enemy', category: 'enemies' },
   // Triggers
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
@@ -73,6 +76,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'dust_pile_large',  label: 'Dust Pile (L)',  category: 'triggers' },
   // Legacy alias kept for backward-compat with older room exports
   { id: 'dust_pile', label: 'Dust Pile', category: 'triggers' },
+  { id: 'grasshopper_area', label: 'Grasshopper Area', category: 'triggers' },
 ];
 
 /** Available block themes for the editor dropdown. */
@@ -150,6 +154,9 @@ export interface EditorEnemy {
   isRockElementalFlag: 0 | 1;
   isRadiantTetherFlag: 0 | 1;
   isGrappleHunterFlag: 0 | 1;
+  isSlimeFlag: 0 | 1;
+  isLargeSlimeFlag: 0 | 1;
+  isWheelEnemyFlag: 0 | 1;
 }
 
 export interface EditorTransition {
@@ -191,6 +198,16 @@ export interface EditorDustPile {
   dustCount: number;
 }
 
+export interface EditorGrasshopperArea {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  /** Number of grasshoppers to spawn in this area. */
+  count: number;
+}
+
 export interface EditorRoomData {
   id: string;
   name: string;
@@ -221,11 +238,12 @@ export interface EditorRoomData {
   saveTombs: EditorSaveTomb[];
   skillTombs: EditorSkillTomb[];
   dustPiles: EditorDustPile[];
+  grasshopperAreas: EditorGrasshopperArea[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'playerSpawn';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'playerSpawn';
 
 export interface SelectedElement {
   type: SelectedElementType;

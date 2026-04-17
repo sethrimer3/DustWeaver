@@ -224,13 +224,14 @@ export function renderEditorOverlays(
 /** Returns a unique display ID string for the given element (e.g. "skill_tomb_12"). */
 function buildElementTooltipId(type: SelectedElementType, uid: number): string {
   const prefix: Record<SelectedElementType, string> = {
-    wall:        'wall',
-    enemy:       'enemy',
-    transition:  'transition',
-    saveTomb:    'save_tomb',
-    skillTomb:   'skill_tomb',
-    dustPile:    'dust_pile',
-    playerSpawn: 'player_spawn',
+    wall:             'wall',
+    enemy:            'enemy',
+    transition:       'transition',
+    saveTomb:         'save_tomb',
+    skillTomb:        'skill_tomb',
+    dustPile:         'dust_pile',
+    grasshopperArea:  'grasshopper_area',
+    playerSpawn:      'player_spawn',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;

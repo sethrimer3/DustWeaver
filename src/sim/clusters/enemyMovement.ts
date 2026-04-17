@@ -41,6 +41,15 @@ export function tickEnemyMovement(
   playerYWorld: number,
   isPlayerFound: boolean,
 ): void {
+  // Slime enemies have their own hop AI — skip standard movement; gravity
+  // is applied inside slimeAi.ts
+  if (cluster.isSlimeFlag === 1 || cluster.isLargeSlimeFlag === 1) {
+    return;
+  }
+  // Wheel enemies have their own movement AI — skip standard movement
+  if (cluster.isWheelEnemyFlag === 1) {
+    return;
+  }
   if (cluster.isFlyingEyeFlag === 1) {
     // ── Flying Eye: no gravity, 2D steering toward/away from player ────────
     if (isPlayerFound) {
