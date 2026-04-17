@@ -1,0 +1,5 @@
+id: DUSTWEAVER_CAMPAIGN
+title: DustWeaver
+creator: GravyThyme
+initial_room_id: lobby
+description: The main DustWeaver campaign. This is the core single-player game experience with the canonical world map, progression, and story path.

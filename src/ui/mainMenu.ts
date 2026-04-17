@@ -40,6 +40,7 @@ import {
   getInfluenceHighlightWidth,
   setInfluenceHighlightWidth,
 } from './renderSettings';
+import { loadCampaignManifest, MAIN_CAMPAIGN_ID, toCampaignAssetPath } from '../levels/campaigns';
 import {
   KB_ACTIONS,
   CTRL_ACTIONS,
@@ -185,6 +186,13 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   `;
   container.appendChild(settingsEl);
 
+  const customCampaignsEl = document.createElement('div');
+  customCampaignsEl.style.cssText = `
+    display: none; flex-direction: column; align-items: center;
+    gap: 0.8rem; opacity: 0; transition: opacity 0.5s ease-in; width: min(880px, 92vw);
+  `;
+  container.appendChild(customCampaignsEl);
+
   const buildBadgeEl = document.createElement('div');
   buildBadgeEl.textContent = `Build ${BUILD_NUMBER}`;
   buildBadgeEl.style.cssText = `
@@ -223,11 +231,13 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
 
   const btnPlay = createMenuButton('Play', showSaveSlots);
   const btnSettings = createMenuButton('Settings', showSettings);
+  const btnCustomCampaigns = createMenuButton('Custom Campaigns', showCustomCampaigns);
   const btnExit = createMenuButton('Exit', () => {
     window.close();
   });
 
   menuEl.appendChild(btnPlay);
+  menuEl.appendChild(btnCustomCampaigns);
   menuEl.appendChild(btnSettings);
   menuEl.appendChild(btnExit);
 
@@ -319,6 +329,146 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
         menuEl.style.opacity = '1';
       });
     }, 300);
+  }
+
+  function showCustomCampaigns(): void {
+    menuEl.style.opacity = '0';
+    setTimeout(() => {
+      menuEl.style.display = 'none';
+      void buildCustomCampaignsUI();
+      customCampaignsEl.style.display = 'flex';
+      requestAnimationFrame(() => {
+        customCampaignsEl.style.opacity = '1';
+      });
+    }, 300);
+  }
+
+  function showMenuFromCustomCampaigns(): void {
+    customCampaignsEl.style.opacity = '0';
+    setTimeout(() => {
+      customCampaignsEl.style.display = 'none';
+      menuEl.style.display = 'flex';
+      requestAnimationFrame(() => {
+        menuEl.style.opacity = '1';
+      });
+    }, 300);
+  }
+
+  async function buildCustomCampaignsUI(): Promise<void> {
+    customCampaignsEl.innerHTML = '';
+
+    const heading = document.createElement('h2');
+    heading.textContent = 'Custom Campaigns';
+    heading.style.cssText = `
+      color: #d4a84b; font-size: 1.8rem; margin-bottom: 0.2rem;
+      text-shadow: 0 0 20px rgba(212,168,75,0.3);
+      letter-spacing: 0.06em; font-weight: 400;
+    `;
+    customCampaignsEl.appendChild(heading);
+
+    const subtitle = document.createElement('div');
+    subtitle.textContent = 'Install additional campaigns in CAMPAIGNS/ and list them in CAMPAIGNS/manifest.json.';
+    subtitle.style.cssText = `color: rgba(212,168,75,0.7); font-size: 0.85rem; margin-bottom: 0.8rem;`;
+    customCampaignsEl.appendChild(subtitle);
+
+    const campaigns = await loadCampaignManifest();
+    const customCampaigns = campaigns.filter((campaign) => campaign.folderName !== MAIN_CAMPAIGN_ID);
+
+    if (customCampaigns.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No custom campaigns found.';
+      empty.style.cssText = `
+        color: rgba(212,168,75,0.75);
+        padding: 1rem 1.2rem;
+        border: 1px dashed rgba(212,168,75,0.4);
+        width: min(680px, 90vw);
+        text-align: center;
+      `;
+      customCampaignsEl.appendChild(empty);
+    } else {
+      const listPanel = document.createElement('div');
+      listPanel.style.cssText = `
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        gap: 0.8rem;
+        width: 100%;
+        background: rgba(0,0,0,0.48);
+        border: 1px solid rgba(212,168,75,0.3);
+        padding: 0.9rem;
+      `;
+
+      const listEl = document.createElement('div');
+      listEl.style.cssText = 'display: flex; flex-direction: column; gap: 0.5rem;';
+      const detailEl = document.createElement('div');
+      detailEl.style.cssText = `
+        border: 1px solid rgba(212,168,75,0.25);
+        background: rgba(0,0,0,0.35);
+        padding: 0.8rem;
+        min-height: 320px;
+      `;
+
+      function renderDetail(index: number): void {
+        const campaign = customCampaigns[index];
+        const imageSrc = campaign.initialRoomImagePath !== null
+          ? toCampaignAssetPath(campaign.folderName, campaign.initialRoomImagePath)
+          : null;
+
+        detailEl.innerHTML = `
+          <div style="font-size: 1.35rem; color: #d4a84b; margin-bottom: 0.2rem;">${campaign.title}</div>
+          <div style="font-size: 0.9rem; color: rgba(212,168,75,0.75); margin-bottom: 0.8rem;">By ${campaign.creator}</div>
+          ${imageSrc !== null
+            ? `<img src="${imageSrc}" alt="${campaign.title} initial room" style="display:block; width:100%; max-height:190px; object-fit:cover; border:1px solid rgba(212,168,75,0.3); margin-bottom:0.8rem;"/>`
+            : `<div style="display:flex; align-items:center; justify-content:center; width:100%; height:190px; border:1px dashed rgba(212,168,75,0.3); color:rgba(212,168,75,0.65); margin-bottom:0.8rem;">Initial room preview unavailable</div>`}
+          <div style="font-size: 0.84rem; line-height: 1.45; color: rgba(240,220,176,0.9);">${campaign.description}</div>
+        `;
+      }
+
+      for (let i = 0; i < customCampaigns.length; i++) {
+        const campaign = customCampaigns[i];
+        const btn = document.createElement('button');
+        btn.textContent = campaign.title;
+        btn.style.cssText = `
+          width: 100%; text-align: left;
+          background: rgba(0,0,0,0.45); border: 1px solid rgba(212,168,75,0.28);
+          color: #d4a84b; padding: 0.7rem; font-family: 'Cinzel', serif; cursor: pointer;
+        `;
+        btn.addEventListener('mouseenter', () => {
+          btn.style.borderColor = 'rgba(212,168,75,0.75)';
+          btn.style.background = 'rgba(212,168,75,0.1)';
+        });
+        btn.addEventListener('mouseleave', () => {
+          btn.style.borderColor = 'rgba(212,168,75,0.28)';
+          btn.style.background = 'rgba(0,0,0,0.45)';
+        });
+        const index = i;
+        btn.addEventListener('click', () => renderDetail(index));
+        listEl.appendChild(btn);
+      }
+
+      listPanel.appendChild(listEl);
+      listPanel.appendChild(detailEl);
+      customCampaignsEl.appendChild(listPanel);
+      renderDetail(0);
+    }
+
+    const backBtn = document.createElement('button');
+    backBtn.textContent = 'Back';
+    backBtn.style.cssText = `
+      background: transparent; border: 1px solid rgba(212,168,75,0.25);
+      color: rgba(212,168,75,0.6); padding: 0.6rem 2.5rem; font-size: 0.9rem;
+      font-family: 'Cinzel', serif; cursor: pointer; transition: all 0.25s;
+      border-radius: 2px; letter-spacing: 0.1em; margin-top: 0.5rem;
+    `;
+    backBtn.addEventListener('mouseenter', () => {
+      backBtn.style.borderColor = 'rgba(212,168,75,0.6)';
+      backBtn.style.color = '#d4a84b';
+    });
+    backBtn.addEventListener('mouseleave', () => {
+      backBtn.style.borderColor = 'rgba(212,168,75,0.25)';
+      backBtn.style.color = 'rgba(212,168,75,0.6)';
+    });
+    backBtn.addEventListener('click', showMenuFromCustomCampaigns);
+    customCampaignsEl.appendChild(backBtn);
   }
 
   function buildSaveSlotUI(): void {

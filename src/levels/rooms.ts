@@ -4,10 +4,10 @@
  * Layout:
  *   World 3 ← World 2 ← [LOBBY] → World 1
  *
- * Room data is loaded at startup from individual JSON files in ASSETS/ROOMS/.
- * Each room has its own .json file, listed in ASSETS/ROOMS/manifest.json.
+ * Room data is loaded at startup from individual JSON files in CAMPAIGNS/<CAMPAIGN_ID>/ROOMS/.
+ * Each room has its own .json file, listed in CAMPAIGNS/<CAMPAIGN_ID>/ROOMS/manifest.json.
  *
- * An optional ASSETS/ROOMS/world-map.json file stores world names, room name
+ * An optional CAMPAIGNS/<CAMPAIGN_ID>/worldMap/world-map.json file stores world names, room name
  * overrides, world assignment overrides, and visual map positions.  The editor
  * reads and writes these stores; use exportWorldMapJson() to persist them.
  *
@@ -83,7 +83,7 @@ export function registerRoom(room: RoomDef): void {
 }
 
 /**
- * Loads all room JSON files from ASSETS/ROOMS/ and populates ROOM_REGISTRY.
+ * Loads all room JSON files from CAMPAIGNS/<CAMPAIGN_ID>/ROOMS/ and populates ROOM_REGISTRY.
  * Also loads world-map.json (if present) to populate world-map metadata stores.
  * Must be called (and awaited) before the game starts.
  */
