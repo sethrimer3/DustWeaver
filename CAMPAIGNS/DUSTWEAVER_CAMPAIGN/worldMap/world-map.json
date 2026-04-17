@@ -1,0 +1,42 @@
+{
+  "worlds": [
+    {
+      "id": 0,
+      "name": "World 0"
+    },
+    {
+      "id": 1,
+      "name": "World 1"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "w1_room1",
+      "name": "Stone Crossing",
+      "worldId": 1,
+      "mapX": -89,
+      "mapY": 8
+    },
+    {
+      "id": "lobby",
+      "name": "Stone Hollow",
+      "worldId": 0,
+      "mapX": -147,
+      "mapY": 87.5
+    },
+    {
+      "id": "boss_radiant_tether",
+      "name": "Luminous Chamber",
+      "worldId": 1,
+      "mapX": -51,
+      "mapY": -32
+    },
+    {
+      "id": "seal_chamber",
+      "name": "Seal Chamber",
+      "worldId": 1,
+      "mapX": 4,
+      "mapY": -38
+    }
+  ]
+}

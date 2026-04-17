@@ -7,7 +7,7 @@
  * clicking a transition completes the link.
  *
  * Management features: rename rooms/worlds, move rooms between worlds,
- * add rooms, add worlds, and export world-map.json.
+ * add rooms, add worlds, and export room JSON files with map metadata.
  */
 
 import { ROOM_REGISTRY } from '../levels/rooms';
@@ -373,8 +373,8 @@ export function showEditorWorldMap(
     addWorldBtn.addEventListener('click', () => showAddWorldModal());
     footerRow.appendChild(addWorldBtn);
 
-    const exportBtn = makeFooterBtn('\u2b07 Export World Map', '#cccc44');
-    exportBtn.title = 'Download world-map.json — place in ASSETS/ROOMS/ to persist changes';
+    const exportBtn = makeFooterBtn('\u2b07 Export Rooms', '#cccc44');
+    exportBtn.title = 'Download all room JSON files with updated map metadata';
     exportBtn.addEventListener('click', () => {
       exportWorldMapJson();
     });

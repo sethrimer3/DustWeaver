@@ -1,0 +1,1752 @@
+{
+  "id": "seal_chamber",
+  "name": "Seal Chamber",
+  "worldNumber": 1,
+  "widthBlocks": 120,
+  "heightBlocks": 80,
+  "playerSpawnBlock": [
+    60,
+    40
+  ],
+  "interiorWalls": [
+    {
+      "xBlock": 0,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 6,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 8,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 20,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 22,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 24,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 26,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 28,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 30,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 32,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 34,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 36,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 38,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 40,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 42,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 44,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 46,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 48,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 50,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 52,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 54,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 56,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 58,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 60,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 62,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 64,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 66,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 68,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 70,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 72,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 74,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 76,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 0,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 8,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 10,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 12,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 14,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 16,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 18,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 20,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 22,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 24,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 26,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 28,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 30,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 32,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 34,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 36,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 38,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 40,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 42,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 44,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 46,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 48,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 50,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 52,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 54,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 56,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 58,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 60,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 62,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 64,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 66,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 68,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 70,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 72,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 74,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 76,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 78,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 80,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 82,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 84,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 86,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 88,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 90,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 92,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 94,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 96,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 98,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 100,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 102,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 104,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 106,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 108,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 110,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 112,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 114,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 116,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 78,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 76,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 74,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 72,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 70,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 68,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 66,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 64,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 62,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 60,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 58,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 56,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 54,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 52,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 50,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 48,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 46,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 44,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 42,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 40,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 38,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 36,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 34,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 32,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 30,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 28,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 26,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 24,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 22,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 20,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 14,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 12,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 10,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 8,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 6,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 118,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 116,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 114,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 112,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 110,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 108,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 106,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 104,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 102,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 100,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 98,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 96,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 94,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 92,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 90,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 88,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 86,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 84,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 82,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 80,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 78,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 76,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 74,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 72,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 70,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 68,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 66,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 64,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 62,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 60,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 58,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 56,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 54,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 52,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 50,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 48,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 46,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 44,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 42,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 40,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 38,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 36,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 34,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 32,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 30,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 28,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 26,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 24,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 22,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 20,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 18,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 16,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 14,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 12,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 10,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 8,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 0,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 8,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 10,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 12,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 14,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 16,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 8,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 8,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 8,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 8,
+      "yBlock": 8,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 10,
+      "yBlock": 6,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 8,
+      "yBlock": 6,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 6,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 6,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 6,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 8,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 10,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 12,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 14,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 16,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 18,
+      "yBlock": 4,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 8,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 10,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 12,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 14,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 16,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 18,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 20,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 22,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 24,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 26,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 28,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 30,
+      "yBlock": 2,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 18,
+      "yBlock": 16,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 14,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 12,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 10,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 8,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 18,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 20,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 4,
+      "yBlock": 20,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 6,
+      "yBlock": 20,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    },
+    {
+      "xBlock": 2,
+      "yBlock": 22,
+      "wBlock": 2,
+      "hBlock": 2,
+      "blockTheme": "blackRock"
+    }
+  ],
+  "enemies": [],
+  "transitions": [
+    {
+      "direction": "left",
+      "positionBlock": 10,
+      "openingSizeBlocks": 6,
+      "targetRoomId": "boss_radiant_tether",
+      "targetSpawnBlock": [
+        54,
+        7
+      ]
+    }
+  ],
+  "skillTombs": [],
+  "blockTheme": "blackRock",
+  "backgroundId": "brownRock",
+  "lightingEffect": "DEFAULT"
+}

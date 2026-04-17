@@ -8,7 +8,7 @@
  * Doors can be clicked to initiate or complete a link.
  *
  * Room positions, world names, and room name/world overrides are persisted
- * via the "Export World Map" button, which downloads world-map.json.
+ * directly into room JSON files.
  *
  * Selecting a room (single click) and pressing arrow keys nudges it by
  * 1 map world unit per keypress.
@@ -172,15 +172,15 @@ export function showVisualWorldMap(
   addWorldBtn.addEventListener('click', () => showAddWorldDialog());
   header.appendChild(addWorldBtn);
 
-  const exportBtn = makeHeaderBtn('\u2b07 Export World Map', '#cccc44');
-  exportBtn.title = 'Download world-map.json — place it in ASSETS/ROOMS/ to persist changes';
+  const exportBtn = makeHeaderBtn('\u2b07 Export Rooms', '#cccc44');
+  exportBtn.title = 'Download all room JSON files with updated map metadata';
   exportBtn.addEventListener('click', () => {
     // Flush current placement positions before export
     for (const [roomId, placement] of placements) {
       setRoomMapPosition(roomId, placement.mapXWorld, placement.mapYWorld);
     }
     exportWorldMapJson();
-    statusBar.textContent = 'world-map.json downloaded — save it to ASSETS/ROOMS/ to persist.';
+    statusBar.textContent = 'Room JSON files downloaded with updated map metadata.';
     statusBar.style.color = '#cccc44';
   });
   header.appendChild(exportBtn);
@@ -1494,7 +1494,7 @@ function computeAutoLayout(
 
   if (allRooms.length === 0) return;
 
-  // Use stored positions from world-map.json for rooms that have them
+  // Use stored positions from in-memory room metadata cache.
   for (const room of allRooms) {
     const stored = WORLD_MAP_POSITIONS.get(room.id);
     if (stored) {

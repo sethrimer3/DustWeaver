@@ -1,0 +1,17 @@
+{
+  "id": "lobby",
+  "name": "Lobby",
+  "worldNumber": 0,
+  "widthBlocks": 40,
+  "heightBlocks": 20,
+  "interiorWalls": [],
+  "enemies": [],
+  "playerSpawnBlock": [
+    4,
+    12
+  ],
+  "transitions": [],
+  "skillTombs": [],
+  "mapX": 0,
+  "mapY": 0
+}

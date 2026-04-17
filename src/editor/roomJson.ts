@@ -167,6 +167,10 @@ export interface RoomJsonDef {
   id: string;
   name: string;
   worldNumber: number;
+  /** X position on the visual world map (map world units). */
+  mapX?: number;
+  /** Y position on the visual world map (map world units). */
+  mapY?: number;
   /** Block sprite theme. Defaults to 'blackRock' if not set. */
   blockTheme?: BlockTheme;
   /** Background visual ID. Falls back to worldNumber if not set. */
@@ -229,6 +233,12 @@ export function validateRoomJson(data: unknown): ValidationError[] {
   }
   if (typeof obj.worldNumber !== 'number') {
     errors.push({ path: 'worldNumber', message: 'Must be a number' });
+  }
+  if (obj.mapX !== undefined && typeof obj.mapX !== 'number') {
+    errors.push({ path: 'mapX', message: 'Must be a number when provided' });
+  }
+  if (obj.mapY !== undefined && typeof obj.mapY !== 'number') {
+    errors.push({ path: 'mapY', message: 'Must be a number when provided' });
   }
   if (obj.lightingEffect !== undefined && obj.lightingEffect !== 'DEFAULT' && obj.lightingEffect !== 'Above') {
     errors.push({ path: 'lightingEffect', message: 'Must be DEFAULT|Above' });
@@ -372,6 +382,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       id: json.id,
       name: json.name,
       worldNumber: json.worldNumber,
+      mapX: json.mapX ?? 0,
+      mapY: json.mapY ?? 0,
       blockTheme: json.blockTheme ?? 'blackRock',
       backgroundId: json.backgroundId ?? 'brownRock',
       lightingEffect: json.lightingEffect ?? 'DEFAULT',
@@ -398,6 +410,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     id: data.id,
     name: data.name,
     worldNumber: data.worldNumber,
+    mapX: data.mapX,
+    mapY: data.mapY,
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     playerSpawnBlock: [...data.playerSpawnBlock],
@@ -624,6 +638,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     id: data.id,
     name: data.name,
     worldNumber: data.worldNumber,
+    mapX: data.mapX,
+    mapY: data.mapY,
     blockTheme: data.blockTheme,
     backgroundId: data.backgroundId,
     lightingEffect: data.lightingEffect,
@@ -747,6 +763,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       id: room.id,
       name: room.name,
       worldNumber: room.worldNumber,
+      mapX: room.mapX,
+      mapY: room.mapY,
       blockTheme: room.blockTheme ?? 'blackRock',
       backgroundId: room.backgroundId ?? 'brownRock',
       lightingEffect: room.lightingEffect ?? 'DEFAULT',

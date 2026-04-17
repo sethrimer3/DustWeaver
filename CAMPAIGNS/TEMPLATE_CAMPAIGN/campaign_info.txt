@@ -1,0 +1,8 @@
+# Copy this folder, rename it, and add your campaign folder name to CAMPAIGNS/manifest.json.
+id: TEMPLATE_CAMPAIGN
+title: Example Campaign
+creator: YourName
+initial_room_id: lobby
+# Optional: relative path inside this campaign folder to an image shown in the Custom Campaigns menu.
+# initial_room_image: PREVIEW/initial_room.webp
+description: Replace this with your campaign description.

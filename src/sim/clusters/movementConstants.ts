@@ -286,7 +286,7 @@ export const FLYING_EYE_VERTICAL_MARGIN_WORLD = 20.0;
 // ============================================================================
 
 /** Horizontal margin from world edges within which clusters are clamped. */
-export const CLUSTER_EDGE_MARGIN_WORLD = 7.0;
+export const CLUSTER_EDGE_MARGIN_WORLD = 0.0;
 
 // ============================================================================
 // Collision helpers

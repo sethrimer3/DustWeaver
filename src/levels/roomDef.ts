@@ -62,7 +62,14 @@ export type BackgroundId =
   | 'world1'
   | 'world2'
   | 'world3'
-  | 'crystallineCracks';
+  | 'crystallineCracks'
+  | 'thero_prologue'
+  | 'thero_ch1'
+  | 'thero_ch2'
+  | 'thero_ch3'
+  | 'thero_ch4'
+  | 'thero_ch5'
+  | 'thero_ch6';
 
 /**
  * Lighting model used when shading block tiles in a room.
@@ -301,6 +308,10 @@ export interface RoomDef {
   name: string;
   /** World number — determines block sprites and background colour. */
   worldNumber: number;
+  /** X position on the visual world map (map world units). */
+  mapX: number;
+  /** Y position on the visual world map (map world units). */
+  mapY: number;
   /**
    * Visual theme for block sprites.  When set, overrides the worldNumber-based
    * sprite selection.  Falls back to worldNumber if not set.
