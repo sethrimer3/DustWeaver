@@ -1,0 +1,117 @@
+{
+  "worlds": [
+    {
+      "id": 0,
+      "name": "World 0"
+    },
+    {
+      "id": 1,
+      "name": "World 1"
+    },
+    {
+      "id": 2,
+      "name": "World 2"
+    },
+    {
+      "id": 3,
+      "name": "World 3"
+    },
+    {
+      "id": 99,
+      "name": "World 99"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "w1_room1",
+      "name": "Stone Crossing",
+      "worldId": 1,
+      "mapX": -89,
+      "mapY": 8
+    },
+    {
+      "id": "thero_prologue",
+      "name": "Prologue – Shape Glow",
+      "worldId": 99,
+      "mapX": 0,
+      "mapY": 128
+    },
+    {
+      "id": "w3_room1",
+      "name": "Crucible Depths",
+      "worldId": 3,
+      "mapX": 66,
+      "mapY": 128
+    },
+    {
+      "id": "thero_ch2",
+      "name": "Chapter 2 – Gravity Grid",
+      "worldId": 99,
+      "mapX": 116,
+      "mapY": 128
+    },
+    {
+      "id": "lobby",
+      "name": "Stone Hollow",
+      "worldId": 0,
+      "mapX": -147,
+      "mapY": 87.5
+    },
+    {
+      "id": "thero_ch5",
+      "name": "Chapter 5 – Tetris Blocks",
+      "worldId": 99,
+      "mapX": 182,
+      "mapY": 128
+    },
+    {
+      "id": "thero_ch1",
+      "name": "Chapter 1 – Vermiculate",
+      "worldId": 99,
+      "mapX": 248,
+      "mapY": 128
+    },
+    {
+      "id": "thero_ch3",
+      "name": "Chapter 3 – Euler Fluid",
+      "worldId": 99,
+      "mapX": 314,
+      "mapY": 128
+    },
+    {
+      "id": "w2_room1",
+      "name": "Ember Threshold",
+      "worldId": 2,
+      "mapX": 380,
+      "mapY": 128
+    },
+    {
+      "id": "boss_radiant_tether",
+      "name": "Luminous Chamber",
+      "worldId": 1,
+      "mapX": -51,
+      "mapY": -32
+    },
+    {
+      "id": "thero_ch4",
+      "name": "Chapter 4 – Floater Lattice",
+      "worldId": 99,
+      "mapX": 426,
+      "mapY": 128
+    },
+    {
+      "id": "thero_ch6",
+      "name": "Chapter 6 – Substrate",
+      "worldId": 99,
+      "mapX": 492,
+      "mapY": 128
+    },
+    {
+      "id": "seal_chamber",
+      "name": "Seal Chamber",
+      "worldId": 1,
+      "mapX": 4,
+      "mapY": -38
+    }
+  ]
+}

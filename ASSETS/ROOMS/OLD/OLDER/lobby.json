@@ -1,0 +1,81 @@
+{
+  "id": "lobby",
+  "name": "Stone Hollow",
+  "worldNumber": 0,
+  "widthBlocks": 144,
+  "heightBlocks": 72,
+  "playerSpawnBlock": [24, 18],
+  "interiorWalls": [
+    { "xBlock": 5, "yBlock": 1, "wBlock": 2, "hBlock": 2 },
+    { "xBlock": 10, "yBlock": 1, "wBlock": 3, "hBlock": 1 },
+    { "xBlock": 16, "yBlock": 1, "wBlock": 1, "hBlock": 3 },
+    { "xBlock": 17, "yBlock": 1, "wBlock": 2, "hBlock": 2 },
+    { "xBlock": 22, "yBlock": 1, "wBlock": 4, "hBlock": 1 },
+    { "xBlock": 28, "yBlock": 1, "wBlock": 2, "hBlock": 2 },
+    { "xBlock": 33, "yBlock": 1, "wBlock": 1, "hBlock": 3 },
+    { "xBlock": 37, "yBlock": 1, "wBlock": 3, "hBlock": 1 },
+    { "xBlock": 42, "yBlock": 1, "wBlock": 2, "hBlock": 2 },
+    { "xBlock": 1, "yBlock": 2, "wBlock": 2, "hBlock": 3 },
+    { "xBlock": 1, "yBlock": 7, "wBlock": 1, "hBlock": 4 },
+    { "xBlock": 1, "yBlock": 12, "wBlock": 3, "hBlock": 2 },
+    { "xBlock": 1, "yBlock": 21, "wBlock": 2, "hBlock": 2 },
+    { "xBlock": 45, "yBlock": 2, "wBlock": 2, "hBlock": 3 },
+    { "xBlock": 46, "yBlock": 7, "wBlock": 1, "hBlock": 3 },
+    { "xBlock": 44, "yBlock": 12, "wBlock": 3, "hBlock": 2 },
+    { "xBlock": 45, "yBlock": 21, "wBlock": 2, "hBlock": 2 },
+    { "xBlock": 1, "yBlock": 21, "wBlock": 4, "hBlock": 2 },
+    { "xBlock": 5, "yBlock": 22, "wBlock": 5, "hBlock": 1 },
+    { "xBlock": 10, "yBlock": 21, "wBlock": 3, "hBlock": 2 },
+    { "xBlock": 13, "yBlock": 22, "wBlock": 3, "hBlock": 1 },
+    { "xBlock": 16, "yBlock": 22, "wBlock": 2, "hBlock": 1 },
+    { "xBlock": 20, "yBlock": 19, "wBlock": 8, "hBlock": 4 },
+    { "xBlock": 28, "yBlock": 22, "wBlock": 3, "hBlock": 1 },
+    { "xBlock": 31, "yBlock": 21, "wBlock": 3, "hBlock": 2 },
+    { "xBlock": 34, "yBlock": 22, "wBlock": 4, "hBlock": 1 },
+    { "xBlock": 38, "yBlock": 21, "wBlock": 3, "hBlock": 2 },
+    { "xBlock": 41, "yBlock": 22, "wBlock": 3, "hBlock": 1 },
+    { "xBlock": 44, "yBlock": 21, "wBlock": 3, "hBlock": 2 },
+    { "xBlock": 7, "yBlock": 17, "wBlock": 3, "hBlock": 1 },
+    { "xBlock": 38, "yBlock": 17, "wBlock": 3, "hBlock": 1 },
+    { "xBlock": 18, "yBlock": 21, "wBlock": 2, "hBlock": 2 },
+    { "xBlock": 28, "yBlock": 21, "wBlock": 2, "hBlock": 2 }
+  ],
+  "enemies": [
+    {
+      "xBlock": 10,
+      "yBlock": 20,
+      "kinds": ["Earth"],
+      "particleCount": 12,
+      "isBoss": false,
+      "isFlyingEye": false,
+      "isRollingEnemy": false,
+      "isRockElemental": true,
+      "isRadiantTether": false
+    }
+  ],
+  "transitions": [
+    {
+      "direction": "right",
+      "targetRoomId": "w1_room1",
+      "positionBlock": 16,
+      "openingSizeBlocks": 5,
+      "targetSpawnBlock": [3, 19]
+    },
+    {
+      "direction": "left",
+      "targetRoomId": "w2_room1",
+      "positionBlock": 16,
+      "openingSizeBlocks": 5,
+      "targetSpawnBlock": [36, 19]
+    }
+  ],
+  "skillTombs": [
+    { "xBlock": 26, "yBlock": 18 }
+  ],
+  "skillBooks": [
+    { "xBlock": 22, "yBlock": 18 }
+  ],
+  "dustContainers": [
+    { "xBlock": 30, "yBlock": 18 }
+  ]
+}
