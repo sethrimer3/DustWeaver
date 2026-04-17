@@ -186,7 +186,10 @@ export function createEditorController(
             pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
             isCurrentRoomDirty = false;
           }
-          exportAllChanges(pendingRoomEdits, initialRoomIds, isWorldMapDirty);
+          const exportedFileCount = exportAllChanges(pendingRoomEdits, initialRoomIds, isWorldMapDirty);
+          if (exportedFileCount === 0) {
+            window.alert('No changed rooms or world-map edits to export yet.');
+          }
         },
         onOpenVisualMap: () => openVisualMap(),
         onSkillTombWeaveChange: (weaveId: string) => {

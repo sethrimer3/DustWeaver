@@ -30,7 +30,8 @@ export function exportRoomAsJson(data: EditorRoomData): void {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Revoke on the next tick so browsers have time to begin reading the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /**
@@ -79,7 +80,8 @@ export function exportWorldMapJson(): void {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Revoke on the next tick so browsers have time to begin reading the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /**
@@ -96,10 +98,13 @@ export function exportAllChanges(
   pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
   initialRoomIds: ReadonlySet<string>,
   isWorldMapDirty: boolean,
-): void {
+): number {
+  let exportCount = 0;
+
   // Export every room in the pending-edits store.
   for (const [, data] of pendingRoomEdits) {
     exportRoomAsJson(data);
+    exportCount += 1;
   }
 
   // Export newly-added rooms that were never explicitly saved (blank rooms).
@@ -107,10 +112,14 @@ export function exportAllChanges(
     if (!initialRoomIds.has(id) && !pendingRoomEdits.has(id)) {
       const { data } = roomDefToEditorRoomData(roomDef, 1);
       exportRoomAsJson(data);
+      exportCount += 1;
     }
   }
 
   if (isWorldMapDirty) {
     exportWorldMapJson();
+    exportCount += 1;
   }
+
+  return exportCount;
 }
