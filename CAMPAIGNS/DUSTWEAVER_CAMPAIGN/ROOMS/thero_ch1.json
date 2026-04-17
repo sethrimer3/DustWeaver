@@ -1,12 +1,17 @@
 {
   "id": "thero_ch1",
-  "name": "Chapter 1 – Vermiculate",
+  "name": "Chapter 1 \u2013 Vermiculate",
   "worldNumber": 99,
   "widthBlocks": 60,
   "heightBlocks": 34,
-  "playerSpawnBlock": [30, 30],
+  "playerSpawnBlock": [
+    30,
+    30
+  ],
   "interiorWalls": [],
   "enemies": [],
   "transitions": [],
-  "skillTombs": []
+  "skillTombs": [],
+  "mapX": 248,
+  "mapY": 128
 }

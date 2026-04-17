@@ -1,12 +1,17 @@
 {
   "id": "thero_ch4",
-  "name": "Chapter 4 – Floater Lattice",
+  "name": "Chapter 4 \u2013 Floater Lattice",
   "worldNumber": 99,
   "widthBlocks": 60,
   "heightBlocks": 34,
-  "playerSpawnBlock": [30, 30],
+  "playerSpawnBlock": [
+    30,
+    30
+  ],
   "interiorWalls": [],
   "enemies": [],
   "transitions": [],
-  "skillTombs": []
+  "skillTombs": [],
+  "mapX": 426,
+  "mapY": 128
 }

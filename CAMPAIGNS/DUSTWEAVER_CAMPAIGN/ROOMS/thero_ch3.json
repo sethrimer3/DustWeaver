@@ -1,12 +1,17 @@
 {
   "id": "thero_ch3",
-  "name": "Chapter 3 – Euler Fluid",
+  "name": "Chapter 3 \u2013 Euler Fluid",
   "worldNumber": 99,
   "widthBlocks": 60,
   "heightBlocks": 34,
-  "playerSpawnBlock": [30, 30],
+  "playerSpawnBlock": [
+    30,
+    30
+  ],
   "interiorWalls": [],
   "enemies": [],
   "transitions": [],
-  "skillTombs": []
+  "skillTombs": [],
+  "mapX": 314,
+  "mapY": 128
 }

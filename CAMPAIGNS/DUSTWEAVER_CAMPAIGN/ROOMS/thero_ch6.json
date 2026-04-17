@@ -1,12 +1,17 @@
 {
   "id": "thero_ch6",
-  "name": "Chapter 6 – Substrate",
+  "name": "Chapter 6 \u2013 Substrate",
   "worldNumber": 99,
   "widthBlocks": 60,
   "heightBlocks": 34,
-  "playerSpawnBlock": [30, 30],
+  "playerSpawnBlock": [
+    30,
+    30
+  ],
   "interiorWalls": [],
   "enemies": [],
   "transitions": [],
-  "skillTombs": []
+  "skillTombs": [],
+  "mapX": 492,
+  "mapY": 128
 }

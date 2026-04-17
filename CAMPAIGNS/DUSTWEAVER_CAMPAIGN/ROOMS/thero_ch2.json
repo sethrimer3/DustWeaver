@@ -1,12 +1,17 @@
 {
   "id": "thero_ch2",
-  "name": "Chapter 2 – Gravity Grid",
+  "name": "Chapter 2 \u2013 Gravity Grid",
   "worldNumber": 99,
   "widthBlocks": 60,
   "heightBlocks": 34,
-  "playerSpawnBlock": [30, 30],
+  "playerSpawnBlock": [
+    30,
+    30
+  ],
   "interiorWalls": [],
   "enemies": [],
   "transitions": [],
-  "skillTombs": []
+  "skillTombs": [],
+  "mapX": 116,
+  "mapY": 128
 }

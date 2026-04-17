@@ -27,8 +27,7 @@ import {
   parseSongId,
 } from '../editor/roomJson';
 import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
-import type { WorldMapJsonDef } from '../editor/worldMapData';
-import { getActiveCampaignId, getCampaignRoomsBasePath, getCampaignWorldMapPath } from './campaigns';
+import { getActiveCampaignId, getCampaignRoomsBasePath } from './campaigns';
 
 // ── Boundary wall generation (mirrors roomBuilders.ts) ───────────────────────
 
@@ -215,6 +214,8 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     id: json.id,
     name: json.name,
     worldNumber: json.worldNumber,
+    mapX: json.mapX ?? 0,
+    mapY: json.mapY ?? 0,
     widthBlocks: json.widthBlocks,
     heightBlocks: json.heightBlocks,
     walls: allWalls,
@@ -301,33 +302,4 @@ export async function loadRoomJsonFiles(): Promise<Map<string, RoomDef>> {
 
   await Promise.all(fetches);
   return rooms;
-}
-
-// ── World-map.json loader ─────────────────────────────────────────────────────
-
-/**
- * Fetches the optional CAMPAIGNS/<CAMPAIGN_ID>/worldMap/world-map.json file.
- * Returns the parsed WorldMapJsonDef, or null if the file is absent or invalid.
- */
-export async function loadWorldMapJson(): Promise<WorldMapJsonDef | null> {
-  try {
-    const worldMapPath = getCampaignWorldMapPath(getActiveCampaignId());
-    const resp = await fetch(worldMapPath);
-    if (!resp.ok) {
-      // 404 is normal when no world-map.json has been saved yet
-      if (resp.status !== 404) {
-        console.warn(`[roomJsonLoader] world-map.json fetch failed: ${resp.status}`);
-      }
-      return null;
-    }
-    const data = await resp.json() as WorldMapJsonDef;
-    if (!Array.isArray(data.worlds) || !Array.isArray(data.rooms)) {
-      console.warn('[roomJsonLoader] world-map.json has unexpected shape');
-      return null;
-    }
-    return data;
-  } catch (err) {
-    console.warn('[roomJsonLoader] Could not load world-map.json:', err);
-    return null;
-  }
 }

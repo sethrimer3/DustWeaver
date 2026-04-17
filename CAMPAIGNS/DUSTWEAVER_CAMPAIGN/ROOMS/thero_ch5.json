@@ -1,12 +1,17 @@
 {
   "id": "thero_ch5",
-  "name": "Chapter 5 – Tetris Blocks",
+  "name": "Chapter 5 \u2013 Tetris Blocks",
   "worldNumber": 99,
   "widthBlocks": 60,
   "heightBlocks": 34,
-  "playerSpawnBlock": [30, 30],
+  "playerSpawnBlock": [
+    30,
+    30
+  ],
   "interiorWalls": [],
   "enemies": [],
   "transitions": [],
-  "skillTombs": []
+  "skillTombs": [],
+  "mapX": 182,
+  "mapY": 128
 }

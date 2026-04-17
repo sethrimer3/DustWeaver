@@ -3176,5 +3176,7 @@
   "skillTombs": [],
   "blockTheme": "blackRock",
   "backgroundId": "crystallineCracks",
-  "lightingEffect": "DEFAULT"
+  "lightingEffect": "DEFAULT",
+  "mapX": -147,
+  "mapY": 87.5
 }
