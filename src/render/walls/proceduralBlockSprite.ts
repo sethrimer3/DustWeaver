@@ -141,6 +141,11 @@ export function getProceduralSprite(
  * Used to pick a stable, pseudo-random base sprite variation per cell so the
  * same block always shows the same texture across frames and game sessions.
  *
+ * Uses the MurmurHash3 finalizer mix applied to a simple spatial seed formed
+ * from the tile coordinates and an optional room/world seed.  The magic
+ * constants (73856093, 19349663, 83492791) are standard spatial-hash primes;
+ * 2246822519 is the first MurmurHash3 finalization constant.
+ *
  * @param col   Tile column (0-based).
  * @param row   Tile row (0-based).
  * @param seed  Optional extra seed (e.g. world / room number).
@@ -155,10 +160,50 @@ export function hashTilePosition(col: number, row: number, seed: number = 0): nu
   return h >>> 0;
 }
 
+// ── Per-pool ready-URL cache ──────────────────────────────────────────────────
+
+/**
+ * Caches the filtered list of successfully-loaded URLs for each probe pool.
+ * Key: reference to the probe pool array (identity comparison).
+ *
+ * The cache is rebuilt lazily when the pool's ready-count has grown.  This
+ * avoids per-frame allocation while still picking up newly-loaded variations.
+ */
+const _readyUrlsByPool = new Map<readonly string[], { urls: string[]; readyCount: number }>();
+
+/**
+ * Returns the subset of `probePool` whose images have finished loading,
+ * using a cached result that is only rebuilt when new images have loaded.
+ *
+ * Avoids allocating a new array on every render call while sprites are still
+ * being fetched — critical because this function runs for every visible tile.
+ */
+function _getReadyUrls(probePool: readonly string[]): string[] {
+  // Count how many pool images are currently loaded.
+  let currentReadyCount = 0;
+  for (let i = 0; i < probePool.length; i++) {
+    const img = _loadImg(probePool[i]);
+    if (_isReady(img)) currentReadyCount++;
+  }
+
+  const entry = _readyUrlsByPool.get(probePool);
+  if (entry !== undefined && entry.readyCount === currentReadyCount) {
+    return entry.urls;
+  }
+
+  // Rebuild the ready list.
+  const urls: string[] = [];
+  for (let i = 0; i < probePool.length; i++) {
+    if (_isReady(_loadImg(probePool[i]))) urls.push(probePool[i]);
+  }
+  _readyUrlsByPool.set(probePool, { urls, readyCount: currentReadyCount });
+  return urls;
+}
+
 /**
  * Picks a ready base sprite URL from a probe pool using a deterministic hash.
- * Falls back to the first URL in the pool if no images have loaded yet (so the
- * caller can still attempt loading rather than silently skipping).
+ * Falls back to the first URL in the pool when no images have loaded yet so
+ * the caller can still attempt loading rather than silently skipping.
  *
  * @param probePool   Array of probe URLs (some may not exist / not be loaded).
  * @param hash        Pre-computed hash to choose the variation.
@@ -167,16 +212,10 @@ export function hashTilePosition(col: number, row: number, seed: number = 0): nu
 function _pickFromPool(probePool: readonly string[], hash: number): string | null {
   if (probePool.length === 0) return null;
 
-  // Collect URLs whose images have successfully loaded.
-  const readyUrls: string[] = [];
-  for (let i = 0; i < probePool.length; i++) {
-    const img = _loadImg(probePool[i]);
-    if (_isReady(img)) readyUrls.push(probePool[i]);
-  }
-
+  const readyUrls = _getReadyUrls(probePool);
   if (readyUrls.length === 0) {
-    // Images still loading — kick off loading, return first URL so caller can
-    // show a fallback and retry next frame.
+    // Images still loading — return first URL so the caller can initiate
+    // loading and show a fallback this frame, then retry next frame.
     return probePool[0];
   }
 

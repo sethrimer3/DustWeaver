@@ -14,7 +14,14 @@
 
 // ── Probe helpers ─────────────────────────────────────────────────────────────
 
-/** Maximum number of sequential file indices to probe per folder. */
+/**
+ * Maximum number of sequential file indices to probe per folder.
+ *
+ * Any probe URL that fails to load (404) is simply ignored, so raising this
+ * value is safe.  The current largest pool is blackRock 2×2 at 20 variations;
+ * 50 gives generous headroom.  If the actual sprite count ever exceeds 50,
+ * raise this constant — no other code changes are needed.
+ */
 const _MAX_PROBE_COUNT = 50;
 
 /**
