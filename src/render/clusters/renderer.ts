@@ -327,7 +327,26 @@ export function renderWalls(ctx: CanvasRenderingContext2D, snapshot: WorldSnapsh
       const screenY = snapshot.walls.yWorld[wi] * scalePx + offsetYPx;
       const screenW = snapshot.walls.wWorld[wi] * scalePx;
       const screenH = snapshot.walls.hWorld[wi] * scalePx;
-      ctx.strokeRect(screenX, screenY, screenW, screenH);
+      const isInvisibleBoundary = snapshot.walls.isInvisibleFlag[wi] === 1;
+      const isThinHorizontal = screenH <= BLOCK_SIZE_MEDIUM * scalePx;
+      const isThinVertical = screenW <= BLOCK_SIZE_MEDIUM * scalePx;
+      if (isInvisibleBoundary && (isThinHorizontal || isThinVertical)) {
+        // Draw a single centerline for thin invisible boundary walls so room
+        // borders show as one dotted line instead of a double-edge rectangle.
+        ctx.beginPath();
+        if (isThinHorizontal) {
+          const centerY = screenY + screenH * 0.5;
+          ctx.moveTo(screenX, centerY);
+          ctx.lineTo(screenX + screenW, centerY);
+        } else {
+          const centerX = screenX + screenW * 0.5;
+          ctx.moveTo(centerX, screenY);
+          ctx.lineTo(centerX, screenY + screenH);
+        }
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(screenX, screenY, screenW, screenH);
+      }
     }
     ctx.setLineDash([]);
     ctx.restore();

@@ -37,7 +37,15 @@ function backgroundIdToImagePath(id: BackgroundId): string | null {
     case 'world1':           return `${BASE}SPRITES/WORLDS/W-1/background/background.png`;
     case 'world2':           return `${BASE}SPRITES/WORLDS/W-2/background/background.png`;
     case 'world3':           return `${BASE}SPRITES/WORLDS/W-3/background/background.png`;
-    case 'crystallineCracks': return null;  // solid black + procedural effect
+    case 'crystallineCracks':
+    case 'thero_prologue':
+    case 'thero_ch1':
+    case 'thero_ch2':
+    case 'thero_ch3':
+    case 'thero_ch4':
+    case 'thero_ch5':
+    case 'thero_ch6':
+      return null;  // procedural background effect
     default:                 return null;
   }
 }
@@ -124,7 +132,17 @@ export function renderWorldBackground(
   backgroundId?: BackgroundId,
 ): void {
   // Thero showcase rooms and Crystalline Cracks use solid black — no parallax image.
-  if (worldNumber === 99 || backgroundId === 'crystallineCracks') {
+  if (
+    worldNumber === 99 ||
+    backgroundId === 'crystallineCracks' ||
+    backgroundId === 'thero_prologue' ||
+    backgroundId === 'thero_ch1' ||
+    backgroundId === 'thero_ch2' ||
+    backgroundId === 'thero_ch3' ||
+    backgroundId === 'thero_ch4' ||
+    backgroundId === 'thero_ch5' ||
+    backgroundId === 'thero_ch6'
+  ) {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
     return;
