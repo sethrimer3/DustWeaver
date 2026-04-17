@@ -26,7 +26,12 @@ import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
-import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
+import {
+  isTheroShowcaseRoom,
+  renderTheroShowcaseEffect,
+  renderTheroBackgroundEffect,
+  renderCrystallineCracksBackground,
+} from '../render/effects/theroEffectManager';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
@@ -352,8 +357,17 @@ export function renderFrame(r: RenderFrameContext): void {
     currentRoom.backgroundId,
   );
 
-  // ── Thero effect showcase overlay (worldNumber=99 rooms) ────────────────
-  if (isTheroShowcaseRoom(currentRoom.id)) {
+  // ── Thero effect procedural overlays ─────────────────────────────────────
+  const renderedTheroBackground = renderTheroBackgroundEffect(
+    ctx,
+    currentRoom.backgroundId,
+    virtualWidthPx,
+    virtualHeightPx,
+    performance.now(),
+  );
+  // Legacy showcase rooms still use room-id dispatch when no explicit
+  // thero_* background override is present.
+  if (!renderedTheroBackground && isTheroShowcaseRoom(currentRoom.id)) {
     renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
   }
 

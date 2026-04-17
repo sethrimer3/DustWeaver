@@ -22,6 +22,7 @@ import { createEulerFluidEffect }     from './eulerFluidEffect';
 import { createFloaterLatticeEffect } from './floaterLatticeEffect';
 import { createTetrisBlockEffect }    from './tetrisBlockEffect';
 import { createSubstrateEffect }      from './substrateEffect';
+import type { BackgroundId } from '../../levels/roomDef';
 
 // Room IDs of the 7 showcase rooms (worldNumber === 99).
 export const THERO_SHOWCASE_ROOM_IDS = new Set([
@@ -93,6 +94,25 @@ export function renderTheroShowcaseEffect(
 
   effect.update(nowMs, widthPx, heightPx);
   effect.draw(ctx);
+}
+
+/**
+ * Render a Thero procedural background effect selected by backgroundId.
+ * Returns true when a Thero effect was rendered; false otherwise.
+ */
+export function renderTheroBackgroundEffect(
+  ctx: CanvasRenderingContext2D,
+  backgroundId: BackgroundId | undefined,
+  widthPx: number,
+  heightPx: number,
+  nowMs: number,
+): boolean {
+  if (!backgroundId) return false;
+  const effect = getEffects().get(backgroundId);
+  if (!effect) return false;
+  effect.update(nowMs, widthPx, heightPx);
+  effect.draw(ctx);
+  return true;
 }
 
 /**

@@ -89,6 +89,13 @@ export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] 
   { id: 'world2',           label: 'World 2' },
   { id: 'world3',           label: 'World 3' },
   { id: 'crystallineCracks', label: 'Crystalline Cracks' },
+  { id: 'thero_prologue',   label: 'Thero Prologue (Shape Glow)' },
+  { id: 'thero_ch1',        label: 'Thero Chapter 1 (Vermiculate)' },
+  { id: 'thero_ch2',        label: 'Thero Chapter 2 (Gravity Grid)' },
+  { id: 'thero_ch3',        label: 'Thero Chapter 3 (Euler Fluid)' },
+  { id: 'thero_ch4',        label: 'Thero Chapter 4 (Floater Lattice)' },
+  { id: 'thero_ch5',        label: 'Thero Chapter 5 (Tetris Blocks)' },
+  { id: 'thero_ch6',        label: 'Thero Chapter 6 (Substrate)' },
 ];
 
 /** Available lighting models for the editor dropdown. */
