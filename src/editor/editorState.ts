@@ -195,6 +195,10 @@ export interface EditorRoomData {
   id: string;
   name: string;
   worldNumber: number;
+  /** X position on the visual world map (map world units). */
+  mapX: number;
+  /** Y position on the visual world map (map world units). */
+  mapY: number;
   /** Block sprite theme for this room. Defaults to 'blackRock'. */
   blockTheme: BlockTheme;
   /** Background visual for this room. */
