@@ -149,6 +149,9 @@ export function startGameScreen(
   musicManager.setVolume(getMusicVolume());
 
   // ── Room state ────────────────────────────────────────────────────────────
+  const campaignSpawnRoom: RoomDef = ROOM_REGISTRY.get(STARTING_ROOM_ID)!;
+  const campaignSpawnBlock: readonly [number, number] = campaignSpawnRoom.playerSpawnBlock;
+
   let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
   let bgColor = worldBgColor(currentRoom.worldNumber);
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
@@ -401,7 +404,7 @@ export function startGameScreen(
   // Initial room load — use saved spawn point if returning to a save
   const initialSpawnBlock = (progress && progress.lastSaveSpawnBlock && progress.lastSaveRoomId === currentRoom.id)
     ? progress.lastSaveSpawnBlock
-    : currentRoom.playerSpawnBlock;
+    : campaignSpawnBlock;
   loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
 
   const inputState = createInputState();
@@ -528,16 +531,16 @@ export function startGameScreen(
       onReturnToLastSave: () => {
         isPlayerDead = false;
         deathScreenCleanup = null;
-        // Reload from last save point or starting room
+        // Reload from last save point or campaign spawn
         if (progress && progress.lastSaveRoomId) {
           const saveRoom = ROOM_REGISTRY.get(progress.lastSaveRoomId);
           if (saveRoom && progress.lastSaveSpawnBlock) {
             loadRoom(saveRoom, progress.lastSaveSpawnBlock[0], progress.lastSaveSpawnBlock[1]);
           } else {
-            loadRoom(currentRoom, currentRoom.playerSpawnBlock[0], currentRoom.playerSpawnBlock[1]);
+            loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
           }
         } else {
-          loadRoom(currentRoom, currentRoom.playerSpawnBlock[0], currentRoom.playerSpawnBlock[1]);
+          loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
         }
         lastTimestampMs = 0;
       },
