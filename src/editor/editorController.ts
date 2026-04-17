@@ -42,6 +42,8 @@ export interface EditorController {
   state: EditorState;
   /** Toggle editor on/off. */
   toggle: (currentRoom: RoomDef) => void;
+  /** Opens the visual world map overlay (editor must be active). */
+  openVisualMap: () => void;
   /** Called each frame. Returns true if editor is active (gameplay should be suppressed). */
   update: (
     dtSec: number,
@@ -1167,6 +1169,7 @@ export function createEditorController(
   return {
     state,
     toggle,
+    openVisualMap,
     update,
     render,
     loadRoomForEditing,

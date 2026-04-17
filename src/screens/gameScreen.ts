@@ -149,10 +149,22 @@ export function startGameScreen(
   musicManager.setVolume(getMusicVolume());
 
   // ── Room state ────────────────────────────────────────────────────────────
-  const campaignSpawnRoom: RoomDef = ROOM_REGISTRY.get('lobby') ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)!;
+  const firstAvailableRoom: RoomDef | null = ROOM_REGISTRY.values().next().value ?? null;
+  const configuredSpawnRoom: RoomDef | null = ROOM_REGISTRY.get('lobby')
+    ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)
+    ?? firstAvailableRoom;
+  const requestedStartRoom: RoomDef | null = (startRoomId !== null ? ROOM_REGISTRY.get(startRoomId) : undefined)
+    ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)
+    ?? configuredSpawnRoom;
+  if (requestedStartRoom === null || configuredSpawnRoom === null) {
+    throw new Error('[gameScreen] No rooms are loaded. Cannot start gameplay.');
+  }
+  const campaignSpawnRoom: RoomDef = configuredSpawnRoom;
   const campaignSpawnBlock: readonly [number, number] = campaignSpawnRoom.playerSpawnBlock;
+  const shouldOpenFailsafeEditor = (startRoomId !== null && ROOM_REGISTRY.get(startRoomId) === undefined)
+    || !ROOM_REGISTRY.has('lobby');
 
-  let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
+  let currentRoom: RoomDef = requestedStartRoom;
   let bgColor = worldBgColor(currentRoom.worldNumber);
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
   let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
@@ -401,10 +413,15 @@ export function startGameScreen(
     progress.exploredRoomIds.push(currentRoom.id);
   }
 
-  // Initial room load — use saved spawn point if returning to a save
-  const initialSpawnBlock = (progress && progress.lastSaveSpawnBlock && progress.lastSaveRoomId === currentRoom.id)
+  // Initial room load — use saved spawn point if returning to a save.
+  // Guard against bad/missing spawn values by clamping inside room bounds.
+  const desiredSpawnBlock = (progress && progress.lastSaveSpawnBlock && progress.lastSaveRoomId === currentRoom.id)
     ? progress.lastSaveSpawnBlock
     : campaignSpawnBlock;
+  const initialSpawnBlock: readonly [number, number] = [
+    Math.min(Math.max(1, desiredSpawnBlock[0]), Math.max(1, currentRoom.widthBlocks - 2)),
+    Math.min(Math.max(1, desiredSpawnBlock[1]), Math.max(1, currentRoom.heightBlocks - 2)),
+  ];
   loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
 
   const inputState = createInputState();
@@ -437,6 +454,12 @@ export function startGameScreen(
       editorToggleBtn.style.color = '#00c864';
     }
   });
+
+  // Failsafe: if campaign start wiring looks broken, force-open editor visual map.
+  if (shouldOpenFailsafeEditor) {
+    editorController.toggle(currentRoom);
+    editorController.openVisualMap();
+  }
 
   // "World Editor" toggle button — shown when debug mode is on
   let editorToggleBtn: HTMLButtonElement | null = null;
