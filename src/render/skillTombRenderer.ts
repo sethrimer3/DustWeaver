@@ -75,20 +75,14 @@ interface TombState {
 }
 
 export class SkillTombRenderer {
-  private readonly activeTombSprite: HTMLImageElement;
-  private readonly saveTombSprite: HTMLImageElement;
+  private readonly tombSprite: HTMLImageElement;
   private readonly tombStates: TombState[] = [];
-  private isActiveSpriteLoaded = false;
-  private isSaveSpriteLoaded = false;
+  private isSpriteLoaded = false;
 
   constructor() {
-    this.activeTombSprite = new Image();
-    this.activeTombSprite.src = `${BASE}SPRITES/WORLDS/W-0/skill_tomb.png`;
-    this.activeTombSprite.onload = () => { this.isActiveSpriteLoaded = true; };
-
-    this.saveTombSprite = new Image();
-    this.saveTombSprite.src = `${BASE}SPRITES/OBJECTS/environment/saveTomb.png`;
-    this.saveTombSprite.onload = () => { this.isSaveSpriteLoaded = true; };
+    this.tombSprite = new Image();
+    this.tombSprite.src = `${BASE}SPRITES/OBJECTS/environment/skillTomb.png`;
+    this.tombSprite.onload = () => { this.isSpriteLoaded = true; };
   }
 
   /** Initialise tomb states for a new room. */
@@ -287,20 +281,12 @@ export class SkillTombRenderer {
       const screenX = tomb.xWorld * zoom + offsetXPx;
       const screenY = tomb.yWorld * zoom + offsetYPx;
 
-      // Draw sprite (save tomb when idle, skill tomb when active)
+      // Draw sprite (always uses skillTomb.png)
       const spriteW = TOMB_SPRITE_WIDTH_WORLD * zoom;
       const spriteH = TOMB_SPRITE_HEIGHT_WORLD * zoom;
-      if (tomb.activationFactor > 0.1 && this.isActiveSpriteLoaded) {
+      if (this.isSpriteLoaded) {
         ctx.drawImage(
-          this.activeTombSprite,
-          screenX - spriteW / 2,
-          screenY - spriteH / 2,
-          spriteW,
-          spriteH,
-        );
-      } else if (this.isSaveSpriteLoaded) {
-        ctx.drawImage(
-          this.saveTombSprite,
+          this.tombSprite,
           screenX - spriteW / 2,
           screenY - spriteH / 2,
           spriteW,

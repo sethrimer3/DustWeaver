@@ -240,6 +240,13 @@ const PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD = -1;
 const PLAYER_AFTERIMAGE_MIN_SPEED_WORLD_PER_SEC = 185;
 /** Number of faint trailing afterimages to draw at high speed. */
 const PLAYER_AFTERIMAGE_COUNT = 2;
+/**
+ * Duration in ticks of the hurt visual feedback window.
+ * Must match HURT_VISUAL_DURATION_TICKS in sim/playerDamage.ts.
+ */
+const HURT_FLASH_DURATION_TICKS = 20;
+/** Maximum alpha of the red damage tint overlay (at the start of the hurt window). */
+const HURT_FLASH_MAX_ALPHA = 0.45;
 
 const _grappleDustSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust.png');
 const _grappleDustEndSprite = _loadImg('SPRITES/DUST/grapplingHook/grapplingHookDust_end.png');
@@ -424,6 +431,18 @@ export function renderClusters(
       } : undefined;
 
       if (_isSpriteReady(sprite)) {
+        // ── Invulnerability flicker: skip every other 3 ticks while invulnerable ──
+        const isInvulnerable = cluster.invulnerabilityTicks > 0;
+        // Flicker: visible for 3 ticks, invisible for 3 ticks — use ticks countdown.
+        const flickerHide = isInvulnerable && (Math.floor(cluster.invulnerabilityTicks / 3) % 2 === 0);
+        if (flickerHide) {
+          // Skip rendering this cluster for this flicker frame — still render cloak
+          if (playerCloak !== undefined && cloakPlayerState !== undefined) {
+            playerCloak.renderFront(ctx, offsetXPx, offsetYPx, scalePx, cloakPlayerState);
+          }
+          continue; // skip rest of player rendering
+        }
+
         // ── Layer 1: Back cloak (behind body) ──────────────────────────
         if (playerCloak !== undefined) {
           playerCloak.renderBack(ctx, offsetXPx, offsetYPx, scalePx);
@@ -478,6 +497,16 @@ export function renderClusters(
         );
         ctx.drawImage(sprite, -spriteHalfW, -spriteHalfH, spriteW, spriteH);
         ctx.restore();
+
+        // ── Hurt flash overlay: red tint while hurtTicks > 0 ─────────────
+        if (cluster.hurtTicks > 0) {
+          const flashAlpha = (cluster.hurtTicks / HURT_FLASH_DURATION_TICKS) * HURT_FLASH_MAX_ALPHA;
+          ctx.save();
+          ctx.globalAlpha = flashAlpha;
+          ctx.fillStyle = '#ff2222';
+          ctx.fillRect(screenX - spriteHalfW, spriteCenterY - spriteHalfH, spriteW, spriteH);
+          ctx.restore();
+        }
 
         // ── Layer 3: Front cloak (in front of body) ────────────────────
         if (playerCloak !== undefined && cloakPlayerState !== undefined) {

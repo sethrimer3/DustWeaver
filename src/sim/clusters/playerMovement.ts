@@ -88,6 +88,12 @@ export function tickPlayerMovement(
   if (cluster.varJumpTimerTicks > 0) {
     cluster.varJumpTimerTicks -= 1;
   }
+  if (cluster.invulnerabilityTicks > 0) {
+    cluster.invulnerabilityTicks -= 1;
+  }
+  if (cluster.hurtTicks > 0) {
+    cluster.hurtTicks -= 1;
+  }
   // Grappling resets the "first wall jump" bonus state.
   if (world.isGrappleActiveFlag === 1 || world.isGrappleStuckFlag === 1) {
     cluster.hasUsedWallJumpSinceResetFlag = 0;

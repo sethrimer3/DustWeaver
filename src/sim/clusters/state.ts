@@ -265,6 +265,18 @@ export interface ClusterState {
   isSkiddingFlag: 0 | 1;
   /** 1 while the player is sliding (sprint + crouch/down on ground). */
   isSlidingFlag: 0 | 1;
+
+  // ---- Damage / hit feedback -----------------------------------------------
+  /**
+   * Ticks remaining during which the player is invulnerable to damage.
+   * Counted down each tick; while > 0 incoming hits are ignored.
+   */
+  invulnerabilityTicks: number;
+  /**
+   * Ticks remaining in the hurt visual feedback window.
+   * While > 0 the player sprite shows a damage tint / flash.
+   */
+  hurtTicks: number;
 }
 
 export function createClusterState(
@@ -353,5 +365,7 @@ export function createClusterState(
     playerIdleNextSwitchTicks: 0,
     isSkiddingFlag: 0,
     isSlidingFlag: 0,
+    invulnerabilityTicks: 0,
+    hurtTicks: 0,
   };
 }

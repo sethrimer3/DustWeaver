@@ -277,7 +277,7 @@ export function placeAtCursor(state: EditorState): void {
       uid: allocateUid(state),
       xBlock: bx,
       yBlock: by,
-      weaveId: 'storm',
+      weaveId: state.pendingSkillTombWeaveId,
     });
   } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
     let dustCount: number;

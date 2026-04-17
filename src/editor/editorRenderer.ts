@@ -5,7 +5,7 @@
  */
 
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
-import type { EditorState, EditorRoomData, EditorTransition, EditorWall } from './editorState';
+import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview } from './editorTools';
 
@@ -206,10 +206,130 @@ export function renderEditorOverlays(
   drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
     offsetXPx, offsetYPx, zoom, CURSOR_COLOR, 1);
 
+  // ── Hover tooltip (Select tool only) ─────────────────────────────────────
+  if (state.activeTool === EditorTool.Select && state.hoverElement !== null) {
+    const el = state.hoverElement;
+    const tooltipId = buildElementTooltipId(el.type, el.uid);
+    const tooltipType = buildElementTypeName(el.type, el.uid, room);
+    const cursorXPx = state.cursorWorldX * zoom + offsetXPx;
+    const cursorYPx = state.cursorWorldY * zoom + offsetYPx;
+    drawHoverTooltip(ctx, tooltipId, tooltipType, cursorXPx, cursorYPx, canvasWidth, canvasHeight);
+  }
+
   ctx.restore();
 }
 
 // ── Drawing helpers ──────────────────────────────────────────────────────────
+
+/** Returns a unique display ID string for the given element (e.g. "skill_tomb_12"). */
+function buildElementTooltipId(type: SelectedElementType, uid: number): string {
+  const prefix: Record<SelectedElementType, string> = {
+    wall:        'wall',
+    enemy:       'enemy',
+    transition:  'transition',
+    saveTomb:    'save_tomb',
+    skillTomb:   'skill_tomb',
+    dustPile:    'dust_pile',
+    playerSpawn: 'player_spawn',
+  };
+  const base = prefix[type] ?? type;
+  return `${base}_${uid}`;
+}
+
+/**
+ * Returns a human-readable type name for the element, enriched with enemy
+ * sub-type when available.
+ */
+function buildElementTypeName(
+  type: SelectedElementType,
+  uid: number,
+  room: EditorRoomData,
+): string {
+  if (type === 'enemy') {
+    const e = room.enemies.find(x => x.uid === uid);
+    if (e) {
+      if (e.isFlyingEyeFlag === 1)    return 'Flying Eye';
+      if (e.isRollingEnemyFlag === 1) return 'Rolling Enemy';
+      if (e.isRockElementalFlag === 1)return 'Rock Elemental';
+      if (e.isRadiantTetherFlag === 1)return 'Radiant Tether';
+      if (e.isGrappleHunterFlag === 1)return 'Grapple Hunter';
+      return 'Enemy';
+    }
+  }
+  const names: Partial<Record<SelectedElementType, string>> = {
+    wall:        'Wall',
+    transition:  'Room Transition',
+    saveTomb:    'Save Tomb',
+    skillTomb:   'Skill Tomb',
+    dustPile:    'Dust Pile',
+    playerSpawn: 'Player Spawn',
+  };
+  return names[type] ?? type;
+}
+
+/** Renders a small tooltip box near the cursor showing element ID + type. */
+function drawHoverTooltip(
+  ctx: CanvasRenderingContext2D,
+  idText: string,
+  typeText: string,
+  cursorXPx: number,
+  cursorYPx: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): void {
+  const PADDING = 5;
+  const LINE_HEIGHT = 13;
+  const ID_FONT    = 'bold 11px monospace';
+  const TYPE_FONT  = '10px monospace';
+  const OFFSET_X   = 12;
+  const OFFSET_Y   = -28;
+
+  ctx.save();
+  ctx.font = ID_FONT;
+  const idWidth = ctx.measureText(idText).width;
+  ctx.font = TYPE_FONT;
+  const typeWidth = ctx.measureText(typeText).width;
+  const boxW = Math.max(idWidth, typeWidth) + PADDING * 2;
+  const boxH = LINE_HEIGHT * 2 + PADDING * 2;
+
+  let tx = cursorXPx + OFFSET_X;
+  let ty = cursorYPx + OFFSET_Y;
+  // Keep tooltip inside canvas
+  if (tx + boxW > canvasWidth - 4) tx = cursorXPx - OFFSET_X - boxW;
+  if (ty < 4) ty = cursorYPx + 16;
+  if (ty + boxH > canvasHeight - 4) ty = canvasHeight - 4 - boxH;
+
+  ctx.globalAlpha = 0.88;
+  ctx.fillStyle = 'rgba(10,12,20,0.9)';
+  ctx.strokeStyle = 'rgba(0,200,100,0.55)';
+  ctx.lineWidth = 1;
+  // Rounded rectangle
+  const r = 3;
+  ctx.beginPath();
+  ctx.moveTo(tx + r, ty);
+  ctx.lineTo(tx + boxW - r, ty);
+  ctx.arcTo(tx + boxW, ty,         tx + boxW, ty + r,         r);
+  ctx.lineTo(tx + boxW, ty + boxH - r);
+  ctx.arcTo(tx + boxW, ty + boxH,  tx + boxW - r, ty + boxH,  r);
+  ctx.lineTo(tx + r, ty + boxH);
+  ctx.arcTo(tx,       ty + boxH,   tx, ty + boxH - r,          r);
+  ctx.lineTo(tx, ty + r);
+  ctx.arcTo(tx,       ty,          tx + r, ty,                  r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.globalAlpha = 1.0;
+  ctx.font = ID_FONT;
+  ctx.fillStyle = '#c0ffd0';
+  ctx.fillText(idText,   tx + PADDING, ty + PADDING + LINE_HEIGHT - 2);
+  ctx.font = TYPE_FONT;
+  ctx.fillStyle = 'rgba(170,220,180,0.7)';
+  ctx.fillText(typeText, tx + PADDING, ty + PADDING + LINE_HEIGHT * 2 - 2);
+
+  ctx.restore();
+}
+
 
 function drawGrid(
   ctx: CanvasRenderingContext2D,
