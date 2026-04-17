@@ -12,7 +12,7 @@ import type { CameraState } from '../render/camera';
 import {
   EditorState, createEditorState, EditorTool,
   EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile,
-  BlockTheme, BackgroundId, LightingEffect,
+  BlockTheme, BackgroundId, LightingEffect, RoomSongId,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
@@ -172,6 +172,10 @@ export function createEditorController(
         },
         onBackgroundChange: (bgId: BackgroundId) => {
           if (state.roomData) state.roomData.backgroundId = bgId;
+          applyEdits();
+        },
+        onRoomSongChange: (songId: RoomSongId) => {
+          if (state.roomData) state.roomData.songId = songId;
           applyEdits();
         },
         onConfirm: () => confirmEdits(),

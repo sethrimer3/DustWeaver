@@ -32,6 +32,7 @@ import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize, getMusicVolume, getSfxVolume } from '../ui/renderSettings';
+import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { BloomSystem } from '../render/effects/bloomSystem';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
@@ -136,40 +137,9 @@ export function startGameScreen(
   const ctx = virtualCtx;
   const camera = createCameraState();
 
-  // ── Music system for world0 (brown rock cave) ─────────────────────────────
-  let currentWorldMusic: HTMLAudioElement | null = null;
-  let currentMusicWorldNumber: number | null = null;
-  let musicVolume = 0.7; // will be updated from pauseMenuState
-
-  function updateWorldMusic(worldNumber: number, volume: number): void {
-    musicVolume = volume;
-    // Only play thoughtfulLevel music in world0
-    if (worldNumber === 0) {
-      if (currentMusicWorldNumber !== 0) {
-        // Stop any existing music
-        if (currentWorldMusic !== null) {
-          currentWorldMusic.pause();
-          currentWorldMusic.src = '';
-        }
-        // Start world0 music
-        currentWorldMusic = new Audio(`${BASE}MUSIC/thoughtfulLevel.mp3`);
-        currentWorldMusic.loop = true;
-        currentWorldMusic.volume = volume;
-        currentWorldMusic.play().catch(() => { /* autoplay may be blocked */ });
-        currentMusicWorldNumber = 0;
-      } else if (currentWorldMusic !== null) {
-        currentWorldMusic.volume = volume;
-      }
-    } else {
-      // Stop music in other worlds
-      if (currentWorldMusic !== null) {
-        currentWorldMusic.pause();
-        currentWorldMusic.src = '';
-        currentWorldMusic = null;
-        currentMusicWorldNumber = null;
-      }
-    }
-  }
+  // ── Background music manager ─────────────────────────────────────────────
+  const musicManager: MusicManager = createMusicManager(BASE);
+  musicManager.setVolume(getMusicVolume());
 
   // ── Room state ────────────────────────────────────────────────────────────
   let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
@@ -202,8 +172,8 @@ export function startGameScreen(
     }
     setActiveBlockLighting(room.lightingEffect ?? 'DEFAULT', room.widthBlocks, room.heightBlocks);
 
-    // Update music for the current world
-    updateWorldMusic(room.worldNumber, musicVolume);
+    // Notify the music manager about the new room
+    musicManager.notifyRoomEntered(room.songId ?? '_continue');
 
     // Reset world state
     world.tick = 0;
@@ -900,10 +870,7 @@ export function startGameScreen(
     }
 
     // Update music volume from pause menu settings
-    if (currentWorldMusic !== null && currentWorldMusic.volume !== pauseMenuState.musicVolume) {
-      currentWorldMusic.volume = pauseMenuState.musicVolume;
-      musicVolume = pauseMenuState.musicVolume;
-    }
+    musicManager.setVolume(pauseMenuState.musicVolume);
 
     // While paused or in a menu, still render the frozen scene but skip sim and transitions
     if (isPaused || isSkillTombMenuOpen) {
@@ -1169,12 +1136,8 @@ export function startGameScreen(
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
     if (deathScreenCleanup !== null) deathScreenCleanup();
     if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
-    // Stop world music
-    if (currentWorldMusic !== null) {
-      currentWorldMusic.pause();
-      currentWorldMusic.src = '';
-      currentWorldMusic = null;
-    }
+    // Stop background music and release resources
+    musicManager.dispose();
     editorController.destroy();
     removeEditorButton();
     detachInput();
