@@ -24,6 +24,7 @@ import type {
 import {
   validateRoomJson,
   stringToParticleKind,
+  parseSongId,
 } from '../editor/roomJson';
 import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
 import type { WorldMapJsonDef } from '../editor/worldMapData';
@@ -48,12 +49,12 @@ function buildBoundaryWalls(
   // Bottom wall (full width) — invisible boundary
   walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
 
-  // Left wall — split around tunnel openings (invisible boundary)
-  const leftTunnels = transitions.filter(t => t.direction === 'left');
+  // Left wall — split around edge-transition openings only (interior transitions keep wall intact)
+  const leftTunnels = transitions.filter(t => t.direction === 'left' && t.depthBlock === undefined);
   buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
 
-  // Right wall — split around tunnel openings (invisible boundary)
-  const rightTunnels = transitions.filter(t => t.direction === 'right');
+  // Right wall — split around edge-transition openings only
+  const rightTunnels = transitions.filter(t => t.direction === 'right' && t.depthBlock === undefined);
   buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
 
   return walls;
@@ -90,7 +91,10 @@ function buildTunnelWalls(
 ): RoomWallDef[] {
   const walls: RoomWallDef[] = [];
 
+  // Only edge transitions (depthBlock undefined) get physical corridor walls.
   for (const tunnel of transitions) {
+    if (tunnel.depthBlock !== undefined) continue; // interior transition — no corridor walls
+
     const topY = tunnel.positionBlock - 1;
     const bottomY = tunnel.positionBlock + tunnel.openingSizeBlocks;
 
@@ -123,7 +127,10 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     wBlock: w.wBlock,
     hBlock: w.hBlock,
     isPlatformFlag: w.isPlatform ? (1 as const) : (0 as const),
+    platformEdge: w.platformEdge,
     blockTheme: w.blockTheme,
+    rampOrientation: w.rampOrientation,
+    isPillarHalfWidthFlag: w.isPillarHalfWidth ? (1 as const) : (0 as const),
   }));
 
   const allWalls: RoomWallDef[] = [...boundaryWalls, ...tunnelWalls, ...interiorWalls];
@@ -157,6 +164,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     openingSizeBlocks: t.openingSizeBlocks,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
     fadeColor: t.fadeColor,
+    depthBlock: t.depthBlock,
   }));
 
   // ── Hazards ──────────────────────────────────────────────────────────────
@@ -216,13 +224,16 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     enemies,
     playerSpawnBlock: [json.playerSpawnBlock[0], json.playerSpawnBlock[1]],
     transitions,
-    skillTombs: json.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    saveTombs: json.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    skillTombs: (json.dustSkillTombs ?? []).map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
   };
 
   // Propagate optional theme/background fields
   if (json.blockTheme) room.blockTheme = json.blockTheme;
   if (json.backgroundId) room.backgroundId = json.backgroundId;
   if (json.lightingEffect) room.lightingEffect = json.lightingEffect;
+  const resolvedSongId = parseSongId(json.songId);
+  if (resolvedSongId !== '_continue') room.songId = resolvedSongId;
 
   // Add optional fields only if present
   if (json.skillBooks && json.skillBooks.length > 0) {

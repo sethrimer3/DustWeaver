@@ -20,6 +20,12 @@
 import { WallSnapshot } from '../snapshot';
 import type { BlockTheme, LightingEffect } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
+import {
+  getBlockSprite1x1,
+  getBlockSprite2x2,
+  getPlatformSprite1x1,
+  getRampSprite,
+} from './proceduralBlockSprite';
 
 // ── Sprite loading ──────────────────────────────────────────────────────────
 
@@ -50,55 +56,6 @@ interface BlockSpriteSet {
 }
 
 // ── Block-theme sprite pre-loads ────────────────────────────────────────────
-
-// Black Rock sprites
-const _blackRockBlockVariants: readonly HTMLImageElement[] = [
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (1).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (2).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (3).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (4).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (5).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (6).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (7).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (8).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (9).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (10).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (11).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (12).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (13).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (14).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (15).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (16).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (17).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (18).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (19).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock (20).png'),
-];
-const _blackRockCornerVariants: readonly HTMLImageElement[] = [
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (1).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (2).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (3).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (4).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (5).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (6).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (7).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (8).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (9).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (10).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_corner (11).png'),
-];
-const _blackRockPlatformVariants: readonly HTMLImageElement[] = [
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (1).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (2).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (3).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_platform (4).png'),
-];
-const _blackRockPillarVariants: readonly HTMLImageElement[] = [
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (1).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (2).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (3).png'),
-  _loadImage('SPRITES/BLOCKS/blackRock/blackRock_pillar (4).png'),
-];
 
 // Brown Rock sprites (single flat sprite, no auto-tiling variants)
 const _brownRockSprite8 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_8x8.png');
@@ -212,9 +169,8 @@ function _getDirtSprite(variant: TileVariant): HTMLImageElement {
 }
 
 /**
- * Returns the 2x2 full sprite for themes that use a single dedicated 16x16
- * texture (brownRock, dirt).  For blackRock, returns null — blackRock 2x2
- * blocks use per-block variant selection in _getBlackRock2x2Sprite.
+ * Returns the 2×2 full sprite for themes that use a single dedicated 16×16
+ * texture (brownRock, dirt).
  */
 function _getFullSpriteFor2x2(theme: BlockTheme | null, blockSizePx: number): HTMLImageElement | null {
   if (blockSizePx !== 8) return null;
@@ -223,82 +179,39 @@ function _getFullSpriteFor2x2(theme: BlockTheme | null, blockSizePx: number): HT
   return null;
 }
 
-/** Returns true if the active theme supports 2x2 full-sprite rendering. */
+/** Returns true if the active theme supports 2×2 full-sprite rendering. */
 function _themeSupports2x2(theme: BlockTheme | null, blockSizePx: number): boolean {
   if (blockSizePx !== 8) return false;
   return theme === 'brownRock' || theme === 'dirt' || theme === 'blackRock';
 }
 
 /**
- * Returns a blackRock variant sprite for a 2x2 block at the given top-left
- * tile coordinate.  The existing 16×16 source sprites are drawn at their
- * native resolution (16 game-pixels) to fill the 2x2 area.
+ * Returns the sprite image for a non-blackRock block cell (brownRock, dirt)
+ * based on the auto-tile variant.
  */
-function _getBlackRock2x2Sprite(col: number, row: number): HTMLImageElement {
-  const hash = _hashTileCoord(col, row);
-  return _blackRockBlockVariants[hash % _blackRockBlockVariants.length];
-}
-
-function _hashTileCoord(col: number, row: number): number {
-  let seed = (col * 73856093) ^ (row * 19349663) ^ (_activeWorldNumber * 83492791);
-  seed |= 0;
-  seed ^= seed >>> 16;
-  seed = Math.imul(seed, 2246822519);
-  seed ^= seed >>> 13;
-  return seed >>> 0;
-}
-
-// Neighbor-mask constants for corner detection
-const _CORNER_MASK_SW = 4 | 8;   // _S | _W
-const _CORNER_MASK_NE = 1 | 2;   // _N | _E
-const _CORNER_MASK_SE = 4 | 2;   // _S | _E
-const _CORNER_MASK_NW = 1 | 8;   // _N | _W
-
-function _pickBlackRockVariant(
-  col: number,
-  row: number,
-  northSolid: boolean,
-  eastSolid: boolean,
-  southSolid: boolean,
-  westSolid: boolean,
-  // mask is pre-computed by the caller to avoid recomputing per call site;
-  // it equals (northSolid?_N:0)|(eastSolid?_E:0)|(southSolid?_S:0)|(westSolid?_W:0).
-  mask: number,
-): HTMLImageElement {
-  // Thin pillar tiles: vertically connected and narrow in width.
-  const isPillarTile = northSolid && southSolid && !eastSolid && !westSolid;
-  const hash = _hashTileCoord(col, row);
-  if (isPillarTile) {
-    return _blackRockPillarVariants[hash % _blackRockPillarVariants.length];
-  }
-  // Use dedicated corner sprites for 2-adjacent-neighbor (L-shaped) tiles.
-  if (mask === _CORNER_MASK_SW || mask === _CORNER_MASK_NE ||
-      mask === _CORNER_MASK_SE || mask === _CORNER_MASK_NW) {
-    return _blackRockCornerVariants[hash % _blackRockCornerVariants.length];
-  }
-  return _blackRockBlockVariants[hash % _blackRockBlockVariants.length];
-}
-
-/**
- * Returns the sprite for a block cell, based on the active block theme and
- * the cell's auto-tile variant.
- */
-function _getSpriteForTheme(
+function _getSpriteForLegacyTheme(
   theme: BlockTheme,
-  col: number, row: number,
-  northSolid: boolean, eastSolid: boolean, southSolid: boolean, westSolid: boolean,
-  mask: number,
   variant: TileVariant,
   blockSizePx: number,
 ): HTMLImageElement {
   switch (theme) {
-    case 'blackRock':
-      return _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid, mask);
     case 'brownRock':
       return _getBrownRockSpriteForBlockSize(blockSizePx);
     case 'dirt':
       return _getDirtSprite(variant);
+    default:
+      return _getBrownRockSpriteForBlockSize(blockSizePx);
   }
+}
+
+/**
+ * Maps a BlockTheme to the material name string used by the procedural sprite
+ * system.  Returns null when the theme is not supported by that system.
+ */
+function _themeToProceduralMaterial(theme: BlockTheme | null, legacyWorldNumber: number): string | null {
+  if (theme === 'blackRock') return 'blackRock';
+  if (theme === null && legacyWorldNumber === 0) return 'blackRock';
+  return null;
 }
 
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
@@ -372,6 +285,16 @@ interface CachedTileCoord {
   readonly key: string;
   readonly col: number;
   readonly row: number;
+  /** platformEdge for platform tiles: 0=top, 1=bottom, 2=left, 3=right. Only meaningful for platformTiles. */
+  readonly platformEdge: number;
+}
+
+interface RampWallInfo {
+  readonly wallIndex: number;
+}
+
+interface HalfPillarWallInfo {
+  readonly wallIndex: number;
 }
 
 interface CachedWallLayout {
@@ -381,6 +304,10 @@ interface CachedWallLayout {
   platformOccupied: Set<string>;
   occupiedTiles: CachedTileCoord[];
   platformTiles: CachedTileCoord[];
+  /** Ramp walls (rampOrientationIndex !== 255): rendered as filled triangles. */
+  rampWalls: RampWallInfo[];
+  /** Half-pillar walls (isPillarHalfWidthFlag === 1): rendered narrow. */
+  halfPillarWalls: HalfPillarWallInfo[];
   /** Per-tile theme: maps tile key → BlockTheme (null = use room default). */
   tileTheme: Map<string, BlockTheme | null>;
   aboveLightingDepths: Map<string, number>;
@@ -492,7 +419,7 @@ function _buildWallLayoutCache(
 ): CachedWallLayout {
   let signature = `${blockSizePx}|${walls.count}`;
   for (let wi = 0; wi < walls.count; wi++) {
-    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.themeIndex[wi]},${walls.isInvisibleFlag[wi]}`;
+    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.platformEdge[wi]},${walls.themeIndex[wi]},${walls.isInvisibleFlag[wi]},${walls.rampOrientationIndex[wi]},${walls.isPillarHalfWidthFlag[wi]}`;
   }
 
   if (_cachedWallLayout !== null &&
@@ -503,11 +430,20 @@ function _buildWallLayoutCache(
 
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
+  const platformEdgeByKey = new Map<string, number>();
   const tileTheme = new Map<string, BlockTheme | null>();
+  const rampWalls: RampWallInfo[] = [];
+  const halfPillarWalls: HalfPillarWallInfo[] = [];
 
   for (let wi = 0; wi < walls.count; wi++) {
     // Skip invisible boundary walls
     if (walls.isInvisibleFlag[wi] === 1) continue;
+
+    // Ramp walls render as triangles — skip them from the regular tile grid
+    if (walls.rampOrientationIndex[wi] !== 255) {
+      rampWalls.push({ wallIndex: wi });
+      continue;
+    }
 
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
@@ -518,6 +454,27 @@ function _buildWallLayoutCache(
       ? indexToBlockTheme(walls.themeIndex[wi])
       : null;
 
+    // Half-pillar walls: add to normal occupied for lighting/neighbor purposes but
+    // record for separate narrow rendering.
+    const isHalfPillar = walls.isPillarHalfWidthFlag[wi] === 1;
+    if (isHalfPillar) {
+      halfPillarWalls.push({ wallIndex: wi });
+      // Add to occupied so neighbor detection works; these tiles still block movement.
+      for (let r = 0; r < rowCount; r++) {
+        for (let c = 0; c < colCount; c++) {
+          occupied.add(_tileKey(colStart + c, rowStart + r));
+        }
+      }
+      if (wallTheme !== null) {
+        for (let r = 0; r < rowCount; r++) {
+          for (let c = 0; c < colCount; c++) {
+            tileTheme.set(_tileKey(colStart + c, rowStart + r), wallTheme);
+          }
+        }
+      }
+      continue;
+    }
+
     for (let r = 0; r < rowCount; r++) {
       for (let c = 0; c < colCount; c++) {
         const col = colStart + c;
@@ -525,6 +482,7 @@ function _buildWallLayoutCache(
         const key = _tileKey(col, row);
         if (walls.isPlatformFlag[wi] === 1) {
           platformOccupied.add(key);
+          platformEdgeByKey.set(key, walls.platformEdge[wi]);
         } else {
           occupied.add(key);
         }
@@ -542,6 +500,7 @@ function _buildWallLayoutCache(
       key,
       col: parseInt(key.slice(0, commaIdx), 10),
       row: parseInt(key.slice(commaIdx + 1), 10),
+      platformEdge: 0,
     });
   }
 
@@ -552,6 +511,7 @@ function _buildWallLayoutCache(
       key,
       col: parseInt(key.slice(0, commaIdx), 10),
       row: parseInt(key.slice(commaIdx + 1), 10),
+      platformEdge: platformEdgeByKey.get(key) ?? 0,
     });
   }
 
@@ -584,6 +544,8 @@ function _buildWallLayoutCache(
     platformOccupied,
     occupiedTiles,
     platformTiles,
+    rampWalls,
+    halfPillarWalls,
     tileTheme,
     aboveLightingDepths,
     defaultLightingDepthByRoomKey: new Map<string, Map<string, number>>(),
@@ -600,6 +562,18 @@ function _getDefaultLightingDepths(layout: CachedWallLayout): Map<string, number
   const depths = _buildDefaultLightingDepths(layout.occupied);
   layout.defaultLightingDepthByRoomKey.set(roomKey, depths);
   return depths;
+}
+
+/**
+ * Converts open-air distance (in tiles) into darkness alpha.
+ * Darkness now accelerates with depth: each additional tile from open air
+ * contributes twice the darkness of the previous tile.
+ */
+function _getDarknessAlphaFromAirDepth(airDepth: number): number {
+  if (airDepth <= 0) return 0;
+  const BASE_DARKNESS_STEP = 0.1;
+  const acceleratedAlpha = BASE_DARKNESS_STEP * (Math.pow(2, airDepth) - 1);
+  return Math.min(1, acceleratedAlpha);
 }
 
 /** Collects 2x2 wall top-left keys with their per-wall theme index. */
@@ -703,6 +677,67 @@ function _drawVertexOverlays(
   }
 }
 
+// ── Platform and ramp draw helpers ───────────────────────────────────────────
+
+/** Draws a 3-pixel thick solid-color platform line at the specified edge. */
+function _drawPlatformLine(
+  ctx: CanvasRenderingContext2D,
+  tileX: number, tileY: number,
+  tileSizeScreen: number,
+  platformEdge: number,
+  scalePx: number,
+): void {
+  const LINE_PX = Math.max(1, Math.round(3 * scalePx));
+  switch (platformEdge) {
+    case 0: ctx.fillRect(tileX, tileY, tileSizeScreen, LINE_PX); break;
+    case 1: ctx.fillRect(tileX, tileY + tileSizeScreen - LINE_PX, tileSizeScreen, LINE_PX); break;
+    case 2: ctx.fillRect(tileX, tileY, LINE_PX, tileSizeScreen); break;
+    case 3: ctx.fillRect(tileX + tileSizeScreen - LINE_PX, tileY, LINE_PX, tileSizeScreen); break;
+  }
+}
+
+/**
+ * Draws a ramp as a solid-color filled triangle with a hypotenuse edge stroke.
+ * Used as fallback for non-blackRock themes and while procedural sprites load.
+ */
+function _drawRampTriangle(
+  ctx: CanvasRenderingContext2D,
+  wxPx: number, wyPx: number,
+  wwPx: number, whPx: number,
+  ori: number,
+  fillColor: string,
+  edgeColor: string,
+  scalePx: number,
+): void {
+  const x0 = wxPx;        const y0 = wyPx;         // TL
+  const x1 = wxPx + wwPx; const y1 = wyPx;         // TR
+  const x2 = wxPx;        const y2 = wyPx + whPx;  // BL
+  const x3 = wxPx + wwPx; const y3 = wyPx + whPx;  // BR
+
+  ctx.fillStyle = fillColor;
+  ctx.beginPath();
+  switch (ori) {
+    case 0: ctx.moveTo(x2, y2); ctx.lineTo(x3, y3); ctx.lineTo(x1, y1); break; // /
+    case 1: ctx.moveTo(x2, y2); ctx.lineTo(x3, y3); ctx.lineTo(x0, y0); break; // \
+    case 2: ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); break; // ⌐
+    case 3: ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x3, y3); break; // ¬
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = edgeColor;
+  ctx.lineWidth = Math.max(1, scalePx);
+  ctx.beginPath();
+  switch (ori) {
+    case 0: ctx.moveTo(x2, y2); ctx.lineTo(x1, y1); break;
+    case 1: ctx.moveTo(x3, y3); ctx.lineTo(x0, y0); break;
+    case 2: ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); break;
+    case 3: ctx.moveTo(x0, y0); ctx.lineTo(x3, y3); break;
+  }
+  ctx.stroke();
+  ctx.lineWidth = 1;
+}
+
 // ── Public render function ────────────────────────────────────────────────────
 
 /**
@@ -766,8 +801,9 @@ export function renderWallSprites(
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  // Draw 2x2 full sprites (brownRock/dirt use a single dedicated 16x16 image,
-  // blackRock uses per-block hash-selected variants from the existing 16x16 sources).
+  // Draw 2×2 full sprites.
+  // blackRock: procedural sprite from 2×2 base pool + 2×2 block template.
+  // brownRock / dirt: single dedicated 16×16 flat sprite (legacy).
   if (coveredBy2x2Keys.size > 0) {
     const drawSize = tileSizeScreen * 2;
     for (const [topLeftKey, wallThemeIdx] of solid2x2Map) {
@@ -782,17 +818,23 @@ export function renderWallSprites(
       const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
       const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
-      let sprite: HTMLImageElement | null;
-      if (resolvedTheme === 'blackRock') {
-        sprite = _getBlackRock2x2Sprite(col, row);
+      const material = _themeToProceduralMaterial(resolvedTheme, _activeWorldNumber);
+      if (material !== null) {
+        // Procedural path: base sprite cut with 2×2 block template.
+        const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, _activeWorldNumber);
+        if (procSprite !== null) {
+          ctx.drawImage(procSprite, tileX, tileY, drawSize, drawSize);
+        } else {
+          _drawFallbackTile(ctx, tileX, tileY, drawSize);
+        }
       } else {
-        sprite = _getFullSpriteFor2x2(resolvedTheme, blockSizePx);
-      }
-
-      if (sprite !== null && isSpriteReady(sprite)) {
-        ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
-      } else {
-        _drawFallbackTile(ctx, tileX, tileY, drawSize);
+        // Legacy flat-sprite path (brownRock, dirt).
+        const sprite = _getFullSpriteFor2x2(resolvedTheme, blockSizePx);
+        if (sprite !== null && isSpriteReady(sprite)) {
+          ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
+        } else {
+          _drawFallbackTile(ctx, tileX, tileY, drawSize);
+        }
       }
     }
   }
@@ -825,7 +867,7 @@ export function renderWallSprites(
       const airDepth = _activeLightingEffect === 'DEFAULT'
         ? (defaultLightingDepths?.get(tileKey) ?? 0)
         : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-      const darknessAlpha = Math.min(1, airDepth * 0.1);
+      const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
       if (darknessAlpha > 0) {
         ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
         ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -833,49 +875,64 @@ export function renderWallSprites(
       continue;
     }
 
-    const halfSz = Math.round(tileSizeScreen * 0.5);
-    const cx     = Math.round(tileX + tileSizeScreen * 0.5);
-    const cy     = Math.round(tileY + tileSizeScreen * 0.5);
-
     // Resolve per-tile theme: use tile-level override if present, else room default
     const tileTheme: BlockTheme | null = wallLayout.tileTheme.get(tileKey) ?? roomTheme;
     const tileIsLegacyBlackRock = (tileTheme === null) && (_activeWorldNumber === 0);
 
-    let img: HTMLImageElement;
-    let skipRotation: boolean;
+    const material = _themeToProceduralMaterial(tileTheme, _activeWorldNumber);
 
-    if (tileTheme !== null) {
-      // Theme-based rendering
-      img = _getSpriteForTheme(tileTheme, col, row, northSolid, eastSolid, southSolid, westSolid, mask, spec.variant, blockSizePx);
-      skipRotation = (tileTheme === 'blackRock' || tileTheme === 'brownRock');
-    } else if (tileIsLegacyBlackRock) {
-      // World 0 legacy: blackRock sprites
-      img = _pickBlackRockVariant(col, row, northSolid, eastSolid, southSolid, westSolid, mask);
-      skipRotation = true;
-    } else {
-      // World 1+ legacy: world-specific auto-tiling sprites
-      img = _sprites[spec.variant];
-      skipRotation = false;
-    }
-
-    if (isSpriteReady(img)) {
-      if (skipRotation || spec.rotationRad === 0) {
-        ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
+    if (material !== null) {
+      // Procedural path (blackRock): base sprite cut with 1×1 block template.
+      const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, _activeWorldNumber);
+      if (procSprite !== null) {
+        ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(spec.rotationRad);
-        ctx.drawImage(img, -halfSz, -halfSz, tileSizeScreen, tileSizeScreen);
-        ctx.restore();
+        _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
+      }
+    } else if (!tileIsLegacyBlackRock && tileTheme !== null) {
+      // Legacy flat-sprite / auto-tiling path (brownRock, dirt).
+      const img = _getSpriteForLegacyTheme(tileTheme, spec.variant, blockSizePx);
+      if (isSpriteReady(img)) {
+        if (tileTheme === 'brownRock' || spec.rotationRad === 0) {
+          ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
+        } else {
+          const halfSz = Math.round(tileSizeScreen * 0.5);
+          const cx     = Math.round(tileX + tileSizeScreen * 0.5);
+          const cy     = Math.round(tileY + tileSizeScreen * 0.5);
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(spec.rotationRad);
+          ctx.drawImage(img, -halfSz, -halfSz, tileSizeScreen, tileSizeScreen);
+          ctx.restore();
+        }
+      } else {
+        _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else {
-      _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
+      // World 1+ legacy: world-specific auto-tiling sprites.
+      const img = _sprites[spec.variant];
+      if (isSpriteReady(img)) {
+        if (spec.rotationRad === 0) {
+          ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
+        } else {
+          const halfSz = Math.round(tileSizeScreen * 0.5);
+          const cx     = Math.round(tileX + tileSizeScreen * 0.5);
+          const cy     = Math.round(tileY + tileSizeScreen * 0.5);
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(spec.rotationRad);
+          ctx.drawImage(img, -halfSz, -halfSz, tileSizeScreen, tileSizeScreen);
+          ctx.restore();
+        }
+      } else {
+        _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
+      }
     }
 
     const airDepth = _activeLightingEffect === 'DEFAULT'
       ? (defaultLightingDepths?.get(tileKey) ?? 0)
       : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-    const darknessAlpha = Math.min(1, airDepth * 0.1);
+    const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
     if (darknessAlpha > 0) {
       ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
       ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -899,38 +956,135 @@ export function renderWallSprites(
 
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
-    const hash = _hashTileCoord(col, row);
 
-    // Resolve per-tile theme for platform
+    // platformEdge is stored in the tile from the cache building pass (no per-draw wall scan).
+    const platformEdgeForTile = tile.platformEdge;
+
+    // Resolve theme for this platform tile.
     const platTheme: BlockTheme | null = wallLayout.tileTheme.get(key) ?? roomTheme;
-    const platIsLegacyBlackRock = (platTheme === null) && (_activeWorldNumber === 0);
+    const platMaterial = _themeToProceduralMaterial(platTheme, _activeWorldNumber);
 
-    let img: HTMLImageElement;
-    if (platTheme === 'blackRock' || platIsLegacyBlackRock) {
-      img = _blackRockPlatformVariants[hash % _blackRockPlatformVariants.length];
-    } else if (platTheme === 'brownRock') {
-      img = _getBrownRockSpriteForBlockSize(blockSizePx);
-    } else if (platTheme === 'dirt') {
-      img = _dirtBlockSprite;
+    if (platMaterial !== null) {
+      // Procedural path (blackRock): base sprite cut with platform template.
+      const procSprite = getPlatformSprite1x1(col, row, platMaterial, blockSizePx, platformEdgeForTile, _activeWorldNumber);
+      if (procSprite !== null) {
+        ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
+      } else {
+        // Fallback: thin solid-color line while sprites are loading.
+        ctx.fillStyle = '#8899aa';
+        _drawPlatformLine(ctx, tileX, tileY, tileSizeScreen, platformEdgeForTile, scalePx);
+      }
     } else {
-      img = _sprites.end;
-    }
-
-    if (isSpriteReady(img)) {
-      ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
-    } else {
-      _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
+      // Legacy flat-color line (brownRock, dirt, world 1+).
+      const isLegacyBlackRockPlatform = (platTheme === null) && (_activeWorldNumber === 0);
+      let lineColor: string;
+      if (platTheme === 'dirt') {
+        lineColor = '#8b6914';
+      } else if (platTheme === 'brownRock' || (platTheme === null && !isLegacyBlackRockPlatform)) {
+        lineColor = '#8a7050';
+      } else {
+        lineColor = '#8899aa';
+      }
+      ctx.fillStyle = lineColor;
+      _drawPlatformLine(ctx, tileX, tileY, tileSizeScreen, platformEdgeForTile, scalePx);
     }
 
     const tileKey = key;
     const airDepth = _activeLightingEffect === 'DEFAULT'
       ? (defaultLightingDepths?.get(tileKey) ?? 0)
       : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-    const darknessAlpha = Math.min(1, airDepth * 0.1);
+    const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
     if (darknessAlpha > 0) {
       ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
       ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
     }
+  }
+
+  // ── Ramp rendering ────────────────────────────────────────────────────────
+  // blackRock: procedural sprite from base pool + ramp template.
+  // Other themes: filled solid-color triangle with edge highlight (legacy).
+  for (let ri = 0; ri < wallLayout.rampWalls.length; ri++) {
+    const wi = wallLayout.rampWalls[ri].wallIndex;
+    const ori = walls.rampOrientationIndex[wi];
+    const wxPx = walls.xWorld[wi] * scalePx + offsetXPx;
+    const wyPx = walls.yWorld[wi] * scalePx + offsetYPx;
+    const wwPx = walls.wWorld[wi] * scalePx;
+    const whPx = walls.hWorld[wi] * scalePx;
+
+    // Resolve theme for this ramp wall.
+    const rampTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
+      ? indexToBlockTheme(walls.themeIndex[wi])
+      : roomTheme;
+    const rampMaterial = _themeToProceduralMaterial(rampTheme, _activeWorldNumber);
+
+    if (rampMaterial !== null) {
+      // Procedural path (blackRock): base sprite cut with ramp template.
+      const col = Math.floor(walls.xWorld[wi] / blockSizePx);
+      const row = Math.floor(walls.yWorld[wi] / blockSizePx);
+      const widthBlocks  = Math.max(1, Math.round(walls.wWorld[wi] / blockSizePx));
+      const heightBlocks = Math.max(1, Math.round(walls.hWorld[wi] / blockSizePx));
+      const procSprite = getRampSprite(col, row, widthBlocks, heightBlocks, ori, rampMaterial, blockSizePx, _activeWorldNumber);
+      if (procSprite !== null) {
+        ctx.drawImage(procSprite, Math.round(wxPx), Math.round(wyPx), Math.round(wwPx), Math.round(whPx));
+      } else {
+        // Fallback: solid triangle while sprites are loading.
+        _drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, '#1a2535', '#5080b0', scalePx);
+      }
+    } else {
+      // Legacy solid-color triangle path (brownRock, dirt, world 1+).
+      const isLegacyBR = (rampTheme === null) && (_activeWorldNumber === 0);
+      let fillColor: string;
+      if (rampTheme === 'dirt') {
+        fillColor = '#5a3e1b';
+      } else if (rampTheme === 'brownRock' || (rampTheme === null && !isLegacyBR)) {
+        fillColor = '#4a3828';
+      } else {
+        fillColor = '#1a2535';
+      }
+      let edgeColor: string;
+      if (rampTheme === 'dirt') {
+        edgeColor = '#8b6914';
+      } else if (rampTheme === 'brownRock' || (rampTheme === null && !isLegacyBR)) {
+        edgeColor = '#7a5840';
+      } else {
+        edgeColor = '#5080b0';
+      }
+      _drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, fillColor, edgeColor, scalePx);
+    }
+  }
+
+  // ── Half-pillar walls ─────────────────────────────────────────────────────
+  // Draw half-width pillars as centered narrow rectangles.
+  for (let pi = 0; pi < wallLayout.halfPillarWalls.length; pi++) {
+    const wi = wallLayout.halfPillarWalls[pi].wallIndex;
+    const wxPx = walls.xWorld[wi] * scalePx + offsetXPx;
+    const wyPx = walls.yWorld[wi] * scalePx + offsetYPx;
+    const wwPx = walls.wWorld[wi] * scalePx;
+    const whPx = walls.hWorld[wi] * scalePx;
+
+    // Resolve theme color
+    const pillarTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
+      ? indexToBlockTheme(walls.themeIndex[wi])
+      : roomTheme;
+    const isLegacyBR2 = (pillarTheme === null) && (_activeWorldNumber === 0);
+    let pillarFill: string;
+    let pillarEdge: string;
+    if (pillarTheme === 'dirt') {
+      pillarFill = '#5a3e1b'; pillarEdge = '#8b6914';
+    } else if (pillarTheme === 'brownRock' || (pillarTheme === null && !isLegacyBR2)) {
+      pillarFill = '#4a3828'; pillarEdge = '#7a5840';
+    } else {
+      pillarFill = '#1a2535'; pillarEdge = '#5080b0';
+    }
+
+    // Draw the pillar centered horizontally within its AABB
+    const pillarWidthPx = wwPx; // width already 4 px (half BLOCK_SIZE_MEDIUM)
+    ctx.fillStyle = pillarFill;
+    ctx.fillRect(Math.round(wxPx), Math.round(wyPx), Math.round(pillarWidthPx), Math.round(whPx));
+    ctx.strokeStyle = pillarEdge;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(wxPx) + 0.5, Math.round(wyPx) + 0.5,
+      Math.round(pillarWidthPx) - 1, Math.round(whPx) - 1);
   }
 
   ctx.restore();

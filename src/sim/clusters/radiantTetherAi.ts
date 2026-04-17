@@ -15,6 +15,7 @@
 
 import { WorldState } from '../world';
 import { nextFloat } from '../rng';
+import { dist } from '../../utils/math';
 import {
   RT_TELEGRAPH_DURATION_TICKS,
   RT_LOCK_DURATION_TICKS,
@@ -122,7 +123,7 @@ export function applyRadiantTetherAI(world: WorldState): void {
     // Distance to player
     const dxToPlayer = playerFound ? playerX - cluster.positionXWorld : 0;
     const dyToPlayer = playerFound ? playerY - cluster.positionYWorld : 0;
-    const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+    const distToPlayer = playerFound ? dist(cluster.positionXWorld, cluster.positionYWorld, playerX, playerY) : 0;
 
     // Chain count based on current health
     const chainCount = getChainCountForHealth(

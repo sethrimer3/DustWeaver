@@ -74,6 +74,9 @@ const CLOAK_FIELDS: readonly CloakFieldDef[] = [
   { key: 'opennessFalling', label: 'Open Fall', defaultValue: 0.4 },
   { key: 'opennessFastFall', label: 'Open FastFall', defaultValue: 0.65 },
   { key: 'opennessWallSlide', label: 'Open Wall', defaultValue: 0.2 },
+  { key: 'backCollisionStrength', label: 'Back Col Str', defaultValue: 0.85 },
+  { key: 'backCollisionDamping', label: 'Back Col Damp', defaultValue: 0.6 },
+  { key: 'backCompressionAmount', label: 'Back Compress', defaultValue: 0.5 },
 ];
 
 export interface DebugPanel {

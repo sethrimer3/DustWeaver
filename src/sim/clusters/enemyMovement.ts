@@ -51,8 +51,8 @@ export function tickEnemyMovement(
       const dirX = dxToPlayer * invDist;
       const dirY = dyToPlayer * invDist;
 
-      let targetVelX = 0.0;
-      let targetVelY = 0.0;
+      let targetVelX: number;
+      let targetVelY: number;
 
       const outerBand = FLYING_EYE_PREFERRED_DIST_WORLD + FLYING_EYE_PREFERRED_BAND_WORLD;
       const innerBand = FLYING_EYE_PREFERRED_DIST_WORLD - FLYING_EYE_PREFERRED_BAND_WORLD;

@@ -10,7 +10,8 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSkillTomb, EditorDustPile } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, RoomSongId } from './editorState';
+import { AVAILABLE_SONGS } from '../audio/musicManager';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -70,8 +71,20 @@ export interface RoomJsonWall {
   hBlock: number;
   /** true if this is a one-way platform block. */
   isPlatform?: boolean;
+  /**
+   * Which edge is the one-way surface. Only meaningful when isPlatform=true.
+   * 0=top (default), 1=bottom, 2=left, 3=right.
+   */
+  platformEdge?: 0 | 1 | 2 | 3;
   /** Per-wall block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
+  /**
+   * Ramp orientation. When present, this wall is a diagonal triangle.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** true if this pillar wall is half-block wide (4 px). */
+  isPillarHalfWidth?: boolean;
 }
 
 export interface RoomJsonTransition {
@@ -81,11 +94,21 @@ export interface RoomJsonTransition {
   targetRoomId: string;
   targetSpawnBlock: [number, number];
   fadeColor?: string;
+  depthBlock?: number;
 }
 
+/** Save Tomb — where the player saves their progress. Uses "skillTombs" JSON key for backward compat. */
 export interface RoomJsonSkillTomb {
   xBlock: number;
   yBlock: number;
+}
+
+/** Skill Tomb — grants a specific dust skill/weave when interacted with. */
+export interface RoomJsonDustSkillTomb {
+  xBlock: number;
+  yBlock: number;
+  /** The weave ID unlocked by this tomb. */
+  weaveId: string;
 }
 
 export interface RoomJsonSpike {
@@ -139,6 +162,11 @@ export interface RoomJsonDef {
   backgroundId?: BackgroundId;
   /** Lighting model. Falls back to 'DEFAULT' if not set. */
   lightingEffect?: LightingEffect;
+  /**
+   * Background music. Omitting or setting to '_continue' means "keep playing
+   * whatever was already playing".  '_silence' stops music.
+   */
+  songId?: string;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];
@@ -146,7 +174,10 @@ export interface RoomJsonDef {
   interiorWalls: RoomJsonWall[];
   enemies: RoomJsonEnemy[];
   transitions: RoomJsonTransition[];
+  /** Save Tombs (stored as "skillTombs" for backward compatibility with existing room files). */
   skillTombs: RoomJsonSkillTomb[];
+  /** Skill Tombs — grant dust skills/weaves when interacted with. */
+  dustSkillTombs?: RoomJsonDustSkillTomb[];
   /** Collectible skill book positions (block units). */
   skillBooks?: RoomJsonSkillTomb[];
   /** Collectible dust container positions (block units). */
@@ -231,6 +262,23 @@ export function validateRoomJson(data: unknown): ValidationError[] {
   return errors;
 }
 
+// ── Song ID helpers ───────────────────────────────────────────────────────────
+
+const VALID_SONG_IDS: ReadonlySet<string> = new Set<string>([
+  '_continue', '_silence', ...AVAILABLE_SONGS,
+]);
+
+/**
+ * Parse a raw string from JSON into a RoomSongId.
+ * Unknown strings fall back to '_continue' with a console warning.
+ */
+export function parseSongId(raw: string | undefined): RoomSongId {
+  if (raw === undefined) return '_continue';
+  if (VALID_SONG_IDS.has(raw)) return raw as RoomSongId;
+  console.warn(`[roomJson] Unknown songId "${raw}" — falling back to "_continue".`);
+  return '_continue';
+}
+
 // ── Conversion: RoomJsonDef → EditorRoomData ─────────────────────────────────
 
 export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { data: EditorRoomData; nextUid: number } {
@@ -243,7 +291,10 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     wBlock: w.wBlock,
     hBlock: w.hBlock,
     isPlatformFlag: w.isPlatform ? 1 : 0,
+    platformEdge: w.platformEdge ?? 0,
     blockTheme: w.blockTheme,
+    rampOrientation: w.rampOrientation,
+    isPillarHalfWidthFlag: w.isPillarHalfWidth ? 1 : 0,
   }));
 
   const enemies: EditorEnemy[] = json.enemies.map(e => ({
@@ -269,12 +320,20 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     targetRoomId: t.targetRoomId,
     targetSpawnBlock: [...t.targetSpawnBlock] as [number, number],
     fadeColor: t.fadeColor,
+    depthBlock: t.depthBlock,
   }));
 
-  const skillTombs: EditorSkillTomb[] = json.skillTombs.map(s => ({
+  const saveTombs: EditorSaveTomb[] = json.skillTombs.map(s => ({
     uid: uid++,
     xBlock: s.xBlock,
     yBlock: s.yBlock,
+  }));
+
+  const skillTombs: EditorSkillTomb[] = (json.dustSkillTombs ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    weaveId: s.weaveId,
   }));
 
   const dustPiles: EditorDustPile[] = (json.dustPiles ?? []).map(p => ({
@@ -292,12 +351,14 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       blockTheme: json.blockTheme ?? 'blackRock',
       backgroundId: json.backgroundId ?? 'brownRock',
       lightingEffect: json.lightingEffect ?? 'DEFAULT',
+      songId: parseSongId(json.songId),
       widthBlocks: json.widthBlocks,
       heightBlocks: json.heightBlocks,
       playerSpawnBlock: [...json.playerSpawnBlock] as [number, number],
       interiorWalls,
       enemies,
       transitions,
+      saveTombs,
       skillTombs,
       dustPiles,
     },
@@ -322,8 +383,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         wBlock: w.wBlock,
         hBlock: w.hBlock,
       };
-      if (w.isPlatformFlag === 1) wall.isPlatform = true;
+      if (w.isPlatformFlag === 1) {
+        wall.isPlatform = true;
+        if (w.platformEdge !== 0 && w.platformEdge !== undefined) wall.platformEdge = w.platformEdge;
+      }
       if (w.blockTheme !== undefined) wall.blockTheme = w.blockTheme;
+      if (w.rampOrientation !== undefined) wall.rampOrientation = w.rampOrientation;
+      if (w.isPillarHalfWidthFlag === 1) wall.isPillarHalfWidth = true;
       return wall;
     }),
     enemies: data.enemies.map(e => ({
@@ -348,9 +414,10 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         targetSpawnBlock: [...t.targetSpawnBlock],
       };
       if (t.fadeColor) jt.fadeColor = t.fadeColor;
+      if (t.depthBlock !== undefined) jt.depthBlock = t.depthBlock;
       return jt;
     }),
-    skillTombs: data.skillTombs.map(s => ({
+    skillTombs: data.saveTombs.map(s => ({
       xBlock: s.xBlock,
       yBlock: s.yBlock,
     })),
@@ -359,6 +426,15 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.blockTheme) json.blockTheme = data.blockTheme;
   if (data.backgroundId) json.backgroundId = data.backgroundId;
   if (data.lightingEffect) json.lightingEffect = data.lightingEffect;
+  // Only write songId when it differs from the default ('_continue')
+  if (data.songId !== '_continue') json.songId = data.songId;
+  if (data.skillTombs.length > 0) {
+    json.dustSkillTombs = data.skillTombs.map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      weaveId: s.weaveId,
+    }));
+  }
   if (data.dustPiles.length > 0) {
     json.dustPiles = data.dustPiles.map(p => ({
       xBlock: p.xBlock,
@@ -372,8 +448,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
 // ── Conversion: EditorRoomData → RoomDef (for runtime loading) ───────────────
 
 /**
- * Builds boundary walls with gaps for transition tunnel openings.
- * Mirrors the logic in rooms.ts but works from EditorRoomData.
+ * Builds boundary walls with gaps for edge-transition tunnel openings.
+ * Interior transitions (depthBlock defined) do not create gaps.
  */
 function buildBoundaryWalls(
   widthBlocks: number,
@@ -387,12 +463,12 @@ function buildBoundaryWalls(
   // Bottom wall (full width) — invisible boundary
   walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
 
-  // Left wall — split around tunnel openings (invisible boundary)
-  const leftTunnels = transitions.filter(t => t.direction === 'left');
+  // Left wall — split around edge-transition openings only
+  const leftTunnels = transitions.filter(t => t.direction === 'left' && t.depthBlock === undefined);
   buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
 
-  // Right wall — split around tunnel openings (invisible boundary)
-  const rightTunnels = transitions.filter(t => t.direction === 'right');
+  // Right wall — split around edge-transition openings only
+  const rightTunnels = transitions.filter(t => t.direction === 'right' && t.depthBlock === undefined);
   buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
 
   return walls;
@@ -430,7 +506,10 @@ function buildTunnelWalls(
   const walls: RoomWallDef[] = [];
   const TUNNEL_OVERHANG_BLOCKS = 4;
 
+  // Only edge transitions (depthBlock undefined) get physical corridor walls.
   for (const tunnel of transitions) {
+    if (tunnel.depthBlock !== undefined) continue; // interior transition — no corridor walls
+
     const topY = tunnel.positionBlock - 1;
     const bottomY = tunnel.positionBlock + tunnel.openingSizeBlocks;
 
@@ -461,7 +540,10 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     wBlock: w.wBlock,
     hBlock: w.hBlock,
     isPlatformFlag: w.isPlatformFlag,
+    platformEdge: w.platformEdge,
     blockTheme: w.blockTheme,
+    rampOrientation: w.rampOrientation,
+    isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
   }));
 
   const allWalls: RoomWallDef[] = [...boundaryWalls, ...tunnelWalls, ...interiorWalls];
@@ -495,6 +577,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     openingSizeBlocks: t.openingSizeBlocks,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
     fadeColor: t.fadeColor,
+    depthBlock: t.depthBlock,
   }));
 
   return {
@@ -504,13 +587,15 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     blockTheme: data.blockTheme,
     backgroundId: data.backgroundId,
     lightingEffect: data.lightingEffect,
+    songId: data.songId !== '_continue' ? data.songId : undefined,
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     walls: allWalls,
     enemies,
     playerSpawnBlock: [data.playerSpawnBlock[0], data.playerSpawnBlock[1]],
     transitions,
-    skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    saveTombs: data.saveTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
+    skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount })),
   };
 }
@@ -547,7 +632,10 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     wBlock: w.wBlock,
     hBlock: w.hBlock,
     isPlatformFlag: (w.isPlatformFlag ?? 0) as 0 | 1,
+    platformEdge: (w.platformEdge ?? 0) as 0 | 1 | 2 | 3,
     blockTheme: w.blockTheme,
+    rampOrientation: w.rampOrientation,
+    isPillarHalfWidthFlag: (w.isPillarHalfWidthFlag ?? 0) as 0 | 1,
   }));
 
   const enemies: EditorEnemy[] = room.enemies.map(e => ({
@@ -575,10 +663,17 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     fadeColor: t.fadeColor,
   }));
 
-  const skillTombs: EditorSkillTomb[] = room.skillTombs.map(s => ({
+  const saveTombs: EditorSaveTomb[] = room.saveTombs.map(s => ({
     uid: uid++,
     xBlock: s.xBlock,
     yBlock: s.yBlock,
+  }));
+
+  const skillTombs: EditorSkillTomb[] = (room.skillTombs ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    weaveId: s.weaveId,
   }));
 
   const dustPiles: EditorDustPile[] = (room.dustPiles ?? []).map(p => ({
@@ -596,12 +691,14 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       blockTheme: room.blockTheme ?? 'blackRock',
       backgroundId: room.backgroundId ?? 'brownRock',
       lightingEffect: room.lightingEffect ?? 'DEFAULT',
+      songId: room.songId ?? '_continue',
       widthBlocks: room.widthBlocks,
       heightBlocks: room.heightBlocks,
       playerSpawnBlock: [room.playerSpawnBlock[0], room.playerSpawnBlock[1]],
       interiorWalls,
       enemies,
       transitions,
+      saveTombs,
       skillTombs,
       dustPiles,
     },

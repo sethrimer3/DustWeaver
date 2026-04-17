@@ -13,9 +13,9 @@ export interface EditorInputState {
   isCamRight: boolean;
   /** Shift key held (doubles camera pan speed). */
   isShiftHeld: boolean;
-  /** M key toggles world map. */
+  /** N key toggles world map list. */
   isMapToggled: boolean;
-  /** N key toggles visual world map editor. */
+  /** M key toggles visual world map editor. */
   isVisualMapToggled: boolean;
   /** Left mouse button currently held down (persistent, not one-shot). */
   isMouseDown: boolean;
@@ -44,6 +44,12 @@ export interface EditorInputState {
   isCopyPressed: boolean;
   /** Ctrl+V pressed (one-shot). */
   isPastePressed: boolean;
+  /** F key pressed (one-shot) — flips the current placement horizontally. */
+  isFlipPressed: boolean;
+  /** Q key pressed (one-shot) — rotates placement counter-clockwise. */
+  isRotateLeftPressed: boolean;
+  /** E key pressed (one-shot) — rotates placement clockwise. */
+  isRotateRightPressed: boolean;
   /** World coordinates at drag start. */
   dragStartWorldX: number;
   dragStartWorldY: number;
@@ -74,6 +80,9 @@ export function createEditorInputState(): EditorInputState {
     isRedoPressed: false,
     isCopyPressed: false,
     isPastePressed: false,
+    isFlipPressed: false,
+    isRotateLeftPressed: false,
+    isRotateRightPressed: false,
     dragStartWorldX: 0,
     dragStartWorldY: 0,
   };
@@ -105,8 +114,8 @@ export function attachEditorInputListeners(
     if (key === 's') { state.isCamDown = true; e.preventDefault(); }
     if (key === 'a') { state.isCamLeft = true; e.preventDefault(); }
     if (key === 'd') { state.isCamRight = true; e.preventDefault(); }
-    if (key === 'm' && !e.repeat) { state.isMapToggled = true; e.preventDefault(); }
-    if (key === 'n' && !e.repeat) { state.isVisualMapToggled = true; e.preventDefault(); }
+    if (key === 'n' && !e.repeat) { state.isMapToggled = true; e.preventDefault(); }
+    if (key === 'm' && !e.repeat) { state.isVisualMapToggled = true; e.preventDefault(); }
     if (key === 'escape') { state.isEscapePressed = true; e.preventDefault(); }
     if (key === '1') state.toolKeyPressed = 1;
     if (key === '2') state.toolKeyPressed = 2;
@@ -117,6 +126,9 @@ export function attachEditorInputListeners(
     // Ctrl+C → copy, Ctrl+V → paste
     if ((e.ctrlKey || e.metaKey) && key === 'c') { state.isCopyPressed = true; e.preventDefault(); }
     if ((e.ctrlKey || e.metaKey) && key === 'v') { state.isPastePressed = true; e.preventDefault(); }
+    if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isFlipPressed = true; e.preventDefault(); }
+    if (key === 'q' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isRotateLeftPressed = true; e.preventDefault(); }
+    if (key === 'e' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isRotateRightPressed = true; e.preventDefault(); }
   }
 
   function onKeyUp(e: KeyboardEvent): void {
@@ -199,4 +211,7 @@ export function clearEditorOneShots(state: EditorInputState): void {
   state.isRedoPressed = false;
   state.isCopyPressed = false;
   state.isPastePressed = false;
+  state.isFlipPressed = false;
+  state.isRotateLeftPressed = false;
+  state.isRotateRightPressed = false;
 }

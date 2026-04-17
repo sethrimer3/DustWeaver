@@ -80,6 +80,18 @@ import {
   CLOAK_OPENNESS_FAST_FALL,
   CLOAK_OPENNESS_WALL_SLIDE,
   CLOAK_SHAPE_LERP_SPEED,
+  PLAYER_BACK_X,
+  PLAYER_BACK_TOP,
+  PLAYER_BACK_BOTTOM,
+  BACK_COLLISION_STRENGTH,
+  BACK_COLLISION_DAMPING,
+  BACK_COMPRESSION_AMOUNT,
+  BACK_SLIDE_STRENGTH,
+  BACK_DRAPE_SPACING,
+  BACK_DRAPE_MIN_SPACING,
+  BACK_DRAPE_DAMPING,
+  BACK_SURFACE_GRAVITY_BIAS,
+  BACK_BUNCHING_FIX_BLEND,
   getCloakTuningValue,
 } from './cloakConstants';
 
@@ -285,8 +297,8 @@ export class PlayerCloak {
       for (let i = 1; i < this.pointCount; i++) {
         const parentX = this.posXWorld[i - 1];
         const parentY = this.posYWorld[i - 1];
-        let dx = this.posXWorld[i] - parentX;
-        let dy = this.posYWorld[i] - parentY;
+        const dx = this.posXWorld[i] - parentX;
+        const dy = this.posYWorld[i] - parentY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > CLOAK_MIN_DISTANCE_WORLD) {
           const targetDist = CLOAK_SEGMENT_LENGTH_WORLD;
@@ -296,6 +308,10 @@ export class PlayerCloak {
         }
       }
     }
+
+    // ── 10b. Back collision constraint ─────────────────────────────────
+    // Prevents cloak from passing through the player's back.
+    this._applyBackCollision(player, dtClamped);
 
     // ── 11. Max extension clamp from root ─────────────────────────────
     const tipIdx = this.pointCount - 1;
@@ -467,6 +483,74 @@ export class PlayerCloak {
     if (this.landingTimerSec > 0) {
       ctx.fillText(`land: ${this.landingTimerSec.toFixed(2)}s`, textX, textY);
     }
+
+    // ── Back collision boundary line (orange) ──────────────────────────
+    const backBoundX = this._backBoundaryWorldX(player);
+    const backTopY = this._backBoundaryTopWorldY(player);
+    const backBottomY = this._backBoundaryBottomWorldY(player);
+    const backLineSX = Math.round(backBoundX * scalePx + offsetXPx);
+    const backLineTopSY = Math.round(backTopY * scalePx + offsetYPx);
+    const backLineBottomSY = Math.round(backBottomY * scalePx + offsetYPx);
+
+    ctx.strokeStyle = '#ff8800';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(backLineSX, backLineTopSY);
+    ctx.lineTo(backLineSX, backLineBottomSY);
+    ctx.stroke();
+
+    // Back boundary top/bottom markers (small horizontal ticks).
+    const tickHalfLenPx = 2;
+    ctx.beginPath();
+    ctx.moveTo(backLineSX - tickHalfLenPx, backLineTopSY);
+    ctx.lineTo(backLineSX + tickHalfLenPx, backLineTopSY);
+    ctx.moveTo(backLineSX - tickHalfLenPx, backLineBottomSY);
+    ctx.lineTo(backLineSX + tickHalfLenPx, backLineBottomSY);
+    ctx.stroke();
+
+    // Highlight cloak points that are within the back boundary Y range.
+    const backToleranceWorld = 1.5;
+    const isFacingRight = player.isFacingLeftFlag === 0;
+    for (let i = 1; i < this.pointCount; i++) {
+      const py = this.posYWorld[i];
+      if (py >= backTopY && py <= backBottomY) {
+        const sx = Math.round(this.posXWorld[i] * scalePx + offsetXPx);
+        const sy = Math.round(py * scalePx + offsetYPx);
+
+        // Check if point is on the back surface (constrained).
+        const px = this.posXWorld[i];
+        const distFromBack = isFacingRight ? (backBoundX - px) : (px - backBoundX);
+        const isConstrained = distFromBack >= -0.5 && distFromBack <= backToleranceWorld;
+
+        ctx.fillStyle = isConstrained ? '#ff00ff' : '#ff4400';
+        ctx.beginPath();
+        ctx.arc(sx, sy, CLOAK_DEBUG_POINT_RADIUS_PX + 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Drape target positions along the back (small green diamonds).
+    const drapeSpacing = this._tunedValue(BACK_DRAPE_SPACING, 'backDrapeSpacing');
+    const anchorY = this.posYWorld[0];
+    ctx.fillStyle = '#00ff88';
+    for (let i = 1; i < this.pointCount; i++) {
+      const idealY = anchorY + (i * drapeSpacing);
+      const targetY = Math.min(Math.max(idealY, backTopY), backBottomY);
+      const dtsx = backLineSX;
+      const dtsy = Math.round(targetY * scalePx + offsetYPx);
+      // Draw a small diamond marker.
+      ctx.beginPath();
+      ctx.moveTo(dtsx, dtsy - 2);
+      ctx.lineTo(dtsx + 2, dtsy);
+      ctx.lineTo(dtsx, dtsy + 2);
+      ctx.lineTo(dtsx - 2, dtsy);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#ff8800';
+    ctx.fillText('backCol', backLineSX + 4, backLineTopSY - 2);
 
     ctx.restore();
   }
@@ -750,6 +834,190 @@ export class PlayerCloak {
       return this._tunedValue(CLOAK_OPENNESS_RUNNING, 'opennessRunning');
     }
     return this._tunedValue(CLOAK_OPENNESS_IDLE, 'opennessIdle');
+  }
+
+  // ── Private: back collision helpers ──────────────────────────────────
+
+  /**
+   * Compute the world-space X of the player's back boundary line,
+   * correctly mirrored for facing direction.
+   */
+  private _backBoundaryWorldX(player: CloakPlayerState): number {
+    const spriteLeftWorldX = player.positionXWorld - PLAYER_SPRITE_WIDTH_WORLD * 0.5;
+    if (player.isFacingLeftFlag === 1) {
+      // Facing left: "back" is on the right side of the sprite.
+      return spriteLeftWorldX + (PLAYER_SPRITE_WIDTH_WORLD - PLAYER_BACK_X);
+    }
+    // Facing right: "back" is on the left side of the sprite.
+    return spriteLeftWorldX + PLAYER_BACK_X;
+  }
+
+  /** World-space Y of the top of the back boundary. */
+  private _backBoundaryTopWorldY(player: CloakPlayerState): number {
+    const spriteTopWorldY = player.positionYWorld + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD
+      - PLAYER_SPRITE_HEIGHT_WORLD * 0.5;
+    return spriteTopWorldY + PLAYER_BACK_TOP;
+  }
+
+  /** World-space Y of the bottom of the back boundary. */
+  private _backBoundaryBottomWorldY(player: CloakPlayerState): number {
+    const spriteTopWorldY = player.positionYWorld + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD
+      - PLAYER_SPRITE_HEIGHT_WORLD * 0.5;
+    return spriteTopWorldY + PLAYER_BACK_BOTTOM;
+  }
+
+  /**
+   * Apply soft back collision to all trailing cloak points (skip root).
+   * If a point crosses the back boundary into the body, push it back
+   * toward the boundary with damping. After clamping, applies a drape/slide
+   * pass that redistributes constrained points downward along the back
+   * surface, preventing bunching near the shoulder.
+   */
+  private _applyBackCollision(player: CloakPlayerState, dtSec: number): void {
+    const backX = this._backBoundaryWorldX(player);
+    const backTopY = this._backBoundaryTopWorldY(player);
+    const backBottomY = this._backBoundaryBottomWorldY(player);
+
+    const strength = this._tunedValue(BACK_COLLISION_STRENGTH, 'backCollisionStrength');
+    const damping = this._tunedValue(BACK_COLLISION_DAMPING, 'backCollisionDamping');
+    const compression = this._tunedValue(BACK_COMPRESSION_AMOUNT, 'backCompressionAmount');
+
+    // Drape parameters.
+    const slideStrength = this._tunedValue(BACK_SLIDE_STRENGTH, 'backSlideStrength');
+    const drapeSpacing = this._tunedValue(BACK_DRAPE_SPACING, 'backDrapeSpacing');
+    const drapeMinSpacing = this._tunedValue(BACK_DRAPE_MIN_SPACING, 'backDrapeMinSpacing');
+    const drapeDamping = this._tunedValue(BACK_DRAPE_DAMPING, 'backDrapeDamping');
+    const surfaceGravityBias = this._tunedValue(BACK_SURFACE_GRAVITY_BIAS, 'backSurfaceGravityBias');
+    const bunchingFixBlend = this._tunedValue(BACK_BUNCHING_FIX_BLEND, 'backBunchingFixBlend');
+
+    // Determine if player is moving backward relative to facing.
+    const isMovingBackwardFlag = player.isFacingLeftFlag === 1
+      ? player.velocityXWorld > 0
+      : player.velocityXWorld < 0;
+
+    const isFacingRight = player.isFacingLeftFlag === 0;
+
+    // ── Pass 1: Standard back-collision clamping ─────────────────────
+    for (let i = 1; i < this.pointCount; i++) {
+      const py = this.posYWorld[i];
+
+      // Only apply constraint within the vertical extent of the back.
+      if (py < backTopY || py > backBottomY) continue;
+
+      const px = this.posXWorld[i];
+
+      // Check if point has crossed the back boundary into the body.
+      const penetration = isFacingRight ? (px - backX) : (backX - px);
+
+      if (penetration > 0) {
+        // Soft push: move point back toward boundary proportional to strength.
+        const pushBack = penetration * strength;
+
+        if (isFacingRight) {
+          this.posXWorld[i] -= pushBack;
+          this.velXWorld[i] *= (1 - damping);
+        } else {
+          this.posXWorld[i] += pushBack;
+          this.velXWorld[i] *= (1 - damping);
+        }
+
+        // Apply extra downward gravity bias so constrained points slide down
+        // instead of stacking near the shoulder.
+        this.velYWorld[i] += surfaceGravityBias * dtSec;
+
+        // Damp horizontal velocity harder on the back surface, but preserve
+        // vertical (tangential) motion — only apply gentle tangential damping.
+        this.velYWorld[i] *= (1 - drapeDamping * dtSec);
+      }
+
+      // Extra compression when moving backward: gently push point toward boundary.
+      if (isMovingBackwardFlag) {
+        const distFromBack = isFacingRight ? (backX - px) : (px - backX);
+        if (distFromBack >= 0 && distFromBack < compression * 2) {
+          const compressionPush = compression * dtSec;
+          if (isFacingRight) {
+            this.posXWorld[i] += compressionPush;
+          } else {
+            this.posXWorld[i] -= compressionPush;
+          }
+        }
+      }
+    }
+
+    // ── Pass 2: Drape redistribution along the back surface ──────────
+    // Collect indices of points currently on or touching the back boundary,
+    // in chain order (ascending index = top-to-bottom along the garment).
+    // Then distribute them downward with stable spacing.
+
+    // Re-check which points are now on the back surface after clamping.
+    // A point is "on the back" if its X is very close to the back boundary
+    // and its Y is within the back range.
+    const backToleranceWorld = 1.5; // world units — how close to backX counts as "on surface"
+
+    // Build ordered list of constrained point indices.
+    let constrainedPointCount = 0;
+    // Reuse a stack-local array approach — pointCount is small (4), safe to iterate.
+    // We avoid allocation by using two passes.
+
+    // First, count constrained points and compute drape target Y positions.
+    for (let i = 1; i < this.pointCount; i++) {
+      const py = this.posYWorld[i];
+      if (py < backTopY - 1 || py > backBottomY + 1) continue;
+
+      const px = this.posXWorld[i];
+      const distFromBack = isFacingRight ? (backX - px) : (px - backX);
+      // Point is on the back surface if it's within tolerance.
+      if (distFromBack >= -0.5 && distFromBack <= backToleranceWorld) {
+        constrainedPointCount++;
+      }
+    }
+
+    // Only run redistribution if at least 2 points are constrained (can bunch).
+    if (constrainedPointCount >= 2) {
+      // Compute ideal drape target Y for each constrained point.
+      // Start from the anchor (root) Y and space downward by drapeSpacing.
+      const anchorY = this.posYWorld[0];
+
+      for (let i = 1; i < this.pointCount; i++) {
+        const py = this.posYWorld[i];
+        if (py < backTopY - 1 || py > backBottomY + 1) continue;
+
+        const px = this.posXWorld[i];
+        const distFromBack = isFacingRight ? (backX - px) : (px - backX);
+        if (distFromBack >= -0.5 && distFromBack <= backToleranceWorld) {
+          // Compute target Y: anchor + (chainIndex * drapeSpacing), clamped to back range.
+          const idealY = anchorY + (i * drapeSpacing);
+          const targetY = Math.min(Math.max(idealY, backTopY), backBottomY);
+
+          // Blend current Y toward drape target.
+          const currentY = this.posYWorld[i];
+          const dy = targetY - currentY;
+          this.posYWorld[i] += dy * slideStrength * bunchingFixBlend;
+        }
+      }
+
+      // ── Pass 3: Enforce minimum spacing between consecutive constrained points.
+      // Walk chain in order and ensure each constrained point is at least
+      // drapeMinSpacing below its predecessor.
+      let prevConstrainedY = this.posYWorld[0]; // root anchor
+
+      for (let i = 1; i < this.pointCount; i++) {
+        const py = this.posYWorld[i];
+        if (py < backTopY - 1 || py > backBottomY + 1) continue;
+
+        const px = this.posXWorld[i];
+        const distFromBack = isFacingRight ? (backX - px) : (px - backX);
+        if (distFromBack >= -0.5 && distFromBack <= backToleranceWorld) {
+          const minY = prevConstrainedY + drapeMinSpacing;
+          if (this.posYWorld[i] < minY) {
+            // Blend toward minimum to prevent hard snapping.
+            const correction = (minY - this.posYWorld[i]) * bunchingFixBlend;
+            this.posYWorld[i] += correction;
+          }
+          prevConstrainedY = this.posYWorld[i];
+        }
+      }
+    }
   }
 
   /** Place all chain points at their rest pose relative to the root anchor. */

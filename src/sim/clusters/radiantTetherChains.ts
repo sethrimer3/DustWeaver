@@ -37,6 +37,7 @@ import {
   RT_CHAIN_IFRAMES_TICKS,
 } from './radiantTetherConfig';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import { closestPointOnSegment } from '../physics/collision';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -275,10 +276,10 @@ export function tickChains(
     }
   }
 
-  let vx = (bossVelXWorld + forceX) * RT_BOSS_DRAG;
-  let vy = (bossVelYWorld + forceY) * RT_BOSS_DRAG;
-  let px = bossXWorld + vx;
-  let py = bossYWorld + vy;
+  const vx = (bossVelXWorld + forceX) * RT_BOSS_DRAG;
+  const vy = (bossVelYWorld + forceY) * RT_BOSS_DRAG;
+  const px = bossXWorld + vx;
+  const py = bossYWorld + vy;
 
   return { newVelX: vx, newVelY: vy, newPosX: px, newPosY: py };
 }
@@ -470,7 +471,7 @@ export function checkChainPlayerCollision(
 }
 
 function applyChainDamage(
-  player: { healthPoints: number; isAliveFlag: 0 | 1; entityId: number; positionXWorld: number; positionYWorld: number; velocityXWorld: number; velocityYWorld: number; isGroundedFlag: 0 | 1 },
+  player: { healthPoints: number; isAliveFlag: 0 | 1; entityId: number; positionXWorld: number; positionYWorld: number; velocityXWorld: number; velocityYWorld: number; isGroundedFlag: 0 | 1; invulnerabilityTicks: number; hurtTicks: number },
   cs: RadiantTetherChainState,
   world: WorldState,
   sourceXWorld: number,
@@ -489,38 +490,6 @@ function applyChainDamage(
   const damage = Math.max(1, RT_CHAIN_DAMAGE - armor);
   applyPlayerDamageWithKnockback(player, damage, sourceXWorld, sourceYWorld);
   cs.playerChainIframeTicks = RT_CHAIN_IFRAMES_TICKS;
-}
-
-/** Closest point on segment AB to point P, with squared distance. */
-function closestPointOnSegment(
-  px: number, py: number,
-  ax: number, ay: number,
-  bx: number, by: number,
-): { xWorld: number; yWorld: number; distSq: number } {
-  const abx = bx - ax;
-  const aby = by - ay;
-  const apx = px - ax;
-  const apy = py - ay;
-  const abLenSq = abx * abx + aby * aby;
-  if (abLenSq < 0.001) {
-    return {
-      xWorld: ax,
-      yWorld: ay,
-      distSq: apx * apx + apy * apy,
-    };
-  }
-  let t = (apx * abx + apy * aby) / abLenSq;
-  if (t < 0) t = 0;
-  if (t > 1) t = 1;
-  const xWorld = ax + t * abx;
-  const yWorld = ay + t * aby;
-  const dx = px - xWorld;
-  const dy = py - yWorld;
-  return {
-    xWorld,
-    yWorld,
-    distSq: dx * dx + dy * dy,
-  };
 }
 
 // ── Chain count from health ─────────────────────────────────────────────────

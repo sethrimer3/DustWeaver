@@ -14,7 +14,10 @@
 import {
   getReachableEdgeGlowOpacity, setReachableEdgeGlowOpacity,
   getInfluenceCircleOpacity, setInfluenceCircleOpacity,
+  getInfluenceHighlightWidth, setInfluenceHighlightWidth,
+  setMusicVolume, setSfxVolume,
 } from './renderSettings';
+import { makeButton, makeSlider, makeTabButton, GOLD, PANEL_BORDER } from './helpers';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -33,107 +36,8 @@ export interface PauseMenuState {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const GOLD = '#d4a84b';
-const GOLD_HOVER = '#e8c374';
 const DARK_BG = 'rgba(0,0,0,0.78)';
 const PANEL_BG = 'rgba(20,18,14,0.92)';
-const PANEL_BORDER = 'rgba(212,168,75,0.35)';
-
-function makeButton(text: string, onClick: () => void): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.textContent = text;
-  btn.style.cssText = `
-    display: block;
-    width: 260px;
-    margin: 0 auto 14px auto;
-    padding: 14px 0;
-    font-family: 'Cinzel', serif;
-    font-size: 1.15rem;
-    color: ${GOLD};
-    background: rgba(30,28,22,0.85);
-    border: 2px solid ${PANEL_BORDER};
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: center;
-    letter-spacing: 1px;
-    transition: background 0.15s, color 0.15s;
-  `;
-  btn.addEventListener('mouseenter', () => {
-    btn.style.background = 'rgba(60,55,40,0.9)';
-    btn.style.color = GOLD_HOVER;
-  });
-  btn.addEventListener('mouseleave', () => {
-    btn.style.background = 'rgba(30,28,22,0.85)';
-    btn.style.color = GOLD;
-  });
-  btn.addEventListener('click', onClick);
-  return btn;
-}
-
-function makeSlider(
-  label: string,
-  initialValue: number,
-  onChange: (value: number) => void,
-): HTMLDivElement {
-  const row = document.createElement('div');
-  row.style.cssText = `
-    display: flex; align-items: center; justify-content: space-between;
-    margin: 14px 0; font-family: 'Cinzel', serif; color: ${GOLD};
-    font-size: 0.95rem;
-  `;
-
-  const lbl = document.createElement('span');
-  lbl.textContent = label;
-  lbl.style.minWidth = '80px';
-
-  const slider = document.createElement('input');
-  slider.type = 'range';
-  slider.min = '0';
-  slider.max = '100';
-  slider.value = String(Math.round(initialValue * 100));
-  slider.style.cssText = `
-    flex: 1; margin: 0 12px; accent-color: ${GOLD}; cursor: pointer;
-  `;
-
-  const valLabel = document.createElement('span');
-  valLabel.textContent = `${Math.round(initialValue * 100)}%`;
-  valLabel.style.minWidth = '44px';
-  valLabel.style.textAlign = 'right';
-
-  slider.addEventListener('input', () => {
-    const v = parseInt(slider.value, 10);
-    valLabel.textContent = `${v}%`;
-    onChange(v / 100);
-  });
-
-  row.appendChild(lbl);
-  row.appendChild(slider);
-  row.appendChild(valLabel);
-  return row;
-}
-
-function makeTabButton(
-  text: string,
-  isActive: boolean,
-  onClick: () => void,
-): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.textContent = text;
-  btn.style.cssText = `
-    flex: 1;
-    padding: 10px 0;
-    font-family: 'Cinzel', serif;
-    font-size: 1rem;
-    color: ${isActive ? '#fff' : GOLD};
-    background: ${isActive ? 'rgba(212,168,75,0.2)' : 'transparent'};
-    border: none;
-    border-bottom: ${isActive ? `2px solid ${GOLD}` : '2px solid transparent'};
-    cursor: pointer;
-    transition: background 0.15s;
-  `;
-  btn.addEventListener('click', onClick);
-  return btn;
-}
 
 function makeQualityButton(
   text: string,
@@ -229,12 +133,14 @@ export function showPauseMenu(
       // Music volume slider
       const musicSlider = makeSlider('Music', state.musicVolume, (v) => {
         state.musicVolume = v;
+        setMusicVolume(v);
       });
       optionsPanel.appendChild(musicSlider);
 
       // SFX volume slider
       const sfxSlider = makeSlider('SFX', state.sfxVolume, (v) => {
         state.sfxVolume = v;
+        setSfxVolume(v);
       });
       optionsPanel.appendChild(sfxSlider);
     } else {
@@ -274,6 +180,13 @@ export function showPauseMenu(
         (v) => { setReachableEdgeGlowOpacity(v); },
       );
       optionsPanel.appendChild(edgeGlowSlider);
+
+      const influenceWidthSlider = makeSlider(
+        'Influence Highlight Width',
+        getInfluenceHighlightWidth(),
+        (v) => { setInfluenceHighlightWidth(v); },
+      );
+      optionsPanel.appendChild(influenceWidthSlider);
 
       const influenceCircleSlider = makeSlider(
         'Influence Circle Opacity',

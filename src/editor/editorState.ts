@@ -7,9 +7,20 @@
  */
 
 import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
+import type { RoomSongId } from '../audio/musicManager';
+import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
+import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
 
 // Re-export for convenience in editor modules
 export type { BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
+export type { RoomSongId } from '../audio/musicManager';
+
+/** Options shown in the "Room Song" editor dropdown, in display order. */
+export const SONG_OPTIONS: readonly { id: RoomSongId; label: string }[] = [
+  { id: '_continue', label: SONG_DISPLAY_NAMES._continue },
+  { id: '_silence',  label: SONG_DISPLAY_NAMES._silence },
+  ...AVAILABLE_SONGS.map(id => ({ id, label: SONG_DISPLAY_NAMES[id] })),
+];
 
 // ── Editor tool enum ─────────────────────────────────────────────────────────
 
@@ -33,14 +44,21 @@ export interface PaletteItem {
   defaultHeightBlocks?: number;
   /** 1 if this palette item places a one-way platform. */
   isPlatformItem?: 1;
+  /** 1 if this palette item places a ramp (diagonal triangle). */
+  isRampItem?: 1;
+  /** 1 if this palette item places a half-width pillar (4 px wide). */
+  isPillarHalfWidthItem?: 1;
 }
 
 /** Built-in palette items available in the editor. */
 export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Blocks / terrain
-  { id: 'block_1x1', label: '1×1 Block',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
-  { id: 'block_2x2', label: '2×2 Block',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
-  { id: 'platform',  label: 'Platform',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPlatformItem: 1 },
+  { id: 'block_1x1', label: '1×1 Block',   category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'block_2x2', label: '2×2 Block',   category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
+  { id: 'platform',  label: 'Platform',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPlatformItem: 1 },
+  { id: 'ramp_1x1',  label: '1×1 Ramp',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isRampItem: 1 },
+  { id: 'ramp_1x2',  label: '1×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isRampItem: 1 },
+  { id: 'ramp_2x2',  label: '2×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isRampItem: 1 },
   // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },
@@ -48,7 +66,12 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Triggers
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
+  { id: 'save_tomb', label: 'Save Tomb', category: 'triggers' },
   { id: 'skill_tomb', label: 'Skill Tomb', category: 'triggers' },
+  { id: 'dust_pile_small',  label: 'Dust Pile (S)',  category: 'triggers' },
+  { id: 'dust_pile_medium', label: 'Dust Pile (M)',  category: 'triggers' },
+  { id: 'dust_pile_large',  label: 'Dust Pile (L)',  category: 'triggers' },
+  // Legacy alias kept for backward-compat with older room exports
   { id: 'dust_pile', label: 'Dust Pile', category: 'triggers' },
 ];
 
@@ -90,8 +113,20 @@ export interface EditorWall {
   hBlock: number;
   /** 1 if this wall is a one-way platform. */
   isPlatformFlag: 0 | 1;
+  /**
+   * Which edge of this platform block is the one-way surface.
+   * 0 = top (default), 1 = bottom, 2 = left, 3 = right.
+   */
+  platformEdge: 0 | 1 | 2 | 3;
   /** Per-wall block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
+  /**
+   * Ramp orientation (0-3). Undefined or -1 = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** 1 if this pillar wall should be rendered and collide at half-block width. */
+  isPillarHalfWidthFlag: 0 | 1;
 }
 
 export interface EditorEnemy {
@@ -118,12 +153,28 @@ export interface EditorTransition {
   targetRoomId: string;
   targetSpawnBlock: [number, number];
   fadeColor?: string;
+  /**
+   * Left edge (for left/right) or top edge (for up/down) of the 6-block-deep
+   * transition zone. When undefined the transition sits on the room boundary.
+   * When defined the transition is an interior zone at this block position.
+   */
+  depthBlock?: number;
 }
 
+/** Save Tomb — where the player saves their progress. */
+export interface EditorSaveTomb {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
+/** Skill Tomb — grants the player a specific dust skill/weave when interacted with. */
 export interface EditorSkillTomb {
   uid: number;
   xBlock: number;
   yBlock: number;
+  /** The weave ID unlocked by this tomb. */
+  weaveId: string;
 }
 
 export interface EditorDustPile {
@@ -143,19 +194,27 @@ export interface EditorRoomData {
   backgroundId: BackgroundId;
   /** Lighting model for this room. */
   lightingEffect: LightingEffect;
+  /**
+   * Background music for this room.
+   * '_continue' = keep playing the previous room's song (default).
+   * '_silence'  = stop music when entering this room.
+   * Any other value = switch to the named song when entering this room.
+   */
+  songId: RoomSongId;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];
   interiorWalls: EditorWall[];
   enemies: EditorEnemy[];
   transitions: EditorTransition[];
+  saveTombs: EditorSaveTomb[];
   skillTombs: EditorSkillTomb[];
   dustPiles: EditorDustPile[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'skillTomb' | 'dustPile' | 'playerSpawn';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'playerSpawn';
 
 export interface SelectedElement {
   type: SelectedElementType;
@@ -172,6 +231,8 @@ export interface EditorState {
   selectedElements: SelectedElement[];
   /** Current placement rotation in 90° steps (0, 1, 2, 3). */
   placementRotationSteps: number;
+  /** Whether the current placement is horizontally flipped. */
+  placementFlipH: boolean;
   /** Mouse position in block units (snapped to grid). */
   cursorBlockX: number;
   cursorBlockY: number;
@@ -202,6 +263,16 @@ export interface EditorState {
   selectionBoxStartBlockY: number;
   /** Serialized clipboard data for copy/paste. */
   clipboard: string | null;
+  /**
+   * Which skill (weave) a newly placed skill tomb will contain.
+   * Populated from the skill picker dropdown when skill_tomb is selected.
+   */
+  pendingSkillTombWeaveId: string;
+  /**
+   * The element the mouse is currently hovering over (Select tool only).
+   * Null when no element is under the cursor or when not using the Select tool.
+   */
+  hoverElement: SelectedElement | null;
 }
 
 export function createEditorState(): EditorState {
@@ -212,6 +283,7 @@ export function createEditorState(): EditorState {
     selectedPaletteItem: null,
     selectedElements: [],
     placementRotationSteps: 0,
+    placementFlipH: false,
     cursorBlockX: 0,
     cursorBlockY: 0,
     cursorWorldX: 0,
@@ -229,6 +301,8 @@ export function createEditorState(): EditorState {
     selectionBoxStartBlockX: 0,
     selectionBoxStartBlockY: 0,
     clipboard: null,
+    pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
+    hoverElement: null,
   };
 }
 

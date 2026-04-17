@@ -44,26 +44,36 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
   const ws: number[] = [];
   const hs: number[] = [];
   const fs: number[] = []; // isPlatformFlag (0 or 1)
+  const pe: number[] = []; // platformEdge (0=top,1=bottom,2=left,3=right)
   const ts: number[] = []; // themeIndex
   const iv: number[] = []; // isInvisibleFlag (0 or 1)
+  const ro: number[] = []; // rampOrientationIndex (255 = not a ramp)
+  const ph: number[] = []; // isPillarHalfWidthFlag (0 or 1)
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
     const def = room.walls[wi];
+    const isHalfWidthPillar = def.isPillarHalfWidthFlag === 1;
+    // Half-width pillars use half BLOCK_SIZE_MEDIUM for width; minimum is still enforced per-axis.
+    const rawWWorld = isHalfWidthPillar
+      ? Math.max(BLOCK_SIZE_MEDIUM / 2, def.wBlock * (BLOCK_SIZE_MEDIUM / 2))
+      : Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM);
     xs.push(def.xBlock * BLOCK_SIZE_MEDIUM);
     ys.push(def.yBlock * BLOCK_SIZE_MEDIUM);
-    ws.push(Math.max(BLOCK_SIZE_MEDIUM, def.wBlock * BLOCK_SIZE_MEDIUM));
+    ws.push(rawWWorld);
     hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
     fs.push(def.isPlatformFlag === 1 ? 1 : 0);
+    pe.push(def.platformEdge ?? 0);
     ts.push(def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX);
     iv.push(def.isInvisibleFlag === 1 ? 1 : 0);
+    ro.push(def.rampOrientation !== undefined ? def.rampOrientation : 255);
+    ph.push(isHalfWidthPillar ? 1 : 0);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
   // Two rectangles may merge if they share a complete face AND have the same
-  // isPlatformFlag (platform walls must not merge with solid walls):
-  //   - Same Y and height, contiguous on X (horizontal merge)
-  //   - Same X and width,  contiguous on Y (vertical merge)
+  // isPlatformFlag (platform walls must not merge with solid walls).
+  // Ramps (ro !== 255) and half-width pillars (ph === 1) are never merged.
   let merged = true;
   while (merged) {
     merged = false;
@@ -73,6 +83,9 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
         if (fs[i] !== fs[j]) continue;
         if (ts[i] !== ts[j]) continue;
         if (iv[i] !== iv[j]) continue;
+        // Never merge ramps or half-width pillars
+        if (ro[i] !== 255 || ro[j] !== 255) continue;
+        if (ph[i] !== 0 || ph[j] !== 0) continue;
         // Horizontal merge: same Y, same H, contiguous on X axis
         if (
           Math.abs(ys[i] - ys[j]) <= WALL_MERGE_EPSILON_WORLD &&
@@ -92,7 +105,9 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             ws[i] = mergedRight - mergedLeft;
             ys[i] = ys[i] < ys[j] ? ys[i] : ys[j];
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1);
             merged = true;
             break;
           }
@@ -116,7 +131,9 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             hs[i] = mergedBottom - mergedTop;
             xs[i] = xs[i] < xs[j] ? xs[i] : xs[j];
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
-            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1); fs.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
+            fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1);
             merged = true;
             break;
           }
@@ -135,8 +152,11 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     world.wallWWorld[wi] = ws[wi];
     world.wallHWorld[wi] = hs[wi];
     world.wallIsPlatformFlag[wi] = fs[wi];
+    world.wallPlatformEdge[wi] = pe[wi];
     world.wallThemeIndex[wi] = ts[wi];
     world.wallIsInvisibleFlag[wi] = iv[wi];
+    world.wallRampOrientationIndex[wi] = ro[wi];
+    world.wallIsPillarHalfWidthFlag[wi] = ph[wi];
   }
 }
 
@@ -291,14 +311,16 @@ export function drawTunnelDarkness(
   offsetYPx: number,
   zoom: number,
 ): void {
-  const roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
-  const fadeDepthWorld = 1.5 * BLOCK_SIZE_MEDIUM; // quick fade to black near boundary
+  const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
+  const roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
+  const FADE_BLOCKS = 6;
+  const fadeDepthWorld = FADE_BLOCKS * BLOCK_SIZE_MEDIUM;
 
   ctx.save();
 
   for (let ti = 0; ti < room.transitions.length; ti++) {
     const t = room.transitions[ti];
-    const openTopWorld = t.positionBlock * BLOCK_SIZE_MEDIUM;
+    const openTopWorld    = t.positionBlock * BLOCK_SIZE_MEDIUM;
     const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 
     // Determine fade colors based on transition fadeColor
@@ -322,30 +344,81 @@ export function drawTunnelDarkness(
       fadeTransparentColor = 'rgba(0,0,0,0)';
     }
 
-    if (t.direction === 'left') {
-      // Fade from left room edge inward
-      const x0Screen = 0 * zoom + offsetXPx;
-      const x1Screen = fadeDepthWorld * zoom + offsetXPx;
-      const y0Screen = openTopWorld * zoom + offsetYPx;
-      const y1Screen = openBottomWorld * zoom + offsetYPx;
+    const y0Screen = openTopWorld    * zoom + offsetYPx;
+    const y1Screen = openBottomWorld * zoom + offsetYPx;
+    const x1Screen = roomWidthWorld  * zoom + offsetXPx;
 
-      const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
+    if (t.direction === 'left') {
+      // Zone starts at depthBlock (or room left edge) and extends inward 6 blocks
+      const zoneLeft  = (t.depthBlock !== undefined ? t.depthBlock * BLOCK_SIZE_MEDIUM : 0);
+      const zoneRight = zoneLeft + fadeDepthWorld;
+      const zlScreen  = zoneLeft  * zoom + offsetXPx;
+      const zrScreen  = zoneRight * zoom + offsetXPx;
+
+      const grad = ctx.createLinearGradient(zlScreen, 0, zrScreen, 0);
       grad.addColorStop(0, fadeOpaqueColor);
       grad.addColorStop(1, fadeTransparentColor);
       ctx.fillStyle = grad;
-      ctx.fillRect(x0Screen - 200, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
-    } else if (t.direction === 'right') {
-      // Fade from right room edge inward
-      const x0Screen = (roomWidthWorld - fadeDepthWorld) * zoom + offsetXPx;
-      const x1Screen = roomWidthWorld * zoom + offsetXPx;
-      const y0Screen = openTopWorld * zoom + offsetYPx;
-      const y1Screen = openBottomWorld * zoom + offsetYPx;
+      // For edge transitions extend fill leftward past the room boundary to cover the tunnel corridor.
+      const fillLeft = t.depthBlock !== undefined ? zlScreen : 0;
+      ctx.fillRect(fillLeft, y0Screen, zrScreen - fillLeft, y1Screen - y0Screen);
 
-      const grad = ctx.createLinearGradient(x0Screen, 0, x1Screen, 0);
+    } else if (t.direction === 'right') {
+      // Zone starts 6 blocks from right (or at depthBlock) and exits right
+      const zoneLeft  = t.depthBlock !== undefined
+        ? t.depthBlock * BLOCK_SIZE_MEDIUM
+        : roomWidthWorld - fadeDepthWorld;
+      const zoneRight = zoneLeft + fadeDepthWorld;
+      const zlScreen  = zoneLeft  * zoom + offsetXPx;
+      const zrScreen  = zoneRight * zoom + offsetXPx;
+
+      const grad = ctx.createLinearGradient(zlScreen, 0, zrScreen, 0);
       grad.addColorStop(0, fadeTransparentColor);
       grad.addColorStop(1, fadeOpaqueColor);
       ctx.fillStyle = grad;
-      ctx.fillRect(x0Screen, y0Screen, x1Screen - x0Screen + 200, y1Screen - y0Screen);
+      // For edge transitions extend fill rightward past the room boundary to cover the tunnel corridor.
+      const fillRight = t.depthBlock !== undefined ? zrScreen : x1Screen;
+      ctx.fillRect(zlScreen, y0Screen, fillRight - zlScreen, y1Screen - y0Screen);
+
+    } else if (t.direction === 'up') {
+      const openLeftWorld  = t.positionBlock * BLOCK_SIZE_MEDIUM;
+      const openRightWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
+      const x0s = openLeftWorld  * zoom + offsetXPx;
+      const x1s = openRightWorld * zoom + offsetXPx;
+
+      const zoneTop    = (t.depthBlock !== undefined ? t.depthBlock * BLOCK_SIZE_MEDIUM : 0);
+      const zoneBottom = zoneTop + fadeDepthWorld;
+      const ztScreen   = zoneTop    * zoom + offsetYPx;
+      const zbScreen   = zoneBottom * zoom + offsetYPx;
+
+      const grad = ctx.createLinearGradient(0, ztScreen, 0, zbScreen);
+      grad.addColorStop(0, fadeOpaqueColor);
+      grad.addColorStop(1, fadeTransparentColor);
+      ctx.fillStyle = grad;
+      // For edge transitions extend fill upward past the room boundary.
+      const fillTop = t.depthBlock !== undefined ? ztScreen : 0;
+      ctx.fillRect(x0s, fillTop, x1s - x0s, zbScreen - fillTop);
+
+    } else if (t.direction === 'down') {
+      const openLeftWorld  = t.positionBlock * BLOCK_SIZE_MEDIUM;
+      const openRightWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
+      const x0s = openLeftWorld  * zoom + offsetXPx;
+      const x1s = openRightWorld * zoom + offsetXPx;
+
+      const zoneTop    = t.depthBlock !== undefined
+        ? t.depthBlock * BLOCK_SIZE_MEDIUM
+        : roomHeightWorld - fadeDepthWorld;
+      const zoneBottom = zoneTop + fadeDepthWorld;
+      const ztScreen   = zoneTop    * zoom + offsetYPx;
+      const zbScreen   = zoneBottom * zoom + offsetYPx;
+
+      const grad = ctx.createLinearGradient(0, ztScreen, 0, zbScreen);
+      grad.addColorStop(0, fadeTransparentColor);
+      grad.addColorStop(1, fadeOpaqueColor);
+      ctx.fillStyle = grad;
+      // For edge transitions extend fill downward past the room boundary.
+      const fillBottom = t.depthBlock !== undefined ? zbScreen : roomHeightWorld * zoom + offsetYPx;
+      ctx.fillRect(x0s, ztScreen, x1s - x0s, fillBottom - ztScreen);
     }
   }
 

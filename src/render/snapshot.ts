@@ -110,6 +110,16 @@ export interface ClusterSnapshot {
   readonly grappleHunterTipXWorld: number;
   /** Y of grapple chain tip (world units). */
   readonly grappleHunterTipYWorld: number;
+  /**
+   * Ticks remaining of invulnerability after taking damage.
+   * Non-zero while the player cannot be damaged again.
+   */
+  readonly invulnerabilityTicks: number;
+  /**
+   * Ticks remaining in the hurt visual feedback window.
+   * Non-zero while the player sprite should show damage tint / flash.
+   */
+  readonly hurtTicks: number;
 }
 
 export interface WallSnapshot {
@@ -119,10 +129,16 @@ export interface WallSnapshot {
   readonly wWorld:  Float32Array;
   readonly hWorld:  Float32Array;
   readonly isPlatformFlag: Uint8Array;
+  /** 0=top, 1=bottom, 2=left, 3=right. Only meaningful when isPlatformFlag=1. */
+  readonly platformEdge: Uint8Array;
   /** Per-wall theme index: 0=blackRock, 1=brownRock, 2=dirt.  Uses room default when 255. */
   readonly themeIndex: Uint8Array;
   /** 1 if the wall is an invisible collision boundary (not rendered). */
   readonly isInvisibleFlag: Uint8Array;
+  /** Ramp orientation: 255=not a ramp, 0=rises right(/), 1=rises left(\), 2=ceiling⌐, 3=ceiling¬. */
+  readonly rampOrientationIndex: Uint8Array;
+  /** 1 if the wall is a half-width pillar (4 px wide). */
+  readonly isPillarHalfWidthFlag: Uint8Array;
 }
 
 export interface WorldSnapshot {
@@ -205,6 +221,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       grappleHunterChainStartIndex:     c.grappleHunterChainStartIndex,
       grappleHunterTipXWorld:           c.grappleHunterTipXWorld,
       grappleHunterTipYWorld:           c.grappleHunterTipYWorld,
+      invulnerabilityTicks:             c.invulnerabilityTicks,
+      hurtTicks:                        c.hurtTicks,
     });
   }
 
@@ -232,8 +250,11 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       wWorld: world.wallWWorld,
       hWorld: world.wallHWorld,
       isPlatformFlag: world.wallIsPlatformFlag,
+      platformEdge: world.wallPlatformEdge,
       themeIndex: world.wallThemeIndex,
       isInvisibleFlag: world.wallIsInvisibleFlag,
+      rampOrientationIndex: world.wallRampOrientationIndex,
+      isPillarHalfWidthFlag: world.wallIsPillarHalfWidthFlag,
     },
     isGrappleActiveFlag: world.isGrappleActiveFlag,
     isGrappleMissActiveFlag: world.isGrappleMissActiveFlag,

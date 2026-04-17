@@ -5,7 +5,7 @@
  */
 
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
-import type { EditorState, EditorRoomData, EditorTransition } from './editorState';
+import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview } from './editorTools';
 
@@ -14,6 +14,10 @@ const WALL_HIGHLIGHT = 'rgba(100,200,255,0.3)';
 const WALL_SELECTED = 'rgba(0,200,255,0.6)';
 const PLATFORM_HIGHLIGHT = 'rgba(255,200,50,0.35)';
 const PLATFORM_SELECTED = 'rgba(255,200,50,0.8)';
+const RAMP_HIGHLIGHT = 'rgba(120,220,120,0.4)';
+const RAMP_SELECTED = 'rgba(80,255,80,0.8)';
+const PILLAR_HALF_HIGHLIGHT = 'rgba(180,130,255,0.45)';
+const PILLAR_HALF_SELECTED = 'rgba(180,100,255,0.9)';
 const ENEMY_COLOR = 'rgba(255,80,80,0.5)';
 const ENEMY_SELECTED = 'rgba(255,80,80,0.9)';
 const TRANSITION_COLOR = 'rgba(80,255,80,0.35)';
@@ -25,6 +29,9 @@ const SPAWN_SELECTED = 'rgba(255,220,50,0.9)';
 const TOMB_COLOR = 'rgba(212,168,75,0.5)';
 const TOMB_SELECTED = 'rgba(212,168,75,0.9)';
 const PREVIEW_COLOR = 'rgba(0,200,255,0.25)';
+const PREVIEW_RAMP_COLOR = 'rgba(80,255,80,0.35)';
+const PREVIEW_PLATFORM_COLOR = 'rgba(255,200,50,0.4)';
+const PREVIEW_PILLAR_HALF_COLOR = 'rgba(180,130,255,0.35)';
 const CURSOR_COLOR = 'rgba(255,255,255,0.4)';
 const SELECTION_BOX_COLOR = 'rgba(100,200,255,0.25)';
 const SELECTION_BOX_BORDER = 'rgba(100,200,255,0.7)';
@@ -58,13 +65,22 @@ export function renderEditorOverlays(
   for (const w of room.interiorWalls) {
     const isSelected = isElementSelected('wall', w.uid);
     const isPlatform = w.isPlatformFlag === 1;
-    let color: string;
-    if (isPlatform) {
-      color = isSelected ? PLATFORM_SELECTED : PLATFORM_HIGHLIGHT;
+    const isRamp = w.rampOrientation !== undefined;
+    const isHalfPillar = w.isPillarHalfWidthFlag === 1;
+
+    if (isRamp) {
+      const color = isSelected ? RAMP_SELECTED : RAMP_HIGHLIGHT;
+      drawRampTriangle(ctx, w, offsetXPx, offsetYPx, zoom, color, isSelected ? 2 : 1);
+    } else if (isPlatform) {
+      const color = isSelected ? PLATFORM_SELECTED : PLATFORM_HIGHLIGHT;
+      drawPlatformLine(ctx, w, offsetXPx, offsetYPx, zoom, color);
+    } else if (isHalfPillar) {
+      const color = isSelected ? PILLAR_HALF_SELECTED : PILLAR_HALF_HIGHLIGHT;
+      drawHalfPillarRect(ctx, w, offsetXPx, offsetYPx, zoom, color);
     } else {
-      color = isSelected ? WALL_SELECTED : WALL_HIGHLIGHT;
+      const color = isSelected ? WALL_SELECTED : WALL_HIGHLIGHT;
+      drawBlockRect(ctx, w.xBlock, w.yBlock, w.wBlock, w.hBlock, offsetXPx, offsetYPx, zoom, color, isSelected ? 2 : 1);
     }
-    drawBlockRect(ctx, w.xBlock, w.yBlock, w.wBlock, w.hBlock, offsetXPx, offsetYPx, zoom, color, isSelected ? 2 : 1);
   }
 
   // ── Enemies ──────────────────────────────────────────────────────────────
@@ -94,11 +110,18 @@ export function renderEditorOverlays(
       isSelected ? SPAWN_SELECTED : SPAWN_COLOR, '🏠');
   }
 
-  // ── Skill tombs ─────────────────────────────────────────────────────────
+  // ── Save tombs ──────────────────────────────────────────────────────────
+  for (const s of room.saveTombs) {
+    const isSelected = isElementSelected('saveTomb', s.uid);
+    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom,
+      isSelected ? TOMB_SELECTED : TOMB_COLOR, '⛩');
+  }
+
+  // ── Skill tombs (dust skill unlocks) ────────────────────────────────────
   for (const s of room.skillTombs) {
     const isSelected = isElementSelected('skillTomb', s.uid);
     drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom,
-      isSelected ? TOMB_SELECTED : TOMB_COLOR, '⛩');
+      isSelected ? 'rgba(160,120,255,0.9)' : 'rgba(120,80,220,0.55)', '✦');
   }
 
   // ── Dust piles ──────────────────────────────────────────────────────────
@@ -112,8 +135,53 @@ export function renderEditorOverlays(
   if (state.activeTool === EditorTool.Place && state.selectedPaletteItem !== null) {
     const preview = getPlacementPreview(state);
     if (preview !== null) {
-      drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
-        preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 2);
+      const item = state.selectedPaletteItem;
+      if (item.isRampItem === 1) {
+        // Show ramp preview as a triangle with current orientation
+        const base = state.placementRotationSteps % 4;
+        const rampOri = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+        const previewWall: EditorWall = {
+          uid: -1,
+          xBlock: state.cursorBlockX,
+          yBlock: state.cursorBlockY,
+          wBlock: preview.wBlock,
+          hBlock: preview.hBlock,
+          isPlatformFlag: 0,
+          platformEdge: 0,
+          rampOrientation: rampOri,
+          isPillarHalfWidthFlag: 0,
+        };
+        drawRampTriangle(ctx, previewWall, offsetXPx, offsetYPx, zoom, PREVIEW_RAMP_COLOR, 2);
+      } else if (item.isPlatformItem === 1) {
+        const platformEdgeMap: readonly (0 | 1 | 2 | 3)[] = [0, 3, 1, 2];
+        const platformEdge: 0 | 1 | 2 | 3 = platformEdgeMap[state.placementRotationSteps % 4];
+        const previewWall: EditorWall = {
+          uid: -1,
+          xBlock: state.cursorBlockX,
+          yBlock: state.cursorBlockY,
+          wBlock: preview.wBlock,
+          hBlock: preview.hBlock,
+          isPlatformFlag: 1,
+          platformEdge,
+          isPillarHalfWidthFlag: 0,
+        };
+        drawPlatformLine(ctx, previewWall, offsetXPx, offsetYPx, zoom, PREVIEW_PLATFORM_COLOR);
+      } else if (item.isPillarHalfWidthItem === 1) {
+        const previewWall: EditorWall = {
+          uid: -1,
+          xBlock: state.cursorBlockX,
+          yBlock: state.cursorBlockY,
+          wBlock: preview.wBlock,
+          hBlock: preview.hBlock,
+          isPlatformFlag: 0,
+          platformEdge: 0,
+          isPillarHalfWidthFlag: 1,
+        };
+        drawHalfPillarRect(ctx, previewWall, offsetXPx, offsetYPx, zoom, PREVIEW_PILLAR_HALF_COLOR);
+      } else {
+        drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
+          preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 2);
+      }
     }
   }
 
@@ -138,10 +206,130 @@ export function renderEditorOverlays(
   drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
     offsetXPx, offsetYPx, zoom, CURSOR_COLOR, 1);
 
+  // ── Hover tooltip (Select tool only) ─────────────────────────────────────
+  if (state.activeTool === EditorTool.Select && state.hoverElement !== null) {
+    const el = state.hoverElement;
+    const tooltipId = buildElementTooltipId(el.type, el.uid);
+    const tooltipType = buildElementTypeName(el.type, el.uid, room);
+    const cursorXPx = state.cursorWorldX * zoom + offsetXPx;
+    const cursorYPx = state.cursorWorldY * zoom + offsetYPx;
+    drawHoverTooltip(ctx, tooltipId, tooltipType, cursorXPx, cursorYPx, canvasWidth, canvasHeight);
+  }
+
   ctx.restore();
 }
 
 // ── Drawing helpers ──────────────────────────────────────────────────────────
+
+/** Returns a unique display ID string for the given element (e.g. "skill_tomb_12"). */
+function buildElementTooltipId(type: SelectedElementType, uid: number): string {
+  const prefix: Record<SelectedElementType, string> = {
+    wall:        'wall',
+    enemy:       'enemy',
+    transition:  'transition',
+    saveTomb:    'save_tomb',
+    skillTomb:   'skill_tomb',
+    dustPile:    'dust_pile',
+    playerSpawn: 'player_spawn',
+  };
+  const base = prefix[type] ?? type;
+  return `${base}_${uid}`;
+}
+
+/**
+ * Returns a human-readable type name for the element, enriched with enemy
+ * sub-type when available.
+ */
+function buildElementTypeName(
+  type: SelectedElementType,
+  uid: number,
+  room: EditorRoomData,
+): string {
+  if (type === 'enemy') {
+    const e = room.enemies.find(x => x.uid === uid);
+    if (e) {
+      if (e.isFlyingEyeFlag === 1)    return 'Flying Eye';
+      if (e.isRollingEnemyFlag === 1) return 'Rolling Enemy';
+      if (e.isRockElementalFlag === 1)return 'Rock Elemental';
+      if (e.isRadiantTetherFlag === 1)return 'Radiant Tether';
+      if (e.isGrappleHunterFlag === 1)return 'Grapple Hunter';
+      return 'Enemy';
+    }
+  }
+  const names: Partial<Record<SelectedElementType, string>> = {
+    wall:        'Wall',
+    transition:  'Room Transition',
+    saveTomb:    'Save Tomb',
+    skillTomb:   'Skill Tomb',
+    dustPile:    'Dust Pile',
+    playerSpawn: 'Player Spawn',
+  };
+  return names[type] ?? type;
+}
+
+/** Renders a small tooltip box near the cursor showing element ID + type. */
+function drawHoverTooltip(
+  ctx: CanvasRenderingContext2D,
+  idText: string,
+  typeText: string,
+  cursorXPx: number,
+  cursorYPx: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): void {
+  const PADDING = 5;
+  const LINE_HEIGHT = 13;
+  const ID_FONT    = 'bold 11px monospace';
+  const TYPE_FONT  = '10px monospace';
+  const OFFSET_X   = 12;
+  const OFFSET_Y   = -28;
+
+  ctx.save();
+  ctx.font = ID_FONT;
+  const idWidth = ctx.measureText(idText).width;
+  ctx.font = TYPE_FONT;
+  const typeWidth = ctx.measureText(typeText).width;
+  const boxW = Math.max(idWidth, typeWidth) + PADDING * 2;
+  const boxH = LINE_HEIGHT * 2 + PADDING * 2;
+
+  let tx = cursorXPx + OFFSET_X;
+  let ty = cursorYPx + OFFSET_Y;
+  // Keep tooltip inside canvas
+  if (tx + boxW > canvasWidth - 4) tx = cursorXPx - OFFSET_X - boxW;
+  if (ty < 4) ty = cursorYPx + 16;
+  if (ty + boxH > canvasHeight - 4) ty = canvasHeight - 4 - boxH;
+
+  ctx.globalAlpha = 0.88;
+  ctx.fillStyle = 'rgba(10,12,20,0.9)';
+  ctx.strokeStyle = 'rgba(0,200,100,0.55)';
+  ctx.lineWidth = 1;
+  // Rounded rectangle
+  const r = 3;
+  ctx.beginPath();
+  ctx.moveTo(tx + r, ty);
+  ctx.lineTo(tx + boxW - r, ty);
+  ctx.arcTo(tx + boxW, ty,         tx + boxW, ty + r,         r);
+  ctx.lineTo(tx + boxW, ty + boxH - r);
+  ctx.arcTo(tx + boxW, ty + boxH,  tx + boxW - r, ty + boxH,  r);
+  ctx.lineTo(tx + r, ty + boxH);
+  ctx.arcTo(tx,       ty + boxH,   tx, ty + boxH - r,          r);
+  ctx.lineTo(tx, ty + r);
+  ctx.arcTo(tx,       ty,          tx + r, ty,                  r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.globalAlpha = 1.0;
+  ctx.font = ID_FONT;
+  ctx.fillStyle = '#c0ffd0';
+  ctx.fillText(idText,   tx + PADDING, ty + PADDING + LINE_HEIGHT - 2);
+  ctx.font = TYPE_FONT;
+  ctx.fillStyle = 'rgba(170,220,180,0.7)';
+  ctx.fillText(typeText, tx + PADDING, ty + PADDING + LINE_HEIGHT * 2 - 2);
+
+  ctx.restore();
+}
+
 
 function drawGrid(
   ctx: CanvasRenderingContext2D,
@@ -189,6 +377,111 @@ function drawBlockRect(
   ctx.strokeRect(x, y, w, h);
 }
 
+/**
+ * Draws a ramp wall as a colored triangle using the wall's rampOrientation.
+ */
+function drawRampTriangle(
+  ctx: CanvasRenderingContext2D,
+  w: EditorWall,
+  ox: number, oy: number, zoom: number,
+  color: string, lineWidth: number,
+): void {
+  const x  = w.xBlock * BS * zoom + ox;
+  const y  = w.yBlock * BS * zoom + oy;
+  const ww = w.wBlock * BS * zoom;
+  const wh = w.hBlock * BS * zoom;
+  const ori = w.rampOrientation ?? 0;
+
+  // Corners: TL, TR, BL, BR
+  const tlx = x;    const tly = y;
+  const trx = x+ww; const try_ = y;
+  const blx = x;    const bly = y+wh;
+  const brx = x+ww; const bry = y+wh;
+
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color.replace(/[\d.]+\)$/, '1)');
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  switch (ori) {
+    case 0: // /: BL, BR, TR
+      ctx.moveTo(blx, bly); ctx.lineTo(brx, bry); ctx.lineTo(trx, try_);
+      break;
+    case 1: // \: BR, BL, TL
+      ctx.moveTo(brx, bry); ctx.lineTo(blx, bly); ctx.lineTo(tlx, tly);
+      break;
+    case 2: // ⌐ ceiling: TL, TR, BL
+      ctx.moveTo(tlx, tly); ctx.lineTo(trx, try_); ctx.lineTo(blx, bly);
+      break;
+    case 3: // ¬ ceiling: TL, TR, BR
+      ctx.moveTo(tlx, tly); ctx.lineTo(trx, try_); ctx.lineTo(brx, bry);
+      break;
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+/**
+ * Draws a platform wall as a thin line on the appropriate edge.
+ */
+function drawPlatformLine(
+  ctx: CanvasRenderingContext2D,
+  w: EditorWall,
+  ox: number, oy: number, zoom: number,
+  color: string,
+): void {
+  const x  = w.xBlock * BS * zoom + ox;
+  const y  = w.yBlock * BS * zoom + oy;
+  const ww = w.wBlock * BS * zoom;
+  const wh = w.hBlock * BS * zoom;
+  const edge = w.platformEdge ?? 0;
+  const LINE = Math.max(2, Math.round(3 * zoom));
+
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color.replace(/[\d.]+\)$/, '1)');
+  ctx.lineWidth = 1;
+
+  // Draw a faint block outline to show the full block extent
+  ctx.fillRect(x, y, ww, wh);
+
+  // Draw the thick edge line
+  ctx.fillStyle = color.replace(/[\d.]+\)$/, '0.9)');
+  switch (edge) {
+    case 0: ctx.fillRect(x, y, ww, LINE); break;           // top
+    case 1: ctx.fillRect(x, y + wh - LINE, ww, LINE); break; // bottom
+    case 2: ctx.fillRect(x, y, LINE, wh); break;           // left
+    case 3: ctx.fillRect(x + ww - LINE, y, LINE, wh); break; // right
+  }
+  ctx.strokeRect(x, y, ww, wh);
+}
+
+/**
+ * Draws a half-width pillar wall as a narrow rectangle.
+ */
+function drawHalfPillarRect(
+  ctx: CanvasRenderingContext2D,
+  w: EditorWall,
+  ox: number, oy: number, zoom: number,
+  color: string,
+): void {
+  // Full AABB position
+  const x  = w.xBlock * BS * zoom + ox;
+  const y  = w.yBlock * BS * zoom + oy;
+  const ww = w.wBlock * BS * zoom;
+  const wh = w.hBlock * BS * zoom;
+  // Half-width pillar = 3 world units wide (half of BLOCK_SIZE_MEDIUM=6)
+  const halfW = ww / 2;
+
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, halfW, wh);
+  ctx.strokeStyle = color.replace(/[\d.]+\)$/, '1)');
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, halfW, wh);
+  // Faint outline of full block extent
+  ctx.strokeStyle = color.replace(/[\d.]+\)$/, '0.3)');
+  ctx.strokeRect(x, y, ww, wh);
+}
+
 function drawMarker(
   ctx: CanvasRenderingContext2D,
   xBlock: number, yBlock: number,
@@ -219,15 +512,18 @@ function drawTransitionZone(
   color: string,
   doorNumber: number,
 ): void {
+  const DEPTH = 6;
   let xBlock: number, yBlock: number, wBlock: number, hBlock: number;
-  if (t.direction === 'left') {
-    xBlock = -1; yBlock = t.positionBlock; wBlock = 2; hBlock = t.openingSizeBlocks;
-  } else if (t.direction === 'right') {
-    xBlock = room.widthBlocks - 1; yBlock = t.positionBlock; wBlock = 2; hBlock = t.openingSizeBlocks;
-  } else if (t.direction === 'up') {
-    xBlock = t.positionBlock; yBlock = -1; wBlock = t.openingSizeBlocks; hBlock = 2;
+  if (t.direction === 'left' || t.direction === 'right') {
+    const zoneX = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'left' ? 0 : room.widthBlocks - DEPTH);
+    xBlock = zoneX; yBlock = t.positionBlock; wBlock = DEPTH; hBlock = t.openingSizeBlocks;
   } else {
-    xBlock = t.positionBlock; yBlock = room.heightBlocks - 1; wBlock = t.openingSizeBlocks; hBlock = 2;
+    const zoneY = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'up' ? 0 : room.heightBlocks - DEPTH);
+    xBlock = t.positionBlock; yBlock = zoneY; wBlock = t.openingSizeBlocks; hBlock = DEPTH;
   }
 
   drawBlockRect(ctx, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom, color, 2);
@@ -246,12 +542,40 @@ function drawTransitionZone(
 /**
  * Draws the "WORLD EDITOR ON" indicator at the top of the screen.
  */
-export function renderEditorIndicator(ctx: CanvasRenderingContext2D, canvasWidth: number): void {
+export function renderEditorIndicator(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  state?: EditorState,
+): void {
   ctx.save();
   ctx.fillStyle = 'rgba(0,200,100,0.85)';
   ctx.font = 'bold 8px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText('WORLD EDITOR ON', canvasWidth / 2, 6);
+
+  // Show rotation / flip state when Place tool is active and a block item is selected
+  if (state !== null && state !== undefined &&
+      state.activeTool === EditorTool.Place &&
+      state.selectedPaletteItem !== null &&
+      state.selectedPaletteItem.category === 'blocks') {
+    const rampLabels = ['/', '\\', '⌐', '¬'];
+    const item = state.selectedPaletteItem;
+    let rotHint: string;
+    if (item.isRampItem === 1) {
+      const base = state.placementRotationSteps % 4;
+      const ori = state.placementFlipH ? (base ^ 1) : base;
+      rotHint = `Ramp:${rampLabels[ori]}`;
+    } else if (item.isPlatformItem === 1) {
+      const platformEdgeMap: readonly string[] = ['↑top', '→rgt', '↓btm', '←lft'];
+      rotHint = `Plat:${platformEdgeMap[state.placementRotationSteps % 4]}`;
+    } else {
+      rotHint = `R${state.placementRotationSteps}`;
+    }
+    const flipHint = state.placementFlipH ? ' [F]' : '';
+    ctx.fillStyle = 'rgba(200,255,200,0.75)';
+    ctx.font = '7px monospace';
+    ctx.fillText(`${rotHint}${flipHint}  [scroll]=rotate  [F]=flip`, canvasWidth / 2, 16);
+  }
   ctx.restore();
 }

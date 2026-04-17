@@ -277,11 +277,9 @@ function renderDebugOverlay(
   ctx.fillText(`HP: ${hp}/${maxHp}  Chains: ${chainCount}`, screenX - 50, screenY - 18);
 
   // Draw anchor points
-  let activeCount = 0;
   for (let i = 0; i < chainState.chains.length; i++) {
     const chain = chainState.chains[i];
     if (chain.isActiveFlag === 0) continue;
-    activeCount++;
     const asx = chain.anchorXWorld * scalePx + offsetXPx;
     const asy = chain.anchorYWorld * scalePx + offsetYPx;
     ctx.beginPath();

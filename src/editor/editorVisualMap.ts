@@ -100,6 +100,8 @@ export interface VisualMapCallbacks {
   onJumpToRoom: (room: RoomDef) => void;
   /** Called when the visual map closes. */
   onClose: () => void;
+  /** Called whenever world-map metadata is mutated (rename, move, add room/world, door link). */
+  onWorldMapDataChanged?: () => void;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -381,7 +383,19 @@ export function showVisualWorldMap(
     const ds = Math.max(4, Math.min(DOOR_SIZE, zoom * 1.5));
 
     let dx: number, dy: number;
-    if (trans.direction === 'left') {
+    const DEPTH = 6;
+    if (trans.depthBlock !== undefined) {
+      // Interior transition: show door at center of the zone
+      const depthMid = (trans.depthBlock + DEPTH / 2) * zoom;
+      const posMid   = (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom;
+      if (trans.direction === 'left' || trans.direction === 'right') {
+        dx = roomSx + depthMid - ds / 2;
+        dy = roomSy + posMid   - ds / 2;
+      } else {
+        dx = roomSx + posMid   - ds / 2;
+        dy = roomSy + depthMid - ds / 2;
+      }
+    } else if (trans.direction === 'left') {
       dx = roomSx - ds / 2;
       dy = roomSy + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom - ds / 2;
     } else if (trans.direction === 'right') {
@@ -486,14 +500,24 @@ export function showVisualWorldMap(
     roomW: number,
     roomH: number,
   ): [number, number] {
+    const DEPTH = 6;
+    const posMid = (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom;
+    if (trans.depthBlock !== undefined) {
+      const depthMid = (trans.depthBlock + DEPTH / 2) * zoom;
+      if (trans.direction === 'left' || trans.direction === 'right') {
+        return [roomSx + depthMid, roomSy + posMid];
+      } else {
+        return [roomSx + posMid, roomSy + depthMid];
+      }
+    }
     if (trans.direction === 'left') {
-      return [roomSx, roomSy + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom];
+      return [roomSx, roomSy + posMid];
     } else if (trans.direction === 'right') {
-      return [roomSx + roomW, roomSy + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom];
+      return [roomSx + roomW, roomSy + posMid];
     } else if (trans.direction === 'up') {
-      return [roomSx + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom, roomSy];
+      return [roomSx + posMid, roomSy];
     } else {
-      return [roomSx + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom, roomSy + roomH];
+      return [roomSx + posMid, roomSy + roomH];
     }
   }
 
@@ -622,9 +646,9 @@ export function showVisualWorldMap(
       const dy = e.clientY - dragStartYPx;
       const placement = placements.get(dragRoomId);
       if (placement) {
-        // Free drag position
-        placement.mapXWorld = dragRoomStartXPx + dx / zoom;
-        placement.mapYWorld = dragRoomStartYPx + dy / zoom;
+        // Snap dragged position to integer block grid
+        placement.mapXWorld = Math.round(dragRoomStartXPx + dx / zoom);
+        placement.mapYWorld = Math.round(dragRoomStartYPx + dy / zoom);
         // Doorway snap: adjust position if a compatible door pair is close enough
         snapIndicator = applyDoorSnap(dragRoomId, placement);
       }
@@ -722,6 +746,7 @@ export function showVisualWorldMap(
         const placement = placements.get(dragRoomId);
         if (placement) {
           setRoomMapPosition(dragRoomId, placement.mapXWorld, placement.mapYWorld);
+          callbacks.onWorldMapDataChanged?.();
           if (snapIndicator) {
             statusBar.textContent =
               `Snapped: ${effectiveRoomName(dragRoomId)} door #${snapIndicator.srcTransIdx + 1}` +
@@ -856,6 +881,7 @@ export function showVisualWorldMap(
       const newName = window.prompt('New name for room:', roomName);
       if (newName !== null && newName.trim() !== '') {
         setRoomNameOverride(roomId, newName.trim());
+        callbacks.onWorldMapDataChanged?.();
         statusBar.textContent = `Renamed "${roomId}" \u2192 "${newName.trim()}"`;
         statusBar.style.color = '#88ff88';
         render();
@@ -917,6 +943,7 @@ export function showVisualWorldMap(
     okBtn.addEventListener('click', () => {
       const newWorldId = parseInt(sel.value, 10);
       setRoomWorldOverride(roomId, newWorldId);
+      callbacks.onWorldMapDataChanged?.();
       statusBar.textContent = `Moved "${effectiveRoomName(roomId)}" to ${worldDisplayName(newWorldId)}`;
       statusBar.style.color = '#88ff88';
       modal.destroy();
@@ -1032,6 +1059,7 @@ export function showVisualWorldMap(
       registerRoom(roomDef);
       setRoomNameOverride(id, name);
       setRoomWorldOverride(id, worldId);
+      callbacks.onWorldMapDataChanged?.();
 
       const canvasWCss = canvas.width / window.devicePixelRatio;
       const canvasHCss = canvas.height / window.devicePixelRatio;
@@ -1100,6 +1128,7 @@ export function showVisualWorldMap(
     createBtn.addEventListener('click', () => {
       const name = nameInput.value.trim() || `World ${nextId}`;
       setWorldName(nextId, name);
+      callbacks.onWorldMapDataChanged?.();
       modal.destroy();
       statusBar.textContent = `World "${name}" (id: ${nextId}) created \u2014 right-click rooms to move them into it.`;
       statusBar.style.color = '#88ff88';
@@ -1273,6 +1302,16 @@ export function showVisualWorldMap(
     const cx = placement.mapXWorld;
     const cy = placement.mapYWorld;
     const mid = trans.positionBlock + trans.openingSizeBlocks / 2;
+    const DEPTH = 6;
+    if (trans.depthBlock !== undefined) {
+      // Interior transition: report center of the zone
+      const depthMid = trans.depthBlock + DEPTH / 2;
+      if (trans.direction === 'left' || trans.direction === 'right') {
+        return [cx + depthMid, cy + mid];
+      } else {
+        return [cx + mid, cy + depthMid];
+      }
+    }
     if (trans.direction === 'left')  return [cx,                   cy + mid];
     if (trans.direction === 'right') return [cx + room.widthBlocks, cy + mid];
     if (trans.direction === 'up')    return [cx + mid,              cy];
@@ -1375,6 +1414,7 @@ export function showVisualWorldMap(
         if (e.key === 'ArrowUp')    placement.mapYWorld -= 1;
         if (e.key === 'ArrowDown')  placement.mapYWorld += 1;
         setRoomMapPosition(selectedRoomId, placement.mapXWorld, placement.mapYWorld);
+        callbacks.onWorldMapDataChanged?.();
         render();
       }
       return;

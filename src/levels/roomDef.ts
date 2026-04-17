@@ -22,6 +22,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
+import type { RoomSongId } from '../audio/musicManager';
 
 // ── Block theme and background types ─────────────────────────────────────────
 
@@ -151,11 +152,32 @@ export interface RoomWallDef {
    * it but lands on top when falling down.  Platforms have no side collision.
    */
   isPlatformFlag?: 0 | 1;
+  /**
+   * Which edge of this platform block is the one-way surface.
+   * Only meaningful when isPlatformFlag === 1.
+   * 0 = top (default), 1 = bottom, 2 = left, 3 = right.
+   */
+  platformEdge?: 0 | 1 | 2 | 3;
   /** Per-wall block theme override.  When set, this wall renders with the
    *  specified theme instead of the room-level default. */
   blockTheme?: BlockTheme;
   /** 1 if this wall is an invisible collision boundary (not rendered). */
   isInvisibleFlag?: 0 | 1;
+  /**
+   * Ramp orientation. When set, this wall is a diagonal triangle (ramp) rather
+   * than a full rectangle. The four orientations are:
+   *   0 = ramp rises going right  ( / shape, hypotenuse from bottom-left to top-right )
+   *   1 = ramp rises going left   ( \ shape, hypotenuse from bottom-right to top-left )
+   *   2 = ceiling ramp going left ( ⌐ shape, upside-down /, hypotenuse top-left to bottom-right )
+   *   3 = ceiling ramp going right( ¬ shape, upside-down \, hypotenuse top-right to bottom-left )
+   * Omit (or set to undefined) for a normal rectangular wall.
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * 1 if this pillar wall is rendered and collides at half-block width (4 px).
+   * Only meaningful for walls that are 1×2 blocks and serve as pillars.
+   */
+  isPillarHalfWidthFlag?: 0 | 1;
 }
 
 /** Direction a transition tunnel faces. */
@@ -187,6 +209,13 @@ export interface RoomTransitionDef {
   targetSpawnBlock: readonly [number, number];
   /** Color used for the tunnel fade gradient. Defaults to black if unset. */
   fadeColor?: string;
+  /**
+   * Left edge (for left/right) or top edge (for up/down) of the 6-block-deep
+   * transition zone, in block units. When undefined the transition is an edge
+   * transition sitting against the room boundary; when defined it is an
+   * interior transition that can be placed anywhere inside the room.
+   */
+  depthBlock?: number;
 }
 
 /** Direction a spike faces (the pointy end). */
@@ -278,8 +307,10 @@ export interface RoomDef {
   playerSpawnBlock: readonly [number, number];
   /** Transition tunnels connecting to other rooms. */
   transitions: readonly RoomTransitionDef[];
-  /** Skill tomb positions (block units). Empty array if none. */
-  skillTombs: readonly { xBlock: number; yBlock: number }[];
+  /** Save tomb positions (block units) — where the player saves their progress. */
+  saveTombs: readonly { xBlock: number; yBlock: number }[];
+  /** Skill Tomb definitions (block units) — grant dust skills/weaves when interacted with. */
+  skillTombs?: readonly { xBlock: number; yBlock: number; weaveId: string }[];
   /** Collectible skill book positions (block units). */
   skillBooks?: readonly { xBlock: number; yBlock: number }[];
   /**
@@ -305,4 +336,12 @@ export interface RoomDef {
   fireflyJars?: readonly RoomFireflyJarDef[];
   /** Piles of gold dust placed on the ground (attracted by Storm Weave). */
   dustPiles?: readonly RoomDustPileDef[];
+  /**
+   * Background music for this room.
+   * '_continue' = keep playing the previous room's song (default / undefined).
+   * '_silence'  = stop music when entering this room.
+   * Any other value = switch to the named song when entering this room.
+   * When undefined, treated as '_continue'.
+   */
+  songId?: RoomSongId;
 }

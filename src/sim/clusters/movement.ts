@@ -66,6 +66,7 @@ import {
   resolveClusterFloorCollision,
   resetClusterGroundedFlag,
   resolveClusterSolidWallCollision,
+  resolveRampSurfaces,
 } from './movementCollision';
 
 export { debugSpeedOverrides, PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS };
@@ -173,11 +174,12 @@ export function applyClusterMovement(world: WorldState): void {
       const wasGrounded = cluster.isGroundedFlag === 1;
       // Grounding for this tick is rebuilt by collision passes below.
       resetClusterGroundedFlag(cluster);
-      const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY, dtSec);
+      const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY, dtSec, wasGrounded);
+      const rampLanded  = resolveRampSurfaces(cluster, world);
 
       // Thin platform / world floor check (position already integrated by solid wall resolver)
       const thinLanded  = resolveClusterFloorCollision(cluster, world);
-      const justLanded  = thinLanded || thickLanded;
+      const justLanded  = thinLanded || thickLanded || rampLanded;
 
       if (cluster.isPlayerFlag === 1) {
         // ── Wall slide: cap downward velocity when pressing into a wall ─────
@@ -260,18 +262,25 @@ export function applyClusterMovement(world: WorldState): void {
 
   // ── Update skid debris flag for renderer ──────────────────────────────────
   const player = world.clusters[0];
-  if (player !== undefined && player.isAliveFlag === 1 && player.isSkiddingFlag === 1) {
+  if (
+    player !== undefined &&
+    player.isAliveFlag === 1 &&
+    (player.isSkiddingFlag === 1 || world.wallJumpSkidDebrisBurstFlag === 1)
+  ) {
     world.isPlayerSkiddingFlag = 1;
     // Front corner = bottom edge, in the direction the player is sliding
     // (opposite to facing direction since they are skidding)
-    const isMovingRight = player.velocityXWorld > 0;
-    world.skidDebrisXWorld = isMovingRight
-      ? player.positionXWorld + player.halfWidthWorld
-      : player.positionXWorld - player.halfWidthWorld;
-    world.skidDebrisYWorld = player.positionYWorld + player.halfHeightWorld;
+    if (player.isSkiddingFlag === 1) {
+      const isMovingRight = player.velocityXWorld > 0;
+      world.skidDebrisXWorld = isMovingRight
+        ? player.positionXWorld + player.halfWidthWorld
+        : player.positionXWorld - player.halfWidthWorld;
+      world.skidDebrisYWorld = player.positionYWorld + player.halfHeightWorld;
+    }
   } else {
     world.isPlayerSkiddingFlag = 0;
   }
+  world.wallJumpSkidDebrisBurstFlag = 0;
 
   // Clear per-tick player inputs (consumed this tick).
   // playerJumpTriggeredFlag is preserved when grappling so applyGrappleClusterConstraint

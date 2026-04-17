@@ -1,4 +1,5 @@
 import { GameCommand, CommandKind } from './commands';
+import { getKeyboardBindings, keyMatches } from './keybindings';
 
 const JOYSTICK_DEAD_ZONE_PX = 12;
 export const JOYSTICK_MAX_RADIUS_PX = 60;
@@ -131,10 +132,6 @@ function clearJoystickKeys(state: InputState): void {
   state.isKeyD = false;
 }
 
-function isShiftKey(e: KeyboardEvent): boolean {
-  return e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
-}
-
 export function attachInputListeners(canvas: HTMLCanvasElement, state: InputState): () => void {
   // Track joystick touch ID so multi-touch doesn't confuse movement with aiming
   let joystickTouchId = -1;
@@ -151,42 +148,51 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     };
   }
 
+  function isTypingIntoField(e: KeyboardEvent): boolean {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+
   function onKeyDown(e: KeyboardEvent): void {
-    if (e.key === 'a' || e.key === 'A') state.isKeyA = true;
-    if (e.key === 'd' || e.key === 'D') state.isKeyD = true;
-    if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') state.isKeyS = true;
-    if (e.key === 'ArrowLeft') state.isKeyA = true;
-    if (e.key === 'ArrowRight') state.isKeyD = true;
+    if (isTypingIntoField(e)) return;
+    const b = getKeyboardBindings();
+    if (keyMatches(e.key, b.moveLeft) || e.key === 'ArrowLeft') state.isKeyA = true;
+    if (keyMatches(e.key, b.moveRight) || e.key === 'ArrowRight') state.isKeyD = true;
+    if (keyMatches(e.key, b.moveDown) || e.key === 'ArrowDown') state.isKeyS = true;
     if (e.key === 'Escape') state.isEscapePressed = true;
-    if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
+    if (keyMatches(e.key, b.jump) || e.key === ' ' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (!e.repeat) { state.isJumpTriggeredFlag = true; }
       state.isJumpHeldFlag = true;
     }
-    if (e.shiftKey || isShiftKey(e)) {
+    if (keyMatches(e.key, b.sprint)) {
       e.preventDefault();
       state.isSprintHeldFlag = true;
     }
-    if ((e.key === 'f' || e.key === 'F') && !e.repeat) {
+    if (keyMatches(e.key, b.interact) && !e.repeat) {
       state.isInteractTriggeredFlag = true;
     }
-    if ((e.key === 'p' || e.key === 'P') && !e.repeat) {
+    if (keyMatches(e.key, b.toggleFullscreen) && !e.repeat) {
       state.isFullscreenToggleTriggeredFlag = true;
     }
   }
   function onKeyUp(e: KeyboardEvent): void {
-    if (e.key === 'a' || e.key === 'A') state.isKeyA = false;
-    if (e.key === 'd' || e.key === 'D') state.isKeyD = false;
-    if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') state.isKeyS = false;
-    if (e.key === 'ArrowLeft') state.isKeyA = false;
-    if (e.key === 'ArrowRight') state.isKeyD = false;
+    const b = getKeyboardBindings();
+    if (keyMatches(e.key, b.moveLeft) || e.key === 'ArrowLeft') state.isKeyA = false;
+    if (keyMatches(e.key, b.moveRight) || e.key === 'ArrowRight') state.isKeyD = false;
+    if (keyMatches(e.key, b.moveDown) || e.key === 'ArrowDown') state.isKeyS = false;
     if (e.key === 'Escape') state.isEscapePressed = false;
-    if (e.key === 'w' || e.key === 'W' || e.key === ' ' || e.key === 'ArrowUp') {
+    if (keyMatches(e.key, b.jump) || e.key === ' ' || e.key === 'ArrowUp') {
       state.isJumpHeldFlag = false;
     }
-    if (isShiftKey(e)) {
+    if (keyMatches(e.key, b.sprint)) {
       state.isSprintHeldFlag = false;
-    } else if (e.shiftKey) {
+    }
+    // If the sprint binding is a modifier key (e.g. Shift), keep sprint active
+    // when the other physical key of the same type is still held.
+    if (b.sprint.toLowerCase() === 'shift' && e.shiftKey) {
       state.isSprintHeldFlag = true;
     }
   }

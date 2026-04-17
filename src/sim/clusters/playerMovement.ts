@@ -88,6 +88,12 @@ export function tickPlayerMovement(
   if (cluster.varJumpTimerTicks > 0) {
     cluster.varJumpTimerTicks -= 1;
   }
+  if (cluster.invulnerabilityTicks > 0) {
+    cluster.invulnerabilityTicks -= 1;
+  }
+  if (cluster.hurtTicks > 0) {
+    cluster.hurtTicks -= 1;
+  }
   // Grappling resets the "first wall jump" bonus state.
   if (world.isGrappleActiveFlag === 1 || world.isGrappleStuckFlag === 1) {
     cluster.hasUsedWallJumpSinceResetFlag = 0;
@@ -299,9 +305,10 @@ export function tickPlayerMovement(
       if (canJumpFromLeft || canJumpFromRight) {
         const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, WALL_JUMP_X_SPEED_WORLD);
         const wallJumpYBase = ov(debugSpeedOverrides.wallJumpYWorld, WALL_JUMP_Y_SPEED_WORLD);
-        const wallJumpY = cluster.hasUsedWallJumpSinceResetFlag === 0
+        const isInitialWallJump = cluster.hasUsedWallJumpSinceResetFlag === 0;
+        const wallJumpY = isInitialWallJump
           ? wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD
-          : wallJumpYBase;
+          : wallJumpYBase - 10.0;
         // wallDir = +1 if wall is to the right, -1 if wall is to the left
         const wallDir = canJumpFromRight ? 1 : -1;
         // Launch away: strong diagonal push prevents same-wall climbing.
@@ -313,6 +320,11 @@ export function tickPlayerMovement(
         cluster.isWallSlidingFlag       = 0;
         cluster.coyoteTimeTicks         = 0;
         cluster.hasUsedWallJumpSinceResetFlag = 1;
+        if (isInitialWallJump) {
+          world.wallJumpSkidDebrisBurstFlag = 1;
+          world.skidDebrisXWorld = cluster.positionXWorld;
+          world.skidDebrisYWorld = cluster.positionYWorld + cluster.halfHeightWorld;
+        }
         // Start variable jump sustain for wall jumps too.
         cluster.varJumpTimerTicks       = VAR_JUMP_TIME_TICKS;
         cluster.varJumpSpeedWorld       = -wallJumpY;

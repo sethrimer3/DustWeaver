@@ -20,14 +20,19 @@ function hitTestPoint(xBlock: number, yBlock: number, bx: number, by: number): b
 }
 
 function hitTestTransition(t: EditorTransition, bx: number, by: number, roomData: EditorRoomData): boolean {
-  if (t.direction === 'left') {
-    return bx <= 1 && by >= t.positionBlock && by < t.positionBlock + t.openingSizeBlocks;
-  } else if (t.direction === 'right') {
-    return bx >= roomData.widthBlocks - 2 && by >= t.positionBlock && by < t.positionBlock + t.openingSizeBlocks;
-  } else if (t.direction === 'up') {
-    return by <= 1 && bx >= t.positionBlock && bx < t.positionBlock + t.openingSizeBlocks;
+  const DEPTH = 6;
+  if (t.direction === 'left' || t.direction === 'right') {
+    const zoneX = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'left' ? 0 : roomData.widthBlocks - DEPTH);
+    return bx >= zoneX && bx < zoneX + DEPTH
+      && by >= t.positionBlock && by < t.positionBlock + t.openingSizeBlocks;
   } else {
-    return by >= roomData.heightBlocks - 2 && bx >= t.positionBlock && bx < t.positionBlock + t.openingSizeBlocks;
+    const zoneY = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'up' ? 0 : roomData.heightBlocks - DEPTH);
+    return by >= zoneY && by < zoneY + DEPTH
+      && bx >= t.positionBlock && bx < t.positionBlock + t.openingSizeBlocks;
   }
 }
 
@@ -74,6 +79,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const e of room.enemies) {
     if (hitTestPoint(e.xBlock, e.yBlock, bx, by)) {
       return { type: 'enemy', uid: e.uid };
+    }
+  }
+
+  // Check save tombs
+  for (const s of room.saveTombs) {
+    if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) {
+      return { type: 'saveTomb', uid: s.uid };
     }
   }
 
@@ -125,6 +137,24 @@ export function placeAtCursor(state: EditorState): void {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
     const isPlatformFlag: 0 | 1 = item.isPlatformItem === 1 ? 1 : 0;
+
+    // Compute ramp orientation from rotation steps and flip
+    let rampOrientation: 0 | 1 | 2 | 3 | undefined;
+    if (item.isRampItem === 1) {
+      const base = state.placementRotationSteps % 4;
+      // flipH toggles within pairs: 0↔1, 2↔3
+      rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+    }
+
+    // Compute platform edge from rotation steps
+    // R=0→top(0), R=1→right(3), R=2→bottom(1), R=3→left(2)
+    const platformEdgeMap: readonly (0 | 1 | 2 | 3)[] = [0, 3, 1, 2];
+    const platformEdge: 0 | 1 | 2 | 3 = isPlatformFlag === 1
+      ? platformEdgeMap[state.placementRotationSteps % 4]
+      : 0;
+
+    const isPillarHalfWidthFlag: 0 | 1 = item.isPillarHalfWidthItem === 1 ? 1 : 0;
+
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
     // Prevent overlapping walls
     const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
@@ -136,7 +166,10 @@ export function placeAtCursor(state: EditorState): void {
       wBlock,
       hBlock,
       isPlatformFlag,
+      platformEdge,
       blockTheme: room.blockTheme,
+      rampOrientation,
+      isPillarHalfWidthFlag,
     });
   } else if (item.id === 'enemy_rolling') {
     room.enemies.push({
@@ -186,20 +219,43 @@ export function placeAtCursor(state: EditorState): void {
   } else if (item.id === 'player_spawn') {
     room.playerSpawnBlock = [bx, by];
   } else if (item.id === 'room_transition') {
-    // Determine direction from cursor position
-    let direction: 'left' | 'right' | 'up' | 'down' = 'right';
-    if (bx <= 1) direction = 'left';
-    else if (bx >= room.widthBlocks - 2) direction = 'right';
-    else if (by <= 1) direction = 'up';
-    else if (by >= room.heightBlocks - 2) direction = 'down';
+    // Determine direction from the nearest room edge
+    const distLeft   = bx;
+    const distRight  = room.widthBlocks  - 1 - bx;
+    const distTop    = by;
+    const distBottom = room.heightBlocks - 1 - by;
+    const minDist    = Math.min(distLeft, distRight, distTop, distBottom);
+    const direction: 'left' | 'right' | 'up' | 'down' =
+      minDist === distLeft   ? 'left'  :
+      minDist === distRight  ? 'right' :
+      minDist === distTop    ? 'up'    : 'down';
 
-    const openingSizeBlocks = direction === 'left' || direction === 'right'
-      ? Math.max(1, Math.min(5, room.heightBlocks - 2))
-      : Math.max(1, Math.min(5, room.widthBlocks - 2));
+    const OPENING_SIZE = 6;
+    const isHoriz = direction === 'left' || direction === 'right';
 
-    const positionBlock = direction === 'left' || direction === 'right'
-      ? Math.min(Math.max(1, by), room.heightBlocks - 1 - openingSizeBlocks)
-      : Math.min(Math.max(1, bx), room.widthBlocks - 1 - openingSizeBlocks);
+    const openingSizeBlocks = isHoriz
+      ? Math.max(1, Math.min(OPENING_SIZE, room.heightBlocks - 2))
+      : Math.max(1, Math.min(OPENING_SIZE, room.widthBlocks - 2));
+
+    const positionBlock = isHoriz
+      ? Math.min(Math.max(1, by - Math.floor(openingSizeBlocks / 2)), room.heightBlocks - 1 - openingSizeBlocks)
+      : Math.min(Math.max(1, bx - Math.floor(openingSizeBlocks / 2)), room.widthBlocks - 1 - openingSizeBlocks);
+
+    // Determine whether this is an interior transition (cursor not at the boundary edge)
+    const ZONE_DEPTH = 6;
+    const isEdge =
+      (direction === 'left'  && bx <= ZONE_DEPTH)      ||
+      (direction === 'right' && bx >= room.widthBlocks - ZONE_DEPTH) ||
+      (direction === 'up'    && by <= ZONE_DEPTH)      ||
+      (direction === 'down'  && by >= room.heightBlocks - ZONE_DEPTH);
+
+    let depthBlock: number | undefined;
+    if (!isEdge) {
+      // Interior: anchor the zone so the cursor is at the entry side
+      depthBlock = isHoriz
+        ? Math.min(Math.max(0, bx), room.widthBlocks - ZONE_DEPTH)
+        : Math.min(Math.max(0, by), room.heightBlocks - ZONE_DEPTH);
+    }
 
     room.transitions.push({
       uid: allocateUid(state),
@@ -208,19 +264,35 @@ export function placeAtCursor(state: EditorState): void {
       openingSizeBlocks,
       targetRoomId: '',
       targetSpawnBlock: [3, by + 2],
+      depthBlock,
+    });
+  } else if (item.id === 'save_tomb') {
+    room.saveTombs.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
     });
   } else if (item.id === 'skill_tomb') {
     room.skillTombs.push({
       uid: allocateUid(state),
       xBlock: bx,
       yBlock: by,
+      weaveId: state.pendingSkillTombWeaveId,
     });
-  } else if (item.id === 'dust_pile') {
+  } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
+    let dustCount: number;
+    if (item.id === 'dust_pile_small') {
+      dustCount = 3;  // small pile — tight cluster
+    } else if (item.id === 'dust_pile_large') {
+      dustCount = 8;  // large pile — wide scatter
+    } else {
+      dustCount = 5;  // medium pile (dust_pile / dust_pile_medium)
+    }
     room.dustPiles.push({
       uid: allocateUid(state),
       xBlock: bx,
       yBlock: by,
-      dustCount: 5,
+      dustCount,
     });
   }
 }
@@ -252,6 +324,16 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestPoint(room.enemies[i].xBlock, room.enemies[i].yBlock, bx, by)) {
       const removedUid = room.enemies[i].uid;
       room.enemies.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check save tombs
+  for (let i = 0; i < room.saveTombs.length; i++) {
+    if (hitTestPoint(room.saveTombs[i].xBlock, room.saveTombs[i].yBlock, bx, by)) {
+      const removedUid = room.saveTombs[i].uid;
+      room.saveTombs.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
@@ -362,6 +444,11 @@ export function getAllElementsInRect(
       results.push({ type: 'enemy', uid: e.uid });
     }
   }
+  for (const s of room.saveTombs) {
+    if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
+      results.push({ type: 'saveTomb', uid: s.uid });
+    }
+  }
   for (const s of room.skillTombs) {
     if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
       results.push({ type: 'skillTomb', uid: s.uid });
@@ -388,15 +475,18 @@ function hitTestTransitionRect(
   t: EditorTransition, minX: number, minY: number, maxX: number, maxY: number,
   room: EditorRoomData,
 ): boolean {
+  const DEPTH = 6;
   let tx: number, ty: number, tw: number, th: number;
-  if (t.direction === 'left') {
-    tx = 0; ty = t.positionBlock; tw = 1; th = t.openingSizeBlocks;
-  } else if (t.direction === 'right') {
-    tx = room.widthBlocks - 1; ty = t.positionBlock; tw = 1; th = t.openingSizeBlocks;
-  } else if (t.direction === 'up') {
-    tx = t.positionBlock; ty = 0; tw = t.openingSizeBlocks; th = 1;
+  if (t.direction === 'left' || t.direction === 'right') {
+    const zoneX = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'left' ? 0 : room.widthBlocks - DEPTH);
+    tx = zoneX; ty = t.positionBlock; tw = DEPTH; th = t.openingSizeBlocks;
   } else {
-    tx = t.positionBlock; ty = room.heightBlocks - 1; tw = t.openingSizeBlocks; th = 1;
+    const zoneY = t.depthBlock !== undefined
+      ? t.depthBlock
+      : (t.direction === 'up' ? 0 : room.heightBlocks - DEPTH);
+    tx = t.positionBlock; ty = zoneY; tw = t.openingSizeBlocks; th = DEPTH;
   }
   return tx + tw > minX && tx < maxX + 1 && ty + th > minY && ty < maxY + 1;
 }

@@ -31,12 +31,13 @@ import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/pla
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
-import { getSelectedRenderSize } from '../ui/renderSettings';
+import { getSelectedRenderSize, getMusicVolume, getSfxVolume } from '../ui/renderSettings';
+import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { BloomSystem } from '../render/effects/bloomSystem';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
-import { performEarlyAutoAssignment } from '../progression/unlocks';
+import { performEarlyAutoAssignment, unlockActiveWeave } from '../progression/unlocks';
 import {
   spawnClusterParticles,
   spawnLoadoutParticles,
@@ -91,7 +92,7 @@ export function startGameScreen(
 
   // ── Weave loadout (replaces flat particle loadout for combat) ──────────
   // Initialize from progress if available, otherwise create default
-  let playerWeaveLoadout: PlayerWeaveLoadout = progress?.weaveLoadout
+  const playerWeaveLoadout: PlayerWeaveLoadout = progress?.weaveLoadout
     ?? createDefaultWeaveLoadout();
 
   // ── Virtual resolution pipeline ──────────────────────────────────────────
@@ -136,40 +137,9 @@ export function startGameScreen(
   const ctx = virtualCtx;
   const camera = createCameraState();
 
-  // ── Music system for world0 (brown rock cave) ─────────────────────────────
-  let currentWorldMusic: HTMLAudioElement | null = null;
-  let currentMusicWorldNumber: number | null = null;
-  let musicVolume = 0.7; // will be updated from pauseMenuState
-
-  function updateWorldMusic(worldNumber: number, volume: number): void {
-    musicVolume = volume;
-    // Only play thoughtfulLevel music in world0
-    if (worldNumber === 0) {
-      if (currentMusicWorldNumber !== 0) {
-        // Stop any existing music
-        if (currentWorldMusic !== null) {
-          currentWorldMusic.pause();
-          currentWorldMusic.src = '';
-        }
-        // Start world0 music
-        currentWorldMusic = new Audio(`${BASE}MUSIC/thoughtfulLevel.mp3`);
-        currentWorldMusic.loop = true;
-        currentWorldMusic.volume = volume;
-        currentWorldMusic.play().catch(() => { /* autoplay may be blocked */ });
-        currentMusicWorldNumber = 0;
-      } else if (currentWorldMusic !== null) {
-        currentWorldMusic.volume = volume;
-      }
-    } else {
-      // Stop music in other worlds
-      if (currentWorldMusic !== null) {
-        currentWorldMusic.pause();
-        currentWorldMusic.src = '';
-        currentWorldMusic = null;
-        currentMusicWorldNumber = null;
-      }
-    }
-  }
+  // ── Background music manager ─────────────────────────────────────────────
+  const musicManager: MusicManager = createMusicManager(BASE);
+  musicManager.setVolume(getMusicVolume());
 
   // ── Room state ────────────────────────────────────────────────────────────
   let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
@@ -188,7 +158,7 @@ export function startGameScreen(
   const collectedDustContainerKeySet: Set<string> = new Set();
 
   /** Initialises (or re-initialises) world state for the given room. */
-  function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void {
+  function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera = false): void {
     currentRoom = room;
     bgColor = worldBgColor(room.worldNumber);
     roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
@@ -202,8 +172,8 @@ export function startGameScreen(
     }
     setActiveBlockLighting(room.lightingEffect ?? 'DEFAULT', room.widthBlocks, room.heightBlocks);
 
-    // Update music for the current world
-    updateWorldMusic(room.worldNumber, musicVolume);
+    // Notify the music manager about the new room
+    musicManager.notifyRoomEntered(room.songId ?? '_continue');
 
     // Reset world state
     world.tick = 0;
@@ -340,15 +310,17 @@ export function startGameScreen(
     playerCloak.reset();
 
     // Init skill tomb renderer
-    skillTombRenderer.init(room.skillTombs);
+    skillTombRenderer.init(room.saveTombs);
 
     // Track explored room
     if (progress && !progress.exploredRoomIds.includes(room.id)) {
       progress.exploredRoomIds.push(room.id);
     }
 
-    // Snap camera to player position
-    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
+    // Snap camera to player position (skip when called from editor to preserve editor camera)
+    if (!preserveCamera) {
+      snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
+    }
   }
 
   const world = createWorldState(FIXED_DT_MS, 42);
@@ -411,8 +383,8 @@ export function startGameScreen(
   }
 
   // ── World Editor ────────────────────────────────────────────────────────
-  const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY) => {
-    loadRoom(roomDef, spawnX, spawnY);
+  const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY, preserveCamera) => {
+    loadRoom(roomDef, spawnX, spawnY, preserveCamera);
   }, () => {
     // Called when editor closes (confirm or cancel)
     if (editorToggleBtn) {
@@ -474,8 +446,8 @@ export function startGameScreen(
   let isDebugMode = false;
   const pauseMenuState: PauseMenuState = {
     isDebugOn: false,
-    musicVolume: 0.7,
-    sfxVolume: 0.7,
+    musicVolume: getMusicVolume(),
+    sfxVolume: getSfxVolume(),
     graphicsQuality: 'med',
   };
 
@@ -635,7 +607,19 @@ export function startGameScreen(
       const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 
       let isInTunnel = false;
-      if (t.direction === 'left') {
+      if (t.depthBlock !== undefined) {
+        // Interior transition: fire when the player's center enters the zone
+        const FADE_DEPTH = 6 * BLOCK_SIZE_MEDIUM;
+        const zoneStartWorld = t.depthBlock * BLOCK_SIZE_MEDIUM;
+        const zoneEndWorld   = zoneStartWorld + FADE_DEPTH;
+        isInTunnel = px >= zoneStartWorld && px <= zoneEndWorld
+          && py >= openTopWorld && py <= openBottomWorld;
+        // For up/down interior transitions
+        if (t.direction === 'up' || t.direction === 'down') {
+          isInTunnel = py >= zoneStartWorld && py <= zoneEndWorld
+            && px >= openTopWorld && px <= openBottomWorld;
+        }
+      } else if (t.direction === 'left') {
         isInTunnel = px < TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
       } else if (t.direction === 'right') {
         isInTunnel = px > roomWidthWorld - TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
@@ -886,10 +870,7 @@ export function startGameScreen(
     }
 
     // Update music volume from pause menu settings
-    if (currentWorldMusic !== null && currentWorldMusic.volume !== pauseMenuState.musicVolume) {
-      currentWorldMusic.volume = pauseMenuState.musicVolume;
-      musicVolume = pauseMenuState.musicVolume;
-    }
+    musicManager.setVolume(pauseMenuState.musicVolume);
 
     // While paused or in a menu, still render the frozen scene but skip sim and transitions
     if (isPaused || isSkillTombMenuOpen) {
@@ -971,6 +952,23 @@ export function startGameScreen(
               levelRng,
             );
             break;
+          }
+        }
+      }
+
+      // Skill Tomb interaction: unlocks a dust weave when the player walks close.
+      // Each tomb is one-time per session (not per-game-save); once unlocked it stays
+      // in progress.unlockedActiveWeaves and the pickup is idempotent.
+      if (progress) {
+        const roomSkillTombs = currentRoom.skillTombs ?? [];
+        for (let i = 0; i < roomSkillTombs.length; i++) {
+          const st = roomSkillTombs[i];
+          const tx = (st.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const ty = (st.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const dx = playerForTomb.positionXWorld - tx;
+          const dy = playerForTomb.positionYWorld - ty;
+          if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
+            unlockActiveWeave(progress, st.weaveId);
           }
         }
       }
@@ -1138,12 +1136,8 @@ export function startGameScreen(
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
     if (deathScreenCleanup !== null) deathScreenCleanup();
     if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
-    // Stop world music
-    if (currentWorldMusic !== null) {
-      currentWorldMusic.pause();
-      currentWorldMusic.src = '';
-      currentWorldMusic = null;
-    }
+    // Stop background music and release resources
+    musicManager.dispose();
     editorController.destroy();
     removeEditorButton();
     detachInput();

@@ -1,3 +1,46 @@
+import { getStoredFloat, setStoredFloat } from '../utils/storage';
+
+// ── Audio Volume ─────────────────────────────────────────────────────────────
+
+const MUSIC_VOLUME_STORAGE_KEY = 'dustweaver-music-volume';
+const SFX_VOLUME_STORAGE_KEY = 'dustweaver-sfx-volume';
+const DEFAULT_MUSIC_VOLUME = 0.7;
+const DEFAULT_SFX_VOLUME = 0.7;
+
+export function getMusicVolume(): number {
+  return getStoredFloat(MUSIC_VOLUME_STORAGE_KEY, DEFAULT_MUSIC_VOLUME, 0, 1);
+}
+
+export function setMusicVolume(volume: number): void {
+  setStoredFloat(MUSIC_VOLUME_STORAGE_KEY, volume, 0, 1);
+}
+
+export function getSfxVolume(): number {
+  return getStoredFloat(SFX_VOLUME_STORAGE_KEY, DEFAULT_SFX_VOLUME, 0, 1);
+}
+
+export function setSfxVolume(volume: number): void {
+  setStoredFloat(SFX_VOLUME_STORAGE_KEY, volume, 0, 1);
+}
+
+// ── Graphics Quality ─────────────────────────────────────────────────────────
+
+const GRAPHICS_QUALITY_STORAGE_KEY = 'dustweaver-graphics-quality';
+export type GraphicsQuality = 'low' | 'high';
+const DEFAULT_GRAPHICS_QUALITY: GraphicsQuality = 'high';
+
+export function getGraphicsQuality(): GraphicsQuality {
+  const value = localStorage.getItem(GRAPHICS_QUALITY_STORAGE_KEY);
+  if (value === 'low' || value === 'high') return value;
+  return DEFAULT_GRAPHICS_QUALITY;
+}
+
+export function setGraphicsQuality(quality: GraphicsQuality): void {
+  localStorage.setItem(GRAPHICS_QUALITY_STORAGE_KEY, quality);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface RenderSizeOption {
   id: string;
   label: string;
@@ -9,6 +52,7 @@ const RENDER_SIZE_STORAGE_KEY = 'dustweaver-render-size-id';
 const OFFENSIVE_DUST_OUTLINE_STORAGE_KEY = 'dustweaver-offensive-dust-outline-enabled';
 const REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY = 'dustweaver-reachable-edge-glow-opacity';
 const INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY = 'dustweaver-influence-circle-opacity';
+const INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY = 'dustweaver-influence-highlight-width';
 const DEFAULT_RENDER_SIZE_ID = '1080p';
 
 const RENDER_SIZE_OPTIONS: RenderSizeOption[] = [
@@ -96,19 +140,11 @@ export function setOffensiveDustOutlineEnabled(isEnabled: boolean): void {
 const DEFAULT_REACHABLE_EDGE_GLOW_OPACITY = 0.5;
 
 export function getReachableEdgeGlowOpacity(): number {
-  const value = localStorage.getItem(REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY);
-  if (value !== null) {
-    const parsed = parseFloat(value);
-    return !isNaN(parsed) ? parsed : DEFAULT_REACHABLE_EDGE_GLOW_OPACITY;
-  }
-  return DEFAULT_REACHABLE_EDGE_GLOW_OPACITY;
+  return getStoredFloat(REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY, DEFAULT_REACHABLE_EDGE_GLOW_OPACITY);
 }
 
 export function setReachableEdgeGlowOpacity(opacity: number): void {
-  localStorage.setItem(
-    REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY,
-    String(Math.max(0, Math.min(1, opacity))),
-  );
+  setStoredFloat(REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY, opacity, 0, 1);
 }
 
 // ── Influence Circle Opacity ────────────────────────────────────────────────
@@ -116,17 +152,23 @@ export function setReachableEdgeGlowOpacity(opacity: number): void {
 const DEFAULT_INFLUENCE_CIRCLE_OPACITY = 0.5;
 
 export function getInfluenceCircleOpacity(): number {
-  const value = localStorage.getItem(INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY);
-  if (value !== null) {
-    const parsed = parseFloat(value);
-    return !isNaN(parsed) ? parsed : DEFAULT_INFLUENCE_CIRCLE_OPACITY;
-  }
-  return DEFAULT_INFLUENCE_CIRCLE_OPACITY;
+  return getStoredFloat(INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY, DEFAULT_INFLUENCE_CIRCLE_OPACITY);
 }
 
 export function setInfluenceCircleOpacity(opacity: number): void {
-  localStorage.setItem(
-    INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY,
-    String(Math.max(0, Math.min(1, opacity))),
-  );
+  setStoredFloat(INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY, opacity, 0, 1);
 }
+
+// ── Influence Highlight Width ────────────────────────────────────────────────
+
+/** Fraction of the circle circumference that is highlighted (0–1). Default 25%. */
+const DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH = 0.25;
+
+export function getInfluenceHighlightWidth(): number {
+  return getStoredFloat(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY, DEFAULT_INFLUENCE_HIGHLIGHT_WIDTH, 0, 1);
+}
+
+export function setInfluenceHighlightWidth(width: number): void {
+  setStoredFloat(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY, width, 0, 1);
+}
+

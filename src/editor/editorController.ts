@@ -11,8 +11,8 @@ import type { CameraState } from '../render/camera';
 
 import {
   EditorState, createEditorState, EditorTool,
-  EditorWall, EditorEnemy, EditorTransition, EditorSkillTomb, EditorDustPile,
-  BlockTheme, BackgroundId, LightingEffect,
+  EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile,
+  BlockTheme, BackgroundId, LightingEffect, RoomSongId,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
@@ -28,7 +28,8 @@ import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
 import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
-import { exportRoomAsJson } from './editorExport';
+import { exportRoomAsJson, exportAllChanges } from './editorExport';
+import { ROOM_REGISTRY, registerRoom } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 
@@ -77,7 +78,7 @@ export interface EditorController {
 export function createEditorController(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
-  onLoadRoom: (room: RoomDef, spawnXBlock: number, spawnYBlock: number) => void,
+  onLoadRoom: (room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera?: boolean) => void,
   onEditorClose?: () => void,
 ): EditorController {
   const state = createEditorState();
@@ -102,12 +103,28 @@ export function createEditorController(
   let originalRoomDef: RoomDef | null = null;
 
   // Drag-to-move: original positions of selected elements at drag start
-  let dragOriginalPositions: Map<number, { xBlock: number; yBlock: number }> = new Map();
+  const dragOriginalPositions: Map<number, { xBlock: number; yBlock: number }> = new Map();
+
+  // ── Pending-edits persistence for multi-room editing ────────────────────
+  // Stores EditorRoomData snapshots saved by the user as they navigate rooms.
+  const pendingRoomEdits = new Map<string, EditorRoomData>();
+  // Room IDs that existed when the editor session started (identifies new rooms).
+  let initialRoomIds = new Set<string>();
+  // True if any world-map metadata (names, positions, world assignments) changed.
+  let isWorldMapDirty = false;
+  // True if the current room has unsaved edits since it was last loaded.
+  let isCurrentRoomDirty = false;
 
   function toggle(currentRoom: RoomDef): void {
     state.isActive = !state.isActive;
 
     if (state.isActive) {
+      // Snapshot which rooms already exist so we can identify newly-added ones.
+      initialRoomIds = new Set(ROOM_REGISTRY.keys());
+      isWorldMapDirty = false;
+      isCurrentRoomDirty = false;
+      pendingRoomEdits.clear();
+
       // Save original room for cancel/revert
       originalRoomDef = currentRoom;
 
@@ -157,8 +174,24 @@ export function createEditorController(
           if (state.roomData) state.roomData.backgroundId = bgId;
           applyEdits();
         },
+        onRoomSongChange: (songId: RoomSongId) => {
+          if (state.roomData) state.roomData.songId = songId;
+          applyEdits();
+        },
         onConfirm: () => confirmEdits(),
         onCancel: () => cancelEdits(),
+        onExportAllChanges: () => {
+          // Auto-save current room to pending before exporting so it's included.
+          if (isCurrentRoomDirty && state.roomData) {
+            pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            isCurrentRoomDirty = false;
+          }
+          exportAllChanges(pendingRoomEdits, initialRoomIds, isWorldMapDirty);
+        },
+        onOpenVisualMap: () => openVisualMap(),
+        onSkillTombWeaveChange: (weaveId: string) => {
+          state.pendingSkillTombWeaveId = weaveId;
+        },
       });
     } else {
       closeEditor();
@@ -177,6 +210,10 @@ export function createEditorController(
     state.isDragging = false;
     state.isSelectionBoxActive = false;
     originalRoomDef = null;
+    pendingRoomEdits.clear();
+    initialRoomIds = new Set();
+    isWorldMapDirty = false;
+    isCurrentRoomDirty = false;
     clearHistory(history);
     onEditorClose?.();
   }
@@ -185,6 +222,7 @@ export function createEditorController(
     // Build a RoomDef from the current editor data and load it
     if (state.roomData) {
       const newRoomDef = editorRoomDataToRoomDef(state.roomData);
+      registerRoom(newRoomDef); // update ROOM_REGISTRY so visual map sees new transitions
       const sx = state.roomData.playerSpawnBlock[0];
       const sy = state.roomData.playerSpawnBlock[1];
       closeEditor();
@@ -195,11 +233,28 @@ export function createEditorController(
   }
 
   function cancelEdits(): void {
-    // Restore the original room
-    const saved = originalRoomDef;
-    closeEditor();
-    if (saved) {
-      onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
+    // If the current room has unsaved changes, ask whether to save them first.
+    if (isCurrentRoomDirty && state.roomData) {
+      showSaveChangesDialog(uiRoot, () => {
+        // YES — save to pending, then exit
+        if (state.roomData) {
+          pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+        }
+        isCurrentRoomDirty = false;
+        const saved = originalRoomDef;
+        closeEditor();
+        if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
+      }, () => {
+        // NO — exit without saving
+        const saved = originalRoomDef;
+        closeEditor();
+        if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
+      });
+    } else {
+      // No unsaved changes — exit immediately
+      const saved = originalRoomDef;
+      closeEditor();
+      if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
     }
   }
 
@@ -210,17 +265,37 @@ export function createEditorController(
    */
   function applyEdits(): void {
     if (!state.roomData) return;
+    isCurrentRoomDirty = true;
     const roomDef = editorRoomDataToRoomDef(state.roomData);
+    registerRoom(roomDef); // keep ROOM_REGISTRY in sync while editing
     const sx = state.roomData.playerSpawnBlock[0];
     const sy = state.roomData.playerSpawnBlock[1];
-    onLoadRoom(roomDef, sx, sy);
+    onLoadRoom(roomDef, sx, sy, true); // preserve camera while in editor
   }
 
   function loadRoomForEditing(room: RoomDef): void {
-    const result = roomDefToEditorRoomData(room, state.nextUid);
-    state.roomData = result.data;
-    state.nextUid = result.nextUid;
+    const pending = pendingRoomEdits.get(room.id);
+    if (pending) {
+      // Restore previously-saved edits for this room.
+      state.roomData = deepCloneRoomData(pending);
+      // Recalculate nextUid to be above all existing element UIDs.
+      let maxUid = 0;
+      for (const w of state.roomData.interiorWalls)  maxUid = Math.max(maxUid, w.uid + 1);
+      for (const e of state.roomData.enemies)        maxUid = Math.max(maxUid, e.uid + 1);
+      for (const t of state.roomData.transitions)    maxUid = Math.max(maxUid, t.uid + 1);
+      for (const s of state.roomData.saveTombs)      maxUid = Math.max(maxUid, s.uid + 1);
+      for (const s of state.roomData.skillTombs)     maxUid = Math.max(maxUid, s.uid + 1);
+      for (const p of state.roomData.dustPiles)      maxUid = Math.max(maxUid, p.uid + 1);
+      // Ensure nextUid never regresses below its current value (other rooms may
+      // already have used higher UIDs during this session).
+      state.nextUid = Math.max(state.nextUid, maxUid);
+    } else {
+      const result = roomDefToEditorRoomData(room, state.nextUid);
+      state.roomData = result.data;
+      state.nextUid = result.nextUid;
+    }
     state.selectedElements = [];
+    isCurrentRoomDirty = false;
   }
 
   function openWorldMap(): void {
@@ -234,12 +309,26 @@ export function createEditorController(
         state.isWorldMapOpen = false;
         worldMapCleanup = null;
 
-        // Load the new room for editing
-        loadRoomForEditing(room);
+        const doSwitch = () => {
+          loadRoomForEditing(room);
+          const roomDef = editorRoomDataToRoomDef(state.roomData!);
+          onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+        };
 
-        // Build a RoomDef and use the game's loadRoom to set up runtime state
-        const roomDef = editorRoomDataToRoomDef(state.roomData!);
-        onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+        if (isCurrentRoomDirty && state.roomData) {
+          showSaveChangesDialog(uiRoot, () => {
+            if (state.roomData) {
+              pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            }
+            isCurrentRoomDirty = false;
+            doSwitch();
+          }, () => {
+            isCurrentRoomDirty = false;
+            doSwitch();
+          });
+        } else {
+          doSwitch();
+        }
       },
       onLinkTransition: (room, transitionIndex) => {
         state.isWorldMapOpen = false;
@@ -278,6 +367,7 @@ export function createEditorController(
           cancelTransitionLink(state);
         }
       },
+      onWorldMapDataChanged: () => { isWorldMapDirty = true; },
     });
   }
 
@@ -290,15 +380,32 @@ export function createEditorController(
         state.isVisualMapOpen = false;
         visualMapCleanup = null;
 
-        // Load the room for editing
-        loadRoomForEditing(room);
-        const roomDef = editorRoomDataToRoomDef(state.roomData!);
-        onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+        const doSwitch = () => {
+          loadRoomForEditing(room);
+          const roomDef = editorRoomDataToRoomDef(state.roomData!);
+          onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
+        };
+
+        if (isCurrentRoomDirty && state.roomData) {
+          showSaveChangesDialog(uiRoot, () => {
+            if (state.roomData) {
+              pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            }
+            isCurrentRoomDirty = false;
+            doSwitch();
+          }, () => {
+            isCurrentRoomDirty = false;
+            doSwitch();
+          });
+        } else {
+          doSwitch();
+        }
       },
       onClose: () => {
         state.isVisualMapOpen = false;
         visualMapCleanup = null;
       },
+      onWorldMapDataChanged: () => { isWorldMapDirty = true; },
     });
   }
 
@@ -354,12 +461,25 @@ export function createEditorController(
       }
     }
 
-    // M key → world map
+    // Q/E keys → rotate placement (Q = counter-clockwise, E = clockwise)
+    if (inputState.isRotateLeftPressed && state.activeTool === EditorTool.Place) {
+      state.placementRotationSteps = (state.placementRotationSteps + 3) % 4;
+    }
+    if (inputState.isRotateRightPressed && state.activeTool === EditorTool.Place) {
+      state.placementRotationSteps = (state.placementRotationSteps + 1) % 4;
+    }
+
+    // F key → flip placement horizontally
+    if (inputState.isFlipPressed && state.activeTool === EditorTool.Place) {
+      state.placementFlipH = !state.placementFlipH;
+    }
+
+    // N key → world map list
     if (inputState.isMapToggled) {
       openWorldMap();
     }
 
-    // N key → visual world map editor
+    // M key → visual world map editor
     if (inputState.isVisualMapToggled) {
       openVisualMap();
     }
@@ -553,6 +673,16 @@ export function createEditorController(
       }
     }
 
+    // Compute hover element for tooltip (Select tool only, outside the editor panel)
+    if (
+      state.activeTool === EditorTool.Select &&
+      inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX
+    ) {
+      state.hoverElement = selectAtCursor(state);
+    } else {
+      state.hoverElement = null;
+    }
+
     // Update UI panel
     if (ui) ui.update(state);
 
@@ -570,7 +700,7 @@ export function createEditorController(
   ): void {
     if (!state.isActive) return;
 
-    renderEditorIndicator(ctx, canvasWidth);
+    renderEditorIndicator(ctx, canvasWidth, state);
     renderEditorOverlays(ctx, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
   }
 
@@ -609,6 +739,11 @@ export function createEditorController(
       enemy.yBlock = Math.min(Math.max(0, enemy.yBlock), maxY);
     }
 
+    for (const tomb of room.saveTombs) {
+      tomb.xBlock = Math.min(Math.max(0, tomb.xBlock), maxX);
+      tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
+    }
+
     for (const tomb of room.skillTombs) {
       tomb.xBlock = Math.min(Math.max(0, tomb.xBlock), maxX);
       tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
@@ -636,6 +771,9 @@ export function createEditorController(
           Math.max(1, trans.positionBlock),
           room.heightBlocks - 1 - trans.openingSizeBlocks,
         );
+        if (trans.depthBlock !== undefined) {
+          trans.depthBlock = Math.min(Math.max(0, trans.depthBlock), room.widthBlocks - 6);
+        }
       } else {
         const maxOpening = Math.max(1, room.widthBlocks - 2);
         trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
@@ -643,6 +781,9 @@ export function createEditorController(
           Math.max(1, trans.positionBlock),
           room.widthBlocks - 1 - trans.openingSizeBlocks,
         );
+        if (trans.depthBlock !== undefined) {
+          trans.depthBlock = Math.min(Math.max(0, trans.depthBlock), room.heightBlocks - 6);
+        }
       }
     }
   }
@@ -682,6 +823,12 @@ export function createEditorController(
       for (const enemy of room.enemies) {
         enemy.xBlock += shiftX;
         enemy.yBlock += shiftY;
+      }
+
+      // Shift save tombs
+      for (const tomb of room.saveTombs) {
+        tomb.xBlock += shiftX;
+        tomb.yBlock += shiftY;
       }
 
       // Shift skill tombs
@@ -781,15 +928,29 @@ export function createEditorController(
         if (prop === 'transition.targetSpawnBlockX' && !isNaN(numVal)) trans.targetSpawnBlock[0] = numVal;
         if (prop === 'transition.targetSpawnBlockY' && !isNaN(numVal)) trans.targetSpawnBlock[1] = numVal;
         if (prop === 'transition.fadeColor' && typeof value === 'string') trans.fadeColor = value;
+        if (prop === 'transition.depthBlock') {
+          if (value === '' || value === '-' || (typeof value === 'number' && isNaN(value))) {
+            trans.depthBlock = undefined; // clear = edge transition
+          } else if (!isNaN(numVal)) {
+            trans.depthBlock = Math.max(0, numVal);
+          }
+        }
       }
     } else if (el.type === 'playerSpawn') {
       if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;
       if (prop === 'playerSpawn.yBlock' && !isNaN(numVal)) room.playerSpawnBlock[1] = numVal;
+    } else if (el.type === 'saveTomb') {
+      const tomb = room.saveTombs.find((s: EditorSaveTomb) => s.uid === el.uid);
+      if (tomb) {
+        if (prop === 'saveTomb.xBlock' && !isNaN(numVal)) tomb.xBlock = numVal;
+        if (prop === 'saveTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
+      }
     } else if (el.type === 'skillTomb') {
       const tomb = room.skillTombs.find((s: EditorSkillTomb) => s.uid === el.uid);
       if (tomb) {
         if (prop === 'skillTomb.xBlock' && !isNaN(numVal)) tomb.xBlock = numVal;
         if (prop === 'skillTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
+        if (prop === 'skillTomb.weaveId' && typeof value === 'string') tomb.weaveId = value;
       }
     } else if (el.type === 'dustPile') {
       const pile = room.dustPiles.find((p: EditorDustPile) => p.uid === el.uid);
@@ -814,6 +975,9 @@ export function createEditorController(
       } else if (el.type === 'enemy') {
         const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
         if (e) positions.set(key, { xBlock: e.xBlock, yBlock: e.yBlock });
+      } else if (el.type === 'saveTomb') {
+        const t = s.roomData.saveTombs.find(t2 => t2.uid === el.uid);
+        if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
@@ -822,6 +986,21 @@ export function createEditorController(
         if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
       } else if (el.type === 'playerSpawn') {
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
+      } else if (el.type === 'transition') {
+        const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
+        if (tr) {
+          const isHoriz = tr.direction === 'left' || tr.direction === 'right';
+          const edgeDepth = isHoriz
+            ? (tr.direction === 'left' ? 0 : s.roomData.widthBlocks - 6)
+            : (tr.direction === 'up' ? 0 : s.roomData.heightBlocks - 6);
+          const depth = tr.depthBlock !== undefined ? tr.depthBlock : edgeDepth;
+          // xBlock = depth for left/right, positionBlock for up/down
+          // yBlock = positionBlock for left/right, depth for up/down
+          positions.set(key, {
+            xBlock: isHoriz ? depth : tr.positionBlock,
+            yBlock: isHoriz ? tr.positionBlock : depth,
+          });
+        }
       }
     }
   }
@@ -842,6 +1021,9 @@ export function createEditorController(
       } else if (el.type === 'enemy') {
         const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
         if (e) { e.xBlock = orig.xBlock + deltaX; e.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'saveTomb') {
+        const t = s.roomData.saveTombs.find(t2 => t2.uid === el.uid);
+        if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
@@ -851,6 +1033,27 @@ export function createEditorController(
       } else if (el.type === 'playerSpawn') {
         s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
         s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
+      } else if (el.type === 'transition') {
+        const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
+        if (tr) {
+          const isHoriz = tr.direction === 'left' || tr.direction === 'right';
+          const room = s.roomData;
+          if (isHoriz) {
+            // Y drag → positionBlock, X drag → depthBlock
+            const maxPos = room.heightBlocks - 1 - tr.openingSizeBlocks;
+            tr.positionBlock = Math.min(Math.max(0, orig.yBlock + deltaY), maxPos);
+            const newDepth = orig.xBlock + deltaX;
+            const maxDepth = room.widthBlocks - 6;
+            tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
+          } else {
+            // X drag → positionBlock, Y drag → depthBlock
+            const maxPos = room.widthBlocks - 1 - tr.openingSizeBlocks;
+            tr.positionBlock = Math.min(Math.max(0, orig.xBlock + deltaX), maxPos);
+            const newDepth = orig.yBlock + deltaY;
+            const maxDepth = room.heightBlocks - 6;
+            tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
+          }
+        }
       }
     }
   }
@@ -858,8 +1061,8 @@ export function createEditorController(
   // ── Copy/Paste helpers ───────────────────────────────────────────────────
 
   function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
-    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] } = {
-      walls: [], enemies: [], skillTombs: [], dustPiles: [],
+    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] } = {
+      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [],
     };
     for (const el of elements) {
       if (el.type === 'wall') {
@@ -868,6 +1071,9 @@ export function createEditorController(
       } else if (el.type === 'enemy') {
         const e = room.enemies.find(e2 => e2.uid === el.uid);
         if (e) data.enemies.push({ ...e });
+      } else if (el.type === 'saveTomb') {
+        const t = room.saveTombs.find(t2 => t2.uid === el.uid);
+        if (t) data.saveTombs.push({ ...t });
       } else if (el.type === 'skillTomb') {
         const t = room.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) data.skillTombs.push({ ...t });
@@ -881,7 +1087,7 @@ export function createEditorController(
 
   function pasteFromClipboard(s: EditorState): void {
     if (!s.roomData || !s.clipboard) return;
-    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] };
+    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] };
     try {
       data = JSON.parse(s.clipboard) as typeof data;
     } catch {
@@ -896,7 +1102,8 @@ export function createEditorController(
     let minX = Infinity, minY = Infinity;
     for (const w of data.walls) { minX = Math.min(minX, w.xBlock); minY = Math.min(minY, w.yBlock); }
     for (const e of data.enemies) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
-    for (const t of data.skillTombs) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
+    for (const t of (data.saveTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
+    for (const t of (data.skillTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
     for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
     if (!isFinite(minX)) minX = 0;
     if (!isFinite(minY)) minY = 0;
@@ -921,7 +1128,17 @@ export function createEditorController(
       });
       newElements.push({ type: 'enemy', uid: newUid });
     }
-    for (const t of data.skillTombs) {
+    for (const t of (data.saveTombs ?? [])) {
+      const newUid = allocateUid(s);
+      s.roomData.saveTombs.push({
+        ...t,
+        uid: newUid,
+        xBlock: t.xBlock - minX + offsetX,
+        yBlock: t.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'saveTomb', uid: newUid });
+    }
+    for (const t of (data.skillTombs ?? [])) {
       const newUid = allocateUid(s);
       s.roomData.skillTombs.push({
         ...t,
@@ -953,4 +1170,88 @@ export function createEditorController(
     getRoomDef,
     destroy,
   };
+}
+
+// ── Module-level helpers ──────────────────────────────────────────────────────
+
+/**
+ * Deep-clones an EditorRoomData object using structuredClone.
+ * Safe because EditorRoomData contains only plain, structured-cloneable values.
+ */
+function deepCloneRoomData(data: EditorRoomData): EditorRoomData {
+  return structuredClone(data) as EditorRoomData;
+}
+
+/**
+ * Shows a modal "Save Changes?" dialog with a green YES and a red NO button.
+ * The dialog is appended to `root` and removed when the user picks an option.
+ *
+ * @param root    DOM element to append the dialog to (should be the UI overlay root).
+ * @param onYes   Called when the user clicks YES.
+ * @param onNo    Called when the user clicks NO.
+ */
+function showSaveChangesDialog(root: HTMLElement, onYes: () => void, onNo: () => void): void {
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = `
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto;
+  `;
+
+  const panel = document.createElement('div');
+  panel.style.cssText = `
+    background: rgba(10,12,20,0.97); border: 1px solid rgba(0,200,100,0.5);
+    border-radius: 8px; padding: 24px 32px; display: flex; flex-direction: column;
+    align-items: center; gap: 20px; font-family: 'Cinzel', monospace;
+    min-width: 260px; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+  `;
+
+  const question = document.createElement('div');
+  question.textContent = 'Save Changes?';
+  question.style.cssText = `
+    font-size: 16px; font-weight: bold; color: #c0ffd0; letter-spacing: 0.05em;
+  `;
+  panel.appendChild(question);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display: flex; gap: 16px;';
+
+  const yesBtn = document.createElement('button');
+  yesBtn.textContent = 'YES';
+  yesBtn.style.cssText = `
+    min-width: 90px; padding: 10px 20px; font-size: 14px; font-weight: bold;
+    font-family: 'Cinzel', monospace; cursor: pointer; border-radius: 4px;
+    background: rgba(0,140,60,0.6); color: #44ff88;
+    border: 2px solid #44ff88; transition: background 0.15s;
+  `;
+  yesBtn.addEventListener('mouseenter', () => { yesBtn.style.background = 'rgba(0,180,80,0.8)'; });
+  yesBtn.addEventListener('mouseleave', () => { yesBtn.style.background = 'rgba(0,140,60,0.6)'; });
+  yesBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
+    onYes();
+  });
+
+  const noBtn = document.createElement('button');
+  noBtn.textContent = 'NO';
+  noBtn.style.cssText = `
+    min-width: 90px; padding: 10px 20px; font-size: 14px; font-weight: bold;
+    font-family: 'Cinzel', monospace; cursor: pointer; border-radius: 4px;
+    background: rgba(160,30,20,0.6); color: #ff6644;
+    border: 2px solid #ff6644; transition: background 0.15s;
+  `;
+  noBtn.addEventListener('mouseenter', () => { noBtn.style.background = 'rgba(200,40,30,0.8)'; });
+  noBtn.addEventListener('mouseleave', () => { noBtn.style.background = 'rgba(160,30,20,0.6)'; });
+  noBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
+    onNo();
+  });
+
+  btnRow.appendChild(yesBtn);
+  btnRow.appendChild(noBtn);
+  panel.appendChild(btnRow);
+  backdrop.appendChild(panel);
+  root.appendChild(backdrop);
 }

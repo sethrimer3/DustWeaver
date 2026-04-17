@@ -14,6 +14,7 @@
  */
 
 import { WorldState } from '../world';
+import { dist } from '../../utils/math';
 
 // ── Tuning constants (exposed for easy adjustment) ─────────────────────────
 
@@ -101,13 +102,11 @@ export function applyRockElementalAI(world: WorldState): void {
 
     // Distance to player
     const dxToPlayer = playerFound ? playerX - cluster.positionXWorld : 0;
-    const dyToPlayer = playerFound ? playerY - cluster.positionYWorld : 0;
-    const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+    const distToPlayer = playerFound ? dist(cluster.positionXWorld, cluster.positionYWorld, playerX, playerY) : 0;
 
     // Distance from spawn (for leash)
     const dxFromSpawn = cluster.positionXWorld - cluster.rockElementalSpawnXWorld;
-    const dyFromSpawn = cluster.positionYWorld - cluster.rockElementalSpawnYWorld;
-    const distFromSpawn = Math.sqrt(dxFromSpawn * dxFromSpawn + dyFromSpawn * dyFromSpawn);
+    const distFromSpawn = dist(cluster.positionXWorld, cluster.positionYWorld, cluster.rockElementalSpawnXWorld, cluster.rockElementalSpawnYWorld);
 
     switch (state) {
       // ── INACTIVE ──────────────────────────────────────────────────────

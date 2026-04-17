@@ -15,6 +15,7 @@ import { ClusterState } from './state';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import { dist } from '../../utils/math';
 
 // ============================================================================
 // Constants
@@ -133,7 +134,7 @@ export function applyGrappleHunterAI(world: WorldState): void {
     if (player !== null) {
       dxToPlayer = player.positionXWorld - c.positionXWorld;
       dyToPlayer = player.positionYWorld - c.positionYWorld;
-      distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+      distToPlayer = dist(c.positionXWorld, c.positionYWorld, player.positionXWorld, player.positionYWorld);
     }
 
     switch (c.grappleHunterState) {
@@ -188,9 +189,7 @@ export function applyGrappleHunterAI(world: WorldState): void {
         positionChainParticles(world, c);
 
         // Check distance from hunter to tip
-        const tipDx = c.grappleHunterTipXWorld - c.positionXWorld;
-        const tipDy = c.grappleHunterTipYWorld - c.positionYWorld;
-        const tipDist = Math.sqrt(tipDx * tipDx + tipDy * tipDy);
+        const tipDist = dist(c.positionXWorld, c.positionYWorld, c.grappleHunterTipXWorld, c.grappleHunterTipYWorld);
 
         // Check tip-to-player AABB collision
         if (player !== null && tipHitsCluster(c.grappleHunterTipXWorld, c.grappleHunterTipYWorld, player)) {

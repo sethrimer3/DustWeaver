@@ -16,6 +16,7 @@
 import { WorldState } from '../world';
 import { nextFloat } from '../rng';
 import { DASH_COOLDOWN_TICKS, DASH_RECHARGE_ANIM_TICKS, ENEMY_DODGE_SPEED_WORLD } from './dashConstants';
+import { dist } from '../../utils/math';
 
 // Re-export shared constants so callers that previously imported from this module
 // don't need to change their import paths.
@@ -103,7 +104,7 @@ export function applyEnemyAI(world: WorldState): void {
 
     const dxToPlayer = playerX - cluster.positionXWorld;
     const dyToPlayer = playerY - cluster.positionYWorld;
-    const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+    const distToPlayer = dist(cluster.positionXWorld, cluster.positionYWorld, playerX, playerY);
 
     const invDist = distToPlayer > 0.5 ? 1.0 / distToPlayer : 0.0;
     const dirToPlayerX = dxToPlayer * invDist;
@@ -132,7 +133,7 @@ export function applyEnemyAI(world: WorldState): void {
       const py = positionYWorld[i];
       const dxToEnemy = cluster.positionXWorld - px;
       const dyToEnemy = cluster.positionYWorld - py;
-      const distToEnemy = Math.sqrt(dxToEnemy * dxToEnemy + dyToEnemy * dyToEnemy);
+      const distToEnemy = dist(px, py, cluster.positionXWorld, cluster.positionYWorld);
       if (distToEnemy > ENEMY_BLOCK_DETECTION_RANGE_WORLD) continue;
 
       // Particle must be generally moving toward this enemy
