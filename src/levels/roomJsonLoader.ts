@@ -24,6 +24,7 @@ import type {
 import {
   validateRoomJson,
   stringToParticleKind,
+  parseSongId,
 } from '../editor/roomJson';
 import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
 import type { WorldMapJsonDef } from '../editor/worldMapData';
@@ -231,9 +232,8 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (json.blockTheme) room.blockTheme = json.blockTheme;
   if (json.backgroundId) room.backgroundId = json.backgroundId;
   if (json.lightingEffect) room.lightingEffect = json.lightingEffect;
-  if (json.songId !== undefined && json.songId !== '_continue') {
-    room.songId = json.songId as RoomDef['songId'];
-  }
+  const resolvedSongId = parseSongId(json.songId);
+  if (resolvedSongId !== '_continue') room.songId = resolvedSongId;
 
   // Add optional fields only if present
   if (json.skillBooks && json.skillBooks.length > 0) {

@@ -270,10 +270,12 @@ const VALID_SONG_IDS: ReadonlySet<string> = new Set<string>([
 
 /**
  * Parse a raw string from JSON into a RoomSongId.
- * Unknown strings fall back to '_continue'.
+ * Unknown strings fall back to '_continue' with a console warning.
  */
-function parseSongId(raw: string | undefined): RoomSongId {
-  if (raw !== undefined && VALID_SONG_IDS.has(raw)) return raw as RoomSongId;
+export function parseSongId(raw: string | undefined): RoomSongId {
+  if (raw === undefined) return '_continue';
+  if (VALID_SONG_IDS.has(raw)) return raw as RoomSongId;
+  console.warn(`[roomJson] Unknown songId "${raw}" — falling back to "_continue".`);
   return '_continue';
 }
 

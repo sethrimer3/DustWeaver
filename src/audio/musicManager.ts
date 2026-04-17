@@ -202,6 +202,9 @@ export class MusicManager {
     this.activeSongId = newSongId;
 
     // Begin the fade.
+    // NOTE: performance.now() is acceptable here because MusicManager lives in
+    // the render/audio layer (not the deterministic sim), and crossfade timing
+    // only affects the audio experience, not simulation state.
     const hasSomethingToFade = this.fadingAudio !== null || newSongId !== null;
     if (hasSomethingToFade) {
       this.isCrossfading = true;
@@ -290,8 +293,8 @@ export class MusicManager {
       this.fadingAudio.volume = Math.max(0, Math.min(1, this.fadingGain * this.targetVolume));
     }
     if (this.loopNextAudio !== null && this.isLoopCrossfading) {
-      const elapsed = performance.now() - this.loopCrossfadeStartMs;
-      const t = Math.min(elapsed / CROSSFADE_LOOP_MS, 1);
+      const elapsedMs = performance.now() - this.loopCrossfadeStartMs;
+      const t = Math.min(elapsedMs / CROSSFADE_LOOP_MS, 1);
       this.loopNextAudio.volume = Math.max(0, Math.min(1, t * this.primaryGain * this.targetVolume));
     }
   }
@@ -300,20 +303,20 @@ export class MusicManager {
 
   private scheduleUpdate(): void {
     if (this.rafId !== null) return; // already scheduled
-    this.rafId = requestAnimationFrame((now) => {
+    this.rafId = requestAnimationFrame((nowMs) => {
       this.rafId = null;
-      this.tick(now);
+      this.tick(nowMs);
     });
   }
 
-  private tick(now: number): void {
+  private tick(nowMs: number): void {
     if (this.isDisposed) return;
 
     let needsMore = false;
 
     // ── Room crossfade ──────────────────────────────────────────────────
     if (this.isCrossfading) {
-      const elapsed = now - this.crossfadeStartMs;
+      const elapsed = nowMs - this.crossfadeStartMs;
       const t = Math.min(elapsed / this.crossfadeDurationMs, 1);
 
       this.primaryGain = t;
@@ -343,7 +346,7 @@ export class MusicManager {
 
     // ── Loop crossfade ──────────────────────────────────────────────────
     if (this.isLoopCrossfading && this.loopNextAudio !== null) {
-      const elapsed = now - this.loopCrossfadeStartMs;
+      const elapsed = nowMs - this.loopCrossfadeStartMs;
       const t = Math.min(elapsed / CROSSFADE_LOOP_MS, 1);
 
       // During loop crossfade: primaryGain stays at 1 (full, modulated by
