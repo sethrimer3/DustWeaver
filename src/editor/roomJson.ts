@@ -10,7 +10,8 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, RoomSongId } from './editorState';
+import { AVAILABLE_SONGS } from '../audio/musicManager';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -161,6 +162,11 @@ export interface RoomJsonDef {
   backgroundId?: BackgroundId;
   /** Lighting model. Falls back to 'DEFAULT' if not set. */
   lightingEffect?: LightingEffect;
+  /**
+   * Background music. Omitting or setting to '_continue' means "keep playing
+   * whatever was already playing".  '_silence' stops music.
+   */
+  songId?: string;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];
@@ -256,6 +262,23 @@ export function validateRoomJson(data: unknown): ValidationError[] {
   return errors;
 }
 
+// ── Song ID helpers ───────────────────────────────────────────────────────────
+
+const VALID_SONG_IDS: ReadonlySet<string> = new Set<string>([
+  '_continue', '_silence', ...AVAILABLE_SONGS,
+]);
+
+/**
+ * Parse a raw string from JSON into a RoomSongId.
+ * Unknown strings fall back to '_continue' with a console warning.
+ */
+export function parseSongId(raw: string | undefined): RoomSongId {
+  if (raw === undefined) return '_continue';
+  if (VALID_SONG_IDS.has(raw)) return raw as RoomSongId;
+  console.warn(`[roomJson] Unknown songId "${raw}" — falling back to "_continue".`);
+  return '_continue';
+}
+
 // ── Conversion: RoomJsonDef → EditorRoomData ─────────────────────────────────
 
 export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { data: EditorRoomData; nextUid: number } {
@@ -328,6 +351,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       blockTheme: json.blockTheme ?? 'blackRock',
       backgroundId: json.backgroundId ?? 'brownRock',
       lightingEffect: json.lightingEffect ?? 'DEFAULT',
+      songId: parseSongId(json.songId),
       widthBlocks: json.widthBlocks,
       heightBlocks: json.heightBlocks,
       playerSpawnBlock: [...json.playerSpawnBlock] as [number, number],
@@ -402,6 +426,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.blockTheme) json.blockTheme = data.blockTheme;
   if (data.backgroundId) json.backgroundId = data.backgroundId;
   if (data.lightingEffect) json.lightingEffect = data.lightingEffect;
+  // Only write songId when it differs from the default ('_continue')
+  if (data.songId !== '_continue') json.songId = data.songId;
   if (data.skillTombs.length > 0) {
     json.dustSkillTombs = data.skillTombs.map(s => ({
       xBlock: s.xBlock,
@@ -561,6 +587,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     blockTheme: data.blockTheme,
     backgroundId: data.backgroundId,
     lightingEffect: data.lightingEffect,
+    songId: data.songId !== '_continue' ? data.songId : undefined,
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     walls: allWalls,
@@ -664,6 +691,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       blockTheme: room.blockTheme ?? 'blackRock',
       backgroundId: room.backgroundId ?? 'brownRock',
       lightingEffect: room.lightingEffect ?? 'DEFAULT',
+      songId: room.songId ?? '_continue',
       widthBlocks: room.widthBlocks,
       heightBlocks: room.heightBlocks,
       playerSpawnBlock: [room.playerSpawnBlock[0], room.playerSpawnBlock[1]],

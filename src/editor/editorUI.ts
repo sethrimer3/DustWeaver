@@ -6,7 +6,7 @@
 import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
   PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS, FADE_COLOR_OPTIONS,
-  BlockTheme, BackgroundId, LightingEffect,
+  BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
 } from './editorState';
 import { addHoverStyle } from '../ui/helpers';
 
@@ -68,6 +68,7 @@ export interface EditorUICallbacks {
   onBlockThemeChange: (theme: BlockTheme) => void;
   onLightingEffectChange: (effect: LightingEffect) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
+  onRoomSongChange: (songId: RoomSongId) => void;
   onConfirm: () => void;
   onCancel: () => void;
   onExportAllChanges: () => void;
@@ -213,11 +214,41 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   bgDiv.appendChild(bgSelect);
   container.appendChild(bgDiv);
 
+  // ── Room Song dropdown ───────────────────────────────────────────────────
+  const songDiv = document.createElement('div');
+  songDiv.style.cssText = `
+    border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
+    padding: 6px 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2);
+  `;
+  const songTitle = document.createElement('div');
+  songTitle.textContent = 'Room Song';
+  songTitle.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
+  songDiv.appendChild(songTitle);
+  const songSelect = document.createElement('select');
+  songSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of SONG_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    songSelect.appendChild(o);
+  }
+  songSelect.addEventListener('change', () => {
+    callbacks?.onRoomSongChange(songSelect.value as RoomSongId);
+  });
+  songSelect.addEventListener('click', (e) => e.stopPropagation());
+  songDiv.appendChild(songSelect);
+  container.appendChild(songDiv);
+
   // ── Category tabs ────────────────────────────────────────────────────────
   let lastRenderedRoomId = '';
   let lastRenderedWidthBlocks = -1;
   let lastRenderedHeightBlocks = -1;
   let lastRenderedBackgroundId = '';
+  let lastRenderedSongId = '';
   let dimWidthInput: HTMLInputElement | null = null;
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
@@ -354,6 +385,15 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       }
     }
 
+    // Update song dropdown
+    const currentSongId = state.roomData?.songId ?? '_continue';
+    if (currentSongId !== lastRenderedSongId) {
+      lastRenderedSongId = currentSongId;
+      if (document.activeElement !== songSelect) {
+        songSelect.value = currentSongId;
+      }
+    }
+
     // Update palette area — recreate when category changes OR when block theme changes
     const currentTheme = state.roomData?.blockTheme ?? 'blackRock';
     const currentLighting = state.roomData?.lightingEffect ?? 'DEFAULT';
@@ -465,6 +505,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       lastRenderedWidthBlocks = -1;
       lastRenderedHeightBlocks = -1;
       lastRenderedBackgroundId = '';
+      lastRenderedSongId = '';
       lastRenderedBlockTheme = '';
       lastRenderedLightingEffect = '';
       dimWidthInput = null;

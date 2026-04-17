@@ -22,6 +22,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
+import type { RoomSongId } from '../audio/musicManager';
 
 // ── Block theme and background types ─────────────────────────────────────────
 
@@ -335,4 +336,12 @@ export interface RoomDef {
   fireflyJars?: readonly RoomFireflyJarDef[];
   /** Piles of gold dust placed on the ground (attracted by Storm Weave). */
   dustPiles?: readonly RoomDustPileDef[];
+  /**
+   * Background music for this room.
+   * '_continue' = keep playing the previous room's song (default / undefined).
+   * '_silence'  = stop music when entering this room.
+   * Any other value = switch to the named song when entering this room.
+   * When undefined, treated as '_continue'.
+   */
+  songId?: RoomSongId;
 }

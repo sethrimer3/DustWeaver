@@ -7,9 +7,19 @@
  */
 
 import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
+import type { RoomSongId } from '../audio/musicManager';
+import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 
 // Re-export for convenience in editor modules
 export type { BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
+export type { RoomSongId } from '../audio/musicManager';
+
+/** Options shown in the "Room Song" editor dropdown, in display order. */
+export const SONG_OPTIONS: readonly { id: RoomSongId; label: string }[] = [
+  { id: '_continue', label: SONG_DISPLAY_NAMES._continue },
+  { id: '_silence',  label: SONG_DISPLAY_NAMES._silence },
+  ...AVAILABLE_SONGS.map(id => ({ id, label: SONG_DISPLAY_NAMES[id] })),
+];
 
 // ── Editor tool enum ─────────────────────────────────────────────────────────
 
@@ -184,6 +194,13 @@ export interface EditorRoomData {
   backgroundId: BackgroundId;
   /** Lighting model for this room. */
   lightingEffect: LightingEffect;
+  /**
+   * Background music for this room.
+   * '_continue' = keep playing the previous room's song (default).
+   * '_silence'  = stop music when entering this room.
+   * Any other value = switch to the named song when entering this room.
+   */
+  songId: RoomSongId;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];
