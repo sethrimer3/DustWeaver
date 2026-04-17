@@ -645,6 +645,18 @@ function _getDefaultLightingDepths(layout: CachedWallLayout): Map<string, number
   return depths;
 }
 
+/**
+ * Converts open-air distance (in tiles) into darkness alpha.
+ * Darkness now accelerates with depth: each additional tile from open air
+ * contributes twice the darkness of the previous tile.
+ */
+function _getDarknessAlphaFromAirDepth(airDepth: number): number {
+  if (airDepth <= 0) return 0;
+  const BASE_DARKNESS_STEP = 0.1;
+  const acceleratedAlpha = BASE_DARKNESS_STEP * (Math.pow(2, airDepth) - 1);
+  return Math.min(1, acceleratedAlpha);
+}
+
 /** Collects 2x2 wall top-left keys with their per-wall theme index. */
 function _collectSolid2x2WallTopLefts(walls: WallSnapshot, blockSizePx: number): Map<string, number> {
   const topLeftMap = new Map<string, number>();
@@ -868,7 +880,7 @@ export function renderWallSprites(
       const airDepth = _activeLightingEffect === 'DEFAULT'
         ? (defaultLightingDepths?.get(tileKey) ?? 0)
         : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-      const darknessAlpha = Math.min(1, airDepth * 0.1);
+      const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
       if (darknessAlpha > 0) {
         ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
         ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -918,7 +930,7 @@ export function renderWallSprites(
     const airDepth = _activeLightingEffect === 'DEFAULT'
       ? (defaultLightingDepths?.get(tileKey) ?? 0)
       : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-    const darknessAlpha = Math.min(1, airDepth * 0.1);
+    const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
     if (darknessAlpha > 0) {
       ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
       ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -979,7 +991,7 @@ export function renderWallSprites(
     const airDepth = _activeLightingEffect === 'DEFAULT'
       ? (defaultLightingDepths?.get(tileKey) ?? 0)
       : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-    const darknessAlpha = Math.min(1, airDepth * 0.1);
+    const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
     if (darknessAlpha > 0) {
       ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
       ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
