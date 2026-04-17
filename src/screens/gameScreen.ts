@@ -282,7 +282,7 @@ export function startGameScreen(
         enemyCluster.isLargeSlimeFlag = 1;
         enemyCluster.halfWidthWorld = LARGE_SLIME_HALF_SIZE_WORLD;
         enemyCluster.halfHeightWorld = LARGE_SLIME_HALF_SIZE_WORLD;
-        enemyCluster.slimeHopTimerTicks = LARGE_SLIME_HOP_INTERVAL_INITIAL;
+        enemyCluster.slimeHopTimerTicks = LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS;
       } else if (enemyDef.isWheelEnemyFlag === 1) {
         enemyCluster.isWheelEnemyFlag = 1;
         enemyCluster.halfWidthWorld = WHEEL_ENEMY_HALF_SIZE_WORLD;
