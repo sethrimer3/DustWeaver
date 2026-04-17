@@ -149,7 +149,7 @@ export function startGameScreen(
   musicManager.setVolume(getMusicVolume());
 
   // ── Room state ────────────────────────────────────────────────────────────
-  const campaignSpawnRoom: RoomDef = ROOM_REGISTRY.get(STARTING_ROOM_ID)!;
+  const campaignSpawnRoom: RoomDef = ROOM_REGISTRY.get('lobby') ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)!;
   const campaignSpawnBlock: readonly [number, number] = campaignSpawnRoom.playerSpawnBlock;
 
   let currentRoom: RoomDef = ROOM_REGISTRY.get(startRoomId ?? STARTING_ROOM_ID)!;
