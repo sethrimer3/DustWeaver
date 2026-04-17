@@ -1,0 +1,8 @@
+{
+  "worlds": [
+    { "id": 0, "name": "World 0" }
+  ],
+  "rooms": [
+    { "id": "lobby", "name": "Lobby", "worldId": 0, "mapX": 0, "mapY": 0 }
+  ]
+}
