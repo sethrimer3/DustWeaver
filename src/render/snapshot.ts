@@ -110,6 +110,16 @@ export interface ClusterSnapshot {
   readonly grappleHunterTipXWorld: number;
   /** Y of grapple chain tip (world units). */
   readonly grappleHunterTipYWorld: number;
+  /**
+   * Ticks remaining of invulnerability after taking damage.
+   * Non-zero while the player cannot be damaged again.
+   */
+  readonly invulnerabilityTicks: number;
+  /**
+   * Ticks remaining in the hurt visual feedback window.
+   * Non-zero while the player sprite should show damage tint / flash.
+   */
+  readonly hurtTicks: number;
 }
 
 export interface WallSnapshot {
@@ -211,6 +221,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       grappleHunterChainStartIndex:     c.grappleHunterChainStartIndex,
       grappleHunterTipXWorld:           c.grappleHunterTipXWorld,
       grappleHunterTipYWorld:           c.grappleHunterTipYWorld,
+      invulnerabilityTicks:             c.invulnerabilityTicks,
+      hurtTicks:                        c.hurtTicks,
     });
   }
 

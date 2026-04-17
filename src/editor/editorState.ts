@@ -9,6 +9,7 @@
 import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
+import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
 
 // Re-export for convenience in editor modules
 export type { BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
@@ -58,8 +59,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'ramp_1x1',  label: '1×1 Ramp',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isRampItem: 1 },
   { id: 'ramp_1x2',  label: '1×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isRampItem: 1 },
   { id: 'ramp_2x2',  label: '2×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isRampItem: 1 },
-  { id: 'pillar_full', label: 'Pillar',           category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 2 },
-  { id: 'pillar_half', label: 'Pillar (Half)',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 2, isPillarHalfWidthItem: 1 },  // Enemies
+  // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },
   { id: 'enemy_rock_elemental', label: 'Rock Elemental', category: 'enemies' },
@@ -263,6 +263,16 @@ export interface EditorState {
   selectionBoxStartBlockY: number;
   /** Serialized clipboard data for copy/paste. */
   clipboard: string | null;
+  /**
+   * Which skill (weave) a newly placed skill tomb will contain.
+   * Populated from the skill picker dropdown when skill_tomb is selected.
+   */
+  pendingSkillTombWeaveId: string;
+  /**
+   * The element the mouse is currently hovering over (Select tool only).
+   * Null when no element is under the cursor or when not using the Select tool.
+   */
+  hoverElement: SelectedElement | null;
 }
 
 export function createEditorState(): EditorState {
@@ -291,6 +301,8 @@ export function createEditorState(): EditorState {
     selectionBoxStartBlockX: 0,
     selectionBoxStartBlockY: 0,
     clipboard: null,
+    pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
+    hoverElement: null,
   };
 }
 

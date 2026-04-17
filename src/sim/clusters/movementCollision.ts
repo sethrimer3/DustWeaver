@@ -44,8 +44,11 @@ function tryStepUpSingleBlock(
   world: WorldState,
   wallTopWorld: number,
   requiredInputDirX: -1 | 1,
+  wasGrounded: boolean,
 ): boolean {
   if (cluster.isPlayerFlag === 0) return false;
+  // Step-up is only valid when the player was grounded at the start of this tick.
+  if (!wasGrounded) return false;
   if (cluster.velocityYWorld < 0) return false;
 
   const inputDxWorld = world.playerMoveInputDxWorld;
@@ -103,6 +106,7 @@ export function resolveWallsX(
   cluster: ClusterState,
   world: WorldState,
   prevXWorld: number,
+  wasGrounded: boolean,
 ): void {
   const hw = cluster.halfWidthWorld;
   const hh = cluster.halfHeightWorld;
@@ -130,13 +134,13 @@ export function resolveWallsX(
 
     // Determine push direction from previous position
     if (prevRight <= wallLeft + COLLISION_EPSILON) {
-      if (tryStepUpSingleBlock(cluster, world, wallTop, 1)) continue;
+      if (tryStepUpSingleBlock(cluster, world, wallTop, 1, wasGrounded)) continue;
       // Was to the left of wall — push out left
       cluster.positionXWorld = wallLeft - hw;
       if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
       if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
     } else if (prevLeft >= wallRight - COLLISION_EPSILON) {
-      if (tryStepUpSingleBlock(cluster, world, wallTop, -1)) continue;
+      if (tryStepUpSingleBlock(cluster, world, wallTop, -1, wasGrounded)) continue;
       // Was to the right of wall — push out right
       cluster.positionXWorld = wallRight + hw;
       if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
@@ -273,6 +277,7 @@ export function resolveClusterSolidWallCollision(
   prevX: number,
   prevY: number,
   dtSec: number,
+  wasGrounded: boolean,
 ): boolean {
   // Restore position to pre-integration state — we re-integrate per axis.
   cluster.positionXWorld = prevX;
@@ -287,7 +292,7 @@ export function resolveClusterSolidWallCollision(
   for (let i = 0; i < stepsX; i++) {
     const subPrevX = cluster.positionXWorld;
     cluster.positionXWorld += cluster.velocityXWorld * dtX;
-    resolveWallsX(cluster, world, subPrevX);
+    resolveWallsX(cluster, world, subPrevX, wasGrounded);
   }
 
   // ── Y pass with sub-tick safety ──────────────────────────────────────────

@@ -471,7 +471,7 @@ export function checkChainPlayerCollision(
 }
 
 function applyChainDamage(
-  player: { healthPoints: number; isAliveFlag: 0 | 1; entityId: number; positionXWorld: number; positionYWorld: number; velocityXWorld: number; velocityYWorld: number; isGroundedFlag: 0 | 1 },
+  player: { healthPoints: number; isAliveFlag: 0 | 1; entityId: number; positionXWorld: number; positionYWorld: number; velocityXWorld: number; velocityYWorld: number; isGroundedFlag: 0 | 1; invulnerabilityTicks: number; hurtTicks: number },
   cs: RadiantTetherChainState,
   world: WorldState,
   sourceXWorld: number,

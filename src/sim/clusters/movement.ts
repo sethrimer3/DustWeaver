@@ -174,7 +174,7 @@ export function applyClusterMovement(world: WorldState): void {
       const wasGrounded = cluster.isGroundedFlag === 1;
       // Grounding for this tick is rebuilt by collision passes below.
       resetClusterGroundedFlag(cluster);
-      const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY, dtSec);
+      const thickLanded = resolveClusterSolidWallCollision(cluster, world, prevX, prevY, dtSec, wasGrounded);
       const rampLanded  = resolveRampSurfaces(cluster, world);
 
       // Thin platform / world floor check (position already integrated by solid wall resolver)

@@ -9,6 +9,7 @@ import {
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
 } from './editorState';
 import { addHoverStyle } from '../ui/helpers';
+import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 
 // ── Style constants ──────────────────────────────────────────────────────────
 
@@ -31,13 +32,6 @@ const THEME_FILL_COLOR: Readonly<Record<string, string>> = {
 /** Representative block sprite URL for each block theme. */
 const THEME_BLOCK_SPRITE_URL: Readonly<Record<string, string>> = {
   blackRock: 'SPRITES/BLOCKS/blackRock/blackRock (1).png',
-  brownRock: 'SPRITES/BLOCKS/brownRock/brownRock_8x8.png',
-  dirt:      'SPRITES/BLOCKS/dirt/dirt_8x8.png',
-};
-
-/** Pillar sprite URL for each block theme (fallback to block sprite). */
-const THEME_PILLAR_SPRITE_URL: Readonly<Record<string, string>> = {
-  blackRock: 'SPRITES/BLOCKS/blackRock/blackRock_pillar (1).png',
   brownRock: 'SPRITES/BLOCKS/brownRock/brownRock_8x8.png',
   dirt:      'SPRITES/BLOCKS/dirt/dirt_8x8.png',
 };
@@ -74,6 +68,8 @@ export interface EditorUICallbacks {
   onExportAllChanges: () => void;
   /** Open the visual world map overlay. */
   onOpenVisualMap: () => void;
+  /** Called when the user picks a different skill in the skill tomb dropdown. */
+  onSkillTombWeaveChange: (weaveId: string) => void;
 }
 
 export function createEditorUI(root: HTMLElement): EditorUI {
@@ -299,11 +295,41 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   let lastRenderedLightingEffect = '';
   let paletteItems: { btn: HTMLElement; itemId: string }[] = [];
 
+  // ── Skill tomb picker (shown above inspector when skill_tomb is selected) ──
+  const skillTombPickerDiv = document.createElement('div');
+  skillTombPickerDiv.style.cssText = `
+    border: 1px solid rgba(212,168,75,0.5); border-radius: 3px;
+    padding: 6px 8px; margin-top: 8px; background: rgba(20,15,0,0.4); display: none;
+  `;
+  const skillTombPickerTitle = document.createElement('div');
+  skillTombPickerTitle.textContent = 'Skill in Tomb';
+  skillTombPickerTitle.style.cssText = `font-size: 11px; color: #d4a84b; margin-bottom: 6px; font-weight: bold;`;
+  skillTombPickerDiv.appendChild(skillTombPickerTitle);
+  const skillTombSelect = document.createElement('select');
+  skillTombSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid rgba(212,168,75,0.4);
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const weaveId of WEAVE_LIST) {
+    const def = WEAVE_REGISTRY.get(weaveId);
+    const o = document.createElement('option');
+    o.value = weaveId;
+    o.textContent = def?.displayName ?? weaveId;
+    skillTombSelect.appendChild(o);
+  }
+  skillTombSelect.addEventListener('change', () => {
+    callbacks?.onSkillTombWeaveChange(skillTombSelect.value);
+  });
+  skillTombSelect.addEventListener('click', (e) => e.stopPropagation());
+  skillTombPickerDiv.appendChild(skillTombSelect);
+
   // ── Inspector ────────────────────────────────────────────────────────────
   const inspectorDiv = document.createElement('div');
   inspectorDiv.style.cssText = `
     border-top: 1px solid ${PANEL_BORDER}; padding-top: 10px; margin-top: 8px;
   `;
+  container.appendChild(skillTombPickerDiv);
   container.appendChild(inspectorDiv);
 
   // Track rendered inspector state to avoid recreating fields every frame
@@ -479,6 +505,13 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
     }
 
+    // Show/hide the skill tomb picker based on selected palette item
+    const isSkillTombSelected = state.selectedPaletteItem?.id === 'skill_tomb';
+    skillTombPickerDiv.style.display = isSkillTombSelected ? '' : 'none';
+    if (isSkillTombSelected && document.activeElement !== skillTombSelect) {
+      skillTombSelect.value = state.pendingSkillTombWeaveId;
+    }
+
     // Update inspector (only recreate when selected element changes)
     const selUid = state.selectedElements.length > 0 ? state.selectedElements[0].uid : -1;
     const selType = state.selectedElements.length > 0 ? state.selectedElements[0].type : '';
@@ -584,7 +617,6 @@ function makeThemeChip(themeId: string, label: string, isActive: boolean, onClic
 function makeBlockPreviewShapeCss(itemId: string, theme: string): { shapeCss: string; containerCss: string } {
   const fill = THEME_FILL_COLOR[theme] ?? '#555';
   const spriteUrl = THEME_BLOCK_SPRITE_URL[theme] ?? '';
-  const pillarUrl = THEME_PILLAR_SPRITE_URL[theme] ?? spriteUrl;
   const baseTile = `
     background-color: ${fill};
     background-image: url(${spriteUrl});
@@ -640,32 +672,6 @@ function makeBlockPreviewShapeCss(itemId: string, theme: string): { shapeCss: st
         `,
       };
     }
-    case 'pillar_full':
-      return {
-        containerCss,
-        shapeCss: `
-          position: absolute; left: 13px; top: 0;
-          width: 14px; height: 40px;
-          background-color: ${fill};
-          background-image: url(${pillarUrl});
-          background-size: cover; image-rendering: pixelated;
-          border-left: 1px solid rgba(255,255,255,0.1);
-          border-right: 1px solid rgba(255,255,255,0.1);
-        `,
-      };
-    case 'pillar_half':
-      return {
-        containerCss,
-        shapeCss: `
-          position: absolute; left: 16px; top: 0;
-          width: 8px; height: 40px;
-          background-color: ${fill};
-          background-image: url(${pillarUrl});
-          background-size: cover; image-rendering: pixelated;
-          border-left: 1px solid rgba(255,255,255,0.1);
-          border-right: 1px solid rgba(255,255,255,0.1);
-        `,
-      };
     default:
       return {
         containerCss,
@@ -866,10 +872,10 @@ function updateInspector(
       addField(div, 'yBlock', String(tomb.yBlock),
         v => callbacks?.onPropertyChange('skillTomb.yBlock', parseInt(v)));
       addSelect(div, 'weaveId',
-        [
-          { label: 'Storm Weave', value: 'storm' },
-          { label: 'Shield Weave', value: 'shield' },
-        ],
+        WEAVE_LIST.map(id => ({
+          label: WEAVE_REGISTRY.get(id)?.displayName ?? id,
+          value: id,
+        })),
         tomb.weaveId,
         v => callbacks?.onPropertyChange('skillTomb.weaveId', v));
     }

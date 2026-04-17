@@ -189,6 +189,9 @@ export function createEditorController(
           exportAllChanges(pendingRoomEdits, initialRoomIds, isWorldMapDirty);
         },
         onOpenVisualMap: () => openVisualMap(),
+        onSkillTombWeaveChange: (weaveId: string) => {
+          state.pendingSkillTombWeaveId = weaveId;
+        },
       });
     } else {
       closeEditor();
@@ -668,6 +671,16 @@ export function createEditorController(
           applyEdits();
         }
       }
+    }
+
+    // Compute hover element for tooltip (Select tool only, outside the editor panel)
+    if (
+      state.activeTool === EditorTool.Select &&
+      inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX
+    ) {
+      state.hoverElement = selectAtCursor(state);
+    } else {
+      state.hoverElement = null;
     }
 
     // Update UI panel
