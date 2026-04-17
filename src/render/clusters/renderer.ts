@@ -649,6 +649,18 @@ export function renderClusters(
         ctx.fill();
       }
 
+    } else if (cluster.isSlimeFlag === 1) {
+      // ── Slime: green blob circle ──────────────────────────────────────────
+      const healthRatio = cluster.maxHealthPoints > 0 ? cluster.healthPoints / cluster.maxHealthPoints : 1;
+      _renderSlimeBody(ctx, screenX, screenY, boxHalfW, false, healthRatio);
+    } else if (cluster.isLargeSlimeFlag === 1) {
+      // ── Large Dust Slime: larger green blob with orbiting dust ────────────
+      const healthRatio = cluster.maxHealthPoints > 0 ? cluster.healthPoints / cluster.maxHealthPoints : 1;
+      _renderSlimeBody(ctx, screenX, screenY, boxHalfW, true, healthRatio);
+      _renderLargeSlimeDustOrbit(ctx, screenX, screenY, cluster.largeSlimeDustOrbitAngleRad, boxHalfW);
+    } else if (cluster.isWheelEnemyFlag === 1) {
+      // ── Wheel Enemy: rolling circle with spokes ───────────────────────────
+      _renderWheelEnemy(ctx, screenX, screenY, boxHalfW, cluster.wheelRollAngleRad);
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -706,6 +718,12 @@ export function renderClusters(
       barColor = '#fffde0'; // radiant white-gold for light boss
     } else if (cluster.isGrappleHunterFlag === 1) {
       barColor = '#aa55ee'; // purple for grapple hunter
+    } else if (cluster.isSlimeFlag === 1) {
+      barColor = '#44cc44';
+    } else if (cluster.isLargeSlimeFlag === 1) {
+      barColor = '#228822';
+    } else if (cluster.isWheelEnemyFlag === 1) {
+      barColor = '#cc8844';
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {
@@ -716,6 +734,83 @@ export function renderClusters(
   }
 
   ctx.restore();
+}
+
+function _renderSlimeBody(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  radiusPx: number,
+  isLarge: boolean,
+  healthRatio: number,
+): void {
+  const greenIntensity = Math.round(120 + healthRatio * 80);
+  ctx.beginPath();
+  ctx.arc(cx, cy, radiusPx, 0, Math.PI * 2);
+  ctx.fillStyle = isLarge ? `rgb(20,${greenIntensity},20)` : `rgb(40,${greenIntensity},40)`;
+  ctx.globalAlpha = 0.9;
+  ctx.fill();
+  ctx.globalAlpha = 1.0;
+  ctx.strokeStyle = isLarge ? '#00ff44' : '#44ff88';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  const eyeOffsetX = radiusPx * 0.3;
+  const eyeOffsetY = -radiusPx * 0.2;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx - eyeOffsetX, cy + eyeOffsetY, radiusPx * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx + eyeOffsetX, cy + eyeOffsetY, radiusPx * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function _renderLargeSlimeDustOrbit(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  orbitAngleRad: number,
+  radiusPx: number,
+): void {
+  const orbitRadius = radiusPx * 1.6;
+  const dotRadius = radiusPx * 0.15;
+  ctx.fillStyle = '#88ffaa';
+  ctx.globalAlpha = 0.7;
+  for (let d = 0; d < 4; d++) {
+    const angle = orbitAngleRad + (d * Math.PI * 0.5);
+    const dx = Math.cos(angle) * orbitRadius;
+    const dy = Math.sin(angle) * orbitRadius;
+    ctx.beginPath();
+    ctx.arc(cx + dx, cy + dy, dotRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1.0;
+}
+
+function _renderWheelEnemy(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  radiusPx: number,
+  rollAngleRad: number,
+): void {
+  ctx.beginPath();
+  ctx.arc(cx, cy, radiusPx, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(180, 100, 40, 0.85)';
+  ctx.fill();
+  ctx.strokeStyle = '#ffaa44';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.strokeStyle = '#ffcc88';
+  ctx.lineWidth = 1;
+  for (let s = 0; s < 4; s++) {
+    const spokeAngle = rollAngleRad + (s * Math.PI * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(spokeAngle) * radiusPx, cy + Math.sin(spokeAngle) * radiusPx);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#ffcc88';
+  ctx.beginPath();
+  ctx.arc(cx, cy, radiusPx * 0.18, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {

@@ -139,6 +139,12 @@ export interface RoomEnemyDef {
   isRadiantTetherFlag?: 0 | 1;
   /** 1 if this enemy is a grapple hunter — ground enemy that fires slow grapple hooks at the player. */
   isGrappleHunterFlag?: 0 | 1;
+  /** 1 if this enemy is a slime — hops toward the player. */
+  isSlimeFlag?: 0 | 1;
+  /** 1 if this enemy is a large dust slime — slower hops, orbiting dust, splits on death. */
+  isLargeSlimeFlag?: 0 | 1;
+  /** 1 if this enemy is a wheel enemy — rolls along surfaces toward the player. */
+  isWheelEnemyFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */
@@ -273,6 +279,20 @@ export interface RoomDustPileDef {
   dustCount: number;
 }
 
+/** A rectangular area where grasshopper critters spawn randomly. */
+export interface RoomGrasshopperAreaDef {
+  /** Left edge X (block units). */
+  xBlock: number;
+  /** Top edge Y (block units). */
+  yBlock: number;
+  /** Width (block units). */
+  wBlock: number;
+  /** Height (block units). */
+  hBlock: number;
+  /** Number of grasshoppers to spawn in this area. */
+  count: number;
+}
+
 /** Full definition for a single room in the Metroidvania world. */
 export interface RoomDef {
   /** Unique identifier for this room. */
@@ -336,6 +356,8 @@ export interface RoomDef {
   fireflyJars?: readonly RoomFireflyJarDef[];
   /** Piles of gold dust placed on the ground (attracted by Storm Weave). */
   dustPiles?: readonly RoomDustPileDef[];
+  /** Grasshopper critter spawn zones. */
+  grasshopperAreas?: readonly RoomGrasshopperAreaDef[];
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default / undefined).

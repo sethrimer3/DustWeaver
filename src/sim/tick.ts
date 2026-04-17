@@ -37,6 +37,9 @@ import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
 import { applyHazards } from './hazards';
+import { tickGrasshoppers } from './critters/grasshopper';
+import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
+import { applyWheelEnemyAI } from './clusters/wheelEnemyAi';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -64,6 +67,18 @@ export function tick(world: WorldState): void {
 
   // 0.5e. Grapple Hunter AI — grapple attack state machine
   applyGrappleHunterAI(world);
+
+  // 0.5f. Slime AI — hop toward player
+  applySlimeAI(world);
+
+  // 0.5g. Large Dust Slime AI — slower hops + dust orbit
+  applyLargeSlimeAI(world);
+
+  // 0.5h. Wheel Enemy AI — roll along surfaces toward player
+  applyWheelEnemyAI(world);
+
+  // 0.5i. Grasshopper critters — ambient hop + flee
+  tickGrasshoppers(world);
 
   // 1. Clear accumulated forces from previous tick
   for (let i = 0; i < world.particleCount; i++) {

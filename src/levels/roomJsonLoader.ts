@@ -154,6 +154,9 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       isRockElementalFlag: e.isRockElemental ? 1 as const : 0 as const,
       isRadiantTetherFlag: e.isRadiantTether ? 1 as const : 0 as const,
       isGrappleHunterFlag: e.isGrappleHunter ? 1 as const : 0 as const,
+      isSlimeFlag: e.isSlime ? 1 as const : 0 as const,
+      isLargeSlimeFlag: e.isLargeSlime ? 1 as const : 0 as const,
+      isWheelEnemyFlag: e.isWheelEnemy ? 1 as const : 0 as const,
     };
   });
 
@@ -249,6 +252,16 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (breakableBlocks && breakableBlocks.length > 0) room.breakableBlocks = breakableBlocks;
   if (dustBoostJars && dustBoostJars.length > 0) room.dustBoostJars = dustBoostJars;
   if (fireflyJars && fireflyJars.length > 0) room.fireflyJars = fireflyJars;
+
+  if (json.grasshopperAreas && json.grasshopperAreas.length > 0) {
+    room.grasshopperAreas = json.grasshopperAreas.map(a => ({
+      xBlock: a.xBlock,
+      yBlock: a.yBlock,
+      wBlock: a.wBlock,
+      hBlock: a.hBlock,
+      count: a.count,
+    }));
+  }
 
   return room;
 }
