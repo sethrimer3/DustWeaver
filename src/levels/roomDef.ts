@@ -62,7 +62,14 @@ export type BackgroundId =
   | 'world1'
   | 'world2'
   | 'world3'
-  | 'crystallineCracks';
+  | 'crystallineCracks'
+  | 'thero_prologue'
+  | 'thero_ch1'
+  | 'thero_ch2'
+  | 'thero_ch3'
+  | 'thero_ch4'
+  | 'thero_ch5'
+  | 'thero_ch6';
 
 /**
  * Lighting model used when shading block tiles in a room.
