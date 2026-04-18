@@ -1,5 +1,12 @@
 import { WorldState, MAX_WALLS, MAX_DUST_PILES } from '../sim/world';
-import { RoomDef, BLOCK_SIZE_MEDIUM, blockThemeToIndex, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
+import {
+  RoomDef,
+  BLOCK_SIZE_MEDIUM,
+  blockThemeToIndex,
+  WALL_THEME_DEFAULT_INDEX,
+  PLAYER_HALF_WIDTH_WORLD,
+  PLAYER_HALF_HEIGHT_WORLD,
+} from '../levels/roomDef';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,
@@ -297,6 +304,95 @@ export function worldBgColor(worldNumber: number): string {
     case 3:  return '#1a0500'; // deep dark red-orange (fire/lava world)
     default: return '#0a0a12';
   }
+}
+
+
+// ── Spawn-block safety helpers ────────────────────────────────────────────────
+
+/**
+ * Inset from each room edge (in blocks) used when clamping and scanning for a
+ * valid player spawn position.  The boundary walls occupy the outermost block
+ * strip, so this keeps the spawn clear of them.
+ */
+const SPAWN_MARGIN_BLOCKS = 2;
+
+/**
+ * Returns true if the player's AABB, centred on the given block position,
+ * overlaps any solid (non-platform, non-invisible) wall in the room.
+ * Ramp walls are treated as solid for the purpose of this check.
+ */
+function isSpawnBlockInSolidWall(room: RoomDef, xBlock: number, yBlock: number): boolean {
+  const cx = xBlock * BLOCK_SIZE_MEDIUM;
+  const cy = yBlock * BLOCK_SIZE_MEDIUM;
+  const pLeft   = cx - PLAYER_HALF_WIDTH_WORLD;
+  const pRight  = cx + PLAYER_HALF_WIDTH_WORLD;
+  const pTop    = cy - PLAYER_HALF_HEIGHT_WORLD;
+  const pBottom = cy + PLAYER_HALF_HEIGHT_WORLD;
+
+  for (let wi = 0; wi < room.walls.length; wi++) {
+    const wall = room.walls[wi];
+    if (wall.isPlatformFlag === 1)  continue; // platforms don't block vertical spawn
+    if (wall.isInvisibleFlag === 1) continue; // invisible boundary walls are passable
+
+    // Half-width pillars use half the declared block-width; full walls scale 1:1.
+    const wallWidthScale = wall.isPillarHalfWidthFlag === 1 ? 0.5 : 1;
+    const wLeft   = wall.xBlock * BLOCK_SIZE_MEDIUM;
+    const wTop    = wall.yBlock * BLOCK_SIZE_MEDIUM;
+    const wRight  = wLeft + wall.wBlock * BLOCK_SIZE_MEDIUM * wallWidthScale;
+    const wBottom = wTop  + wall.hBlock * BLOCK_SIZE_MEDIUM;
+
+    if (pLeft < wRight && pRight > wLeft && pTop < wBottom && pBottom > wTop) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Scans the room (inside the SPAWN_MARGIN_BLOCKS border) and returns the first
+ * block position whose player AABB does not overlap any solid wall.
+ * Falls back to the room centre if every candidate block is blocked.
+ */
+export function findOpenSpawnBlock(room: RoomDef): [number, number] {
+  const maxX = room.widthBlocks  - 1 - SPAWN_MARGIN_BLOCKS;
+  const maxY = room.heightBlocks - 1 - SPAWN_MARGIN_BLOCKS;
+  for (let y = SPAWN_MARGIN_BLOCKS; y <= maxY; y++) {
+    for (let x = SPAWN_MARGIN_BLOCKS; x <= maxX; x++) {
+      if (!isSpawnBlockInSolidWall(room, x, y)) {
+        return [x, y];
+      }
+    }
+  }
+  // Absolute fallback: room centre
+  return [Math.floor(room.widthBlocks / 2), Math.floor(room.heightBlocks / 2)];
+}
+
+/**
+ * Resolves a desired spawn block to a valid, open position.
+ *
+ * 1. Clamps the position to the playable bounds
+ *    ([SPAWN_MARGIN_BLOCKS, dimension − 1 − SPAWN_MARGIN_BLOCKS] on each axis).
+ * 2. If the clamped position is inside a solid wall, falls back to
+ *    `findOpenSpawnBlock` and logs a warning.
+ */
+export function resolveSpawnBlock(
+  room: RoomDef,
+  xBlock: number,
+  yBlock: number,
+): readonly [number, number] {
+  const maxX = room.widthBlocks  - 1 - SPAWN_MARGIN_BLOCKS;
+  const maxY = room.heightBlocks - 1 - SPAWN_MARGIN_BLOCKS;
+  const cx = Math.min(Math.max(SPAWN_MARGIN_BLOCKS, xBlock), maxX);
+  const cy = Math.min(Math.max(SPAWN_MARGIN_BLOCKS, yBlock), maxY);
+
+  if (!isSpawnBlockInSolidWall(room, cx, cy)) {
+    return [cx, cy] as const;
+  }
+
+  console.warn(
+    `[gameRoom] Spawn block [${xBlock}, ${yBlock}] is inside a wall in room '${room.id}'. Finding open spawn.`,
+  );
+  return findOpenSpawnBlock(room);
 }
 
 
