@@ -55,6 +55,7 @@ import {
   worldBgColor,
   drawTunnelDarkness,
   screenToWorld,
+  resolveSpawnBlock,
   TUNNEL_DETECT_MARGIN_WORLD,
   SKILLBOOK_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_PICKUP_RADIUS_WORLD,
@@ -414,14 +415,14 @@ export function startGameScreen(
   }
 
   // Initial room load — use saved spawn point if returning to a save.
-  // Guard against bad/missing spawn values by clamping inside room bounds.
+  // Prefer the room's own playerSpawnBlock as the fallback so the player is
+  // placed at a sensible room-specific position rather than the lobby coordinates.
+  // resolveSpawnBlock clamps to bounds and finds an open spot if the position
+  // is inside a solid wall (handles out-of-bounds saves, new rooms, etc.).
   const desiredSpawnBlock = (progress && progress.lastSaveSpawnBlock && progress.lastSaveRoomId === currentRoom.id)
     ? progress.lastSaveSpawnBlock
-    : campaignSpawnBlock;
-  const initialSpawnBlock: readonly [number, number] = [
-    Math.min(Math.max(1, desiredSpawnBlock[0]), Math.max(1, currentRoom.widthBlocks - 2)),
-    Math.min(Math.max(1, desiredSpawnBlock[1]), Math.max(1, currentRoom.heightBlocks - 2)),
-  ];
+    : currentRoom.playerSpawnBlock;
+  const initialSpawnBlock = resolveSpawnBlock(currentRoom, desiredSpawnBlock[0], desiredSpawnBlock[1]);
   loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
 
   const inputState = createInputState();
@@ -445,7 +446,11 @@ export function startGameScreen(
 
   // ── World Editor ────────────────────────────────────────────────────────
   const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY, preserveCamera) => {
-    loadRoom(roomDef, spawnX, spawnY, preserveCamera);
+    // When playing from the editor the room's playerSpawnBlock may be inside a
+    // wall (e.g. in a newly-created room or after heavy edits).  Always resolve
+    // to an open position so the player isn't stuck on entry.
+    const [validX, validY] = resolveSpawnBlock(roomDef, spawnX, spawnY);
+    loadRoom(roomDef, validX, validY, preserveCamera);
   }, () => {
     // Called when editor closes (confirm or cancel)
     if (editorToggleBtn) {
