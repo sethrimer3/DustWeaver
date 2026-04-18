@@ -82,6 +82,28 @@ const BASE = import.meta.env.BASE_URL;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
+function createFallbackRoomDef(): RoomDef {
+  return {
+    id: 'fallback_boot_room',
+    name: 'Fallback Room',
+    worldNumber: 1,
+    mapX: 0,
+    mapY: 0,
+    widthBlocks: 80,
+    heightBlocks: 45,
+    walls: [
+      { xBlock: 0, yBlock: 44, wBlock: 80, hBlock: 1 }, // floor
+      { xBlock: 0, yBlock: 0, wBlock: 1, hBlock: 45 }, // left wall
+      { xBlock: 79, yBlock: 0, wBlock: 1, hBlock: 45 }, // right wall
+    ],
+    enemies: [],
+    playerSpawnBlock: [40, 40],
+    transitions: [],
+    saveTombs: [],
+    skillTombs: [],
+  };
+}
+
 export interface GameScreenCallbacks {
   onReturnToMenu: () => void;
   onSave?: () => void;
@@ -157,15 +179,17 @@ export function startGameScreen(
   const requestedStartRoom: RoomDef | null = (startRoomId !== null ? ROOM_REGISTRY.get(startRoomId) : undefined)
     ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)
     ?? configuredSpawnRoom;
+  const fallbackRoom = createFallbackRoomDef();
+  const campaignSpawnRoom: RoomDef = configuredSpawnRoom ?? fallbackRoom;
+  const initialRoom: RoomDef = requestedStartRoom ?? campaignSpawnRoom;
   if (requestedStartRoom === null || configuredSpawnRoom === null) {
-    throw new Error('[gameScreen] No rooms are loaded. Cannot start gameplay.');
+    console.error('[gameScreen] No rooms were loaded. Starting in fallback room.');
   }
-  const campaignSpawnRoom: RoomDef = configuredSpawnRoom;
   const campaignSpawnBlock: readonly [number, number] = campaignSpawnRoom.playerSpawnBlock;
   const shouldOpenFailsafeEditor = (startRoomId !== null && ROOM_REGISTRY.get(startRoomId) === undefined)
     || !ROOM_REGISTRY.has('lobby');
 
-  let currentRoom: RoomDef = requestedStartRoom;
+  let currentRoom: RoomDef = initialRoom;
   let bgColor = worldBgColor(currentRoom.worldNumber);
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
   let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
