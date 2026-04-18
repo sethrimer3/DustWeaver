@@ -29,7 +29,7 @@ import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { exportRoomAsJson, exportAllChanges } from './editorExport';
-import { ROOM_REGISTRY, registerRoom } from '../levels/rooms';
+import { ROOM_REGISTRY, initRoomRegistry, registerRoom } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 
@@ -376,8 +376,25 @@ export function createEditorController(
     });
   }
 
-  function openVisualMap(): void {
+  async function openVisualMap(): Promise<void> {
     if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
+
+    // Failsafe: if the room registry is empty (e.g. startup load race or
+    // campaign file fetch hiccup), reload it before opening the visual map.
+    if (ROOM_REGISTRY.size === 0) {
+      try {
+        await initRoomRegistry();
+      } catch (err) {
+        console.error('[editor] Failed to reload room registry before opening visual map:', err);
+      }
+    }
+
+    // Ensure the currently edited room is present in the visual map set, even
+    // if it came from fallback loading or was created in-session.
+    if (state.roomData && !ROOM_REGISTRY.has(state.roomData.id)) {
+      registerRoom(editorRoomDataToRoomDef(state.roomData));
+    }
+
     state.isVisualMapOpen = true;
 
     visualMapCleanup = showVisualWorldMap(uiRoot, state.roomData?.id ?? '', {

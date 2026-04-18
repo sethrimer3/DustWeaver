@@ -27,7 +27,7 @@ import {
   parseSongId,
 } from '../editor/roomJson';
 import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
-import { getActiveCampaignId, getCampaignRoomsBasePath } from './campaigns';
+import { getActiveCampaignId, getCampaignById, getCampaignRoomsBasePath } from './campaigns';
 
 // ── Boundary wall generation (mirrors roomBuilders.ts) ───────────────────────
 
@@ -276,24 +276,49 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
 export async function loadRoomJsonFiles(): Promise<Map<string, RoomDef>> {
   const rooms = new Map<string, RoomDef>();
 
-  let manifest: string[];
-  try {
-    const roomsBasePath = getCampaignRoomsBasePath(getActiveCampaignId());
-    const resp = await fetch(`${roomsBasePath}/manifest.json`);
-    if (!resp.ok) {
-      console.error(`[roomJsonLoader] Failed to fetch manifest: ${resp.status}`);
-      return rooms;
+  const activeCampaignId = getActiveCampaignId();
+  const basePathCandidates: string[] = [];
+  const preferredBasePath = getCampaignRoomsBasePath(activeCampaignId);
+  basePathCandidates.push(preferredBasePath);
+  // Fallback for environments where BASE_URL differs from deployment root.
+  basePathCandidates.push(`CAMPAIGNS/${activeCampaignId}/ROOMS`);
+  basePathCandidates.push(`/CAMPAIGNS/${activeCampaignId}/ROOMS`);
+
+  const meta = await getCampaignById(activeCampaignId);
+  if (meta) {
+    basePathCandidates.push(getCampaignRoomsBasePath(meta.folderName));
+    basePathCandidates.push(`CAMPAIGNS/${meta.folderName}/ROOMS`);
+    basePathCandidates.push(`/CAMPAIGNS/${meta.folderName}/ROOMS`);
+  }
+
+  const uniqueBasePaths = [...new Set(basePathCandidates)];
+
+  let manifest: string[] | null = null;
+  let roomsBasePath = preferredBasePath;
+  for (const candidate of uniqueBasePaths) {
+    try {
+      const resp = await fetch(`${candidate}/manifest.json`);
+      if (!resp.ok) continue;
+      const data = await resp.json() as unknown;
+      if (!Array.isArray(data)) continue;
+      manifest = data
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map(entry => entry.replace(/\\/g, '/').replace(/^\/+/, ''));
+      roomsBasePath = candidate;
+      break;
+    } catch {
+      // Try next candidate.
     }
-    manifest = await resp.json() as string[];
-  } catch (err) {
-    console.error('[roomJsonLoader] Failed to parse manifest:', err);
+  }
+
+  if (manifest === null) {
+    console.error('[roomJsonLoader] Failed to fetch rooms manifest from all known campaign paths:', uniqueBasePaths);
     return rooms;
   }
 
   // Fetch all room files in parallel
   const fetches = manifest.map(async (filename) => {
     try {
-      const roomsBasePath = getCampaignRoomsBasePath(getActiveCampaignId());
       const resp = await fetch(`${roomsBasePath}/${filename}`);
       if (!resp.ok) {
         console.error(`[roomJsonLoader] Failed to fetch ${filename}: ${resp.status}`);
