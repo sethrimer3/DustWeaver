@@ -83,6 +83,13 @@ export interface WorldState extends ParticleBuffers {
   wallIsPillarHalfWidthFlag: Uint8Array;
 
   // ---- Player combat state ------------------------------------------------
+  /**
+   * World tick on which the most recent blocked hit (0-damage enemy attack)
+   * occurred.  Initialised to -1 (no event yet).  Written by forces.ts;
+   * read by the renderer to spawn BLOCKED combat text.
+   */
+  lastPlayerBlockedTick: number;
+
   /** Set to 1 for exactly one tick to trigger attack launch. */
   playerAttackTriggeredFlag: 0 | 1;
   /** Normalized attack direction (world units, set when attack is triggered). */
@@ -372,6 +379,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsInvisibleFlag: new Uint8Array(MAX_WALLS),
     wallRampOrientationIndex: new Uint8Array(MAX_WALLS).fill(255),
     wallIsPillarHalfWidthFlag: new Uint8Array(MAX_WALLS),
+    lastPlayerBlockedTick: -1,
     playerAttackTriggeredFlag: 0,
     playerAttackDirXWorld: 1.0,
     playerAttackDirYWorld: 0.0,
