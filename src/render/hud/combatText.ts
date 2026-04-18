@@ -124,7 +124,7 @@ export function createCombatTextSystem(): CombatTextSystem {
           continue;
         }
 
-        const t = elapsedMs / e.durationMs; // normalised age [0, 1)
+        const t = elapsedMs / e.durationMs; // normalized age [0, 1)
 
         // ── Per-kind animation parameters ────────────────────────────────
         let alpha: number;

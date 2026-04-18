@@ -530,7 +530,7 @@ export function renderFrame(r: RenderFrameContext): void {
       // ── Gold outline — 1 px outside the bar bounds ────────────────────────
       ctx.strokeStyle = '#c89820';
       ctx.lineWidth   = 1;
-      // strokeRect draws centred on the path, so offset by 0.5 px to align
+      // strokeRect draws centered on the path, so offset by 0.5 px to align
       // precisely to the pixel grid.
       ctx.strokeRect(barX - 1.5, barY - 1.5, barW + 3, barH + 3);
 
