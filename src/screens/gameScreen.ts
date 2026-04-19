@@ -63,6 +63,7 @@ import {
   FLYING_EYE_HALF_SIZE_WORLD,
 } from './gameRoom';
 import { renderFrame } from './gameRender';
+import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits, SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
 import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
@@ -418,6 +419,11 @@ export function startGameScreen(
   const healthBarDisplayUntilTick: Map<number, number> = new Map();
   /** Previous health values to detect damage. */
   const prevHealthMap: Map<number, number> = new Map();
+
+  // ── Combat text system (floating damage numbers) ─────────────────────────
+  const combatText = createCombatTextSystem();
+  /** Tracks the last seen world.lastPlayerBlockedTick to detect new BLOCKED events. */
+  const prevLastPlayerBlockedTick = { value: -1 };
 
   // ── Dust container state (armor system) ─────────────────────────────────
   /** Number of dust particles the player currently has. */
@@ -1220,6 +1226,7 @@ export function startGameScreen(
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,
       bgColor, isDebugMode, hudState, inputState,
       prevHealthMap, healthBarDisplayUntilTick,
+      combatText, prevLastPlayerBlockedTick,
       collectedDustContainerKeySet,
       isSkillBookSpriteLoaded, isDustContainerSpriteLoaded,
       skillBookSprite, dustContainerSprite,

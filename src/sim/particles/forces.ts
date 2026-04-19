@@ -519,6 +519,11 @@ export function applyInterParticleForces(world: WorldState): void {
               positionYWorld[i],
             );
           } else {
+            // When an enemy attack hits the player but armor absorbs all damage,
+            // record the tick so the renderer can display a BLOCKED floater.
+            if (cluster.isPlayerFlag === 1 && damage === 0 && !attackerIsPlayer) {
+              world.lastPlayerBlockedTick = world.tick;
+            }
             cluster.healthPoints -= damage;
             if (cluster.healthPoints <= 0) {
               cluster.healthPoints = 0;

@@ -21,6 +21,7 @@ import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
 import { renderHudOverlay } from '../render/hud/overlay';
 import type { HudState } from '../render/hud/overlay';
+import type { CombatTextSystem } from '../render/hud/combatText';
 import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
@@ -58,16 +59,20 @@ const JOYSTICK_INNER_RADIUS_PX = 22;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-// HUD layout
-const HUD_HEALTH_BAR_X_PX = 8;
-const HUD_HEALTH_BAR_Y_PX = 8;
-const HUD_HEALTH_BAR_WIDTH_PX = 50;
-const HUD_HEALTH_BAR_HEIGHT_PX = 4;
-const HUD_HEALTH_DUST_GAP_PX = 3;
+// HUD layout — health bar dimensions (virtual pixels)
+const HUD_HEALTH_BAR_X_PX        = 8;
+const HUD_HEALTH_BAR_Y_PX        = 8;
+const HUD_HEALTH_BAR_WIDTH_PX    = 60;
+const HUD_HEALTH_BAR_HEIGHT_PX   = 6;
+const HUD_HEALTH_DUST_GAP_PX     = 4;
 /** Visual spacing between grapple bloom dots along the chain (virtual px). */
 const GRAPPLE_BLOOM_SEGMENT_PX = 6;
 const OUTLINE_BASE_WIDTH_1080P_PX = 2;
 const OFFENSIVE_DUST_BASE_DIAMETER_WORLD = 2.0;
+
+// Health fraction thresholds for visual escalation
+const HEALTH_THRESHOLD_DANGER_FRACTION   = 0.40;  // below this → amber warning
+const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red alert
 
 function drawGrappleBloom(
   bloomSystem: BloomSystem,
@@ -277,6 +282,16 @@ export interface RenderFrameContext {
   prevHealthMap: Map<number, number>;
   healthBarDisplayUntilTick: Map<number, number>;
 
+  // Combat text floaters
+  combatText: CombatTextSystem;
+  /**
+   * Mutable box holding the last `world.lastPlayerBlockedTick` value seen by
+   * the renderer.  Updated each frame so repeated ticks don't re-trigger the
+   * same BLOCKED event.  Lives as a single-element object to allow mutation
+   * through the interface.
+   */
+  prevLastPlayerBlockedTick: { value: number };
+
   // Collectibles
   collectedDustContainerKeySet: Set<string>;
   isSkillBookSpriteLoaded: boolean;
@@ -305,12 +320,15 @@ export function renderFrame(r: RenderFrameContext): void {
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
     bgColor, isDebugMode, hudState, inputState,
     prevHealthMap, healthBarDisplayUntilTick,
+    combatText, prevLastPlayerBlockedTick,
     collectedDustContainerKeySet,
     isSkillBookSpriteLoaded, isDustContainerSpriteLoaded,
     skillBookSprite, dustContainerSprite,
     progress,
     getPlayerDustCount,
   } = r;
+
+  const nowMs = performance.now();
 
   const snapshot = createSnapshot(world);
   const roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_SMALL;
@@ -488,18 +506,76 @@ export function renderFrame(r: RenderFrameContext): void {
     const playerForHealth = world.clusters[0];
     if (playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
       const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
+      const isCritical = healthFraction < HEALTH_THRESHOLD_CRITICAL_FRACTION;
+      const isDanger   = healthFraction < HEALTH_THRESHOLD_DANGER_FRACTION;
+
+      const barX = HUD_HEALTH_BAR_X_PX;
+      const barY = HUD_HEALTH_BAR_Y_PX;
+      const barW = HUD_HEALTH_BAR_WIDTH_PX;
+      const barH = HUD_HEALTH_BAR_HEIGHT_PX;
+      const fillW = barW * Math.max(0, healthFraction);
 
       ctx.save();
-      // Background
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX, HUD_HEALTH_BAR_HEIGHT_PX);
-      // Health fill
-      ctx.fillStyle = '#00ff88';
-      ctx.fillRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX * healthFraction, HUD_HEALTH_BAR_HEIGHT_PX);
-      // Border
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(HUD_HEALTH_BAR_X_PX, HUD_HEALTH_BAR_Y_PX, HUD_HEALTH_BAR_WIDTH_PX, HUD_HEALTH_BAR_HEIGHT_PX);
+
+      // ── Outer danger glow at critical health (pulsing shadow) ────────────
+      if (isCritical) {
+        const pulseT = (Math.sin(nowMs * 0.008) + 1) * 0.5;  // 0..1 at ~0.76 Hz
+        ctx.shadowBlur  = 5 + 7 * pulseT;
+        ctx.shadowColor = `rgba(255,25,25,${0.55 + 0.45 * pulseT})`;
+      } else if (isDanger) {
+        ctx.shadowBlur  = 3;
+        ctx.shadowColor = 'rgba(255,140,0,0.45)';
+      }
+
+      // ── Gold outline — 1 px outside the bar bounds ────────────────────────
+      ctx.strokeStyle = '#c89820';
+      ctx.lineWidth   = 1;
+      // strokeRect draws centered on the path, so offset by 0.5 px to align
+      // precisely to the pixel grid.
+      ctx.strokeRect(barX - 1.5, barY - 1.5, barW + 3, barH + 3);
+
+      ctx.shadowBlur = 0;  // reset before fill draws
+
+      // ── Dark background ────────────────────────────────────────────────────
+      ctx.fillStyle = 'rgba(0,0,0,0.78)';
+      ctx.fillRect(barX, barY, barW, barH);
+
+      // ── Health fill — color escalates with urgency ─────────────────────────
+      let fillColor: string;
+      if (isCritical) {
+        // Pulsing between deep red and bright red for maximum urgency.
+        const pulseT = (Math.sin(nowMs * 0.008) + 1) * 0.5;
+        const rHigh  = Math.round(210 + 45 * pulseT);
+        fillColor = `rgb(${rHigh},25,25)`;
+      } else if (isDanger) {
+        fillColor = '#e07000';  // amber-orange warning
+      } else {
+        fillColor = '#00b866';  // rich green — healthy
+      }
+
+      if (fillW > 0) {
+        ctx.fillStyle = fillColor;
+        ctx.fillRect(barX, barY, fillW, barH);
+
+        // ── Inner shine: 1 px lighter strip along the top edge ───────────────
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillRect(barX, barY, fillW, 1);
+
+        // ── Subtle dividers at 25 / 50 / 75 % so fractions read at a glance ──
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        for (let q = 1; q <= 3; q++) {
+          const divX = barX + barW * (q * 0.25);
+          if (divX < barX + fillW) {
+            ctx.fillRect(divX - 0.5, barY + 1, 1, barH - 1);
+          }
+        }
+      }
+
+      // ── Thin dark inner border (gives a recessed look) ────────────────────
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth   = 0.5;
+      ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1);
+
       ctx.restore();
     }
   }
@@ -540,47 +616,94 @@ export function renderFrame(r: RenderFrameContext): void {
   }
   ctx.restore();
 
+  // ── Health bar / combat-text event detection ──────────────────────────────
+  // Detect BLOCKED events (armor absorbed a full hit) and spawn floater text.
+  {
+    const currentBlockedTick = world.lastPlayerBlockedTick;
+    if (currentBlockedTick !== prevLastPlayerBlockedTick.value && currentBlockedTick >= 0) {
+      prevLastPlayerBlockedTick.value = currentBlockedTick;
+      const player = world.clusters[0];
+      if (player !== undefined && player.isAliveFlag === 1) {
+        combatText.spawnBlocked(player.positionXWorld, player.positionYWorld, nowMs);
+      }
+    }
+  }
+
   // ── Enemy health bar display (only when damaged) ──────────────────────────
   const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const cluster = world.clusters[ci];
     if (cluster.isAliveFlag === 0) continue;
-    // Skip the player — their health bar is in the HUD, not over their character
-    if (cluster.isPlayerFlag === 1) {
-      prevHealthMap.set(cluster.entityId, cluster.healthPoints);
-      continue;
+
+    const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
+    const healthDelta = prevHealth - cluster.healthPoints;
+
+    // Spawn damage floater when health decreased for any cluster.
+    if (healthDelta > 0) {
+      if (cluster.isPlayerFlag === 1) {
+        // Player was damaged — spawn urgent red floater above player.
+        combatText.spawnDamage(
+          cluster.positionXWorld,
+          cluster.positionYWorld - cluster.halfHeightWorld,
+          healthDelta,
+          1,
+          nowMs,
+        );
+      } else {
+        // Enemy was damaged — spawn gold floater above the enemy.
+        combatText.spawnDamage(
+          cluster.positionXWorld,
+          cluster.positionYWorld - cluster.halfHeightWorld,
+          healthDelta,
+          0,
+          nowMs,
+        );
+      }
     }
 
-    // Check for health changes to trigger display
-    const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
-    if (cluster.healthPoints < prevHealth) {
-      healthBarDisplayUntilTick.set(cluster.entityId, world.tick + healthBarDisplayTicks);
-    }
+    // Update tracked health for next frame.
     prevHealthMap.set(cluster.entityId, cluster.healthPoints);
 
-    // Only show health bar if recently damaged (tick-based)
+    // Player health bar is in the HUD; skip per-character bar for player.
+    if (cluster.isPlayerFlag === 1) continue;
+
+    // Check for health changes to trigger enemy health bar display.
+    if (healthDelta > 0) {
+      healthBarDisplayUntilTick.set(cluster.entityId, world.tick + healthBarDisplayTicks);
+    }
+
+    // Only show health bar if recently damaged (tick-based).
     const displayUntilTick = healthBarDisplayUntilTick.get(cluster.entityId) ?? 0;
     if (world.tick > displayUntilTick) continue;
 
     const healthFraction = cluster.healthPoints / cluster.maxHealthPoints;
-    const barWidth = 24;
+    const barWidth  = 24;
     const barHeight = 3;
     const barX = cluster.positionXWorld * zoom + ox - barWidth / 2;
-    const barY = (cluster.positionYWorld - cluster.halfHeightWorld - 4) * zoom + oy;
+    const barY = (cluster.positionYWorld - cluster.halfHeightWorld - 5) * zoom + oy;
 
     ctx.save();
+    // Thin gold outline
+    ctx.strokeStyle = '#a07800';
+    ctx.lineWidth   = 0.5;
+    ctx.strokeRect(barX - 0.5, barY - 0.5, barWidth + 1, barHeight + 1);
     // Background
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
     ctx.fillRect(barX, barY, barWidth, barHeight);
-    // Health fill — enemies only (player skipped above)
-    ctx.fillStyle = '#ff4444';
-    ctx.fillRect(barX, barY, barWidth * healthFraction, barHeight);
-    // Border
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(barX, barY, barWidth, barHeight);
+    // Health fill — red for enemies
+    const enemyFillW = barWidth * Math.max(0, healthFraction);
+    if (enemyFillW > 0) {
+      ctx.fillStyle = '#cc3333';
+      ctx.fillRect(barX, barY, enemyFillW, barHeight);
+      // Shine
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(barX, barY, enemyFillW, 1);
+    }
     ctx.restore();
   }
+
+  // ── Floating combat text (damage numbers, BLOCKED) ────────────────────────
+  combatText.render(ctx, ox, oy, zoom, nowMs);
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
   deviceCtx.imageSmoothingEnabled = false;
