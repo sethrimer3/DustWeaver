@@ -240,8 +240,8 @@ export function validateRoomJson(data: unknown): ValidationError[] {
   if (obj.mapY !== undefined && typeof obj.mapY !== 'number') {
     errors.push({ path: 'mapY', message: 'Must be a number when provided' });
   }
-  if (obj.lightingEffect !== undefined && obj.lightingEffect !== 'DEFAULT' && obj.lightingEffect !== 'Above') {
-    errors.push({ path: 'lightingEffect', message: 'Must be DEFAULT|Above' });
+  if (obj.lightingEffect !== undefined && obj.lightingEffect !== 'DEFAULT' && obj.lightingEffect !== 'Above' && obj.lightingEffect !== 'DarkRoom') {
+    errors.push({ path: 'lightingEffect', message: 'Must be DEFAULT|Above|DarkRoom' });
   }
   if (typeof obj.widthBlocks !== 'number' || (obj.widthBlocks as number) < 10) {
     errors.push({ path: 'widthBlocks', message: 'Must be a number >= 10' });

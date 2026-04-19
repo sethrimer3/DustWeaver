@@ -794,9 +794,14 @@ export function renderWallSprites(
     coveredBy2x2Keys.add(_tileKey(col + 1, row + 1));
   }
 
-  const defaultLightingDepths = _activeLightingEffect === 'DEFAULT'
+  const defaultLightingDepths = _activeLightingEffect === 'DEFAULT' || _activeLightingEffect === 'DarkRoom'
     ? _getDefaultLightingDepths(wallLayout)
     : null;
+
+  // DarkRoom: the per-tile tinting is skipped entirely.  The DarkRoomOverlay
+  // in the render pipeline covers the full room with a canvas-level darkness
+  // layer, so double-darkening individual blocks would look wrong.
+  const isBlockTintEnabled = _activeLightingEffect !== 'DarkRoom';
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -864,13 +869,15 @@ export function renderWallSprites(
     const tileKey = key;
 
     if (coveredBy2x2Keys.has(tileKey)) {
-      const airDepth = _activeLightingEffect === 'DEFAULT'
-        ? (defaultLightingDepths?.get(tileKey) ?? 0)
-        : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-      const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
-      if (darknessAlpha > 0) {
-        ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
-        ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+      if (isBlockTintEnabled) {
+        const airDepth = _activeLightingEffect === 'DEFAULT'
+          ? (defaultLightingDepths?.get(tileKey) ?? 0)
+          : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+        const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
+        if (darknessAlpha > 0) {
+          ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
+          ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+        }
       }
       continue;
     }
@@ -929,13 +936,15 @@ export function renderWallSprites(
       }
     }
 
-    const airDepth = _activeLightingEffect === 'DEFAULT'
-      ? (defaultLightingDepths?.get(tileKey) ?? 0)
-      : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-    const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
-    if (darknessAlpha > 0) {
-      ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
-      ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+    if (isBlockTintEnabled) {
+      const airDepth = _activeLightingEffect === 'DEFAULT'
+        ? (defaultLightingDepths?.get(tileKey) ?? 0)
+        : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+      const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
+      if (darknessAlpha > 0) {
+        ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
+        ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+      }
     }
 
     // Draw vertex overlays only in world 1+ legacy mode (those worlds have vertex.png).
@@ -990,13 +999,15 @@ export function renderWallSprites(
     }
 
     const tileKey = key;
-    const airDepth = _activeLightingEffect === 'DEFAULT'
-      ? (defaultLightingDepths?.get(tileKey) ?? 0)
-      : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
-    const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
-    if (darknessAlpha > 0) {
-      ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
-      ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+    if (isBlockTintEnabled) {
+      const airDepth = _activeLightingEffect === 'DEFAULT'
+        ? (defaultLightingDepths?.get(tileKey) ?? 0)
+        : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+      const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
+      if (darknessAlpha > 0) {
+        ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
+        ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
+      }
     }
   }
 

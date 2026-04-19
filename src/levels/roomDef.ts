@@ -73,10 +73,14 @@ export type BackgroundId =
 
 /**
  * Lighting model used when shading block tiles in a room.
- * - DEFAULT: distance-to-open-air in any direction (intended behavior)
- * - Above:   legacy top-down depth shading effect
+ * - DEFAULT:  distance-to-open-air in any direction (intended behavior)
+ * - Above:    legacy top-down depth shading effect
+ * - DarkRoom: fully dark room; only explicit light sources illuminate it.
+ *             Block-level tinting is skipped; the darkness overlay in the
+ *             render pipeline covers the entire room and is pierced by
+ *             radial light gradients at glowing decorations and the player.
  */
-export type LightingEffect = 'DEFAULT' | 'Above';
+export type LightingEffect = 'DEFAULT' | 'Above' | 'DarkRoom';
 
 /** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
 export const BLOCK_SIZE_SMALL  = 8;
