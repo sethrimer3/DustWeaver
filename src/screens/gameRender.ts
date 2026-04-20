@@ -26,6 +26,7 @@ import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
+import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
 import {
   isTheroShowcaseRoom,
@@ -265,6 +266,7 @@ export interface RenderFrameContext {
   environmentalDust: EnvironmentalDustLayer;
   skidDebris: SkidDebrisRenderer;
   skillTombRenderer: SkillTombRenderer;
+  skillTombEffectRenderer: SkillTombEffectRenderer;
   bloomSystem: BloomSystem;
   playerCloak: PlayerCloak;
   darkRoomOverlay: DarkRoomOverlay;
@@ -322,7 +324,7 @@ export interface RenderFrameContext {
 export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
-    webglRenderer, environmentalDust, skidDebris, skillTombRenderer, bloomSystem,
+    webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, darkRoomOverlay,
     world, currentRoom,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -443,8 +445,13 @@ export function renderFrame(r: RenderFrameContext): void {
   environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
   skidDebris.render(ctx, ox, oy, zoom);
 
-  // Skill tombs (sprite + dust particles)
+  // Save tombs (sprite + swirling/falling dust particles)
   skillTombRenderer.render(ctx, ox, oy, zoom);
+
+  // Skill tombs — background particles (behind sprite), sprite, then foreground particles
+  skillTombEffectRenderer.renderBehind(ctx, ox, oy, zoom);
+  skillTombEffectRenderer.renderSprite(ctx, ox, oy, zoom);
+  skillTombEffectRenderer.renderFront(ctx, ox, oy, zoom);
 
   // Skill books (collectibles)
   if (isSkillBookSpriteLoaded && progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
