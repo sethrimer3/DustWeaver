@@ -385,23 +385,38 @@ export function renderFrame(r: RenderFrameContext): void {
     currentRoom.backgroundId,
   );
 
+  // Relative camera offset (from room centre) used for procedural background parallax.
+  // When the camera is centred on the room this is 0; it grows as the camera pans.
+  const roomCenterOffsetXPx = virtualWidthPx * 0.5 - (roomWidthWorld * 0.5 * zoom);
+  const roomCenterOffsetYPx = virtualHeightPx * 0.5 - (roomHeightWorld * 0.5 * zoom);
+  const relCameraOffsetXPx = ox - roomCenterOffsetXPx;
+  const relCameraOffsetYPx = oy - roomCenterOffsetYPx;
+
   // ── Thero effect procedural overlays ─────────────────────────────────────
   const renderedTheroBackground = renderTheroBackgroundEffect(
     ctx,
     currentRoom.backgroundId,
     virtualWidthPx,
     virtualHeightPx,
-    performance.now(),
+    nowMs,
+    relCameraOffsetXPx,
+    relCameraOffsetYPx,
   );
   // Legacy showcase rooms still use room-id dispatch when no explicit
   // thero_* background override is present.
   if (!renderedTheroBackground && isTheroShowcaseRoom(currentRoom.id)) {
-    renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
+    renderTheroShowcaseEffect(
+      ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, nowMs,
+      relCameraOffsetXPx, relCameraOffsetYPx,
+    );
   }
 
   // ── Crystalline Cracks procedural background effect ──────────────────────
   if (currentRoom.backgroundId === 'crystallineCracks') {
-    renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
+    renderCrystallineCracksBackground(
+      ctx, virtualWidthPx, virtualHeightPx, nowMs,
+      relCameraOffsetXPx, relCameraOffsetYPx,
+    );
   }
 
   // Walls before cluster indicators so clusters are drawn on top
