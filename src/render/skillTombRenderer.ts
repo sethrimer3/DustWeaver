@@ -48,6 +48,14 @@ const MAX_FALL_OFFSET_REL_WORLD = 80;
 /** Speed at which alpha fades when a particle cannot find a floor (per second). */
 const FADE_SPEED_PER_SEC = 1.5;
 
+/**
+ * Maximum vertical distance (world units) between a grounded particle and the
+ * nearest floor below it before the particle is considered to be off an edge
+ * and is ungrounded.  Walls are defined in integer block units so 1.0 is more
+ * than enough tolerance for floating-point drift.
+ */
+const FLOOR_REVALIDATION_THRESHOLD_WORLD = 1.0;
+
 interface DustParticle {
   /** Current position relative to tomb center (world units). */
   xWorld: number;
@@ -216,7 +224,7 @@ export class SkillTombRenderer {
         } else {
           // Falling / grounded mode
           if (!dp.isGroundedFlag && dp.alphaFade > 0) {
-            dp.vyWorld += 80 * dtSec; // gravity (doubled fall speed)
+            dp.vyWorld += 40 * dtSec; // gravity
             dp.xWorld += dp.vxWorld * dtSec;
             dp.yWorld += dp.vyWorld * dtSec;
 
@@ -246,6 +254,18 @@ export class SkillTombRenderer {
             dp.yWorld = dp.groundYRelWorld; // keep pinned to found floor
             dp.vxWorld *= Math.max(0, 1 - FLOOR_FRICTION_PER_SEC * dtSec);
             if (Math.abs(dp.vxWorld) < 0.3) dp.vxWorld = 0;
+
+            // Re-validate floor under current X: particle may have been pushed
+            // sideways off an edge by particle-particle collision.  If there is
+            // no floor within 1 world unit of the grounded Y, unground it so it
+            // falls to the correct surface below.
+            const absXCheck = tomb.xWorld + dp.xWorld;
+            const absYCheck = tomb.yWorld + dp.groundYRelWorld;
+            const floorYWorld = this.findFloorTopWorld(absXCheck, absYCheck);
+            if (floorYWorld === null || floorYWorld > absYCheck + FLOOR_REVALIDATION_THRESHOLD_WORLD) {
+              dp.isGroundedFlag = false;
+              dp.vyWorld = 0;
+            }
           }
 
           dp.brightness = Math.max(0.2, dp.brightness - 0.5 * dtSec);
