@@ -7,7 +7,7 @@
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType } from './editorState';
 import { EditorTool } from './editorState';
-import { getPlacementPreview } from './editorTools';
+import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow } from './editorTools';
 
 const GRID_COLOR = 'rgba(255,255,255,0.06)';
 const WALL_HIGHLIGHT = 'rgba(100,200,255,0.3)';
@@ -131,12 +131,36 @@ export function renderEditorOverlays(
       isSelected ? 'rgba(255,215,0,0.8)' : 'rgba(255,215,0,0.4)', '✦');
   }
 
+  // ── Decorations ──────────────────────────────────────────────────────────
+  for (const d of (room.decorations ?? [])) {
+    const isSelected = isElementSelected('decoration', d.uid);
+    const emoji = d.kind === 'mushroom' ? '🍄' : d.kind === 'glowGrass' ? '🌿' : '🌱';
+    const color = isSelected ? 'rgba(80,220,130,0.9)' : 'rgba(60,170,90,0.55)';
+    drawMarker(ctx, d.xBlock, d.yBlock, offsetXPx, offsetYPx, zoom, color, emoji);
+  }
+
   // ── Placement preview ────────────────────────────────────────────────────
   if (state.activeTool === EditorTool.Place && state.selectedPaletteItem !== null) {
     const preview = getPlacementPreview(state);
     if (preview !== null) {
       const item = state.selectedPaletteItem;
-      if (item.isRampItem === 1) {
+      if (item.id === 'decoration_mushroom' || item.id === 'decoration_glowgrass' || item.id === 'decoration_vine') {
+        // Decoration preview: compute terrain-snapped target position
+        const isVine = item.id === 'decoration_vine';
+        const targetRow = isVine
+          ? findCeilingBlockRow(room, state.cursorBlockX, state.cursorBlockY)
+          : findFloorBlockRow(room, state.cursorBlockX, state.cursorBlockY);
+        if (targetRow !== null) {
+          const emoji = item.id === 'decoration_mushroom' ? '🍄' : item.id === 'decoration_glowgrass' ? '🌿' : '🌱';
+          // Highlight the surface block
+          const surfaceColor = 'rgba(80,220,130,0.2)';
+          drawBlockRect(ctx, state.cursorBlockX, targetRow, 1, 1, offsetXPx, offsetYPx, zoom, surfaceColor, 1);
+          drawMarker(ctx, state.cursorBlockX, targetRow, offsetXPx, offsetYPx, zoom, 'rgba(80,220,130,0.5)', emoji);
+        } else {
+          // No valid surface — show warning color on cursor
+          drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1, offsetXPx, offsetYPx, zoom, 'rgba(255,60,60,0.2)', 1);
+        }
+      } else if (item.isRampItem === 1) {
         // Show ramp preview as a triangle with current orientation
         const base = state.placementRotationSteps % 4;
         const rampOri = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
@@ -231,6 +255,7 @@ function buildElementTooltipId(type: SelectedElementType, uid: number): string {
     skillTomb:        'skill_tomb',
     dustPile:         'dust_pile',
     grasshopperArea:  'grasshopper_area',
+    decoration:       'decoration',
     playerSpawn:      'player_spawn',
   };
   const base = prefix[type] ?? type;
@@ -256,6 +281,15 @@ function buildElementTypeName(
       if (e.isGrappleHunterFlag === 1)return 'Grapple Hunter';
       return 'Enemy';
     }
+  }
+  if (type === 'decoration') {
+    const d = (room.decorations ?? []).find(x => x.uid === uid);
+    if (d) {
+      if (d.kind === 'mushroom')  return 'Glow Mushroom';
+      if (d.kind === 'glowGrass') return 'Glow Grass';
+      if (d.kind === 'vine')      return 'Glow Vine';
+    }
+    return 'Decoration';
   }
   const names: Partial<Record<SelectedElementType, string>> = {
     wall:        'Wall',

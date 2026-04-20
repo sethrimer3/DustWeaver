@@ -1,9 +1,12 @@
 /**
- * Wall decorations — pixelated glowing moss and mushrooms.
+ * Wall decorations — pixelated glowing mushrooms, grass tufts, and hanging vines.
  *
- * Decorations are automatically placed on horizontal floor tile surfaces
- * (tiles whose tile-below is open air) using a deterministic hash seeded
- * by (col, row).  The system is purely visual and lives in the render layer.
+ * Decorations are authored in the room editor and stored as part of room data.
+ * They are no longer auto-generated procedurally.
+ *
+ * - 'mushroom'  — sits on the TOP surface of a floor block; grows upward.
+ * - 'glowGrass' — sits on the TOP surface of a floor block; grows upward.
+ * - 'vine'      — hangs from the BOTTOM surface of a ceiling block; hangs downward.
  *
  * In DarkRoom lighting mode these decorations serve as point light sources:
  * `collectDecorationLights()` converts their world-space positions to
@@ -15,29 +18,31 @@
  * this is render-side code and wall-clock time is permitted here.
  */
 
-import type { WallSnapshot } from '../snapshot';
+import type { RoomDecorationDef, DecorationKind } from '../../levels/roomDef';
 import type { BloomSystem } from './bloomSystem';
 import type { LightSourcePx } from './darkRoomOverlay';
 
 // ── Decoration types ──────────────────────────────────────────────────────────
 
-export type DecorKind = 'moss' | 'mushroom';
+/** Re-export the canonical decoration kind type for render-layer consumers. */
+export type { DecorationKind };
 
 export interface WallDecoration {
-  /** World-space X of the tile left edge (col * blockSizePx). */
+  /** World-space X of the anchor block's left edge (xBlock * blockSizePx). */
   readonly worldLeftPx: number;
-  /** World-space Y of the tile bottom edge ((row + 1) * blockSizePx). */
-  readonly worldBottomPx: number;
+  /**
+   * World-space Y of the decoration's surface anchor:
+   * - For 'mushroom' / 'glowGrass': top surface of the floor block (yBlock * blockSizePx).
+   * - For 'vine': bottom surface of the ceiling block ((yBlock + 1) * blockSizePx).
+   *
+   * Mushroom/grass draw UPWARD from this Y; vines draw DOWNWARD.
+   */
+  readonly worldAnchorYPx: number;
   /** Visual kind. */
-  readonly kind: DecorKind;
-  /** Deterministic seed derived from tile coordinates. */
+  readonly kind: DecorationKind;
+  /** Deterministic seed derived from block coordinates. */
   readonly seed: number;
 }
-
-// ── Cache ─────────────────────────────────────────────────────────────────────
-
-/** Decoration list keyed by a lightweight wall-layout signature. */
-const _decoCache = new Map<string, WallDecoration[]>();
 
 // ── Deterministic hash ────────────────────────────────────────────────────────
 
@@ -46,102 +51,47 @@ const _decoCache = new Map<string, WallDecoration[]>();
  * Returns a non-negative number.  For decoration use only (not sim RNG).
  */
 function _hash(a: number, b: number, c: number): number {
-  // Combine with mixing constants similar to PCG / Murmur3
   let h = (Math.imul(a, 0x6c62272e) ^ Math.imul(b, 0x9e3779b9) ^ Math.imul(c, 0x517cc1b7)) >>> 0;
   h = (Math.imul(h ^ (h >>> 16), 0x45d9f3b)) >>> 0;
   h = (h ^ (h >>> 13)) >>> 0;
   return h;
 }
 
-// ── Occupancy helpers ─────────────────────────────────────────────────────────
-
-function _buildOccupied(walls: WallSnapshot, blockSizePx: number): Set<string> {
-  const occupied = new Set<string>();
-  for (let wi = 0; wi < walls.count; wi++) {
-    if (walls.isInvisibleFlag[wi] === 1) continue;
-    if (walls.isPlatformFlag[wi] === 1) continue;
-    if (walls.rampOrientationIndex[wi] !== 255) continue; // ramps skipped
-
-    const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
-    const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
-    const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
-    const rowCount = Math.max(1, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
-
-    for (let r = 0; r < rowCount; r++) {
-      for (let c = 0; c < colCount; c++) {
-        occupied.add(`${colStart + c},${rowStart + r}`);
-      }
-    }
-  }
-  return occupied;
-}
-
-function _isOccupied(occupied: Set<string>, col: number, row: number): boolean {
-  return occupied.has(`${col},${row}`);
-}
-
-// ── Public API: compute decorations ──────────────────────────────────────────
+// ── Public API: build decoration list from room data ─────────────────────────
 
 /**
- * Returns (from cache or freshly computed) a list of wall decorations for the
- * given wall snapshot.  The list is stable as long as the wall geometry does
- * not change.
+ * Converts room decoration definitions into render-ready WallDecoration objects.
+ * The seed for each decoration is derived deterministically from its position and kind.
  */
-export function getWallDecorations(
-  walls: WallSnapshot,
+export function buildRoomDecorations(
+  decorations: readonly RoomDecorationDef[],
   blockSizePx: number,
-): readonly WallDecoration[] {
-  // Build a lightweight change-detection signature.
-  let sig = `${blockSizePx}|${walls.count}`;
-  for (let wi = 0; wi < walls.count; wi++) {
-    sig += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]}`;
+): WallDecoration[] {
+  const result: WallDecoration[] = [];
+  for (let i = 0; i < decorations.length; i++) {
+    const d = decorations[i];
+    const kindCode = d.kind === 'mushroom' ? 1 : d.kind === 'glowGrass' ? 2 : 3;
+    const seed = _hash(d.xBlock, d.yBlock, kindCode);
+
+    const worldLeftPx = d.xBlock * blockSizePx;
+    // Floor decorations anchor to the TOP surface of their block (grows upward).
+    // Vine decorations anchor to the BOTTOM surface of their block (hangs downward).
+    const worldAnchorYPx = d.kind === 'vine'
+      ? (d.yBlock + 1) * blockSizePx
+      : d.yBlock * blockSizePx;
+
+    result.push({ worldLeftPx, worldAnchorYPx, kind: d.kind, seed });
   }
-
-  const cached = _decoCache.get(sig);
-  if (cached !== undefined) return cached;
-
-  const occupied = _buildOccupied(walls, blockSizePx);
-  const decorations: WallDecoration[] = [];
-
-  for (const key of occupied) {
-    const commaIdx = key.indexOf(',');
-    const col = parseInt(key.slice(0, commaIdx), 10);
-    const row = parseInt(key.slice(commaIdx + 1), 10);
-
-    // Only place decorations on top surfaces (tile below is open air).
-    if (_isOccupied(occupied, col, row + 1)) continue;
-
-    const h = _hash(col, row, 0x4d726b5e);
-    const roll = h % 100;
-    // 70 % nothing | 20 % moss | 10 % mushroom
-    if (roll < 70) continue;
-
-    const kind: DecorKind = roll < 90 ? 'moss' : 'mushroom';
-    decorations.push({
-      worldLeftPx:   col * blockSizePx,
-      worldBottomPx: (row + 1) * blockSizePx,
-      kind,
-      seed: h,
-    });
-  }
-
-  // Evict oldest entry when cache grows large.
-  if (_decoCache.size >= 8) {
-    const firstKey = _decoCache.keys().next().value;
-    if (firstKey !== undefined) _decoCache.delete(firstKey);
-  }
-  _decoCache.set(sig, decorations);
-  return decorations;
+  return result;
 }
 
 // ── Pixel-art drawing helpers ─────────────────────────────────────────────────
 
 /**
- * Draws a pixelated moss tuft at the screen position (sx, sy), where sy is
- * the floor surface (bottom of the tile in screen space, i.e. the decorations
- * grow upward from sy).  px is the size of one virtual pixel.
+ * Draws a pixelated glowing-grass tuft at screen position (sx, sy).
+ * sy is the floor surface; the grass grows UPWARD from sy (toward smaller Y).
  */
-function _drawMoss(
+function _drawGlowGrass(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
@@ -151,16 +101,13 @@ function _drawMoss(
 ): void {
   const px  = Math.max(1, Math.round(scalePx));
   const bw  = Math.round(blockSizePx * scalePx);
-  // 3–6 small grass tufts spread across the tile bottom.
   const count = 3 + (seed & 3);
   for (let i = 0; i < count; i++) {
-    const h2      = _hash(seed, i, 0xabcde123);
-    const offX    = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - px));
-    const tufH    = 1 + ((h2 >> 8) & 0x3);   // 1–4 px tall
-    // Stem — dark forest green
+    const h2   = _hash(seed, i, 0xabcde123);
+    const offX = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - px));
+    const tufH = 1 + ((h2 >> 8) & 0x3);
     ctx.fillStyle = '#1d5a26';
     ctx.fillRect(sx + offX, sy - tufH * px, px, tufH * px);
-    // Tip pixel — bright green highlight
     ctx.fillStyle = '#3db048';
     ctx.fillRect(sx + offX, sy - tufH * px, px, px);
   }
@@ -168,7 +115,7 @@ function _drawMoss(
 
 /**
  * Draws a tiny pixelated mushroom at screen position (sx, sy).
- * The mushroom grows upward from the floor surface at sy.
+ * sy is the floor surface; the mushroom grows UPWARD from sy.
  */
 function _drawMushroom(
   ctx: CanvasRenderingContext2D,
@@ -181,30 +128,60 @@ function _drawMushroom(
   const px     = Math.max(1, Math.round(scalePx));
   const bw     = Math.round(blockSizePx * scalePx);
   const h2     = _hash(seed, 0, 0xf00dface);
-  // Horizontal offset: keep cap (3 px wide) inside tile bounds.
   const offX   = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - 3 * px)) + px;
-  const stemH  = 2 + (h2 & 1);     // 2–3 px stem
-  const capW   = 3;                 // always 3 px wide cap
+  const stemH  = 2 + (h2 & 1);
+  const capW   = 3;
 
-  // Stem — pale ivory
   ctx.fillStyle = '#c8b89a';
   ctx.fillRect(sx + offX, sy - stemH * px, px, stemH * px);
 
-  // Cap — either bioluminescent purple or teal depending on seed bit
-  const isBlue     = ((h2 >> 4) & 1) === 0;
-  const capColor   = isBlue ? '#7a58b8' : '#4aaa7a';
-  ctx.fillStyle    = capColor;
+  const isBlue   = ((h2 >> 4) & 1) === 0;
+  const capColor = isBlue ? '#7a58b8' : '#4aaa7a';
+  ctx.fillStyle  = capColor;
   ctx.fillRect(sx + offX - px, sy - (stemH + 2) * px, capW * px, 2 * px);
 
-  // Small bright dot on cap for a spore/glow highlight
   ctx.fillStyle = 'rgba(240,255,200,0.85)';
   ctx.fillRect(sx + offX, sy - (stemH + 2) * px, px, px);
+}
+
+/**
+ * Draws a glowing vine at screen position (sx, sy).
+ * sy is the ceiling bottom surface; the vine hangs DOWNWARD from sy (toward larger Y).
+ */
+function _drawVine(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  blockSizePx: number,
+  scalePx: number,
+  seed: number,
+): void {
+  const px   = Math.max(1, Math.round(scalePx));
+  const bw   = Math.round(blockSizePx * scalePx);
+  const count = 2 + (seed & 3);
+  for (let i = 0; i < count; i++) {
+    const h2      = _hash(seed, i, 0xc0ffee77);
+    const offX    = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - px));
+    const vineH   = 3 + ((h2 >> 8) & 0x7);
+    // Stem — dark forest green
+    ctx.fillStyle = '#175520';
+    ctx.fillRect(sx + offX, sy, px, vineH * px);
+    // Tip — bright glow
+    ctx.fillStyle = '#4fd46e';
+    ctx.fillRect(sx + offX, sy + (vineH - 1) * px, px, px);
+    // Small leaf pixel midway
+    if (vineH >= 4) {
+      const midY = Math.floor(vineH / 2);
+      ctx.fillStyle = '#2e9944';
+      ctx.fillRect(sx + offX - px, sy + midY * px, 2 * px, px);
+    }
+  }
 }
 
 // ── Public API: render & lights ───────────────────────────────────────────────
 
 /**
- * Renders all decoration sprites onto `ctx` and returns nothing.
+ * Renders all decoration sprites onto `ctx`.
  * Call this BEFORE `addDecorationBloom` and BEFORE the dark room overlay.
  */
 export function renderDecorationSprites(
@@ -217,13 +194,15 @@ export function renderDecorationSprites(
 ): void {
   for (let i = 0; i < decorations.length; i++) {
     const d  = decorations[i];
-    const sx = Math.round(d.worldLeftPx   * scalePx + offsetXPx);
-    const sy = Math.round(d.worldBottomPx * scalePx + offsetYPx);
+    const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
+    const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
 
-    if (d.kind === 'moss') {
-      _drawMoss(ctx, sx, sy, blockSizePx, scalePx, d.seed);
-    } else {
+    if (d.kind === 'glowGrass') {
+      _drawGlowGrass(ctx, sx, sy, blockSizePx, scalePx, d.seed);
+    } else if (d.kind === 'mushroom') {
       _drawMushroom(ctx, sx, sy, blockSizePx, scalePx, d.seed);
+    } else {
+      _drawVine(ctx, sx, sy, blockSizePx, scalePx, d.seed);
     }
   }
 }
@@ -244,10 +223,10 @@ export function addDecorationBloom(
 ): void {
   for (let i = 0; i < decorations.length; i++) {
     const d  = decorations[i];
-    const sx = Math.round(d.worldLeftPx   * scalePx + offsetXPx);
-    const sy = Math.round(d.worldBottomPx * scalePx + offsetYPx);
+    const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
+    const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
 
-    if (d.kind === 'moss') {
+    if (d.kind === 'glowGrass') {
       const centerXPx = sx + Math.round(blockSizePx * scalePx * 0.5);
       const centerYPx = sy - Math.round(2 * scalePx);
       const pulse     = 0.8 + 0.2 * Math.sin(nowMs * 0.0011 + d.seed * 0.013);
@@ -261,14 +240,13 @@ export function addDecorationBloom(
           color:     '#22aa44',
         },
       });
-    } else {
-      // Mushroom: derive cap position the same way as _drawMushroom.
+    } else if (d.kind === 'mushroom') {
       const h2       = _hash(d.seed, 0, 0xf00dface);
       const bw       = Math.round(blockSizePx * scalePx);
       const offX     = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - 3 * Math.max(1, Math.round(scalePx)))) + Math.max(1, Math.round(scalePx));
       const stemH    = 2 + (h2 & 1);
       const px       = Math.max(1, Math.round(scalePx));
-      const capCX    = sx + offX + px;   // approximate cap centre X
+      const capCX    = sx + offX + px;
       const capCY    = sy - (stemH + 1) * px;
       const isBlue   = ((h2 >> 4) & 1) === 0;
       const glowColor = isBlue ? '#8860e0' : '#44cc88';
@@ -281,6 +259,26 @@ export function addDecorationBloom(
           enabled:   true,
           intensity: 0.55 * pulse,
           color:     glowColor,
+        },
+      });
+    } else {
+      // Vine: glow at the tip (bottom) of the longest strand
+      const h2    = _hash(d.seed, 0, 0xc0ffee77);
+      const bw    = Math.round(blockSizePx * scalePx);
+      const offX  = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - Math.max(1, Math.round(scalePx))));
+      const vineH = 3 + ((h2 >> 8) & 0x7);
+      const px    = Math.max(1, Math.round(scalePx));
+      const tipCX = sx + offX;
+      const tipCY = sy + vineH * px;
+      const pulse = 0.8 + 0.2 * Math.sin(nowMs * 0.0013 + d.seed * 0.019);
+      bloomSystem.glowPass.drawCircle({
+        x:    tipCX,
+        y:    tipCY,
+        radius: 5 * scalePx,
+        glow: {
+          enabled:   true,
+          intensity: 0.30 * pulse,
+          color:     '#2ad46a',
         },
       });
     }
@@ -301,29 +299,43 @@ export function collectDecorationLights(
   const lights: LightSourcePx[] = [];
   for (let i = 0; i < decorations.length; i++) {
     const d  = decorations[i];
-    const sx = Math.round(d.worldLeftPx   * scalePx + offsetXPx);
-    const sy = Math.round(d.worldBottomPx * scalePx + offsetYPx);
+    const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
+    const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
 
-    if (d.kind === 'moss') {
+    if (d.kind === 'glowGrass') {
       lights.push({
-        xPx:          sx + Math.round(blockSizePx * scalePx * 0.5),
-        yPx:          sy - Math.round(2 * scalePx),
-        radiusPx:     14 * scalePx,
+        xPx:           sx + Math.round(blockSizePx * scalePx * 0.5),
+        yPx:           sy - Math.round(2 * scalePx),
+        radiusPx:      14 * scalePx,
         innerFraction: 0.1,
       });
-    } else {
-      const h2   = _hash(d.seed, 0, 0xf00dface);
-      const bw   = Math.round(blockSizePx * scalePx);
-      const px   = Math.max(1, Math.round(scalePx));
-      const offX = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - 3 * px)) + px;
+    } else if (d.kind === 'mushroom') {
+      const h2    = _hash(d.seed, 0, 0xf00dface);
+      const bw    = Math.round(blockSizePx * scalePx);
+      const px    = Math.max(1, Math.round(scalePx));
+      const offX  = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - 3 * px)) + px;
       const stemH = 2 + (h2 & 1);
       lights.push({
-        xPx:          sx + offX + px,
-        yPx:          sy - (stemH + 1) * px,
-        radiusPx:     26 * scalePx,
+        xPx:           sx + offX + px,
+        yPx:           sy - (stemH + 1) * px,
+        radiusPx:      26 * scalePx,
         innerFraction: 0.08,
+      });
+    } else {
+      // Vine: light at tip
+      const h2    = _hash(d.seed, 0, 0xc0ffee77);
+      const bw    = Math.round(blockSizePx * scalePx);
+      const offX  = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - Math.max(1, Math.round(scalePx))));
+      const vineH = 3 + ((h2 >> 8) & 0x7);
+      const px    = Math.max(1, Math.round(scalePx));
+      lights.push({
+        xPx:           sx + offX,
+        yPx:           sy + vineH * px,
+        radiusPx:      18 * scalePx,
+        innerFraction: 0.1,
       });
     }
   }
   return lights;
 }
+
