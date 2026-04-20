@@ -48,6 +48,14 @@ const MAX_FALL_OFFSET_REL_WORLD = 80;
 /** Speed at which alpha fades when a particle cannot find a floor (per second). */
 const FADE_SPEED_PER_SEC = 1.5;
 
+/**
+ * Maximum vertical distance (world units) between a grounded particle and the
+ * nearest floor below it before the particle is considered to be off an edge
+ * and is ungrounded.  Walls are defined in integer block units so 1.0 is more
+ * than enough tolerance for floating-point drift.
+ */
+const FLOOR_REVALIDATION_THRESHOLD_WORLD = 1.0;
+
 interface DustParticle {
   /** Current position relative to tomb center (world units). */
   xWorld: number;
@@ -253,8 +261,8 @@ export class SkillTombRenderer {
             // falls to the correct surface below.
             const absXCheck = tomb.xWorld + dp.xWorld;
             const absYCheck = tomb.yWorld + dp.groundYRelWorld;
-            const recheck = this.findFloorTopWorld(absXCheck, absYCheck);
-            if (recheck === null || recheck > absYCheck + 1.0) {
+            const floorYWorld = this.findFloorTopWorld(absXCheck, absYCheck);
+            if (floorYWorld === null || floorYWorld > absYCheck + FLOOR_REVALIDATION_THRESHOLD_WORLD) {
               dp.isGroundedFlag = false;
               dp.vyWorld = 0;
             }
