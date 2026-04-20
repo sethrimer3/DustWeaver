@@ -25,6 +25,7 @@ import { renderWorldBackground } from '../render/backgroundRenderer';
 import { showDeathScreen } from '../ui/deathScreen';
 import { showSkillTombMenu } from '../ui/skillTombMenu';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
+import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
@@ -394,8 +395,11 @@ export function startGameScreen(
     // Reset procedural cloak on room transition
     playerCloak.reset();
 
-    // Init skill tomb renderer
-    skillTombRenderer.init(room.saveTombs);
+    // Init save tomb renderer (with room walls for floor detection)
+    skillTombRenderer.init(room.saveTombs, room.walls);
+
+    // Init skill tomb effect renderer
+    skillTombEffectRenderer.init(room.skillTombs);
 
     // Track explored room
     if (progress && !progress.exploredRoomIds.includes(room.id)) {
@@ -415,6 +419,7 @@ export function startGameScreen(
   const environmentalDust = new EnvironmentalDustLayer();
   const skidDebris = new SkidDebrisRenderer();
   const skillTombRenderer = new SkillTombRenderer();
+  const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();
 
   // ── Health bar state ─────────────────────────────────────────────────────
@@ -824,6 +829,9 @@ export function startGameScreen(
         drawTunnelDarkness(ctx, currentRoom, eox, eoy, zoom);
         environmentalDust.render(ctx, eox, eoy, zoom, true);
         skillTombRenderer.render(ctx, eox, eoy, zoom);
+        skillTombEffectRenderer.renderBehind(ctx, eox, eoy, zoom);
+        skillTombEffectRenderer.renderSprite(ctx, eox, eoy, zoom);
+        skillTombEffectRenderer.renderFront(ctx, eox, eoy, zoom);
 
         if (!webglRenderer.isAvailable) {
           renderParticles(ctx, snapshot, eox, eoy, zoom);
@@ -954,14 +962,25 @@ export function startGameScreen(
         }
       } else if (cmd.kind === CommandKind.Interact) {
         interactInputPulseMs = 150;
-        // Check if player is near a skill tomb
         const playerForInteract = world.clusters[0];
         if (playerForInteract !== undefined && playerForInteract.isAliveFlag === 1) {
+          // Check if player is near a save tomb (opens the save menu)
           const nearbyIndex = skillTombRenderer.getNearbyTombIndex(
             playerForInteract.positionXWorld, playerForInteract.positionYWorld,
           );
           if (nearbyIndex >= 0) {
             interactTriggered = true;
+          }
+          // Check if player is near a skill tomb (unlocks a dust weave)
+          const nearbySkillTombIndex = skillTombEffectRenderer.getNearbyTombIndex(
+            playerForInteract.positionXWorld, playerForInteract.positionYWorld,
+          );
+          if (nearbySkillTombIndex >= 0 && progress) {
+            const roomSkillTombs = currentRoom.skillTombs ?? [];
+            const st = roomSkillTombs[nearbySkillTombIndex];
+            if (st !== undefined) {
+              unlockActiveWeave(progress, st.weaveId);
+            }
           }
         }
       }
@@ -1038,6 +1057,7 @@ export function startGameScreen(
     const playerForTomb = world.clusters[0];
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
+      skillTombEffectRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
       // Skillbook pickup (lobby progression): triggers the early auto-assignment.
       // Grants Cycle passive, Golden Dust, and 2 containers on first pickup.
@@ -1063,23 +1083,6 @@ export function startGameScreen(
               levelRng,
             );
             break;
-          }
-        }
-      }
-
-      // Skill Tomb interaction: unlocks a dust weave when the player walks close.
-      // Each tomb is one-time per session (not per-game-save); once unlocked it stays
-      // in progress.unlockedActiveWeaves and the pickup is idempotent.
-      if (progress) {
-        const roomSkillTombs = currentRoom.skillTombs ?? [];
-        for (let i = 0; i < roomSkillTombs.length; i++) {
-          const st = roomSkillTombs[i];
-          const tx = (st.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-          const ty = (st.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-          const dx = playerForTomb.positionXWorld - tx;
-          const dy = playerForTomb.positionYWorld - ty;
-          if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
-            unlockActiveWeave(progress, st.weaveId);
           }
         }
       }
@@ -1223,7 +1226,7 @@ export function startGameScreen(
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
-      webglRenderer, environmentalDust, skidDebris, skillTombRenderer, bloomSystem,
+      webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, darkRoomOverlay,
       world, currentRoom,
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,

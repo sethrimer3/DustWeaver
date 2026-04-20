@@ -308,7 +308,7 @@ export function tickPlayerMovement(
         const isInitialWallJump = cluster.hasUsedWallJumpSinceResetFlag === 0;
         const wallJumpY = isInitialWallJump
           ? wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD
-          : wallJumpYBase - 10.0;
+          : wallJumpYBase - 20.0;
         // wallDir = +1 if wall is to the right, -1 if wall is to the left
         const wallDir = canJumpFromRight ? 1 : -1;
         // Launch away: strong diagonal push prevents same-wall climbing.

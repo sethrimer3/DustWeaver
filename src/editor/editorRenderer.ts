@@ -28,6 +28,8 @@ const SPAWN_COLOR = 'rgba(255,220,50,0.5)';
 const SPAWN_SELECTED = 'rgba(255,220,50,0.9)';
 const TOMB_COLOR = 'rgba(212,168,75,0.5)';
 const TOMB_SELECTED = 'rgba(212,168,75,0.9)';
+const SKILL_TOMB_COLOR = 'rgba(120,80,220,0.55)';
+const SKILL_TOMB_SELECTED = 'rgba(160,120,255,0.9)';
 const PREVIEW_COLOR = 'rgba(0,200,255,0.25)';
 const PREVIEW_RAMP_COLOR = 'rgba(80,255,80,0.35)';
 const PREVIEW_PLATFORM_COLOR = 'rgba(255,200,50,0.4)';
@@ -35,6 +37,13 @@ const PREVIEW_PILLAR_HALF_COLOR = 'rgba(180,130,255,0.35)';
 const CURSOR_COLOR = 'rgba(255,255,255,0.4)';
 const SELECTION_BOX_COLOR = 'rgba(100,200,255,0.25)';
 const SELECTION_BOX_BORDER = 'rgba(100,200,255,0.7)';
+
+/** Footprint size of a save tomb in block units (sprite is 2 wide × 3 tall, centered). */
+const SAVE_TOMB_FOOTPRINT_W_BLOCKS = 2;
+const SAVE_TOMB_FOOTPRINT_H_BLOCKS = 3;
+/** Footprint size of a skill tomb in block units (sprite is 2 wide × 2 tall, centered). */
+const SKILL_TOMB_FOOTPRINT_W_BLOCKS = 2;
+const SKILL_TOMB_FOOTPRINT_H_BLOCKS = 2;
 
 const BS = BLOCK_SIZE_MEDIUM;
 
@@ -113,15 +122,25 @@ export function renderEditorOverlays(
   // ── Save tombs ──────────────────────────────────────────────────────────
   for (const s of room.saveTombs) {
     const isSelected = isElementSelected('saveTomb', s.uid);
-    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom,
-      isSelected ? TOMB_SELECTED : TOMB_COLOR, '⛩');
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'saveTomb' && state.hoverElement.uid === s.uid;
+    const color = isSelected ? TOMB_SELECTED : TOMB_COLOR;
+    drawObjectFootprint(ctx, s.xBlock, s.yBlock,
+      SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
+      offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
+    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '⛩');
   }
 
   // ── Skill tombs (dust skill unlocks) ────────────────────────────────────
   for (const s of room.skillTombs) {
     const isSelected = isElementSelected('skillTomb', s.uid);
-    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom,
-      isSelected ? 'rgba(160,120,255,0.9)' : 'rgba(120,80,220,0.55)', '✦');
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'skillTomb' && state.hoverElement.uid === s.uid;
+    const color = isSelected ? SKILL_TOMB_SELECTED : SKILL_TOMB_COLOR;
+    drawObjectFootprint(ctx, s.xBlock, s.yBlock,
+      SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
+      offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
+    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '✦');
   }
 
   // ── Dust piles ──────────────────────────────────────────────────────────
@@ -202,6 +221,18 @@ export function renderEditorOverlays(
           isPillarHalfWidthFlag: 1,
         };
         drawHalfPillarRect(ctx, previewWall, offsetXPx, offsetYPx, zoom, PREVIEW_PILLAR_HALF_COLOR);
+      } else if (item.id === 'save_tomb') {
+        drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY,
+          SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
+          offsetXPx, offsetYPx, zoom, 'rgba(212,168,75,0.35)', 2);
+        drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+          'rgba(212,168,75,0.5)', '⛩');
+      } else if (item.id === 'skill_tomb') {
+        drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY,
+          SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
+          offsetXPx, offsetYPx, zoom, 'rgba(120,80,220,0.35)', 2);
+        drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+          'rgba(120,80,220,0.55)', '✦');
       } else {
         drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
           preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 2);
@@ -537,6 +568,35 @@ function drawMarker(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(emoji, cx, cy);
+}
+
+/**
+ * Draws a filled + outlined footprint rectangle for an object whose sprite is
+ * centered on the block at (xBlock, yBlock).  The object occupies
+ * (wBlocks × hBlocks) blocks centered on the block-center point.
+ */
+function drawObjectFootprint(
+  ctx: CanvasRenderingContext2D,
+  xBlock: number, yBlock: number,
+  wBlocks: number, hBlocks: number,
+  ox: number, oy: number, zoom: number,
+  color: string, lineWidth: number,
+): void {
+  // Center of the anchor block in pixel space
+  const cx = (xBlock + 0.5) * BS * zoom + ox;
+  const cy = (yBlock + 0.5) * BS * zoom + oy;
+  const halfW = (wBlocks / 2) * BS * zoom;
+  const halfH = (hBlocks / 2) * BS * zoom;
+  const x = cx - halfW;
+  const y = cy - halfH;
+  const w = wBlocks * BS * zoom;
+  const h = hBlocks * BS * zoom;
+
+  ctx.fillStyle = color.replace(/[\d.]+\)$/, '0.12)');
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = color.replace(/[\d.]+\)$/, '1)');
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(x, y, w, h);
 }
 
 function drawTransitionZone(
