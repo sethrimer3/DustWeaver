@@ -104,8 +104,9 @@ export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] 
 
 /** Available lighting models for the editor dropdown. */
 export const LIGHTING_OPTIONS: readonly { id: LightingEffect; label: string }[] = [
-  { id: 'DEFAULT', label: 'DEFAULT' },
-  { id: 'Above', label: 'Above' },
+  { id: 'DEFAULT',  label: 'DEFAULT' },
+  { id: 'Above',    label: 'Above' },
+  { id: 'DarkRoom', label: 'Dark Room' },
 ];
 
 /** Available fade color options for room transitions. */

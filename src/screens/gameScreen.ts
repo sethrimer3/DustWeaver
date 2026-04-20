@@ -35,6 +35,7 @@ import { getSelectedRenderSize, getMusicVolume, getSfxVolume } from '../ui/rende
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { BloomSystem } from '../render/effects/bloomSystem';
+import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
 import { performEarlyAutoAssignment, unlockActiveWeave } from '../progression/unlocks';
@@ -120,6 +121,7 @@ export function startGameScreen(
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
   const bloomSystem = new BloomSystem(DEFAULT_BLOOM_CONFIG);
+  const darkRoomOverlay = new DarkRoomOverlay();
 
   // ── Weave loadout (replaces flat particle loadout for combat) ──────────
   // Initialize from progress if available, otherwise create default
@@ -156,6 +158,7 @@ export function startGameScreen(
       webglRenderer.resize(virtualWidthPx, virtualHeightPx);
     }
     bloomSystem.resize(virtualWidthPx, virtualHeightPx);
+    darkRoomOverlay.resize(virtualWidthPx, virtualHeightPx);
   }
 
   resizeCanvas();
@@ -1221,7 +1224,7 @@ export function startGameScreen(
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, skillTombRenderer, bloomSystem,
-      playerCloak,
+      playerCloak, darkRoomOverlay,
       world, currentRoom,
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,
       bgColor, isDebugMode, hudState, inputState,

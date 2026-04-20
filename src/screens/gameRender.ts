@@ -34,6 +34,13 @@ import {
   renderCrystallineCracksBackground,
 } from '../render/effects/theroEffectManager';
 import type { BloomSystem } from '../render/effects/bloomSystem';
+import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
+import {
+  getWallDecorations,
+  renderDecorationSprites,
+  addDecorationBloom,
+  collectDecorationLights,
+} from '../render/effects/wallDecorations';
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
@@ -260,6 +267,7 @@ export interface RenderFrameContext {
   skillTombRenderer: SkillTombRenderer;
   bloomSystem: BloomSystem;
   playerCloak: PlayerCloak;
+  darkRoomOverlay: DarkRoomOverlay;
 
   // World / room
   world: WorldState;
@@ -315,7 +323,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, skillTombRenderer, bloomSystem,
-    playerCloak,
+    playerCloak, darkRoomOverlay,
     world, currentRoom,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
     bgColor, isDebugMode, hudState, inputState,
@@ -397,6 +405,14 @@ export function renderFrame(r: RenderFrameContext): void {
   // Walls before cluster indicators so clusters are drawn on top
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
 
+  // ── Wall decorations (glowing moss & mushrooms) ──────────────────────────
+  // Pre-computed and cached per wall signature; rendered after walls so they
+  // appear on top of tile surfaces.  Bloom and light source data are
+  // collected here for use later in the frame.
+  const isDarkRoom = currentRoom.lightingEffect === 'DarkRoom';
+  const wallDecorations = getWallDecorations(snapshot.walls, BLOCK_SIZE_SMALL);
+  renderDecorationSprites(ctx, wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
+
   // Grapple influence visuals (golden circle + edge glow) drawn on top of walls
   // but behind clusters/particles so they don't obscure the action.
   renderGrappleInfluenceVisuals(
@@ -417,6 +433,9 @@ export function renderFrame(r: RenderFrameContext): void {
   renderGrapple(ctx, snapshot, ox, oy, zoom);
   drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
   drawParticleGlow(bloomSystem, snapshot, ox, oy, zoom);
+  // Decoration bloom — always added (even outside DarkRoom) so moss/mushrooms
+  // visibly glow with the atmospheric bloom pass on any lighting setting.
+  addDecorationBloom(bloomSystem, wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, nowMs);
 
   // Tunnel darkness overlays
   drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
@@ -484,6 +503,44 @@ export function renderFrame(r: RenderFrameContext): void {
   // WebGL renders to its own offscreen canvas at virtual resolution)
   if (!webglRenderer.isAvailable) {
     renderParticles(ctx, snapshot, ox, oy, zoom);
+  }
+
+  // ── Dark room overlay (applied last, inside the room clip) ───────────────
+  // Covers the entire room with a near-opaque darkness layer, then "punches"
+  // radial light holes at every light source so only illuminated areas show.
+  // The bloom pass (composited later on the device canvas) adds atmospheric
+  // glow on top of the darkness, making light sources feel warm and radiant.
+  if (isDarkRoom) {
+    const lights = collectDecorationLights(wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
+
+    // Player emits a personal lantern-sized light.
+    const playerSnap = snapshot.clusters.find(c => c.isPlayerFlag === 1 && c.isAliveFlag === 1);
+    if (playerSnap !== undefined) {
+      lights.push({
+        xPx:          playerSnap.positionXWorld * zoom + ox,
+        yPx:          playerSnap.positionYWorld * zoom + oy,
+        radiusPx:     38 * zoom,
+        innerFraction: 0.18,
+      });
+    }
+
+    // Alive Physical (golden) dust particles each contribute a small light.
+    const MAX_PARTICLE_LIGHTS = 24;
+    let particleLightCount = 0;
+    const parts = snapshot.particles;
+    for (let pi = 0; pi < parts.particleCount && particleLightCount < MAX_PARTICLE_LIGHTS; pi++) {
+      if (parts.isAliveFlag[pi] === 0) continue;
+      if (parts.kindBuffer[pi] !== ParticleKind.Physical) continue;
+      lights.push({
+        xPx:          parts.positionXWorld[pi] * zoom + ox,
+        yPx:          parts.positionYWorld[pi] * zoom + oy,
+        radiusPx:     11 * zoom,
+        innerFraction: 0.05,
+      });
+      particleLightCount++;
+    }
+
+    darkRoomOverlay.render(ctx, lights);
   }
 
   // End room clip before any HUD/screen-space overlays are drawn.
