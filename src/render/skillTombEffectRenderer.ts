@@ -18,6 +18,9 @@ const SKILL_TOMB_WIDTH_WORLD = 2 * BLOCK_SIZE_SMALL;
 /** Skill tomb sprite height in world units (2 small blocks tall). */
 const SKILL_TOMB_HEIGHT_WORLD = 2 * BLOCK_SIZE_SMALL;
 
+/** Distance (world units) within which the "F" prompt appears. */
+export const SKILL_TOMB_INTERACT_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
+
 /** Number of rising golden particles per skill tomb. */
 const PARTICLES_PER_TOMB = 22;
 
@@ -67,6 +70,8 @@ interface SkillTombState {
   xWorld: number;
   yWorld: number;
   particles: SkillTombParticle[];
+  /** True when the player is within interact radius. */
+  isPlayerNearbyFlag: boolean;
 }
 
 /** Spawn a single particle at a random position/velocity below the tomb center. */
@@ -130,14 +135,19 @@ export class SkillTombEffectRenderer {
       for (let p = 0; p < PARTICLES_PER_TOMB; p++) {
         particles.push(spawnParticle(p));
       }
-      this.tombStates.push({ xWorld, yWorld, particles });
+      this.tombStates.push({ xWorld, yWorld, particles, isPlayerNearbyFlag: false });
     }
   }
 
-  /** Advance all particle animations. */
-  update(dtSec: number): void {
+  /** Advance all particle animations and update player proximity. */
+  update(playerXWorld: number, playerYWorld: number, dtSec: number): void {
     for (let t = 0; t < this.tombStates.length; t++) {
       const tomb = this.tombStates[t];
+      const dx = playerXWorld - tomb.xWorld;
+      const dy = playerYWorld - tomb.yWorld;
+      tomb.isPlayerNearbyFlag =
+        dx * dx + dy * dy <
+        SKILL_TOMB_INTERACT_RADIUS_WORLD * SKILL_TOMB_INTERACT_RADIUS_WORLD;
       for (let p = 0; p < tomb.particles.length; p++) {
         const pk = tomb.particles[p];
         pk.ageSec += dtSec;
@@ -149,6 +159,22 @@ export class SkillTombEffectRenderer {
         pk.yRelWorld += pk.vyWorld * dtSec;
       }
     }
+  }
+
+  /** Returns the index of the skill tomb the player is within interact range of, or -1. */
+  getNearbyTombIndex(playerXWorld: number, playerYWorld: number): number {
+    for (let t = 0; t < this.tombStates.length; t++) {
+      const tomb = this.tombStates[t];
+      const dx = playerXWorld - tomb.xWorld;
+      const dy = playerYWorld - tomb.yWorld;
+      if (
+        dx * dx + dy * dy <
+        SKILL_TOMB_INTERACT_RADIUS_WORLD * SKILL_TOMB_INTERACT_RADIUS_WORLD
+      ) {
+        return t;
+      }
+    }
+    return -1;
   }
 
   /**
@@ -193,6 +219,7 @@ export class SkillTombEffectRenderer {
 
   /**
    * Draw particles that should appear in front of the skill tomb sprite.
+   * Also draws the "F" interact prompt when the player is nearby.
    * Call after renderSprite().
    */
   renderFront(
@@ -202,6 +229,49 @@ export class SkillTombEffectRenderer {
     zoom: number,
   ): void {
     this.renderLayer(ctx, offsetXPx, offsetYPx, zoom, false);
+    this.renderPrompts(ctx, offsetXPx, offsetYPx, zoom);
+  }
+
+  /** Draw the "F" interact prompt above each nearby skill tomb. */
+  private renderPrompts(
+    ctx: CanvasRenderingContext2D,
+    offsetXPx: number,
+    offsetYPx: number,
+    zoom: number,
+  ): void {
+    for (let t = 0; t < this.tombStates.length; t++) {
+      const tomb = this.tombStates[t];
+      if (!tomb.isPlayerNearbyFlag) continue;
+
+      const screenX = tomb.xWorld * zoom + offsetXPx;
+      const screenY = tomb.yWorld * zoom + offsetYPx;
+      const labelY = screenY - SKILL_TOMB_HEIGHT_WORLD * zoom * 0.85;
+      const labelSize = Math.max(6, Math.round(11 * zoom));
+
+      ctx.save();
+      ctx.font = `bold ${labelSize}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Background pill
+      const metrics = ctx.measureText('F');
+      const padX = labelSize * 0.45;
+      const padY = labelSize * 0.25;
+      const boxW = metrics.width + padX * 2;
+      const boxH = labelSize + padY * 2;
+      ctx.fillStyle = 'rgba(20,10,35,0.7)';
+      ctx.beginPath();
+      ctx.roundRect(screenX - boxW / 2, labelY - boxH / 2, boxW, boxH, boxH / 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(180,130,255,0.9)';
+      ctx.lineWidth = Math.max(1, zoom * 0.5);
+      ctx.stroke();
+
+      // Letter
+      ctx.fillStyle = 'rgba(200,170,255,1)';
+      ctx.fillText('F', screenX, labelY);
+      ctx.restore();
+    }
   }
 
   private renderLayer(

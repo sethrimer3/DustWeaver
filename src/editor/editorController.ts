@@ -580,8 +580,15 @@ export function createEditorController(
                 state.selectedElements.push(clicked);
               }
             } else {
-              // Normal click on object: select it
-              state.selectedElements = [clicked];
+              // Normal click: if the element is already in the selection keep
+              // everything selected (so the whole group can be dragged).
+              // Only replace the selection if clicking a new, unselected element.
+              const isAlreadySelected = state.selectedElements.some(
+                e => e.type === clicked.type && e.uid === clicked.uid,
+              );
+              if (!isAlreadySelected) {
+                state.selectedElements = [clicked];
+              }
             }
           } else if (!inputState.isShiftHeld) {
             // Click on empty space without shift: begin selection box
