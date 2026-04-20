@@ -290,6 +290,26 @@ export interface RoomDustPileDef {
   dustCount: number;
 }
 
+// ── Decorations ───────────────────────────────────────────────────────────────
+
+/**
+ * Visual kind for an editor-placed decoration.
+ * - 'mushroom'  — glowing mushroom, sits on the TOP surface of a floor block.
+ * - 'glowGrass' — glowing grass tuft, sits on the TOP surface of a floor block.
+ * - 'vine'      — glowing vine, hangs from the BOTTOM surface of a ceiling block.
+ */
+export type DecorationKind = 'mushroom' | 'glowGrass' | 'vine';
+
+/** An editor-placed decoration anchored to a specific block surface. */
+export interface RoomDecorationDef {
+  /** Block column of the anchor block. */
+  xBlock: number;
+  /** Block row of the anchor block. */
+  yBlock: number;
+  /** Visual kind of decoration. */
+  kind: DecorationKind;
+}
+
 /** A rectangular area where grasshopper critters spawn randomly. */
 export interface RoomGrasshopperAreaDef {
   /** Left edge X (block units). */
@@ -373,6 +393,8 @@ export interface RoomDef {
   dustPiles?: readonly RoomDustPileDef[];
   /** Grasshopper critter spawn zones. */
   grasshopperAreas?: readonly RoomGrasshopperAreaDef[];
+  /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
+  decorations?: readonly RoomDecorationDef[];
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default / undefined).

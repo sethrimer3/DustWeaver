@@ -54,6 +54,7 @@ import type {
   RoomJsonFireflyJar,
   RoomJsonDustPile,
   RoomJsonGrasshopperArea,
+  RoomJsonDecoration,
 } from '../editor/roomJson';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -189,6 +190,8 @@ export interface SavedRoomV2 {
   dustPiles?: [number, number, number][];
   /** [x, y, w, h, count] */
   grasshopperAreas?: [number, number, number, number, number][];
+  /** [x, y, kind] */
+  decorations?: [number, number, string][];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -575,6 +578,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.grasshopperAreas && json.grasshopperAreas.length > 0) {
     out.grasshopperAreas = json.grasshopperAreas.map(a => [a.xBlock, a.yBlock, a.wBlock, a.hBlock, a.count]);
   }
+  if (json.decorations && json.decorations.length > 0) {
+    out.decorations = json.decorations.map(d => [d.xBlock, d.yBlock, d.kind] as [number, number, string]);
+  }
 
   return out;
 }
@@ -687,6 +693,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.fireflyJars)    json.fireflyJars     = saved.fireflyJars.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonFireflyJar);
   if (saved.dustPiles)      json.dustPiles       = saved.dustPiles.map(([x, y, count]) => ({ xBlock: x, yBlock: y, dustCount: count }) as RoomJsonDustPile);
   if (saved.grasshopperAreas) json.grasshopperAreas = saved.grasshopperAreas.map(([x, y, w, h, count]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h, count }) as RoomJsonGrasshopperArea);
+  if (saved.decorations)    json.decorations     = saved.decorations.map(([x, y, kind]) => ({ xBlock: x, yBlock: y, kind }) as RoomJsonDecoration);
 
   return json;
 }

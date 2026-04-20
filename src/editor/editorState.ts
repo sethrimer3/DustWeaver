@@ -6,13 +6,13 @@
  * which can be exported to JSON and later rebuilt into a RoomDef.
  */
 
-import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
 
 // Re-export for convenience in editor modules
-export type { BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
+export type { BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
 export type { RoomSongId } from '../audio/musicManager';
 
 /** Options shown in the "Room Song" editor dropdown, in display order. */
@@ -77,6 +77,10 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Legacy alias kept for backward-compat with older room exports
   { id: 'dust_pile', label: 'Dust Pile', category: 'triggers' },
   { id: 'grasshopper_area', label: 'Grasshopper Area', category: 'triggers' },
+  // Decorations
+  { id: 'decoration_mushroom',  label: 'Glow Mushroom', category: 'triggers' },
+  { id: 'decoration_glowgrass', label: 'Glow Grass',    category: 'triggers' },
+  { id: 'decoration_vine',      label: 'Glow Vine',     category: 'triggers' },
 ];
 
 /** Available block themes for the editor dropdown. */
@@ -209,6 +213,14 @@ export interface EditorGrasshopperArea {
   count: number;
 }
 
+/** An editor-placed decoration (mushroom, grass, vine) anchored to a terrain surface. */
+export interface EditorDecoration {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  kind: DecorationKind;
+}
+
 export interface EditorRoomData {
   id: string;
   name: string;
@@ -240,11 +252,13 @@ export interface EditorRoomData {
   skillTombs: EditorSkillTomb[];
   dustPiles: EditorDustPile[];
   grasshopperAreas: EditorGrasshopperArea[];
+  /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
+  decorations: EditorDecoration[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'playerSpawn';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn';
 
 export interface SelectedElement {
   type: SelectedElementType;

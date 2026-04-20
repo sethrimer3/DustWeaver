@@ -262,6 +262,14 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     }));
   }
 
+  if (json.decorations && json.decorations.length > 0) {
+    room.decorations = json.decorations.map(d => ({
+      xBlock: d.xBlock,
+      yBlock: d.yBlock,
+      kind: d.kind,
+    }));
+  }
+
   return room;
 }
 

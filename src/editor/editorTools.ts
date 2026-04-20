@@ -6,7 +6,7 @@
 import {
   EditorState, EditorTool, EditorRoomData, EditorWall,
   EditorTransition, SelectedElement, allocateUid,
-  PaletteItem,
+  PaletteItem, DecorationKind,
 } from './editorState';
 
 // ── Hit testing helpers ──────────────────────────────────────────────────────
@@ -103,6 +103,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check decorations
+  for (const d of (room.decorations ?? [])) {
+    if (hitTestPoint(d.xBlock, d.yBlock, bx, by)) {
+      return { type: 'decoration', uid: d.uid };
+    }
+  }
+
   // Check player spawn
   if (hitTestPoint(room.playerSpawnBlock[0], room.playerSpawnBlock[1], bx, by)) {
     return { type: 'playerSpawn', uid: 0 };
@@ -115,6 +122,52 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  return null;
+}
+
+// ── Surface scan helpers ─────────────────────────────────────────────────────
+
+/**
+ * Returns true if any solid interior wall (non-platform, non-ramp) occupies
+ * the grid cell at (col, row).
+ */
+function isSolidWallAt(room: EditorRoomData, col: number, row: number): boolean {
+  for (const w of room.interiorWalls) {
+    if (w.isPlatformFlag === 1) continue;
+    if (w.rampOrientation !== undefined) continue;
+    if (col >= w.xBlock && col < w.xBlock + w.wBlock &&
+        row >= w.yBlock && row < w.yBlock + w.hBlock) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Starting at (col, startRow) and searching DOWNWARD (increasing row),
+ * returns the row of the first solid interior wall block, or null if none found.
+ *
+ * Used for placing floor decorations (mushrooms, glowGrass) that sit on the
+ * TOP surface of the first solid ground block below the cursor.
+ */
+export function findFloorBlockRow(room: EditorRoomData, col: number, startRow: number): number | null {
+  for (let row = startRow; row < room.heightBlocks; row++) {
+    if (isSolidWallAt(room, col, row)) return row;
+  }
+  return null;
+}
+
+/**
+ * Starting at (col, startRow) and searching UPWARD (decreasing row),
+ * returns the row of the first solid interior wall block, or null if none found.
+ *
+ * Used for placing vines that hang from the BOTTOM surface of the first solid
+ * ceiling block above the cursor.
+ */
+export function findCeilingBlockRow(room: EditorRoomData, col: number, startRow: number): number | null {
+  for (let row = startRow; row >= 0; row--) {
+    if (isSolidWallAt(room, col, row)) return row;
+  }
   return null;
 }
 
@@ -366,6 +419,35 @@ export function placeAtCursor(state: EditorState): void {
       yBlock: by,
       dustCount,
     });
+  } else if (item.id === 'decoration_mushroom' || item.id === 'decoration_glowgrass' || item.id === 'decoration_vine') {
+    const kind: DecorationKind =
+      item.id === 'decoration_mushroom'  ? 'mushroom'  :
+      item.id === 'decoration_glowgrass' ? 'glowGrass' : 'vine';
+
+    let targetRow: number | null;
+    if (kind === 'vine') {
+      // Vine: find the first solid block ABOVE the cursor, hang from its bottom.
+      targetRow = findCeilingBlockRow(room, bx, by);
+    } else {
+      // Floor decorations: find the first solid block AT OR BELOW the cursor.
+      targetRow = findFloorBlockRow(room, bx, by);
+    }
+
+    if (targetRow === null) return; // no valid surface — do not place
+
+    // Avoid duplicate decoration at the same cell and kind.
+    const alreadyPlaced = (room.decorations ?? []).some(
+      d => d.xBlock === bx && d.yBlock === targetRow && d.kind === kind,
+    );
+    if (alreadyPlaced) return;
+
+    if (!room.decorations) room.decorations = [];
+    room.decorations.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: targetRow,
+      kind,
+    });
   }
 }
 
@@ -426,6 +508,17 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestPoint(room.dustPiles[i].xBlock, room.dustPiles[i].yBlock, bx, by)) {
       const removedUid = room.dustPiles[i].uid;
       room.dustPiles.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check decorations
+  const decos = room.decorations ?? [];
+  for (let i = 0; i < decos.length; i++) {
+    if (hitTestPoint(decos[i].xBlock, decos[i].yBlock, bx, by)) {
+      const removedUid = decos[i].uid;
+      decos.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
@@ -529,6 +622,11 @@ export function getAllElementsInRect(
   for (const p of room.dustPiles) {
     if (p.xBlock >= minX && p.xBlock <= maxX && p.yBlock >= minY && p.yBlock <= maxY) {
       results.push({ type: 'dustPile', uid: p.uid });
+    }
+  }
+  for (const d of (room.decorations ?? [])) {
+    if (d.xBlock >= minX && d.xBlock <= maxX && d.yBlock >= minY && d.yBlock <= maxY) {
+      results.push({ type: 'decoration', uid: d.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&
