@@ -58,6 +58,15 @@ function getEffects(): Map<string, TheroBackgroundEffect> {
   return _effects;
 }
 
+// ── Parallax constants ────────────────────────────────────────────────────────
+
+/**
+ * Parallax factor applied to animated procedural backgrounds.
+ * 0 = fully fixed; 1 = moves 1:1 with the foreground.
+ * Slightly less than the static background (0.2) for a subtler distant feel.
+ */
+const THERO_PARALLAX_FACTOR = 0.15;
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -76,11 +85,13 @@ export function isTheroShowcaseRoom(roomId: string): boolean {
  *
  * Safe to call every frame; does nothing if roomId is not a showcase room.
  *
- * @param ctx       The 2D canvas context (virtual 480×270 space).
- * @param roomId    Current room ID.
- * @param widthPx   Virtual canvas width (480).
- * @param heightPx  Virtual canvas height (270).
- * @param nowMs     Current timestamp in ms (e.g. performance.now()).
+ * @param ctx                  The 2D canvas context (virtual 480×270 space).
+ * @param roomId               Current room ID.
+ * @param widthPx              Virtual canvas width (480).
+ * @param heightPx             Virtual canvas height (270).
+ * @param nowMs                Current timestamp in ms (e.g. performance.now()).
+ * @param relCameraOffsetXPx   Camera X offset relative to room centre (optional parallax).
+ * @param relCameraOffsetYPx   Camera Y offset relative to room centre (optional parallax).
  */
 export function renderTheroShowcaseEffect(
   ctx: CanvasRenderingContext2D,
@@ -88,17 +99,33 @@ export function renderTheroShowcaseEffect(
   widthPx: number,
   heightPx: number,
   nowMs: number,
+  relCameraOffsetXPx = 0,
+  relCameraOffsetYPx = 0,
 ): void {
   const effect = getEffects().get(roomId);
   if (!effect) return;
 
   effect.update(nowMs, widthPx, heightPx);
+
+  const dx = relCameraOffsetXPx * THERO_PARALLAX_FACTOR;
+  const dy = relCameraOffsetYPx * THERO_PARALLAX_FACTOR;
+  ctx.save();
+  ctx.translate(dx, dy);
   effect.draw(ctx);
+  ctx.restore();
 }
 
 /**
  * Render a Thero procedural background effect selected by backgroundId.
  * Returns true when a Thero effect was rendered; false otherwise.
+ *
+ * @param ctx                  The 2D canvas context.
+ * @param backgroundId         Active background ID.
+ * @param widthPx              Virtual canvas width (480).
+ * @param heightPx             Virtual canvas height (270).
+ * @param nowMs                Current timestamp in ms.
+ * @param relCameraOffsetXPx   Camera X offset relative to room centre (optional parallax).
+ * @param relCameraOffsetYPx   Camera Y offset relative to room centre (optional parallax).
  */
 export function renderTheroBackgroundEffect(
   ctx: CanvasRenderingContext2D,
@@ -106,12 +133,19 @@ export function renderTheroBackgroundEffect(
   widthPx: number,
   heightPx: number,
   nowMs: number,
+  relCameraOffsetXPx = 0,
+  relCameraOffsetYPx = 0,
 ): boolean {
   if (!backgroundId) return false;
   const effect = getEffects().get(backgroundId);
   if (!effect) return false;
   effect.update(nowMs, widthPx, heightPx);
+  const dx = relCameraOffsetXPx * THERO_PARALLAX_FACTOR;
+  const dy = relCameraOffsetYPx * THERO_PARALLAX_FACTOR;
+  ctx.save();
+  ctx.translate(dx, dy);
   effect.draw(ctx);
+  ctx.restore();
   return true;
 }
 
@@ -146,20 +180,29 @@ let _crystallineCracksEffect: TheroBackgroundEffect | null = null;
  * Render the Crystalline Cracks procedural background effect.
  * Call this each frame after drawing the solid-black background.
  *
- * @param ctx       The 2D canvas context (virtual 480×270 space).
- * @param widthPx   Virtual canvas width (480).
- * @param heightPx  Virtual canvas height (270).
- * @param nowMs     Current timestamp in ms (e.g. performance.now()).
+ * @param ctx                  The 2D canvas context (virtual 480×270 space).
+ * @param widthPx              Virtual canvas width (480).
+ * @param heightPx             Virtual canvas height (270).
+ * @param nowMs                Current timestamp in ms (e.g. performance.now()).
+ * @param relCameraOffsetXPx   Camera X offset relative to room centre (optional parallax).
+ * @param relCameraOffsetYPx   Camera Y offset relative to room centre (optional parallax).
  */
 export function renderCrystallineCracksBackground(
   ctx: CanvasRenderingContext2D,
   widthPx: number,
   heightPx: number,
   nowMs: number,
+  relCameraOffsetXPx = 0,
+  relCameraOffsetYPx = 0,
 ): void {
   if (!_crystallineCracksEffect) {
     _crystallineCracksEffect = createSubstrateEffect();
   }
   _crystallineCracksEffect.update(nowMs, widthPx, heightPx);
+  const dx = relCameraOffsetXPx * THERO_PARALLAX_FACTOR;
+  const dy = relCameraOffsetYPx * THERO_PARALLAX_FACTOR;
+  ctx.save();
+  ctx.translate(dx, dy);
   _crystallineCracksEffect.draw(ctx);
+  ctx.restore();
 }

@@ -103,7 +103,7 @@ export class SkillTombRenderer {
   private readonly tombStates: TombState[] = [];
   private isSpriteLoaded = false;
   /** Precomputed solid wall rectangles in world units (excluding one-way platforms). */
-  private wallRects: Array<{ leftWorld: number; rightWorld: number; topWorld: number }> = [];
+  private wallRects: Array<{ leftWorld: number; rightWorld: number; topWorld: number; bottomWorld: number }> = [];
 
   constructor() {
     this.tombSprite = new Image();
@@ -121,9 +121,10 @@ export class SkillTombRenderer {
     this.wallRects = walls
       .filter(w => !w.isPlatformFlag)
       .map(w => ({
-        leftWorld:  w.xBlock * BLOCK_SIZE_MEDIUM,
-        rightWorld: (w.xBlock + w.wBlock) * BLOCK_SIZE_MEDIUM,
-        topWorld:   w.yBlock * BLOCK_SIZE_MEDIUM,
+        leftWorld:   w.xBlock * BLOCK_SIZE_MEDIUM,
+        rightWorld:  (w.xBlock + w.wBlock) * BLOCK_SIZE_MEDIUM,
+        topWorld:    w.yBlock * BLOCK_SIZE_MEDIUM,
+        bottomWorld: (w.yBlock + w.hBlock) * BLOCK_SIZE_MEDIUM,
       }));
 
     const count = Math.min(tombs.length, MAX_TOMBS);
@@ -310,6 +311,12 @@ export class SkillTombRenderer {
             }
           }
         }
+
+        // After particle-particle resolution, push any particle that crossed into
+        // a wall back out.  This prevents both lateral penetration and seam-slip.
+        for (let p = 0; p < tomb.dustParticles.length; p++) {
+          this.resolveParticleWallPenetration(tomb.dustParticles[p], tomb.xWorld, tomb.yWorld);
+        }
       }
     }
   }
@@ -321,19 +328,76 @@ export class SkillTombRenderer {
    * In world space Y increases downward, so "below the particle" means
    * `wall.topWorld >= absY` (larger Y = visually lower on screen).  Among all
    * qualifying walls the one with the smallest topWorld is the closest floor.
+   *
+   * A small horizontal seam tolerance (DUST_CONTACT_RADIUS_WORLD) is applied to
+   * the X bounds so particles near block seams still detect the floor.
    */
   private findFloorTopWorld(absX: number, absY: number): number | null {
     let closestY = Infinity;
+    const seam = DUST_CONTACT_RADIUS_WORLD;
     for (let i = 0; i < this.wallRects.length; i++) {
       const wall = this.wallRects[i];
       // wall.topWorld >= absY: wall top is at or below the particle (Y-down coordinate system)
-      if (absX >= wall.leftWorld && absX <= wall.rightWorld && wall.topWorld >= absY) {
+      if (
+        absX >= wall.leftWorld - seam && absX <= wall.rightWorld + seam &&
+        wall.topWorld >= absY
+      ) {
         if (wall.topWorld < closestY) {
           closestY = wall.topWorld;
         }
       }
     }
     return closestY === Infinity ? null : closestY;
+  }
+
+  /**
+   * Resolve a particle out of any solid wall it has penetrated.
+   * Tests the particle (treated as a point) against all wall AABBs and,
+   * if inside, pushes it out via the smallest-penetration axis.
+   * Velocity is zeroed on the collision axis and reflected slightly for a bounce.
+   *
+   * @param dp        The dust particle (relative coordinates).
+   * @param tombX     Absolute X of the tomb center (world units).
+   * @param tombY     Absolute Y of the tomb center (world units).
+   */
+  private resolveParticleWallPenetration(dp: DustParticle, tombX: number, tombY: number): void {
+    const absX = tombX + dp.xWorld;
+    const absY = tombY + dp.yWorld;
+
+    for (let i = 0; i < this.wallRects.length; i++) {
+      const wall = this.wallRects[i];
+      // Check if particle center is inside the wall AABB
+      if (
+        absX > wall.leftWorld && absX < wall.rightWorld &&
+        absY > wall.topWorld  && absY < wall.bottomWorld
+      ) {
+        // Penetration depths on each face
+        const penLeft   = absX - wall.leftWorld;
+        const penRight  = wall.rightWorld  - absX;
+        const penTop    = absY - wall.topWorld;
+        const penBottom = wall.bottomWorld - absY;
+
+        // Resolve on the shallowest penetration axis
+        const minPen = Math.min(penLeft, penRight, penTop, penBottom);
+        if (minPen === penLeft) {
+          dp.xWorld -= penLeft;
+          if (dp.vxWorld > 0) dp.vxWorld *= -0.1;
+        } else if (minPen === penRight) {
+          dp.xWorld += penRight;
+          if (dp.vxWorld < 0) dp.vxWorld *= -0.1;
+        } else if (minPen === penTop) {
+          // Landed on wall top surface — snap to floor
+          dp.yWorld -= penTop;
+          dp.groundYRelWorld = dp.yWorld;
+          dp.vyWorld *= -0.15;
+          if (Math.abs(dp.vyWorld) < 2) dp.vyWorld = 0;
+          dp.isGroundedFlag = true;
+        } else {
+          dp.yWorld += penBottom;
+          if (dp.vyWorld < 0) dp.vyWorld *= -0.1;
+        }
+      }
+    }
   }
 
   /**
@@ -409,10 +473,11 @@ export class SkillTombRenderer {
         const py = (tomb.yWorld + dp.yWorld) * zoom + offsetYPx;
         const size = DUST_PIXEL_SIZE;
 
-        // Interpolate between dull gold and bright gold based on brightness
-        const r = Math.round(180 + 32 * dp.brightness);
-        const g = Math.round(140 + 28 * dp.brightness);
-        const b = Math.round(40 + 35 * dp.brightness);
+        // Match the player's Physical golden dust particle colour (#ffd700).
+        // At full brightness: rgb(255,215,0); at dim: slightly darker amber.
+        const r = Math.round(180 + 75 * dp.brightness);
+        const g = Math.round(130 + 85 * dp.brightness);
+        const b = Math.round(10 * (1 - dp.brightness));
         const alpha = (0.5 + 0.5 * dp.brightness) * dp.alphaFade;
 
         ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
