@@ -27,6 +27,7 @@ import {
   parseSongId,
 } from '../editor/roomJson';
 import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
+import { isSavedRoomV2, hydrateV2Room } from './roomSchemaV2';
 import { getActiveCampaignId, getCampaignById, getCampaignRoomsBasePath } from './campaigns';
 
 // ── Boundary wall generation (mirrors roomBuilders.ts) ───────────────────────
@@ -325,12 +326,19 @@ export async function loadRoomJsonFiles(): Promise<Map<string, RoomDef>> {
         return;
       }
       const data: unknown = await resp.json();
-      const errors = validateRoomJson(data);
-      if (errors.length > 0) {
-        console.error(`[roomJsonLoader] Validation errors in ${filename}:`, errors);
-        return;
+      // Auto-detect schema: v2 rooms hydrate first into the legacy RoomJsonDef
+      // shape so the downstream conversion pipeline stays unchanged.
+      let json: RoomJsonDef;
+      if (isSavedRoomV2(data)) {
+        json = hydrateV2Room(data);
+      } else {
+        const errors = validateRoomJson(data);
+        if (errors.length > 0) {
+          console.error(`[roomJsonLoader] Validation errors in ${filename}:`, errors);
+          return;
+        }
+        json = data as RoomJsonDef;
       }
-      const json = data as RoomJsonDef;
       const roomDef = roomJsonDefToRoomDef(json);
       rooms.set(roomDef.id, roomDef);
     } catch (err) {
