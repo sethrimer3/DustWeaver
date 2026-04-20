@@ -69,24 +69,17 @@ interface SkillTombState {
   particles: SkillTombParticle[];
 }
 
-/** Seeded pseudo-random to avoid Math.random() in init hot-path (still decorative, not sim). */
-let _seed = 0xdeadbeef;
-function nextRand(): number {
-  _seed = Math.imul(_seed ^ (_seed >>> 13), 1664525) + 1013904223 | 0;
-  return (_seed >>> 0) / 0xffffffff;
-}
-
 /** Spawn a single particle at a random position/velocity below the tomb center. */
-function spawnParticle(_tombIndex: number, particleIndex: number): SkillTombParticle {
+function spawnParticle(particleIndex: number): SkillTombParticle {
   const isBehind = particleIndex < Math.round(PARTICLES_PER_TOMB * BEHIND_FRACTION);
   // Spawn at the bottom edge of the tomb or slightly below (ground level)
-  const spawnY = SKILL_TOMB_HEIGHT_WORLD * 0.5 + nextRand() * 4;
-  const spawnX = (nextRand() * 2 - 1) * SPAWN_HALF_WIDTH_WORLD;
-  const vy = -(RISE_SPEED_MIN_WORLD + nextRand() * (RISE_SPEED_MAX_WORLD - RISE_SPEED_MIN_WORLD));
-  const vx = (nextRand() * 2 - 1) * DRIFT_SPEED_MAX_WORLD;
-  const lifetime = LIFETIME_MIN_SEC + nextRand() * (LIFETIME_MAX_SEC - LIFETIME_MIN_SEC);
+  const spawnY = SKILL_TOMB_HEIGHT_WORLD * 0.5 + Math.random() * 4;
+  const spawnX = (Math.random() * 2 - 1) * SPAWN_HALF_WIDTH_WORLD;
+  const vy = -(RISE_SPEED_MIN_WORLD + Math.random() * (RISE_SPEED_MAX_WORLD - RISE_SPEED_MIN_WORLD));
+  const vx = (Math.random() * 2 - 1) * DRIFT_SPEED_MAX_WORLD;
+  const lifetime = LIFETIME_MIN_SEC + Math.random() * (LIFETIME_MAX_SEC - LIFETIME_MIN_SEC);
   // Stagger initial ages so particles don't all appear at once on spawn
-  const initialAge = nextRand() * lifetime;
+  const initialAge = Math.random() * lifetime;
   return {
     xRelWorld: spawnX,
     yRelWorld: spawnY,
@@ -94,24 +87,24 @@ function spawnParticle(_tombIndex: number, particleIndex: number): SkillTombPart
     vxWorld: vx,
     ageSec: initialAge,
     lifetimeSec: lifetime,
-    maxAlpha: 0.55 + nextRand() * 0.35,
-    sizePx: nextRand() < 0.35 ? 2 : 1,
-    goldVariant: nextRand(),
+    maxAlpha: 0.55 + Math.random() * 0.35,
+    sizePx: Math.random() < 0.35 ? 2 : 1,
+    goldVariant: Math.random(),
     isBehindFlag: isBehind,
   };
 }
 
 /** Reset a particle to a fresh spawn (called when it completes its lifetime). */
 function resetParticle(p: SkillTombParticle): void {
-  p.xRelWorld = (nextRand() * 2 - 1) * SPAWN_HALF_WIDTH_WORLD;
-  p.yRelWorld = SKILL_TOMB_HEIGHT_WORLD * 0.5 + nextRand() * 4;
-  p.vyWorld = -(RISE_SPEED_MIN_WORLD + nextRand() * (RISE_SPEED_MAX_WORLD - RISE_SPEED_MIN_WORLD));
-  p.vxWorld = (nextRand() * 2 - 1) * DRIFT_SPEED_MAX_WORLD;
+  p.xRelWorld = (Math.random() * 2 - 1) * SPAWN_HALF_WIDTH_WORLD;
+  p.yRelWorld = SKILL_TOMB_HEIGHT_WORLD * 0.5 + Math.random() * 4;
+  p.vyWorld = -(RISE_SPEED_MIN_WORLD + Math.random() * (RISE_SPEED_MAX_WORLD - RISE_SPEED_MIN_WORLD));
+  p.vxWorld = (Math.random() * 2 - 1) * DRIFT_SPEED_MAX_WORLD;
   p.ageSec = 0;
-  p.lifetimeSec = LIFETIME_MIN_SEC + nextRand() * (LIFETIME_MAX_SEC - LIFETIME_MIN_SEC);
-  p.maxAlpha = 0.55 + nextRand() * 0.35;
-  p.sizePx = nextRand() < 0.35 ? 2 : 1;
-  p.goldVariant = nextRand();
+  p.lifetimeSec = LIFETIME_MIN_SEC + Math.random() * (LIFETIME_MAX_SEC - LIFETIME_MIN_SEC);
+  p.maxAlpha = 0.55 + Math.random() * 0.35;
+  p.sizePx = Math.random() < 0.35 ? 2 : 1;
+  p.goldVariant = Math.random();
 }
 
 export class SkillTombEffectRenderer {
@@ -129,15 +122,13 @@ export class SkillTombEffectRenderer {
   init(tombs: readonly { xBlock: number; yBlock: number; weaveId: string }[] | undefined): void {
     this.tombStates.length = 0;
     if (!tombs) return;
-    // Seed per-room for stable initial scatter
-    _seed = 0xdeadbeef ^ (tombs.length * 0x9e3779b9 | 0);
     const count = Math.min(tombs.length, MAX_TOMBS);
     for (let i = 0; i < count; i++) {
       const xWorld = (tombs[i].xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
       const yWorld = (tombs[i].yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
       const particles: SkillTombParticle[] = [];
       for (let p = 0; p < PARTICLES_PER_TOMB; p++) {
-        particles.push(spawnParticle(i, p));
+        particles.push(spawnParticle(p));
       }
       this.tombStates.push({ xWorld, yWorld, particles });
     }

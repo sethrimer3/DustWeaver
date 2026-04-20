@@ -9,7 +9,7 @@
  * Also draws the "Press F to interact" prompt when the player is close.
  */
 
-import { BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RoomWallDef } from '../levels/roomDef';
 
 const BASE = import.meta.env.BASE_URL;
@@ -35,9 +35,9 @@ const DUST_FALL_LAUNCH_SPEED_WORLD = 18.0;
 /** Rendered size of each dust particle in screen pixels (uniform, 4×4). */
 const DUST_PIXEL_SIZE = 4;
 /** Save tomb sprite width in world units (2 small blocks wide). */
-const TOMB_SPRITE_WIDTH_WORLD = 2 * BLOCK_SIZE_SMALL;
+const TOMB_SPRITE_WIDTH_WORLD = 2 * BLOCK_SIZE_MEDIUM;
 /** Save tomb sprite height in world units (3 small blocks tall). */
-const TOMB_SPRITE_HEIGHT_WORLD = 3 * BLOCK_SIZE_SMALL;
+const TOMB_SPRITE_HEIGHT_WORLD = 3 * BLOCK_SIZE_MEDIUM;
 
 /**
  * How far below the tomb center (relative Y) a particle may fall before being
@@ -107,13 +107,15 @@ export class SkillTombRenderer {
   init(tombs: readonly { xBlock: number; yBlock: number }[], walls: readonly RoomWallDef[]): void {
     this.tombStates.length = 0;
 
-    // Precompute solid wall top surfaces for floor detection
+    // Precompute solid wall top surfaces for floor detection.
+    // Both wall and tomb coordinates use BLOCK_SIZE_MEDIUM (= BLOCK_SIZE_SMALL = 8) as
+    // the block-to-world-unit scale, so they inhabit the same coordinate space.
     this.wallRects = walls
       .filter(w => !w.isPlatformFlag)
       .map(w => ({
-        leftWorld:  w.xBlock * BLOCK_SIZE_SMALL,
-        rightWorld: (w.xBlock + w.wBlock) * BLOCK_SIZE_SMALL,
-        topWorld:   w.yBlock * BLOCK_SIZE_SMALL,
+        leftWorld:  w.xBlock * BLOCK_SIZE_MEDIUM,
+        rightWorld: (w.xBlock + w.wBlock) * BLOCK_SIZE_MEDIUM,
+        topWorld:   w.yBlock * BLOCK_SIZE_MEDIUM,
       }));
 
     const count = Math.min(tombs.length, MAX_TOMBS);
@@ -295,11 +297,16 @@ export class SkillTombRenderer {
   /**
    * Find the nearest wall top surface that is at or below `absY` and horizontally
    * overlaps `absX`.  Returns the wall-top world Y coordinate, or `null` if none found.
+   *
+   * In world space Y increases downward, so "below the particle" means
+   * `wall.topWorld >= absY` (larger Y = visually lower on screen).  Among all
+   * qualifying walls the one with the smallest topWorld is the closest floor.
    */
   private findFloorTopWorld(absX: number, absY: number): number | null {
     let closestY = Infinity;
     for (let i = 0; i < this.wallRects.length; i++) {
       const wall = this.wallRects[i];
+      // wall.topWorld >= absY: wall top is at or below the particle (Y-down coordinate system)
       if (absX >= wall.leftWorld && absX <= wall.rightWorld && wall.topWorld >= absY) {
         if (wall.topWorld < closestY) {
           closestY = wall.topWorld;
