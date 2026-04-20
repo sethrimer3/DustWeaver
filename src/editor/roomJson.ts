@@ -9,8 +9,8 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, RoomSongId } from './editorState';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
@@ -163,6 +163,12 @@ export interface RoomJsonGrasshopperArea {
   count: number;
 }
 
+export interface RoomJsonDecoration {
+  xBlock: number;
+  yBlock: number;
+  kind: DecorationKind;
+}
+
 export interface RoomJsonDef {
   id: string;
   name: string;
@@ -207,6 +213,8 @@ export interface RoomJsonDef {
   fireflyJars?: RoomJsonFireflyJar[];
   dustPiles?: RoomJsonDustPile[];
   grasshopperAreas?: RoomJsonGrasshopperArea[];
+  /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
+  decorations?: RoomJsonDecoration[];
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
@@ -377,6 +385,13 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     count: a.count,
   }));
 
+  const decorations: EditorDecoration[] = (json.decorations ?? []).map(d => ({
+    uid: uid++,
+    xBlock: d.xBlock,
+    yBlock: d.yBlock,
+    kind: d.kind,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -398,6 +413,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       skillTombs,
       dustPiles,
       grasshopperAreas,
+      decorations,
     },
     nextUid: uid,
   };
@@ -491,6 +507,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       wBlock: a.wBlock,
       hBlock: a.hBlock,
       count: a.count,
+    }));
+  }
+  if ((data.decorations ?? []).length > 0) {
+    json.decorations = data.decorations.map(d => ({
+      xBlock: d.xBlock,
+      yBlock: d.yBlock,
+      kind: d.kind,
     }));
   }
   return json;
@@ -660,6 +683,11 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       hBlock: a.hBlock,
       count: a.count,
     })),
+    decorations: (data.decorations ?? []).map(d => ({
+      xBlock: d.xBlock,
+      yBlock: d.yBlock,
+      kind: d.kind,
+    })),
   };
 }
 
@@ -758,6 +786,13 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     count: a.count,
   }));
 
+  const decorations: EditorDecoration[] = (room.decorations ?? []).map(d => ({
+    uid: uid++,
+    xBlock: d.xBlock,
+    yBlock: d.yBlock,
+    kind: d.kind,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -779,6 +814,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       skillTombs,
       dustPiles,
       grasshopperAreas,
+      decorations,
     },
     nextUid: uid,
   };

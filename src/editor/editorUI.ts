@@ -889,6 +889,15 @@ function updateInspector(
       addField(div, 'dustCount', String(pile.dustCount),
         v => callbacks?.onPropertyChange('dustPile.dustCount', parseInt(v)));
     }
+  } else if (el.type === 'decoration') {
+    const deco = (room.decorations ?? []).find(d => d.uid === el.uid);
+    if (deco) {
+      addField(div, 'kind', deco.kind, () => {/* read-only */});
+      addField(div, 'xBlock', String(deco.xBlock),
+        v => callbacks?.onPropertyChange('decoration.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(deco.yBlock),
+        v => callbacks?.onPropertyChange('decoration.yBlock', parseInt(v)));
+    }
   }
 }
 

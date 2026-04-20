@@ -11,7 +11,7 @@ import type { CameraState } from '../render/camera';
 
 import {
   EditorState, createEditorState, EditorTool,
-  EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile,
+  EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
   BlockTheme, BackgroundId, LightingEffect, RoomSongId,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
@@ -291,6 +291,7 @@ export function createEditorController(
       for (const s of state.roomData.saveTombs)      maxUid = Math.max(maxUid, s.uid + 1);
       for (const s of state.roomData.skillTombs)     maxUid = Math.max(maxUid, s.uid + 1);
       for (const p of state.roomData.dustPiles)      maxUid = Math.max(maxUid, p.uid + 1);
+      for (const d of (state.roomData.decorations ?? [])) maxUid = Math.max(maxUid, d.uid + 1);
       // Ensure nextUid never regresses below its current value (other rooms may
       // already have used higher UIDs during this session).
       state.nextUid = Math.max(state.nextUid, maxUid);
@@ -776,6 +777,11 @@ export function createEditorController(
       pile.yBlock = Math.min(Math.max(0, pile.yBlock), maxY);
     }
 
+    for (const deco of (room.decorations ?? [])) {
+      deco.xBlock = Math.min(Math.max(0, deco.xBlock), maxX);
+      deco.yBlock = Math.min(Math.max(0, deco.yBlock), maxY);
+    }
+
     // Clamp interior wall rectangles so they stay fully inside the room.
     for (const wall of room.interiorWalls) {
       wall.wBlock = Math.max(1, Math.min(wall.wBlock, room.widthBlocks));
@@ -863,6 +869,12 @@ export function createEditorController(
       for (const pile of room.dustPiles) {
         pile.xBlock += shiftX;
         pile.yBlock += shiftY;
+      }
+
+      // Shift decorations
+      for (const deco of (room.decorations ?? [])) {
+        deco.xBlock += shiftX;
+        deco.yBlock += shiftY;
       }
 
       // Shift interior walls
@@ -981,6 +993,12 @@ export function createEditorController(
         if (prop === 'dustPile.yBlock' && !isNaN(numVal)) pile.yBlock = numVal;
         if (prop === 'dustPile.dustCount' && !isNaN(numVal)) pile.dustCount = Math.max(1, numVal);
       }
+    } else if (el.type === 'decoration') {
+      const deco = (room.decorations ?? []).find((d: EditorDecoration) => d.uid === el.uid);
+      if (deco) {
+        if (prop === 'decoration.xBlock' && !isNaN(numVal)) deco.xBlock = numVal;
+        if (prop === 'decoration.yBlock' && !isNaN(numVal)) deco.yBlock = numVal;
+      }
     }
   }
 
@@ -1006,6 +1024,9 @@ export function createEditorController(
       } else if (el.type === 'dustPile') {
         const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
         if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
+      } else if (el.type === 'decoration') {
+        const d = (s.roomData.decorations ?? []).find(d2 => d2.uid === el.uid);
+        if (d) positions.set(key, { xBlock: d.xBlock, yBlock: d.yBlock });
       } else if (el.type === 'playerSpawn') {
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
       } else if (el.type === 'transition') {
@@ -1052,6 +1073,9 @@ export function createEditorController(
       } else if (el.type === 'dustPile') {
         const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
         if (p) { p.xBlock = orig.xBlock + deltaX; p.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'decoration') {
+        const d = (s.roomData.decorations ?? []).find(d2 => d2.uid === el.uid);
+        if (d) { d.xBlock = orig.xBlock + deltaX; d.yBlock = orig.yBlock + deltaY; }
       } else if (el.type === 'playerSpawn') {
         s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
         s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
@@ -1083,8 +1107,8 @@ export function createEditorController(
   // ── Copy/Paste helpers ───────────────────────────────────────────────────
 
   function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
-    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] } = {
-      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [],
+    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations: EditorDecoration[] } = {
+      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [], decorations: [],
     };
     for (const el of elements) {
       if (el.type === 'wall') {
@@ -1102,6 +1126,9 @@ export function createEditorController(
       } else if (el.type === 'dustPile') {
         const p = room.dustPiles.find(p2 => p2.uid === el.uid);
         if (p) data.dustPiles.push({ ...p });
+      } else if (el.type === 'decoration') {
+        const d = (room.decorations ?? []).find(d2 => d2.uid === el.uid);
+        if (d) data.decorations.push({ ...d });
       }
     }
     return JSON.stringify(data);
@@ -1109,7 +1136,7 @@ export function createEditorController(
 
   function pasteFromClipboard(s: EditorState): void {
     if (!s.roomData || !s.clipboard) return;
-    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[] };
+    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations?: EditorDecoration[] };
     try {
       data = JSON.parse(s.clipboard) as typeof data;
     } catch {
@@ -1127,6 +1154,7 @@ export function createEditorController(
     for (const t of (data.saveTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
     for (const t of (data.skillTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
     for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
+    for (const d of (data.decorations ?? [])) { minX = Math.min(minX, d.xBlock); minY = Math.min(minY, d.yBlock); }
     if (!isFinite(minX)) minX = 0;
     if (!isFinite(minY)) minY = 0;
 
@@ -1179,6 +1207,17 @@ export function createEditorController(
         yBlock: p.yBlock - minY + offsetY,
       });
       newElements.push({ type: 'dustPile', uid: newUid });
+    }
+    for (const d of (data.decorations ?? [])) {
+      const newUid = allocateUid(s);
+      if (!s.roomData.decorations) s.roomData.decorations = [];
+      s.roomData.decorations.push({
+        ...d,
+        uid: newUid,
+        xBlock: d.xBlock - minX + offsetX,
+        yBlock: d.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'decoration', uid: newUid });
     }
     s.selectedElements = newElements;
   }

@@ -36,7 +36,7 @@ import {
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import {
-  getWallDecorations,
+  buildRoomDecorations,
   renderDecorationSprites,
   addDecorationBloom,
   collectDecorationLights,
@@ -410,7 +410,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // appear on top of tile surfaces.  Bloom and light source data are
   // collected here for use later in the frame.
   const isDarkRoom = currentRoom.lightingEffect === 'DarkRoom';
-  const wallDecorations = getWallDecorations(snapshot.walls, BLOCK_SIZE_SMALL);
+  const wallDecorations = buildRoomDecorations(currentRoom.decorations ?? [], BLOCK_SIZE_SMALL);
   renderDecorationSprites(ctx, wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
 
   // Grapple influence visuals (golden circle + edge glow) drawn on top of walls
