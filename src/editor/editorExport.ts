@@ -1,21 +1,35 @@
 /**
  * Editor export — triggers browser downloads of room JSON and world-map JSON.
+ *
+ * Rooms are saved in the compact v2 schema (`SavedRoomV2`) by default.  The
+ * loader auto-detects v2 vs. legacy so older files keep working.
  */
 
 import type { EditorRoomData } from './editorState';
 import { editorRoomDataToJson } from './roomJson';
 import { roomDefToEditorRoomData } from './roomJson';
+import { dehydrateRoom, validateRoomRoundtrip } from '../levels/roomSchemaV2';
 import {
   ROOM_REGISTRY,
 } from '../levels/rooms';
 
 /**
- * Exports the given editor room data as a downloadable .json file.
- * The JSON is clean, human-readable, and uses the RoomJsonDef schema.
+ * Exports the given editor room data as a downloadable .json file using the
+ * compact v2 schema. In development builds we also run a dehydrate→hydrate
+ * round-trip assertion so encoding regressions are caught immediately.
  */
 export function exportRoomAsJson(data: EditorRoomData): void {
-  const json = editorRoomDataToJson(data);
-  const text = JSON.stringify(json, null, 2);
+  const verboseJson = editorRoomDataToJson(data);
+  const savedV2 = dehydrateRoom(verboseJson);
+
+  if (import.meta.env.DEV) {
+    const errors = validateRoomRoundtrip(verboseJson);
+    if (errors.length > 0) {
+      console.error(`[editorExport] Round-trip validation failed for room "${data.id}":`, errors);
+    }
+  }
+
+  const text = JSON.stringify(savedV2, null, 2);
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
