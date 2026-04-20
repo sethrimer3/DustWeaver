@@ -6,7 +6,7 @@
  *   - When the player leaves: dust turns dull gold and falls onto nearby blocks
  *   - Particles that cannot find a floor within range fade out and respawn
  *
- * Also draws the "Press F to interact" prompt when the player is close.
+ * Also draws the "F" key prompt when the player is close.
  */
 
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
@@ -484,13 +484,31 @@ export class SkillTombRenderer {
         ctx.fillRect(px - size / 2, py - size / 2, size, size);
       }
 
-      // Draw interact prompt
+      // Draw interact prompt ("F" key indicator)
       if (tomb.isPlayerNearbyFlag) {
+        const alpha = 0.6 + 0.4 * tomb.activationFactor;
+        const labelY = screenY - BLOCK_SIZE_MEDIUM * zoom * 2.0;
+        const labelSize = Math.max(6, Math.round(11 * zoom));
         ctx.save();
-        ctx.font = `${14 * (zoom / 2.8)}px 'Cinzel', serif`;
-        ctx.fillStyle = `rgba(212,168,75,${0.6 + 0.4 * tomb.activationFactor})`;
+        ctx.font = `bold ${labelSize}px monospace`;
         ctx.textAlign = 'center';
-        ctx.fillText('Press F to interact', screenX, screenY - BLOCK_SIZE_MEDIUM * zoom * 0.8);
+        ctx.textBaseline = 'middle';
+        // Background pill
+        const metrics = ctx.measureText('F');
+        const padX = labelSize * 0.45;
+        const padY = labelSize * 0.25;
+        const boxW = metrics.width + padX * 2;
+        const boxH = labelSize + padY * 2;
+        ctx.fillStyle = `rgba(20,14,6,${alpha * 0.7})`;
+        ctx.beginPath();
+        ctx.roundRect(screenX - boxW / 2, labelY - boxH / 2, boxW, boxH, boxH / 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(212,168,75,${alpha})`;
+        ctx.lineWidth = Math.max(1, zoom * 0.5);
+        ctx.stroke();
+        // Letter
+        ctx.fillStyle = `rgba(212,168,75,${alpha})`;
+        ctx.fillText('F', screenX, labelY);
         ctx.restore();
       }
     }

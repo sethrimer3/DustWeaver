@@ -962,14 +962,25 @@ export function startGameScreen(
         }
       } else if (cmd.kind === CommandKind.Interact) {
         interactInputPulseMs = 150;
-        // Check if player is near a skill tomb
         const playerForInteract = world.clusters[0];
         if (playerForInteract !== undefined && playerForInteract.isAliveFlag === 1) {
+          // Check if player is near a save tomb (opens the save menu)
           const nearbyIndex = skillTombRenderer.getNearbyTombIndex(
             playerForInteract.positionXWorld, playerForInteract.positionYWorld,
           );
           if (nearbyIndex >= 0) {
             interactTriggered = true;
+          }
+          // Check if player is near a skill tomb (unlocks a dust weave)
+          const nearbySkillTombIndex = skillTombEffectRenderer.getNearbyTombIndex(
+            playerForInteract.positionXWorld, playerForInteract.positionYWorld,
+          );
+          if (nearbySkillTombIndex >= 0 && progress) {
+            const roomSkillTombs = currentRoom.skillTombs ?? [];
+            const st = roomSkillTombs[nearbySkillTombIndex];
+            if (st !== undefined) {
+              unlockActiveWeave(progress, st.weaveId);
+            }
           }
         }
       }
@@ -1046,7 +1057,7 @@ export function startGameScreen(
     const playerForTomb = world.clusters[0];
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
-      skillTombEffectRenderer.update(elapsedMs / 1000);
+      skillTombEffectRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
       // Skillbook pickup (lobby progression): triggers the early auto-assignment.
       // Grants Cycle passive, Golden Dust, and 2 containers on first pickup.
@@ -1072,23 +1083,6 @@ export function startGameScreen(
               levelRng,
             );
             break;
-          }
-        }
-      }
-
-      // Skill Tomb interaction: unlocks a dust weave when the player walks close.
-      // Each tomb is one-time per session (not per-game-save); once unlocked it stays
-      // in progress.unlockedActiveWeaves and the pickup is idempotent.
-      if (progress) {
-        const roomSkillTombs = currentRoom.skillTombs ?? [];
-        for (let i = 0; i < roomSkillTombs.length; i++) {
-          const st = roomSkillTombs[i];
-          const tx = (st.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-          const ty = (st.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-          const dx = playerForTomb.positionXWorld - tx;
-          const dy = playerForTomb.positionYWorld - ty;
-          if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
-            unlockActiveWeave(progress, st.weaveId);
           }
         }
       }
