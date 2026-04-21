@@ -559,6 +559,37 @@ export function renderFrame(r: RenderFrameContext): void {
   if (isDarkRoom) {
     const lights = collectDecorationLights(cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
 
+    // ── Authored local light sources (see RoomLightSourceDef) ──────────────
+    // Designer-placed lights are serialised in `RoomDef.lightSources`.  When
+    // the room is in DarkRoom mode they punch additional holes in the
+    // darkness mask just like decoration lights.  Brightness (0-100%) is
+    // mapped onto both the inner-radius fraction (brighter → wider fully-lit
+    // core) and a radius scalar so low-brightness lights feel dimmer.
+    //
+    // NOTE: colour is stored on RoomLightSourceDef but the DarkRoom overlay
+    // currently uses an achromatic darkness mask, so colour is not applied
+    // here yet.  This is consistent with the existing decoration-light path
+    // and matches phase-1 scope (see task spec §9).  The colour data is
+    // preserved end-to-end for a future coloured-light pass.
+    if (currentRoom.lightSources) {
+      for (const ls of currentRoom.lightSources) {
+        const bPct = Math.max(0, Math.min(100, ls.brightnessPct)) / 100;
+        if (bPct <= 0) continue;
+        const worldX = (ls.xBlock + 0.5) * BLOCK_SIZE_SMALL;
+        const worldY = (ls.yBlock + 0.5) * BLOCK_SIZE_SMALL;
+        const radiusWorld = Math.max(1, ls.radiusBlocks) * BLOCK_SIZE_SMALL;
+        // Brightness 100% → full radius + wide core; 25% → half radius + tiny core.
+        const radiusPx = radiusWorld * zoom * (0.5 + 0.5 * bPct);
+        const innerFraction = 0.1 + 0.3 * bPct;
+        lights.push({
+          xPx: worldX * zoom + ox,
+          yPx: worldY * zoom + oy,
+          radiusPx,
+          innerFraction,
+        });
+      }
+    }
+
     // Player emits a personal lantern-sized light.
     const playerSnap = snapshot.clusters.find(c => c.isPlayerFlag === 1 && c.isAliveFlag === 1);
     if (playerSnap !== undefined) {

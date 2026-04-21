@@ -6,13 +6,13 @@
  * which can be exported to JSON and later rebuilt into a RoomDef.
  */
 
-import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection } from '../levels/roomDef';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
 
 // Re-export for convenience in editor modules
-export type { BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
+export type { BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection } from '../levels/roomDef';
 export type { RoomSongId } from '../audio/musicManager';
 
 /** Options shown in the "Room Song" editor dropdown, in display order. */
@@ -32,7 +32,7 @@ export enum EditorTool {
 
 // ── Palette categories and items ─────────────────────────────────────────────
 
-export type PaletteCategory = 'blocks' | 'enemies' | 'triggers';
+export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'lighting';
 
 export interface PaletteItem {
   id: string;
@@ -48,6 +48,10 @@ export interface PaletteItem {
   isRampItem?: 1;
   /** 1 if this palette item places a half-width pillar (4 px wide). */
   isPillarHalfWidthItem?: 1;
+  /** 1 if this palette item paints ambient-light blocker tiles. */
+  isAmbientLightBlockerItem?: 1;
+  /** 1 if this palette item places a local light source. */
+  isLightSourceItem?: 1;
 }
 
 /** Built-in palette items available in the editor. */
@@ -84,6 +88,11 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'decoration_mushroom',  label: 'Glow Mushroom', category: 'triggers' },
   { id: 'decoration_glowgrass', label: 'Glow Grass',    category: 'triggers' },
   { id: 'decoration_vine',      label: 'Glow Vine',     category: 'triggers' },
+  // ── Lighting layer ─────────────────────────────────────────────────────
+  // Designer-facing authoring for the unified ambient lighting system.
+  // See `RoomAmbientLightBlockerDef` / `RoomLightSourceDef` in roomDef.ts.
+  { id: 'ambient_light_blocker', label: 'Ambient Blocker', category: 'lighting', isAmbientLightBlockerItem: 1 },
+  { id: 'light_source',          label: 'Light Source',    category: 'lighting', isLightSourceItem: 1 },
 ];
 
 /** Available block themes for the editor dropdown. */
@@ -109,11 +118,36 @@ export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] 
   { id: 'thero_ch6',        label: 'Thero Chapter 6 (Substrate)' },
 ];
 
-/** Available lighting models for the editor dropdown. */
+/**
+ * Available lighting models for the editor dropdown.
+ *
+ * The legacy `'DEFAULT'` and `'Above'` values are preserved for backward
+ * compatibility with existing room files (the runtime solver maps them into
+ * the unified ambient model — `'DEFAULT'` → omni, `'Above'` → down). New
+ * rooms should pick `'Ambient'`, `'DarkRoom'`, or `'FullyLit'`.
+ */
 export const LIGHTING_OPTIONS: readonly { id: LightingEffect; label: string }[] = [
-  { id: 'DEFAULT',  label: 'DEFAULT' },
-  { id: 'Above',    label: 'Above' },
+  { id: 'Ambient',  label: 'Ambient' },
   { id: 'DarkRoom', label: 'Dark Room' },
+  { id: 'FullyLit', label: 'Fully Lit' },
+  { id: 'DEFAULT',  label: 'Legacy: Default (omni)' },
+  { id: 'Above',    label: 'Legacy: Above (down)' },
+];
+
+/**
+ * Available ambient/skylight directions. `'down-right'` is the recommended
+ * authored default for a natural diagonal spill (§8 of the spec).
+ */
+export const AMBIENT_LIGHT_DIRECTION_OPTIONS: readonly { id: AmbientLightDirection; label: string }[] = [
+  { id: 'omni',       label: 'Omni (all sides)' },
+  { id: 'down',       label: 'Down ↓' },
+  { id: 'down-right', label: 'Down-Right ↘' },
+  { id: 'down-left',  label: 'Down-Left ↙' },
+  { id: 'up',         label: 'Up ↑' },
+  { id: 'up-right',   label: 'Up-Right ↗' },
+  { id: 'up-left',    label: 'Up-Left ↖' },
+  { id: 'left',       label: 'Left ←' },
+  { id: 'right',      label: 'Right →' },
 ];
 
 /** Available fade color options for room transitions. */
@@ -227,6 +261,33 @@ export interface EditorDecoration {
   kind: DecorationKind;
 }
 
+/**
+ * An editor-painted ambient-light blocker tile.
+ *
+ * One entry per opaque cell. The sparse cell-coordinate storage fits the
+ * existing JSON arrays model (see ARCHITECTURE/roomJson.ts). The tile has
+ * no collision, no hazard, and no visual geometry — it only influences
+ * the ambient-light propagation pass.
+ */
+export interface EditorAmbientLightBlocker {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
+/** An editor-placed local light source (see {@link RoomLightSourceDef}). */
+export interface EditorLightSource {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  radiusBlocks: number;
+  colorR: number;
+  colorG: number;
+  colorB: number;
+  /** Designer-facing 0-100 percent brightness slider value. */
+  brightnessPct: number;
+}
+
 export interface EditorRoomData {
   id: string;
   name: string;
@@ -241,6 +302,12 @@ export interface EditorRoomData {
   backgroundId: BackgroundId;
   /** Lighting model for this room. */
   lightingEffect: LightingEffect;
+  /**
+   * Direction ambient/skylight arrives from. Undefined means "use whatever
+   * the legacy `lightingEffect` value implies" (omni for `DEFAULT`/`Ambient`,
+   * down for `Above`).
+   */
+  ambientLightDirection?: AmbientLightDirection;
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default).
@@ -260,11 +327,15 @@ export interface EditorRoomData {
   grasshopperAreas: EditorGrasshopperArea[];
   /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
   decorations: EditorDecoration[];
+  /** Editor-painted ambient-light blocker tiles (sparse). */
+  ambientLightBlockers: EditorAmbientLightBlocker[];
+  /** Editor-placed local light sources. */
+  lightSources: EditorLightSource[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource';
 
 export interface SelectedElement {
   type: SelectedElementType;

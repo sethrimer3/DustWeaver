@@ -7,6 +7,7 @@ import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
   PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS, FADE_COLOR_OPTIONS,
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
+  AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
 } from './editorState';
 import { addHoverStyle } from '../ui/helpers';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
@@ -61,6 +62,7 @@ export interface EditorUICallbacks {
   onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => void;
   onBlockThemeChange: (theme: BlockTheme) => void;
   onLightingEffectChange: (effect: LightingEffect) => void;
+  onAmbientLightDirectionChange: (direction: AmbientLightDirection | undefined) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onRoomSongChange: (songId: RoomSongId) => void;
   onConfirm: () => void;
@@ -284,6 +286,35 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   lightingSelect.addEventListener('click', (e) => e.stopPropagation());
   lightingDiv.appendChild(lightingSelect);
 
+  // ── Ambient Light Direction dropdown ─────────────────────────────────────
+  const ambientDirLabel = document.createElement('div');
+  ambientDirLabel.textContent = 'Ambient Direction';
+  ambientDirLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  lightingDiv.appendChild(ambientDirLabel);
+  const ambientDirSelect = document.createElement('select');
+  ambientDirSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  // Add undefined/"room default" option
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '(room default)';
+  ambientDirSelect.appendChild(defaultOpt);
+  for (const opt of AMBIENT_LIGHT_DIRECTION_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    ambientDirSelect.appendChild(o);
+  }
+  ambientDirSelect.addEventListener('change', () => {
+    const val = ambientDirSelect.value as AmbientLightDirection | '';
+    callbacks?.onAmbientLightDirectionChange(val === '' ? undefined : val);
+  });
+  ambientDirSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(ambientDirSelect);
+
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
@@ -491,10 +522,14 @@ export function createEditorUI(root: HTMLElement): EditorUI {
         }
       }
     } else if (state.activeCategory === 'blocks') {
-      // Lighting may change independently; update select in-place
+      // Lighting and ambient direction may change independently; update selects in-place
       if (currentLighting !== lastRenderedLightingEffect && document.activeElement !== lightingSelect) {
         lastRenderedLightingEffect = currentLighting;
         lightingSelect.value = currentLighting;
+      }
+      const currentAmbientDir = state.roomData?.ambientLightDirection;
+      if (document.activeElement !== ambientDirSelect) {
+        ambientDirSelect.value = currentAmbientDir ?? '';
       }
     }
 
@@ -898,6 +933,56 @@ function updateInspector(
       addField(div, 'yBlock', String(deco.yBlock),
         v => callbacks?.onPropertyChange('decoration.yBlock', parseInt(v)));
     }
+  } else if (el.type === 'ambientLightBlocker') {
+    const blocker = (room.ambientLightBlockers ?? []).find(b => b.uid === el.uid);
+    if (blocker) {
+      const readout = document.createElement('div');
+      readout.textContent = 'Ambient Light Blocker';
+      readout.style.cssText = `font-size: 12px; color: rgba(180,120,255,0.9); margin-bottom: 6px; font-weight: bold;`;
+      div.appendChild(readout);
+      const posInfo = document.createElement('div');
+      posInfo.textContent = `X: ${blocker.xBlock}, Y: ${blocker.yBlock}`;
+      posInfo.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
+      div.appendChild(posInfo);
+      const note = document.createElement('div');
+      note.textContent = 'Blocks ambient-light propagation through this cell (no collision effect).';
+      note.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.5); margin-top: 6px; font-style: italic;`;
+      div.appendChild(note);
+    }
+  } else if (el.type === 'lightSource') {
+    const light = (room.lightSources ?? []).find(l => l.uid === el.uid);
+    if (light) {
+      addField(div, 'xBlock', String(light.xBlock),
+        v => {
+          const num = parseInt(v);
+          if (!isNaN(num)) {
+            light.xBlock = num;
+            callbacks?.onPropertyChange('lightSource.xBlock', num);
+          }
+        });
+      addField(div, 'yBlock', String(light.yBlock),
+        v => {
+          const num = parseInt(v);
+          if (!isNaN(num)) {
+            light.yBlock = num;
+            callbacks?.onPropertyChange('lightSource.yBlock', num);
+          }
+        });
+      addNumberField(div, 'radiusBlocks', light.radiusBlocks, 1, 64, v => {
+        light.radiusBlocks = v;
+        callbacks?.onPropertyChange('lightSource.radiusBlocks', v);
+      });
+      addSliderField(div, 'brightnessPct', light.brightnessPct, 0, 100, v => {
+        light.brightnessPct = v;
+        callbacks?.onPropertyChange('lightSource.brightnessPct', v);
+      });
+      addColorSliders(div, 'color', light.colorR, light.colorG, light.colorB, (r, g, b) => {
+        light.colorR = r;
+        light.colorG = g;
+        light.colorB = b;
+        callbacks?.onPropertyChange('lightSource.color', 0);
+      });
+    }
   }
 }
 
@@ -1014,4 +1099,140 @@ function addDimField(
   row.appendChild(input);
   parent.appendChild(row);
   return input;
+}
+
+function addNumberField(
+  parent: HTMLElement, label: string, value: number, min: number, max: number,
+  onChange: (v: number) => void,
+): void {
+  const row = document.createElement('div');
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+
+  const lbl = document.createElement('span');
+  lbl.textContent = label;
+  lbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(200,255,200,0.7);`;
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.value = String(value);
+  input.min = String(min);
+  input.max = String(max);
+  input.step = '1';
+  input.style.cssText = `
+    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 3px 5px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  input.addEventListener('change', () => {
+    const v = parseInt(input.value, 10);
+    if (!isNaN(v) && v >= min && v <= max) onChange(v);
+  });
+  input.addEventListener('click', (e) => e.stopPropagation());
+
+  row.appendChild(lbl);
+  row.appendChild(input);
+  parent.appendChild(row);
+}
+
+function addSliderField(
+  parent: HTMLElement, label: string, value: number, min: number, max: number,
+  onChange: (v: number) => void,
+): void {
+  const row = document.createElement('div');
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+
+  const lbl = document.createElement('span');
+  lbl.textContent = label;
+  lbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(200,255,200,0.7);`;
+
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.value = String(value);
+  slider.min = String(min);
+  slider.max = String(max);
+  slider.step = '1';
+  slider.style.cssText = `flex: 1; accent-color: ${GREEN};`;
+
+  const valueDisplay = document.createElement('span');
+  valueDisplay.textContent = String(value);
+  valueDisplay.style.cssText = `min-width: 30px; font-size: 11px; color: ${TEXT_COLOR}; text-align: right;`;
+
+  slider.addEventListener('input', () => {
+    const v = parseInt(slider.value, 10);
+    valueDisplay.textContent = String(v);
+    onChange(v);
+  });
+  slider.addEventListener('click', (e) => e.stopPropagation());
+
+  row.appendChild(lbl);
+  row.appendChild(slider);
+  row.appendChild(valueDisplay);
+  parent.appendChild(row);
+}
+
+function addColorSliders(
+  parent: HTMLElement, label: string, r: number, g: number, b: number,
+  onChange: (r: number, g: number, b: number) => void,
+): void {
+  const heading = document.createElement('div');
+  heading.textContent = label;
+  heading.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  parent.appendChild(heading);
+
+  let currentR = r;
+  let currentG = g;
+  let currentB = b;
+
+  const updateColor = () => onChange(currentR, currentG, currentB);
+
+  const addChannelSlider = (channelLabel: string, initialValue: number, setter: (v: number) => void) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display: flex; align-items: center; margin-bottom: 3px; gap: 6px;';
+
+    const lbl = document.createElement('span');
+    lbl.textContent = channelLabel;
+    lbl.style.cssText = `min-width: 20px; font-size: 10px; color: rgba(200,255,200,0.6);`;
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.value = String(initialValue);
+    slider.min = '0';
+    slider.max = '255';
+    slider.step = '1';
+    slider.style.cssText = `flex: 1; accent-color: ${GREEN};`;
+
+    const valueDisplay = document.createElement('span');
+    valueDisplay.textContent = String(initialValue);
+    valueDisplay.style.cssText = `min-width: 30px; font-size: 10px; color: ${TEXT_COLOR}; text-align: right;`;
+
+    slider.addEventListener('input', () => {
+      const v = parseInt(slider.value, 10);
+      valueDisplay.textContent = String(v);
+      setter(v);
+      updateColor();
+      updateSwatch();
+    });
+    slider.addEventListener('click', (e) => e.stopPropagation());
+
+    row.appendChild(lbl);
+    row.appendChild(slider);
+    row.appendChild(valueDisplay);
+    parent.appendChild(row);
+  };
+
+  addChannelSlider('R', r, v => { currentR = v; });
+  addChannelSlider('G', g, v => { currentG = v; });
+  addChannelSlider('B', b, v => { currentB = v; });
+
+  const swatch = document.createElement('div');
+  swatch.style.cssText = `
+    width: 100%; height: 20px; border-radius: 3px; margin-top: 4px;
+    border: 1px solid ${PANEL_BORDER};
+  `;
+  parent.appendChild(swatch);
+
+  const updateSwatch = () => {
+    swatch.style.backgroundColor = `rgb(${currentR},${currentG},${currentB})`;
+  };
+  updateSwatch();
 }

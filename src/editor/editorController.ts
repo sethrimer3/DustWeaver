@@ -12,8 +12,8 @@ import type { CameraState } from '../render/camera';
 import {
   EditorState, createEditorState, EditorTool,
   EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
-  BlockTheme, BackgroundId, LightingEffect, RoomSongId,
-  SelectedElement, allocateUid, EditorRoomData,
+  BlockTheme, BackgroundId, LightingEffect, RoomSongId, AmbientLightDirection,
+  SelectedElement, allocateUid, EditorRoomData, EditorLightSource,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
@@ -170,6 +170,10 @@ export function createEditorController(
         },
         onLightingEffectChange: (lightingEffect: LightingEffect) => {
           if (state.roomData) state.roomData.lightingEffect = lightingEffect;
+          applyEdits();
+        },
+        onAmbientLightDirectionChange: (direction: AmbientLightDirection | undefined) => {
+          if (state.roomData) state.roomData.ambientLightDirection = direction;
           applyEdits();
         },
         onBackgroundChange: (bgId: BackgroundId) => {
@@ -1006,6 +1010,17 @@ export function createEditorController(
         if (prop === 'decoration.xBlock' && !isNaN(numVal)) deco.xBlock = numVal;
         if (prop === 'decoration.yBlock' && !isNaN(numVal)) deco.yBlock = numVal;
       }
+    } else if (el.type === 'lightSource') {
+      const light = (room.lightSources ?? []).find((l: EditorLightSource) => l.uid === el.uid);
+      if (light) {
+        if (prop === 'lightSource.xBlock' && !isNaN(numVal)) light.xBlock = numVal;
+        if (prop === 'lightSource.yBlock' && !isNaN(numVal)) light.yBlock = numVal;
+        if (prop === 'lightSource.radiusBlocks' && !isNaN(numVal)) light.radiusBlocks = Math.max(1, Math.min(64, numVal));
+        if (prop === 'lightSource.brightnessPct' && !isNaN(numVal)) light.brightnessPct = Math.max(0, Math.min(100, numVal));
+        if (prop === 'lightSource.color') {
+          // Color change already applied in UI handler; just mark dirty
+        }
+      }
     }
   }
 
@@ -1034,6 +1049,9 @@ export function createEditorController(
       } else if (el.type === 'decoration') {
         const d = (s.roomData.decorations ?? []).find(d2 => d2.uid === el.uid);
         if (d) positions.set(key, { xBlock: d.xBlock, yBlock: d.yBlock });
+      } else if (el.type === 'lightSource') {
+        const l = (s.roomData.lightSources ?? []).find(l2 => l2.uid === el.uid);
+        if (l) positions.set(key, { xBlock: l.xBlock, yBlock: l.yBlock });
       } else if (el.type === 'playerSpawn') {
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
       } else if (el.type === 'transition') {
@@ -1083,6 +1101,9 @@ export function createEditorController(
       } else if (el.type === 'decoration') {
         const d = (s.roomData.decorations ?? []).find(d2 => d2.uid === el.uid);
         if (d) { d.xBlock = orig.xBlock + deltaX; d.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'lightSource') {
+        const l = (s.roomData.lightSources ?? []).find(l2 => l2.uid === el.uid);
+        if (l) { l.xBlock = orig.xBlock + deltaX; l.yBlock = orig.yBlock + deltaY; }
       } else if (el.type === 'playerSpawn') {
         s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
         s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
@@ -1114,8 +1135,8 @@ export function createEditorController(
   // ── Copy/Paste helpers ───────────────────────────────────────────────────
 
   function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
-    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations: EditorDecoration[] } = {
-      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [], decorations: [],
+    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations: EditorDecoration[]; lightSources: EditorLightSource[] } = {
+      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [], decorations: [], lightSources: [],
     };
     for (const el of elements) {
       if (el.type === 'wall') {
@@ -1136,6 +1157,9 @@ export function createEditorController(
       } else if (el.type === 'decoration') {
         const d = (room.decorations ?? []).find(d2 => d2.uid === el.uid);
         if (d) data.decorations.push({ ...d });
+      } else if (el.type === 'lightSource') {
+        const l = (room.lightSources ?? []).find(l2 => l2.uid === el.uid);
+        if (l) data.lightSources.push({ ...l });
       }
     }
     return JSON.stringify(data);
@@ -1143,7 +1167,7 @@ export function createEditorController(
 
   function pasteFromClipboard(s: EditorState): void {
     if (!s.roomData || !s.clipboard) return;
-    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations?: EditorDecoration[] };
+    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations?: EditorDecoration[]; lightSources?: EditorLightSource[] };
     try {
       data = JSON.parse(s.clipboard) as typeof data;
     } catch {
@@ -1162,6 +1186,7 @@ export function createEditorController(
     for (const t of (data.skillTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
     for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
     for (const d of (data.decorations ?? [])) { minX = Math.min(minX, d.xBlock); minY = Math.min(minY, d.yBlock); }
+    for (const l of (data.lightSources ?? [])) { minX = Math.min(minX, l.xBlock); minY = Math.min(minY, l.yBlock); }
     if (!isFinite(minX)) minX = 0;
     if (!isFinite(minY)) minY = 0;
 
@@ -1225,6 +1250,17 @@ export function createEditorController(
         yBlock: d.yBlock - minY + offsetY,
       });
       newElements.push({ type: 'decoration', uid: newUid });
+    }
+    for (const l of (data.lightSources ?? [])) {
+      const newUid = allocateUid(s);
+      if (!s.roomData.lightSources) s.roomData.lightSources = [];
+      s.roomData.lightSources.push({
+        ...l,
+        uid: newUid,
+        xBlock: l.xBlock - minX + offsetX,
+        yBlock: l.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'lightSource', uid: newUid });
     }
     s.selectedElements = newElements;
   }

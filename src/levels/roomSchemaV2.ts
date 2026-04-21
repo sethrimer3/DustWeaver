@@ -193,6 +193,18 @@ export interface SavedRoomV2 {
   grasshopperAreas?: [number, number, number, number, number][];
   /** [x, y, kind] */
   decorations?: [number, number, string][];
+  /**
+   * Authored ambient/skylight direction (see `AmbientLightDirection`).
+   * Stored verbatim as the string literal.
+   */
+  ambientDir?: string;
+  /** Sparse list of ambient-light blocker tile coordinates: [x, y]. */
+  ambientBlockers?: [number, number][];
+  /**
+   * Sparse list of local light sources:
+   * [xBlock, yBlock, radiusBlocks, r, g, b, brightnessPct].
+   */
+  lights?: [number, number, number, number, number, number, number][];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -584,6 +596,18 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.decorations && json.decorations.length > 0) {
     out.decorations = json.decorations.map(d => [d.xBlock, d.yBlock, d.kind] as [number, number, string]);
   }
+  // ── Lighting authoring data ────────────────────────────────────────────
+  if (json.ambientLightDirection) {
+    out.ambientDir = json.ambientLightDirection;
+  }
+  if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
+    out.ambientBlockers = json.ambientLightBlockers.map(b => [b.xBlock, b.yBlock] as [number, number]);
+  }
+  if (json.lightSources && json.lightSources.length > 0) {
+    out.lights = json.lightSources.map(l => [
+      l.xBlock, l.yBlock, l.radiusBlocks, l.colorR, l.colorG, l.colorB, l.brightnessPct,
+    ] as [number, number, number, number, number, number, number]);
+  }
 
   return out;
 }
@@ -697,6 +721,19 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.dustPiles)      json.dustPiles       = saved.dustPiles.map(([x, y, count]) => ({ xBlock: x, yBlock: y, dustCount: count }) as RoomJsonDustPile);
   if (saved.grasshopperAreas) json.grasshopperAreas = saved.grasshopperAreas.map(([x, y, w, h, count]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h, count }) as RoomJsonGrasshopperArea);
   if (saved.decorations)    json.decorations     = saved.decorations.map(([x, y, kind]) => ({ xBlock: x, yBlock: y, kind }) as RoomJsonDecoration);
+  if (saved.ambientDir) {
+    // Cast — the JSON field is typed as the literal union `AmbientLightDirection`.
+    json.ambientLightDirection = saved.ambientDir as RoomJsonDef['ambientLightDirection'];
+  }
+  if (saved.ambientBlockers && saved.ambientBlockers.length > 0) {
+    json.ambientLightBlockers = saved.ambientBlockers.map(([x, y]) => ({ xBlock: x, yBlock: y }));
+  }
+  if (saved.lights && saved.lights.length > 0) {
+    json.lightSources = saved.lights.map(([x, y, r, cr, cg, cb, br]) => ({
+      xBlock: x, yBlock: y, radiusBlocks: r,
+      colorR: cr, colorG: cg, colorB: cb, brightnessPct: br,
+    }));
+  }
 
   return json;
 }

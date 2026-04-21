@@ -18,7 +18,7 @@
  */
 
 import { WallSnapshot } from '../snapshot';
-import type { BlockTheme, LightingEffect } from '../../levels/roomDef';
+import type { BlockTheme, LightingEffect, AmbientLightDirection } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 import {
   getBlockSprite1x1,
@@ -125,9 +125,21 @@ let _activeWorldNumber = 0;
  * world-number-based sprite selection.
  */
 let _activeBlockTheme: BlockTheme | null = null;
-let _activeLightingEffect: LightingEffect = 'DEFAULT';
+let _activeLightingEffect: LightingEffect = 'Ambient';
+let _activeAmbientDirection: AmbientLightDirection = 'omni';
 let _activeRoomWidthBlocks = 0;
 let _activeRoomHeightBlocks = 0;
+/**
+ * Active set of {@link import('../../levels/roomDef').RoomAmbientLightBlockerDef}
+ * tile keys (`"col,row"`). Treated as opaque to ambient-light propagation
+ * (but NOT to collision, NOT to local lights — see roomDef.ts docs).
+ */
+let _activeAmbientBlockerKeys: ReadonlySet<string> = new Set();
+/**
+ * Short signature of the active blocker set, used to detect blocker changes
+ * when rebuilding the wall-layout cache. Set to `''` when the set is empty.
+ */
+let _activeAmbientBlockerSig = '';
 
 /**
  * Set the active world number for block sprite rendering.
@@ -149,11 +161,55 @@ export function setActiveBlockSpriteTheme(theme: BlockTheme): void {
   _invalidateBakedWallCanvas();
 }
 
-/** Sets the active lighting model and room bounds used for block shading. */
-export function setActiveBlockLighting(effect: LightingEffect, roomWidthBlocks: number, roomHeightBlocks: number): void {
+/**
+ * Sets the active ambient-lighting model and room bounds used for block shading.
+ *
+ * @param effect          Which lighting mode is active. Legacy values `'DEFAULT'`
+ *                        and `'Above'` are accepted and mapped to `'Ambient'`
+ *                        with direction `'omni'` / `'down'` respectively
+ *                        (unless a direction is explicitly supplied).
+ * @param roomWidthBlocks  Room width in block units.
+ * @param roomHeightBlocks Room height in block units.
+ * @param direction        Ambient/skylight direction. Omitted ⇒ use the
+ *                         direction implied by the legacy mode name.
+ * @param ambientBlockers  Optional set of `"col,row"` tile keys that are
+ *                         opaque to ambient-light propagation. Authored data
+ *                         from {@link import('../../levels/roomDef').RoomAmbientLightBlockerDef}.
+ */
+export function setActiveBlockLighting(
+  effect: LightingEffect,
+  roomWidthBlocks: number,
+  roomHeightBlocks: number,
+  direction?: AmbientLightDirection,
+  ambientBlockers?: ReadonlySet<string>,
+): void {
   _activeLightingEffect = effect;
   _activeRoomWidthBlocks = roomWidthBlocks;
   _activeRoomHeightBlocks = roomHeightBlocks;
+
+  // Resolve direction: explicit > inferred-from-legacy-mode > sensible default.
+  if (direction !== undefined) {
+    _activeAmbientDirection = direction;
+  } else if (effect === 'Above') {
+    _activeAmbientDirection = 'down';
+  } else {
+    // 'DEFAULT', 'Ambient', 'DarkRoom', 'FullyLit' → omni by default
+    _activeAmbientDirection = 'omni';
+  }
+
+  // Build a stable signature from the blocker set; order-independent by using
+  // a sorted join of keys. Cheap for typical authored counts (<~128).
+  const blockerKeys = ambientBlockers ?? new Set<string>();
+  _activeAmbientBlockerKeys = blockerKeys;
+  if (blockerKeys.size === 0) {
+    _activeAmbientBlockerSig = '';
+  } else {
+    const arr: string[] = [];
+    for (const k of blockerKeys) arr.push(k);
+    arr.sort();
+    _activeAmbientBlockerSig = arr.join(';');
+  }
+
   _invalidateBakedWallCanvas();
 }
 
@@ -300,6 +356,28 @@ interface HalfPillarWallInfo {
   readonly wallIndex: number;
 }
 
+/**
+ * Unit 2-D vector associated with each {@link AmbientLightDirection} value.
+ *
+ * The vector points in the direction light TRAVELS (e.g. `'down-right'` →
+ * (+1, +1) normalised, meaning light enters the room from the upper-left
+ * and moves toward the lower-right). The `'omni'` value returns (0,0),
+ * signalling the solver to skip directional biasing.
+ */
+function _ambientDirectionVector(dir: AmbientLightDirection): { dx: number; dy: number } {
+  switch (dir) {
+    case 'omni':       return { dx:  0, dy:  0 };
+    case 'down':       return { dx:  0, dy:  1 };
+    case 'down-right': return { dx:  1, dy:  1 };
+    case 'down-left':  return { dx: -1, dy:  1 };
+    case 'up':         return { dx:  0, dy: -1 };
+    case 'up-right':   return { dx:  1, dy: -1 };
+    case 'up-left':    return { dx: -1, dy: -1 };
+    case 'left':       return { dx: -1, dy:  0 };
+    case 'right':      return { dx:  1, dy:  0 };
+  }
+}
+
 interface CachedWallLayout {
   signature: string;
   blockSizePx: number;
@@ -313,8 +391,13 @@ interface CachedWallLayout {
   halfPillarWalls: HalfPillarWallInfo[];
   /** Per-tile theme: maps tile key → BlockTheme (null = use room default). */
   tileTheme: Map<string, BlockTheme | null>;
-  aboveLightingDepths: Map<string, number>;
-  defaultLightingDepthByRoomKey: Map<string, Map<string, number>>;
+  /**
+   * Per-(room-size × direction × blockers) cache of computed ambient depths.
+   * Keyed by `"widthxheight|direction|blockerSig"` so a room that keeps the
+   * same wall layout but toggles ambient direction or blocker edits reuses
+   * the same outer layout cache.
+   */
+  ambientDepthsByKey: Map<string, Map<string, number>>;
   /**
    * Maps top-left tile key of each 2×2 solid wall to its wall theme index.
    * Computed once per layout and reused across frames to avoid per-frame Map allocation.
@@ -339,16 +422,139 @@ function _isInsideActiveRoom(col: number, row: number): boolean {
 }
 
 /**
- * Returns how many solid tiles lie directly above this tile before open air.
- * 0 means this tile is directly exposed to air from above.
+ * Unified ambient-light depth solver.
+ *
+ * Two-phase algorithm that replaces the legacy split between `'DEFAULT'`
+ * (omni BFS from any air-touching solid) and `'Above'` (vertical scan only):
+ *
+ * 1. **Lit-air flood**: compute the set of in-room AIR cells that are
+ *    "connected to the sky". Seeds are air cells on a room edge that faces
+ *    the ambient-light direction (or every edge, for `'omni'`). The flood
+ *    propagates through empty cells only, skipping solids and skipping
+ *    `ambientBlockers`. When a direction is set, a cell only propagates into
+ *    neighbours whose offset dot-producted with the direction vector is
+ *    `≥ 0`, so light naturally spills in a diagonal cone instead of bending
+ *    around arbitrary corners.
+ *
+ * 2. **Solid depth BFS**: every solid cell 8-adjacent to a lit-air cell is
+ *    depth 0 ("directly exposed"). BFS outward through adjacent solids
+ *    assigns each deeper solid an incrementing depth, which drives the
+ *    exponential darkness tint in {@link _getDarknessAlphaFromAirDepth}.
+ *
+ * Air cells inside an enclosed/blocked pocket never enter the lit-air set, so
+ * solid walls adjacent to them stay at `maxFallbackDepth` (fully dark). When
+ * a breakable wall is destroyed its tile becomes empty, the wall-layout
+ * signature changes, and this function is re-run — light then spills in
+ * naturally on the next bake. See `ambientLightBlockers` docs in
+ * `roomDef.ts` for the full authoring model.
  */
-function _buildDefaultLightingDepths(occupied: Set<string>): Map<string, number> {
+function _buildAmbientDepths(
+  occupied: Set<string>,
+  blockers: ReadonlySet<string>,
+  direction: AmbientLightDirection,
+): Map<string, number> {
   const depths = new Map<string, number>();
   if (_activeRoomWidthBlocks <= 0 || _activeRoomHeightBlocks <= 0) return depths;
 
-  const qCols: number[] = [];
-  const qRows: number[] = [];
-  const qDepths: number[] = [];
+  const { dx: directionVectorX, dy: directionVectorY } = _ambientDirectionVector(direction);
+  const isOmni = directionVectorX === 0 && directionVectorY === 0;
+
+  // ── Phase 1: flood-fill "lit air" cells ──────────────────────────────────
+  // `litAir` tracks which empty cells are connected to the sky.
+  const litAir = new Set<string>();
+  const airQueueCols: number[] = [];
+  const airQueueRows: number[] = [];
+  let airQueueIndex = 0;
+
+  const pushAirSeed = (c: number, r: number): void => {
+    if (!_isInsideActiveRoom(c, r)) return;
+    const key = _tileKey(c, r);
+    if (litAir.has(key)) return;
+    if (occupied.has(key)) return;       // solid: not a sky-seed
+    if (blockers.has(key)) return;       // authored blocker: opaque to ambient
+    litAir.add(key);
+    airQueueCols.push(c);
+    airQueueRows.push(r);
+  };
+
+  // Seed the "sky side" of the room.
+  //
+  // For `'omni'` mode we preserve the legacy `'DEFAULT'` semantics by seeding
+  // EVERY non-blocker air cell — so a fully-enclosed room with only interior
+  // air still has lit walls around the air, and authored hidden pockets are
+  // created exclusively by painting `ambientLightBlockers` over the pocket's
+  // air cells (those cells fail the `!blockers.has(key)` check and stay dark).
+  //
+  // For a directional mode, seeds come from the edges facing the sky (i.e.
+  // the sides opposite to the direction vector); the flood then propagates
+  // inward through connected air, so a hidden pocket walled off from the
+  // sky-facing edge naturally stays dark.
+  if (isOmni) {
+    for (let r = 0; r < _activeRoomHeightBlocks; r++) {
+      for (let c = 0; c < _activeRoomWidthBlocks; c++) {
+        const key = _tileKey(c, r);
+        if (occupied.has(key)) continue;
+        if (blockers.has(key)) continue;
+        litAir.add(key);
+      }
+    }
+    // Omni mode doesn't need to flood — every eligible air cell is already
+    // in `litAir` — so skip the queue-based propagation below.
+  } else {
+    const seedTop    = directionVectorY > 0;  // light moves downward ⇒ enters from top
+    const seedBottom = directionVectorY < 0;
+    const seedLeft   = directionVectorX > 0;
+    const seedRight  = directionVectorX < 0;
+
+    if (seedTop) {
+      for (let c = 0; c < _activeRoomWidthBlocks; c++) pushAirSeed(c, 0);
+    }
+    if (seedBottom) {
+      for (let c = 0; c < _activeRoomWidthBlocks; c++) pushAirSeed(c, _activeRoomHeightBlocks - 1);
+    }
+    if (seedLeft) {
+      for (let r = 0; r < _activeRoomHeightBlocks; r++) pushAirSeed(0, r);
+    }
+    if (seedRight) {
+      for (let r = 0; r < _activeRoomHeightBlocks; r++) pushAirSeed(_activeRoomWidthBlocks - 1, r);
+    }
+  }
+
+  // Flood-fill through empty cells. Directional bias: only step into a
+  // neighbour whose offset has a non-negative dot product with the direction
+  // vector (i.e. light keeps travelling generally with the direction). The
+  // check allows perpendicular spread for a natural soft cone.
+  while (airQueueIndex < airQueueCols.length) {
+    const col = airQueueCols[airQueueIndex];
+    const row = airQueueRows[airQueueIndex];
+    airQueueIndex++;
+
+    for (let ny = -1; ny <= 1; ny++) {
+      for (let nx = -1; nx <= 1; nx++) {
+        if (nx === 0 && ny === 0) continue;
+        if (!isOmni) {
+          // dot(neighbourOffset, direction) >= 0 — skip stepping "uphill"
+          const dot = nx * directionVectorX + ny * directionVectorY;
+          if (dot < 0) continue;
+        }
+        const c = col + nx;
+        const r = row + ny;
+        if (!_isInsideActiveRoom(c, r)) continue;
+        const key = _tileKey(c, r);
+        if (litAir.has(key)) continue;
+        if (occupied.has(key)) continue;
+        if (blockers.has(key)) continue;
+        litAir.add(key);
+        airQueueCols.push(c);
+        airQueueRows.push(r);
+      }
+    }
+  }
+
+  // ── Phase 2: BFS depth into solid cells from lit-air neighbours ─────────
+  const solidQueueCols: number[] = [];
+  const solidQueueRows: number[] = [];
+  const solidQueueDepths: number[] = [];
   let qIndex = 0;
 
   for (const key of occupied) {
@@ -357,32 +563,33 @@ function _buildDefaultLightingDepths(occupied: Set<string>): Map<string, number>
     const row = parseInt(key.slice(commaIdx + 1), 10);
     if (!_isInsideActiveRoom(col, row)) continue;
 
-    let touchesOpenAir = false;
-    for (let dy = -1; dy <= 1 && !touchesOpenAir; dy++) {
+    // Solid cell is "exposed" if any 8-neighbour is a lit-air cell.
+    let touchesLitAir = false;
+    for (let dy = -1; dy <= 1 && !touchesLitAir; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (dx === 0 && dy === 0) continue;
         const nc = col + dx;
         const nr = row + dy;
-        if (!_isInsideActiveRoom(nc, nr)) continue; // outside room counts as solid
-        if (!_isOccupied(occupied, nc, nr)) {
-          touchesOpenAir = true;
+        if (!_isInsideActiveRoom(nc, nr)) continue;
+        if (litAir.has(_tileKey(nc, nr))) {
+          touchesLitAir = true;
           break;
         }
       }
     }
 
-    if (touchesOpenAir) {
+    if (touchesLitAir) {
       depths.set(key, 0);
-      qCols.push(col);
-      qRows.push(row);
-      qDepths.push(0);
+      solidQueueCols.push(col);
+      solidQueueRows.push(row);
+      solidQueueDepths.push(0);
     }
   }
 
-  while (qIndex < qCols.length) {
-    const col = qCols[qIndex];
-    const row = qRows[qIndex];
-    const depth = qDepths[qIndex];
+  while (qIndex < solidQueueCols.length) {
+    const col = solidQueueCols[qIndex];
+    const row = solidQueueRows[qIndex];
+    const depth = solidQueueDepths[qIndex];
     qIndex++;
 
     for (let dy = -1; dy <= 1; dy++) {
@@ -395,13 +602,16 @@ function _buildDefaultLightingDepths(occupied: Set<string>): Map<string, number>
         if (depths.has(neighborKey)) continue;
         const nextDepth = depth + 1;
         depths.set(neighborKey, nextDepth);
-        qCols.push(nc);
-        qRows.push(nr);
-        qDepths.push(nextDepth);
+        solidQueueCols.push(nc);
+        solidQueueRows.push(nr);
+        solidQueueDepths.push(nextDepth);
       }
     }
   }
 
+  // Solid cells never reached by the flood are authored dark pockets
+  // (enclosed by walls or by a blocker field). Assign the maximum fallback
+  // depth so the darkness tint saturates.
   const maxFallbackDepth = Math.max(_activeRoomWidthBlocks, _activeRoomHeightBlocks);
   for (const key of occupied) {
     const commaIdx = key.indexOf(',');
@@ -523,28 +733,6 @@ function _buildWallLayoutCache(
     });
   }
 
-  const aboveLightingDepths = new Map<string, number>();
-  for (let i = 0; i < occupiedTiles.length; i++) {
-    const tile = occupiedTiles[i];
-    let depth = 0;
-    let scanRow = tile.row - 1;
-    while (_isOccupied(occupied, tile.col, scanRow)) {
-      depth++;
-      scanRow--;
-    }
-    aboveLightingDepths.set(tile.key, depth);
-  }
-  for (let i = 0; i < platformTiles.length; i++) {
-    const tile = platformTiles[i];
-    let depth = 0;
-    let scanRow = tile.row - 1;
-    while (_isOccupied(occupied, tile.col, scanRow)) {
-      depth++;
-      scanRow--;
-    }
-    aboveLightingDepths.set(tile.key, depth);
-  }
-
   _cachedWallLayout = {
     signature,
     blockSizePx,
@@ -555,21 +743,30 @@ function _buildWallLayoutCache(
     rampWalls,
     halfPillarWalls,
     tileTheme,
-    aboveLightingDepths,
-    defaultLightingDepthByRoomKey: new Map<string, Map<string, number>>(),
+    ambientDepthsByKey: new Map<string, Map<string, number>>(),
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),
   };
 
   return _cachedWallLayout;
 }
 
-function _getDefaultLightingDepths(layout: CachedWallLayout): Map<string, number> {
-  const roomKey = `${_activeRoomWidthBlocks}x${_activeRoomHeightBlocks}`;
-  const cached = layout.defaultLightingDepthByRoomKey.get(roomKey);
+/**
+ * Returns the per-tile ambient-light depth map for the current lighting
+ * configuration, memoised per `(roomSize × direction × blockerSet)` so the
+ * common "camera panning, nothing changed" path costs one Map lookup.
+ *
+ * When the layout cache itself is rebuilt (signature change — e.g. a
+ * breakable wall's AABB was zeroed on destruction), this memo is discarded
+ * along with the rest of the layout, so light spills into newly opened
+ * pockets on the next frame.
+ */
+function _getAmbientDepths(layout: CachedWallLayout): Map<string, number> {
+  const memoKey = `${_activeRoomWidthBlocks}x${_activeRoomHeightBlocks}|${_activeAmbientDirection}|${_activeAmbientBlockerSig}`;
+  const cached = layout.ambientDepthsByKey.get(memoKey);
   if (cached !== undefined) return cached;
 
-  const depths = _buildDefaultLightingDepths(layout.occupied);
-  layout.defaultLightingDepthByRoomKey.set(roomKey, depths);
+  const depths = _buildAmbientDepths(layout.occupied, _activeAmbientBlockerKeys, _activeAmbientDirection);
+  layout.ambientDepthsByKey.set(memoKey, depths);
   return depths;
 }
 
@@ -855,8 +1052,11 @@ export function renderWallSprites(
   // avoids allocating a new Set<string> every frame.
   _populateCoveredBy2x2Keys(wallLayout.solid2x2Map, blockSizePx, _activeBlockTheme);
 
-  const defaultLightingDepths = _activeLightingEffect === 'DEFAULT' || _activeLightingEffect === 'DarkRoom'
-    ? _getDefaultLightingDepths(wallLayout)
+  // Compute ambient depths for the currently-active lighting mode, except
+  // for 'DarkRoom' (handled by full-screen overlay) and 'FullyLit' (no tint
+  // applied at all — see `isBlockTintEnabled` below).
+  const ambientDepths = (_activeLightingEffect !== 'DarkRoom' && _activeLightingEffect !== 'FullyLit')
+    ? _getAmbientDepths(wallLayout)
     : null;
 
   // Fast path: blit the pre-rendered canvas when the layout, scale, and
@@ -897,13 +1097,13 @@ export function renderWallSprites(
   const bakeCtx = bakeCanvas.getContext('2d');
   if (bakeCtx === null) {
     // Context unavailable — render directly without baking.
-    _doRenderWallTilesDirect(ctx, walls, wallLayout, defaultLightingDepths, offsetXPx, offsetYPx, scalePx, blockSizePx);
+    _doRenderWallTilesDirect(ctx, walls, wallLayout, ambientDepths, offsetXPx, offsetYPx, scalePx, blockSizePx);
     return;
   }
 
   // Render all tiles into the bake canvas at world origin (offset = 0, 0).
   bakeCtx.clearRect(0, 0, bakeCanvas.width, bakeCanvas.height);
-  _doRenderWallTilesDirect(bakeCtx, walls, wallLayout, defaultLightingDepths, 0, 0, scalePx, blockSizePx);
+  _doRenderWallTilesDirect(bakeCtx, walls, wallLayout, ambientDepths, 0, 0, scalePx, blockSizePx);
 
   // Commit the bake (even if fallbacks were used — they'll be corrected on the
   // next frame once the sprites finish loading).
@@ -934,7 +1134,7 @@ function _doRenderWallTilesDirect(
   ctx:                   CanvasRenderingContext2D,
   walls:                 WallSnapshot,
   wallLayout:            CachedWallLayout,
-  defaultLightingDepths: Map<string, number> | null,
+  ambientDepths:         Map<string, number> | null,
   offsetXPx:             number,
   offsetYPx:             number,
   scalePx:               number,
@@ -951,10 +1151,12 @@ function _doRenderWallTilesDirect(
   // World-number mode for worlds 1+ uses the world-specific sprite set
   const isWorldMode = (roomTheme === null) && !isLegacyBlackRock;
 
-  // DarkRoom: the per-tile tinting is skipped entirely.  The DarkRoomOverlay
-  // in the render pipeline covers the full room with a canvas-level darkness
-  // layer, so double-darkening individual blocks would look wrong.
-  const isBlockTintEnabled = _activeLightingEffect !== 'DarkRoom';
+  // Per-tile block tinting is skipped for:
+  //   - 'DarkRoom':  a full-screen darkness overlay handles it globally.
+  //   - 'FullyLit':  intentionally no ambient shading at all (metroidvania-
+  //                  style straightforward lighting, §7 of the spec).
+  const isBlockTintEnabled =
+    _activeLightingEffect !== 'DarkRoom' && _activeLightingEffect !== 'FullyLit';
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -1025,9 +1227,7 @@ function _doRenderWallTilesDirect(
 
     if (_coveredBy2x2Keys.has(tileKey)) {
       if (isBlockTintEnabled) {
-        const airDepth = _activeLightingEffect === 'DEFAULT'
-          ? (defaultLightingDepths?.get(tileKey) ?? 0)
-          : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+        const airDepth = (ambientDepths?.get(tileKey) ?? 0);
         const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
         if (darknessAlpha > 0) {
           ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
@@ -1095,9 +1295,7 @@ function _doRenderWallTilesDirect(
     }
 
     if (isBlockTintEnabled) {
-      const airDepth = _activeLightingEffect === 'DEFAULT'
-        ? (defaultLightingDepths?.get(tileKey) ?? 0)
-        : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+      const airDepth = (ambientDepths?.get(tileKey) ?? 0);
       const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
       if (darknessAlpha > 0) {
         ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
@@ -1163,9 +1361,7 @@ function _doRenderWallTilesDirect(
 
     const tileKey = key;
     if (isBlockTintEnabled) {
-      const airDepth = _activeLightingEffect === 'DEFAULT'
-        ? (defaultLightingDepths?.get(tileKey) ?? 0)
-        : (wallLayout.aboveLightingDepths.get(tileKey) ?? 0);
+      const airDepth = (ambientDepths?.get(tileKey) ?? 0);
       const darknessAlpha = _getDarknessAlphaFromAirDepth(airDepth);
       if (darknessAlpha > 0) {
         ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;

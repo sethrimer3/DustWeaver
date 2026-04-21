@@ -221,7 +221,24 @@ export function startGameScreen(
     } else {
       setActiveBlockSpriteWorld(room.worldNumber);
     }
-    setActiveBlockLighting(room.lightingEffect ?? 'DEFAULT', room.widthBlocks, room.heightBlocks);
+    // Build the ambientLightBlockers tile-key set from authored room data.
+    // These tiles are opaque to the ambient-light solver in
+    // `blockSpriteRenderer` (but NOT to collision and NOT to local lights
+    // — see `roomDef.ts` for the full authoring model).
+    let blockerKeys: Set<string> | undefined;
+    if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
+      blockerKeys = new Set<string>();
+      for (const b of room.ambientLightBlockers) {
+        blockerKeys.add(`${b.xBlock},${b.yBlock}`);
+      }
+    }
+    setActiveBlockLighting(
+      room.lightingEffect ?? 'Ambient',
+      room.widthBlocks,
+      room.heightBlocks,
+      room.ambientLightDirection,
+      blockerKeys,
+    );
 
     // Notify the music manager about the new room
     musicManager.notifyRoomEntered(room.songId ?? '_continue');
