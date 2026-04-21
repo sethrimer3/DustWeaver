@@ -4,7 +4,7 @@ import { initGrappleChainParticles, fireGrapple, releaseGrapple } from '../sim/c
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng, nextFloat } from '../sim/rng';
-import { createSnapshot } from '../render/snapshot';
+import { createSnapshot, createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
 import { PlayerCloak } from '../render/clusters/playerCloak';
@@ -69,7 +69,8 @@ import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits, SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
 import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
 import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
-import { DecorationWaveState } from '../render/effects/wallDecorations';
+import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
+import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
 import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS } from '../sim/world';
 
@@ -411,6 +412,19 @@ export function startGameScreen(
     // Reset decoration wave state for new room
     decorationWaveState.reset(room.decorations?.length ?? 0);
 
+    // Build and cache wall decorations and their center coordinates once per
+    // room load so renderFrame() never allocates a WallDecoration[] each frame.
+    cachedWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+    for (let _di = 0; _di < cachedWallDecorations.length; _di++) {
+      const _d = cachedWallDecorations[_di];
+      cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
+      cachedDecorationCenterY[_di] = _d.worldAnchorYPx;
+    }
+
+    // Rebuild the reusable snapshot cluster pool to match this room's cluster
+    // count so updateSnapshotInPlace() never needs to grow the pool mid-frame.
+    resetReusableSnapshot(reusableSnapshot, world);
+
     // Init save tomb renderer (with room walls for floor detection)
     skillTombRenderer.init(room.saveTombs, room.walls);
 
@@ -438,6 +452,14 @@ export function startGameScreen(
   const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();
   const decorationWaveState = new DecorationWaveState();
+
+  // ── Per-frame allocation-free state ─────────────────────────────────────
+  // All three are populated once per room load in loadRoom() and reused every
+  // frame so renderFrame() never allocates decorations or snapshots on the heap.
+  let cachedWallDecorations: WallDecoration[] = [];
+  const cachedDecorationCenterX = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
+  const cachedDecorationCenterY = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
+  const reusableSnapshot = createReusableSnapshot(world);
 
   // ── Health bar state ─────────────────────────────────────────────────────
   /** Map of entityId -> tick when health bar should hide. */
@@ -1241,11 +1263,16 @@ export function startGameScreen(
     }
 
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
+    updateSnapshotInPlace(reusableSnapshot, world);
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, darkRoomOverlay, decorationWaveState,
       world, currentRoom,
+      snapshot: reusableSnapshot,
+      cachedDecorations: cachedWallDecorations,
+      cachedDecorationCenterX,
+      cachedDecorationCenterY,
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,
       bgColor, isDebugMode, hudState, inputState,
       prevHealthMap, healthBarDisplayUntilTick,

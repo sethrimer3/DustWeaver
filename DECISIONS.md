@@ -125,7 +125,58 @@ The `kind` drives element colour selection in the GLSL fragment shader.
 `normalizedAge` (ageTicks / lifetimeTicks) drives alpha fade and point-size
 shrink in the vertex shader — particles visually decay as they age out.
 
-## Player Movement Physics (BUILD 38 — Celeste-inspired retune)
+## Renderer Performance (BUILD 156 — Eliminate rAF Violation Warnings)
+
+### Reusable WorldSnapshot
+
+`createReusableSnapshot(world)` allocates a `ReusableWorldSnapshot` once after
+`createWorldState()`.  `updateSnapshotInPlace(snap, world)` updates it each
+frame without heap allocation — cluster objects are recycled from a pre-allocated
+pool of 64 slots (expandable lazily).  `resetReusableSnapshot(snap, world)` is
+called in `loadRoom()` to rebuild the cluster array for the new room's cluster
+count.
+
+**Safety invariant**: `reusableSnapshot` must never be stored or referenced
+across frame boundaries.  It is valid only for the duration of the `renderFrame()`
+call that consumed it.  After the next `updateSnapshotInPlace()` all previous
+field values are overwritten.
+
+`createSnapshot(world)` is retained as a compatibility wrapper used by the
+editor preview path (which requires an immutable one-shot snapshot).
+
+### Cached Room Decorations
+
+`buildRoomDecorations()` is called once in `loadRoom()` and the result stored in
+`cachedWallDecorations`.  Per-decoration center coordinates are precomputed into
+`cachedDecorationCenterX` / `cachedDecorationCenterY` (pre-allocated
+`Float32Array`s of `DecorationWaveState.MAX_DECORATIONS` slots) for use by
+`DecorationWaveState.update()`.  `renderFrame()` no longer calls
+`buildRoomDecorations()` on every frame.
+
+### DecorationWaveState Broad-Phase
+
+`DecorationWaveState.update()` now accepts pre-computed center arrays and:
+1. Skips any cluster whose `|velocityXWorld| < MIN_PUSH_VELOCITY_THRESHOLD (1.0)`
+   without entering the inner decoration loop (broad-phase reject for still entities).
+2. Uses an AABB early-out `|dx| > pushRadius || |dy| > pushRadius` before the
+   more expensive `distSq` computation (avoids multiply-add for out-of-range pairs).
+
+### Offensive Outline Batching
+
+`drawOffensiveDustOutlineOverlay()` now builds a `Set<number>` of alive enemy
+entity IDs in one O(C) pass, then uses `set.has()` instead of an O(P×C) inner
+cluster scan.  All qualifying arcs are batched into a single `beginPath` +
+`stroke` call instead of one flush per particle.
+
+### High-Water Glow Guard (DISABLED BY DEFAULT)
+
+`HIGH_WATER_GLOW_GUARD_ENABLED = false` in `gameRender.ts`.  When flipped to
+`true`, `addDecorationBloom()` will only process decorations within the virtual
+canvas viewport when the decoration count exceeds
+`HIGH_WATER_DECORATION_BLOOM_LIMIT = 128`.  This avoids off-screen bloom cost on
+pathological rooms.  No visual regression for visible decorations.
+
+
 
 ### Gravity Model
 Replaced the dual rise/fall gravity split with a unified normal gravity (900 px/s²).

@@ -205,6 +205,323 @@ export interface WorldSnapshot {
   readonly isGrasshopperAliveFlag: Uint8Array;
 }
 
+// ── Reusable allocation-free snapshot ─────────────────────────────────────
+
+/**
+ * Maximum number of cluster slots pre-allocated in a ReusableWorldSnapshot
+ * pool.  Rooms should never exceed this; if they do the pool grows lazily.
+ */
+const MAX_REUSABLE_CLUSTERS = 64;
+
+/** Mutable version of ClusterSnapshot for use only within this module. */
+type _MutableCluster = { -readonly [K in keyof ClusterSnapshot]: ClusterSnapshot[K] };
+
+/**
+ * Internal mutable backing accessed only through the snapshot module
+ * functions.  External callers see only the readonly WorldSnapshot view.
+ */
+interface _ReusableBacking {
+  tick: number;
+  /** Sub-object whose typed-array fields are fixed references; only particleCount changes. */
+  readonly particles: { particleCount: number };
+  clusters: _MutableCluster[];
+  /** Sub-object whose typed-array fields are fixed references; only count changes. */
+  readonly walls: { count: number };
+  isGrappleActiveFlag: 0 | 1;
+  isGrappleMissActiveFlag: 0 | 1;
+  grappleParticleStartIndex: number;
+  isGrappleTopSurfaceFlag: 0 | 1;
+  isGrappleStuckFlag: 0 | 1;
+  grappleAnchorXWorld: number;
+  grappleAnchorYWorld: number;
+  grappleAttachFxTicks: number;
+  grappleAttachFxXWorld: number;
+  grappleAttachFxYWorld: number;
+  isPlayerBlockingFlag: 0 | 1;
+  hasGrappleChargeFlag: 0 | 1;
+  isPlayerWeaveActiveFlag: 0 | 1;
+  characterId: string;
+  grasshopperCount: number;
+  /** @internal Pre-allocated cluster objects — not part of the public API. */
+  readonly _clusterPool: _MutableCluster[];
+}
+
+/**
+ * Nominal brand used to distinguish ReusableWorldSnapshot from a plain
+ * WorldSnapshot so callers cannot accidentally pass an allocating snapshot
+ * to the in-place update functions.
+ */
+declare const _reusableTag: unique symbol;
+
+/**
+ * An allocation-free snapshot handle that satisfies WorldSnapshot.
+ * Created once via `createReusableSnapshot()`; updated each frame via
+ * `updateSnapshotInPlace()`.
+ *
+ * ⚠ Safety invariant: never store or use this object across frame
+ * boundaries.  It is valid only for the duration of the `renderFrame()`
+ * call that consumed it — after the next `updateSnapshotInPlace()` all
+ * previous field values are overwritten.
+ */
+export type ReusableWorldSnapshot = WorldSnapshot & { readonly [_reusableTag]: true };
+
+/** @internal Cast to mutable backing — only valid within this module. */
+function _asBacking(snap: ReusableWorldSnapshot): _ReusableBacking {
+  return snap as unknown as _ReusableBacking;
+}
+
+/** Returns a zeroed-out cluster object ready for pool use. */
+function _makeEmptyCluster(): _MutableCluster {
+  return {
+    entityId: 0,
+    positionXWorld: 0,
+    positionYWorld: 0,
+    velocityXWorld: 0,
+    velocityYWorld: 0,
+    isAliveFlag: 0,
+    isPlayerFlag: 0,
+    healthPoints: 0,
+    maxHealthPoints: 1,
+    influenceRadiusWorld: 0,
+    dashCooldownTicks: 0,
+    maxDashCooldownTicks: 1,
+    dashRechargeAnimTicks: 0,
+    halfWidthWorld: 0,
+    halfHeightWorld: 0,
+    isFlyingEyeFlag: 0,
+    flyingEyeFacingAngleRad: 0,
+    flyingEyeElementKind: 0,
+    isRollingEnemyFlag: 0,
+    rollingEnemySpriteIndex: 0,
+    rollingEnemyRollAngleRad: 0,
+    isFacingLeftFlag: 0,
+    isSprintingFlag: 0,
+    isCrouchingFlag: 0,
+    isGroundedFlag: 0,
+    isWallSlidingFlag: 0,
+    playerIdleAnimState: 0,
+    isRockElementalFlag: 0,
+    rockElementalState: 0,
+    rockElementalActivationProgress: 0,
+    rockElementalOrbitAngleRad: 0,
+    rockElementalDustCount: 0,
+    isRadiantTetherFlag: 0,
+    radiantTetherState: 0,
+    radiantTetherStateTicks: 0,
+    radiantTetherBaseAngleRad: 0,
+    radiantTetherChainCount: 0,
+    isGrappleHunterFlag: 0,
+    grappleHunterState: 0,
+    grappleHunterChainStartIndex: -1,
+    grappleHunterTipXWorld: 0,
+    grappleHunterTipYWorld: 0,
+    invulnerabilityTicks: 0,
+    hurtTicks: 0,
+    isSlimeFlag: 0,
+    isLargeSlimeFlag: 0,
+    largeSlimeDustOrbitAngleRad: 0,
+    isWheelEnemyFlag: 0,
+    wheelRollAngleRad: 0,
+    isBeetleFlag: 0,
+    beetleAiState: 0,
+    beetleSurfaceNormalXWorld: 0,
+    beetleSurfaceNormalYWorld: 0,
+    beetleIsFlightModeFlag: 0,
+  };
+}
+
+/** Copies all ClusterState fields into a pre-allocated _MutableCluster object. */
+function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
+  dst.entityId                        = src.entityId;
+  dst.positionXWorld                  = src.positionXWorld;
+  dst.positionYWorld                  = src.positionYWorld;
+  dst.velocityXWorld                  = src.velocityXWorld;
+  dst.velocityYWorld                  = src.velocityYWorld;
+  dst.isAliveFlag                     = src.isAliveFlag;
+  dst.isPlayerFlag                    = src.isPlayerFlag;
+  dst.healthPoints                    = src.healthPoints;
+  dst.maxHealthPoints                 = src.maxHealthPoints;
+  dst.influenceRadiusWorld            = INFLUENCE_RADIUS_WORLD;
+  dst.dashCooldownTicks               = src.dashCooldownTicks;
+  dst.maxDashCooldownTicks            = DASH_COOLDOWN_TICKS;
+  dst.dashRechargeAnimTicks           = src.dashRechargeAnimTicks;
+  dst.halfWidthWorld                  = src.halfWidthWorld;
+  dst.halfHeightWorld                 = src.halfHeightWorld;
+  dst.isFlyingEyeFlag                 = src.isFlyingEyeFlag;
+  dst.flyingEyeFacingAngleRad         = src.flyingEyeFacingAngleRad;
+  dst.flyingEyeElementKind            = src.flyingEyeElementKind;
+  dst.isRollingEnemyFlag              = src.isRollingEnemyFlag;
+  dst.rollingEnemySpriteIndex         = src.rollingEnemySpriteIndex;
+  dst.rollingEnemyRollAngleRad        = src.rollingEnemyRollAngleRad;
+  dst.isFacingLeftFlag                = src.isFacingLeftFlag;
+  dst.isSprintingFlag                 = src.isSprintingFlag;
+  dst.isCrouchingFlag                 = src.isCrouchingFlag;
+  dst.isGroundedFlag                  = src.isGroundedFlag;
+  dst.isWallSlidingFlag               = src.isWallSlidingFlag;
+  dst.playerIdleAnimState             = src.playerIdleAnimState;
+  dst.isRockElementalFlag             = src.isRockElementalFlag;
+  dst.rockElementalState              = src.rockElementalState;
+  dst.rockElementalActivationProgress = src.rockElementalActivationProgress;
+  dst.rockElementalOrbitAngleRad      = src.rockElementalOrbitAngleRad;
+  dst.rockElementalDustCount          = src.rockElementalDustCount;
+  dst.isRadiantTetherFlag             = src.isRadiantTetherFlag;
+  dst.radiantTetherState              = src.radiantTetherState;
+  dst.radiantTetherStateTicks         = src.radiantTetherStateTicks;
+  dst.radiantTetherBaseAngleRad       = src.radiantTetherBaseAngleRad;
+  dst.radiantTetherChainCount         = src.radiantTetherChainCount;
+  dst.isGrappleHunterFlag             = src.isGrappleHunterFlag;
+  dst.grappleHunterState              = src.grappleHunterState;
+  dst.grappleHunterChainStartIndex    = src.grappleHunterChainStartIndex;
+  dst.grappleHunterTipXWorld          = src.grappleHunterTipXWorld;
+  dst.grappleHunterTipYWorld          = src.grappleHunterTipYWorld;
+  dst.invulnerabilityTicks            = src.invulnerabilityTicks;
+  dst.hurtTicks                       = src.hurtTicks;
+  dst.isSlimeFlag                     = src.isSlimeFlag;
+  dst.isLargeSlimeFlag                = src.isLargeSlimeFlag;
+  dst.largeSlimeDustOrbitAngleRad     = src.largeSlimeDustOrbitAngleRad;
+  dst.isWheelEnemyFlag                = src.isWheelEnemyFlag;
+  dst.wheelRollAngleRad               = src.wheelRollAngleRad;
+  dst.isBeetleFlag                    = src.isBeetleFlag;
+  dst.beetleAiState                   = src.beetleAiState;
+  dst.beetleSurfaceNormalXWorld       = src.beetleSurfaceNormalXWorld;
+  dst.beetleSurfaceNormalYWorld       = src.beetleSurfaceNormalYWorld;
+  dst.beetleIsFlightModeFlag          = src.beetleIsFlightModeFlag;
+}
+
+/**
+ * Allocates a ReusableWorldSnapshot backed by pre-allocated cluster objects.
+ * Call once after `createWorldState()`.  Then call `resetReusableSnapshot()`
+ * when the cluster set changes (on `loadRoom()`), and `updateSnapshotInPlace()`
+ * every frame before rendering.
+ */
+export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot {
+  const clusterPool: _MutableCluster[] = [];
+  for (let i = 0; i < MAX_REUSABLE_CLUSTERS; i++) {
+    clusterPool.push(_makeEmptyCluster());
+  }
+  const clusters: _MutableCluster[] = [];
+
+  // Build as a plain mutable object that satisfies WorldSnapshot structurally,
+  // then brand it as ReusableWorldSnapshot.
+  const backing = {
+    tick: world.tick,
+    particles: {
+      positionXWorld:    world.positionXWorld,
+      positionYWorld:    world.positionYWorld,
+      velocityXWorld:    world.velocityXWorld,
+      velocityYWorld:    world.velocityYWorld,
+      isAliveFlag:       world.isAliveFlag,
+      kindBuffer:        world.kindBuffer,
+      ownerEntityId:     world.ownerEntityId,
+      ageTicks:          world.ageTicks,
+      lifetimeTicks:     world.lifetimeTicks,
+      disturbanceFactor: world.disturbanceFactor,
+      behaviorMode:      world.behaviorMode,
+      particleCount:     world.particleCount,
+    },
+    clusters,
+    walls: {
+      count:                world.wallCount,
+      xWorld:               world.wallXWorld,
+      yWorld:               world.wallYWorld,
+      wWorld:               world.wallWWorld,
+      hWorld:               world.wallHWorld,
+      isPlatformFlag:       world.wallIsPlatformFlag,
+      platformEdge:         world.wallPlatformEdge,
+      themeIndex:           world.wallThemeIndex,
+      isInvisibleFlag:      world.wallIsInvisibleFlag,
+      rampOrientationIndex: world.wallRampOrientationIndex,
+      isPillarHalfWidthFlag: world.wallIsPillarHalfWidthFlag,
+    },
+    isGrappleActiveFlag:      world.isGrappleActiveFlag,
+    isGrappleMissActiveFlag:  world.isGrappleMissActiveFlag,
+    grappleParticleStartIndex: world.grappleParticleStartIndex,
+    isGrappleTopSurfaceFlag:  world.isGrappleTopSurfaceFlag,
+    isGrappleStuckFlag:       world.isGrappleStuckFlag,
+    grappleAnchorXWorld:      world.grappleAnchorXWorld,
+    grappleAnchorYWorld:      world.grappleAnchorYWorld,
+    grappleAttachFxTicks:     world.grappleAttachFxTicks,
+    grappleAttachFxXWorld:    world.grappleAttachFxXWorld,
+    grappleAttachFxYWorld:    world.grappleAttachFxYWorld,
+    isPlayerBlockingFlag:     world.isPlayerBlockingFlag,
+    hasGrappleChargeFlag:     world.hasGrappleChargeFlag,
+    isPlayerWeaveActiveFlag:  (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
+    characterId:              world.characterId,
+    grasshopperCount:         world.grasshopperCount,
+    grasshopperXWorld:        world.grasshopperXWorld,
+    grasshopperYWorld:        world.grasshopperYWorld,
+    isGrasshopperAliveFlag:   world.isGrasshopperAliveFlag,
+    _clusterPool:             clusterPool,
+  };
+
+  return backing as unknown as ReusableWorldSnapshot;
+}
+
+/**
+ * Updates the reusable snapshot in-place from the current world state.
+ * No heap allocations — all cluster objects are recycled from the pre-allocated
+ * pool.  Call once per frame, immediately before `renderFrame()`.
+ *
+ * ⚠ After this returns, the previous snapshot contents are overwritten.
+ */
+export function updateSnapshotInPlace(snap: ReusableWorldSnapshot, world: WorldState): void {
+  const b = _asBacking(snap);
+
+  b.tick = world.tick;
+  b.particles.particleCount = world.particleCount;
+  b.walls.count             = world.wallCount;
+
+  b.isGrappleActiveFlag       = world.isGrappleActiveFlag;
+  b.isGrappleMissActiveFlag   = world.isGrappleMissActiveFlag;
+  b.grappleParticleStartIndex = world.grappleParticleStartIndex;
+  b.isGrappleTopSurfaceFlag   = world.isGrappleTopSurfaceFlag;
+  b.isGrappleStuckFlag        = world.isGrappleStuckFlag;
+  b.grappleAnchorXWorld       = world.grappleAnchorXWorld;
+  b.grappleAnchorYWorld       = world.grappleAnchorYWorld;
+  b.grappleAttachFxTicks      = world.grappleAttachFxTicks;
+  b.grappleAttachFxXWorld     = world.grappleAttachFxXWorld;
+  b.grappleAttachFxYWorld     = world.grappleAttachFxYWorld;
+  b.isPlayerBlockingFlag      = world.isPlayerBlockingFlag;
+  b.hasGrappleChargeFlag      = world.hasGrappleChargeFlag;
+  b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
+  b.grasshopperCount          = world.grasshopperCount;
+
+  const clusterCount = world.clusters.length;
+  const pool = b._clusterPool;
+
+  // Grow pool lazily if a room loaded more clusters than the initial capacity.
+  while (pool.length < clusterCount) {
+    pool.push(_makeEmptyCluster());
+  }
+
+  b.clusters.length = clusterCount;
+  for (let i = 0; i < clusterCount; i++) {
+    if (b.clusters[i] === undefined) {
+      b.clusters[i] = pool[i];
+    }
+    _fillCluster(b.clusters[i], world.clusters[i]);
+  }
+}
+
+/**
+ * Resets the reusable snapshot after a room load that changes the cluster
+ * set.  Ensures the cluster array is properly sized and all slots are
+ * populated from the current world state.
+ */
+export function resetReusableSnapshot(snap: ReusableWorldSnapshot, world: WorldState): void {
+  const b = _asBacking(snap);
+  // Grow pool if this room has more clusters than any previous room.
+  while (b._clusterPool.length < world.clusters.length) {
+    b._clusterPool.push(_makeEmptyCluster());
+  }
+  // Reassign pool slots to the clusters array so all indices are defined.
+  b.clusters.length = world.clusters.length;
+  for (let i = 0; i < world.clusters.length; i++) {
+    b.clusters[i] = b._clusterPool[i];
+  }
+  updateSnapshotInPlace(snap, world);
+}
+
 export function createSnapshot(world: WorldState): WorldSnapshot {
   const clusterSnapshots: ClusterSnapshot[] = [];
   for (let i = 0; i < world.clusters.length; i++) {
