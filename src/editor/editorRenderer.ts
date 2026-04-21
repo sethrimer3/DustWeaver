@@ -325,7 +325,10 @@ function buildElementTypeName(
   }
   if (type === 'skillTomb') {
     const s = room.skillTombs.find(x => x.uid === uid);
-    if (s) return `Skill Tomb [${WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? s.weaveId}]`;
+    if (s) {
+      const displayName = WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? '(unknown weave)';
+      return `Skill Tomb [${displayName}]`;
+    }
     return 'Skill Tomb';
   }
   const names: Partial<Record<SelectedElementType, string>> = {

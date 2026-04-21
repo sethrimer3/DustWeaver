@@ -231,10 +231,10 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     skillTombs: [
       ...(json.dustSkillTombs ?? []).map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
       // Legacy: skill books are unified with skill tombs — merge them in.
-      ...(json.skillBooks ?? []).filter(s => (s as unknown as { weaveId?: string }).weaveId).map(s => ({
+      ...(json.skillBooks ?? []).filter(s => !!(s as unknown as Record<string, unknown>)['weaveId']).map(s => ({
         xBlock: s.xBlock,
         yBlock: s.yBlock,
-        weaveId: (s as unknown as { weaveId: string }).weaveId,
+        weaveId: (s as unknown as Record<string, unknown>)['weaveId'] as string,
       })),
     ],
   };
