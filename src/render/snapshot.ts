@@ -496,9 +496,10 @@ export function updateSnapshotInPlace(snap: ReusableWorldSnapshot, world: WorldS
 
   b.clusters.length = clusterCount;
   for (let i = 0; i < clusterCount; i++) {
-    if (b.clusters[i] === undefined) {
-      b.clusters[i] = pool[i];
-    }
+    // Pool slot i is guaranteed to be populated by resetReusableSnapshot() on
+    // every room load (which runs before the first renderFrame() call).
+    // The lazy pool-growth above also ensures pool[i] always exists here.
+    b.clusters[i] = pool[i];
     _fillCluster(b.clusters[i], world.clusters[i]);
   }
 }

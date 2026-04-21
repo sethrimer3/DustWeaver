@@ -500,7 +500,6 @@ export function renderFrame(r: RenderFrameContext): void {
   drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
   drawParticleGlow(bloomSystem, snapshot, ox, oy, zoom);
   // Decoration bloom — always added (even outside DarkRoom) so moss/mushrooms
-  // Decoration bloom — always added (even outside DarkRoom) so moss/mushrooms
   // visibly glow with the atmospheric bloom pass on any lighting setting.
   // HIGH_WATER_GLOW_GUARD_ENABLED: when true and decoration count exceeds
   // HIGH_WATER_DECORATION_BLOOM_LIMIT, only viewport-visible decorations are

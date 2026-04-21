@@ -158,9 +158,10 @@ export class DecorationWaveState {
       for (let i = 0; i < count; i++) {
         // AABB early-out using pre-cached decoration centers — avoids
         // the more expensive distSq multiply-add for distant decorations.
+        // Direct range comparisons avoid the two Math.abs() calls.
         const dx = cx - decorationCenterX[i];
         const dy = cy - decorationCenterY[i];
-        if (Math.abs(dx) > pushRadius || Math.abs(dy) > pushRadius) continue;
+        if (dx < -pushRadius || dx > pushRadius || dy < -pushRadius || dy > pushRadius) continue;
         const distSq = dx * dx + dy * dy;
         if (distSq >= radiusSq) continue;
 

@@ -417,6 +417,7 @@ export function startGameScreen(
     cachedWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
     for (let _di = 0; _di < cachedWallDecorations.length; _di++) {
       const _d = cachedWallDecorations[_di];
+      // Decoration center X = left edge + half block width (mid-block horizontally).
       cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
       cachedDecorationCenterY[_di] = _d.worldAnchorYPx;
     }
