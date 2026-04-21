@@ -92,6 +92,13 @@ const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red 
 const HIGH_WATER_GLOW_GUARD_ENABLED       = false;
 const HIGH_WATER_DECORATION_BLOOM_LIMIT   = 128;
 
+/**
+ * Module-level pre-allocated Set for alive enemy entity IDs.
+ * Reused each frame by `drawOffensiveDustOutlineOverlay` — avoids allocating a
+ * new Set<number> on every render call (saves one GC-eligible object per frame).
+ */
+const _aliveEnemyEntityIds = new Set<number>();
+
 function drawGrappleBloom(
   bloomSystem: BloomSystem,
   snapshot: WorldSnapshot,
@@ -234,11 +241,12 @@ function drawOffensiveDustOutlineOverlay(
 
   // Precompute the set of alive non-player entity IDs in one O(C) pass.
   // Cluster count is tiny (≤ ~30), so the Set construction cost is negligible.
-  const aliveEnemyEntityIds = new Set<number>();
+  // Using the module-level pre-allocated Set avoids a per-frame heap allocation.
+  _aliveEnemyEntityIds.clear();
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {
     const cluster = snapshot.clusters[ci];
     if (cluster.isPlayerFlag === 0 && cluster.isAliveFlag === 1) {
-      aliveEnemyEntityIds.add(cluster.entityId);
+      _aliveEnemyEntityIds.add(cluster.entityId);
     }
   }
 
@@ -255,7 +263,7 @@ function drawOffensiveDustOutlineOverlay(
   for (let i = 0; i < particles.particleCount; i++) {
     if (particles.isAliveFlag[i] === 0) continue;
     if (particles.behaviorMode[i] !== 1) continue;
-    if (!aliveEnemyEntityIds.has(particles.ownerEntityId[i])) continue;
+    if (!_aliveEnemyEntityIds.has(particles.ownerEntityId[i])) continue;
 
     const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
     const sy = particles.positionYWorld[i] * scalePx + offsetYPx;
