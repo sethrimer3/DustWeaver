@@ -140,8 +140,8 @@ function _getOrCreateOuterOutlineMask(sprite: HTMLImageElement): HTMLCanvasEleme
 
   const outlineImage = outlineCtx.createImageData(paddedWidthPx, paddedHeightPx);
   const outlinePixels = outlineImage.data;
-  for (let yPx = 1; yPx < paddedHeightPx - 1; yPx++) {
-    for (let xPx = 1; xPx < paddedWidthPx - 1; xPx++) {
+  for (let yPx = 0; yPx < paddedHeightPx; yPx++) {
+    for (let xPx = 0; xPx < paddedWidthPx; xPx++) {
       const idx = yPx * paddedWidthPx + xPx;
       if (isOutsideFlag[idx] === 0) continue;
 
@@ -149,6 +149,7 @@ function _getOrCreateOuterOutlineMask(sprite: HTMLImageElement): HTMLCanvasEleme
       for (let n = 0; n < _outlineNeighborOffsets.length; n++) {
         const nx = xPx + _outlineNeighborOffsets[n][0];
         const ny = yPx + _outlineNeighborOffsets[n][1];
+        if (nx < 0 || nx >= paddedWidthPx || ny < 0 || ny >= paddedHeightPx) continue;
         if (isOpaqueFlag[ny * paddedWidthPx + nx] === 1) {
           hasOpaqueNeighbor = true;
           break;
@@ -555,7 +556,7 @@ export function renderClusters(
             const drawCenterY = spriteCenterY - normY * spacingPx;
             const alpha = 0.085 * (1.0 - t * 0.35);
             ctx.save();
-            ctx.translate(Math.round(drawCenterX), Math.round(drawCenterY));
+            ctx.translate(Math.round(drawCenterX) - 0.5, Math.round(drawCenterY));
             if (cluster.isFacingLeftFlag === 1) {
               ctx.scale(-1, 1);
             }
@@ -572,8 +573,10 @@ export function renderClusters(
           }
         }
         ctx.save();
-        // Flip pivot is at screenX (= hitbox centre = sprite pixel 9.5).
-        ctx.translate(screenX, spriteCenterY);
+        // Shift by -0.5 so that sprite edges (at ±9.5 / ±6.5 from pivot) land on
+        // integer virtual pixels in both facing directions, preventing the edge-pixel
+        // duplication artifact that appears under ctx.scale(-1, 1).
+        ctx.translate(screenX - 0.5, spriteCenterY);
         if (cluster.isFacingLeftFlag === 1) {
           ctx.scale(-1, 1);
         }
