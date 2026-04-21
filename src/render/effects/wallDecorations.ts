@@ -90,6 +90,13 @@ export class DecorationWaveState {
   private static readonly PUSH_FACTOR = 0.0006;
   /** Maximum allowed sway angle (radians). */
   private static readonly MAX_SWAY_RAD = 0.35;
+  /**
+   * Minimum absolute horizontal velocity (world units/s) a cluster must have
+   * before it can impart a push impulse on decorations.  Clusters slower
+   * than this are skipped entirely (broad-phase reject) to avoid iterating
+   * all decorations for effectively-still entities.
+   */
+  private static readonly MIN_PUSH_VELOCITY_THRESHOLD = 1.0;
 
   constructor() {
     this._swayAngleRad = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
@@ -113,11 +120,17 @@ export class DecorationWaveState {
    * @param dtSec    Frame delta in seconds.
    * @param decorations  Decoration list (same order as used by renderDecorationSprites).
    * @param clusters All cluster snapshots (player + enemies) — read-only.
+   * @param decorationCenterX  Pre-computed center X (world units) for each decoration.
+   * @param decorationCenterY  Pre-computed center Y (world units) for each decoration.
+   *   Both arrays must have length >= decorations.length.  Populated once per
+   *   room load in `loadRoom()` alongside `cachedWallDecorations`.
    */
   update(
     dtSec: number,
     decorations: readonly WallDecoration[],
     clusters: readonly ClusterSnapshot[],
+    decorationCenterX: Float32Array,
+    decorationCenterY: Float32Array,
   ): void {
     const count = Math.min(this._count, decorations.length);
     const springK = DecorationWaveState.SPRING_K;
@@ -125,25 +138,30 @@ export class DecorationWaveState {
     const pushRadius = DecorationWaveState.PUSH_RADIUS_WORLD;
     const pushFactor = DecorationWaveState.PUSH_FACTOR;
     const maxSway  = DecorationWaveState.MAX_SWAY_RAD;
+    const minVelThreshold = DecorationWaveState.MIN_PUSH_VELOCITY_THRESHOLD;
 
     const dampFactor = Math.pow(damping, dtSec);
+    const radiusSq = pushRadius * pushRadius;
 
     // ── Apply entity-velocity impulses ────────────────────────────────────────
     for (let ci = 0; ci < clusters.length; ci++) {
       const c = clusters[ci];
       if (c.isAliveFlag === 0) continue;
       const velX = c.velocityXWorld;
-      if (velX === 0) continue;
+      // Broad-phase: skip clusters that are effectively still — their
+      // impulse contribution would be zero or negligible.
+      if (Math.abs(velX) < minVelThreshold) continue;
 
       const cx = c.positionXWorld;
       const cy = c.positionYWorld;
-      const radiusSq = pushRadius * pushRadius;
 
       for (let i = 0; i < count; i++) {
-        const d = decorations[i];
-        // Decoration center: mid-block horizontally, at anchor Y
-        const dx = cx - (d.worldLeftPx + 4);
-        const dy = cy - d.worldAnchorYPx;
+        // AABB early-out using pre-cached decoration centers — avoids
+        // the more expensive distSq multiply-add for distant decorations.
+        // Direct range comparisons avoid the two Math.abs() calls.
+        const dx = cx - decorationCenterX[i];
+        const dy = cy - decorationCenterY[i];
+        if (dx < -pushRadius || dx > pushRadius || dy < -pushRadius || dy > pushRadius) continue;
         const distSq = dx * dx + dy * dy;
         if (distSq >= radiusSq) continue;
 

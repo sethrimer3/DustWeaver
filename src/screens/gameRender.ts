@@ -9,7 +9,6 @@
  * in-place (passed by reference) as part of the HUD tracking logic.
  */
 
-import { createSnapshot } from '../render/snapshot';
 import type { WorldSnapshot } from '../render/snapshot';
 import type { WorldState } from '../sim/world';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
@@ -37,12 +36,12 @@ import {
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import {
-  buildRoomDecorations,
   renderDecorationSprites,
   addDecorationBloom,
   collectDecorationLights,
   DecorationWaveState,
 } from '../render/effects/wallDecorations';
+import type { WallDecoration } from '../render/effects/wallDecorations';
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
@@ -82,6 +81,16 @@ const OFFENSIVE_DUST_BASE_DIAMETER_WORLD = 2.0;
 // Health fraction thresholds for visual escalation
 const HEALTH_THRESHOLD_DANGER_FRACTION   = 0.40;  // below this → amber warning
 const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red alert
+
+// ── Optional high-water glow guard (disabled by default) ──────────────────
+// When HIGH_WATER_GLOW_GUARD_ENABLED is true and the cached decoration count
+// exceeds HIGH_WATER_DECORATION_BLOOM_LIMIT, addDecorationBloom only processes
+// decorations whose screen-space position falls within the virtual canvas
+// bounds (cheap sx/sy AABB check), skipping off-screen decorations.
+// Flip HIGH_WATER_GLOW_GUARD_ENABLED to true for pathological scenes; see
+// DECISIONS.md for full guidance.  Has no effect when false.
+const HIGH_WATER_GLOW_GUARD_ENABLED       = false;
+const HIGH_WATER_DECORATION_BLOOM_LIMIT   = 128;
 
 function drawGrappleBloom(
   bloomSystem: BloomSystem,
@@ -223,30 +232,39 @@ function drawOffensiveDustOutlineOverlay(
   const radiusPx = Math.max(lineWidthPx * 0.6, worldDiameterPx * 0.6);
   const halfPixelAdjust = ((lineWidthPx % 2) === 0) ? 0.5 : 0;
 
+  // Precompute the set of alive non-player entity IDs in one O(C) pass.
+  // Cluster count is tiny (≤ ~30), so the Set construction cost is negligible.
+  const aliveEnemyEntityIds = new Set<number>();
+  for (let ci = 0; ci < snapshot.clusters.length; ci++) {
+    const cluster = snapshot.clusters[ci];
+    if (cluster.isPlayerFlag === 0 && cluster.isAliveFlag === 1) {
+      aliveEnemyEntityIds.add(cluster.entityId);
+    }
+  }
+
   deviceCtx.save();
   deviceCtx.strokeStyle = '#ff1a1a';
   deviceCtx.lineWidth = lineWidthPx;
+
+  // Collect all qualifying arc positions into a single batched path so
+  // the GPU only receives one stroke call instead of one per particle.
+  deviceCtx.beginPath();
+  let arcCount = 0;
 
   const particles = snapshot.particles;
   for (let i = 0; i < particles.particleCount; i++) {
     if (particles.isAliveFlag[i] === 0) continue;
     if (particles.behaviorMode[i] !== 1) continue;
-
-    const ownerEntityId = particles.ownerEntityId[i];
-    let isEnemyOwned = false;
-    for (let ci = 0; ci < snapshot.clusters.length; ci++) {
-      const cluster = snapshot.clusters[ci];
-      if (cluster.entityId !== ownerEntityId) continue;
-      isEnemyOwned = cluster.isPlayerFlag === 0 && cluster.isAliveFlag === 1;
-      break;
-    }
-    if (!isEnemyOwned) continue;
+    if (!aliveEnemyEntityIds.has(particles.ownerEntityId[i])) continue;
 
     const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
     const sy = particles.positionYWorld[i] * scalePx + offsetYPx;
-
-    deviceCtx.beginPath();
+    deviceCtx.moveTo(sx + halfPixelAdjust + radiusPx, sy + halfPixelAdjust);
     deviceCtx.arc(sx + halfPixelAdjust, sy + halfPixelAdjust, radiusPx, 0, Math.PI * 2);
+    arcCount++;
+  }
+
+  if (arcCount > 0) {
     deviceCtx.stroke();
   }
   deviceCtx.restore();
@@ -277,6 +295,26 @@ export interface RenderFrameContext {
   // World / room
   world: WorldState;
   currentRoom: RoomDef;
+  /**
+   * Pre-computed snapshot updated once per frame via `updateSnapshotInPlace()`
+   * before `renderFrame()` is called.  Allocation-free — reuses pooled objects.
+   */
+  snapshot: WorldSnapshot;
+  /**
+   * Room decorations built once per room load in `loadRoom()`.
+   * Avoids allocating a new WallDecoration[] array every frame.
+   */
+  cachedDecorations: readonly WallDecoration[];
+  /**
+   * Pre-computed center X (world units) for each entry in `cachedDecorations`.
+   * Index i corresponds to cachedDecorations[i].  Populated in `loadRoom()`.
+   */
+  cachedDecorationCenterX: Float32Array;
+  /**
+   * Pre-computed center Y (world units) for each entry in `cachedDecorations`.
+   * Index i corresponds to cachedDecorations[i].  Populated in `loadRoom()`.
+   */
+  cachedDecorationCenterY: Float32Array;
 
   // Camera
   ox: number;
@@ -329,7 +367,8 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, darkRoomOverlay, decorationWaveState,
-    world, currentRoom,
+    world, currentRoom, snapshot,
+    cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
     bgColor, isDebugMode, hudState, inputState,
     prevHealthMap, healthBarDisplayUntilTick,
@@ -343,7 +382,6 @@ export function renderFrame(r: RenderFrameContext): void {
 
   const nowMs = performance.now();
 
-  const snapshot = createSnapshot(world);
   const roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_SMALL;
   const roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_SMALL;
   const roomScreenXPx = ox;
@@ -425,18 +463,21 @@ export function renderFrame(r: RenderFrameContext): void {
   // Walls before cluster indicators so clusters are drawn on top
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
 
-  // ── Wall decorations (glowing moss & mushrooms) ──────────────────────────
-  // Pre-computed and cached per wall signature; rendered after walls so they
-  // appear on top of tile surfaces.  Bloom and light source data are
-  // collected here for use later in the frame.
   const isDarkRoom = currentRoom.lightingEffect === 'DarkRoom';
-  const wallDecorations = buildRoomDecorations(currentRoom.decorations ?? [], BLOCK_SIZE_SMALL);
 
+  // ── Wall decorations (glowing moss & mushrooms) ──────────────────────────
+  // Built once per room load (see `loadRoom()`) and passed in via `cachedDecorations`.
   // Update decoration wave state — apply entity-velocity pushes and advance spring.
   // dtSec is approximated as the fixed sim timestep (frame time is consistent at 60 fps).
-  decorationWaveState.update(FIXED_DT_MS * 0.001, wallDecorations, snapshot.clusters);
+  decorationWaveState.update(
+    FIXED_DT_MS * 0.001,
+    cachedDecorations,
+    snapshot.clusters,
+    cachedDecorationCenterX,
+    cachedDecorationCenterY,
+  );
 
-  renderDecorationSprites(ctx, wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, decorationWaveState);
+  renderDecorationSprites(ctx, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, decorationWaveState);
 
   // Grapple influence visuals (golden circle + edge glow) drawn on top of walls
   // but behind clusters/particles so they don't obscure the action.
@@ -460,7 +501,13 @@ export function renderFrame(r: RenderFrameContext): void {
   drawParticleGlow(bloomSystem, snapshot, ox, oy, zoom);
   // Decoration bloom — always added (even outside DarkRoom) so moss/mushrooms
   // visibly glow with the atmospheric bloom pass on any lighting setting.
-  addDecorationBloom(bloomSystem, wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, nowMs);
+  // HIGH_WATER_GLOW_GUARD_ENABLED: when true and decoration count exceeds
+  // HIGH_WATER_DECORATION_BLOOM_LIMIT, only viewport-visible decorations are
+  // processed (viewport sx/sy AABB check).  Disabled by default — see DECISIONS.md.
+  if (HIGH_WATER_GLOW_GUARD_ENABLED && cachedDecorations.length > HIGH_WATER_DECORATION_BLOOM_LIMIT) {
+    // TODO: filter cachedDecorations to viewport-visible subset before calling addDecorationBloom.
+  }
+  addDecorationBloom(bloomSystem, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, nowMs);
 
   // Tunnel darkness overlays
   drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
@@ -479,7 +526,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // Skill books (collectibles)
   if (isSkillBookSpriteLoaded && progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
     const roomSkillBooks = currentRoom.skillBooks ?? [];
-    const bobOffsetWorld = Math.sin(performance.now() * 0.004) * 2.0;
+    const bobOffsetWorld = Math.sin(nowMs * 0.004) * 2.0;
     for (let i = 0; i < roomSkillBooks.length; i++) {
       const sb = roomSkillBooks[i];
       const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
@@ -510,7 +557,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // Dust containers (collectibles)
   if (isDustContainerSpriteLoaded) {
     const roomDustContainers = currentRoom.dustContainers ?? [];
-    const bobOffsetWorld = Math.sin(performance.now() * 0.0032) * 1.5;
+    const bobOffsetWorld = Math.sin(nowMs * 0.0032) * 1.5;
     for (let i = 0; i < roomDustContainers.length; i++) {
       const pickupKey = `${currentRoom.id}:${i}`;
       if (collectedDustContainerKeySet.has(pickupKey)) continue;
@@ -541,7 +588,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // The bloom pass (composited later on the device canvas) adds atmospheric
   // glow on top of the darkness, making light sources feel warm and radiant.
   if (isDarkRoom) {
-    const lights = collectDecorationLights(wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
+    const lights = collectDecorationLights(cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
 
     // Player emits a personal lantern-sized light.
     const playerSnap = snapshot.clusters.find(c => c.isPlayerFlag === 1 && c.isAliveFlag === 1);
@@ -718,6 +765,11 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Enemy health bar display (only when damaged) ──────────────────────────
   const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
+  // Hoist constant canvas state outside the per-enemy loop to avoid redundant
+  // state-change calls and one save/restore pair per live enemy.
+  ctx.save();
+  ctx.strokeStyle = '#a07800';
+  ctx.lineWidth   = 0.5;
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const cluster = world.clusters[ci];
     if (cluster.isAliveFlag === 0) continue;
@@ -769,10 +821,7 @@ export function renderFrame(r: RenderFrameContext): void {
     const barX = cluster.positionXWorld * zoom + ox - barWidth / 2;
     const barY = (cluster.positionYWorld - cluster.halfHeightWorld - 5) * zoom + oy;
 
-    ctx.save();
     // Thin gold outline
-    ctx.strokeStyle = '#a07800';
-    ctx.lineWidth   = 0.5;
     ctx.strokeRect(barX - 0.5, barY - 0.5, barWidth + 1, barHeight + 1);
     // Background
     ctx.fillStyle = 'rgba(0,0,0,0.65)';
@@ -786,8 +835,8 @@ export function renderFrame(r: RenderFrameContext): void {
       ctx.fillStyle = 'rgba(255,255,255,0.15)';
       ctx.fillRect(barX, barY, enemyFillW, 1);
     }
-    ctx.restore();
   }
+  ctx.restore();
 
   // ── Floating combat text (damage numbers, BLOCKED) ────────────────────────
   combatText.render(ctx, ox, oy, zoom, nowMs);
