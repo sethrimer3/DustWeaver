@@ -66,6 +66,8 @@ export interface RoomJsonEnemy {
   isLargeSlime?: boolean;
   isWheelEnemy?: boolean;
   isBeetle?: boolean;
+  isBubbleEnemy?: boolean;
+  isIceBubble?: boolean;
 }
 
 export interface RoomJsonWall {
@@ -345,6 +347,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isLargeSlimeFlag: (e.isLargeSlime ?? false) ? 1 : 0,
     isWheelEnemyFlag: (e.isWheelEnemy ?? false) ? 1 : 0,
     isBeetleFlag: (e.isBeetle ?? false) ? 1 : 0,
+    isBubbleEnemyFlag: (e.isBubbleEnemy ?? false) ? 1 : 0,
+    isIceBubbleFlag: (e.isIceBubble ?? false) ? 1 : 0,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => ({
@@ -474,6 +478,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isLargeSlime: e.isLargeSlimeFlag === 1,
       isWheelEnemy: e.isWheelEnemyFlag === 1,
       isBeetle: e.isBeetleFlag === 1,
+      isBubbleEnemy: e.isBubbleEnemyFlag === 1,
+      isIceBubble: e.isIceBubbleFlag === 1,
     })),
     transitions: data.transitions.map(t => {
       const jt: RoomJsonTransition = {
@@ -657,6 +663,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isLargeSlimeFlag: e.isLargeSlimeFlag,
       isWheelEnemyFlag: e.isWheelEnemyFlag,
       isBeetleFlag: e.isBeetleFlag,
+      isBubbleEnemyFlag: e.isBubbleEnemyFlag,
+      isIceBubbleFlag: e.isIceBubbleFlag,
     };
   });
 
@@ -759,6 +767,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isLargeSlimeFlag: (e.isLargeSlimeFlag ?? 0) as 0 | 1,
     isWheelEnemyFlag: (e.isWheelEnemyFlag ?? 0) as 0 | 1,
     isBeetleFlag: (e.isBeetleFlag ?? 0) as 0 | 1,
+    isBubbleEnemyFlag: (e.isBubbleEnemyFlag ?? 0) as 0 | 1,
+    isIceBubbleFlag: (e.isIceBubbleFlag ?? 0) as 0 | 1,
   }));
 
   const transitions: EditorTransition[] = room.transitions.map(t => ({

@@ -68,6 +68,7 @@ import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits, SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
 import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
 import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
+import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../sim/clusters/bubbleAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
@@ -341,6 +342,17 @@ export function startGameScreen(
         enemyCluster.beetleSurfaceNormalYWorld = -1; // assume floor initially
         enemyCluster.beetleIsFlightModeFlag    = 0;
         enemyCluster.beetlePrevHealthPoints    = enemyCluster.healthPoints;
+      } else if (enemyDef.isBubbleEnemyFlag === 1) {
+        enemyCluster.isBubbleEnemyFlag      = 1;
+        enemyCluster.isIceBubbleFlag        = (enemyDef.isIceBubbleFlag ?? 0) as 0 | 1;
+        enemyCluster.halfWidthWorld         = BUBBLE_HALF_SIZE_WORLD;
+        enemyCluster.halfHeightWorld        = BUBBLE_HALF_SIZE_WORLD;
+        enemyCluster.bubbleState            = 0;
+        enemyCluster.bubbleMaxParticleCount = enemyDef.particleCount;
+        enemyCluster.bubbleOrbitAngleRad    = 0;
+        enemyCluster.bubbleRegenTicks       = WATER_BUBBLE_REGEN_INTERVAL_TICKS;
+        enemyCluster.bubbleDriftPhaseRad    = 0;
+        enemyCluster.bubblePrevHealthPoints = enemyCluster.healthPoints;
       }
 
       world.clusters.push(enemyCluster);

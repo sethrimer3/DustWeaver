@@ -50,6 +50,10 @@ export function tickEnemyMovement(
   if (cluster.isWheelEnemyFlag === 1) {
     return;
   }
+  // Bubble enemies have their own AI — skip standard gravity/movement
+  if (cluster.isBubbleEnemyFlag === 1) {
+    return;
+  }
   if (cluster.isFlyingEyeFlag === 1) {
     // ── Flying Eye: no gravity, 2D steering toward/away from player ────────
     if (isPlayerFound) {

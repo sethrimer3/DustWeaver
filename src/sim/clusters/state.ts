@@ -323,6 +323,30 @@ export interface ClusterState {
   beetleIsFlightModeFlag: 0 | 1;
   /** Health recorded at end of last tick, used to detect incoming damage. */
   beetlePrevHealthPoints: number;
+
+  // ---- Bubble enemy (populated only when isBubbleEnemyFlag === 1) ----------
+  /**
+   * 1 if this cluster is a bubble enemy (water or ice variant).
+   * Drifts in 2D, repelled by walls/other bubbles, ring of particles orbits center.
+   */
+  isBubbleEnemyFlag: 0 | 1;
+  /** 1 if this is the ice variant (pops on any damage); 0 for water variant (pops at <75% HP). */
+  isIceBubbleFlag: 0 | 1;
+  /**
+   * 0 = alive/drifting, 1 = popped (particles flying free).
+   * Cluster's isAliveFlag is set to 0 once all popped particles are gone.
+   */
+  bubbleState: number;
+  /** Maximum number of ring particles (set at spawn, never changes). */
+  bubbleMaxParticleCount: number;
+  /** Accumulated rotation angle (radians) of the orbit ring — incremented each tick. */
+  bubbleOrbitAngleRad: number;
+  /** Countdown ticks until the water bubble regenerates one particle (water only). */
+  bubbleRegenTicks: number;
+  /** Phase (radians) for the Lissajous-curve drift direction — incremented each tick. */
+  bubbleDriftPhaseRad: number;
+  /** Health recorded at end of previous tick — used by ice bubble to detect any damage instantly. */
+  bubblePrevHealthPoints: number;
 }
 
 export function createClusterState(
@@ -427,5 +451,13 @@ export function createClusterState(
     beetleSurfaceNormalYWorld: -1,
     beetleIsFlightModeFlag: 0,
     beetlePrevHealthPoints: maxHealthPoints,
+    isBubbleEnemyFlag: 0,
+    isIceBubbleFlag: 0,
+    bubbleState: 0,
+    bubbleMaxParticleCount: 0,
+    bubbleOrbitAngleRad: 0,
+    bubbleRegenTicks: 0,
+    bubbleDriftPhaseRad: 0,
+    bubblePrevHealthPoints: maxHealthPoints,
   };
 }
