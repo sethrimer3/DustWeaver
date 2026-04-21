@@ -63,10 +63,14 @@ export function showCharacterSelect(
   `;
   container.appendChild(cardRow);
 
-  // Pre-load character standing sprites for the cards
+  // Pre-load character menu sprites for the cards (fall back to standing if no menu sprite)
   const spriteImages: HTMLImageElement[] = CHARACTER_IDS.map((id) => {
     const img = new Image();
-    img.src = `SPRITES/PLAYERS/${id}/${id}_standing.png`;
+    const menuSpriteSrc = `SPRITES/PLAYERS/${id}/${id}_menu_sprite.png`;
+    const standingSrc   = `SPRITES/PLAYERS/${id}/${id}_standing.png`;
+    // Try the menu sprite first; fall back to standing on error.
+    img.src = menuSpriteSrc;
+    img.onerror = () => { img.src = standingSrc; };
     return img;
   });
 

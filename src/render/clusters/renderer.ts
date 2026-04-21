@@ -1,7 +1,7 @@
 import { WorldSnapshot, ClusterSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
-import { BLOCK_SIZE_MEDIUM } from '../../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
 import { ParticleKind } from '../../sim/particles/kinds';
 import type { PlayerCloak } from './playerCloak';
 
@@ -45,6 +45,10 @@ interface CharacterSprites {
   sprinting: HTMLImageElement;
   crouching: HTMLImageElement;
   grappling: HTMLImageElement;
+  jumping: HTMLImageElement;
+  falling: HTMLImageElement;
+  fastFalling: HTMLImageElement;
+  swinging: HTMLImageElement;
 }
 
 /** 1 virtual pixel outline thickness around player sprites. */
@@ -168,13 +172,17 @@ function _loadCharacterSprites(characterId: string): CharacterSprites {
   const base = `SPRITES/PLAYERS/${characterId}/${characterId}`;
   const standingSrc = `${base}_standing.png`;
   return {
-    standing:  _loadImg(standingSrc),
-    idle1:     _loadImgWithFallback([`${base}_idle1.png`, standingSrc]),
-    idle2:     _loadImgWithFallback([`${base}_idle2.png`, standingSrc]),
-    idleBlink: _loadImgWithFallback([`${base}_idleBlink.png`, standingSrc]),
-    sprinting: _loadImgWithFallback([`${base}_sprinting.png`, standingSrc]),
-    crouching: _loadImgWithFallback([`${base}_crouching.png`, standingSrc]),
-    grappling: _loadImgWithFallback([`${base}_grappling.png`, standingSrc]),
+    standing:   _loadImg(standingSrc),
+    idle1:      _loadImgWithFallback([`${base}_idle1.png`, standingSrc]),
+    idle2:      _loadImgWithFallback([`${base}_idle2.png`, standingSrc]),
+    idleBlink:  _loadImgWithFallback([`${base}_idleBlink.png`, standingSrc]),
+    sprinting:  _loadImgWithFallback([`${base}_sprinting.png`, standingSrc]),
+    crouching:  _loadImgWithFallback([`${base}_crouching.png`, standingSrc]),
+    grappling:  _loadImgWithFallback([`${base}_grappling.png`, standingSrc]),
+    jumping:    _loadImgWithFallback([`${base}_jumping.png`, standingSrc]),
+    falling:    _loadImgWithFallback([`${base}_falling.png`, standingSrc]),
+    fastFalling: _loadImgWithFallback([`${base}_fastfalling.png`, standingSrc]),
+    swinging:   _loadImgWithFallback([`${base}_swinging.png`, standingSrc]),
   };
 }
 
@@ -188,11 +196,49 @@ const _characterSprites: Record<string, CharacterSprites> = {
 
 /**
  * Returns the appropriate sprite for the current player state.
+ * Priority (highest first):
+ *  1. Swinging on grapple with decent velocity → swinging sprite
+ *  2. Crouching (grounded + down held) → crouching sprite
+ *  3. Airborne & moving upward            → jumping sprite
+ *  4. Airborne & fast-falling             → fastFalling sprite
+ *  5. Airborne & moving downward          → falling sprite
+ *  6. Sprinting                           → sprinting sprite
+ *  7. Idle animation states               → idle1 / idle2 / idleBlink
+ *  8. Default                             → standing sprite
+ *
+ * When grappling with low/zero velocity, the standing sprite is shown.
  */
-function _getPlayerSprite(sprites: CharacterSprites, cluster: ClusterSnapshot, isGrappling: boolean): HTMLImageElement {
-  if (isGrappling) return sprites.grappling;
+function _getPlayerSprite(
+  sprites: CharacterSprites,
+  cluster: ClusterSnapshot,
+  isGrappling: boolean,
+): HTMLImageElement {
+  // ── Grapple states ─────────────────────────────────────────────────────
+  if (isGrappling) {
+    const swingSpeed = Math.sqrt(
+      cluster.velocityXWorld * cluster.velocityXWorld +
+      cluster.velocityYWorld * cluster.velocityYWorld,
+    );
+    if (swingSpeed > PLAYER_SWING_SPEED_THRESHOLD_WORLD) {
+      return sprites.swinging;
+    }
+    // Low velocity while grappling → show standing sprite
+    return sprites.standing;
+  }
+
+  // ── Crouch ────────────────────────────────────────────────────────────
   if (cluster.isCrouchingFlag === 1) return sprites.crouching;
+
+  // ── Airborne states ───────────────────────────────────────────────────
+  if (cluster.isGroundedFlag === 0) {
+    if (cluster.velocityYWorld < 0) return sprites.jumping;
+    if (cluster.velocityYWorld > PLAYER_FAST_FALL_SPRITE_THRESHOLD_WORLD) return sprites.fastFalling;
+    return sprites.falling;
+  }
+
+  // ── Grounded states ───────────────────────────────────────────────────
   if (cluster.isSprintingFlag === 1) return sprites.sprinting;
+
   // Idle animation states: 0=standing, 1=idle1, 2=idle2, 3=idleBlink
   switch (cluster.playerIdleAnimState) {
     case 1: return sprites.idle1;
@@ -234,8 +280,29 @@ const FLYING_EYE_RING_WIDTHS = [3.5, 2.5, 2.0, 1.5];
 const PLAYER_SPRITE_WIDTH_WORLD = 16;
 /** Player sprite render height in world units (virtual px at zoom 1). */
 const PLAYER_SPRITE_HEIGHT_WORLD = 24;
-/** Vertical offset from hitbox center to sprite center so feet align to hitbox bottom. */
-const PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD = -1;
+/**
+ * X pixel (from sprite's left edge, in world units) used as the flip pivot when
+ * mirroring the sprite for the facing-left direction.  Corresponds to the
+ * horizontal centre of the gameplay hitbox (x 6–13 → centre at 9.5).
+ */
+const PLAYER_SPRITE_PIVOT_X_WORLD = 9.5;
+/**
+ * Vertical offset from hitbox centre to the sprite's draw pivot so that the
+ * sprite's pixel-14 (vertical centre of the y 4–24 hitbox) aligns with the
+ * cluster's world position.  Equals -(spriteHalfH - 12) = -(12 - 12) + adjustment.
+ * Formula: PLAYER_SPRITE_HALF_HEIGHT(12) - hitboxCentreInSprite(14) = -2.
+ */
+const PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD = -2;
+/**
+ * Minimum speed (world units/sec) the player must be moving while on the
+ * grapple to use the swinging sprite instead of the standing sprite.
+ */
+const PLAYER_SWING_SPEED_THRESHOLD_WORLD = 60;
+/**
+ * Downward velocity threshold (world units/sec) above which the fast-falling
+ * sprite is shown.  Matches the cloak renderer's fast-fall threshold.
+ */
+const PLAYER_FAST_FALL_SPRITE_THRESHOLD_WORLD = 180;
 /** Minimum speed (world units/sec) before subtle player afterimages appear. */
 const PLAYER_AFTERIMAGE_MIN_SPEED_WORLD_PER_SEC = 185;
 /** Number of faint trailing afterimages to draw at high speed. */
@@ -429,9 +496,12 @@ export function renderClusters(
       const charSprites = _characterSprites[snapshot.characterId] ?? _characterSprites['knight'];
       const isGrappling = snapshot.isGrappleActiveFlag === 1;
       const sprite = _getPlayerSprite(charSprites, cluster, isGrappling);
-      const spriteHalfW = (PLAYER_SPRITE_WIDTH_WORLD * scalePx) * 0.5;
+      // spritePivotX is the x-offset from the flip-pivot (hitbox centre, screenX) to
+      // the sprite's left edge.  Pixel 9.5 from the sprite left aligns with screenX,
+      // so the sprite left is 9.5px to the left of screenX.
+      const spritePivotX = PLAYER_SPRITE_PIVOT_X_WORLD * scalePx;
       const spriteHalfH = (PLAYER_SPRITE_HEIGHT_WORLD * scalePx) * 0.5;
-      const spriteW = spriteHalfW * 2;
+      const spriteW = PLAYER_SPRITE_WIDTH_WORLD * scalePx;
       const spriteH = spriteHalfH * 2;
       const spriteCenterY = screenY + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD * scalePx;
       // Build player state for cloak rendering (shared by back + front).
@@ -492,16 +562,17 @@ export function renderClusters(
             ctx.globalAlpha = alpha;
             ctx.drawImage(
               outlineMask,
-              -spriteHalfW - outlineThicknessPx,
+              -(spritePivotX + outlineThicknessPx),
               -spriteHalfH - outlineThicknessPx,
               spriteW + outlineThicknessPx * 2,
               spriteH + outlineThicknessPx * 2,
             );
-            ctx.drawImage(sprite, -spriteHalfW, -spriteHalfH, spriteW, spriteH);
+            ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
             ctx.restore();
           }
         }
         ctx.save();
+        // Flip pivot is at screenX (= hitbox centre = sprite pixel 9.5).
         ctx.translate(screenX, spriteCenterY);
         if (cluster.isFacingLeftFlag === 1) {
           ctx.scale(-1, 1);
@@ -509,12 +580,12 @@ export function renderClusters(
         // Draw black outer silhouette first, then the original sprite on top.
         ctx.drawImage(
           outlineMask,
-          -spriteHalfW - outlineThicknessPx,
+          -(spritePivotX + outlineThicknessPx),
           -spriteHalfH - outlineThicknessPx,
           spriteW + outlineThicknessPx * 2,
           spriteH + outlineThicknessPx * 2,
         );
-        ctx.drawImage(sprite, -spriteHalfW, -spriteHalfH, spriteW, spriteH);
+        ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
         ctx.restore();
 
         // ── Hurt flash overlay: red tint while hurtTicks > 0 ─────────────
@@ -523,7 +594,51 @@ export function renderClusters(
           ctx.save();
           ctx.globalAlpha = flashAlpha;
           ctx.fillStyle = '#ff2222';
-          ctx.fillRect(screenX - spriteHalfW, spriteCenterY - spriteHalfH, spriteW, spriteH);
+          ctx.fillRect(screenX - spritePivotX, spriteCenterY - spriteHalfH, spriteW, spriteH);
+          ctx.restore();
+        }
+
+        // ── Debug hitbox for player (only when showHitboxes is on) ────────
+        if (showHitboxes) {
+          // The sprite's top-left in screen space (constant regardless of facing).
+          const spriteTopY = spriteCenterY - spriteHalfH; // = screenY - 14*scalePx
+          // Determine state-adjusted hitbox in sprite pixel coordinates.
+          // All measured from sprite top-left; y increases downward.
+          const isAirborne = cluster.isGroundedFlag === 0;
+          const isJumping  = isAirborne && cluster.velocityYWorld < 0;
+          // Jumping (y 2–22): the debug rectangle is 2 px higher than the sim
+          // hitbox (y 4–24 / PLAYER_HALF_HEIGHT_WORLD = 10).  The sim collision
+          // box is intentionally left unchanged for jumping — only the debug
+          // indicator shifts to reflect the intended visual hitbox placement.
+          let hbTopPx   = isJumping ? 2 : 4;   // sprite y-pixel of hitbox top
+          const hbBotPx = isJumping ? 22 : 24;  // sprite y-pixel of hitbox bottom
+          // Derive x edges from the pivot constant so they stay in sync.
+          const hbHalfWPx = PLAYER_HALF_WIDTH_WORLD; // 3.5
+          const hbLeftPx  = PLAYER_SPRITE_PIVOT_X_WORLD - hbHalfWPx; // 9.5 - 3.5 = 6
+          const hbRightPx = PLAYER_SPRITE_PIVOT_X_WORLD + hbHalfWPx; // 9.5 + 3.5 = 13
+          // Crouching: sim already adjusted positionY and halfHeightWorld.
+          // Use the documented sprite y 8–24 for the crouching indicator.
+          if (cluster.isCrouchingFlag === 1) {
+            hbTopPx = 8; // y 8–24, matching CROUCH_HALF_HEIGHT_WORLD = 8
+          }
+          const hbScreenLeft = screenX - spritePivotX + hbLeftPx  * scalePx;
+          const hbScreenTop  = spriteTopY              + hbTopPx   * scalePx;
+          const hbScreenW    = (hbRightPx - hbLeftPx) * scalePx;
+          const hbScreenH    = (hbBotPx   - hbTopPx)  * scalePx;
+          // Fast-fall: use actual sim half-width (already narrowed in sim).
+          const isFastFalling = isAirborne && cluster.velocityYWorld > PLAYER_FAST_FALL_SPRITE_THRESHOLD_WORLD;
+          const fastFallHbW    = cluster.halfWidthWorld * 2 * scalePx;
+          const fastFallHbLeft = screenX - cluster.halfWidthWorld * scalePx;
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 255, 100, 0.9)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+          if (isFastFalling) {
+            ctx.strokeRect(fastFallHbLeft, hbScreenTop, fastFallHbW, hbScreenH);
+          } else {
+            ctx.strokeRect(hbScreenLeft, hbScreenTop, hbScreenW, hbScreenH);
+          }
+          ctx.setLineDash([]);
           ctx.restore();
         }
 
@@ -538,13 +653,15 @@ export function renderClusters(
         }
       } else {
         // Fallback while sprite loads: coloured box
+        const spritePivotXFb = PLAYER_SPRITE_PIVOT_X_WORLD * scalePx;
+        const spriteHFb = PLAYER_SPRITE_HEIGHT_WORLD * scalePx;
         ctx.fillStyle = '#00ff99';
         ctx.globalAlpha = 0.75;
-        ctx.fillRect(screenX - spriteHalfW, spriteCenterY - spriteHalfH, spriteW, spriteH);
+        ctx.fillRect(screenX - spritePivotXFb, spriteCenterY - spriteHFb * 0.5, PLAYER_SPRITE_WIDTH_WORLD * scalePx, spriteHFb);
         ctx.globalAlpha = 1.0;
         ctx.strokeStyle = '#00ff99';
         ctx.lineWidth = 2;
-        ctx.strokeRect(screenX - spriteHalfW, spriteCenterY - spriteHalfH, spriteW, spriteH);
+        ctx.strokeRect(screenX - spritePivotXFb, spriteCenterY - spriteHFb * 0.5, PLAYER_SPRITE_WIDTH_WORLD * scalePx, spriteHFb);
       }
     } else if (cluster.isRollingEnemyFlag === 1) {
       // ── Rolling enemy: sprite rotated by accumulated roll angle ──────────

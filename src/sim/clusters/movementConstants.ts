@@ -245,8 +245,22 @@ export const SKID_VELOCITY_THRESHOLD_WORLD = 5.0;
 
 // ── Player crouch ───────────────────────────────────────────────────────────
 
-/** Half-height of the player hitbox when crouching (world units). */
-export const CROUCH_HALF_HEIGHT_WORLD = 7;
+/** Half-height of the player hitbox when crouching (world units). Sprite y 8–24 = 16 px, half = 8. */
+export const CROUCH_HALF_HEIGHT_WORLD = 8;
+
+// ── Fast-fall hitbox ────────────────────────────────────────────────────────
+
+/**
+ * Downward velocity threshold (world units/sec) above which the player is
+ * considered to be fast-falling.  Matches the cloak renderer's threshold.
+ */
+export const FAST_FALL_VELOCITY_THRESHOLD_WORLD = 180;
+
+/**
+ * Half-width of the player hitbox when fast-falling (world units).
+ * Sprite x 7–12 = 5 px, half = 2.5.
+ */
+export const FAST_FALL_HALF_WIDTH_WORLD = 2.5;
 
 // ── Player idle animation ───────────────────────────────────────────────────
 
