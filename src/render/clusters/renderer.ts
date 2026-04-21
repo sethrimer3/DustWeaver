@@ -440,8 +440,8 @@ export function renderClusters(
     const cluster = snapshot.clusters[ci];
     if (cluster.isAliveFlag === 0) continue;
 
-    const screenX = Math.round(cluster.positionXWorld * scalePx + offsetXPx);
-    const screenY = Math.round(cluster.positionYWorld * scalePx + offsetYPx);
+    const screenX = Math.round(cluster.renderPositionXWorld * scalePx + offsetXPx);
+    const screenY = Math.round(cluster.renderPositionYWorld * scalePx + offsetYPx);
 
     const isPlayer = cluster.isPlayerFlag === 1;
 

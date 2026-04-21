@@ -457,6 +457,15 @@ export function startGameScreen(
   const cachedDecorationCenterY = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
   const reusableSnapshot = createReusableSnapshot(world);
 
+  // ── Render-interpolation buffers ─────────────────────────────────────────
+  // Cluster positions captured immediately before the physics tick loop each
+  // frame.  The renderer blends between these and the post-tick positions using
+  // the remaining accumulator fraction (renderAlpha) so sprites advance
+  // continuously rather than snapping once per physics tick.
+  // Sized to match MAX_REUSABLE_CLUSTERS; grows lazily if needed.
+  let prevClusterPosX = new Float32Array(64);
+  let prevClusterPosY = new Float32Array(64);
+
   // ── Health bar state ─────────────────────────────────────────────────────
   /** Map of entityId -> tick when health bar should hide. */
   const healthBarDisplayUntilTick: Map<number, number> = new Map();
@@ -1062,6 +1071,21 @@ export function startGameScreen(
 
     // ── Sim ticks ──────────────────────────────────────────────────────────
     accumulatorMs += elapsedMs;
+
+    // Capture cluster positions before any ticks run this frame.  These are
+    // the "previous" positions used by render interpolation: the renderer
+    // blends between these and the post-tick positions so sprites move
+    // continuously rather than snapping discretely once per physics tick.
+    const clusterCountBeforeTick = world.clusters.length;
+    if (prevClusterPosX.length < clusterCountBeforeTick) {
+      prevClusterPosX = new Float32Array(clusterCountBeforeTick * 2);
+      prevClusterPosY = new Float32Array(clusterCountBeforeTick * 2);
+    }
+    for (let _ci = 0; _ci < clusterCountBeforeTick; _ci++) {
+      prevClusterPosX[_ci] = world.clusters[_ci].positionXWorld;
+      prevClusterPosY[_ci] = world.clusters[_ci].positionYWorld;
+    }
+
     while (accumulatorMs >= FIXED_DT_MS) {
       const player = world.clusters[0];
       if (player !== undefined) {
@@ -1081,6 +1105,10 @@ export function startGameScreen(
       skidDebris.update(world, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
     }
+
+    // Fraction of a tick remaining in the accumulator — used to blend rendered
+    // cluster positions between the pre-tick and post-tick physics positions.
+    const renderAlpha = accumulatorMs / FIXED_DT_MS;
 
     // ── Check for player death ───────────────────────────────────────────────
     const playerForDeath = world.clusters[0];
@@ -1148,10 +1176,16 @@ export function startGameScreen(
     // ── Update camera to follow player ──────────────────────────────────────
     const playerForCamera = world.clusters[0];
     if (playerForCamera !== undefined && playerForCamera.isAliveFlag === 1) {
+      // Use the render-interpolated player position so the camera tracks the
+      // same sub-tick position that the sprite will be drawn at.  This keeps
+      // the player visually centred and prevents background/wall parallax
+      // jitter relative to the sprite.
+      const camTargetX = prevClusterPosX[0] + (playerForCamera.positionXWorld - prevClusterPosX[0]) * renderAlpha;
+      const camTargetY = prevClusterPosY[0] + (playerForCamera.positionYWorld - prevClusterPosY[0]) * renderAlpha;
       updateCamera(
         camera,
-        playerForCamera.positionXWorld,
-        playerForCamera.positionYWorld,
+        camTargetX,
+        camTargetY,
         roomWidthWorld,
         roomHeightWorld,
         virtualWidthPx,
@@ -1231,7 +1265,7 @@ export function startGameScreen(
     }
 
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
-    updateSnapshotInPlace(reusableSnapshot, world);
+    updateSnapshotInPlace(reusableSnapshot, world, renderAlpha, prevClusterPosX, prevClusterPosY);
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,

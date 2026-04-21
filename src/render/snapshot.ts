@@ -143,6 +143,18 @@ export interface ClusterSnapshot {
   readonly beetleSurfaceNormalYWorld: number;
   /** 1 while the beetle is airborne (flying states). */
   readonly beetleIsFlightModeFlag: 0 | 1;
+  /**
+   * Render-interpolated X position (world units).
+   * Linearly blended between the previous tick's position and the current tick's
+   * position using the frame's sub-tick alpha, so sprites animate smoothly at
+   * any refresh rate instead of snapping discretely each physics tick.
+   */
+  readonly renderPositionXWorld: number;
+  /**
+   * Render-interpolated Y position (world units).
+   * See `renderPositionXWorld` for details.
+   */
+  readonly renderPositionYWorld: number;
 }
 
 export interface WallSnapshot {
@@ -327,6 +339,8 @@ function _makeEmptyCluster(): _MutableCluster {
     beetleSurfaceNormalXWorld: 0,
     beetleSurfaceNormalYWorld: 0,
     beetleIsFlightModeFlag: 0,
+    renderPositionXWorld: 0,
+    renderPositionYWorld: 0,
   };
 }
 
@@ -386,6 +400,11 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.beetleSurfaceNormalXWorld       = src.beetleSurfaceNormalXWorld;
   dst.beetleSurfaceNormalYWorld       = src.beetleSurfaceNormalYWorld;
   dst.beetleIsFlightModeFlag          = src.beetleIsFlightModeFlag;
+  // Render interpolation: initialised to the physics position by default.
+  // updateSnapshotInPlace() overwrites these with the blended position when
+  // prev-position buffers and an alpha are supplied.
+  dst.renderPositionXWorld            = src.positionXWorld;
+  dst.renderPositionYWorld            = src.positionYWorld;
 }
 
 /**
@@ -462,9 +481,23 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
  * No heap allocations — all cluster objects are recycled from the pre-allocated
  * pool.  Call once per frame, immediately before `renderFrame()`.
  *
+ * @param renderAlpha - Sub-tick interpolation factor in [0, 1].  0 = fully at
+ *   the previous tick's position; 1 = fully at the current tick's position.
+ *   Pass 1.0 (or omit) when no interpolation data is available.
+ * @param prevPosX - Pre-allocated Float32Array of cluster X positions from the
+ *   start of the current frame (before any tick ran).  Must be at least as long
+ *   as `world.clusters.length`.  Omit to skip interpolation.
+ * @param prevPosY - Matching Y buffer.  Omit to skip interpolation.
+ *
  * ⚠ After this returns, the previous snapshot contents are overwritten.
  */
-export function updateSnapshotInPlace(snap: ReusableWorldSnapshot, world: WorldState): void {
+export function updateSnapshotInPlace(
+  snap: ReusableWorldSnapshot,
+  world: WorldState,
+  renderAlpha = 1.0,
+  prevPosX?: Float32Array,
+  prevPosY?: Float32Array,
+): void {
   const b = _asBacking(snap);
 
   b.tick = world.tick;
@@ -501,6 +534,18 @@ export function updateSnapshotInPlace(snap: ReusableWorldSnapshot, world: WorldS
     // The lazy pool-growth above also ensures pool[i] always exists here.
     b.clusters[i] = pool[i];
     _fillCluster(b.clusters[i], world.clusters[i]);
+
+    // Overwrite the render positions with the interpolated value when prev
+    // buffers are supplied.  _fillCluster() already set them to the current
+    // physics position as the no-interpolation fallback.
+    if (prevPosX !== undefined && prevPosY !== undefined) {
+      const px = prevPosX[i];
+      const py = prevPosY[i];
+      const cx = world.clusters[i].positionXWorld;
+      const cy = world.clusters[i].positionYWorld;
+      b.clusters[i].renderPositionXWorld = px + (cx - px) * renderAlpha;
+      b.clusters[i].renderPositionYWorld = py + (cy - py) * renderAlpha;
+    }
   }
 }
 
@@ -582,6 +627,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       beetleSurfaceNormalXWorld:     c.beetleSurfaceNormalXWorld,
       beetleSurfaceNormalYWorld:     c.beetleSurfaceNormalYWorld,
       beetleIsFlightModeFlag:        c.beetleIsFlightModeFlag,
+      renderPositionXWorld:          c.positionXWorld,
+      renderPositionYWorld:          c.positionYWorld,
     });
   }
 
