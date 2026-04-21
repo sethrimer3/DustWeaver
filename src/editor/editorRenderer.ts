@@ -8,6 +8,7 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow } from './editorTools';
+import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 
 const GRID_COLOR = 'rgba(255,255,255,0.06)';
 const WALL_HIGHLIGHT = 'rgba(100,200,255,0.3)';
@@ -141,6 +142,18 @@ export function renderEditorOverlays(
       SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
       offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
     drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '✦');
+  }
+
+  // ── Skill books (collectible skill unlocks) ──────────────────────────────
+  for (const s of room.skillBooks) {
+    const isSelected = isElementSelected('skillBook', s.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'skillBook' && state.hoverElement.uid === s.uid;
+    const color = isSelected ? 'rgba(180,130,255,0.9)' : 'rgba(140,90,220,0.55)';
+    drawObjectFootprint(ctx, s.xBlock, s.yBlock,
+      1, 1,
+      offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
+    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '📖');
   }
 
   // ── Dust piles ──────────────────────────────────────────────────────────
@@ -284,6 +297,7 @@ function buildElementTooltipId(type: SelectedElementType, uid: number): string {
     transition:       'transition',
     saveTomb:         'save_tomb',
     skillTomb:        'skill_tomb',
+    skillBook:        'skill_book',
     dustPile:         'dust_pile',
     grasshopperArea:  'grasshopper_area',
     decoration:       'decoration',
@@ -322,11 +336,20 @@ function buildElementTypeName(
     }
     return 'Decoration';
   }
+  if (type === 'skillTomb') {
+    const s = room.skillTombs.find(x => x.uid === uid);
+    if (s) return `Skill Tomb [${WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? s.weaveId}]`;
+    return 'Skill Tomb';
+  }
+  if (type === 'skillBook') {
+    const s = room.skillBooks.find(x => x.uid === uid);
+    if (s) return `Skill Book [${WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? s.weaveId}]`;
+    return 'Skill Book';
+  }
   const names: Partial<Record<SelectedElementType, string>> = {
     wall:        'Wall',
     transition:  'Room Transition',
     saveTomb:    'Save Tomb',
-    skillTomb:   'Skill Tomb',
     dustPile:    'Dust Pile',
     playerSpawn: 'Player Spawn',
   };

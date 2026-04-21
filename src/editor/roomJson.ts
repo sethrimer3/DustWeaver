@@ -10,7 +10,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, RoomSongId } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorSkillBook, EditorDustPile, EditorGrasshopperArea, EditorDecoration, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
@@ -201,7 +201,7 @@ export interface RoomJsonDef {
   /** Skill Tombs — grant dust skills/weaves when interacted with. */
   dustSkillTombs?: RoomJsonDustSkillTomb[];
   /** Collectible skill book positions (block units). */
-  skillBooks?: RoomJsonSkillTomb[];
+  skillBooks?: RoomJsonDustSkillTomb[];
   /** Collectible dust container positions (block units). */
   dustContainers?: RoomJsonSkillTomb[];
   // ── Environmental hazards (all optional) ──────────────────────────────────
@@ -371,6 +371,13 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     weaveId: s.weaveId,
   }));
 
+  const skillBooks: EditorSkillBook[] = (json.skillBooks ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    weaveId: s.weaveId,
+  }));
+
   const dustPiles: EditorDustPile[] = (json.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -413,6 +420,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       transitions,
       saveTombs,
       skillTombs,
+      skillBooks,
       dustPiles,
       grasshopperAreas,
       decorations,
@@ -491,6 +499,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.songId !== '_continue') json.songId = data.songId;
   if (data.skillTombs.length > 0) {
     json.dustSkillTombs = data.skillTombs.map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      weaveId: s.weaveId,
+    }));
+  }
+  if (data.skillBooks.length > 0) {
+    json.skillBooks = data.skillBooks.map(s => ({
       xBlock: s.xBlock,
       yBlock: s.yBlock,
       weaveId: s.weaveId,
@@ -679,6 +694,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     transitions,
     saveTombs: data.saveTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
     skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
+    skillBooks: data.skillBooks.length > 0 ? data.skillBooks.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })) : undefined,
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount })),
     grasshopperAreas: data.grasshopperAreas.map(a => ({
       xBlock: a.xBlock,
@@ -775,6 +791,13 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     weaveId: s.weaveId,
   }));
 
+  const skillBooks: EditorSkillBook[] = (room.skillBooks ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    weaveId: s.weaveId,
+  }));
+
   const dustPiles: EditorDustPile[] = (room.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -817,6 +840,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       transitions,
       saveTombs,
       skillTombs,
+      skillBooks,
       dustPiles,
       grasshopperAreas,
       decorations,

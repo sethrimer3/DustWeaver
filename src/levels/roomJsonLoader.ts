@@ -240,7 +240,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
 
   // Add optional fields only if present
   if (json.skillBooks && json.skillBooks.length > 0) {
-    room.skillBooks = json.skillBooks.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock }));
+    room.skillBooks = json.skillBooks.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId ?? '' }));
   }
   if (json.dustContainers && json.dustContainers.length > 0) {
     room.dustContainers = json.dustContainers.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock }));

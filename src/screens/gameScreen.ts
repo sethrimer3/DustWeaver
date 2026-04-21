@@ -211,6 +211,8 @@ export function startGameScreen(
   dustContainerSprite.onload = () => { isDustContainerSpriteLoaded = true; };
   /** Keys in the format `${roomId}:${containerIndex}` for already-collected dust containers. */
   const collectedDustContainerKeySet: Set<string> = new Set();
+  /** Keys in the format `${roomId}:${bookIndex}` for already-collected skill books. */
+  const collectedSkillBookKeySet: Set<string> = new Set();
 
   /** Initialises (or re-initialises) world state for the given room. */
   function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera = false): void {
@@ -1099,30 +1101,21 @@ export function startGameScreen(
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
       skillTombEffectRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
-      // Skillbook pickup (lobby progression): triggers the early auto-assignment.
-      // Grants Cycle passive, Golden Dust, and 2 containers on first pickup.
-      if (progress && !progress.hasCompletedEarlyAutoAssignment) {
+      // Skillbook pickup: grants the specific weave contained in the book.
+      if (progress) {
         const roomSkillBooks = currentRoom.skillBooks ?? [];
         for (let i = 0; i < roomSkillBooks.length; i++) {
+          const pickupKey = `${currentRoom.id}:${i}`;
+          if (collectedSkillBookKeySet.has(pickupKey)) continue;
           const sb = roomSkillBooks[i];
+          if (!sb.weaveId) continue;
           const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
           const sy = (sb.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
           const dx = playerForTomb.positionXWorld - sx;
           const dy = playerForTomb.positionYWorld - sy;
           if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
-            // Perform the early auto-assignment: Cycle + Golden Dust + 2 containers
-            const goldenDustCount = performEarlyAutoAssignment(progress);
-            // Spawn the auto-assigned Golden Dust particles immediately
-            spawnClusterParticles(
-              world,
-              playerForTomb.entityId,
-              playerForTomb.positionXWorld,
-              playerForTomb.positionYWorld,
-              ParticleKind.Physical,
-              goldenDustCount,
-              levelRng,
-            );
-            break;
+            collectedSkillBookKeySet.add(pickupKey);
+            unlockActiveWeave(progress, sb.weaveId);
           }
         }
       }

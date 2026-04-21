@@ -72,6 +72,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
   { id: 'save_tomb', label: 'Save Tomb', category: 'triggers' },
   { id: 'skill_tomb', label: 'Skill Tomb', category: 'triggers' },
+  { id: 'skill_book', label: 'Skill Book', category: 'triggers' },
   { id: 'dust_pile_small',  label: 'Dust Pile (S)',  category: 'triggers' },
   { id: 'dust_pile_medium', label: 'Dust Pile (M)',  category: 'triggers' },
   { id: 'dust_pile_large',  label: 'Dust Pile (L)',  category: 'triggers' },
@@ -198,6 +199,15 @@ export interface EditorSkillTomb {
   weaveId: string;
 }
 
+/** Skill Book — grants the player a specific dust skill/weave when walked over. */
+export interface EditorSkillBook {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** The weave ID unlocked by this book. */
+  weaveId: string;
+}
+
 export interface EditorDustPile {
   uid: number;
   xBlock: number;
@@ -252,6 +262,7 @@ export interface EditorRoomData {
   transitions: EditorTransition[];
   saveTombs: EditorSaveTomb[];
   skillTombs: EditorSkillTomb[];
+  skillBooks: EditorSkillBook[];
   dustPiles: EditorDustPile[];
   grasshopperAreas: EditorGrasshopperArea[];
   /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
@@ -260,7 +271,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'skillBook' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn';
 
 export interface SelectedElement {
   type: SelectedElementType;
@@ -315,6 +326,11 @@ export interface EditorState {
    */
   pendingSkillTombWeaveId: string;
   /**
+   * Which skill (weave) a newly placed skill book will contain.
+   * Populated from the skill picker dropdown when skill_book is selected.
+   */
+  pendingSkillBookWeaveId: string;
+  /**
    * The element the mouse is currently hovering over (Select tool only).
    * Null when no element is under the cursor or when not using the Select tool.
    */
@@ -348,6 +364,7 @@ export function createEditorState(): EditorState {
     selectionBoxStartBlockY: 0,
     clipboard: null,
     pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
+    pendingSkillBookWeaveId: WEAVE_LIST[0] ?? 'storm',
     hoverElement: null,
   };
 }

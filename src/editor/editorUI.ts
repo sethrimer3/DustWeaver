@@ -70,6 +70,8 @@ export interface EditorUICallbacks {
   onOpenVisualMap: () => void;
   /** Called when the user picks a different skill in the skill tomb dropdown. */
   onSkillTombWeaveChange: (weaveId: string) => void;
+  /** Called when the user picks a different skill in the skill book dropdown. */
+  onSkillBookWeaveChange: (weaveId: string) => void;
 }
 
 export function createEditorUI(root: HTMLElement): EditorUI {
@@ -324,12 +326,42 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   skillTombSelect.addEventListener('click', (e) => e.stopPropagation());
   skillTombPickerDiv.appendChild(skillTombSelect);
 
+  // ── Skill book picker (shown above inspector when skill_book is selected) ──
+  const skillBookPickerDiv = document.createElement('div');
+  skillBookPickerDiv.style.cssText = `
+    border: 1px solid rgba(140,90,220,0.5); border-radius: 3px;
+    padding: 6px 8px; margin-top: 8px; background: rgba(10,0,25,0.4); display: none;
+  `;
+  const skillBookPickerTitle = document.createElement('div');
+  skillBookPickerTitle.textContent = 'Skill in Book';
+  skillBookPickerTitle.style.cssText = `font-size: 11px; color: #b87fff; margin-bottom: 6px; font-weight: bold;`;
+  skillBookPickerDiv.appendChild(skillBookPickerTitle);
+  const skillBookSelect = document.createElement('select');
+  skillBookSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid rgba(140,90,220,0.4);
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const weaveId of WEAVE_LIST) {
+    const def = WEAVE_REGISTRY.get(weaveId);
+    const o = document.createElement('option');
+    o.value = weaveId;
+    o.textContent = def?.displayName ?? weaveId;
+    skillBookSelect.appendChild(o);
+  }
+  skillBookSelect.addEventListener('change', () => {
+    callbacks?.onSkillBookWeaveChange(skillBookSelect.value);
+  });
+  skillBookSelect.addEventListener('click', (e) => e.stopPropagation());
+  skillBookPickerDiv.appendChild(skillBookSelect);
+
   // ── Inspector ────────────────────────────────────────────────────────────
   const inspectorDiv = document.createElement('div');
   inspectorDiv.style.cssText = `
     border-top: 1px solid ${PANEL_BORDER}; padding-top: 10px; margin-top: 8px;
   `;
   container.appendChild(skillTombPickerDiv);
+  container.appendChild(skillBookPickerDiv);
   container.appendChild(inspectorDiv);
 
   // Track rendered inspector state to avoid recreating fields every frame
@@ -510,6 +542,13 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     skillTombPickerDiv.style.display = isSkillTombSelected ? '' : 'none';
     if (isSkillTombSelected && document.activeElement !== skillTombSelect) {
       skillTombSelect.value = state.pendingSkillTombWeaveId;
+    }
+
+    // Show/hide the skill book picker based on selected palette item
+    const isSkillBookSelected = state.selectedPaletteItem?.id === 'skill_book';
+    skillBookPickerDiv.style.display = isSkillBookSelected ? '' : 'none';
+    if (isSkillBookSelected && document.activeElement !== skillBookSelect) {
+      skillBookSelect.value = state.pendingSkillBookWeaveId;
     }
 
     // Update inspector (only recreate when selected element changes)
@@ -878,6 +917,21 @@ function updateInspector(
         })),
         tomb.weaveId,
         v => callbacks?.onPropertyChange('skillTomb.weaveId', v));
+    }
+  } else if (el.type === 'skillBook') {
+    const book = room.skillBooks.find(s => s.uid === el.uid);
+    if (book) {
+      addField(div, 'xBlock', String(book.xBlock),
+        v => callbacks?.onPropertyChange('skillBook.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(book.yBlock),
+        v => callbacks?.onPropertyChange('skillBook.yBlock', parseInt(v)));
+      addSelect(div, 'weaveId',
+        WEAVE_LIST.map(id => ({
+          label: WEAVE_REGISTRY.get(id)?.displayName ?? id,
+          value: id,
+        })),
+        book.weaveId,
+        v => callbacks?.onPropertyChange('skillBook.weaveId', v));
     }
   } else if (el.type === 'dustPile') {
     const pile = room.dustPiles.find(p => p.uid === el.uid);
