@@ -137,6 +137,7 @@ export function setActiveBlockSpriteWorld(worldNumber: number): void {
   _activeWorldNumber = worldNumber;
   _sprites = getBlockSpriteSet(worldNumber);
   _activeBlockTheme = null;
+  _invalidateBakedWallCanvas();
 }
 
 /**
@@ -145,6 +146,7 @@ export function setActiveBlockSpriteWorld(worldNumber: number): void {
  */
 export function setActiveBlockSpriteTheme(theme: BlockTheme): void {
   _activeBlockTheme = theme;
+  _invalidateBakedWallCanvas();
 }
 
 /** Sets the active lighting model and room bounds used for block shading. */
@@ -152,6 +154,7 @@ export function setActiveBlockLighting(effect: LightingEffect, roomWidthBlocks: 
   _activeLightingEffect = effect;
   _activeRoomWidthBlocks = roomWidthBlocks;
   _activeRoomHeightBlocks = roomHeightBlocks;
+  _invalidateBakedWallCanvas();
 }
 
 function _getBrownRockSpriteForBlockSize(blockSizePx: number): HTMLImageElement {
@@ -312,6 +315,11 @@ interface CachedWallLayout {
   tileTheme: Map<string, BlockTheme | null>;
   aboveLightingDepths: Map<string, number>;
   defaultLightingDepthByRoomKey: Map<string, Map<string, number>>;
+  /**
+   * Maps top-left tile key of each 2×2 solid wall to its wall theme index.
+   * Computed once per layout and reused across frames to avoid per-frame Map allocation.
+   */
+  solid2x2Map: Map<string, number>;
 }
 
 let _cachedWallLayout: CachedWallLayout | null = null;
@@ -549,6 +557,7 @@ function _buildWallLayoutCache(
     tileTheme,
     aboveLightingDepths,
     defaultLightingDepthByRoomKey: new Map<string, Map<string, number>>(),
+    solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),
   };
 
   return _cachedWallLayout;
@@ -576,8 +585,8 @@ function _getDarknessAlphaFromAirDepth(airDepth: number): number {
   return Math.min(1, acceleratedAlpha);
 }
 
-/** Collects 2x2 wall top-left keys with their per-wall theme index. */
-function _collectSolid2x2WallTopLefts(walls: WallSnapshot, blockSizePx: number): Map<string, number> {
+/** Builds the 2×2 solid-wall top-left map from raw wall data. Called once per layout build. */
+function _buildSolid2x2Map(walls: WallSnapshot, blockSizePx: number): Map<string, number> {
   const topLeftMap = new Map<string, number>();
   if (blockSizePx !== 8) return topLeftMap;
 
@@ -594,6 +603,70 @@ function _collectSolid2x2WallTopLefts(walls: WallSnapshot, blockSizePx: number):
   }
 
   return topLeftMap;
+}
+
+// ── Per-frame reusable collections (pre-allocated to avoid GC pressure) ───────
+
+/**
+ * Reusable Set identifying tiles covered by a 2×2 full-sprite block.
+ * Cleared and repopulated each frame from `wallLayout.solid2x2Map` —
+ * avoids creating a new Set<string> every render call.
+ */
+const _coveredBy2x2Keys = new Set<string>();
+
+/**
+ * Populates `_coveredBy2x2Keys` from the layout's `solid2x2Map`.
+ * Must be called before the tile-draw loop each frame.
+ */
+function _populateCoveredBy2x2Keys(
+  solid2x2Map: Map<string, number>,
+  blockSizePx: number,
+  roomTheme: BlockTheme | null,
+): void {
+  _coveredBy2x2Keys.clear();
+  for (const [topLeftKey, wallThemeIdx] of solid2x2Map) {
+    const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
+      ? indexToBlockTheme(wallThemeIdx)
+      : roomTheme;
+    if (!_themeSupports2x2(resolvedTheme, blockSizePx)) continue;
+    const commaIdx = topLeftKey.indexOf(',');
+    const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
+    const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
+    _coveredBy2x2Keys.add(_tileKey(col, row));
+    _coveredBy2x2Keys.add(_tileKey(col + 1, row));
+    _coveredBy2x2Keys.add(_tileKey(col, row + 1));
+    _coveredBy2x2Keys.add(_tileKey(col + 1, row + 1));
+  }
+}
+
+// ── Wall layer bake cache ─────────────────────────────────────────────────────
+
+/**
+ * Pre-rendered offscreen canvas holding the fully composited wall layer for the
+ * current room.  Built once when sprites are ready; blitted cheaply each frame.
+ * Replaced whenever the bake key changes (room load, theme/lighting change).
+ */
+let _bakedWallCanvas: HTMLCanvasElement | null = null;
+/** Key identifying the configuration used to build `_bakedWallCanvas`. */
+let _bakedWallCanvasKey = '';
+/**
+ * True when the current `_bakedWallCanvas` was rendered with at least one
+ * fallback tile (sprite still loading).  Triggers a re-bake next frame so that
+ * the canvas is refreshed once all sprites have loaded.
+ */
+let _bakedWallHadFallbacks = false;
+/**
+ * Tracks whether the current bake pass used any fallback tiles.
+ * Set to false at the start of each `_doRenderWallTilesDirect` call; set to
+ * true by any code path that falls back to placeholder drawing.
+ */
+let _bakePassHadFallbacks = false;
+
+/** Invalidates the baked wall canvas so it will be rebuilt on the next render. */
+function _invalidateBakedWallCanvas(): void {
+  _bakedWallCanvas = null;
+  _bakedWallCanvasKey = '';
+  _bakedWallHadFallbacks = false;
 }
 
 // ── Solid-colour fallback ─────────────────────────────────────────────────────
@@ -765,6 +838,93 @@ export function renderWallSprites(
   const walls = snapshot.walls;
   if (walls.count === 0) return;
 
+  const wallLayout = _buildWallLayoutCache(walls, blockSizePx);
+
+  // Populate module-level coveredBy2x2Keys from the cached solid2x2Map —
+  // avoids allocating a new Set<string> every frame.
+  _populateCoveredBy2x2Keys(wallLayout.solid2x2Map, blockSizePx, _activeBlockTheme);
+
+  const defaultLightingDepths = _activeLightingEffect === 'DEFAULT' || _activeLightingEffect === 'DarkRoom'
+    ? _getDefaultLightingDepths(wallLayout)
+    : null;
+
+  // Build a key that captures every variable affecting wall visual output.
+  // When the key matches the cached bake, we blit the pre-rendered canvas
+  // instead of issuing hundreds of individual draw calls.
+  const bakeKey = `${wallLayout.signature}|${_activeWorldNumber}|${String(_activeBlockTheme)}|${_activeLightingEffect}|${_activeRoomWidthBlocks}|${_activeRoomHeightBlocks}|${scalePx}`;
+
+  if (_bakedWallCanvas !== null && _bakedWallCanvasKey === bakeKey && !_bakedWallHadFallbacks) {
+    // Fast path: all sprites are ready and the bake is current — blit in one draw call.
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(_bakedWallCanvas, Math.round(offsetXPx), Math.round(offsetYPx));
+    ctx.restore();
+    return;
+  }
+
+  // Determine or create the offscreen bake canvas.
+  // When the key is unchanged but the last bake had fallbacks we reuse the
+  // existing canvas (no resize needed) and re-render into it this frame.
+  let bakeCanvas: HTMLCanvasElement;
+  if (_bakedWallCanvas !== null && _bakedWallCanvasKey === bakeKey) {
+    bakeCanvas = _bakedWallCanvas;
+  } else {
+    // Key changed (new room or configuration) — allocate a fresh canvas sized
+    // to the room bounds in virtual pixels (scalePx ≈ 1.0 always).
+    const roomW = Math.max(1, Math.ceil(_activeRoomWidthBlocks * blockSizePx * scalePx));
+    const roomH = Math.max(1, Math.ceil(_activeRoomHeightBlocks * blockSizePx * scalePx));
+    bakeCanvas = document.createElement('canvas');
+    bakeCanvas.width = roomW;
+    bakeCanvas.height = roomH;
+  }
+
+  const bakeCtx = bakeCanvas.getContext('2d');
+  if (bakeCtx === null) {
+    // Context unavailable — render directly without baking.
+    _doRenderWallTilesDirect(ctx, walls, wallLayout, defaultLightingDepths, offsetXPx, offsetYPx, scalePx, blockSizePx);
+    return;
+  }
+
+  // Render all tiles into the bake canvas at world origin (offset = 0, 0).
+  bakeCtx.clearRect(0, 0, bakeCanvas.width, bakeCanvas.height);
+  _doRenderWallTilesDirect(bakeCtx, walls, wallLayout, defaultLightingDepths, 0, 0, scalePx, blockSizePx);
+
+  // Commit the bake (even if fallbacks were used — they'll be corrected on the
+  // next frame once the sprites finish loading).
+  _bakedWallCanvas = bakeCanvas;
+  _bakedWallCanvasKey = bakeKey;
+  _bakedWallHadFallbacks = _bakePassHadFallbacks;
+
+  // Blit the freshly-baked canvas to the target context.
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(bakeCanvas, Math.round(offsetXPx), Math.round(offsetYPx));
+  ctx.restore();
+}
+
+/**
+ * Draws all wall tiles, platforms, ramps, and half-pillars into `ctx`.
+ *
+ * `offsetXPx` / `offsetYPx` are applied to every tile position, allowing the
+ * function to render either directly to the virtual canvas (with camera offset)
+ * or to the bake canvas at origin (offset = 0, 0).
+ *
+ * Sets `_bakePassHadFallbacks = true` whenever a sprite is not yet loaded and
+ * a placeholder tile is drawn instead.  The caller uses this to decide whether
+ * to re-bake on the next frame.
+ */
+function _doRenderWallTilesDirect(
+  ctx:                   CanvasRenderingContext2D,
+  walls:                 WallSnapshot,
+  wallLayout:            CachedWallLayout,
+  defaultLightingDepths: Map<string, number> | null,
+  offsetXPx:             number,
+  offsetYPx:             number,
+  scalePx:               number,
+  blockSizePx:           number,
+): void {
+  _bakePassHadFallbacks = false;
+
   const tileSizeScreen = blockSizePx * scalePx;
 
   // Determine rendering mode: room-level default theme
@@ -773,30 +933,6 @@ export function renderWallSprites(
   const isLegacyBlackRock = (roomTheme === null) && (_activeWorldNumber === 0);
   // World-number mode for worlds 1+ uses the world-specific sprite set
   const isWorldMode = (roomTheme === null) && !isLegacyBlackRock;
-
-  const wallLayout = _buildWallLayoutCache(walls, blockSizePx);
-  const solid2x2Map = _collectSolid2x2WallTopLefts(walls, blockSizePx);
-  const coveredBy2x2Keys = new Set<string>();
-
-  // Determine which 2x2 blocks should render as full sprites.
-  // Mark covered tiles for each 2x2 block whose resolved theme supports 2x2.
-  for (const [topLeftKey, wallThemeIdx] of solid2x2Map) {
-    const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
-      ? indexToBlockTheme(wallThemeIdx)
-      : roomTheme;
-    if (!_themeSupports2x2(resolvedTheme, blockSizePx)) continue;
-    const commaIdx = topLeftKey.indexOf(',');
-    const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
-    const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
-    coveredBy2x2Keys.add(_tileKey(col, row));
-    coveredBy2x2Keys.add(_tileKey(col + 1, row));
-    coveredBy2x2Keys.add(_tileKey(col, row + 1));
-    coveredBy2x2Keys.add(_tileKey(col + 1, row + 1));
-  }
-
-  const defaultLightingDepths = _activeLightingEffect === 'DEFAULT' || _activeLightingEffect === 'DarkRoom'
-    ? _getDefaultLightingDepths(wallLayout)
-    : null;
 
   // DarkRoom: the per-tile tinting is skipped entirely.  The DarkRoomOverlay
   // in the render pipeline covers the full room with a canvas-level darkness
@@ -809,9 +945,9 @@ export function renderWallSprites(
   // Draw 2×2 full sprites.
   // blackRock: procedural sprite from 2×2 base pool + 2×2 block template.
   // brownRock / dirt: single dedicated 16×16 flat sprite (legacy).
-  if (coveredBy2x2Keys.size > 0) {
+  if (_coveredBy2x2Keys.size > 0) {
     const drawSize = tileSizeScreen * 2;
-    for (const [topLeftKey, wallThemeIdx] of solid2x2Map) {
+    for (const [topLeftKey, wallThemeIdx] of wallLayout.solid2x2Map) {
       const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
         ? indexToBlockTheme(wallThemeIdx)
         : roomTheme;
@@ -830,6 +966,7 @@ export function renderWallSprites(
         if (procSprite !== null) {
           ctx.drawImage(procSprite, tileX, tileY, drawSize, drawSize);
         } else {
+          _bakePassHadFallbacks = true;
           _drawFallbackTile(ctx, tileX, tileY, drawSize);
         }
       } else {
@@ -838,6 +975,7 @@ export function renderWallSprites(
         if (sprite !== null && isSpriteReady(sprite)) {
           ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
         } else {
+          _bakePassHadFallbacks = true;
           _drawFallbackTile(ctx, tileX, tileY, drawSize);
         }
       }
@@ -868,7 +1006,7 @@ export function renderWallSprites(
     const tileY  = Math.round(row * blockSizePx * scalePx + offsetYPx);
     const tileKey = key;
 
-    if (coveredBy2x2Keys.has(tileKey)) {
+    if (_coveredBy2x2Keys.has(tileKey)) {
       if (isBlockTintEnabled) {
         const airDepth = _activeLightingEffect === 'DEFAULT'
           ? (defaultLightingDepths?.get(tileKey) ?? 0)
@@ -894,6 +1032,7 @@ export function renderWallSprites(
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
+        _bakePassHadFallbacks = true;
         _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else if (!tileIsLegacyBlackRock && tileTheme !== null) {
@@ -913,6 +1052,7 @@ export function renderWallSprites(
           ctx.restore();
         }
       } else {
+        _bakePassHadFallbacks = true;
         _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else {
@@ -932,6 +1072,7 @@ export function renderWallSprites(
           ctx.restore();
         }
       } else {
+        _bakePassHadFallbacks = true;
         _drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     }
@@ -950,10 +1091,14 @@ export function renderWallSprites(
     // Draw vertex overlays only in world 1+ legacy mode (those worlds have vertex.png).
     // Theme-based modes and world-0 blackRock do not use vertex overlays.
     if (isWorldMode && spec.variant === 'corner') {
-      _drawVertexOverlays(
-        ctx, wallLayout.occupied, col, row, tileX, tileY, tileSizeScreen,
-        northSolid, eastSolid, southSolid, westSolid,
-      );
+      if (!isSpriteReady(_sprites.vertex)) {
+        _bakePassHadFallbacks = true;
+      } else {
+        _drawVertexOverlays(
+          ctx, wallLayout.occupied, col, row, tileX, tileY, tileSizeScreen,
+          northSolid, eastSolid, southSolid, westSolid,
+        );
+      }
     }
   }
 
@@ -980,6 +1125,7 @@ export function renderWallSprites(
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
         // Fallback: thin solid-color line while sprites are loading.
+        _bakePassHadFallbacks = true;
         ctx.fillStyle = '#8899aa';
         _drawPlatformLine(ctx, tileX, tileY, tileSizeScreen, platformEdgeForTile, scalePx);
       }
@@ -1039,6 +1185,7 @@ export function renderWallSprites(
         ctx.drawImage(procSprite, Math.round(wxPx), Math.round(wyPx), Math.round(wwPx), Math.round(whPx));
       } else {
         // Fallback: solid triangle while sprites are loading.
+        _bakePassHadFallbacks = true;
         _drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, '#1a2535', '#5080b0', scalePx);
       }
     } else {
