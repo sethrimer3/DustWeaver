@@ -228,7 +228,15 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     playerSpawnBlock: [json.playerSpawnBlock[0], json.playerSpawnBlock[1]],
     transitions,
     saveTombs: json.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
-    skillTombs: (json.dustSkillTombs ?? []).map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
+    skillTombs: [
+      ...(json.dustSkillTombs ?? []).map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
+      // Legacy: skill books are unified with skill tombs — merge them in.
+      ...(json.skillBooks ?? []).filter(s => (s as unknown as { weaveId?: string }).weaveId).map(s => ({
+        xBlock: s.xBlock,
+        yBlock: s.yBlock,
+        weaveId: (s as unknown as { weaveId: string }).weaveId,
+      })),
+    ],
   };
 
   // Propagate optional theme/background fields
@@ -239,9 +247,6 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (resolvedSongId !== '_continue') room.songId = resolvedSongId;
 
   // Add optional fields only if present
-  if (json.skillBooks && json.skillBooks.length > 0) {
-    room.skillBooks = json.skillBooks.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId ?? '' }));
-  }
   if (json.dustContainers && json.dustContainers.length > 0) {
     room.dustContainers = json.dustContainers.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock }));
   }

@@ -39,7 +39,7 @@ import { BloomSystem } from '../render/effects/bloomSystem';
 import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
-import { performEarlyAutoAssignment, unlockActiveWeave } from '../progression/unlocks';
+import { unlockActiveWeave } from '../progression/unlocks';
 import {
   spawnClusterParticles,
   spawnLoadoutParticles,
@@ -59,7 +59,6 @@ import {
   screenToWorld,
   resolveSpawnBlock,
   TUNNEL_DETECT_MARGIN_WORLD,
-  SKILLBOOK_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_DUST_GAIN,
   FLYING_EYE_HALF_SIZE_WORLD,
@@ -201,18 +200,12 @@ export function startGameScreen(
   let bgColor = worldBgColor(currentRoom.worldNumber);
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
   let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
-  const skillBookSprite = new Image();
-  skillBookSprite.src = `${BASE}SPRITES/objects/collectables/skillBook.png`;
-  let isSkillBookSpriteLoaded = false;
-  skillBookSprite.onload = () => { isSkillBookSpriteLoaded = true; };
   const dustContainerSprite = new Image();
   dustContainerSprite.src = `${BASE}SPRITES/objects/collectables/dust_container_stub.svg`;
   let isDustContainerSpriteLoaded = false;
   dustContainerSprite.onload = () => { isDustContainerSpriteLoaded = true; };
   /** Keys in the format `${roomId}:${containerIndex}` for already-collected dust containers. */
   const collectedDustContainerKeySet: Set<string> = new Set();
-  /** Keys in the format `${roomId}:${bookIndex}` for already-collected skill books. */
-  const collectedSkillBookKeySet: Set<string> = new Set();
 
   /** Initialises (or re-initialises) world state for the given room. */
   function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera = false): void {
@@ -1101,25 +1094,6 @@ export function startGameScreen(
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
       skillTombEffectRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
-      // Skillbook pickup: grants the specific weave contained in the book.
-      if (progress) {
-        const roomSkillBooks = currentRoom.skillBooks ?? [];
-        for (let i = 0; i < roomSkillBooks.length; i++) {
-          const pickupKey = `${currentRoom.id}:${i}`;
-          if (collectedSkillBookKeySet.has(pickupKey)) continue;
-          const sb = roomSkillBooks[i];
-          if (!sb.weaveId) continue;
-          const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-          const sy = (sb.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-          const dx = playerForTomb.positionXWorld - sx;
-          const dy = playerForTomb.positionYWorld - sy;
-          if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
-            collectedSkillBookKeySet.add(pickupKey);
-            unlockActiveWeave(progress, sb.weaveId);
-          }
-        }
-      }
-
       // Dust container pickup: grants +1 dust container (+4 capacity) and spawns particles.
       const roomDustContainers = currentRoom.dustContainers ?? [];
       for (let i = 0; i < roomDustContainers.length; i++) {
@@ -1272,9 +1246,8 @@ export function startGameScreen(
       prevHealthMap, healthBarDisplayUntilTick,
       combatText, prevLastPlayerBlockedTick,
       collectedDustContainerKeySet,
-      isSkillBookSpriteLoaded, isDustContainerSpriteLoaded,
-      skillBookSprite, dustContainerSprite,
-      progress,
+      isDustContainerSpriteLoaded,
+      dustContainerSprite,
       getPlayerDustCount,
     });
 

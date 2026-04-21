@@ -96,13 +96,6 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
-  // Check skill books
-  for (const s of room.skillBooks) {
-    if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) {
-      return { type: 'skillBook', uid: s.uid };
-    }
-  }
-
   // Check dust piles
   for (const p of room.dustPiles) {
     if (hitTestPoint(p.xBlock, p.yBlock, bx, by)) {
@@ -436,13 +429,6 @@ export function placeAtCursor(state: EditorState): void {
       yBlock: by,
       weaveId: state.pendingSkillTombWeaveId,
     });
-  } else if (item.id === 'skill_book') {
-    room.skillBooks.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      weaveId: state.pendingSkillBookWeaveId,
-    });
   } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
     let dustCount: number;
     if (item.id === 'dust_pile_small') {
@@ -537,16 +523,6 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestPoint(room.skillTombs[i].xBlock, room.skillTombs[i].yBlock, bx, by)) {
       const removedUid = room.skillTombs[i].uid;
       room.skillTombs.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check skill books
-  for (let i = 0; i < room.skillBooks.length; i++) {
-    if (hitTestPoint(room.skillBooks[i].xBlock, room.skillBooks[i].yBlock, bx, by)) {
-      const removedUid = room.skillBooks[i].uid;
-      room.skillBooks.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
@@ -666,11 +642,6 @@ export function getAllElementsInRect(
   for (const s of room.skillTombs) {
     if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
       results.push({ type: 'skillTomb', uid: s.uid });
-    }
-  }
-  for (const s of room.skillBooks) {
-    if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
-      results.push({ type: 'skillBook', uid: s.uid });
     }
   }
   for (const p of room.dustPiles) {

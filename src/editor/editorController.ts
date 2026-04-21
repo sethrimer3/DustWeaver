@@ -11,7 +11,7 @@ import type { CameraState } from '../render/camera';
 
 import {
   EditorState, createEditorState, EditorTool,
-  EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorSkillBook, EditorDustPile, EditorDecoration,
+  EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
   BlockTheme, BackgroundId, LightingEffect, RoomSongId,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
@@ -197,9 +197,6 @@ export function createEditorController(
         onSkillTombWeaveChange: (weaveId: string) => {
           state.pendingSkillTombWeaveId = weaveId;
         },
-        onSkillBookWeaveChange: (weaveId: string) => {
-          state.pendingSkillBookWeaveId = weaveId;
-        },
       });
     } else {
       closeEditor();
@@ -293,7 +290,6 @@ export function createEditorController(
       for (const t of state.roomData.transitions)    maxUid = Math.max(maxUid, t.uid + 1);
       for (const s of state.roomData.saveTombs)      maxUid = Math.max(maxUid, s.uid + 1);
       for (const s of state.roomData.skillTombs)     maxUid = Math.max(maxUid, s.uid + 1);
-      for (const s of state.roomData.skillBooks)     maxUid = Math.max(maxUid, s.uid + 1);
       for (const p of state.roomData.dustPiles)      maxUid = Math.max(maxUid, p.uid + 1);
       for (const d of (state.roomData.decorations ?? [])) maxUid = Math.max(maxUid, d.uid + 1);
       // Ensure nextUid never regresses below its current value (other rooms may
@@ -997,13 +993,6 @@ export function createEditorController(
         if (prop === 'skillTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
         if (prop === 'skillTomb.weaveId' && typeof value === 'string') tomb.weaveId = value;
       }
-    } else if (el.type === 'skillBook') {
-      const book = room.skillBooks.find((s: EditorSkillBook) => s.uid === el.uid);
-      if (book) {
-        if (prop === 'skillBook.xBlock' && !isNaN(numVal)) book.xBlock = numVal;
-        if (prop === 'skillBook.yBlock' && !isNaN(numVal)) book.yBlock = numVal;
-        if (prop === 'skillBook.weaveId' && typeof value === 'string') book.weaveId = value;
-      }
     } else if (el.type === 'dustPile') {
       const pile = room.dustPiles.find((p: EditorDustPile) => p.uid === el.uid);
       if (pile) {
@@ -1039,9 +1028,6 @@ export function createEditorController(
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
-      } else if (el.type === 'skillBook') {
-        const b = s.roomData.skillBooks.find(b2 => b2.uid === el.uid);
-        if (b) positions.set(key, { xBlock: b.xBlock, yBlock: b.yBlock });
       } else if (el.type === 'dustPile') {
         const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
         if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
@@ -1091,9 +1077,6 @@ export function createEditorController(
       } else if (el.type === 'skillTomb') {
         const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
-      } else if (el.type === 'skillBook') {
-        const b = s.roomData.skillBooks.find(b2 => b2.uid === el.uid);
-        if (b) { b.xBlock = orig.xBlock + deltaX; b.yBlock = orig.yBlock + deltaY; }
       } else if (el.type === 'dustPile') {
         const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
         if (p) { p.xBlock = orig.xBlock + deltaX; p.yBlock = orig.yBlock + deltaY; }
@@ -1131,8 +1114,8 @@ export function createEditorController(
   // ── Copy/Paste helpers ───────────────────────────────────────────────────
 
   function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
-    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; skillBooks: EditorSkillBook[]; dustPiles: EditorDustPile[]; decorations: EditorDecoration[] } = {
-      walls: [], enemies: [], saveTombs: [], skillTombs: [], skillBooks: [], dustPiles: [], decorations: [],
+    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations: EditorDecoration[] } = {
+      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [], decorations: [],
     };
     for (const el of elements) {
       if (el.type === 'wall') {
@@ -1147,9 +1130,6 @@ export function createEditorController(
       } else if (el.type === 'skillTomb') {
         const t = room.skillTombs.find(t2 => t2.uid === el.uid);
         if (t) data.skillTombs.push({ ...t });
-      } else if (el.type === 'skillBook') {
-        const b = room.skillBooks.find(b2 => b2.uid === el.uid);
-        if (b) data.skillBooks.push({ ...b });
       } else if (el.type === 'dustPile') {
         const p = room.dustPiles.find(p2 => p2.uid === el.uid);
         if (p) data.dustPiles.push({ ...p });
@@ -1163,7 +1143,7 @@ export function createEditorController(
 
   function pasteFromClipboard(s: EditorState): void {
     if (!s.roomData || !s.clipboard) return;
-    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; skillBooks?: EditorSkillBook[]; dustPiles: EditorDustPile[]; decorations?: EditorDecoration[] };
+    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations?: EditorDecoration[] };
     try {
       data = JSON.parse(s.clipboard) as typeof data;
     } catch {
@@ -1180,7 +1160,6 @@ export function createEditorController(
     for (const e of data.enemies) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
     for (const t of (data.saveTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
     for (const t of (data.skillTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
-    for (const b of (data.skillBooks ?? [])) { minX = Math.min(minX, b.xBlock); minY = Math.min(minY, b.yBlock); }
     for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
     for (const d of (data.decorations ?? [])) { minX = Math.min(minX, d.xBlock); minY = Math.min(minY, d.yBlock); }
     if (!isFinite(minX)) minX = 0;
@@ -1225,16 +1204,6 @@ export function createEditorController(
         yBlock: t.yBlock - minY + offsetY,
       });
       newElements.push({ type: 'skillTomb', uid: newUid });
-    }
-    for (const b of (data.skillBooks ?? [])) {
-      const newUid = allocateUid(s);
-      s.roomData.skillBooks.push({
-        ...b,
-        uid: newUid,
-        xBlock: b.xBlock - minX + offsetX,
-        yBlock: b.yBlock - minY + offsetY,
-      });
-      newElements.push({ type: 'skillBook', uid: newUid });
     }
     for (const p of (data.dustPiles ?? [])) {
       const newUid = allocateUid(s);

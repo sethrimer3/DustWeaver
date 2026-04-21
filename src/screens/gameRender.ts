@@ -47,11 +47,9 @@ import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
 import {
   drawTunnelDarkness,
-  SKILLBOOK_SIZE_WORLD,
   DUST_CONTAINER_SIZE_WORLD,
   HEALTH_BAR_DISPLAY_MS,
 } from './gameRoom';
-import type { PlayerProgress } from '../progression/playerProgress';
 import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
@@ -353,13 +351,8 @@ export interface RenderFrameContext {
 
   // Collectibles
   collectedDustContainerKeySet: Set<string>;
-  isSkillBookSpriteLoaded: boolean;
   isDustContainerSpriteLoaded: boolean;
-  skillBookSprite: HTMLImageElement;
   dustContainerSprite: HTMLImageElement;
-
-  // Progression
-  progress: PlayerProgress | undefined;
 
   // Callbacks
   getPlayerDustCount: () => number;
@@ -382,9 +375,8 @@ export function renderFrame(r: RenderFrameContext): void {
     prevHealthMap, healthBarDisplayUntilTick,
     combatText, prevLastPlayerBlockedTick,
     collectedDustContainerKeySet,
-    isSkillBookSpriteLoaded, isDustContainerSpriteLoaded,
-    skillBookSprite, dustContainerSprite,
-    progress,
+    isDustContainerSpriteLoaded,
+    dustContainerSprite,
     getPlayerDustCount,
   } = r;
 
@@ -530,37 +522,6 @@ export function renderFrame(r: RenderFrameContext): void {
   skillTombEffectRenderer.renderBehind(ctx, ox, oy, zoom);
   skillTombEffectRenderer.renderSprite(ctx, ox, oy, zoom);
   skillTombEffectRenderer.renderFront(ctx, ox, oy, zoom);
-
-  // Skill books (collectibles)
-  if (isSkillBookSpriteLoaded && progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
-    const roomSkillBooks = currentRoom.skillBooks ?? [];
-    const bobOffsetWorld = Math.sin(nowMs * 0.004) * 2.0;
-    for (let i = 0; i < roomSkillBooks.length; i++) {
-      const sb = roomSkillBooks[i];
-      const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-      const sy = (sb.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
-      const drawSize = SKILLBOOK_SIZE_WORLD * zoom;
-      ctx.drawImage(
-        skillBookSprite,
-        sx * zoom + ox - drawSize * 0.5,
-        sy * zoom + oy - drawSize * 0.5,
-        drawSize,
-        drawSize,
-      );
-      bloomSystem.glowPass.drawSprite({
-        image: skillBookSprite,
-        x: sx * zoom + ox - drawSize * 0.5,
-        y: sy * zoom + oy - drawSize * 0.5,
-        width: drawSize,
-        height: drawSize,
-        glow: {
-          enabled: true,
-          intensity: 0.75,
-          color: '#b8a2ff',
-        },
-      });
-    }
-  }
 
   // Dust containers (collectibles)
   if (isDustContainerSpriteLoaded) {

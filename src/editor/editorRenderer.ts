@@ -144,18 +144,6 @@ export function renderEditorOverlays(
     drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '✦');
   }
 
-  // ── Skill books (collectible skill unlocks) ──────────────────────────────
-  for (const s of room.skillBooks) {
-    const isSelected = isElementSelected('skillBook', s.uid);
-    const isHovered = state.hoverElement !== null &&
-      state.hoverElement.type === 'skillBook' && state.hoverElement.uid === s.uid;
-    const color = isSelected ? 'rgba(180,130,255,0.9)' : 'rgba(140,90,220,0.55)';
-    drawObjectFootprint(ctx, s.xBlock, s.yBlock,
-      1, 1,
-      offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
-    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '📖');
-  }
-
   // ── Dust piles ──────────────────────────────────────────────────────────
   for (const p of room.dustPiles) {
     const isSelected = isElementSelected('dustPile', p.uid);
@@ -297,7 +285,6 @@ function buildElementTooltipId(type: SelectedElementType, uid: number): string {
     transition:       'transition',
     saveTomb:         'save_tomb',
     skillTomb:        'skill_tomb',
-    skillBook:        'skill_book',
     dustPile:         'dust_pile',
     grasshopperArea:  'grasshopper_area',
     decoration:       'decoration',
@@ -340,11 +327,6 @@ function buildElementTypeName(
     const s = room.skillTombs.find(x => x.uid === uid);
     if (s) return `Skill Tomb [${WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? s.weaveId}]`;
     return 'Skill Tomb';
-  }
-  if (type === 'skillBook') {
-    const s = room.skillBooks.find(x => x.uid === uid);
-    if (s) return `Skill Book [${WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? s.weaveId}]`;
-    return 'Skill Book';
   }
   const names: Partial<Record<SelectedElementType, string>> = {
     wall:        'Wall',
