@@ -36,6 +36,13 @@ const BEETLE_SURFACE_DETECT_RANGE_WORLD = 6;
 /** Snap distance threshold — beetle snaps flush to surface when within this range. */
 const BEETLE_SNAP_DIST_WORLD = 0.5;
 
+/**
+ * Maximum snap correction magnitude (world units) applied per tick.
+ * Guards against large position jumps caused by numerical instability when
+ * the beetle briefly occupies deeply-overlapping wall geometry.
+ */
+const BEETLE_MAX_SNAP_CORRECTION_WORLD = 20;
+
 /** Distance from player that triggers contact damage (world units, AABB overlap). */
 const BEETLE_CONTACT_DAMAGE_POINTS = 1;
 
@@ -59,6 +66,13 @@ const BEETLE_FLY_DRAG = 0.85;
 
 /** How close to a surface the beetle must be to land from flight (world units). */
 const BEETLE_LANDING_RANGE_WORLD = 4;
+
+/**
+ * Downward acceleration (world units/s²) applied when the beetle has lost its
+ * surface contact in crawl mode — pulls it back toward the last-known normal
+ * direction so it re-establishes surface contact quickly.
+ */
+const BEETLE_FALL_ACCEL_WORLD = 300;
 
 // ── State identifiers ──────────────────────────────────────────────────────
 const STATE_CRAWL_TOWARD = 0;
@@ -433,7 +447,7 @@ export function applyBeetleAI(world: WorldState): void {
         // We want that edge to be at surfacePos (distance 0 from wall face).
         // Since we only know normal, we snap using the signed distance.
         const snapAmount = surf.penetrationWorld; // > 0 = push OUT, < 0 = too far
-        if (Math.abs(snapAmount) < 20) { // sanity guard
+        if (Math.abs(snapAmount) < BEETLE_MAX_SNAP_CORRECTION_WORLD) { // sanity guard
           beetle.positionXWorld += surf.normalX * snapAmount;
           beetle.positionYWorld += surf.normalY * snapAmount;
         }
@@ -479,7 +493,7 @@ export function applyBeetleAI(world: WorldState): void {
     } else {
       // No surface detected — beetle has lost its surface.
       // Apply weak gravity toward last-known surface normal direction.
-      const fallAccel = 300;
+      const fallAccel = BEETLE_FALL_ACCEL_WORLD;
       beetle.velocityXWorld += (-beetle.beetleSurfaceNormalXWorld) * fallAccel * dtSec;
       beetle.velocityYWorld += (-beetle.beetleSurfaceNormalYWorld) * fallAccel * dtSec;
     }

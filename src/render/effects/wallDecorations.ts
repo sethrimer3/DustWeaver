@@ -259,10 +259,16 @@ function _drawMushroom(
   const offX   = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - 3 * px)) + px;
   const stemH  = 2 + (h2 & 1);
   const capW   = 3;
-  const capSway = Math.round(swayOffsetPx * 0.8);
+  // Cap sways more than stem (cap sits at the top, stem is rooted):
+  // MUSHROOM_CAP_SWAY_FACTOR = 0.8 — the cap (most flexible part) moves ~80% of the input sway.
+  // MUSHROOM_STEM_SWAY_FACTOR = 0.3 — the stem base barely moves (~30% of cap sway).
+  const MUSHROOM_CAP_SWAY_FACTOR  = 0.8;
+  const MUSHROOM_STEM_SWAY_FACTOR = 0.3;
+  const capSway  = Math.round(swayOffsetPx * MUSHROOM_CAP_SWAY_FACTOR);
+  const stemSway = Math.round(capSway * MUSHROOM_STEM_SWAY_FACTOR);
 
   ctx.fillStyle = '#c8b89a';
-  ctx.fillRect(sx + offX + Math.round(capSway * 0.3), sy - stemH * px, px, stemH * px);
+  ctx.fillRect(sx + offX + stemSway, sy - stemH * px, px, stemH * px);
 
   const isBlue   = ((h2 >> 4) & 1) === 0;
   const capColor = isBlue ? '#7a58b8' : '#4aaa7a';
@@ -337,10 +343,10 @@ export function renderDecorationSprites(
     const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
 
     // Sway: angle (rad) → pixel offset at the tip.
-    // A stem of ~4px high at typical scale leans by round(angle * height).
+    // A stem of approximately half-a-block height at typical scale leans by round(angle * height).
     const swayAngle = waveState !== undefined ? waveState.getSway(i) : 0;
-    // Approximate tip height in virtual pixels (before upscale) — 4 stem units typical.
-    const stemHeightPx = 4 * scalePx;
+    // Stem height heuristic: half the block size in virtual pixels.
+    const stemHeightPx = blockSizePx * 0.5 * scalePx;
     const swayOffsetPx = Math.round(swayAngle * stemHeightPx);
 
     if (d.kind === 'glowGrass') {
