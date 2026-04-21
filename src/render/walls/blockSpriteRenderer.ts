@@ -644,11 +644,21 @@ function _populateCoveredBy2x2Keys(
 /**
  * Pre-rendered offscreen canvas holding the fully composited wall layer for the
  * current room.  Built once when sprites are ready; blitted cheaply each frame.
- * Replaced whenever the bake key changes (room load, theme/lighting change).
+ * Replaced whenever `_bakedWallLayoutRef` or `_bakedWallScalePx` changes, or
+ * when `_invalidateBakedWallCanvas()` is called on room/theme/lighting updates.
  */
 let _bakedWallCanvas: HTMLCanvasElement | null = null;
-/** Key identifying the configuration used to build `_bakedWallCanvas`. */
-let _bakedWallCanvasKey = '';
+/**
+ * Reference to the `CachedWallLayout` that was used to build `_bakedWallCanvas`.
+ * Identity comparison (`===`) in `renderWallSprites` detects wall-layout changes
+ * without rebuilding a long signature string on every fast-path frame.
+ */
+let _bakedWallLayoutRef: CachedWallLayout | null = null;
+/**
+ * The `scalePx` value used when building `_bakedWallCanvas`.
+ * Included in the validity check alongside `_bakedWallLayoutRef`.
+ */
+let _bakedWallScalePx = 0;
 /**
  * True when the current `_bakedWallCanvas` was rendered with at least one
  * fallback tile (sprite still loading).  Triggers a re-bake next frame so that
@@ -665,7 +675,8 @@ let _bakePassHadFallbacks = false;
 /** Invalidates the baked wall canvas so it will be rebuilt on the next render. */
 function _invalidateBakedWallCanvas(): void {
   _bakedWallCanvas = null;
-  _bakedWallCanvasKey = '';
+  _bakedWallLayoutRef = null;
+  _bakedWallScalePx = 0;
   _bakedWallHadFallbacks = false;
 }
 
@@ -848,29 +859,34 @@ export function renderWallSprites(
     ? _getDefaultLightingDepths(wallLayout)
     : null;
 
-  // Build a key that captures every variable affecting wall visual output.
-  // When the key matches the cached bake, we blit the pre-rendered canvas
-  // instead of issuing hundreds of individual draw calls.
-  const bakeKey = `${wallLayout.signature}|${_activeWorldNumber}|${String(_activeBlockTheme)}|${_activeLightingEffect}|${_activeRoomWidthBlocks}|${_activeRoomHeightBlocks}|${scalePx}`;
+  // Fast path: blit the pre-rendered canvas when the layout, scale, and
+  // rendering configuration are all unchanged and no sprite fallbacks remain.
+  // Uses object-reference comparison for the layout (no string allocation) since
+  // `_buildWallLayoutCache` returns the same object when the signature is stable.
+  // Theme/lighting/world changes are detected via `_invalidateBakedWallCanvas()`
+  // which nulls `_bakedWallCanvas` before we reach this check.
+  const bakeCurrentMatch =
+    _bakedWallCanvas !== null &&
+    _bakedWallLayoutRef === wallLayout &&
+    _bakedWallScalePx === scalePx;
 
-  if (_bakedWallCanvas !== null && _bakedWallCanvasKey === bakeKey && !_bakedWallHadFallbacks) {
-    // Fast path: all sprites are ready and the bake is current — blit in one draw call.
+  if (bakeCurrentMatch && !_bakedWallHadFallbacks) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(_bakedWallCanvas, Math.round(offsetXPx), Math.round(offsetYPx));
+    ctx.drawImage(_bakedWallCanvas!, Math.round(offsetXPx), Math.round(offsetYPx));
     ctx.restore();
     return;
   }
 
   // Determine or create the offscreen bake canvas.
-  // When the key is unchanged but the last bake had fallbacks we reuse the
-  // existing canvas (no resize needed) and re-render into it this frame.
+  // When the match is current but had fallbacks we reuse the existing canvas
+  // (same size) and re-render into it this frame.
   let bakeCanvas: HTMLCanvasElement;
-  if (_bakedWallCanvas !== null && _bakedWallCanvasKey === bakeKey) {
-    bakeCanvas = _bakedWallCanvas;
+  if (bakeCurrentMatch) {
+    bakeCanvas = _bakedWallCanvas!;
   } else {
-    // Key changed (new room or configuration) — allocate a fresh canvas sized
-    // to the room bounds in virtual pixels (scalePx ≈ 1.0 always).
+    // Layout or scale changed — allocate a fresh canvas sized to the room
+    // bounds in virtual pixels (scalePx ≈ 1.0 always).
     const roomW = Math.max(1, Math.ceil(_activeRoomWidthBlocks * blockSizePx * scalePx));
     const roomH = Math.max(1, Math.ceil(_activeRoomHeightBlocks * blockSizePx * scalePx));
     bakeCanvas = document.createElement('canvas');
@@ -892,7 +908,8 @@ export function renderWallSprites(
   // Commit the bake (even if fallbacks were used — they'll be corrected on the
   // next frame once the sprites finish loading).
   _bakedWallCanvas = bakeCanvas;
-  _bakedWallCanvasKey = bakeKey;
+  _bakedWallLayoutRef = wallLayout;
+  _bakedWallScalePx = scalePx;
   _bakedWallHadFallbacks = _bakePassHadFallbacks;
 
   // Blit the freshly-baked canvas to the target context.

@@ -192,12 +192,12 @@ with a single `ctx.drawImage(bakedCanvas, ox, oy)`.
 of 1.0 with BLOCK_SIZE_MEDIUM = 8 and a 80×45-block room this is 640×360 virtual
 pixels — well within memory budget.
 
-**Bake key**: `wallLayout.signature | activeWorldNumber | activeBlockTheme |
-activeLightingEffect | roomWidthBlocks | roomHeightBlocks | scalePx`.  Any
-change to this key (room load, theme switch, lighting mode change) discards the
-cached canvas and triggers a rebuild on the next frame.  `setActiveBlockSpriteWorld`,
-`setActiveBlockSpriteTheme`, and `setActiveBlockLighting` all call
-`_invalidateBakedWallCanvas()` to force the rebuild.
+**Bake key**: Layout identity (`_bakedWallLayoutRef === wallLayout`) plus
+`_bakedWallScalePx === scalePx`.  Using object-reference comparison for the
+wall layout avoids building a long concatenated string on every fast-path frame —
+`_buildWallLayoutCache` returns the same object while the room is unchanged.
+Theme/lighting/world changes are detected via `_invalidateBakedWallCanvas()`
+which nulls `_bakedWallCanvas`/`_bakedWallLayoutRef` before the next render.
 
 **Fallback detection**: `_bakePassHadFallbacks` is set to `true` inside
 `_doRenderWallTilesDirect()` whenever any sprite is not yet loaded and a
