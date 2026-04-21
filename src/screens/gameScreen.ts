@@ -68,6 +68,8 @@ import { renderFrame } from './gameRender';
 import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits, SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
 import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
+import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
+import { DecorationWaveState } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
 import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS } from '../sim/world';
 
@@ -332,6 +334,17 @@ export function startGameScreen(
         enemyCluster.isWheelEnemyFlag = 1;
         enemyCluster.halfWidthWorld = WHEEL_ENEMY_HALF_SIZE_WORLD;
         enemyCluster.halfHeightWorld = WHEEL_ENEMY_HALF_SIZE_WORLD;
+      } else if (enemyDef.isBeetleFlag === 1) {
+        enemyCluster.isBeetleFlag              = 1;
+        enemyCluster.halfWidthWorld            = BEETLE_HALF_SIZE_WORLD;
+        enemyCluster.halfHeightWorld           = BEETLE_HALF_SIZE_WORLD;
+        // Start in a crawl state; AI will pick the first real state on the first tick.
+        enemyCluster.beetleAiState             = 2; // idle briefly so it lands on a surface first
+        enemyCluster.beetleAiStateTicks        = 30;
+        enemyCluster.beetleSurfaceNormalXWorld = 0;
+        enemyCluster.beetleSurfaceNormalYWorld = -1; // assume floor initially
+        enemyCluster.beetleIsFlightModeFlag    = 0;
+        enemyCluster.beetlePrevHealthPoints    = enemyCluster.healthPoints;
       }
 
       world.clusters.push(enemyCluster);
@@ -395,6 +408,9 @@ export function startGameScreen(
     // Reset procedural cloak on room transition
     playerCloak.reset();
 
+    // Reset decoration wave state for new room
+    decorationWaveState.reset(room.decorations?.length ?? 0);
+
     // Init save tomb renderer (with room walls for floor detection)
     skillTombRenderer.init(room.saveTombs, room.walls);
 
@@ -421,6 +437,7 @@ export function startGameScreen(
   const skillTombRenderer = new SkillTombRenderer();
   const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();
+  const decorationWaveState = new DecorationWaveState();
 
   // ── Health bar state ─────────────────────────────────────────────────────
   /** Map of entityId -> tick when health bar should hide. */
@@ -1227,7 +1244,7 @@ export function startGameScreen(
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-      playerCloak, darkRoomOverlay,
+      playerCloak, darkRoomOverlay, decorationWaveState,
       world, currentRoom,
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,
       bgColor, isDebugMode, hudState, inputState,

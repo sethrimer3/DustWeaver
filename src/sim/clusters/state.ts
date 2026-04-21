@@ -297,6 +297,32 @@ export interface ClusterState {
   isWheelEnemyFlag: 0 | 1;
   /** Accumulated roll angle (radians) — drives spoke rotation renderer. */
   wheelRollAngleRad: number;
+
+  // ---- Golden Beetle (populated only when isBeetleFlag === 1) ---------------
+  /**
+   * 1 if this cluster is a golden beetle — crawls on any surface (floor/wall/ceiling),
+   * damages the player on contact, and flies when agitated.
+   */
+  isBeetleFlag: 0 | 1;
+  /**
+   * Current beetle AI state:
+   *  0 = crawl_toward  — crawling toward player along current surface (50% base prob)
+   *  1 = crawl_away    — crawling away from player along current surface (25% base prob)
+   *  2 = idle          — sitting still on surface (25% base prob)
+   *  3 = fly_away      — flying away from player (triggered by damage dealt/received)
+   *  4 = fly_toward    — flying toward player (50% chance after idle state ends)
+   */
+  beetleAiState: number;
+  /** Ticks remaining in the current AI state. 0 triggers a state transition. */
+  beetleAiStateTicks: number;
+  /** X component of the surface normal the beetle is currently attached to (0 = no surface). */
+  beetleSurfaceNormalXWorld: number;
+  /** Y component of the surface normal the beetle is currently attached to. */
+  beetleSurfaceNormalYWorld: number;
+  /** 1 while the beetle is in flight (states 3 or 4); 0 when crawling/idle. */
+  beetleIsFlightModeFlag: 0 | 1;
+  /** Health recorded at end of last tick, used to detect incoming damage. */
+  beetlePrevHealthPoints: number;
 }
 
 export function createClusterState(
@@ -394,5 +420,12 @@ export function createClusterState(
     largeSlimeSplitDoneFlag: 0,
     isWheelEnemyFlag: 0,
     wheelRollAngleRad: 0,
+    isBeetleFlag: 0,
+    beetleAiState: 0,
+    beetleAiStateTicks: 0,
+    beetleSurfaceNormalXWorld: 0,
+    beetleSurfaceNormalYWorld: -1,
+    beetleIsFlightModeFlag: 0,
+    beetlePrevHealthPoints: maxHealthPoints,
   };
 }

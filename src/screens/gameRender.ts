@@ -41,6 +41,7 @@ import {
   renderDecorationSprites,
   addDecorationBloom,
   collectDecorationLights,
+  DecorationWaveState,
 } from '../render/effects/wallDecorations';
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
@@ -270,6 +271,8 @@ export interface RenderFrameContext {
   bloomSystem: BloomSystem;
   playerCloak: PlayerCloak;
   darkRoomOverlay: DarkRoomOverlay;
+  /** Decoration sway state for push-wave animation driven by entity velocity. */
+  decorationWaveState: DecorationWaveState;
 
   // World / room
   world: WorldState;
@@ -325,7 +328,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-    playerCloak, darkRoomOverlay,
+    playerCloak, darkRoomOverlay, decorationWaveState,
     world, currentRoom,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
     bgColor, isDebugMode, hudState, inputState,
@@ -428,7 +431,12 @@ export function renderFrame(r: RenderFrameContext): void {
   // collected here for use later in the frame.
   const isDarkRoom = currentRoom.lightingEffect === 'DarkRoom';
   const wallDecorations = buildRoomDecorations(currentRoom.decorations ?? [], BLOCK_SIZE_SMALL);
-  renderDecorationSprites(ctx, wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
+
+  // Update decoration wave state — apply entity-velocity pushes and advance spring.
+  // dtSec is approximated as the fixed sim timestep (frame time is consistent at 60 fps).
+  decorationWaveState.update(FIXED_DT_MS * 0.001, wallDecorations, snapshot.clusters);
+
+  renderDecorationSprites(ctx, wallDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, decorationWaveState);
 
   // Grapple influence visuals (golden circle + edge glow) drawn on top of walls
   // but behind clusters/particles so they don't obscure the action.

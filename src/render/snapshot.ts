@@ -130,6 +130,19 @@ export interface ClusterSnapshot {
   readonly isWheelEnemyFlag: 0 | 1;
   /** Accumulated roll angle (radians) for wheel enemy spoke renderer. */
   readonly wheelRollAngleRad: number;
+  /** 1 if this cluster is a golden beetle — crawls on surfaces, flies when agitated. */
+  readonly isBeetleFlag: 0 | 1;
+  /**
+   * Current beetle AI state:
+   *  0=crawl_toward, 1=crawl_away, 2=idle, 3=fly_away, 4=fly_toward
+   */
+  readonly beetleAiState: number;
+  /** X component of the surface normal the beetle is attached to (0 when flying). */
+  readonly beetleSurfaceNormalXWorld: number;
+  /** Y component of the surface normal (−1=floor, +1=ceiling, ±0 with X for walls). */
+  readonly beetleSurfaceNormalYWorld: number;
+  /** 1 while the beetle is airborne (flying states). */
+  readonly beetleIsFlightModeFlag: 0 | 1;
 }
 
 export interface WallSnapshot {
@@ -246,6 +259,11 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       largeSlimeDustOrbitAngleRad: c.largeSlimeDustOrbitAngleRad,
       isWheelEnemyFlag:           c.isWheelEnemyFlag,
       wheelRollAngleRad:          c.wheelRollAngleRad,
+      isBeetleFlag:                  c.isBeetleFlag,
+      beetleAiState:                 c.beetleAiState,
+      beetleSurfaceNormalXWorld:     c.beetleSurfaceNormalXWorld,
+      beetleSurfaceNormalYWorld:     c.beetleSurfaceNormalYWorld,
+      beetleIsFlightModeFlag:        c.beetleIsFlightModeFlag,
     });
   }
 

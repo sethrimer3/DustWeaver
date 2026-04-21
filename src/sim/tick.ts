@@ -40,6 +40,7 @@ import { applyHazards } from './hazards';
 import { tickGrasshoppers } from './critters/grasshopper';
 import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
 import { applyWheelEnemyAI } from './clusters/wheelEnemyAi';
+import { applyBeetleAI } from './clusters/beetleAi';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -76,6 +77,9 @@ export function tick(world: WorldState): void {
 
   // 0.5h. Wheel Enemy AI — roll along surfaces toward player
   applyWheelEnemyAI(world);
+
+  // 0.5i_pre. Golden Beetle AI — crawl/fly state machine with contact damage
+  applyBeetleAI(world);
 
   // 0.5i. Grasshopper critters — ambient hop + flee
   tickGrasshoppers(world);

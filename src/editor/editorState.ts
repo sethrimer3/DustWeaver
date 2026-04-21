@@ -66,6 +66,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_slime', label: 'Slime', category: 'enemies' },
   { id: 'enemy_slime_large', label: 'Dust Slime (L)', category: 'enemies' },
   { id: 'enemy_wheel', label: 'Wheel Enemy', category: 'enemies' },
+  { id: 'enemy_beetle', label: 'Golden Beetle', category: 'enemies' },
   // Triggers
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
@@ -162,6 +163,7 @@ export interface EditorEnemy {
   isSlimeFlag: 0 | 1;
   isLargeSlimeFlag: 0 | 1;
   isWheelEnemyFlag: 0 | 1;
+  isBeetleFlag: 0 | 1;
 }
 
 export interface EditorTransition {

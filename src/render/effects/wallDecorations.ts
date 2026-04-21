@@ -21,6 +21,7 @@
 import type { RoomDecorationDef, DecorationKind } from '../../levels/roomDef';
 import type { BloomSystem } from './bloomSystem';
 import type { LightSourcePx } from './darkRoomOverlay';
+import type { ClusterSnapshot } from '../snapshot';
 
 // ── Decoration types ──────────────────────────────────────────────────────────
 
@@ -57,6 +58,127 @@ function _hash(a: number, b: number, c: number): number {
   return h;
 }
 
+// ── Decoration wave state ──────────────────────────────────────────────────────
+
+/**
+ * Per-room sway state for decoration push-wave animation.
+ * When entities (player/enemies) move past decorations their horizontal
+ * velocity imparts a momentary push — the decorations lean in the direction
+ * of travel then spring back, with a higher velocity producing more lean.
+ *
+ * This is render-side state only; never referenced in sim code.
+ * Uses `performance.now()` indirectly through the caller-supplied `dtSec`.
+ */
+export class DecorationWaveState {
+  private readonly _swayAngleRad: Float32Array;
+  private readonly _swayVelRad: Float32Array;
+  private _count = 0;
+
+  /** Maximum pre-allocated capacity in decorations. */
+  static readonly MAX_DECORATIONS = 512;
+
+  /** Spring stiffness — how quickly decorations return to upright. */
+  private static readonly SPRING_K = 10.0;
+  /** Velocity damping factor (fraction retained per second). */
+  private static readonly DAMPING = 0.80;
+  /** World-unit radius within which an entity influences a decoration. */
+  private static readonly PUSH_RADIUS_WORLD = 36;
+  /**
+   * Velocity-to-angular-impulse scaling.
+   * At 200 world-units/s, this produces ~0.12 rad/s of angular velocity.
+   */
+  private static readonly PUSH_FACTOR = 0.0006;
+  /** Maximum allowed sway angle (radians). */
+  private static readonly MAX_SWAY_RAD = 0.35;
+
+  constructor() {
+    this._swayAngleRad = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
+    this._swayVelRad   = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
+  }
+
+  /**
+   * Call once when loading a new room (or when the decoration list changes).
+   * Resets all sway state for a fresh start.
+   */
+  reset(count: number): void {
+    this._count = Math.min(count, DecorationWaveState.MAX_DECORATIONS);
+    this._swayAngleRad.fill(0, 0, this._count);
+    this._swayVelRad.fill(0, 0, this._count);
+  }
+
+  /**
+   * Advance sway spring simulation and apply entity-velocity impulses.
+   * Call once per render frame with `dtSec = elapsedMs / 1000`.
+   *
+   * @param dtSec    Frame delta in seconds.
+   * @param decorations  Decoration list (same order as used by renderDecorationSprites).
+   * @param clusters All cluster snapshots (player + enemies) — read-only.
+   */
+  update(
+    dtSec: number,
+    decorations: readonly WallDecoration[],
+    clusters: readonly ClusterSnapshot[],
+  ): void {
+    const count = Math.min(this._count, decorations.length);
+    const springK = DecorationWaveState.SPRING_K;
+    const damping = DecorationWaveState.DAMPING;
+    const pushRadius = DecorationWaveState.PUSH_RADIUS_WORLD;
+    const pushFactor = DecorationWaveState.PUSH_FACTOR;
+    const maxSway  = DecorationWaveState.MAX_SWAY_RAD;
+
+    const dampFactor = Math.pow(damping, dtSec);
+
+    // ── Apply entity-velocity impulses ────────────────────────────────────────
+    for (let ci = 0; ci < clusters.length; ci++) {
+      const c = clusters[ci];
+      if (c.isAliveFlag === 0) continue;
+      const velX = c.velocityXWorld;
+      if (velX === 0) continue;
+
+      const cx = c.positionXWorld;
+      const cy = c.positionYWorld;
+      const radiusSq = pushRadius * pushRadius;
+
+      for (let i = 0; i < count; i++) {
+        const d = decorations[i];
+        // Decoration center: mid-block horizontally, at anchor Y
+        const dx = cx - (d.worldLeftPx + 4);
+        const dy = cy - d.worldAnchorYPx;
+        const distSq = dx * dx + dy * dy;
+        if (distSq >= radiusSq) continue;
+
+        const dist    = Math.sqrt(distSq);
+        const falloff = 1.0 - dist / pushRadius;
+        // Push in direction of entity horizontal velocity, scaled by speed and proximity.
+        this._swayVelRad[i] += velX * pushFactor * falloff;
+      }
+    }
+
+    // ── Advance spring + damping ───────────────────────────────────────────────
+    for (let i = 0; i < count; i++) {
+      // Spring restoring force
+      this._swayVelRad[i] -= this._swayAngleRad[i] * springK * dtSec;
+      // Velocity damping
+      this._swayVelRad[i] *= dampFactor;
+      // Integrate angle
+      this._swayAngleRad[i] += this._swayVelRad[i] * dtSec;
+      // Clamp sway angle
+      if (this._swayAngleRad[i] > maxSway)  this._swayAngleRad[i] = maxSway;
+      if (this._swayAngleRad[i] < -maxSway) this._swayAngleRad[i] = -maxSway;
+    }
+  }
+
+  /**
+   * Returns the current sway angle (radians) for decoration at `index`.
+   * Positive = lean right; negative = lean left.
+   * Returns 0 for out-of-range indices.
+   */
+  getSway(index: number): number {
+    if (index < 0 || index >= this._count) return 0;
+    return this._swayAngleRad[index];
+  }
+}
+
 // ── Public API: build decoration list from room data ─────────────────────────
 
 /**
@@ -90,6 +212,7 @@ export function buildRoomDecorations(
 /**
  * Draws a pixelated glowing-grass tuft at screen position (sx, sy).
  * sy is the floor surface; the grass grows UPWARD from sy (toward smaller Y).
+ * swayOffsetPx shifts the tip horizontally to simulate push-wave lean.
  */
 function _drawGlowGrass(
   ctx: CanvasRenderingContext2D,
@@ -98,6 +221,7 @@ function _drawGlowGrass(
   blockSizePx: number,
   scalePx: number,
   seed: number,
+  swayOffsetPx = 0,
 ): void {
   const px  = Math.max(1, Math.round(scalePx));
   const bw  = Math.round(blockSizePx * scalePx);
@@ -106,16 +230,19 @@ function _drawGlowGrass(
     const h2   = _hash(seed, i, 0xabcde123);
     const offX = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - px));
     const tufH = 1 + ((h2 >> 8) & 0x3);
+    // Apply sway: the tip leans by swayOffsetPx; scale by stem height fraction.
+    const tipSway = Math.round(swayOffsetPx * tufH / 4);
     ctx.fillStyle = '#1d5a26';
-    ctx.fillRect(sx + offX, sy - tufH * px, px, tufH * px);
+    ctx.fillRect(sx + offX + tipSway, sy - tufH * px, px, tufH * px);
     ctx.fillStyle = '#3db048';
-    ctx.fillRect(sx + offX, sy - tufH * px, px, px);
+    ctx.fillRect(sx + offX + tipSway, sy - tufH * px, px, px);
   }
 }
 
 /**
  * Draws a tiny pixelated mushroom at screen position (sx, sy).
  * sy is the floor surface; the mushroom grows UPWARD from sy.
+ * swayOffsetPx shifts the cap horizontally to simulate lean.
  */
 function _drawMushroom(
   ctx: CanvasRenderingContext2D,
@@ -124,6 +251,7 @@ function _drawMushroom(
   blockSizePx: number,
   scalePx: number,
   seed: number,
+  swayOffsetPx = 0,
 ): void {
   const px     = Math.max(1, Math.round(scalePx));
   const bw     = Math.round(blockSizePx * scalePx);
@@ -131,22 +259,24 @@ function _drawMushroom(
   const offX   = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - 3 * px)) + px;
   const stemH  = 2 + (h2 & 1);
   const capW   = 3;
+  const capSway = Math.round(swayOffsetPx * 0.8);
 
   ctx.fillStyle = '#c8b89a';
-  ctx.fillRect(sx + offX, sy - stemH * px, px, stemH * px);
+  ctx.fillRect(sx + offX + Math.round(capSway * 0.3), sy - stemH * px, px, stemH * px);
 
   const isBlue   = ((h2 >> 4) & 1) === 0;
   const capColor = isBlue ? '#7a58b8' : '#4aaa7a';
   ctx.fillStyle  = capColor;
-  ctx.fillRect(sx + offX - px, sy - (stemH + 2) * px, capW * px, 2 * px);
+  ctx.fillRect(sx + offX - px + capSway, sy - (stemH + 2) * px, capW * px, 2 * px);
 
   ctx.fillStyle = 'rgba(240,255,200,0.85)';
-  ctx.fillRect(sx + offX, sy - (stemH + 2) * px, px, px);
+  ctx.fillRect(sx + offX + capSway, sy - (stemH + 2) * px, px, px);
 }
 
 /**
  * Draws a glowing vine at screen position (sx, sy).
  * sy is the ceiling bottom surface; the vine hangs DOWNWARD from sy (toward larger Y).
+ * swayOffsetPx shifts the tip horizontally to simulate push-wave sway.
  */
 function _drawVine(
   ctx: CanvasRenderingContext2D,
@@ -155,6 +285,7 @@ function _drawVine(
   blockSizePx: number,
   scalePx: number,
   seed: number,
+  swayOffsetPx = 0,
 ): void {
   const px   = Math.max(1, Math.round(scalePx));
   const bw   = Math.round(blockSizePx * scalePx);
@@ -163,17 +294,20 @@ function _drawVine(
     const h2      = _hash(seed, i, 0xc0ffee77);
     const offX    = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - px));
     const vineH   = 3 + ((h2 >> 8) & 0x7);
+    // Apply sway: tip shifts by swayOffsetPx, root stays fixed
+    const tipSway = Math.round(swayOffsetPx * vineH / 10);
     // Stem — dark forest green
     ctx.fillStyle = '#175520';
-    ctx.fillRect(sx + offX, sy, px, vineH * px);
+    ctx.fillRect(sx + offX + tipSway, sy, px, vineH * px);
     // Tip — bright glow
     ctx.fillStyle = '#4fd46e';
-    ctx.fillRect(sx + offX, sy + (vineH - 1) * px, px, px);
+    ctx.fillRect(sx + offX + tipSway, sy + (vineH - 1) * px, px, px);
     // Small leaf pixel midway
     if (vineH >= 4) {
       const midY = Math.floor(vineH / 2);
+      const midSway = Math.round(swayOffsetPx * midY / (vineH * 2));
       ctx.fillStyle = '#2e9944';
-      ctx.fillRect(sx + offX - px, sy + midY * px, 2 * px, px);
+      ctx.fillRect(sx + offX + midSway - px, sy + midY * px, 2 * px, px);
     }
   }
 }
@@ -183,6 +317,10 @@ function _drawVine(
 /**
  * Renders all decoration sprites onto `ctx`.
  * Call this BEFORE `addDecorationBloom` and BEFORE the dark room overlay.
+ *
+ * @param waveState  Optional pre-updated wave state driving per-decoration sway.
+ *                   When provided, decorations lean in the direction of nearby
+ *                   entity motion (higher speed = more lean, springs back).
  */
 export function renderDecorationSprites(
   ctx: CanvasRenderingContext2D,
@@ -191,18 +329,26 @@ export function renderDecorationSprites(
   offsetYPx: number,
   scalePx: number,
   blockSizePx: number,
+  waveState?: DecorationWaveState,
 ): void {
   for (let i = 0; i < decorations.length; i++) {
     const d  = decorations[i];
     const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
     const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
 
+    // Sway: angle (rad) → pixel offset at the tip.
+    // A stem of ~4px high at typical scale leans by round(angle * height).
+    const swayAngle = waveState !== undefined ? waveState.getSway(i) : 0;
+    // Approximate tip height in virtual pixels (before upscale) — 4 stem units typical.
+    const stemHeightPx = 4 * scalePx;
+    const swayOffsetPx = Math.round(swayAngle * stemHeightPx);
+
     if (d.kind === 'glowGrass') {
-      _drawGlowGrass(ctx, sx, sy, blockSizePx, scalePx, d.seed);
+      _drawGlowGrass(ctx, sx, sy, blockSizePx, scalePx, d.seed, swayOffsetPx);
     } else if (d.kind === 'mushroom') {
-      _drawMushroom(ctx, sx, sy, blockSizePx, scalePx, d.seed);
+      _drawMushroom(ctx, sx, sy, blockSizePx, scalePx, d.seed, swayOffsetPx);
     } else {
-      _drawVine(ctx, sx, sy, blockSizePx, scalePx, d.seed);
+      _drawVine(ctx, sx, sy, blockSizePx, scalePx, d.seed, swayOffsetPx);
     }
   }
 }

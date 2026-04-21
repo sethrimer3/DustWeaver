@@ -156,6 +156,11 @@ export interface RoomEnemyDef {
   isLargeSlimeFlag?: 0 | 1;
   /** 1 if this enemy is a wheel enemy — rolls along surfaces toward the player. */
   isWheelEnemyFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a golden beetle — crawls on any surface (floor/wall/ceiling),
+   * damages the player on contact, and flies away when agitated.
+   */
+  isBeetleFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */
