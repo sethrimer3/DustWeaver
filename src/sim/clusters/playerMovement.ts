@@ -442,8 +442,9 @@ export function tickPlayerMovement(
   if (cluster.isGroundedFlag === 0
       && cluster.velocityYWorld > FAST_FALL_VELOCITY_THRESHOLD_WORLD) {
     cluster.halfWidthWorld = FAST_FALL_HALF_WIDTH_WORLD;
-  } else if (cluster.isCrouchingFlag === 0) {
-    // Restore full width when not fast-falling and not crouching
+  } else {
+    // Restore full width whenever not in fast-fall (crouching only changes
+    // halfHeightWorld, so it is safe to always reset halfWidthWorld here).
     cluster.halfWidthWorld = PLAYER_HALF_WIDTH_WORLD;
   }
 }

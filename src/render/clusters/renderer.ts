@@ -1,7 +1,7 @@
 import { WorldSnapshot, ClusterSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
-import { BLOCK_SIZE_MEDIUM } from '../../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
 import { ParticleKind } from '../../sim/particles/kinds';
 import type { PlayerCloak } from './playerCloak';
 
@@ -606,23 +606,29 @@ export function renderClusters(
           // All measured from sprite top-left; y increases downward.
           const isAirborne = cluster.isGroundedFlag === 0;
           const isJumping  = isAirborne && cluster.velocityYWorld < 0;
-          let hbTopPx   = isJumping ? 2 : 4;     // y-coord of hitbox top in sprite
-          const hbBotPx = isJumping ? 22 : 24;   // y-coord of hitbox bottom in sprite
-          const hbLeftPx  = 6;                   // x-coord (always; fast-fall handled by sim)
-          const hbRightPx = 13;
+          // Jumping (y 2–22): the debug rectangle is 2 px higher than the sim
+          // hitbox (y 4–24 / PLAYER_HALF_HEIGHT_WORLD = 10).  The sim collision
+          // box is intentionally left unchanged for jumping — only the debug
+          // indicator shifts to reflect the intended visual hitbox placement.
+          let hbTopPx   = isJumping ? 2 : 4;   // sprite y-pixel of hitbox top
+          const hbBotPx = isJumping ? 22 : 24;  // sprite y-pixel of hitbox bottom
+          // Derive x edges from the pivot constant so they stay in sync.
+          const hbHalfWPx = PLAYER_HALF_WIDTH_WORLD; // 3.5
+          const hbLeftPx  = PLAYER_SPRITE_PIVOT_X_WORLD - hbHalfWPx; // 9.5 - 3.5 = 6
+          const hbRightPx = PLAYER_SPRITE_PIVOT_X_WORLD + hbHalfWPx; // 9.5 + 3.5 = 13
           // Crouching: sim already adjusted positionY and halfHeightWorld.
-          // Use the sim hitbox dimensions directly to stay accurate.
+          // Use the documented sprite y 8–24 for the crouching indicator.
           if (cluster.isCrouchingFlag === 1) {
-            hbTopPx = 8; // sim ensures bottom remains at 24
+            hbTopPx = 8; // y 8–24, matching CROUCH_HALF_HEIGHT_WORLD = 8
           }
           const hbScreenLeft = screenX - spritePivotX + hbLeftPx  * scalePx;
           const hbScreenTop  = spriteTopY              + hbTopPx   * scalePx;
           const hbScreenW    = (hbRightPx - hbLeftPx) * scalePx;
           const hbScreenH    = (hbBotPx   - hbTopPx)  * scalePx;
           // Fast-fall: use actual sim half-width (already narrowed in sim).
-          const fastFallHbW = cluster.halfWidthWorld * 2 * scalePx;
-          const fastFallHbLeft = screenX - cluster.halfWidthWorld * scalePx;
           const isFastFalling = isAirborne && cluster.velocityYWorld > PLAYER_FAST_FALL_SPRITE_THRESHOLD_WORLD;
+          const fastFallHbW    = cluster.halfWidthWorld * 2 * scalePx;
+          const fastFallHbLeft = screenX - cluster.halfWidthWorld * scalePx;
           ctx.save();
           ctx.strokeStyle = 'rgba(0, 255, 100, 0.9)';
           ctx.lineWidth = 1;
