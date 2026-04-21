@@ -154,6 +154,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       isSlimeFlag: e.isSlime ? 1 as const : 0 as const,
       isLargeSlimeFlag: e.isLargeSlime ? 1 as const : 0 as const,
       isWheelEnemyFlag: e.isWheelEnemy ? 1 as const : 0 as const,
+      isBeetleFlag: e.isBeetle ? 1 as const : 0 as const,
     };
   });
 

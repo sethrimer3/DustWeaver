@@ -797,6 +797,17 @@ export function renderClusters(
     } else if (cluster.isWheelEnemyFlag === 1) {
       // ── Wheel Enemy: rolling circle with spokes ───────────────────────────
       _renderWheelEnemy(ctx, screenX, screenY, boxHalfW, cluster.wheelRollAngleRad);
+    } else if (cluster.isBeetleFlag === 1) {
+      // ── Golden Beetle: stub graphics — oval body with wing hints ─────────
+      if (cluster.beetleIsFlightModeFlag === 1) {
+        _renderBeetleFlying(ctx, screenX, screenY, boxHalfW);
+      } else {
+        _renderBeetleCrawling(
+          ctx, screenX, screenY, boxHalfW,
+          cluster.beetleSurfaceNormalXWorld,
+          cluster.beetleSurfaceNormalYWorld,
+        );
+      }
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -860,6 +871,8 @@ export function renderClusters(
       barColor = '#228822';
     } else if (cluster.isWheelEnemyFlag === 1) {
       barColor = '#cc8844';
+    } else if (cluster.isBeetleFlag === 1) {
+      barColor = '#ffd700'; // golden yellow for beetle
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {
@@ -947,6 +960,143 @@ function _renderWheelEnemy(
   ctx.beginPath();
   ctx.arc(cx, cy, radiusPx * 0.18, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/**
+ * Stub renderer for a crawling golden beetle.
+ * Draws an oval body oriented according to the surface normal, with stubby legs.
+ * The forward direction is the tangent to the surface (perpendicular to normal).
+ */
+function _renderBeetleCrawling(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  halfSizePx: number,
+  normalX: number,
+  normalY: number,
+): void {
+  // Angle: body faces along the tangent of the surface normal.
+  // Normal (0,-1) → tangent (1,0) → angle=0; normal (-1,0) → tangent (0,-1) → angle=-π/2.
+  const tangentX = -normalY;
+  const tangentY =  normalX;
+  const angle = Math.atan2(tangentY, tangentX);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  // Elytra (wing covers) — golden oval
+  ctx.beginPath();
+  ctx.ellipse(0, 0, halfSizePx * 1.1, halfSizePx * 0.75, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#c8900a';
+  ctx.globalAlpha = 0.92;
+  ctx.fill();
+  ctx.globalAlpha = 1.0;
+
+  // Gold sheen outline
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Elytra dividing line down the middle
+  ctx.beginPath();
+  ctx.moveTo(0, -halfSizePx * 0.75);
+  ctx.lineTo(0, halfSizePx * 0.75);
+  ctx.strokeStyle = '#ffec60';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Head nub (front)
+  ctx.beginPath();
+  ctx.arc(halfSizePx * 0.95, 0, halfSizePx * 0.3, 0, Math.PI * 2);
+  ctx.fillStyle = '#b87000';
+  ctx.fill();
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Legs — 3 pairs (stub lines perpendicular to body)
+  ctx.strokeStyle = '#8b5000';
+  ctx.lineWidth = 1;
+  const legOffsets = [-halfSizePx * 0.5, 0, halfSizePx * 0.5];
+  for (let li = 0; li < legOffsets.length; li++) {
+    const lx = legOffsets[li];
+    ctx.beginPath();
+    ctx.moveTo(lx, halfSizePx * 0.7);
+    ctx.lineTo(lx + halfSizePx * 0.2, halfSizePx * 1.3);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(lx, -halfSizePx * 0.7);
+    ctx.lineTo(lx + halfSizePx * 0.2, -halfSizePx * 1.3);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Stub renderer for a flying golden beetle.
+ * Draws the body with spread wing outlines to indicate flight.
+ */
+function _renderBeetleFlying(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  halfSizePx: number,
+): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // Wings (spread out, semi-transparent)
+  ctx.beginPath();
+  ctx.ellipse(-halfSizePx * 1.5, -halfSizePx * 0.3,
+    halfSizePx * 1.3, halfSizePx * 0.45, -Math.PI * 0.15, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 220, 80, 0.35)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.75)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.ellipse(halfSizePx * 1.5, -halfSizePx * 0.3,
+    halfSizePx * 1.3, halfSizePx * 0.45, Math.PI * 0.15, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 220, 80, 0.35)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.75)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Elytra body — slightly open (horizontal orientation)
+  ctx.beginPath();
+  ctx.ellipse(0, 0, halfSizePx * 1.1, halfSizePx * 0.75, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#c8900a';
+  ctx.globalAlpha = 0.92;
+  ctx.fill();
+  ctx.globalAlpha = 1.0;
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Head nub
+  ctx.beginPath();
+  ctx.arc(halfSizePx * 0.95, 0, halfSizePx * 0.3, 0, Math.PI * 2);
+  ctx.fillStyle = '#b87000';
+  ctx.fill();
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Small antennae
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(halfSizePx * 1.2, -halfSizePx * 0.2);
+  ctx.lineTo(halfSizePx * 1.9, -halfSizePx * 0.8);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(halfSizePx * 1.2, halfSizePx * 0.2);
+  ctx.lineTo(halfSizePx * 1.9, halfSizePx * 0.8);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
