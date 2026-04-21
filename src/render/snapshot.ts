@@ -539,12 +539,12 @@ export function updateSnapshotInPlace(
     // buffers are supplied.  _fillCluster() already set them to the current
     // physics position as the no-interpolation fallback.
     if (prevPosX !== undefined && prevPosY !== undefined) {
-      const px = prevPosX[i];
-      const py = prevPosY[i];
-      const cx = world.clusters[i].positionXWorld;
-      const cy = world.clusters[i].positionYWorld;
-      b.clusters[i].renderPositionXWorld = px + (cx - px) * renderAlpha;
-      b.clusters[i].renderPositionYWorld = py + (cy - py) * renderAlpha;
+      const prevPositionXWorld = prevPosX[i];
+      const prevPositionYWorld = prevPosY[i];
+      const currentPositionXWorld = world.clusters[i].positionXWorld;
+      const currentPositionYWorld = world.clusters[i].positionYWorld;
+      b.clusters[i].renderPositionXWorld = prevPositionXWorld + (currentPositionXWorld - prevPositionXWorld) * renderAlpha;
+      b.clusters[i].renderPositionYWorld = prevPositionYWorld + (currentPositionYWorld - prevPositionYWorld) * renderAlpha;
     }
   }
 }

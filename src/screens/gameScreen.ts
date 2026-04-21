@@ -1081,9 +1081,9 @@ export function startGameScreen(
       prevClusterPosX = new Float32Array(clusterCountBeforeTick * 2);
       prevClusterPosY = new Float32Array(clusterCountBeforeTick * 2);
     }
-    for (let _ci = 0; _ci < clusterCountBeforeTick; _ci++) {
-      prevClusterPosX[_ci] = world.clusters[_ci].positionXWorld;
-      prevClusterPosY[_ci] = world.clusters[_ci].positionYWorld;
+    for (let clusterIndex = 0; clusterIndex < clusterCountBeforeTick; clusterIndex++) {
+      prevClusterPosX[clusterIndex] = world.clusters[clusterIndex].positionXWorld;
+      prevClusterPosY[clusterIndex] = world.clusters[clusterIndex].positionYWorld;
     }
 
     while (accumulatorMs >= FIXED_DT_MS) {
