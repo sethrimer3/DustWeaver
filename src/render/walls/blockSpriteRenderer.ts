@@ -456,15 +456,15 @@ function _buildAmbientDepths(
   const depths = new Map<string, number>();
   if (_activeRoomWidthBlocks <= 0 || _activeRoomHeightBlocks <= 0) return depths;
 
-  const { dx: dirX, dy: dirY } = _ambientDirectionVector(direction);
-  const isOmni = dirX === 0 && dirY === 0;
+  const { dx: directionVectorX, dy: directionVectorY } = _ambientDirectionVector(direction);
+  const isOmni = directionVectorX === 0 && directionVectorY === 0;
 
   // ── Phase 1: flood-fill "lit air" cells ──────────────────────────────────
   // `litAir` tracks which empty cells are connected to the sky.
   const litAir = new Set<string>();
-  const airQCols: number[] = [];
-  const airQRows: number[] = [];
-  let airQIndex = 0;
+  const airQueueCols: number[] = [];
+  const airQueueRows: number[] = [];
+  let airQueueIndex = 0;
 
   const pushAirSeed = (c: number, r: number): void => {
     if (!_isInsideActiveRoom(c, r)) return;
@@ -473,8 +473,8 @@ function _buildAmbientDepths(
     if (occupied.has(key)) return;       // solid: not a sky-seed
     if (blockers.has(key)) return;       // authored blocker: opaque to ambient
     litAir.add(key);
-    airQCols.push(c);
-    airQRows.push(r);
+    airQueueCols.push(c);
+    airQueueRows.push(r);
   };
 
   // Seed the "sky side" of the room.
@@ -501,10 +501,10 @@ function _buildAmbientDepths(
     // Omni mode doesn't need to flood — every eligible air cell is already
     // in `litAir` — so skip the queue-based propagation below.
   } else {
-    const seedTop    = dirY > 0;  // light moves downward ⇒ enters from top
-    const seedBottom = dirY < 0;
-    const seedLeft   = dirX > 0;
-    const seedRight  = dirX < 0;
+    const seedTop    = directionVectorY > 0;  // light moves downward ⇒ enters from top
+    const seedBottom = directionVectorY < 0;
+    const seedLeft   = directionVectorX > 0;
+    const seedRight  = directionVectorX < 0;
 
     if (seedTop) {
       for (let c = 0; c < _activeRoomWidthBlocks; c++) pushAirSeed(c, 0);
@@ -524,17 +524,17 @@ function _buildAmbientDepths(
   // neighbour whose offset has a non-negative dot product with the direction
   // vector (i.e. light keeps travelling generally with the direction). The
   // check allows perpendicular spread for a natural soft cone.
-  while (airQIndex < airQCols.length) {
-    const col = airQCols[airQIndex];
-    const row = airQRows[airQIndex];
-    airQIndex++;
+  while (airQueueIndex < airQueueCols.length) {
+    const col = airQueueCols[airQueueIndex];
+    const row = airQueueRows[airQueueIndex];
+    airQueueIndex++;
 
     for (let ny = -1; ny <= 1; ny++) {
       for (let nx = -1; nx <= 1; nx++) {
         if (nx === 0 && ny === 0) continue;
         if (!isOmni) {
           // dot(neighbourOffset, direction) >= 0 — skip stepping "uphill"
-          const dot = nx * dirX + ny * dirY;
+          const dot = nx * directionVectorX + ny * directionVectorY;
           if (dot < 0) continue;
         }
         const c = col + nx;
@@ -545,16 +545,16 @@ function _buildAmbientDepths(
         if (occupied.has(key)) continue;
         if (blockers.has(key)) continue;
         litAir.add(key);
-        airQCols.push(c);
-        airQRows.push(r);
+        airQueueCols.push(c);
+        airQueueRows.push(r);
       }
     }
   }
 
   // ── Phase 2: BFS depth into solid cells from lit-air neighbours ─────────
-  const qCols: number[] = [];
-  const qRows: number[] = [];
-  const qDepths: number[] = [];
+  const solidQueueCols: number[] = [];
+  const solidQueueRows: number[] = [];
+  const solidQueueDepths: number[] = [];
   let qIndex = 0;
 
   for (const key of occupied) {
@@ -580,16 +580,16 @@ function _buildAmbientDepths(
 
     if (touchesLitAir) {
       depths.set(key, 0);
-      qCols.push(col);
-      qRows.push(row);
-      qDepths.push(0);
+      solidQueueCols.push(col);
+      solidQueueRows.push(row);
+      solidQueueDepths.push(0);
     }
   }
 
-  while (qIndex < qCols.length) {
-    const col = qCols[qIndex];
-    const row = qRows[qIndex];
-    const depth = qDepths[qIndex];
+  while (qIndex < solidQueueCols.length) {
+    const col = solidQueueCols[qIndex];
+    const row = solidQueueRows[qIndex];
+    const depth = solidQueueDepths[qIndex];
     qIndex++;
 
     for (let dy = -1; dy <= 1; dy++) {
@@ -602,9 +602,9 @@ function _buildAmbientDepths(
         if (depths.has(neighborKey)) continue;
         const nextDepth = depth + 1;
         depths.set(neighborKey, nextDepth);
-        qCols.push(nc);
-        qRows.push(nr);
-        qDepths.push(nextDepth);
+        solidQueueCols.push(nc);
+        solidQueueRows.push(nr);
+        solidQueueDepths.push(nextDepth);
       }
     }
   }

@@ -46,8 +46,6 @@ const SAVE_TOMB_FOOTPRINT_H_BLOCKS = 3;
 const SKILL_TOMB_FOOTPRINT_W_BLOCKS = 2;
 const SKILL_TOMB_FOOTPRINT_H_BLOCKS = 2;
 
-const BS = BLOCK_SIZE_SMALL;
-
 /**
  * Renders all editor overlays on the 2D canvas.
  */
@@ -156,9 +154,9 @@ export function renderEditorOverlays(
     const isSelected = isElementSelected('ambientLightBlocker', b.uid);
     // Purple translucent fill
     ctx.fillStyle = 'rgba(120, 60, 200, 0.35)';
-    const xPx = b.xBlock * BS * zoom + offsetXPx;
-    const yPx = b.yBlock * BS * zoom + offsetYPx;
-    const sizePx = BS * zoom;
+    const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const sizePx = BLOCK_SIZE_SMALL * zoom;
     ctx.fillRect(xPx, yPx, sizePx, sizePx);
     // Purple stroke
     ctx.strokeStyle = isSelected ? 'rgba(255, 255, 255, 1.0)' : 'rgba(180, 120, 255, 0.85)';
@@ -169,10 +167,10 @@ export function renderEditorOverlays(
   // ── Light Sources (before decorations so icons draw on top) ──────────────
   for (const l of (room.lightSources ?? [])) {
     const isSelected = isElementSelected('lightSource', l.uid);
-    const centerXPx = (l.xBlock + 0.5) * BS * zoom + offsetXPx;
-    const centerYPx = (l.yBlock + 0.5) * BS * zoom + offsetYPx;
+    const centerXPx = (l.xBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const centerYPx = (l.yBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     // Draw range circle (dashed)
-    const rangeRadiusPx = l.radiusBlocks * BS * zoom;
+    const rangeRadiusPx = l.radiusBlocks * BLOCK_SIZE_SMALL * zoom;
     ctx.save();
     ctx.setLineDash([2, 2]);
     ctx.strokeStyle = `rgba(${l.colorR}, ${l.colorG}, ${l.colorB}, 0.6)`;
@@ -290,10 +288,10 @@ export function renderEditorOverlays(
     const y1 = Math.min(state.selectionBoxStartBlockY, state.cursorBlockY);
     const x2 = Math.max(state.selectionBoxStartBlockX, state.cursorBlockX);
     const y2 = Math.max(state.selectionBoxStartBlockY, state.cursorBlockY);
-    const sx = x1 * BS * zoom + offsetXPx;
-    const sy = y1 * BS * zoom + offsetYPx;
-    const sw = (x2 - x1 + 1) * BS * zoom;
-    const sh = (y2 - y1 + 1) * BS * zoom;
+    const sx = x1 * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const sy = y1 * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const sw = (x2 - x1 + 1) * BLOCK_SIZE_SMALL * zoom;
+    const sh = (y2 - y1 + 1) * BLOCK_SIZE_SMALL * zoom;
     ctx.fillStyle = SELECTION_BOX_COLOR;
     ctx.fillRect(sx, sy, sw, sh);
     ctx.strokeStyle = SELECTION_BOX_BORDER;
@@ -504,20 +502,20 @@ function drawGrid(
   ctx.lineWidth = 1;
   ctx.beginPath();
 
-  const startCol = Math.max(0, Math.floor(-ox / (BS * zoom)));
-  const endCol = Math.min(room.widthBlocks, Math.ceil((canvasW - ox) / (BS * zoom)));
-  const startRow = Math.max(0, Math.floor(-oy / (BS * zoom)));
-  const endRow = Math.min(room.heightBlocks, Math.ceil((canvasH - oy) / (BS * zoom)));
+  const startCol = Math.max(0, Math.floor(-ox / (BLOCK_SIZE_SMALL * zoom)));
+  const endCol = Math.min(room.widthBlocks, Math.ceil((canvasW - ox) / (BLOCK_SIZE_SMALL * zoom)));
+  const startRow = Math.max(0, Math.floor(-oy / (BLOCK_SIZE_SMALL * zoom)));
+  const endRow = Math.min(room.heightBlocks, Math.ceil((canvasH - oy) / (BLOCK_SIZE_SMALL * zoom)));
 
   for (let col = startCol; col <= endCol; col++) {
-    const x = col * BS * zoom + ox;
-    ctx.moveTo(x, startRow * BS * zoom + oy);
-    ctx.lineTo(x, endRow * BS * zoom + oy);
+    const x = col * BLOCK_SIZE_SMALL * zoom + ox;
+    ctx.moveTo(x, startRow * BLOCK_SIZE_SMALL * zoom + oy);
+    ctx.lineTo(x, endRow * BLOCK_SIZE_SMALL * zoom + oy);
   }
   for (let row = startRow; row <= endRow; row++) {
-    const y = row * BS * zoom + oy;
-    ctx.moveTo(startCol * BS * zoom + ox, y);
-    ctx.lineTo(endCol * BS * zoom + ox, y);
+    const y = row * BLOCK_SIZE_SMALL * zoom + oy;
+    ctx.moveTo(startCol * BLOCK_SIZE_SMALL * zoom + ox, y);
+    ctx.lineTo(endCol * BLOCK_SIZE_SMALL * zoom + ox, y);
   }
   ctx.stroke();
 }
@@ -528,10 +526,10 @@ function drawBlockRect(
   ox: number, oy: number, zoom: number,
   color: string, lineWidth: number,
 ): void {
-  const x = xBlock * BS * zoom + ox;
-  const y = yBlock * BS * zoom + oy;
-  const w = wBlock * BS * zoom;
-  const h = hBlock * BS * zoom;
+  const x = xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y = yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const w = wBlock * BLOCK_SIZE_SMALL * zoom;
+  const h = hBlock * BLOCK_SIZE_SMALL * zoom;
 
   ctx.fillStyle = color;
   ctx.fillRect(x, y, w, h);
@@ -549,10 +547,10 @@ function drawRampTriangle(
   ox: number, oy: number, zoom: number,
   color: string, lineWidth: number,
 ): void {
-  const x  = w.xBlock * BS * zoom + ox;
-  const y  = w.yBlock * BS * zoom + oy;
-  const ww = w.wBlock * BS * zoom;
-  const wh = w.hBlock * BS * zoom;
+  const x  = w.xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const ww = w.wBlock * BLOCK_SIZE_SMALL * zoom;
+  const wh = w.hBlock * BLOCK_SIZE_SMALL * zoom;
   const ori = w.rampOrientation ?? 0;
 
   // Corners: TL, TR, BL, BR
@@ -593,10 +591,10 @@ function drawPlatformLine(
   ox: number, oy: number, zoom: number,
   color: string,
 ): void {
-  const x  = w.xBlock * BS * zoom + ox;
-  const y  = w.yBlock * BS * zoom + oy;
-  const ww = w.wBlock * BS * zoom;
-  const wh = w.hBlock * BS * zoom;
+  const x  = w.xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const ww = w.wBlock * BLOCK_SIZE_SMALL * zoom;
+  const wh = w.hBlock * BLOCK_SIZE_SMALL * zoom;
   const edge = w.platformEdge ?? 0;
   const LINE = Math.max(2, Math.round(3 * zoom));
 
@@ -628,10 +626,10 @@ function drawHalfPillarRect(
   color: string,
 ): void {
   // Full AABB position
-  const x  = w.xBlock * BS * zoom + ox;
-  const y  = w.yBlock * BS * zoom + oy;
-  const ww = w.wBlock * BS * zoom;
-  const wh = w.hBlock * BS * zoom;
+  const x  = w.xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const ww = w.wBlock * BLOCK_SIZE_SMALL * zoom;
+  const wh = w.hBlock * BLOCK_SIZE_SMALL * zoom;
   // Half-width pillar = 3 world units wide (half of BLOCK_SIZE_MEDIUM=6)
   const halfW = ww / 2;
 
@@ -651,9 +649,9 @@ function drawMarker(
   ox: number, oy: number, zoom: number,
   color: string, emoji: string,
 ): void {
-  const cx = xBlock * BS * zoom + ox;
-  const cy = yBlock * BS * zoom + oy;
-  const r = BS * zoom * 0.4;
+  const cx = xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const cy = yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const r = BLOCK_SIZE_SMALL * zoom * 0.4;
 
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -680,14 +678,14 @@ function drawObjectFootprint(
   color: string, lineWidth: number,
 ): void {
   // Center of the anchor block in pixel space
-  const cx = (xBlock + 0.5) * BS * zoom + ox;
-  const cy = (yBlock + 0.5) * BS * zoom + oy;
-  const halfW = (wBlocks / 2) * BS * zoom;
-  const halfH = (hBlocks / 2) * BS * zoom;
+  const cx = (xBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + ox;
+  const cy = (yBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + oy;
+  const halfW = (wBlocks / 2) * BLOCK_SIZE_SMALL * zoom;
+  const halfH = (hBlocks / 2) * BLOCK_SIZE_SMALL * zoom;
   const x = cx - halfW;
   const y = cy - halfH;
-  const w = wBlocks * BS * zoom;
-  const h = hBlocks * BS * zoom;
+  const w = wBlocks * BLOCK_SIZE_SMALL * zoom;
+  const h = hBlocks * BLOCK_SIZE_SMALL * zoom;
 
   ctx.fillStyle = color.replace(/[\d.]+\)$/, '0.12)');
   ctx.fillRect(x, y, w, h);
@@ -721,8 +719,8 @@ function drawTransitionZone(
   drawBlockRect(ctx, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom, color, 2);
 
   // Draw label with door number
-  const cx = (xBlock + wBlock / 2) * BS * zoom + ox;
-  const cy = (yBlock + hBlock / 2) * BS * zoom + oy;
+  const cx = (xBlock + wBlock / 2) * BLOCK_SIZE_SMALL * zoom + ox;
+  const cy = (yBlock + hBlock / 2) * BLOCK_SIZE_SMALL * zoom + oy;
   ctx.fillStyle = '#fff';
   ctx.font = '11px monospace';
   ctx.textAlign = 'center';
