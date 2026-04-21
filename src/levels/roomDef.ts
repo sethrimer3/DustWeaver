@@ -161,6 +161,10 @@ export interface RoomEnemyDef {
    * damages the player on contact, and flies away when agitated.
    */
   isBeetleFlag?: 0 | 1;
+  /** 1 if this enemy is a bubble enemy (water or ice floating ring). */
+  isBubbleEnemyFlag?: 0 | 1;
+  /** 1 if this is an ice bubble variant, 0 (or omitted) for water bubble. */
+  isIceBubbleFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

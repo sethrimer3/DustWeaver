@@ -166,6 +166,30 @@ export function applyClusterMovement(world: WorldState): void {
         cluster.positionYWorld = world.worldHeightWorld - margin - hh;
         cluster.radiantTetherVelYWorld *= -0.3;
       }
+    } else if (cluster.isBubbleEnemyFlag === 1) {
+      // ── Bubble enemy: 2D drift + world-bounds clamp (no wall collision) ─────
+      cluster.positionXWorld += cluster.velocityXWorld * dtSec;
+      cluster.positionYWorld += cluster.velocityYWorld * dtSec;
+
+      const hw = cluster.halfWidthWorld;
+      const hh = cluster.halfHeightWorld;
+      const margin = hw;
+      if (cluster.positionXWorld < minX + margin) {
+        cluster.positionXWorld = minX + margin;
+        if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+      } else if (cluster.positionXWorld > maxX - margin) {
+        cluster.positionXWorld = maxX - margin;
+        if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+      }
+      const minYBubble = hh + 4.0;
+      const maxYBubble = world.worldHeightWorld - hh - 4.0;
+      if (cluster.positionYWorld < minYBubble) {
+        cluster.positionYWorld = minYBubble;
+        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+      } else if (cluster.positionYWorld > maxYBubble) {
+        cluster.positionYWorld = maxYBubble;
+        if (cluster.velocityYWorld > 0) cluster.velocityYWorld = 0;
+      }
     } else {
       // ── Resolve ground entity collision (axis-separated sweep) ──────────
       // resolveClusterSolidWallCollision handles its own integration internally

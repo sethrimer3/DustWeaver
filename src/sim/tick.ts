@@ -41,6 +41,7 @@ import { tickGrasshoppers } from './critters/grasshopper';
 import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
 import { applyWheelEnemyAI } from './clusters/wheelEnemyAi';
 import { applyBeetleAI } from './clusters/beetleAi';
+import { applyBubbleAI, applyBubblePopForces } from './clusters/bubbleAi';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -84,11 +85,17 @@ export function tick(world: WorldState): void {
   // 0.5i. Grasshopper critters — ambient hop + flee
   tickGrasshoppers(world);
 
+  // 0.5j. Bubble Enemy AI — orbit ring maintenance, drift, regen, pop detection
+  applyBubbleAI(world);
+
   // 1. Clear accumulated forces from previous tick
   for (let i = 0; i < world.particleCount; i++) {
     world.forceX[i] = 0;
     world.forceY[i] = 0;
   }
+
+  // 1.5. Bubble pop forces — gravity + heat-seeking for popped water particles
+  applyBubblePopForces(world);
 
   // 2. Per-element forces (noise, curl, diffusion, buoyancy)
   applyElementForces(world);

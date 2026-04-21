@@ -811,6 +811,18 @@ export function renderClusters(
           cluster.beetleSurfaceNormalYWorld,
         );
       }
+    } else if (cluster.isBubbleEnemyFlag === 1) {
+      // ── Bubble enemy: translucent circle body ─────────────────────────────
+      if (cluster.bubbleState === 0) {
+        const healthRatio = cluster.maxHealthPoints > 0
+          ? cluster.healthPoints / cluster.maxHealthPoints : 1.0;
+        if (cluster.isIceBubbleFlag === 1) {
+          _renderIceBubbleBody(ctx, screenX, screenY, boxHalfW, healthRatio);
+        } else {
+          _renderWaterBubbleBody(ctx, screenX, screenY, boxHalfW, healthRatio);
+        }
+      }
+      // In popped state (bubbleState === 1), no cluster body is drawn — only particles.
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -842,6 +854,8 @@ export function renderClusters(
     // ── Health bar (above the body) ───────────────────────────────────────
     // Player health bar is drawn in the HUD (top-left), not over the character.
     if (isPlayer) continue;
+    // Popped bubble clusters have no visible body — skip health bar too
+    if (cluster.isBubbleEnemyFlag === 1 && cluster.bubbleState === 1) continue;
 
     const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
     // For flying eyes the health bar is anchored above the outer diamond ring;
@@ -876,6 +890,8 @@ export function renderClusters(
       barColor = '#cc8844';
     } else if (cluster.isBeetleFlag === 1) {
       barColor = '#ffd700'; // golden yellow for beetle
+    } else if (cluster.isBubbleEnemyFlag === 1) {
+      barColor = cluster.isIceBubbleFlag === 1 ? '#aaddff' : '#3388ff';
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {
@@ -1259,4 +1275,36 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
   }
 
   ctx.restore();
+}
+
+function _renderWaterBubbleBody(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  radiusPx: number,
+  healthRatio: number,
+): void {
+  const alpha = 0.15 + healthRatio * 0.2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radiusPx, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(40,120,220,${alpha.toFixed(2)})`;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(80,180,255,${(0.55 + healthRatio * 0.35).toFixed(2)})`;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function _renderIceBubbleBody(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  radiusPx: number,
+  healthRatio: number,
+): void {
+  const alpha = 0.12 + healthRatio * 0.18;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radiusPx, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(200,235,255,${alpha.toFixed(2)})`;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(220,245,255,${(0.6 + healthRatio * 0.3).toFixed(2)})`;
+  ctx.lineWidth = 2;
+  ctx.stroke();
 }

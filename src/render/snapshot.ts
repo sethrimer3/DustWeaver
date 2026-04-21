@@ -143,6 +143,14 @@ export interface ClusterSnapshot {
   readonly beetleSurfaceNormalYWorld: number;
   /** 1 while the beetle is airborne (flying states). */
   readonly beetleIsFlightModeFlag: 0 | 1;
+  /** 1 if this cluster is a bubble enemy (water or ice). */
+  readonly isBubbleEnemyFlag: 0 | 1;
+  /** 1 for the ice variant, 0 for the water variant. */
+  readonly isIceBubbleFlag: 0 | 1;
+  /** 0 = alive/drifting, 1 = popped. */
+  readonly bubbleState: number;
+  /** Current orbit rotation angle (radians). */
+  readonly bubbleOrbitAngleRad: number;
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -339,6 +347,10 @@ function _makeEmptyCluster(): _MutableCluster {
     beetleSurfaceNormalXWorld: 0,
     beetleSurfaceNormalYWorld: 0,
     beetleIsFlightModeFlag: 0,
+    isBubbleEnemyFlag: 0,
+    isIceBubbleFlag: 0,
+    bubbleState: 0,
+    bubbleOrbitAngleRad: 0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -400,6 +412,10 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.beetleSurfaceNormalXWorld       = src.beetleSurfaceNormalXWorld;
   dst.beetleSurfaceNormalYWorld       = src.beetleSurfaceNormalYWorld;
   dst.beetleIsFlightModeFlag          = src.beetleIsFlightModeFlag;
+  dst.isBubbleEnemyFlag               = src.isBubbleEnemyFlag;
+  dst.isIceBubbleFlag                 = src.isIceBubbleFlag;
+  dst.bubbleState                     = src.bubbleState;
+  dst.bubbleOrbitAngleRad             = src.bubbleOrbitAngleRad;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
@@ -627,6 +643,10 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       beetleSurfaceNormalXWorld:     c.beetleSurfaceNormalXWorld,
       beetleSurfaceNormalYWorld:     c.beetleSurfaceNormalYWorld,
       beetleIsFlightModeFlag:        c.beetleIsFlightModeFlag,
+      isBubbleEnemyFlag:             c.isBubbleEnemyFlag,
+      isIceBubbleFlag:               c.isIceBubbleFlag,
+      bubbleState:                   c.bubbleState,
+      bubbleOrbitAngleRad:           c.bubbleOrbitAngleRad,
       renderPositionXWorld:          c.positionXWorld,
       renderPositionYWorld:          c.positionYWorld,
     });
