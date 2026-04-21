@@ -16,7 +16,7 @@
 import { WorldState } from '../world';
 import { ClusterState } from './state';
 import { DASH_RECHARGE_ANIM_TICKS } from './dashConstants';
-import { PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
+import { PLAYER_HALF_HEIGHT_WORLD, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
 import { nextUint32 } from '../rng';
 import { WATER_GRAVITY_MULTIPLIER } from '../hazards';
 
@@ -50,6 +50,8 @@ import {
   SKID_JUMP_MULTIPLIER,
   SKID_VELOCITY_THRESHOLD_WORLD,
   CROUCH_HALF_HEIGHT_WORLD,
+  FAST_FALL_VELOCITY_THRESHOLD_WORLD,
+  FAST_FALL_HALF_WIDTH_WORLD,
   IDLE_TRIGGER_TICKS,
   IDLE_BLINK_DURATION_TICKS,
 } from './movementConstants';
@@ -434,5 +436,14 @@ export function tickPlayerMovement(
         cluster.velocityXWorld = cluster.velocityXWorld + dv < 0 ? cluster.velocityXWorld + dv : 0;
       }
     }
+  }
+
+  // ── Fast-fall hitbox: narrow the player box while fast-falling airborne ─
+  if (cluster.isGroundedFlag === 0
+      && cluster.velocityYWorld > FAST_FALL_VELOCITY_THRESHOLD_WORLD) {
+    cluster.halfWidthWorld = FAST_FALL_HALF_WIDTH_WORLD;
+  } else if (cluster.isCrouchingFlag === 0) {
+    // Restore full width when not fast-falling and not crouching
+    cluster.halfWidthWorld = PLAYER_HALF_WIDTH_WORLD;
   }
 }
