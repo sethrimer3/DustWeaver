@@ -9,7 +9,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, RoomAmbientLightBlockerDef, RoomLightSourceDef } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection } from '../levels/roomDef';
 import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 

@@ -4,8 +4,8 @@
  * other editor visual feedback on the 2D canvas.
  */
 
-import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
-import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType } from './editorState';
+import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType, AmbientLightDirection } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow } from './editorTools';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
@@ -46,7 +46,7 @@ const SAVE_TOMB_FOOTPRINT_H_BLOCKS = 3;
 const SKILL_TOMB_FOOTPRINT_W_BLOCKS = 2;
 const SKILL_TOMB_FOOTPRINT_H_BLOCKS = 2;
 
-const BS = BLOCK_SIZE_MEDIUM;
+const BS = BLOCK_SIZE_SMALL;
 
 /**
  * Renders all editor overlays on the 2D canvas.
@@ -149,6 +149,49 @@ export function renderEditorOverlays(
     const isSelected = isElementSelected('dustPile', p.uid);
     drawMarker(ctx, p.xBlock, p.yBlock, offsetXPx, offsetYPx, zoom,
       isSelected ? 'rgba(255,215,0,0.8)' : 'rgba(255,215,0,0.4)', '✦');
+  }
+
+  // ── Ambient Light Blockers (before decorations so icons draw on top) ─────
+  for (const b of (room.ambientLightBlockers ?? [])) {
+    const isSelected = isElementSelected('ambientLightBlocker', b.uid);
+    // Purple translucent fill
+    ctx.fillStyle = 'rgba(120, 60, 200, 0.35)';
+    const xPx = b.xBlock * BS * zoom + offsetXPx;
+    const yPx = b.yBlock * BS * zoom + offsetYPx;
+    const sizePx = BS * zoom;
+    ctx.fillRect(xPx, yPx, sizePx, sizePx);
+    // Purple stroke
+    ctx.strokeStyle = isSelected ? 'rgba(255, 255, 255, 1.0)' : 'rgba(180, 120, 255, 0.85)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, sizePx, sizePx);
+  }
+
+  // ── Light Sources (before decorations so icons draw on top) ──────────────
+  for (const l of (room.lightSources ?? [])) {
+    const isSelected = isElementSelected('lightSource', l.uid);
+    const centerXPx = (l.xBlock + 0.5) * BS * zoom + offsetXPx;
+    const centerYPx = (l.yBlock + 0.5) * BS * zoom + offsetYPx;
+    // Draw range circle (dashed)
+    const rangeRadiusPx = l.radiusBlocks * BS * zoom;
+    ctx.save();
+    ctx.setLineDash([2, 2]);
+    ctx.strokeStyle = `rgba(${l.colorR}, ${l.colorG}, ${l.colorB}, 0.6)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(centerXPx, centerYPx, rangeRadiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    // Draw center marker (filled circle)
+    ctx.fillStyle = `rgb(${l.colorR}, ${l.colorG}, ${l.colorB})`;
+    ctx.beginPath();
+    ctx.arc(centerXPx, centerYPx, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = isSelected ? 'rgba(255, 255, 255, 1.0)' : 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.beginPath();
+    ctx.arc(centerXPx, centerYPx, 3, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   // ── Decorations ──────────────────────────────────────────────────────────
@@ -272,7 +315,51 @@ export function renderEditorOverlays(
     drawHoverTooltip(ctx, tooltipId, tooltipType, cursorXPx, cursorYPx, canvasWidth, canvasHeight);
   }
 
+  // ── Ambient Light Direction Indicator ────────────────────────────────────
+  if (room.ambientLightDirection && room.ambientLightDirection !== 'omni') {
+    const dir = room.ambientLightDirection;
+    const [dx, dy] = getDirectionVector(dir);
+    const arrowLen = 16; // virtual px
+    const startX = 12; // top-left padding
+    const startY = 12;
+    const endX = startX + dx * arrowLen;
+    const endY = startY + dy * arrowLen;
+    ctx.strokeStyle = 'rgba(255, 220, 120, 0.9)';
+    ctx.fillStyle = 'rgba(255, 220, 120, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    // Arrowhead
+    const headLen = 5;
+    const angle = Math.atan2(dy, dx);
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+    // Label
+    ctx.font = '10px monospace';
+    ctx.fillText(dir, endX + 4, endY + 4);
+  }
+
   ctx.restore();
+}
+
+function getDirectionVector(dir: AmbientLightDirection): [number, number] {
+  switch (dir) {
+    case 'down':       return [0, 1];
+    case 'down-right': return [1, 1];
+    case 'down-left':  return [-1, 1];
+    case 'up':         return [0, -1];
+    case 'up-right':   return [1, -1];
+    case 'up-left':    return [-1, -1];
+    case 'left':       return [-1, 0];
+    case 'right':      return [1, 0];
+    case 'omni':       return [0, 0];
+  }
 }
 
 // ── Drawing helpers ──────────────────────────────────────────────────────────
