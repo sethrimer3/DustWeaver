@@ -9,8 +9,8 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, RoomSongId } from './editorState';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, RoomAmbientLightBlockerDef, RoomLightSourceDef } from '../levels/roomDef';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
@@ -172,6 +172,25 @@ export interface RoomJsonDecoration {
   kind: DecorationKind;
 }
 
+/** Authored tile-coord ambient-light blocker (see {@link RoomAmbientLightBlockerDef}). */
+export interface RoomJsonAmbientLightBlocker {
+  xBlock: number;
+  yBlock: number;
+}
+
+/** Authored local light source (see {@link RoomLightSourceDef}). */
+export interface RoomJsonLightSource {
+  xBlock: number;
+  yBlock: number;
+  radiusBlocks: number;
+  /** 0-255 RGB channels. */
+  colorR: number;
+  colorG: number;
+  colorB: number;
+  /** 0-100 percent. */
+  brightnessPct: number;
+}
+
 export interface RoomJsonDef {
   id: string;
   name: string;
@@ -184,8 +203,18 @@ export interface RoomJsonDef {
   blockTheme?: BlockTheme;
   /** Background visual ID. Falls back to worldNumber if not set. */
   backgroundId?: BackgroundId;
-  /** Lighting model. Falls back to 'DEFAULT' if not set. */
+  /**
+   * Lighting model. Falls back to `'Ambient'` when not set.
+   * Legacy `'DEFAULT'` and `'Above'` values are accepted and treated as
+   * `'Ambient'` with the appropriate direction (omni / down) at runtime.
+   */
   lightingEffect?: LightingEffect;
+  /** Ambient/skylight direction (see {@link AmbientLightDirection}). */
+  ambientLightDirection?: AmbientLightDirection;
+  /** Sparse tile-coord list of authored ambient-light blockers. */
+  ambientLightBlockers?: RoomJsonAmbientLightBlocker[];
+  /** Sparse list of authored local light sources. */
+  lightSources?: RoomJsonLightSource[];
   /**
    * Background music. Omitting or setting to '_continue' means "keep playing
    * whatever was already playing".  '_silence' stops music.
@@ -251,8 +280,11 @@ export function validateRoomJson(data: unknown): ValidationError[] {
   if (obj.mapY !== undefined && typeof obj.mapY !== 'number') {
     errors.push({ path: 'mapY', message: 'Must be a number when provided' });
   }
-  if (obj.lightingEffect !== undefined && obj.lightingEffect !== 'DEFAULT' && obj.lightingEffect !== 'Above' && obj.lightingEffect !== 'DarkRoom') {
-    errors.push({ path: 'lightingEffect', message: 'Must be DEFAULT|Above|DarkRoom' });
+  if (obj.lightingEffect !== undefined) {
+    const v = obj.lightingEffect;
+    if (v !== 'Ambient' && v !== 'DarkRoom' && v !== 'FullyLit' && v !== 'DEFAULT' && v !== 'Above') {
+      errors.push({ path: 'lightingEffect', message: 'Must be Ambient|DarkRoom|FullyLit (legacy DEFAULT|Above also accepted)' });
+    }
   }
   if (typeof obj.widthBlocks !== 'number' || (obj.widthBlocks as number) < 10) {
     errors.push({ path: 'widthBlocks', message: 'Must be a number >= 10' });
@@ -407,6 +439,23 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     kind: d.kind,
   }));
 
+  const ambientLightBlockers: EditorAmbientLightBlocker[] = (json.ambientLightBlockers ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+  }));
+
+  const lightSources: EditorLightSource[] = (json.lightSources ?? []).map(l => ({
+    uid: uid++,
+    xBlock: l.xBlock,
+    yBlock: l.yBlock,
+    radiusBlocks: l.radiusBlocks,
+    colorR: l.colorR,
+    colorG: l.colorG,
+    colorB: l.colorB,
+    brightnessPct: l.brightnessPct,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -416,7 +465,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       mapY: json.mapY ?? 0,
       blockTheme: json.blockTheme ?? 'blackRock',
       backgroundId: json.backgroundId ?? 'brownRock',
-      lightingEffect: json.lightingEffect ?? 'DEFAULT',
+      lightingEffect: json.lightingEffect ?? 'Ambient',
+      ambientLightDirection: json.ambientLightDirection,
       songId: parseSongId(json.songId),
       widthBlocks: json.widthBlocks,
       heightBlocks: json.heightBlocks,
@@ -429,6 +479,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       dustPiles,
       grasshopperAreas,
       decorations,
+      ambientLightBlockers,
+      lightSources,
     },
     nextUid: uid,
   };
@@ -532,6 +584,26 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       xBlock: d.xBlock,
       yBlock: d.yBlock,
       kind: d.kind,
+    }));
+  }
+  if (data.ambientLightDirection) {
+    json.ambientLightDirection = data.ambientLightDirection;
+  }
+  if ((data.ambientLightBlockers ?? []).length > 0) {
+    json.ambientLightBlockers = data.ambientLightBlockers.map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+    }));
+  }
+  if ((data.lightSources ?? []).length > 0) {
+    json.lightSources = data.lightSources.map(l => ({
+      xBlock: l.xBlock,
+      yBlock: l.yBlock,
+      radiusBlocks: l.radiusBlocks,
+      colorR: l.colorR,
+      colorG: l.colorG,
+      colorB: l.colorB,
+      brightnessPct: l.brightnessPct,
     }));
   }
   return json;
@@ -709,6 +781,20 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       yBlock: d.yBlock,
       kind: d.kind,
     })),
+    ambientLightDirection: data.ambientLightDirection,
+    ambientLightBlockers: (data.ambientLightBlockers ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+    })),
+    lightSources: (data.lightSources ?? []).map(l => ({
+      xBlock: l.xBlock,
+      yBlock: l.yBlock,
+      radiusBlocks: l.radiusBlocks,
+      colorR: l.colorR,
+      colorG: l.colorG,
+      colorB: l.colorB,
+      brightnessPct: l.brightnessPct,
+    })),
   };
 }
 
@@ -817,6 +903,23 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     kind: d.kind,
   }));
 
+  const ambientLightBlockers: EditorAmbientLightBlocker[] = (room.ambientLightBlockers ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+  }));
+
+  const lightSources: EditorLightSource[] = (room.lightSources ?? []).map(l => ({
+    uid: uid++,
+    xBlock: l.xBlock,
+    yBlock: l.yBlock,
+    radiusBlocks: l.radiusBlocks,
+    colorR: l.colorR,
+    colorG: l.colorG,
+    colorB: l.colorB,
+    brightnessPct: l.brightnessPct,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -826,7 +929,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       mapY: room.mapY,
       blockTheme: room.blockTheme ?? 'blackRock',
       backgroundId: room.backgroundId ?? 'brownRock',
-      lightingEffect: room.lightingEffect ?? 'DEFAULT',
+      lightingEffect: room.lightingEffect ?? 'Ambient',
+      ambientLightDirection: room.ambientLightDirection,
       songId: room.songId ?? '_continue',
       widthBlocks: room.widthBlocks,
       heightBlocks: room.heightBlocks,
@@ -839,6 +943,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       dustPiles,
       grasshopperAreas,
       decorations,
+      ambientLightBlockers,
+      lightSources,
     },
     nextUid: uid,
   };

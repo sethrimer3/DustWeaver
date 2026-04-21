@@ -289,6 +289,8 @@ function buildElementTooltipId(type: SelectedElementType, uid: number): string {
     grasshopperArea:  'grasshopper_area',
     decoration:       'decoration',
     playerSpawn:      'player_spawn',
+    ambientLightBlocker: 'ambient_blocker',
+    lightSource:      'light_source',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;

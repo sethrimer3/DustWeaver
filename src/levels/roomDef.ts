@@ -73,14 +73,91 @@ export type BackgroundId =
 
 /**
  * Lighting model used when shading block tiles in a room.
- * - DEFAULT:  distance-to-open-air in any direction (intended behavior)
- * - Above:    legacy top-down depth shading effect
- * - DarkRoom: fully dark room; only explicit light sources illuminate it.
- *             Block-level tinting is skipped; the darkness overlay in the
- *             render pipeline covers the entire room and is pierced by
- *             radial light gradients at glowing decorations and the player.
+ *
+ * The unified "Ambient" model propagates skylight from outside the room through
+ * empty cells into solid walls, using a configurable {@link AmbientLightDirection}.
+ * `ambientLightBlockers` tiles block this propagation (see {@link RoomAmbientLightBlockerDef}),
+ * producing dark walkable pockets that only brighten when a connecting path to
+ * the outside opens (e.g. after a breakable wall is destroyed).
+ *
+ * - `'Ambient'`  — unified directional ambient/skylight solver (preferred).
+ * - `'DarkRoom'` — ambient darkness; only point lights illuminate (overlay path).
+ * - `'FullyLit'` — no ambient darkness shading; everything is bright.
+ *
+ * **Legacy values (accepted for backward compatibility):**
+ * - `'DEFAULT'` — omnidirectional sky access; behaves like `'Ambient'` with
+ *                 {@link AmbientLightDirection} = `'omni'`.
+ * - `'Above'`   — legacy top-down scan; behaves like `'Ambient'` with
+ *                 {@link AmbientLightDirection} = `'down'`.
  */
-export type LightingEffect = 'DEFAULT' | 'Above' | 'DarkRoom';
+export type LightingEffect = 'Ambient' | 'DarkRoom' | 'FullyLit' | 'DEFAULT' | 'Above';
+
+/**
+ * Direction that ambient/skylight arrives from.
+ *
+ * The solver seeds "lit air" cells by flood-filling from the edge(s) of the
+ * room that face the sky, then propagates through air that moves WITH the
+ * direction vector (and its two orthogonal neighbours, for natural diagonal
+ * spill). Solid walls adjacent to lit air are then shaded by depth.
+ *
+ * - `'omni'`       — no directional bias; any room edge counts as sky source
+ *                     (compatible with the legacy `'DEFAULT'` mode).
+ * - `'down'`       — sunlight from directly above (the legacy `'Above'` mode).
+ * - `'down-right'` / `'down-left'` — natural diagonal skylight (recommended default).
+ * - `'up'` / `'up-right'` / `'up-left'` — uncommon, but supported for
+ *                                         authoring flexibility.
+ * - `'left'` / `'right'` — horizontal ambient (rare; for special rooms).
+ */
+export type AmbientLightDirection =
+  | 'omni'
+  | 'down'
+  | 'down-right'
+  | 'down-left'
+  | 'up'
+  | 'up-right'
+  | 'up-left'
+  | 'left'
+  | 'right';
+
+/**
+ * A single tile-coordinate ambient-light blocker.
+ *
+ * Authored in the editor via the dedicated lighting layer. The tile remains
+ * empty for gameplay (not solid, not hazardous) and visually air, but the
+ * ambient-lighting solver treats it as opaque to skylight propagation. Solid
+ * walls hidden behind a field of blockers stay fully dark until a path to
+ * the actual room edge opens up.
+ *
+ * Blockers do NOT affect {@link RoomLightSourceDef} local lights — those
+ * remain purely radius-based for now (see task guidance §2 and §9).
+ */
+export interface RoomAmbientLightBlockerDef {
+  readonly xBlock: number;
+  readonly yBlock: number;
+}
+
+/**
+ * A placed local light source authored in the editor.
+ *
+ * Intended as the designer-facing equivalent of {@link import('../render/effects/darkRoomOverlay').LightSourcePx}.
+ * Colour is stored as three 0-255 channels for an intuitive RGB picker; brightness
+ * is stored as a 0-100 percent value for a familiar slider. The runtime converts
+ * both into overlay parameters when building the darkness mask.
+ */
+export interface RoomLightSourceDef {
+  readonly xBlock: number;
+  readonly yBlock: number;
+  /** Outer light radius in world/block units. */
+  readonly radiusBlocks: number;
+  /** Red channel, 0-255. */
+  readonly colorR: number;
+  /** Green channel, 0-255. */
+  readonly colorG: number;
+  /** Blue channel, 0-255. */
+  readonly colorB: number;
+  /** Brightness as a percent in 0-100. 100 = full lamp, 0 = off. */
+  readonly brightnessPct: number;
+}
 
 /** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
 export const BLOCK_SIZE_SMALL  = 8;
@@ -356,9 +433,28 @@ export interface RoomDef {
    */
   backgroundId?: BackgroundId;
   /**
-   * Block lighting model. Falls back to 'DEFAULT' when not set.
+   * Block lighting model. Falls back to 'Ambient' (omni) when not set.
+   * Legacy 'DEFAULT' and 'Above' values are accepted and migrated internally.
    */
   lightingEffect?: LightingEffect;
+  /**
+   * Direction ambient/skylight arrives from. When omitted the runtime picks a
+   * sensible default based on the legacy {@link LightingEffect} value:
+   *   - `'DEFAULT'` / `'Ambient'` ⇒ `'omni'`
+   *   - `'Above'`                 ⇒ `'down'`
+   * The recommended authored default for new rooms is `'down-right'` so light
+   * spills in at a natural diagonal rather than straight down.
+   */
+  ambientLightDirection?: AmbientLightDirection;
+  /**
+   * Tiles that block ambient-light propagation. Gameplay treats them as empty
+   * air; only the ambient-lighting solver sees them as opaque. Used to carve
+   * out authored "hidden dark pockets" that only light up when a physical path
+   * to the outside opens.
+   */
+  ambientLightBlockers?: readonly RoomAmbientLightBlockerDef[];
+  /** Designer-placed local light sources (see {@link RoomLightSourceDef}). */
+  lightSources?: readonly RoomLightSourceDef[];
   /** Room width in blocks. */
   widthBlocks: number;
   /** Room height in blocks. */

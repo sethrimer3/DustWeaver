@@ -103,6 +103,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check light sources (point selection at block centre).
+  for (const ls of (room.lightSources ?? [])) {
+    if (hitTestPoint(ls.xBlock, ls.yBlock, bx, by)) {
+      return { type: 'lightSource', uid: ls.uid };
+    }
+  }
+
   // Check decorations
   for (const d of (room.decorations ?? [])) {
     if (hitTestPoint(d.xBlock, d.yBlock, bx, by)) {
@@ -119,6 +126,16 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const w of room.interiorWalls) {
     if (hitTestWall(w, bx, by)) {
       return { type: 'wall', uid: w.uid };
+    }
+  }
+
+  // Check ambient-light blockers last — they're single cells and shouldn't
+  // block selection of things authored above them.
+  const bxFloor = Math.floor(bx);
+  const byFloor = Math.floor(by);
+  for (const b of (room.ambientLightBlockers ?? [])) {
+    if (b.xBlock === bxFloor && b.yBlock === byFloor) {
+      return { type: 'ambientLightBlocker', uid: b.uid };
     }
   }
 
@@ -185,6 +202,44 @@ export function placeAtCursor(state: EditorState): void {
   const by = state.cursorBlockY;
 
   if (!isInsideRoom(room, bx, by)) return;
+
+  // ── Lighting layer ─────────────────────────────────────────────────────
+  // Paint/place handlers for the ambientLightBlockers and local lightSources
+  // authoring workflows. Ambient blockers are single-cell and idempotent:
+  // clicking the same cell twice leaves it painted once.
+  if (item.category === 'lighting') {
+    const xFloor = Math.floor(bx);
+    const yFloor = Math.floor(by);
+    if (item.isAmbientLightBlockerItem === 1) {
+      const already = (room.ambientLightBlockers ?? []).some(
+        b => b.xBlock === xFloor && b.yBlock === yFloor,
+      );
+      if (already) return;
+      if (!room.ambientLightBlockers) room.ambientLightBlockers = [];
+      room.ambientLightBlockers.push({
+        uid: allocateUid(state),
+        xBlock: xFloor,
+        yBlock: yFloor,
+      });
+      return;
+    }
+    if (item.isLightSourceItem === 1) {
+      if (!room.lightSources) room.lightSources = [];
+      // Sensible editor defaults: warm white, full brightness, ~6-block radius.
+      room.lightSources.push({
+        uid: allocateUid(state),
+        xBlock: xFloor,
+        yBlock: yFloor,
+        radiusBlocks: 6,
+        colorR: 255,
+        colorG: 230,
+        colorB: 180,
+        brightnessPct: 100,
+      });
+      return;
+    }
+    return;
+  }
 
   if (item.category === 'blocks') {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
@@ -614,6 +669,30 @@ export function deleteAtCursor(state: EditorState): void {
       return;
     }
   }
+
+  // Check light sources (before blockers so the bigger icon wins).
+  const lights = room.lightSources ?? [];
+  for (let i = 0; i < lights.length; i++) {
+    if (hitTestPoint(lights[i].xBlock, lights[i].yBlock, bx, by)) {
+      const removedUid = lights[i].uid;
+      lights.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check ambient-light blockers (single-cell match).
+  const blockers = room.ambientLightBlockers ?? [];
+  const bxFloor = Math.floor(bx);
+  const byFloor = Math.floor(by);
+  for (let i = 0; i < blockers.length; i++) {
+    if (blockers[i].xBlock === bxFloor && blockers[i].yBlock === byFloor) {
+      const removedUid = blockers[i].uid;
+      blockers.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
 }
 
 // ── Rotation helpers ─────────────────────────────────────────────────────────
@@ -708,6 +787,16 @@ export function getAllElementsInRect(
   for (const d of (room.decorations ?? [])) {
     if (d.xBlock >= minX && d.xBlock <= maxX && d.yBlock >= minY && d.yBlock <= maxY) {
       results.push({ type: 'decoration', uid: d.uid });
+    }
+  }
+  for (const ls of (room.lightSources ?? [])) {
+    if (ls.xBlock >= minX && ls.xBlock <= maxX && ls.yBlock >= minY && ls.yBlock <= maxY) {
+      results.push({ type: 'lightSource', uid: ls.uid });
+    }
+  }
+  for (const b of (room.ambientLightBlockers ?? [])) {
+    if (b.xBlock >= minX && b.xBlock <= maxX && b.yBlock >= minY && b.yBlock <= maxY) {
+      results.push({ type: 'ambientLightBlocker', uid: b.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&
