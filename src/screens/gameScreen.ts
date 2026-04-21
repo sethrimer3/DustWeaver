@@ -39,7 +39,7 @@ import { BloomSystem } from '../render/effects/bloomSystem';
 import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
-import { performEarlyAutoAssignment, unlockActiveWeave } from '../progression/unlocks';
+import { unlockActiveWeave } from '../progression/unlocks';
 import {
   spawnClusterParticles,
   spawnLoadoutParticles,
@@ -59,7 +59,6 @@ import {
   screenToWorld,
   resolveSpawnBlock,
   TUNNEL_DETECT_MARGIN_WORLD,
-  SKILLBOOK_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_DUST_GAIN,
   FLYING_EYE_HALF_SIZE_WORLD,
@@ -201,10 +200,6 @@ export function startGameScreen(
   let bgColor = worldBgColor(currentRoom.worldNumber);
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
   let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
-  const skillBookSprite = new Image();
-  skillBookSprite.src = `${BASE}SPRITES/objects/collectables/skillBook.png`;
-  let isSkillBookSpriteLoaded = false;
-  skillBookSprite.onload = () => { isSkillBookSpriteLoaded = true; };
   const dustContainerSprite = new Image();
   dustContainerSprite.src = `${BASE}SPRITES/objects/collectables/dust_container_stub.svg`;
   let isDustContainerSpriteLoaded = false;
@@ -1099,34 +1094,6 @@ export function startGameScreen(
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
       skillTombEffectRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
-      // Skillbook pickup (lobby progression): triggers the early auto-assignment.
-      // Grants Cycle passive, Golden Dust, and 2 containers on first pickup.
-      if (progress && !progress.hasCompletedEarlyAutoAssignment) {
-        const roomSkillBooks = currentRoom.skillBooks ?? [];
-        for (let i = 0; i < roomSkillBooks.length; i++) {
-          const sb = roomSkillBooks[i];
-          const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-          const sy = (sb.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-          const dx = playerForTomb.positionXWorld - sx;
-          const dy = playerForTomb.positionYWorld - sy;
-          if (dx * dx + dy * dy <= SKILLBOOK_PICKUP_RADIUS_WORLD * SKILLBOOK_PICKUP_RADIUS_WORLD) {
-            // Perform the early auto-assignment: Cycle + Golden Dust + 2 containers
-            const goldenDustCount = performEarlyAutoAssignment(progress);
-            // Spawn the auto-assigned Golden Dust particles immediately
-            spawnClusterParticles(
-              world,
-              playerForTomb.entityId,
-              playerForTomb.positionXWorld,
-              playerForTomb.positionYWorld,
-              ParticleKind.Physical,
-              goldenDustCount,
-              levelRng,
-            );
-            break;
-          }
-        }
-      }
-
       // Dust container pickup: grants +1 dust container (+4 capacity) and spawns particles.
       const roomDustContainers = currentRoom.dustContainers ?? [];
       for (let i = 0; i < roomDustContainers.length; i++) {
@@ -1279,9 +1246,8 @@ export function startGameScreen(
       prevHealthMap, healthBarDisplayUntilTick,
       combatText, prevLastPlayerBlockedTick,
       collectedDustContainerKeySet,
-      isSkillBookSpriteLoaded, isDustContainerSpriteLoaded,
-      skillBookSprite, dustContainerSprite,
-      progress,
+      isDustContainerSpriteLoaded,
+      dustContainerSprite,
       getPlayerDustCount,
     });
 

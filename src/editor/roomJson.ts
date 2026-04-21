@@ -364,12 +364,21 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     yBlock: s.yBlock,
   }));
 
-  const skillTombs: EditorSkillTomb[] = (json.dustSkillTombs ?? []).map(s => ({
-    uid: uid++,
-    xBlock: s.xBlock,
-    yBlock: s.yBlock,
-    weaveId: s.weaveId,
-  }));
+  const skillTombs: EditorSkillTomb[] = [
+    ...(json.dustSkillTombs ?? []).map(s => ({
+      uid: uid++,
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      weaveId: s.weaveId,
+    })),
+    // Legacy: skill books are unified with skill tombs — load them in.
+    ...(json.skillBooks ?? []).filter(s => !!(s as unknown as Record<string, unknown>)['weaveId']).map(s => ({
+      uid: uid++,
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      weaveId: (s as unknown as Record<string, unknown>)['weaveId'] as string,
+    })),
+  ];
 
   const dustPiles: EditorDustPile[] = (json.dustPiles ?? []).map(p => ({
     uid: uid++,

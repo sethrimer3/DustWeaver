@@ -8,6 +8,7 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow } from './editorTools';
+import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 
 const GRID_COLOR = 'rgba(255,255,255,0.06)';
 const WALL_HIGHLIGHT = 'rgba(100,200,255,0.3)';
@@ -322,11 +323,18 @@ function buildElementTypeName(
     }
     return 'Decoration';
   }
+  if (type === 'skillTomb') {
+    const s = room.skillTombs.find(x => x.uid === uid);
+    if (s) {
+      const displayName = WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? '(unknown weave)';
+      return `Skill Tomb [${displayName}]`;
+    }
+    return 'Skill Tomb';
+  }
   const names: Partial<Record<SelectedElementType, string>> = {
     wall:        'Wall',
     transition:  'Room Transition',
     saveTomb:    'Save Tomb',
-    skillTomb:   'Skill Tomb',
     dustPile:    'Dust Pile',
     playerSpawn: 'Player Spawn',
   };
