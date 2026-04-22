@@ -324,6 +324,34 @@ export interface ClusterState {
   /** Health recorded at end of last tick, used to detect incoming damage. */
   beetlePrevHealthPoints: number;
 
+  // ---- Square Stampede (populated only when isSquareStampedeFlag === 1) -----
+  /**
+   * 1 if this cluster is a square stampede enemy — floats in 2D, dashes
+   * along orthogonal axes, and leaves a shrinking ghost trail.
+   */
+  isSquareStampedeFlag: 0 | 1;
+  /**
+   * Index into the WorldState square-stampede trail ring-buffer arrays.
+   * -1 when no slot has been assigned.
+   */
+  squareStampedeSlotIndex: number;
+  /**
+   * Original full-health half-size (world units). Constant after spawn.
+   * Used by the renderer to scale each trail ghost independently of current HP.
+   */
+  squareStampedeBaseHalfSizeWorld: number;
+  /**
+   * Current AI movement state:
+   *   0 = idle (pausing between dashes)
+   *   1 = dashing horizontally (±X)
+   *   2 = dashing vertically (±Y)
+   */
+  squareStampedeAiState: number;
+  /** Ticks remaining in the current AI state. */
+  squareStampedeAiStateTicks: number;
+  /** Countdown ticks until the next trail position is recorded. */
+  squareStampedeTrailTimerTicks: number;
+
   // ---- Bubble enemy (populated only when isBubbleEnemyFlag === 1) ----------
   /**
    * 1 if this cluster is a bubble enemy (water or ice variant).
@@ -451,6 +479,12 @@ export function createClusterState(
     beetleSurfaceNormalYWorld: -1,
     beetleIsFlightModeFlag: 0,
     beetlePrevHealthPoints: maxHealthPoints,
+    isSquareStampedeFlag: 0,
+    squareStampedeSlotIndex: -1,
+    squareStampedeBaseHalfSizeWorld: 0,
+    squareStampedeAiState: 0,
+    squareStampedeAiStateTicks: 0,
+    squareStampedeTrailTimerTicks: 0,
     isBubbleEnemyFlag: 0,
     isIceBubbleFlag: 0,
     bubbleState: 0,

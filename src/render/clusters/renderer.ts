@@ -823,6 +823,9 @@ export function renderClusters(
         }
       }
       // In popped state (bubbleState === 1), no cluster body is drawn — only particles.
+    } else if (cluster.isSquareStampedeFlag === 1) {
+      // ── Square Stampede: ghost trail + current square ─────────────────────
+      _renderSquareStampede(ctx, screenX, screenY, cluster, snapshot, scalePx, offsetXPx, offsetYPx);
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -892,6 +895,8 @@ export function renderClusters(
       barColor = '#ffd700'; // golden yellow for beetle
     } else if (cluster.isBubbleEnemyFlag === 1) {
       barColor = cluster.isIceBubbleFlag === 1 ? '#aaddff' : '#3388ff';
+    } else if (cluster.isSquareStampedeFlag === 1) {
+      barColor = '#dd44ff'; // vivid magenta-purple for square stampede
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {
@@ -1116,6 +1121,82 @@ function _renderBeetleFlying(
   ctx.stroke();
 
   ctx.restore();
+}
+
+/**
+ * Renders a Square Stampede enemy: a chain of concentric ghost squares as the
+ * trail (oldest farthest back, most faded) plus the current body square.
+ *
+ * Trail piece index 0 is the most-recently recorded position (closest behind
+ * the enemy, 95% of original size); index TRAIL_COUNT-1 is farthest (5% of
+ * original size).
+ */
+function _renderSquareStampede(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  cluster: ClusterSnapshot,
+  snapshot: WorldSnapshot,
+  scalePx: number,
+  offsetXPx: number,
+  offsetYPx: number,
+): void {
+  const slotIndex = cluster.squareStampedeSlotIndex;
+  const baseHalfSize = cluster.squareStampedeBaseHalfSizeWorld;
+  const stride = snapshot.squareStampedeTrailStride;
+
+  // ── Draw trail (oldest to newest so newer pieces render on top) ──────────
+  if (slotIndex >= 0) {
+    const base = slotIndex * stride;
+    const count = snapshot.squareStampedeTrailCount[slotIndex];
+    const head  = snapshot.squareStampedeTrailHead[slotIndex];
+
+    for (let i = count - 1; i >= 0; i--) {
+      // Ring-buffer index: i=0 → most recent (head-1), i=count-1 → oldest
+      const ringIdx = (head - 1 - i + stride * 2) % stride;
+      const trailX  = snapshot.squareStampedeTrailXWorld[base + ringIdx];
+      const trailY  = snapshot.squareStampedeTrailYWorld[base + ringIdx];
+
+      // Size: trail piece 0 (most recent, closest) is ~100% of original,
+      // piece (stride-1) (oldest, farthest) is ~5% of original.
+      // Formula: (stride - i) / stride → i=0: 1.0, i=18: 1/19 ≈ 5%
+      // The main body is drawn separately on top, so piece 0 reading as "100%"
+      // is fine — its low alpha means it blends naturally behind the body.
+      const pieceFrac  = (stride - i) / stride;
+      const halfSizePx = baseHalfSize * pieceFrac * scalePx;
+      if (halfSizePx < 0.5) continue;
+
+      // Alpha fades from ~35% for the closest piece to ~5% for the farthest
+      const alpha = 0.05 + 0.30 * pieceFrac;
+      const tx = Math.round(trailX * scalePx + offsetXPx);
+      const ty = Math.round(trailY * scalePx + offsetYPx);
+
+      ctx.globalAlpha = Math.min(alpha, 0.45);
+      ctx.strokeStyle = '#cc55ff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx - halfSizePx, ty - halfSizePx, halfSizePx * 2, halfSizePx * 2);
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+  // ── Draw current body square ──────────────────────────────────────────────
+  const curHalfPx = cluster.halfWidthWorld * scalePx;
+
+  // Glow fill
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = '#880033';
+  ctx.fillRect(screenX - curHalfPx, screenY - curHalfPx, curHalfPx * 2, curHalfPx * 2);
+  ctx.globalAlpha = 1.0;
+
+  // Vivid magenta border
+  ctx.strokeStyle = '#ff22cc';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(screenX - curHalfPx, screenY - curHalfPx, curHalfPx * 2, curHalfPx * 2);
+
+  // Inner highlight (top-left corner glow)
+  ctx.fillStyle = 'rgba(255, 100, 255, 0.35)';
+  ctx.fillRect(screenX - curHalfPx + 1, screenY - curHalfPx + 1, curHalfPx * 2 - 2, 2);
+  ctx.fillRect(screenX - curHalfPx + 1, screenY - curHalfPx + 1, 2, curHalfPx * 2 - 2);
 }
 
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {

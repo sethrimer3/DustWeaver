@@ -34,6 +34,14 @@ export const MAX_GRASSHOPPERS = 32;
  */
 export const GRASSHOPPER_INITIAL_TIMER_MAX_TICKS = 60;
 
+/** Maximum number of square-stampede enemies per room. */
+export const MAX_SQUARE_STAMPEDE = 8;
+/**
+ * Number of trail ring-buffer slots per square-stampede enemy.
+ * Each slot stores one past position; 19 slots → 19 ghost trail copies.
+ */
+export const SQUARE_STAMPEDE_TRAIL_COUNT = 19;
+
 export interface WorldState extends ParticleBuffers {
   tick: number;
   dtMs: number;
@@ -357,6 +365,21 @@ export interface WorldState extends ParticleBuffers {
   grasshopperHopTimerTicks: Float32Array;
   /** 1 if this grasshopper slot is alive. */
   isGrasshopperAliveFlag: Uint8Array;
+
+  // ── Square Stampede trail ring buffers ─────────────────────────────────────
+  /**
+   * X positions of trail ring buffer, flattened as [slot * stride + head].
+   * Length = MAX_SQUARE_STAMPEDE * SQUARE_STAMPEDE_TRAIL_COUNT.
+   */
+  squareStampedeTrailXWorld: Float32Array;
+  /** Y positions of trail ring buffer. Same layout as squareStampedeTrailXWorld. */
+  squareStampedeTrailYWorld: Float32Array;
+  /** Write-head index (0..stride-1) per slot. */
+  squareStampedeTrailHead: Uint8Array;
+  /** Number of valid entries filled so far (0..stride) per slot. */
+  squareStampedeTrailCount: Uint8Array;
+  /** Number of entries per slot (= SQUARE_STAMPEDE_TRAIL_COUNT). Read-only after init. */
+  squareStampedeTrailStride: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -482,6 +505,12 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grasshopperVelYWorld: new Float32Array(MAX_GRASSHOPPERS),
     grasshopperHopTimerTicks: new Float32Array(MAX_GRASSHOPPERS),
     isGrasshopperAliveFlag: new Uint8Array(MAX_GRASSHOPPERS),
+    // ── Square Stampede trail ─────────────────────────────────────────
+    squareStampedeTrailStride: SQUARE_STAMPEDE_TRAIL_COUNT,
+    squareStampedeTrailXWorld: new Float32Array(MAX_SQUARE_STAMPEDE * SQUARE_STAMPEDE_TRAIL_COUNT),
+    squareStampedeTrailYWorld: new Float32Array(MAX_SQUARE_STAMPEDE * SQUARE_STAMPEDE_TRAIL_COUNT),
+    squareStampedeTrailHead: new Uint8Array(MAX_SQUARE_STAMPEDE),
+    squareStampedeTrailCount: new Uint8Array(MAX_SQUARE_STAMPEDE),
     ...createParticleBuffers(),
   };
 }

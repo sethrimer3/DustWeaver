@@ -299,6 +299,7 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 0,
       isBubbleEnemyFlag: 0,
       isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
     });
   } else if (item.id === 'enemy_flying_eye') {
     room.enemies.push({
@@ -320,6 +321,7 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 0,
       isBubbleEnemyFlag: 0,
       isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
     });
   } else if (item.id === 'enemy_rock_elemental') {
     room.enemies.push({
@@ -341,6 +343,7 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 0,
       isBubbleEnemyFlag: 0,
       isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
     });
   } else if (item.id === 'enemy_slime') {
     room.enemies.push({
@@ -362,6 +365,7 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 0,
       isBubbleEnemyFlag: 0,
       isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
     });
   } else if (item.id === 'enemy_slime_large') {
     room.enemies.push({
@@ -383,6 +387,7 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 0,
       isBubbleEnemyFlag: 0,
       isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
     });
   } else if (item.id === 'enemy_wheel') {
     room.enemies.push({
@@ -404,6 +409,7 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 0,
       isBubbleEnemyFlag: 0,
       isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
     });
   } else if (item.id === 'enemy_beetle') {
     room.enemies.push({
@@ -425,6 +431,7 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 1,
       isBubbleEnemyFlag: 0,
       isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
     });
   } else if (item.id === 'enemy_water_bubble') {
     room.enemies.push({
@@ -446,6 +453,7 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 0,
       isBubbleEnemyFlag: 1,
       isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
     });
   } else if (item.id === 'enemy_ice_bubble') {
     room.enemies.push({
@@ -467,6 +475,29 @@ export function placeAtCursor(state: EditorState): void {
       isBeetleFlag: 0,
       isBubbleEnemyFlag: 1,
       isIceBubbleFlag: 1,
+      isSquareStampedeFlag: 0,
+    });
+  } else if (item.id === 'enemy_square_stampede') {
+    room.enemies.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      kinds: ['Void'],
+      particleCount: 5,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 0,
+      isRollingEnemyFlag: 0,
+      rollingEnemySpriteIndex: 0,
+      isRockElementalFlag: 0,
+      isRadiantTetherFlag: 0,
+      isGrappleHunterFlag: 0,
+      isSlimeFlag: 0,
+      isLargeSlimeFlag: 0,
+      isWheelEnemyFlag: 0,
+      isBeetleFlag: 0,
+      isBubbleEnemyFlag: 0,
+      isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 1,
     });
   } else if (item.id === 'grasshopper_area') {
     room.grasshopperAreas.push({

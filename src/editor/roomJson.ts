@@ -68,6 +68,7 @@ export interface RoomJsonEnemy {
   isBeetle?: boolean;
   isBubbleEnemy?: boolean;
   isIceBubble?: boolean;
+  isSquareStampede?: boolean;
 }
 
 export interface RoomJsonWall {
@@ -381,6 +382,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isBeetleFlag: (e.isBeetle ?? false) ? 1 : 0,
     isBubbleEnemyFlag: (e.isBubbleEnemy ?? false) ? 1 : 0,
     isIceBubbleFlag: (e.isIceBubble ?? false) ? 1 : 0,
+    isSquareStampedeFlag: (e.isSquareStampede ?? false) ? 1 : 0,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => ({
@@ -532,6 +534,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isBeetle: e.isBeetleFlag === 1,
       isBubbleEnemy: e.isBubbleEnemyFlag === 1,
       isIceBubble: e.isIceBubbleFlag === 1,
+      isSquareStampede: e.isSquareStampedeFlag === 1,
     })),
     transitions: data.transitions.map(t => {
       const jt: RoomJsonTransition = {
@@ -737,6 +740,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isBeetleFlag: e.isBeetleFlag,
       isBubbleEnemyFlag: e.isBubbleEnemyFlag,
       isIceBubbleFlag: e.isIceBubbleFlag,
+      isSquareStampedeFlag: e.isSquareStampedeFlag,
     };
   });
 
@@ -855,6 +859,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isBeetleFlag: (e.isBeetleFlag ?? 0) as 0 | 1,
     isBubbleEnemyFlag: (e.isBubbleEnemyFlag ?? 0) as 0 | 1,
     isIceBubbleFlag: (e.isIceBubbleFlag ?? 0) as 0 | 1,
+    isSquareStampedeFlag: (e.isSquareStampedeFlag ?? 0) as 0 | 1,
   }));
 
   const transitions: EditorTransition[] = room.transitions.map(t => ({

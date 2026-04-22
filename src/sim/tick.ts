@@ -42,6 +42,7 @@ import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
 import { applyWheelEnemyAI } from './clusters/wheelEnemyAi';
 import { applyBeetleAI } from './clusters/beetleAi';
 import { applyBubbleAI, applyBubblePopForces } from './clusters/bubbleAi';
+import { applySquareStampedeAI } from './clusters/squareStampedeAi';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -87,6 +88,9 @@ export function tick(world: WorldState): void {
 
   // 0.5j. Bubble Enemy AI — orbit ring maintenance, drift, regen, pop detection
   applyBubbleAI(world);
+
+  // 0.5k. Square Stampede AI — orthogonal dashing, trail update, contact damage
+  applySquareStampedeAI(world);
 
   // 1. Clear accumulated forces from previous tick
   for (let i = 0; i < world.particleCount; i++) {
