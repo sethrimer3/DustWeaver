@@ -70,6 +70,7 @@ import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
 import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
 import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../sim/clusters/bubbleAi';
 import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAIL_UPDATE_INTERVAL_TICKS } from '../sim/clusters/squareStampedeAi';
+import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
@@ -403,10 +404,33 @@ export function startGameScreen(
         enemyCluster.squareStampedeAiState           = 0;
         enemyCluster.squareStampedeAiStateTicks      = 20;
         enemyCluster.squareStampedeTrailTimerTicks   = TRAIL_UPDATE_INTERVAL_TICKS;
+      } else if (enemyDef.isGoldenMimicFlag === 1) {
+        const isYFlipped = enemyDef.isGoldenMimicYFlippedFlag === 1;
+        enemyCluster.isGoldenMimicFlag               = 1;
+        enemyCluster.isGoldenMimicYFlippedFlag       = isYFlipped ? 1 : 0;
+        enemyCluster.halfWidthWorld                  = GOLDEN_MIMIC_HALF_WIDTH_WORLD;
+        enemyCluster.halfHeightWorld                 = GOLDEN_MIMIC_HALF_HEIGHT_WORLD;
+        enemyCluster.goldenMimicState                = 0;
+        enemyCluster.goldenMimicStateTicks           = 0;
+        enemyCluster.goldenMimicFadeAlpha            = 1.0;
+        // goldenMimicInitialParticleCount is filled in after spawnLoadoutParticles below
       }
 
       world.clusters.push(enemyCluster);
+      const particleStartIdx = world.particleCount;
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
+
+      // Post-spawn: mark golden mimic particles as non-regenerating (isTransientFlag=1)
+      // and record initial particle count for half-dead threshold detection.
+      if (enemyCluster.isGoldenMimicFlag === 1) {
+        const spawnedCount = world.particleCount - particleStartIdx;
+        enemyCluster.goldenMimicInitialParticleCount = spawnedCount;
+        enemyCluster.healthPoints    = spawnedCount;
+        enemyCluster.maxHealthPoints = spawnedCount;
+        for (let pi = particleStartIdx; pi < world.particleCount; pi++) {
+          world.isTransientFlag[pi] = 1;
+        }
+      }
     }
 
     // Spawn background Fluid particles

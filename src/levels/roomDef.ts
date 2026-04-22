@@ -247,6 +247,18 @@ export interface RoomEnemyDef {
    * leaves a shrinking ghost trail, and has layered HP.
    */
   isSquareStampedeFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a golden mimic — a golden silhouette of the player that
+   * mirrors player movement (X-axis flipped), deals contact damage, and collapses
+   * when half its particles are destroyed.
+   */
+  isGoldenMimicFlag?: 0 | 1;
+  /**
+   * 1 for the XY-flipped variant of the golden mimic (both axes mirrored; floats
+   * upward when it collapses instead of falling).
+   * Only meaningful when isGoldenMimicFlag === 1.
+   */
+  isGoldenMimicYFlippedFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

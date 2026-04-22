@@ -54,6 +54,10 @@ export function tickEnemyMovement(
   if (cluster.isBubbleEnemyFlag === 1) {
     return;
   }
+  // Golden Mimic has its own movement AI — velocity set in goldenMimicAi.ts
+  if (cluster.isGoldenMimicFlag === 1) {
+    return;
+  }
   if (cluster.isFlyingEyeFlag === 1) {
     // ── Flying Eye: no gravity, 2D steering toward/away from player ────────
     if (isPlayerFound) {

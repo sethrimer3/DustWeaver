@@ -322,6 +322,21 @@ const GRAPPLE_DUST_SEGMENT_PX = 4;
 const GRAPPLE_DUST_SIZE_PX = 4;
 const GRAPPLE_DUST_END_SIZE_PX = 4;
 
+// ── Golden Mimic rendering constants ─────────────────────────────────────
+
+/**
+ * Pre-computed gold shade palette — from darkest gold to brightest.
+ * Allocated once at module load; referenced by index in the hot render loop
+ * to avoid per-frame string allocation.
+ */
+const _goldShades: readonly string[] = [
+  '#5a3e00', '#6b4c00', '#7d5900', '#8b6914',
+  '#9a7a00', '#b8860b', '#c49a00', '#d4aa00',
+  '#daa520', '#e6b800', '#f0c000', '#ffd700',
+  '#ffe066', '#fff3b0',
+];
+const _GOLD_PALETTE_SIZE = _goldShades.length; // 14
+
 /** Returns the primary display colour for a flying eye by element kind. */
 function getFlyingEyeColor(elementKind: number): string {
   switch (elementKind as ParticleKind) {
@@ -330,6 +345,93 @@ function getFlyingEyeColor(elementKind: number): string {
     case ParticleKind.Wind:  return '#88ffaa';
     default:                 return '#ccccff';
   }
+}
+
+/**
+ * Renders a golden mimic — a golden silhouette of the player sprite where each
+ * small pixel region has a slightly different shade of gold that slowly shifts
+ * over time, creating a shimmering effect.
+ *
+ * In heap state the silhouette fades out via `cluster.goldenMimicFadeAlpha`.
+ *
+ * The Y-flipped variant renders the sprite upside-down so it appears to be
+ * "falling upward" when in heap state.
+ *
+ * Allocation-minimal: the gold shade palette is pre-allocated; no strings or
+ * arrays are created per frame.
+ */
+function _renderGoldenMimic(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  cluster: ClusterSnapshot,
+  tick: number,
+  scalePx: number,
+  characterId: string,
+): void {
+  const sprites = _characterSprites[characterId] ?? _characterSprites['knight'];
+  const sprite  = sprites.standing;
+  const isYFlipped  = cluster.isGoldenMimicYFlippedFlag === 1;
+  const fadeAlpha   = cluster.goldenMimicFadeAlpha;
+  const spritePivotXPx = PLAYER_SPRITE_PIVOT_X_WORLD * scalePx;
+  const spriteHPx      = PLAYER_SPRITE_HEIGHT_WORLD  * scalePx;
+  const spriteWPx      = PLAYER_SPRITE_WIDTH_WORLD   * scalePx;
+  const spriteCenterY  = screenY + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD * scalePx;
+
+  ctx.save();
+  ctx.translate(Math.round(screenX) - 0.5, Math.round(spriteCenterY));
+  ctx.scale(
+    cluster.isFacingLeftFlag === 1 ? -1 : 1,
+    isYFlipped ? -1 : 1,
+  );
+
+  if (_isSpriteReady(sprite)) {
+    // Step 1: draw the sprite at the desired fade alpha — establishes the
+    // alpha mask that source-atop will clip to in step 2.
+    ctx.globalAlpha = fadeAlpha;
+    ctx.drawImage(sprite, -spritePivotXPx, -spriteHPx * 0.5, spriteWPx, spriteHPx);
+
+    // Step 2: overlay gold pixel grid clipped to sprite silhouette.
+    ctx.globalCompositeOperation = 'source-atop';
+
+    // Pixel block size: 2 virtual pixels at normal scale, 1 at very small scale.
+    const blockPx = scalePx >= 1.5 ? 2 : 1;
+    const numBX   = Math.ceil(spriteWPx / blockPx) + 1;
+    const numBY   = Math.ceil(spriteHPx / blockPx) + 1;
+
+    // Tick seed advances every 4 ticks for a slow shimmering effect.
+    const slowTick = tick >> 2;
+
+    for (let bx = 0; bx < numBX; bx++) {
+      for (let by = 0; by < numBY; by++) {
+        // Fast pseudo-random hash of (block position, time) using prime multipliers
+        // (MurmurHash-inspired integer mixing) — no allocations.
+        const h = (((bx * 374761393 + by * 1664525 + slowTick * 22695477) >>> 0) * 2246822519) >>> 0;
+        const shadeIdx  = (h >> 24) % _GOLD_PALETTE_SIZE;
+        // Alpha variation range: min 0.72 + up to 0.28 additional = [0.72, 1.0],
+        // then multiplied by fadeAlpha so the heap fade-out applies uniformly.
+        const blockAlpha = fadeAlpha * (0.72 + ((h >> 16) & 0xff) * (0.28 / 255));
+        ctx.globalAlpha  = blockAlpha;
+        ctx.fillStyle    = _goldShades[shadeIdx];
+        ctx.fillRect(
+          -spritePivotXPx + bx * blockPx,
+          -spriteHPx * 0.5 + by * blockPx,
+          blockPx + 1,
+          blockPx + 1,
+        );
+      }
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+  } else {
+    // Fallback while sprite image loads: golden box in the player's footprint.
+    ctx.globalAlpha = fadeAlpha * 0.8;
+    ctx.fillStyle   = '#ffd700';
+    ctx.fillRect(-spritePivotXPx, -spriteHPx * 0.5, spriteWPx, spriteHPx);
+  }
+
+  ctx.globalAlpha = 1.0;
+  ctx.restore();
 }
 
 /**
@@ -826,6 +928,9 @@ export function renderClusters(
     } else if (cluster.isSquareStampedeFlag === 1) {
       // ── Square Stampede: ghost trail + current square ─────────────────────
       _renderSquareStampede(ctx, screenX, screenY, cluster, snapshot, scalePx, offsetXPx, offsetYPx);
+    } else if (cluster.isGoldenMimicFlag === 1) {
+      // ── Golden Mimic: golden silhouette of the player sprite ──────────────
+      _renderGoldenMimic(ctx, screenX, screenY, cluster, snapshot.tick, scalePx, snapshot.characterId);
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -897,6 +1002,8 @@ export function renderClusters(
       barColor = cluster.isIceBubbleFlag === 1 ? '#aaddff' : '#3388ff';
     } else if (cluster.isSquareStampedeFlag === 1) {
       barColor = '#dd44ff'; // vivid magenta-purple for square stampede
+    } else if (cluster.isGoldenMimicFlag === 1) {
+      barColor = '#ffd700'; // bright gold for golden mimic
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {
