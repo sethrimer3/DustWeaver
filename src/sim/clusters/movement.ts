@@ -190,6 +190,10 @@ export function applyClusterMovement(world: WorldState): void {
         cluster.positionYWorld = maxYBubble;
         if (cluster.velocityYWorld > 0) cluster.velocityYWorld = 0;
       }
+    } else if (cluster.isGoldenMimicFlag === 1) {
+      // ── Golden Mimic: movement and collision handled entirely in goldenMimicAi.ts ──
+      // Nothing to do here — velocity is 0 (skipped in tickEnemyMovement) and
+      // goldenMimicAi.ts applies its own physics after applyClusterMovement runs.
     } else {
       // ── Resolve ground entity collision (axis-separated sweep) ──────────
       // resolveClusterSolidWallCollision handles its own integration internally

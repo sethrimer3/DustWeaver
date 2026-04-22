@@ -43,6 +43,7 @@ import { applyWheelEnemyAI } from './clusters/wheelEnemyAi';
 import { applyBeetleAI } from './clusters/beetleAi';
 import { applyBubbleAI, applyBubblePopForces } from './clusters/bubbleAi';
 import { applySquareStampedeAI } from './clusters/squareStampedeAi';
+import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -91,6 +92,9 @@ export function tick(world: WorldState): void {
 
   // 0.5k. Square Stampede AI — orthogonal dashing, trail update, contact damage
   applySquareStampedeAI(world);
+
+  // 0.5l. Golden Mimic AI — mirror player movement, heap/fade state, contact damage
+  applyGoldenMimicAI(world);
 
   // 1. Clear accumulated forces from previous tick
   for (let i = 0; i < world.particleCount; i++) {

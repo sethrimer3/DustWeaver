@@ -375,6 +375,38 @@ export interface ClusterState {
   bubbleDriftPhaseRad: number;
   /** Health recorded at end of previous tick — used by ice bubble to detect any damage instantly. */
   bubblePrevHealthPoints: number;
+
+  // ---- Golden Mimic (populated only when isGoldenMimicFlag === 1) -----------
+  /**
+   * 1 if this cluster is a golden mimic — a golden silhouette of the player that
+   * mirrors the player's movement (X-axis flipped), deals contact damage, and
+   * collapses into a heap when half its particles are destroyed.
+   */
+  isGoldenMimicFlag: 0 | 1;
+  /**
+   * 1 for the XY-flipped variant: moves with both axes flipped relative to the
+   * player (X and Y mirrored), and floats upward instead of falling in heap state.
+   */
+  isGoldenMimicYFlippedFlag: 0 | 1;
+  /**
+   * Current mimic state:
+   *  0 = active  — mimicking player movement, dealing contact damage
+   *  1 = heap    — half pixels gone; falling (normal) or rising (Y-flipped); fading out
+   */
+  goldenMimicState: number;
+  /** Ticks elapsed in the current mimic state. */
+  goldenMimicStateTicks: number;
+  /**
+   * Particle count recorded at spawn.  Used to detect the half-dead threshold
+   * (alive count ≤ goldenMimicInitialParticleCount / 2 → transition to heap).
+   */
+  goldenMimicInitialParticleCount: number;
+  /**
+   * Fade alpha for the heap state, in [1.0, 0.0].
+   * Decremented each tick in heap state; when it reaches 0 the cluster is killed.
+   * Read by the renderer to set globalAlpha on the golden silhouette.
+   */
+  goldenMimicFadeAlpha: number;
 }
 
 export function createClusterState(
@@ -493,5 +525,11 @@ export function createClusterState(
     bubbleRegenTicks: 0,
     bubbleDriftPhaseRad: 0,
     bubblePrevHealthPoints: maxHealthPoints,
+    isGoldenMimicFlag: 0,
+    isGoldenMimicYFlippedFlag: 0,
+    goldenMimicState: 0,
+    goldenMimicStateTicks: 0,
+    goldenMimicInitialParticleCount: 0,
+    goldenMimicFadeAlpha: 1.0,
   };
 }

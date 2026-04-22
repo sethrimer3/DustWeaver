@@ -160,6 +160,20 @@ export interface ClusterSnapshot {
   readonly squareStampedeSlotIndex: number;
   /** Original full-health half-size (world units) — constant after spawn. */
   readonly squareStampedeBaseHalfSizeWorld: number;
+  /** 1 if this cluster is a golden mimic enemy. */
+  readonly isGoldenMimicFlag: 0 | 1;
+  /** 1 for the XY-flipped variant of the golden mimic. */
+  readonly isGoldenMimicYFlippedFlag: 0 | 1;
+  /**
+   * Current mimic state: 0=active, 1=heap.
+   * Used by renderer to select heap vs. active visual mode.
+   */
+  readonly goldenMimicState: number;
+  /**
+   * Fade alpha for the heap state, in [1.0, 0.0].
+   * Applied as globalAlpha by the renderer during the fade-out.
+   */
+  readonly goldenMimicFadeAlpha: number;
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -380,6 +394,10 @@ function _makeEmptyCluster(): _MutableCluster {
     isSquareStampedeFlag: 0,
     squareStampedeSlotIndex: -1,
     squareStampedeBaseHalfSizeWorld: 0,
+    isGoldenMimicFlag: 0,
+    isGoldenMimicYFlippedFlag: 0,
+    goldenMimicState: 0,
+    goldenMimicFadeAlpha: 1.0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -448,6 +466,10 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.isSquareStampedeFlag            = src.isSquareStampedeFlag;
   dst.squareStampedeSlotIndex         = src.squareStampedeSlotIndex;
   dst.squareStampedeBaseHalfSizeWorld = src.squareStampedeBaseHalfSizeWorld;
+  dst.isGoldenMimicFlag               = src.isGoldenMimicFlag;
+  dst.isGoldenMimicYFlippedFlag       = src.isGoldenMimicYFlippedFlag;
+  dst.goldenMimicState                = src.goldenMimicState;
+  dst.goldenMimicFadeAlpha            = src.goldenMimicFadeAlpha;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
