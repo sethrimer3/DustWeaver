@@ -7,7 +7,8 @@
  *
  * Behaviour overview:
  *   • Grows from shoulder → tip while grappling (speed ∝ player velocity).
- *   • Reaches approximately 3× the length of the normal cloak.
+ *   • Extends approximately 2× the normal cloak length, making the total
+ *     visible cloak 3× the normal length (normal + phantom = 3× normal).
  *   • Dissipates from base → tip when grappling ends, emitting golden particles.
  *   • Rendered behind the main back cloak for a ghostly extension effect.
  *
@@ -41,7 +42,7 @@ import {
  */
 export const PHANTOM_LENGTH_MULTIPLIER = 3;
 
-/** Number of phantom extension segments (= 2× normal = (MULTIPLIER-1) × normal). */
+/** Number of phantom extension segments — (MULTIPLIER-1) × normal cloak segments = 2× normal. */
 const PHANTOM_SEGMENT_COUNT = CLOAK_SEGMENT_COUNT * (PHANTOM_LENGTH_MULTIPLIER - 1);
 
 /** Total chain point slots: root anchor + trailing phantom segments. */
