@@ -8,6 +8,7 @@ import { createSnapshot, createReusableSnapshot, updateSnapshotInPlace, resetReu
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
 import { PlayerCloak } from '../render/clusters/playerCloak';
+import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
@@ -489,6 +490,7 @@ export function startGameScreen(
 
     // Reset procedural cloak on room transition
     playerCloak.reset();
+    phantomCloak.reset();
 
     // Reset decoration wave state for new room
     decorationWaveState.reset(room.decorations?.length ?? 0);
@@ -533,6 +535,7 @@ export function startGameScreen(
   const skillTombRenderer = new SkillTombRenderer();
   const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();
+  const phantomCloak = new PhantomCloakExtension();
   const decorationWaveState = new DecorationWaveState();
 
   // ── Per-frame allocation-free state ─────────────────────────────────────
@@ -1348,6 +1351,17 @@ export function startGameScreen(
         halfWidthWorld: cloakPlayer.halfWidthWorld,
         halfHeightWorld: cloakPlayer.halfHeightWorld,
       });
+      // Update phantom cloak extension — roots at the main cloak's tip.
+      phantomCloak.update(elapsedMs / 1000, {
+        positionXWorld:    cloakPlayer.positionXWorld,
+        positionYWorld:    cloakPlayer.positionYWorld,
+        velocityXWorld:    cloakPlayer.velocityXWorld,
+        velocityYWorld:    cloakPlayer.velocityYWorld,
+        isFacingLeftFlag:  cloakPlayer.isFacingLeftFlag,
+        isGrappleActiveFlag: world.isGrappleActiveFlag,
+        rootXWorld:        playerCloak.getTipXWorld(),
+        rootYWorld:        playerCloak.getTipYWorld(),
+      });
     }
 
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
@@ -1355,7 +1369,7 @@ export function startGameScreen(
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-      playerCloak, darkRoomOverlay, decorationWaveState,
+      playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState,
       world, currentRoom,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,

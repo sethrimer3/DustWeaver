@@ -4,6 +4,7 @@ import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_MEDIUM, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
 import { ParticleKind } from '../../sim/particles/kinds';
 import type { PlayerCloak } from './playerCloak';
+import type { PhantomCloakExtension } from './phantomCloak';
 
 // ── Sprite loading ──────────────────────────────────────────────────────────
 
@@ -531,6 +532,7 @@ export function renderClusters(
   scalePx: number,
   showHitboxes = false,
   playerCloak?: PlayerCloak,
+  phantomCloak?: PhantomCloakExtension,
   isDebugCloak = false,
 ): void {
   ctx.save();
@@ -628,11 +630,22 @@ export function renderClusters(
         // Flicker: visible for 3 ticks, invisible for 3 ticks — use ticks countdown.
         const flickerHide = isInvulnerable && (Math.floor(cluster.invulnerabilityTicks / 3) % 2 === 0);
         if (flickerHide) {
-          // Skip rendering this cluster for this flicker frame — still render cloak
+          // Skip rendering this cluster for this flicker frame — still render cloak/phantom
+          if (phantomCloak !== undefined) {
+            phantomCloak.render(ctx, offsetXPx, offsetYPx, scalePx);
+          }
           if (playerCloak !== undefined && cloakPlayerState !== undefined) {
             playerCloak.renderFront(ctx, offsetXPx, offsetYPx, scalePx, cloakPlayerState);
           }
+          if (phantomCloak !== undefined) {
+            phantomCloak.renderParticles(ctx, offsetXPx, offsetYPx, scalePx);
+          }
           continue; // skip rest of player rendering
+        }
+
+        // ── Layer 0: Phantom cloak extension (behind main cloak) ──────────
+        if (phantomCloak !== undefined) {
+          phantomCloak.render(ctx, offsetXPx, offsetYPx, scalePx);
         }
 
         // ── Layer 1: Back cloak (behind body) ──────────────────────────
@@ -752,9 +765,17 @@ export function renderClusters(
           playerCloak.renderFront(ctx, offsetXPx, offsetYPx, scalePx, cloakPlayerState);
         }
 
+        // ── Layer 4: Phantom dissipation particles (above all cloaks) ─────
+        if (phantomCloak !== undefined) {
+          phantomCloak.renderParticles(ctx, offsetXPx, offsetYPx, scalePx);
+        }
+
         // ── Debug overlay (both cloak polygons + control points) ───────
         if (playerCloak !== undefined && isDebugCloak && cloakPlayerState !== undefined) {
           playerCloak.renderDebug(ctx, offsetXPx, offsetYPx, scalePx, cloakPlayerState);
+        }
+        if (phantomCloak !== undefined && isDebugCloak) {
+          phantomCloak.renderDebug(ctx, offsetXPx, offsetYPx, scalePx);
         }
       } else {
         // Fallback while sprite loads: coloured box
