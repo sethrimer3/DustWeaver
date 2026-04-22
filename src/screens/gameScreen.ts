@@ -69,11 +69,11 @@ import { processLargeSlimeSplits, SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_W
 import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
 import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
 import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../sim/clusters/bubbleAi';
-import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT } from '../sim/clusters/squareStampedeAi';
+import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAIL_UPDATE_INTERVAL_TICKS } from '../sim/clusters/squareStampedeAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
-import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_SQUARE_STAMPEDE, SQUARE_STAMPEDE_TRAIL_COUNT } from '../sim/world';
+import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_SQUARE_STAMPEDE } from '../sim/world';
 
 const FIXED_DT_MS = 16.666;
 
@@ -385,9 +385,9 @@ export function startGameScreen(
           if (!taken) {
             slotIndex = si;
             // Clear the slot's trail data
-            const base = si * SQUARE_STAMPEDE_TRAIL_COUNT;
-            world.squareStampedeTrailXWorld.fill(0, base, base + SQUARE_STAMPEDE_TRAIL_COUNT);
-            world.squareStampedeTrailYWorld.fill(0, base, base + SQUARE_STAMPEDE_TRAIL_COUNT);
+            const base = si * world.squareStampedeTrailStride;
+            world.squareStampedeTrailXWorld.fill(0, base, base + world.squareStampedeTrailStride);
+            world.squareStampedeTrailYWorld.fill(0, base, base + world.squareStampedeTrailStride);
             world.squareStampedeTrailHead[si]  = 0;
             world.squareStampedeTrailCount[si] = 0;
             break;
@@ -402,7 +402,7 @@ export function startGameScreen(
         enemyCluster.maxHealthPoints                 = SQUARE_STAMPEDE_LAYER_COUNT;
         enemyCluster.squareStampedeAiState           = 0;
         enemyCluster.squareStampedeAiStateTicks      = 20;
-        enemyCluster.squareStampedeTrailTimerTicks   = SQUARE_STAMPEDE_TRAIL_COUNT;
+        enemyCluster.squareStampedeTrailTimerTicks   = TRAIL_UPDATE_INTERVAL_TICKS;
       }
 
       world.clusters.push(enemyCluster);

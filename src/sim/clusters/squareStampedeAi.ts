@@ -50,8 +50,11 @@ const IDLE_MAX_TICKS = 18;
 
 // ── Trail ─────────────────────────────────────────────────────────────────────
 
-/** How often (ticks) the trail ring buffer is written. */
-const TRAIL_UPDATE_INTERVAL_TICKS = 3;
+/**
+ * How often (ticks) the trail ring buffer is written.
+ * Exported so spawn code can initialize the timer correctly.
+ */
+export const TRAIL_UPDATE_INTERVAL_TICKS = 3;
 
 // ── Contact damage ────────────────────────────────────────────────────────────
 
@@ -91,29 +94,118 @@ function pushTrailPosition(
   }
 }
 
+/**
+ * Resolves AABB collisions against solid walls using axis-separated sweep:
+ * 1. Apply X velocity, then push out along X axis only.
+ * 2. Apply Y velocity, then push out along Y axis only.
+ * Prevents corner-clipping and seam artifacts (per Section 14 guidelines).
+ */
+function resolveWallCollisions(world: WorldState, cluster: { positionXWorld: number; positionYWorld: number; velocityXWorld: number; velocityYWorld: number; halfWidthWorld: number; halfHeightWorld: number }, dtSec: number): void {
+  const hw = cluster.halfWidthWorld;
+  const hh = cluster.halfHeightWorld;
+
+  // Sub-tick safety: split movement into steps no larger than half the cluster dimension
+  const moveX = cluster.velocityXWorld * dtSec;
+  const moveY = cluster.velocityYWorld * dtSec;
+  const stepsX = Math.max(1, Math.ceil(Math.abs(moveX) / hw));
+  const stepsY = Math.max(1, Math.ceil(Math.abs(moveY) / hh));
+
+  // ── X pass ────────────────────────────────────────────────────────────────
+  const stepDX = moveX / stepsX;
+  for (let s = 0; s < stepsX; s++) {
+    cluster.positionXWorld += stepDX;
+    for (let wi = 0; wi < world.wallCount; wi++) {
+      if (world.wallIsPlatformFlag[wi] === 1) continue;
+      if (world.wallRampOrientationIndex[wi] !== 255) continue;
+      if (world.wallIsInvisibleFlag[wi] === 1) continue;
+
+      const wx = world.wallXWorld[wi];
+      const wy = world.wallYWorld[wi];
+      const ww = world.wallWWorld[wi];
+      const wh = world.wallHWorld[wi];
+
+      const clLeft   = cluster.positionXWorld - hw;
+      const clRight  = cluster.positionXWorld + hw;
+      const clTop    = cluster.positionYWorld - hh;
+      const clBottom = cluster.positionYWorld + hh;
+
+      if (clRight <= wx || clLeft >= wx + ww) continue;
+      if (clBottom <= wy || clTop >= wy + wh) continue;
+
+      // Resolve X only
+      const penLeft  = clRight  - wx;
+      const penRight = (wx + ww) - clLeft;
+      if (penLeft < penRight) {
+        cluster.positionXWorld -= penLeft;
+        cluster.velocityXWorld  = 0;
+      } else {
+        cluster.positionXWorld += penRight;
+        cluster.velocityXWorld  = 0;
+      }
+    }
+  }
+
+  // ── Y pass ────────────────────────────────────────────────────────────────
+  const stepDY = moveY / stepsY;
+  for (let s = 0; s < stepsY; s++) {
+    cluster.positionYWorld += stepDY;
+    for (let wi = 0; wi < world.wallCount; wi++) {
+      if (world.wallIsPlatformFlag[wi] === 1) continue;
+      if (world.wallRampOrientationIndex[wi] !== 255) continue;
+      if (world.wallIsInvisibleFlag[wi] === 1) continue;
+
+      const wx = world.wallXWorld[wi];
+      const wy = world.wallYWorld[wi];
+      const ww = world.wallWWorld[wi];
+      const wh = world.wallHWorld[wi];
+
+      const clLeft   = cluster.positionXWorld - hw;
+      const clRight  = cluster.positionXWorld + hw;
+      const clTop    = cluster.positionYWorld - hh;
+      const clBottom = cluster.positionYWorld + hh;
+
+      if (clRight <= wx || clLeft >= wx + ww) continue;
+      if (clBottom <= wy || clTop >= wy + wh) continue;
+
+      // Resolve Y only
+      const penTop    = clBottom - wy;
+      const penBottom = (wy + wh) - clTop;
+      if (penTop < penBottom) {
+        cluster.positionYWorld -= penTop;
+        cluster.velocityYWorld  = 0;
+      } else {
+        cluster.positionYWorld += penBottom;
+        cluster.velocityYWorld  = 0;
+      }
+    }
+  }
+}
+
 // ── Public AI entry point ─────────────────────────────────────────────────────
 
 export function applySquareStampedeAI(world: WorldState): void {
   const dtSec = world.dtMs * 0.001;
 
-  // Locate player
-  let playerXWorld = 0;
-  let playerYWorld = 0;
-  let playerHalfW  = 0;
-  let playerHalfH  = 0;
-  let playerFound  = false;
+  // Locate player once for the whole tick
+  let playerXWorld   = 0;
+  let playerYWorld   = 0;
+  let playerHalfW    = 0;
+  let playerHalfH    = 0;
+  let playerClusterRef: typeof world.clusters[0] | undefined;
 
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const c = world.clusters[ci];
     if (c.isPlayerFlag === 1 && c.isAliveFlag === 1) {
-      playerXWorld = c.positionXWorld;
-      playerYWorld = c.positionYWorld;
-      playerHalfW  = c.halfWidthWorld;
-      playerHalfH  = c.halfHeightWorld;
-      playerFound  = true;
+      playerXWorld    = c.positionXWorld;
+      playerYWorld    = c.positionYWorld;
+      playerHalfW     = c.halfWidthWorld;
+      playerHalfH     = c.halfHeightWorld;
+      playerClusterRef = c;
       break;
     }
   }
+
+  const playerFound = playerClusterRef !== undefined;
 
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const cluster = world.clusters[ci];
@@ -139,14 +231,12 @@ export function applySquareStampedeAI(world: WorldState): void {
     cluster.squareStampedeAiStateTicks -= 1;
 
     if (cluster.squareStampedeAiStateTicks <= 0) {
-      // Transition to next state
       if (cluster.squareStampedeAiState === STATE_IDLE) {
-        // Choose axis to dash on — prefer larger gap to player
+        // Choose axis to dash on — prefer the axis with the larger gap to player
         let chosenState: number;
         if (playerFound) {
           const dx = Math.abs(playerXWorld - cluster.positionXWorld);
           const dy = Math.abs(playerYWorld - cluster.positionYWorld);
-          // Alternate axes using the tick counter as a bias breaker
           const preferX = dx >= dy || ((world.tick & 1) === 0 && dx > 4);
           chosenState = preferX ? STATE_DASH_X : STATE_DASH_Y;
         } else {
@@ -177,75 +267,17 @@ export function applySquareStampedeAI(world: WorldState): void {
       cluster.velocityYWorld = 0;
     }
 
-    // ── Move (no gravity — floats in 2D) ─────────────────────────────────────
-    cluster.positionXWorld += cluster.velocityXWorld * dtSec;
-    cluster.positionYWorld += cluster.velocityYWorld * dtSec;
-
-    // ── Wall clamping (simple AABB push-out against solid walls) ─────────────
-    const hw = cluster.halfWidthWorld;
-    const hh = cluster.halfHeightWorld;
-    for (let wi = 0; wi < world.wallCount; wi++) {
-      if (world.wallIsPlatformFlag[wi] === 1) continue;
-      if (world.wallRampOrientationIndex[wi] !== 255) continue;
-      if (world.wallIsInvisibleFlag[wi] === 1) continue;
-
-      const wx = world.wallXWorld[wi];
-      const wy = world.wallYWorld[wi];
-      const ww = world.wallWWorld[wi];
-      const wh = world.wallHWorld[wi];
-
-      const clLeft   = cluster.positionXWorld - hw;
-      const clRight  = cluster.positionXWorld + hw;
-      const clTop    = cluster.positionYWorld - hh;
-      const clBottom = cluster.positionYWorld + hh;
-
-      const overlapX = clRight > wx && clLeft < wx + ww;
-      const overlapY = clBottom > wy && clTop < wy + wh;
-      if (!overlapX || !overlapY) continue;
-
-      // Push out along the axis of least penetration
-      const penLeft   = clRight  - wx;
-      const penRight  = (wx + ww) - clLeft;
-      const penTop    = clBottom - wy;
-      const penBottom = (wy + wh) - clTop;
-
-      const minPen = Math.min(penLeft, penRight, penTop, penBottom);
-      if (minPen === penLeft) {
-        cluster.positionXWorld -= penLeft;
-        cluster.velocityXWorld  = 0;
-      } else if (minPen === penRight) {
-        cluster.positionXWorld += penRight;
-        cluster.velocityXWorld  = 0;
-      } else if (minPen === penTop) {
-        cluster.positionYWorld -= penTop;
-        cluster.velocityYWorld  = 0;
-      } else {
-        cluster.positionYWorld += penBottom;
-        cluster.velocityYWorld  = 0;
-      }
-    }
+    // ── Move with axis-separated sweep collision (sub-stepped for safety) ────
+    resolveWallCollisions(world, cluster, dtSec);
 
     // ── Contact damage to player ──────────────────────────────────────────────
-    if (playerFound) {
-      const playerCluster = world.clusters[0];
-      // Find the actual player cluster (might not be index 0)
-      let pc = playerCluster;
-      if (pc === undefined || pc.isPlayerFlag !== 1) {
-        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
-          if (world.clusters[ci2].isPlayerFlag === 1) {
-            pc = world.clusters[ci2];
-            break;
-          }
-        }
-      }
-      if (pc !== undefined && pc.isAliveFlag === 1 && pc.invulnerabilityTicks <= 0) {
-        const dx = Math.abs(cluster.positionXWorld - playerXWorld);
-        const dy = Math.abs(cluster.positionYWorld - playerYWorld);
-        const overlapX = dx < hw + playerHalfW;
-        const overlapY = dy < hh + playerHalfH;
-        if (overlapX && overlapY) {
-          applyPlayerDamageWithKnockback(pc, CONTACT_DAMAGE, cluster.positionXWorld, cluster.positionYWorld);
-        }
+    if (playerFound && playerClusterRef !== undefined && playerClusterRef.invulnerabilityTicks <= 0) {
+      const hw = cluster.halfWidthWorld;
+      const hh = cluster.halfHeightWorld;
+      const dx = Math.abs(cluster.positionXWorld - playerXWorld);
+      const dy = Math.abs(cluster.positionYWorld - playerYWorld);
+      if (dx < hw + playerHalfW && dy < hh + playerHalfH) {
+        applyPlayerDamageWithKnockback(playerClusterRef, CONTACT_DAMAGE, cluster.positionXWorld, cluster.positionYWorld);
       }
     }
   }
