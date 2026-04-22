@@ -27,6 +27,7 @@ import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
+import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import {
   isTheroShowcaseRoom,
   renderTheroShowcaseEffect,
@@ -294,6 +295,8 @@ export interface RenderFrameContext {
   skillTombEffectRenderer: SkillTombEffectRenderer;
   bloomSystem: BloomSystem;
   playerCloak: PlayerCloak;
+  /** Phantasmal golden cloak extension — visible while the player is grappling. */
+  phantomCloak: PhantomCloakExtension;
   darkRoomOverlay: DarkRoomOverlay;
   /** Decoration sway state for push-wave animation driven by entity velocity. */
   decorationWaveState: DecorationWaveState;
@@ -367,7 +370,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-    playerCloak, darkRoomOverlay, decorationWaveState,
+    playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -494,7 +497,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
   renderHazards(ctx, world, ox, oy, zoom, world.tick);
 
-  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, /* isDebugCloak */ isDebugMode);
+  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom);
   drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
