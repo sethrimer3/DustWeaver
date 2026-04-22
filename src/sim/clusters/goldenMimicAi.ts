@@ -194,8 +194,8 @@ export function applyGoldenMimicAI(world: WorldState): void {
         }
       }
 
-      // ── Check half-dead threshold ─────────────────────────────────────────
-      const halfThreshold = cluster.goldenMimicInitialParticleCount >> 1; // floor divide by 2
+      // Check half-dead threshold (bitwise right shift by 1 = floor divide by 2)
+      const halfThreshold = cluster.goldenMimicInitialParticleCount >> 1;
       if (aliveCount <= halfThreshold) {
         cluster.goldenMimicState = STATE_HEAP;
         cluster.goldenMimicStateTicks = 0;

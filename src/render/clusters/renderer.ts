@@ -404,10 +404,11 @@ function _renderGoldenMimic(
 
     for (let bx = 0; bx < numBX; bx++) {
       for (let by = 0; by < numBY; by++) {
-        // Fast integer hash of (block position, time) — no allocations.
+        // Fast pseudo-random hash of (block position, time) using prime multipliers
+        // (MurmurHash-inspired integer mixing) — no allocations.
         const h = (((bx * 374761393 + by * 1664525 + slowTick * 22695477) >>> 0) * 2246822519) >>> 0;
         const shadeIdx  = (h >> 24) % _GOLD_PALETTE_SIZE;
-        // Per-block alpha variation in [0.72, 1.0] for the shimmering feel,
+        // Alpha variation range: min 0.72 + up to 0.28 additional = [0.72, 1.0],
         // then multiplied by fadeAlpha so the heap fade-out applies uniformly.
         const blockAlpha = fadeAlpha * (0.72 + ((h >> 16) & 0xff) * (0.28 / 255));
         ctx.globalAlpha  = blockAlpha;
