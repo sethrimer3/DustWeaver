@@ -242,6 +242,11 @@ export interface RoomEnemyDef {
   isBubbleEnemyFlag?: 0 | 1;
   /** 1 if this is an ice bubble variant, 0 (or omitted) for water bubble. */
   isIceBubbleFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a square stampede — dashes orthogonally in 2D,
+   * leaves a shrinking ghost trail, and has layered HP.
+   */
+  isSquareStampedeFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

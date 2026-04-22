@@ -73,6 +73,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_beetle', label: 'Golden Beetle', category: 'enemies' },
   { id: 'enemy_water_bubble', label: 'Water Bubble', category: 'enemies' },
   { id: 'enemy_ice_bubble',   label: 'Ice Bubble',   category: 'enemies' },
+  { id: 'enemy_square_stampede', label: 'Square Stampede', category: 'enemies' },
   // Triggers
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
@@ -202,6 +203,7 @@ export interface EditorEnemy {
   isBeetleFlag: 0 | 1;
   isBubbleEnemyFlag: 0 | 1;
   isIceBubbleFlag: 0 | 1;
+  isSquareStampedeFlag: 0 | 1;
 }
 
 export interface EditorTransition {
