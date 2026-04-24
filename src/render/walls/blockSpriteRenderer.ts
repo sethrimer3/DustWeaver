@@ -242,18 +242,18 @@ export function setActiveDarkAmbientBlockers(darkBlockerKeys?: ReadonlySet<strin
  * @param ctx          The 2D canvas rendering context.
  * @param offsetXPx    Horizontal pixel offset (camera translation).
  * @param offsetYPx    Vertical pixel offset (camera translation).
- * @param scalePx      Scale factor (world units → screen pixels).
+ * @param zoom         Scale factor (world units → screen pixels).
  * @param blockSizePx  Block/tile size in world units (e.g. BLOCK_SIZE_SMALL = 8).
  */
 export function renderDarkAmbientBlockerOverlay(
   ctx: CanvasRenderingContext2D,
   offsetXPx: number,
   offsetYPx: number,
-  scalePx: number,
+  zoom: number,
   blockSizePx: number,
 ): void {
   if (_activeDarkBlockerKeys.size === 0) return;
-  const tileSizePx = blockSizePx * scalePx;
+  const tileSizePx = blockSizePx * zoom;
   ctx.fillStyle = '#000000';
   for (const key of _activeDarkBlockerKeys) {
     const commaIdx = key.indexOf(',');
