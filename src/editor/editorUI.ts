@@ -247,7 +247,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
   catBar.style.cssText = 'display: flex; gap: 4px; margin-bottom: 8px;';
-  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers'];
+  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'lighting'];
   const catBtns: HTMLButtonElement[] = [];
   for (const cat of categories) {
     const btn = makeBtn(cat, () => callbacks?.onCategoryChange(cat));

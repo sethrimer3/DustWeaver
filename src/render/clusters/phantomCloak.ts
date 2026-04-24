@@ -54,13 +54,13 @@ const PHANTOM_POINT_COUNT = 1 + PHANTOM_SEGMENT_COUNT;
  * Base growth rate: phantom segments added per second regardless of speed.
  * Increase to make the cloak appear faster at rest.
  */
-const BASE_GROWTH_RATE = 0.8;
+const BASE_GROWTH_RATE = 5.0;
 
 /**
  * Additional growth rate per world-unit of player velocity magnitude.
  * Faster swinging → faster cloak growth.
  */
-const SPEED_GROWTH_MULTIPLIER = 0.008;
+const SPEED_GROWTH_MULTIPLIER = 0.015;
 
 /** Maximum phantom length in active segments. */
 const MAX_PHANTOM_LENGTH = PHANTOM_SEGMENT_COUNT;
