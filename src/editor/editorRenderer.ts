@@ -152,14 +152,18 @@ export function renderEditorOverlays(
   // ── Ambient Light Blockers (before decorations so icons draw on top) ─────
   for (const b of (room.ambientLightBlockers ?? [])) {
     const isSelected = isElementSelected('ambientLightBlocker', b.uid);
-    // Purple translucent fill
-    ctx.fillStyle = 'rgba(120, 60, 200, 0.35)';
+    const isDark = b.isDarkFlag === 1;
+    // Dark blockers: near-opaque black fill with a dark grey stroke.
+    // Clear blockers: purple translucent fill.
+    ctx.fillStyle = isDark ? 'rgba(0, 0, 0, 0.65)' : 'rgba(120, 60, 200, 0.35)';
     const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     const sizePx = BLOCK_SIZE_SMALL * zoom;
     ctx.fillRect(xPx, yPx, sizePx, sizePx);
-    // Purple stroke
-    ctx.strokeStyle = isSelected ? 'rgba(255, 255, 255, 1.0)' : 'rgba(180, 120, 255, 0.85)';
+    // Stroke
+    ctx.strokeStyle = isSelected
+      ? 'rgba(255, 255, 255, 1.0)'
+      : (isDark ? 'rgba(90, 90, 90, 0.9)' : 'rgba(180, 120, 255, 0.85)');
     ctx.lineWidth = isSelected ? 2 : 1;
     ctx.strokeRect(xPx, yPx, sizePx, sizePx);
   }
@@ -419,12 +423,18 @@ function buildElementTypeName(
     return 'Skill Tomb';
   }
   const names: Partial<Record<SelectedElementType, string>> = {
-    wall:        'Wall',
-    transition:  'Room Transition',
-    saveTomb:    'Save Tomb',
-    dustPile:    'Dust Pile',
-    playerSpawn: 'Player Spawn',
+    wall:               'Wall',
+    transition:         'Room Transition',
+    saveTomb:           'Save Tomb',
+    dustPile:           'Dust Pile',
+    playerSpawn:        'Player Spawn',
+    ambientLightBlocker:'Ambient Blocker',
+    lightSource:        'Light Source',
   };
+  if (type === 'ambientLightBlocker') {
+    const b = (room.ambientLightBlockers ?? []).find(x => x.uid === uid);
+    if (b) return b.isDarkFlag === 1 ? 'Dark Blocker' : 'Ambient Blocker';
+  }
   return names[type] ?? type;
 }
 

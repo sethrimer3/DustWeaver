@@ -276,6 +276,28 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     }));
   }
 
+  if (json.ambientLightDirection) {
+    room.ambientLightDirection = json.ambientLightDirection;
+  }
+  if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
+    room.ambientLightBlockers = json.ambientLightBlockers.map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+      isDark: b.isDark,
+    }));
+  }
+  if (json.lightSources && json.lightSources.length > 0) {
+    room.lightSources = json.lightSources.map(l => ({
+      xBlock: l.xBlock,
+      yBlock: l.yBlock,
+      radiusBlocks: l.radiusBlocks,
+      colorR: l.colorR,
+      colorG: l.colorG,
+      colorB: l.colorB,
+      brightnessPct: l.brightnessPct,
+    }));
+  }
+
   return room;
 }
 

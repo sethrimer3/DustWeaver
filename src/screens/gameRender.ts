@@ -54,6 +54,7 @@ import {
 import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
+import { renderDarkAmbientBlockerOverlay } from '../render/walls/blockSpriteRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -464,6 +465,7 @@ export function renderFrame(r: RenderFrameContext): void {
   }
 
   // Walls before cluster indicators so clusters are drawn on top
+  renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
 
   const isDarkRoom = currentRoom.lightingEffect === 'DarkRoom';

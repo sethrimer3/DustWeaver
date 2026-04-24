@@ -134,6 +134,13 @@ export type AmbientLightDirection =
 export interface RoomAmbientLightBlockerDef {
   readonly xBlock: number;
   readonly yBlock: number;
+  /**
+   * When true, this blocker also draws a solid black overlay over the air cell,
+   * hiding the room background (procedural effects, parallax) from view.
+   * Use this to conceal secret tunnels and off-screen areas.
+   * The ambient-light propagation effect is identical to the default (clear) blocker.
+   */
+  readonly isDark?: boolean;
 }
 
 /**
