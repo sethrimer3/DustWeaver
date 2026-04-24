@@ -9,6 +9,7 @@
 import { ROOM_REGISTRY } from '../levels/rooms';
 import type { RoomDef } from '../levels/roomDef';
 import { GOLD } from './skillTombShared';
+import { drawRoomSketch, smoothstep, ZOOM_SKETCH_FULL, ZOOM_DETAIL_FULL } from './mapSketchRenderer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -117,27 +118,49 @@ export function buildMapTab(
     const centerY = ch / 2 + panYPx;
     const cellSize = mapZoom;
 
+    // LOD blend: smoothly transition between detail blocks and sketch silhouettes.
+    // detailAlpha = 1 when zoomed in (≥ ZOOM_DETAIL_FULL), 0 when zoomed out (≤ ZOOM_SKETCH_FULL).
+    const detailAlpha = smoothstep(ZOOM_SKETCH_FULL, ZOOM_DETAIL_FULL, mapZoom);
+    const sketchAlpha = 1 - detailAlpha;
+    const showDetail = detailAlpha > 0.01;
+    const showSketch = sketchAlpha > 0.01;
+
     // Draw each explored room
     placements.forEach((placement) => {
       const { room, mapXBlock, mapYBlock } = placement;
       const isCurrentRoom = room.id === currentRoomId;
 
-      // Draw blocks (walls)
-      for (const wall of room.walls) {
-        for (let bx = 0; bx < wall.wBlock; bx++) {
-          for (let by = 0; by < wall.hBlock; by++) {
-            const worldBx = mapXBlock + wall.xBlock + bx;
-            const worldBy = mapYBlock + wall.yBlock + by;
-            const screenX = centerX + worldBx * cellSize;
-            const screenY = centerY + worldBy * cellSize;
-
-            mapCtx.fillStyle = isCurrentRoom ? 'rgba(212,168,75,0.6)' : 'rgba(150,140,120,0.4)';
-            mapCtx.fillRect(screenX, screenY, cellSize, cellSize);
-          }
-        }
+      // ── Sketch layer: silhouette with organic jitter ──────────────────────
+      if (showSketch) {
+        drawRoomSketch(
+          mapCtx, room, mapXBlock, mapYBlock,
+          centerX, centerY, cellSize,
+          sketchAlpha, isCurrentRoom,
+        );
       }
 
-      // Draw doorways (transitions)
+      // ── Detail layer: individual block tiles ──────────────────────────────
+      if (showDetail) {
+        mapCtx.save();
+        mapCtx.globalAlpha = detailAlpha;
+        for (const wall of room.walls) {
+          for (let bx = 0; bx < wall.wBlock; bx++) {
+            for (let by = 0; by < wall.hBlock; by++) {
+              const worldBx = mapXBlock + wall.xBlock + bx;
+              const worldBy = mapYBlock + wall.yBlock + by;
+              const screenX = centerX + worldBx * cellSize;
+              const screenY = centerY + worldBy * cellSize;
+
+              mapCtx.fillStyle = isCurrentRoom ? 'rgba(212,168,75,0.6)' : 'rgba(150,140,120,0.4)';
+              mapCtx.fillRect(screenX, screenY, cellSize, cellSize);
+            }
+          }
+        }
+        mapCtx.restore();
+      }
+
+      // ── Markers: always at full opacity (doors, tombs, labels) ───────────
+      // Doorways — shown in both modes so connections remain readable.
       for (const t of room.transitions) {
         const openTop = t.positionBlock;
         const openSize = t.openingSizeBlocks;
@@ -157,7 +180,7 @@ export function buildMapTab(
         }
       }
 
-      // Draw save tombs (save points shown on map)
+      // Save tombs — diamond markers remain crisp at all zoom levels.
       for (const tomb of room.saveTombs) {
         const screenX = centerX + (mapXBlock + tomb.xBlock) * cellSize;
         const screenY = centerY + (mapYBlock + tomb.yBlock) * cellSize;
@@ -178,7 +201,7 @@ export function buildMapTab(
         mapCtx.fill();
       }
 
-      // Draw room name label
+      // Room name label.
       const roomCenterX = centerX + (mapXBlock + room.widthBlocks / 2) * cellSize;
       const roomTopY = centerY + mapYBlock * cellSize;
       mapCtx.fillStyle = isCurrentRoom ? GOLD : 'rgba(200,190,170,0.6)';
