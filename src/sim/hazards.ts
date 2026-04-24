@@ -10,6 +10,7 @@
  *   - Water zone buoyancy flag
  *   - Lava zone damage
  *   - Breakable block destruction
+ *   - Crumble block damage/destruction by dust particles
  *   - Dust boost jar breaking
  *   - Firefly jar breaking + firefly AI movement
  *
@@ -57,6 +58,13 @@ const BREAKABLE_MOMENTUM_THRESHOLD_WORLD = 250.0;
 
 /** Interaction radius for jars (world units). */
 const JAR_INTERACT_RADIUS_WORLD = 10.0;
+
+/**
+ * Number of ticks to wait between hits on the same crumble block.
+ * Prevents a single fast-moving particle stream from consuming multiple hits.
+ * At 60 ticks/s this gives a ~0.5 s window.
+ */
+const CRUMBLE_HIT_COOLDOWN_TICKS = 30;
 
 /** Firefly wander speed (world units/s). */
 const FIREFLY_SPEED_WORLD = 30.0;
@@ -246,26 +254,56 @@ export function applyHazards(world: WorldState): void {
   }
 
   // ── Crumble blocks ───────────────────────────────────────────────────────
-  // A crumble block collapses the moment the player body AABB overlaps it
-  // (at any speed), unlike breakable blocks which require high momentum.
+  // Destroyed by any dust particle (from any cluster) touching the block, OR
+  // by the player body AABB overlapping (player walks into it).
+  // 2-hit system: first contact cracks the block, second destroys it.
   {
     const bHalf = BLOCK_SIZE_MEDIUM * 0.5;
     for (let i = 0; i < world.crumbleBlockCount; i++) {
       if (world.isCrumbleBlockActiveFlag[i] === 0) continue;
 
+      // Tick down cooldown
+      if (world.crumbleBlockHitCooldownTicks[i] > 0) {
+        world.crumbleBlockHitCooldownTicks[i] -= 1;
+        continue;
+      }
+
       const bx = world.crumbleBlockXWorld[i];
       const by = world.crumbleBlockYWorld[i];
-      const bLeft  = bx - bHalf;
+      const bLeft   = bx - bHalf;
       const bRight  = bx + bHalf;
       const bTop    = by - bHalf;
       const bBottom = by + bHalf;
 
-      if (overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom)) {
-        world.isCrumbleBlockActiveFlag[i] = 0;
-        const wi = world.crumbleBlockWallIndex[i];
-        if (wi >= 0 && wi < world.wallCount) {
-          world.wallWWorld[wi] = 0;
-          world.wallHWorld[wi] = 0;
+      // Check player body AABB
+      let hit = overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom);
+
+      // Check any alive particle from any cluster
+      if (!hit) {
+        for (let p = 0; p < world.particleCount; p++) {
+          if (world.isAliveFlag[p] === 0) continue;
+          const partX = world.positionXWorld[p];
+          const partY = world.positionYWorld[p];
+          if (partX >= bLeft && partX <= bRight && partY >= bTop && partY <= bBottom) {
+            hit = true;
+            break;
+          }
+        }
+      }
+
+      if (hit) {
+        world.crumbleBlockHitsRemaining[i] -= 1;
+        if (world.crumbleBlockHitsRemaining[i] === 0) {
+          // Fully destroyed
+          world.isCrumbleBlockActiveFlag[i] = 0;
+          const wi = world.crumbleBlockWallIndex[i];
+          if (wi >= 0 && wi < world.wallCount) {
+            world.wallWWorld[wi] = 0;
+            world.wallHWorld[wi] = 0;
+          }
+        } else {
+          // Cracked — start cooldown before next hit
+          world.crumbleBlockHitCooldownTicks[i] = CRUMBLE_HIT_COOLDOWN_TICKS;
         }
       }
     }

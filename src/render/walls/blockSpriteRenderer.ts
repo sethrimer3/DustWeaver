@@ -27,7 +27,6 @@ import {
   getRampSprite,
 } from './proceduralBlockSprite';
 import {
-  ambientDirectionVector,
   buildAmbientDepths,
   getDarknessAlphaFromAirDepth,
 } from './ambientLightDepths';

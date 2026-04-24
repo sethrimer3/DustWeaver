@@ -282,6 +282,8 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.crumbleBlockXWorld[ci] = bx;
     world.crumbleBlockYWorld[ci] = by;
     world.isCrumbleBlockActiveFlag[ci] = 1;
+    world.crumbleBlockHitsRemaining[ci] = 2;
+    world.crumbleBlockHitCooldownTicks[ci] = 0;
     world.crumbleBlockWallIndex[ci] = wallIdx;
   }
 
@@ -434,13 +436,19 @@ export function drawTunnelDarkness(
 ): void {
   const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
   const roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
-  const FADE_BLOCKS = 6;
-  const fadeDepthWorld = FADE_BLOCKS * BLOCK_SIZE_MEDIUM;
+  const DEFAULT_FADE_BLOCKS = 6;
 
   ctx.save();
 
   for (let ti = 0; ti < room.transitions.length; ti++) {
     const t = room.transitions[ti];
+
+    // Use per-transition gradient width when set; default to 6 blocks.
+    // A value of 0 means no gradient should be drawn for this transition.
+    const fadeBlocks = t.gradientWidthBlocks ?? DEFAULT_FADE_BLOCKS;
+    if (fadeBlocks <= 0) continue;
+    const fadeDepthWorld = fadeBlocks * BLOCK_SIZE_MEDIUM;
+
     const openTopWorld    = t.positionBlock * BLOCK_SIZE_MEDIUM;
     const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 

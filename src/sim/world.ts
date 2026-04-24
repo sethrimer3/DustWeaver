@@ -311,6 +311,16 @@ export interface WorldState extends ParticleBuffers {
   /** 1 if block is still intact, 0 if broken. */
   isCrumbleBlockActiveFlag: Uint8Array;
   /**
+   * Hits remaining: 2 = undamaged, 1 = cracked, 0 = destroyed.
+   * Starts at 2; any dust particle contact decrements it once per cooldown.
+   */
+  crumbleBlockHitsRemaining: Uint8Array;
+  /**
+   * Ticks until this block can be hit again (debounce / hit cooldown).
+   * 0 = can be hit now; set to CRUMBLE_HIT_COOLDOWN_TICKS on hit.
+   */
+  crumbleBlockHitCooldownTicks: Uint8Array;
+  /**
    * Wall index in the wall arrays that corresponds to each crumble block.
    * -1 if no corresponding wall.
    */
@@ -497,6 +507,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     crumbleBlockXWorld: new Float32Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockYWorld: new Float32Array(MAX_CRUMBLE_BLOCKS),
     isCrumbleBlockActiveFlag: new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockHitsRemaining: new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockHitCooldownTicks: new Uint8Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockWallIndex: new Int8Array(MAX_CRUMBLE_BLOCKS),
     dustBoostJarCount: 0,
     dustBoostJarXWorld: new Float32Array(MAX_DUST_BOOST_JARS),

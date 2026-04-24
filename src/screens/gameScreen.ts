@@ -12,6 +12,7 @@ import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
+import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands } from '../input/handler';
 import { CommandKind } from '../input/commands';
@@ -75,7 +76,7 @@ import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '.
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
-import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_SQUARE_STAMPEDE } from '../sim/world';
+import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_SQUARE_STAMPEDE, MAX_CRUMBLE_BLOCKS } from '../sim/world';
 
 const FIXED_DT_MS = 16.666;
 
@@ -539,6 +540,7 @@ export function startGameScreen(
   const levelRng = createRng(12345);
   const environmentalDust = new EnvironmentalDustLayer();
   const skidDebris = new SkidDebrisRenderer();
+  const crumbleDebris = new CrumbleDebrisRenderer();
   const skillTombRenderer = new SkillTombRenderer();
   const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();
@@ -552,6 +554,12 @@ export function startGameScreen(
   const cachedDecorationCenterX = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
   const cachedDecorationCenterY = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
   const reusableSnapshot = createReusableSnapshot(world);
+
+  // ── Crumble block prev-state tracking ───────────────────────────────────
+  // Snapshot of per-block hit state from the previous tick so we can detect
+  // damage and destruction transitions and fire visual events + lighting rebuild.
+  const prevCrumbleActive = new Uint8Array(MAX_CRUMBLE_BLOCKS);
+  const prevCrumbleHits   = new Uint8Array(MAX_CRUMBLE_BLOCKS);
 
   // ── Render-interpolation buffers ─────────────────────────────────────────
   // Cluster positions captured immediately before the physics tick loop each
@@ -1199,6 +1207,31 @@ export function startGameScreen(
       }
       environmentalDust.update(world, FIXED_DT_MS);
       skidDebris.update(world, FIXED_DT_MS);
+
+      // ── Crumble block debris events & ambient lighting rebuild ────────────
+      for (let ci = 0; ci < world.crumbleBlockCount; ci++) {
+        const nowActive = world.isCrumbleBlockActiveFlag[ci];
+        const nowHits   = world.crumbleBlockHitsRemaining[ci];
+        const wasActive = prevCrumbleActive[ci];
+        const wasHits   = prevCrumbleHits[ci];
+
+        if (wasActive === 1) {
+          if (nowActive === 0) {
+            // Block fully destroyed this tick.
+            // The wall sprite renderer detects the changed wall-layout signature
+            // automatically and rebuilds ambient lighting on the next frame.
+            crumbleDebris.notifyBlockHit(world.crumbleBlockXWorld[ci], world.crumbleBlockYWorld[ci], true);
+          } else if (nowHits < wasHits) {
+            // Block cracked (first hit) this tick
+            crumbleDebris.notifyBlockHit(world.crumbleBlockXWorld[ci], world.crumbleBlockYWorld[ci], false);
+          }
+        }
+
+        prevCrumbleActive[ci] = nowActive;
+        prevCrumbleHits[ci]   = nowHits;
+      }
+
+      crumbleDebris.update(FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
     }
 
@@ -1375,7 +1408,7 @@ export function startGameScreen(
     updateSnapshotInPlace(reusableSnapshot, world, renderAlpha, prevClusterPosX, prevClusterPosY);
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
-      webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+      webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState,
       world, currentRoom,
       snapshot: reusableSnapshot,

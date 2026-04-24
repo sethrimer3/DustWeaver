@@ -174,7 +174,7 @@ export function renderHazards(
     ctx.strokeRect(sx + 0.5, sy + 0.5, sz - 1, sz - 1);
   }
 
-  // ── Crumble blocks (fragile appearance — lighter sandy color + X mark) ──
+  // ── Crumble blocks (fragile appearance — sandy fill + cracks based on damage) ──
   for (let i = 0; i < world.crumbleBlockCount; i++) {
     if (world.isCrumbleBlockActiveFlag[i] === 0) continue;
 
@@ -184,22 +184,38 @@ export function renderHazards(
     const sy = (by - BLOCK_HALF) * zoom + offsetYPx;
     const sz = BLOCK_SIZE_MEDIUM * zoom;
 
-    // Lighter sandy fill to distinguish from breakable (brown) blocks
-    ctx.fillStyle = 'rgba(210,190,140,0.65)';
+    const isCracked = world.crumbleBlockHitsRemaining[i] <= 1;
+
+    // Fill: sandy tan when intact, darker and more jagged when cracked
+    ctx.fillStyle = isCracked ? 'rgba(160,130,80,0.75)' : 'rgba(210,190,140,0.65)';
     ctx.fillRect(sx, sy, sz, sz);
 
-    // X mark indicating crumble vulnerability
-    ctx.strokeStyle = 'rgba(160,100,30,0.80)';
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(sx + sz * 0.15, sy + sz * 0.15);
-    ctx.lineTo(sx + sz * 0.85, sy + sz * 0.85);
-    ctx.moveTo(sx + sz * 0.85, sy + sz * 0.15);
-    ctx.lineTo(sx + sz * 0.15, sy + sz * 0.85);
-    ctx.stroke();
+    if (isCracked) {
+      // Heavy crack lines when damaged
+      ctx.strokeStyle = 'rgba(80,50,20,0.85)';
+      ctx.lineWidth = 1.0;
+      ctx.beginPath();
+      // Main diagonal crack
+      ctx.moveTo(sx + sz * 0.2, sy + sz * 0.1);
+      ctx.lineTo(sx + sz * 0.5, sy + sz * 0.45);
+      ctx.lineTo(sx + sz * 0.8, sy + sz * 0.9);
+      // Secondary crack branch
+      ctx.moveTo(sx + sz * 0.5, sy + sz * 0.45);
+      ctx.lineTo(sx + sz * 0.75, sy + sz * 0.3);
+      ctx.stroke();
+    } else {
+      // Light hairline cracks when intact (shows fragility)
+      ctx.strokeStyle = 'rgba(140,100,50,0.50)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(sx + sz * 0.3, sy + sz * 0.2);
+      ctx.lineTo(sx + sz * 0.5, sy + sz * 0.5);
+      ctx.lineTo(sx + sz * 0.7, sy + sz * 0.3);
+      ctx.stroke();
+    }
 
     // Thin border
-    ctx.strokeStyle = 'rgba(160,120,60,0.45)';
+    ctx.strokeStyle = isCracked ? 'rgba(100,70,30,0.60)' : 'rgba(160,120,60,0.45)';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(sx + 0.5, sy + 0.5, sz - 1, sz - 1);
   }
