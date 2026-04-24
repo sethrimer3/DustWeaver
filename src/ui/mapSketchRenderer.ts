@@ -66,6 +66,20 @@ const FILL_RGB_OTHER = '90, 85, 78';
  */
 const CONTOUR_STEP_BLOCKS = 2;
 
+/**
+ * Index offset used when generating stroke-level jitter noise.
+ * Must be large enough to be disjoint from per-point indices (max room size
+ * is several hundred blocks, so 0xffff is safely out of range).
+ */
+const STROKE_JITTER_INDEX_OFFSET = 0xffff;
+
+/**
+ * Starting noise channel for per-stroke, per-point jitter.
+ * Channels 0–1 are reserved for the interior fill (see drawRoomSketch fill
+ * pass); channels starting here are used for the stroke passes.
+ */
+const POINT_JITTER_CHANNEL_BASE = 10;
+
 // ── Deterministic noise ───────────────────────────────────────────────────────
 
 /** FNV-1a hash of a room ID string — used as the per-room noise seed. */
@@ -286,12 +300,12 @@ export function drawRoomSketch(
   // ── Multi-stroke sketch outline ───────────────────────────────────────────
   for (let strokeIndex = 0; strokeIndex < STROKE_COUNT; strokeIndex++) {
     // Each stroke gets a stable whole-stroke offset for hand-drawn wobble.
-    const strokeOffX = deterministicNoise(roomHash, 0xffff + strokeIndex, strokeIndex * 2)     * JITTER_PX * 0.4;
-    const strokeOffY = deterministicNoise(roomHash, 0xffff + strokeIndex, strokeIndex * 2 + 1) * JITTER_PX * 0.4;
+    const strokeOffX = deterministicNoise(roomHash, STROKE_JITTER_INDEX_OFFSET + strokeIndex, strokeIndex * 2)     * JITTER_PX * 0.4;
+    const strokeOffY = deterministicNoise(roomHash, STROKE_JITTER_INDEX_OFFSET + strokeIndex, strokeIndex * 2 + 1) * JITTER_PX * 0.4;
 
     // Per-stroke jitter channel seeds (different per stroke, stable per point).
-    const chanX = strokeIndex * 2 + 10;
-    const chanY = strokeIndex * 2 + 11;
+    const chanX = POINT_JITTER_CHANNEL_BASE + strokeIndex * 2;
+    const chanY = POINT_JITTER_CHANNEL_BASE + strokeIndex * 2 + 1;
 
     ctx.save();
     ctx.globalAlpha = alpha * (STROKE_ALPHA_BASE - strokeIndex * STROKE_ALPHA_STEP);
