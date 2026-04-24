@@ -198,8 +198,11 @@ export interface SavedRoomV2 {
    * Stored verbatim as the string literal.
    */
   ambientDir?: string;
-  /** Sparse list of ambient-light blocker tile coordinates: [x, y]. */
-  ambientBlockers?: [number, number][];
+  /**
+   * Sparse list of ambient-light blocker tile coordinates.
+   * Each entry is [x, y] for a clear blocker, or [x, y, 1] for a dark blocker.
+   */
+  ambientBlockers?: ([number, number] | [number, number, 1])[];
   /**
    * Sparse list of local light sources:
    * [xBlock, yBlock, radiusBlocks, r, g, b, brightnessPct].
@@ -601,7 +604,11 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.ambientDir = json.ambientLightDirection;
   }
   if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
-    out.ambientBlockers = json.ambientLightBlockers.map(b => [b.xBlock, b.yBlock] as [number, number]);
+    out.ambientBlockers = json.ambientLightBlockers.map(b =>
+      b.isDark
+        ? ([b.xBlock, b.yBlock, 1] as [number, number, 1])
+        : ([b.xBlock, b.yBlock] as [number, number]),
+    );
   }
   if (json.lightSources && json.lightSources.length > 0) {
     out.lights = json.lightSources.map(l => [
@@ -726,7 +733,11 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     json.ambientLightDirection = saved.ambientDir as RoomJsonDef['ambientLightDirection'];
   }
   if (saved.ambientBlockers && saved.ambientBlockers.length > 0) {
-    json.ambientLightBlockers = saved.ambientBlockers.map(([x, y]) => ({ xBlock: x, yBlock: y }));
+    json.ambientLightBlockers = saved.ambientBlockers.map(entry => ({
+      xBlock: entry[0],
+      yBlock: entry[1],
+      isDark: entry[2] === 1,
+    }));
   }
   if (saved.lights && saved.lights.length > 0) {
     json.lightSources = saved.lights.map(([x, y, r, cr, cg, cb, br]) => ({

@@ -19,7 +19,7 @@ import { RoomDef, RoomTransitionDef, TransitionDirection, BLOCK_SIZE_MEDIUM, BLO
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
-import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting } from '../render/walls/blockSpriteRenderer';
+import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
 import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
 import { renderWorldBackground } from '../render/backgroundRenderer';
@@ -229,10 +229,16 @@ export function startGameScreen(
     // `blockSpriteRenderer` (but NOT to collision and NOT to local lights
     // — see `roomDef.ts` for the full authoring model).
     let blockerKeys: Set<string> | undefined;
+    let darkBlockerKeys: Set<string> | undefined;
     if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
       blockerKeys = new Set<string>();
       for (const b of room.ambientLightBlockers) {
-        blockerKeys.add(`${b.xBlock},${b.yBlock}`);
+        const key = `${b.xBlock},${b.yBlock}`;
+        blockerKeys.add(key);
+        if (b.isDark) {
+          if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
+          darkBlockerKeys.add(key);
+        }
       }
     }
     setActiveBlockLighting(
@@ -242,6 +248,7 @@ export function startGameScreen(
       room.ambientLightDirection,
       blockerKeys,
     );
+    setActiveDarkAmbientBlockers(darkBlockerKeys);
 
     // Notify the music manager about the new room
     musicManager.notifyRoomEntered(room.songId ?? '_continue');

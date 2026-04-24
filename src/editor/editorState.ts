@@ -50,6 +50,8 @@ export interface PaletteItem {
   isPillarHalfWidthItem?: 1;
   /** 1 if this palette item paints ambient-light blocker tiles. */
   isAmbientLightBlockerItem?: 1;
+  /** 1 if this palette item paints dark ambient-light blocker tiles (also draws a black background overlay). */
+  isDarkAmbientLightBlockerItem?: 1;
   /** 1 if this palette item places a local light source. */
   isLightSourceItem?: 1;
 }
@@ -94,7 +96,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // ── Lighting layer ─────────────────────────────────────────────────────
   // Designer-facing authoring for the unified ambient lighting system.
   // See `RoomAmbientLightBlockerDef` / `RoomLightSourceDef` in roomDef.ts.
-  { id: 'ambient_light_blocker', label: 'Ambient Blocker', category: 'lighting', isAmbientLightBlockerItem: 1 },
+  { id: 'ambient_light_blocker',      label: 'Ambient Blocker', category: 'lighting', isAmbientLightBlockerItem: 1 },
+  { id: 'dark_ambient_light_blocker', label: 'Dark Blocker',    category: 'lighting', isAmbientLightBlockerItem: 1, isDarkAmbientLightBlockerItem: 1 },
   { id: 'light_source',          label: 'Light Source',    category: 'lighting', isLightSourceItem: 1 },
 ];
 
@@ -279,6 +282,11 @@ export interface EditorAmbientLightBlocker {
   uid: number;
   xBlock: number;
   yBlock: number;
+  /**
+   * 1 if this is a dark blocker that draws a solid black overlay over the air
+   * cell, hiding the room background.  0 (or absent) for the standard clear blocker.
+   */
+  isDarkFlag: 0 | 1;
 }
 
 /** An editor-placed local light source (see {@link RoomLightSourceDef}). */

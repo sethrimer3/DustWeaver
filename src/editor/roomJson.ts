@@ -179,6 +179,8 @@ export interface RoomJsonDecoration {
 export interface RoomJsonAmbientLightBlocker {
   xBlock: number;
   yBlock: number;
+  /** When true, this blocker also draws a solid black overlay over the cell. */
+  isDark?: boolean;
 }
 
 /** Authored local light source (see {@link RoomLightSourceDef}). */
@@ -449,6 +451,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     uid: uid++,
     xBlock: b.xBlock,
     yBlock: b.yBlock,
+    isDarkFlag: b.isDark ? 1 : 0,
   }));
 
   const lightSources: EditorLightSource[] = (json.lightSources ?? []).map(l => ({
@@ -599,10 +602,11 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     json.ambientLightDirection = data.ambientLightDirection;
   }
   if ((data.ambientLightBlockers ?? []).length > 0) {
-    json.ambientLightBlockers = data.ambientLightBlockers.map(b => ({
-      xBlock: b.xBlock,
-      yBlock: b.yBlock,
-    }));
+    json.ambientLightBlockers = data.ambientLightBlockers.map(b => {
+      const entry: RoomJsonAmbientLightBlocker = { xBlock: b.xBlock, yBlock: b.yBlock };
+      if (b.isDarkFlag === 1) entry.isDark = true;
+      return entry;
+    });
   }
   if ((data.lightSources ?? []).length > 0) {
     json.lightSources = data.lightSources.map(l => ({
@@ -797,6 +801,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     ambientLightBlockers: (data.ambientLightBlockers ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,
+      isDark: b.isDarkFlag === 1,
     })),
     lightSources: (data.lightSources ?? []).map(l => ({
       xBlock: l.xBlock,
@@ -922,6 +927,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     uid: uid++,
     xBlock: b.xBlock,
     yBlock: b.yBlock,
+    isDarkFlag: b.isDark ? 1 : 0,
   }));
 
   const lightSources: EditorLightSource[] = (room.lightSources ?? []).map(l => ({

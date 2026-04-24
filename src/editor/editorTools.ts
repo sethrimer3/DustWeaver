@@ -211,6 +211,7 @@ export function placeAtCursor(state: EditorState): void {
     const xFloor = Math.floor(bx);
     const yFloor = Math.floor(by);
     if (item.isAmbientLightBlockerItem === 1) {
+      const isDarkFlag: 0 | 1 = item.isDarkAmbientLightBlockerItem === 1 ? 1 : 0;
       const already = (room.ambientLightBlockers ?? []).some(
         b => b.xBlock === xFloor && b.yBlock === yFloor,
       );
@@ -220,6 +221,7 @@ export function placeAtCursor(state: EditorState): void {
         uid: allocateUid(state),
         xBlock: xFloor,
         yBlock: yFloor,
+        isDarkFlag,
       });
       return;
     }

@@ -142,6 +142,14 @@ let _activeAmbientBlockerKeys: ReadonlySet<string> = new Set();
 let _activeAmbientBlockerSig = '';
 
 /**
+ * Dark ambient-light blocker tile keys (`"col,row"`).
+ * These cells draw a solid black overlay over the room background,
+ * hiding secret areas from view.  They also participate in the normal
+ * ambient-light propagation block (same as clear blockers).
+ */
+let _activeDarkBlockerKeys: ReadonlySet<string> = new Set();
+
+/**
  * Set the active world number for block sprite rendering.
  * Call this when the player enters a room without an explicit blockTheme.
  */
@@ -211,6 +219,53 @@ export function setActiveBlockLighting(
   }
 
   _invalidateBakedWallCanvas();
+}
+
+/**
+ * Sets the active set of dark ambient-light blocker tile keys.
+ * Dark blockers are rendered as solid black overlays over the room background
+ * before the wall sprites are drawn.  Call this when entering a room (same
+ * timing as {@link setActiveBlockLighting}).
+ *
+ * @param darkBlockerKeys  Set of `"col,row"` tile keys for dark blockers.
+ *                         Pass `undefined` or an empty set to clear.
+ */
+export function setActiveDarkAmbientBlockers(darkBlockerKeys?: ReadonlySet<string>): void {
+  _activeDarkBlockerKeys = darkBlockerKeys ?? new Set();
+}
+
+/**
+ * Draws a solid black rectangle over every dark ambient-light blocker cell.
+ * Call this after the procedural background effects and before rendering wall
+ * sprites so the darkness layer covers the background but not the geometry.
+ *
+ * @param ctx          The 2D canvas rendering context.
+ * @param offsetXPx    Horizontal pixel offset (camera translation).
+ * @param offsetYPx    Vertical pixel offset (camera translation).
+ * @param zoom         Scale factor (world units → screen pixels).
+ * @param blockSizePx  Block/tile size in world units (e.g. BLOCK_SIZE_SMALL = 8).
+ */
+export function renderDarkAmbientBlockerOverlay(
+  ctx: CanvasRenderingContext2D,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+  blockSizePx: number,
+): void {
+  if (_activeDarkBlockerKeys.size === 0) return;
+  const tileSizePx = blockSizePx * zoom;
+  ctx.fillStyle = '#000000';
+  for (const key of _activeDarkBlockerKeys) {
+    const commaIdx = key.indexOf(',');
+    const col = parseInt(key.slice(0, commaIdx), 10);
+    const row = parseInt(key.slice(commaIdx + 1), 10);
+    ctx.fillRect(
+      Math.round(col * tileSizePx + offsetXPx),
+      Math.round(row * tileSizePx + offsetYPx),
+      Math.ceil(tileSizePx),
+      Math.ceil(tileSizePx),
+    );
+  }
 }
 
 function _getBrownRockSpriteForBlockSize(blockSizePx: number): HTMLImageElement {
@@ -795,8 +850,14 @@ function _buildSolid2x2Map(walls: WallSnapshot, blockSizePx: number): Map<string
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
     const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
     const rowCount = Math.max(1, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
-    if (colCount !== 2 || rowCount !== 2) continue;
-    topLeftMap.set(_tileKey(colStart, rowStart), walls.themeIndex[wi]);
+    // Tile the wall into non-overlapping 2×2 sub-blocks. Any trailing
+    // odd column or row falls through to the 1×1 rendering path because
+    // those cells are never added to _coveredBy2x2Keys.
+    for (let r = 0; r + 1 < rowCount; r += 2) {
+      for (let c = 0; c + 1 < colCount; c += 2) {
+        topLeftMap.set(_tileKey(colStart + c, rowStart + r), walls.themeIndex[wi]);
+      }
+    }
   }
 
   return topLeftMap;
