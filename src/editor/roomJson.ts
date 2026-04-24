@@ -69,6 +69,8 @@ export interface RoomJsonEnemy {
   isBubbleEnemy?: boolean;
   isIceBubble?: boolean;
   isSquareStampede?: boolean;
+  isGoldenMimic?: boolean;
+  isGoldenMimicYFlipped?: boolean;
 }
 
 export interface RoomJsonWall {
@@ -383,6 +385,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isBubbleEnemyFlag: (e.isBubbleEnemy ?? false) ? 1 : 0,
     isIceBubbleFlag: (e.isIceBubble ?? false) ? 1 : 0,
     isSquareStampedeFlag: (e.isSquareStampede ?? false) ? 1 : 0,
+    isGoldenMimicFlag: (e.isGoldenMimic ?? false) ? 1 : 0,
+    isGoldenMimicYFlippedFlag: (e.isGoldenMimicYFlipped ?? false) ? 1 : 0,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => ({
@@ -535,6 +539,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isBubbleEnemy: e.isBubbleEnemyFlag === 1,
       isIceBubble: e.isIceBubbleFlag === 1,
       isSquareStampede: e.isSquareStampedeFlag === 1,
+      isGoldenMimic: e.isGoldenMimicFlag === 1,
+      isGoldenMimicYFlipped: e.isGoldenMimicYFlippedFlag === 1,
     })),
     transitions: data.transitions.map(t => {
       const jt: RoomJsonTransition = {
@@ -741,6 +747,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isBubbleEnemyFlag: e.isBubbleEnemyFlag,
       isIceBubbleFlag: e.isIceBubbleFlag,
       isSquareStampedeFlag: e.isSquareStampedeFlag,
+      isGoldenMimicFlag: e.isGoldenMimicFlag ?? 0,
+      isGoldenMimicYFlippedFlag: e.isGoldenMimicYFlippedFlag ?? 0,
     };
   });
 
@@ -860,6 +868,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isBubbleEnemyFlag: (e.isBubbleEnemyFlag ?? 0) as 0 | 1,
     isIceBubbleFlag: (e.isIceBubbleFlag ?? 0) as 0 | 1,
     isSquareStampedeFlag: (e.isSquareStampedeFlag ?? 0) as 0 | 1,
+    isGoldenMimicFlag: (e.isGoldenMimicFlag ?? 0) as 0 | 1,
+    isGoldenMimicYFlippedFlag: (e.isGoldenMimicYFlippedFlag ?? 0) as 0 | 1,
   }));
 
   const transitions: EditorTransition[] = room.transitions.map(t => ({

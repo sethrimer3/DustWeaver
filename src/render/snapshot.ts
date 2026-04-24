@@ -709,6 +709,10 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       isSquareStampedeFlag:          c.isSquareStampedeFlag,
       squareStampedeSlotIndex:       c.squareStampedeSlotIndex,
       squareStampedeBaseHalfSizeWorld: c.squareStampedeBaseHalfSizeWorld,
+      isGoldenMimicFlag:             c.isGoldenMimicFlag,
+      isGoldenMimicYFlippedFlag:     c.isGoldenMimicYFlippedFlag,
+      goldenMimicState:              c.goldenMimicState,
+      goldenMimicFadeAlpha:          c.goldenMimicFadeAlpha,
       renderPositionXWorld:          c.positionXWorld,
       renderPositionYWorld:          c.positionYWorld,
     });
