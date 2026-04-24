@@ -44,13 +44,12 @@ import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCap
 import { unlockActiveWeave } from '../progression/unlocks';
 import {
   spawnClusterParticles,
-  spawnLoadoutParticles,
   spawnWeaveLoadoutParticles,
   spawnBackgroundFluidParticles,
   spawnDustPileParticles,
+  spawnEnemyClusters,
   PARTICLE_COUNT_PER_CLUSTER,
   BACKGROUND_FLUID_COUNT,
-  BOSS_HP_MULTIPLIER,
   PLAYER_INITIAL_HEALTH,
 } from './gameSpawn';
 import {
@@ -63,25 +62,16 @@ import {
   TUNNEL_DETECT_MARGIN_WORLD,
   DUST_CONTAINER_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_DUST_GAIN,
-  FLYING_EYE_HALF_SIZE_WORLD,
 } from './gameRoom';
 import { renderFrame } from './gameRender';
 import { createCombatTextSystem } from '../render/hud/combatText';
-import { processLargeSlimeSplits, SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
-import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
-import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
-import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../sim/clusters/bubbleAi';
-import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAIL_UPDATE_INTERVAL_TICKS } from '../sim/clusters/squareStampedeAi';
-import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
+import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
-import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_SQUARE_STAMPEDE, MAX_CRUMBLE_BLOCKS } from '../sim/world';
+import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_CRUMBLE_BLOCKS } from '../sim/world';
 
 const FIXED_DT_MS = 16.666;
-
-const SLIME_HOP_INTERVAL_INITIAL_TICKS = 30;
-const LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS = 45;
 
 /** Baseline virtual width at 16:9; height is authoritative for fixed zoom. */
 const BASE_VIRTUAL_WIDTH_PX = 480;
@@ -307,140 +297,7 @@ export function startGameScreen(
     world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
 
     // Spawn enemies
-    let nextEntityId = 2;
-    for (let ei = 0; ei < room.enemies.length; ei++) {
-      const enemyDef = room.enemies[ei];
-      const ex = enemyDef.xBlock * BLOCK_SIZE_MEDIUM;
-      const ey = enemyDef.yBlock * BLOCK_SIZE_MEDIUM;
-      const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
-      const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
-
-      if (enemyDef.isFlyingEyeFlag === 1) {
-        enemyCluster.isFlyingEyeFlag     = 1;
-        enemyCluster.flyingEyeElementKind = enemyDef.kinds.length > 0
-          ? enemyDef.kinds[0]
-          : ParticleKind.Wind;
-        // Flying eyes are larger than ground enemies
-        enemyCluster.halfWidthWorld  = FLYING_EYE_HALF_SIZE_WORLD;
-        enemyCluster.halfHeightWorld = FLYING_EYE_HALF_SIZE_WORLD;
-      } else if (enemyDef.isRollingEnemyFlag === 1) {
-        enemyCluster.isRollingEnemyFlag    = 1;
-        enemyCluster.rollingEnemySpriteIndex = enemyDef.rollingEnemySpriteIndex ?? 1;
-        enemyCluster.rollingEnemyRollAngleRad = 0;
-      } else if (enemyDef.isRockElementalFlag === 1) {
-        enemyCluster.isRockElementalFlag = 1;
-        enemyCluster.rockElementalSpawnXWorld = ex;
-        enemyCluster.rockElementalSpawnYWorld = ey;
-        enemyCluster.rockElementalState = 0; // start inactive
-        // Rock Elemental is slightly larger than regular enemies
-        enemyCluster.halfWidthWorld = 4.5;
-        enemyCluster.halfHeightWorld = 4.5;
-      } else if (enemyDef.isRadiantTetherFlag === 1) {
-        enemyCluster.isRadiantTetherFlag = 1;
-        enemyCluster.radiantTetherState = 0; // start inactive
-        enemyCluster.halfWidthWorld = 6.0;
-        enemyCluster.halfHeightWorld = 6.0;
-      } else if (enemyDef.isGrappleHunterFlag === 1) {
-        enemyCluster.isGrappleHunterFlag = 1;
-        enemyCluster.grappleHunterState = 0;
-        enemyCluster.halfWidthWorld = 5.0;
-        enemyCluster.halfHeightWorld = 5.0;
-      } else if (enemyDef.isSlimeFlag === 1) {
-        enemyCluster.isSlimeFlag = 1;
-        enemyCluster.halfWidthWorld = SLIME_HALF_SIZE_WORLD;
-        enemyCluster.halfHeightWorld = SLIME_HALF_SIZE_WORLD;
-        enemyCluster.slimeHopTimerTicks = SLIME_HOP_INTERVAL_INITIAL_TICKS;
-      } else if (enemyDef.isLargeSlimeFlag === 1) {
-        enemyCluster.isLargeSlimeFlag = 1;
-        enemyCluster.halfWidthWorld = LARGE_SLIME_HALF_SIZE_WORLD;
-        enemyCluster.halfHeightWorld = LARGE_SLIME_HALF_SIZE_WORLD;
-        enemyCluster.slimeHopTimerTicks = LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS;
-      } else if (enemyDef.isWheelEnemyFlag === 1) {
-        enemyCluster.isWheelEnemyFlag = 1;
-        enemyCluster.halfWidthWorld = WHEEL_ENEMY_HALF_SIZE_WORLD;
-        enemyCluster.halfHeightWorld = WHEEL_ENEMY_HALF_SIZE_WORLD;
-      } else if (enemyDef.isBeetleFlag === 1) {
-        enemyCluster.isBeetleFlag              = 1;
-        enemyCluster.halfWidthWorld            = BEETLE_HALF_SIZE_WORLD;
-        enemyCluster.halfHeightWorld           = BEETLE_HALF_SIZE_WORLD;
-        // Start in a crawl state; AI will pick the first real state on the first tick.
-        enemyCluster.beetleAiState             = 2; // idle briefly so it lands on a surface first
-        enemyCluster.beetleAiStateTicks        = 30;
-        enemyCluster.beetleSurfaceNormalXWorld = 0;
-        enemyCluster.beetleSurfaceNormalYWorld = -1; // assume floor initially
-        enemyCluster.beetleIsFlightModeFlag    = 0;
-        enemyCluster.beetlePrevHealthPoints    = enemyCluster.healthPoints;
-      } else if (enemyDef.isBubbleEnemyFlag === 1) {
-        enemyCluster.isBubbleEnemyFlag      = 1;
-        enemyCluster.isIceBubbleFlag        = (enemyDef.isIceBubbleFlag ?? 0) as 0 | 1;
-        enemyCluster.halfWidthWorld         = BUBBLE_HALF_SIZE_WORLD;
-        enemyCluster.halfHeightWorld        = BUBBLE_HALF_SIZE_WORLD;
-        enemyCluster.bubbleState            = 0;
-        enemyCluster.bubbleMaxParticleCount = enemyDef.particleCount;
-        enemyCluster.bubbleOrbitAngleRad    = 0;
-        enemyCluster.bubbleRegenTicks       = WATER_BUBBLE_REGEN_INTERVAL_TICKS;
-        enemyCluster.bubbleDriftPhaseRad    = 0;
-        enemyCluster.bubblePrevHealthPoints = enemyCluster.healthPoints;
-      } else if (enemyDef.isSquareStampedeFlag === 1) {
-        // Allocate a trail ring-buffer slot for this enemy
-        let slotIndex = -1;
-        for (let si = 0; si < MAX_SQUARE_STAMPEDE; si++) {
-          let taken = false;
-          for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
-            if (world.clusters[ci2].squareStampedeSlotIndex === si) {
-              taken = true;
-              break;
-            }
-          }
-          if (!taken) {
-            slotIndex = si;
-            // Clear the slot's trail data
-            const base = si * world.squareStampedeTrailStride;
-            world.squareStampedeTrailXWorld.fill(0, base, base + world.squareStampedeTrailStride);
-            world.squareStampedeTrailYWorld.fill(0, base, base + world.squareStampedeTrailStride);
-            world.squareStampedeTrailHead[si]  = 0;
-            world.squareStampedeTrailCount[si] = 0;
-            break;
-          }
-        }
-        enemyCluster.isSquareStampedeFlag            = 1;
-        enemyCluster.squareStampedeSlotIndex         = slotIndex;
-        enemyCluster.squareStampedeBaseHalfSizeWorld = SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD;
-        enemyCluster.halfWidthWorld                  = SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD;
-        enemyCluster.halfHeightWorld                 = SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD;
-        enemyCluster.healthPoints                    = SQUARE_STAMPEDE_LAYER_COUNT;
-        enemyCluster.maxHealthPoints                 = SQUARE_STAMPEDE_LAYER_COUNT;
-        enemyCluster.squareStampedeAiState           = 0;
-        enemyCluster.squareStampedeAiStateTicks      = 20;
-        enemyCluster.squareStampedeTrailTimerTicks   = TRAIL_UPDATE_INTERVAL_TICKS;
-      } else if (enemyDef.isGoldenMimicFlag === 1) {
-        const isYFlipped = enemyDef.isGoldenMimicYFlippedFlag === 1;
-        enemyCluster.isGoldenMimicFlag               = 1;
-        enemyCluster.isGoldenMimicYFlippedFlag       = isYFlipped ? 1 : 0;
-        enemyCluster.halfWidthWorld                  = GOLDEN_MIMIC_HALF_WIDTH_WORLD;
-        enemyCluster.halfHeightWorld                 = GOLDEN_MIMIC_HALF_HEIGHT_WORLD;
-        enemyCluster.goldenMimicState                = 0;
-        enemyCluster.goldenMimicStateTicks           = 0;
-        enemyCluster.goldenMimicFadeAlpha            = 1.0;
-        // goldenMimicInitialParticleCount is filled in after spawnLoadoutParticles below
-      }
-
-      world.clusters.push(enemyCluster);
-      const particleStartIdx = world.particleCount;
-      spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
-
-      // Post-spawn: mark golden mimic particles as non-regenerating (isTransientFlag=1)
-      // and record initial particle count for half-dead threshold detection.
-      if (enemyCluster.isGoldenMimicFlag === 1) {
-        const spawnedCount = world.particleCount - particleStartIdx;
-        enemyCluster.goldenMimicInitialParticleCount = spawnedCount;
-        enemyCluster.healthPoints    = spawnedCount;
-        enemyCluster.maxHealthPoints = spawnedCount;
-        for (let pi = particleStartIdx; pi < world.particleCount; pi++) {
-          world.isTransientFlag[pi] = 1;
-        }
-      }
-    }
+    spawnEnemyClusters(world, room.enemies, 2, levelRng);
 
     // Spawn background Fluid particles
     spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
