@@ -10,7 +10,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, RoomSongId } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
@@ -104,6 +104,8 @@ export interface RoomJsonTransition {
   targetSpawnBlock: [number, number];
   fadeColor?: string;
   depthBlock?: number;
+  isSecretDoor?: boolean;
+  gradientWidthBlocks?: number;
 }
 
 /** Save Tomb — where the player saves their progress. Uses "skillTombs" JSON key for backward compat. */
@@ -139,6 +141,11 @@ export interface RoomJsonZone {
 }
 
 export interface RoomJsonBreakableBlock {
+  xBlock: number;
+  yBlock: number;
+}
+
+export interface RoomJsonCrumbleBlock {
   xBlock: number;
   yBlock: number;
 }
@@ -246,6 +253,7 @@ export interface RoomJsonDef {
   waterZones?: RoomJsonZone[];
   lavaZones?: RoomJsonZone[];
   breakableBlocks?: RoomJsonBreakableBlock[];
+  crumbleBlocks?: RoomJsonCrumbleBlock[];
   dustBoostJars?: RoomJsonDustBoostJar[];
   fireflyJars?: RoomJsonFireflyJar[];
   dustPiles?: RoomJsonDustPile[];
@@ -400,6 +408,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     targetSpawnBlock: [...t.targetSpawnBlock] as [number, number],
     fadeColor: t.fadeColor,
     depthBlock: t.depthBlock,
+    isSecretDoor: t.isSecretDoor,
+    gradientWidthBlocks: t.gradientWidthBlocks,
   }));
 
   const saveTombs: EditorSaveTomb[] = json.skillTombs.map(s => ({
@@ -465,6 +475,28 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     brightnessPct: l.brightnessPct,
   }));
 
+  const waterZones: EditorWaterZone[] = (json.waterZones ?? []).map(z => ({
+    uid: uid++,
+    xBlock: z.xBlock,
+    yBlock: z.yBlock,
+    wBlock: z.wBlock,
+    hBlock: z.hBlock,
+  }));
+
+  const lavaZones: EditorLavaZone[] = (json.lavaZones ?? []).map(z => ({
+    uid: uid++,
+    xBlock: z.xBlock,
+    yBlock: z.yBlock,
+    wBlock: z.wBlock,
+    hBlock: z.hBlock,
+  }));
+
+  const crumbleBlocks: EditorCrumbleBlock[] = (json.crumbleBlocks ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -490,6 +522,9 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       decorations,
       ambientLightBlockers,
       lightSources,
+      waterZones,
+      lavaZones,
+      crumbleBlocks,
     },
     nextUid: uid,
   };
@@ -555,6 +590,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       };
       if (t.fadeColor) jt.fadeColor = t.fadeColor;
       if (t.depthBlock !== undefined) jt.depthBlock = t.depthBlock;
+      if (t.isSecretDoor) jt.isSecretDoor = t.isSecretDoor;
+      if (t.gradientWidthBlocks !== undefined) jt.gradientWidthBlocks = t.gradientWidthBlocks;
       return jt;
     }),
     skillTombs: data.saveTombs.map(s => ({
@@ -617,6 +654,28 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       colorG: l.colorG,
       colorB: l.colorB,
       brightnessPct: l.brightnessPct,
+    }));
+  }
+  if ((data.waterZones ?? []).length > 0) {
+    json.waterZones = (data.waterZones ?? []).map(z => ({
+      xBlock: z.xBlock,
+      yBlock: z.yBlock,
+      wBlock: z.wBlock,
+      hBlock: z.hBlock,
+    }));
+  }
+  if ((data.lavaZones ?? []).length > 0) {
+    json.lavaZones = (data.lavaZones ?? []).map(z => ({
+      xBlock: z.xBlock,
+      yBlock: z.yBlock,
+      wBlock: z.wBlock,
+      hBlock: z.hBlock,
+    }));
+  }
+  if ((data.crumbleBlocks ?? []).length > 0) {
+    json.crumbleBlocks = (data.crumbleBlocks ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
     }));
   }
   return json;
@@ -764,6 +823,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
     fadeColor: t.fadeColor,
     depthBlock: t.depthBlock,
+    isSecretDoor: t.isSecretDoor,
+    gradientWidthBlocks: t.gradientWidthBlocks,
   }));
 
   return {
@@ -811,6 +872,22 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       colorG: l.colorG,
       colorB: l.colorB,
       brightnessPct: l.brightnessPct,
+    })),
+    waterZones: (data.waterZones ?? []).map(z => ({
+      xBlock: z.xBlock,
+      yBlock: z.yBlock,
+      wBlock: z.wBlock,
+      hBlock: z.hBlock,
+    })),
+    lavaZones: (data.lavaZones ?? []).map(z => ({
+      xBlock: z.xBlock,
+      yBlock: z.yBlock,
+      wBlock: z.wBlock,
+      hBlock: z.hBlock,
+    })),
+    crumbleBlocks: (data.crumbleBlocks ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
     })),
   };
 }
@@ -885,6 +962,9 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     targetRoomId: t.targetRoomId,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as [number, number],
     fadeColor: t.fadeColor,
+    depthBlock: t.depthBlock,
+    isSecretDoor: t.isSecretDoor,
+    gradientWidthBlocks: t.gradientWidthBlocks,
   }));
 
   const saveTombs: EditorSaveTomb[] = room.saveTombs.map(s => ({
@@ -941,6 +1021,28 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     brightnessPct: l.brightnessPct,
   }));
 
+  const waterZones: EditorWaterZone[] = (room.waterZones ?? []).map(z => ({
+    uid: uid++,
+    xBlock: z.xBlock,
+    yBlock: z.yBlock,
+    wBlock: z.wBlock,
+    hBlock: z.hBlock,
+  }));
+
+  const lavaZones: EditorLavaZone[] = (room.lavaZones ?? []).map(z => ({
+    uid: uid++,
+    xBlock: z.xBlock,
+    yBlock: z.yBlock,
+    wBlock: z.wBlock,
+    hBlock: z.hBlock,
+  }));
+
+  const crumbleBlocks: EditorCrumbleBlock[] = (room.crumbleBlocks ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -966,6 +1068,9 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       decorations,
       ambientLightBlockers,
       lightSources,
+      waterZones,
+      lavaZones,
+      crumbleBlocks,
     },
     nextUid: uid,
   };

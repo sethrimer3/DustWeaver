@@ -14,6 +14,7 @@ import {
   EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
   BlockTheme, BackgroundId, LightingEffect, RoomSongId, AmbientLightDirection,
   SelectedElement, allocateUid, EditorRoomData, EditorLightSource,
+  EditorWaterZone, EditorLavaZone, EditorCrumbleBlock,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
@@ -793,6 +794,24 @@ export function createEditorController(
       deco.yBlock = Math.min(Math.max(0, deco.yBlock), maxY);
     }
 
+    for (const light of (room.lightSources ?? [])) {
+      light.xBlock = Math.min(Math.max(0, light.xBlock), maxX);
+      light.yBlock = Math.min(Math.max(0, light.yBlock), maxY);
+    }
+
+    for (const z of (room.waterZones ?? [])) {
+      clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
+    }
+
+    for (const z of (room.lavaZones ?? [])) {
+      clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
+    }
+
+    for (const b of (room.crumbleBlocks ?? [])) {
+      b.xBlock = Math.min(Math.max(0, b.xBlock), maxX);
+      b.yBlock = Math.min(Math.max(0, b.yBlock), maxY);
+    }
+
     // Clamp interior wall rectangles so they stay fully inside the room.
     for (const wall of room.interiorWalls) {
       wall.wBlock = Math.max(1, Math.min(wall.wBlock, room.widthBlocks));
@@ -888,6 +907,30 @@ export function createEditorController(
         deco.yBlock += shiftY;
       }
 
+      // Shift light sources
+      for (const light of (room.lightSources ?? [])) {
+        light.xBlock += shiftX;
+        light.yBlock += shiftY;
+      }
+
+      // Shift water zones
+      for (const z of (room.waterZones ?? [])) {
+        z.xBlock += shiftX;
+        z.yBlock += shiftY;
+      }
+
+      // Shift lava zones
+      for (const z of (room.lavaZones ?? [])) {
+        z.xBlock += shiftX;
+        z.yBlock += shiftY;
+      }
+
+      // Shift crumble blocks
+      for (const b of (room.crumbleBlocks ?? [])) {
+        b.xBlock += shiftX;
+        b.yBlock += shiftY;
+      }
+
       // Shift interior walls
       for (const wall of room.interiorWalls) {
         wall.xBlock += shiftX;
@@ -980,6 +1023,34 @@ export function createEditorController(
             trans.depthBlock = Math.max(0, numVal);
           }
         }
+        if (prop === 'transition.isSecretDoor') {
+          trans.isSecretDoor = numVal === 1;
+        }
+        if (prop === 'transition.gradientWidthBlocks' && !isNaN(numVal)) {
+          trans.gradientWidthBlocks = Math.max(1, numVal);
+        }
+      }
+    } else if (el.type === 'waterZone') {
+      const zone = (room.waterZones ?? []).find((z: EditorWaterZone) => z.uid === el.uid);
+      if (zone) {
+        if (prop === 'waterZone.xBlock' && !isNaN(numVal)) zone.xBlock = numVal;
+        if (prop === 'waterZone.yBlock' && !isNaN(numVal)) zone.yBlock = numVal;
+        if (prop === 'waterZone.wBlock' && !isNaN(numVal)) zone.wBlock = Math.max(1, numVal);
+        if (prop === 'waterZone.hBlock' && !isNaN(numVal)) zone.hBlock = Math.max(1, numVal);
+      }
+    } else if (el.type === 'lavaZone') {
+      const zone = (room.lavaZones ?? []).find((z: EditorLavaZone) => z.uid === el.uid);
+      if (zone) {
+        if (prop === 'lavaZone.xBlock' && !isNaN(numVal)) zone.xBlock = numVal;
+        if (prop === 'lavaZone.yBlock' && !isNaN(numVal)) zone.yBlock = numVal;
+        if (prop === 'lavaZone.wBlock' && !isNaN(numVal)) zone.wBlock = Math.max(1, numVal);
+        if (prop === 'lavaZone.hBlock' && !isNaN(numVal)) zone.hBlock = Math.max(1, numVal);
+      }
+    } else if (el.type === 'crumbleBlock') {
+      const block = (room.crumbleBlocks ?? []).find((b: EditorCrumbleBlock) => b.uid === el.uid);
+      if (block) {
+        if (prop === 'crumbleBlock.xBlock' && !isNaN(numVal)) block.xBlock = numVal;
+        if (prop === 'crumbleBlock.yBlock' && !isNaN(numVal)) block.yBlock = numVal;
       }
     } else if (el.type === 'playerSpawn') {
       if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;
@@ -1052,6 +1123,15 @@ export function createEditorController(
       } else if (el.type === 'lightSource') {
         const l = (s.roomData.lightSources ?? []).find(l2 => l2.uid === el.uid);
         if (l) positions.set(key, { xBlock: l.xBlock, yBlock: l.yBlock });
+      } else if (el.type === 'waterZone') {
+        const z = (s.roomData.waterZones ?? []).find(z2 => z2.uid === el.uid);
+        if (z) positions.set(key, { xBlock: z.xBlock, yBlock: z.yBlock });
+      } else if (el.type === 'lavaZone') {
+        const z = (s.roomData.lavaZones ?? []).find(z2 => z2.uid === el.uid);
+        if (z) positions.set(key, { xBlock: z.xBlock, yBlock: z.yBlock });
+      } else if (el.type === 'crumbleBlock') {
+        const b = (s.roomData.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
+        if (b) positions.set(key, { xBlock: b.xBlock, yBlock: b.yBlock });
       } else if (el.type === 'playerSpawn') {
         positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
       } else if (el.type === 'transition') {
@@ -1104,6 +1184,15 @@ export function createEditorController(
       } else if (el.type === 'lightSource') {
         const l = (s.roomData.lightSources ?? []).find(l2 => l2.uid === el.uid);
         if (l) { l.xBlock = orig.xBlock + deltaX; l.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'waterZone') {
+        const z = (s.roomData.waterZones ?? []).find(z2 => z2.uid === el.uid);
+        if (z) { z.xBlock = orig.xBlock + deltaX; z.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'lavaZone') {
+        const z = (s.roomData.lavaZones ?? []).find(z2 => z2.uid === el.uid);
+        if (z) { z.xBlock = orig.xBlock + deltaX; z.yBlock = orig.yBlock + deltaY; }
+      } else if (el.type === 'crumbleBlock') {
+        const b = (s.roomData.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
+        if (b) { b.xBlock = orig.xBlock + deltaX; b.yBlock = orig.yBlock + deltaY; }
       } else if (el.type === 'playerSpawn') {
         s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
         s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
@@ -1135,8 +1224,20 @@ export function createEditorController(
   // ── Copy/Paste helpers ───────────────────────────────────────────────────
 
   function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
-    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations: EditorDecoration[]; lightSources: EditorLightSource[] } = {
-      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [], decorations: [], lightSources: [],
+    const data: {
+      walls: EditorWall[];
+      enemies: EditorEnemy[];
+      saveTombs: EditorSaveTomb[];
+      skillTombs: EditorSkillTomb[];
+      dustPiles: EditorDustPile[];
+      decorations: EditorDecoration[];
+      lightSources: EditorLightSource[];
+      waterZones: EditorWaterZone[];
+      lavaZones: EditorLavaZone[];
+      crumbleBlocks: EditorCrumbleBlock[];
+    } = {
+      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [],
+      decorations: [], lightSources: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
     };
     for (const el of elements) {
       if (el.type === 'wall') {
@@ -1160,6 +1261,15 @@ export function createEditorController(
       } else if (el.type === 'lightSource') {
         const l = (room.lightSources ?? []).find(l2 => l2.uid === el.uid);
         if (l) data.lightSources.push({ ...l });
+      } else if (el.type === 'waterZone') {
+        const z = (room.waterZones ?? []).find(z2 => z2.uid === el.uid);
+        if (z) data.waterZones.push({ ...z });
+      } else if (el.type === 'lavaZone') {
+        const z = (room.lavaZones ?? []).find(z2 => z2.uid === el.uid);
+        if (z) data.lavaZones.push({ ...z });
+      } else if (el.type === 'crumbleBlock') {
+        const b = (room.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
+        if (b) data.crumbleBlocks.push({ ...b });
       }
     }
     return JSON.stringify(data);
@@ -1167,7 +1277,18 @@ export function createEditorController(
 
   function pasteFromClipboard(s: EditorState): void {
     if (!s.roomData || !s.clipboard) return;
-    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations?: EditorDecoration[]; lightSources?: EditorLightSource[] };
+    let data: {
+      walls: EditorWall[];
+      enemies: EditorEnemy[];
+      saveTombs?: EditorSaveTomb[];
+      skillTombs: EditorSkillTomb[];
+      dustPiles: EditorDustPile[];
+      decorations?: EditorDecoration[];
+      lightSources?: EditorLightSource[];
+      waterZones?: EditorWaterZone[];
+      lavaZones?: EditorLavaZone[];
+      crumbleBlocks?: EditorCrumbleBlock[];
+    };
     try {
       data = JSON.parse(s.clipboard) as typeof data;
     } catch {
@@ -1175,18 +1296,16 @@ export function createEditorController(
     }
 
     const newElements: SelectedElement[] = [];
-    // Offset paste by 1 block from cursor
     const offsetX = s.cursorBlockX;
     const offsetY = s.cursorBlockY;
-    // Find min coords from clipboard to compute relative offsets
     let minX = Infinity, minY = Infinity;
-    for (const w of data.walls) { minX = Math.min(minX, w.xBlock); minY = Math.min(minY, w.yBlock); }
-    for (const e of data.enemies) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
-    for (const t of (data.saveTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
-    for (const t of (data.skillTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
-    for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
-    for (const d of (data.decorations ?? [])) { minX = Math.min(minX, d.xBlock); minY = Math.min(minY, d.yBlock); }
-    for (const l of (data.lightSources ?? [])) { minX = Math.min(minX, l.xBlock); minY = Math.min(minY, l.yBlock); }
+    const allEntities: Array<{ xBlock: number; yBlock: number }> = [
+      ...data.walls, ...data.enemies,
+      ...(data.saveTombs ?? []), ...(data.skillTombs ?? []), ...(data.dustPiles ?? []),
+      ...(data.decorations ?? []), ...(data.lightSources ?? []),
+      ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
+    ];
+    for (const e of allEntities) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
     if (!isFinite(minX)) minX = 0;
     if (!isFinite(minY)) minY = 0;
 
@@ -1262,6 +1381,39 @@ export function createEditorController(
       });
       newElements.push({ type: 'lightSource', uid: newUid });
     }
+    for (const z of (data.waterZones ?? [])) {
+      const newUid = allocateUid(s);
+      if (!s.roomData.waterZones) s.roomData.waterZones = [];
+      s.roomData.waterZones.push({
+        ...z,
+        uid: newUid,
+        xBlock: z.xBlock - minX + offsetX,
+        yBlock: z.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'waterZone', uid: newUid });
+    }
+    for (const z of (data.lavaZones ?? [])) {
+      const newUid = allocateUid(s);
+      if (!s.roomData.lavaZones) s.roomData.lavaZones = [];
+      s.roomData.lavaZones.push({
+        ...z,
+        uid: newUid,
+        xBlock: z.xBlock - minX + offsetX,
+        yBlock: z.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'lavaZone', uid: newUid });
+    }
+    for (const b of (data.crumbleBlocks ?? [])) {
+      const newUid = allocateUid(s);
+      if (!s.roomData.crumbleBlocks) s.roomData.crumbleBlocks = [];
+      s.roomData.crumbleBlocks.push({
+        ...b,
+        uid: newUid,
+        xBlock: b.xBlock - minX + offsetX,
+        yBlock: b.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'crumbleBlock', uid: newUid });
+    }
     s.selectedElements = newElements;
   }
 
@@ -1278,6 +1430,18 @@ export function createEditorController(
 }
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
+
+/** Clamps a zone rect (with wBlock/hBlock) to fit within the given room dimensions. */
+function clampZoneToDimensions(
+  z: { xBlock: number; yBlock: number; wBlock: number; hBlock: number },
+  widthBlocks: number,
+  heightBlocks: number,
+): void {
+  z.wBlock = Math.max(1, Math.min(z.wBlock, widthBlocks));
+  z.hBlock = Math.max(1, Math.min(z.hBlock, heightBlocks));
+  z.xBlock = Math.min(Math.max(0, z.xBlock), widthBlocks - z.wBlock);
+  z.yBlock = Math.min(Math.max(0, z.yBlock), heightBlocks - z.hBlock);
+}
 
 /**
  * Deep-clones an EditorRoomData object using structuredClone.

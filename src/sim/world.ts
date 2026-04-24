@@ -15,6 +15,8 @@ export const MAX_WATER_ZONES = 8;
 export const MAX_LAVA_ZONES = 8;
 /** Maximum number of breakable blocks per room. */
 export const MAX_BREAKABLE_BLOCKS = 32;
+/** Maximum number of crumble blocks per room. */
+export const MAX_CRUMBLE_BLOCKS = 32;
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -299,6 +301,31 @@ export interface WorldState extends ParticleBuffers {
    */
   breakableBlockWallIndex: Int8Array;
 
+  // ── Crumble blocks ─────────────────────────────────────────────────────────
+  /** Number of crumble blocks (active + broken). */
+  crumbleBlockCount: number;
+  /** Center X of each crumble block (world units). */
+  crumbleBlockXWorld: Float32Array;
+  /** Center Y of each crumble block (world units). */
+  crumbleBlockYWorld: Float32Array;
+  /** 1 if block is still intact, 0 if broken. */
+  isCrumbleBlockActiveFlag: Uint8Array;
+  /**
+   * Hits remaining: 2 = undamaged, 1 = cracked, 0 = destroyed.
+   * Starts at 2; any dust particle contact decrements it once per cooldown.
+   */
+  crumbleBlockHitsRemaining: Uint8Array;
+  /**
+   * Ticks until this block can be hit again (debounce / hit cooldown).
+   * 0 = can be hit now; set to CRUMBLE_HIT_COOLDOWN_TICKS on hit.
+   */
+  crumbleBlockHitCooldownTicks: Uint8Array;
+  /**
+   * Wall index in the wall arrays that corresponds to each crumble block.
+   * -1 if no corresponding wall.
+   */
+  crumbleBlockWallIndex: Int8Array;
+
   // ── Dust boost jars ────────────────────────────────────────────────────────
   /** Number of dust boost jars (active + broken). */
   dustBoostJarCount: number;
@@ -476,6 +503,13 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     breakableBlockYWorld: new Float32Array(MAX_BREAKABLE_BLOCKS),
     isBreakableBlockActiveFlag: new Uint8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockWallIndex: new Int8Array(MAX_BREAKABLE_BLOCKS),
+    crumbleBlockCount: 0,
+    crumbleBlockXWorld: new Float32Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockYWorld: new Float32Array(MAX_CRUMBLE_BLOCKS),
+    isCrumbleBlockActiveFlag: new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockHitsRemaining: new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockHitCooldownTicks: new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockWallIndex: new Int8Array(MAX_CRUMBLE_BLOCKS),
     dustBoostJarCount: 0,
     dustBoostJarXWorld: new Float32Array(MAX_DUST_BOOST_JARS),
     dustBoostJarYWorld: new Float32Array(MAX_DUST_BOOST_JARS),

@@ -24,6 +24,7 @@ import type { CombatTextSystem } from '../render/hud/combatText';
 import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
+import type { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
@@ -292,6 +293,7 @@ export interface RenderFrameContext {
   webglRenderer: WebGLParticleRenderer;
   environmentalDust: EnvironmentalDustLayer;
   skidDebris: SkidDebrisRenderer;
+  crumbleDebris: CrumbleDebrisRenderer;
   skillTombRenderer: SkillTombRenderer;
   skillTombEffectRenderer: SkillTombEffectRenderer;
   bloomSystem: BloomSystem;
@@ -370,7 +372,7 @@ export interface RenderFrameContext {
 export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
-    webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+    webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
@@ -519,6 +521,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
   skidDebris.render(ctx, ox, oy, zoom);
+  crumbleDebris.render(ctx, ox, oy, zoom);
 
   // Save tombs (sprite + swirling/falling dust particles)
   skillTombRenderer.render(ctx, ox, oy, zoom);

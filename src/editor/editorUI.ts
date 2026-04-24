@@ -246,8 +246,8 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   let dimWidthInput: HTMLInputElement | null = null;
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
-  catBar.style.cssText = 'display: flex; gap: 4px; margin-bottom: 8px;';
-  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'lighting'];
+  catBar.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px;';
+  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'lighting', 'liquids'];
   const catBtns: HTMLButtonElement[] = [];
   for (const cat of categories) {
     const btn = makeBtn(cat, () => callbacks?.onCategoryChange(cat));
@@ -874,6 +874,11 @@ function updateInspector(
         trans.fadeColor ?? '#000000',
         v => callbacks?.onPropertyChange('transition.fadeColor', v));
 
+      addCheckbox(div, 'isSecretDoor', trans.isSecretDoor === true,
+        v => callbacks?.onPropertyChange('transition.isSecretDoor', v ? 1 : 0));
+      addNumberField(div, 'gradientWidthBlocks', trans.gradientWidthBlocks ?? 3, 1, 20,
+        v => callbacks?.onPropertyChange('transition.gradientWidthBlocks', v));
+
       // Link Transition button
       const linkBtn = makeBtn('🔗 Link Transition', () => callbacks?.onLinkTransition());
       linkBtn.style.width = '100%';
@@ -978,6 +983,38 @@ function updateInspector(
         light.colorB = b;
         callbacks?.onPropertyChange('lightSource.color', 0);
       });
+    }
+  } else if (el.type === 'waterZone') {
+    const zone = (room.waterZones ?? []).find(z => z.uid === el.uid);
+    if (zone) {
+      addField(div, 'xBlock', String(zone.xBlock),
+        v => callbacks?.onPropertyChange('waterZone.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(zone.yBlock),
+        v => callbacks?.onPropertyChange('waterZone.yBlock', parseInt(v)));
+      addField(div, 'wBlock', String(zone.wBlock),
+        v => callbacks?.onPropertyChange('waterZone.wBlock', parseInt(v)));
+      addField(div, 'hBlock', String(zone.hBlock),
+        v => callbacks?.onPropertyChange('waterZone.hBlock', parseInt(v)));
+    }
+  } else if (el.type === 'lavaZone') {
+    const zone = (room.lavaZones ?? []).find(z => z.uid === el.uid);
+    if (zone) {
+      addField(div, 'xBlock', String(zone.xBlock),
+        v => callbacks?.onPropertyChange('lavaZone.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(zone.yBlock),
+        v => callbacks?.onPropertyChange('lavaZone.yBlock', parseInt(v)));
+      addField(div, 'wBlock', String(zone.wBlock),
+        v => callbacks?.onPropertyChange('lavaZone.wBlock', parseInt(v)));
+      addField(div, 'hBlock', String(zone.hBlock),
+        v => callbacks?.onPropertyChange('lavaZone.hBlock', parseInt(v)));
+    }
+  } else if (el.type === 'crumbleBlock') {
+    const block = (room.crumbleBlocks ?? []).find(b => b.uid === el.uid);
+    if (block) {
+      addField(div, 'xBlock', String(block.xBlock),
+        v => callbacks?.onPropertyChange('crumbleBlock.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(block.yBlock),
+        v => callbacks?.onPropertyChange('crumbleBlock.yBlock', parseInt(v)));
     }
   }
 }

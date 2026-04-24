@@ -11,6 +11,10 @@ import {
 
 // ── Hit testing helpers ──────────────────────────────────────────────────────
 
+function hitTestZone(zone: { xBlock: number; yBlock: number; wBlock: number; hBlock: number }, bx: number, by: number): boolean {
+  return bx >= zone.xBlock && bx < zone.xBlock + zone.wBlock && by >= zone.yBlock && by < zone.yBlock + zone.hBlock;
+}
+
 function hitTestWall(w: EditorWall, bx: number, by: number): boolean {
   return bx >= w.xBlock && bx < w.xBlock + w.wBlock && by >= w.yBlock && by < w.yBlock + w.hBlock;
 }
@@ -107,6 +111,27 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const ls of (room.lightSources ?? [])) {
     if (hitTestPoint(ls.xBlock, ls.yBlock, bx, by)) {
       return { type: 'lightSource', uid: ls.uid };
+    }
+  }
+
+  // Check water zones
+  for (const z of (room.waterZones ?? [])) {
+    if (hitTestZone(z, bx, by)) {
+      return { type: 'waterZone', uid: z.uid };
+    }
+  }
+
+  // Check lava zones
+  for (const z of (room.lavaZones ?? [])) {
+    if (hitTestZone(z, bx, by)) {
+      return { type: 'lavaZone', uid: z.uid };
+    }
+  }
+
+  // Check crumble blocks
+  for (const b of (room.crumbleBlocks ?? [])) {
+    if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) {
+      return { type: 'crumbleBlock', uid: b.uid };
     }
   }
 
@@ -243,6 +268,21 @@ export function placeAtCursor(state: EditorState): void {
     return;
   }
 
+  // ── Liquids layer ──────────────────────────────────────────────────────
+  if (item.category === 'liquids') {
+    const wBlock = item.defaultWidthBlocks ?? 4;
+    const hBlock = item.defaultHeightBlocks ?? 4;
+    if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
+    if (item.id === 'water_zone') {
+      if (!room.waterZones) room.waterZones = [];
+      room.waterZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
+    } else if (item.id === 'lava_zone') {
+      if (!room.lavaZones) room.lavaZones = [];
+      room.lavaZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
+    }
+    return;
+  }
+
   if (item.category === 'blocks') {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
@@ -264,6 +304,13 @@ export function placeAtCursor(state: EditorState): void {
       : 0;
 
     const isPillarHalfWidthFlag: 0 | 1 = item.isPillarHalfWidthItem === 1 ? 1 : 0;
+
+    if (item.isCrumbleBlockItem === 1) {
+      // Crumble blocks are always 1×1 and have their own array
+      if (!room.crumbleBlocks) room.crumbleBlocks = [];
+      room.crumbleBlocks.push({ uid: allocateUid(state), xBlock: bx, yBlock: by });
+      return;
+    }
 
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
     // Prevent overlapping walls
@@ -774,6 +821,39 @@ export function deleteAtCursor(state: EditorState): void {
       return;
     }
   }
+
+  // Check water zones
+  const waterZones = room.waterZones ?? [];
+  for (let i = 0; i < waterZones.length; i++) {
+    if (hitTestZone(waterZones[i], bx, by)) {
+      const removedUid = waterZones[i].uid;
+      waterZones.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check lava zones
+  const lavaZones = room.lavaZones ?? [];
+  for (let i = 0; i < lavaZones.length; i++) {
+    if (hitTestZone(lavaZones[i], bx, by)) {
+      const removedUid = lavaZones[i].uid;
+      lavaZones.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check crumble blocks
+  const crumbleBlocks = room.crumbleBlocks ?? [];
+  for (let i = 0; i < crumbleBlocks.length; i++) {
+    if (hitTestPoint(crumbleBlocks[i].xBlock, crumbleBlocks[i].yBlock, bx, by)) {
+      const removedUid = crumbleBlocks[i].uid;
+      crumbleBlocks.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
 }
 
 // ── Rotation helpers ─────────────────────────────────────────────────────────
@@ -796,6 +876,12 @@ function getPlacementHeight(item: PaletteItem, rotSteps: number): number {
 export function getPlacementPreview(state: EditorState): { wBlock: number; hBlock: number } | null {
   if (state.activeTool !== EditorTool.Place || state.selectedPaletteItem === null) return null;
   const item = state.selectedPaletteItem;
+  if (item.category === 'liquids') {
+    return {
+      wBlock: item.defaultWidthBlocks ?? 4,
+      hBlock: item.defaultHeightBlocks ?? 4,
+    };
+  }
   if (item.category !== 'blocks') {
     return { wBlock: 1, hBlock: 1 };
   }
@@ -878,6 +964,23 @@ export function getAllElementsInRect(
   for (const b of (room.ambientLightBlockers ?? [])) {
     if (b.xBlock >= minX && b.xBlock <= maxX && b.yBlock >= minY && b.yBlock <= maxY) {
       results.push({ type: 'ambientLightBlocker', uid: b.uid });
+    }
+  }
+  for (const z of (room.waterZones ?? [])) {
+    if (z.xBlock + z.wBlock > minX && z.xBlock < maxX + 1 &&
+        z.yBlock + z.hBlock > minY && z.yBlock < maxY + 1) {
+      results.push({ type: 'waterZone', uid: z.uid });
+    }
+  }
+  for (const z of (room.lavaZones ?? [])) {
+    if (z.xBlock + z.wBlock > minX && z.xBlock < maxX + 1 &&
+        z.yBlock + z.hBlock > minY && z.yBlock < maxY + 1) {
+      results.push({ type: 'lavaZone', uid: z.uid });
+    }
+  }
+  for (const b of (room.crumbleBlocks ?? [])) {
+    if (b.xBlock >= minX && b.xBlock <= maxX && b.yBlock >= minY && b.yBlock <= maxY) {
+      results.push({ type: 'crumbleBlock', uid: b.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&

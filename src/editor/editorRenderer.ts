@@ -23,6 +23,8 @@ const ENEMY_COLOR = 'rgba(255,80,80,0.5)';
 const ENEMY_SELECTED = 'rgba(255,80,80,0.9)';
 const TRANSITION_COLOR = 'rgba(80,255,80,0.35)';
 const TRANSITION_SELECTED = 'rgba(80,255,80,0.8)';
+const SECRET_DOOR_COLOR = 'rgba(160,80,255,0.35)';
+const SECRET_DOOR_SELECTED = 'rgba(160,80,255,0.8)';
 const TRANSITION_LINK_SOURCE = 'rgba(255,255,0,0.7)';
 const TRANSITION_LINK_CANDIDATE = 'rgba(0,255,200,0.5)';
 const SPAWN_COLOR = 'rgba(255,220,50,0.5)';
@@ -107,6 +109,7 @@ export function renderEditorOverlays(
     let color = TRANSITION_COLOR;
     if (isLinkSource) color = TRANSITION_LINK_SOURCE;
     else if (isLinkCandidate) color = TRANSITION_LINK_CANDIDATE;
+    else if (t.isSecretDoor) color = isSelected ? SECRET_DOOR_SELECTED : SECRET_DOOR_COLOR;
     else if (isSelected) color = TRANSITION_SELECTED;
     drawTransitionZone(ctx, t, room, offsetXPx, offsetYPx, zoom, color, tIndex + 1);
   }
@@ -193,6 +196,64 @@ export function renderEditorOverlays(
     ctx.lineWidth = isSelected ? 2 : 1;
     ctx.beginPath();
     ctx.arc(centerXPx, centerYPx, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // ── Water zones ──────────────────────────────────────────────────────────
+  for (const z of (room.waterZones ?? [])) {
+    const isSelected = isElementSelected('waterZone', z.uid);
+    const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = z.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = isSelected ? 'rgba(80,160,255,0.30)' : 'rgba(60,120,220,0.18)';
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeStyle = isSelected ? 'rgba(80,180,255,0.85)' : 'rgba(80,160,255,0.50)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    ctx.fillStyle = 'rgba(160,210,255,0.75)';
+    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💧', xPx + wPx * 0.5, yPx + hPx * 0.5);
+  }
+
+  // ── Lava zones ───────────────────────────────────────────────────────────
+  for (const z of (room.lavaZones ?? [])) {
+    const isSelected = isElementSelected('lavaZone', z.uid);
+    const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = z.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = isSelected ? 'rgba(255,100,20,0.30)' : 'rgba(220,60,10,0.18)';
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeStyle = isSelected ? 'rgba(255,120,30,0.85)' : 'rgba(220,90,20,0.50)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    ctx.fillStyle = 'rgba(255,180,60,0.75)';
+    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🔥', xPx + wPx * 0.5, yPx + hPx * 0.5);
+  }
+
+  // ── Crumble blocks ───────────────────────────────────────────────────────
+  for (const b of (room.crumbleBlocks ?? [])) {
+    const isSelected = isElementSelected('crumbleBlock', b.uid);
+    const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const sz = BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = isSelected ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
+    ctx.fillRect(xPx, yPx, sz, sz);
+    ctx.strokeStyle = isSelected ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, sz, sz);
+    // X mark
+    ctx.beginPath();
+    ctx.moveTo(xPx + sz * 0.2, yPx + sz * 0.2);
+    ctx.lineTo(xPx + sz * 0.8, yPx + sz * 0.8);
+    ctx.moveTo(xPx + sz * 0.8, yPx + sz * 0.2);
+    ctx.lineTo(xPx + sz * 0.2, yPx + sz * 0.8);
     ctx.stroke();
   }
 
@@ -380,6 +441,9 @@ function buildElementTooltipId(type: SelectedElementType, uid: number): string {
     playerSpawn:      'player_spawn',
     ambientLightBlocker: 'ambient_blocker',
     lightSource:      'light_source',
+    waterZone:        'water_zone',
+    lavaZone:         'lava_zone',
+    crumbleBlock:     'crumble_block',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;
@@ -430,6 +494,9 @@ function buildElementTypeName(
     playerSpawn:        'Player Spawn',
     ambientLightBlocker:'Ambient Blocker',
     lightSource:        'Light Source',
+    waterZone:          'Water Zone',
+    lavaZone:           'Lava Zone',
+    crumbleBlock:       'Crumble Block',
   };
   if (type === 'ambientLightBlocker') {
     const b = (room.ambientLightBlockers ?? []).find(x => x.uid === uid);
