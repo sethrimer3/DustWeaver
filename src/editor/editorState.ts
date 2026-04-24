@@ -206,6 +206,8 @@ export interface EditorEnemy {
   isBubbleEnemyFlag: 0 | 1;
   isIceBubbleFlag: 0 | 1;
   isSquareStampedeFlag: 0 | 1;
+  isGoldenMimicFlag?: 0 | 1;
+  isGoldenMimicYFlippedFlag?: 0 | 1;
 }
 
 export interface EditorTransition {
