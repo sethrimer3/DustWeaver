@@ -374,6 +374,19 @@ export function startGameScreen(
     // count so updateSnapshotInPlace() never needs to grow the pool mid-frame.
     resetReusableSnapshot(reusableSnapshot, world);
 
+    // Seed the render-interpolation buffers with the freshly spawned cluster
+    // positions so the very first rendered frame has a valid prevPos baseline.
+    // Without this, prevPos stays at zero until the first physics tick runs,
+    // which can show a one-frame teleport glitch on high-refresh-rate displays.
+    if (prevClusterPosX.length < world.clusters.length) {
+      prevClusterPosX = new Float32Array(world.clusters.length * 2);
+      prevClusterPosY = new Float32Array(world.clusters.length * 2);
+    }
+    for (let ci = 0; ci < world.clusters.length; ci++) {
+      prevClusterPosX[ci] = world.clusters[ci].positionXWorld;
+      prevClusterPosY[ci] = world.clusters[ci].positionYWorld;
+    }
+
     // Init save tomb renderer (with room walls for floor detection)
     skillTombRenderer.init(room.saveTombs, room.walls);
 
@@ -1033,21 +1046,25 @@ export function startGameScreen(
     // ── Sim ticks ──────────────────────────────────────────────────────────
     accumulatorMs += elapsedMs;
 
-    // Capture cluster positions before any ticks run this frame.  These are
-    // the "previous" positions used by render interpolation: the renderer
-    // blends between these and the post-tick positions so sprites move
-    // continuously rather than snapping discretely once per physics tick.
-    const clusterCountBeforeTick = world.clusters.length;
-    if (prevClusterPosX.length < clusterCountBeforeTick) {
-      prevClusterPosX = new Float32Array(clusterCountBeforeTick * 2);
-      prevClusterPosY = new Float32Array(clusterCountBeforeTick * 2);
-    }
-    for (let clusterIndex = 0; clusterIndex < clusterCountBeforeTick; clusterIndex++) {
-      prevClusterPosX[clusterIndex] = world.clusters[clusterIndex].positionXWorld;
-      prevClusterPosY[clusterIndex] = world.clusters[clusterIndex].positionYWorld;
-    }
-
     while (accumulatorMs >= FIXED_DT_MS) {
+      // Capture cluster positions just before THIS tick so that after the loop,
+      // prevClusterPos holds the positions from the start of the LAST tick that
+      // ran.  Combined with renderAlpha (the remaining accumulator fraction),
+      // this enables smooth sub-tick interpolation at any display refresh rate:
+      // the renderer blends from prevPos to currentPos as renderAlpha grows from
+      // 0 toward 1 between ticks, producing continuous motion with no lurching.
+      // Capturing before ALL ticks (the old approach) caused the sprite to freeze
+      // at currentPos on no-tick frames then snap back when a tick finally fired.
+      const clusterCountForTick = world.clusters.length;
+      if (prevClusterPosX.length < clusterCountForTick) {
+        prevClusterPosX = new Float32Array(clusterCountForTick * 2);
+        prevClusterPosY = new Float32Array(clusterCountForTick * 2);
+      }
+      for (let clusterIndex = 0; clusterIndex < clusterCountForTick; clusterIndex++) {
+        prevClusterPosX[clusterIndex] = world.clusters[clusterIndex].positionXWorld;
+        prevClusterPosY[clusterIndex] = world.clusters[clusterIndex].positionYWorld;
+      }
+
       const player = world.clusters[0];
       if (player !== undefined) {
         world.playerMoveInputDxWorld = moveDx !== 0 ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
@@ -1235,9 +1252,16 @@ export function startGameScreen(
     // ── Update procedural cloak (per-frame visual, not per-tick sim) ──────
     const cloakPlayer = world.clusters[0];
     if (cloakPlayer !== undefined && cloakPlayer.isAliveFlag === 1 && cloakPlayer.isPlayerFlag === 1) {
+      // Use the render-interpolated player position so the cloak chain anchor
+      // matches the pixel position where the player sprite will be drawn.
+      // Using raw physics positionXWorld instead causes the cloak root to sit
+      // one-tick ahead of the sprite at non-60 Hz refresh rates, making the
+      // cloak appear to detach and jitter relative to the player body.
+      const cloakInterpXWorld = prevClusterPosX[0] + (cloakPlayer.positionXWorld - prevClusterPosX[0]) * renderAlpha;
+      const cloakInterpYWorld = prevClusterPosY[0] + (cloakPlayer.positionYWorld - prevClusterPosY[0]) * renderAlpha;
       playerCloak.update(elapsedMs / 1000, {
-        positionXWorld: cloakPlayer.positionXWorld,
-        positionYWorld: cloakPlayer.positionYWorld,
+        positionXWorld: cloakInterpXWorld,
+        positionYWorld: cloakInterpYWorld,
         velocityXWorld: cloakPlayer.velocityXWorld,
         velocityYWorld: cloakPlayer.velocityYWorld,
         isFacingLeftFlag: cloakPlayer.isFacingLeftFlag,
@@ -1250,8 +1274,8 @@ export function startGameScreen(
       });
       // Update phantom cloak extension — roots at the main cloak's tip.
       phantomCloak.update(elapsedMs / 1000, {
-        positionXWorld:    cloakPlayer.positionXWorld,
-        positionYWorld:    cloakPlayer.positionYWorld,
+        positionXWorld:    cloakInterpXWorld,
+        positionYWorld:    cloakInterpYWorld,
         velocityXWorld:    cloakPlayer.velocityXWorld,
         velocityYWorld:    cloakPlayer.velocityYWorld,
         isFacingLeftFlag:  cloakPlayer.isFacingLeftFlag,
