@@ -800,17 +800,11 @@ export function createEditorController(
     }
 
     for (const z of (room.waterZones ?? [])) {
-      z.wBlock = Math.max(1, Math.min(z.wBlock, room.widthBlocks));
-      z.hBlock = Math.max(1, Math.min(z.hBlock, room.heightBlocks));
-      z.xBlock = Math.min(Math.max(0, z.xBlock), room.widthBlocks - z.wBlock);
-      z.yBlock = Math.min(Math.max(0, z.yBlock), room.heightBlocks - z.hBlock);
+      clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
     }
 
     for (const z of (room.lavaZones ?? [])) {
-      z.wBlock = Math.max(1, Math.min(z.wBlock, room.widthBlocks));
-      z.hBlock = Math.max(1, Math.min(z.hBlock, room.heightBlocks));
-      z.xBlock = Math.min(Math.max(0, z.xBlock), room.widthBlocks - z.wBlock);
-      z.yBlock = Math.min(Math.max(0, z.yBlock), room.heightBlocks - z.hBlock);
+      clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
     }
 
     for (const b of (room.crumbleBlocks ?? [])) {
@@ -1305,16 +1299,13 @@ export function createEditorController(
     const offsetX = s.cursorBlockX;
     const offsetY = s.cursorBlockY;
     let minX = Infinity, minY = Infinity;
-    for (const w of data.walls) { minX = Math.min(minX, w.xBlock); minY = Math.min(minY, w.yBlock); }
-    for (const e of data.enemies) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
-    for (const t of (data.saveTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
-    for (const t of (data.skillTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
-    for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
-    for (const d of (data.decorations ?? [])) { minX = Math.min(minX, d.xBlock); minY = Math.min(minY, d.yBlock); }
-    for (const l of (data.lightSources ?? [])) { minX = Math.min(minX, l.xBlock); minY = Math.min(minY, l.yBlock); }
-    for (const z of (data.waterZones ?? [])) { minX = Math.min(minX, z.xBlock); minY = Math.min(minY, z.yBlock); }
-    for (const z of (data.lavaZones ?? [])) { minX = Math.min(minX, z.xBlock); minY = Math.min(minY, z.yBlock); }
-    for (const b of (data.crumbleBlocks ?? [])) { minX = Math.min(minX, b.xBlock); minY = Math.min(minY, b.yBlock); }
+    const allEntities: Array<{ xBlock: number; yBlock: number }> = [
+      ...data.walls, ...data.enemies,
+      ...(data.saveTombs ?? []), ...(data.skillTombs ?? []), ...(data.dustPiles ?? []),
+      ...(data.decorations ?? []), ...(data.lightSources ?? []),
+      ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
+    ];
+    for (const e of allEntities) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
     if (!isFinite(minX)) minX = 0;
     if (!isFinite(minY)) minY = 0;
 
@@ -1439,6 +1430,18 @@ export function createEditorController(
 }
 
 // ── Module-level helpers ──────────────────────────────────────────────────────
+
+/** Clamps a zone rect (with wBlock/hBlock) to fit within the given room dimensions. */
+function clampZoneToDimensions(
+  z: { xBlock: number; yBlock: number; wBlock: number; hBlock: number },
+  widthBlocks: number,
+  heightBlocks: number,
+): void {
+  z.wBlock = Math.max(1, Math.min(z.wBlock, widthBlocks));
+  z.hBlock = Math.max(1, Math.min(z.hBlock, heightBlocks));
+  z.xBlock = Math.min(Math.max(0, z.xBlock), widthBlocks - z.wBlock);
+  z.yBlock = Math.min(Math.max(0, z.yBlock), heightBlocks - z.hBlock);
+}
 
 /**
  * Deep-clones an EditorRoomData object using structuredClone.
