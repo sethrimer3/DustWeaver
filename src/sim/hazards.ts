@@ -245,6 +245,32 @@ export function applyHazards(world: WorldState): void {
     }
   }
 
+  // ── Crumble blocks ───────────────────────────────────────────────────────
+  // A crumble block collapses the moment the player body AABB overlaps it
+  // (at any speed), unlike breakable blocks which require high momentum.
+  {
+    const bHalf = BLOCK_SIZE_MEDIUM * 0.5;
+    for (let i = 0; i < world.crumbleBlockCount; i++) {
+      if (world.isCrumbleBlockActiveFlag[i] === 0) continue;
+
+      const bx = world.crumbleBlockXWorld[i];
+      const by = world.crumbleBlockYWorld[i];
+      const bLeft  = bx - bHalf;
+      const bRight  = bx + bHalf;
+      const bTop    = by - bHalf;
+      const bBottom = by + bHalf;
+
+      if (overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom)) {
+        world.isCrumbleBlockActiveFlag[i] = 0;
+        const wi = world.crumbleBlockWallIndex[i];
+        if (wi >= 0 && wi < world.wallCount) {
+          world.wallWWorld[wi] = 0;
+          world.wallHWorld[wi] = 0;
+        }
+      }
+    }
+  }
+
   // ── Dust boost jars ──────────────────────────────────────────────────────
   for (let i = 0; i < world.dustBoostJarCount; i++) {
     if (world.isDustBoostJarActiveFlag[i] === 0) continue;

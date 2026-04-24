@@ -182,6 +182,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.lavaZoneCount = 0;
   world.lavaInvulnTicks = 0;
   world.breakableBlockCount = 0;
+  world.crumbleBlockCount = 0;
   world.dustBoostJarCount = 0;
   world.fireflyJarCount = 0;
   world.fireflyCount = 0;
@@ -258,6 +259,30 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.breakableBlockYWorld[bi] = by;
     world.isBreakableBlockActiveFlag[bi] = 1;
     world.breakableBlockWallIndex[bi] = wallIdx;
+  }
+
+  // ── Crumble blocks ────────────────────────────────────────────────────────
+  // Each crumble block is added as a wall AND tracked in the crumble arrays.
+  const crumbleDefs = room.crumbleBlocks ?? [];
+  for (let i = 0; i < crumbleDefs.length && world.crumbleBlockCount < world.crumbleBlockXWorld.length; i++) {
+    const b = crumbleDefs[i];
+    const bx = (b.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    const by = (b.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+
+    let wallIdx = -1;
+    if (world.wallCount < MAX_WALLS) {
+      wallIdx = world.wallCount++;
+      world.wallXWorld[wallIdx] = b.xBlock * BLOCK_SIZE_MEDIUM;
+      world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
+      world.wallWWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
+      world.wallHWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
+    }
+
+    const ci = world.crumbleBlockCount++;
+    world.crumbleBlockXWorld[ci] = bx;
+    world.crumbleBlockYWorld[ci] = by;
+    world.isCrumbleBlockActiveFlag[ci] = 1;
+    world.crumbleBlockWallIndex[ci] = wallIdx;
   }
 
   // ── Dust boost jars ───────────────────────────────────────────────────────

@@ -32,7 +32,7 @@ export enum EditorTool {
 
 // ── Palette categories and items ─────────────────────────────────────────────
 
-export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'lighting';
+export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'lighting' | 'liquids';
 
 export interface PaletteItem {
   id: string;
@@ -54,6 +54,10 @@ export interface PaletteItem {
   isDarkAmbientLightBlockerItem?: 1;
   /** 1 if this palette item places a local light source. */
   isLightSourceItem?: 1;
+  /** 1 if this palette item places a liquid zone (water or lava). */
+  isLiquidZoneItem?: 1;
+  /** 1 if this palette item places a crumble block (collapses on first contact). */
+  isCrumbleBlockItem?: 1;
 }
 
 /** Built-in palette items available in the editor. */
@@ -99,6 +103,11 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'ambient_light_blocker',      label: 'Ambient Blocker', category: 'lighting', isAmbientLightBlockerItem: 1 },
   { id: 'dark_ambient_light_blocker', label: 'Dark Blocker',    category: 'lighting', isAmbientLightBlockerItem: 1, isDarkAmbientLightBlockerItem: 1 },
   { id: 'light_source',          label: 'Light Source',    category: 'lighting', isLightSourceItem: 1 },
+  // ── Liquids layer ───────────────────────────────────────────────────────
+  { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
+  { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
+  // ── Crumble blocks ──────────────────────────────────────────────────────
+  { id: 'crumble_block', label: 'Crumble Block', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1 },
 ];
 
 /** Available block themes for the editor dropdown. */
@@ -227,6 +236,35 @@ export interface EditorTransition {
    * When defined the transition is an interior zone at this block position.
    */
   depthBlock?: number;
+  /** When true, this transition is a secret door hidden from the player until approached. */
+  isSecretDoor?: boolean;
+  /** Width of the fade gradient in blocks (default: 3). */
+  gradientWidthBlocks?: number;
+}
+
+/** A water zone rectangle placed in the room. */
+export interface EditorWaterZone {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
+/** A lava zone rectangle placed in the room. */
+export interface EditorLavaZone {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
+/** A crumble block that collapses on first player contact. */
+export interface EditorCrumbleBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
 }
 
 /** Save Tomb — where the player saves their progress. */
@@ -345,11 +383,17 @@ export interface EditorRoomData {
   ambientLightBlockers: EditorAmbientLightBlocker[];
   /** Editor-placed local light sources. */
   lightSources: EditorLightSource[];
+  /** Water zones placed in this room. */
+  waterZones?: EditorWaterZone[];
+  /** Lava zones placed in this room. */
+  lavaZones?: EditorLavaZone[];
+  /** Crumble blocks placed in this room (collapse on first player contact). */
+  crumbleBlocks?: EditorCrumbleBlock[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

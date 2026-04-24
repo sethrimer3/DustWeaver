@@ -343,6 +343,16 @@ export interface RoomTransitionDef {
    * interior transition that can be placed anywhere inside the room.
    */
   depthBlock?: number;
+  /**
+   * When true, this transition is a secret door: the fade gradient begins
+   * invisible and only activates when the player is very close.
+   */
+  isSecretDoor?: boolean;
+  /**
+   * Width of the fade gradient in blocks (default: 3). Larger values create
+   * a slower, more gradual fade-to-black effect at the tunnel entrance.
+   */
+  gradientWidthBlocks?: number;
 }
 
 /** Direction a spike faces (the pointy end). */
@@ -372,6 +382,12 @@ export interface RoomZoneDef {
 
 /** A breakable block that shatters when the player hits it with high momentum. */
 export interface RoomBreakableBlockDef {
+  xBlock: number;
+  yBlock: number;
+}
+
+/** A crumble block that collapses as soon as the player touches it. */
+export interface RoomCrumbleBlockDef {
   xBlock: number;
   yBlock: number;
 }
@@ -512,6 +528,8 @@ export interface RoomDef {
   lavaZones?: readonly RoomZoneDef[];
   /** Breakable blocks that shatter from high-momentum player impact. */
   breakableBlocks?: readonly RoomBreakableBlockDef[];
+  /** Crumble blocks that collapse on first player contact. */
+  crumbleBlocks?: readonly RoomCrumbleBlockDef[];
   /** Jars that grant temporary dust particles when broken by the player. */
   dustBoostJars?: readonly RoomDustBoostJarDef[];
   /** Jars that release golden fireflies when broken by the player. */
