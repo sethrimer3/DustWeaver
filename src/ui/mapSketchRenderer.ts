@@ -124,13 +124,19 @@ const contourCache = new Map<string, ContourData>();
 /**
  * Builds and caches the silhouette contour for a room.
  *
- * Algorithm:
+ * Algorithm (orientation-aware):
  * 1. Rasterise all (non-invisible) walls into a boolean solid grid.
- * 2. Column-scan to find the topmost and bottommost empty (navigable) cell
- *    per column.
- * 3. Walk left-to-right along the top edge, then right-to-left along the
- *    bottom edge, sampling every CONTOUR_STEP_BLOCKS columns.  Together these
- *    form a single closed polygon that outlines the navigable interior.
+ * 2a. If the room is wider than tall (or square): **column-scan** — find the
+ *     topmost and bottommost empty cell per column, then walk L→R along the
+ *     top edge and R→L along the bottom edge.
+ * 2b. If the room is taller than wide: **row-scan** — find the leftmost and
+ *     rightmost empty cell per row, then walk top→bottom along the left edge
+ *     and bottom→top along the right edge.
+ * 3. Sample every CONTOUR_STEP_BLOCKS steps and build a single closed polygon.
+ *
+ * Using the dominant axis ensures that rooms with a winding vertical corridor
+ * (e.g. tall S-shaped rooms) sketch their sinuous left/right edges rather than
+ * producing flat vertical lines.
  *
  * If every cell is solid (degenerate room) the full bounding box is used.
  */
@@ -156,7 +162,86 @@ function buildRoomContour(room: RoomDef): ContourData {
     }
   }
 
-  // Column scan: topmost and bottommost empty cell per column.
+  // ── Tall rooms: row-scan (left/right edges per row) ───────────────────────
+  if (h > w) {
+    const leftEdge  = new Int16Array(h).fill(-1);
+    const rightEdge = new Int16Array(h).fill(-1);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (solid[y * w + x] === 0) {
+          if (leftEdge[y] === -1) leftEdge[y] = x;
+          rightEdge[y] = x;
+        }
+      }
+    }
+
+    // Find the topmost and bottommost row with at least one empty cell.
+    let rowMin = -1;
+    let rowMax = -1;
+    for (let y = 0; y < h; y++) {
+      if (leftEdge[y] !== -1) {
+        if (rowMin === -1) rowMin = y;
+        rowMax = y;
+      }
+    }
+
+    // Degenerate case: all solid — use full bounding box.
+    if (rowMin === -1) {
+      const pts = new Float32Array([0, 0, w, 0, w, h, 0, h]);
+      const contour: ContourData = { points: pts, pointCount: 4 };
+      contourCache.set(room.id, contour);
+      return contour;
+    }
+
+    // Sample left/right edge vertices at CONTOUR_STEP_BLOCKS row intervals.
+    // leftPoints/rightPoints are flat [x0,y0, x1,y1, …] arrays.
+    const leftPoints:  number[] = [];
+    const rightPoints: number[] = [];
+
+    for (let y = rowMin; y <= rowMax; y += CONTOUR_STEP_BLOCKS) {
+      const lx = leftEdge[y];
+      const rx = rightEdge[y];
+      if (lx === -1) continue; // skip all-solid rows within the range
+      // lx is the left boundary of the leftmost empty cell;
+      // rx + 1 is the right boundary of the rightmost empty cell (mirrors
+      // the column-scan's use of "by + 1" for the bottom cell boundary).
+      leftPoints.push(lx, y);
+      rightPoints.push(rx + 1, y);
+    }
+
+    // Ensure the bottommost row is always included (rowMax is guaranteed
+    // to have at least one empty cell by construction, so lx !== -1).
+    const lastSampledY = rowMin + Math.floor((rowMax - rowMin) / CONTOUR_STEP_BLOCKS) * CONTOUR_STEP_BLOCKS;
+    if (lastSampledY < rowMax) {
+      const lx = leftEdge[rowMax];
+      const rx = rightEdge[rowMax];
+      leftPoints.push(lx, rowMax);
+      rightPoints.push(rx + 1, rowMax);
+    }
+
+    // Build closed polygon: left edge top→bottom then right edge bottom→top.
+    const leftPtCount  = leftPoints.length  / 2;
+    const rightPtCount = rightPoints.length / 2;
+    const pointCount   = leftPtCount + rightPtCount;
+    const points = new Float32Array(pointCount * 2);
+    let pi = 0;
+
+    for (let i = 0; i < leftPoints.length; i++) {
+      points[pi++] = leftPoints[i];
+    }
+    // Reverse the right edge so the polygon winds correctly.
+    for (let i = rightPtCount - 1; i >= 0; i--) {
+      points[pi++] = rightPoints[i * 2];
+      points[pi++] = rightPoints[i * 2 + 1];
+    }
+
+    const contour: ContourData = { points, pointCount };
+    contourCache.set(room.id, contour);
+    return contour;
+  }
+
+  // ── Wide/square rooms: column-scan (top/bottom edges per column) ──────────
+
   const topEdge = new Int16Array(w).fill(-1);
   const botEdge = new Int16Array(w).fill(-1);
   for (let x = 0; x < w; x++) {
