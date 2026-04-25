@@ -22,6 +22,8 @@ export enum CommandKind {
   /** Release/end the secondary Weave hold. */
   WeaveEndSecondary = 15,
   ToggleFullscreen = 16,
+  /** Open the world map (read-only unless at a save tomb). */
+  OpenMap = 17,
 }
 
 export interface MovePlayerCommand {
@@ -133,6 +135,10 @@ export interface ToggleFullscreenCommand {
   kind: CommandKind.ToggleFullscreen;
 }
 
+export interface OpenMapCommand {
+  kind: CommandKind.OpenMap;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
@@ -150,4 +156,5 @@ export type GameCommand =
   | WeaveActivateSecondaryCommand
   | WeaveHoldSecondaryCommand
   | WeaveEndSecondaryCommand
-  | ToggleFullscreenCommand;
+  | ToggleFullscreenCommand
+  | OpenMapCommand;

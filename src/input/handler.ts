@@ -66,8 +66,10 @@ export interface InputState {
   grappleAimYPx: number;
   /** Set to true for one collectCommands call to trigger an interact (F key). */
   isInteractTriggeredFlag: boolean;
-  /** Set to true for one collectCommands call to request fullscreen toggle (P key). */
+  /** Set to true for one collectCommands call to toggle fullscreen. */
   isFullscreenToggleTriggeredFlag: boolean;
+  /** Set to true for one collectCommands call to open the world map (M key). */
+  isMapKeyTriggeredFlag: boolean;
 }
 
 export function createInputState(): InputState {
@@ -110,6 +112,7 @@ export function createInputState(): InputState {
     grappleAimYPx: 0,
     isInteractTriggeredFlag: false,
     isFullscreenToggleTriggeredFlag: false,
+    isMapKeyTriggeredFlag: false,
   };
 }
 
@@ -176,6 +179,9 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     }
     if (keyMatches(e.key, b.toggleFullscreen) && !e.repeat) {
       state.isFullscreenToggleTriggeredFlag = true;
+    }
+    if ((e.key === 'm' || e.key === 'M') && !e.repeat) {
+      state.isMapKeyTriggeredFlag = true;
     }
   }
   function onKeyUp(e: KeyboardEvent): void {
@@ -305,6 +311,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.isGrappleHeldFlag = 0;
     state.isRightMouseDownFlag = 0;
     state.isMouseDownFlag = 0;
+    state.isMapKeyTriggeredFlag = false;
   }
 
   function onTouchEnd(e: TouchEvent): void {
@@ -481,6 +488,11 @@ export function collectCommands(input: InputState): GameCommand[] {
   if (input.isFullscreenToggleTriggeredFlag) {
     input.isFullscreenToggleTriggeredFlag = false;
     commands.push({ kind: CommandKind.ToggleFullscreen });
+  }
+
+  if (input.isMapKeyTriggeredFlag) {
+    input.isMapKeyTriggeredFlag = false;
+    commands.push({ kind: CommandKind.OpenMap });
   }
 
   return commands;

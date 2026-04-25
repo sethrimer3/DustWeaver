@@ -25,7 +25,7 @@ import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
 import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
 import { renderWorldBackground } from '../render/backgroundRenderer';
 import { showDeathScreen } from '../ui/deathScreen';
-import { showSkillTombMenu } from '../ui/skillTombMenu';
+import { showSkillTombMenu, showMapOnlyModal } from '../ui/skillTombMenu';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
@@ -43,6 +43,7 @@ import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
 import { unlockActiveWeave } from '../progression/unlocks';
 import { getWeaveDefinition } from '../sim/weaves/weaveDefinition';
+import { getElementProfile } from '../sim/particles/elementProfiles';
 import {
   spawnClusterParticles,
   spawnWeaveLoadoutParticles,
@@ -604,7 +605,7 @@ export function startGameScreen(
   };
 
   function openPauseMenu(): void {
-    if (isPaused || isPlayerDead || isSkillTombMenuOpen) return;
+    if (isPaused || isPlayerDead || isSkillTombMenuOpen || isMapOnlyOpen) return;
     isPaused = true;
     pauseMenuCleanup = showPauseMenu(uiRoot, pauseMenuState, {
       onResume: () => {
@@ -666,8 +667,18 @@ export function startGameScreen(
   let isSkillTombMenuOpen = false;
   let skillTombMenuCleanup: (() => void) | null = null;
 
+  // ── Map-only modal state ────────────────────────────────────────────────
+  let isMapOnlyOpen = false;
+  let mapOnlyCleanup: (() => void) | null = null;
+
   function openSkillTombMenu(): void {
     if (isSkillTombMenuOpen || !progress) return;
+    // Close the map-only modal if it's open before opening the full menu.
+    if (isMapOnlyOpen && mapOnlyCleanup !== null) {
+      mapOnlyCleanup();
+      isMapOnlyOpen = false;
+      mapOnlyCleanup = null;
+    }
     isSkillTombMenuOpen = true;
 
     // Save progress
@@ -687,9 +698,28 @@ export function startGameScreen(
           ];
         }
       }
+
+      // Heal player to full and restore all dust motes.
+      player.healthPoints = player.maxHealthPoints;
+      for (let i = 0; i < world.particleCount; i++) {
+        if (world.ownerEntityId[i] !== player.entityId) continue;
+        if (world.isTransientFlag[i] === 1) continue;
+        if (world.isAliveFlag[i] === 0 && world.respawnDelayTicks[i] > 0) {
+          // Instant respawn: set delay to 1 so the next tick's lifetime update
+          // will decrement it to 0 and trigger the respawn logic.
+          world.respawnDelayTicks[i] = 1;
+        }
+        if (world.isAliveFlag[i] === 1) {
+          // Restore durability to the particle's maximum toughness.
+          world.particleDurability[i] = getElementProfile(world.kindBuffer[i]).toughness;
+        }
+      }
     }
 
-    skillTombMenuCleanup = showSkillTombMenu(uiRoot, progress, currentRoom.id, {
+    const playerXWorld = player?.positionXWorld ?? 0;
+    const playerYWorld = player?.positionYWorld ?? 0;
+
+    skillTombMenuCleanup = showSkillTombMenu(uiRoot, progress, currentRoom.id, playerXWorld, playerYWorld, {
       onClose: (updatedLoadout, updatedWeaveLoadout) => {
         isSkillTombMenuOpen = false;
         skillTombMenuCleanup = null;
@@ -700,6 +730,27 @@ export function startGameScreen(
         if (callbacks.onSave) callbacks.onSave();
       },
     });
+  }
+
+  function openMapOnly(): void {
+    if (isMapOnlyOpen || isSkillTombMenuOpen || !progress) return;
+    const player = world.clusters[0];
+    if (!player) return;
+    isMapOnlyOpen = true;
+    mapOnlyCleanup = showMapOnlyModal(
+      uiRoot,
+      progress,
+      currentRoom.id,
+      player.positionXWorld,
+      player.positionYWorld,
+      {
+        onClose: () => {
+          isMapOnlyOpen = false;
+          mapOnlyCleanup = null;
+          lastTimestampMs = 0;
+        },
+      },
+    );
   }
 
   function onResize(): void {
@@ -1002,6 +1053,8 @@ export function startGameScreen(
           // Enter fullscreen on key press (requires user gesture; keydown path satisfies this).
           void document.documentElement.requestFullscreen().catch(() => {});
         }
+      } else if (cmd.kind === CommandKind.OpenMap) {
+        openMapOnly();
       } else if (cmd.kind === CommandKind.Interact) {
         interactInputPulseMs = 150;
         const playerForInteract = world.clusters[0];
@@ -1013,7 +1066,8 @@ export function startGameScreen(
           if (nearbyIndex >= 0) {
             interactTriggered = true;
           }
-          // Check if player is near a skill tomb (unlocks a dust weave)
+          // Check if player is near a skill tomb (unlocks a dust weave).
+          // Only show the wave-obtained label — do NOT open the motes menu.
           const nearbySkillTombIndex = skillTombEffectRenderer.getNearbyTombIndex(
             playerForInteract.positionXWorld, playerForInteract.positionYWorld,
           );
@@ -1033,7 +1087,7 @@ export function startGameScreen(
                 performance.now(),
               );
             }
-            interactTriggered = true;
+            // Do NOT set interactTriggered — picking up a wave should not open the motes menu.
           }
         }
       }
@@ -1051,7 +1105,7 @@ export function startGameScreen(
     musicManager.setVolume(pauseMenuState.musicVolume);
 
     // While paused or in a menu, still render the frozen scene but skip sim and transitions
-    if (isPaused || isSkillTombMenuOpen) {
+    if (isPaused || isSkillTombMenuOpen || isMapOnlyOpen) {
       rafHandle = requestAnimationFrame(frame);
       return;
     }
@@ -1352,6 +1406,7 @@ export function startGameScreen(
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
     if (deathScreenCleanup !== null) deathScreenCleanup();
     if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
+    if (mapOnlyCleanup !== null) mapOnlyCleanup();
     // Stop background music and release resources
     musicManager.dispose();
     editorController.destroy();
