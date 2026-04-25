@@ -17,15 +17,20 @@ import { AVAILABLE_SONGS } from '../audio/musicManager';
 import {
   particleKindToString,
   stringToParticleKind,
+} from './roomJsonSchema';
+import type {
+  RoomJsonDef,
+  RoomJsonWall,
+  RoomJsonTransition,
+  RoomJsonAmbientLightBlocker,
   ValidationError,
 } from './roomJsonSchema';
-import type { RoomJsonDef } from './roomJsonSchema';
 export {
   particleKindToString,
   stringToParticleKind,
-  ValidationError,
 } from './roomJsonSchema';
 export type {
+  ValidationError,
   RoomJsonDef,
   RoomJsonEnemy,
   RoomJsonWall,
