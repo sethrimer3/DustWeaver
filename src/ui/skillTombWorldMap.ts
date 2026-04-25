@@ -1,7 +1,8 @@
 /**
  * World Map tab for the Skill Tomb menu.
  *
- * Renders a canvas-based world map with BFS-placed rooms, zoom / pan,
+ * Renders a canvas-based world map using the authored mapX/mapY positions
+ * stored in each RoomDef (set via the visual map editor), zoom / pan,
  * and mouse interaction.  Returns a cleanup function that removes
  * window-level event listeners.
  */
@@ -48,46 +49,12 @@ export function buildMapTab(
     }
   });
 
-  // Compute room positions via BFS from lobby
+  // Build room placements from the authored mapX/mapY positions stored in each RoomDef.
+  // These are the same block-unit coordinates used by the visual map editor, so
+  // dragging rooms in the editor directly controls where they appear here.
   const placements = new Map<string, RoomPlacement>();
-
-  if (exploredRooms.length > 0) {
-    const startRoom = exploredRooms.find(r => r.id === 'lobby') ?? exploredRooms[0];
-    placements.set(startRoom.id, { room: startRoom, mapXBlock: 0, mapYBlock: 0 });
-
-    const queue = [startRoom];
-    const visited = new Set<string>([startRoom.id]);
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      const currentPlacement = placements.get(current.id)!;
-
-      for (const transition of current.transitions) {
-        if (visited.has(transition.targetRoomId)) continue;
-        const targetRoom = ROOM_REGISTRY.get(transition.targetRoomId);
-        if (!targetRoom || !exploredSet.has(targetRoom.id)) continue;
-
-        let offsetX = 0;
-        let offsetY = 0;
-        if (transition.direction === 'right') {
-          offsetX = current.widthBlocks + 4;
-        } else if (transition.direction === 'left') {
-          offsetX = -(targetRoom.widthBlocks + 4);
-        } else if (transition.direction === 'down') {
-          offsetY = current.heightBlocks + 4;
-        } else if (transition.direction === 'up') {
-          offsetY = -(targetRoom.heightBlocks + 4);
-        }
-
-        placements.set(targetRoom.id, {
-          room: targetRoom,
-          mapXBlock: currentPlacement.mapXBlock + offsetX,
-          mapYBlock: currentPlacement.mapYBlock + offsetY,
-        });
-        visited.add(targetRoom.id);
-        queue.push(targetRoom);
-      }
-    }
+  for (const room of exploredRooms) {
+    placements.set(room.id, { room, mapXBlock: room.mapX, mapYBlock: room.mapY });
   }
 
   // ── Map view state ──────────────────────────────────────────────────────

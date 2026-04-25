@@ -42,6 +42,7 @@ import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
 import { unlockActiveWeave } from '../progression/unlocks';
+import { getWeaveDefinition } from '../sim/weaves/weaveDefinition';
 import {
   spawnClusterParticles,
   spawnWeaveLoadoutParticles,
@@ -201,6 +202,8 @@ export function startGameScreen(
   dustContainerSprite.onload = () => { isDustContainerSpriteLoaded = true; };
   /** Keys in the format `${roomId}:${containerIndex}` for already-collected dust containers. */
   const collectedDustContainerKeySet: Set<string> = new Set();
+  /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
+  const consumedSkillTombKeySet: Set<string> = new Set();
 
   /** Initialises (or re-initialises) world state for the given room. */
   function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera = false): void {
@@ -392,6 +395,15 @@ export function startGameScreen(
 
     // Init skill tomb effect renderer
     skillTombEffectRenderer.init(room.skillTombs);
+    // Remove any skill tombs that were already consumed in this session.
+    // Iterate in reverse so splice indices remain valid.
+    const roomSkillTombsForInit = room.skillTombs ?? [];
+    for (let i = roomSkillTombsForInit.length - 1; i >= 0; i--) {
+      const st = roomSkillTombsForInit[i];
+      if (consumedSkillTombKeySet.has(`${room.id}:${st.xBlock}:${st.yBlock}`)) {
+        skillTombEffectRenderer.removeTomb(i);
+      }
+    }
 
     // Track explored room
     if (progress && !progress.exploredRoomIds.includes(room.id)) {
@@ -994,10 +1006,20 @@ export function startGameScreen(
             playerForInteract.positionXWorld, playerForInteract.positionYWorld,
           );
           if (nearbySkillTombIndex >= 0 && progress) {
-            const roomSkillTombs = currentRoom.skillTombs ?? [];
-            const st = roomSkillTombs[nearbySkillTombIndex];
-            if (st !== undefined) {
-              unlockActiveWeave(progress, st.weaveId);
+            const tombPositionKey = skillTombEffectRenderer.getTombPositionKey(nearbySkillTombIndex);
+            const consumedKey = `${currentRoom.id}:${tombPositionKey}`;
+            if (!consumedSkillTombKeySet.has(consumedKey)) {
+              const weaveId = skillTombEffectRenderer.getTombWeaveId(nearbySkillTombIndex);
+              unlockActiveWeave(progress, weaveId);
+              consumedSkillTombKeySet.add(consumedKey);
+              skillTombEffectRenderer.removeTomb(nearbySkillTombIndex);
+              const weaveName = getWeaveDefinition(weaveId)?.displayName ?? 'Unknown Weave';
+              combatText.spawnLabel(
+                playerForInteract.positionXWorld,
+                playerForInteract.positionYWorld - 10,
+                `${weaveName} Obtained`,
+                performance.now(),
+              );
             }
             interactTriggered = true;
           }
