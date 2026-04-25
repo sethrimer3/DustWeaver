@@ -67,6 +67,7 @@ export interface RoomJsonEnemy {
   isSquareStampede?: boolean;
   isGoldenMimic?: boolean;
   isGoldenMimicYFlipped?: boolean;
+  isBeeSwarm?: boolean;
 }
 
 export interface RoomJsonWall {

@@ -1,4 +1,4 @@
-import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE } from '../sim/world';
+import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
@@ -12,6 +12,7 @@ import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
 import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../sim/clusters/bubbleAi';
 import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAIL_UPDATE_INTERVAL_TICKS } from '../sim/clusters/squareStampedeAi';
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
+import { BEE_HALF_WIDTH_WORLD, BEE_HALF_HEIGHT_WORLD } from '../sim/clusters/beeSwarmAi';
 import { FLYING_EYE_HALF_SIZE_WORLD } from './gameRoom';
 
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
@@ -390,6 +391,45 @@ export function spawnEnemyClusters(
       enemyCluster.goldenMimicStateTicks     = 0;
       enemyCluster.goldenMimicFadeAlpha      = 1.0;
       // goldenMimicInitialParticleCount is filled in after spawnLoadoutParticles below
+    } else if (enemyDef.isBeeSwarmFlag === 1) {
+      // Allocate a bee-swarm slot
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_BEE_SWARMS; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].beeSwarmSlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) { slotIndex = si; break; }
+      }
+
+      enemyCluster.isBeeSwarmFlag       = 1;
+      enemyCluster.beeSwarmSlotIndex    = slotIndex;
+      enemyCluster.halfWidthWorld       = BEE_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld      = BEE_HALF_HEIGHT_WORLD;
+      enemyCluster.healthPoints         = BEES_PER_SWARM;
+      enemyCluster.maxHealthPoints      = BEES_PER_SWARM;
+      enemyCluster.beeSwarmSpawnXWorld  = ex;
+      enemyCluster.beeSwarmSpawnYWorld  = ey;
+      enemyCluster.beeSwarmState        = 0;
+      enemyCluster.beeSwarmStateTicks   = 0;
+      enemyCluster.beeSwarmPrevHealthPoints = BEES_PER_SWARM;
+      enemyCluster.beeSwarmOrbitAngleRad    = 0;
+
+      // Initialise individual bee positions in a ring around the spawn point
+      if (slotIndex >= 0) {
+        const base = slotIndex * BEES_PER_SWARM;
+        for (let bi = 0; bi < BEES_PER_SWARM; bi++) {
+          const phase = (bi / BEES_PER_SWARM) * Math.PI * 2;
+          world.beeSwarmBeePhaseRad[base + bi]  = phase;
+          world.beeSwarmBeeXWorld[base + bi]    = ex + Math.cos(phase) * 20;
+          world.beeSwarmBeeYWorld[base + bi]    = ey + Math.sin(phase) * 12;
+          world.beeSwarmBeeVelXWorld[base + bi] = 0;
+          world.beeSwarmBeeVelYWorld[base + bi] = 0;
+        }
+      }
     }
 
     world.clusters.push(enemyCluster);

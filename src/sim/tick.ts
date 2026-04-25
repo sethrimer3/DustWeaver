@@ -45,6 +45,7 @@ import { applyBeetleAI } from './clusters/beetleAi';
 import { applyBubbleAI, applyBubblePopForces } from './clusters/bubbleAi';
 import { applySquareStampedeAI } from './clusters/squareStampedeAi';
 import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
+import { applyBeeSwarmAI } from './clusters/beeSwarmAi';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -96,6 +97,9 @@ export function tick(world: WorldState): void {
 
   // 0.5l. Golden Mimic AI — mirror player movement, heap/fade state, contact damage
   applyGoldenMimicAI(world);
+
+  // 0.5m. Bee Swarm AI — orbit swarm pattern, charge/contact damage
+  applyBeeSwarmAI(world);
 
   // 1. Clear accumulated forces from previous tick
   for (let i = 0; i < world.particleCount; i++) {
