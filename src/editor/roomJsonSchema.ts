@@ -7,7 +7,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -145,6 +145,17 @@ export interface RoomJsonBreakableBlock {
 export interface RoomJsonCrumbleBlock {
   xBlock: number;
   yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock?: number;
+  /** Height in blocks (default 1). */
+  hBlock?: number;
+  /**
+   * Ramp orientation (0-3). Absent = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** Elemental weakness variant. Defaults to `'normal'` when absent. */
+  variant?: CrumbleVariant;
 }
 
 export interface RoomJsonDustBoostJar {

@@ -330,6 +330,11 @@ export interface WorldState extends ParticleBuffers {
    * -1 if no corresponding wall.
    */
   crumbleBlockWallIndex: Int8Array;
+  /**
+   * Packed elemental variant index for each crumble block.
+   * Maps to CrumbleVariant: 0=normal, 1=fire, 2=water, 3=void, 4=ice, 5=lightning, 6=poison, 7=shadow, 8=nature.
+   */
+  crumbleBlockVariant: Uint8Array;
 
   // ── Dust boost jars ────────────────────────────────────────────────────────
   /** Number of dust boost jars (active + broken). */
@@ -534,6 +539,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     crumbleBlockHitsRemaining: new Uint8Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockHitCooldownTicks: new Uint8Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockWallIndex: new Int8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockVariant: new Uint8Array(MAX_CRUMBLE_BLOCKS),
     dustBoostJarCount: 0,
     dustBoostJarXWorld: new Float32Array(MAX_DUST_BOOST_JARS),
     dustBoostJarYWorld: new Float32Array(MAX_DUST_BOOST_JARS),

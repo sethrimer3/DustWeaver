@@ -278,6 +278,10 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     uid: uid++,
     xBlock: b.xBlock,
     yBlock: b.yBlock,
+    wBlock: b.wBlock ?? 1,
+    hBlock: b.hBlock ?? 1,
+    rampOrientation: b.rampOrientation,
+    variant: b.variant ?? 'normal',
   }));
 
   return {
@@ -457,10 +461,17 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     }));
   }
   if ((data.crumbleBlocks ?? []).length > 0) {
-    json.crumbleBlocks = (data.crumbleBlocks ?? []).map(b => ({
-      xBlock: b.xBlock,
-      yBlock: b.yBlock,
-    }));
+    json.crumbleBlocks = (data.crumbleBlocks ?? []).map(b => {
+      const entry: import('./roomJsonSchema').RoomJsonCrumbleBlock = {
+        xBlock: b.xBlock,
+        yBlock: b.yBlock,
+      };
+      if (b.wBlock !== 1) entry.wBlock = b.wBlock;
+      if (b.hBlock !== 1) entry.hBlock = b.hBlock;
+      if (b.rampOrientation !== undefined) entry.rampOrientation = b.rampOrientation;
+      if (b.variant !== 'normal') entry.variant = b.variant;
+      return entry;
+    });
   }
   return json;
 }
@@ -672,6 +683,10 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     crumbleBlocks: (data.crumbleBlocks ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,
+      wBlock: b.wBlock !== 1 ? b.wBlock : undefined,
+      hBlock: b.hBlock !== 1 ? b.hBlock : undefined,
+      rampOrientation: b.rampOrientation,
+      variant: b.variant !== 'normal' ? b.variant : undefined,
     })),
   };
 }
@@ -825,6 +840,10 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     uid: uid++,
     xBlock: b.xBlock,
     yBlock: b.yBlock,
+    wBlock: b.wBlock ?? 1,
+    hBlock: b.hBlock ?? 1,
+    rampOrientation: b.rampOrientation,
+    variant: b.variant ?? 'normal',
   }));
 
   return {

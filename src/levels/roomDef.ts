@@ -392,10 +392,44 @@ export interface RoomBreakableBlockDef {
   yBlock: number;
 }
 
+/**
+ * Which elemental substance a crumble block is specifically weak to.
+ * - `'normal'`    — standard crumble block (no elemental weakness).
+ * - `'fire'`      — weak to fire.
+ * - `'water'`     — weak to water.
+ * - `'void'`      — weak to void energy.
+ * - `'ice'`       — weak to ice.
+ * - `'lightning'` — weak to lightning.
+ * - `'poison'`    — weak to poison.
+ * - `'shadow'`    — weak to shadow.
+ * - `'nature'`    — weak to nature.
+ */
+export type CrumbleVariant =
+  | 'normal'
+  | 'fire'
+  | 'water'
+  | 'void'
+  | 'ice'
+  | 'lightning'
+  | 'poison'
+  | 'shadow'
+  | 'nature';
+
 /** A crumble block that collapses as soon as the player touches it. */
 export interface RoomCrumbleBlockDef {
   xBlock: number;
   yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock?: number;
+  /** Height in blocks (default 1). */
+  hBlock?: number;
+  /**
+   * Ramp orientation (0-3). Undefined or absent = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** Which elemental type this crumble block is weak to. Defaults to `'normal'`. */
+  variant?: CrumbleVariant;
 }
 
 /** A jar that grants temporary dust particles when broken. */

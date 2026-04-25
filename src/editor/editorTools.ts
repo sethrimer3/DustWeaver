@@ -307,9 +307,38 @@ export function placeAtCursor(state: EditorState): void {
     const isPillarHalfWidthFlag: 0 | 1 = item.isPillarHalfWidthItem === 1 ? 1 : 0;
 
     if (item.isCrumbleBlockItem === 1) {
-      // Crumble blocks are always 1×1 and have their own array
+      // Crumble blocks support different sizes and ramp orientations.
+      const wBlock = getPlacementWidth(item, state.placementRotationSteps);
+      const hBlock = getPlacementHeight(item, state.placementRotationSteps);
+
+      let rampOrientation: 0 | 1 | 2 | 3 | undefined;
+      if (item.isRampItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+
+      if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
+
+      // Prevent overlapping crumble blocks (can't place on top of itself).
+      const crumbles = room.crumbleBlocks ?? [];
+      const overlapsCrumble = crumbles.some(b => {
+        const bw = b.wBlock ?? 1;
+        const bh = b.hBlock ?? 1;
+        return bx < b.xBlock + bw && bx + wBlock > b.xBlock &&
+               by < b.yBlock + bh && by + hBlock > b.yBlock;
+      });
+      if (overlapsCrumble) return;
+
       if (!room.crumbleBlocks) room.crumbleBlocks = [];
-      room.crumbleBlocks.push({ uid: allocateUid(state), xBlock: bx, yBlock: by });
+      room.crumbleBlocks.push({
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        wBlock,
+        hBlock,
+        rampOrientation,
+        variant: state.pendingCrumbleVariant,
+      });
       return;
     }
 

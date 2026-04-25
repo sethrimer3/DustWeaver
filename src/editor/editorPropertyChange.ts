@@ -129,6 +129,9 @@ export function applyPropertyToElement(
     if (block) {
       if (prop === 'crumbleBlock.xBlock' && !isNaN(numVal)) block.xBlock = numVal;
       if (prop === 'crumbleBlock.yBlock' && !isNaN(numVal)) block.yBlock = numVal;
+      if (prop === 'crumbleBlock.variant' && typeof value === 'string') {
+        block.variant = value as EditorCrumbleBlock['variant'];
+      }
     }
   } else if (el.type === 'playerSpawn') {
     if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;
