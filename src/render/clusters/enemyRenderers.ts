@@ -9,6 +9,7 @@
 
 import type { ClusterSnapshot, WorldSnapshot } from '../snapshot';
 import { ParticleKind } from '../../sim/particles/kinds';
+import { BEES_PER_SWARM } from '../../sim/world';
 import { loadImg, isSpriteReady } from '../imageCache';
 import {
   getCharacterSprites,
@@ -664,7 +665,7 @@ export function renderBeeSwarm(
   if (slot < 0) return;
 
   const aliveCount = cluster.healthPoints;
-  const base       = slot * 10; // BEES_PER_SWARM = 10
+  const base       = slot * BEES_PER_SWARM;
 
   const isCharging = cluster.beeSwarmState === 1;
 
