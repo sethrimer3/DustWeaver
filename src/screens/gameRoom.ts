@@ -6,6 +6,7 @@ import {
   WALL_THEME_DEFAULT_INDEX,
   PLAYER_HALF_WIDTH_WORLD,
   PLAYER_HALF_HEIGHT_WORLD,
+  CrumbleVariant,
 } from '../levels/roomDef';
 import {
   SPIKE_DIR_UP,
@@ -34,6 +35,22 @@ export const DUST_CONTAINER_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
 export const DUST_CONTAINER_DUST_GAIN = 4;
 /** Epsilon used when deciding whether wall edges are contiguous during merge. */
 const WALL_MERGE_EPSILON_WORLD = 0.001;
+
+/**
+ * Maps a `CrumbleVariant` string to a packed integer stored in `crumbleBlockVariant[]`.
+ * 0=normal, 1=fire, 2=water, 3=void, 4=ice, 5=lightning, 6=poison, 7=shadow, 8=nature.
+ */
+const CRUMBLE_VARIANT_INDEX: Readonly<Record<CrumbleVariant, number>> = {
+  normal:    0,
+  fire:      1,
+  water:     2,
+  void:      3,
+  ice:       4,
+  lightning: 5,
+  poison:    6,
+  shadow:    7,
+  nature:    8,
+};
 
 /**
  * Loads wall definitions from a RoomDef into the WorldState wall buffers.
@@ -266,16 +283,18 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   const crumbleDefs = room.crumbleBlocks ?? [];
   for (let i = 0; i < crumbleDefs.length && world.crumbleBlockCount < world.crumbleBlockXWorld.length; i++) {
     const b = crumbleDefs[i];
-    const bx = (b.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    const by = (b.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    const wBlocks = b.wBlock ?? 1;
+    const hBlocks = b.hBlock ?? 1;
+    const bx = (b.xBlock + wBlocks * 0.5) * BLOCK_SIZE_MEDIUM;
+    const by = (b.yBlock + hBlocks * 0.5) * BLOCK_SIZE_MEDIUM;
 
     let wallIdx = -1;
     if (world.wallCount < MAX_WALLS) {
       wallIdx = world.wallCount++;
       world.wallXWorld[wallIdx] = b.xBlock * BLOCK_SIZE_MEDIUM;
       world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
-      world.wallWWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
-      world.wallHWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
+      world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
     }
 
     const ci = world.crumbleBlockCount++;
@@ -285,6 +304,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.crumbleBlockHitsRemaining[ci] = 2;
     world.crumbleBlockHitCooldownTicks[ci] = 0;
     world.crumbleBlockWallIndex[ci] = wallIdx;
+    world.crumbleBlockVariant[ci] = CRUMBLE_VARIANT_INDEX[b.variant ?? 'normal'] ?? 0;
   }
 
   // ── Dust boost jars ───────────────────────────────────────────────────────

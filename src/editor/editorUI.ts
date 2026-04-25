@@ -8,6 +8,7 @@ import {
   PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS, FADE_COLOR_OPTIONS,
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
   AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
+  CrumbleVariant, CRUMBLE_VARIANT_OPTIONS,
 } from './editorState';
 import { addHoverStyle } from '../ui/helpers';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
@@ -68,6 +69,8 @@ export interface EditorUICallbacks {
   onOpenVisualMap: () => void;
   /** Called when the user picks a different skill in the skill tomb dropdown. */
   onSkillTombWeaveChange: (weaveId: string) => void;
+  /** Called when the user picks a different crumble variant in the crumble variant dropdown. */
+  onCrumbleVariantChange: (variant: CrumbleVariant) => void;
 }
 
 export function createEditorUI(root: HTMLElement): EditorUI {
@@ -351,12 +354,41 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   skillTombSelect.addEventListener('click', (e) => e.stopPropagation());
   skillTombPickerDiv.appendChild(skillTombSelect);
 
+  // ── Crumble variant picker (shown above inspector when a crumble item is selected) ──
+  const crumblePickerDiv = document.createElement('div');
+  crumblePickerDiv.style.cssText = `
+    border: 1px solid rgba(200,150,60,0.5); border-radius: 3px;
+    padding: 6px 8px; margin-top: 8px; background: rgba(20,12,0,0.4); display: none;
+  `;
+  const crumblePickerTitle = document.createElement('div');
+  crumblePickerTitle.textContent = 'Crumble Weakness';
+  crumblePickerTitle.style.cssText = `font-size: 11px; color: #c8a060; margin-bottom: 6px; font-weight: bold;`;
+  crumblePickerDiv.appendChild(crumblePickerTitle);
+  const crumbleVariantSelect = document.createElement('select');
+  crumbleVariantSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid rgba(200,150,60,0.4);
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of CRUMBLE_VARIANT_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    crumbleVariantSelect.appendChild(o);
+  }
+  crumbleVariantSelect.addEventListener('change', () => {
+    callbacks?.onCrumbleVariantChange(crumbleVariantSelect.value as CrumbleVariant);
+  });
+  crumbleVariantSelect.addEventListener('click', (e) => e.stopPropagation());
+  crumblePickerDiv.appendChild(crumbleVariantSelect);
+
   // ── Inspector ────────────────────────────────────────────────────────────
   const inspectorDiv = document.createElement('div');
   inspectorDiv.style.cssText = `
     border-top: 1px solid ${PANEL_BORDER}; padding-top: 10px; margin-top: 8px;
   `;
   container.appendChild(skillTombPickerDiv);
+  container.appendChild(crumblePickerDiv);
   container.appendChild(inspectorDiv);
 
   // Track rendered inspector state to avoid recreating fields every frame
@@ -543,6 +575,13 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       skillTombSelect.value = state.pendingSkillTombWeaveId;
     }
 
+    // Show/hide the crumble variant picker based on selected palette item
+    const isCrumbleSelected = state.selectedPaletteItem?.isCrumbleBlockItem === 1;
+    crumblePickerDiv.style.display = isCrumbleSelected ? '' : 'none';
+    if (isCrumbleSelected && document.activeElement !== crumbleVariantSelect) {
+      crumbleVariantSelect.value = state.pendingCrumbleVariant;
+    }
+
     // Update inspector (only recreate when selected element changes)
     const selUid = state.selectedElements.length > 0 ? state.selectedElements[0].uid : -1;
     const selType = state.selectedElements.length > 0 ? state.selectedElements[0].type : '';
@@ -703,6 +742,35 @@ function makeBlockPreviewShapeCss(itemId: string, theme: string): { shapeCss: st
         `,
       };
     }
+    // ── Crumble block variants (same shape as their non-crumble counterpart) ──
+    case 'crumble_block':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;`,
+      };
+    case 'crumble_block_2x2':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: 50% 50%; opacity: 0.75;`,
+      };
+    case 'crumble_ramp_1x1':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
+      };
+    case 'crumble_ramp_1x2':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 50%);`,
+      };
+    case 'crumble_ramp_2x2':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
+      };
     default:
       return {
         containerCss,
@@ -729,6 +797,29 @@ function makeBlockPreviewCard(item: PaletteItem, theme: string, onClick: () => v
   const shape = document.createElement('div');
   shape.style.cssText = shapeCss;
   previewWrap.appendChild(shape);
+
+  // Crumble blocks get a crack overlay drawn on a canvas inside the preview
+  if (item.isCrumbleBlockItem === 1) {
+    const crackCanvas = document.createElement('canvas');
+    crackCanvas.width = 40;
+    crackCanvas.height = 40;
+    crackCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
+    const cctx = crackCanvas.getContext('2d');
+    if (cctx) {
+      cctx.strokeStyle = '#c8a060'; // neutral crack color in palette (variant color shows on placement)
+      cctx.lineWidth = 1.5;
+      cctx.beginPath();
+      cctx.moveTo(17, 4);
+      cctx.lineTo(22, 18);
+      cctx.lineTo(18, 22);
+      cctx.lineTo(23, 36);
+      cctx.moveTo(22, 18);
+      cctx.lineTo(30, 12);
+      cctx.stroke();
+    }
+    previewWrap.appendChild(crackCanvas);
+  }
+
   card.appendChild(previewWrap);
 
   const lbl = document.createElement('div');
@@ -1015,6 +1106,10 @@ function updateInspector(
         v => callbacks?.onPropertyChange('crumbleBlock.xBlock', parseInt(v)));
       addField(div, 'yBlock', String(block.yBlock),
         v => callbacks?.onPropertyChange('crumbleBlock.yBlock', parseInt(v)));
+      addSelect(div, 'variant',
+        CRUMBLE_VARIANT_OPTIONS.map(o => ({ label: o.label, value: o.id })),
+        block.variant ?? 'normal',
+        v => callbacks?.onPropertyChange('crumbleBlock.variant', v));
     }
   }
 }

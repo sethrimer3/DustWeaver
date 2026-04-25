@@ -92,8 +92,7 @@ export function applyRoomDimensionChange(
   }
 
   for (const b of (room.crumbleBlocks ?? [])) {
-    b.xBlock = Math.min(Math.max(0, b.xBlock), maxX);
-    b.yBlock = Math.min(Math.max(0, b.yBlock), maxY);
+    clampZoneToDimensions(b, room.widthBlocks, room.heightBlocks);
   }
 
   // Clamp interior wall rectangles so they stay fully inside the room.

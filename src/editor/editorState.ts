@@ -6,13 +6,13 @@
  * which can be exported to JSON and later rebuilt into a RoomDef.
  */
 
-import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
 
 // Re-export for convenience in editor modules
-export type { BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection } from '../levels/roomDef';
+export type { BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 export type { RoomSongId } from '../audio/musicManager';
 
 /** Options shown in the "Room Song" editor dropdown, in display order. */
@@ -59,6 +59,19 @@ export interface PaletteItem {
   /** 1 if this palette item places a crumble block (collapses on first contact). */
   isCrumbleBlockItem?: 1;
 }
+
+/** Options for the crumble-block weakness variant dropdown. */
+export const CRUMBLE_VARIANT_OPTIONS: readonly { id: CrumbleVariant; label: string }[] = [
+  { id: 'normal',    label: 'Normal'    },
+  { id: 'fire',      label: 'Fire'      },
+  { id: 'water',     label: 'Water'     },
+  { id: 'void',      label: 'Void'      },
+  { id: 'ice',       label: 'Ice'       },
+  { id: 'lightning', label: 'Lightning' },
+  { id: 'poison',    label: 'Poison'    },
+  { id: 'shadow',    label: 'Shadow'    },
+  { id: 'nature',    label: 'Nature'    },
+];
 
 /** Built-in palette items available in the editor. */
 export const PALETTE_ITEMS: readonly PaletteItem[] = [
@@ -108,7 +121,11 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
   { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
   // ── Crumble blocks ──────────────────────────────────────────────────────
-  { id: 'crumble_block', label: 'Crumble Block', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1 },
+  { id: 'crumble_block',    label: 'Crumble 1×1',       category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1 },
+  { id: 'crumble_block_2x2', label: 'Crumble 2×2',      category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1 },
+  { id: 'crumble_ramp_1x1', label: 'Crumble Ramp 1×1',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1, isRampItem: 1 },
+  { id: 'crumble_ramp_1x2', label: 'Crumble Ramp 1×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isCrumbleBlockItem: 1, isRampItem: 1 },
+  { id: 'crumble_ramp_2x2', label: 'Crumble Ramp 2×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1, isRampItem: 1 },
 ];
 
 /** Available block themes for the editor dropdown. */
@@ -267,6 +284,17 @@ export interface EditorCrumbleBlock {
   uid: number;
   xBlock: number;
   yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock: number;
+  /** Height in blocks (default 1). */
+  hBlock: number;
+  /**
+   * Ramp orientation (0-3). Undefined = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** Which elemental type this crumble block is weak to. */
+  variant: CrumbleVariant;
 }
 
 /** Save Tomb — where the player saves their progress. */
@@ -450,6 +478,11 @@ export interface EditorState {
    */
   pendingSkillTombWeaveId: string;
   /**
+   * Which crumble variant a newly placed crumble block will have.
+   * Populated from the crumble variant dropdown when a crumble item is selected.
+   */
+  pendingCrumbleVariant: CrumbleVariant;
+  /**
    * The element the mouse is currently hovering over (Select tool only).
    * Null when no element is under the cursor or when not using the Select tool.
    */
@@ -483,6 +516,7 @@ export function createEditorState(): EditorState {
     selectionBoxStartBlockY: 0,
     clipboard: null,
     pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
+    pendingCrumbleVariant: 'normal',
     hoverElement: null,
   };
 }

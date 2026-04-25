@@ -208,6 +208,9 @@ export function createEditorController(
         onSkillTombWeaveChange: (weaveId: string) => {
           state.pendingSkillTombWeaveId = weaveId;
         },
+        onCrumbleVariantChange: (variant) => {
+          state.pendingCrumbleVariant = variant;
+        },
       });
     } else {
       closeEditor();

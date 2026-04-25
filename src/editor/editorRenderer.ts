@@ -5,7 +5,7 @@
  */
 
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
-import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType, AmbientLightDirection } from './editorState';
+import type { CrumbleVariant, EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType, AmbientLightDirection } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow } from './editorTools';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
@@ -40,6 +40,23 @@ const PREVIEW_PILLAR_HALF_COLOR = 'rgba(180,130,255,0.35)';
 const CURSOR_COLOR = 'rgba(255,255,255,0.4)';
 const SELECTION_BOX_COLOR = 'rgba(100,200,255,0.25)';
 const SELECTION_BOX_BORDER = 'rgba(100,200,255,0.7)';
+
+/**
+ * Crack-line stroke color for each crumble block variant.
+ * The same crack geometry is drawn for every block size/shape;
+ * only the color changes to indicate the elemental weakness.
+ */
+const CRUMBLE_VARIANT_CRACK_COLOR: Readonly<Record<CrumbleVariant, string>> = {
+  normal:    '#c8a060',
+  fire:      '#ff6030',
+  water:     '#4080ff',
+  void:      '#a040e0',
+  ice:       '#80d8ff',
+  lightning: '#ffee00',
+  poison:    '#60cc40',
+  shadow:    '#602090',
+  nature:    '#90e060',
+};
 
 /** Footprint size of a save tomb in block units (sprite is 2 wide × 3 tall, centered). */
 const SAVE_TOMB_FOOTPRINT_W_BLOCKS = 2;
@@ -240,20 +257,51 @@ export function renderEditorOverlays(
   // ── Crumble blocks ───────────────────────────────────────────────────────
   for (const b of (room.crumbleBlocks ?? [])) {
     const isSelected = isElementSelected('crumbleBlock', b.uid);
+    const wBlocks = b.wBlock ?? 1;
+    const hBlocks = b.hBlock ?? 1;
     const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const sz = BLOCK_SIZE_SMALL * zoom;
+    const wPx = wBlocks * BLOCK_SIZE_SMALL * zoom;
+    const hPx = hBlocks * BLOCK_SIZE_SMALL * zoom;
+
+    // Block fill
     ctx.fillStyle = isSelected ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
-    ctx.fillRect(xPx, yPx, sz, sz);
-    ctx.strokeStyle = isSelected ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
-    ctx.lineWidth = isSelected ? 2 : 1;
-    ctx.strokeRect(xPx, yPx, sz, sz);
-    // X mark
+    if (b.rampOrientation !== undefined) {
+      // Draw ramp triangle shape
+      ctx.beginPath();
+      switch (b.rampOrientation) {
+        case 0: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx); break;
+        case 1: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx, yPx); break;
+        case 2: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx + wPx, yPx + hPx); break;
+        case 3: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx, yPx + hPx); break;
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = isSelected ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.stroke();
+    } else {
+      ctx.fillRect(xPx, yPx, wPx, hPx);
+      ctx.strokeStyle = isSelected ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.strokeRect(xPx, yPx, wPx, hPx);
+    }
+
+    // Crack overlay — same zigzag geometry, color indicates elemental weakness
+    const crackColor = CRUMBLE_VARIANT_CRACK_COLOR[b.variant ?? 'normal'];
+    ctx.strokeStyle = crackColor;
+    ctx.lineWidth = Math.max(1, zoom * 0.7);
     ctx.beginPath();
-    ctx.moveTo(xPx + sz * 0.2, yPx + sz * 0.2);
-    ctx.lineTo(xPx + sz * 0.8, yPx + sz * 0.8);
-    ctx.moveTo(xPx + sz * 0.8, yPx + sz * 0.2);
-    ctx.lineTo(xPx + sz * 0.2, yPx + sz * 0.8);
+    // Central zigzag crack
+    const cx = xPx + wPx * 0.5;
+    const cy = yPx + hPx * 0.5;
+    ctx.moveTo(cx - wPx * 0.15, yPx + hPx * 0.1);
+    ctx.lineTo(cx + wPx * 0.05, cy - hPx * 0.1);
+    ctx.lineTo(cx - wPx * 0.05, cy + hPx * 0.1);
+    ctx.lineTo(cx + wPx * 0.15, yPx + hPx * 0.9);
+    // Short branch crack
+    ctx.moveTo(cx + wPx * 0.05, cy - hPx * 0.1);
+    ctx.lineTo(cx + wPx * 0.25, cy - hPx * 0.25);
     ctx.stroke();
   }
 
@@ -286,6 +334,47 @@ export function renderEditorOverlays(
           // No valid surface — show warning color on cursor
           drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1, offsetXPx, offsetYPx, zoom, 'rgba(255,60,60,0.2)', 1);
         }
+      } else if (item.isCrumbleBlockItem === 1) {
+        // Crumble block preview — draw block shape then crack overlay in variant color
+        const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+        const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+        const wPx = preview.wBlock * BLOCK_SIZE_SMALL * zoom;
+        const hPx = preview.hBlock * BLOCK_SIZE_SMALL * zoom;
+        if (item.isRampItem === 1) {
+          const base = state.placementRotationSteps % 4;
+          const rampOri = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+          const previewWall: EditorWall = {
+            uid: -1,
+            xBlock: state.cursorBlockX,
+            yBlock: state.cursorBlockY,
+            wBlock: preview.wBlock,
+            hBlock: preview.hBlock,
+            isPlatformFlag: 0,
+            platformEdge: 0,
+            rampOrientation: rampOri,
+            isPillarHalfWidthFlag: 0,
+          };
+          drawRampTriangle(ctx, previewWall, offsetXPx, offsetYPx, zoom, 'rgba(210,180,100,0.30)', 2);
+        } else {
+          drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
+            preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, 'rgba(210,180,100,0.30)', 2);
+        }
+        // Draw variant crack overlay
+        const crackColor = CRUMBLE_VARIANT_CRACK_COLOR[state.pendingCrumbleVariant ?? 'normal'];
+        ctx.strokeStyle = crackColor;
+        ctx.lineWidth = Math.max(1, zoom * 0.7);
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        const cx = xPx + wPx * 0.5;
+        const cy = yPx + hPx * 0.5;
+        ctx.moveTo(cx - wPx * 0.15, yPx + hPx * 0.1);
+        ctx.lineTo(cx + wPx * 0.05, cy - hPx * 0.1);
+        ctx.lineTo(cx - wPx * 0.05, cy + hPx * 0.1);
+        ctx.lineTo(cx + wPx * 0.15, yPx + hPx * 0.9);
+        ctx.moveTo(cx + wPx * 0.05, cy - hPx * 0.1);
+        ctx.lineTo(cx + wPx * 0.25, cy - hPx * 0.25);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
       } else if (item.isRampItem === 1) {
         // Show ramp preview as a triangle with current orientation
         const base = state.placementRotationSteps % 4;
@@ -496,8 +585,17 @@ function buildElementTypeName(
     lightSource:        'Light Source',
     waterZone:          'Water Zone',
     lavaZone:           'Lava Zone',
-    crumbleBlock:       'Crumble Block',
   };
+  if (type === 'crumbleBlock') {
+    const b = (room.crumbleBlocks ?? []).find(x => x.uid === uid);
+    if (b) {
+      const variantLabel = b.variant && b.variant !== 'normal' ? ` [${b.variant}]` : '';
+      const sizeLabel = (b.wBlock ?? 1) > 1 || (b.hBlock ?? 1) > 1
+        ? ` ${b.wBlock ?? 1}×${b.hBlock ?? 1}` : '';
+      return `Crumble Block${sizeLabel}${variantLabel}`;
+    }
+    return 'Crumble Block';
+  }
   if (type === 'ambientLightBlocker') {
     const b = (room.ambientLightBlockers ?? []).find(x => x.uid === uid);
     if (b) return b.isDarkFlag === 1 ? 'Dark Blocker' : 'Ambient Blocker';
