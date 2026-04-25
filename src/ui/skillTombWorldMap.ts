@@ -9,6 +9,7 @@
 
 import { ROOM_REGISTRY } from '../levels/rooms';
 import type { RoomDef } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { GOLD } from './skillTombShared';
 import { drawRoomSketch, smoothstep, ZOOM_SKETCH_FULL, ZOOM_DETAIL_FULL } from './mapSketchRenderer';
 
@@ -26,6 +27,8 @@ export function buildMapTab(
   contentArea: HTMLElement,
   currentRoomId: string,
   exploredRoomIds: ReadonlyArray<string>,
+  playerXWorld?: number,
+  playerYWorld?: number,
 ): () => void {
   const mapContainer = document.createElement('div');
   mapContainer.style.cssText = `
@@ -175,6 +178,21 @@ export function buildMapTab(
       mapCtx.font = `${Math.max(10, cellSize * 2.5)}px 'Cinzel', serif`;
       mapCtx.textAlign = 'center';
       mapCtx.fillText(room.name, roomCenterX, roomTopY - cellSize * 1.5);
+
+      // Player position marker — shown only in the current room.
+      if (isCurrentRoom && playerXWorld !== undefined && playerYWorld !== undefined) {
+        const playerMapX = centerX + (mapXBlock + playerXWorld / BLOCK_SIZE_MEDIUM) * cellSize;
+        const playerMapY = centerY + (mapYBlock + playerYWorld / BLOCK_SIZE_MEDIUM) * cellSize;
+        const markerRadius = Math.max(3, cellSize * 1.0);
+        mapCtx.save();
+        mapCtx.beginPath();
+        mapCtx.arc(playerMapX, playerMapY, markerRadius, 0, Math.PI * 2);
+        mapCtx.fillStyle = '#00ffcc';
+        mapCtx.shadowColor = '#00ffcc';
+        mapCtx.shadowBlur = markerRadius * 2;
+        mapCtx.fill();
+        mapCtx.restore();
+      }
     });
 
     // Legend
@@ -196,6 +214,13 @@ export function buildMapTab(
     mapCtx.fillRect(legendX, legendY + 36, 10, 10);
     mapCtx.fillStyle = '#aaa';
     mapCtx.fillText('= Skill Tomb', legendX + 16, legendY + 45);
+
+    mapCtx.fillStyle = '#00ffcc';
+    mapCtx.beginPath();
+    mapCtx.arc(legendX + 5, legendY + 59, 5, 0, Math.PI * 2);
+    mapCtx.fill();
+    mapCtx.fillStyle = '#aaa';
+    mapCtx.fillText('= You', legendX + 16, legendY + 63);
   }
 
   // ── Zoom (mouse wheel) ──────────────────────────────────────────────────
