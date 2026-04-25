@@ -78,6 +78,7 @@ import { resolveAABBPenetration } from '../physics/collision';
 import {
   GRAPPLE_MAX_LENGTH_WORLD,
   GRAPPLE_SEGMENT_COUNT,
+  GRAPPLE_MIN_LENGTH_WORLD,
   GRAPPLE_ATTACH_FX_TICKS,
   BEHAVIOR_MODE_GRAPPLE_CHAIN,
   GRAPPLE_CHAIN_LIFETIME_TICKS,
@@ -91,9 +92,6 @@ import {
 // ============================================================================
 // Tuning constants — adjust these to dial in the grapple feel
 // ============================================================================
-
-/** Minimum rope length to prevent degenerate zero-length ropes. */
-const GRAPPLE_MIN_LENGTH_WORLD = 20;
 
 /**
  * Speed at which the rope shortens while the jump button is held (world units per second).
@@ -130,8 +128,6 @@ const GRAPPLE_SWING_DAMPING_PER_SEC = 0.12;
  * Applied by *subtracting* from velocityYWorld — negative Y is upward.
  */
 const GRAPPLE_JUMP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD;
-
-/** Number of Gold particles that form the visible chain between player and anchor. */
 
 // ── Top-surface grapple (zip + stick) ────────────────────────────────────────
 

@@ -516,6 +516,5 @@ export function updateGrappleMissChain(world: WorldState): void {
   }
 }
 
-// ── Internal constant used by updateGrappleMissChain ─────────────────────────
-/** Minimum rope length to prevent degenerate zero-length rope attachment. */
-const GRAPPLE_MIN_LENGTH_WORLD = 20;
+/** Minimum rope length to prevent degenerate zero-length rope attachment (world units). */
+export const GRAPPLE_MIN_LENGTH_WORLD = 20;
