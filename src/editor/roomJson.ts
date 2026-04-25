@@ -11,7 +11,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, BlockTheme, BackgroundId, LightingEffect, AmbientLightDirection } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef } from '../levels/roomDef';
 import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 import {
@@ -21,11 +21,8 @@ import {
 } from './roomJsonSchema';
 import type {
   RoomJsonDef,
-  RoomJsonEnemy,
   RoomJsonWall,
   RoomJsonTransition,
-  RoomJsonSkillTomb,
-  RoomJsonDustSkillTomb,
   RoomJsonSpike,
   RoomJsonSpringboard,
   RoomJsonZone,

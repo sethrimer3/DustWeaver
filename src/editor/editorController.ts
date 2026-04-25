@@ -13,7 +13,7 @@ import {
   EditorState, createEditorState, EditorTool,
   BackgroundId, LightingEffect, RoomSongId, AmbientLightDirection,
   BlockTheme,
-  SelectedElement, EditorRoomData,
+  EditorTransition, EditorRoomData,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
