@@ -20,7 +20,8 @@
 
 import { WorldState } from './world';
 import { applyClusterMovement } from './clusters/movement';
-import { applyGrappleClusterConstraint, updateGrappleChainParticles, updateGrappleMissChain } from './clusters/grapple';
+import { applyGrappleClusterConstraint, updateGrappleChainParticles } from './clusters/grapple';
+import { updateGrappleMissChain } from './clusters/grappleMiss';
 import { applyEnemyAI } from './clusters/enemyAi';
 import { applyRockElementalAI } from './clusters/rockElementalAi';
 import { updateRockElementalDust } from './clusters/rockElementalDust';
