@@ -69,6 +69,12 @@ interface SkillTombParticle {
 interface SkillTombState {
   xWorld: number;
   yWorld: number;
+  /** Original block X position — used as a stable consumed-tomb key. */
+  xBlock: number;
+  /** Original block Y position — used as a stable consumed-tomb key. */
+  yBlock: number;
+  /** Weave ID granted when this tomb is consumed. */
+  weaveId: string;
   particles: SkillTombParticle[];
   /** True when the player is within interact radius. */
   isPlayerNearbyFlag: boolean;
@@ -135,7 +141,14 @@ export class SkillTombEffectRenderer {
       for (let p = 0; p < PARTICLES_PER_TOMB; p++) {
         particles.push(spawnParticle(p));
       }
-      this.tombStates.push({ xWorld, yWorld, particles, isPlayerNearbyFlag: false });
+      this.tombStates.push({
+        xWorld, yWorld,
+        xBlock: tombs[i].xBlock,
+        yBlock: tombs[i].yBlock,
+        weaveId: tombs[i].weaveId,
+        particles,
+        isPlayerNearbyFlag: false,
+      });
     }
   }
 
@@ -175,6 +188,28 @@ export class SkillTombEffectRenderer {
       }
     }
     return -1;
+  }
+
+  /** Returns the weave ID of the tomb at the given index, or '' if out of range. */
+  getTombWeaveId(index: number): string {
+    return this.tombStates[index]?.weaveId ?? '';
+  }
+
+  /**
+   * Returns a stable key for the tomb at the given index, in the form
+   * `"${xBlock}:${yBlock}"`.  Used to track consumed tombs across room re-entries.
+   */
+  getTombPositionKey(index: number): string {
+    const tomb = this.tombStates[index];
+    if (!tomb) return '';
+    return `${tomb.xBlock}:${tomb.yBlock}`;
+  }
+
+  /** Remove the tomb at the given index (marks it as consumed and hides its visuals). */
+  removeTomb(index: number): void {
+    if (index >= 0 && index < this.tombStates.length) {
+      this.tombStates.splice(index, 1);
+    }
   }
 
   /**

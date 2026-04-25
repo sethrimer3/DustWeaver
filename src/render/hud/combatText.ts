@@ -17,8 +17,12 @@
 const DAMAGE_NUMBER_DURATION_MS = 1150;
 /** How long BLOCKED text stays visible (milliseconds). */
 const BLOCKED_DURATION_MS = 820;
+/** How long a pickup label (e.g., "Storm Weave Obtained") stays visible (milliseconds). */
+const LABEL_DURATION_MS = 2800;
 /** Virtual pixels the floater drifts upward over its full lifetime. */
 const FLOAT_RISE_PX = 22;
+/** Virtual pixels the pickup label drifts upward over its full lifetime. */
+const LABEL_RISE_PX = 45;
 /** Pre-allocated pool size — oldest entry overwritten when full. */
 const MAX_COMBAT_TEXT_ENTRIES = 48;
 
@@ -27,12 +31,16 @@ interface CombatTextEntry {
   isActiveFlag: 0 | 1;
   xWorld: number;
   yWorld: number;
-  /** Damage amount; 0 for BLOCKED entries. */
+  /** Damage amount; 0 for BLOCKED and label entries. */
   amount: number;
   /** 1 = player was the damage target (red text); 0 = enemy was target (gold). */
   isPlayerTargetFlag: 0 | 1;
   /** 1 = this is a BLOCKED notice rather than a numeric damage value. */
   isBlockedFlag: 0 | 1;
+  /** 1 = this is a custom pickup label (uses `label` string). */
+  isLabelFlag: 0 | 1;
+  /** Custom text for label entries (e.g., "Storm Weave Obtained"). */
+  label: string;
   spawnMs: number;
   durationMs: number;
 }
@@ -49,6 +57,9 @@ export interface CombatTextSystem {
 
   /** Spawn a BLOCKED floater at a world-space position. */
   spawnBlocked(xWorld: number, yWorld: number, nowMs: number): void;
+
+  /** Spawn a large golden pickup label (e.g., "Storm Weave Obtained") above a world position. */
+  spawnLabel(xWorld: number, yWorld: number, text: string, nowMs: number): void;
 
   /**
    * Render all active entries to the virtual canvas.
@@ -74,6 +85,8 @@ export function createCombatTextSystem(): CombatTextSystem {
       amount: 0,
       isPlayerTargetFlag: 0,
       isBlockedFlag: 0,
+      isLabelFlag: 0,
+      label: '',
       spawnMs: 0,
       durationMs: 0,
     });
@@ -86,6 +99,8 @@ export function createCombatTextSystem(): CombatTextSystem {
     amount: number,
     isPlayerTargetFlag: 0 | 1,
     isBlockedFlag: 0 | 1,
+    isLabelFlag: 0 | 1,
+    label: string,
     nowMs: number,
   ): void {
     const e = entries[nextSlot];
@@ -95,18 +110,30 @@ export function createCombatTextSystem(): CombatTextSystem {
     e.amount = amount;
     e.isPlayerTargetFlag = isPlayerTargetFlag;
     e.isBlockedFlag = isBlockedFlag;
+    e.isLabelFlag = isLabelFlag;
+    e.label = label;
     e.spawnMs = nowMs;
-    e.durationMs = isBlockedFlag === 1 ? BLOCKED_DURATION_MS : DAMAGE_NUMBER_DURATION_MS;
+    if (isLabelFlag === 1) {
+      e.durationMs = LABEL_DURATION_MS;
+    } else if (isBlockedFlag === 1) {
+      e.durationMs = BLOCKED_DURATION_MS;
+    } else {
+      e.durationMs = DAMAGE_NUMBER_DURATION_MS;
+    }
     nextSlot = (nextSlot + 1) % MAX_COMBAT_TEXT_ENTRIES;
   }
 
   return {
     spawnDamage(xWorld, yWorld, amount, isPlayerTargetFlag, nowMs) {
-      _spawnEntry(xWorld, yWorld, amount, isPlayerTargetFlag, 0, nowMs);
+      _spawnEntry(xWorld, yWorld, amount, isPlayerTargetFlag, 0, 0, '', nowMs);
     },
 
     spawnBlocked(xWorld, yWorld, nowMs) {
-      _spawnEntry(xWorld, yWorld, 0, 1, 1, nowMs);
+      _spawnEntry(xWorld, yWorld, 0, 1, 1, 0, '', nowMs);
+    },
+
+    spawnLabel(xWorld, yWorld, text, nowMs) {
+      _spawnEntry(xWorld, yWorld, 0, 0, 0, 1, text, nowMs);
     },
 
     render(ctx, ox, oy, zoom, nowMs) {
@@ -131,7 +158,15 @@ export function createCombatTextSystem(): CombatTextSystem {
         let scale: number;
         let riseOffsetPx: number;
 
-        if (e.isBlockedFlag === 1) {
+        if (e.isLabelFlag === 1) {
+          // Pickup label: pop-in, hold, drift upward, fade out in last 30%.
+          const popPhase = Math.min(1.0, t * 4.0);          // 0→1 in first 25%
+          const popEase  = 1.0 - Math.pow(1.0 - popPhase, 3);
+          const overshoot = Math.sin(popPhase * Math.PI) * 0.22;
+          scale = 0.4 + 0.6 * popEase + overshoot;
+          alpha = t < 0.70 ? 1.0 : 1.0 - (t - 0.70) / 0.30;
+          riseOffsetPx = LABEL_RISE_PX * Math.sqrt(t);
+        } else if (e.isBlockedFlag === 1) {
           // BLOCKED: fast pop-in, brief hold, quick fade.  No upward drift.
           const popT = Math.min(1.0, t * 6.0);          // 0→1 in first ~17%
           const easeOut = 1.0 - Math.pow(1.0 - popT, 3);  // cubic ease-out
@@ -161,7 +196,12 @@ export function createCombatTextSystem(): CombatTextSystem {
         let strokeColor: string;
         let strokeWidth: number;
 
-        if (e.isBlockedFlag === 1) {
+        if (e.isLabelFlag === 1) {
+          fontSizePx  = 16;
+          fillColor   = '#ffd700';
+          strokeColor = '#3a2000';
+          strokeWidth = 3.5;
+        } else if (e.isBlockedFlag === 1) {
           fontSizePx = 7;
           fillColor  = '#00e8ff';
           strokeColor = '#002233';
@@ -182,7 +222,7 @@ export function createCombatTextSystem(): CombatTextSystem {
           strokeWidth = 2.5;
         }
 
-        const displayText = e.isBlockedFlag === 1 ? 'BLOCKED' : `${e.amount}`;
+        const displayText = e.isLabelFlag === 1 ? e.label : (e.isBlockedFlag === 1 ? 'BLOCKED' : `${e.amount}`);
 
         ctx.save();
         ctx.globalAlpha = alpha;
