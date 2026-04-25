@@ -999,6 +999,7 @@ export function startGameScreen(
             if (st !== undefined) {
               unlockActiveWeave(progress, st.weaveId);
             }
+            interactTriggered = true;
           }
         }
       }
