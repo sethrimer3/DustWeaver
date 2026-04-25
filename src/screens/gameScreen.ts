@@ -247,6 +247,13 @@ export function startGameScreen(
     // Notify the music manager about the new room
     musicManager.notifyRoomEntered(room.songId ?? '_continue');
 
+    // Preserve the player's current health across room transitions.
+    // On the very first load there is no existing player, so fall back to full health.
+    let carryHealthPoints = PLAYER_INITIAL_HEALTH;
+    if (world.clusters.length > 0 && world.clusters[0].isPlayerFlag === 1) {
+      carryHealthPoints = world.clusters[0].healthPoints;
+    }
+
     // Reset world state
     world.tick = 0;
     world.particleCount = 0;
@@ -271,6 +278,10 @@ export function startGameScreen(
     const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
     const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
+    // Restore health carried from the previous room (createClusterState sets both
+    // healthPoints and maxHealthPoints to PLAYER_INITIAL_HEALTH; we only override
+    // healthPoints so the health bar displays correctly).
+    playerCluster.healthPoints = carryHealthPoints;
     world.clusters.push(playerCluster);
 
     // Spawn player dust particles based on capacity model.
