@@ -19,6 +19,7 @@ import {
   stringToParticleKind,
   ValidationError,
 } from './roomJsonSchema';
+import type { RoomJsonDef } from './roomJsonSchema';
 export {
   particleKindToString,
   stringToParticleKind,
