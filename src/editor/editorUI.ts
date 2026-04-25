@@ -806,7 +806,7 @@ function makeBlockPreviewCard(item: PaletteItem, theme: string, onClick: () => v
     crackCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
     const cctx = crackCanvas.getContext('2d');
     if (cctx) {
-      cctx.strokeStyle = '#c8a060'; // neutral crack color in palette (variant color shows on placement)
+      cctx.strokeStyle = '#c8a060'; // neutral crack color in palette; variant color shows in preview cursor and placed blocks
       cctx.lineWidth = 1.5;
       cctx.beginPath();
       cctx.moveTo(17, 4);

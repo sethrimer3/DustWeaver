@@ -304,7 +304,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.crumbleBlockHitsRemaining[ci] = 2;
     world.crumbleBlockHitCooldownTicks[ci] = 0;
     world.crumbleBlockWallIndex[ci] = wallIdx;
-    world.crumbleBlockVariant[ci] = CRUMBLE_VARIANT_INDEX[b.variant ?? 'normal'] ?? 0;
+    world.crumbleBlockVariant[ci] = CRUMBLE_VARIANT_INDEX[b.variant ?? 'normal'];
   }
 
   // ── Dust boost jars ───────────────────────────────────────────────────────
