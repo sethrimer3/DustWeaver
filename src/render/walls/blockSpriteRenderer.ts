@@ -30,95 +30,16 @@ import {
   buildAmbientDepths,
   getDarknessAlphaFromAirDepth,
 } from './ambientLightDepths';
-
-// ── Sprite loading ──────────────────────────────────────────────────────────
-
-/** Module-level image cache — populated once, reused forever. */
-const _imageCache = new Map<string, HTMLImageElement>();
-
-function _loadImage(src: string): HTMLImageElement {
-  const cached = _imageCache.get(src);
-  if (cached !== undefined) return cached;
-  const img = new Image();
-  img.src = src;
-  _imageCache.set(src, img);
-  return img;
-}
-
-function isSpriteReady(img: HTMLImageElement): boolean {
-  return img.complete && img.naturalWidth > 0;
-}
-
-/** Sprite set for a single world theme. */
-interface BlockSpriteSet {
-  block:  HTMLImageElement;
-  single: HTMLImageElement;
-  edge:   HTMLImageElement;
-  corner: HTMLImageElement;
-  end:    HTMLImageElement;
-  vertex: HTMLImageElement;
-}
-
-// ── Block-theme sprite pre-loads ────────────────────────────────────────────
-
-// Brown Rock sprites (single flat sprite, no auto-tiling variants)
-const _brownRockSprite8 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_8x8.png');
-const _brownRockSprite16 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_16x16.png');
-const _brownRockSprite32 = _loadImage('SPRITES/BLOCKS/brownRock/brownRock_32x32.png');
-
-// Dirt sprites (edge/corner auto-tiling at 8x8)
-const _dirtBlockSprite = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8.png');
-const _dirtEdgeSprite  = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8_edge.png');
-const _dirtCornerSprite = _loadImage('SPRITES/BLOCKS/dirt/dirt_8x8_corner.png');
-const _dirtSprite16 = _loadImage('SPRITES/BLOCKS/dirt/dirt_16x16.png');
-
-/** Cache of loaded sprite sets keyed by worldNumber (for legacy world-number mode). */
-const _spriteSets = new Map<number, BlockSpriteSet>();
-
-/**
- * Returns the sprite set for a given world number, loading on first access.
- *
- * W-0, W-1, W-2 use simple filenames (block.png, corner.png, …).
- * W-3 through W-9 use prefixed filenames (world_N_block.png, …).
- */
-function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
-  const cached = _spriteSets.get(worldNumber);
-  if (cached !== undefined) return cached;
-
-  const dir = `SPRITES/WORLDS/W-${worldNumber}/blocks`;
-  let sprites: BlockSpriteSet;
-  if (worldNumber === 0) {
-    sprites = {
-      block:  _brownRockSprite8,
-      single: _brownRockSprite8,
-      edge:   _brownRockSprite8,
-      corner: _brownRockSprite8,
-      end:    _brownRockSprite8,
-      vertex: _brownRockSprite8,
-    };
-  } else if (worldNumber <= 2) {
-    sprites = {
-      block:  _loadImage(`${dir}/block.png`),
-      single: _loadImage(`${dir}/single.png`),
-      edge:   _loadImage(`${dir}/edge.png`),
-      corner: _loadImage(`${dir}/corner.png`),
-      end:    _loadImage(`${dir}/end.png`),
-      vertex: _loadImage(`${dir}/vertex.png`),
-    };
-  } else {
-    const prefix = `world_${worldNumber}_block`;
-    sprites = {
-      block:  _loadImage(`${dir}/${prefix}.png`),
-      single: _loadImage(`${dir}/${prefix}_single.png`),
-      edge:   _loadImage(`${dir}/${prefix}_edge.png`),
-      corner: _loadImage(`${dir}/${prefix}_corner.png`),
-      end:    _loadImage(`${dir}/${prefix}_end.png`),
-      vertex: _loadImage(`${dir}/${prefix}_vertex.png`),
-    };
-  }
-  _spriteSets.set(worldNumber, sprites);
-  return sprites;
-}
+import {
+  isSpriteReady,
+  TileVariant,
+  BlockSpriteSet,
+  getBlockSpriteSet,
+  getFullSpriteFor2x2,
+  themeSupports2x2,
+  getSpriteForLegacyTheme,
+  themeToProceduralMaterial,
+} from './blockSpriteSets';
 
 /** Active sprite set for world-number mode. */
 let _sprites: BlockSpriteSet = getBlockSpriteSet(0);
@@ -272,69 +193,7 @@ export function renderDarkAmbientBlockerOverlay(
   }
 }
 
-function _getBrownRockSpriteForBlockSize(blockSizePx: number): HTMLImageElement {
-  if (blockSizePx >= 32) return _brownRockSprite32;
-  if (blockSizePx >= 16) return _brownRockSprite16;
-  return _brownRockSprite8;
-}
-
-function _getDirtSprite(variant: TileVariant): HTMLImageElement {
-  switch (variant) {
-    case 'edge':   return _dirtEdgeSprite;
-    case 'corner': return _dirtCornerSprite;
-    default:       return _dirtBlockSprite;
-  }
-}
-
-/**
- * Returns the 2×2 full sprite for themes that use a single dedicated 16×16
- * texture (brownRock, dirt).
- */
-function _getFullSpriteFor2x2(theme: BlockTheme | null, blockSizePx: number): HTMLImageElement | null {
-  if (blockSizePx !== 8) return null;
-  if (theme === 'brownRock') return _brownRockSprite16;
-  if (theme === 'dirt') return _dirtSprite16;
-  return null;
-}
-
-/** Returns true if the active theme supports 2×2 full-sprite rendering. */
-function _themeSupports2x2(theme: BlockTheme | null, blockSizePx: number): boolean {
-  if (blockSizePx !== 8) return false;
-  return theme === 'brownRock' || theme === 'dirt' || theme === 'blackRock';
-}
-
-/**
- * Returns the sprite image for a non-blackRock block cell (brownRock, dirt)
- * based on the auto-tile variant.
- */
-function _getSpriteForLegacyTheme(
-  theme: BlockTheme,
-  variant: TileVariant,
-  blockSizePx: number,
-): HTMLImageElement {
-  switch (theme) {
-    case 'brownRock':
-      return _getBrownRockSpriteForBlockSize(blockSizePx);
-    case 'dirt':
-      return _getDirtSprite(variant);
-    default:
-      return _getBrownRockSpriteForBlockSize(blockSizePx);
-  }
-}
-
-/**
- * Maps a BlockTheme to the material name string used by the procedural sprite
- * system.  Returns null when the theme is not supported by that system.
- */
-function _themeToProceduralMaterial(theme: BlockTheme | null, legacyWorldNumber: number): string | null {
-  if (theme === 'blackRock') return 'blackRock';
-  if (theme === null && legacyWorldNumber === 0) return 'blackRock';
-  return null;
-}
-
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
-
-type TileVariant = 'block' | 'single' | 'edge' | 'corner' | 'end';
 
 interface TileSpec {
   readonly variant:     TileVariant;
@@ -648,7 +507,7 @@ function _populateCoveredBy2x2Keys(
     const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(wallThemeIdx)
       : roomTheme;
-    if (!_themeSupports2x2(resolvedTheme, blockSizePx)) continue;
+    if (!themeSupports2x2(resolvedTheme, blockSizePx)) continue;
     const commaIdx = topLeftKey.indexOf(',');
     const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
     const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
@@ -993,7 +852,7 @@ function _doRenderWallTilesDirect(
       const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
         ? indexToBlockTheme(wallThemeIdx)
         : roomTheme;
-      if (!_themeSupports2x2(resolvedTheme, blockSizePx)) continue;
+      if (!themeSupports2x2(resolvedTheme, blockSizePx)) continue;
 
       const commaIdx = topLeftKey.indexOf(',');
       const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
@@ -1001,7 +860,7 @@ function _doRenderWallTilesDirect(
       const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
       const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
-      const material = _themeToProceduralMaterial(resolvedTheme, _activeWorldNumber);
+      const material = themeToProceduralMaterial(resolvedTheme, _activeWorldNumber);
       if (material !== null) {
         // Procedural path: base sprite cut with 2×2 block template.
         const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, _activeWorldNumber);
@@ -1013,7 +872,7 @@ function _doRenderWallTilesDirect(
         }
       } else {
         // Legacy flat-sprite path (brownRock, dirt).
-        const sprite = _getFullSpriteFor2x2(resolvedTheme, blockSizePx);
+        const sprite = getFullSpriteFor2x2(resolvedTheme, blockSizePx);
         if (sprite !== null && isSpriteReady(sprite)) {
           ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
         } else {
@@ -1064,7 +923,7 @@ function _doRenderWallTilesDirect(
     const tileTheme: BlockTheme | null = wallLayout.tileTheme.get(tileKey) ?? roomTheme;
     const tileIsLegacyBlackRock = (tileTheme === null) && (_activeWorldNumber === 0);
 
-    const material = _themeToProceduralMaterial(tileTheme, _activeWorldNumber);
+    const material = themeToProceduralMaterial(tileTheme, _activeWorldNumber);
 
     if (material !== null) {
       // Procedural path (blackRock): base sprite cut with 1×1 block template.
@@ -1077,7 +936,7 @@ function _doRenderWallTilesDirect(
       }
     } else if (!tileIsLegacyBlackRock && tileTheme !== null) {
       // Legacy flat-sprite / auto-tiling path (brownRock, dirt).
-      const img = _getSpriteForLegacyTheme(tileTheme, spec.variant, blockSizePx);
+      const img = getSpriteForLegacyTheme(tileTheme, spec.variant, blockSizePx);
       if (isSpriteReady(img)) {
         if (tileTheme === 'brownRock' || spec.rotationRad === 0) {
           ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -1154,7 +1013,7 @@ function _doRenderWallTilesDirect(
 
     // Resolve theme for this platform tile.
     const platTheme: BlockTheme | null = wallLayout.tileTheme.get(key) ?? roomTheme;
-    const platMaterial = _themeToProceduralMaterial(platTheme, _activeWorldNumber);
+    const platMaterial = themeToProceduralMaterial(platTheme, _activeWorldNumber);
 
     if (platMaterial !== null) {
       // Procedural path (blackRock): base sprite cut with platform template.
@@ -1208,7 +1067,7 @@ function _doRenderWallTilesDirect(
     const rampTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(walls.themeIndex[wi])
       : roomTheme;
-    const rampMaterial = _themeToProceduralMaterial(rampTheme, _activeWorldNumber);
+    const rampMaterial = themeToProceduralMaterial(rampTheme, _activeWorldNumber);
 
     if (rampMaterial !== null) {
       // Procedural path (blackRock): base sprite cut with ramp template.
