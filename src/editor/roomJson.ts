@@ -19,24 +19,6 @@ import {
   stringToParticleKind,
   ValidationError,
 } from './roomJsonSchema';
-import type {
-  RoomJsonDef,
-  RoomJsonWall,
-  RoomJsonTransition,
-  RoomJsonSpike,
-  RoomJsonSpringboard,
-  RoomJsonZone,
-  RoomJsonBreakableBlock,
-  RoomJsonCrumbleBlock,
-  RoomJsonDustBoostJar,
-  RoomJsonFireflyJar,
-  RoomJsonDustPile,
-  RoomJsonGrasshopperArea,
-  RoomJsonDecoration,
-  RoomJsonAmbientLightBlocker,
-  RoomJsonLightSource,
-} from './roomJsonSchema';
-
 export {
   particleKindToString,
   stringToParticleKind,
