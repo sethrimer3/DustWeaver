@@ -553,6 +553,8 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     }
 
     if (world.isGrappleStuckFlag === 0) {
+      // ── Zip phase: move player toward anchor at 3× sprint speed ────────
+      const dx = targetX - player.positionXWorld;
       const dy = targetY - player.positionYWorld;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const zipStep = GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * dtSec;

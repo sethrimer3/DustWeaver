@@ -236,6 +236,7 @@ export function showPauseMenu(
 
   // Exit to Main Menu (bottom) — requires a second click for confirmation
   let exitConfirmPending = false;
+  let exitConfirmTimerId: ReturnType<typeof setTimeout> | undefined;
   const exitBtn = makeButton('Exit to Main Menu', () => {
     if (!exitConfirmPending) {
       exitConfirmPending = true;
@@ -243,9 +244,10 @@ export function showPauseMenu(
       exitBtn.style.color = '#ff6b6b';
       exitBtn.style.borderColor = '#ff6b6b';
       // Auto-cancel confirmation after 3 seconds if the player doesn't confirm
-      setTimeout(() => {
+      exitConfirmTimerId = setTimeout(() => {
         if (exitConfirmPending) {
           exitConfirmPending = false;
+          exitConfirmTimerId = undefined;
           exitBtn.textContent = 'Exit to Main Menu';
           exitBtn.style.color = '';
           exitBtn.style.borderColor = '';
@@ -275,6 +277,10 @@ export function showPauseMenu(
 
   function destroy(): void {
     window.removeEventListener('keydown', onKey);
+    if (exitConfirmTimerId !== undefined) {
+      clearTimeout(exitConfirmTimerId);
+      exitConfirmTimerId = undefined;
+    }
     if (overlay.parentElement) overlay.parentElement.removeChild(overlay);
   }
 
