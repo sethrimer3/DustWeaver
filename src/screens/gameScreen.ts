@@ -281,7 +281,8 @@ export function startGameScreen(
     // Restore health carried from the previous room (createClusterState sets both
     // healthPoints and maxHealthPoints to PLAYER_INITIAL_HEALTH; we only override
     // healthPoints so the health bar displays correctly).
-    playerCluster.healthPoints = carryHealthPoints;
+    // Clamp to maxHealthPoints so an out-of-range carry value cannot violate the invariant.
+    playerCluster.healthPoints = Math.min(carryHealthPoints, playerCluster.maxHealthPoints);
     world.clusters.push(playerCluster);
 
     // Spawn player dust particles based on capacity model.

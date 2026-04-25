@@ -245,6 +245,8 @@ export function showPauseMenu(
       exitBtn.style.borderColor = '#ff6b6b';
       // Auto-cancel confirmation after 3 seconds if the player doesn't confirm
       exitConfirmTimerId = setTimeout(() => {
+        // Guard: if the menu was destroyed while we were waiting, do nothing.
+        if (exitConfirmTimerId === undefined) return;
         if (exitConfirmPending) {
           exitConfirmPending = false;
           exitConfirmTimerId = undefined;

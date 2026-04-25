@@ -306,9 +306,11 @@ export class PhantomCloakExtension {
       // Dissolving from tip (outer end) inward toward the root.
       // We shrink growthProgress so the visible active end retreats toward
       // the shoulder — the "outside-in" fade direction.
+      // Floor at 0 (not dissolveProgress, which stays 0 in this path) to
+      // prevent the value going negative due to floating-point drift.
       const prevGrowth = this.growthProgress;
       this.growthProgress = Math.max(
-        this.dissolveProgress,
+        0,
         this.growthProgress - DISSIPATION_SPEED * dt,
       );
 
@@ -320,7 +322,7 @@ export class PhantomCloakExtension {
       }
 
       // Fully dissolved — return to inactive state.
-      if (this.growthProgress <= this.dissolveProgress) {
+      if (this.growthProgress <= 0) {
         this.growthProgress   = 0;
         this.dissolveProgress = 0;
         this.isDissipating    = false;
