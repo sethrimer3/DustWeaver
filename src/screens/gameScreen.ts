@@ -674,7 +674,7 @@ export function startGameScreen(
   function openSkillTombMenu(): void {
     if (isSkillTombMenuOpen || !progress) return;
     // Close the map-only modal if it's open before opening the full menu.
-    if (isMapOnlyOpen && mapOnlyCleanup !== null) {
+    if (mapOnlyCleanup !== null) {
       mapOnlyCleanup();
       isMapOnlyOpen = false;
       mapOnlyCleanup = null;
@@ -686,7 +686,12 @@ export function startGameScreen(
 
     // Record save point
     const player = world.clusters[0];
+    let playerXWorld = 0;
+    let playerYWorld = 0;
     if (player) {
+      playerXWorld = player.positionXWorld;
+      playerYWorld = player.positionYWorld;
+
       const nearbyIndex = skillTombRenderer.getNearbyTombIndex(player.positionXWorld, player.positionYWorld);
       if (nearbyIndex >= 0) {
         const tombPos = skillTombRenderer.getTombPosition(nearbyIndex);
@@ -715,9 +720,6 @@ export function startGameScreen(
         }
       }
     }
-
-    const playerXWorld = player?.positionXWorld ?? 0;
-    const playerYWorld = player?.positionYWorld ?? 0;
 
     skillTombMenuCleanup = showSkillTombMenu(uiRoot, progress, currentRoom.id, playerXWorld, playerYWorld, {
       onClose: (updatedLoadout, updatedWeaveLoadout) => {

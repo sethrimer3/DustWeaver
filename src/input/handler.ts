@@ -311,7 +311,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.isGrappleHeldFlag = 0;
     state.isRightMouseDownFlag = 0;
     state.isMouseDownFlag = 0;
-    state.isMapKeyTriggeredFlag = false;
   }
 
   function onTouchEnd(e: TouchEvent): void {
