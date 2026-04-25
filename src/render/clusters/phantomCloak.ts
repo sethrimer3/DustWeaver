@@ -52,15 +52,16 @@ const PHANTOM_POINT_COUNT = 1 + PHANTOM_SEGMENT_COUNT;
 
 /**
  * Base growth rate: phantom segments added per second regardless of speed.
- * Increase to make the cloak appear faster at rest.
+ * Reduced so the cloak extends gradually at rest.
  */
-const BASE_GROWTH_RATE = 5.0;
+const BASE_GROWTH_RATE = 2.0;
 
 /**
  * Additional growth rate per world-unit of player velocity magnitude.
- * Faster swinging → faster cloak growth.
+ * Faster swinging → faster cloak growth.  Increased so high-speed swings
+ * produce a noticeably wider cloak trail quickly.
  */
-const SPEED_GROWTH_MULTIPLIER = 0.015;
+const SPEED_GROWTH_MULTIPLIER = 0.06;
 
 /** Maximum phantom length in active segments. */
 const MAX_PHANTOM_LENGTH = PHANTOM_SEGMENT_COUNT;
@@ -68,18 +69,23 @@ const MAX_PHANTOM_LENGTH = PHANTOM_SEGMENT_COUNT;
 // ── Dissipation behaviour ────────────────────────────────────────────────────
 
 /**
- * Rate at which the base end of the phantom dissolves once grappling ends
- * (active segments consumed per second from the root / shoulder side).
+ * Rate at which the tip end of the phantom dissolves once grappling ends
+ * (active segments consumed per second from the tip / outer end).
+ * Dissipation now travels from outside → inside so the visible end retreats
+ * toward the shoulder rather than the base disappearing first.
  */
 const DISSIPATION_SPEED = 4.5;
 
 // ── Visual appearance ────────────────────────────────────────────────────────
 
-/** Opacity of the phantom fill (0 = transparent, 1 = opaque). */
-const PHANTOM_ALPHA = 0.52;
+/** Opacity of the phantom fill (0 = transparent, 1 = opaque). More translucent than before. */
+const PHANTOM_ALPHA = 0.28;
 
-/** Opacity of the phantom outline. */
-const PHANTOM_OUTLINE_ALPHA = 0.30;
+/** Opacity of the phantom glow outline — bright gold, more prominent than the fill. */
+const PHANTOM_OUTLINE_ALPHA = 0.70;
+
+/** Opacity of the secondary wider glow halo pass (softer outer ring). */
+const PHANTOM_GLOW_HALO_ALPHA = 0.25;
 
 /** Golden fill colour (warm, luminous). */
 const PHANTOM_FILL_COLOR = '#c89600';
@@ -87,11 +93,14 @@ const PHANTOM_FILL_COLOR = '#c89600';
 /** Lighter golden colour used for bright particle variation. */
 const PHANTOM_FILL_COLOR_BRIGHT = '#f0c830';
 
-/** Darker amber outline for subtle contrast. */
-const PHANTOM_OUTLINE_COLOR = '#7a5800';
+/** Bright luminous gold for the glowing outline. */
+const PHANTOM_OUTLINE_COLOR = '#ffe066';
 
-/** Phantom outline width (world units). */
-const PHANTOM_OUTLINE_WIDTH_WORLD = 0.75;
+/** Phantom outline width (world units) — slightly thicker for the glow effect. */
+const PHANTOM_OUTLINE_WIDTH_WORLD = 1.0;
+
+/** Width of the wider soft halo pass behind the main glow stroke (world units). */
+const PHANTOM_GLOW_HALO_WIDTH_WORLD = 2.5;
 
 /**
  * Slight width reduction relative to main cloak so the phantom appears as a
@@ -294,22 +303,26 @@ export class PhantomCloakExtension {
       const growRate = BASE_GROWTH_RATE + speedWorldPerSec * SPEED_GROWTH_MULTIPLIER;
       this.growthProgress = Math.min(MAX_PHANTOM_LENGTH, this.growthProgress + growRate * dt);
     } else if (this.isDissipating) {
-      // Dissolving from root end outward.
-      const prevDissolve = this.dissolveProgress;
-      this.dissolveProgress = Math.min(
-        this.growthProgress,
-        this.dissolveProgress + DISSIPATION_SPEED * dt,
+      // Dissolving from tip (outer end) inward toward the root.
+      // We shrink growthProgress so the visible active end retreats toward
+      // the shoulder — the "outside-in" fade direction.
+      // Floor at 0 (not dissolveProgress, which stays 0 in this path) to
+      // prevent the value going negative due to floating-point drift.
+      const prevGrowth = this.growthProgress;
+      this.growthProgress = Math.max(
+        0,
+        this.growthProgress - DISSIPATION_SPEED * dt,
       );
 
-      // Emit particles for every newly dissolved whole segment.
-      const prevFloor = Math.floor(prevDissolve);
-      const currFloor = Math.floor(this.dissolveProgress);
-      for (let s = prevFloor; s < currFloor; s++) {
+      // Emit particles for every newly consumed whole segment at the tip.
+      const prevFloor = Math.floor(prevGrowth);
+      const currFloor = Math.floor(this.growthProgress);
+      for (let s = currFloor; s < prevFloor; s++) {
         this._emitDissipationParticles(s);
       }
 
       // Fully dissolved — return to inactive state.
-      if (this.dissolveProgress >= this.growthProgress) {
+      if (this.growthProgress <= 0) {
         this.growthProgress   = 0;
         this.dissolveProgress = 0;
         this.isDissipating    = false;
@@ -406,9 +419,10 @@ export class PhantomCloakExtension {
     this._buildPolygon(dissolveStart, visibleCount, offsetXPx, offsetYPx, scalePx);
 
     ctx.save();
-    ctx.globalAlpha = PHANTOM_ALPHA;
     ctx.globalCompositeOperation = 'source-over';
+    ctx.lineJoin = 'round';
 
+    // Build shared path for fill + outline passes.
     ctx.beginPath();
     ctx.moveTo(this.leftXPx[0], this.leftYPx[0]);
     for (let i = 1; i < visibleCount; i++) {
@@ -418,13 +432,22 @@ export class PhantomCloakExtension {
       ctx.lineTo(this.rightXPx[i], this.rightYPx[i]);
     }
     ctx.closePath();
+
+    // Pass 1: translucent golden fill.
+    ctx.globalAlpha = PHANTOM_ALPHA;
     ctx.fillStyle = PHANTOM_FILL_COLOR;
     ctx.fill();
 
+    // Pass 2: wide soft halo stroke for the golden glow effect.
+    ctx.globalAlpha = PHANTOM_GLOW_HALO_ALPHA;
+    ctx.strokeStyle = PHANTOM_OUTLINE_COLOR;
+    ctx.lineWidth   = PHANTOM_GLOW_HALO_WIDTH_WORLD * scalePx;
+    ctx.stroke();
+
+    // Pass 3: bright tight outline for the crisp golden edge.
     ctx.globalAlpha = PHANTOM_OUTLINE_ALPHA;
     ctx.strokeStyle = PHANTOM_OUTLINE_COLOR;
     ctx.lineWidth   = PHANTOM_OUTLINE_WIDTH_WORLD * scalePx;
-    ctx.lineJoin    = 'round';
     ctx.stroke();
 
     ctx.restore();

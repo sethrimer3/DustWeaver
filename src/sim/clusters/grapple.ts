@@ -74,6 +74,7 @@ import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { INFLUENCE_RADIUS_WORLD } from './binding';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS } from './movement';
+import { COYOTE_TIME_TICKS } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
 
 // ============================================================================
@@ -439,10 +440,27 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
 /**
  * Releases the grapple and deactivates the chain particles.
  * The player retains their current velocity (built-up swing momentum).
+ *
+ * Grants the player coyote-time frames so they can still jump immediately
+ * after releasing the grapple (e.g. letting go of the mouse button mid-swing).
+ *
+ * @param grantCoyoteTime  When true (default), sets the player's coyoteTimeTicks so
+ *   a jump pressed in the next few frames still counts.  Pass false when the
+ *   release is itself a jump (jump-off and stuck-jump paths) because those paths
+ *   already apply an upward velocity impulse directly.
  */
-export function releaseGrapple(world: WorldState): void {
+export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void {
   const shouldRetractFromActiveGrapple = world.isGrappleActiveFlag === 1;
   const shouldRetractFromMiss = world.isGrappleMissActiveFlag === 1;
+
+  // Grant coyote time so the player can jump in the first few frames after
+  // releasing the grapple without pressing jump at the exact release moment.
+  if (grantCoyoteTime && shouldRetractFromActiveGrapple) {
+    const player = world.clusters[0];
+    if (player !== undefined && player.isPlayerFlag === 1 && player.isAliveFlag === 1) {
+      player.coyoteTimeTicks = COYOTE_TIME_TICKS;
+    }
+  }
 
   world.isGrappleActiveFlag = 0;
   world.isGrappleTopSurfaceFlag = 0;
@@ -530,7 +548,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       player.isGroundedFlag = 0;
       player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
       player.varJumpSpeedWorld = -jumpSpeed;
-      releaseGrapple(world);
+      releaseGrapple(world, false);
       return;
     }
 
@@ -606,7 +624,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     player.velocityYWorld -= GRAPPLE_JUMP_OFF_SPEED_WORLD;
     player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
     player.varJumpSpeedWorld = player.velocityYWorld;
-    releaseGrapple(world);
+    releaseGrapple(world, false);
     return;
   }
 
