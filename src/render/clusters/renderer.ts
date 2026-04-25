@@ -34,6 +34,7 @@ import {
   renderSquareStampede,
   renderWaterBubbleBody,
   renderIceBubbleBody,
+  renderBeeSwarm,
 } from './enemyRenderers';
 
 // ── Grapple dust sprites ─────────────────────────────────────────────────────
@@ -442,6 +443,9 @@ export function renderClusters(
     } else if (cluster.isGoldenMimicFlag === 1) {
       // ── Golden Mimic: golden silhouette of the player sprite ──────────────
       renderGoldenMimic(ctx, screenX, screenY, cluster, snapshot.tick, scalePx, snapshot.characterId);
+    } else if (cluster.isBeeSwarmFlag === 1) {
+      // ── Bee Swarm: individual bees rendered as 4×2 pixel sprites ─────────
+      renderBeeSwarm(ctx, cluster, snapshot, scalePx, offsetXPx, offsetYPx);
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -515,6 +519,8 @@ export function renderClusters(
       barColor = '#dd44ff'; // vivid magenta-purple for square stampede
     } else if (cluster.isGoldenMimicFlag === 1) {
       barColor = '#ffd700'; // bright gold for golden mimic
+    } else if (cluster.isBeeSwarmFlag === 1) {
+      barColor = '#ffcc00'; // amber-gold for bee swarm
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

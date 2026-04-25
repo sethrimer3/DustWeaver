@@ -407,6 +407,35 @@ export interface ClusterState {
    * Read by the renderer to set globalAlpha on the golden silhouette.
    */
   goldenMimicFadeAlpha: number;
+
+  // ---- Bee Swarm (populated only when isBeeSwarmFlag === 1) ------------------
+  /**
+   * 1 if this cluster is a bee swarm — 10 bees that orbit a spawn area until
+   * the player comes close or the swarm takes damage, then charge the player.
+   * Each bee can be killed by 1 golden mote (1 Physical particle hit).
+   */
+  isBeeSwarmFlag: 0 | 1;
+  /**
+   * Index into the WorldState bee-position arrays (0..MAX_BEE_SWARMS-1).
+   * -1 when no slot has been assigned.
+   */
+  beeSwarmSlotIndex: number;
+  /**
+   * Current bee-swarm AI state:
+   *   0 = swarming — bees orbit the spawn area in a natural pattern
+   *   1 = charging — bees fly toward the player and deal contact damage
+   */
+  beeSwarmState: number;
+  /** Ticks elapsed in the current bee-swarm AI state. */
+  beeSwarmStateTicks: number;
+  /** Spawn X position (world units) — center of the swarm's patrol area. */
+  beeSwarmSpawnXWorld: number;
+  /** Spawn Y position (world units) — center of the swarm's patrol area. */
+  beeSwarmSpawnYWorld: number;
+  /** Health recorded at end of last tick, used to detect incoming damage for aggro. */
+  beeSwarmPrevHealthPoints: number;
+  /** Global orbit angle (radians) incremented each tick to animate the swarm path. */
+  beeSwarmOrbitAngleRad: number;
 }
 
 export function createClusterState(
@@ -531,5 +560,13 @@ export function createClusterState(
     goldenMimicStateTicks: 0,
     goldenMimicInitialParticleCount: 0,
     goldenMimicFadeAlpha: 1.0,
+    isBeeSwarmFlag: 0,
+    beeSwarmSlotIndex: -1,
+    beeSwarmState: 0,
+    beeSwarmStateTicks: 0,
+    beeSwarmSpawnXWorld: positionXWorld,
+    beeSwarmSpawnYWorld: positionYWorld,
+    beeSwarmPrevHealthPoints: maxHealthPoints,
+    beeSwarmOrbitAngleRad: 0,
   };
 }

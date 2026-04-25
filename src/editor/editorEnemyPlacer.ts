@@ -286,6 +286,29 @@ export function placeEnemyAtCursor(
       isGoldenMimicFlag: 1,
       isGoldenMimicYFlippedFlag: 1,
     });
+  } else if (item.id === 'enemy_bee_swarm') {
+    room.enemies.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      kinds: ['Physical'],
+      particleCount: 10,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 0,
+      isRollingEnemyFlag: 0,
+      rollingEnemySpriteIndex: 0,
+      isRockElementalFlag: 0,
+      isRadiantTetherFlag: 0,
+      isGrappleHunterFlag: 0,
+      isSlimeFlag: 0,
+      isLargeSlimeFlag: 0,
+      isWheelEnemyFlag: 0,
+      isBeetleFlag: 0,
+      isBubbleEnemyFlag: 0,
+      isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
+      isBeeSwarmFlag: 1,
+    });
   } else if (item.id === 'grasshopper_area') {
     room.grasshopperAreas.push({
       uid: allocateUid(state),

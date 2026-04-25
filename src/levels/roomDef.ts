@@ -266,6 +266,12 @@ export interface RoomEnemyDef {
    * Only meaningful when isGoldenMimicFlag === 1.
    */
   isGoldenMimicYFlippedFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a bee swarm — 10 bees that orbit a spawn area until the
+   * player comes close or the swarm takes damage, then charge the player.
+   * Each bee is killed by 1 golden mote (1 Physical particle hit).
+   */
+  isBeeSwarmFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

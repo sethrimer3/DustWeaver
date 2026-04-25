@@ -44,6 +44,11 @@ export const MAX_SQUARE_STAMPEDE = 8;
  */
 export const SQUARE_STAMPEDE_TRAIL_COUNT = 19;
 
+/** Maximum number of bee-swarm enemies per room. */
+export const MAX_BEE_SWARMS = 4;
+/** Number of bees in a single bee-swarm cluster. */
+export const BEES_PER_SWARM = 10;
+
 export interface WorldState extends ParticleBuffers {
   tick: number;
   dtMs: number;
@@ -407,6 +412,25 @@ export interface WorldState extends ParticleBuffers {
   squareStampedeTrailCount: Uint8Array;
   /** Number of entries per slot (= SQUARE_STAMPEDE_TRAIL_COUNT). Read-only after init. */
   squareStampedeTrailStride: number;
+
+  // ── Bee-swarm individual bee position buffers ────────────────────────────────
+  /**
+   * X position of each bee (world units).
+   * Layout: [swarmSlot * BEES_PER_SWARM + beeIndex].
+   * Total length = MAX_BEE_SWARMS * BEES_PER_SWARM.
+   */
+  beeSwarmBeeXWorld: Float32Array;
+  /** Y position of each bee (world units). Same layout as beeSwarmBeeXWorld. */
+  beeSwarmBeeYWorld: Float32Array;
+  /** X velocity of each bee (world units/s). Same layout as beeSwarmBeeXWorld. */
+  beeSwarmBeeVelXWorld: Float32Array;
+  /** Y velocity of each bee (world units/s). Same layout as beeSwarmBeeXWorld. */
+  beeSwarmBeeVelYWorld: Float32Array;
+  /**
+   * Per-bee Lissajous phase offset (radians).
+   * Assigned at spawn time to spread bees around the orbit ring.
+   */
+  beeSwarmBeePhaseRad: Float32Array;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -545,6 +569,12 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     squareStampedeTrailYWorld: new Float32Array(MAX_SQUARE_STAMPEDE * SQUARE_STAMPEDE_TRAIL_COUNT),
     squareStampedeTrailHead: new Uint8Array(MAX_SQUARE_STAMPEDE),
     squareStampedeTrailCount: new Uint8Array(MAX_SQUARE_STAMPEDE),
+    // ── Bee-swarm bee position buffers ────────────────────────────────
+    beeSwarmBeeXWorld:    new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    beeSwarmBeeYWorld:    new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    beeSwarmBeeVelXWorld: new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    beeSwarmBeeVelYWorld: new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    beeSwarmBeePhaseRad:  new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     ...createParticleBuffers(),
   };
 }
