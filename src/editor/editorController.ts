@@ -405,9 +405,9 @@ export function createEditorController(
       }
     }
 
-    // Ensure the currently edited room is present in the visual map set, even
-    // if it came from fallback loading or was created in-session.
-    if (state.roomData && !ROOM_REGISTRY.has(state.roomData.id)) {
+    // Refresh the currently edited room before the visual map snapshots
+    // ROOM_REGISTRY. Door moves can otherwise render from a stale RoomDef.
+    if (state.roomData) {
       registerRoom(editorRoomDataToRoomDef(state.roomData));
     }
 
