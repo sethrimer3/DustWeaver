@@ -12,6 +12,11 @@ import { ParticleKind } from '../../sim/particles/kinds';
 import { BEES_PER_SWARM } from '../../sim/world';
 import { loadImg, isSpriteReady } from '../imageCache';
 import {
+  RT_STATE_TELEGRAPH,
+  RT_STATE_LOCK,
+  RT_STATE_FIRING,
+} from '../../sim/clusters/radiantTetherAi';
+import {
   getCharacterSprites,
   PLAYER_SPRITE_WIDTH_WORLD,
   PLAYER_SPRITE_HEIGHT_WORLD,
@@ -21,16 +26,8 @@ import {
 
 // ── Rolling enemy sprites ────────────────────────────────────────────────────
 
-/** Rolling enemy sprites indexed by spriteIndex (1–6). Index 0 is unused. */
-const _enemySprites: HTMLImageElement[] = [
-  loadImg('SPRITES/player/player.png'), // placeholder at index 0 (unused)
-  loadImg('SPRITES/enemies/universal/enemy (1).png'),
-  loadImg('SPRITES/enemies/universal/enemy (2).png'),
-  loadImg('SPRITES/enemies/universal/enemy (3).png'),
-  loadImg('SPRITES/enemies/universal/enemy (4).png'),
-  loadImg('SPRITES/enemies/universal/enemy (5).png'),
-  loadImg('SPRITES/enemies/universal/enemy (6).png'),
-];
+/** Golden block enemy sprite (16×16 source art). */
+const _goldenBlockSprite = loadImg('SPRITES/ENEMIES/goldenBlock/goldenBlock.png');
 
 // ── Rock Elemental sprites ───────────────────────────────────────────────────
 
@@ -40,6 +37,18 @@ const _reArm2Deactivated = loadImg('SPRITES/ENEMIES/earthElemental/earthElementa
 const _reHeadActivated   = loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_head_activated.png');
 const _reArm1Activated   = loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_arm_1_activated.png');
 const _reArm2Activated   = loadImg('SPRITES/ENEMIES/earthElemental/earthElemental_arm_2_activated.png');
+
+// ── Golden Beetle sprites ───────────────────────────────────────────────────
+
+const _beetleWalkSprite = loadImg('SPRITES/ENEMIES/goldenBeetle/goldenBeetle_walking.png');
+const _beetleDefensiveSprite = loadImg('SPRITES/ENEMIES/goldenBeetle/goldenBeetle_defensive.png');
+const _beetleFlyingSprite = loadImg('SPRITES/ENEMIES/goldenBeetle/goldenBeetle_flying.png');
+const _beetleDivingSprite = loadImg('SPRITES/ENEMIES/goldenBeetle/goldenBeetle_diving.png');
+
+// ── Radiant Tether sprites ──────────────────────────────────────────────────
+
+const _radiantTetherFlyingSprite = loadImg('SPRITES/ENEMIES/radiantTeather/radiantTether_flying.png');
+const _radiantTetherAttackingSprite = loadImg('SPRITES/ENEMIES/radiantTeather/radiantTether_attacking.png');
 
 // ── Flying Eye rendering constants ──────────────────────────────────────────
 
@@ -82,14 +91,12 @@ export function renderRollingEnemy(
   const boxW     = boxHalfW * 2;
   const boxH     = boxHalfH * 2;
 
-  const idx    = cluster.rollingEnemySpriteIndex;
-  const sprite = idx >= 1 && idx <= 6 ? _enemySprites[idx] : _enemySprites[1];
   const rollAngle = cluster.rollingEnemyRollAngleRad;
-  if (isSpriteReady(sprite)) {
+  if (isSpriteReady(_goldenBlockSprite)) {
     ctx.save();
     ctx.translate(screenX, screenY);
     ctx.rotate(rollAngle);
-    ctx.drawImage(sprite, -boxHalfW, -boxHalfH, boxW, boxH);
+    ctx.drawImage(_goldenBlockSprite, -boxHalfW, -boxHalfH, boxW, boxH);
     ctx.restore();
   } else {
     // Fallback while sprite loads: orange box
@@ -123,9 +130,11 @@ export function renderRockElemental(
   const arm1Sprite = isActiveRE ? _reArm1Activated : _reArm1Deactivated;
   const arm2Sprite = isActiveRE ? _reArm2Activated : _reArm2Deactivated;
 
-  // Piece sizes
+  // Piece sizes (matching source sprite proportions):
+  // head 24×24, arms 8×16.
   const headSize = boxW * 1.2;
-  const armSize = boxW * 0.9;
+  const armWidth = headSize / 3;
+  const armHeight = headSize * (2 / 3);
 
   if (reState === 0) {
     // Inactive: rock pieces scattered on ground
@@ -133,10 +142,10 @@ export function renderRockElemental(
       ctx.drawImage(headSprite, screenX - headSize * 0.5, screenY - headSize * 0.3, headSize, headSize);
     }
     if (isSpriteReady(arm1Sprite)) {
-      ctx.drawImage(arm1Sprite, screenX - armSize * 1.4, screenY, armSize, armSize);
+      ctx.drawImage(arm1Sprite, screenX - headSize * 0.85, screenY - armHeight * 0.2, armWidth, armHeight);
     }
     if (isSpriteReady(arm2Sprite)) {
-      ctx.drawImage(arm2Sprite, screenX + armSize * 0.5, screenY + armSize * 0.1, armSize, armSize);
+      ctx.drawImage(arm2Sprite, screenX + headSize * 0.5, screenY - armHeight * 0.1, armWidth, armHeight);
     }
   } else {
     // Activating or active: lerp pieces into floating formation
@@ -148,18 +157,18 @@ export function renderRockElemental(
     const headY = headRestY + (headFloatY - headRestY) * t;
 
     // Arm 1: slides left
-    const arm1RestX = screenX - armSize * 1.4;
-    const arm1RestY = screenY;
-    const arm1FloatX = screenX - armSize * 1.1;
-    const arm1FloatY = screenY - armSize * 0.4;
+    const arm1RestX = screenX - headSize * 0.85;
+    const arm1RestY = screenY - armHeight * 0.2;
+    const arm1FloatX = screenX - headSize * 0.6;
+    const arm1FloatY = screenY - headSize * 0.55;
     const arm1X = arm1RestX + (arm1FloatX - arm1RestX) * t;
     const arm1Y = arm1RestY + (arm1FloatY - arm1RestY) * t;
 
     // Arm 2: slides right
-    const arm2RestX = screenX + armSize * 0.5;
-    const arm2RestY = screenY + armSize * 0.1;
-    const arm2FloatX = screenX + armSize * 0.3;
-    const arm2FloatY = screenY - armSize * 0.4;
+    const arm2RestX = screenX + headSize * 0.5;
+    const arm2RestY = screenY - armHeight * 0.1;
+    const arm2FloatX = screenX + headSize * 0.45;
+    const arm2FloatY = screenY - headSize * 0.55;
     const arm2X = arm2RestX + (arm2FloatX - arm2RestX) * t;
     const arm2Y = arm2RestY + (arm2FloatY - arm2RestY) * t;
 
@@ -170,10 +179,10 @@ export function renderRockElemental(
       ctx.drawImage(headSprite, screenX - headSize * 0.5, headY + bobOffset, headSize, headSize);
     }
     if (isSpriteReady(arm1Sprite)) {
-      ctx.drawImage(arm1Sprite, arm1X, arm1Y + bobOffset, armSize, armSize);
+      ctx.drawImage(arm1Sprite, arm1X, arm1Y + bobOffset, armWidth, armHeight);
     }
     if (isSpriteReady(arm2Sprite)) {
-      ctx.drawImage(arm2Sprite, arm2X, arm2Y + bobOffset, armSize, armSize);
+      ctx.drawImage(arm2Sprite, arm2X, arm2Y + bobOffset, armWidth, armHeight);
     }
   }
 }
@@ -391,141 +400,58 @@ export function renderWheelEnemy(
 
 // ── Golden Beetle ────────────────────────────────────────────────────────────
 
-/**
- * Stub renderer for a crawling golden beetle.
- * Draws an oval body oriented according to the surface normal, with stubby legs.
- * The forward direction is the tangent to the surface (perpendicular to normal).
- */
+function drawBeetleSprite(
+  ctx: CanvasRenderingContext2D,
+  sprite: HTMLImageElement,
+  cx: number,
+  cy: number,
+  halfSizePx: number,
+): boolean {
+  if (!isSpriteReady(sprite)) return false;
+  const drawW = halfSizePx * 2;
+  const drawH = halfSizePx * 2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.drawImage(sprite, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
+  ctx.restore();
+  return true;
+}
+
 export function renderBeetleCrawling(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number,
   halfSizePx: number,
-  normalX: number,
-  normalY: number,
+  _normalX: number,
+  _normalY: number,
+  beetleAiState: number,
 ): void {
-  // Angle: body faces along the tangent of the surface normal.
-  // Normal (0,-1) → tangent (1,0) → angle=0; normal (-1,0) → tangent (0,-1) → angle=-π/2.
-  const tangentX = -normalY;
-  const tangentY =  normalX;
-  const angle = Math.atan2(tangentY, tangentX);
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-
-  // Elytra (wing covers) — golden oval
-  ctx.beginPath();
-  ctx.ellipse(0, 0, halfSizePx * 1.1, halfSizePx * 0.75, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#c8900a';
-  ctx.globalAlpha = 0.92;
-  ctx.fill();
-  ctx.globalAlpha = 1.0;
-
-  // Gold sheen outline
-  ctx.strokeStyle = '#ffd700';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Elytra dividing line down the middle
-  ctx.beginPath();
-  ctx.moveTo(0, -halfSizePx * 0.75);
-  ctx.lineTo(0, halfSizePx * 0.75);
-  ctx.strokeStyle = '#ffec60';
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
-
-  // Head nub (front)
-  ctx.beginPath();
-  ctx.arc(halfSizePx * 0.95, 0, halfSizePx * 0.3, 0, Math.PI * 2);
-  ctx.fillStyle = '#b87000';
-  ctx.fill();
-  ctx.strokeStyle = '#ffd700';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Legs — 3 pairs (stub lines perpendicular to body)
-  ctx.strokeStyle = '#8b5000';
-  ctx.lineWidth = 1;
-  const legOffsets = [-halfSizePx * 0.5, 0, halfSizePx * 0.5];
-  for (let li = 0; li < legOffsets.length; li++) {
-    const lx = legOffsets[li];
-    ctx.beginPath();
-    ctx.moveTo(lx, halfSizePx * 0.7);
-    ctx.lineTo(lx + halfSizePx * 0.2, halfSizePx * 1.3);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(lx, -halfSizePx * 0.7);
-    ctx.lineTo(lx + halfSizePx * 0.2, -halfSizePx * 1.3);
-    ctx.stroke();
+  const isIdleState = beetleAiState === 2;
+  const sprite = isIdleState ? _beetleDefensiveSprite : _beetleWalkSprite;
+  if (!drawBeetleSprite(ctx, sprite, cx, cy, halfSizePx)) {
+    ctx.fillStyle = '#c8900a';
+    ctx.fillRect(cx - halfSizePx, cy - halfSizePx, halfSizePx * 2, halfSizePx * 2);
   }
-
-  ctx.restore();
 }
 
-/**
- * Stub renderer for a flying golden beetle.
- * Draws the body with spread wing outlines to indicate flight.
- */
 export function renderBeetleFlying(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number,
   halfSizePx: number,
+  beetleAiState: number,
 ): void {
-  ctx.save();
-  ctx.translate(cx, cy);
+  const isFlyToward = beetleAiState === 4;
+  const sprite = isFlyToward ? _beetleDivingSprite : _beetleFlyingSprite;
+  if (!drawBeetleSprite(ctx, sprite, cx, cy, halfSizePx)) {
+    ctx.fillStyle = '#c8900a';
+    ctx.fillRect(cx - halfSizePx, cy - halfSizePx, halfSizePx * 2, halfSizePx * 2);
+  }
+}
 
-  // Wings (spread out, semi-transparent)
-  ctx.beginPath();
-  ctx.ellipse(-halfSizePx * 1.5, -halfSizePx * 0.3,
-    halfSizePx * 1.3, halfSizePx * 0.45, -Math.PI * 0.15, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 220, 80, 0.35)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 215, 0, 0.75)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.ellipse(halfSizePx * 1.5, -halfSizePx * 0.3,
-    halfSizePx * 1.3, halfSizePx * 0.45, Math.PI * 0.15, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 220, 80, 0.35)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255, 215, 0, 0.75)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Elytra body — slightly open (horizontal orientation)
-  ctx.beginPath();
-  ctx.ellipse(0, 0, halfSizePx * 1.1, halfSizePx * 0.75, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#c8900a';
-  ctx.globalAlpha = 0.92;
-  ctx.fill();
-  ctx.globalAlpha = 1.0;
-  ctx.strokeStyle = '#ffd700';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Head nub
-  ctx.beginPath();
-  ctx.arc(halfSizePx * 0.95, 0, halfSizePx * 0.3, 0, Math.PI * 2);
-  ctx.fillStyle = '#b87000';
-  ctx.fill();
-  ctx.strokeStyle = '#ffd700';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Small antennae
-  ctx.strokeStyle = '#ffd700';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(halfSizePx * 1.2, -halfSizePx * 0.2);
-  ctx.lineTo(halfSizePx * 1.9, -halfSizePx * 0.8);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(halfSizePx * 1.2, halfSizePx * 0.2);
-  ctx.lineTo(halfSizePx * 1.9, halfSizePx * 0.8);
-  ctx.stroke();
-
-  ctx.restore();
+export function getRadiantTetherBodySprite(state: number): HTMLImageElement {
+  if (state === RT_STATE_TELEGRAPH || state === RT_STATE_LOCK || state === RT_STATE_FIRING) {
+    return _radiantTetherAttackingSprite;
+  }
+  return _radiantTetherFlyingSprite;
 }
 
 // ── Square Stampede ──────────────────────────────────────────────────────────

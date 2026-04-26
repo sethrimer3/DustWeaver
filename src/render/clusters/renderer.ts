@@ -417,12 +417,13 @@ export function renderClusters(
     } else if (cluster.isBeetleFlag === 1) {
       // ── Golden Beetle: stub graphics — oval body with wing hints ─────────
       if (cluster.beetleIsFlightModeFlag === 1) {
-        renderBeetleFlying(ctx, screenX, screenY, boxHalfW);
+        renderBeetleFlying(ctx, screenX, screenY, boxHalfW, cluster.beetleAiState);
       } else {
         renderBeetleCrawling(
           ctx, screenX, screenY, boxHalfW,
           cluster.beetleSurfaceNormalXWorld,
           cluster.beetleSurfaceNormalYWorld,
+          cluster.beetleAiState,
         );
       }
     } else if (cluster.isBubbleEnemyFlag === 1) {
