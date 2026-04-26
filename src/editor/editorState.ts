@@ -6,13 +6,13 @@
  * which can be exported to JSON and later rebuilt into a RoomDef.
  */
 
-import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
 
 // Re-export for convenience in editor modules
-export type { BlockTheme, BackgroundId, LightingEffect, DecorationKind } from '../levels/roomDef';
+export type { BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 export type { RoomSongId } from '../audio/musicManager';
 
 /** Options shown in the "Room Song" editor dropdown, in display order. */
@@ -32,7 +32,7 @@ export enum EditorTool {
 
 // ── Palette categories and items ─────────────────────────────────────────────
 
-export type PaletteCategory = 'blocks' | 'enemies' | 'triggers';
+export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'lighting' | 'liquids';
 
 export interface PaletteItem {
   id: string;
@@ -48,7 +48,30 @@ export interface PaletteItem {
   isRampItem?: 1;
   /** 1 if this palette item places a half-width pillar (4 px wide). */
   isPillarHalfWidthItem?: 1;
+  /** 1 if this palette item paints ambient-light blocker tiles. */
+  isAmbientLightBlockerItem?: 1;
+  /** 1 if this palette item paints dark ambient-light blocker tiles (also draws a black background overlay). */
+  isDarkAmbientLightBlockerItem?: 1;
+  /** 1 if this palette item places a local light source. */
+  isLightSourceItem?: 1;
+  /** 1 if this palette item places a liquid zone (water or lava). */
+  isLiquidZoneItem?: 1;
+  /** 1 if this palette item places a crumble block (collapses on first contact). */
+  isCrumbleBlockItem?: 1;
 }
+
+/** Options for the crumble-block weakness variant dropdown. */
+export const CRUMBLE_VARIANT_OPTIONS: readonly { id: CrumbleVariant; label: string }[] = [
+  { id: 'normal',    label: 'Normal'    },
+  { id: 'fire',      label: 'Fire'      },
+  { id: 'water',     label: 'Water'     },
+  { id: 'void',      label: 'Void'      },
+  { id: 'ice',       label: 'Ice'       },
+  { id: 'lightning', label: 'Lightning' },
+  { id: 'poison',    label: 'Poison'    },
+  { id: 'shadow',    label: 'Shadow'    },
+  { id: 'nature',    label: 'Nature'    },
+];
 
 /** Built-in palette items available in the editor. */
 export const PALETTE_ITEMS: readonly PaletteItem[] = [
@@ -67,6 +90,12 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_slime_large', label: 'Dust Slime (L)', category: 'enemies' },
   { id: 'enemy_wheel', label: 'Wheel Enemy', category: 'enemies' },
   { id: 'enemy_beetle', label: 'Golden Beetle', category: 'enemies' },
+  { id: 'enemy_water_bubble', label: 'Water Bubble', category: 'enemies' },
+  { id: 'enemy_ice_bubble',   label: 'Ice Bubble',   category: 'enemies' },
+  { id: 'enemy_square_stampede', label: 'Square Stampede', category: 'enemies' },
+  { id: 'enemy_golden_mimic', label: 'Golden Mimic', category: 'enemies' },
+  { id: 'enemy_golden_mimic_xy', label: 'Golden Mimic (XY)', category: 'enemies' },
+  { id: 'enemy_bee_swarm', label: 'Bee Swarm', category: 'enemies' },
   // Triggers
   { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
@@ -82,6 +111,21 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'decoration_mushroom',  label: 'Glow Mushroom', category: 'triggers' },
   { id: 'decoration_glowgrass', label: 'Glow Grass',    category: 'triggers' },
   { id: 'decoration_vine',      label: 'Glow Vine',     category: 'triggers' },
+  // ── Lighting layer ─────────────────────────────────────────────────────
+  // Designer-facing authoring for the unified ambient lighting system.
+  // See `RoomAmbientLightBlockerDef` / `RoomLightSourceDef` in roomDef.ts.
+  { id: 'ambient_light_blocker',      label: 'Ambient Blocker', category: 'lighting', isAmbientLightBlockerItem: 1 },
+  { id: 'dark_ambient_light_blocker', label: 'Dark Blocker',    category: 'lighting', isAmbientLightBlockerItem: 1, isDarkAmbientLightBlockerItem: 1 },
+  { id: 'light_source',          label: 'Light Source',    category: 'lighting', isLightSourceItem: 1 },
+  // ── Liquids layer ───────────────────────────────────────────────────────
+  { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
+  { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
+  // ── Crumble blocks ──────────────────────────────────────────────────────
+  { id: 'crumble_block',    label: 'Crumble 1×1',       category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1 },
+  { id: 'crumble_block_2x2', label: 'Crumble 2×2',      category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1 },
+  { id: 'crumble_ramp_1x1', label: 'Crumble Ramp 1×1',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1, isRampItem: 1 },
+  { id: 'crumble_ramp_1x2', label: 'Crumble Ramp 1×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isCrumbleBlockItem: 1, isRampItem: 1 },
+  { id: 'crumble_ramp_2x2', label: 'Crumble Ramp 2×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1, isRampItem: 1 },
 ];
 
 /** Available block themes for the editor dropdown. */
@@ -107,11 +151,36 @@ export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] 
   { id: 'thero_ch6',        label: 'Thero Chapter 6 (Substrate)' },
 ];
 
-/** Available lighting models for the editor dropdown. */
+/**
+ * Available lighting models for the editor dropdown.
+ *
+ * The legacy `'DEFAULT'` and `'Above'` values are preserved for backward
+ * compatibility with existing room files (the runtime solver maps them into
+ * the unified ambient model — `'DEFAULT'` → omni, `'Above'` → down). New
+ * rooms should pick `'Ambient'`, `'DarkRoom'`, or `'FullyLit'`.
+ */
 export const LIGHTING_OPTIONS: readonly { id: LightingEffect; label: string }[] = [
-  { id: 'DEFAULT',  label: 'DEFAULT' },
-  { id: 'Above',    label: 'Above' },
+  { id: 'Ambient',  label: 'Ambient' },
   { id: 'DarkRoom', label: 'Dark Room' },
+  { id: 'FullyLit', label: 'Fully Lit' },
+  { id: 'DEFAULT',  label: 'Legacy: Default (omni)' },
+  { id: 'Above',    label: 'Legacy: Above (down)' },
+];
+
+/**
+ * Available ambient/skylight directions. `'down-right'` is the recommended
+ * authored default for a natural diagonal spill (§8 of the spec).
+ */
+export const AMBIENT_LIGHT_DIRECTION_OPTIONS: readonly { id: AmbientLightDirection; label: string }[] = [
+  { id: 'omni',       label: 'Omni (all sides)' },
+  { id: 'down',       label: 'Down ↓' },
+  { id: 'down-right', label: 'Down-Right ↘' },
+  { id: 'down-left',  label: 'Down-Left ↙' },
+  { id: 'up',         label: 'Up ↑' },
+  { id: 'up-right',   label: 'Up-Right ↗' },
+  { id: 'up-left',    label: 'Up-Left ↖' },
+  { id: 'left',       label: 'Left ←' },
+  { id: 'right',      label: 'Right →' },
 ];
 
 /** Available fade color options for room transitions. */
@@ -164,6 +233,12 @@ export interface EditorEnemy {
   isLargeSlimeFlag: 0 | 1;
   isWheelEnemyFlag: 0 | 1;
   isBeetleFlag: 0 | 1;
+  isBubbleEnemyFlag: 0 | 1;
+  isIceBubbleFlag: 0 | 1;
+  isSquareStampedeFlag: 0 | 1;
+  isGoldenMimicFlag?: 0 | 1;
+  isGoldenMimicYFlippedFlag?: 0 | 1;
+  isBeeSwarmFlag?: 0 | 1;
 }
 
 export interface EditorTransition {
@@ -180,6 +255,46 @@ export interface EditorTransition {
    * When defined the transition is an interior zone at this block position.
    */
   depthBlock?: number;
+  /** When true, this transition is a secret door hidden from the player until approached. */
+  isSecretDoor?: boolean;
+  /** Width of the fade gradient in blocks (default: 3). */
+  gradientWidthBlocks?: number;
+}
+
+/** A water zone rectangle placed in the room. */
+export interface EditorWaterZone {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
+/** A lava zone rectangle placed in the room. */
+export interface EditorLavaZone {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
+/** A crumble block that collapses on first player contact. */
+export interface EditorCrumbleBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock: number;
+  /** Height in blocks (default 1). */
+  hBlock: number;
+  /**
+   * Ramp orientation (0-3). Undefined = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** Which elemental type this crumble block is weak to. */
+  variant: CrumbleVariant;
 }
 
 /** Save Tomb — where the player saves their progress. */
@@ -223,6 +338,38 @@ export interface EditorDecoration {
   kind: DecorationKind;
 }
 
+/**
+ * An editor-painted ambient-light blocker tile.
+ *
+ * One entry per opaque cell. The sparse cell-coordinate storage fits the
+ * existing JSON arrays model (see ARCHITECTURE/roomJson.ts). The tile has
+ * no collision, no hazard, and no visual geometry — it only influences
+ * the ambient-light propagation pass.
+ */
+export interface EditorAmbientLightBlocker {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /**
+   * 1 if this is a dark blocker that draws a solid black overlay over the air
+   * cell, hiding the room background.  0 (or absent) for the standard clear blocker.
+   */
+  isDarkFlag: 0 | 1;
+}
+
+/** An editor-placed local light source (see {@link RoomLightSourceDef}). */
+export interface EditorLightSource {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  radiusBlocks: number;
+  colorR: number;
+  colorG: number;
+  colorB: number;
+  /** Designer-facing 0-100 percent brightness slider value. */
+  brightnessPct: number;
+}
+
 export interface EditorRoomData {
   id: string;
   name: string;
@@ -237,6 +384,12 @@ export interface EditorRoomData {
   backgroundId: BackgroundId;
   /** Lighting model for this room. */
   lightingEffect: LightingEffect;
+  /**
+   * Direction ambient/skylight arrives from. Undefined means "use whatever
+   * the legacy `lightingEffect` value implies" (omni for `DEFAULT`/`Ambient`,
+   * down for `Above`).
+   */
+  ambientLightDirection?: AmbientLightDirection;
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default).
@@ -256,11 +409,21 @@ export interface EditorRoomData {
   grasshopperAreas: EditorGrasshopperArea[];
   /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
   decorations: EditorDecoration[];
+  /** Editor-painted ambient-light blocker tiles (sparse). */
+  ambientLightBlockers: EditorAmbientLightBlocker[];
+  /** Editor-placed local light sources. */
+  lightSources: EditorLightSource[];
+  /** Water zones placed in this room. */
+  waterZones?: EditorWaterZone[];
+  /** Lava zones placed in this room. */
+  lavaZones?: EditorLavaZone[];
+  /** Crumble blocks placed in this room (collapse on first player contact). */
+  crumbleBlocks?: EditorCrumbleBlock[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;
@@ -315,6 +478,11 @@ export interface EditorState {
    */
   pendingSkillTombWeaveId: string;
   /**
+   * Which crumble variant a newly placed crumble block will have.
+   * Populated from the crumble variant dropdown when a crumble item is selected.
+   */
+  pendingCrumbleVariant: CrumbleVariant;
+  /**
    * The element the mouse is currently hovering over (Select tool only).
    * Null when no element is under the cursor or when not using the Select tool.
    */
@@ -348,6 +516,7 @@ export function createEditorState(): EditorState {
     selectionBoxStartBlockY: 0,
     clipboard: null,
     pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
+    pendingCrumbleVariant: 'normal',
     hoverElement: null,
   };
 }

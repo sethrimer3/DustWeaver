@@ -228,7 +228,15 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     playerSpawnBlock: [json.playerSpawnBlock[0], json.playerSpawnBlock[1]],
     transitions,
     saveTombs: json.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
-    skillTombs: (json.dustSkillTombs ?? []).map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
+    skillTombs: [
+      ...(json.dustSkillTombs ?? []).map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
+      // Legacy: skill books are unified with skill tombs — merge them in.
+      ...(json.skillBooks ?? []).filter(s => !!(s as unknown as Record<string, unknown>)['weaveId']).map(s => ({
+        xBlock: s.xBlock,
+        yBlock: s.yBlock,
+        weaveId: (s as unknown as Record<string, unknown>)['weaveId'] as string,
+      })),
+    ],
   };
 
   // Propagate optional theme/background fields
@@ -239,9 +247,6 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (resolvedSongId !== '_continue') room.songId = resolvedSongId;
 
   // Add optional fields only if present
-  if (json.skillBooks && json.skillBooks.length > 0) {
-    room.skillBooks = json.skillBooks.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock }));
-  }
   if (json.dustContainers && json.dustContainers.length > 0) {
     room.dustContainers = json.dustContainers.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock }));
   }
@@ -268,6 +273,28 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       xBlock: d.xBlock,
       yBlock: d.yBlock,
       kind: d.kind,
+    }));
+  }
+
+  if (json.ambientLightDirection) {
+    room.ambientLightDirection = json.ambientLightDirection;
+  }
+  if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
+    room.ambientLightBlockers = json.ambientLightBlockers.map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+      isDark: b.isDark,
+    }));
+  }
+  if (json.lightSources && json.lightSources.length > 0) {
+    room.lightSources = json.lightSources.map(l => ({
+      xBlock: l.xBlock,
+      yBlock: l.yBlock,
+      radiusBlocks: l.radiusBlocks,
+      colorR: l.colorR,
+      colorG: l.colorG,
+      colorB: l.colorB,
+      brightnessPct: l.brightnessPct,
     }));
   }
 

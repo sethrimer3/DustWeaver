@@ -8,8 +8,13 @@ import {
   EditorTransition, SelectedElement, allocateUid,
   PaletteItem, DecorationKind,
 } from './editorState';
+import { placeEnemyAtCursor } from './editorEnemyPlacer';
 
 // ── Hit testing helpers ──────────────────────────────────────────────────────
+
+function hitTestZone(zone: { xBlock: number; yBlock: number; wBlock: number; hBlock: number }, bx: number, by: number): boolean {
+  return bx >= zone.xBlock && bx < zone.xBlock + zone.wBlock && by >= zone.yBlock && by < zone.yBlock + zone.hBlock;
+}
 
 function hitTestWall(w: EditorWall, bx: number, by: number): boolean {
   return bx >= w.xBlock && bx < w.xBlock + w.wBlock && by >= w.yBlock && by < w.yBlock + w.hBlock;
@@ -103,6 +108,34 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check light sources (point selection at block centre).
+  for (const ls of (room.lightSources ?? [])) {
+    if (hitTestPoint(ls.xBlock, ls.yBlock, bx, by)) {
+      return { type: 'lightSource', uid: ls.uid };
+    }
+  }
+
+  // Check water zones
+  for (const z of (room.waterZones ?? [])) {
+    if (hitTestZone(z, bx, by)) {
+      return { type: 'waterZone', uid: z.uid };
+    }
+  }
+
+  // Check lava zones
+  for (const z of (room.lavaZones ?? [])) {
+    if (hitTestZone(z, bx, by)) {
+      return { type: 'lavaZone', uid: z.uid };
+    }
+  }
+
+  // Check crumble blocks
+  for (const b of (room.crumbleBlocks ?? [])) {
+    if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) {
+      return { type: 'crumbleBlock', uid: b.uid };
+    }
+  }
+
   // Check decorations
   for (const d of (room.decorations ?? [])) {
     if (hitTestPoint(d.xBlock, d.yBlock, bx, by)) {
@@ -119,6 +152,16 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const w of room.interiorWalls) {
     if (hitTestWall(w, bx, by)) {
       return { type: 'wall', uid: w.uid };
+    }
+  }
+
+  // Check ambient-light blockers last — they're single cells and shouldn't
+  // block selection of things authored above them.
+  const bxFloor = Math.floor(bx);
+  const byFloor = Math.floor(by);
+  for (const b of (room.ambientLightBlockers ?? [])) {
+    if (b.xBlock === bxFloor && b.yBlock === byFloor) {
+      return { type: 'ambientLightBlocker', uid: b.uid };
     }
   }
 
@@ -186,6 +229,61 @@ export function placeAtCursor(state: EditorState): void {
 
   if (!isInsideRoom(room, bx, by)) return;
 
+  // ── Lighting layer ─────────────────────────────────────────────────────
+  // Paint/place handlers for the ambientLightBlockers and local lightSources
+  // authoring workflows. Ambient blockers are single-cell and idempotent:
+  // clicking the same cell twice leaves it painted once.
+  if (item.category === 'lighting') {
+    const xFloor = Math.floor(bx);
+    const yFloor = Math.floor(by);
+    if (item.isAmbientLightBlockerItem === 1) {
+      const isDarkFlag: 0 | 1 = item.isDarkAmbientLightBlockerItem === 1 ? 1 : 0;
+      const already = (room.ambientLightBlockers ?? []).some(
+        b => b.xBlock === xFloor && b.yBlock === yFloor,
+      );
+      if (already) return;
+      if (!room.ambientLightBlockers) room.ambientLightBlockers = [];
+      room.ambientLightBlockers.push({
+        uid: allocateUid(state),
+        xBlock: xFloor,
+        yBlock: yFloor,
+        isDarkFlag,
+      });
+      return;
+    }
+    if (item.isLightSourceItem === 1) {
+      if (!room.lightSources) room.lightSources = [];
+      // Sensible editor defaults: warm white, full brightness, ~6-block radius.
+      room.lightSources.push({
+        uid: allocateUid(state),
+        xBlock: xFloor,
+        yBlock: yFloor,
+        radiusBlocks: 6,
+        colorR: 255,
+        colorG: 230,
+        colorB: 180,
+        brightnessPct: 100,
+      });
+      return;
+    }
+    return;
+  }
+
+  // ── Liquids layer ──────────────────────────────────────────────────────
+  if (item.category === 'liquids') {
+    const wBlock = item.defaultWidthBlocks ?? 4;
+    const hBlock = item.defaultHeightBlocks ?? 4;
+    if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
+    if (item.id === 'water_zone') {
+      if (!room.waterZones) room.waterZones = [];
+      room.waterZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
+    } else if (item.id === 'lava_zone') {
+      if (!room.lavaZones) room.lavaZones = [];
+      room.lavaZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
+    }
+    return;
+  }
+
   if (item.category === 'blocks') {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
@@ -208,6 +306,42 @@ export function placeAtCursor(state: EditorState): void {
 
     const isPillarHalfWidthFlag: 0 | 1 = item.isPillarHalfWidthItem === 1 ? 1 : 0;
 
+    if (item.isCrumbleBlockItem === 1) {
+      // Crumble blocks support different sizes and ramp orientations.
+      const wBlock = getPlacementWidth(item, state.placementRotationSteps);
+      const hBlock = getPlacementHeight(item, state.placementRotationSteps);
+
+      let rampOrientation: 0 | 1 | 2 | 3 | undefined;
+      if (item.isRampItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+
+      if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
+
+      // Prevent overlapping crumble blocks (can't place on top of itself).
+      const crumbles = room.crumbleBlocks ?? [];
+      const overlapsCrumble = crumbles.some(b => {
+        const bw = b.wBlock ?? 1;
+        const bh = b.hBlock ?? 1;
+        return bx < b.xBlock + bw && bx + wBlock > b.xBlock &&
+               by < b.yBlock + bh && by + hBlock > b.yBlock;
+      });
+      if (overlapsCrumble) return;
+
+      if (!room.crumbleBlocks) room.crumbleBlocks = [];
+      room.crumbleBlocks.push({
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        wBlock,
+        hBlock,
+        rampOrientation,
+        variant: state.pendingCrumbleVariant,
+      });
+      return;
+    }
+
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
     // Prevent overlapping walls
     const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
@@ -224,148 +358,8 @@ export function placeAtCursor(state: EditorState): void {
       rampOrientation,
       isPillarHalfWidthFlag,
     });
-  } else if (item.id === 'enemy_rolling') {
-    room.enemies.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      kinds: ['Physical'],
-      particleCount: 18,
-      isBossFlag: 0,
-      isFlyingEyeFlag: 0,
-      isRollingEnemyFlag: 1,
-      rollingEnemySpriteIndex: 1,
-      isRockElementalFlag: 0,
-      isRadiantTetherFlag: 0,
-      isGrappleHunterFlag: 0,
-      isSlimeFlag: 0,
-      isLargeSlimeFlag: 0,
-      isWheelEnemyFlag: 0,
-      isBeetleFlag: 0,
-    });
-  } else if (item.id === 'enemy_flying_eye') {
-    room.enemies.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      kinds: ['Wind'],
-      particleCount: 16,
-      isBossFlag: 0,
-      isFlyingEyeFlag: 1,
-      isRollingEnemyFlag: 0,
-      rollingEnemySpriteIndex: 0,
-      isRockElementalFlag: 0,
-      isRadiantTetherFlag: 0,
-      isGrappleHunterFlag: 0,
-      isSlimeFlag: 0,
-      isLargeSlimeFlag: 0,
-      isWheelEnemyFlag: 0,
-      isBeetleFlag: 0,
-    });
-  } else if (item.id === 'enemy_rock_elemental') {
-    room.enemies.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      kinds: ['Earth'],
-      particleCount: 20,
-      isBossFlag: 0,
-      isFlyingEyeFlag: 0,
-      isRollingEnemyFlag: 0,
-      rollingEnemySpriteIndex: 0,
-      isRockElementalFlag: 1,
-      isRadiantTetherFlag: 0,
-      isGrappleHunterFlag: 0,
-      isSlimeFlag: 0,
-      isLargeSlimeFlag: 0,
-      isWheelEnemyFlag: 0,
-      isBeetleFlag: 0,
-    });
-  } else if (item.id === 'enemy_slime') {
-    room.enemies.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      kinds: ['Nature'],
-      particleCount: 8,
-      isBossFlag: 0,
-      isFlyingEyeFlag: 0,
-      isRollingEnemyFlag: 0,
-      rollingEnemySpriteIndex: 0,
-      isRockElementalFlag: 0,
-      isRadiantTetherFlag: 0,
-      isGrappleHunterFlag: 0,
-      isSlimeFlag: 1,
-      isLargeSlimeFlag: 0,
-      isWheelEnemyFlag: 0,
-      isBeetleFlag: 0,
-    });
-  } else if (item.id === 'enemy_slime_large') {
-    room.enemies.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      kinds: ['Nature'],
-      particleCount: 16,
-      isBossFlag: 0,
-      isFlyingEyeFlag: 0,
-      isRollingEnemyFlag: 0,
-      rollingEnemySpriteIndex: 0,
-      isRockElementalFlag: 0,
-      isRadiantTetherFlag: 0,
-      isGrappleHunterFlag: 0,
-      isSlimeFlag: 0,
-      isLargeSlimeFlag: 1,
-      isWheelEnemyFlag: 0,
-      isBeetleFlag: 0,
-    });
-  } else if (item.id === 'enemy_wheel') {
-    room.enemies.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      kinds: ['Physical'],
-      particleCount: 12,
-      isBossFlag: 0,
-      isFlyingEyeFlag: 0,
-      isRollingEnemyFlag: 0,
-      rollingEnemySpriteIndex: 0,
-      isRockElementalFlag: 0,
-      isRadiantTetherFlag: 0,
-      isGrappleHunterFlag: 0,
-      isSlimeFlag: 0,
-      isLargeSlimeFlag: 0,
-      isWheelEnemyFlag: 1,
-      isBeetleFlag: 0,
-    });
-  } else if (item.id === 'enemy_beetle') {
-    room.enemies.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      kinds: ['Physical'],
-      particleCount: 8,
-      isBossFlag: 0,
-      isFlyingEyeFlag: 0,
-      isRollingEnemyFlag: 0,
-      rollingEnemySpriteIndex: 0,
-      isRockElementalFlag: 0,
-      isRadiantTetherFlag: 0,
-      isGrappleHunterFlag: 0,
-      isSlimeFlag: 0,
-      isLargeSlimeFlag: 0,
-      isWheelEnemyFlag: 0,
-      isBeetleFlag: 1,
-    });
-  } else if (item.id === 'grasshopper_area') {
-    room.grasshopperAreas.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      wBlock: 4,
-      hBlock: 4,
-      count: 4,
-    });
+  } else if (placeEnemyAtCursor(state, room, item, bx, by)) {
+    // Enemy or grasshopper area was placed — handled by editorEnemyPlacer
   } else if (item.id === 'player_spawn') {
     room.playerSpawnBlock = [bx, by];
   } else if (item.id === 'room_transition') {
@@ -558,6 +552,63 @@ export function deleteAtCursor(state: EditorState): void {
       return;
     }
   }
+
+  // Check light sources (before blockers so the bigger icon wins).
+  const lights = room.lightSources ?? [];
+  for (let i = 0; i < lights.length; i++) {
+    if (hitTestPoint(lights[i].xBlock, lights[i].yBlock, bx, by)) {
+      const removedUid = lights[i].uid;
+      lights.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check ambient-light blockers (single-cell match).
+  const blockers = room.ambientLightBlockers ?? [];
+  const bxFloor = Math.floor(bx);
+  const byFloor = Math.floor(by);
+  for (let i = 0; i < blockers.length; i++) {
+    if (blockers[i].xBlock === bxFloor && blockers[i].yBlock === byFloor) {
+      const removedUid = blockers[i].uid;
+      blockers.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check water zones
+  const waterZones = room.waterZones ?? [];
+  for (let i = 0; i < waterZones.length; i++) {
+    if (hitTestZone(waterZones[i], bx, by)) {
+      const removedUid = waterZones[i].uid;
+      waterZones.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check lava zones
+  const lavaZones = room.lavaZones ?? [];
+  for (let i = 0; i < lavaZones.length; i++) {
+    if (hitTestZone(lavaZones[i], bx, by)) {
+      const removedUid = lavaZones[i].uid;
+      lavaZones.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check crumble blocks
+  const crumbleBlocks = room.crumbleBlocks ?? [];
+  for (let i = 0; i < crumbleBlocks.length; i++) {
+    if (hitTestPoint(crumbleBlocks[i].xBlock, crumbleBlocks[i].yBlock, bx, by)) {
+      const removedUid = crumbleBlocks[i].uid;
+      crumbleBlocks.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
 }
 
 // ── Rotation helpers ─────────────────────────────────────────────────────────
@@ -580,6 +631,12 @@ function getPlacementHeight(item: PaletteItem, rotSteps: number): number {
 export function getPlacementPreview(state: EditorState): { wBlock: number; hBlock: number } | null {
   if (state.activeTool !== EditorTool.Place || state.selectedPaletteItem === null) return null;
   const item = state.selectedPaletteItem;
+  if (item.category === 'liquids') {
+    return {
+      wBlock: item.defaultWidthBlocks ?? 4,
+      hBlock: item.defaultHeightBlocks ?? 4,
+    };
+  }
   if (item.category !== 'blocks') {
     return { wBlock: 1, hBlock: 1 };
   }
@@ -652,6 +709,33 @@ export function getAllElementsInRect(
   for (const d of (room.decorations ?? [])) {
     if (d.xBlock >= minX && d.xBlock <= maxX && d.yBlock >= minY && d.yBlock <= maxY) {
       results.push({ type: 'decoration', uid: d.uid });
+    }
+  }
+  for (const ls of (room.lightSources ?? [])) {
+    if (ls.xBlock >= minX && ls.xBlock <= maxX && ls.yBlock >= minY && ls.yBlock <= maxY) {
+      results.push({ type: 'lightSource', uid: ls.uid });
+    }
+  }
+  for (const b of (room.ambientLightBlockers ?? [])) {
+    if (b.xBlock >= minX && b.xBlock <= maxX && b.yBlock >= minY && b.yBlock <= maxY) {
+      results.push({ type: 'ambientLightBlocker', uid: b.uid });
+    }
+  }
+  for (const z of (room.waterZones ?? [])) {
+    if (z.xBlock + z.wBlock > minX && z.xBlock < maxX + 1 &&
+        z.yBlock + z.hBlock > minY && z.yBlock < maxY + 1) {
+      results.push({ type: 'waterZone', uid: z.uid });
+    }
+  }
+  for (const z of (room.lavaZones ?? [])) {
+    if (z.xBlock + z.wBlock > minX && z.xBlock < maxX + 1 &&
+        z.yBlock + z.hBlock > minY && z.yBlock < maxY + 1) {
+      results.push({ type: 'lavaZone', uid: z.uid });
+    }
+  }
+  for (const b of (room.crumbleBlocks ?? [])) {
+    if (b.xBlock >= minX && b.xBlock <= maxX && b.yBlock >= minY && b.yBlock <= maxY) {
+      results.push({ type: 'crumbleBlock', uid: b.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&

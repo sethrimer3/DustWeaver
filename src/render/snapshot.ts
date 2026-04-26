@@ -143,6 +143,63 @@ export interface ClusterSnapshot {
   readonly beetleSurfaceNormalYWorld: number;
   /** 1 while the beetle is airborne (flying states). */
   readonly beetleIsFlightModeFlag: 0 | 1;
+  /** 1 if this cluster is a bubble enemy (water or ice). */
+  readonly isBubbleEnemyFlag: 0 | 1;
+  /** 1 for the ice variant, 0 for the water variant. */
+  readonly isIceBubbleFlag: 0 | 1;
+  /** 0 = alive/drifting, 1 = popped. */
+  readonly bubbleState: number;
+  /** Current orbit rotation angle (radians). */
+  readonly bubbleOrbitAngleRad: number;
+  /** 1 if this cluster is a square stampede enemy. */
+  readonly isSquareStampedeFlag: 0 | 1;
+  /**
+   * Index into the WorldSnapshot trail ring-buffer arrays.
+   * -1 when not assigned.
+   */
+  readonly squareStampedeSlotIndex: number;
+  /** Original full-health half-size (world units) — constant after spawn. */
+  readonly squareStampedeBaseHalfSizeWorld: number;
+  /** 1 if this cluster is a golden mimic enemy. */
+  readonly isGoldenMimicFlag: 0 | 1;
+  /** 1 for the XY-flipped variant of the golden mimic. */
+  readonly isGoldenMimicYFlippedFlag: 0 | 1;
+  /**
+   * Current mimic state: 0=active, 1=heap.
+   * Used by renderer to select heap vs. active visual mode.
+   */
+  readonly goldenMimicState: number;
+  /**
+   * Fade alpha for the heap state, in [1.0, 0.0].
+   * Applied as globalAlpha by the renderer during the fade-out.
+   */
+  readonly goldenMimicFadeAlpha: number;
+  /** 1 if this cluster is a bee swarm. */
+  readonly isBeeSwarmFlag: 0 | 1;
+  /**
+   * Index into the WorldSnapshot bee-position arrays (0..MAX_BEE_SWARMS-1).
+   * -1 when not assigned.
+   */
+  readonly beeSwarmSlotIndex: number;
+  /**
+   * Current bee-swarm AI state: 0=swarming, 1=charging.
+   * Used by renderer to tint bees differently when charging.
+   */
+  readonly beeSwarmState: number;
+  /** Global orbit angle (radians) — used by the renderer for swarm animation. */
+  readonly beeSwarmOrbitAngleRad: number;
+  /**
+   * Render-interpolated X position (world units).
+   * Linearly blended between the previous tick's position and the current tick's
+   * position using the frame's sub-tick alpha, so sprites animate smoothly at
+   * any refresh rate instead of snapping discretely each physics tick.
+   */
+  readonly renderPositionXWorld: number;
+  /**
+   * Render-interpolated Y position (world units).
+   * See `renderPositionXWorld` for details.
+   */
+  readonly renderPositionYWorld: number;
 }
 
 export interface WallSnapshot {
@@ -203,6 +260,31 @@ export interface WorldSnapshot {
   readonly grasshopperYWorld: Float32Array;
   /** Per-grasshopper alive flags. */
   readonly isGrasshopperAliveFlag: Uint8Array;
+
+  // ── Square Stampede trail ring buffers ────────────────────────────────────
+  /** Flattened trail X positions [slot * stride + ringIndex] (world units). */
+  readonly squareStampedeTrailXWorld: Float32Array;
+  /** Flattened trail Y positions. Same layout as squareStampedeTrailXWorld. */
+  readonly squareStampedeTrailYWorld: Float32Array;
+  /** Write-head per slot — points to the NEXT slot to be overwritten. */
+  readonly squareStampedeTrailHead: Uint8Array;
+  /** Number of valid trail entries per slot (0..stride). */
+  readonly squareStampedeTrailCount: Uint8Array;
+  /** Number of entries per slot (SQUARE_STAMPEDE_TRAIL_COUNT). */
+  readonly squareStampedeTrailStride: number;
+
+  // ── Bee-swarm individual bee position buffers ─────────────────────────────
+  /**
+   * X position of each bee (world units).
+   * Layout: [swarmSlot * BEES_PER_SWARM + beeIndex].
+   */
+  readonly beeSwarmBeeXWorld: Float32Array;
+  /** Y position of each bee (world units). Same layout as beeSwarmBeeXWorld. */
+  readonly beeSwarmBeeYWorld: Float32Array;
+  /** X velocity of each bee (world units/s). Same layout as beeSwarmBeeXWorld. */
+  readonly beeSwarmBeeVelXWorld: Float32Array;
+  /** Y velocity of each bee (world units/s). Same layout as beeSwarmBeeXWorld. */
+  readonly beeSwarmBeeVelYWorld: Float32Array;
 }
 
 // ── Reusable allocation-free snapshot ─────────────────────────────────────
@@ -242,6 +324,15 @@ interface _ReusableBacking {
   isPlayerWeaveActiveFlag: 0 | 1;
   characterId: string;
   grasshopperCount: number;
+  squareStampedeTrailXWorld: Float32Array;
+  squareStampedeTrailYWorld: Float32Array;
+  squareStampedeTrailHead: Uint8Array;
+  squareStampedeTrailCount: Uint8Array;
+  squareStampedeTrailStride: number;
+  beeSwarmBeeXWorld: Float32Array;
+  beeSwarmBeeYWorld: Float32Array;
+  beeSwarmBeeVelXWorld: Float32Array;
+  beeSwarmBeeVelYWorld: Float32Array;
   /** @internal Pre-allocated cluster objects — not part of the public API. */
   readonly _clusterPool: _MutableCluster[];
 }
@@ -327,6 +418,23 @@ function _makeEmptyCluster(): _MutableCluster {
     beetleSurfaceNormalXWorld: 0,
     beetleSurfaceNormalYWorld: 0,
     beetleIsFlightModeFlag: 0,
+    isBubbleEnemyFlag: 0,
+    isIceBubbleFlag: 0,
+    bubbleState: 0,
+    bubbleOrbitAngleRad: 0,
+    isSquareStampedeFlag: 0,
+    squareStampedeSlotIndex: -1,
+    squareStampedeBaseHalfSizeWorld: 0,
+    isGoldenMimicFlag: 0,
+    isGoldenMimicYFlippedFlag: 0,
+    goldenMimicState: 0,
+    goldenMimicFadeAlpha: 1.0,
+    isBeeSwarmFlag: 0,
+    beeSwarmSlotIndex: -1,
+    beeSwarmState: 0,
+    beeSwarmOrbitAngleRad: 0,
+    renderPositionXWorld: 0,
+    renderPositionYWorld: 0,
   };
 }
 
@@ -386,6 +494,26 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.beetleSurfaceNormalXWorld       = src.beetleSurfaceNormalXWorld;
   dst.beetleSurfaceNormalYWorld       = src.beetleSurfaceNormalYWorld;
   dst.beetleIsFlightModeFlag          = src.beetleIsFlightModeFlag;
+  dst.isBubbleEnemyFlag               = src.isBubbleEnemyFlag;
+  dst.isIceBubbleFlag                 = src.isIceBubbleFlag;
+  dst.bubbleState                     = src.bubbleState;
+  dst.bubbleOrbitAngleRad             = src.bubbleOrbitAngleRad;
+  dst.isSquareStampedeFlag            = src.isSquareStampedeFlag;
+  dst.squareStampedeSlotIndex         = src.squareStampedeSlotIndex;
+  dst.squareStampedeBaseHalfSizeWorld = src.squareStampedeBaseHalfSizeWorld;
+  dst.isGoldenMimicFlag               = src.isGoldenMimicFlag;
+  dst.isGoldenMimicYFlippedFlag       = src.isGoldenMimicYFlippedFlag;
+  dst.goldenMimicState                = src.goldenMimicState;
+  dst.goldenMimicFadeAlpha            = src.goldenMimicFadeAlpha;
+  dst.isBeeSwarmFlag                  = src.isBeeSwarmFlag;
+  dst.beeSwarmSlotIndex               = src.beeSwarmSlotIndex;
+  dst.beeSwarmState                   = src.beeSwarmState;
+  dst.beeSwarmOrbitAngleRad           = src.beeSwarmOrbitAngleRad;
+  // Render interpolation: initialised to the physics position by default.
+  // updateSnapshotInPlace() overwrites these with the blended position when
+  // prev-position buffers and an alpha are supplied.
+  dst.renderPositionXWorld            = src.positionXWorld;
+  dst.renderPositionYWorld            = src.positionYWorld;
 }
 
 /**
@@ -451,6 +579,15 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     grasshopperXWorld:        world.grasshopperXWorld,
     grasshopperYWorld:        world.grasshopperYWorld,
     isGrasshopperAliveFlag:   world.isGrasshopperAliveFlag,
+    squareStampedeTrailXWorld: world.squareStampedeTrailXWorld,
+    squareStampedeTrailYWorld: world.squareStampedeTrailYWorld,
+    squareStampedeTrailHead:   world.squareStampedeTrailHead,
+    squareStampedeTrailCount:  world.squareStampedeTrailCount,
+    squareStampedeTrailStride: world.squareStampedeTrailStride,
+    beeSwarmBeeXWorld:         world.beeSwarmBeeXWorld,
+    beeSwarmBeeYWorld:         world.beeSwarmBeeYWorld,
+    beeSwarmBeeVelXWorld:      world.beeSwarmBeeVelXWorld,
+    beeSwarmBeeVelYWorld:      world.beeSwarmBeeVelYWorld,
     _clusterPool:             clusterPool,
   };
 
@@ -462,9 +599,23 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
  * No heap allocations — all cluster objects are recycled from the pre-allocated
  * pool.  Call once per frame, immediately before `renderFrame()`.
  *
+ * @param renderAlpha - Sub-tick interpolation factor in [0, 1].  0 = fully at
+ *   the previous tick's position; 1 = fully at the current tick's position.
+ *   Pass 1.0 (or omit) when no interpolation data is available.
+ * @param prevPosX - Pre-allocated Float32Array of cluster X positions from the
+ *   start of the current frame (before any tick ran).  Must be at least as long
+ *   as `world.clusters.length`.  Omit to skip interpolation.
+ * @param prevPosY - Matching Y buffer.  Omit to skip interpolation.
+ *
  * ⚠ After this returns, the previous snapshot contents are overwritten.
  */
-export function updateSnapshotInPlace(snap: ReusableWorldSnapshot, world: WorldState): void {
+export function updateSnapshotInPlace(
+  snap: ReusableWorldSnapshot,
+  world: WorldState,
+  renderAlpha = 1.0,
+  prevPosX?: Float32Array,
+  prevPosY?: Float32Array,
+): void {
   const b = _asBacking(snap);
 
   b.tick = world.tick;
@@ -501,6 +652,18 @@ export function updateSnapshotInPlace(snap: ReusableWorldSnapshot, world: WorldS
     // The lazy pool-growth above also ensures pool[i] always exists here.
     b.clusters[i] = pool[i];
     _fillCluster(b.clusters[i], world.clusters[i]);
+
+    // Overwrite the render positions with the interpolated value when prev
+    // buffers are supplied.  _fillCluster() already set them to the current
+    // physics position as the no-interpolation fallback.
+    if (prevPosX !== undefined && prevPosY !== undefined) {
+      const prevPositionXWorld = prevPosX[i];
+      const prevPositionYWorld = prevPosY[i];
+      const currentPositionXWorld = world.clusters[i].positionXWorld;
+      const currentPositionYWorld = world.clusters[i].positionYWorld;
+      b.clusters[i].renderPositionXWorld = prevPositionXWorld + (currentPositionXWorld - prevPositionXWorld) * renderAlpha;
+      b.clusters[i].renderPositionYWorld = prevPositionYWorld + (currentPositionYWorld - prevPositionYWorld) * renderAlpha;
+    }
   }
 }
 
@@ -582,6 +745,23 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       beetleSurfaceNormalXWorld:     c.beetleSurfaceNormalXWorld,
       beetleSurfaceNormalYWorld:     c.beetleSurfaceNormalYWorld,
       beetleIsFlightModeFlag:        c.beetleIsFlightModeFlag,
+      isBubbleEnemyFlag:             c.isBubbleEnemyFlag,
+      isIceBubbleFlag:               c.isIceBubbleFlag,
+      bubbleState:                   c.bubbleState,
+      bubbleOrbitAngleRad:           c.bubbleOrbitAngleRad,
+      isSquareStampedeFlag:          c.isSquareStampedeFlag,
+      squareStampedeSlotIndex:       c.squareStampedeSlotIndex,
+      squareStampedeBaseHalfSizeWorld: c.squareStampedeBaseHalfSizeWorld,
+      isGoldenMimicFlag:             c.isGoldenMimicFlag,
+      isGoldenMimicYFlippedFlag:     c.isGoldenMimicYFlippedFlag,
+      goldenMimicState:              c.goldenMimicState,
+      goldenMimicFadeAlpha:          c.goldenMimicFadeAlpha,
+      isBeeSwarmFlag:                c.isBeeSwarmFlag,
+      beeSwarmSlotIndex:             c.beeSwarmSlotIndex,
+      beeSwarmState:                 c.beeSwarmState,
+      beeSwarmOrbitAngleRad:         c.beeSwarmOrbitAngleRad,
+      renderPositionXWorld:          c.positionXWorld,
+      renderPositionYWorld:          c.positionYWorld,
     });
   }
 
@@ -633,5 +813,14 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grasshopperXWorld:      world.grasshopperXWorld,
     grasshopperYWorld:      world.grasshopperYWorld,
     isGrasshopperAliveFlag: world.isGrasshopperAliveFlag,
+    squareStampedeTrailXWorld: world.squareStampedeTrailXWorld,
+    squareStampedeTrailYWorld: world.squareStampedeTrailYWorld,
+    squareStampedeTrailHead:   world.squareStampedeTrailHead,
+    squareStampedeTrailCount:  world.squareStampedeTrailCount,
+    squareStampedeTrailStride: world.squareStampedeTrailStride,
+    beeSwarmBeeXWorld:         world.beeSwarmBeeXWorld,
+    beeSwarmBeeYWorld:         world.beeSwarmBeeYWorld,
+    beeSwarmBeeVelXWorld:      world.beeSwarmBeeVelXWorld,
+    beeSwarmBeeVelYWorld:      world.beeSwarmBeeVelYWorld,
   };
 }

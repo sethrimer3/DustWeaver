@@ -323,6 +323,119 @@ export interface ClusterState {
   beetleIsFlightModeFlag: 0 | 1;
   /** Health recorded at end of last tick, used to detect incoming damage. */
   beetlePrevHealthPoints: number;
+
+  // ---- Square Stampede (populated only when isSquareStampedeFlag === 1) -----
+  /**
+   * 1 if this cluster is a square stampede enemy — floats in 2D, dashes
+   * along orthogonal axes, and leaves a shrinking ghost trail.
+   */
+  isSquareStampedeFlag: 0 | 1;
+  /**
+   * Index into the WorldState square-stampede trail ring-buffer arrays.
+   * -1 when no slot has been assigned.
+   */
+  squareStampedeSlotIndex: number;
+  /**
+   * Original full-health half-size (world units). Constant after spawn.
+   * Used by the renderer to scale each trail ghost independently of current HP.
+   */
+  squareStampedeBaseHalfSizeWorld: number;
+  /**
+   * Current AI movement state:
+   *   0 = idle (pausing between dashes)
+   *   1 = dashing horizontally (±X)
+   *   2 = dashing vertically (±Y)
+   */
+  squareStampedeAiState: number;
+  /** Ticks remaining in the current AI state. */
+  squareStampedeAiStateTicks: number;
+  /** Countdown ticks until the next trail position is recorded. */
+  squareStampedeTrailTimerTicks: number;
+
+  // ---- Bubble enemy (populated only when isBubbleEnemyFlag === 1) ----------
+  /**
+   * 1 if this cluster is a bubble enemy (water or ice variant).
+   * Drifts in 2D, repelled by walls/other bubbles, ring of particles orbits center.
+   */
+  isBubbleEnemyFlag: 0 | 1;
+  /** 1 if this is the ice variant (pops on any damage); 0 for water variant (pops at <75% HP). */
+  isIceBubbleFlag: 0 | 1;
+  /**
+   * 0 = alive/drifting, 1 = popped (particles flying free).
+   * Cluster's isAliveFlag is set to 0 once all popped particles are gone.
+   */
+  bubbleState: number;
+  /** Maximum number of ring particles (set at spawn, never changes). */
+  bubbleMaxParticleCount: number;
+  /** Accumulated rotation angle (radians) of the orbit ring — incremented each tick. */
+  bubbleOrbitAngleRad: number;
+  /** Countdown ticks until the water bubble regenerates one particle (water only). */
+  bubbleRegenTicks: number;
+  /** Phase (radians) for the Lissajous-curve drift direction — incremented each tick. */
+  bubbleDriftPhaseRad: number;
+  /** Health recorded at end of previous tick — used by ice bubble to detect any damage instantly. */
+  bubblePrevHealthPoints: number;
+
+  // ---- Golden Mimic (populated only when isGoldenMimicFlag === 1) -----------
+  /**
+   * 1 if this cluster is a golden mimic — a golden silhouette of the player that
+   * mirrors the player's movement (X-axis flipped), deals contact damage, and
+   * collapses into a heap when half its particles are destroyed.
+   */
+  isGoldenMimicFlag: 0 | 1;
+  /**
+   * 1 for the XY-flipped variant: moves with both axes flipped relative to the
+   * player (X and Y mirrored), and floats upward instead of falling in heap state.
+   */
+  isGoldenMimicYFlippedFlag: 0 | 1;
+  /**
+   * Current mimic state:
+   *  0 = active  — mimicking player movement, dealing contact damage
+   *  1 = heap    — half pixels gone; falling (normal) or rising (Y-flipped); fading out
+   */
+  goldenMimicState: number;
+  /** Ticks elapsed in the current mimic state. */
+  goldenMimicStateTicks: number;
+  /**
+   * Particle count recorded at spawn.  Used to detect the half-dead threshold
+   * (alive count ≤ goldenMimicInitialParticleCount / 2 → transition to heap).
+   */
+  goldenMimicInitialParticleCount: number;
+  /**
+   * Fade alpha for the heap state, in [1.0, 0.0].
+   * Decremented each tick in heap state; when it reaches 0 the cluster is killed.
+   * Read by the renderer to set globalAlpha on the golden silhouette.
+   */
+  goldenMimicFadeAlpha: number;
+
+  // ---- Bee Swarm (populated only when isBeeSwarmFlag === 1) ------------------
+  /**
+   * 1 if this cluster is a bee swarm — 10 bees that orbit a spawn area until
+   * the player comes close or the swarm takes damage, then charge the player.
+   * Each bee can be killed by 1 golden mote (1 Physical particle hit).
+   */
+  isBeeSwarmFlag: 0 | 1;
+  /**
+   * Index into the WorldState bee-position arrays (0..MAX_BEE_SWARMS-1).
+   * -1 when no slot has been assigned.
+   */
+  beeSwarmSlotIndex: number;
+  /**
+   * Current bee-swarm AI state:
+   *   0 = swarming — bees orbit the spawn area in a natural pattern
+   *   1 = charging — bees fly toward the player and deal contact damage
+   */
+  beeSwarmState: number;
+  /** Ticks elapsed in the current bee-swarm AI state. */
+  beeSwarmStateTicks: number;
+  /** Spawn X position (world units) — center of the swarm's patrol area. */
+  beeSwarmSpawnXWorld: number;
+  /** Spawn Y position (world units) — center of the swarm's patrol area. */
+  beeSwarmSpawnYWorld: number;
+  /** Health recorded at end of last tick, used to detect incoming damage for aggro. */
+  beeSwarmPrevHealthPoints: number;
+  /** Global orbit angle (radians) incremented each tick to animate the swarm path. */
+  beeSwarmOrbitAngleRad: number;
 }
 
 export function createClusterState(
@@ -427,5 +540,33 @@ export function createClusterState(
     beetleSurfaceNormalYWorld: -1,
     beetleIsFlightModeFlag: 0,
     beetlePrevHealthPoints: maxHealthPoints,
+    isSquareStampedeFlag: 0,
+    squareStampedeSlotIndex: -1,
+    squareStampedeBaseHalfSizeWorld: 0,
+    squareStampedeAiState: 0,
+    squareStampedeAiStateTicks: 0,
+    squareStampedeTrailTimerTicks: 0,
+    isBubbleEnemyFlag: 0,
+    isIceBubbleFlag: 0,
+    bubbleState: 0,
+    bubbleMaxParticleCount: 0,
+    bubbleOrbitAngleRad: 0,
+    bubbleRegenTicks: 0,
+    bubbleDriftPhaseRad: 0,
+    bubblePrevHealthPoints: maxHealthPoints,
+    isGoldenMimicFlag: 0,
+    isGoldenMimicYFlippedFlag: 0,
+    goldenMimicState: 0,
+    goldenMimicStateTicks: 0,
+    goldenMimicInitialParticleCount: 0,
+    goldenMimicFadeAlpha: 1.0,
+    isBeeSwarmFlag: 0,
+    beeSwarmSlotIndex: -1,
+    beeSwarmState: 0,
+    beeSwarmStateTicks: 0,
+    beeSwarmSpawnXWorld: positionXWorld,
+    beeSwarmSpawnYWorld: positionYWorld,
+    beeSwarmPrevHealthPoints: maxHealthPoints,
+    beeSwarmOrbitAngleRad: 0,
   };
 }

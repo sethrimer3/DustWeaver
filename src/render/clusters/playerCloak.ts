@@ -555,6 +555,21 @@ export class PlayerCloak {
     ctx.restore();
   }
 
+  /**
+   * Returns the world-space X of the last chain point (cloak tip).
+   * Used by PhantomCloakExtension to root its chain at the main cloak's tip.
+   */
+  getTipXWorld(): number {
+    return this.isInitialisedFlag ? this.posXWorld[this.pointCount - 1] : 0;
+  }
+
+  /**
+   * Returns the world-space Y of the last chain point (cloak tip).
+   */
+  getTipYWorld(): number {
+    return this.isInitialisedFlag ? this.posYWorld[this.pointCount - 1] : 0;
+  }
+
   /** Reset chain state (e.g. on room transition). */
   reset(): void {
     this.isInitialisedFlag = false;

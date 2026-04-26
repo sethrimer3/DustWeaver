@@ -1,14 +1,17 @@
 /**
  * World Map tab for the Skill Tomb menu.
  *
- * Renders a canvas-based world map with BFS-placed rooms, zoom / pan,
+ * Renders a canvas-based world map using the authored mapX/mapY positions
+ * stored in each RoomDef (set via the visual map editor), zoom / pan,
  * and mouse interaction.  Returns a cleanup function that removes
  * window-level event listeners.
  */
 
 import { ROOM_REGISTRY } from '../levels/rooms';
 import type { RoomDef } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { GOLD } from './skillTombShared';
+import { drawRoomSketch, smoothstep, ZOOM_SKETCH_FULL, ZOOM_DETAIL_FULL } from './mapSketchRenderer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +27,8 @@ export function buildMapTab(
   contentArea: HTMLElement,
   currentRoomId: string,
   exploredRoomIds: ReadonlyArray<string>,
+  playerXWorld?: number,
+  playerYWorld?: number,
 ): () => void {
   const mapContainer = document.createElement('div');
   mapContainer.style.cssText = `
@@ -47,46 +52,12 @@ export function buildMapTab(
     }
   });
 
-  // Compute room positions via BFS from lobby
+  // Build room placements from the authored mapX/mapY positions stored in each RoomDef.
+  // These are the same block-unit coordinates used by the visual map editor, so
+  // dragging rooms in the editor directly controls where they appear here.
   const placements = new Map<string, RoomPlacement>();
-
-  if (exploredRooms.length > 0) {
-    const startRoom = exploredRooms.find(r => r.id === 'lobby') ?? exploredRooms[0];
-    placements.set(startRoom.id, { room: startRoom, mapXBlock: 0, mapYBlock: 0 });
-
-    const queue = [startRoom];
-    const visited = new Set<string>([startRoom.id]);
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      const currentPlacement = placements.get(current.id)!;
-
-      for (const transition of current.transitions) {
-        if (visited.has(transition.targetRoomId)) continue;
-        const targetRoom = ROOM_REGISTRY.get(transition.targetRoomId);
-        if (!targetRoom || !exploredSet.has(targetRoom.id)) continue;
-
-        let offsetX = 0;
-        let offsetY = 0;
-        if (transition.direction === 'right') {
-          offsetX = current.widthBlocks + 4;
-        } else if (transition.direction === 'left') {
-          offsetX = -(targetRoom.widthBlocks + 4);
-        } else if (transition.direction === 'down') {
-          offsetY = current.heightBlocks + 4;
-        } else if (transition.direction === 'up') {
-          offsetY = -(targetRoom.heightBlocks + 4);
-        }
-
-        placements.set(targetRoom.id, {
-          room: targetRoom,
-          mapXBlock: currentPlacement.mapXBlock + offsetX,
-          mapYBlock: currentPlacement.mapYBlock + offsetY,
-        });
-        visited.add(targetRoom.id);
-        queue.push(targetRoom);
-      }
-    }
+  for (const room of exploredRooms) {
+    placements.set(room.id, { room, mapXBlock: room.mapX, mapYBlock: room.mapY });
   }
 
   // ── Map view state ──────────────────────────────────────────────────────
@@ -117,27 +88,49 @@ export function buildMapTab(
     const centerY = ch / 2 + panYPx;
     const cellSize = mapZoom;
 
+    // LOD blend: smoothly transition between detail blocks and sketch silhouettes.
+    // detailAlpha = 1 when zoomed in (≥ ZOOM_DETAIL_FULL), 0 when zoomed out (≤ ZOOM_SKETCH_FULL).
+    const detailAlpha = smoothstep(ZOOM_SKETCH_FULL, ZOOM_DETAIL_FULL, mapZoom);
+    const sketchAlpha = 1 - detailAlpha;
+    const showDetail = detailAlpha > 0.01;
+    const showSketch = sketchAlpha > 0.01;
+
     // Draw each explored room
     placements.forEach((placement) => {
       const { room, mapXBlock, mapYBlock } = placement;
       const isCurrentRoom = room.id === currentRoomId;
 
-      // Draw blocks (walls)
-      for (const wall of room.walls) {
-        for (let bx = 0; bx < wall.wBlock; bx++) {
-          for (let by = 0; by < wall.hBlock; by++) {
-            const worldBx = mapXBlock + wall.xBlock + bx;
-            const worldBy = mapYBlock + wall.yBlock + by;
-            const screenX = centerX + worldBx * cellSize;
-            const screenY = centerY + worldBy * cellSize;
-
-            mapCtx.fillStyle = isCurrentRoom ? 'rgba(212,168,75,0.6)' : 'rgba(150,140,120,0.4)';
-            mapCtx.fillRect(screenX, screenY, cellSize, cellSize);
-          }
-        }
+      // ── Sketch layer: silhouette with organic jitter ──────────────────────
+      if (showSketch) {
+        drawRoomSketch(
+          mapCtx, room, mapXBlock, mapYBlock,
+          centerX, centerY, cellSize,
+          sketchAlpha, isCurrentRoom,
+        );
       }
 
-      // Draw doorways (transitions)
+      // ── Detail layer: individual block tiles ──────────────────────────────
+      if (showDetail) {
+        mapCtx.save();
+        mapCtx.globalAlpha = detailAlpha;
+        for (const wall of room.walls) {
+          for (let bx = 0; bx < wall.wBlock; bx++) {
+            for (let by = 0; by < wall.hBlock; by++) {
+              const worldBx = mapXBlock + wall.xBlock + bx;
+              const worldBy = mapYBlock + wall.yBlock + by;
+              const screenX = centerX + worldBx * cellSize;
+              const screenY = centerY + worldBy * cellSize;
+
+              mapCtx.fillStyle = isCurrentRoom ? 'rgba(212,168,75,0.6)' : 'rgba(150,140,120,0.4)';
+              mapCtx.fillRect(screenX, screenY, cellSize, cellSize);
+            }
+          }
+        }
+        mapCtx.restore();
+      }
+
+      // ── Markers: always at full opacity (doors, tombs, labels) ───────────
+      // Doorways — shown in both modes so connections remain readable.
       for (const t of room.transitions) {
         const openTop = t.positionBlock;
         const openSize = t.openingSizeBlocks;
@@ -157,7 +150,7 @@ export function buildMapTab(
         }
       }
 
-      // Draw save tombs (save points shown on map)
+      // Save tombs — diamond markers remain crisp at all zoom levels.
       for (const tomb of room.saveTombs) {
         const screenX = centerX + (mapXBlock + tomb.xBlock) * cellSize;
         const screenY = centerY + (mapYBlock + tomb.yBlock) * cellSize;
@@ -178,13 +171,28 @@ export function buildMapTab(
         mapCtx.fill();
       }
 
-      // Draw room name label
+      // Room name label.
       const roomCenterX = centerX + (mapXBlock + room.widthBlocks / 2) * cellSize;
       const roomTopY = centerY + mapYBlock * cellSize;
       mapCtx.fillStyle = isCurrentRoom ? GOLD : 'rgba(200,190,170,0.6)';
       mapCtx.font = `${Math.max(10, cellSize * 2.5)}px 'Cinzel', serif`;
       mapCtx.textAlign = 'center';
       mapCtx.fillText(room.name, roomCenterX, roomTopY - cellSize * 1.5);
+
+      // Player position marker — shown only in the current room.
+      if (isCurrentRoom && playerXWorld !== undefined && playerYWorld !== undefined) {
+        const playerMapX = centerX + (mapXBlock + playerXWorld / BLOCK_SIZE_MEDIUM) * cellSize;
+        const playerMapY = centerY + (mapYBlock + playerYWorld / BLOCK_SIZE_MEDIUM) * cellSize;
+        const markerRadius = Math.max(3, cellSize * 1.0);
+        mapCtx.save();
+        mapCtx.beginPath();
+        mapCtx.arc(playerMapX, playerMapY, markerRadius, 0, Math.PI * 2);
+        mapCtx.fillStyle = '#00ffcc';
+        mapCtx.shadowColor = '#00ffcc';
+        mapCtx.shadowBlur = markerRadius * 2;
+        mapCtx.fill();
+        mapCtx.restore();
+      }
     });
 
     // Legend
@@ -206,6 +214,13 @@ export function buildMapTab(
     mapCtx.fillRect(legendX, legendY + 36, 10, 10);
     mapCtx.fillStyle = '#aaa';
     mapCtx.fillText('= Skill Tomb', legendX + 16, legendY + 45);
+
+    mapCtx.fillStyle = '#00ffcc';
+    mapCtx.beginPath();
+    mapCtx.arc(legendX + 5, legendY + 59, 5, 0, Math.PI * 2);
+    mapCtx.fill();
+    mapCtx.fillStyle = '#aaa';
+    mapCtx.fillText('= You', legendX + 16, legendY + 63);
   }
 
   // ── Zoom (mouse wheel) ──────────────────────────────────────────────────

@@ -1,8 +1,19 @@
-import { WorldState, MAX_PARTICLES } from '../sim/world';
+import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
 import { PlayerWeaveLoadout, WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from '../sim/weaves/playerLoadout';
+import type { RoomEnemyDef } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import { createClusterState } from '../sim/clusters/state';
+import { SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
+import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
+import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
+import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../sim/clusters/bubbleAi';
+import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAIL_UPDATE_INTERVAL_TICKS } from '../sim/clusters/squareStampedeAi';
+import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
+import { BEE_HALF_WIDTH_WORLD, BEE_HALF_HEIGHT_WORLD } from '../sim/clusters/beeSwarmAi';
+import { FLYING_EYE_HALF_SIZE_WORLD } from './gameRoom';
 
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 export const PARTICLE_COUNT_PER_CLUSTER = 20;
@@ -241,4 +252,201 @@ export function spawnDustPileParticles(
     world.isTransientFlag[idx] = 1;
     world.weaveSlotId[idx] = 0;
   }
+}
+
+// ── Enemy cluster initialisation ─────────────────────────────────────────────
+
+/** Initial hop delay for slime enemies (ticks). */
+export const SLIME_HOP_INTERVAL_INITIAL_TICKS = 30;
+/** Initial hop delay for large slime enemies (ticks). */
+export const LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS = 45;
+
+/**
+ * Creates and pushes enemy `ClusterState` objects from `enemyDefs` into
+ * `world.clusters`, spawning their particle loadout with `spawnLoadoutParticles`.
+ *
+ * @param world           Mutable world state — clusters and particles are appended.
+ * @param enemyDefs       Array of enemy definitions from the room.
+ * @param startEntityId   First entity ID to assign (typically 2; 1 is the player).
+ * @param levelRng        Seeded RNG for deterministic particle placement.
+ * @returns The next unused entity ID after all enemies have been assigned.
+ */
+export function spawnEnemyClusters(
+  world: WorldState,
+  enemyDefs: readonly RoomEnemyDef[],
+  startEntityId: number,
+  levelRng: RngState,
+): number {
+  let nextEntityId = startEntityId;
+  for (let ei = 0; ei < enemyDefs.length; ei++) {
+    const enemyDef = enemyDefs[ei];
+    const ex = enemyDef.xBlock * BLOCK_SIZE_MEDIUM;
+    const ey = enemyDef.yBlock * BLOCK_SIZE_MEDIUM;
+    const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
+    const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
+
+    if (enemyDef.isFlyingEyeFlag === 1) {
+      enemyCluster.isFlyingEyeFlag     = 1;
+      enemyCluster.flyingEyeElementKind = enemyDef.kinds.length > 0
+        ? enemyDef.kinds[0]
+        : ParticleKind.Wind;
+      enemyCluster.halfWidthWorld  = FLYING_EYE_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld = FLYING_EYE_HALF_SIZE_WORLD;
+    } else if (enemyDef.isRollingEnemyFlag === 1) {
+      enemyCluster.isRollingEnemyFlag      = 1;
+      enemyCluster.rollingEnemySpriteIndex = enemyDef.rollingEnemySpriteIndex ?? 1;
+      enemyCluster.rollingEnemyRollAngleRad = 0;
+    } else if (enemyDef.isRockElementalFlag === 1) {
+      enemyCluster.isRockElementalFlag        = 1;
+      enemyCluster.rockElementalSpawnXWorld   = ex;
+      enemyCluster.rockElementalSpawnYWorld   = ey;
+      enemyCluster.rockElementalState         = 0;
+      enemyCluster.halfWidthWorld  = 4.5;
+      enemyCluster.halfHeightWorld = 4.5;
+    } else if (enemyDef.isRadiantTetherFlag === 1) {
+      enemyCluster.isRadiantTetherFlag = 1;
+      enemyCluster.radiantTetherState  = 0;
+      enemyCluster.halfWidthWorld  = 6.0;
+      enemyCluster.halfHeightWorld = 6.0;
+    } else if (enemyDef.isGrappleHunterFlag === 1) {
+      enemyCluster.isGrappleHunterFlag  = 1;
+      enemyCluster.grappleHunterState   = 0;
+      enemyCluster.halfWidthWorld  = 5.0;
+      enemyCluster.halfHeightWorld = 5.0;
+    } else if (enemyDef.isSlimeFlag === 1) {
+      enemyCluster.isSlimeFlag          = 1;
+      enemyCluster.halfWidthWorld       = SLIME_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld      = SLIME_HALF_SIZE_WORLD;
+      enemyCluster.slimeHopTimerTicks   = SLIME_HOP_INTERVAL_INITIAL_TICKS;
+    } else if (enemyDef.isLargeSlimeFlag === 1) {
+      enemyCluster.isLargeSlimeFlag     = 1;
+      enemyCluster.halfWidthWorld       = LARGE_SLIME_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld      = LARGE_SLIME_HALF_SIZE_WORLD;
+      enemyCluster.slimeHopTimerTicks   = LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS;
+    } else if (enemyDef.isWheelEnemyFlag === 1) {
+      enemyCluster.isWheelEnemyFlag = 1;
+      enemyCluster.halfWidthWorld   = WHEEL_ENEMY_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld  = WHEEL_ENEMY_HALF_SIZE_WORLD;
+    } else if (enemyDef.isBeetleFlag === 1) {
+      enemyCluster.isBeetleFlag              = 1;
+      enemyCluster.halfWidthWorld            = BEETLE_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld           = BEETLE_HALF_SIZE_WORLD;
+      // Start in a crawl state; AI will pick the first real state on the first tick.
+      enemyCluster.beetleAiState             = 2; // idle briefly so it lands on a surface first
+      enemyCluster.beetleAiStateTicks        = 30;
+      enemyCluster.beetleSurfaceNormalXWorld = 0;
+      enemyCluster.beetleSurfaceNormalYWorld = -1; // assume floor initially
+      enemyCluster.beetleIsFlightModeFlag    = 0;
+      enemyCluster.beetlePrevHealthPoints    = enemyCluster.healthPoints;
+    } else if (enemyDef.isBubbleEnemyFlag === 1) {
+      enemyCluster.isBubbleEnemyFlag      = 1;
+      enemyCluster.isIceBubbleFlag        = (enemyDef.isIceBubbleFlag ?? 0) as 0 | 1;
+      enemyCluster.halfWidthWorld         = BUBBLE_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld        = BUBBLE_HALF_SIZE_WORLD;
+      enemyCluster.bubbleState            = 0;
+      enemyCluster.bubbleMaxParticleCount = enemyDef.particleCount;
+      enemyCluster.bubbleOrbitAngleRad    = 0;
+      enemyCluster.bubbleRegenTicks       = WATER_BUBBLE_REGEN_INTERVAL_TICKS;
+      enemyCluster.bubbleDriftPhaseRad    = 0;
+      enemyCluster.bubblePrevHealthPoints = enemyCluster.healthPoints;
+    } else if (enemyDef.isSquareStampedeFlag === 1) {
+      // Allocate a trail ring-buffer slot for this enemy
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_SQUARE_STAMPEDE; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].squareStampedeSlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) {
+          slotIndex = si;
+          // Clear the slot's trail data
+          const base = si * world.squareStampedeTrailStride;
+          world.squareStampedeTrailXWorld.fill(0, base, base + world.squareStampedeTrailStride);
+          world.squareStampedeTrailYWorld.fill(0, base, base + world.squareStampedeTrailStride);
+          world.squareStampedeTrailHead[si]  = 0;
+          world.squareStampedeTrailCount[si] = 0;
+          break;
+        }
+      }
+      enemyCluster.isSquareStampedeFlag            = 1;
+      enemyCluster.squareStampedeSlotIndex         = slotIndex;
+      enemyCluster.squareStampedeBaseHalfSizeWorld = SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD;
+      enemyCluster.halfWidthWorld                  = SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld                 = SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD;
+      enemyCluster.healthPoints                    = SQUARE_STAMPEDE_LAYER_COUNT;
+      enemyCluster.maxHealthPoints                 = SQUARE_STAMPEDE_LAYER_COUNT;
+      enemyCluster.squareStampedeAiState           = 0;
+      enemyCluster.squareStampedeAiStateTicks      = 20;
+      enemyCluster.squareStampedeTrailTimerTicks   = TRAIL_UPDATE_INTERVAL_TICKS;
+    } else if (enemyDef.isGoldenMimicFlag === 1) {
+      const isYFlipped = enemyDef.isGoldenMimicYFlippedFlag === 1;
+      enemyCluster.isGoldenMimicFlag         = 1;
+      enemyCluster.isGoldenMimicYFlippedFlag = isYFlipped ? 1 : 0;
+      enemyCluster.halfWidthWorld            = GOLDEN_MIMIC_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld           = GOLDEN_MIMIC_HALF_HEIGHT_WORLD;
+      enemyCluster.goldenMimicState          = 0;
+      enemyCluster.goldenMimicStateTicks     = 0;
+      enemyCluster.goldenMimicFadeAlpha      = 1.0;
+      // goldenMimicInitialParticleCount is filled in after spawnLoadoutParticles below
+    } else if (enemyDef.isBeeSwarmFlag === 1) {
+      // Allocate a bee-swarm slot
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_BEE_SWARMS; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].beeSwarmSlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) { slotIndex = si; break; }
+      }
+
+      enemyCluster.isBeeSwarmFlag       = 1;
+      enemyCluster.beeSwarmSlotIndex    = slotIndex;
+      enemyCluster.halfWidthWorld       = BEE_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld      = BEE_HALF_HEIGHT_WORLD;
+      enemyCluster.healthPoints         = BEES_PER_SWARM;
+      enemyCluster.maxHealthPoints      = BEES_PER_SWARM;
+      enemyCluster.beeSwarmSpawnXWorld  = ex;
+      enemyCluster.beeSwarmSpawnYWorld  = ey;
+      enemyCluster.beeSwarmState        = 0;
+      enemyCluster.beeSwarmStateTicks   = 0;
+      enemyCluster.beeSwarmPrevHealthPoints = BEES_PER_SWARM;
+      enemyCluster.beeSwarmOrbitAngleRad    = 0;
+
+      // Initialise individual bee positions in a ring around the spawn point
+      if (slotIndex >= 0) {
+        const base = slotIndex * BEES_PER_SWARM;
+        for (let bi = 0; bi < BEES_PER_SWARM; bi++) {
+          const phase = (bi / BEES_PER_SWARM) * Math.PI * 2;
+          world.beeSwarmBeePhaseRad[base + bi]  = phase;
+          world.beeSwarmBeeXWorld[base + bi]    = ex + Math.cos(phase) * 20;
+          world.beeSwarmBeeYWorld[base + bi]    = ey + Math.sin(phase) * 12;
+          world.beeSwarmBeeVelXWorld[base + bi] = 0;
+          world.beeSwarmBeeVelYWorld[base + bi] = 0;
+        }
+      }
+    }
+
+    world.clusters.push(enemyCluster);
+    const particleStartIdx = world.particleCount;
+    spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
+
+    // Post-spawn: mark golden mimic particles as non-regenerating (isTransientFlag=1)
+    // and record initial particle count for half-dead threshold detection.
+    if (enemyCluster.isGoldenMimicFlag === 1) {
+      const spawnedCount = world.particleCount - particleStartIdx;
+      enemyCluster.goldenMimicInitialParticleCount = spawnedCount;
+      enemyCluster.healthPoints    = spawnedCount;
+      enemyCluster.maxHealthPoints = spawnedCount;
+      for (let pi = particleStartIdx; pi < world.particleCount; pi++) {
+        world.isTransientFlag[pi] = 1;
+      }
+    }
+  }
+  return nextEntityId;
 }

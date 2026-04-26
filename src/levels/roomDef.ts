@@ -73,14 +73,98 @@ export type BackgroundId =
 
 /**
  * Lighting model used when shading block tiles in a room.
- * - DEFAULT:  distance-to-open-air in any direction (intended behavior)
- * - Above:    legacy top-down depth shading effect
- * - DarkRoom: fully dark room; only explicit light sources illuminate it.
- *             Block-level tinting is skipped; the darkness overlay in the
- *             render pipeline covers the entire room and is pierced by
- *             radial light gradients at glowing decorations and the player.
+ *
+ * The unified "Ambient" model propagates skylight from outside the room through
+ * empty cells into solid walls, using a configurable {@link AmbientLightDirection}.
+ * `ambientLightBlockers` tiles block this propagation (see {@link RoomAmbientLightBlockerDef}),
+ * producing dark walkable pockets that only brighten when a connecting path to
+ * the outside opens (e.g. after a breakable wall is destroyed).
+ *
+ * - `'Ambient'`  — unified directional ambient/skylight solver (preferred).
+ * - `'DarkRoom'` — ambient darkness; only point lights illuminate (overlay path).
+ * - `'FullyLit'` — no ambient darkness shading; everything is bright.
+ *
+ * **Legacy values (accepted for backward compatibility):**
+ * - `'DEFAULT'` — omnidirectional sky access; behaves like `'Ambient'` with
+ *                 {@link AmbientLightDirection} = `'omni'`.
+ * - `'Above'`   — legacy top-down scan; behaves like `'Ambient'` with
+ *                 {@link AmbientLightDirection} = `'down'`.
  */
-export type LightingEffect = 'DEFAULT' | 'Above' | 'DarkRoom';
+export type LightingEffect = 'Ambient' | 'DarkRoom' | 'FullyLit' | 'DEFAULT' | 'Above';
+
+/**
+ * Direction that ambient/skylight arrives from.
+ *
+ * The solver seeds "lit air" cells by flood-filling from the edge(s) of the
+ * room that face the sky, then propagates through air that moves WITH the
+ * direction vector (and its two orthogonal neighbours, for natural diagonal
+ * spill). Solid walls adjacent to lit air are then shaded by depth.
+ *
+ * - `'omni'`       — no directional bias; any room edge counts as sky source
+ *                     (compatible with the legacy `'DEFAULT'` mode).
+ * - `'down'`       — sunlight from directly above (the legacy `'Above'` mode).
+ * - `'down-right'` / `'down-left'` — natural diagonal skylight (recommended default).
+ * - `'up'` / `'up-right'` / `'up-left'` — uncommon, but supported for
+ *                                         authoring flexibility.
+ * - `'left'` / `'right'` — horizontal ambient (rare; for special rooms).
+ */
+export type AmbientLightDirection =
+  | 'omni'
+  | 'down'
+  | 'down-right'
+  | 'down-left'
+  | 'up'
+  | 'up-right'
+  | 'up-left'
+  | 'left'
+  | 'right';
+
+/**
+ * A single tile-coordinate ambient-light blocker.
+ *
+ * Authored in the editor via the dedicated lighting layer. The tile remains
+ * empty for gameplay (not solid, not hazardous) and visually air, but the
+ * ambient-lighting solver treats it as opaque to skylight propagation. Solid
+ * walls hidden behind a field of blockers stay fully dark until a path to
+ * the actual room edge opens up.
+ *
+ * Blockers do NOT affect {@link RoomLightSourceDef} local lights — those
+ * remain purely radius-based for now (see task guidance §2 and §9).
+ */
+export interface RoomAmbientLightBlockerDef {
+  readonly xBlock: number;
+  readonly yBlock: number;
+  /**
+   * When true, this blocker also draws a solid black overlay over the air cell,
+   * hiding the room background (procedural effects, parallax) from view.
+   * Use this to conceal secret tunnels and off-screen areas.
+   * The ambient-light propagation effect is identical to the default (clear) blocker.
+   */
+  readonly isDark?: boolean;
+}
+
+/**
+ * A placed local light source authored in the editor.
+ *
+ * Intended as the designer-facing equivalent of {@link import('../render/effects/darkRoomOverlay').LightSourcePx}.
+ * Colour is stored as three 0-255 channels for an intuitive RGB picker; brightness
+ * is stored as a 0-100 percent value for a familiar slider. The runtime converts
+ * both into overlay parameters when building the darkness mask.
+ */
+export interface RoomLightSourceDef {
+  readonly xBlock: number;
+  readonly yBlock: number;
+  /** Outer light radius in world/block units. */
+  readonly radiusBlocks: number;
+  /** Red channel, 0-255. */
+  readonly colorR: number;
+  /** Green channel, 0-255. */
+  readonly colorG: number;
+  /** Blue channel, 0-255. */
+  readonly colorB: number;
+  /** Brightness as a percent in 0-100. 100 = full lamp, 0 = off. */
+  readonly brightnessPct: number;
+}
 
 /** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
 export const BLOCK_SIZE_SMALL  = 8;
@@ -161,6 +245,33 @@ export interface RoomEnemyDef {
    * damages the player on contact, and flies away when agitated.
    */
   isBeetleFlag?: 0 | 1;
+  /** 1 if this enemy is a bubble enemy (water or ice floating ring). */
+  isBubbleEnemyFlag?: 0 | 1;
+  /** 1 if this is an ice bubble variant, 0 (or omitted) for water bubble. */
+  isIceBubbleFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a square stampede — dashes orthogonally in 2D,
+   * leaves a shrinking ghost trail, and has layered HP.
+   */
+  isSquareStampedeFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a golden mimic — a golden silhouette of the player that
+   * mirrors player movement (X-axis flipped), deals contact damage, and collapses
+   * when half its particles are destroyed.
+   */
+  isGoldenMimicFlag?: 0 | 1;
+  /**
+   * 1 for the XY-flipped variant of the golden mimic (both axes mirrored; floats
+   * upward when it collapses instead of falling).
+   * Only meaningful when isGoldenMimicFlag === 1.
+   */
+  isGoldenMimicYFlippedFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a bee swarm — 10 bees that orbit a spawn area until the
+   * player comes close or the swarm takes damage, then charge the player.
+   * Each bee is killed by 1 golden mote (1 Physical particle hit).
+   */
+  isBeeSwarmFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */
@@ -238,6 +349,16 @@ export interface RoomTransitionDef {
    * interior transition that can be placed anywhere inside the room.
    */
   depthBlock?: number;
+  /**
+   * When true, this transition is a secret door: the fade gradient begins
+   * invisible and only activates when the player is very close.
+   */
+  isSecretDoor?: boolean;
+  /**
+   * Width of the fade gradient in blocks (default: 3). Larger values create
+   * a slower, more gradual fade-to-black effect at the tunnel entrance.
+   */
+  gradientWidthBlocks?: number;
 }
 
 /** Direction a spike faces (the pointy end). */
@@ -269,6 +390,46 @@ export interface RoomZoneDef {
 export interface RoomBreakableBlockDef {
   xBlock: number;
   yBlock: number;
+}
+
+/**
+ * Which elemental substance a crumble block is specifically weak to.
+ * - `'normal'`    — standard crumble block (no elemental weakness).
+ * - `'fire'`      — weak to fire.
+ * - `'water'`     — weak to water.
+ * - `'void'`      — weak to void energy.
+ * - `'ice'`       — weak to ice.
+ * - `'lightning'` — weak to lightning.
+ * - `'poison'`    — weak to poison.
+ * - `'shadow'`    — weak to shadow.
+ * - `'nature'`    — weak to nature.
+ */
+export type CrumbleVariant =
+  | 'normal'
+  | 'fire'
+  | 'water'
+  | 'void'
+  | 'ice'
+  | 'lightning'
+  | 'poison'
+  | 'shadow'
+  | 'nature';
+
+/** A crumble block that collapses as soon as the player touches it. */
+export interface RoomCrumbleBlockDef {
+  xBlock: number;
+  yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock?: number;
+  /** Height in blocks (default 1). */
+  hBlock?: number;
+  /**
+   * Ramp orientation (0-3). Undefined or absent = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** Which elemental type this crumble block is weak to. Defaults to `'normal'`. */
+  variant?: CrumbleVariant;
 }
 
 /** A jar that grants temporary dust particles when broken. */
@@ -352,9 +513,28 @@ export interface RoomDef {
    */
   backgroundId?: BackgroundId;
   /**
-   * Block lighting model. Falls back to 'DEFAULT' when not set.
+   * Block lighting model. Falls back to 'Ambient' (omni) when not set.
+   * Legacy 'DEFAULT' and 'Above' values are accepted and migrated internally.
    */
   lightingEffect?: LightingEffect;
+  /**
+   * Direction ambient/skylight arrives from. When omitted the runtime picks a
+   * sensible default based on the legacy {@link LightingEffect} value:
+   *   - `'DEFAULT'` / `'Ambient'` ⇒ `'omni'`
+   *   - `'Above'`                 ⇒ `'down'`
+   * The recommended authored default for new rooms is `'down-right'` so light
+   * spills in at a natural diagonal rather than straight down.
+   */
+  ambientLightDirection?: AmbientLightDirection;
+  /**
+   * Tiles that block ambient-light propagation. Gameplay treats them as empty
+   * air; only the ambient-lighting solver sees them as opaque. Used to carve
+   * out authored "hidden dark pockets" that only light up when a physical path
+   * to the outside opens.
+   */
+  ambientLightBlockers?: readonly RoomAmbientLightBlockerDef[];
+  /** Designer-placed local light sources (see {@link RoomLightSourceDef}). */
+  lightSources?: readonly RoomLightSourceDef[];
   /** Room width in blocks. */
   widthBlocks: number;
   /** Room height in blocks. */
@@ -371,8 +551,6 @@ export interface RoomDef {
   saveTombs: readonly { xBlock: number; yBlock: number }[];
   /** Skill Tomb definitions (block units) — grant dust skills/weaves when interacted with. */
   skillTombs?: readonly { xBlock: number; yBlock: number; weaveId: string }[];
-  /** Collectible skill book positions (block units). */
-  skillBooks?: readonly { xBlock: number; yBlock: number }[];
   /**
    * Collectible dust container positions (block units).
    * Each pickup grants +4 dust particles to the player.
@@ -390,6 +568,8 @@ export interface RoomDef {
   lavaZones?: readonly RoomZoneDef[];
   /** Breakable blocks that shatter from high-momentum player impact. */
   breakableBlocks?: readonly RoomBreakableBlockDef[];
+  /** Crumble blocks that collapse on first player contact. */
+  crumbleBlocks?: readonly RoomCrumbleBlockDef[];
   /** Jars that grant temporary dust particles when broken by the player. */
   dustBoostJars?: readonly RoomDustBoostJarDef[];
   /** Jars that release golden fireflies when broken by the player. */

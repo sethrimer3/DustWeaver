@@ -6,6 +6,7 @@ import {
   WALL_THEME_DEFAULT_INDEX,
   PLAYER_HALF_WIDTH_WORLD,
   PLAYER_HALF_HEIGHT_WORLD,
+  CrumbleVariant,
 } from '../levels/roomDef';
 import {
   SPIKE_DIR_UP,
@@ -34,6 +35,22 @@ export const DUST_CONTAINER_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
 export const DUST_CONTAINER_DUST_GAIN = 4;
 /** Epsilon used when deciding whether wall edges are contiguous during merge. */
 const WALL_MERGE_EPSILON_WORLD = 0.001;
+
+/**
+ * Maps a `CrumbleVariant` string to a packed integer stored in `crumbleBlockVariant[]`.
+ * 0=normal, 1=fire, 2=water, 3=void, 4=ice, 5=lightning, 6=poison, 7=shadow, 8=nature.
+ */
+const CRUMBLE_VARIANT_INDEX: Readonly<Record<CrumbleVariant, number>> = {
+  normal:    0,
+  fire:      1,
+  water:     2,
+  void:      3,
+  ice:       4,
+  lightning: 5,
+  poison:    6,
+  shadow:    7,
+  nature:    8,
+};
 
 /**
  * Loads wall definitions from a RoomDef into the WorldState wall buffers.
@@ -182,6 +199,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.lavaZoneCount = 0;
   world.lavaInvulnTicks = 0;
   world.breakableBlockCount = 0;
+  world.crumbleBlockCount = 0;
   world.dustBoostJarCount = 0;
   world.fireflyJarCount = 0;
   world.fireflyCount = 0;
@@ -258,6 +276,35 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.breakableBlockYWorld[bi] = by;
     world.isBreakableBlockActiveFlag[bi] = 1;
     world.breakableBlockWallIndex[bi] = wallIdx;
+  }
+
+  // ── Crumble blocks ────────────────────────────────────────────────────────
+  // Each crumble block is added as a wall AND tracked in the crumble arrays.
+  const crumbleDefs = room.crumbleBlocks ?? [];
+  for (let i = 0; i < crumbleDefs.length && world.crumbleBlockCount < world.crumbleBlockXWorld.length; i++) {
+    const b = crumbleDefs[i];
+    const wBlocks = b.wBlock ?? 1;
+    const hBlocks = b.hBlock ?? 1;
+    const bx = (b.xBlock + wBlocks * 0.5) * BLOCK_SIZE_MEDIUM;
+    const by = (b.yBlock + hBlocks * 0.5) * BLOCK_SIZE_MEDIUM;
+
+    let wallIdx = -1;
+    if (world.wallCount < MAX_WALLS) {
+      wallIdx = world.wallCount++;
+      world.wallXWorld[wallIdx] = b.xBlock * BLOCK_SIZE_MEDIUM;
+      world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
+      world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
+    }
+
+    const ci = world.crumbleBlockCount++;
+    world.crumbleBlockXWorld[ci] = bx;
+    world.crumbleBlockYWorld[ci] = by;
+    world.isCrumbleBlockActiveFlag[ci] = 1;
+    world.crumbleBlockHitsRemaining[ci] = 2;
+    world.crumbleBlockHitCooldownTicks[ci] = 0;
+    world.crumbleBlockWallIndex[ci] = wallIdx;
+    world.crumbleBlockVariant[ci] = CRUMBLE_VARIANT_INDEX[b.variant ?? 'normal'];
   }
 
   // ── Dust boost jars ───────────────────────────────────────────────────────
@@ -409,13 +456,19 @@ export function drawTunnelDarkness(
 ): void {
   const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
   const roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
-  const FADE_BLOCKS = 6;
-  const fadeDepthWorld = FADE_BLOCKS * BLOCK_SIZE_MEDIUM;
+  const DEFAULT_FADE_BLOCKS = 6;
 
   ctx.save();
 
   for (let ti = 0; ti < room.transitions.length; ti++) {
     const t = room.transitions[ti];
+
+    // Use per-transition gradient width when set; default to 6 blocks.
+    // A value of 0 means no gradient should be drawn for this transition.
+    const fadeBlocks = t.gradientWidthBlocks ?? DEFAULT_FADE_BLOCKS;
+    if (fadeBlocks <= 0) continue;
+    const fadeDepthWorld = fadeBlocks * BLOCK_SIZE_MEDIUM;
+
     const openTopWorld    = t.positionBlock * BLOCK_SIZE_MEDIUM;
     const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
 

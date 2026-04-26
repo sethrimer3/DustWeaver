@@ -163,10 +163,12 @@ editor preview path (which requires an immutable one-shot snapshot).
 
 ### Offensive Outline Batching
 
-`drawOffensiveDustOutlineOverlay()` now builds a `Set<number>` of alive enemy
-entity IDs in one O(C) pass, then uses `set.has()` instead of an O(P×C) inner
-cluster scan.  All qualifying arcs are batched into a single `beginPath` +
-`stroke` call instead of one flush per particle.
+`drawOffensiveDustOutlineOverlay()` builds a `Set<number>` of alive enemy entity
+IDs in one O(C) pass, then uses `set.has()` instead of an O(P×C) inner cluster
+scan.  All qualifying arcs are batched into a single `beginPath` + `stroke` call
+instead of one flush per particle.  The set is a module-level pre-allocated
+`_aliveEnemyEntityIds`, cleared and refilled each frame — avoids a per-frame
+`new Set<number>()` heap allocation.
 
 ### High-Water Glow Guard (DISABLED BY DEFAULT)
 
@@ -175,6 +177,52 @@ cluster scan.  All qualifying arcs are batched into a single `beginPath` +
 canvas viewport when the decoration count exceeds
 `HIGH_WATER_DECORATION_BLOOM_LIMIT = 128`.  This avoids off-screen bloom cost on
 pathological rooms.  No visual regression for visible decorations.
+
+## Renderer Performance (BUILD 157 — Wall Layer Baking)
+
+### Wall Layer Bake Cache
+
+`renderWallSprites()` in `blockSpriteRenderer.ts` now pre-renders the entire wall
+layer into an offscreen `HTMLCanvasElement` (the "bake canvas") and caches it.
+Subsequent frames skip all per-tile draw calls and instead blit the bake canvas
+with a single `ctx.drawImage(bakedCanvas, ox, oy)`.
+
+**Bake canvas dimensions**: `ceil(roomWidthBlocks × blockSizePx × scalePx)` ×
+`ceil(roomHeightBlocks × blockSizePx × scalePx)` pixels.  At the standard zoom
+of 1.0 with BLOCK_SIZE_MEDIUM = 8 and a 80×45-block room this is 640×360 virtual
+pixels — well within memory budget.
+
+**Bake key**: Layout identity (`_bakedWallLayoutRef === wallLayout`) plus
+`_bakedWallScalePx === scalePx`.  Using object-reference comparison for the
+wall layout avoids building a long concatenated string on every fast-path frame —
+`_buildWallLayoutCache` returns the same object while the room is unchanged.
+Theme/lighting/world changes are detected via `_invalidateBakedWallCanvas()`
+which nulls `_bakedWallCanvas`/`_bakedWallLayoutRef` before the next render.
+
+**Fallback detection**: `_bakePassHadFallbacks` is set to `true` inside
+`_doRenderWallTilesDirect()` whenever any sprite is not yet loaded and a
+placeholder tile is drawn instead.  When this flag is true after the bake pass,
+`_bakedWallHadFallbacks` is recorded and the fast blit path is suppressed on the
+next frame, triggering a re-bake.  Once all sprites have loaded the bake is
+committed without fallbacks and the fast path is taken every subsequent frame.
+
+**Performance impact**: replaces ~300–500 `drawImage`/`fillRect` calls per frame
+with a single `drawImage` blit after the warm-up period.  Expected savings: 1–2 ms
+per frame on a dense room at 60 fps.
+
+### solid2x2Map Pre-Computed in Layout Cache
+
+`CachedWallLayout` now includes a `solid2x2Map: Map<string, number>` field
+populated once in `_buildWallLayoutCache()`.  This removes the per-frame call to
+the deleted `_collectSolid2x2WallTopLefts()` helper, eliminating one
+`new Map<string, number>()` allocation and one O(wallCount) wall iteration per
+frame.
+
+### Pre-Allocated `_coveredBy2x2Keys`
+
+`_coveredBy2x2Keys` is now a module-level `Set<string>`, cleared and repopulated
+from `wallLayout.solid2x2Map` each frame via `_populateCoveredBy2x2Keys()`.
+Avoids one `new Set<string>()` allocation per frame.
 
 
 

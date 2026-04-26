@@ -15,6 +15,8 @@ export const MAX_WATER_ZONES = 8;
 export const MAX_LAVA_ZONES = 8;
 /** Maximum number of breakable blocks per room. */
 export const MAX_BREAKABLE_BLOCKS = 32;
+/** Maximum number of crumble blocks per room. */
+export const MAX_CRUMBLE_BLOCKS = 32;
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -33,6 +35,19 @@ export const MAX_GRASSHOPPERS = 32;
  * hop on tick 0).
  */
 export const GRASSHOPPER_INITIAL_TIMER_MAX_TICKS = 60;
+
+/** Maximum number of square-stampede enemies per room. */
+export const MAX_SQUARE_STAMPEDE = 8;
+/**
+ * Number of trail ring-buffer slots per square-stampede enemy.
+ * Each slot stores one past position; 19 slots → 19 ghost trail copies.
+ */
+export const SQUARE_STAMPEDE_TRAIL_COUNT = 19;
+
+/** Maximum number of bee-swarm enemies per room. */
+export const MAX_BEE_SWARMS = 4;
+/** Number of bees in a single bee-swarm cluster. */
+export const BEES_PER_SWARM = 10;
 
 export interface WorldState extends ParticleBuffers {
   tick: number;
@@ -291,6 +306,36 @@ export interface WorldState extends ParticleBuffers {
    */
   breakableBlockWallIndex: Int8Array;
 
+  // ── Crumble blocks ─────────────────────────────────────────────────────────
+  /** Number of crumble blocks (active + broken). */
+  crumbleBlockCount: number;
+  /** Center X of each crumble block (world units). */
+  crumbleBlockXWorld: Float32Array;
+  /** Center Y of each crumble block (world units). */
+  crumbleBlockYWorld: Float32Array;
+  /** 1 if block is still intact, 0 if broken. */
+  isCrumbleBlockActiveFlag: Uint8Array;
+  /**
+   * Hits remaining: 2 = undamaged, 1 = cracked, 0 = destroyed.
+   * Starts at 2; any dust particle contact decrements it once per cooldown.
+   */
+  crumbleBlockHitsRemaining: Uint8Array;
+  /**
+   * Ticks until this block can be hit again (debounce / hit cooldown).
+   * 0 = can be hit now; set to CRUMBLE_HIT_COOLDOWN_TICKS on hit.
+   */
+  crumbleBlockHitCooldownTicks: Uint8Array;
+  /**
+   * Wall index in the wall arrays that corresponds to each crumble block.
+   * -1 if no corresponding wall.
+   */
+  crumbleBlockWallIndex: Int8Array;
+  /**
+   * Packed elemental variant index for each crumble block.
+   * Maps to CrumbleVariant: 0=normal, 1=fire, 2=water, 3=void, 4=ice, 5=lightning, 6=poison, 7=shadow, 8=nature.
+   */
+  crumbleBlockVariant: Uint8Array;
+
   // ── Dust boost jars ────────────────────────────────────────────────────────
   /** Number of dust boost jars (active + broken). */
   dustBoostJarCount: number;
@@ -357,6 +402,40 @@ export interface WorldState extends ParticleBuffers {
   grasshopperHopTimerTicks: Float32Array;
   /** 1 if this grasshopper slot is alive. */
   isGrasshopperAliveFlag: Uint8Array;
+
+  // ── Square Stampede trail ring buffers ─────────────────────────────────────
+  /**
+   * X positions of trail ring buffer, flattened as [slot * stride + head].
+   * Length = MAX_SQUARE_STAMPEDE * SQUARE_STAMPEDE_TRAIL_COUNT.
+   */
+  squareStampedeTrailXWorld: Float32Array;
+  /** Y positions of trail ring buffer. Same layout as squareStampedeTrailXWorld. */
+  squareStampedeTrailYWorld: Float32Array;
+  /** Write-head index (0..stride-1) per slot. */
+  squareStampedeTrailHead: Uint8Array;
+  /** Number of valid entries filled so far (0..stride) per slot. */
+  squareStampedeTrailCount: Uint8Array;
+  /** Number of entries per slot (= SQUARE_STAMPEDE_TRAIL_COUNT). Read-only after init. */
+  squareStampedeTrailStride: number;
+
+  // ── Bee-swarm individual bee position buffers ────────────────────────────────
+  /**
+   * X position of each bee (world units).
+   * Layout: [swarmSlot * BEES_PER_SWARM + beeIndex].
+   * Total length = MAX_BEE_SWARMS * BEES_PER_SWARM.
+   */
+  beeSwarmBeeXWorld: Float32Array;
+  /** Y position of each bee (world units). Same layout as beeSwarmBeeXWorld. */
+  beeSwarmBeeYWorld: Float32Array;
+  /** X velocity of each bee (world units/s). Same layout as beeSwarmBeeXWorld. */
+  beeSwarmBeeVelXWorld: Float32Array;
+  /** Y velocity of each bee (world units/s). Same layout as beeSwarmBeeXWorld. */
+  beeSwarmBeeVelYWorld: Float32Array;
+  /**
+   * Per-bee Lissajous phase offset (radians).
+   * Assigned at spawn time to spread bees around the orbit ring.
+   */
+  beeSwarmBeePhaseRad: Float32Array;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -453,6 +532,14 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     breakableBlockYWorld: new Float32Array(MAX_BREAKABLE_BLOCKS),
     isBreakableBlockActiveFlag: new Uint8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockWallIndex: new Int8Array(MAX_BREAKABLE_BLOCKS),
+    crumbleBlockCount: 0,
+    crumbleBlockXWorld: new Float32Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockYWorld: new Float32Array(MAX_CRUMBLE_BLOCKS),
+    isCrumbleBlockActiveFlag: new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockHitsRemaining: new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockHitCooldownTicks: new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockWallIndex: new Int8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockVariant: new Uint8Array(MAX_CRUMBLE_BLOCKS),
     dustBoostJarCount: 0,
     dustBoostJarXWorld: new Float32Array(MAX_DUST_BOOST_JARS),
     dustBoostJarYWorld: new Float32Array(MAX_DUST_BOOST_JARS),
@@ -482,6 +569,18 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grasshopperVelYWorld: new Float32Array(MAX_GRASSHOPPERS),
     grasshopperHopTimerTicks: new Float32Array(MAX_GRASSHOPPERS),
     isGrasshopperAliveFlag: new Uint8Array(MAX_GRASSHOPPERS),
+    // ── Square Stampede trail ─────────────────────────────────────────
+    squareStampedeTrailStride: SQUARE_STAMPEDE_TRAIL_COUNT,
+    squareStampedeTrailXWorld: new Float32Array(MAX_SQUARE_STAMPEDE * SQUARE_STAMPEDE_TRAIL_COUNT),
+    squareStampedeTrailYWorld: new Float32Array(MAX_SQUARE_STAMPEDE * SQUARE_STAMPEDE_TRAIL_COUNT),
+    squareStampedeTrailHead: new Uint8Array(MAX_SQUARE_STAMPEDE),
+    squareStampedeTrailCount: new Uint8Array(MAX_SQUARE_STAMPEDE),
+    // ── Bee-swarm bee position buffers ────────────────────────────────
+    beeSwarmBeeXWorld:    new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    beeSwarmBeeYWorld:    new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    beeSwarmBeeVelXWorld: new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    beeSwarmBeeVelYWorld: new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    beeSwarmBeePhaseRad:  new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     ...createParticleBuffers(),
   };
 }

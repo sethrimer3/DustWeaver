@@ -11,9 +11,9 @@ import type { CameraState } from '../render/camera';
 
 import {
   EditorState, createEditorState, EditorTool,
-  EditorWall, EditorEnemy, EditorTransition, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
-  BlockTheme, BackgroundId, LightingEffect, RoomSongId,
-  SelectedElement, allocateUid, EditorRoomData,
+  BackgroundId, LightingEffect, RoomSongId, AmbientLightDirection,
+  BlockTheme,
+  EditorTransition, EditorRoomData,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
@@ -32,6 +32,13 @@ import { exportRoomAsJson, exportAllChanges } from './editorExport';
 import { ROOM_REGISTRY, initRoomRegistry, registerRoom } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
+import {
+  storeDragStartPositions, moveSelectedElements,
+  serializeSelectedElements, pasteFromClipboard,
+} from './editorDragCopyPaste';
+import { deepCloneRoomData, showSaveChangesDialog } from './editorSaveChangesDialog';
+import { applyRoomDimensionChange, applyEdgeResize } from './editorRoomResize';
+import { handlePropertyChange } from './editorPropertyChange';
 
 const BS = BLOCK_SIZE_MEDIUM;
 
@@ -153,15 +160,15 @@ export function createEditorController(
           }
         },
         onPropertyChange: (prop: string, value: string | number) => {
-          handlePropertyChange(prop, value);
+          if (state.roomData) handlePropertyChange(state.roomData, state.selectedElements, history, prop, value);
           applyEdits();
         },
         onRoomDimensionsChange: (dimProp: 'widthBlocks' | 'heightBlocks', value: number) => {
-          handleRoomDimensionsChange(dimProp, value);
+          if (state.roomData) applyRoomDimensionChange(state.roomData, dimProp, value);
           applyEdits();
         },
         onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => {
-          handleEdgeResize(edge, delta);
+          if (state.roomData) applyEdgeResize(state.roomData, history, edge, delta);
           applyEdits();
         },
         onBlockThemeChange: (theme: BlockTheme) => {
@@ -170,6 +177,10 @@ export function createEditorController(
         },
         onLightingEffectChange: (lightingEffect: LightingEffect) => {
           if (state.roomData) state.roomData.lightingEffect = lightingEffect;
+          applyEdits();
+        },
+        onAmbientLightDirectionChange: (direction: AmbientLightDirection | undefined) => {
+          if (state.roomData) state.roomData.ambientLightDirection = direction;
           applyEdits();
         },
         onBackgroundChange: (bgId: BackgroundId) => {
@@ -196,6 +207,9 @@ export function createEditorController(
         onOpenVisualMap: () => openVisualMap(),
         onSkillTombWeaveChange: (weaveId: string) => {
           state.pendingSkillTombWeaveId = weaveId;
+        },
+        onCrumbleVariantChange: (variant) => {
+          state.pendingCrumbleVariant = variant;
         },
       });
     } else {
@@ -746,489 +760,6 @@ export function createEditorController(
     if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
   }
 
-  function handleRoomDimensionsChange(prop: 'widthBlocks' | 'heightBlocks', value: number): void {
-    if (!state.roomData) return;
-
-    const room = state.roomData;
-    const clamped = Math.max(10, value);
-    if (prop === 'widthBlocks') {
-      room.widthBlocks = clamped;
-    } else {
-      room.heightBlocks = clamped;
-    }
-
-    const maxX = room.widthBlocks - 1;
-    const maxY = room.heightBlocks - 1;
-
-    // Keep spawn and point entities inside the new room bounds.
-    room.playerSpawnBlock[0] = Math.min(Math.max(0, room.playerSpawnBlock[0]), maxX);
-    room.playerSpawnBlock[1] = Math.min(Math.max(0, room.playerSpawnBlock[1]), maxY);
-
-    for (const enemy of room.enemies) {
-      enemy.xBlock = Math.min(Math.max(0, enemy.xBlock), maxX);
-      enemy.yBlock = Math.min(Math.max(0, enemy.yBlock), maxY);
-    }
-
-    for (const tomb of room.saveTombs) {
-      tomb.xBlock = Math.min(Math.max(0, tomb.xBlock), maxX);
-      tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
-    }
-
-    for (const tomb of room.skillTombs) {
-      tomb.xBlock = Math.min(Math.max(0, tomb.xBlock), maxX);
-      tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
-    }
-
-    for (const pile of room.dustPiles) {
-      pile.xBlock = Math.min(Math.max(0, pile.xBlock), maxX);
-      pile.yBlock = Math.min(Math.max(0, pile.yBlock), maxY);
-    }
-
-    for (const deco of (room.decorations ?? [])) {
-      deco.xBlock = Math.min(Math.max(0, deco.xBlock), maxX);
-      deco.yBlock = Math.min(Math.max(0, deco.yBlock), maxY);
-    }
-
-    // Clamp interior wall rectangles so they stay fully inside the room.
-    for (const wall of room.interiorWalls) {
-      wall.wBlock = Math.max(1, Math.min(wall.wBlock, room.widthBlocks));
-      wall.hBlock = Math.max(1, Math.min(wall.hBlock, room.heightBlocks));
-      wall.xBlock = Math.min(Math.max(0, wall.xBlock), room.widthBlocks - wall.wBlock);
-      wall.yBlock = Math.min(Math.max(0, wall.yBlock), room.heightBlocks - wall.hBlock);
-    }
-
-    // Keep transitions valid for the updated room dimensions.
-    for (const trans of room.transitions) {
-      if (trans.direction === 'left' || trans.direction === 'right') {
-        const maxOpening = Math.max(1, room.heightBlocks - 2);
-        trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
-        trans.positionBlock = Math.min(
-          Math.max(1, trans.positionBlock),
-          room.heightBlocks - 1 - trans.openingSizeBlocks,
-        );
-        if (trans.depthBlock !== undefined) {
-          trans.depthBlock = Math.min(Math.max(0, trans.depthBlock), room.widthBlocks - 6);
-        }
-      } else {
-        const maxOpening = Math.max(1, room.widthBlocks - 2);
-        trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
-        trans.positionBlock = Math.min(
-          Math.max(1, trans.positionBlock),
-          room.widthBlocks - 1 - trans.openingSizeBlocks,
-        );
-        if (trans.depthBlock !== undefined) {
-          trans.depthBlock = Math.min(Math.max(0, trans.depthBlock), room.heightBlocks - 6);
-        }
-      }
-    }
-  }
-
-  /**
-   * Add or remove one row/column from the given edge.
-   * Adding to top/left shifts all content. Adding to bottom/right just extends.
-   * Removing from top/left shifts content the other direction.
-   * Minimum room size is 10×10.
-   */
-  function handleEdgeResize(edge: RoomEdge, delta: 1 | -1): void {
-    if (!state.roomData) return;
-    pushSnapshot(history, state.roomData);
-    const room = state.roomData;
-
-    const isHorizontal = edge === 'left' || edge === 'right';
-    const prop = isHorizontal ? 'widthBlocks' : 'heightBlocks';
-    const currentSize = room[prop];
-    const newSize = currentSize + delta;
-
-    // Enforce minimum room size of 10
-    if (newSize < 10) return;
-
-    room[prop] = newSize;
-
-    // When adding/removing from top or left, we need to shift all content
-    const needsShift = edge === 'top' || edge === 'left';
-    if (needsShift) {
-      const shiftX = edge === 'left' ? delta : 0;
-      const shiftY = edge === 'top' ? delta : 0;
-
-      // Shift player spawn
-      room.playerSpawnBlock[0] += shiftX;
-      room.playerSpawnBlock[1] += shiftY;
-
-      // Shift enemies
-      for (const enemy of room.enemies) {
-        enemy.xBlock += shiftX;
-        enemy.yBlock += shiftY;
-      }
-
-      // Shift save tombs
-      for (const tomb of room.saveTombs) {
-        tomb.xBlock += shiftX;
-        tomb.yBlock += shiftY;
-      }
-
-      // Shift skill tombs
-      for (const tomb of room.skillTombs) {
-        tomb.xBlock += shiftX;
-        tomb.yBlock += shiftY;
-      }
-
-      // Shift dust piles
-      for (const pile of room.dustPiles) {
-        pile.xBlock += shiftX;
-        pile.yBlock += shiftY;
-      }
-
-      // Shift decorations
-      for (const deco of (room.decorations ?? [])) {
-        deco.xBlock += shiftX;
-        deco.yBlock += shiftY;
-      }
-
-      // Shift interior walls
-      for (const wall of room.interiorWalls) {
-        wall.xBlock += shiftX;
-        wall.yBlock += shiftY;
-      }
-
-      // Shift transitions along the shifted axis
-      for (const trans of room.transitions) {
-        if (edge === 'top' && (trans.direction === 'left' || trans.direction === 'right')) {
-          trans.positionBlock += shiftY;
-        }
-        if (edge === 'left' && (trans.direction === 'up' || trans.direction === 'down')) {
-          trans.positionBlock += shiftX;
-        }
-      }
-    }
-
-    // Re-clamp everything to new bounds
-    handleRoomDimensionsChange(prop, newSize);
-  }
-
-  function handlePropertyChange(prop: string, value: string | number): void {
-    if (!state.roomData || state.selectedElements.length === 0) return;
-
-    pushSnapshot(history, state.roomData);
-
-    // Apply property to all selected elements of matching type
-    for (const el of state.selectedElements) {
-      applyPropertyToElement(el, prop, value);
-    }
-  }
-
-  function applyPropertyToElement(el: SelectedElement, prop: string, value: string | number): void {
-    if (!state.roomData) return;
-    const room = state.roomData;
-    const numVal = typeof value === 'number' ? value : parseInt(value as string, 10);
-
-    if (el.type === 'wall') {
-      const wall = room.interiorWalls.find((w: EditorWall) => w.uid === el.uid);
-      if (wall) {
-        if (prop === 'wall.xBlock' && !isNaN(numVal)) wall.xBlock = numVal;
-        if (prop === 'wall.yBlock' && !isNaN(numVal)) wall.yBlock = numVal;
-        if (prop === 'wall.wBlock' && !isNaN(numVal)) wall.wBlock = Math.max(1, numVal);
-        if (prop === 'wall.hBlock' && !isNaN(numVal)) wall.hBlock = Math.max(1, numVal);
-        if (prop === 'wall.blockTheme' && typeof value === 'string') {
-          wall.blockTheme = value as BlockTheme;
-        }
-      }
-    } else if (el.type === 'enemy') {
-      const enemy = room.enemies.find((e: EditorEnemy) => e.uid === el.uid);
-      if (enemy) {
-        if (prop === 'enemy.xBlock' && !isNaN(numVal)) enemy.xBlock = numVal;
-        if (prop === 'enemy.yBlock' && !isNaN(numVal)) enemy.yBlock = numVal;
-        if (prop === 'enemy.kinds' && typeof value === 'string') {
-          enemy.kinds = value.split(',').map(s => s.trim()).filter(s => s.length > 0);
-        }
-        if (prop === 'enemy.particleCount' && !isNaN(numVal)) enemy.particleCount = Math.max(1, numVal);
-        if (prop === 'enemy.type') {
-          if (value === 'rolling') {
-            enemy.isRollingEnemyFlag = 1;
-            enemy.isFlyingEyeFlag = 0;
-          } else {
-            enemy.isRollingEnemyFlag = 0;
-            enemy.isFlyingEyeFlag = 1;
-          }
-        }
-        if (prop === 'enemy.rollingEnemySpriteIndex' && !isNaN(numVal)) {
-          enemy.rollingEnemySpriteIndex = Math.max(1, Math.min(6, numVal));
-        }
-        if (prop === 'enemy.isBossFlag') {
-          enemy.isBossFlag = numVal ? 1 : 0;
-        }
-      }
-    } else if (el.type === 'transition') {
-      const trans = room.transitions.find((t: EditorTransition) => t.uid === el.uid);
-      if (trans) {
-        if (prop === 'transition.direction' && typeof value === 'string') {
-          trans.direction = value as 'left' | 'right' | 'up' | 'down';
-        }
-        if (prop === 'transition.positionBlock' && !isNaN(numVal)) trans.positionBlock = numVal;
-        if (prop === 'transition.openingSizeBlocks' && !isNaN(numVal)) trans.openingSizeBlocks = Math.max(1, numVal);
-        if (prop === 'transition.targetRoomId' && typeof value === 'string') trans.targetRoomId = value;
-        if (prop === 'transition.targetSpawnBlockX' && !isNaN(numVal)) trans.targetSpawnBlock[0] = numVal;
-        if (prop === 'transition.targetSpawnBlockY' && !isNaN(numVal)) trans.targetSpawnBlock[1] = numVal;
-        if (prop === 'transition.fadeColor' && typeof value === 'string') trans.fadeColor = value;
-        if (prop === 'transition.depthBlock') {
-          if (value === '' || value === '-' || (typeof value === 'number' && isNaN(value))) {
-            trans.depthBlock = undefined; // clear = edge transition
-          } else if (!isNaN(numVal)) {
-            trans.depthBlock = Math.max(0, numVal);
-          }
-        }
-      }
-    } else if (el.type === 'playerSpawn') {
-      if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;
-      if (prop === 'playerSpawn.yBlock' && !isNaN(numVal)) room.playerSpawnBlock[1] = numVal;
-    } else if (el.type === 'saveTomb') {
-      const tomb = room.saveTombs.find((s: EditorSaveTomb) => s.uid === el.uid);
-      if (tomb) {
-        if (prop === 'saveTomb.xBlock' && !isNaN(numVal)) tomb.xBlock = numVal;
-        if (prop === 'saveTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
-      }
-    } else if (el.type === 'skillTomb') {
-      const tomb = room.skillTombs.find((s: EditorSkillTomb) => s.uid === el.uid);
-      if (tomb) {
-        if (prop === 'skillTomb.xBlock' && !isNaN(numVal)) tomb.xBlock = numVal;
-        if (prop === 'skillTomb.yBlock' && !isNaN(numVal)) tomb.yBlock = numVal;
-        if (prop === 'skillTomb.weaveId' && typeof value === 'string') tomb.weaveId = value;
-      }
-    } else if (el.type === 'dustPile') {
-      const pile = room.dustPiles.find((p: EditorDustPile) => p.uid === el.uid);
-      if (pile) {
-        if (prop === 'dustPile.xBlock' && !isNaN(numVal)) pile.xBlock = numVal;
-        if (prop === 'dustPile.yBlock' && !isNaN(numVal)) pile.yBlock = numVal;
-        if (prop === 'dustPile.dustCount' && !isNaN(numVal)) pile.dustCount = Math.max(1, numVal);
-      }
-    } else if (el.type === 'decoration') {
-      const deco = (room.decorations ?? []).find((d: EditorDecoration) => d.uid === el.uid);
-      if (deco) {
-        if (prop === 'decoration.xBlock' && !isNaN(numVal)) deco.xBlock = numVal;
-        if (prop === 'decoration.yBlock' && !isNaN(numVal)) deco.yBlock = numVal;
-      }
-    }
-  }
-
-  // ── Drag-to-move helpers ─────────────────────────────────────────────────
-
-  function storeDragStartPositions(s: EditorState, positions: Map<number, { xBlock: number; yBlock: number }>): void {
-    positions.clear();
-    if (!s.roomData) return;
-    for (const el of s.selectedElements) {
-      const key = el.type === 'playerSpawn' ? 0 : el.uid;
-      if (el.type === 'wall') {
-        const w = s.roomData.interiorWalls.find(w2 => w2.uid === el.uid);
-        if (w) positions.set(key, { xBlock: w.xBlock, yBlock: w.yBlock });
-      } else if (el.type === 'enemy') {
-        const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
-        if (e) positions.set(key, { xBlock: e.xBlock, yBlock: e.yBlock });
-      } else if (el.type === 'saveTomb') {
-        const t = s.roomData.saveTombs.find(t2 => t2.uid === el.uid);
-        if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
-      } else if (el.type === 'skillTomb') {
-        const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
-        if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
-      } else if (el.type === 'dustPile') {
-        const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
-        if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
-      } else if (el.type === 'decoration') {
-        const d = (s.roomData.decorations ?? []).find(d2 => d2.uid === el.uid);
-        if (d) positions.set(key, { xBlock: d.xBlock, yBlock: d.yBlock });
-      } else if (el.type === 'playerSpawn') {
-        positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
-      } else if (el.type === 'transition') {
-        const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
-        if (tr) {
-          const isHoriz = tr.direction === 'left' || tr.direction === 'right';
-          const edgeDepth = isHoriz
-            ? (tr.direction === 'left' ? 0 : s.roomData.widthBlocks - 6)
-            : (tr.direction === 'up' ? 0 : s.roomData.heightBlocks - 6);
-          const depth = tr.depthBlock !== undefined ? tr.depthBlock : edgeDepth;
-          // xBlock = depth for left/right, positionBlock for up/down
-          // yBlock = positionBlock for left/right, depth for up/down
-          positions.set(key, {
-            xBlock: isHoriz ? depth : tr.positionBlock,
-            yBlock: isHoriz ? tr.positionBlock : depth,
-          });
-        }
-      }
-    }
-  }
-
-  function moveSelectedElements(
-    s: EditorState,
-    positions: Map<number, { xBlock: number; yBlock: number }>,
-    deltaX: number, deltaY: number,
-  ): void {
-    if (!s.roomData) return;
-    for (const el of s.selectedElements) {
-      const key = el.type === 'playerSpawn' ? 0 : el.uid;
-      const orig = positions.get(key);
-      if (!orig) continue;
-      if (el.type === 'wall') {
-        const w = s.roomData.interiorWalls.find(w2 => w2.uid === el.uid);
-        if (w) { w.xBlock = orig.xBlock + deltaX; w.yBlock = orig.yBlock + deltaY; }
-      } else if (el.type === 'enemy') {
-        const e = s.roomData.enemies.find(e2 => e2.uid === el.uid);
-        if (e) { e.xBlock = orig.xBlock + deltaX; e.yBlock = orig.yBlock + deltaY; }
-      } else if (el.type === 'saveTomb') {
-        const t = s.roomData.saveTombs.find(t2 => t2.uid === el.uid);
-        if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
-      } else if (el.type === 'skillTomb') {
-        const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
-        if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
-      } else if (el.type === 'dustPile') {
-        const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
-        if (p) { p.xBlock = orig.xBlock + deltaX; p.yBlock = orig.yBlock + deltaY; }
-      } else if (el.type === 'decoration') {
-        const d = (s.roomData.decorations ?? []).find(d2 => d2.uid === el.uid);
-        if (d) { d.xBlock = orig.xBlock + deltaX; d.yBlock = orig.yBlock + deltaY; }
-      } else if (el.type === 'playerSpawn') {
-        s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
-        s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
-      } else if (el.type === 'transition') {
-        const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
-        if (tr) {
-          const isHoriz = tr.direction === 'left' || tr.direction === 'right';
-          const room = s.roomData;
-          if (isHoriz) {
-            // Y drag → positionBlock, X drag → depthBlock
-            const maxPos = room.heightBlocks - 1 - tr.openingSizeBlocks;
-            tr.positionBlock = Math.min(Math.max(0, orig.yBlock + deltaY), maxPos);
-            const newDepth = orig.xBlock + deltaX;
-            const maxDepth = room.widthBlocks - 6;
-            tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
-          } else {
-            // X drag → positionBlock, Y drag → depthBlock
-            const maxPos = room.widthBlocks - 1 - tr.openingSizeBlocks;
-            tr.positionBlock = Math.min(Math.max(0, orig.xBlock + deltaX), maxPos);
-            const newDepth = orig.yBlock + deltaY;
-            const maxDepth = room.heightBlocks - 6;
-            tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
-          }
-        }
-      }
-    }
-  }
-
-  // ── Copy/Paste helpers ───────────────────────────────────────────────────
-
-  function serializeSelectedElements(room: EditorRoomData, elements: SelectedElement[]): string {
-    const data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations: EditorDecoration[] } = {
-      walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [], decorations: [],
-    };
-    for (const el of elements) {
-      if (el.type === 'wall') {
-        const w = room.interiorWalls.find(w2 => w2.uid === el.uid);
-        if (w) data.walls.push({ ...w });
-      } else if (el.type === 'enemy') {
-        const e = room.enemies.find(e2 => e2.uid === el.uid);
-        if (e) data.enemies.push({ ...e });
-      } else if (el.type === 'saveTomb') {
-        const t = room.saveTombs.find(t2 => t2.uid === el.uid);
-        if (t) data.saveTombs.push({ ...t });
-      } else if (el.type === 'skillTomb') {
-        const t = room.skillTombs.find(t2 => t2.uid === el.uid);
-        if (t) data.skillTombs.push({ ...t });
-      } else if (el.type === 'dustPile') {
-        const p = room.dustPiles.find(p2 => p2.uid === el.uid);
-        if (p) data.dustPiles.push({ ...p });
-      } else if (el.type === 'decoration') {
-        const d = (room.decorations ?? []).find(d2 => d2.uid === el.uid);
-        if (d) data.decorations.push({ ...d });
-      }
-    }
-    return JSON.stringify(data);
-  }
-
-  function pasteFromClipboard(s: EditorState): void {
-    if (!s.roomData || !s.clipboard) return;
-    let data: { walls: EditorWall[]; enemies: EditorEnemy[]; saveTombs?: EditorSaveTomb[]; skillTombs: EditorSkillTomb[]; dustPiles: EditorDustPile[]; decorations?: EditorDecoration[] };
-    try {
-      data = JSON.parse(s.clipboard) as typeof data;
-    } catch {
-      return;
-    }
-
-    const newElements: SelectedElement[] = [];
-    // Offset paste by 1 block from cursor
-    const offsetX = s.cursorBlockX;
-    const offsetY = s.cursorBlockY;
-    // Find min coords from clipboard to compute relative offsets
-    let minX = Infinity, minY = Infinity;
-    for (const w of data.walls) { minX = Math.min(minX, w.xBlock); minY = Math.min(minY, w.yBlock); }
-    for (const e of data.enemies) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
-    for (const t of (data.saveTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
-    for (const t of (data.skillTombs ?? [])) { minX = Math.min(minX, t.xBlock); minY = Math.min(minY, t.yBlock); }
-    for (const p of (data.dustPiles ?? [])) { minX = Math.min(minX, p.xBlock); minY = Math.min(minY, p.yBlock); }
-    for (const d of (data.decorations ?? [])) { minX = Math.min(minX, d.xBlock); minY = Math.min(minY, d.yBlock); }
-    if (!isFinite(minX)) minX = 0;
-    if (!isFinite(minY)) minY = 0;
-
-    for (const w of data.walls) {
-      const newUid = allocateUid(s);
-      s.roomData.interiorWalls.push({
-        ...w,
-        uid: newUid,
-        xBlock: w.xBlock - minX + offsetX,
-        yBlock: w.yBlock - minY + offsetY,
-      });
-      newElements.push({ type: 'wall', uid: newUid });
-    }
-    for (const e of data.enemies) {
-      const newUid = allocateUid(s);
-      s.roomData.enemies.push({
-        ...e,
-        uid: newUid,
-        xBlock: e.xBlock - minX + offsetX,
-        yBlock: e.yBlock - minY + offsetY,
-      });
-      newElements.push({ type: 'enemy', uid: newUid });
-    }
-    for (const t of (data.saveTombs ?? [])) {
-      const newUid = allocateUid(s);
-      s.roomData.saveTombs.push({
-        ...t,
-        uid: newUid,
-        xBlock: t.xBlock - minX + offsetX,
-        yBlock: t.yBlock - minY + offsetY,
-      });
-      newElements.push({ type: 'saveTomb', uid: newUid });
-    }
-    for (const t of (data.skillTombs ?? [])) {
-      const newUid = allocateUid(s);
-      s.roomData.skillTombs.push({
-        ...t,
-        uid: newUid,
-        xBlock: t.xBlock - minX + offsetX,
-        yBlock: t.yBlock - minY + offsetY,
-      });
-      newElements.push({ type: 'skillTomb', uid: newUid });
-    }
-    for (const p of (data.dustPiles ?? [])) {
-      const newUid = allocateUid(s);
-      s.roomData.dustPiles.push({
-        ...p,
-        uid: newUid,
-        xBlock: p.xBlock - minX + offsetX,
-        yBlock: p.yBlock - minY + offsetY,
-      });
-      newElements.push({ type: 'dustPile', uid: newUid });
-    }
-    for (const d of (data.decorations ?? [])) {
-      const newUid = allocateUid(s);
-      if (!s.roomData.decorations) s.roomData.decorations = [];
-      s.roomData.decorations.push({
-        ...d,
-        uid: newUid,
-        xBlock: d.xBlock - minX + offsetX,
-        yBlock: d.yBlock - minY + offsetY,
-      });
-      newElements.push({ type: 'decoration', uid: newUid });
-    }
-    s.selectedElements = newElements;
-  }
-
   return {
     state,
     toggle,
@@ -1239,88 +770,4 @@ export function createEditorController(
     getRoomDef,
     destroy,
   };
-}
-
-// ── Module-level helpers ──────────────────────────────────────────────────────
-
-/**
- * Deep-clones an EditorRoomData object using structuredClone.
- * Safe because EditorRoomData contains only plain, structured-cloneable values.
- */
-function deepCloneRoomData(data: EditorRoomData): EditorRoomData {
-  return structuredClone(data) as EditorRoomData;
-}
-
-/**
- * Shows a modal "Save Changes?" dialog with a green YES and a red NO button.
- * The dialog is appended to `root` and removed when the user picks an option.
- *
- * @param root    DOM element to append the dialog to (should be the UI overlay root).
- * @param onYes   Called when the user clicks YES.
- * @param onNo    Called when the user clicks NO.
- */
-function showSaveChangesDialog(root: HTMLElement, onYes: () => void, onNo: () => void): void {
-  const backdrop = document.createElement('div');
-  backdrop.style.cssText = `
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.7); z-index: 2000;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: auto;
-  `;
-
-  const panel = document.createElement('div');
-  panel.style.cssText = `
-    background: rgba(10,12,20,0.97); border: 1px solid rgba(0,200,100,0.5);
-    border-radius: 8px; padding: 24px 32px; display: flex; flex-direction: column;
-    align-items: center; gap: 20px; font-family: 'Cinzel', monospace;
-    min-width: 260px; box-shadow: 0 0 30px rgba(0,0,0,0.8);
-  `;
-
-  const question = document.createElement('div');
-  question.textContent = 'Save Changes?';
-  question.style.cssText = `
-    font-size: 16px; font-weight: bold; color: #c0ffd0; letter-spacing: 0.05em;
-  `;
-  panel.appendChild(question);
-
-  const btnRow = document.createElement('div');
-  btnRow.style.cssText = 'display: flex; gap: 16px;';
-
-  const yesBtn = document.createElement('button');
-  yesBtn.textContent = 'YES';
-  yesBtn.style.cssText = `
-    min-width: 90px; padding: 10px 20px; font-size: 14px; font-weight: bold;
-    font-family: 'Cinzel', monospace; cursor: pointer; border-radius: 4px;
-    background: rgba(0,140,60,0.6); color: #44ff88;
-    border: 2px solid #44ff88; transition: background 0.15s;
-  `;
-  yesBtn.addEventListener('mouseenter', () => { yesBtn.style.background = 'rgba(0,180,80,0.8)'; });
-  yesBtn.addEventListener('mouseleave', () => { yesBtn.style.background = 'rgba(0,140,60,0.6)'; });
-  yesBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
-    onYes();
-  });
-
-  const noBtn = document.createElement('button');
-  noBtn.textContent = 'NO';
-  noBtn.style.cssText = `
-    min-width: 90px; padding: 10px 20px; font-size: 14px; font-weight: bold;
-    font-family: 'Cinzel', monospace; cursor: pointer; border-radius: 4px;
-    background: rgba(160,30,20,0.6); color: #ff6644;
-    border: 2px solid #ff6644; transition: background 0.15s;
-  `;
-  noBtn.addEventListener('mouseenter', () => { noBtn.style.background = 'rgba(200,40,30,0.8)'; });
-  noBtn.addEventListener('mouseleave', () => { noBtn.style.background = 'rgba(160,30,20,0.6)'; });
-  noBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
-    onNo();
-  });
-
-  btnRow.appendChild(yesBtn);
-  btnRow.appendChild(noBtn);
-  panel.appendChild(btnRow);
-  backdrop.appendChild(panel);
-  root.appendChild(backdrop);
 }

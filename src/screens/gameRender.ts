@@ -24,9 +24,11 @@ import type { CombatTextSystem } from '../render/hud/combatText';
 import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
+import type { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
+import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import {
   isTheroShowcaseRoom,
   renderTheroShowcaseEffect,
@@ -47,14 +49,13 @@ import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
 import {
   drawTunnelDarkness,
-  SKILLBOOK_SIZE_WORLD,
   DUST_CONTAINER_SIZE_WORLD,
   HEALTH_BAR_DISPLAY_MS,
 } from './gameRoom';
-import type { PlayerProgress } from '../progression/playerProgress';
 import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
+import { renderDarkAmbientBlockerOverlay } from '../render/walls/blockSpriteRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -91,6 +92,13 @@ const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red 
 // DECISIONS.md for full guidance.  Has no effect when false.
 const HIGH_WATER_GLOW_GUARD_ENABLED       = false;
 const HIGH_WATER_DECORATION_BLOOM_LIMIT   = 128;
+
+/**
+ * Module-level pre-allocated Set for alive enemy entity IDs.
+ * Reused each frame by `drawOffensiveDustOutlineOverlay` — avoids allocating a
+ * new Set<number> on every render call (saves one GC-eligible object per frame).
+ */
+const _aliveEnemyEntityIds = new Set<number>();
 
 function drawGrappleBloom(
   bloomSystem: BloomSystem,
@@ -234,11 +242,12 @@ function drawOffensiveDustOutlineOverlay(
 
   // Precompute the set of alive non-player entity IDs in one O(C) pass.
   // Cluster count is tiny (≤ ~30), so the Set construction cost is negligible.
-  const aliveEnemyEntityIds = new Set<number>();
+  // Using the module-level pre-allocated Set avoids a per-frame heap allocation.
+  _aliveEnemyEntityIds.clear();
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {
     const cluster = snapshot.clusters[ci];
     if (cluster.isPlayerFlag === 0 && cluster.isAliveFlag === 1) {
-      aliveEnemyEntityIds.add(cluster.entityId);
+      _aliveEnemyEntityIds.add(cluster.entityId);
     }
   }
 
@@ -255,7 +264,7 @@ function drawOffensiveDustOutlineOverlay(
   for (let i = 0; i < particles.particleCount; i++) {
     if (particles.isAliveFlag[i] === 0) continue;
     if (particles.behaviorMode[i] !== 1) continue;
-    if (!aliveEnemyEntityIds.has(particles.ownerEntityId[i])) continue;
+    if (!_aliveEnemyEntityIds.has(particles.ownerEntityId[i])) continue;
 
     const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
     const sy = particles.positionYWorld[i] * scalePx + offsetYPx;
@@ -284,10 +293,13 @@ export interface RenderFrameContext {
   webglRenderer: WebGLParticleRenderer;
   environmentalDust: EnvironmentalDustLayer;
   skidDebris: SkidDebrisRenderer;
+  crumbleDebris: CrumbleDebrisRenderer;
   skillTombRenderer: SkillTombRenderer;
   skillTombEffectRenderer: SkillTombEffectRenderer;
   bloomSystem: BloomSystem;
   playerCloak: PlayerCloak;
+  /** Phantasmal golden cloak extension — visible while the player is grappling. */
+  phantomCloak: PhantomCloakExtension;
   darkRoomOverlay: DarkRoomOverlay;
   /** Decoration sway state for push-wave animation driven by entity velocity. */
   decorationWaveState: DecorationWaveState;
@@ -345,13 +357,8 @@ export interface RenderFrameContext {
 
   // Collectibles
   collectedDustContainerKeySet: Set<string>;
-  isSkillBookSpriteLoaded: boolean;
   isDustContainerSpriteLoaded: boolean;
-  skillBookSprite: HTMLImageElement;
   dustContainerSprite: HTMLImageElement;
-
-  // Progression
-  progress: PlayerProgress | undefined;
 
   // Callbacks
   getPlayerDustCount: () => number;
@@ -365,8 +372,8 @@ export interface RenderFrameContext {
 export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
-    webglRenderer, environmentalDust, skidDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-    playerCloak, darkRoomOverlay, decorationWaveState,
+    webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+    playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -374,9 +381,8 @@ export function renderFrame(r: RenderFrameContext): void {
     prevHealthMap, healthBarDisplayUntilTick,
     combatText, prevLastPlayerBlockedTick,
     collectedDustContainerKeySet,
-    isSkillBookSpriteLoaded, isDustContainerSpriteLoaded,
-    skillBookSprite, dustContainerSprite,
-    progress,
+    isDustContainerSpriteLoaded,
+    dustContainerSprite,
     getPlayerDustCount,
   } = r;
 
@@ -461,6 +467,7 @@ export function renderFrame(r: RenderFrameContext): void {
   }
 
   // Walls before cluster indicators so clusters are drawn on top
+  renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
 
   const isDarkRoom = currentRoom.lightingEffect === 'DarkRoom';
@@ -494,7 +501,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
   renderHazards(ctx, world, ox, oy, zoom, world.tick);
 
-  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, /* isDebugCloak */ isDebugMode);
+  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom);
   drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
@@ -514,6 +521,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
   skidDebris.render(ctx, ox, oy, zoom);
+  crumbleDebris.render(ctx, ox, oy, zoom);
 
   // Save tombs (sprite + swirling/falling dust particles)
   skillTombRenderer.render(ctx, ox, oy, zoom);
@@ -522,37 +530,6 @@ export function renderFrame(r: RenderFrameContext): void {
   skillTombEffectRenderer.renderBehind(ctx, ox, oy, zoom);
   skillTombEffectRenderer.renderSprite(ctx, ox, oy, zoom);
   skillTombEffectRenderer.renderFront(ctx, ox, oy, zoom);
-
-  // Skill books (collectibles)
-  if (isSkillBookSpriteLoaded && progress && !progress.unlockedDustKinds.includes(ParticleKind.Physical)) {
-    const roomSkillBooks = currentRoom.skillBooks ?? [];
-    const bobOffsetWorld = Math.sin(nowMs * 0.004) * 2.0;
-    for (let i = 0; i < roomSkillBooks.length; i++) {
-      const sb = roomSkillBooks[i];
-      const sx = (sb.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-      const sy = (sb.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
-      const drawSize = SKILLBOOK_SIZE_WORLD * zoom;
-      ctx.drawImage(
-        skillBookSprite,
-        sx * zoom + ox - drawSize * 0.5,
-        sy * zoom + oy - drawSize * 0.5,
-        drawSize,
-        drawSize,
-      );
-      bloomSystem.glowPass.drawSprite({
-        image: skillBookSprite,
-        x: sx * zoom + ox - drawSize * 0.5,
-        y: sy * zoom + oy - drawSize * 0.5,
-        width: drawSize,
-        height: drawSize,
-        glow: {
-          enabled: true,
-          intensity: 0.75,
-          color: '#b8a2ff',
-        },
-      });
-    }
-  }
 
   // Dust containers (collectibles)
   if (isDustContainerSpriteLoaded) {
@@ -589,6 +566,37 @@ export function renderFrame(r: RenderFrameContext): void {
   // glow on top of the darkness, making light sources feel warm and radiant.
   if (isDarkRoom) {
     const lights = collectDecorationLights(cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
+
+    // ── Authored local light sources (see RoomLightSourceDef) ──────────────
+    // Designer-placed lights are serialised in `RoomDef.lightSources`.  When
+    // the room is in DarkRoom mode they punch additional holes in the
+    // darkness mask just like decoration lights.  Brightness (0-100%) is
+    // mapped onto both the inner-radius fraction (brighter → wider fully-lit
+    // core) and a radius scalar so low-brightness lights feel dimmer.
+    //
+    // NOTE: colour is stored on RoomLightSourceDef but the DarkRoom overlay
+    // currently uses an achromatic darkness mask, so colour is not applied
+    // here yet.  This is consistent with the existing decoration-light path
+    // and matches phase-1 scope (see task spec §9).  The colour data is
+    // preserved end-to-end for a future coloured-light pass.
+    if (currentRoom.lightSources) {
+      for (const ls of currentRoom.lightSources) {
+        const bPct = Math.max(0, Math.min(100, ls.brightnessPct)) / 100;
+        if (bPct <= 0) continue;
+        const worldX = (ls.xBlock + 0.5) * BLOCK_SIZE_SMALL;
+        const worldY = (ls.yBlock + 0.5) * BLOCK_SIZE_SMALL;
+        const radiusWorld = Math.max(1, ls.radiusBlocks) * BLOCK_SIZE_SMALL;
+        // Brightness 100% → full radius + wide core; 25% → half radius + tiny core.
+        const radiusPx = radiusWorld * zoom * (0.5 + 0.5 * bPct);
+        const innerFraction = 0.1 + 0.3 * bPct;
+        lights.push({
+          xPx: worldX * zoom + ox,
+          yPx: worldY * zoom + oy,
+          radiusPx,
+          innerFraction,
+        });
+      }
+    }
 
     // Player emits a personal lantern-sized light.
     const playerSnap = snapshot.clusters.find(c => c.isPlayerFlag === 1 && c.isAliveFlag === 1);

@@ -7,18 +7,16 @@ import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
   PaletteItem, BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS, FADE_COLOR_OPTIONS,
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
+  AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
+  CrumbleVariant, CRUMBLE_VARIANT_OPTIONS,
 } from './editorState';
 import { addHoverStyle } from '../ui/helpers';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
-
-// ── Style constants ──────────────────────────────────────────────────────────
-
-const PANEL_BG = 'rgba(15,15,20,0.92)';
-const PANEL_BORDER = 'rgba(0,200,100,0.4)';
-const ACTIVE_BG = 'rgba(0,200,100,0.25)';
-const BTN_BG = 'rgba(30,30,40,0.85)';
-const TEXT_COLOR = '#c0ffd0';
-const GREEN = '#00c864';
+import {
+  addField, addSelect, addCheckbox,
+  addDimField, addNumberField, addSliderField, addColorSliders,
+} from './editorFormWidgets';
+import { PANEL_BG, PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, GREEN } from './editorStyles';
 
 // ── Block-theme visual constants ─────────────────────────────────────────────
 
@@ -61,6 +59,7 @@ export interface EditorUICallbacks {
   onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => void;
   onBlockThemeChange: (theme: BlockTheme) => void;
   onLightingEffectChange: (effect: LightingEffect) => void;
+  onAmbientLightDirectionChange: (direction: AmbientLightDirection | undefined) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onRoomSongChange: (songId: RoomSongId) => void;
   onConfirm: () => void;
@@ -70,6 +69,8 @@ export interface EditorUICallbacks {
   onOpenVisualMap: () => void;
   /** Called when the user picks a different skill in the skill tomb dropdown. */
   onSkillTombWeaveChange: (weaveId: string) => void;
+  /** Called when the user picks a different crumble variant in the crumble variant dropdown. */
+  onCrumbleVariantChange: (variant: CrumbleVariant) => void;
 }
 
 export function createEditorUI(root: HTMLElement): EditorUI {
@@ -248,8 +249,8 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   let dimWidthInput: HTMLInputElement | null = null;
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
-  catBar.style.cssText = 'display: flex; gap: 4px; margin-bottom: 8px;';
-  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers'];
+  catBar.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px;';
+  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'lighting', 'liquids'];
   const catBtns: HTMLButtonElement[] = [];
   for (const cat of categories) {
     const btn = makeBtn(cat, () => callbacks?.onCategoryChange(cat));
@@ -283,6 +284,35 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   });
   lightingSelect.addEventListener('click', (e) => e.stopPropagation());
   lightingDiv.appendChild(lightingSelect);
+
+  // ── Ambient Light Direction dropdown ─────────────────────────────────────
+  const ambientDirLabel = document.createElement('div');
+  ambientDirLabel.textContent = 'Ambient Direction';
+  ambientDirLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  lightingDiv.appendChild(ambientDirLabel);
+  const ambientDirSelect = document.createElement('select');
+  ambientDirSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  // Add undefined/"room default" option
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '(room default)';
+  ambientDirSelect.appendChild(defaultOpt);
+  for (const opt of AMBIENT_LIGHT_DIRECTION_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    ambientDirSelect.appendChild(o);
+  }
+  ambientDirSelect.addEventListener('change', () => {
+    const val = ambientDirSelect.value as AmbientLightDirection | '';
+    callbacks?.onAmbientLightDirectionChange(val === '' ? undefined : val);
+  });
+  ambientDirSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(ambientDirSelect);
 
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
@@ -324,12 +354,41 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   skillTombSelect.addEventListener('click', (e) => e.stopPropagation());
   skillTombPickerDiv.appendChild(skillTombSelect);
 
+  // ── Crumble variant picker (shown above inspector when a crumble item is selected) ──
+  const crumblePickerDiv = document.createElement('div');
+  crumblePickerDiv.style.cssText = `
+    border: 1px solid rgba(200,150,60,0.5); border-radius: 3px;
+    padding: 6px 8px; margin-top: 8px; background: rgba(20,12,0,0.4); display: none;
+  `;
+  const crumblePickerTitle = document.createElement('div');
+  crumblePickerTitle.textContent = 'Crumble Weakness';
+  crumblePickerTitle.style.cssText = `font-size: 11px; color: #c8a060; margin-bottom: 6px; font-weight: bold;`;
+  crumblePickerDiv.appendChild(crumblePickerTitle);
+  const crumbleVariantSelect = document.createElement('select');
+  crumbleVariantSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid rgba(200,150,60,0.4);
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of CRUMBLE_VARIANT_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    crumbleVariantSelect.appendChild(o);
+  }
+  crumbleVariantSelect.addEventListener('change', () => {
+    callbacks?.onCrumbleVariantChange(crumbleVariantSelect.value as CrumbleVariant);
+  });
+  crumbleVariantSelect.addEventListener('click', (e) => e.stopPropagation());
+  crumblePickerDiv.appendChild(crumbleVariantSelect);
+
   // ── Inspector ────────────────────────────────────────────────────────────
   const inspectorDiv = document.createElement('div');
   inspectorDiv.style.cssText = `
     border-top: 1px solid ${PANEL_BORDER}; padding-top: 10px; margin-top: 8px;
   `;
   container.appendChild(skillTombPickerDiv);
+  container.appendChild(crumblePickerDiv);
   container.appendChild(inspectorDiv);
 
   // Track rendered inspector state to avoid recreating fields every frame
@@ -491,10 +550,14 @@ export function createEditorUI(root: HTMLElement): EditorUI {
         }
       }
     } else if (state.activeCategory === 'blocks') {
-      // Lighting may change independently; update select in-place
+      // Lighting and ambient direction may change independently; update selects in-place
       if (currentLighting !== lastRenderedLightingEffect && document.activeElement !== lightingSelect) {
         lastRenderedLightingEffect = currentLighting;
         lightingSelect.value = currentLighting;
+      }
+      const currentAmbientDir = state.roomData?.ambientLightDirection;
+      if (document.activeElement !== ambientDirSelect) {
+        ambientDirSelect.value = currentAmbientDir ?? '';
       }
     }
 
@@ -510,6 +573,13 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     skillTombPickerDiv.style.display = isSkillTombSelected ? '' : 'none';
     if (isSkillTombSelected && document.activeElement !== skillTombSelect) {
       skillTombSelect.value = state.pendingSkillTombWeaveId;
+    }
+
+    // Show/hide the crumble variant picker based on selected palette item
+    const isCrumbleSelected = state.selectedPaletteItem?.isCrumbleBlockItem === 1;
+    crumblePickerDiv.style.display = isCrumbleSelected ? '' : 'none';
+    if (isCrumbleSelected && document.activeElement !== crumbleVariantSelect) {
+      crumbleVariantSelect.value = state.pendingCrumbleVariant;
     }
 
     // Update inspector (only recreate when selected element changes)
@@ -672,6 +742,35 @@ function makeBlockPreviewShapeCss(itemId: string, theme: string): { shapeCss: st
         `,
       };
     }
+    // ── Crumble block variants (same shape as their non-crumble counterpart) ──
+    case 'crumble_block':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;`,
+      };
+    case 'crumble_block_2x2':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: 50% 50%; opacity: 0.75;`,
+      };
+    case 'crumble_ramp_1x1':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
+      };
+    case 'crumble_ramp_1x2':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 50%);`,
+      };
+    case 'crumble_ramp_2x2':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
+      };
     default:
       return {
         containerCss,
@@ -698,6 +797,29 @@ function makeBlockPreviewCard(item: PaletteItem, theme: string, onClick: () => v
   const shape = document.createElement('div');
   shape.style.cssText = shapeCss;
   previewWrap.appendChild(shape);
+
+  // Crumble blocks get a crack overlay drawn on a canvas inside the preview
+  if (item.isCrumbleBlockItem === 1) {
+    const crackCanvas = document.createElement('canvas');
+    crackCanvas.width = 40;
+    crackCanvas.height = 40;
+    crackCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
+    const cctx = crackCanvas.getContext('2d');
+    if (cctx) {
+      cctx.strokeStyle = '#c8a060'; // neutral crack color in palette; variant color shows in preview cursor and placed blocks
+      cctx.lineWidth = 1.5;
+      cctx.beginPath();
+      cctx.moveTo(17, 4);
+      cctx.lineTo(22, 18);
+      cctx.lineTo(18, 22);
+      cctx.lineTo(23, 36);
+      cctx.moveTo(22, 18);
+      cctx.lineTo(30, 12);
+      cctx.stroke();
+    }
+    previewWrap.appendChild(crackCanvas);
+  }
+
   card.appendChild(previewWrap);
 
   const lbl = document.createElement('div');
@@ -843,6 +965,11 @@ function updateInspector(
         trans.fadeColor ?? '#000000',
         v => callbacks?.onPropertyChange('transition.fadeColor', v));
 
+      addCheckbox(div, 'isSecretDoor', trans.isSecretDoor === true,
+        v => callbacks?.onPropertyChange('transition.isSecretDoor', v ? 1 : 0));
+      addNumberField(div, 'gradientWidthBlocks', trans.gradientWidthBlocks ?? 3, 1, 20,
+        v => callbacks?.onPropertyChange('transition.gradientWidthBlocks', v));
+
       // Link Transition button
       const linkBtn = makeBtn('🔗 Link Transition', () => callbacks?.onLinkTransition());
       linkBtn.style.width = '100%';
@@ -898,120 +1025,91 @@ function updateInspector(
       addField(div, 'yBlock', String(deco.yBlock),
         v => callbacks?.onPropertyChange('decoration.yBlock', parseInt(v)));
     }
+  } else if (el.type === 'ambientLightBlocker') {
+    const blocker = (room.ambientLightBlockers ?? []).find(b => b.uid === el.uid);
+    if (blocker) {
+      const readout = document.createElement('div');
+      readout.textContent = 'Ambient Light Blocker';
+      readout.style.cssText = `font-size: 12px; color: rgba(180,120,255,0.9); margin-bottom: 6px; font-weight: bold;`;
+      div.appendChild(readout);
+      const posInfo = document.createElement('div');
+      posInfo.textContent = `X: ${blocker.xBlock}, Y: ${blocker.yBlock}`;
+      posInfo.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
+      div.appendChild(posInfo);
+      const note = document.createElement('div');
+      note.textContent = 'Blocks ambient-light propagation through this cell (no collision effect).';
+      note.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.5); margin-top: 6px; font-style: italic;`;
+      div.appendChild(note);
+    }
+  } else if (el.type === 'lightSource') {
+    const light = (room.lightSources ?? []).find(l => l.uid === el.uid);
+    if (light) {
+      addField(div, 'xBlock', String(light.xBlock),
+        v => {
+          const num = parseInt(v);
+          if (!isNaN(num)) {
+            light.xBlock = num;
+            callbacks?.onPropertyChange('lightSource.xBlock', num);
+          }
+        });
+      addField(div, 'yBlock', String(light.yBlock),
+        v => {
+          const num = parseInt(v);
+          if (!isNaN(num)) {
+            light.yBlock = num;
+            callbacks?.onPropertyChange('lightSource.yBlock', num);
+          }
+        });
+      addNumberField(div, 'radiusBlocks', light.radiusBlocks, 1, 64, v => {
+        light.radiusBlocks = v;
+        callbacks?.onPropertyChange('lightSource.radiusBlocks', v);
+      });
+      addSliderField(div, 'brightnessPct', light.brightnessPct, 0, 100, v => {
+        light.brightnessPct = v;
+        callbacks?.onPropertyChange('lightSource.brightnessPct', v);
+      });
+      addColorSliders(div, 'color', light.colorR, light.colorG, light.colorB, (r, g, b) => {
+        light.colorR = r;
+        light.colorG = g;
+        light.colorB = b;
+        callbacks?.onPropertyChange('lightSource.color', 0);
+      });
+    }
+  } else if (el.type === 'waterZone') {
+    const zone = (room.waterZones ?? []).find(z => z.uid === el.uid);
+    if (zone) {
+      addField(div, 'xBlock', String(zone.xBlock),
+        v => callbacks?.onPropertyChange('waterZone.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(zone.yBlock),
+        v => callbacks?.onPropertyChange('waterZone.yBlock', parseInt(v)));
+      addField(div, 'wBlock', String(zone.wBlock),
+        v => callbacks?.onPropertyChange('waterZone.wBlock', parseInt(v)));
+      addField(div, 'hBlock', String(zone.hBlock),
+        v => callbacks?.onPropertyChange('waterZone.hBlock', parseInt(v)));
+    }
+  } else if (el.type === 'lavaZone') {
+    const zone = (room.lavaZones ?? []).find(z => z.uid === el.uid);
+    if (zone) {
+      addField(div, 'xBlock', String(zone.xBlock),
+        v => callbacks?.onPropertyChange('lavaZone.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(zone.yBlock),
+        v => callbacks?.onPropertyChange('lavaZone.yBlock', parseInt(v)));
+      addField(div, 'wBlock', String(zone.wBlock),
+        v => callbacks?.onPropertyChange('lavaZone.wBlock', parseInt(v)));
+      addField(div, 'hBlock', String(zone.hBlock),
+        v => callbacks?.onPropertyChange('lavaZone.hBlock', parseInt(v)));
+    }
+  } else if (el.type === 'crumbleBlock') {
+    const block = (room.crumbleBlocks ?? []).find(b => b.uid === el.uid);
+    if (block) {
+      addField(div, 'xBlock', String(block.xBlock),
+        v => callbacks?.onPropertyChange('crumbleBlock.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(block.yBlock),
+        v => callbacks?.onPropertyChange('crumbleBlock.yBlock', parseInt(v)));
+      addSelect(div, 'variant',
+        CRUMBLE_VARIANT_OPTIONS.map(o => ({ label: o.label, value: o.id })),
+        block.variant ?? 'normal',
+        v => callbacks?.onPropertyChange('crumbleBlock.variant', v));
+    }
   }
-}
-
-function addField(
-  parent: HTMLElement, label: string, value: string,
-  onChange: (v: string) => void,
-): void {
-  const row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
-
-  const lbl = document.createElement('span');
-  lbl.textContent = label;
-  lbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(200,255,200,0.7);`;
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = value;
-  input.style.cssText = `
-    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 3px 5px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
-  `;
-  input.addEventListener('change', () => onChange(input.value));
-  input.addEventListener('click', (e) => e.stopPropagation());
-
-  row.appendChild(lbl);
-  row.appendChild(input);
-  parent.appendChild(row);
-}
-
-function addSelect(
-  parent: HTMLElement, label: string,
-  options: readonly { label: string; value: string }[],
-  current: string,
-  onChange: (v: string) => void,
-): void {
-  const row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
-
-  const lbl = document.createElement('span');
-  lbl.textContent = label;
-  lbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(200,255,200,0.7);`;
-
-  const sel = document.createElement('select');
-  sel.style.cssText = `
-    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 3px; font-size: 11px; font-family: monospace;
-  `;
-  for (const opt of options) {
-    const o = document.createElement('option');
-    o.value = opt.value;
-    o.textContent = opt.label;
-    if (opt.value === current) o.selected = true;
-    sel.appendChild(o);
-  }
-  sel.addEventListener('change', () => onChange(sel.value));
-  sel.addEventListener('click', (e) => e.stopPropagation());
-
-  row.appendChild(lbl);
-  row.appendChild(sel);
-  parent.appendChild(row);
-}
-
-function addCheckbox(
-  parent: HTMLElement, label: string, checked: boolean,
-  onChange: (v: boolean) => void,
-): void {
-  const row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
-
-  const lbl = document.createElement('span');
-  lbl.textContent = label;
-  lbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(200,255,200,0.7);`;
-
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.checked = checked;
-  cb.style.cssText = `accent-color: ${GREEN};`;
-  cb.addEventListener('change', () => onChange(cb.checked));
-  cb.addEventListener('click', (e) => e.stopPropagation());
-
-  row.appendChild(lbl);
-  row.appendChild(cb);
-  parent.appendChild(row);
-}
-
-function addDimField(
-  parent: HTMLElement, label: string, value: number,
-  onChange: (v: number) => void,
-): HTMLInputElement {
-  const row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
-
-  const lbl = document.createElement('span');
-  lbl.textContent = label;
-  lbl.style.cssText = `min-width: 100px; font-size: 11px; color: rgba(200,255,200,0.7);`;
-
-  const input = document.createElement('input');
-  input.type = 'number';
-  input.value = String(value);
-  input.min = '10';
-  input.style.cssText = `
-    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 3px 5px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
-  `;
-  input.addEventListener('change', () => {
-    const v = parseInt(input.value, 10);
-    if (!isNaN(v) && v >= 10) onChange(v);
-  });
-  input.addEventListener('click', (e) => e.stopPropagation());
-
-  row.appendChild(lbl);
-  row.appendChild(input);
-  parent.appendChild(row);
-  return input;
 }

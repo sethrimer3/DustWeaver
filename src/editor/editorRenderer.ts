@@ -4,10 +4,11 @@
  * other editor visual feedback on the 2D canvas.
  */
 
-import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
-import type { EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType } from './editorState';
+import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import type { CrumbleVariant, EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType, AmbientLightDirection } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow } from './editorTools';
+import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 
 const GRID_COLOR = 'rgba(255,255,255,0.06)';
 const WALL_HIGHLIGHT = 'rgba(100,200,255,0.3)';
@@ -22,6 +23,8 @@ const ENEMY_COLOR = 'rgba(255,80,80,0.5)';
 const ENEMY_SELECTED = 'rgba(255,80,80,0.9)';
 const TRANSITION_COLOR = 'rgba(80,255,80,0.35)';
 const TRANSITION_SELECTED = 'rgba(80,255,80,0.8)';
+const SECRET_DOOR_COLOR = 'rgba(160,80,255,0.35)';
+const SECRET_DOOR_SELECTED = 'rgba(160,80,255,0.8)';
 const TRANSITION_LINK_SOURCE = 'rgba(255,255,0,0.7)';
 const TRANSITION_LINK_CANDIDATE = 'rgba(0,255,200,0.5)';
 const SPAWN_COLOR = 'rgba(255,220,50,0.5)';
@@ -38,14 +41,29 @@ const CURSOR_COLOR = 'rgba(255,255,255,0.4)';
 const SELECTION_BOX_COLOR = 'rgba(100,200,255,0.25)';
 const SELECTION_BOX_BORDER = 'rgba(100,200,255,0.7)';
 
+/**
+ * Crack-line stroke color for each crumble block variant.
+ * The same crack geometry is drawn for every block size/shape;
+ * only the color changes to indicate the elemental weakness.
+ */
+const CRUMBLE_VARIANT_CRACK_COLOR: Readonly<Record<CrumbleVariant, string>> = {
+  normal:    '#c8a060',
+  fire:      '#ff6030',
+  water:     '#4080ff',
+  void:      '#a040e0',
+  ice:       '#80d8ff',
+  lightning: '#ffee00',
+  poison:    '#60cc40',
+  shadow:    '#602090',
+  nature:    '#90e060',
+};
+
 /** Footprint size of a save tomb in block units (sprite is 2 wide × 3 tall, centered). */
 const SAVE_TOMB_FOOTPRINT_W_BLOCKS = 2;
 const SAVE_TOMB_FOOTPRINT_H_BLOCKS = 3;
 /** Footprint size of a skill tomb in block units (sprite is 2 wide × 2 tall, centered). */
 const SKILL_TOMB_FOOTPRINT_W_BLOCKS = 2;
 const SKILL_TOMB_FOOTPRINT_H_BLOCKS = 2;
-
-const BS = BLOCK_SIZE_MEDIUM;
 
 /**
  * Renders all editor overlays on the 2D canvas.
@@ -108,6 +126,7 @@ export function renderEditorOverlays(
     let color = TRANSITION_COLOR;
     if (isLinkSource) color = TRANSITION_LINK_SOURCE;
     else if (isLinkCandidate) color = TRANSITION_LINK_CANDIDATE;
+    else if (t.isSecretDoor) color = isSelected ? SECRET_DOOR_SELECTED : SECRET_DOOR_COLOR;
     else if (isSelected) color = TRANSITION_SELECTED;
     drawTransitionZone(ctx, t, room, offsetXPx, offsetYPx, zoom, color, tIndex + 1);
   }
@@ -150,6 +169,142 @@ export function renderEditorOverlays(
       isSelected ? 'rgba(255,215,0,0.8)' : 'rgba(255,215,0,0.4)', '✦');
   }
 
+  // ── Ambient Light Blockers (before decorations so icons draw on top) ─────
+  for (const b of (room.ambientLightBlockers ?? [])) {
+    const isSelected = isElementSelected('ambientLightBlocker', b.uid);
+    const isDark = b.isDarkFlag === 1;
+    // Dark blockers: near-opaque black fill with a dark grey stroke.
+    // Clear blockers: purple translucent fill.
+    ctx.fillStyle = isDark ? 'rgba(0, 0, 0, 0.65)' : 'rgba(120, 60, 200, 0.35)';
+    const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const sizePx = BLOCK_SIZE_SMALL * zoom;
+    ctx.fillRect(xPx, yPx, sizePx, sizePx);
+    // Stroke
+    ctx.strokeStyle = isSelected
+      ? 'rgba(255, 255, 255, 1.0)'
+      : (isDark ? 'rgba(90, 90, 90, 0.9)' : 'rgba(180, 120, 255, 0.85)');
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, sizePx, sizePx);
+  }
+
+  // ── Light Sources (before decorations so icons draw on top) ──────────────
+  for (const l of (room.lightSources ?? [])) {
+    const isSelected = isElementSelected('lightSource', l.uid);
+    const centerXPx = (l.xBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const centerYPx = (l.yBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    // Draw range circle (dashed)
+    const rangeRadiusPx = l.radiusBlocks * BLOCK_SIZE_SMALL * zoom;
+    ctx.save();
+    ctx.setLineDash([2, 2]);
+    ctx.strokeStyle = `rgba(${l.colorR}, ${l.colorG}, ${l.colorB}, 0.6)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(centerXPx, centerYPx, rangeRadiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    // Draw center marker (filled circle)
+    ctx.fillStyle = `rgb(${l.colorR}, ${l.colorG}, ${l.colorB})`;
+    ctx.beginPath();
+    ctx.arc(centerXPx, centerYPx, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = isSelected ? 'rgba(255, 255, 255, 1.0)' : 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.beginPath();
+    ctx.arc(centerXPx, centerYPx, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // ── Water zones ──────────────────────────────────────────────────────────
+  for (const z of (room.waterZones ?? [])) {
+    const isSelected = isElementSelected('waterZone', z.uid);
+    const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = z.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = isSelected ? 'rgba(80,160,255,0.30)' : 'rgba(60,120,220,0.18)';
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeStyle = isSelected ? 'rgba(80,180,255,0.85)' : 'rgba(80,160,255,0.50)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    ctx.fillStyle = 'rgba(160,210,255,0.75)';
+    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('💧', xPx + wPx * 0.5, yPx + hPx * 0.5);
+  }
+
+  // ── Lava zones ───────────────────────────────────────────────────────────
+  for (const z of (room.lavaZones ?? [])) {
+    const isSelected = isElementSelected('lavaZone', z.uid);
+    const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = z.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = isSelected ? 'rgba(255,100,20,0.30)' : 'rgba(220,60,10,0.18)';
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeStyle = isSelected ? 'rgba(255,120,30,0.85)' : 'rgba(220,90,20,0.50)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    ctx.fillStyle = 'rgba(255,180,60,0.75)';
+    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🔥', xPx + wPx * 0.5, yPx + hPx * 0.5);
+  }
+
+  // ── Crumble blocks ───────────────────────────────────────────────────────
+  for (const b of (room.crumbleBlocks ?? [])) {
+    const isSelected = isElementSelected('crumbleBlock', b.uid);
+    const wBlocks = b.wBlock ?? 1;
+    const hBlocks = b.hBlock ?? 1;
+    const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = wBlocks * BLOCK_SIZE_SMALL * zoom;
+    const hPx = hBlocks * BLOCK_SIZE_SMALL * zoom;
+
+    // Block fill
+    ctx.fillStyle = isSelected ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
+    if (b.rampOrientation !== undefined) {
+      // Draw ramp triangle shape
+      ctx.beginPath();
+      switch (b.rampOrientation) {
+        case 0: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx); break;
+        case 1: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx, yPx); break;
+        case 2: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx + wPx, yPx + hPx); break;
+        case 3: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx, yPx + hPx); break;
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = isSelected ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.stroke();
+    } else {
+      ctx.fillRect(xPx, yPx, wPx, hPx);
+      ctx.strokeStyle = isSelected ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.strokeRect(xPx, yPx, wPx, hPx);
+    }
+
+    // Crack overlay — same zigzag geometry, color indicates elemental weakness
+    const crackColor = CRUMBLE_VARIANT_CRACK_COLOR[b.variant ?? 'normal'];
+    ctx.strokeStyle = crackColor;
+    ctx.lineWidth = Math.max(1, zoom * 0.7);
+    ctx.beginPath();
+    // Central zigzag crack
+    const cx = xPx + wPx * 0.5;
+    const cy = yPx + hPx * 0.5;
+    ctx.moveTo(cx - wPx * 0.15, yPx + hPx * 0.1);
+    ctx.lineTo(cx + wPx * 0.05, cy - hPx * 0.1);
+    ctx.lineTo(cx - wPx * 0.05, cy + hPx * 0.1);
+    ctx.lineTo(cx + wPx * 0.15, yPx + hPx * 0.9);
+    // Short branch crack
+    ctx.moveTo(cx + wPx * 0.05, cy - hPx * 0.1);
+    ctx.lineTo(cx + wPx * 0.25, cy - hPx * 0.25);
+    ctx.stroke();
+  }
+
   // ── Decorations ──────────────────────────────────────────────────────────
   for (const d of (room.decorations ?? [])) {
     const isSelected = isElementSelected('decoration', d.uid);
@@ -179,6 +334,47 @@ export function renderEditorOverlays(
           // No valid surface — show warning color on cursor
           drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1, offsetXPx, offsetYPx, zoom, 'rgba(255,60,60,0.2)', 1);
         }
+      } else if (item.isCrumbleBlockItem === 1) {
+        // Crumble block preview — draw block shape then crack overlay in variant color
+        const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+        const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+        const wPx = preview.wBlock * BLOCK_SIZE_SMALL * zoom;
+        const hPx = preview.hBlock * BLOCK_SIZE_SMALL * zoom;
+        if (item.isRampItem === 1) {
+          const base = state.placementRotationSteps % 4;
+          const rampOri = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+          const previewWall: EditorWall = {
+            uid: -1,
+            xBlock: state.cursorBlockX,
+            yBlock: state.cursorBlockY,
+            wBlock: preview.wBlock,
+            hBlock: preview.hBlock,
+            isPlatformFlag: 0,
+            platformEdge: 0,
+            rampOrientation: rampOri,
+            isPillarHalfWidthFlag: 0,
+          };
+          drawRampTriangle(ctx, previewWall, offsetXPx, offsetYPx, zoom, 'rgba(210,180,100,0.30)', 2);
+        } else {
+          drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
+            preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, 'rgba(210,180,100,0.30)', 2);
+        }
+        // Draw variant crack overlay
+        const crackColor = CRUMBLE_VARIANT_CRACK_COLOR[state.pendingCrumbleVariant ?? 'normal'];
+        ctx.strokeStyle = crackColor;
+        ctx.lineWidth = Math.max(1, zoom * 0.7);
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        const cx = xPx + wPx * 0.5;
+        const cy = yPx + hPx * 0.5;
+        ctx.moveTo(cx - wPx * 0.15, yPx + hPx * 0.1);
+        ctx.lineTo(cx + wPx * 0.05, cy - hPx * 0.1);
+        ctx.lineTo(cx - wPx * 0.05, cy + hPx * 0.1);
+        ctx.lineTo(cx + wPx * 0.15, yPx + hPx * 0.9);
+        ctx.moveTo(cx + wPx * 0.05, cy - hPx * 0.1);
+        ctx.lineTo(cx + wPx * 0.25, cy - hPx * 0.25);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
       } else if (item.isRampItem === 1) {
         // Show ramp preview as a triangle with current orientation
         const base = state.placementRotationSteps % 4;
@@ -246,10 +442,10 @@ export function renderEditorOverlays(
     const y1 = Math.min(state.selectionBoxStartBlockY, state.cursorBlockY);
     const x2 = Math.max(state.selectionBoxStartBlockX, state.cursorBlockX);
     const y2 = Math.max(state.selectionBoxStartBlockY, state.cursorBlockY);
-    const sx = x1 * BS * zoom + offsetXPx;
-    const sy = y1 * BS * zoom + offsetYPx;
-    const sw = (x2 - x1 + 1) * BS * zoom;
-    const sh = (y2 - y1 + 1) * BS * zoom;
+    const sx = x1 * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const sy = y1 * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const sw = (x2 - x1 + 1) * BLOCK_SIZE_SMALL * zoom;
+    const sh = (y2 - y1 + 1) * BLOCK_SIZE_SMALL * zoom;
     ctx.fillStyle = SELECTION_BOX_COLOR;
     ctx.fillRect(sx, sy, sw, sh);
     ctx.strokeStyle = SELECTION_BOX_BORDER;
@@ -271,7 +467,51 @@ export function renderEditorOverlays(
     drawHoverTooltip(ctx, tooltipId, tooltipType, cursorXPx, cursorYPx, canvasWidth, canvasHeight);
   }
 
+  // ── Ambient Light Direction Indicator ────────────────────────────────────
+  if (room.ambientLightDirection && room.ambientLightDirection !== 'omni') {
+    const dir = room.ambientLightDirection;
+    const [dx, dy] = getDirectionVector(dir);
+    const arrowLen = 16; // virtual px
+    const startX = 12; // top-left padding
+    const startY = 12;
+    const endX = startX + dx * arrowLen;
+    const endY = startY + dy * arrowLen;
+    ctx.strokeStyle = 'rgba(255, 220, 120, 0.9)';
+    ctx.fillStyle = 'rgba(255, 220, 120, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    // Arrowhead
+    const headLen = 5;
+    const angle = Math.atan2(dy, dx);
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+    // Label
+    ctx.font = '10px monospace';
+    ctx.fillText(dir, endX + 4, endY + 4);
+  }
+
   ctx.restore();
+}
+
+function getDirectionVector(dir: AmbientLightDirection): [number, number] {
+  switch (dir) {
+    case 'down':       return [0, 1];
+    case 'down-right': return [1, 1];
+    case 'down-left':  return [-1, 1];
+    case 'up':         return [0, -1];
+    case 'up-right':   return [1, -1];
+    case 'up-left':    return [-1, -1];
+    case 'left':       return [-1, 0];
+    case 'right':      return [1, 0];
+    case 'omni':       return [0, 0];
+  }
 }
 
 // ── Drawing helpers ──────────────────────────────────────────────────────────
@@ -288,6 +528,11 @@ function buildElementTooltipId(type: SelectedElementType, uid: number): string {
     grasshopperArea:  'grasshopper_area',
     decoration:       'decoration',
     playerSpawn:      'player_spawn',
+    ambientLightBlocker: 'ambient_blocker',
+    lightSource:      'light_source',
+    waterZone:        'water_zone',
+    lavaZone:         'lava_zone',
+    crumbleBlock:     'crumble_block',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;
@@ -322,14 +567,39 @@ function buildElementTypeName(
     }
     return 'Decoration';
   }
+  if (type === 'skillTomb') {
+    const s = room.skillTombs.find(x => x.uid === uid);
+    if (s) {
+      const displayName = WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? '(unknown weave)';
+      return `Skill Tomb [${displayName}]`;
+    }
+    return 'Skill Tomb';
+  }
   const names: Partial<Record<SelectedElementType, string>> = {
-    wall:        'Wall',
-    transition:  'Room Transition',
-    saveTomb:    'Save Tomb',
-    skillTomb:   'Skill Tomb',
-    dustPile:    'Dust Pile',
-    playerSpawn: 'Player Spawn',
+    wall:               'Wall',
+    transition:         'Room Transition',
+    saveTomb:           'Save Tomb',
+    dustPile:           'Dust Pile',
+    playerSpawn:        'Player Spawn',
+    ambientLightBlocker:'Ambient Blocker',
+    lightSource:        'Light Source',
+    waterZone:          'Water Zone',
+    lavaZone:           'Lava Zone',
   };
+  if (type === 'crumbleBlock') {
+    const b = (room.crumbleBlocks ?? []).find(x => x.uid === uid);
+    if (b) {
+      const variantLabel = b.variant && b.variant !== 'normal' ? ` [${b.variant}]` : '';
+      const sizeLabel = (b.wBlock ?? 1) > 1 || (b.hBlock ?? 1) > 1
+        ? ` ${b.wBlock ?? 1}×${b.hBlock ?? 1}` : '';
+      return `Crumble Block${sizeLabel}${variantLabel}`;
+    }
+    return 'Crumble Block';
+  }
+  if (type === 'ambientLightBlocker') {
+    const b = (room.ambientLightBlockers ?? []).find(x => x.uid === uid);
+    if (b) return b.isDarkFlag === 1 ? 'Dark Blocker' : 'Ambient Blocker';
+  }
   return names[type] ?? type;
 }
 
@@ -407,20 +677,20 @@ function drawGrid(
   ctx.lineWidth = 1;
   ctx.beginPath();
 
-  const startCol = Math.max(0, Math.floor(-ox / (BS * zoom)));
-  const endCol = Math.min(room.widthBlocks, Math.ceil((canvasW - ox) / (BS * zoom)));
-  const startRow = Math.max(0, Math.floor(-oy / (BS * zoom)));
-  const endRow = Math.min(room.heightBlocks, Math.ceil((canvasH - oy) / (BS * zoom)));
+  const startCol = Math.max(0, Math.floor(-ox / (BLOCK_SIZE_SMALL * zoom)));
+  const endCol = Math.min(room.widthBlocks, Math.ceil((canvasW - ox) / (BLOCK_SIZE_SMALL * zoom)));
+  const startRow = Math.max(0, Math.floor(-oy / (BLOCK_SIZE_SMALL * zoom)));
+  const endRow = Math.min(room.heightBlocks, Math.ceil((canvasH - oy) / (BLOCK_SIZE_SMALL * zoom)));
 
   for (let col = startCol; col <= endCol; col++) {
-    const x = col * BS * zoom + ox;
-    ctx.moveTo(x, startRow * BS * zoom + oy);
-    ctx.lineTo(x, endRow * BS * zoom + oy);
+    const x = col * BLOCK_SIZE_SMALL * zoom + ox;
+    ctx.moveTo(x, startRow * BLOCK_SIZE_SMALL * zoom + oy);
+    ctx.lineTo(x, endRow * BLOCK_SIZE_SMALL * zoom + oy);
   }
   for (let row = startRow; row <= endRow; row++) {
-    const y = row * BS * zoom + oy;
-    ctx.moveTo(startCol * BS * zoom + ox, y);
-    ctx.lineTo(endCol * BS * zoom + ox, y);
+    const y = row * BLOCK_SIZE_SMALL * zoom + oy;
+    ctx.moveTo(startCol * BLOCK_SIZE_SMALL * zoom + ox, y);
+    ctx.lineTo(endCol * BLOCK_SIZE_SMALL * zoom + ox, y);
   }
   ctx.stroke();
 }
@@ -431,10 +701,10 @@ function drawBlockRect(
   ox: number, oy: number, zoom: number,
   color: string, lineWidth: number,
 ): void {
-  const x = xBlock * BS * zoom + ox;
-  const y = yBlock * BS * zoom + oy;
-  const w = wBlock * BS * zoom;
-  const h = hBlock * BS * zoom;
+  const x = xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y = yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const w = wBlock * BLOCK_SIZE_SMALL * zoom;
+  const h = hBlock * BLOCK_SIZE_SMALL * zoom;
 
   ctx.fillStyle = color;
   ctx.fillRect(x, y, w, h);
@@ -452,10 +722,10 @@ function drawRampTriangle(
   ox: number, oy: number, zoom: number,
   color: string, lineWidth: number,
 ): void {
-  const x  = w.xBlock * BS * zoom + ox;
-  const y  = w.yBlock * BS * zoom + oy;
-  const ww = w.wBlock * BS * zoom;
-  const wh = w.hBlock * BS * zoom;
+  const x  = w.xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const ww = w.wBlock * BLOCK_SIZE_SMALL * zoom;
+  const wh = w.hBlock * BLOCK_SIZE_SMALL * zoom;
   const ori = w.rampOrientation ?? 0;
 
   // Corners: TL, TR, BL, BR
@@ -496,10 +766,10 @@ function drawPlatformLine(
   ox: number, oy: number, zoom: number,
   color: string,
 ): void {
-  const x  = w.xBlock * BS * zoom + ox;
-  const y  = w.yBlock * BS * zoom + oy;
-  const ww = w.wBlock * BS * zoom;
-  const wh = w.hBlock * BS * zoom;
+  const x  = w.xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const ww = w.wBlock * BLOCK_SIZE_SMALL * zoom;
+  const wh = w.hBlock * BLOCK_SIZE_SMALL * zoom;
   const edge = w.platformEdge ?? 0;
   const LINE = Math.max(2, Math.round(3 * zoom));
 
@@ -531,10 +801,10 @@ function drawHalfPillarRect(
   color: string,
 ): void {
   // Full AABB position
-  const x  = w.xBlock * BS * zoom + ox;
-  const y  = w.yBlock * BS * zoom + oy;
-  const ww = w.wBlock * BS * zoom;
-  const wh = w.hBlock * BS * zoom;
+  const x  = w.xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const ww = w.wBlock * BLOCK_SIZE_SMALL * zoom;
+  const wh = w.hBlock * BLOCK_SIZE_SMALL * zoom;
   // Half-width pillar = 3 world units wide (half of BLOCK_SIZE_MEDIUM=6)
   const halfW = ww / 2;
 
@@ -554,9 +824,9 @@ function drawMarker(
   ox: number, oy: number, zoom: number,
   color: string, emoji: string,
 ): void {
-  const cx = xBlock * BS * zoom + ox;
-  const cy = yBlock * BS * zoom + oy;
-  const r = BS * zoom * 0.4;
+  const cx = xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const cy = yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const r = BLOCK_SIZE_SMALL * zoom * 0.4;
 
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -583,14 +853,14 @@ function drawObjectFootprint(
   color: string, lineWidth: number,
 ): void {
   // Center of the anchor block in pixel space
-  const cx = (xBlock + 0.5) * BS * zoom + ox;
-  const cy = (yBlock + 0.5) * BS * zoom + oy;
-  const halfW = (wBlocks / 2) * BS * zoom;
-  const halfH = (hBlocks / 2) * BS * zoom;
+  const cx = (xBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + ox;
+  const cy = (yBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + oy;
+  const halfW = (wBlocks / 2) * BLOCK_SIZE_SMALL * zoom;
+  const halfH = (hBlocks / 2) * BLOCK_SIZE_SMALL * zoom;
   const x = cx - halfW;
   const y = cy - halfH;
-  const w = wBlocks * BS * zoom;
-  const h = hBlocks * BS * zoom;
+  const w = wBlocks * BLOCK_SIZE_SMALL * zoom;
+  const h = hBlocks * BLOCK_SIZE_SMALL * zoom;
 
   ctx.fillStyle = color.replace(/[\d.]+\)$/, '0.12)');
   ctx.fillRect(x, y, w, h);
@@ -624,8 +894,8 @@ function drawTransitionZone(
   drawBlockRect(ctx, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom, color, 2);
 
   // Draw label with door number
-  const cx = (xBlock + wBlock / 2) * BS * zoom + ox;
-  const cy = (yBlock + hBlock / 2) * BS * zoom + oy;
+  const cx = (xBlock + wBlock / 2) * BLOCK_SIZE_SMALL * zoom + ox;
+  const cy = (yBlock + hBlock / 2) * BLOCK_SIZE_SMALL * zoom + oy;
   ctx.fillStyle = '#fff';
   ctx.font = '11px monospace';
   ctx.textAlign = 'center';
