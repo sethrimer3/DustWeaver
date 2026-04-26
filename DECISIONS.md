@@ -227,6 +227,15 @@ frame.
 from `wallLayout.solid2x2Map` each frame via `_populateCoveredBy2x2Keys()`.
 Avoids one `new Set<string>()` allocation per frame.
 
+### Procedural Block Open-Air Filter
+
+`proceduralBlockSprite.ts` applies a cached post-process to generated block
+sprites after the template mask is composited. Solid pixels adjacent to
+transparent open air blend 30% toward their inverted colour, pixels one step
+farther blend 20%, and pixels two steps farther blend 10%. This is independent
+from ambient lighting and is baked into each cached procedural sprite, so the
+wall layer still renders through the existing bake-canvas fast path.
+
 
 
 ### Gravity Model

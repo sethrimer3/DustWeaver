@@ -45,6 +45,10 @@
 - [ ] Weave patterns (Spire, Aegis, etc.) function correctly
 - [ ] Particle durability and combat destruction still work
 
+## Block Rendering
+- [ ] Procedural block sprites show a faint inverted-colour rim on the three innermost pixels next to open air
+- [ ] The rim appears independently from ambient-light darkness settings
+
 ## Performance
 - [ ] 60 FPS with particles active
 - [ ] Performance overlay shows FPS, frame time, particle count

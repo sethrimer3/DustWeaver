@@ -49,6 +49,10 @@ function _isReady(img: HTMLImageElement): boolean {
 /** Cache of fully generated sprites keyed by a unique string. */
 const _spriteCache = new Map<string, HTMLCanvasElement>();
 
+const _OPEN_AIR_EDGE_DISTANCE_NONE = 255;
+const _OPEN_AIR_FILTER_MAX_DISTANCE_PX = 2;
+const _OPEN_AIR_FILTER_OPACITY_BY_DISTANCE = [0.30, 0.20, 0.10] as const;
+
 function _cacheKey(
   baseUrl: string,
   templateUrl: string,
@@ -81,6 +85,7 @@ function _generateSprite(
   canvas.width  = widthPx;
   canvas.height = heightPx;
   const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
 
   // Step 1: draw base texture (always upright, never transformed).
   ctx.drawImage(base, 0, 0, widthPx, heightPx);
@@ -101,7 +106,109 @@ function _generateSprite(
   }
   ctx.globalCompositeOperation = 'source-over';
 
+  // Step 3: add a cached edge-adjacent colour-inversion pass. This is separate
+  // from room ambient lighting: it only depends on the final sprite alpha mask.
+  _applyOpenAirInversionFilter(ctx, widthPx, heightPx);
+
   return canvas;
+}
+
+function _applyOpenAirInversionFilter(
+  ctx: CanvasRenderingContext2D,
+  widthPx: number,
+  heightPx: number,
+): void {
+  const imageData = ctx.getImageData(0, 0, widthPx, heightPx);
+  const data = imageData.data;
+  const pixelCount = widthPx * heightPx;
+  const distanceFromOpenAirPx = new Uint8Array(pixelCount);
+  distanceFromOpenAirPx.fill(_OPEN_AIR_EDGE_DISTANCE_NONE);
+
+  const queue = new Uint16Array(pixelCount);
+  let queueHeadIndex = 0;
+  let queueCount = 0;
+
+  for (let yPx = 0; yPx < heightPx; yPx++) {
+    for (let xPx = 0; xPx < widthPx; xPx++) {
+      const pixelIndex = yPx * widthPx + xPx;
+      const dataIndex = pixelIndex * 4;
+      if (data[dataIndex + 3] === 0) continue;
+      if (!_hasCardinalOpenAirNeighbor(data, widthPx, heightPx, xPx, yPx)) continue;
+      distanceFromOpenAirPx[pixelIndex] = 0;
+      queue[queueCount] = pixelIndex;
+      queueCount++;
+    }
+  }
+
+  while (queueHeadIndex < queueCount) {
+    const pixelIndex = queue[queueHeadIndex];
+    queueHeadIndex++;
+
+    const currentDistancePx = distanceFromOpenAirPx[pixelIndex];
+    if (currentDistancePx >= _OPEN_AIR_FILTER_MAX_DISTANCE_PX) continue;
+
+    const xPx = pixelIndex % widthPx;
+    const yPx = Math.floor(pixelIndex / widthPx);
+    const nextDistancePx = currentDistancePx + 1;
+
+    if (xPx > 0) {
+      queueCount = _pushSolidNeighborIfCloser(data, distanceFromOpenAirPx, queue, queueCount, pixelIndex - 1, nextDistancePx);
+    }
+    if (xPx + 1 < widthPx) {
+      queueCount = _pushSolidNeighborIfCloser(data, distanceFromOpenAirPx, queue, queueCount, pixelIndex + 1, nextDistancePx);
+    }
+    if (yPx > 0) {
+      queueCount = _pushSolidNeighborIfCloser(data, distanceFromOpenAirPx, queue, queueCount, pixelIndex - widthPx, nextDistancePx);
+    }
+    if (yPx + 1 < heightPx) {
+      queueCount = _pushSolidNeighborIfCloser(data, distanceFromOpenAirPx, queue, queueCount, pixelIndex + widthPx, nextDistancePx);
+    }
+  }
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
+    const distancePx = distanceFromOpenAirPx[pixelIndex];
+    if (distancePx > _OPEN_AIR_FILTER_MAX_DISTANCE_PX) continue;
+
+    const opacity = _OPEN_AIR_FILTER_OPACITY_BY_DISTANCE[distancePx];
+    const dataIndex = pixelIndex * 4;
+    data[dataIndex]     = Math.round(data[dataIndex]     * (1 - opacity) + (255 - data[dataIndex])     * opacity);
+    data[dataIndex + 1] = Math.round(data[dataIndex + 1] * (1 - opacity) + (255 - data[dataIndex + 1]) * opacity);
+    data[dataIndex + 2] = Math.round(data[dataIndex + 2] * (1 - opacity) + (255 - data[dataIndex + 2]) * opacity);
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function _hasCardinalOpenAirNeighbor(
+  data: Uint8ClampedArray,
+  widthPx: number,
+  heightPx: number,
+  xPx: number,
+  yPx: number,
+): boolean {
+  if (xPx === 0 || yPx === 0 || xPx + 1 === widthPx || yPx + 1 === heightPx) return true;
+
+  const pixelIndex = yPx * widthPx + xPx;
+  return data[(pixelIndex - 1) * 4 + 3] === 0 ||
+    data[(pixelIndex + 1) * 4 + 3] === 0 ||
+    data[(pixelIndex - widthPx) * 4 + 3] === 0 ||
+    data[(pixelIndex + widthPx) * 4 + 3] === 0;
+}
+
+function _pushSolidNeighborIfCloser(
+  data: Uint8ClampedArray,
+  distanceFromOpenAirPx: Uint8Array,
+  queue: Uint16Array,
+  queueCount: number,
+  pixelIndex: number,
+  nextDistancePx: number,
+): number {
+  if (data[pixelIndex * 4 + 3] === 0) return queueCount;
+  if (distanceFromOpenAirPx[pixelIndex] <= nextDistancePx) return queueCount;
+
+  distanceFromOpenAirPx[pixelIndex] = nextDistancePx;
+  queue[queueCount] = pixelIndex;
+  return queueCount + 1;
 }
 
 // ── Public sprite accessor ────────────────────────────────────────────────────
