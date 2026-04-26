@@ -32,6 +32,9 @@
 - Player spawns in a central lobby (world 0) with tunnels leading left (world 2)
   and right (world 1).
 - Rooms are defined in block-unit coordinates (currently 1 block = BLOCK_SIZE_SMALL = 8 world units).
+- Room manifests are ordering hints, not exclusive file lists. Vite discovers
+  room JSON files under `ASSETS/CAMPAIGNS/*/ROOMS/*.json` and the loader appends
+  discovered files that are missing from `manifest.json`.
 - Room transitions are open tunnel passages at room edges; blocks line the
   tunnel ceiling/floor and a darkness gradient fades to 100% black at the edge.
 - When the player enters a transition zone, the current room is unloaded and

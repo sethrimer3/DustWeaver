@@ -32,6 +32,9 @@ lerp, clamped to room bounds so the viewport never shows outside the room.
 Room definitions live in `levels/roomDef.ts` (types) and `levels/rooms.ts` (data).
 Each room specifies walls, enemies, and transitions in block-unit coordinates.
 The game screen loads one room at a time; transitions swap the entire sim state.
+Campaign room JSON loading uses the room manifest as an ordering hint and also
+discovers `ASSETS/CAMPAIGNS/*/ROOMS/*.json` at build time, so newly added room
+files appear in the editor without manually editing `manifest.json`.
 
 ```
 World 2 ←—[tunnel]—— LOBBY ——[tunnel]—→ World 1
