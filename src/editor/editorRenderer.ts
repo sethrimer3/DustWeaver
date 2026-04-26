@@ -5,7 +5,7 @@
  */
 
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
-import type { CrumbleVariant, EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType, AmbientLightDirection } from './editorState';
+import type { CrumbleVariant, EditorState, EditorRoomData, EditorTransition, EditorWall, SelectedElementType, AmbientLightDirection, EditorEnemy } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow } from './editorTools';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
@@ -113,6 +113,16 @@ export function renderEditorOverlays(
   // ── Enemies ──────────────────────────────────────────────────────────────
   for (const e of room.enemies) {
     const isSelected = isElementSelected('enemy', e.uid);
+    const enemyFootprint = getEnemyFootprintBlocks(e);
+    if (enemyFootprint !== null) {
+      const isHovered = state.hoverElement !== null &&
+        state.hoverElement.type === 'enemy' && state.hoverElement.uid === e.uid;
+      drawObjectFootprint(ctx, e.xBlock, e.yBlock,
+        enemyFootprint.wBlock, enemyFootprint.hBlock,
+        offsetXPx, offsetYPx, zoom,
+        isSelected ? ENEMY_SELECTED : ENEMY_COLOR,
+        isSelected || isHovered ? 2 : 1);
+    }
     drawMarker(ctx, e.xBlock, e.yBlock, offsetXPx, offsetYPx, zoom,
       isSelected ? ENEMY_SELECTED : ENEMY_COLOR, e.isFlyingEyeFlag === 1 ? '👁' : '⚔');
   }
@@ -429,6 +439,19 @@ export function renderEditorOverlays(
           offsetXPx, offsetYPx, zoom, 'rgba(120,80,220,0.35)', 2);
         drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
           'rgba(120,80,220,0.55)', '✦');
+      } else if (item.id === 'enemy_rolling' || item.id === 'enemy_beetle' || item.id === 'enemy_rock_elemental' || item.id === 'enemy_radiant_tether') {
+        const footprintByItemId: Record<string, { wBlock: number; hBlock: number }> = {
+          enemy_rolling: { wBlock: 2, hBlock: 2 },
+          enemy_beetle: { wBlock: 2, hBlock: 1 },
+          enemy_rock_elemental: { wBlock: 3, hBlock: 3 },
+          enemy_radiant_tether: { wBlock: 3, hBlock: 3 },
+        };
+        const fp = footprintByItemId[item.id];
+        drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY,
+          fp.wBlock, fp.hBlock,
+          offsetXPx, offsetYPx, zoom, 'rgba(220,70,70,0.35)', 2);
+        drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+          'rgba(220,70,70,0.55)', '⚔');
       } else {
         drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
           preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 2);
@@ -867,6 +890,14 @@ function drawObjectFootprint(
   ctx.strokeStyle = color.replace(/[\d.]+\)$/, '1)');
   ctx.lineWidth = lineWidth;
   ctx.strokeRect(x, y, w, h);
+}
+
+function getEnemyFootprintBlocks(enemy: EditorEnemy): { wBlock: number; hBlock: number } | null {
+  if (enemy.isRollingEnemyFlag === 1) return { wBlock: 2, hBlock: 2 };
+  if (enemy.isBeetleFlag === 1) return { wBlock: 2, hBlock: 1 };
+  if (enemy.isRadiantTetherFlag === 1) return { wBlock: 3, hBlock: 3 };
+  if (enemy.isRockElementalFlag === 1) return { wBlock: 3, hBlock: 3 };
+  return null;
 }
 
 function drawTransitionZone(
