@@ -23,7 +23,7 @@
  *
  * The solid-encoding algorithm is a deterministic 3-pass greedy tile cover:
  *   1. Rasterize all non-special solid walls into a boolean tile grid, per
- *      theme.  Theme keys are exact strings (the room-default uses the
+ *      theme.  Theme keys are compact BlockThemeId strings (the room-default uses the
  *      sentinel key `__default__` so we never repeat the default name on
  *      every tile).
  *   2. Greedy rectangle extraction — for each seed cell, grow the maximal
@@ -38,7 +38,8 @@
  * stable.
  */
 
-import type { BlockTheme, BackgroundId, LightingEffect, TransitionDirection } from './roomDef';
+import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, TransitionDirection } from './roomDef';
+import { blockThemeRefToTheme, blockThemeToId } from './roomDef';
 import type {
   RoomJsonDef,
   RoomJsonWall,
@@ -105,8 +106,8 @@ export interface SavedSolids {
 export interface SavedSpecialWall {
   /** [x, y, w, h] */
   r: SavedRect;
-  /** Block theme override, if any. */
-  theme?: BlockTheme;
+  /** Compact block theme override, if any. Legacy long names are still accepted. */
+  theme?: BlockThemeId | BlockTheme;
   /** 1 if one-way platform. */
   plat?: 1;
   /** Platform edge: 0=top,1=bottom,2=left,3=right. */
@@ -162,7 +163,7 @@ export interface SavedRoomV2 {
   world: number;
   /** [mapX, mapY] */
   map?: [number, number];
-  theme?: BlockTheme;
+  theme?: BlockThemeId | BlockTheme;
   bg?: BackgroundId;
   light?: LightingEffect;
   song?: string;
@@ -412,7 +413,7 @@ function extractLayerFromGrid(grid: TileGrid): SavedSolidLayer {
 
 /** Pick the theme-grouping key for a wall (sentinel for room-default theme). */
 function themeKeyForWall(wallTheme: BlockTheme | undefined, defaultTheme: BlockTheme): string {
-  return wallTheme && wallTheme !== defaultTheme ? wallTheme : DEFAULT_THEME_KEY;
+  return wallTheme && wallTheme !== defaultTheme ? blockThemeToId(wallTheme) : DEFAULT_THEME_KEY;
 }
 
 /**
@@ -465,7 +466,7 @@ export function hydrateSolidsByTheme(
     const layer = solids.byTheme[themeKey];
     const theme: BlockTheme | undefined = themeKey === DEFAULT_THEME_KEY
       ? undefined
-      : (themeKey as BlockTheme);
+      : blockThemeRefToTheme(themeKey as BlockTheme | BlockThemeId);
 
     if (layer.rects) {
       for (const [x, y, w, h] of layer.rects) {
@@ -507,12 +508,14 @@ export function isSavedRoomV2(data: unknown): data is SavedRoomV2 {
  * The editor saves in this format; the runtime never has to see it.
  */
 export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
-  const defaultTheme: BlockTheme = json.blockTheme ?? 'blackRock';
+  const defaultTheme: BlockTheme = blockThemeRefToTheme(json.blockThemeId) ?? json.blockTheme ?? 'blackRock';
 
   // Partition walls: uniform vs. special.
   const uniformWalls: RoomJsonWall[] = [];
   const specialWallsRaw: RoomJsonWall[] = [];
   for (const w of json.interiorWalls) {
+    const wallTheme = blockThemeRefToTheme(w.blockThemeId);
+    if (wallTheme && w.blockTheme === undefined) w.blockTheme = wallTheme;
     if (isUniformSolidWall(w)) uniformWalls.push(w);
     else specialWallsRaw.push(w);
   }
@@ -521,7 +524,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
 
   const specialWalls: SavedSpecialWall[] = specialWallsRaw.map(w => {
     const sw: SavedSpecialWall = { r: [w.xBlock, w.yBlock, w.wBlock, w.hBlock] };
-    if (w.blockTheme && w.blockTheme !== defaultTheme) sw.theme = w.blockTheme;
+    if (w.blockTheme && w.blockTheme !== defaultTheme) sw.theme = blockThemeToId(w.blockTheme);
     if (w.isPlatform) {
       sw.plat = 1;
       if (w.platformEdge !== undefined && w.platformEdge !== 0) sw.edge = w.platformEdge;
@@ -545,7 +548,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   };
 
   if (json.mapX !== undefined || json.mapY !== undefined) out.map = [json.mapX ?? 0, json.mapY ?? 0];
-  if (json.blockTheme)     out.theme = json.blockTheme;
+  out.theme = blockThemeToId(defaultTheme);
   if (json.backgroundId)   out.bg = json.backgroundId;
   if (json.lightingEffect) out.light = json.lightingEffect;
   if (json.songId && json.songId !== '_continue') out.song = json.songId;
@@ -659,7 +662,10 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   const specialWalls: RoomJsonWall[] = (saved.specialWalls ?? []).map(sw => {
     const [x, y, w, h] = sw.r;
     const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
-    if (sw.theme) wall.blockTheme = sw.theme;
+    if (sw.theme) {
+      const wallTheme = blockThemeRefToTheme(sw.theme);
+      if (wallTheme) wall.blockTheme = wallTheme;
+    }
     if (sw.plat === 1) {
       wall.isPlatform = true;
       if (sw.edge !== undefined && sw.edge !== 0) wall.platformEdge = sw.edge;
@@ -711,7 +717,10 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     skillTombs,
   };
 
-  if (saved.theme) json.blockTheme = saved.theme;
+  if (saved.theme) {
+    const roomTheme = blockThemeRefToTheme(saved.theme);
+    if (roomTheme) json.blockTheme = roomTheme;
+  }
   if (saved.bg)    json.backgroundId = saved.bg;
   if (saved.light) json.lightingEffect = saved.light;
   if (saved.song)  json.songId = saved.song;
@@ -854,7 +863,7 @@ export function validateSolidsRoundtrip(
 export function validateRoomRoundtrip(json: RoomJsonDef): string[] {
   const saved = dehydrateRoom(json);
   const rebuilt = hydrateV2Room(saved);
-  const defaultTheme: BlockTheme = json.blockTheme ?? 'blackRock';
+  const defaultTheme: BlockTheme = blockThemeRefToTheme(json.blockThemeId) ?? json.blockTheme ?? 'blackRock';
 
   const errors = validateSolidsRoundtrip(
     json.interiorWalls, json.widthBlocks, json.heightBlocks, defaultTheme,

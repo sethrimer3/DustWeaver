@@ -428,6 +428,10 @@ All sweep boundary checks must include a small epsilon (`COLLISION_EPSILON = 0.5
 if (prevBottom <= wallTop + COLLISION_EPSILON && velocityY >= 0) { ... }
 ```
 
+### Block Theme IDs
+
+Every new block theme must define both a readable `BlockTheme` name and a very short stable `BlockThemeId` in `src/levels/roomDef.ts` and `BLOCK_THEMES` in `src/editor/editorState.ts`. Keep IDs 2-3 lowercase ASCII characters (examples: `bk`, `br`, `dt`) because compact room JSON uses these IDs as per-theme keys for many wall rectangles.
+
 ### Sub-Tick Safety
 
 If `Math.abs(velocityX * dtSec) > cluster.halfWidthWorld` or `Math.abs(velocityY * dtSec) > cluster.halfHeightWorld`, the movement for that axis must be split into sub-steps (each step ≤ half the cluster's dimension) to prevent tunneling through thin walls at high speed. The dash speed (560 world units/s at 60fps = ~9.3 units/tick) must not tunnel through a small block (3 units wide) — sub-stepping is required.

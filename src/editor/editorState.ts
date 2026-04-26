@@ -6,13 +6,13 @@
  * which can be exported to JSON and later rebuilt into a RoomDef.
  */
 
-import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BlockThemeId, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
 
 // Re-export for convenience in editor modules
-export type { BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+export type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 export type { RoomSongId } from '../audio/musicManager';
 
 /** Options shown in the "Room Song" editor dropdown, in display order. */
@@ -128,12 +128,14 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'crumble_ramp_2x2', label: 'Crumble Ramp 2×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1, isRampItem: 1 },
 ];
 
-/** Available block themes for the editor dropdown. */
-export const BLOCK_THEMES: readonly { id: BlockTheme; label: string }[] = [
-  { id: 'blackRock', label: 'Black Rock' },
-  { id: 'brownRock', label: 'Brown Rock' },
-  { id: 'dirt',      label: 'Dirt' },
+/** Available block themes for placement and wall inspection. */
+export const BLOCK_THEMES: readonly { id: BlockTheme; shortId: BlockThemeId; label: string }[] = [
+  { id: 'blackRock', shortId: 'bk', label: 'Black Rock' },
+  { id: 'brownRock', shortId: 'br', label: 'Brown Rock' },
+  { id: 'dirt',      shortId: 'dt', label: 'Dirt' },
 ];
+
+const DEFAULT_RECENT_BLOCK_THEMES: readonly BlockTheme[] = ['blackRock', 'brownRock', 'dirt'];
 
 /** Available background options for the editor dropdown. */
 export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] = [
@@ -438,6 +440,10 @@ export interface EditorState {
   activeCategory: PaletteCategory;
   selectedPaletteItem: PaletteItem | null;
   selectedElements: SelectedElement[];
+  /** Block theme assigned to newly placed wall blocks. */
+  selectedBlockTheme: BlockTheme;
+  /** Last three block themes picked for placement, most recent first. */
+  recentBlockThemes: BlockTheme[];
   /** Current placement rotation in 90° steps (0, 1, 2, 3). */
   placementRotationSteps: number;
   /** Whether the current placement is horizontally flipped. */
@@ -496,6 +502,8 @@ export function createEditorState(): EditorState {
     activeCategory: 'blocks',
     selectedPaletteItem: null,
     selectedElements: [],
+    selectedBlockTheme: 'blackRock',
+    recentBlockThemes: [...DEFAULT_RECENT_BLOCK_THEMES],
     placementRotationSteps: 0,
     placementFlipH: false,
     cursorBlockX: 0,
@@ -524,4 +532,17 @@ export function createEditorState(): EditorState {
 /** Generates a unique ID for a new editor element. */
 export function allocateUid(state: EditorState): number {
   return state.nextUid++;
+}
+
+/** Selects the placement block theme and updates the recent-theme strip. */
+export function selectBlockTheme(state: EditorState, theme: BlockTheme): void {
+  state.selectedBlockTheme = theme;
+  const nextRecent: BlockTheme[] = [theme];
+  for (const recentTheme of state.recentBlockThemes) {
+    if (recentTheme !== theme && nextRecent.length < 3) nextRecent.push(recentTheme);
+  }
+  for (const fallbackTheme of DEFAULT_RECENT_BLOCK_THEMES) {
+    if (!nextRecent.includes(fallbackTheme) && nextRecent.length < 3) nextRecent.push(fallbackTheme);
+  }
+  state.recentBlockThemes = nextRecent;
 }

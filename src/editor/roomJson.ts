@@ -11,7 +11,8 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, BlockTheme } from '../levels/roomDef';
+import { blockThemeRefToTheme, blockThemeToId } from '../levels/roomDef';
 import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 import {
@@ -139,6 +140,13 @@ export function parseSongId(raw: string | undefined): RoomSongId {
   return '_continue';
 }
 
+function resolveJsonBlockTheme(
+  blockTheme: BlockTheme | undefined,
+  blockThemeId: RoomJsonDef['blockThemeId'] | RoomJsonWall['blockThemeId'] | undefined,
+): BlockTheme | undefined {
+  return blockThemeRefToTheme(blockThemeId) ?? blockThemeRefToTheme(blockTheme);
+}
+
 // ── Conversion: RoomJsonDef → EditorRoomData ─────────────────────────────────
 
 export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { data: EditorRoomData; nextUid: number } {
@@ -152,7 +160,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     hBlock: w.hBlock,
     isPlatformFlag: w.isPlatform ? 1 : 0,
     platformEdge: w.platformEdge ?? 0,
-    blockTheme: w.blockTheme,
+    blockTheme: resolveJsonBlockTheme(w.blockTheme, w.blockThemeId),
     rampOrientation: w.rampOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? 1 : 0,
   }));
@@ -291,7 +299,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       worldNumber: json.worldNumber,
       mapX: json.mapX ?? 0,
       mapY: json.mapY ?? 0,
-      blockTheme: json.blockTheme ?? 'blackRock',
+      blockTheme: resolveJsonBlockTheme(json.blockTheme, json.blockThemeId) ?? 'blackRock',
       backgroundId: json.backgroundId ?? 'brownRock',
       lightingEffect: json.lightingEffect ?? 'Ambient',
       ambientLightDirection: json.ambientLightDirection,
@@ -341,6 +349,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         if (w.platformEdge !== 0 && w.platformEdge !== undefined) wall.platformEdge = w.platformEdge;
       }
       if (w.blockTheme !== undefined) wall.blockTheme = w.blockTheme;
+      if (w.blockTheme !== undefined) wall.blockThemeId = blockThemeToId(w.blockTheme);
       if (w.rampOrientation !== undefined) wall.rampOrientation = w.rampOrientation;
       if (w.isPillarHalfWidthFlag === 1) wall.isPillarHalfWidth = true;
       return wall;
@@ -388,7 +397,10 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     })),
   };
   // Always write blockTheme and backgroundId when present
-  if (data.blockTheme) json.blockTheme = data.blockTheme;
+  if (data.blockTheme) {
+    json.blockTheme = data.blockTheme;
+    json.blockThemeId = blockThemeToId(data.blockTheme);
+  }
   if (data.backgroundId) json.backgroundId = data.backgroundId;
   if (data.lightingEffect) json.lightingEffect = data.lightingEffect;
   // Only write songId when it differs from the default ('_continue')

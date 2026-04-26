@@ -21,6 +21,7 @@ import type {
   RoomFireflyJarDef,
   SpikeDirection,
 } from './roomDef';
+import { blockThemeRefToTheme } from './roomDef';
 import {
   validateRoomJson,
   stringToParticleKind,
@@ -125,7 +126,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     hBlock: w.hBlock,
     isPlatformFlag: w.isPlatform ? (1 as const) : (0 as const),
     platformEdge: w.platformEdge,
-    blockTheme: w.blockTheme,
+    blockTheme: blockThemeRefToTheme(w.blockThemeId) ?? w.blockTheme,
     rampOrientation: w.rampOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? (1 as const) : (0 as const),
   }));
@@ -240,7 +241,8 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   };
 
   // Propagate optional theme/background fields
-  if (json.blockTheme) room.blockTheme = json.blockTheme;
+  const roomBlockTheme = blockThemeRefToTheme(json.blockThemeId) ?? json.blockTheme;
+  if (roomBlockTheme) room.blockTheme = roomBlockTheme;
   if (json.backgroundId) room.backgroundId = json.backgroundId;
   if (json.lightingEffect) room.lightingEffect = json.lightingEffect;
   const resolvedSongId = parseSongId(json.songId);

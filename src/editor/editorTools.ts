@@ -354,7 +354,7 @@ export function placeAtCursor(state: EditorState): void {
       hBlock,
       isPlatformFlag,
       platformEdge,
-      blockTheme: room.blockTheme,
+      blockTheme: state.selectedBlockTheme,
       rampOrientation,
       isPillarHalfWidthFlag,
     });

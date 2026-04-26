@@ -154,6 +154,11 @@ The world editor is an in-game level editing tool accessible via the debug UI.
 - **editorExport.ts** — Browser download of room JSON.
 - **roomJson.ts** — `RoomJsonDef` schema, validation, conversion between JSON ↔ `EditorRoomData` ↔ `RoomDef`.
 
+### Block Theme Placement
+- The block palette keeps a placement-only `selectedBlockTheme` in `EditorState`; changing it does not mutate `EditorRoomData.blockTheme` and therefore does not restyle existing walls.
+- Newly placed walls always receive their own `blockTheme`, allowing several block themes to coexist in one room.
+- The editor shows the last three used themes inline and opens the full theme palette from the adjacent palette button.
+
 ### Integration with Game Screen
 - `EditorController` is created once in `startGameScreen()`.
 - A "World Editor" button appears when debug mode is on.

@@ -710,8 +710,10 @@ can verify the collision boundary matches the visual tile geometry.
 - At runtime, `wallThemeIndex` (Uint8Array) in WorldState maps 0=blackRock, 1=brownRock, 2=dirt; 255=use room default
 - The renderer resolves per-tile theme from wall layout cache, falling back to room-level `_activeBlockTheme`
 - Wall merge only combines walls with matching theme index (in addition to matching platform flag)
-- The Block Theme dropdown in the editor sets which theme newly placed blocks receive
+- The Block Theme palette in the editor sets which theme newly placed blocks receive without changing the room default
+- The editor shows the last three used block themes inline and opens a full palette menu for all available themes
 - Individual wall themes can be changed via the inspector when a wall is selected
+- Compact v2 room JSON writes block themes with very short IDs (`bk`, `br`, `dt`) while retaining legacy long-name loading
 
 ## 2x2 BlackRock Block Sprites (BUILD 107)
 - blackRock 1x1 sprites are 16×16 source images drawn at 8×8 virtual pixels (downscaled)

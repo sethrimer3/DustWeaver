@@ -32,6 +32,46 @@ import type { RoomSongId } from '../audio/musicManager';
  */
 export type BlockTheme = 'blackRock' | 'brownRock' | 'dirt';
 
+/**
+ * Short stable theme IDs used by compact room JSON. Keep these very short
+ * because saved rooms group many block rectangles by theme key.
+ */
+export type BlockThemeId = 'bk' | 'br' | 'dt';
+
+/** Maps a BlockTheme string to its compact JSON ID. */
+export function blockThemeToId(theme: BlockTheme): BlockThemeId {
+  switch (theme) {
+    case 'blackRock': return 'bk';
+    case 'brownRock': return 'br';
+    case 'dirt':      return 'dt';
+  }
+}
+
+/** Maps a compact JSON theme ID back to a BlockTheme string. */
+export function blockThemeIdToTheme(themeId: BlockThemeId): BlockTheme {
+  switch (themeId) {
+    case 'br': return 'brownRock';
+    case 'dt': return 'dirt';
+    case 'bk': return 'blackRock';
+  }
+}
+
+/** Parses either the legacy long theme name or compact JSON theme ID. */
+export function blockThemeRefToTheme(themeRef: BlockTheme | BlockThemeId | undefined): BlockTheme | undefined {
+  switch (themeRef) {
+    case 'blackRock':
+    case 'brownRock':
+    case 'dirt':
+      return themeRef;
+    case 'bk':
+    case 'br':
+    case 'dt':
+      return blockThemeIdToTheme(themeRef);
+    default:
+      return undefined;
+  }
+}
+
 /** Maps a BlockTheme string to a compact numeric index for typed arrays. */
 export function blockThemeToIndex(theme: BlockTheme): number {
   switch (theme) {

@@ -14,6 +14,7 @@ import {
   BackgroundId, LightingEffect, RoomSongId, AmbientLightDirection,
   BlockTheme,
   EditorTransition, EditorRoomData,
+  selectBlockTheme,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
@@ -172,8 +173,7 @@ export function createEditorController(
           applyEdits();
         },
         onBlockThemeChange: (theme: BlockTheme) => {
-          if (state.roomData) state.roomData.blockTheme = theme;
-          applyEdits();
+          selectBlockTheme(state, theme);
         },
         onLightingEffectChange: (lightingEffect: LightingEffect) => {
           if (state.roomData) state.roomData.lightingEffect = lightingEffect;
@@ -315,6 +315,7 @@ export function createEditorController(
       state.nextUid = result.nextUid;
     }
     state.selectedElements = [];
+    selectBlockTheme(state, state.roomData?.blockTheme ?? 'blackRock');
     isCurrentRoomDirty = false;
   }
 

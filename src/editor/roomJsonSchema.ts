@@ -7,7 +7,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BlockThemeId, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -84,6 +84,8 @@ export interface RoomJsonWall {
   platformEdge?: 0 | 1 | 2 | 3;
   /** Per-wall block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
+  /** Compact per-wall block theme override used by newer JSON exports. */
+  blockThemeId?: BlockThemeId;
   /**
    * Ramp orientation. When present, this wall is a diagonal triangle.
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
@@ -221,6 +223,8 @@ export interface RoomJsonDef {
   mapY?: number;
   /** Block sprite theme. Defaults to 'blackRock' if not set. */
   blockTheme?: BlockTheme;
+  /** Compact block sprite theme ID. Preferred by newer JSON exports. */
+  blockThemeId?: BlockThemeId;
   /** Background visual ID. Falls back to worldNumber if not set. */
   backgroundId?: BackgroundId;
   /**

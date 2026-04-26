@@ -323,6 +323,8 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   let renderedCategory: PaletteCategory | null = null;
   let lastRenderedBlockTheme = '';
   let lastRenderedLightingEffect = '';
+  let lastRenderedRecentBlockThemes = '';
+  let isBlockThemePaletteOpen = false;
   let paletteItems: { btn: HTMLElement; itemId: string }[] = [];
 
   // ── Skill tomb picker (shown above inspector when skill_tomb is selected) ──
@@ -480,14 +482,19 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     }
 
     // Update palette area — recreate when category changes OR when block theme changes
-    const currentTheme = state.roomData?.blockTheme ?? 'blackRock';
+    const currentTheme = state.selectedBlockTheme;
+    const recentBlockThemeSignature = state.recentBlockThemes.join('|');
     const currentLighting = state.roomData?.lightingEffect ?? 'DEFAULT';
     const needsPaletteRebuild = renderedCategory !== state.activeCategory ||
-      (state.activeCategory === 'blocks' && currentTheme !== lastRenderedBlockTheme);
+      (state.activeCategory === 'blocks' && (
+        currentTheme !== lastRenderedBlockTheme ||
+        recentBlockThemeSignature !== lastRenderedRecentBlockThemes
+      ));
 
     if (needsPaletteRebuild) {
       renderedCategory = state.activeCategory;
       lastRenderedBlockTheme = currentTheme;
+      lastRenderedRecentBlockThemes = recentBlockThemeSignature;
       lastRenderedLightingEffect = currentLighting;
       paletteDiv.innerHTML = '';
       paletteItems = [];
@@ -502,15 +509,34 @@ export function createEditorUI(root: HTMLElement): EditorUI {
         themeSection.appendChild(themeTitle);
 
         const themeRow = document.createElement('div');
-        themeRow.style.cssText = `display: flex; gap: 4px;`;
-        for (const th of BLOCK_THEMES) {
-          const isActive = th.id === currentTheme;
-          const chip = makeThemeChip(th.id, th.label, isActive, () => {
+        themeRow.style.cssText = `display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 4px;`;
+        for (const themeId of state.recentBlockThemes) {
+          const th = BLOCK_THEMES.find(t => t.id === themeId);
+          if (!th) continue;
+          const chip = makeThemeChip(th.id, th.label, th.shortId, th.id === currentTheme, () => {
             callbacks?.onBlockThemeChange(th.id as BlockTheme);
           });
           themeRow.appendChild(chip);
         }
+        const paletteButton = makeThemePaletteButton(isBlockThemePaletteOpen, () => {
+          isBlockThemePaletteOpen = !isBlockThemePaletteOpen;
+          lastRenderedBlockTheme = '';
+        });
+        themeRow.appendChild(paletteButton);
         themeSection.appendChild(themeRow);
+        if (isBlockThemePaletteOpen) {
+          const themePaletteGrid = document.createElement('div');
+          themePaletteGrid.style.cssText = `display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 5px;`;
+          for (const th of BLOCK_THEMES) {
+            const chip = makeThemeChip(th.id, th.label, th.shortId, th.id === currentTheme, () => {
+              callbacks?.onBlockThemeChange(th.id as BlockTheme);
+              isBlockThemePaletteOpen = false;
+              lastRenderedBlockTheme = '';
+            });
+            themePaletteGrid.appendChild(chip);
+          }
+          themeSection.appendChild(themePaletteGrid);
+        }
         paletteDiv.appendChild(themeSection);
 
         // ── Lighting dropdown ───────────────────────────────────────────────
@@ -610,6 +636,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       lastRenderedBackgroundId = '';
       lastRenderedSongId = '';
       lastRenderedBlockTheme = '';
+      lastRenderedRecentBlockThemes = '';
       lastRenderedLightingEffect = '';
       dimWidthInput = null;
       dimHeightInput = null;
@@ -652,11 +679,11 @@ function makeEdgeBtn(label: string, onClick: () => void): HTMLButtonElement {
  * Creates a visual "theme chip" button for the block theme selector.
  * Shows a colour swatch + short name. Highlighted when isActive is true.
  */
-function makeThemeChip(themeId: string, label: string, isActive: boolean, onClick: () => void): HTMLButtonElement {
+function makeThemeChip(themeId: string, label: string, shortId: string, isActive: boolean, onClick: () => void): HTMLButtonElement {
   const fill = THEME_FILL_COLOR[themeId] ?? '#555';
   const btn = document.createElement('button');
   btn.style.cssText = `
-    flex: 1; padding: 4px 2px; cursor: pointer; border-radius: 4px;
+    min-width: 0; padding: 4px 2px; cursor: pointer; border-radius: 4px;
     background: ${isActive ? 'rgba(0,200,100,0.2)' : BTN_BG};
     border: 2px solid ${isActive ? GREEN : PANEL_BORDER};
     color: ${TEXT_COLOR}; font-size: 9px; font-family: monospace;
@@ -672,11 +699,31 @@ function makeThemeChip(themeId: string, label: string, isActive: boolean, onClic
     background-size: cover; image-rendering: pixelated;
   `;
   const text = document.createElement('span');
-  text.textContent = label;
+  text.textContent = shortId.toUpperCase();
+  text.title = label;
+  text.style.cssText = `max-width: 100%; overflow: hidden; text-overflow: ellipsis;`;
   btn.appendChild(swatch);
   btn.appendChild(text);
+  btn.title = label;
   btn.addEventListener('mouseenter', () => { if (!isActive) btn.style.background = ACTIVE_BG; });
   btn.addEventListener('mouseleave', () => { if (!isActive) btn.style.background = BTN_BG; });
+  btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+  return btn;
+}
+
+function makeThemePaletteButton(isOpen: boolean, onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.textContent = isOpen ? '^' : 'All';
+  btn.title = 'Open block theme palette';
+  btn.style.cssText = `
+    width: 30px; padding: 4px 0; cursor: pointer; border-radius: 4px;
+    background: ${isOpen ? 'rgba(0,200,100,0.2)' : BTN_BG};
+    border: 2px solid ${isOpen ? GREEN : PANEL_BORDER};
+    color: ${TEXT_COLOR}; font-size: 13px; font-family: monospace;
+    transition: background 0.1s;
+  `;
+  btn.addEventListener('mouseenter', () => { if (!isOpen) btn.style.background = ACTIVE_BG; });
+  btn.addEventListener('mouseleave', () => { if (!isOpen) btn.style.background = BTN_BG; });
   btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   return btn;
 }
