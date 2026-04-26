@@ -28,6 +28,8 @@ import {
   RT_DEBUG_ENABLED,
 } from '../../sim/clusters/radiantTetherConfig';
 import { computeChainSagPoints } from './radiantTetherChainRenderer';
+import { getRadiantTetherBodySprite } from './enemyRenderers';
+import { isSpriteReady } from '../imageCache';
 
 // ── Colors ──────────────────────────────────────────────────────────────────
 
@@ -218,6 +220,17 @@ function renderBossBody(
 ): void {
   const radiusPx = RT_BODY_RADIUS_WORLD * scalePx;
   const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
+  const bodySprite = getRadiantTetherBodySprite(cluster.radiantTetherState);
+
+  if (isSpriteReady(bodySprite)) {
+    const bodySizePx = radiusPx * 4;
+    ctx.save();
+    ctx.globalAlpha = 0.8 + healthRatio * 0.2;
+    ctx.drawImage(bodySprite, screenX - bodySizePx * 0.5, screenY - bodySizePx * 0.5, bodySizePx, bodySizePx);
+    ctx.globalAlpha = 1.0;
+    ctx.restore();
+    return;
+  }
 
   // Outer glow
   ctx.save();
