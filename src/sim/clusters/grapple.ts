@@ -535,28 +535,45 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     const newLength = Math.max(oldLength - pullThisTick, GRAPPLE_MIN_LENGTH_WORLD);
 
     if (newLength < oldLength) {
-      // Decompose velocity into radial and tangential components relative to
-      // the anchor→player axis.
-      const vRadial = player.velocityXWorld * nx + player.velocityYWorld * ny;
-      const vTangX  = player.velocityXWorld - vRadial * nx;
-      const vTangY  = player.velocityYWorld - vRadial * ny;
+      // Wall obstruction check: shortening the rope snaps the player toward
+      // the anchor.  If a wall blocks that path, stop retraction rather than
+      // pulling the player through geometry.  Cast from the player toward the
+      // anchor; only check up to however far the player would actually move.
+      // When retractDistWorld <= 0 the player is already within the new rope
+      // length, so no snap occurs and no wall check is needed.
+      const retractDistWorld = dist - newLength;
+      const isRetractPathClear = retractDistWorld <= 0 || raycastWalls(
+        world,
+        player.positionXWorld, player.positionYWorld,
+        -nx, -ny,
+        retractDistWorld,
+      ) === null;
 
-      // Scale tangential velocity to conserve angular momentum (L = m·v·r).
-      // The ratio is clamped to prevent extreme spikes when the rope is very short.
-      const ratio = Math.min(oldLength / newLength, GRAPPLE_MAX_RETRACT_SPEED_RATIO);
-      player.velocityXWorld = vRadial * nx + vTangX * ratio;
-      player.velocityYWorld = vRadial * ny + vTangY * ratio;
+      if (isRetractPathClear) {
+        // Decompose velocity into radial and tangential components relative to
+        // the anchor→player axis.
+        const vRadial = player.velocityXWorld * nx + player.velocityYWorld * ny;
+        const vTangX  = player.velocityXWorld - vRadial * nx;
+        const vTangY  = player.velocityYWorld - vRadial * ny;
 
-      world.grappleLengthWorld        = newLength;
-      world.grapplePullInAmountWorld += (oldLength - newLength);
+        // Scale tangential velocity to conserve angular momentum (L = m·v·r).
+        // The ratio is clamped to prevent extreme spikes when the rope is very short.
+        const ratio = Math.min(oldLength / newLength, GRAPPLE_MAX_RETRACT_SPEED_RATIO);
+        player.velocityXWorld = vRadial * nx + vTangX * ratio;
+        player.velocityYWorld = vRadial * ny + vTangY * ratio;
 
-      // Snap limit: too much accumulated tension breaks the rope
-      if (world.grapplePullInAmountWorld >= GRAPPLE_MAX_PULL_IN_WORLD) {
-        releaseGrapple(world);
-        return;
+        world.grappleLengthWorld        = newLength;
+        world.grapplePullInAmountWorld += (oldLength - newLength);
+
+        // Snap limit: too much accumulated tension breaks the rope
+        if (world.grapplePullInAmountWorld >= GRAPPLE_MAX_PULL_IN_WORLD) {
+          releaseGrapple(world);
+          return;
+        }
       }
+      // If a wall blocks retraction, or if newLength equals GRAPPLE_MIN_LENGTH_WORLD,
+      // no further pull occurs this tick.
     }
-    // If newLength equals GRAPPLE_MIN_LENGTH_WORLD the rope is at minimum — no more pull.
   }
 
   // ── Enforce rope length constraint ────────────────────────────────────────
