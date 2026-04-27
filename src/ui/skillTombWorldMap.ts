@@ -226,8 +226,23 @@ export function buildMapTab(
   // ── Zoom (mouse wheel) ──────────────────────────────────────────────────
   function onWheel(e: WheelEvent): void {
     e.preventDefault();
+    const rect = mapCanvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const cw = mapCanvas.width;
+    const ch = mapCanvas.height;
+
+    // World coordinate under the mouse cursor before zoom changes.
+    const worldX = (mx - cw / 2 - panXPx) / mapZoom;
+    const worldY = (my - ch / 2 - panYPx) / mapZoom;
+
     const delta = e.deltaY > 0 ? -0.5 : 0.5;
     mapZoom = Math.max(1, Math.min(12, mapZoom + delta));
+
+    // Adjust pan so the world point under the cursor stays fixed after zoom.
+    panXPx = mx - cw / 2 - worldX * mapZoom;
+    panYPx = my - ch / 2 - worldY * mapZoom;
+
     renderMap();
   }
 
