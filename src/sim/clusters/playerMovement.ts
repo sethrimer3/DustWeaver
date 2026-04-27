@@ -405,7 +405,7 @@ export function tickPlayerMovement(
       } else if (isGrounded) {
         accel = baseGroundAccel;
       } else {
-        accel = !isGrounded && cluster.hasUsedWallJumpSinceResetFlag === 1
+        accel = cluster.hasUsedWallJumpSinceResetFlag === 1
           ? baseAirAccel * ov(debugSpeedOverrides.wallJumpAirAccelMultiplier, WALL_JUMP_AIR_ACCEL_MULTIPLIER)
           : baseAirAccel;
       }
