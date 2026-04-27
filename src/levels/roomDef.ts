@@ -470,6 +470,8 @@ export interface RoomCrumbleBlockDef {
   rampOrientation?: 0 | 1 | 2 | 3;
   /** Which elemental type this crumble block is weak to. Defaults to `'normal'`. */
   variant?: CrumbleVariant;
+  /** Per-block theme override. When set, overrides the room-level default. */
+  blockTheme?: BlockTheme;
 }
 
 /** A jar that grants temporary dust particles when broken. */

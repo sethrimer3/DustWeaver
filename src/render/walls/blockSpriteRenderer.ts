@@ -354,8 +354,11 @@ function _buildWallLayoutCache(
 
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
-    const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
-    const rowCount = Math.max(1, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
+    const colCount = Math.max(0, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
+    const rowCount = Math.max(0, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
+
+    // Skip zero-dimension walls (e.g. destroyed crumble/breakable blocks).
+    if (colCount === 0 || rowCount === 0) continue;
 
     const wallTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(walls.themeIndex[wi])
@@ -469,8 +472,10 @@ function _buildSolid2x2Map(walls: WallSnapshot, blockSizePx: number): Map<string
 
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);
-    const colCount = Math.max(1, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
-    const rowCount = Math.max(1, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
+    const colCount = Math.max(0, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - colStart);
+    const rowCount = Math.max(0, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - rowStart);
+    // Skip zero-dimension walls (e.g. destroyed crumble/breakable blocks).
+    if (colCount === 0 || rowCount === 0) continue;
     // Tile the wall into non-overlapping 2×2 sub-blocks. Any trailing
     // odd column or row falls through to the 1×1 rendering path because
     // those cells are never added to _coveredBy2x2Keys.

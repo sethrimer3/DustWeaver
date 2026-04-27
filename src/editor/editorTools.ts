@@ -338,6 +338,7 @@ export function placeAtCursor(state: EditorState): void {
         hBlock,
         rampOrientation,
         variant: state.pendingCrumbleVariant,
+        blockTheme: state.selectedBlockTheme,
       });
       return;
     }

@@ -297,6 +297,8 @@ export interface EditorCrumbleBlock {
   rampOrientation?: 0 | 1 | 2 | 3;
   /** Which elemental type this crumble block is weak to. */
   variant: CrumbleVariant;
+  /** Per-block theme override. When set, overrides the room-level default. */
+  blockTheme?: BlockTheme;
 }
 
 /** Save Tomb — where the player saves their progress. */
