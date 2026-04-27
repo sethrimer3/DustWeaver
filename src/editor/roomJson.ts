@@ -290,6 +290,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     hBlock: b.hBlock ?? 1,
     rampOrientation: b.rampOrientation,
     variant: b.variant ?? 'normal',
+    blockTheme: resolveJsonBlockTheme(b.blockTheme, b.blockThemeId),
   }));
 
   return {
@@ -482,6 +483,10 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (b.hBlock !== 1) entry.hBlock = b.hBlock;
       if (b.rampOrientation !== undefined) entry.rampOrientation = b.rampOrientation;
       if (b.variant !== 'normal') entry.variant = b.variant;
+      if (b.blockTheme !== undefined) {
+        entry.blockTheme = b.blockTheme;
+        entry.blockThemeId = blockThemeToId(b.blockTheme);
+      }
       return entry;
     });
   }
@@ -699,6 +704,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       hBlock: b.hBlock !== 1 ? b.hBlock : undefined,
       rampOrientation: b.rampOrientation,
       variant: b.variant !== 'normal' ? b.variant : undefined,
+      blockTheme: b.blockTheme,
     })),
   };
 }
@@ -856,6 +862,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     hBlock: b.hBlock ?? 1,
     rampOrientation: b.rampOrientation,
     variant: b.variant ?? 'normal',
+    blockTheme: b.blockTheme,
   }));
 
   return {

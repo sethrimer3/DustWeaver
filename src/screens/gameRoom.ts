@@ -295,6 +295,13 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
       world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallThemeIndex[wallIdx] = b.blockTheme !== undefined
+        ? blockThemeToIndex(b.blockTheme)
+        : WALL_THEME_DEFAULT_INDEX;
+      world.wallIsInvisibleFlag[wallIdx] = 0;
+      world.wallIsPlatformFlag[wallIdx] = 0;
+      world.wallRampOrientationIndex[wallIdx] = 255;
+      world.wallIsPillarHalfWidthFlag[wallIdx] = 0;
     }
 
     const ci = world.crumbleBlockCount++;

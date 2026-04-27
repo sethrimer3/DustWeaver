@@ -158,6 +158,10 @@ export interface RoomJsonCrumbleBlock {
   rampOrientation?: 0 | 1 | 2 | 3;
   /** Elemental weakness variant. Defaults to `'normal'` when absent. */
   variant?: CrumbleVariant;
+  /** Per-block theme override (defaults to room-level theme). */
+  blockTheme?: BlockTheme;
+  /** Compact per-block theme override used by newer JSON exports. */
+  blockThemeId?: BlockThemeId;
 }
 
 export interface RoomJsonDustBoostJar {
