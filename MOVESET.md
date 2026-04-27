@@ -40,7 +40,9 @@ This document lists the currently implemented movement techniques and their exac
   - Max slide descent speed: **17 units/sec**.
 - **Wall Jump**
   - Horizontal launch speed: **147 units/sec** away from wall.
-  - Vertical launch speed: **147 units/sec** upward.
+  - Vertical launch speed: first wall jump **152 units/sec** (142 + 10 bonus); subsequent wall jumps **71 units/sec** (142 × 0.5).
+- **Post-Wall-Jump Air Acceleration**
+  - After any wall jump, horizontal air acceleration is **doubled (2×)** until the player lands, making steering away from the wall snappier.
 - **Wall Jump Force-Time**
   - Input override window: **10 ticks** (~**0.167s**).
 - **Wall Jump Lockout**
@@ -53,7 +55,7 @@ This document lists the currently implemented movement techniques and their exac
   - Velocity threshold to qualify for skid direction checks: **5 units/sec**.
   - Skid deceleration multiplier: **1.5×**.
 - **Skid Jump Boost**
-  - Jump speed multiplier while skidding: **1.5×**.
+  - Jump speed multiplier while skidding: **1.153×** (targets ~6 small blocks of height).
 - **Skid Debris (visual)**
   - Debris spawns at the bottom-front foot while skidding.
 
@@ -84,7 +86,7 @@ This document lists the currently implemented movement techniques and their exac
   - Considered stopped below **1.0 units/sec**.
 - **Stuck Super Jump Window**
   - Window after fully stopping: **10 ticks** (~**0.167s**).
-  - Jump multiplier in window: **2.0×** vertical jump speed.
+  - Jump multiplier in window: **1.331×** vertical jump speed (targets ~8 small blocks of height).
 - **Grapple Miss Mode**
   - Chain extension speed: **400 units/sec**.
   - Miss mode timeout: **90 ticks** (**1.5s**).

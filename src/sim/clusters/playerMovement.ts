@@ -54,6 +54,8 @@ import {
   FAST_FALL_HALF_WIDTH_WORLD,
   IDLE_TRIGGER_TICKS,
   IDLE_BLINK_DURATION_TICKS,
+  WALL_JUMP_AIR_ACCEL_MULTIPLIER,
+  WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER,
 } from './movementConstants';
 
 /**
@@ -285,9 +287,10 @@ export function tickPlayerMovement(
   // (handled in grapple.ts step 0.25), so normal / wall jumps are skipped.
   if (world.playerJumpTriggeredFlag === 1 && world.isGrappleActiveFlag === 0) {
     const baseJumpSpeed = ov(debugSpeedOverrides.jumpSpeedWorld, PLAYER_JUMP_SPEED_WORLD);
-    // Skid jump boost: if jumping while skidding, increase jump height by 50%
+    // Skid jump boost: if jumping while skidding, increase jump height
+    const skidJumpMult = ov(debugSpeedOverrides.skidJumpMultiplier, SKID_JUMP_MULTIPLIER);
     const jumpSpeed = cluster.isSkiddingFlag === 1
-      ? baseJumpSpeed * SKID_JUMP_MULTIPLIER
+      ? baseJumpSpeed * skidJumpMult
       : baseJumpSpeed;
     if (cluster.isGroundedFlag === 1 || cluster.coyoteTimeTicks > 0) {
       // ── Normal ground jump ─────────────────────────────────────────
@@ -310,7 +313,7 @@ export function tickPlayerMovement(
         const isInitialWallJump = cluster.hasUsedWallJumpSinceResetFlag === 0;
         const wallJumpY = isInitialWallJump
           ? wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD
-          : wallJumpYBase - 20.0;
+          : wallJumpYBase * WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER;
         // wallDir = +1 if wall is to the right, -1 if wall is to the left
         const wallDir = canJumpFromRight ? 1 : -1;
         // Launch away: strong diagonal push prevents same-wall climbing.
@@ -402,7 +405,9 @@ export function tickPlayerMovement(
       } else if (isGrounded) {
         accel = baseGroundAccel;
       } else {
-        accel = baseAirAccel;
+        accel = cluster.hasUsedWallJumpSinceResetFlag === 1
+          ? baseAirAccel * ov(debugSpeedOverrides.wallJumpAirAccelMultiplier, WALL_JUMP_AIR_ACCEL_MULTIPLIER)
+          : baseAirAccel;
       }
       cluster.velocityXWorld += inputDx * accel * dtSec;
       // Clamp to max run speed only in the direction of input

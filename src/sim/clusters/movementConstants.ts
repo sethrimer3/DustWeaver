@@ -25,6 +25,9 @@ export const debugSpeedOverrides = {
   airDecelWorld: NaN,
   wallJumpXWorld: NaN,
   wallJumpYWorld: NaN,
+  skidJumpMultiplier: NaN,
+  grappleSuperJumpMultiplier: NaN,
+  wallJumpAirAccelMultiplier: NaN,
 };
 
 /** Helper: return override if finite, else fallback. */
@@ -187,6 +190,20 @@ export const WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD = 10.0;
 export const WALL_JUMP_FORCE_TIME_TICKS = 10;
 
 /**
+ * Multiplier applied to horizontal air acceleration after any wall jump until
+ * the player lands.  Doubles air steering speed for snappier control away from
+ * the wall without affecting ground or pre-wall-jump air movement.
+ */
+export const WALL_JUMP_AIR_ACCEL_MULTIPLIER = 2.0;
+
+/**
+ * Multiplier applied to wallJumpYBase for wall jumps after the first;
+ * produces half the vertical launch speed to prevent altitude gain from
+ * chained wall-jumps.
+ */
+export const WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER = 0.5;
+
+/**
  * Ticks after a wall jump during which the same-side wall sensor is suppressed.
  * Prevents instant re-grab and ensures the player is physically away from the
  * wall before another wall jump becomes available.
@@ -237,11 +254,17 @@ export const SPRINT_FRICTION_MULTIPLIER = 0.5;
 /** Ground deceleration multiplier when skidding (50% more friction than default). */
 export const SKID_FRICTION_MULTIPLIER = 1.5;
 
-/** Jump speed multiplier when jumping out of a skid (50% higher jump). */
-export const SKID_JUMP_MULTIPLIER = 1.5;
+/** Jump speed multiplier when jumping out of a skid; targets ~6 small blocks of height. */
+export const SKID_JUMP_MULTIPLIER = 1.153;
 
 /** Velocity threshold (px/s) below which a player is considered "not moving" for skid detection. */
 export const SKID_VELOCITY_THRESHOLD_WORLD = 5.0;
+
+/**
+ * Jump speed multiplier for the top-surface grapple super jump.
+ * Targets ~8 small blocks of jump height from a top-surface grapple stick.
+ */
+export const GRAPPLE_SUPER_JUMP_MULTIPLIER = 1.331;
 
 // ── Player crouch ───────────────────────────────────────────────────────────
 

@@ -43,6 +43,9 @@ const FIELDS: readonly FieldDef[] = [
   { key: 'airDecelWorld',      label: 'Air Decel',       defaultValue: 600.0 },
   { key: 'wallJumpXWorld',     label: 'Wall Jump X',     defaultValue: 147.0 },
   { key: 'wallJumpYWorld',     label: 'Wall Jump Y',     defaultValue: 147.0 },
+  { key: 'skidJumpMultiplier',         label: 'Skid Jump Mult',     defaultValue: 1.153 },
+  { key: 'grappleSuperJumpMultiplier', label: 'Grapple Super Mult', defaultValue: 1.331 },
+  { key: 'wallJumpAirAccelMultiplier', label: 'WJ Air Accel Mult',  defaultValue: 2.0 },
 ];
 
 const CLOAK_FIELDS: readonly CloakFieldDef[] = [
