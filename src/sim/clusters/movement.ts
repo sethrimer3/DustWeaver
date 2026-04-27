@@ -53,6 +53,7 @@ import {
   COYOTE_TIME_TICKS,
   WALL_SLIDE_MAX_FALL_SPEED,
   SKID_JUMP_MULTIPLIER,
+  GRAPPLE_SUPER_JUMP_MULTIPLIER,
   ROLLING_ENEMY_SPRITE_RADIUS_WORLD,
   FLYING_EYE_VERTICAL_MARGIN_WORLD,
   CLUSTER_EDGE_MARGIN_WORLD,
@@ -69,7 +70,7 @@ import {
   resolveRampSurfaces,
 } from './movementCollision';
 
-export { debugSpeedOverrides, PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS };
+export { debugSpeedOverrides, PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER };
 
 // ============================================================================
 // Main cluster movement update (step 0 of tick pipeline)

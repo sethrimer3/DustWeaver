@@ -72,8 +72,8 @@
 import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
-import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS } from './movement';
-import { COYOTE_TIME_TICKS } from './movementConstants';
+import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
+import { COYOTE_TIME_TICKS, debugSpeedOverrides, ov } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
 import {
   GRAPPLE_MAX_LENGTH_WORLD,
@@ -151,9 +151,6 @@ const GRAPPLE_STUCK_STOP_THRESHOLD_WORLD = 1.0;
  * receives 100% extra vertical height (super jump).
  */
 const GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS = 10;
-
-/** Jump speed multiplier for the super jump (2× = 100% extra height). */
-const GRAPPLE_STUCK_SUPER_JUMP_MULTIPLIER = 2.0;
 
 /**
  * Distance threshold (world units) within which the player is considered to
@@ -426,7 +423,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         world.grappleStuckStoppedTickCount > 0 &&
         world.grappleStuckStoppedTickCount <= GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS;
       const jumpSpeed = PLAYER_JUMP_SPEED_WORLD *
-        (hasSuperJump ? GRAPPLE_STUCK_SUPER_JUMP_MULTIPLIER : 1.0);
+        (hasSuperJump ? ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER) : 1.0);
       player.velocityYWorld = -jumpSpeed;
       player.isGroundedFlag = 0;
       player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
