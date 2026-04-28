@@ -8,7 +8,7 @@
  */
 
 import { ParticleKind } from '../particles/kinds';
-import { WeaveId, getWeaveDefinition, WEAVE_STORM, WEAVE_SHIELD } from './weaveDefinition';
+import { WeaveId, getWeaveDefinition, WEAVE_STORM, WEAVE_ARROW } from './weaveDefinition';
 import { getDustSlotCost } from './dustDefinition';
 
 // ---- Weave Binding ---------------------------------------------------------
@@ -114,7 +114,7 @@ export function getAllBoundDustFlat(loadout: PlayerWeaveLoadout): ParticleKind[]
  * Creates the default starting loadout for a new game.
  *
  * Primary: Storm Weave (passive attraction — always active, no bound dust)
- * Secondary: Shield Weave (crescent shield — no bound dust by default)
+ * Secondary: Arrow Weave (charge-and-release arrow — no bound dust)
  */
 export function createDefaultWeaveLoadout(): PlayerWeaveLoadout {
   return {
@@ -123,7 +123,7 @@ export function createDefaultWeaveLoadout(): PlayerWeaveLoadout {
       boundDust: [],
     },
     secondary: {
-      weaveId: WEAVE_SHIELD,
+      weaveId: WEAVE_ARROW,
       boundDust: [],
     },
   };

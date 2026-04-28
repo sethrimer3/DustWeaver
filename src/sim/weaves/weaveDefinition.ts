@@ -24,6 +24,7 @@ export type WeaveId = string;
 /** Built-in weave IDs. */
 export const WEAVE_STORM  = 'storm';
 export const WEAVE_SHIELD = 'shield';
+export const WEAVE_ARROW  = 'arrow';
 
 // ---- Weave Activation Role -------------------------------------------------
 
@@ -96,18 +97,32 @@ const SHIELD_DEF: WeaveDefinition = {
   spreadRad: Math.PI * 0.5,   // 90° crescent arc
 };
 
+const ARROW_DEF: WeaveDefinition = {
+  id: WEAVE_ARROW,
+  displayName: 'Arrow Weave',
+  description: 'Hold to load an arrow of dust motes; release to fire. More loading time = more motes, more damage, faster flight.',
+  role: WeaveRole.SecondaryOnly,
+  dustSlotCapacity: 0,
+  durationTicks: 0,
+  cooldownTicks: 0,
+  deploySpeedWorld: 0,
+  spreadRad: 0,
+};
+
 // ---- Weave Registry --------------------------------------------------------
 
 /** All available weave definitions, keyed by WeaveId. */
 export const WEAVE_REGISTRY: ReadonlyMap<WeaveId, WeaveDefinition> = new Map([
   [WEAVE_STORM,  STORM_DEF],
   [WEAVE_SHIELD, SHIELD_DEF],
+  [WEAVE_ARROW,  ARROW_DEF],
 ]);
 
 /** Ordered list of weave IDs for UI display. */
 export const WEAVE_LIST: readonly WeaveId[] = [
   WEAVE_STORM,
   WEAVE_SHIELD,
+  WEAVE_ARROW,
 ];
 
 /**

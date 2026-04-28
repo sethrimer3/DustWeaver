@@ -1,6 +1,7 @@
 import { ParticleBuffers, createParticleBuffers, MAX_PARTICLES } from './particles/state';
 import { ClusterState } from './clusters/state';
 import { RngState, createRng } from './rng';
+import { MAX_ARROWS } from './weaves/arrowWeave';
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
 export const MAX_WALLS = 2000;
@@ -436,6 +437,49 @@ export interface WorldState extends ParticleBuffers {
    * Assigned at spawn time to spread bees around the orbit ring.
    */
   beeSwarmBeePhaseRad: Float32Array;
+
+  // ── Arrow Weave loading state ──────────────────────────────────────────────
+  /** 1 while the player is holding the arrow weave button and loading an arrow. */
+  isArrowWeaveLoadingFlag: 0 | 1;
+  /** World tick when loading began (-1 = not loading). */
+  arrowWeaveLoadStartTick: number;
+  /** Current loaded mote count (0, 2, 3, or 4). */
+  arrowWeaveCurrentMoteCount: number;
+
+  // ── Arrow Weave flight buffer (MAX_ARROWS slots) ───────────────────────────
+  /** Number of allocated arrow slots (may include expired entries with lifetime ≤ 0). */
+  arrowCount: number;
+  /** Tip X position of each arrow (world units). */
+  arrowXWorld: Float32Array;
+  /** Tip Y position of each arrow (world units). */
+  arrowYWorld: Float32Array;
+  /** X velocity of each arrow (world units/s). */
+  arrowVelXWorld: Float32Array;
+  /** Y velocity of each arrow (world units/s). */
+  arrowVelYWorld: Float32Array;
+  /** Normalized X component of the arrow's travel direction. */
+  arrowDirXWorld: Float32Array;
+  /** Normalized Y component of the arrow's travel direction. */
+  arrowDirYWorld: Float32Array;
+  /** Number of motes in this arrow (2, 3, or 4). */
+  arrowMoteCount: Uint8Array;
+  /** 1 when the arrow is stuck in terrain; 0 while in flight. */
+  isArrowStuckFlag: Uint8Array;
+  /**
+   * 1 when the arrow hit an enemy while in flight and is playing its hit
+   * sequence.  The arrow is invisible in this state and removed when done.
+   */
+  isArrowHitEnemyFlag: Uint8Array;
+  /** Countdown ticks until this arrow slot is freed (0 = expired). */
+  arrowLifetimeTicksLeft: Float32Array;
+  /** Number of motes remaining to hit in the current hit sequence. */
+  arrowHitSequenceMotesLeft: Uint8Array;
+  /** Ticks until the next mote in the hit sequence fires. */
+  arrowHitSequenceDelayTicks: Float32Array;
+  /** Index into world.clusters of the enemy currently being hit (-1 = none). */
+  arrowHitTargetClusterIndex: Int32Array;
+  /** Ticks before this stuck arrow can begin a new hit sequence (invulnerability). */
+  arrowDamageCooldownTicks: Float32Array;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -467,7 +511,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerBlockDirYWorld: 0.0,
     // Weave combat state
     playerPrimaryWeaveId: 'storm',
-    playerSecondaryWeaveId: 'shield',
+    playerSecondaryWeaveId: 'arrow',
     playerPrimaryWeaveTriggeredFlag: 0,
     playerSecondaryWeaveTriggeredFlag: 0,
     isPlayerPrimaryWeaveActiveFlag: 0,
@@ -581,6 +625,25 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     beeSwarmBeeVelXWorld: new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     beeSwarmBeeVelYWorld: new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     beeSwarmBeePhaseRad:  new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    // ── Arrow Weave ───────────────────────────────────────────────────
+    isArrowWeaveLoadingFlag:       0,
+    arrowWeaveLoadStartTick:       -1,
+    arrowWeaveCurrentMoteCount:    0,
+    arrowCount:                    0,
+    arrowXWorld:                   new Float32Array(MAX_ARROWS),
+    arrowYWorld:                   new Float32Array(MAX_ARROWS),
+    arrowVelXWorld:                new Float32Array(MAX_ARROWS),
+    arrowVelYWorld:                new Float32Array(MAX_ARROWS),
+    arrowDirXWorld:                new Float32Array(MAX_ARROWS),
+    arrowDirYWorld:                new Float32Array(MAX_ARROWS),
+    arrowMoteCount:                new Uint8Array(MAX_ARROWS),
+    isArrowStuckFlag:              new Uint8Array(MAX_ARROWS),
+    isArrowHitEnemyFlag:           new Uint8Array(MAX_ARROWS),
+    arrowLifetimeTicksLeft:        new Float32Array(MAX_ARROWS),
+    arrowHitSequenceMotesLeft:     new Uint8Array(MAX_ARROWS),
+    arrowHitSequenceDelayTicks:    new Float32Array(MAX_ARROWS),
+    arrowHitTargetClusterIndex:    new Int32Array(MAX_ARROWS).fill(-1),
+    arrowDamageCooldownTicks:      new Float32Array(MAX_ARROWS),
     ...createParticleBuffers(),
   };
 }

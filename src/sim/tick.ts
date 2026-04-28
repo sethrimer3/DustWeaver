@@ -36,6 +36,7 @@ import { applyWallForces, applyWallBounce, settleFloorDust } from './particles/w
 import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
+import { tickArrows } from './weaves/arrowWeave';
 import { applyHazards } from './hazards';
 import { tickGrasshoppers } from './critters/grasshopper';
 import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
@@ -121,6 +122,8 @@ export function tick(world: WorldState): void {
   // 4.55. Player Weave combat — applies weave activation patterns for bound dust
   applyPlayerWeaveCombat(world);
 
+  // 4.56. Arrow Weave flight update — move arrows, detect wall sticking, apply enemy hit sequences
+  tickArrows(world);
   // 4.6. Lava AoE burn — heat damage to nearby enemy particles
   applyLavaEffect(world);
 

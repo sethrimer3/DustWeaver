@@ -29,6 +29,7 @@ import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
+import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import {
   isTheroShowcaseRoom,
   renderTheroShowcaseEffect,
@@ -301,6 +302,8 @@ export interface RenderFrameContext {
   /** Phantasmal golden cloak extension — visible while the player is grappling. */
   phantomCloak: PhantomCloakExtension;
   darkRoomOverlay: DarkRoomOverlay;
+  /** Arrow Weave renderer — bow crescent, dissipation, and arrow bodies. */
+  arrowWeaveRenderer: ArrowWeaveRenderer;
   /** Decoration sway state for push-wave animation driven by entity velocity. */
   decorationWaveState: DecorationWaveState;
 
@@ -373,7 +376,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-    playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState,
+    playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -506,6 +509,9 @@ export function renderFrame(r: RenderFrameContext): void {
   renderGrapple(ctx, snapshot, ox, oy, zoom);
   drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
   drawParticleGlow(bloomSystem, snapshot, ox, oy, zoom);
+
+  // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows
+  arrowWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
   // Decoration bloom — always added (even outside DarkRoom) so moss/mushrooms
   // visibly glow with the atmospheric bloom pass on any lighting setting.
   // HIGH_WATER_GLOW_GUARD_ENABLED: when true and decoration count exceeds

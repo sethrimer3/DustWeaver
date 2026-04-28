@@ -1,13 +1,20 @@
 /**
- * Weave Combat System — Storm and Shield weaves.
+ * Weave Combat System — Storm, Shield, and Arrow weaves.
  *
  * Storm Weave: passive attraction of nearby unowned Gold Dust to the player.
  * Shield Weave: crescent formation of player dust in the aimed direction.
+ * Arrow Weave: charge-and-release arrow that sticks into terrain and damages enemies.
  */
 
 import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
+import { WEAVE_ARROW } from './weaveDefinition';
+import {
+  startArrowLoading,
+  updateArrowLoading,
+  fireArrowFromLoading,
+} from './arrowWeave';
 
 // ── Storm Weave constants ───────────────────────────────────────────────────
 
@@ -197,23 +204,46 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
     }
   }
 
-  // Secondary mouse button → shield
-  if (world.playerSecondaryWeaveTriggeredFlag === 1) {
-    world.playerSecondaryWeaveTriggeredFlag = 0;
-    world.isPlayerSecondaryWeaveActiveFlag = 1;
-  }
-  if (world.playerSecondaryWeaveEndFlag === 1) {
-    world.playerSecondaryWeaveEndFlag = 0;
-    world.isPlayerSecondaryWeaveActiveFlag = 0;
-    for (let i = 0; i < world.particleCount; i++) {
-      if (world.isAliveFlag[i] === 1 && world.ownerEntityId[i] === playerEntityId && world.behaviorMode[i] === 2) {
-        world.behaviorMode[i] = 0;
+  // Secondary mouse button — branched by equipped weave ID
+  if (world.playerSecondaryWeaveId === WEAVE_ARROW) {
+    // ── Arrow Weave secondary ────────────────────────────────────────────────
+    if (world.playerSecondaryWeaveTriggeredFlag === 1) {
+      world.playerSecondaryWeaveTriggeredFlag = 0;
+      world.isPlayerSecondaryWeaveActiveFlag = 1;
+      startArrowLoading(world);
+    }
+    if (world.isPlayerSecondaryWeaveActiveFlag === 1) {
+      updateArrowLoading(world);
+    }
+    if (world.playerSecondaryWeaveEndFlag === 1) {
+      world.playerSecondaryWeaveEndFlag = 0;
+      world.isPlayerSecondaryWeaveActiveFlag = 0;
+      fireArrowFromLoading(world, playerX, playerY);
+    }
+  } else {
+    // ── Shield Weave secondary (default) ────────────────────────────────────
+    if (world.playerSecondaryWeaveTriggeredFlag === 1) {
+      world.playerSecondaryWeaveTriggeredFlag = 0;
+      world.isPlayerSecondaryWeaveActiveFlag = 1;
+    }
+    if (world.playerSecondaryWeaveEndFlag === 1) {
+      world.playerSecondaryWeaveEndFlag = 0;
+      world.isPlayerSecondaryWeaveActiveFlag = 0;
+      for (let i = 0; i < world.particleCount; i++) {
+        if (world.isAliveFlag[i] === 1 && world.ownerEntityId[i] === playerEntityId && world.behaviorMode[i] === 2) {
+          world.behaviorMode[i] = 0;
+        }
       }
     }
   }
 
-  // Apply crescent forces while shield is active
-  if (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) {
+  // Apply crescent forces while shield is active on either slot.
+  // Arrow weave secondary does NOT activate the shield crescent.
+  const isShieldSecondaryActive =
+    world.isPlayerSecondaryWeaveActiveFlag === 1 &&
+    world.playerSecondaryWeaveId !== WEAVE_ARROW;
+
+  if (world.isPlayerPrimaryWeaveActiveFlag === 1 || isShieldSecondaryActive) {
     const aimX = world.playerWeaveAimDirXWorld;
     const aimY = world.playerWeaveAimDirYWorld;
     applyShieldCrescent(world, playerEntityId, playerX, playerY, aimX, aimY);

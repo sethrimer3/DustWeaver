@@ -285,6 +285,34 @@ export interface WorldSnapshot {
   readonly beeSwarmBeeVelXWorld: Float32Array;
   /** Y velocity of each bee (world units/s). Same layout as beeSwarmBeeXWorld. */
   readonly beeSwarmBeeVelYWorld: Float32Array;
+
+  // ── Arrow Weave state ─────────────────────────────────────────────────────
+  /** 1 while the player is loading an arrow (holding secondary weave button). */
+  readonly isArrowWeaveLoadingFlag: 0 | 1;
+  /** Current loaded mote count (0, 2, 3, or 4) for bow visual sizing. */
+  readonly arrowWeaveCurrentMoteCount: number;
+  /** Current aim direction X (world units, normalized) — for bow placement. */
+  readonly playerWeaveAimDirXWorld: number;
+  /** Current aim direction Y (world units, normalized) — for bow placement. */
+  readonly playerWeaveAimDirYWorld: number;
+  /** Number of allocated arrow slots (some may be expired with lifetime ≤ 0). */
+  readonly arrowCount: number;
+  /** Tip X position of each arrow (world units). Shared view into WorldState. */
+  readonly arrowXWorld: Float32Array;
+  /** Tip Y position of each arrow (world units). Shared view into WorldState. */
+  readonly arrowYWorld: Float32Array;
+  /** Normalized X travel direction of each arrow. Shared view into WorldState. */
+  readonly arrowDirXWorld: Float32Array;
+  /** Normalized Y travel direction of each arrow. Shared view into WorldState. */
+  readonly arrowDirYWorld: Float32Array;
+  /** Mote count per arrow (2, 3, or 4). Shared view into WorldState. */
+  readonly arrowMoteCount: Uint8Array;
+  /** 1 when the arrow is stuck in terrain; 0 while in flight. */
+  readonly isArrowStuckFlag: Uint8Array;
+  /** 1 when the arrow hit an enemy (invisible, playing hit sequence). */
+  readonly isArrowHitEnemyFlag: Uint8Array;
+  /** Remaining lifetime ticks per arrow (0 = expired). */
+  readonly arrowLifetimeTicksLeft: Float32Array;
 }
 
 // ── Reusable allocation-free snapshot ─────────────────────────────────────
@@ -333,6 +361,12 @@ interface _ReusableBacking {
   beeSwarmBeeYWorld: Float32Array;
   beeSwarmBeeVelXWorld: Float32Array;
   beeSwarmBeeVelYWorld: Float32Array;
+  // Arrow Weave scalar fields updated each frame
+  isArrowWeaveLoadingFlag: 0 | 1;
+  arrowWeaveCurrentMoteCount: number;
+  playerWeaveAimDirXWorld: number;
+  playerWeaveAimDirYWorld: number;
+  arrowCount: number;
   /** @internal Pre-allocated cluster objects — not part of the public API. */
   readonly _clusterPool: _MutableCluster[];
 }
@@ -588,6 +622,21 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     beeSwarmBeeYWorld:         world.beeSwarmBeeYWorld,
     beeSwarmBeeVelXWorld:      world.beeSwarmBeeVelXWorld,
     beeSwarmBeeVelYWorld:      world.beeSwarmBeeVelYWorld,
+    // Arrow Weave — typed-array fields are shared views (always up-to-date);
+    // scalar fields are updated in updateSnapshotInPlace.
+    isArrowWeaveLoadingFlag:    world.isArrowWeaveLoadingFlag,
+    arrowWeaveCurrentMoteCount: world.arrowWeaveCurrentMoteCount,
+    playerWeaveAimDirXWorld:    world.playerWeaveAimDirXWorld,
+    playerWeaveAimDirYWorld:    world.playerWeaveAimDirYWorld,
+    arrowCount:                 world.arrowCount,
+    arrowXWorld:                world.arrowXWorld,
+    arrowYWorld:                world.arrowYWorld,
+    arrowDirXWorld:             world.arrowDirXWorld,
+    arrowDirYWorld:             world.arrowDirYWorld,
+    arrowMoteCount:             world.arrowMoteCount,
+    isArrowStuckFlag:           world.isArrowStuckFlag,
+    isArrowHitEnemyFlag:        world.isArrowHitEnemyFlag,
+    arrowLifetimeTicksLeft:     world.arrowLifetimeTicksLeft,
     _clusterPool:             clusterPool,
   };
 
@@ -636,6 +685,13 @@ export function updateSnapshotInPlace(
   b.hasGrappleChargeFlag      = world.hasGrappleChargeFlag;
   b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
   b.grasshopperCount          = world.grasshopperCount;
+
+  // Arrow Weave scalar fields (typed-array fields are shared views, no update needed)
+  b.isArrowWeaveLoadingFlag    = world.isArrowWeaveLoadingFlag;
+  b.arrowWeaveCurrentMoteCount = world.arrowWeaveCurrentMoteCount;
+  b.playerWeaveAimDirXWorld    = world.playerWeaveAimDirXWorld;
+  b.playerWeaveAimDirYWorld    = world.playerWeaveAimDirYWorld;
+  b.arrowCount                 = world.arrowCount;
 
   const clusterCount = world.clusters.length;
   const pool = b._clusterPool;
@@ -822,5 +878,18 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     beeSwarmBeeYWorld:         world.beeSwarmBeeYWorld,
     beeSwarmBeeVelXWorld:      world.beeSwarmBeeVelXWorld,
     beeSwarmBeeVelYWorld:      world.beeSwarmBeeVelYWorld,
+    isArrowWeaveLoadingFlag:    world.isArrowWeaveLoadingFlag,
+    arrowWeaveCurrentMoteCount: world.arrowWeaveCurrentMoteCount,
+    playerWeaveAimDirXWorld:    world.playerWeaveAimDirXWorld,
+    playerWeaveAimDirYWorld:    world.playerWeaveAimDirYWorld,
+    arrowCount:                 world.arrowCount,
+    arrowXWorld:                world.arrowXWorld,
+    arrowYWorld:                world.arrowYWorld,
+    arrowDirXWorld:             world.arrowDirXWorld,
+    arrowDirYWorld:             world.arrowDirYWorld,
+    arrowMoteCount:             world.arrowMoteCount,
+    isArrowStuckFlag:           world.isArrowStuckFlag,
+    isArrowHitEnemyFlag:        world.isArrowHitEnemyFlag,
+    arrowLifetimeTicksLeft:     world.arrowLifetimeTicksLeft,
   };
 }
