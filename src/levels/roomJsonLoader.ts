@@ -309,7 +309,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       xBlock: p.xBlock,
       yBlock: p.yBlock,
       dustCount: p.dustCount,
-      spreadBlocks: p.spreadBlocks,
+      spreadBlocks: p.spreadBlocks ?? 0,
     }));
   }
 

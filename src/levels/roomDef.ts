@@ -496,7 +496,11 @@ export interface RoomDustPileDef {
   yBlock: number;
   /** Number of dust particles in this pile (default: 5). */
   dustCount: number;
-  /** Spread radius (block units) for triangle-distributed random spawn offset. Default: 0. */
+  /**
+   * Full spread width (block units). The pile spawns with a triangle-distributed
+   * random offset in the range ±(spreadBlocks / 2) blocks from the anchor position.
+   * Default: 0 (no spread).
+   */
   spreadBlocks?: number;
 }
 
