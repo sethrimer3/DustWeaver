@@ -304,6 +304,25 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     }));
   }
 
+  if (json.dustPiles && json.dustPiles.length > 0) {
+    room.dustPiles = json.dustPiles.map(p => ({
+      xBlock: p.xBlock,
+      yBlock: p.yBlock,
+      dustCount: p.dustCount,
+      spreadBlocks: p.spreadBlocks,
+    }));
+  }
+
+  if (json.fireflyAreas && json.fireflyAreas.length > 0) {
+    room.fireflyAreas = json.fireflyAreas.map(a => ({
+      xBlock: a.xBlock,
+      yBlock: a.yBlock,
+      wBlock: a.wBlock,
+      hBlock: a.hBlock,
+      count: a.count,
+    }));
+  }
+
   if (json.decorations && json.decorations.length > 0) {
     room.decorations = json.decorations.map(d => ({
       xBlock: d.xBlock,

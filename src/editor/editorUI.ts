@@ -1062,6 +1062,36 @@ function updateInspector(
         v => callbacks?.onPropertyChange('dustPile.yBlock', parseInt(v)));
       addField(div, 'dustCount', String(pile.dustCount),
         v => callbacks?.onPropertyChange('dustPile.dustCount', parseInt(v)));
+      addField(div, 'spreadBlocks', String(pile.spreadBlocks ?? 0),
+        v => callbacks?.onPropertyChange('dustPile.spreadBlocks', parseInt(v)));
+    }
+  } else if (el.type === 'grasshopperArea') {
+    const area = room.grasshopperAreas.find(a => a.uid === el.uid);
+    if (area) {
+      addField(div, 'xBlock', String(area.xBlock),
+        v => callbacks?.onPropertyChange('grasshopperArea.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(area.yBlock),
+        v => callbacks?.onPropertyChange('grasshopperArea.yBlock', parseInt(v)));
+      addField(div, 'wBlock', String(area.wBlock),
+        v => callbacks?.onPropertyChange('grasshopperArea.wBlock', parseInt(v)));
+      addField(div, 'hBlock', String(area.hBlock),
+        v => callbacks?.onPropertyChange('grasshopperArea.hBlock', parseInt(v)));
+      addField(div, 'count', String(area.count),
+        v => callbacks?.onPropertyChange('grasshopperArea.count', parseInt(v)));
+    }
+  } else if (el.type === 'fireflyArea') {
+    const area = (room.fireflyAreas ?? []).find(a => a.uid === el.uid);
+    if (area) {
+      addField(div, 'xBlock', String(area.xBlock),
+        v => callbacks?.onPropertyChange('fireflyArea.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(area.yBlock),
+        v => callbacks?.onPropertyChange('fireflyArea.yBlock', parseInt(v)));
+      addField(div, 'wBlock', String(area.wBlock),
+        v => callbacks?.onPropertyChange('fireflyArea.wBlock', parseInt(v)));
+      addField(div, 'hBlock', String(area.hBlock),
+        v => callbacks?.onPropertyChange('fireflyArea.hBlock', parseInt(v)));
+      addField(div, 'count', String(area.count),
+        v => callbacks?.onPropertyChange('fireflyArea.count', parseInt(v)));
     }
   } else if (el.type === 'decoration') {
     const deco = (room.decorations ?? []).find(d => d.uid === el.uid);

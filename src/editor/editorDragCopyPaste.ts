@@ -10,6 +10,7 @@ import {
   EditorState,
   EditorWall, EditorEnemy, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
   EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock,
+  EditorGrasshopperArea, EditorFireflyArea,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
 
@@ -58,6 +59,12 @@ export function storeDragStartPositions(
     } else if (el.type === 'crumbleBlock') {
       const b = (s.roomData.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
       if (b) positions.set(key, { xBlock: b.xBlock, yBlock: b.yBlock });
+    } else if (el.type === 'grasshopperArea') {
+      const a = s.roomData.grasshopperAreas.find(x => x.uid === el.uid);
+      if (a) positions.set(key, { xBlock: a.xBlock, yBlock: a.yBlock });
+    } else if (el.type === 'fireflyArea') {
+      const a = (s.roomData.fireflyAreas ?? []).find(x => x.uid === el.uid);
+      if (a) positions.set(key, { xBlock: a.xBlock, yBlock: a.yBlock });
     } else if (el.type === 'playerSpawn') {
       positions.set(0, { xBlock: s.roomData.playerSpawnBlock[0], yBlock: s.roomData.playerSpawnBlock[1] });
     } else if (el.type === 'transition') {
@@ -124,6 +131,12 @@ export function moveSelectedElements(
     } else if (el.type === 'crumbleBlock') {
       const b = (s.roomData.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
       if (b) { b.xBlock = orig.xBlock + deltaX; b.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'grasshopperArea') {
+      const a = s.roomData.grasshopperAreas.find(x => x.uid === el.uid);
+      if (a && orig) { a.xBlock = orig.xBlock + deltaX; a.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'fireflyArea') {
+      const a = (s.roomData.fireflyAreas ?? []).find(x => x.uid === el.uid);
+      if (a && orig) { a.xBlock = orig.xBlock + deltaX; a.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'playerSpawn') {
       s.roomData.playerSpawnBlock[0] = orig.xBlock + deltaX;
       s.roomData.playerSpawnBlock[1] = orig.yBlock + deltaY;
@@ -173,9 +186,12 @@ export function serializeSelectedElements(
     waterZones: EditorWaterZone[];
     lavaZones: EditorLavaZone[];
     crumbleBlocks: EditorCrumbleBlock[];
+    grasshopperAreas: EditorGrasshopperArea[];
+    fireflyAreas: EditorFireflyArea[];
   } = {
     walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [],
     decorations: [], lightSources: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
+    grasshopperAreas: [], fireflyAreas: [],
   };
   for (const el of elements) {
     if (el.type === 'wall') {
@@ -208,6 +224,12 @@ export function serializeSelectedElements(
     } else if (el.type === 'crumbleBlock') {
       const b = (room.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
       if (b) data.crumbleBlocks.push({ ...b });
+    } else if (el.type === 'grasshopperArea') {
+      const a = room.grasshopperAreas.find(a2 => a2.uid === el.uid);
+      if (a) data.grasshopperAreas.push({ ...a });
+    } else if (el.type === 'fireflyArea') {
+      const a = (room.fireflyAreas ?? []).find(a2 => a2.uid === el.uid);
+      if (a) data.fireflyAreas.push({ ...a });
     }
   }
   return JSON.stringify(data);
@@ -230,6 +252,8 @@ export function pasteFromClipboard(s: EditorState): void {
     waterZones?: EditorWaterZone[];
     lavaZones?: EditorLavaZone[];
     crumbleBlocks?: EditorCrumbleBlock[];
+    grasshopperAreas?: EditorGrasshopperArea[];
+    fireflyAreas?: EditorFireflyArea[];
   };
   try {
     data = JSON.parse(s.clipboard) as typeof data;
@@ -246,6 +270,7 @@ export function pasteFromClipboard(s: EditorState): void {
     ...(data.saveTombs ?? []), ...(data.skillTombs ?? []), ...(data.dustPiles ?? []),
     ...(data.decorations ?? []), ...(data.lightSources ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
+    ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
   ];
   for (const e of allEntities) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
   if (!isFinite(minX)) minX = 0;
@@ -355,6 +380,27 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: b.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'crumbleBlock', uid: newUid });
+  }
+  for (const a of (data.grasshopperAreas ?? [])) {
+    const newUid = allocateUid(s);
+    s.roomData.grasshopperAreas.push({
+      ...a,
+      uid: newUid,
+      xBlock: a.xBlock - minX + offsetX,
+      yBlock: a.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'grasshopperArea', uid: newUid });
+  }
+  for (const a of (data.fireflyAreas ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.fireflyAreas) s.roomData.fireflyAreas = [];
+    s.roomData.fireflyAreas.push({
+      ...a,
+      uid: newUid,
+      xBlock: a.xBlock - minX + offsetX,
+      yBlock: a.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'fireflyArea', uid: newUid });
   }
   s.selectedElements = newElements;
 }

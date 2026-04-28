@@ -345,8 +345,10 @@ export function startGameScreen(
         const areaHeightWorld = area.hBlock * BLOCK_SIZE_MEDIUM;
         for (let g = 0; g < area.count && world.grasshopperCount < MAX_GRASSHOPPERS; g++) {
           const gi = world.grasshopperCount++;
-          world.grasshopperXWorld[gi] = areaXWorld + nextFloat(world.rng) * areaWidthWorld;
-          world.grasshopperYWorld[gi] = areaYWorld + nextFloat(world.rng) * areaHeightWorld;
+          world.grasshopperXWorld[gi] = areaXWorld + areaWidthWorld  * 0.5
+            + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * areaWidthWorld  * 0.5;
+          world.grasshopperYWorld[gi] = areaYWorld + areaHeightWorld * 0.5
+            + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * areaHeightWorld * 0.5;
           world.grasshopperVelXWorld[gi] = 0;
           world.grasshopperVelYWorld[gi] = 0;
           world.grasshopperHopTimerTicks[gi] = nextFloat(world.rng) * GRASSHOPPER_INITIAL_TIMER_MAX_TICKS;

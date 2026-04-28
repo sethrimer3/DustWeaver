@@ -1,4 +1,5 @@
-import { WorldState, MAX_WALLS, MAX_DUST_PILES } from '../sim/world';
+import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES } from '../sim/world';
+import { nextFloat } from '../sim/rng';
 import {
   RoomDef,
   BLOCK_SIZE_MEDIUM,
@@ -14,6 +15,8 @@ import {
   SPIKE_DIR_LEFT,
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
+
+const FIREFLY_AREA_SPAWN_SPEED_WORLD = 30.0;
 
 /** Duration (ms) to show health bar after taking damage. */
 export const HEALTH_BAR_DISPLAY_MS = 3000;
@@ -341,10 +344,32 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   for (let i = 0; i < dustPileDefs.length && world.dustPileCount < MAX_DUST_PILES; i++) {
     const p = dustPileDefs[i];
     const pi = world.dustPileCount++;
-    world.dustPileXWorld[pi] = (p.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.dustPileYWorld[pi] = (p.yBlock + 1.0) * BLOCK_SIZE_MEDIUM; // bottom of block
+    const halfSpreadWorld = (p.spreadBlocks ?? 0) * 0.5 * BLOCK_SIZE_MEDIUM;
+    world.dustPileXWorld[pi] = (p.xBlock + 0.5) * BLOCK_SIZE_MEDIUM
+      + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * halfSpreadWorld;
+    world.dustPileYWorld[pi] = (p.yBlock + 1.0) * BLOCK_SIZE_MEDIUM
+      + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * halfSpreadWorld;
     world.dustPileDustCount[pi] = p.dustCount;
     world.isDustPileActiveFlag[pi] = 1;
+  }
+
+  // ── Firefly areas ────────────────────────────────────────────────────────
+  const fireflyAreaDefs = room.fireflyAreas ?? [];
+  for (const area of fireflyAreaDefs) {
+    const halfWidthWorld  = area.wBlock * BLOCK_SIZE_MEDIUM * 0.5;
+    const halfHeightWorld = area.hBlock * BLOCK_SIZE_MEDIUM * 0.5;
+    const centerXWorld = area.xBlock * BLOCK_SIZE_MEDIUM + halfWidthWorld;
+    const centerYWorld = area.yBlock * BLOCK_SIZE_MEDIUM + halfHeightWorld;
+    for (let f = 0; f < area.count && world.fireflyCount < MAX_FIREFLIES; f++) {
+      const fi = world.fireflyCount++;
+      world.fireflyXWorld[fi] = centerXWorld
+        + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * halfWidthWorld;
+      world.fireflyYWorld[fi] = centerYWorld
+        + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * halfHeightWorld;
+      const angleRad = nextFloat(world.rng) * Math.PI * 2;
+      world.fireflyVelXWorld[fi] = Math.cos(angleRad) * FIREFLY_AREA_SPAWN_SPEED_WORLD;
+      world.fireflyVelYWorld[fi] = Math.sin(angleRad) * FIREFLY_AREA_SPAWN_SPEED_WORLD;
+    }
   }
 }
 

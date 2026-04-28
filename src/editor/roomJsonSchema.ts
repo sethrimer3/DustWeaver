@@ -180,9 +180,18 @@ export interface RoomJsonDustPile {
   xBlock: number;
   yBlock: number;
   dustCount: number;
+  spreadBlocks?: number;
 }
 
 export interface RoomJsonGrasshopperArea {
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  count: number;
+}
+
+export interface RoomJsonFireflyArea {
   xBlock: number;
   yBlock: number;
   wBlock: number;
@@ -274,6 +283,7 @@ export interface RoomJsonDef {
   fireflyJars?: RoomJsonFireflyJar[];
   dustPiles?: RoomJsonDustPile[];
   grasshopperAreas?: RoomJsonGrasshopperArea[];
+  fireflyAreas?: RoomJsonFireflyArea[];
   /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
   decorations?: RoomJsonDecoration[];
 }
