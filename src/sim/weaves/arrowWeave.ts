@@ -39,10 +39,10 @@ const ARROW_GRAVITY_2_WS2 = 200.0;
 const ARROW_GRAVITY_3_WS2 = 140.0;
 const ARROW_GRAVITY_4_WS2 = 0.0;
 
-/** Stuck-arrow lifetime (ticks) per tier. */
-const ARROW_LIFETIME_2_TICKS = 300;  // 5 s
-const ARROW_LIFETIME_3_TICKS = 420;  // 7 s
-const ARROW_LIFETIME_4_TICKS = 600;  // 10 s
+/** Stuck-arrow lifetime (ticks) per tier — also used by the renderer for fade calculations. */
+export const ARROW_LIFETIME_2_TICKS = 300;  // 5 s
+export const ARROW_LIFETIME_3_TICKS = 420;  // 7 s
+export const ARROW_LIFETIME_4_TICKS = 600;  // 10 s
 
 /** World-space gap between consecutive motes in the arrow line. */
 export const ARROW_MOTE_SPACING_WORLD = 3.0;
@@ -163,8 +163,7 @@ export function fireArrowFromLoading(
 // ── Per-tick simulation ───────────────────────────────────────────────────────
 
 /** Moves a single in-flight arrow: apply gravity, advance position, detect wall sticking. */
-function _updateArrowFlight(world: WorldState, i: number): void {
-  const dtSec = world.dtMs / 1000.0;
+function _updateArrowFlight(world: WorldState, i: number, dtSec: number): void {
   const gravity = _gravity(world.arrowMoteCount[i]);
 
   // Apply gravity to vertical velocity
@@ -178,19 +177,15 @@ function _updateArrowFlight(world: WorldState, i: number): void {
   if (dist > 0.001) {
     const ndx = dx / dist;
     const ndy = dy / dist;
+
+    // Update direction from current velocity before any wall test
+    // (so the arrow's visual direction is correct even when it sticks)
+    world.arrowDirXWorld[i] = ndx;
+    world.arrowDirYWorld[i] = ndy;
+
     const hit = raycastWalls(world, world.arrowXWorld[i], world.arrowYWorld[i], ndx, ndy, dist);
 
     if (hit !== null) {
-      // Stick at the wall surface; retain the last flight direction
-      const preSpeed = Math.sqrt(
-        world.arrowVelXWorld[i] * world.arrowVelXWorld[i] +
-        world.arrowVelYWorld[i] * world.arrowVelYWorld[i],
-      );
-      if (preSpeed > 0.1) {
-        world.arrowDirXWorld[i] = world.arrowVelXWorld[i] / preSpeed;
-        world.arrowDirYWorld[i] = world.arrowVelYWorld[i] / preSpeed;
-      }
-
       world.arrowXWorld[i]    = hit.x;
       world.arrowYWorld[i]    = hit.y;
       world.arrowVelXWorld[i] = 0;
@@ -200,18 +195,9 @@ function _updateArrowFlight(world: WorldState, i: number): void {
     }
   }
 
-  // No wall hit — advance position and update direction
+  // No wall hit — advance position
   world.arrowXWorld[i] += dx;
   world.arrowYWorld[i] += dy;
-
-  const speed = Math.sqrt(
-    world.arrowVelXWorld[i] * world.arrowVelXWorld[i] +
-    world.arrowVelYWorld[i] * world.arrowVelYWorld[i],
-  );
-  if (speed > 0.1) {
-    world.arrowDirXWorld[i] = world.arrowVelXWorld[i] / speed;
-    world.arrowDirYWorld[i] = world.arrowVelYWorld[i] / speed;
-  }
 }
 
 /**
@@ -305,6 +291,8 @@ function _tickArrowHitSequence(world: WorldState, i: number): void {
  * cluster movement but before particle force accumulation.
  */
 export function tickArrows(world: WorldState): void {
+  const dtSec = world.dtMs / 1000.0;
+
   for (let i = 0; i < world.arrowCount; i++) {
     if (world.arrowLifetimeTicksLeft[i] <= 0) continue;
 
@@ -315,7 +303,7 @@ export function tickArrows(world: WorldState): void {
 
     // If flying and not in an enemy-hit state, update flight physics
     if (world.isArrowStuckFlag[i] === 0 && world.isArrowHitEnemyFlag[i] === 0) {
-      _updateArrowFlight(world, i);
+      _updateArrowFlight(world, i, dtSec);
     }
 
     // When a flying arrow hits a wall it becomes stuck; check enemy contact

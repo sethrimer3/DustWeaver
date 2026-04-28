@@ -16,7 +16,12 @@
  */
 
 import { WorldSnapshot } from '../snapshot';
-import { ARROW_MOTE_SPACING_WORLD } from '../../sim/weaves/arrowWeave';
+import {
+  ARROW_MOTE_SPACING_WORLD,
+  ARROW_LIFETIME_2_TICKS,
+  ARROW_LIFETIME_3_TICKS,
+  ARROW_LIFETIME_4_TICKS,
+} from '../../sim/weaves/arrowWeave';
 
 // ── Bow visual constants ──────────────────────────────────────────────────────
 
@@ -125,7 +130,7 @@ export class ArrowWeaveRenderer {
 
     // ── Transition from loading → not loading → start dissipation ────────────
     if (this._prevWasLoading && !isLoading) {
-      this._startDissipation(this._bowMotes, zoom);
+      this._startDissipation(this._bowMotes);
       this._bowMotes = [];
     }
 
@@ -230,10 +235,7 @@ export class ArrowWeaveRenderer {
 
   // ── Dissipation ───────────────────────────────────────────────────────────
 
-  private _startDissipation(
-    bowMotes: BowMoteState[],
-    _zoom: number,
-  ): void {
+  private _startDissipation(bowMotes: BowMoteState[]): void {
     this._isDissipating = true;
     this._dissipateFrame = 0;
     this._dissipateParticles = [];
@@ -319,18 +321,17 @@ export class ArrowWeaveRenderer {
       // Lifetime fade for stuck arrows
       let lifetimeAlpha = 1.0;
       if (snapshot.isArrowStuckFlag[i] === 1) {
-        const maxLifetime = moteCount === 4 ? 600 : moteCount === 3 ? 420 : 300;
-        lifetimeAlpha = Math.min(1.0, snapshot.arrowLifetimeTicksLeft[i] / 60.0);
-        // Also fade fully within the last 60 ticks
+        const maxLifetime = moteCount === 4 ? ARROW_LIFETIME_4_TICKS
+          : moteCount === 3 ? ARROW_LIFETIME_3_TICKS
+          : ARROW_LIFETIME_2_TICKS;
         const remaining = snapshot.arrowLifetimeTicksLeft[i];
         if (remaining < 60) {
           lifetimeAlpha = remaining / 60.0;
         } else {
-          // Slight fade from full lifetime to 60 ticks remaining
           const stableRange = maxLifetime - 60;
-          if (stableRange > 0) {
-            lifetimeAlpha = 0.5 + 0.5 * Math.min(1.0, (remaining - 60) / stableRange);
-          }
+          lifetimeAlpha = stableRange > 0
+            ? 0.5 + 0.5 * Math.min(1.0, (remaining - 60) / stableRange)
+            : 1.0;
         }
       }
 
