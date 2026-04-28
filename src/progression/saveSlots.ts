@@ -48,6 +48,9 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     // preserved while missing fields receive safe defaults.
     const defaults = createDefaultProgress();
     parsed.progress = { ...defaults, ...parsed.progress };
+    // Explicit fallbacks for array/optional fields added after initial release.
+    if (parsed.progress.dustContainerPieces === undefined) parsed.progress.dustContainerPieces = 0;
+    if (!Array.isArray(parsed.progress.disabledPassiveWeaves)) parsed.progress.disabledPassiveWeaves = [];
     return parsed;
   } catch {
     return null;

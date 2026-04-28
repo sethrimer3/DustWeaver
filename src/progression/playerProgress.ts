@@ -75,6 +75,10 @@ export interface PlayerProgress {
   unlockedActiveWeaves: WeaveId[];
   /** Number of dust containers the player owns. Total capacity = dustContainerCount × 4. */
   dustContainerCount: number;
+  /** Dust container pieces collected; 4 pieces forge 1 container. */
+  dustContainerPieces: number;
+  /** WeaveIds of passive weaves the player has manually disabled. */
+  disabledPassiveWeaves: string[];
   /**
    * Whether the early auto-assignment step has been completed.
    * When Golden Dust + 2 containers are first unlocked, they are auto-configured.
@@ -118,6 +122,8 @@ export function createDefaultProgress(): PlayerProgress {
     unlockedPassiveTechniques: [],
     unlockedActiveWeaves: [],
     dustContainerCount: 0,
+    dustContainerPieces: 0,
+    disabledPassiveWeaves: [],
     hasCompletedEarlyAutoAssignment: false,
   };
 }
