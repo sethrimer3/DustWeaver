@@ -13,6 +13,7 @@ import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
+import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, collectCommands } from '../input/handler';
 import { CommandKind } from '../input/commands';
@@ -443,6 +444,7 @@ export function startGameScreen(
   const playerCloak = new PlayerCloak();
   const phantomCloak = new PhantomCloakExtension();
   const decorationWaveState = new DecorationWaveState();
+  const arrowWeaveRenderer = new ArrowWeaveRenderer();
 
   // ── Per-frame allocation-free state ─────────────────────────────────────
   // All three are populated once per room load in loadRoom() and reused every
@@ -1383,7 +1385,7 @@ export function startGameScreen(
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-      playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState,
+      playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer,
       world, currentRoom,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,
