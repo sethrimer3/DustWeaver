@@ -1,6 +1,5 @@
 import { showMainMenu } from './ui/mainMenu';
 import { showLoadoutScreen } from './ui/weaveLoadout';
-import { showCharacterSelect } from './ui/characterSelect';
 import { startGameScreen } from './screens/gameScreen';
 import { ParticleKind } from './sim/particles/kinds';
 import { createDefaultProgress, PlayerProgress } from './progression/playerProgress';
@@ -33,7 +32,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
   }
 
   function navigate(
-    to: 'mainMenu' | 'characterSelect' | 'loadout' | 'gameplay',
+    to: 'mainMenu' | 'loadout' | 'gameplay',
     loadout?: ParticleKind[],
   ): void {
     // Persist progress when leaving gameplay
@@ -56,21 +55,12 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           if (progress.exploredRoomIds.length > 0) {
             navigate('gameplay', progress.loadout);
           } else {
-            // Brand new profile: go to character select, then straight to gameplay
+            // Brand new profile: auto-select outcast, skip character selection screen.
             // Do NOT open the loadout screen — the player starts with nothing.
-            navigate('characterSelect');
+            progress.characterId = 'outcast';
+            navigate('gameplay', []);
           }
         },
-      });
-    } else if (to === 'characterSelect') {
-      cleanup = showCharacterSelect(uiRoot, {
-        onConfirm: (characterId) => {
-          progress.characterId = characterId;
-          // New profile: skip loadout screen entirely, go straight to gameplay.
-          // The player starts as a blank slate with nothing equipped.
-          navigate('gameplay', []);
-        },
-        onCancel: () => navigate('mainMenu'),
       });
     } else if (to === 'loadout') {
       // Loadout screen is now only used at save tombs, not during the initial flow.

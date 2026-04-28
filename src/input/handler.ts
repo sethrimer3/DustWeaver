@@ -258,13 +258,18 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         state.touchJoystickCurrentXPx = touch.xPx;
         state.touchJoystickCurrentYPx = touch.yPx;
       } else if (state.secondTouchId === -1) {
-        // Second finger — attack/block gesture
+        // Second finger — grapple gesture
         state.secondTouchId = t.identifier;
         state.secondTouchStartXPx = touch.xPx;
         state.secondTouchStartYPx = touch.yPx;
         state.secondTouchStartTimeMs = performance.now();
         state.secondTouchCurrentXPx = touch.xPx;
         state.secondTouchCurrentYPx = touch.yPx;
+        // Fire grapple immediately at the touch position.
+        state.isGrappleHeldFlag = 1;
+        state.isGrappleFireTriggeredFlag = 1;
+        state.grappleAimXPx = touch.xPx;
+        state.grappleAimYPx = touch.yPx;
       } else {
         // Additional touches update the aim/mouse position
         state.mouseXPx = touch.xPx;
@@ -279,21 +284,16 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       const t = e.changedTouches[i];
       const touch = clientToCanvasPx(t.clientX, t.clientY);
       if (t.identifier === joystickTouchId) {
-        const dx = touch.xPx - state.touchJoystickBaseXPx;
-        const dy = touch.yPx - state.touchJoystickBaseYPx;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > JOYSTICK_MAX_RADIUS_PX) {
-          // Slide the base so the visual thumb never escapes the outer ring
-          const scale = (dist - JOYSTICK_MAX_RADIUS_PX) / dist;
-          state.touchJoystickBaseXPx += dx * scale;
-          state.touchJoystickBaseYPx += dy * scale;
-        }
+        // Base stays fixed — only the current (thumb) position follows the finger.
         state.touchJoystickCurrentXPx = touch.xPx;
         state.touchJoystickCurrentYPx = touch.yPx;
         applyJoystickToKeys(state);
       } else if (t.identifier === state.secondTouchId) {
         state.secondTouchCurrentXPx = touch.xPx;
         state.secondTouchCurrentYPx = touch.yPx;
+        // Continuously update grapple aim as the second finger moves.
+        state.grappleAimXPx = touch.xPx;
+        state.grappleAimYPx = touch.yPx;
       } else {
         state.mouseXPx = touch.xPx;
         state.mouseYPx = touch.yPx;
@@ -323,14 +323,9 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
         clearJoystickKeys(state);
       } else if (t.identifier === state.secondTouchId) {
         state.secondTouchId = -1;
-        if (state.isBlockingFlag === 1) {
-          // Let collectCommands emit BlockEnd (isBlockingFlag stays 1 until then)
-        } else {
-          // Quick swipe — fire attack toward touch release position (gameScreen converts to direction)
-          state.isAttackFiredFlag = 1;
-          state.attackDirXPx = state.secondTouchCurrentXPx;
-          state.attackDirYPx = state.secondTouchCurrentYPx;
-        }
+        // Release grapple when the second finger lifts.
+        state.isGrappleHeldFlag = 0;
+        state.isGrappleReleaseTriggeredFlag = 1;
       }
     }
   }
@@ -449,24 +444,6 @@ export function collectCommands(input: InputState): GameCommand[] {
     commands.push({ kind: CommandKind.WeaveHoldSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
   }
   _rightMouseWasDown = input.isRightMouseDownFlag === 1;
-
-  // ---- Second touch attack/block (mobile) — maps to primary Weave --------
-  if (input.secondTouchId !== -1) {
-    const holdMs = performance.now() - input.secondTouchStartTimeMs;
-    if (holdMs >= ATTACK_HOLD_THRESHOLD_MS && input.isBlockingFlag === 0) {
-      input.isBlockingFlag = 1;
-      commands.push({ kind: CommandKind.WeaveHoldPrimary, aimXPx: input.secondTouchCurrentXPx, aimYPx: input.secondTouchCurrentYPx });
-    }
-    if (input.isBlockingFlag === 1) {
-      commands.push({ kind: CommandKind.WeaveHoldPrimary, aimXPx: input.secondTouchCurrentXPx, aimYPx: input.secondTouchCurrentYPx });
-    }
-  }
-
-  // Emit WeaveEndPrimary when second touch ended while holding
-  if (input.secondTouchId === -1 && input.isBlockingFlag === 1 && input.isMouseDownFlag === 0) {
-    input.isBlockingFlag = 0;
-    commands.push({ kind: CommandKind.WeaveEndPrimary });
-  }
 
   // ---- Grapple hook commands ----------------------------------------------
   if (input.isGrappleFireTriggeredFlag === 1) {

@@ -53,6 +53,20 @@ const _OPEN_AIR_EDGE_DISTANCE_NONE = 255;
 const _OPEN_AIR_FILTER_MAX_DISTANCE_PX = 2;
 const _OPEN_AIR_FILTER_OPACITY_BY_DISTANCE = [0.30, 0.20, 0.10] as const;
 
+/**
+ * Bit mask for open-air sides of a block sprite canvas.
+ * Bit 0 = North (y=0 border), Bit 1 = East (x=widthPx-1 border),
+ * Bit 2 = South (y=heightPx-1 border), Bit 3 = West (x=0 border).
+ * A set bit means that border is exposed to air (no solid block neighbor on that side).
+ * Pass 0xF to treat all four canvas borders as open air (default/ramp/platform behavior).
+ */
+export const OPEN_AIR_SIDE_N = 1;
+export const OPEN_AIR_SIDE_E = 2;
+export const OPEN_AIR_SIDE_S = 4;
+export const OPEN_AIR_SIDE_W = 8;
+/** All four borders exposed to air — use for ramps, platforms, and isolated blocks. */
+export const OPEN_AIR_ALL_SIDES = 0xF;
+
 function _cacheKey(
   baseUrl: string,
   templateUrl: string,
@@ -61,8 +75,9 @@ function _cacheKey(
   flipX: boolean,
   flipY: boolean,
   rotStep: number,
+  openAirSidesMask: number,
 ): string {
-  return `${baseUrl}|${templateUrl}|${widthPx}|${heightPx}|${flipX ? 1 : 0}${flipY ? 1 : 0}${rotStep}`;
+  return `${baseUrl}|${templateUrl}|${widthPx}|${heightPx}|${flipX ? 1 : 0}${flipY ? 1 : 0}${rotStep}|${openAirSidesMask}`;
 }
 
 /**
@@ -80,6 +95,7 @@ function _generateSprite(
   flipX: boolean,
   flipY: boolean,
   rotStep: number,
+  openAirSidesMask: number,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width  = widthPx;
@@ -108,7 +124,7 @@ function _generateSprite(
 
   // Step 3: add a cached edge-adjacent colour-inversion pass. This is separate
   // from room ambient lighting: it only depends on the final sprite alpha mask.
-  _applyOpenAirInversionFilter(ctx, widthPx, heightPx);
+  _applyOpenAirInversionFilter(ctx, widthPx, heightPx, openAirSidesMask);
 
   return canvas;
 }
@@ -117,6 +133,7 @@ function _applyOpenAirInversionFilter(
   ctx: CanvasRenderingContext2D,
   widthPx: number,
   heightPx: number,
+  openAirSidesMask: number,
 ): void {
   const imageData = ctx.getImageData(0, 0, widthPx, heightPx);
   const data = imageData.data;
@@ -133,7 +150,7 @@ function _applyOpenAirInversionFilter(
       const pixelIndex = yPx * widthPx + xPx;
       const dataIndex = pixelIndex * 4;
       if (data[dataIndex + 3] === 0) continue;
-      if (!_hasCardinalOpenAirNeighbor(data, widthPx, heightPx, xPx, yPx)) continue;
+      if (!_hasCardinalOpenAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask)) continue;
       distanceFromOpenAirPx[pixelIndex] = 0;
       queue[queueCount] = pixelIndex;
       queueCount++;
@@ -185,9 +202,17 @@ function _hasCardinalOpenAirNeighbor(
   heightPx: number,
   xPx: number,
   yPx: number,
+  openAirSidesMask: number,
 ): boolean {
-  if (xPx === 0 || yPx === 0 || xPx + 1 === widthPx || yPx + 1 === heightPx) return true;
+  // Canvas borders: only treat as open air when the corresponding side is
+  // exposed to air (not blocked by an adjacent solid tile).
+  if (yPx === 0 && (openAirSidesMask & OPEN_AIR_SIDE_N)) return true;
+  if (xPx + 1 === widthPx && (openAirSidesMask & OPEN_AIR_SIDE_E)) return true;
+  if (yPx + 1 === heightPx && (openAirSidesMask & OPEN_AIR_SIDE_S)) return true;
+  if (xPx === 0 && (openAirSidesMask & OPEN_AIR_SIDE_W)) return true;
 
+  // Interior transparent neighbours are always open air regardless of side mask.
+  if (xPx === 0 || yPx === 0 || xPx + 1 === widthPx || yPx + 1 === heightPx) return false;
   const pixelIndex = yPx * widthPx + xPx;
   return data[(pixelIndex - 1) * 4 + 3] === 0 ||
     data[(pixelIndex + 1) * 4 + 3] === 0 ||
@@ -227,8 +252,9 @@ export function getProceduralSprite(
   flipX: boolean,
   flipY: boolean,
   rotStep: number,
+  openAirSidesMask: number = OPEN_AIR_ALL_SIDES,
 ): HTMLCanvasElement | null {
-  const key = _cacheKey(baseUrl, templateUrl, widthPx, heightPx, flipX, flipY, rotStep);
+  const key = _cacheKey(baseUrl, templateUrl, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask);
   const cached = _spriteCache.get(key);
   if (cached !== undefined) return cached;
 
@@ -236,7 +262,7 @@ export function getProceduralSprite(
   const template = _loadImg(templateUrl);
   if (!_isReady(base) || !_isReady(template)) return null;
 
-  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep);
+  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask);
   _spriteCache.set(key, result);
   return result;
 }
@@ -380,13 +406,14 @@ export function getBlockSprite1x1(
   material: string,
   blockSizePx: number,
   seed: number,
+  openAirSidesMask: number = OPEN_AIR_ALL_SIDES,
 ): HTMLCanvasElement | null {
   const pool = getBaseSpriteProbePool(material, false);
   if (pool.length === 0) return null;
   const hash    = hashTilePosition(col, row, seed);
   const baseUrl = _pickFromPool(pool, hash);
   if (baseUrl === null) return null;
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 block'], blockSizePx, blockSizePx, false, false, 0);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 block'], blockSizePx, blockSizePx, false, false, 0, openAirSidesMask);
 }
 
 /**
@@ -405,6 +432,7 @@ export function getBlockSprite2x2(
   material: string,
   blockSizePx: number,
   seed: number,
+  openAirSidesMask: number = OPEN_AIR_ALL_SIDES,
 ): HTMLCanvasElement | null {
   const pool = getBaseSpriteProbePool(material, true);
   if (pool.length === 0) return null;
@@ -412,7 +440,7 @@ export function getBlockSprite2x2(
   const baseUrl = _pickFromPool(pool, hash);
   if (baseUrl === null) return null;
   const dim = blockSizePx * 2;
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 block'], dim, dim, false, false, 0);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 block'], dim, dim, false, false, 0, openAirSidesMask);
 }
 
 /**
@@ -439,6 +467,7 @@ export function getPlatformSprite1x1(
   const baseUrl = _pickFromPool(pool, hash);
   if (baseUrl === null) return null;
   const [flipX, flipY, rotStep] = _platformEdgeToTransform(platformEdge);
+  // Platforms are always at the boundary of solid regions; use all-sides-open default.
   return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 platform'], blockSizePx, blockSizePx, flipX, flipY, rotStep);
 }
 
