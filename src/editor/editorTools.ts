@@ -108,6 +108,19 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check grasshopper areas
+  for (const a of room.grasshopperAreas) {
+    if (hitTestZone(a, bx, by)) {
+      return { type: 'grasshopperArea', uid: a.uid };
+    }
+  }
+  // Check firefly areas
+  for (const a of (room.fireflyAreas ?? [])) {
+    if (hitTestZone(a, bx, by)) {
+      return { type: 'fireflyArea', uid: a.uid };
+    }
+  }
+
   // Check light sources (point selection at block centre).
   for (const ls of (room.lightSources ?? [])) {
     if (hitTestPoint(ls.xBlock, ls.yBlock, bx, by)) {
@@ -533,6 +546,26 @@ export function deleteAtCursor(state: EditorState): void {
     }
   }
 
+  // Check grasshopper areas
+  for (let i = 0; i < room.grasshopperAreas.length; i++) {
+    if (hitTestZone(room.grasshopperAreas[i], bx, by)) {
+      const removedUid = room.grasshopperAreas[i].uid;
+      room.grasshopperAreas.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+  // Check firefly areas
+  const fireflyAreas = room.fireflyAreas ?? [];
+  for (let i = 0; i < fireflyAreas.length; i++) {
+    if (hitTestZone(fireflyAreas[i], bx, by)) {
+      const removedUid = fireflyAreas[i].uid;
+      fireflyAreas.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
   // Check decorations
   const decos = room.decorations ?? [];
   for (let i = 0; i < decos.length; i++) {
@@ -705,6 +738,18 @@ export function getAllElementsInRect(
   for (const p of room.dustPiles) {
     if (p.xBlock >= minX && p.xBlock <= maxX && p.yBlock >= minY && p.yBlock <= maxY) {
       results.push({ type: 'dustPile', uid: p.uid });
+    }
+  }
+  for (const a of room.grasshopperAreas) {
+    if (a.xBlock + a.wBlock > minX && a.xBlock < maxX + 1 &&
+        a.yBlock + a.hBlock > minY && a.yBlock < maxY + 1) {
+      results.push({ type: 'grasshopperArea', uid: a.uid });
+    }
+  }
+  for (const a of (room.fireflyAreas ?? [])) {
+    if (a.xBlock + a.wBlock > minX && a.xBlock < maxX + 1 &&
+        a.yBlock + a.hBlock > minY && a.yBlock < maxY + 1) {
+      results.push({ type: 'fireflyArea', uid: a.uid });
     }
   }
   for (const d of (room.decorations ?? [])) {

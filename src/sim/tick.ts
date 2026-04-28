@@ -24,7 +24,6 @@ import { applyGrappleClusterConstraint, updateGrappleChainParticles } from './cl
 import { updateGrappleMissChain } from './clusters/grappleMiss';
 import { applyEnemyAI } from './clusters/enemyAi';
 import { applyRockElementalAI } from './clusters/rockElementalAi';
-import { updateRockElementalDust } from './clusters/rockElementalDust';
 import { applyRadiantTetherAI } from './clusters/radiantTetherAi';
 import { applyGrappleHunterAI } from './clusters/grappleHunterAi';
 import { applyElementForces } from './particles/elementForces';
@@ -64,9 +63,6 @@ export function tick(world: WorldState): void {
 
   // 0.5b. Rock Elemental AI — state machine transitions
   applyRockElementalAI(world);
-
-  // 0.5c. Rock Elemental dust orbit/projectile — position and fire dust
-  updateRockElementalDust(world);
 
   // 0.5d. Radiant Tether AI — light-chain boss state machine
   applyRadiantTetherAI(world);
@@ -119,8 +115,7 @@ export function tick(world: WorldState): void {
   // 4. Owner-anchor spring + orbital tangential force
   applyBindingForces(world);
 
-  // 4.5. Combat forces — enemy attack launch and block shield positioning (legacy)
-  //      Player combat now uses the Weave system (step 4.55).
+  // 4.5. Combat forces — attack launch and block shield positioning
   applyCombatForces(world);
 
   // 4.55. Player Weave combat — applies weave activation patterns for bound dust

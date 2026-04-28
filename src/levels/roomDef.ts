@@ -496,6 +496,12 @@ export interface RoomDustPileDef {
   yBlock: number;
   /** Number of dust particles in this pile (default: 5). */
   dustCount: number;
+  /**
+   * Full spread width (block units). The pile spawns with a triangle-distributed
+   * random offset in the range ±(spreadBlocks / 2) blocks from the anchor position.
+   * Default: 0 (no spread).
+   */
+  spreadBlocks?: number;
 }
 
 // ── Decorations ───────────────────────────────────────────────────────────────
@@ -529,6 +535,15 @@ export interface RoomGrasshopperAreaDef {
   /** Height (block units). */
   hBlock: number;
   /** Number of grasshoppers to spawn in this area. */
+  count: number;
+}
+
+/** A rectangular area where fireflies spawn directly (free-roaming, not from jars). */
+export interface RoomFireflyAreaDef {
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
   count: number;
 }
 
@@ -620,6 +635,8 @@ export interface RoomDef {
   dustPiles?: readonly RoomDustPileDef[];
   /** Grasshopper critter spawn zones. */
   grasshopperAreas?: readonly RoomGrasshopperAreaDef[];
+  /** Firefly spawn areas (free-roaming fireflies, not jar-based). */
+  fireflyAreas?: readonly RoomFireflyAreaDef[];
   /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
   decorations?: readonly RoomDecorationDef[];
   /**

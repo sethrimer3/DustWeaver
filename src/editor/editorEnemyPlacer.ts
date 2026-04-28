@@ -318,6 +318,16 @@ export function placeEnemyAtCursor(
       hBlock: 4,
       count: 4,
     });
+  } else if (item.id === 'firefly_area') {
+    if (!room.fireflyAreas) room.fireflyAreas = [];
+    room.fireflyAreas.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      wBlock: 4,
+      hBlock: 4,
+      count: 4,
+    });
   } else {
     return false;
   }

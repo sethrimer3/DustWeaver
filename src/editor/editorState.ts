@@ -107,6 +107,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Legacy alias kept for backward-compat with older room exports
   { id: 'dust_pile', label: 'Dust Pile', category: 'triggers' },
   { id: 'grasshopper_area', label: 'Grasshopper Area', category: 'triggers' },
+  { id: 'firefly_area', label: 'Firefly Area', category: 'triggers' },
   // Decorations
   { id: 'decoration_mushroom',  label: 'Glow Mushroom', category: 'triggers' },
   { id: 'decoration_glowgrass', label: 'Glow Grass',    category: 'triggers' },
@@ -322,6 +323,7 @@ export interface EditorDustPile {
   xBlock: number;
   yBlock: number;
   dustCount: number;
+  spreadBlocks?: number;
 }
 
 export interface EditorGrasshopperArea {
@@ -331,6 +333,15 @@ export interface EditorGrasshopperArea {
   wBlock: number;
   hBlock: number;
   /** Number of grasshoppers to spawn in this area. */
+  count: number;
+}
+
+export interface EditorFireflyArea {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
   count: number;
 }
 
@@ -411,6 +422,8 @@ export interface EditorRoomData {
   skillTombs: EditorSkillTomb[];
   dustPiles: EditorDustPile[];
   grasshopperAreas: EditorGrasshopperArea[];
+  /** Firefly spawn areas (free-roaming fireflies, not jar-based). */
+  fireflyAreas: EditorFireflyArea[];
   /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
   decorations: EditorDecoration[];
   /** Editor-painted ambient-light blocker tiles (sparse). */
@@ -427,7 +440,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

@@ -13,7 +13,7 @@
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, BlockTheme } from '../levels/roomDef';
 import { blockThemeRefToTheme, blockThemeToId } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, RoomSongId } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorFireflyArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 import {
   particleKindToString,
@@ -47,6 +47,7 @@ export type {
   RoomJsonFireflyJar,
   RoomJsonDustPile,
   RoomJsonGrasshopperArea,
+  RoomJsonFireflyArea,
   RoomJsonDecoration,
   RoomJsonAmbientLightBlocker,
   RoomJsonLightSource,
@@ -230,9 +231,19 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     xBlock: p.xBlock,
     yBlock: p.yBlock,
     dustCount: p.dustCount,
+    spreadBlocks: p.spreadBlocks ?? 0,
   }));
 
   const grasshopperAreas: EditorGrasshopperArea[] = (json.grasshopperAreas ?? []).map(a => ({
+    uid: uid++,
+    xBlock: a.xBlock,
+    yBlock: a.yBlock,
+    wBlock: a.wBlock,
+    hBlock: a.hBlock,
+    count: a.count,
+  }));
+
+  const fireflyAreas: EditorFireflyArea[] = (json.fireflyAreas ?? []).map(a => ({
     uid: uid++,
     xBlock: a.xBlock,
     yBlock: a.yBlock,
@@ -315,6 +326,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       skillTombs,
       dustPiles,
       grasshopperAreas,
+      fireflyAreas,
       decorations,
       ambientLightBlockers,
       lightSources,
@@ -418,10 +430,20 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       xBlock: p.xBlock,
       yBlock: p.yBlock,
       dustCount: p.dustCount,
+      ...(p.spreadBlocks ? { spreadBlocks: p.spreadBlocks } : {}),
     }));
   }
   if ((data.grasshopperAreas ?? []).length > 0) {
     json.grasshopperAreas = data.grasshopperAreas.map(a => ({
+      xBlock: a.xBlock,
+      yBlock: a.yBlock,
+      wBlock: a.wBlock,
+      hBlock: a.hBlock,
+      count: a.count,
+    }));
+  }
+  if ((data.fireflyAreas ?? []).length > 0) {
+    json.fireflyAreas = data.fireflyAreas.map(a => ({
       xBlock: a.xBlock,
       yBlock: a.yBlock,
       wBlock: a.wBlock,
@@ -657,8 +679,15 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     transitions,
     saveTombs: data.saveTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
     skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
-    dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount })),
+    dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount, spreadBlocks: p.spreadBlocks ?? 0 })),
     grasshopperAreas: data.grasshopperAreas.map(a => ({
+      xBlock: a.xBlock,
+      yBlock: a.yBlock,
+      wBlock: a.wBlock,
+      hBlock: a.hBlock,
+      count: a.count,
+    })),
+    fireflyAreas: data.fireflyAreas.map(a => ({
       xBlock: a.xBlock,
       yBlock: a.yBlock,
       wBlock: a.wBlock,
@@ -802,9 +831,19 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     xBlock: p.xBlock,
     yBlock: p.yBlock,
     dustCount: p.dustCount,
+    spreadBlocks: p.spreadBlocks ?? 0,
   }));
 
   const grasshopperAreas: EditorGrasshopperArea[] = (room.grasshopperAreas ?? []).map(a => ({
+    uid: uid++,
+    xBlock: a.xBlock,
+    yBlock: a.yBlock,
+    wBlock: a.wBlock,
+    hBlock: a.hBlock,
+    count: a.count,
+  }));
+
+  const fireflyAreas: EditorFireflyArea[] = (room.fireflyAreas ?? []).map(a => ({
     uid: uid++,
     xBlock: a.xBlock,
     yBlock: a.yBlock,
@@ -887,6 +926,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       skillTombs,
       dustPiles,
       grasshopperAreas,
+      fireflyAreas,
       decorations,
       ambientLightBlockers,
       lightSources,

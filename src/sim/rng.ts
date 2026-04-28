@@ -44,3 +44,11 @@ export function nextFloat(rng: RngState): number {
 export function nextFloatRange(rng: RngState, min: number, max: number): number {
   return min + nextFloat(rng) * (max - min);
 }
+
+/**
+ * Returns a float in [-1, 1] with a triangular distribution peaking at 0.
+ * Achieved by summing two uniform [0,1) samples and subtracting 1.
+ */
+export function nextFloatTriangle(rng: RngState): number {
+  return nextFloat(rng) + nextFloat(rng) - 1.0;
+}

@@ -40,6 +40,10 @@ const PREVIEW_PILLAR_HALF_COLOR = 'rgba(180,130,255,0.35)';
 const CURSOR_COLOR = 'rgba(255,255,255,0.4)';
 const SELECTION_BOX_COLOR = 'rgba(100,200,255,0.25)';
 const SELECTION_BOX_BORDER = 'rgba(100,200,255,0.7)';
+const GRASSHOPPER_COLOR = 'rgba(100,200,100,0.20)';
+const GRASSHOPPER_SELECTED = 'rgba(100,220,100,0.45)';
+const FIREFLY_COLOR = 'rgba(255,220,60,0.20)';
+const FIREFLY_SELECTED = 'rgba(255,230,80,0.45)';
 
 /**
  * Crack-line stroke color for each crumble block variant.
@@ -177,6 +181,44 @@ export function renderEditorOverlays(
     const isSelected = isElementSelected('dustPile', p.uid);
     drawMarker(ctx, p.xBlock, p.yBlock, offsetXPx, offsetYPx, zoom,
       isSelected ? 'rgba(255,215,0,0.8)' : 'rgba(255,215,0,0.4)', '✦');
+  }
+
+  // ── Grasshopper areas ───────────────────────────────────────────────────────
+  for (const a of room.grasshopperAreas) {
+    const isSelected = isElementSelected('grasshopperArea', a.uid);
+    const xPx = a.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = a.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = a.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = a.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = isSelected ? GRASSHOPPER_SELECTED : GRASSHOPPER_COLOR;
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeStyle = isSelected ? 'rgba(100,220,100,0.85)' : 'rgba(100,200,100,0.50)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    ctx.fillStyle = 'rgba(180,255,180,0.75)';
+    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🦗', xPx + wPx * 0.5, yPx + hPx * 0.5);
+  }
+
+  // ── Firefly areas ────────────────────────────────────────────────────────────
+  for (const a of (room.fireflyAreas ?? [])) {
+    const isSelected = isElementSelected('fireflyArea', a.uid);
+    const xPx = a.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = a.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = a.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = a.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = isSelected ? FIREFLY_SELECTED : FIREFLY_COLOR;
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeStyle = isSelected ? 'rgba(255,230,80,0.85)' : 'rgba(255,220,60,0.50)';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    ctx.fillStyle = 'rgba(255,255,180,0.75)';
+    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✨', xPx + wPx * 0.5, yPx + hPx * 0.5);
   }
 
   // ── Ambient Light Blockers (before decorations so icons draw on top) ─────
@@ -549,6 +591,7 @@ function buildElementTooltipId(type: SelectedElementType, uid: number): string {
     skillTomb:        'skill_tomb',
     dustPile:         'dust_pile',
     grasshopperArea:  'grasshopper_area',
+    fireflyArea:      'firefly_area',
     decoration:       'decoration',
     playerSpawn:      'player_spawn',
     ambientLightBlocker: 'ambient_blocker',
@@ -603,6 +646,8 @@ function buildElementTypeName(
     transition:         'Room Transition',
     saveTomb:           'Save Tomb',
     dustPile:           'Dust Pile',
+    grasshopperArea:    'Grasshopper Area',
+    fireflyArea:        'Firefly Area',
     playerSpawn:        'Player Spawn',
     ambientLightBlocker:'Ambient Blocker',
     lightSource:        'Light Source',

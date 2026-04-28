@@ -18,6 +18,8 @@ import type {
   EditorSaveTomb,
   EditorSkillTomb,
   EditorDustPile,
+  EditorGrasshopperArea,
+  EditorFireflyArea,
   EditorDecoration,
   EditorLightSource,
   EditorWaterZone,
@@ -155,6 +157,25 @@ export function applyPropertyToElement(
       if (prop === 'dustPile.xBlock' && !isNaN(numVal)) pile.xBlock = numVal;
       if (prop === 'dustPile.yBlock' && !isNaN(numVal)) pile.yBlock = numVal;
       if (prop === 'dustPile.dustCount' && !isNaN(numVal)) pile.dustCount = Math.max(1, numVal);
+      if (prop === 'dustPile.spreadBlocks' && !isNaN(numVal)) pile.spreadBlocks = Math.max(0, numVal);
+    }
+  } else if (el.type === 'grasshopperArea') {
+    const area = room.grasshopperAreas.find((a: EditorGrasshopperArea) => a.uid === el.uid);
+    if (area) {
+      if (prop === 'grasshopperArea.xBlock' && !isNaN(numVal)) area.xBlock = numVal;
+      if (prop === 'grasshopperArea.yBlock' && !isNaN(numVal)) area.yBlock = numVal;
+      if (prop === 'grasshopperArea.wBlock' && !isNaN(numVal)) area.wBlock = Math.max(1, numVal);
+      if (prop === 'grasshopperArea.hBlock' && !isNaN(numVal)) area.hBlock = Math.max(1, numVal);
+      if (prop === 'grasshopperArea.count' && !isNaN(numVal)) area.count = Math.max(1, numVal);
+    }
+  } else if (el.type === 'fireflyArea') {
+    const area = (room.fireflyAreas ?? []).find((a: EditorFireflyArea) => a.uid === el.uid);
+    if (area) {
+      if (prop === 'fireflyArea.xBlock' && !isNaN(numVal)) area.xBlock = numVal;
+      if (prop === 'fireflyArea.yBlock' && !isNaN(numVal)) area.yBlock = numVal;
+      if (prop === 'fireflyArea.wBlock' && !isNaN(numVal)) area.wBlock = Math.max(1, numVal);
+      if (prop === 'fireflyArea.hBlock' && !isNaN(numVal)) area.hBlock = Math.max(1, numVal);
+      if (prop === 'fireflyArea.count' && !isNaN(numVal)) area.count = Math.max(1, numVal);
     }
   } else if (el.type === 'decoration') {
     const deco = (room.decorations ?? []).find((d: EditorDecoration) => d.uid === el.uid);
