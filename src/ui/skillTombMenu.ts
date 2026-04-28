@@ -144,6 +144,8 @@ export function showSkillTombMenu(
   currentRoomId: string,
   playerXWorld: number,
   playerYWorld: number,
+  playerHp: number,
+  playerMaxHp: number,
   callbacks: SkillTombMenuCallbacks,
 ): () => void {
   let weaveLoadout: PlayerWeaveLoadout = {
@@ -152,6 +154,7 @@ export function showSkillTombMenu(
   };
   let activeTab: 'loadout' | 'map' = 'loadout';
   let mapCleanup: (() => void) | null = null;
+  let loadoutCleanup: (() => void) | null = null;
 
   // ── Overlay ──────────────────────────────────────────────────────────────
   const overlay = createOverlay();
@@ -219,17 +222,28 @@ export function showSkillTombMenu(
     mapTabBtn.style.background = !isLoadout ? 'rgba(212,168,75,0.2)' : 'transparent';
     mapTabBtn.style.borderBottomColor = !isLoadout ? GOLD : 'transparent';
 
-    // Clean up previous map listeners before clearing content
+    // Clean up previous tab listeners before clearing content
     if (mapCleanup) {
       mapCleanup();
       mapCleanup = null;
+    }
+    if (loadoutCleanup) {
+      loadoutCleanup();
+      loadoutCleanup = null;
     }
 
     contentArea.innerHTML = '';
     if (activeTab === 'loadout') {
       // The callback keeps our local weaveLoadout in sync; the final
       // value is read when the menu closes via onClose / ESC.
-      buildLoadoutTab(contentArea, weaveLoadout, (updated) => { weaveLoadout = updated; });
+      loadoutCleanup = buildLoadoutTab(
+        contentArea,
+        weaveLoadout,
+        (updated) => { weaveLoadout = updated; },
+        progress,
+        playerHp,
+        playerMaxHp,
+      );
     } else {
       mapCleanup = buildMapTab(contentArea, currentRoomId, progress.exploredRoomIds, playerXWorld, playerYWorld);
     }
@@ -255,6 +269,7 @@ export function showSkillTombMenu(
   function destroy(): void {
     window.removeEventListener('keydown', onKey, true);
     if (mapCleanup) mapCleanup();
+    if (loadoutCleanup) loadoutCleanup();
     if (overlay.parentElement) overlay.parentElement.removeChild(overlay);
   }
 
