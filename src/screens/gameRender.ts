@@ -872,11 +872,17 @@ export function renderFrame(r: RenderFrameContext): void {
     const joystickCurrentXPx = inputState.touchJoystickCurrentXPx;
     const joystickCurrentYPx = inputState.touchJoystickCurrentYPx;
 
+    // Scale radii from virtual pixels to device canvas pixels so the joystick
+    // appears at the correct physical size regardless of device resolution.
+    const joystickScale = canvas.height / virtualCanvas.height;
+    const outerRadiusPx = JOYSTICK_OUTER_RADIUS_PX * joystickScale;
+    const innerRadiusPx = JOYSTICK_INNER_RADIUS_PX * joystickScale;
+
     deviceCtx.save();
     deviceCtx.beginPath();
-    deviceCtx.arc(bx, by, JOYSTICK_OUTER_RADIUS_PX, 0, Math.PI * 2);
+    deviceCtx.arc(bx, by, outerRadiusPx, 0, Math.PI * 2);
     deviceCtx.strokeStyle = 'rgba(0,207,255,0.35)';
-    deviceCtx.lineWidth = 2;
+    deviceCtx.lineWidth = 2 * joystickScale;
     deviceCtx.stroke();
     deviceCtx.fillStyle = 'rgba(0,207,255,0.08)';
     deviceCtx.fill();
@@ -886,13 +892,13 @@ export function renderFrame(r: RenderFrameContext): void {
     const dist = Math.sqrt(joystickDx * joystickDx + joystickDy * joystickDy);
     let thumbXPx = joystickCurrentXPx;
     let thumbYPx = joystickCurrentYPx;
-    if (dist > JOYSTICK_OUTER_RADIUS_PX) {
-      thumbXPx = bx + (joystickDx / dist) * JOYSTICK_OUTER_RADIUS_PX;
-      thumbYPx = by + (joystickDy / dist) * JOYSTICK_OUTER_RADIUS_PX;
+    if (dist > outerRadiusPx) {
+      thumbXPx = bx + (joystickDx / dist) * outerRadiusPx;
+      thumbYPx = by + (joystickDy / dist) * outerRadiusPx;
     }
 
     deviceCtx.beginPath();
-    deviceCtx.arc(thumbXPx, thumbYPx, JOYSTICK_INNER_RADIUS_PX, 0, Math.PI * 2);
+    deviceCtx.arc(thumbXPx, thumbYPx, innerRadiusPx, 0, Math.PI * 2);
     deviceCtx.fillStyle = 'rgba(0,207,255,0.45)';
     deviceCtx.fill();
     deviceCtx.restore();

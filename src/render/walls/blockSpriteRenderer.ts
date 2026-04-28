@@ -25,6 +25,10 @@ import {
   getBlockSprite2x2,
   getPlatformSprite1x1,
   getRampSprite,
+  OPEN_AIR_SIDE_N,
+  OPEN_AIR_SIDE_E,
+  OPEN_AIR_SIDE_S,
+  OPEN_AIR_SIDE_W,
 } from './proceduralBlockSprite';
 import {
   buildAmbientDepths,
@@ -868,7 +872,22 @@ function _doRenderWallTilesDirect(
       const material = themeToProceduralMaterial(resolvedTheme, _activeWorldNumber);
       if (material !== null) {
         // Procedural path: base sprite cut with 2×2 block template.
-        const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, _activeWorldNumber);
+        // Compute open-air sides for the 2×2 group: a side is open when ALL
+        // cells along that border have no solid neighbor on that edge.
+        const northOpenA = !_isOccupied(wallLayout.occupied, col,     row - 1);
+        const northOpenB = !_isOccupied(wallLayout.occupied, col + 1, row - 1);
+        const southOpenA = !_isOccupied(wallLayout.occupied, col,     row + 2);
+        const southOpenB = !_isOccupied(wallLayout.occupied, col + 1, row + 2);
+        const eastOpenA  = !_isOccupied(wallLayout.occupied, col + 2, row    );
+        const eastOpenB  = !_isOccupied(wallLayout.occupied, col + 2, row + 1);
+        const westOpenA  = !_isOccupied(wallLayout.occupied, col - 1, row    );
+        const westOpenB  = !_isOccupied(wallLayout.occupied, col - 1, row + 1);
+        const openAirSidesMask2x2 =
+          ((northOpenA && northOpenB) ? OPEN_AIR_SIDE_N : 0) |
+          ((eastOpenA  && eastOpenB)  ? OPEN_AIR_SIDE_E : 0) |
+          ((southOpenA && southOpenB) ? OPEN_AIR_SIDE_S : 0) |
+          ((westOpenA  && westOpenB)  ? OPEN_AIR_SIDE_W : 0);
+        const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, _activeWorldNumber, openAirSidesMask2x2);
         if (procSprite !== null) {
           ctx.drawImage(procSprite, tileX, tileY, drawSize, drawSize);
         } else {
@@ -932,7 +951,13 @@ function _doRenderWallTilesDirect(
 
     if (material !== null) {
       // Procedural path (blackRock): base sprite cut with 1×1 block template.
-      const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, _activeWorldNumber);
+      // Only apply the inversion filter on sides that are actually open to air.
+      const openAirSidesMask =
+        (northSolid ? 0 : OPEN_AIR_SIDE_N) |
+        (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
+        (southSolid ? 0 : OPEN_AIR_SIDE_S) |
+        (westSolid  ? 0 : OPEN_AIR_SIDE_W);
+      const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, _activeWorldNumber, openAirSidesMask);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
