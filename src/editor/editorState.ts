@@ -323,7 +323,7 @@ export interface EditorDustPile {
   xBlock: number;
   yBlock: number;
   dustCount: number;
-  spreadBlocks: number;
+  spreadBlocks?: number;
 }
 
 export interface EditorGrasshopperArea {

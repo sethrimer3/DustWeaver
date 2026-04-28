@@ -344,11 +344,11 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   for (let i = 0; i < dustPileDefs.length && world.dustPileCount < MAX_DUST_PILES; i++) {
     const p = dustPileDefs[i];
     const pi = world.dustPileCount++;
-    const halfSpreadWorld = (p.spreadBlocks ?? 0) * 0.5 * BLOCK_SIZE_MEDIUM;
+    const spreadRadiusWorld = (p.spreadBlocks ?? 0) * 0.5 * BLOCK_SIZE_MEDIUM;
     world.dustPileXWorld[pi] = (p.xBlock + 0.5) * BLOCK_SIZE_MEDIUM
-      + nextFloatTriangle(world.rng) * halfSpreadWorld;
+      + nextFloatTriangle(world.rng) * spreadRadiusWorld;
     world.dustPileYWorld[pi] = (p.yBlock + 1.0) * BLOCK_SIZE_MEDIUM
-      + nextFloatTriangle(world.rng) * halfSpreadWorld;
+      + nextFloatTriangle(world.rng) * spreadRadiusWorld;
     world.dustPileDustCount[pi] = p.dustCount;
     world.isDustPileActiveFlag[pi] = 1;
   }
