@@ -3,7 +3,7 @@ import { createClusterState } from '../sim/clusters/state';
 import { initGrappleChainParticles, fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
-import { createRng, nextFloat } from '../sim/rng';
+import { createRng, nextFloat, nextFloatTriangle } from '../sim/rng';
 import { createSnapshot, createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
@@ -346,9 +346,9 @@ export function startGameScreen(
         for (let g = 0; g < area.count && world.grasshopperCount < MAX_GRASSHOPPERS; g++) {
           const gi = world.grasshopperCount++;
           world.grasshopperXWorld[gi] = areaXWorld + areaWidthWorld  * 0.5
-            + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * areaWidthWorld  * 0.5;
+            + nextFloatTriangle(world.rng) * areaWidthWorld  * 0.5;
           world.grasshopperYWorld[gi] = areaYWorld + areaHeightWorld * 0.5
-            + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * areaHeightWorld * 0.5;
+            + nextFloatTriangle(world.rng) * areaHeightWorld * 0.5;
           world.grasshopperVelXWorld[gi] = 0;
           world.grasshopperVelYWorld[gi] = 0;
           world.grasshopperHopTimerTicks[gi] = nextFloat(world.rng) * GRASSHOPPER_INITIAL_TIMER_MAX_TICKS;

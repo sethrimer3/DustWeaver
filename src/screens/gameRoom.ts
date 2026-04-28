@@ -1,5 +1,5 @@
 import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES } from '../sim/world';
-import { nextFloat } from '../sim/rng';
+import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import {
   RoomDef,
   BLOCK_SIZE_MEDIUM,
@@ -346,9 +346,9 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     const pi = world.dustPileCount++;
     const halfSpreadWorld = (p.spreadBlocks ?? 0) * 0.5 * BLOCK_SIZE_MEDIUM;
     world.dustPileXWorld[pi] = (p.xBlock + 0.5) * BLOCK_SIZE_MEDIUM
-      + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * halfSpreadWorld;
+      + nextFloatTriangle(world.rng) * halfSpreadWorld;
     world.dustPileYWorld[pi] = (p.yBlock + 1.0) * BLOCK_SIZE_MEDIUM
-      + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * halfSpreadWorld;
+      + nextFloatTriangle(world.rng) * halfSpreadWorld;
     world.dustPileDustCount[pi] = p.dustCount;
     world.isDustPileActiveFlag[pi] = 1;
   }
@@ -363,9 +363,9 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     for (let f = 0; f < area.count && world.fireflyCount < MAX_FIREFLIES; f++) {
       const fi = world.fireflyCount++;
       world.fireflyXWorld[fi] = centerXWorld
-        + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * halfWidthWorld;
+        + nextFloatTriangle(world.rng) * halfWidthWorld;
       world.fireflyYWorld[fi] = centerYWorld
-        + (nextFloat(world.rng) + nextFloat(world.rng) - 1.0) * halfHeightWorld;
+        + nextFloatTriangle(world.rng) * halfHeightWorld;
       const angleRad = nextFloat(world.rng) * Math.PI * 2;
       world.fireflyVelXWorld[fi] = Math.cos(angleRad) * FIREFLY_AREA_SPAWN_SPEED_WORLD;
       world.fireflyVelYWorld[fi] = Math.sin(angleRad) * FIREFLY_AREA_SPAWN_SPEED_WORLD;

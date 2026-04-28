@@ -679,7 +679,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     transitions,
     saveTombs: data.saveTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
     skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
-    dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount, spreadBlocks: p.spreadBlocks })),
+    dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount, spreadBlocks: p.spreadBlocks ?? 0 })),
     grasshopperAreas: data.grasshopperAreas.map(a => ({
       xBlock: a.xBlock,
       yBlock: a.yBlock,
