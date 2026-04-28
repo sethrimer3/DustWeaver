@@ -28,6 +28,10 @@ const CARD_BG = '#0d0d1a';
 const BOX_BORDER = '1px solid rgba(212,168,75,0.25)';
 const COL_BORDER = '1px solid rgba(212,168,75,0.2)';
 const PASSIVE_GOLD = 'rgba(212,168,75,0.65)';
+/** Number of dust container pieces required to forge one container. */
+const PIECES_PER_CONTAINER = 4;
+/** Expected frame duration at 60 FPS (milliseconds), used to normalise animation speed. */
+const TARGET_FRAME_MS = 16.67;
 
 // ── Passive weave detection ────────────────────────────────────────────────────
 
@@ -155,7 +159,7 @@ function buildStatsBar(
   piecesLabel.textContent = 'Pieces:';
   piecesRow.appendChild(piecesLabel);
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < PIECES_PER_CONTAINER; i++) {
     const piece = document.createElement('span');
     piece.textContent = '◇';
     piece.style.cssText = `color: ${i < dustContainerPieces ? GOLD : '#333'};
@@ -166,7 +170,7 @@ function buildStatsBar(
 
   const piecesCount = document.createElement('span');
   piecesCount.style.cssText = 'color: #888; font-size: 0.7rem; font-family: \'Cinzel\', serif; margin-left: 4px;';
-  piecesCount.textContent = `(${dustContainerPieces}/4 — ${4 - dustContainerPieces} until next)`;
+  piecesCount.textContent = `(${dustContainerPieces}/${PIECES_PER_CONTAINER} — ${PIECES_PER_CONTAINER - dustContainerPieces} until next)`;
   piecesRow.appendChild(piecesCount);
 
   dcBox.appendChild(piecesRow);
@@ -215,7 +219,7 @@ function startStormAnimation(canvas: HTMLCanvasElement): () => void {
     ctx.clearRect(0, 0, w, h);
 
     for (let i = 0; i < COUNT; i++) {
-      angles[i] += speeds[i] * (dtMs / 16.67);
+      angles[i] += speeds[i] * (dtMs / TARGET_FRAME_MS);
       const noise = Math.sin(tMs * 0.001 + noiseOff[i]) * 2;
       const px = cx + Math.cos(angles[i]) * (radii[i] + noise);
       const py = cy + Math.sin(angles[i]) * (radii[i] + noise);
@@ -308,7 +312,7 @@ function startGenericAnimation(canvas: HTMLCanvasElement): () => void {
     lastTs = ts;
     ctx.clearRect(0, 0, w, h);
     for (let i = 0; i < COUNT; i++) {
-      angles[i] += 0.02 * (dtMs / 16.67);
+      angles[i] += 0.02 * (dtMs / TARGET_FRAME_MS);
       const px = cx + Math.cos(angles[i]) * 14;
       const py = cy + Math.sin(angles[i]) * 14;
       ctx.globalAlpha = 0.7;
