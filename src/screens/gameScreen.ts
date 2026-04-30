@@ -14,6 +14,7 @@ import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
+import { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, RoomTransitionDef, TransitionDirection, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
@@ -442,6 +443,7 @@ export function startGameScreen(
   const phantomCloak = new PhantomCloakExtension();
   const decorationWaveState = new DecorationWaveState();
   const arrowWeaveRenderer = new ArrowWeaveRenderer();
+  const swordWeaveRenderer = new SwordWeaveRenderer();
 
   // ── Per-frame allocation-free state ─────────────────────────────────────
   // All three are populated once per room load in loadRoom() and reused every
@@ -1254,7 +1256,7 @@ export function startGameScreen(
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-      playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer,
+      playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       world, currentRoom,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,

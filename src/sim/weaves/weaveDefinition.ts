@@ -22,9 +22,10 @@
 export type WeaveId = string;
 
 /** Built-in weave IDs. */
-export const WEAVE_STORM  = 'storm';
-export const WEAVE_SHIELD = 'shield';
-export const WEAVE_ARROW  = 'arrow';
+export const WEAVE_STORM        = 'storm';
+export const WEAVE_SHIELD       = 'shield';
+export const WEAVE_ARROW        = 'arrow';
+export const WEAVE_SHIELD_SWORD = 'shield_sword';
 
 // ---- Weave Activation Role -------------------------------------------------
 
@@ -109,13 +110,32 @@ const ARROW_DEF: WeaveDefinition = {
   spreadRad: 0,
 };
 
+/**
+ * Shield Sword Weave — sword-form upgrade conceptually built from Storm and
+ * Shield motes.  Forms a golden-crossguard sword that auto-swings at nearby
+ * enemies; while right mouse is held the motes collapse into the existing
+ * Shield Weave crescent; on release the sword reforms into its ready stance.
+ */
+const SHIELD_SWORD_DEF: WeaveDefinition = {
+  id: WEAVE_SHIELD_SWORD,
+  displayName: 'Shield Sword Weave',
+  description: 'Forms a golden-crossguard sword from Storm/Shield motes. Auto-swings at nearby enemies; hold right mouse to raise the crescent shield instead.',
+  role: WeaveRole.SecondaryOnly,
+  dustSlotCapacity: 0,
+  durationTicks: 0,
+  cooldownTicks: 0,
+  deploySpeedWorld: 0,
+  spreadRad: Math.PI * 0.75,
+};
+
 // ---- Weave Registry --------------------------------------------------------
 
 /** All available weave definitions, keyed by WeaveId. */
 export const WEAVE_REGISTRY: ReadonlyMap<WeaveId, WeaveDefinition> = new Map([
-  [WEAVE_STORM,  STORM_DEF],
-  [WEAVE_SHIELD, SHIELD_DEF],
-  [WEAVE_ARROW,  ARROW_DEF],
+  [WEAVE_STORM,        STORM_DEF],
+  [WEAVE_SHIELD,       SHIELD_DEF],
+  [WEAVE_ARROW,        ARROW_DEF],
+  [WEAVE_SHIELD_SWORD, SHIELD_SWORD_DEF],
 ]);
 
 /** Ordered list of weave IDs for UI display. */
@@ -123,6 +143,7 @@ export const WEAVE_LIST: readonly WeaveId[] = [
   WEAVE_STORM,
   WEAVE_SHIELD,
   WEAVE_ARROW,
+  WEAVE_SHIELD_SWORD,
 ];
 
 /**

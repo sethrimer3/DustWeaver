@@ -480,6 +480,30 @@ export interface WorldState extends ParticleBuffers {
   arrowHitTargetClusterIndex: Int32Array;
   /** Ticks before this stuck arrow can begin a new hit sequence (invulnerability). */
   arrowDamageCooldownTicks: Float32Array;
+
+  // ── Shield Sword Weave state ───────────────────────────────────────────────
+  /**
+   * Current sword state machine value.  See sim/weaves/swordWeave.ts for the
+   * SWORD_STATE_* constants.  Drives both behavior and rendering.
+   */
+  swordWeaveStateEnum: number;
+  /** Ticks elapsed in the current sword state. */
+  swordWeaveStateTicksElapsed: number;
+  /** Current sword angle (radians) in world space, measured from the hand anchor. */
+  swordWeaveAngleRad: number;
+  /**
+   * Index of the enemy cluster currently being targeted by the auto-swing,
+   * or -1 if no target is locked.
+   */
+  swordWeaveTargetClusterIndex: number;
+  /** Sword angle (radians) at the start of the current slash. */
+  swordWeaveSlashStartAngleRad: number;
+  /** Sword angle (radians) at the end of the current slash. */
+  swordWeaveSlashEndAngleRad: number;
+  /** World X of the sword's hand anchor, recomputed each tick the sword is active. */
+  swordWeaveHandAnchorXWorld: number;
+  /** World Y of the sword's hand anchor, recomputed each tick the sword is active. */
+  swordWeaveHandAnchorYWorld: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -511,7 +535,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerBlockDirYWorld: 0.0,
     // Weave combat state
     playerPrimaryWeaveId: 'storm',
-    playerSecondaryWeaveId: 'arrow',
+    playerSecondaryWeaveId: 'shield_sword',
     playerPrimaryWeaveTriggeredFlag: 0,
     playerSecondaryWeaveTriggeredFlag: 0,
     isPlayerPrimaryWeaveActiveFlag: 0,
@@ -644,6 +668,15 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     arrowHitSequenceDelayTicks:    new Float32Array(MAX_ARROWS),
     arrowHitTargetClusterIndex:    new Int32Array(MAX_ARROWS).fill(-1),
     arrowDamageCooldownTicks:      new Float32Array(MAX_ARROWS),
+    // ── Shield Sword Weave ────────────────────────────────────────────
+    swordWeaveStateEnum:           0,
+    swordWeaveStateTicksElapsed:   0,
+    swordWeaveAngleRad:            0,
+    swordWeaveTargetClusterIndex:  -1,
+    swordWeaveSlashStartAngleRad:  0,
+    swordWeaveSlashEndAngleRad:    0,
+    swordWeaveHandAnchorXWorld:    0,
+    swordWeaveHandAnchorYWorld:    0,
     ...createParticleBuffers(),
   };
 }

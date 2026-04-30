@@ -29,6 +29,7 @@ import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer'
 import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
+import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import {
   isTheroShowcaseRoom,
   renderTheroShowcaseEffect,
@@ -105,6 +106,8 @@ export interface RenderFrameContext {
   darkRoomOverlay: DarkRoomOverlay;
   /** Arrow Weave renderer — bow crescent, dissipation, and arrow bodies. */
   arrowWeaveRenderer: ArrowWeaveRenderer;
+  /** Shield Sword Weave renderer — golden-crossguard sword and slash trail. */
+  swordWeaveRenderer: SwordWeaveRenderer;
   /** Decoration sway state for push-wave animation driven by entity velocity. */
   decorationWaveState: DecorationWaveState;
 
@@ -177,17 +180,14 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-    playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer,
+    playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
-    bgColor, isDebugMode, hudState, inputState,
-    prevHealthMap, healthBarDisplayUntilTick,
-    combatText, prevLastPlayerBlockedTick,
+    bgColor, isDebugMode, inputState,
     collectedDustContainerKeySet,
     isDustContainerSpriteLoaded,
     dustContainerSprite,
-    getPlayerDustCount,
   } = r;
 
   const nowMs = performance.now();
@@ -313,6 +313,9 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows
   arrowWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
+  // Shield Sword Weave — golden-crossguard sword + slash trail (drawn on top
+  // of the player so the crossguard reads against the body).
+  swordWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
   // Decoration bloom — always added (even outside DarkRoom) so moss/mushrooms
   // visibly glow with the atmospheric bloom pass on any lighting setting.
   // HIGH_WATER_GLOW_GUARD_ENABLED: when true and decoration count exceeds
