@@ -4,6 +4,66 @@
 
 ## Implementation Progress Log
 
+### BUILD 208 — Phases 10–12 complete (2026-04-30)
+
+**Phase 10 (Arrow Weave Uses Ordered Mote Queue): ✅ Complete**
+
+- Added `depleteFirstNMoteSlots(world, n, cooldownTicks?)` to
+  `src/sim/motes/orderedMoteQueue.ts`.  Depletes the first `n` available
+  queue slots in order; no-op when `moteSlotCount === 0`.
+- `startArrowLoading` now gates on the mote queue:
+  - When `moteSlotCount > 0` and `getAvailableMoteSlotCount(world) < 2`,
+    loading silently aborts — the player gets no bow visual and cannot fire.
+  - Falls back to the original uncapped behavior when `moteSlotCount === 0`
+    (legacy / no dust containers configured).
+- `updateArrowLoading` now caps the mote count each tick:
+  - `arrowWeaveCurrentMoteCount = min(timeBased, availableMoteSlotCount)`.
+  - If available drops below 2 mid-charge (e.g., an enemy depletes motes
+    while the player is loading), loading is cancelled automatically.
+- `fireArrowFromLoading` calls `depleteFirstNMoteSlots(world, moteCount)` at
+  fire time (the default `BASE_MOTE_REGENERATION_TICKS` cooldown is used):
+  - The first `moteCount` available queue slots are depleted immediately.
+  - This causes grapple range, sword length, and shield density to shrink
+    after each arrow fire, recovering over ~3 seconds.
+  - Firing with no queue configured (`moteSlotCount === 0`) is unchanged.
+- Arrow mote counts still follow the time-based tier progression (2/3/4 based
+  on hold duration), but are now capped by the available queue depth.
+
+**Phase 11 (Visual Language and UI Feedback): ✅ Complete**
+
+- Added a player-facing mote queue dot row to `src/screens/gameHudRenderer.ts`,
+  rendered below the dust-container display (always visible when
+  `world.moteSlotCount > 0`; hidden when the queue is not configured).
+- Layout: one 5×5 px square per mote slot, 2 px gaps, starting at x=8 with
+  a 3 px vertical gap below the dust container row.
+- Visual encoding:
+  - **Available** (gold): bright gold fill + 1 px shine strip + gold border.
+  - **Depleted** (dark): near-black fill + clockwise cooldown arc that sweeps
+    from 0 → full circle as the mote regenerates, fraction computed as
+    `1 − cooldownTicksLeft / BASE_MOTE_REGENERATION_TICKS`.
+  - Thin border changes from gold (available) to subdued amber (depleted).
+- New imports added to `gameHudRenderer.ts`:
+  `MOTE_STATE_AVAILABLE`, `BASE_MOTE_REGENERATION_TICKS` from orderedMoteQueue.
+- The existing debug-only mote queue text overlay (top-right panel) is
+  preserved; the new dot row is the player-facing complement.
+
+**Phase 12 (Save Data and Migration): ✅ Complete by design**
+
+No new code was required.  The current implementation already satisfies all
+Phase 12 requirements:
+
+- `initMoteQueueFromParticles()` (called at every room load from `gameRoom.ts`)
+  resets all slot states to `MOTE_STATE_AVAILABLE` and clears all cooldowns.
+  This means momentary combat depletion is **never persisted** across room
+  loads — exactly as recommended.
+- Loadout order, unlocked dust types, and dust containers are stored in the
+  player profile independently of the mote queue runtime state.
+- Old saves without mote queue fields remain compatible: `moteSlotCount = 0`
+  on a missing queue triggers the legacy (uncapped) code paths in every weave.
+- Documented in this log as the authoritative reference for future agents.
+
+---
+
 ### BUILD 207 — Phases 8–9 complete (2026-04-30)
 
 **Phase 8 (Storm Weave Integration): ✅ Complete**

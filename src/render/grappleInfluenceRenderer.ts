@@ -466,9 +466,9 @@ export function renderGrappleInfluenceVisuals(
   let edgeOpacity   = edgeGlowMaxOpacity;
   if (tension > 0) {
     // Pulse frequency scales from TENSION_PULSE_MIN_HZ → MAX_HZ as tension goes 0 → 1.
-    const pulseHz = TENSION_PULSE_MIN_HZ + tension * (TENSION_PULSE_MAX_HZ - TENSION_PULSE_MIN_HZ);
+    const pulseFrequencyHz = TENSION_PULSE_MIN_HZ + tension * (TENSION_PULSE_MAX_HZ - TENSION_PULSE_MIN_HZ);
     // Use tick-based square-ish sine so the pulse is visible even at low frame rates.
-    const pulseWave = 0.5 + 0.5 * Math.sin(snapshot.tick * (2 * Math.PI * pulseHz / 60));
+    const pulseWave = 0.5 + 0.5 * Math.sin(snapshot.tick * (2 * Math.PI * pulseFrequencyHz / 60));
     const boost = 1.0 + tension * pulseWave * TENSION_PULSE_BOOST_FACTOR;
     circleOpacity = Math.min(1.0, influenceCircleMaxOpacity * boost);
     edgeOpacity   = Math.min(1.0, edgeGlowMaxOpacity   * boost);

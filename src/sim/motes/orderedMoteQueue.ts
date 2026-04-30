@@ -229,6 +229,32 @@ export function depleteMoteSlotForParticle(
 }
 
 /**
+ * Depletes the first `n` available mote slots in queue order.
+ *
+ * Used by Arrow Weave to spend motes at fire time.  If fewer than `n`
+ * available slots exist, depletes as many as are available (no error).
+ *
+ * No-op when `world.moteSlotCount === 0` (mote queue not configured) so
+ * the caller does not need to guard against the unconfigured case.
+ *
+ * Allocation-free: safe to call every tick.
+ */
+export function depleteFirstNMoteSlots(
+  world: WorldState,
+  n: number,
+  cooldownTicks = BASE_MOTE_REGENERATION_TICKS,
+): void {
+  if (world.moteSlotCount === 0) return;
+  let depleted = 0;
+  for (let i = 0; i < world.moteSlotCount && depleted < n; i++) {
+    if (world.moteSlotState[i] !== MOTE_STATE_AVAILABLE) continue;
+    world.moteSlotState[i]             = MOTE_STATE_DEPLETED;
+    world.moteSlotCooldownTicksLeft[i] = cooldownTicks;
+    depleted++;
+  }
+}
+
+/**
  * Scans all player-owned mote slots and depletes any whose linked particle
  * has just been combat-killed this tick (isAliveFlag === 0 while the slot
  * was still available).
