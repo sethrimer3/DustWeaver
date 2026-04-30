@@ -318,4 +318,22 @@ export interface WorldSnapshot {
   readonly isArrowHitEnemyFlag: Uint8Array;
   /** Remaining lifetime ticks per arrow (0 = expired). */
   readonly arrowLifetimeTicksLeft: Float32Array;
+
+  // ── Shield Sword Weave state ─────────────────────────────────────────────
+  /** ID of the equipped secondary weave (e.g. 'arrow', 'shield_sword'). */
+  readonly playerSecondaryWeaveId: string;
+  /** Current sword state — see SWORD_STATE_* in sim/weaves/swordWeave.ts. */
+  readonly swordWeaveStateEnum: number;
+  /** Ticks elapsed in the current sword state. */
+  readonly swordWeaveStateTicksElapsed: number;
+  /** Current sword angle (radians) in world space. */
+  readonly swordWeaveAngleRad: number;
+  /** Slash sweep start angle (radians). */
+  readonly swordWeaveSlashStartAngleRad: number;
+  /** Slash sweep end angle (radians). */
+  readonly swordWeaveSlashEndAngleRad: number;
+  /** World X of the sword's hand anchor. */
+  readonly swordWeaveHandAnchorXWorld: number;
+  /** World Y of the sword's hand anchor. */
+  readonly swordWeaveHandAnchorYWorld: number;
 }

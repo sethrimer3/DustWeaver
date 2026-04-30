@@ -9,12 +9,13 @@
 import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
-import { WEAVE_ARROW } from './weaveDefinition';
+import { WEAVE_ARROW, WEAVE_SHIELD_SWORD } from './weaveDefinition';
 import {
   startArrowLoading,
   updateArrowLoading,
   fireArrowFromLoading,
 } from './arrowWeave';
+import { tickSwordWeave } from './swordWeave';
 
 // ── Storm Weave constants ───────────────────────────────────────────────────
 
@@ -220,6 +221,43 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
       world.isPlayerSecondaryWeaveActiveFlag = 0;
       fireArrowFromLoading(world, playerX, playerY);
     }
+  } else if (world.playerSecondaryWeaveId === WEAVE_SHIELD_SWORD) {
+    // ── Shield Sword Weave secondary ────────────────────────────────────────
+    // RMB held → shielding (delegated to applyShieldCrescent below).
+    // RMB not held → sword auto-swing FSM.
+    if (world.playerSecondaryWeaveTriggeredFlag === 1) {
+      world.playerSecondaryWeaveTriggeredFlag = 0;
+      world.isPlayerSecondaryWeaveActiveFlag = 1;
+    }
+    if (world.playerSecondaryWeaveEndFlag === 1) {
+      world.playerSecondaryWeaveEndFlag = 0;
+      world.isPlayerSecondaryWeaveActiveFlag = 0;
+      // Release any block-mode particles back to orbit so they don't hang in
+      // the crescent after the player lets go of right mouse.
+      for (let i = 0; i < world.particleCount; i++) {
+        if (
+          world.isAliveFlag[i] === 1 &&
+          world.ownerEntityId[i] === playerEntityId &&
+          world.behaviorMode[i] === 2
+        ) {
+          world.behaviorMode[i] = 0;
+        }
+      }
+    }
+
+    // Drive sword state machine.  Locate the live player cluster object so
+    // the sword module can read facing/position directly.
+    let playerCluster = null;
+    for (let ci = 0; ci < world.clusters.length; ci++) {
+      if (world.clusters[ci].isPlayerFlag === 1 && world.clusters[ci].isAliveFlag === 1) {
+        playerCluster = world.clusters[ci];
+        break;
+      }
+    }
+    if (playerCluster !== null) {
+      const isShieldActive = world.isPlayerSecondaryWeaveActiveFlag === 1;
+      tickSwordWeave(world, playerCluster, isShieldActive);
+    }
   } else {
     // ── Shield Weave secondary (default) ────────────────────────────────────
     if (world.playerSecondaryWeaveTriggeredFlag === 1) {
@@ -239,6 +277,7 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
 
   // Apply crescent forces while shield is active on either slot.
   // Arrow weave secondary does NOT activate the shield crescent.
+  // Shield Sword secondary DOES activate it (right mouse held = shield mode).
   const isShieldSecondaryActive =
     world.isPlayerSecondaryWeaveActiveFlag === 1 &&
     world.playerSecondaryWeaveId !== WEAVE_ARROW;

@@ -61,6 +61,15 @@ interface _ReusableBacking {
   playerWeaveAimDirXWorld: number;
   playerWeaveAimDirYWorld: number;
   arrowCount: number;
+  // Shield Sword Weave scalar fields updated each frame
+  playerSecondaryWeaveId: string;
+  swordWeaveStateEnum: number;
+  swordWeaveStateTicksElapsed: number;
+  swordWeaveAngleRad: number;
+  swordWeaveSlashStartAngleRad: number;
+  swordWeaveSlashEndAngleRad: number;
+  swordWeaveHandAnchorXWorld: number;
+  swordWeaveHandAnchorYWorld: number;
   /** @internal Pre-allocated cluster objects — not part of the public API. */
   readonly _clusterPool: _MutableCluster[];
 }
@@ -331,6 +340,15 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     isArrowStuckFlag:           world.isArrowStuckFlag,
     isArrowHitEnemyFlag:        world.isArrowHitEnemyFlag,
     arrowLifetimeTicksLeft:     world.arrowLifetimeTicksLeft,
+    // Shield Sword Weave
+    playerSecondaryWeaveId:        world.playerSecondaryWeaveId,
+    swordWeaveStateEnum:           world.swordWeaveStateEnum,
+    swordWeaveStateTicksElapsed:   world.swordWeaveStateTicksElapsed,
+    swordWeaveAngleRad:            world.swordWeaveAngleRad,
+    swordWeaveSlashStartAngleRad:  world.swordWeaveSlashStartAngleRad,
+    swordWeaveSlashEndAngleRad:    world.swordWeaveSlashEndAngleRad,
+    swordWeaveHandAnchorXWorld:    world.swordWeaveHandAnchorXWorld,
+    swordWeaveHandAnchorYWorld:    world.swordWeaveHandAnchorYWorld,
     _clusterPool:             clusterPool,
   };
 
@@ -386,6 +404,16 @@ export function updateSnapshotInPlace(
   b.playerWeaveAimDirXWorld    = world.playerWeaveAimDirXWorld;
   b.playerWeaveAimDirYWorld    = world.playerWeaveAimDirYWorld;
   b.arrowCount                 = world.arrowCount;
+
+  // Shield Sword Weave scalar fields
+  b.playerSecondaryWeaveId        = world.playerSecondaryWeaveId;
+  b.swordWeaveStateEnum           = world.swordWeaveStateEnum;
+  b.swordWeaveStateTicksElapsed   = world.swordWeaveStateTicksElapsed;
+  b.swordWeaveAngleRad            = world.swordWeaveAngleRad;
+  b.swordWeaveSlashStartAngleRad  = world.swordWeaveSlashStartAngleRad;
+  b.swordWeaveSlashEndAngleRad    = world.swordWeaveSlashEndAngleRad;
+  b.swordWeaveHandAnchorXWorld    = world.swordWeaveHandAnchorXWorld;
+  b.swordWeaveHandAnchorYWorld    = world.swordWeaveHandAnchorYWorld;
 
   const clusterCount = world.clusters.length;
   const pool = b._clusterPool;
@@ -585,5 +613,14 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     isArrowStuckFlag:           world.isArrowStuckFlag,
     isArrowHitEnemyFlag:        world.isArrowHitEnemyFlag,
     arrowLifetimeTicksLeft:     world.arrowLifetimeTicksLeft,
+    // Shield Sword Weave
+    playerSecondaryWeaveId:        world.playerSecondaryWeaveId,
+    swordWeaveStateEnum:           world.swordWeaveStateEnum,
+    swordWeaveStateTicksElapsed:   world.swordWeaveStateTicksElapsed,
+    swordWeaveAngleRad:            world.swordWeaveAngleRad,
+    swordWeaveSlashStartAngleRad:  world.swordWeaveSlashStartAngleRad,
+    swordWeaveSlashEndAngleRad:    world.swordWeaveSlashEndAngleRad,
+    swordWeaveHandAnchorXWorld:    world.swordWeaveHandAnchorXWorld,
+    swordWeaveHandAnchorYWorld:    world.swordWeaveHandAnchorYWorld,
   };
 }
