@@ -72,6 +72,8 @@ interface _ReusableBacking {
   swordWeaveHandAnchorYWorld: number;
   swordWeaveLengthRatio: number;
   moteGrappleDisplayRadiusWorld: number;
+  isMoteSourceOrbitFlag: 0 | 1;
+  grappleTensionFactor: number;
   /** @internal Pre-allocated cluster objects — not part of the public API. */
   readonly _clusterPool: _MutableCluster[];
 }
@@ -354,6 +356,8 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
     // Ordered Mote Queue display
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
+    isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
+    grappleTensionFactor:          world.grappleTensionFactor,
     _clusterPool:             clusterPool,
   };
 
@@ -423,6 +427,8 @@ export function updateSnapshotInPlace(
 
   // Ordered Mote Queue display
   b.moteGrappleDisplayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
+  b.isMoteSourceOrbitFlag         = world.isMoteSourceOrbitFlag;
+  b.grappleTensionFactor          = world.grappleTensionFactor;
 
   const clusterCount = world.clusters.length;
   const pool = b._clusterPool;
@@ -634,5 +640,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
     // Ordered Mote Queue display
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
+    isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
+    grappleTensionFactor:          world.grappleTensionFactor,
   };
 }

@@ -551,6 +551,40 @@ export interface WorldState extends ParticleBuffers {
    * grows and shrinks visually with a small lag.
    */
   moteGrappleDisplayRadiusWorld: number;
+
+  // ── Phase 8: Storm / Inventory source flag ─────────────────────────────────
+  /**
+   * 1 when the player's primary weave is Storm (motes orbit passively).
+   * 0 when Storm is not equipped (motes materialize from inventory space).
+   *
+   * Set once at loadout apply time (gameScreen.ts) and again whenever the
+   * loadout changes.  Not recomputed every tick.
+   *
+   * Propagated to WorldSnapshot so renderers can choose the appropriate
+   * mote-source visual style without importing sim helpers.
+   */
+  isMoteSourceOrbitFlag: 0 | 1;
+
+  // ── Phase 9: Grapple out-of-range tension ──────────────────────────────────
+  /**
+   * Number of consecutive ticks the attached grapple rope has exceeded the
+   * current effective grapple range.  0 while the rope length is within range.
+   *
+   * When this reaches `GRAPPLE_OUT_OF_RANGE_BREAK_TICKS` (45) the grapple
+   * breaks automatically.  Reset to 0 in `releaseGrapple`.
+   */
+  grappleOutOfRangeTicks: number;
+  /**
+   * Visual tension factor in [0, 1].
+   *
+   * 0 = rope within range (no tension).
+   * Ramps from 0 → 1 as grappleOutOfRangeTicks approaches the break threshold.
+   * 1 = rope breaks next tick.
+   *
+   * Used by the influence circle renderer to pulse/flicker the ring as a
+   * "rope under tension" warning.  Reset to 0 in `releaseGrapple`.
+   */
+  grappleTensionFactor: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -734,6 +768,11 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     // Default to full grapple range (96 world units = INFLUENCE_RADIUS_WORLD).
     // initMoteQueueFromParticles() will correct this on the first room load.
     moteGrappleDisplayRadiusWorld: 96.0,
+    // Default: Storm Weave is the starting primary, so motes orbit from the start.
+    isMoteSourceOrbitFlag:         1,
+    // Phase 9: grapple tension initialised clear.
+    grappleOutOfRangeTicks:        0,
+    grappleTensionFactor:          0,
     ...createParticleBuffers(),
   };
 }

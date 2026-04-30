@@ -352,4 +352,18 @@ export interface WorldSnapshot {
    * visually shrinks and grows as motes are depleted and regenerated.
    */
   readonly moteGrappleDisplayRadiusWorld: number;
+  /**
+   * Phase 8: 1 when the player's primary weave is Storm (motes orbit passively).
+   * 0 when Storm is not the primary weave (motes come from inventory space).
+   * Used by renderers to choose between orbit-fly and center-pop visual styles.
+   */
+  readonly isMoteSourceOrbitFlag: 0 | 1;
+  /**
+   * Phase 9: Grapple rope tension factor in [0, 1].
+   * 0 = rope within effective range, no tension.
+   * Ramps toward 1 as the rope has been out-of-range for longer.
+   * 1 = rope at the break threshold — will snap next tick.
+   * Used by grappleInfluenceRenderer to pulse the ring as a tension warning.
+   */
+  readonly grappleTensionFactor: number;
 }

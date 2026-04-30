@@ -4,6 +4,63 @@
 
 ## Implementation Progress Log
 
+### BUILD 207 — Phases 8–9 complete (2026-04-30)
+
+**Phase 8 (Storm Weave Integration): ✅ Complete**
+- Added `hasStormWeaveUnlocked(world: WorldState): boolean` to
+  `src/sim/motes/orderedMoteQueue.ts`.  Returns `true` when
+  `world.playerPrimaryWeaveId === WEAVE_STORM`.
+- Added `isMoteSourceOrbitFlag: 0 | 1` to `WorldState`:
+  - `1` → Storm is primary weave; motes orbit passively (current default).
+  - `0` → Non-Storm primary; motes would materialize from inventory space.
+  - Set once in `gameScreen.ts` at loadout-apply time:
+    ```ts
+    world.isMoteSourceOrbitFlag = world.playerPrimaryWeaveId === 'storm' ? 1 : 0;
+    ```
+  - Defaults to `1` in `createWorldState()` (Storm is the starting primary).
+- `isMoteSourceOrbitFlag` propagated to `WorldSnapshot` (all 3 snapshot
+  creation/update paths) so renderers can choose the correct visual style
+  without importing sim helpers.
+- Visual materialization distinction (orbit-fly vs. center-pop particles) is
+  noted in the snapshot for future renderer use.  The sim foundation is
+  complete; the renderer visual can be layered on top in a future build.
+
+**Phase 9 (Grapple Weave Uses Ordered Mote Queue): ✅ Complete**
+
+Phase 9 tasks 1–4 (grapple validity uses effective range, visual length
+matches range) were already satisfied by Phase 3 (`getEffectiveGrappleRangeWorld`
+in `fireGrapple`, `moteGrappleDisplayRadiusWorld` for the circle).  This
+build implements tasks 5–6: the out-of-range tension and break.
+
+- Added constants to `grapple.ts`:
+  ```ts
+  GRAPPLE_OUT_OF_RANGE_BREAK_TICKS = 45  // 0.75 s at 60 fps
+  GRAPPLE_RANGE_SHRINK_GRACE_TICKS = 20  // grace before tension is visible
+  ```
+- Added `grappleOutOfRangeTicks: number` and `grappleTensionFactor: number`
+  to `WorldState` (both initialised to 0 in `createWorldState` and reset in
+  `releaseGrapple`).
+- In `applyGrappleClusterConstraint` (normal pendulum path only):
+  - Each tick, compares `grappleLengthWorld` against `getEffectiveGrappleRangeWorld(world)`.
+  - If rope > effective range: increments `grappleOutOfRangeTicks`.
+    `grappleTensionFactor` ramps from 0 → 1 after the grace window:
+    ```ts
+    ticksPastGrace  = outOfRangeTicks - GRAPPLE_RANGE_SHRINK_GRACE_TICKS
+    tensionWindow   = BREAK_TICKS - GRACE_TICKS  // = 25 ticks
+    grappleTensionFactor = clamp(ticksPastGrace / tensionWindow, 0, 1)
+    ```
+    Once `grappleOutOfRangeTicks >= 45`, `releaseGrapple()` is called.
+  - If rope ≤ effective range: resets both counters to 0.
+- `grappleTensionFactor` propagated to `WorldSnapshot` (all 3 paths).
+- `renderGrappleInfluenceVisuals` in `grappleInfluenceRenderer.ts` now
+  pulses the ring when `grappleTensionFactor > 0`:
+  - Pulse frequency: 4 Hz at tension=0 → 12 Hz at tension=1.
+  - Opacity boost: up to 2.5× at full tension with a sinusoidal wave.
+  - Both the influence circle and the reachable-edge glow are affected.
+  - Final alpha is clamped to 1.0 to prevent over-saturation.
+
+---
+
 ### BUILD 206 — Phases 5–7 complete (2026-04-30)
 
 **Phase 5 (Shield Weave Uses Ordered Mote Queue): ✅ Complete**
@@ -72,12 +129,11 @@
 - All guard slash hits use the current `currentReachWorld` (Phase 6) so a
   depleted player gets reduced guard swipe range as intended.
 
-**Deferred (Phases 8–9)**
+**Deferred (Phases 10–13)**
 
-Phases 8–9 add Storm Weave integration (motes from orbit vs. inventory) and
-a combined inventory/inventory-space visual for players who do not have Storm
-unlocked.  These require more complex particle-state management and a new
-"inventory space" rendering layer.  Stopping here to keep this PR atomic.
+Phases 10–13 (Arrow Weave queue, visual UI, save data, polish) are deferred to
+future builds.  The mote economy is now wired into all primary weaves (grapple,
+shield, sword) and the snapshot layer is clean for renderer expansion.
 
 ---
 

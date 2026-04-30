@@ -24,6 +24,7 @@
 import { WorldState, MAX_MOTE_SLOTS } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { GRAPPLE_MAX_LENGTH_WORLD } from '../clusters/grappleMiss';
+import { WEAVE_STORM } from '../weaves/weaveDefinition';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -182,6 +183,23 @@ export function getEffectiveGrappleRangeWorld(world: WorldState): number {
  */
 export function getCircleOfInfluenceRadiusWorld(world: WorldState): number {
   return getEffectiveGrappleRangeWorld(world);
+}
+
+// ── Storm Weave helpers ────────────────────────────────────────────────────────
+
+/**
+ * Returns true when Storm Weave is the player's primary weave.
+ *
+ * When true, motes live passively in orbit around the player (driven by the
+ * Storm passive attraction forces) and move from orbit into weave formations.
+ *
+ * When false, motes are stored in inventory space and materialize from the
+ * player's center outward when a weave activates, returning there when done.
+ *
+ * Used by renderers to choose the appropriate mote-source visual style.
+ */
+export function hasStormWeaveUnlocked(world: WorldState): boolean {
+  return world.playerPrimaryWeaveId === WEAVE_STORM;
 }
 
 // ── Mote lifecycle helpers ─────────────────────────────────────────────────────

@@ -62,6 +62,24 @@ function goldRgba(t: number, alpha: number): string {
 /** Number of small arcs used to approximate the smooth angular fade. */
 const CIRCLE_ARC_SEGMENTS = 64;
 
+// ── Tension pulse constants (Phase 9) ─────────────────────────────────────
+
+/**
+ * Maximum additional opacity multiplier applied to the influence circle and
+ * edge glow when the grapple rope is out of effective range.
+ *
+ * Final boost = 1.0 + grappleTensionFactor × pulseWave × TENSION_PULSE_BOOST_FACTOR
+ * At full tension with a peak pulse wave (1.0):
+ *   opacity × (1.0 + 1.0 × 1.0 × 1.5) = opacity × 2.5
+ * Final alpha is clamped to 1.0 so we never exceed full-bright.
+ */
+const TENSION_PULSE_BOOST_FACTOR = 1.5;
+
+/** Pulse frequency at minimum tension (Hz). */
+const TENSION_PULSE_MIN_HZ = 4;
+/** Pulse frequency at maximum tension (Hz). */
+const TENSION_PULSE_MAX_HZ = 12;
+
 /**
  * Draws the influence-radius circle as a series of arcs whose colour and
  * opacity fade from the mouse direction outward.
@@ -440,12 +458,28 @@ export function renderGrappleInfluenceVisuals(
 
   ctx.save();
 
+  // ── Phase 9: tension pulse — widen circle highlight and flicker ───────────
+  // When grappleTensionFactor > 0 (rope out of effective range), the influence
+  // circle pulses faster and brighter as a "rope under tension" warning.
+  const tension = snapshot.grappleTensionFactor;
+  let circleOpacity = influenceCircleMaxOpacity;
+  let edgeOpacity   = edgeGlowMaxOpacity;
+  if (tension > 0) {
+    // Pulse frequency scales from TENSION_PULSE_MIN_HZ → MAX_HZ as tension goes 0 → 1.
+    const pulseHz = TENSION_PULSE_MIN_HZ + tension * (TENSION_PULSE_MAX_HZ - TENSION_PULSE_MIN_HZ);
+    // Use tick-based square-ish sine so the pulse is visible even at low frame rates.
+    const pulseWave = 0.5 + 0.5 * Math.sin(snapshot.tick * (2 * Math.PI * pulseHz / 60));
+    const boost = 1.0 + tension * pulseWave * TENSION_PULSE_BOOST_FACTOR;
+    circleOpacity = Math.min(1.0, influenceCircleMaxOpacity * boost);
+    edgeOpacity   = Math.min(1.0, edgeGlowMaxOpacity   * boost);
+  }
+
   // Draw influence circle using the smoothed mote-based display radius
   const radiusScreenPx = snapshot.moteGrappleDisplayRadiusWorld * scalePx;
-  drawInfluenceCircle(ctx, playerScreenXPx, playerScreenYPx, radiusScreenPx, mouseAngleRad, influenceCircleMaxOpacity, influenceHighlightWidth);
+  drawInfluenceCircle(ctx, playerScreenXPx, playerScreenYPx, radiusScreenPx, mouseAngleRad, circleOpacity, influenceHighlightWidth);
 
   // Draw reachable edge glow on walls within range
-  drawReachableEdgeGlow(ctx, snapshot, playerXWorld, playerYWorld, mouseAngleRad, edgeGlowMaxOpacity, offsetXPx, offsetYPx, scalePx);
+  drawReachableEdgeGlow(ctx, snapshot, playerXWorld, playerYWorld, mouseAngleRad, edgeOpacity, offsetXPx, offsetYPx, scalePx);
 
   ctx.restore();
 }

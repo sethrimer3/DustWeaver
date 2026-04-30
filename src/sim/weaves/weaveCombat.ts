@@ -151,6 +151,18 @@ function _centerOutArcT(rank: number, n: number): number {
   return posIdx / (n - 1);
 }
 
+/**
+ * Applies spring forces that hold the player's available mote particles in a
+ * crescent formation centred on the aim direction.
+ *
+ * Uses the ordered mote queue so shield density reflects available motes
+ * and earlier-queue motes occupy the strongest center positions.
+ *
+ * **Prerequisite**: `initMoteQueueFromParticles` must have been called at
+ * room-load time to populate `world.moteSlotParticleIndex`.  If it was not
+ * called, `world.moteSlotCount` will be 0 and this function becomes a no-op,
+ * which is safe but produces no shield.
+ */
 function applyShieldCrescent(
   world: WorldState,
   playerX: number,

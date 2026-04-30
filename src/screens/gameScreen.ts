@@ -32,6 +32,7 @@ import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
+import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
@@ -311,6 +312,8 @@ export function startGameScreen(
     // Apply weave IDs to world state for combat dispatch
     world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
     world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
+    // Phase 8: set orbit source flag — 1 if Storm is primary, 0 for inventory source
+    world.isMoteSourceOrbitFlag = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
 
     // Initialise the ordered mote queue from the player particles just spawned.
     // Must be called after player particle spawning and before enemy spawning
