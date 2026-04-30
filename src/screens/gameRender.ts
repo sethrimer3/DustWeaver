@@ -18,7 +18,6 @@ import { renderWalls, renderClusters, renderGrapple } from '../render/clusters/r
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
-import { renderHudOverlay } from '../render/hud/overlay';
 import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
@@ -47,16 +46,19 @@ import {
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
-import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
 import {
   drawTunnelDarkness,
   DUST_CONTAINER_SIZE_WORLD,
-  HEALTH_BAR_DISPLAY_MS,
 } from './gameRoom';
-import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
 import { renderDarkAmbientBlockerOverlay } from '../render/walls/blockSpriteRenderer';
+import {
+  drawGrappleBloom,
+  drawParticleGlow,
+  drawOffensiveDustOutlineOverlay,
+} from './gameRenderHelpers';
+import { renderGameHud } from './gameHudRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -69,21 +71,6 @@ const JOYSTICK_INNER_RADIUS_PX = 22;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-// HUD layout — health bar dimensions (virtual pixels)
-const HUD_HEALTH_BAR_X_PX        = 8;
-const HUD_HEALTH_BAR_Y_PX        = 8;
-const HUD_HEALTH_BAR_WIDTH_PX    = 60;
-const HUD_HEALTH_BAR_HEIGHT_PX   = 6;
-const HUD_HEALTH_DUST_GAP_PX     = 4;
-/** Visual spacing between grapple bloom dots along the chain (virtual px). */
-const GRAPPLE_BLOOM_SEGMENT_PX = 6;
-const OUTLINE_BASE_WIDTH_1080P_PX = 2;
-const OFFENSIVE_DUST_BASE_DIAMETER_WORLD = 2.0;
-
-// Health fraction thresholds for visual escalation
-const HEALTH_THRESHOLD_DANGER_FRACTION   = 0.40;  // below this → amber warning
-const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red alert
-
 // ── Optional high-water glow guard (disabled by default) ──────────────────
 // When HIGH_WATER_GLOW_GUARD_ENABLED is true and the cached decoration count
 // exceeds HIGH_WATER_DECORATION_BLOOM_LIMIT, addDecorationBloom only processes
@@ -93,192 +80,6 @@ const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red 
 // DECISIONS.md for full guidance.  Has no effect when false.
 const HIGH_WATER_GLOW_GUARD_ENABLED       = false;
 const HIGH_WATER_DECORATION_BLOOM_LIMIT   = 128;
-
-/**
- * Module-level pre-allocated Set for alive enemy entity IDs.
- * Reused each frame by `drawOffensiveDustOutlineOverlay` — avoids allocating a
- * new Set<number> on every render call (saves one GC-eligible object per frame).
- */
-const _aliveEnemyEntityIds = new Set<number>();
-
-function drawGrappleBloom(
-  bloomSystem: BloomSystem,
-  snapshot: WorldSnapshot,
-  offsetXPx: number,
-  offsetYPx: number,
-  scalePx: number,
-): void {
-  const hasActiveOrMiss = snapshot.isGrappleActiveFlag === 1 || snapshot.isGrappleMissActiveFlag === 1;
-  if (!hasActiveOrMiss) return;
-
-  let playerCluster: (typeof snapshot.clusters)[0] | undefined;
-  for (let ci = 0; ci < snapshot.clusters.length; ci++) {
-    const candidate = snapshot.clusters[ci];
-    if (candidate.isPlayerFlag === 1 && candidate.isAliveFlag === 1) {
-      playerCluster = candidate;
-      break;
-    }
-  }
-  if (playerCluster === undefined) return;
-
-  const playerHalfWidthPx = playerCluster.halfWidthWorld * scalePx;
-  const offsetDir = playerCluster.isFacingLeftFlag === 1 ? -1 : 1;
-  const px = playerCluster.positionXWorld * scalePx + offsetXPx + offsetDir * playerHalfWidthPx;
-  const py = playerCluster.positionYWorld * scalePx + offsetYPx;
-
-  let ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
-  let ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
-  if (snapshot.isGrappleMissActiveFlag === 1 && snapshot.grappleParticleStartIndex >= 0) {
-    const tipIndex = snapshot.grappleParticleStartIndex + 9;
-    const isTipAlive = tipIndex < snapshot.particles.particleCount && snapshot.particles.isAliveFlag[tipIndex] === 1;
-    if (isTipAlive) {
-      ax = snapshot.particles.positionXWorld[tipIndex] * scalePx + offsetXPx;
-      ay = snapshot.particles.positionYWorld[tipIndex] * scalePx + offsetYPx;
-    }
-  }
-
-  const dx = ax - px;
-  const dy = ay - py;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const segmentCount = Math.max(1, Math.floor(dist / GRAPPLE_BLOOM_SEGMENT_PX));
-  for (let segmentIndex = 0; segmentIndex <= segmentCount; segmentIndex++) {
-    const t = segmentCount > 0 ? segmentIndex / segmentCount : 0;
-    bloomSystem.glowPass.drawCircle({
-      x: px + dx * t,
-      y: py + dy * t,
-      radius: 1.2,
-      glow: {
-        enabled: true,
-        intensity: 0.28,
-        color: '#ffd972',
-      },
-    });
-  }
-
-  bloomSystem.glowPass.drawCircle({
-    x: ax,
-    y: ay,
-    radius: 3.0,
-    glow: {
-      enabled: true,
-      intensity: 0.62,
-      color: '#ffe79d',
-    },
-  });
-}
-
-/**
- * Draws additive glow for gold dust particles into the bloom system's glow pass.
- * Multiple overlapping particles produce a stronger combined glow (additive blend).
- * Glow intensity scales with particle speed — faster-moving particles glow brighter.
- */
-function drawParticleGlow(
-  bloomSystem: BloomSystem,
-  snapshot: WorldSnapshot,
-  offsetXPx: number,
-  offsetYPx: number,
-  scalePx: number,
-): void {
-  const particles = snapshot.particles;
-  /** Glow radius is slightly larger than the 3×3 dust square for a soft halo. */
-  const glowRadius = 2.5 * scalePx;
-
-  /** Speed (world units/s) at which glow reaches full intensity. */
-  const MAX_GLOW_SPEED_WORLD_PER_SEC = 120.0;
-  /** Base glow intensity for a resting particle. */
-  const BASE_GLOW_INTENSITY = 0.25;
-  /** Additional glow intensity added at maximum speed. */
-  const SPEED_GLOW_RANGE = 0.65;
-
-  for (let i = 0; i < particles.particleCount; i++) {
-    if (particles.isAliveFlag[i] === 0) continue;
-    // Only glow gold dust (Physical) particles
-    const kind = particles.kindBuffer[i];
-    if (kind !== ParticleKind.Physical && kind !== ParticleKind.Gold) continue;
-
-    const lt = particles.lifetimeTicks[i];
-    const normAge = lt > 0 ? Math.min(1.0, particles.ageTicks[i] / lt) : 0.0;
-    const ageFade = 1.0 - normAge;
-    if (ageFade < 0.05) continue;
-
-    // Velocity-based brightness: faster particles glow brighter.
-    const vx = particles.velocityXWorld[i];
-    const vy = particles.velocityYWorld[i];
-    const speedWorld = Math.sqrt(vx * vx + vy * vy);
-    const speedFactor = Math.min(1.0, speedWorld / MAX_GLOW_SPEED_WORLD_PER_SEC);
-    const intensity = (BASE_GLOW_INTENSITY + SPEED_GLOW_RANGE * speedFactor) * ageFade;
-
-    const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
-    const sy = particles.positionYWorld[i] * scalePx + offsetYPx;
-
-    bloomSystem.glowPass.drawCircle({
-      x: sx,
-      y: sy,
-      radius: glowRadius,
-      glow: {
-        enabled: true,
-        intensity,
-        color: '#ffd700',
-      },
-    });
-  }
-}
-
-function drawOffensiveDustOutlineOverlay(
-  deviceCtx: CanvasRenderingContext2D,
-  snapshot: WorldSnapshot,
-  canvasWidthPx: number,
-  canvasHeightPx: number,
-  offsetXPx: number,
-  offsetYPx: number,
-  scalePx: number,
-): void {
-  if (!isOffensiveDustOutlineEnabled()) return;
-
-  const outlineScale = Math.min(canvasWidthPx / 1920.0, canvasHeightPx / 1080.0);
-  const lineWidthPx = OUTLINE_BASE_WIDTH_1080P_PX * outlineScale;
-  const worldDiameterPx = OFFENSIVE_DUST_BASE_DIAMETER_WORLD * scalePx;
-  const radiusPx = Math.max(lineWidthPx * 0.6, worldDiameterPx * 0.6);
-  const halfPixelAdjust = ((lineWidthPx % 2) === 0) ? 0.5 : 0;
-
-  // Precompute the set of alive non-player entity IDs in one O(C) pass.
-  // Cluster count is tiny (≤ ~30), so the Set construction cost is negligible.
-  // Using the module-level pre-allocated Set avoids a per-frame heap allocation.
-  _aliveEnemyEntityIds.clear();
-  for (let ci = 0; ci < snapshot.clusters.length; ci++) {
-    const cluster = snapshot.clusters[ci];
-    if (cluster.isPlayerFlag === 0 && cluster.isAliveFlag === 1) {
-      _aliveEnemyEntityIds.add(cluster.entityId);
-    }
-  }
-
-  deviceCtx.save();
-  deviceCtx.strokeStyle = '#ff1a1a';
-  deviceCtx.lineWidth = lineWidthPx;
-
-  // Collect all qualifying arc positions into a single batched path so
-  // the GPU only receives one stroke call instead of one per particle.
-  deviceCtx.beginPath();
-  let arcCount = 0;
-
-  const particles = snapshot.particles;
-  for (let i = 0; i < particles.particleCount; i++) {
-    if (particles.isAliveFlag[i] === 0) continue;
-    if (particles.behaviorMode[i] !== 1) continue;
-    if (!_aliveEnemyEntityIds.has(particles.ownerEntityId[i])) continue;
-
-    const sx = particles.positionXWorld[i] * scalePx + offsetXPx;
-    const sy = particles.positionYWorld[i] * scalePx + offsetYPx;
-    deviceCtx.moveTo(sx + halfPixelAdjust + radiusPx, sy + halfPixelAdjust);
-    deviceCtx.arc(sx + halfPixelAdjust, sy + halfPixelAdjust, radiusPx, 0, Math.PI * 2);
-    arcCount++;
-  }
-
-  if (arcCount > 0) {
-    deviceCtx.stroke();
-  }
-  deviceCtx.restore();
-}
 
 // ── Public interface ───────────────────────────────────────────────────────
 
@@ -637,223 +438,8 @@ export function renderFrame(r: RenderFrameContext): void {
   // End room clip before any HUD/screen-space overlays are drawn.
   ctx.restore();
 
-  // Debug-only HUD and room name
-  if (isDebugMode) {
-    renderHudOverlay(ctx, hudState);
-
-    // ── Room name banner (top-center) ──────────────────────────────────────
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '7px monospace';
-    const roomLabel = currentRoom.name;
-    const labelW = ctx.measureText(roomLabel).width;
-    ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
-  }
-
-  // ── Player health bar in HUD (top-left, above dust display) ─────────────
-  {
-    const playerForHealth = world.clusters[0];
-    if (playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
-      const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
-      const isCritical = healthFraction < HEALTH_THRESHOLD_CRITICAL_FRACTION;
-      const isDanger   = healthFraction < HEALTH_THRESHOLD_DANGER_FRACTION;
-
-      const barX = HUD_HEALTH_BAR_X_PX;
-      const barY = HUD_HEALTH_BAR_Y_PX;
-      const barW = HUD_HEALTH_BAR_WIDTH_PX;
-      const barH = HUD_HEALTH_BAR_HEIGHT_PX;
-      const fillW = barW * Math.max(0, healthFraction);
-
-      ctx.save();
-
-      // ── Outer danger glow at critical health (pulsing shadow) ────────────
-      if (isCritical) {
-        const pulseT = (Math.sin(nowMs * 0.008) + 1) * 0.5;  // 0..1 at ~0.76 Hz
-        ctx.shadowBlur  = 5 + 7 * pulseT;
-        ctx.shadowColor = `rgba(255,25,25,${0.55 + 0.45 * pulseT})`;
-      } else if (isDanger) {
-        ctx.shadowBlur  = 3;
-        ctx.shadowColor = 'rgba(255,140,0,0.45)';
-      }
-
-      // ── Gold outline — 1 px outside the bar bounds ────────────────────────
-      ctx.strokeStyle = '#c89820';
-      ctx.lineWidth   = 1;
-      // strokeRect draws centered on the path, so offset by 0.5 px to align
-      // precisely to the pixel grid.
-      ctx.strokeRect(barX - 1.5, barY - 1.5, barW + 3, barH + 3);
-
-      ctx.shadowBlur = 0;  // reset before fill draws
-
-      // ── Dark background ────────────────────────────────────────────────────
-      ctx.fillStyle = 'rgba(0,0,0,0.78)';
-      ctx.fillRect(barX, barY, barW, barH);
-
-      // ── Health fill — color escalates with urgency ─────────────────────────
-      let fillColor: string;
-      if (isCritical) {
-        // Pulsing between deep red and bright red for maximum urgency.
-        const pulseT = (Math.sin(nowMs * 0.008) + 1) * 0.5;
-        const rHigh  = Math.round(210 + 45 * pulseT);
-        fillColor = `rgb(${rHigh},25,25)`;
-      } else if (isDanger) {
-        fillColor = '#e07000';  // amber-orange warning
-      } else {
-        fillColor = '#00b866';  // rich green — healthy
-      }
-
-      if (fillW > 0) {
-        ctx.fillStyle = fillColor;
-        ctx.fillRect(barX, barY, fillW, barH);
-
-        // ── Inner shine: 1 px lighter strip along the top edge ───────────────
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
-        ctx.fillRect(barX, barY, fillW, 1);
-
-        // ── Subtle dividers at 25 / 50 / 75 % so fractions read at a glance ──
-        ctx.fillStyle = 'rgba(0,0,0,0.35)';
-        for (let q = 1; q <= 3; q++) {
-          const divX = barX + barW * (q * 0.25);
-          if (divX < barX + fillW) {
-            ctx.fillRect(divX - 0.5, barY + 1, 1, barH - 1);
-          }
-        }
-      }
-
-      // ── Thin dark inner border (gives a recessed look) ────────────────────
-      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      ctx.lineWidth   = 0.5;
-      ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1);
-
-      ctx.restore();
-    }
-  }
-
-  // ── Dust container display (top-left, below health bar) ───────────────────
-  const dustCount = getPlayerDustCount();
-  const fullContainers = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
-  const partialDust = dustCount % DUST_PARTICLES_PER_CONTAINER;
-  const dustSquareSize = 8;
-  const dustPadding = 2;
-  const dustStartX = 8;
-  const dustStartY = HUD_HEALTH_BAR_Y_PX + HUD_HEALTH_BAR_HEIGHT_PX + HUD_HEALTH_DUST_GAP_PX;
-
-  ctx.save();
-  for (let i = 0; i < fullContainers + (partialDust > 0 ? 1 : 0); i++) {
-    const squareX = dustStartX + i * (dustSquareSize + dustPadding);
-    const isPartial = i === fullContainers;
-    const quadrantsActive = isPartial ? partialDust : DUST_PARTICLES_PER_CONTAINER;
-
-    // Draw square background
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(squareX, dustStartY, dustSquareSize, dustSquareSize);
-
-    // Draw quadrants (2x2 grid) - direct indexing to avoid allocation
-    const halfSize = dustSquareSize / 2;
-
-    for (let q = 0; q < quadrantsActive; q++) {
-      const qx = (q % 2) * halfSize;
-      const qy = Math.floor(q / 2) * halfSize;
-      ctx.fillStyle = 'rgba(212,168,75,0.9)'; // golden dust color
-      ctx.fillRect(squareX + qx + 0.5, dustStartY + qy + 0.5, halfSize - 1, halfSize - 1);
-    }
-
-    // Draw border
-    ctx.strokeStyle = 'rgba(212,168,75,0.6)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(squareX + 0.5, dustStartY + 0.5, dustSquareSize - 1, dustSquareSize - 1);
-  }
-  ctx.restore();
-
-  // ── Health bar / combat-text event detection ──────────────────────────────
-  // Detect BLOCKED events (armor absorbed a full hit) and spawn floater text.
-  {
-    const currentBlockedTick = world.lastPlayerBlockedTick;
-    if (currentBlockedTick !== prevLastPlayerBlockedTick.value && currentBlockedTick >= 0) {
-      prevLastPlayerBlockedTick.value = currentBlockedTick;
-      const player = world.clusters[0];
-      if (player !== undefined && player.isAliveFlag === 1) {
-        combatText.spawnBlocked(player.positionXWorld, player.positionYWorld, nowMs);
-      }
-    }
-  }
-
-  // ── Enemy health bar display (only when damaged) ──────────────────────────
-  const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
-  // Hoist constant canvas state outside the per-enemy loop to avoid redundant
-  // state-change calls and one save/restore pair per live enemy.
-  ctx.save();
-  ctx.strokeStyle = '#a07800';
-  ctx.lineWidth   = 0.5;
-  for (let ci = 0; ci < world.clusters.length; ci++) {
-    const cluster = world.clusters[ci];
-    if (cluster.isAliveFlag === 0) continue;
-
-    const prevHealth = prevHealthMap.get(cluster.entityId) ?? cluster.maxHealthPoints;
-    const healthDelta = prevHealth - cluster.healthPoints;
-
-    // Spawn damage floater when health decreased for any cluster.
-    if (healthDelta > 0) {
-      if (cluster.isPlayerFlag === 1) {
-        // Player was damaged — spawn urgent red floater above player.
-        combatText.spawnDamage(
-          cluster.positionXWorld,
-          cluster.positionYWorld - cluster.halfHeightWorld,
-          healthDelta,
-          1,
-          nowMs,
-        );
-      } else {
-        // Enemy was damaged — spawn gold floater above the enemy.
-        combatText.spawnDamage(
-          cluster.positionXWorld,
-          cluster.positionYWorld - cluster.halfHeightWorld,
-          healthDelta,
-          0,
-          nowMs,
-        );
-      }
-    }
-
-    // Update tracked health for next frame.
-    prevHealthMap.set(cluster.entityId, cluster.healthPoints);
-
-    // Player health bar is in the HUD; skip per-character bar for player.
-    if (cluster.isPlayerFlag === 1) continue;
-
-    // Check for health changes to trigger enemy health bar display.
-    if (healthDelta > 0) {
-      healthBarDisplayUntilTick.set(cluster.entityId, world.tick + healthBarDisplayTicks);
-    }
-
-    // Only show health bar if recently damaged (tick-based).
-    const displayUntilTick = healthBarDisplayUntilTick.get(cluster.entityId) ?? 0;
-    if (world.tick > displayUntilTick) continue;
-
-    const healthFraction = cluster.healthPoints / cluster.maxHealthPoints;
-    const barWidth  = 24;
-    const barHeight = 3;
-    const barX = cluster.positionXWorld * zoom + ox - barWidth / 2;
-    const barY = (cluster.positionYWorld - cluster.halfHeightWorld - 5) * zoom + oy;
-
-    // Thin gold outline
-    ctx.strokeRect(barX - 0.5, barY - 0.5, barWidth + 1, barHeight + 1);
-    // Background
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
-    ctx.fillRect(barX, barY, barWidth, barHeight);
-    // Health fill — red for enemies
-    const enemyFillW = barWidth * Math.max(0, healthFraction);
-    if (enemyFillW > 0) {
-      ctx.fillStyle = '#cc3333';
-      ctx.fillRect(barX, barY, enemyFillW, barHeight);
-      // Shine
-      ctx.fillStyle = 'rgba(255,255,255,0.15)';
-      ctx.fillRect(barX, barY, enemyFillW, 1);
-    }
-  }
-  ctx.restore();
-
-  // ── Floating combat text (damage numbers, BLOCKED) ────────────────────────
-  combatText.render(ctx, ox, oy, zoom, nowMs);
+  // ── HUD layers (debug overlay, health bar, dust display, enemy bars, combat text) ──
+  renderGameHud(r, nowMs);
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
   deviceCtx.imageSmoothingEnabled = false;
