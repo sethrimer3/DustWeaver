@@ -5,68 +5,74 @@
  *   • If right mouse is NOT held, the player carries a sword formed from
  *     dust motes that auto-swings at nearby enemies through windup → slash →
  *     recovery states.
- *   • If right mouse IS held, the sword instantly transitions into the
- *     existing Shield Weave crescent (delegated to applyShieldCrescent in
- *     weaveCombat.ts).  When released, it returns to sword-ready behavior.
+ *   • If right mouse IS HELD, the sword executes a guard swipe:
+ *       1. GUARD_FORMING  — fast form (5 ticks) when sword was idle/orbiting.
+ *       2. GUARD_SLASHING — a single mouse-aimed swipe before the shield forms.
+ *       3. SHIELDING      — crescent shield while RMB remains held.
+ *     The signature feel is "sword cuts open into shield."
+ *   • When RMB is released, the sword returns to RECOVERING → READY.
  *
- * MVP scope:
- *   • The sword is rendered visually on the 2D canvas (see
- *     render/effects/swordWeaveRenderer.ts) but does NOT physically move
- *     individual particles into a sword shape.  This avoids fighting the
- *     existing binding/orbit forces for one frame and keeps the change local.
- *     Particles continue to passively orbit the player while the sword is
- *     in any non-shielding state — the visual sword reads as a "compressed"
- *     representation of those motes.  Future work (compressed segments,
- *     multi-dust ratios, energy preservation) can be layered on later.
- *   • Shield mode is delegated entirely to applyShieldCrescent — no second
- *     shield system is created.
+ * Blade length (Phase 6):
+ *   activeSwordMoteCount = min(MAX_SWORD_BLADE_MOTES, availableMoteSlotCount)
+ *   swordLengthRatio     = activeSwordMoteCount / MAX_SWORD_BLADE_MOTES
  *
- * Damage:
- *   • During SLASHING the sword scans world.clusters for non-player alive
- *     enemies whose center lies within SWORD_REACH_WORLD of the hand anchor
- *     AND whose bearing lies within ±SLASH_HALF_ARC_RAD of the current sword
- *     angle.  Each enemy is hit at most once per slash via a small Uint8Array
- *     hit registry indexed by world.clusters.indexOf().
- *   • Damage is applied directly (cluster.healthPoints -= SWORD_DAMAGE),
- *     matching the pattern used by tickArrows / arrowWeave.
+ * If swordLengthRatio == 0 (all motes depleted), the sword cannot attack but
+ * can still be in READY state visually to indicate its presence.
+ *
+ * Guard swipe (Phase 7):
+ *   RMB press from non-shield state → GUARD_FORMING → GUARD_SLASHING → SHIELDING.
+ *   tickSwordWeave returns true when the shield crescent should be applied this
+ *   tick (only true once GUARD_SLASHING has completed → SHIELDING).
  *
  * Performance:
  *   • All scratch storage is module-level and pre-allocated.
  *   • No per-tick allocations.
- *   • Enemy scan is O(clusters) per slash tick — rooms typically have <16
- *     enemy clusters, so this is negligible.
  */
 
 import { WorldState } from '../world';
 import { ClusterState } from '../clusters/state';
+import {
+  getCircleOfInfluenceRadiusWorld,
+  getAvailableMoteSlotCount,
+} from '../motes/orderedMoteQueue';
 
 // ── Sword state enum ──────────────────────────────────────────────────────────
 
-export const SWORD_STATE_ORBIT      = 0;
-export const SWORD_STATE_FORMING    = 1;
-export const SWORD_STATE_READY      = 2;
-export const SWORD_STATE_WINDUP     = 3;
-export const SWORD_STATE_SLASHING   = 4;
-export const SWORD_STATE_RECOVERING = 5;
-export const SWORD_STATE_SHIELDING  = 6;
+export const SWORD_STATE_ORBIT        = 0;
+export const SWORD_STATE_FORMING      = 1;
+export const SWORD_STATE_READY        = 2;
+export const SWORD_STATE_WINDUP       = 3;
+export const SWORD_STATE_SLASHING     = 4;
+export const SWORD_STATE_RECOVERING   = 5;
+export const SWORD_STATE_SHIELDING    = 6;
+/**
+ * Phase 7 — fast sword materialisation when RMB is pressed while the sword
+ * is idle (ORBIT or FORMING).  5 ticks; transitions to GUARD_SLASHING.
+ */
+export const SWORD_STATE_GUARD_FORMING   = 7;
+/**
+ * Phase 7 — mouse-aimed guard swipe before the crescent shield forms.
+ * Uses same arc setup as auto-swing but aims toward playerWeaveAimDirXWorld/Y.
+ * After the swipe completes, transitions to SHIELDING.
+ */
+export const SWORD_STATE_GUARD_SLASHING  = 8;
 
 // ── Tunables ──────────────────────────────────────────────────────────────────
 
 /** Maximum visible blade segments rendered along the sword. */
 export const MAX_SWORD_BLADE_MOTES = 8;
 
-/** World-space distance from the hand anchor to the sword tip. */
+/** World-space distance from the hand anchor to the sword tip at full length. */
 export const SWORD_REACH_WORLD = 16.0;
 
 /** Auto-target scan radius (world units) measured from the hand anchor. */
 const AUTO_TARGET_RADIUS_WORLD = 30.0;
-const AUTO_TARGET_RADIUS_SQ_WORLD = AUTO_TARGET_RADIUS_WORLD * AUTO_TARGET_RADIUS_WORLD;
-
 /** Ticks the sword spends in each transient state. */
-const SWORD_FORMING_TICKS    = 15;
-const SWORD_WINDUP_TICKS     = 12;
-const SWORD_SLASH_TICKS      = 10;
-const SWORD_RECOVERY_TICKS   = 18;
+const SWORD_FORMING_TICKS       = 15;
+const SWORD_GUARD_FORMING_TICKS = 5;   // Phase 7: faster materialisation on guard
+const SWORD_WINDUP_TICKS        = 12;
+const SWORD_SLASH_TICKS         = 10;
+const SWORD_RECOVERY_TICKS      = 18;
 
 /** Total angular sweep of a slash (radians). */
 const SLASH_ARC_RAD     = Math.PI * 0.75;
@@ -74,7 +80,7 @@ const SLASH_ARC_RAD     = Math.PI * 0.75;
 const SLASH_HALF_ARC_RAD = SLASH_ARC_RAD * 0.5;
 
 /** Damage applied to each enemy hit by a slash. */
-const SWORD_DAMAGE = 1.0;
+const SWORD_DAMAGE = 2.0;
 
 /**
  * Resting sword angle (radians) measured from the hand anchor while the
@@ -117,6 +123,7 @@ export function resetSwordWeaveState(world: WorldState): void {
   world.swordWeaveSlashEndAngleRad      = 0;
   world.swordWeaveHandAnchorXWorld      = 0;
   world.swordWeaveHandAnchorYWorld      = 0;
+  world.swordWeaveLengthRatio           = 1.0;
   _slashHitFlags.fill(0);
 }
 
@@ -131,13 +138,29 @@ function _computeHandAnchor(player: ClusterState, outAnchor: { xWorld: number; y
 const _handAnchorScratch = { xWorld: 0, yWorld: 0 };
 
 /**
- * Finds the nearest non-player, alive enemy cluster within
- * AUTO_TARGET_RADIUS_WORLD of the given anchor point.  Returns the cluster's
- * index in world.clusters, or -1 if none is in range.
+ * Finds the nearest non-player, alive enemy cluster within `detectionRadiusWorld`
+ * world units of the given anchor point.  Returns the cluster's index in
+ * world.clusters, or -1 if none is in range.
+ *
+ * In Phases 1–4, `detectionRadiusWorld` defaults to `AUTO_TARGET_RADIUS_WORLD`
+ * (30 world units) for backward-compatible auto-swing behavior, but is
+ * overridden in the READY state to `getCircleOfInfluenceRadiusWorld(world)` so
+ * the sword's passive awareness scales with available mote count.
+ *
+ * @param world                  Current world state.
+ * @param anchorXWorld           X coordinate of the sword's hand anchor (world units).
+ * @param anchorYWorld           Y coordinate of the sword's hand anchor (world units).
+ * @param detectionRadiusWorld   Search radius (world units). Defaults to AUTO_TARGET_RADIUS_WORLD.
  */
-function _findNearestEnemyIndex(world: WorldState, anchorXWorld: number, anchorYWorld: number): number {
+function _findNearestEnemyIndex(
+  world: WorldState,
+  anchorXWorld: number,
+  anchorYWorld: number,
+  detectionRadiusWorld = AUTO_TARGET_RADIUS_WORLD,
+): number {
+  const detectionRadiusSq = detectionRadiusWorld * detectionRadiusWorld;
   let bestIndex = -1;
-  let bestDistSq = AUTO_TARGET_RADIUS_SQ_WORLD;
+  let bestDistSq = detectionRadiusSq;
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const c = world.clusters[ci];
     if (c.isAliveFlag === 0) continue;
@@ -180,8 +203,9 @@ function _applySlashHits(
   anchorXWorld: number,
   anchorYWorld: number,
   centerAngleRad: number,
+  reachWorld: number,
 ): void {
-  const reachSq = SWORD_REACH_WORLD * SWORD_REACH_WORLD;
+  const reachSq = reachWorld * reachWorld;
   const limit = Math.min(world.clusters.length, MAX_HIT_REGISTRY_SLOTS);
   for (let ci = 0; ci < limit; ci++) {
     if (_slashHitFlags[ci] === 1) continue;
@@ -215,16 +239,28 @@ function _applySlashHits(
  * applyPlayerWeaveCombat() in weaveCombat.ts when the player has equipped
  * WEAVE_SHIELD_SWORD as their secondary weave.
  *
- * The caller has already determined whether shield mode is active (right
- * mouse held).  When `isShieldActive` is true this function snaps the sword
- * into SWORD_STATE_SHIELDING and bails out without damage / state work; the
- * caller is responsible for invoking the existing applyShieldCrescent() each
- * tick to position the actual mote particles.
+ * Returns `true` when the shield crescent should be applied this tick.
+ * This is only true once the guard swipe (GUARD_SLASHING) has completed
+ * and the sword has entered SHIELDING state.  Returning false during the
+ * GUARD_FORMING / GUARD_SLASHING states suppresses the crescent so the
+ * "sword cuts open into shield" transition is visually uninterrupted.
  *
- * When `isShieldActive` is false the function runs the auto-swing FSM:
- *   ORBIT → FORMING → READY ↔ WINDUP → SLASHING → RECOVERING → READY
+ * @param isShieldHeld  True when the player is holding right mouse button.
  */
-export function tickSwordWeave(world: WorldState, player: ClusterState, isShieldActive: boolean): void {
+export function tickSwordWeave(
+  world: WorldState,
+  player: ClusterState,
+  isShieldHeld: boolean,
+): boolean {
+  // ── Phase 6: compute current blade length from available motes ──────────
+  const availableCount = getAvailableMoteSlotCount(world);
+  const activeSwordMoteCount = Math.min(MAX_SWORD_BLADE_MOTES, availableCount);
+  const lengthRatio = world.moteSlotCount > 0
+    ? activeSwordMoteCount / MAX_SWORD_BLADE_MOTES
+    : 1.0;  // full reach when no mote queue configured
+  world.swordWeaveLengthRatio = lengthRatio;
+  const currentReachWorld = SWORD_REACH_WORLD * Math.max(lengthRatio, 0.0);
+
   // ── Hand anchor ─────────────────────────────────────────────────────────
   _computeHandAnchor(player, _handAnchorScratch);
   world.swordWeaveHandAnchorXWorld = _handAnchorScratch.xWorld;
@@ -232,41 +268,69 @@ export function tickSwordWeave(world: WorldState, player: ClusterState, isShield
 
   // Restful "ready" angle depends on facing direction.
   const readyAngleRad = player.isFacingLeftFlag === 1 ? READY_ANGLE_LEFT_RAD : READY_ANGLE_RIGHT_RAD;
+  const facingSign = player.isFacingLeftFlag === 1 ? -1.0 : 1.0;
 
-  // ── Shield mode preempts everything ─────────────────────────────────────
-  if (isShieldActive) {
-    if (world.swordWeaveStateEnum !== SWORD_STATE_SHIELDING) {
-      world.swordWeaveStateEnum = SWORD_STATE_SHIELDING;
-      world.swordWeaveStateTicksElapsed = 0;
-      world.swordWeaveTargetClusterIndex = -1;
+  // ── Phase 7: detect RMB press (rising edge) ──────────────────────────────
+  const isInShieldOrGuardState =
+    world.swordWeaveStateEnum === SWORD_STATE_SHIELDING     ||
+    world.swordWeaveStateEnum === SWORD_STATE_GUARD_FORMING ||
+    world.swordWeaveStateEnum === SWORD_STATE_GUARD_SLASHING;
+
+  // Rising edge: shield was NOT active (we were not in a guard/shield state)
+  // and now it IS held — begin the guard sequence.
+  const guardPressed = isShieldHeld && !isInShieldOrGuardState;
+
+  if (guardPressed) {
+    // Decide entry point based on current sword readiness:
+    // - Idle/orbit → fast guard form then guard slash
+    // - Any other active state → skip forming, jump straight to guard slash
+    const canSkipGuardForm =
+      world.swordWeaveStateEnum === SWORD_STATE_READY      ||
+      world.swordWeaveStateEnum === SWORD_STATE_WINDUP     ||
+      world.swordWeaveStateEnum === SWORD_STATE_SLASHING   ||
+      world.swordWeaveStateEnum === SWORD_STATE_RECOVERING;
+    if (canSkipGuardForm) {
+      world.swordWeaveStateEnum = SWORD_STATE_GUARD_SLASHING;
     } else {
-      world.swordWeaveStateTicksElapsed++;
+      world.swordWeaveStateEnum = SWORD_STATE_GUARD_FORMING;
     }
-    // When shielding, point the (invisible) sword along the aim direction so
-    // the renderer's ready-stance crossguard fades cleanly.  Use the existing
-    // weave aim direction.
-    const aimAngleRad = Math.atan2(world.playerWeaveAimDirYWorld, world.playerWeaveAimDirXWorld);
-    world.swordWeaveAngleRad = _lerpAngleRad(world.swordWeaveAngleRad, aimAngleRad, 0.25);
-    return;
-  }
-
-  // ── Coming OUT of shielding → start re-forming sword ─────────────────────
-  if (world.swordWeaveStateEnum === SWORD_STATE_SHIELDING) {
-    world.swordWeaveStateEnum = SWORD_STATE_FORMING;
     world.swordWeaveStateTicksElapsed = 0;
     world.swordWeaveTargetClusterIndex = -1;
+    _slashHitFlags.fill(0);
   }
 
-  // First-time entry from ORBIT: begin forming.
+  // RMB released while in any guard/shield state → return to recovering.
+  if (!isShieldHeld && isInShieldOrGuardState) {
+    world.swordWeaveStateEnum = SWORD_STATE_RECOVERING;
+    world.swordWeaveStateTicksElapsed = 0;
+    world.swordWeaveTargetClusterIndex = -1;
+    // Caller will release block-mode particles.
+    return false;
+  }
+
+  // ── Shield mode: crescent only once SHIELDING state is reached ──────────
+  if (world.swordWeaveStateEnum === SWORD_STATE_SHIELDING) {
+    world.swordWeaveStateTicksElapsed++;
+    // When shielding, point the (invisible) sword along the aim direction so
+    // the renderer's ready-stance crossguard fades cleanly.
+    const aimAngleRad = Math.atan2(world.playerWeaveAimDirYWorld, world.playerWeaveAimDirXWorld);
+    world.swordWeaveAngleRad = _lerpAngleRad(world.swordWeaveAngleRad, aimAngleRad, 0.25);
+    return true;  // ← crescent should be active
+  }
+
+  // Coming OUT of SHIELDING state via !isShieldHeld is handled above.
+  // If somehow we're in SHIELDING with RMB still held (handled above), return.
+
+  // ── Coming OUT of ORBIT: begin forming ────────────────────────────────────
   if (world.swordWeaveStateEnum === SWORD_STATE_ORBIT) {
     world.swordWeaveStateEnum = SWORD_STATE_FORMING;
     world.swordWeaveStateTicksElapsed = 0;
   }
 
+  // ── Main FSM ──────────────────────────────────────────────────────────────
   switch (world.swordWeaveStateEnum) {
     case SWORD_STATE_FORMING: {
       world.swordWeaveStateTicksElapsed++;
-      // Smoothly settle to the ready angle.
       world.swordWeaveAngleRad = _lerpAngleRad(world.swordWeaveAngleRad, readyAngleRad, 0.18);
       if (world.swordWeaveStateTicksElapsed >= SWORD_FORMING_TICKS) {
         world.swordWeaveStateEnum = SWORD_STATE_READY;
@@ -277,15 +341,18 @@ export function tickSwordWeave(world: WorldState, player: ClusterState, isShield
 
     case SWORD_STATE_READY: {
       world.swordWeaveStateTicksElapsed++;
-      // Hold the ready pose; passively snap to the ready angle.
       world.swordWeaveAngleRad = _lerpAngleRad(world.swordWeaveAngleRad, readyAngleRad, 0.20);
 
-      // Auto-target scan.
-      const targetIndex = _findNearestEnemyIndex(world, _handAnchorScratch.xWorld, _handAnchorScratch.yWorld);
-      if (targetIndex !== -1) {
-        world.swordWeaveTargetClusterIndex = targetIndex;
-        world.swordWeaveStateEnum = SWORD_STATE_WINDUP;
-        world.swordWeaveStateTicksElapsed = 0;
+      // Phase 6: only enter windup if blade has at least one mote.
+      if (activeSwordMoteCount > 0) {
+        // Phase 4: use circle-of-influence radius for detection.
+        const influenceRadiusWorld = getCircleOfInfluenceRadiusWorld(world);
+        const targetIndex = _findNearestEnemyIndex(world, _handAnchorScratch.xWorld, _handAnchorScratch.yWorld, influenceRadiusWorld);
+        if (targetIndex !== -1) {
+          world.swordWeaveTargetClusterIndex = targetIndex;
+          world.swordWeaveStateEnum = SWORD_STATE_WINDUP;
+          world.swordWeaveStateTicksElapsed = 0;
+        }
       }
       break;
     }
@@ -294,21 +361,17 @@ export function tickSwordWeave(world: WorldState, player: ClusterState, isShield
       world.swordWeaveStateTicksElapsed++;
       const targetCluster = _resolveLiveTarget(world);
       if (targetCluster === null) {
-        // Target died/expired — abort to recovery.
         world.swordWeaveStateEnum = SWORD_STATE_RECOVERING;
         world.swordWeaveStateTicksElapsed = 0;
         break;
       }
       const bearingRad = _bearingToCluster(_handAnchorScratch.xWorld, _handAnchorScratch.yWorld, targetCluster);
-      // Pull back perpendicular-ish to the strike: subtract the wind-up amount.
-      const sign = player.isFacingLeftFlag === 1 ? -1.0 : 1.0;
-      const windupAngleRad = bearingRad - WINDUP_PULL_BACK_RAD * sign;
+      const windupAngleRad = bearingRad - WINDUP_PULL_BACK_RAD * facingSign;
       world.swordWeaveAngleRad = _lerpAngleRad(world.swordWeaveAngleRad, windupAngleRad, 0.30);
 
       if (world.swordWeaveStateTicksElapsed >= SWORD_WINDUP_TICKS) {
-        // Lock in the slash arc start/end based on bearing at slash start.
-        const startAngleRad = bearingRad - SLASH_HALF_ARC_RAD * sign;
-        const endAngleRad   = bearingRad + SLASH_HALF_ARC_RAD * sign;
+        const startAngleRad = bearingRad - SLASH_HALF_ARC_RAD * facingSign;
+        const endAngleRad   = bearingRad + SLASH_HALF_ARC_RAD * facingSign;
         world.swordWeaveSlashStartAngleRad = startAngleRad;
         world.swordWeaveSlashEndAngleRad   = endAngleRad;
         world.swordWeaveAngleRad           = startAngleRad;
@@ -322,7 +385,6 @@ export function tickSwordWeave(world: WorldState, player: ClusterState, isShield
     case SWORD_STATE_SLASHING: {
       world.swordWeaveStateTicksElapsed++;
       const t = Math.min(1.0, world.swordWeaveStateTicksElapsed / SWORD_SLASH_TICKS);
-      // Ease-in-out for snappy slash motion.
       const eased = t * t * (3.0 - 2.0 * t);
       const startRad = world.swordWeaveSlashStartAngleRad;
       const endRad   = world.swordWeaveSlashEndAngleRad;
@@ -330,8 +392,8 @@ export function tickSwordWeave(world: WorldState, player: ClusterState, isShield
       const currentAngleRad = startRad + sweepDelta * eased;
       world.swordWeaveAngleRad = currentAngleRad;
 
-      // Apply hits using the current sword angle as the cone center.
-      _applySlashHits(world, _handAnchorScratch.xWorld, _handAnchorScratch.yWorld, currentAngleRad);
+      // Phase 6: hit detection uses current (possibly reduced) reach.
+      _applySlashHits(world, _handAnchorScratch.xWorld, _handAnchorScratch.yWorld, currentAngleRad, currentReachWorld);
 
       if (world.swordWeaveStateTicksElapsed >= SWORD_SLASH_TICKS) {
         world.swordWeaveStateEnum = SWORD_STATE_RECOVERING;
@@ -351,13 +413,54 @@ export function tickSwordWeave(world: WorldState, player: ClusterState, isShield
       break;
     }
 
+    // ── Phase 7: guard states ──────────────────────────────────────────────
+
+    case SWORD_STATE_GUARD_FORMING: {
+      world.swordWeaveStateTicksElapsed++;
+      world.swordWeaveAngleRad = _lerpAngleRad(world.swordWeaveAngleRad, readyAngleRad, 0.40);
+      if (world.swordWeaveStateTicksElapsed >= SWORD_GUARD_FORMING_TICKS) {
+        world.swordWeaveStateEnum = SWORD_STATE_GUARD_SLASHING;
+        world.swordWeaveStateTicksElapsed = 0;
+        _slashHitFlags.fill(0);
+        // Pre-compute guard slash arc from current aim direction.
+        const aimAngleRad = Math.atan2(world.playerWeaveAimDirYWorld, world.playerWeaveAimDirXWorld);
+        world.swordWeaveSlashStartAngleRad = aimAngleRad - SLASH_HALF_ARC_RAD * facingSign;
+        world.swordWeaveSlashEndAngleRad   = aimAngleRad + SLASH_HALF_ARC_RAD * facingSign;
+        world.swordWeaveAngleRad           = world.swordWeaveSlashStartAngleRad;
+      }
+      break;
+    }
+
+    case SWORD_STATE_GUARD_SLASHING: {
+      world.swordWeaveStateTicksElapsed++;
+      const t = Math.min(1.0, world.swordWeaveStateTicksElapsed / SWORD_SLASH_TICKS);
+      const eased = t * t * (3.0 - 2.0 * t);
+      const startRad = world.swordWeaveSlashStartAngleRad;
+      const endRad   = world.swordWeaveSlashEndAngleRad;
+      const sweepDelta = _shortestAngleDeltaRad(startRad, endRad);
+      const currentAngleRad = startRad + sweepDelta * eased;
+      world.swordWeaveAngleRad = currentAngleRad;
+
+      // Phase 6: guard slash hits also use current reach.
+      if (activeSwordMoteCount > 0) {
+        _applySlashHits(world, _handAnchorScratch.xWorld, _handAnchorScratch.yWorld, currentAngleRad, currentReachWorld);
+      }
+
+      if (world.swordWeaveStateTicksElapsed >= SWORD_SLASH_TICKS) {
+        world.swordWeaveStateEnum = SWORD_STATE_SHIELDING;
+        world.swordWeaveStateTicksElapsed = 0;
+      }
+      break;
+    }
+
     default: {
-      // Unknown state — reset to forming for safety.
       world.swordWeaveStateEnum = SWORD_STATE_FORMING;
       world.swordWeaveStateTicksElapsed = 0;
       break;
     }
   }
+
+  return false;  // crescent not active during sword states
 }
 
 /** Returns the live target cluster, or null if it has died/become invalid. */

@@ -42,6 +42,8 @@ import {
   SWORD_STATE_SLASHING,
   SWORD_STATE_RECOVERING,
   SWORD_STATE_SHIELDING,
+  SWORD_STATE_GUARD_FORMING,
+  SWORD_STATE_GUARD_SLASHING,
   MAX_SWORD_BLADE_MOTES,
   SWORD_REACH_WORLD,
 } from '../../sim/weaves/swordWeave';
@@ -68,9 +70,6 @@ const CROSSGUARD_SPACING_WORLD = 1.5;
  * from the hand, with the handle implicit between the hand and the bottom mote.
  */
 const CROSSGUARD_OFFSET_FROM_HAND_WORLD = 2.5;
-
-/** World-space spacing between consecutive blade mote squares. */
-const BLADE_MOTE_SPACING_WORLD = SWORD_REACH_WORLD / (MAX_SWORD_BLADE_MOTES + 1);
 
 /** Number of slash-trail samples drawn across the sweep. */
 const SLASH_TRAIL_SAMPLE_COUNT = 12;
@@ -113,6 +112,11 @@ export class SwordWeaveRenderer {
     }
     if (!playerFound) return;
 
+    // Phase 6: compute visible blade mote count and tip distance from length ratio.
+    const lengthRatio = snapshot.swordWeaveLengthRatio;
+    const visibleBladeMotes = Math.max(0, Math.round(lengthRatio * MAX_SWORD_BLADE_MOTES));
+    const tipDistWorld = SWORD_REACH_WORLD * Math.max(lengthRatio, 1 / MAX_SWORD_BLADE_MOTES);
+
     const handXPx = snapshot.swordWeaveHandAnchorXWorld * zoom + ox;
     const handYPx = snapshot.swordWeaveHandAnchorYWorld * zoom + oy;
     const angleRad = snapshot.swordWeaveAngleRad;
@@ -120,14 +124,16 @@ export class SwordWeaveRenderer {
     const sinA = Math.sin(angleRad);
 
     // FORMING and RECOVERING ramp the blade extension and alpha for a cleaner
-    // appear/disappear feel.
+    // appear/disappear feel.  GUARD_FORMING uses the same ramp but faster.
     let alpha = 1.0;
     let extension = 1.0;
     if (state === SWORD_STATE_FORMING) {
-      // Linearly grow from 0 → 1 across SWORD_FORMING_TICKS.  We don't have
-      // the exact tick budget here, so use a conservative ramp based on the
-      // recorded elapsed ticks (clamped to 1 at ~15 ticks).
       const t = Math.min(1.0, snapshot.swordWeaveStateTicksElapsed / 15);
+      alpha = t;
+      extension = t;
+    } else if (state === SWORD_STATE_GUARD_FORMING) {
+      // Fast form (5 ticks) — same shape but quicker ramp.
+      const t = Math.min(1.0, snapshot.swordWeaveStateTicksElapsed / 5);
       alpha = t;
       extension = t;
     } else if (state === SWORD_STATE_WINDUP) {
@@ -135,7 +141,7 @@ export class SwordWeaveRenderer {
       extension = 1.0;
     } else if (state === SWORD_STATE_RECOVERING) {
       const t = Math.min(1.0, snapshot.swordWeaveStateTicksElapsed / 18);
-      alpha = 1.0 - 0.25 * t; // subtle dim during recovery
+      alpha = 1.0 - 0.25 * t;
       extension = 1.0;
     }
 
@@ -143,16 +149,20 @@ export class SwordWeaveRenderer {
     ctx.imageSmoothingEnabled = false;
 
     // ── Draw blade ──────────────────────────────────────────────────────────
+    // Phase 6: only draw the number of blade motes matching available motes.
     ctx.globalAlpha = alpha * 0.95;
     ctx.fillStyle = GOLD_COLOR;
     const bladeStartXPx = handXPx + cosA * CROSSGUARD_OFFSET_FROM_HAND_WORLD * zoom;
     const bladeStartYPx = handYPx + sinA * CROSSGUARD_OFFSET_FROM_HAND_WORLD * zoom;
-    for (let m = 1; m <= MAX_SWORD_BLADE_MOTES; m++) {
-      const distWorld = (m * BLADE_MOTE_SPACING_WORLD) * extension;
-      const mx = bladeStartXPx + cosA * distWorld * zoom;
-      const my = bladeStartYPx + sinA * distWorld * zoom;
-      const halfPx = MOTE_HALF_PX * zoom;
-      ctx.fillRect(mx - halfPx, my - halfPx, halfPx * 2, halfPx * 2);
+    if (visibleBladeMotes > 0) {
+      const bladeSpacingWorld = tipDistWorld / (visibleBladeMotes + 1);
+      for (let m = 1; m <= visibleBladeMotes; m++) {
+        const distWorld = (m * bladeSpacingWorld) * extension;
+        const mx = bladeStartXPx + cosA * distWorld * zoom;
+        const my = bladeStartYPx + sinA * distWorld * zoom;
+        const halfPx = MOTE_HALF_PX * zoom;
+        ctx.fillRect(mx - halfPx, my - halfPx, halfPx * 2, halfPx * 2);
+      }
     }
 
     // ── Draw crossguard (5 squares in a plus, perpendicular to the blade) ──
@@ -198,9 +208,9 @@ export class SwordWeaveRenderer {
       halfPx * 2, halfPx * 2,
     );
 
-    // ── Draw slash trail during SLASHING ────────────────────────────────────
-    if (state === SWORD_STATE_SLASHING) {
-      this._drawSlashTrail(ctx, snapshot, handXPx, handYPx, zoom);
+    // ── Draw slash trail during SLASHING or GUARD_SLASHING ─────────────────
+    if (state === SWORD_STATE_SLASHING || state === SWORD_STATE_GUARD_SLASHING) {
+      this._drawSlashTrail(ctx, snapshot, handXPx, handYPx, tipDistWorld, zoom);
     }
 
     ctx.globalAlpha = 1.0;
@@ -219,6 +229,7 @@ export class SwordWeaveRenderer {
     snapshot: WorldSnapshot,
     handXPx: number,
     handYPx: number,
+    tipDistWorld: number,
     zoom: number,
   ): void {
     const startA = snapshot.swordWeaveSlashStartAngleRad;
@@ -234,19 +245,17 @@ export class SwordWeaveRenderer {
     while (trailDelta > Math.PI) trailDelta -= 2.0 * Math.PI;
     while (trailDelta <= -Math.PI) trailDelta += 2.0 * Math.PI;
 
-    const tipDistWorld = SWORD_REACH_WORLD;
+    // tipDistWorld is passed in (Phase 6: scales with swordWeaveLengthRatio).
     const halfPx = MOTE_HALF_PX * zoom;
     ctx.fillStyle = GOLD_COLOR;
     for (let s = 0; s < SLASH_TRAIL_SAMPLE_COUNT; s++) {
       const t = s / (SLASH_TRAIL_SAMPLE_COUNT - 1);
       const a = startA + trailDelta * t;
-      // Older samples (small t) fade; newest (t≈1) is bright.
       ctx.globalAlpha = 0.15 + 0.55 * t;
       const tipX = handXPx + Math.cos(a) * tipDistWorld * zoom;
       const tipY = handYPx + Math.sin(a) * tipDistWorld * zoom;
       ctx.fillRect(tipX - halfPx, tipY - halfPx, halfPx * 2, halfPx * 2);
 
-      // Mid-blade arc dot for thickness
       const midX = handXPx + Math.cos(a) * tipDistWorld * 0.6 * zoom;
       const midY = handYPx + Math.sin(a) * tipDistWorld * 0.6 * zoom;
       ctx.globalAlpha = 0.10 + 0.30 * t;

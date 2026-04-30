@@ -50,6 +50,9 @@ export const MAX_BEE_SWARMS = 4;
 /** Number of bees in a single bee-swarm cluster. */
 export const BEES_PER_SWARM = 10;
 
+/** Maximum number of logical mote slots (equals PARTICLE_COUNT_PER_CLUSTER). */
+export const MAX_MOTE_SLOTS = 20;
+
 export interface WorldState extends ParticleBuffers {
   tick: number;
   dtMs: number;
@@ -504,6 +507,91 @@ export interface WorldState extends ParticleBuffers {
   swordWeaveHandAnchorXWorld: number;
   /** World Y of the sword's hand anchor, recomputed each tick the sword is active. */
   swordWeaveHandAnchorYWorld: number;
+  /**
+   * Current sword length ratio in [0, 1].
+   *
+   * Computed each tick as `min(MAX_SWORD_BLADE_MOTES, availableMoteCount) / MAX_SWORD_BLADE_MOTES`.
+   * 1.0 = full sword (enough motes for all blade segments).
+   * 0.5 = half sword (half the blade segments present).
+   * 0.0 = no sword (zero available motes — sword cannot attack).
+   *
+   * Propagated to WorldSnapshot for the renderer to scale the blade.
+   */
+  swordWeaveLengthRatio: number;
+
+  // ── Ordered Mote Queue ─────────────────────────────────────────────────────
+  /**
+   * Number of active logical mote slots for the player.
+   * 0 when the player has no dust containers or loadout configured.
+   */
+  moteSlotCount: number;
+  /**
+   * ParticleKind per slot (MAX_MOTE_SLOTS entries).
+   * Reflects the dust kind of each mote at queue initialisation time.
+   */
+  moteSlotKind: Uint8Array;
+  /**
+   * State per slot: 0 = available, 1 = depleted (MAX_MOTE_SLOTS entries).
+   * Use MOTE_STATE_AVAILABLE / MOTE_STATE_DEPLETED from orderedMoteQueue.ts.
+   */
+  moteSlotState: Uint8Array;
+  /**
+   * Ticks remaining on the depletion cooldown (MAX_MOTE_SLOTS entries).
+   * 0 while the slot is available.
+   */
+  moteSlotCooldownTicksLeft: Uint16Array;
+  /**
+   * Index into the world particle buffer for each slot's linked particle.
+   * -1 for unlinked slots (MAX_MOTE_SLOTS entries).
+   */
+  moteSlotParticleIndex: Int16Array;
+  /**
+   * Phase 13: ticks remaining on the mote-regeneration flash animation
+   * (MAX_MOTE_SLOTS entries, Uint8 — max 255 ticks).
+   * Set to MOTE_REGEN_FLASH_TICKS when a slot transitions DEPLETED → AVAILABLE.
+   * Ticked down each tick; read by the HUD mote dot row for a brief white flash.
+   */
+  moteRegenFlashTicksLeft: Uint8Array;
+  /**
+   * Smoothed display radius (world units) for the grapple influence circle.
+   * Lerps toward getEffectiveGrappleRangeWorld() each tick so the circle
+   * grows and shrinks visually with a small lag.
+   */
+  moteGrappleDisplayRadiusWorld: number;
+
+  // ── Phase 8: Storm / Inventory source flag ─────────────────────────────────
+  /**
+   * 1 when the player's primary weave is Storm (motes orbit passively).
+   * 0 when Storm is not equipped (motes materialize from inventory space).
+   *
+   * Set once at loadout apply time (gameScreen.ts) and again whenever the
+   * loadout changes.  Not recomputed every tick.
+   *
+   * Propagated to WorldSnapshot so renderers can choose the appropriate
+   * mote-source visual style without importing sim helpers.
+   */
+  isMoteSourceOrbitFlag: 0 | 1;
+
+  // ── Phase 9: Grapple out-of-range tension ──────────────────────────────────
+  /**
+   * Number of consecutive ticks the attached grapple rope has exceeded the
+   * current effective grapple range.  0 while the rope length is within range.
+   *
+   * When this reaches `GRAPPLE_OUT_OF_RANGE_BREAK_TICKS` (45) the grapple
+   * breaks automatically.  Reset to 0 in `releaseGrapple`.
+   */
+  grappleOutOfRangeTicks: number;
+  /**
+   * Visual tension factor in [0, 1].
+   *
+   * 0 = rope within range (no tension).
+   * Ramps from 0 → 1 as grappleOutOfRangeTicks approaches the break threshold.
+   * 1 = rope breaks next tick.
+   *
+   * Used by the influence circle renderer to pulse/flicker the ring as a
+   * "rope under tension" warning.  Reset to 0 in `releaseGrapple`.
+   */
+  grappleTensionFactor: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -677,6 +765,22 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     swordWeaveSlashEndAngleRad:    0,
     swordWeaveHandAnchorXWorld:    0,
     swordWeaveHandAnchorYWorld:    0,
+    swordWeaveLengthRatio:         1.0,
+    // ── Ordered Mote Queue ────────────────────────────────────────────
+    moteSlotCount:              0,
+    moteSlotKind:               new Uint8Array(MAX_MOTE_SLOTS),
+    moteSlotState:              new Uint8Array(MAX_MOTE_SLOTS),
+    moteSlotCooldownTicksLeft:  new Uint16Array(MAX_MOTE_SLOTS),
+    moteSlotParticleIndex:      new Int16Array(MAX_MOTE_SLOTS).fill(-1),
+    moteRegenFlashTicksLeft:    new Uint8Array(MAX_MOTE_SLOTS),
+    // Default to full grapple range (96 world units = INFLUENCE_RADIUS_WORLD).
+    // initMoteQueueFromParticles() will correct this on the first room load.
+    moteGrappleDisplayRadiusWorld: 96.0,
+    // Default: Storm Weave is the starting primary, so motes orbit from the start.
+    isMoteSourceOrbitFlag:         1,
+    // Phase 9: grapple tension initialised clear.
+    grappleOutOfRangeTicks:        0,
+    grappleTensionFactor:          0,
     ...createParticleBuffers(),
   };
 }

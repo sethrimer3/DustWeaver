@@ -15,6 +15,15 @@ import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
 import { HEALTH_BAR_DISPLAY_MS } from './gameRoom';
+import {
+  getTotalMoteSlotCount,
+  getAvailableMoteSlotCount,
+  getEffectiveGrappleRangeWorld,
+  MOTE_STATE_AVAILABLE,
+  MOTE_STATE_DEPLETED,
+  BASE_MOTE_REGENERATION_TICKS,
+  MOTE_REGEN_FLASH_TICKS,
+} from '../sim/motes/orderedMoteQueue';
 
 // ── HUD layout constants ────────────────────────────────────────────────────
 
@@ -31,6 +40,14 @@ const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red 
 
 /** Fixed simulation timestep for tick-to-ms conversion. */
 const FIXED_DT_MS = 16.666;
+
+// ── Mote dot row layout constants (virtual pixels) ──────────────────────────
+/** Side length of each mote indicator square. */
+const MOTE_DOT_SIZE_PX = 5;
+/** Horizontal gap between consecutive mote indicators. */
+const MOTE_DOT_GAP_PX  = 2;
+/** Vertical gap between the dust-container row and the mote indicator row. */
+const MOTE_ROW_GAP_PX  = 3;
 
 // ── HUD context interface ───────────────────────────────────────────────────
 
@@ -79,6 +96,48 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     const roomLabel = currentRoom.name;
     const labelW = ctx.measureText(roomLabel).width;
     ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
+
+    // ── Mote Queue debug overlay (top-right corner) ─────────────────────────
+    {
+      const totalSlots     = getTotalMoteSlotCount(world);
+      const availableSlots = getAvailableMoteSlotCount(world);
+      const depletedSlots  = totalSlots - availableSlots;
+      const ratio          = totalSlots > 0 ? availableSlots / totalSlots : 1.0;
+      const effectiveRange = getEffectiveGrappleRangeWorld(world);
+      const displayRadius  = world.moteGrappleDisplayRadiusWorld;
+
+      // Build slot-state bar: green dots for available, red for depleted
+      let slotBar = '';
+      for (let i = 0; i < world.moteSlotCount; i++) {
+        slotBar += world.moteSlotState[i] === MOTE_STATE_DEPLETED ? '○' : '●';
+      }
+
+      const moteLines = [
+        `Motes: ${availableSlots}/${totalSlots} (${(ratio * 100).toFixed(0)}%)`,
+        `Depleted: ${depletedSlots}`,
+        `Range eff: ${effectiveRange.toFixed(1)}  disp: ${displayRadius.toFixed(1)}`,
+        slotBar || '(no motes)',
+      ];
+
+      ctx.save();
+      ctx.font = '7px monospace';
+      const lineH = 9;
+      const padX  = 4;
+      const padY  = 4;
+      const panelW = 150;
+      const panelH = moteLines.length * lineH + padY * 2;
+      const panelX = virtualWidthPx - panelW - padX;
+      const panelY = padY;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.50)';
+      ctx.fillRect(panelX, panelY, panelW, panelH);
+
+      ctx.fillStyle = '#b0f080';
+      for (let li = 0; li < moteLines.length; li++) {
+        ctx.fillText(moteLines[li], panelX + padX, panelY + padY + (li + 1) * lineH - 2);
+      }
+      ctx.restore();
+    }
   }
 
   // ── Player health bar in HUD (top-left, above dust display) ─────────────
@@ -195,6 +254,69 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     ctx.strokeRect(squareX + 0.5, dustStartY + 0.5, dustSquareSize - 1, dustSquareSize - 1);
   }
   ctx.restore();
+
+  // ── Mote Queue display (top-left, below dust containers) ──────────────────
+  // Always visible when the player has a configured mote queue.
+  // Available motes: bright gold square.  Depleted motes: dark square with
+  // a clockwise cooldown arc that grows as the mote regenerates.
+  if (world.moteSlotCount > 0) {
+    const moteRowXPx = dustStartX;
+    const moteRowYPx = dustStartY + dustSquareSize + MOTE_ROW_GAP_PX;
+
+    ctx.save();
+    for (let mi = 0; mi < world.moteSlotCount; mi++) {
+      const mxPx = moteRowXPx + mi * (MOTE_DOT_SIZE_PX + MOTE_DOT_GAP_PX);
+      const myPx = moteRowYPx;
+      const isAvailable = world.moteSlotState[mi] === MOTE_STATE_AVAILABLE;
+
+      // Background fill
+      ctx.fillStyle = isAvailable ? 'rgba(255,215,0,0.88)' : 'rgba(18,14,4,0.85)';
+      ctx.fillRect(mxPx, myPx, MOTE_DOT_SIZE_PX, MOTE_DOT_SIZE_PX);
+
+      if (isAvailable) {
+        // Shine strip along the top edge — matches the dust container style.
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillRect(mxPx, myPx, MOTE_DOT_SIZE_PX, 1);
+      } else {
+        // Cooldown arc: sweeps clockwise from the top (−π/2) and grows toward
+        // a full circle as the mote approaches regeneration.
+        const cooldownTicksLeft = world.moteSlotCooldownTicksLeft[mi];
+        const regenFraction   = cooldownTicksLeft > 0
+          ? 1.0 - cooldownTicksLeft / BASE_MOTE_REGENERATION_TICKS
+          : 1.0;
+        if (regenFraction > 0) {
+          const cxPx = mxPx + MOTE_DOT_SIZE_PX * 0.5;
+          const cyPx = myPx + MOTE_DOT_SIZE_PX * 0.5;
+          const rPx  = MOTE_DOT_SIZE_PX * 0.5 - 0.5;
+          ctx.strokeStyle = 'rgba(255,215,0,0.65)';
+          ctx.lineWidth   = 1.0;
+          ctx.beginPath();
+          ctx.arc(
+            cxPx, cyPx, rPx,
+            -Math.PI * 0.5,
+            -Math.PI * 0.5 + regenFraction * 2 * Math.PI,
+          );
+          ctx.stroke();
+        }
+      }
+
+      // Thin border — gold for available, subdued amber for depleted.
+      ctx.strokeStyle = isAvailable ? 'rgba(200,160,40,0.75)' : 'rgba(70,55,15,0.55)';
+      ctx.lineWidth   = 0.5;
+      ctx.strokeRect(mxPx + 0.25, myPx + 0.25, MOTE_DOT_SIZE_PX - 0.5, MOTE_DOT_SIZE_PX - 0.5);
+
+      // Phase 13: regen flash — bright white overlay that fades quickly when
+      // a depleted mote just came back online.  Only drawn while the flash
+      // timer is counting down (set to MOTE_REGEN_FLASH_TICKS at restore time).
+      const flashTicksLeft = world.moteRegenFlashTicksLeft[mi];
+      if (flashTicksLeft > 0) {
+        const flashAlpha = flashTicksLeft / MOTE_REGEN_FLASH_TICKS;
+        ctx.fillStyle = `rgba(255,255,255,${(flashAlpha * 0.75).toFixed(3)})`;
+        ctx.fillRect(mxPx, myPx, MOTE_DOT_SIZE_PX, MOTE_DOT_SIZE_PX);
+      }
+    }
+    ctx.restore();
+  }
 
   // ── Health bar / combat-text event detection ──────────────────────────────
   // Detect BLOCKED events (armor absorbed a full hit) and spawn floater text.

@@ -18,6 +18,10 @@
 
 import { WorldState } from '../world';
 import { raycastWalls } from '../clusters/grappleMiss';
+import {
+  getAvailableMoteSlotCount,
+  depleteFirstNMoteSlots,
+} from '../motes/orderedMoteQueue';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +91,10 @@ function _findFreeSlot(world: WorldState): number {
 
 /** Called when the player begins holding the arrow weave input. */
 export function startArrowLoading(world: WorldState): void {
+  // When the ordered mote queue is configured, require at least 2 available
+  // motes to form the minimum (2-mote) arrow.  If not enough motes, silently
+  // abort so the player gets no bow visual and no accidental empty fire.
+  if (world.moteSlotCount > 0 && getAvailableMoteSlotCount(world) < 2) return;
   world.isArrowWeaveLoadingFlag = 1;
   world.arrowWeaveLoadStartTick = world.tick;
   world.arrowWeaveCurrentMoteCount = 2; // 2 motes snap in immediately
@@ -95,17 +103,36 @@ export function startArrowLoading(world: WorldState): void {
 /**
  * Called each tick while the player is holding the arrow weave input.
  * Advances the mote count as loading thresholds are crossed.
+ *
+ * When the ordered mote queue is configured, the mote count is also capped
+ * by the number of currently available queue slots.  If a combat hit depletes
+ * motes mid-charge and available drops below 2, loading is cancelled (the
+ * arrow would be too weak to fire) so the player must re-press.
  */
 export function updateArrowLoading(world: WorldState): void {
   if (world.isArrowWeaveLoadingFlag === 0) return;
   const elapsed = world.tick - world.arrowWeaveLoadStartTick;
+  let timeBasedMoteCount: number;
   if (elapsed >= MOTE_4_LOAD_TICKS) {
-    world.arrowWeaveCurrentMoteCount = 4;
+    timeBasedMoteCount = 4;
   } else if (elapsed >= MOTE_3_LOAD_TICKS) {
-    world.arrowWeaveCurrentMoteCount = 3;
+    timeBasedMoteCount = 3;
   } else {
-    world.arrowWeaveCurrentMoteCount = 2;
+    timeBasedMoteCount = 2;
   }
+
+  // Cap by available mote queue when configured.
+  if (world.moteSlotCount > 0) {
+    const available = getAvailableMoteSlotCount(world);
+    if (available < 2) {
+      // Not enough motes to sustain the minimum arrow — cancel loading.
+      cancelArrowLoading(world);
+      return;
+    }
+    timeBasedMoteCount = Math.min(timeBasedMoteCount, available);
+  }
+
+  world.arrowWeaveCurrentMoteCount = timeBasedMoteCount;
 }
 
 /** Cancels the in-progress load without firing. */
@@ -158,6 +185,13 @@ export function fireArrowFromLoading(
   world.arrowHitSequenceDelayTicks[slot] = 0;
   world.arrowHitTargetClusterIndex[slot] = -1;
   world.arrowDamageCooldownTicks[slot]   = 0;
+
+  // Phase 10: spend the ordered mote slots that formed this arrow.
+  // The first `moteCount` available queue slots are depleted immediately on
+  // fire, so grapple range, sword length, and shield density all shrink
+  // until the motes regenerate (BASE_MOTE_REGENERATION_TICKS ≈ 3 s).
+  // No-op when the mote queue is not configured (moteSlotCount === 0).
+  depleteFirstNMoteSlots(world, moteCount);
 }
 
 // ── Per-tick simulation ───────────────────────────────────────────────────────

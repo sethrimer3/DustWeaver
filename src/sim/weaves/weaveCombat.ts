@@ -16,6 +16,7 @@ import {
   fireArrowFromLoading,
 } from './arrowWeave';
 import { tickSwordWeave } from './swordWeave';
+import { getAvailableOrderedMoteSlots } from '../motes/orderedMoteQueue';
 
 // ── Storm Weave constants ───────────────────────────────────────────────────
 
@@ -122,52 +123,88 @@ function applyStormAttraction(world: WorldState): void {
 
 // ── Shield Weave: crescent formation ────────────────────────────────────────
 
+/**
+ * Computes the arc-t position (0..1 along the crescent) for a mote at `rank`
+ * in the center-out ordering.  Rank 0 gets the center, rank 1 just above,
+ * rank 2 just below, rank 3 further above, etc.
+ *
+ * This ensures the highest-priority (earliest-queue) motes occupy the
+ * strongest defensive positions at the shield's center.
+ *
+ * Allocation-free and branchless after rank/n resolution.
+ */
+function _centerOutArcT(rank: number, n: number): number {
+  if (n <= 1) return 0.5;
+  // Map from even positions (0..n-1) to center-out order.
+  // center = floor((n-1)/2); odd ranks go above, even (>0) go below.
+  const center = Math.floor((n - 1) / 2);
+  let posIdx: number;
+  if (rank === 0) {
+    posIdx = center;
+  } else if (rank % 2 === 1) {
+    posIdx = center + Math.ceil(rank / 2);
+  } else {
+    posIdx = center - (rank / 2);
+  }
+  // Clamp to valid range in case of odd n edge cases.
+  posIdx = Math.max(0, Math.min(n - 1, posIdx));
+  return posIdx / (n - 1);
+}
+
+/**
+ * Applies spring forces that hold the player's available mote particles in a
+ * crescent formation centred on the aim direction.
+ *
+ * Uses the ordered mote queue so shield density reflects available motes
+ * and earlier-queue motes occupy the strongest center positions.
+ *
+ * **Prerequisite**: `initMoteQueueFromParticles` must have been called at
+ * room-load time to populate `world.moteSlotParticleIndex`.  If it was not
+ * called, `world.moteSlotCount` will be 0 and this function becomes a no-op,
+ * which is safe but produces no shield.
+ */
 function applyShieldCrescent(
   world: WorldState,
-  playerEntityId: number,
   playerX: number,
   playerY: number,
   aimDirX: number,
   aimDirY: number,
 ): void {
-  // Collect indices of player-owned, alive, non-grapple particles
-  const indices: number[] = [];
-  for (let i = 0; i < world.particleCount; i++) {
-    if (world.isAliveFlag[i] === 0) continue;
-    if (world.ownerEntityId[i] !== playerEntityId) continue;
-    // Skip grapple chain particles (behaviorMode 3)
-    if (world.behaviorMode[i] === 3) continue;
-    indices.push(i);
-  }
-
-  const total = indices.length;
+  // Use the ordered mote queue so shield density reflects available motes
+  // and earlier-queue motes occupy the strongest center positions.
+  const available = getAvailableOrderedMoteSlots(world);
+  const total = available.count;
   if (total === 0) return;
 
-  // Calculate arc half-angle — scales with particle count
+  // Arc half-angle scales with how many motes are present.
   const arcT = Math.min(1.0, total / SHIELD_MAX_ARC_PARTICLE_COUNT);
   const halfArcRad = SHIELD_MIN_HALF_ARC_RAD + arcT * (SHIELD_MAX_HALF_ARC_RAD - SHIELD_MIN_HALF_ARC_RAD);
 
-  // Center angle from aim direction
+  // Center angle from aim direction.
   const centerAngle = Math.atan2(aimDirY, aimDirX);
 
-  for (let idx = 0; idx < total; idx++) {
-    const i = indices[idx];
-    // Distribute evenly across the arc, centered
-    const t = total > 1 ? idx / (total - 1) : 0.5;
-    const angle = centerAngle - halfArcRad + t * 2.0 * halfArcRad;
+  for (let rank = 0; rank < total; rank++) {
+    const slot = available.indices[rank];
+    const pidx = world.moteSlotParticleIndex[slot];
+    if (pidx < 0 || pidx >= world.particleCount) continue;
+    if (world.isAliveFlag[pidx] === 0) continue;
 
-    // Target position on the crescent
+    // Center-out arc position: rank 0 = center, rank 1 = above, rank 2 = below …
+    const arcPosition = _centerOutArcT(rank, total);
+    const angle = centerAngle - halfArcRad + arcPosition * 2.0 * halfArcRad;
+
+    // Target position on the crescent.
     const targetX = playerX + Math.cos(angle) * SHIELD_CRESCENT_RADIUS_WORLD;
     const targetY = playerY + Math.sin(angle) * SHIELD_CRESCENT_RADIUS_WORLD;
 
-    // Spring force toward target position
-    const dx = targetX - world.positionXWorld[i];
-    const dy = targetY - world.positionYWorld[i];
-    world.forceX[i] += dx * SHIELD_SPRING_STRENGTH;
-    world.forceY[i] += dy * SHIELD_SPRING_STRENGTH;
+    // Spring force toward target position.
+    const dx = targetX - world.positionXWorld[pidx];
+    const dy = targetY - world.positionYWorld[pidx];
+    world.forceX[pidx] += dx * SHIELD_SPRING_STRENGTH;
+    world.forceY[pidx] += dy * SHIELD_SPRING_STRENGTH;
 
-    // Set to block mode so binding forces don't interfere
-    world.behaviorMode[i] = 2;
+    // Set to block mode so binding forces don't interfere.
+    world.behaviorMode[pidx] = 2;
   }
 }
 
@@ -205,6 +242,12 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
     }
   }
 
+  // Whether the sword weave FSM has signalled that the crescent should form
+  // this tick.  True when the player is fully in SHIELDING state (after the
+  // guard swipe completes), false during GUARD_FORMING / GUARD_SLASHING
+  // states when the sword is still executing the opening sweep.
+  let swordWeaveShouldApplyCresc = false;
+
   // Secondary mouse button — branched by equipped weave ID
   if (world.playerSecondaryWeaveId === WEAVE_ARROW) {
     // ── Arrow Weave secondary ────────────────────────────────────────────────
@@ -223,7 +266,7 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
     }
   } else if (world.playerSecondaryWeaveId === WEAVE_SHIELD_SWORD) {
     // ── Shield Sword Weave secondary ────────────────────────────────────────
-    // RMB held → shielding (delegated to applyShieldCrescent below).
+    // RMB held → guard swipe then shield (delegated to tickSwordWeave).
     // RMB not held → sword auto-swing FSM.
     if (world.playerSecondaryWeaveTriggeredFlag === 1) {
       world.playerSecondaryWeaveTriggeredFlag = 0;
@@ -255,8 +298,10 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
       }
     }
     if (playerCluster !== null) {
-      const isShieldActive = world.isPlayerSecondaryWeaveActiveFlag === 1;
-      tickSwordWeave(world, playerCluster, isShieldActive);
+      const isShieldHeld = world.isPlayerSecondaryWeaveActiveFlag === 1;
+      // tickSwordWeave returns true when shield crescent should be applied
+      // this tick (only true once GUARD_SLASHING has completed).
+      swordWeaveShouldApplyCresc = tickSwordWeave(world, playerCluster, isShieldHeld);
     }
   } else {
     // ── Shield Weave secondary (default) ────────────────────────────────────
@@ -277,14 +322,17 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
 
   // Apply crescent forces while shield is active on either slot.
   // Arrow weave secondary does NOT activate the shield crescent.
-  // Shield Sword secondary DOES activate it (right mouse held = shield mode).
-  const isShieldSecondaryActive =
-    world.isPlayerSecondaryWeaveActiveFlag === 1 &&
-    world.playerSecondaryWeaveId !== WEAVE_ARROW;
+  // Shield Sword secondary uses the sword FSM return value so the crescent
+  // is suppressed during the guard swipe animation.
+  const isShieldSecondaryActive = (() => {
+    if (world.playerSecondaryWeaveId === WEAVE_ARROW) return false;
+    if (world.playerSecondaryWeaveId === WEAVE_SHIELD_SWORD) return swordWeaveShouldApplyCresc;
+    return world.isPlayerSecondaryWeaveActiveFlag === 1;
+  })();
 
   if (world.isPlayerPrimaryWeaveActiveFlag === 1 || isShieldSecondaryActive) {
     const aimX = world.playerWeaveAimDirXWorld;
     const aimY = world.playerWeaveAimDirYWorld;
-    applyShieldCrescent(world, playerEntityId, playerX, playerY, aimX, aimY);
+    applyShieldCrescent(world, playerX, playerY, aimX, aimY);
   }
 }

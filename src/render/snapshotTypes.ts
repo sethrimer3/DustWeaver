@@ -336,4 +336,34 @@ export interface WorldSnapshot {
   readonly swordWeaveHandAnchorXWorld: number;
   /** World Y of the sword's hand anchor. */
   readonly swordWeaveHandAnchorYWorld: number;
+  /**
+   * Current sword length ratio in [0, 1].
+   * 1.0 = full blade (all motes available).  0 = no motes — sword cannot form.
+   * Used by the renderer to scale the number of blade segments drawn and the
+   * reach of the slash trail tip.
+   */
+  readonly swordWeaveLengthRatio: number;
+
+  // ── Ordered Mote Queue display ────────────────────────────────────────────
+  /**
+   * Smoothed grapple influence circle radius (world units).
+   * Lerps toward the effective grapple range each tick.
+   * Used by grappleInfluenceRenderer to scale the influence circle so it
+   * visually shrinks and grows as motes are depleted and regenerated.
+   */
+  readonly moteGrappleDisplayRadiusWorld: number;
+  /**
+   * Phase 8: 1 when the player's primary weave is Storm (motes orbit passively).
+   * 0 when Storm is not the primary weave (motes come from inventory space).
+   * Used by renderers to choose between orbit-fly and center-pop visual styles.
+   */
+  readonly isMoteSourceOrbitFlag: 0 | 1;
+  /**
+   * Phase 9: Grapple rope tension factor in [0, 1].
+   * 0 = rope within effective range, no tension.
+   * Ramps toward 1 as the rope has been out-of-range for longer.
+   * 1 = rope at the break threshold — will snap next tick.
+   * Used by grappleInfluenceRenderer to pulse the ring as a tension warning.
+   */
+  readonly grappleTensionFactor: number;
 }

@@ -2,6 +2,264 @@
 ````markdown
 # DustWeaver Ordered Mote Economy and Weave Interaction Roadmap
 
+## Implementation Progress Log
+
+### BUILD 209 — Phase 13 complete (2026-04-30) ✅ ROADMAP COMPLETE
+
+**Phase 13 (Polish and Balancing): ✅ Complete**
+
+All tuning areas from the plan addressed:
+
+#### Mote Regeneration
+
+- **`BASE_MOTE_REGENERATION_TICKS`**: 180 → 150 (~2.5 s).
+  Snappier recovery makes losing motes dangerous but not permanently punishing.
+  The player regains full capability in a shorter window, reducing frustration.
+
+- **Grounded regen bonus** (`GROUNDED_REGEN_SPEED_MULTIPLIER = 2`):  
+  When the player cluster's `isGroundedFlag === 1`, depletion cooldowns tick
+  down at 2× speed (effectively ~1.25 s at full depletion instead of 2.5 s).
+  This rewards the player for landing safely after depleting motes in combat
+  and makes regeneration feel connected to player actions.
+  Implemented in `tickMoteSlotRegeneration` — finds player cluster once
+  per tick before the main slot loop; no per-tick allocation.
+
+#### Grapple
+
+- **`MIN_GRAPPLE_RANGE_RATIO`**: 0.25 → 0.30.
+  Minimum grapple range at full mote depletion is now 30% of max instead of
+  25%.  The grapple stays useful even at worst-case depletion — shrink is
+  noticeable but not frustrating.
+
+- **`GRAPPLE_RANGE_VISUAL_LERP_FACTOR`**: 0.12 → 0.10.
+  Slightly smoother circle resize transition (~10-tick lag instead of ~8-tick)
+  so sudden range changes (e.g., arrow fire depleting several motes at once)
+  animate more gracefully rather than snapping.
+
+#### Sword
+
+- **`SWORD_DAMAGE`**: 1.0 → 2.0 per mote hit.
+  Each sword mote now deals 2 damage on contact, making the sword feel
+  meaningfully powerful and the length reduction (fewer motes = fewer hits)
+  visually and numerically clear to the player.
+
+#### UI / Feedback
+
+- **Mote regeneration flash** (`MOTE_REGEN_FLASH_TICKS = 20`, ~0.33 s):
+  Added `moteRegenFlashTicksLeft: Uint8Array` (MAX_MOTE_SLOTS) to
+  `WorldState` and `createWorldState()`.  `initMoteQueueFromParticles`
+  clears the array on each room load.  `tickMoteSlotRegeneration` sets
+  `moteRegenFlashTicksLeft[i] = MOTE_REGEN_FLASH_TICKS` the moment a slot
+  transitions DEPLETED → AVAILABLE, and decrements all flash timers each tick.
+  The HUD mote dot row overlays a white flash (`rgba(255,255,255,alpha)`) that
+  fades to zero over the flash duration, giving clear and unmissable feedback
+  each time a mote comes back online.
+
+#### Exit Criteria Verification
+
+| Criterion | How addressed |
+|-----------|--------------|
+| Losing motes feels dangerous but not instantly punishing | 2.5 s base regen (was 3 s), grounded bonus cuts this to ~1.25 s |
+| Grapple range shrink is noticeable but not frustrating | Min ratio 30% (was 25%), smoother visual lerp |
+| Sword length reduction is visually clear | Damage doubled — fewer motes = fewer/weaker hits, tangible difference |
+| Shield weakening is understandable | Existing center-out crescent already maps mote count to density |
+| Regeneration feels satisfying | Grounded 2× bonus + white flash on each mote restore |
+
+---
+
+### BUILD 208 — Phases 10–12 complete (2026-04-30)
+
+**Phase 10 (Arrow Weave Uses Ordered Mote Queue): ✅ Complete**
+
+- Added `depleteFirstNMoteSlots(world, n, cooldownTicks?)` to
+  `src/sim/motes/orderedMoteQueue.ts`.  Depletes the first `n` available
+  queue slots in order; no-op when `moteSlotCount === 0`.
+- `startArrowLoading` now gates on the mote queue:
+  - When `moteSlotCount > 0` and `getAvailableMoteSlotCount(world) < 2`,
+    loading silently aborts — the player gets no bow visual and cannot fire.
+  - Falls back to the original uncapped behavior when `moteSlotCount === 0`
+    (legacy / no dust containers configured).
+- `updateArrowLoading` now caps the mote count each tick:
+  - `arrowWeaveCurrentMoteCount = min(timeBased, availableMoteSlotCount)`.
+  - If available drops below 2 mid-charge (e.g., an enemy depletes motes
+    while the player is loading), loading is cancelled automatically.
+- `fireArrowFromLoading` calls `depleteFirstNMoteSlots(world, moteCount)` at
+  fire time (the default `BASE_MOTE_REGENERATION_TICKS` cooldown is used):
+  - The first `moteCount` available queue slots are depleted immediately.
+  - This causes grapple range, sword length, and shield density to shrink
+    after each arrow fire, recovering over ~3 seconds.
+  - Firing with no queue configured (`moteSlotCount === 0`) is unchanged.
+- Arrow mote counts still follow the time-based tier progression (2/3/4 based
+  on hold duration), but are now capped by the available queue depth.
+
+**Phase 11 (Visual Language and UI Feedback): ✅ Complete**
+
+- Added a player-facing mote queue dot row to `src/screens/gameHudRenderer.ts`,
+  rendered below the dust-container display (always visible when
+  `world.moteSlotCount > 0`; hidden when the queue is not configured).
+- Layout: one 5×5 px square per mote slot, 2 px gaps, starting at x=8 with
+  a 3 px vertical gap below the dust container row.
+- Visual encoding:
+  - **Available** (gold): bright gold fill + 1 px shine strip + gold border.
+  - **Depleted** (dark): near-black fill + clockwise cooldown arc that sweeps
+    from 0 → full circle as the mote regenerates, fraction computed as
+    `1 − cooldownTicksLeft / BASE_MOTE_REGENERATION_TICKS`.
+  - Thin border changes from gold (available) to subdued amber (depleted).
+- New imports added to `gameHudRenderer.ts`:
+  `MOTE_STATE_AVAILABLE`, `BASE_MOTE_REGENERATION_TICKS` from orderedMoteQueue.
+- The existing debug-only mote queue text overlay (top-right panel) is
+  preserved; the new dot row is the player-facing complement.
+
+**Phase 12 (Save Data and Migration): ✅ Complete by design**
+
+No new code was required.  The current implementation already satisfies all
+Phase 12 requirements:
+
+- `initMoteQueueFromParticles()` (called at every room load from `gameRoom.ts`)
+  resets all slot states to `MOTE_STATE_AVAILABLE` and clears all cooldowns.
+  This means momentary combat depletion is **never persisted** across room
+  loads — exactly as recommended.
+- Loadout order, unlocked dust types, and dust containers are stored in the
+  player profile independently of the mote queue runtime state.
+- Old saves without mote queue fields remain compatible: `moteSlotCount = 0`
+  on a missing queue triggers the legacy (uncapped) code paths in every weave.
+- Documented in this log as the authoritative reference for future agents.
+
+---
+
+### BUILD 207 — Phases 8–9 complete (2026-04-30)
+
+**Phase 8 (Storm Weave Integration): ✅ Complete**
+- Added `hasStormWeaveUnlocked(world: WorldState): boolean` to
+  `src/sim/motes/orderedMoteQueue.ts`.  Returns `true` when
+  `world.playerPrimaryWeaveId === WEAVE_STORM`.
+- Added `isMoteSourceOrbitFlag: 0 | 1` to `WorldState`:
+  - `1` → Storm is primary weave; motes orbit passively (current default).
+  - `0` → Non-Storm primary; motes would materialize from inventory space.
+  - Set once in `gameScreen.ts` at loadout-apply time:
+    ```ts
+    world.isMoteSourceOrbitFlag = world.playerPrimaryWeaveId === 'storm' ? 1 : 0;
+    ```
+  - Defaults to `1` in `createWorldState()` (Storm is the starting primary).
+- `isMoteSourceOrbitFlag` propagated to `WorldSnapshot` (all 3 snapshot
+  creation/update paths) so renderers can choose the correct visual style
+  without importing sim helpers.
+- Visual materialization distinction (orbit-fly vs. center-pop particles) is
+  noted in the snapshot for future renderer use.  The sim foundation is
+  complete; the renderer visual can be layered on top in a future build.
+
+**Phase 9 (Grapple Weave Uses Ordered Mote Queue): ✅ Complete**
+
+Phase 9 tasks 1–4 (grapple validity uses effective range, visual length
+matches range) were already satisfied by Phase 3 (`getEffectiveGrappleRangeWorld`
+in `fireGrapple`, `moteGrappleDisplayRadiusWorld` for the circle).  This
+build implements tasks 5–6: the out-of-range tension and break.
+
+- Added constants to `grapple.ts`:
+  ```ts
+  GRAPPLE_OUT_OF_RANGE_BREAK_TICKS = 45  // 0.75 s at 60 fps
+  GRAPPLE_RANGE_SHRINK_GRACE_TICKS = 20  // grace before tension is visible
+  ```
+- Added `grappleOutOfRangeTicks: number` and `grappleTensionFactor: number`
+  to `WorldState` (both initialised to 0 in `createWorldState` and reset in
+  `releaseGrapple`).
+- In `applyGrappleClusterConstraint` (normal pendulum path only):
+  - Each tick, compares `grappleLengthWorld` against `getEffectiveGrappleRangeWorld(world)`.
+  - If rope > effective range: increments `grappleOutOfRangeTicks`.
+    `grappleTensionFactor` ramps from 0 → 1 after the grace window:
+    ```ts
+    ticksPastGrace  = outOfRangeTicks - GRAPPLE_RANGE_SHRINK_GRACE_TICKS
+    tensionWindow   = BREAK_TICKS - GRACE_TICKS  // = 25 ticks
+    grappleTensionFactor = clamp(ticksPastGrace / tensionWindow, 0, 1)
+    ```
+    Once `grappleOutOfRangeTicks >= 45`, `releaseGrapple()` is called.
+  - If rope ≤ effective range: resets both counters to 0.
+- `grappleTensionFactor` propagated to `WorldSnapshot` (all 3 paths).
+- `renderGrappleInfluenceVisuals` in `grappleInfluenceRenderer.ts` now
+  pulses the ring when `grappleTensionFactor > 0`:
+  - Pulse frequency: 4 Hz at tension=0 → 12 Hz at tension=1.
+  - Opacity boost: up to 2.5× at full tension with a sinusoidal wave.
+  - Both the influence circle and the reachable-edge glow are affected.
+  - Final alpha is clamped to 1.0 to prevent over-saturation.
+
+---
+
+### BUILD 206 — Phases 5–7 complete (2026-04-30)
+
+**Phase 5 (Shield Weave Uses Ordered Mote Queue): ✅ Complete**
+- `applyShieldCrescent` in `src/sim/weaves/weaveCombat.ts` now uses
+  `getAvailableOrderedMoteSlots(world)` instead of scanning all particles.
+- Removed the per-tick `indices: number[]` allocation — the shield is now
+  fully allocation-free in its hot path.
+- Added `_centerOutArcT(rank, n)` helper: rank 0 gets the center arc position,
+  rank 1 just above, rank 2 just below, rank 3 further above, etc.
+  This ensures the highest-priority (earliest-queue) motes always occupy the
+  strongest defensive center position of the crescent.
+- Shield density now decreases naturally when motes are depleted: fewer
+  `getAvailableOrderedMoteSlots` means a narrower, sparser crescent.
+- `applyShieldCrescent` signature simplified: `playerEntityId` removed (mote
+  queue already contains only player-owned particles).
+
+**Phase 6 (Sword Length from Available Mote Count): ✅ Complete**
+- Added `swordWeaveLengthRatio: number` to `WorldState`, `WorldSnapshot`,
+  and all three snapshot creation/update paths in `snapshot.ts`.
+- `tickSwordWeave` computes each tick:
+  ```ts
+  activeSwordMoteCount = min(MAX_SWORD_BLADE_MOTES, getAvailableMoteSlotCount(world))
+  swordLengthRatio     = activeSwordMoteCount / MAX_SWORD_BLADE_MOTES
+  currentReachWorld    = SWORD_REACH_WORLD * swordLengthRatio
+  ```
+  When `moteSlotCount === 0` (no queue configured) the ratio defaults to `1.0`
+  so the sword behaves as before.
+- `_applySlashHits` now takes an explicit `reachWorld` parameter so auto-swing
+  and guard swipe both use the dynamic reach.
+- Sword auto-swing windup is suppressed when `activeSwordMoteCount === 0`
+  (sword cannot attack with zero available motes but still visually exists).
+- `SwordWeaveRenderer` uses `snapshot.swordWeaveLengthRatio` to:
+  - Draw only `Math.round(lengthRatio × MAX_SWORD_BLADE_MOTES)` blade motes.
+  - Compute dynamic `bladeSpacingWorld` so the visible segments still distribute
+    across the shorter blade (no big gaps when half-length).
+  - Scale the slash trail tip distance so the swipe effect ends at the actual
+    current tip position.
+- Removed the no-longer-used `BLADE_MOTE_SPACING_WORLD` constant from the
+  renderer (it was based on a fixed segment count; the dynamic version replaces it).
+
+**Phase 7 (Guard Swipe — RMB Sequence): ✅ Complete**
+- Added two new sword states to `swordWeave.ts`:
+  - `SWORD_STATE_GUARD_FORMING = 7` — fast 5-tick materialisation when RMB is
+    pressed while the sword is idle (ORBIT or early FORMING).
+  - `SWORD_STATE_GUARD_SLASHING = 8` — a single mouse-aimed arc swipe before
+    the crescent shield forms.  Uses `playerWeaveAimDirXWorld/Y` for the bearing
+    (not nearest-enemy auto-targeting), giving it a deliberate, aimed feel.
+- `tickSwordWeave` now returns `boolean` ("should apply shield crescent this tick"):
+  - Returns `false` during GUARD_FORMING and GUARD_SLASHING (crescent suppressed).
+  - Returns `true` once GUARD_SLASHING → SHIELDING transition completes.
+  - Returns `true` every tick the sword is in SHIELDING.
+- Entry-point logic in `tickSwordWeave`:
+  - Rising edge (shield not previously held): if sword is already in an active
+    combat state (READY/WINDUP/SLASHING/RECOVERING), skip GUARD_FORMING and jump
+    directly to GUARD_SLASHING.  If sword is idle/forming, do the fast form first.
+  - Falling edge (RMB released from guard/shield state): reset to RECOVERING so
+    the sword smoothly returns to ready pose.
+- `applyPlayerWeaveCombat` in `weaveCombat.ts` captures the return value of
+  `tickSwordWeave` as `swordWeaveShouldApplyCresc` and uses it to decide whether
+  `applyShieldCrescent` should run for the SHIELD_SWORD weave.
+- `SwordWeaveRenderer` handles the new states:
+  - GUARD_FORMING: same blade appearance as FORMING but with a 5-tick ramp.
+  - GUARD_SLASHING: same slash-trail rendering as SLASHING (trail drawn at the
+    dynamic tip distance so it matches the current blade length).
+  - SHIELDING: unchanged (sword fully hidden; crescent does the visual work).
+- All guard slash hits use the current `currentReachWorld` (Phase 6) so a
+  depleted player gets reduced guard swipe range as intended.
+
+**Deferred (Phases 10–13)**
+
+Phases 10–13 (Arrow Weave queue, visual UI, save data, polish) are deferred to
+future builds.  The mote economy is now wired into all primary weaves (grapple,
+shield, sword) and the snapshot layer is clean for renderer expansion.
+
+---
+
 ## Purpose
 
 This document defines the staged implementation plan for DustWeaver's ordered mote economy, dynamic grapple range, and integrated Storm, Shield, Sword, Arrow, and Grapple Weave behavior.
