@@ -4,75 +4,80 @@
 
 ## Implementation Progress Log
 
-### BUILD 205 — Phases 0–4 complete (2026-04-30)
+### BUILD 206 — Phases 5–7 complete (2026-04-30)
 
-**Phase 0 (Stabilize): ✅ Complete**
-- Audited all relevant files. Typecheck was clean before work began.
-- No bugs found in the Phase 1 Shield Sword MVP requiring pre-work fixes.
+**Phase 5 (Shield Weave Uses Ordered Mote Queue): ✅ Complete**
+- `applyShieldCrescent` in `src/sim/weaves/weaveCombat.ts` now uses
+  `getAvailableOrderedMoteSlots(world)` instead of scanning all particles.
+- Removed the per-tick `indices: number[]` allocation — the shield is now
+  fully allocation-free in its hot path.
+- Added `_centerOutArcT(rank, n)` helper: rank 0 gets the center arc position,
+  rank 1 just above, rank 2 just below, rank 3 further above, etc.
+  This ensures the highest-priority (earliest-queue) motes always occupy the
+  strongest defensive center position of the crescent.
+- Shield density now decreases naturally when motes are depleted: fewer
+  `getAvailableOrderedMoteSlots` means a narrower, sparser crescent.
+- `applyShieldCrescent` signature simplified: `playerEntityId` removed (mote
+  queue already contains only player-owned particles).
 
-**Phase 1 (Ordered Mote Queue): ✅ Complete**
-- Created `src/sim/motes/orderedMoteQueue.ts` — the new mote queue module.
-- Added `MAX_MOTE_SLOTS = 20` constant to `src/sim/world.ts`.
-- Added five new typed-array fields to `WorldState`:
-  `moteSlotCount`, `moteSlotKind`, `moteSlotState`, `moteSlotCooldownTicksLeft`, `moteSlotParticleIndex`
-- Added scalar `moteGrappleDisplayRadiusWorld` to `WorldState`.
-- `initMoteQueueFromParticles(world, playerEntityId)` scans the particle buffer
-  and links each non-Fluid, non-transient player-owned particle to a slot.
-- Called in `src/screens/gameScreen.ts` right after player particle spawn.
-- Exported helpers: `getTotalMoteSlotCount`, `getAvailableMoteSlotCount`,
-  `getAvailableMoteRatio`, `getAvailableOrderedMoteSlots` (allocation-free scratch buffer).
+**Phase 6 (Sword Length from Available Mote Count): ✅ Complete**
+- Added `swordWeaveLengthRatio: number` to `WorldState`, `WorldSnapshot`,
+  and all three snapshot creation/update paths in `snapshot.ts`.
+- `tickSwordWeave` computes each tick:
+  ```ts
+  activeSwordMoteCount = min(MAX_SWORD_BLADE_MOTES, getAvailableMoteSlotCount(world))
+  swordLengthRatio     = activeSwordMoteCount / MAX_SWORD_BLADE_MOTES
+  currentReachWorld    = SWORD_REACH_WORLD * swordLengthRatio
+  ```
+  When `moteSlotCount === 0` (no queue configured) the ratio defaults to `1.0`
+  so the sword behaves as before.
+- `_applySlashHits` now takes an explicit `reachWorld` parameter so auto-swing
+  and guard swipe both use the dynamic reach.
+- Sword auto-swing windup is suppressed when `activeSwordMoteCount === 0`
+  (sword cannot attack with zero available motes but still visually exists).
+- `SwordWeaveRenderer` uses `snapshot.swordWeaveLengthRatio` to:
+  - Draw only `Math.round(lengthRatio × MAX_SWORD_BLADE_MOTES)` blade motes.
+  - Compute dynamic `bladeSpacingWorld` so the visible segments still distribute
+    across the shorter blade (no big gaps when half-length).
+  - Scale the slash trail tip distance so the swipe effect ends at the actual
+    current tip position.
+- Removed the no-longer-used `BLADE_MOTE_SPACING_WORLD` constant from the
+  renderer (it was based on a fixed segment count; the dynamic version replaces it).
 
-**Phase 2 (Depletion & Regeneration): ✅ Complete**
-- `syncMoteQueueWithParticles(world)` detects player particles whose `isAliveFlag` has
-  gone to 0 (combat kill, not natural lifetime cycling) and depletes their linked slot.
-  Called in `tick.ts` at step 5.1 (after `applyInterParticleForces`).
-- `tickMoteSlotRegeneration(world)` counts down `moteSlotCooldownTicksLeft` and restores
-  slots when the countdown reaches zero.
-  Called in `tick.ts` at step 7.5 (after `updateParticleLifetimes`).
-- `tickMoteGrappleDisplayRadius(world)` lerps the displayed circle radius toward the
-  effective range each tick.
-  Called in `tick.ts` at step 7.6.
-- `depleteMoteSlotForParticle(world, particleIndex, cooldownTicks)` is available for
-  weaves that need explicit depletion (arrow hit, sword energy cost, etc. — future phases).
-- Regeneration cooldown defaults to `BASE_MOTE_REGENERATION_TICKS = 180` (~3 s).
-  `FAST_MOTE_REGENERATION_TICKS = 90` and `SLOW_MOTE_REGENERATION_TICKS = 300` are
-  exported for future use by specific weaves.
-- Debug overlay panel added to `src/screens/gameHudRenderer.ts` (top-right, debug mode
-  only): shows total/available/depleted mote counts, available ratio %, effective grapple
-  range, smoothed display radius, and a per-slot state dot bar (● available, ○ depleted).
+**Phase 7 (Guard Swipe — RMB Sequence): ✅ Complete**
+- Added two new sword states to `swordWeave.ts`:
+  - `SWORD_STATE_GUARD_FORMING = 7` — fast 5-tick materialisation when RMB is
+    pressed while the sword is idle (ORBIT or early FORMING).
+  - `SWORD_STATE_GUARD_SLASHING = 8` — a single mouse-aimed arc swipe before
+    the crescent shield forms.  Uses `playerWeaveAimDirXWorld/Y` for the bearing
+    (not nearest-enemy auto-targeting), giving it a deliberate, aimed feel.
+- `tickSwordWeave` now returns `boolean` ("should apply shield crescent this tick"):
+  - Returns `false` during GUARD_FORMING and GUARD_SLASHING (crescent suppressed).
+  - Returns `true` once GUARD_SLASHING → SHIELDING transition completes.
+  - Returns `true` every tick the sword is in SHIELDING.
+- Entry-point logic in `tickSwordWeave`:
+  - Rising edge (shield not previously held): if sword is already in an active
+    combat state (READY/WINDUP/SLASHING/RECOVERING), skip GUARD_FORMING and jump
+    directly to GUARD_SLASHING.  If sword is idle/forming, do the fast form first.
+  - Falling edge (RMB released from guard/shield state): reset to RECOVERING so
+    the sword smoothly returns to ready pose.
+- `applyPlayerWeaveCombat` in `weaveCombat.ts` captures the return value of
+  `tickSwordWeave` as `swordWeaveShouldApplyCresc` and uses it to decide whether
+  `applyShieldCrescent` should run for the SHIELD_SWORD weave.
+- `SwordWeaveRenderer` handles the new states:
+  - GUARD_FORMING: same blade appearance as FORMING but with a 5-tick ramp.
+  - GUARD_SLASHING: same slash-trail rendering as SLASHING (trail drawn at the
+    dynamic tip distance so it matches the current blade length).
+  - SHIELDING: unchanged (sword fully hidden; crescent does the visual work).
+- All guard slash hits use the current `currentReachWorld` (Phase 6) so a
+  depleted player gets reduced guard swipe range as intended.
 
-**Phase 3 (Dynamic Grapple Range): ✅ Complete**
-- `getEffectiveGrappleRangeWorld(world)` returns `GRAPPLE_MAX_LENGTH_WORLD ×
-  clamp(availableRatio, 0.25, 1.0)`.  Full range when no motes configured.
-- `src/sim/clusters/grapple.ts` `fireGrapple` now calls this function for
-  `maxCastDist` instead of the constant `GRAPPLE_MAX_LENGTH_WORLD`.
-  Grapple target detection and cast range therefore scale with available motes.
-- `moteGrappleDisplayRadiusWorld` is propagated to `WorldSnapshot` (via
-  `snapshotTypes.ts`, `snapshot.ts` `createReusableSnapshot`, `updateSnapshotInPlace`,
-  and `createSnapshot`).
-- `src/render/grappleInfluenceRenderer.ts` now reads `snapshot.moteGrappleDisplayRadiusWorld`
-  instead of the hardcoded `INFLUENCE_RADIUS_WORLD` constant.  The influence circle
-  visually shrinks and grows as motes are depleted and regenerated.
+**Deferred (Phases 8–9)**
 
-**Phase 4 (Circle of Influence Unification): ✅ Complete**
-- `getCircleOfInfluenceRadiusWorld(world)` returns the effective grapple range.
-  Named separately so future phases can decouple the sword detection radius from
-  the grapple range without changing call sites.
-- `src/sim/weaves/swordWeave.ts` `SWORD_STATE_READY` now calls
-  `_findNearestEnemyIndex(world, ..., getCircleOfInfluenceRadiusWorld(world))`
-  instead of the fixed `AUTO_TARGET_RADIUS_WORLD = 30`.
-- When the player has full motes the detection range grows to the grapple radius
-  (~96 world units), so the sword readies from further away.
-  When motes are depleted the detection range shrinks — the sword only activates
-  for enemies that are close.
-- `AUTO_TARGET_RADIUS_WORLD` is kept as the default fallback in `_findNearestEnemyIndex`
-  for any other call site that does not supply an explicit radius.
-
-**Deferred (Phases 5+)**
-
-Phases 5–9 require more significant changes to particle physics, weave formation
-logic, and the Shield Weave's existing collision system.  Stopping here to keep
-this PR atomic and reviewable.
+Phases 8–9 add Storm Weave integration (motes from orbit vs. inventory) and
+a combined inventory/inventory-space visual for players who do not have Storm
+unlocked.  These require more complex particle-state management and a new
+"inventory space" rendering layer.  Stopping here to keep this PR atomic.
 
 ---
 

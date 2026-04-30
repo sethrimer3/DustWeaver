@@ -70,6 +70,7 @@ interface _ReusableBacking {
   swordWeaveSlashEndAngleRad: number;
   swordWeaveHandAnchorXWorld: number;
   swordWeaveHandAnchorYWorld: number;
+  swordWeaveLengthRatio: number;
   moteGrappleDisplayRadiusWorld: number;
   /** @internal Pre-allocated cluster objects — not part of the public API. */
   readonly _clusterPool: _MutableCluster[];
@@ -350,6 +351,7 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     swordWeaveSlashEndAngleRad:    world.swordWeaveSlashEndAngleRad,
     swordWeaveHandAnchorXWorld:    world.swordWeaveHandAnchorXWorld,
     swordWeaveHandAnchorYWorld:    world.swordWeaveHandAnchorYWorld,
+    swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
     // Ordered Mote Queue display
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
     _clusterPool:             clusterPool,
@@ -417,6 +419,7 @@ export function updateSnapshotInPlace(
   b.swordWeaveSlashEndAngleRad    = world.swordWeaveSlashEndAngleRad;
   b.swordWeaveHandAnchorXWorld    = world.swordWeaveHandAnchorXWorld;
   b.swordWeaveHandAnchorYWorld    = world.swordWeaveHandAnchorYWorld;
+  b.swordWeaveLengthRatio         = world.swordWeaveLengthRatio;
 
   // Ordered Mote Queue display
   b.moteGrappleDisplayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
@@ -628,6 +631,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     swordWeaveSlashEndAngleRad:    world.swordWeaveSlashEndAngleRad,
     swordWeaveHandAnchorXWorld:    world.swordWeaveHandAnchorXWorld,
     swordWeaveHandAnchorYWorld:    world.swordWeaveHandAnchorYWorld,
+    swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
     // Ordered Mote Queue display
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
   };

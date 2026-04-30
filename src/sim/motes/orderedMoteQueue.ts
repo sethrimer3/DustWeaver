@@ -51,9 +51,9 @@ const GRAPPLE_RANGE_VISUAL_LERP_FACTOR = 0.12;
 // ── Slot state values ─────────────────────────────────────────────────────────
 
 /** Mote slot is live and can participate in weave formations. */
-export const MOTE_STATE_AVAILABLE: 0 = 0;
+export const MOTE_STATE_AVAILABLE = 0;
 /** Mote slot was destroyed in combat and is waiting for cooldown recovery. */
-export const MOTE_STATE_DEPLETED:  1 = 1;
+export const MOTE_STATE_DEPLETED  = 1;
 
 // ── Initialization ─────────────────────────────────────────────────────────────
 

@@ -507,6 +507,17 @@ export interface WorldState extends ParticleBuffers {
   swordWeaveHandAnchorXWorld: number;
   /** World Y of the sword's hand anchor, recomputed each tick the sword is active. */
   swordWeaveHandAnchorYWorld: number;
+  /**
+   * Current sword length ratio in [0, 1].
+   *
+   * Computed each tick as `min(MAX_SWORD_BLADE_MOTES, availableMoteCount) / MAX_SWORD_BLADE_MOTES`.
+   * 1.0 = full sword (enough motes for all blade segments).
+   * 0.5 = half sword (half the blade segments present).
+   * 0.0 = no sword (zero available motes — sword cannot attack).
+   *
+   * Propagated to WorldSnapshot for the renderer to scale the blade.
+   */
+  swordWeaveLengthRatio: number;
 
   // ── Ordered Mote Queue ─────────────────────────────────────────────────────
   /**
@@ -713,6 +724,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     swordWeaveSlashEndAngleRad:    0,
     swordWeaveHandAnchorXWorld:    0,
     swordWeaveHandAnchorYWorld:    0,
+    swordWeaveLengthRatio:         1.0,
     // ── Ordered Mote Queue ────────────────────────────────────────────
     moteSlotCount:              0,
     moteSlotKind:               new Uint8Array(MAX_MOTE_SLOTS),

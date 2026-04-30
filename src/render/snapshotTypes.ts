@@ -336,6 +336,13 @@ export interface WorldSnapshot {
   readonly swordWeaveHandAnchorXWorld: number;
   /** World Y of the sword's hand anchor. */
   readonly swordWeaveHandAnchorYWorld: number;
+  /**
+   * Current sword length ratio in [0, 1].
+   * 1.0 = full blade (all motes available).  0 = no motes — sword cannot form.
+   * Used by the renderer to scale the number of blade segments drawn and the
+   * reach of the slash trail tip.
+   */
+  readonly swordWeaveLengthRatio: number;
 
   // ── Ordered Mote Queue display ────────────────────────────────────────────
   /**
