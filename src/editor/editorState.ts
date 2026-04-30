@@ -549,6 +549,40 @@ export function allocateUid(state: EditorState): number {
   return state.nextUid++;
 }
 
+// ── Editor UI shared types ────────────────────────────────────────────────────
+// These live here so both editorUI.ts and editorInspector.ts can import them
+// without creating a circular dependency.
+
+/** The four edges of the room that can be grown or shrunk via the edge-resize buttons. */
+export type RoomEdge = 'top' | 'bottom' | 'left' | 'right';
+
+/** Callbacks wired from EditorUI to EditorController. */
+export interface EditorUICallbacks {
+  onToolChange: (tool: EditorTool) => void;
+  onCategoryChange: (category: PaletteCategory) => void;
+  onPaletteItemSelect: (item: PaletteItem) => void;
+  onExport: () => void;
+  onLinkTransition: () => void;
+  onPropertyChange: (prop: string, value: string | number) => void;
+  onRoomDimensionsChange: (prop: 'widthBlocks' | 'heightBlocks', value: number) => void;
+  /** Add or remove one row/column from the given edge. delta is +1 (add) or -1 (remove). */
+  onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => void;
+  onBlockThemeChange: (theme: BlockTheme) => void;
+  onLightingEffectChange: (effect: LightingEffect) => void;
+  onAmbientLightDirectionChange: (direction: AmbientLightDirection | undefined) => void;
+  onBackgroundChange: (backgroundId: BackgroundId) => void;
+  onRoomSongChange: (songId: RoomSongId) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  onExportAllChanges: () => void;
+  /** Open the visual world map overlay. */
+  onOpenVisualMap: () => void;
+  /** Called when the user picks a different skill in the skill tomb dropdown. */
+  onSkillTombWeaveChange: (weaveId: string) => void;
+  /** Called when the user picks a different crumble variant in the crumble variant dropdown. */
+  onCrumbleVariantChange: (variant: CrumbleVariant) => void;
+}
+
 /** Selects the placement block theme and updates the recent-theme strip. */
 export function selectBlockTheme(state: EditorState, theme: BlockTheme): void {
   state.selectedBlockTheme = theme;
