@@ -2,6 +2,80 @@
 ````markdown
 # DustWeaver Ordered Mote Economy and Weave Interaction Roadmap
 
+## Implementation Progress Log
+
+### BUILD 205 — Phases 0–4 complete (2026-04-30)
+
+**Phase 0 (Stabilize): ✅ Complete**
+- Audited all relevant files. Typecheck was clean before work began.
+- No bugs found in the Phase 1 Shield Sword MVP requiring pre-work fixes.
+
+**Phase 1 (Ordered Mote Queue): ✅ Complete**
+- Created `src/sim/motes/orderedMoteQueue.ts` — the new mote queue module.
+- Added `MAX_MOTE_SLOTS = 20` constant to `src/sim/world.ts`.
+- Added five new typed-array fields to `WorldState`:
+  `moteSlotCount`, `moteSlotKind`, `moteSlotState`, `moteSlotCooldownTicksLeft`, `moteSlotParticleIndex`
+- Added scalar `moteGrappleDisplayRadiusWorld` to `WorldState`.
+- `initMoteQueueFromParticles(world, playerEntityId)` scans the particle buffer
+  and links each non-Fluid, non-transient player-owned particle to a slot.
+- Called in `src/screens/gameScreen.ts` right after player particle spawn.
+- Exported helpers: `getTotalMoteSlotCount`, `getAvailableMoteSlotCount`,
+  `getAvailableMoteRatio`, `getAvailableOrderedMoteSlots` (allocation-free scratch buffer).
+
+**Phase 2 (Depletion & Regeneration): ✅ Complete**
+- `syncMoteQueueWithParticles(world)` detects player particles whose `isAliveFlag` has
+  gone to 0 (combat kill, not natural lifetime cycling) and depletes their linked slot.
+  Called in `tick.ts` at step 5.1 (after `applyInterParticleForces`).
+- `tickMoteSlotRegeneration(world)` counts down `moteSlotCooldownTicksLeft` and restores
+  slots when the countdown reaches zero.
+  Called in `tick.ts` at step 7.5 (after `updateParticleLifetimes`).
+- `tickMoteGrappleDisplayRadius(world)` lerps the displayed circle radius toward the
+  effective range each tick.
+  Called in `tick.ts` at step 7.6.
+- `depleteMoteSlotForParticle(world, particleIndex, cooldownTicks)` is available for
+  weaves that need explicit depletion (arrow hit, sword energy cost, etc. — future phases).
+- Regeneration cooldown defaults to `BASE_MOTE_REGENERATION_TICKS = 180` (~3 s).
+  `FAST_MOTE_REGENERATION_TICKS = 90` and `SLOW_MOTE_REGENERATION_TICKS = 300` are
+  exported for future use by specific weaves.
+- Debug overlay panel added to `src/screens/gameHudRenderer.ts` (top-right, debug mode
+  only): shows total/available/depleted mote counts, available ratio %, effective grapple
+  range, smoothed display radius, and a per-slot state dot bar (● available, ○ depleted).
+
+**Phase 3 (Dynamic Grapple Range): ✅ Complete**
+- `getEffectiveGrappleRangeWorld(world)` returns `GRAPPLE_MAX_LENGTH_WORLD ×
+  clamp(availableRatio, 0.25, 1.0)`.  Full range when no motes configured.
+- `src/sim/clusters/grapple.ts` `fireGrapple` now calls this function for
+  `maxCastDist` instead of the constant `GRAPPLE_MAX_LENGTH_WORLD`.
+  Grapple target detection and cast range therefore scale with available motes.
+- `moteGrappleDisplayRadiusWorld` is propagated to `WorldSnapshot` (via
+  `snapshotTypes.ts`, `snapshot.ts` `createReusableSnapshot`, `updateSnapshotInPlace`,
+  and `createSnapshot`).
+- `src/render/grappleInfluenceRenderer.ts` now reads `snapshot.moteGrappleDisplayRadiusWorld`
+  instead of the hardcoded `INFLUENCE_RADIUS_WORLD` constant.  The influence circle
+  visually shrinks and grows as motes are depleted and regenerated.
+
+**Phase 4 (Circle of Influence Unification): ✅ Complete**
+- `getCircleOfInfluenceRadiusWorld(world)` returns the effective grapple range.
+  Named separately so future phases can decouple the sword detection radius from
+  the grapple range without changing call sites.
+- `src/sim/weaves/swordWeave.ts` `SWORD_STATE_READY` now calls
+  `_findNearestEnemyIndex(world, ..., getCircleOfInfluenceRadiusWorld(world))`
+  instead of the fixed `AUTO_TARGET_RADIUS_WORLD = 30`.
+- When the player has full motes the detection range grows to the grapple radius
+  (~96 world units), so the sword readies from further away.
+  When motes are depleted the detection range shrinks — the sword only activates
+  for enemies that are close.
+- `AUTO_TARGET_RADIUS_WORLD` is kept as the default fallback in `_findNearestEnemyIndex`
+  for any other call site that does not supply an explicit radius.
+
+**Deferred (Phases 5+)**
+
+Phases 5–9 require more significant changes to particle physics, weave formation
+logic, and the Shield Weave's existing collision system.  Stopping here to keep
+this PR atomic and reviewable.
+
+---
+
 ## Purpose
 
 This document defines the staged implementation plan for DustWeaver's ordered mote economy, dynamic grapple range, and integrated Storm, Shield, Sword, Arrow, and Grapple Weave behavior.

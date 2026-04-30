@@ -46,6 +46,11 @@ import { applyBubbleAI, applyBubblePopForces } from './clusters/bubbleAi';
 import { applySquareStampedeAI } from './clusters/squareStampedeAi';
 import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
 import { applyBeeSwarmAI } from './clusters/beeSwarmAi';
+import {
+  syncMoteQueueWithParticles,
+  tickMoteSlotRegeneration,
+  tickMoteGrappleDisplayRadius,
+} from './motes/orderedMoteQueue';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -130,6 +135,9 @@ export function tick(world: WorldState): void {
   // 5. Inter-particle: repulsion (different owners) + boid (same owner)
   applyInterParticleForces(world);
 
+  // 5.1. Mote queue sync — detect player particle combat kills → deplete slots
+  syncMoteQueueWithParticles(world);
+
   // 5.5. Wall repulsion forces — push particles away from obstacle geometry
   applyWallForces(world);
 
@@ -152,6 +160,12 @@ export function tick(world: WorldState): void {
 
   // 7. Lifetime: age particles; cycle owned particles or respawn combat-killed ones
   updateParticleLifetimes(world);
+
+  // 7.5. Mote queue regeneration — count down depletion cooldowns → restore slots
+  tickMoteSlotRegeneration(world);
+
+  // 7.6. Mote display radius lerp — smooth the grapple influence circle
+  tickMoteGrappleDisplayRadius(world);
 
   world.tick++;
 }

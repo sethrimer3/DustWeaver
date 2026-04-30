@@ -13,7 +13,6 @@
  */
 
 import type { WorldSnapshot, WallSnapshot } from './snapshot';
-import { INFLUENCE_RADIUS_WORLD } from '../sim/clusters/binding';
 
 // ── Gold colour palette ──────────────────────────────────────────────────────
 
@@ -261,7 +260,7 @@ function drawReachableEdgeGlow(
 ): void {
   if (maxOpacity <= 0) return;
 
-  const influenceRadiusSq = INFLUENCE_RADIUS_WORLD * INFLUENCE_RADIUS_WORLD;
+  const influenceRadiusSq = snapshot.moteGrappleDisplayRadiusWorld * snapshot.moteGrappleDisplayRadiusWorld;
   const walls = snapshot.walls;
 
   ctx.lineWidth = 1.0;
@@ -441,8 +440,8 @@ export function renderGrappleInfluenceVisuals(
 
   ctx.save();
 
-  // Draw influence circle
-  const radiusScreenPx = INFLUENCE_RADIUS_WORLD * scalePx;
+  // Draw influence circle using the smoothed mote-based display radius
+  const radiusScreenPx = snapshot.moteGrappleDisplayRadiusWorld * scalePx;
   drawInfluenceCircle(ctx, playerScreenXPx, playerScreenYPx, radiusScreenPx, mouseAngleRad, influenceCircleMaxOpacity, influenceHighlightWidth);
 
   // Draw reachable edge glow on walls within range

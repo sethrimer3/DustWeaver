@@ -336,4 +336,13 @@ export interface WorldSnapshot {
   readonly swordWeaveHandAnchorXWorld: number;
   /** World Y of the sword's hand anchor. */
   readonly swordWeaveHandAnchorYWorld: number;
+
+  // ── Ordered Mote Queue display ────────────────────────────────────────────
+  /**
+   * Smoothed grapple influence circle radius (world units).
+   * Lerps toward the effective grapple range each tick.
+   * Used by grappleInfluenceRenderer to scale the influence circle so it
+   * visually shrinks and grows as motes are depleted and regenerated.
+   */
+  readonly moteGrappleDisplayRadiusWorld: number;
 }

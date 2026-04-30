@@ -76,7 +76,6 @@ import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIP
 import { COYOTE_TIME_TICKS, debugSpeedOverrides, ov } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
 import {
-  GRAPPLE_MAX_LENGTH_WORLD,
   GRAPPLE_SEGMENT_COUNT,
   GRAPPLE_MIN_LENGTH_WORLD,
   GRAPPLE_ATTACH_FX_TICKS,
@@ -88,6 +87,7 @@ import {
   cancelGrappleMiss,
   startGrappleRetract,
 } from './grappleMiss';
+import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 
 // ============================================================================
 // Tuning constants — adjust these to dial in the grapple feel
@@ -235,7 +235,8 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const invDist = 1.0 / dist;
   const dirX = dx * invDist;
   const dirY = dy * invDist;
-  const maxCastDist = Math.min(dist, GRAPPLE_MAX_LENGTH_WORLD);
+  const effectiveRangeWorld = getEffectiveGrappleRangeWorld(world);
+  const maxCastDist = Math.min(dist, effectiveRangeWorld);
   const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
 
   if (hit === null) {

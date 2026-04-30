@@ -71,6 +71,7 @@ import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
 import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { processPlayerCommands } from './gameCommandProcessor';
+import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 
 const FIXED_DT_MS = 16.666;
 
@@ -310,6 +311,11 @@ export function startGameScreen(
     // Apply weave IDs to world state for combat dispatch
     world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
     world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
+
+    // Initialise the ordered mote queue from the player particles just spawned.
+    // Must be called after player particle spawning and before enemy spawning
+    // (enemy particles are excluded by ownerEntityId, but calling early is safer).
+    initMoteQueueFromParticles(world, playerCluster.entityId);
 
     // Spawn enemies
     spawnEnemyClusters(world, room.enemies, 2, levelRng);

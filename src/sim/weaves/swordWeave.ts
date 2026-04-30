@@ -39,6 +39,7 @@
 
 import { WorldState } from '../world';
 import { ClusterState } from '../clusters/state';
+import { getCircleOfInfluenceRadiusWorld } from '../motes/orderedMoteQueue';
 
 // ── Sword state enum ──────────────────────────────────────────────────────────
 
@@ -60,8 +61,6 @@ export const SWORD_REACH_WORLD = 16.0;
 
 /** Auto-target scan radius (world units) measured from the hand anchor. */
 const AUTO_TARGET_RADIUS_WORLD = 30.0;
-const AUTO_TARGET_RADIUS_SQ_WORLD = AUTO_TARGET_RADIUS_WORLD * AUTO_TARGET_RADIUS_WORLD;
-
 /** Ticks the sword spends in each transient state. */
 const SWORD_FORMING_TICKS    = 15;
 const SWORD_WINDUP_TICKS     = 12;
@@ -131,13 +130,29 @@ function _computeHandAnchor(player: ClusterState, outAnchor: { xWorld: number; y
 const _handAnchorScratch = { xWorld: 0, yWorld: 0 };
 
 /**
- * Finds the nearest non-player, alive enemy cluster within
- * AUTO_TARGET_RADIUS_WORLD of the given anchor point.  Returns the cluster's
- * index in world.clusters, or -1 if none is in range.
+ * Finds the nearest non-player, alive enemy cluster within `detectionRadiusWorld`
+ * world units of the given anchor point.  Returns the cluster's index in
+ * world.clusters, or -1 if none is in range.
+ *
+ * In Phases 1–4, `detectionRadiusWorld` defaults to `AUTO_TARGET_RADIUS_WORLD`
+ * (30 world units) for backward-compatible auto-swing behavior, but is
+ * overridden in the READY state to `getCircleOfInfluenceRadiusWorld(world)` so
+ * the sword's passive awareness scales with available mote count.
+ *
+ * @param world                  Current world state.
+ * @param anchorXWorld           X coordinate of the sword's hand anchor (world units).
+ * @param anchorYWorld           Y coordinate of the sword's hand anchor (world units).
+ * @param detectionRadiusWorld   Search radius (world units). Defaults to AUTO_TARGET_RADIUS_WORLD.
  */
-function _findNearestEnemyIndex(world: WorldState, anchorXWorld: number, anchorYWorld: number): number {
+function _findNearestEnemyIndex(
+  world: WorldState,
+  anchorXWorld: number,
+  anchorYWorld: number,
+  detectionRadiusWorld = AUTO_TARGET_RADIUS_WORLD,
+): number {
+  const detectionRadiusSq = detectionRadiusWorld * detectionRadiusWorld;
   let bestIndex = -1;
-  let bestDistSq = AUTO_TARGET_RADIUS_SQ_WORLD;
+  let bestDistSq = detectionRadiusSq;
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const c = world.clusters[ci];
     if (c.isAliveFlag === 0) continue;
@@ -280,8 +295,10 @@ export function tickSwordWeave(world: WorldState, player: ClusterState, isShield
       // Hold the ready pose; passively snap to the ready angle.
       world.swordWeaveAngleRad = _lerpAngleRad(world.swordWeaveAngleRad, readyAngleRad, 0.20);
 
-      // Auto-target scan.
-      const targetIndex = _findNearestEnemyIndex(world, _handAnchorScratch.xWorld, _handAnchorScratch.yWorld);
+      // Auto-target scan using the circle-of-influence radius so sword
+      // readiness scales with available mote count (Phase 4).
+      const influenceRadiusWorld = getCircleOfInfluenceRadiusWorld(world);
+      const targetIndex = _findNearestEnemyIndex(world, _handAnchorScratch.xWorld, _handAnchorScratch.yWorld, influenceRadiusWorld);
       if (targetIndex !== -1) {
         world.swordWeaveTargetClusterIndex = targetIndex;
         world.swordWeaveStateEnum = SWORD_STATE_WINDUP;

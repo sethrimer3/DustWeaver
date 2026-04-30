@@ -50,6 +50,9 @@ export const MAX_BEE_SWARMS = 4;
 /** Number of bees in a single bee-swarm cluster. */
 export const BEES_PER_SWARM = 10;
 
+/** Maximum number of logical mote slots (equals PARTICLE_COUNT_PER_CLUSTER). */
+export const MAX_MOTE_SLOTS = 20;
+
 export interface WorldState extends ParticleBuffers {
   tick: number;
   dtMs: number;
@@ -504,6 +507,39 @@ export interface WorldState extends ParticleBuffers {
   swordWeaveHandAnchorXWorld: number;
   /** World Y of the sword's hand anchor, recomputed each tick the sword is active. */
   swordWeaveHandAnchorYWorld: number;
+
+  // ── Ordered Mote Queue ─────────────────────────────────────────────────────
+  /**
+   * Number of active logical mote slots for the player.
+   * 0 when the player has no dust containers or loadout configured.
+   */
+  moteSlotCount: number;
+  /**
+   * ParticleKind per slot (MAX_MOTE_SLOTS entries).
+   * Reflects the dust kind of each mote at queue initialisation time.
+   */
+  moteSlotKind: Uint8Array;
+  /**
+   * State per slot: 0 = available, 1 = depleted (MAX_MOTE_SLOTS entries).
+   * Use MOTE_STATE_AVAILABLE / MOTE_STATE_DEPLETED from orderedMoteQueue.ts.
+   */
+  moteSlotState: Uint8Array;
+  /**
+   * Ticks remaining on the depletion cooldown (MAX_MOTE_SLOTS entries).
+   * 0 while the slot is available.
+   */
+  moteSlotCooldownTicksLeft: Uint16Array;
+  /**
+   * Index into the world particle buffer for each slot's linked particle.
+   * -1 for unlinked slots (MAX_MOTE_SLOTS entries).
+   */
+  moteSlotParticleIndex: Int16Array;
+  /**
+   * Smoothed display radius (world units) for the grapple influence circle.
+   * Lerps toward getEffectiveGrappleRangeWorld() each tick so the circle
+   * grows and shrinks visually with a small lag.
+   */
+  moteGrappleDisplayRadiusWorld: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -677,6 +713,15 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     swordWeaveSlashEndAngleRad:    0,
     swordWeaveHandAnchorXWorld:    0,
     swordWeaveHandAnchorYWorld:    0,
+    // ── Ordered Mote Queue ────────────────────────────────────────────
+    moteSlotCount:              0,
+    moteSlotKind:               new Uint8Array(MAX_MOTE_SLOTS),
+    moteSlotState:              new Uint8Array(MAX_MOTE_SLOTS),
+    moteSlotCooldownTicksLeft:  new Uint16Array(MAX_MOTE_SLOTS),
+    moteSlotParticleIndex:      new Int16Array(MAX_MOTE_SLOTS).fill(-1),
+    // Default to full grapple range (96 world units = INFLUENCE_RADIUS_WORLD).
+    // initMoteQueueFromParticles() will correct this on the first room load.
+    moteGrappleDisplayRadiusWorld: 96.0,
     ...createParticleBuffers(),
   };
 }

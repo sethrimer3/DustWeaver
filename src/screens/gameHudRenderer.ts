@@ -15,6 +15,12 @@ import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
 import { HEALTH_BAR_DISPLAY_MS } from './gameRoom';
+import {
+  getTotalMoteSlotCount,
+  getAvailableMoteSlotCount,
+  getEffectiveGrappleRangeWorld,
+  MOTE_STATE_DEPLETED,
+} from '../sim/motes/orderedMoteQueue';
 
 // ── HUD layout constants ────────────────────────────────────────────────────
 
@@ -79,6 +85,48 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     const roomLabel = currentRoom.name;
     const labelW = ctx.measureText(roomLabel).width;
     ctx.fillText(roomLabel, (virtualWidthPx - labelW) / 2, 22);
+
+    // ── Mote Queue debug overlay (top-right corner) ─────────────────────────
+    {
+      const totalSlots     = getTotalMoteSlotCount(world);
+      const availableSlots = getAvailableMoteSlotCount(world);
+      const depletedSlots  = totalSlots - availableSlots;
+      const ratio          = totalSlots > 0 ? availableSlots / totalSlots : 1.0;
+      const effectiveRange = getEffectiveGrappleRangeWorld(world);
+      const displayRadius  = world.moteGrappleDisplayRadiusWorld;
+
+      // Build slot-state bar: green dots for available, red for depleted
+      let slotBar = '';
+      for (let i = 0; i < world.moteSlotCount; i++) {
+        slotBar += world.moteSlotState[i] === MOTE_STATE_DEPLETED ? '○' : '●';
+      }
+
+      const moteLines = [
+        `Motes: ${availableSlots}/${totalSlots} (${(ratio * 100).toFixed(0)}%)`,
+        `Depleted: ${depletedSlots}`,
+        `Range eff: ${effectiveRange.toFixed(1)}  disp: ${displayRadius.toFixed(1)}`,
+        slotBar || '(no motes)',
+      ];
+
+      ctx.save();
+      ctx.font = '7px monospace';
+      const lineH = 9;
+      const padX  = 4;
+      const padY  = 4;
+      const panelW = 150;
+      const panelH = moteLines.length * lineH + padY * 2;
+      const panelX = virtualWidthPx - panelW - padX;
+      const panelY = padY;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.50)';
+      ctx.fillRect(panelX, panelY, panelW, panelH);
+
+      ctx.fillStyle = '#b0f080';
+      for (let li = 0; li < moteLines.length; li++) {
+        ctx.fillText(moteLines[li], panelX + padX, panelY + padY + (li + 1) * lineH - 2);
+      }
+      ctx.restore();
+    }
   }
 
   // ── Player health bar in HUD (top-left, above dust display) ─────────────
