@@ -1,6 +1,6 @@
 import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
-import { initGrappleChainParticles, fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
+import { initGrappleChainParticles } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng, nextFloat, nextFloatTriangle } from '../sim/rng';
@@ -15,8 +15,7 @@ import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
-import { createInputState, attachInputListeners, collectCommands } from '../input/handler';
-import { CommandKind } from '../input/commands';
+import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, RoomTransitionDef, TransitionDirection, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
@@ -42,8 +41,6 @@ import { BloomSystem } from '../render/effects/bloomSystem';
 import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
-import { unlockActiveWeave } from '../progression/unlocks';
-import { getWeaveDefinition } from '../sim/weaves/weaveDefinition';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import {
   spawnClusterParticles,
@@ -60,7 +57,6 @@ import {
   loadRoomHazards,
   worldBgColor,
   drawTunnelDarkness,
-  screenToWorld,
   resolveSpawnBlock,
   TUNNEL_DETECT_MARGIN_WORLD,
   DUST_CONTAINER_PICKUP_RADIUS_WORLD,
@@ -73,6 +69,7 @@ import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wal
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
 import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_CRUMBLE_BLOCKS } from '../sim/world';
+import { processPlayerCommands } from './gameCommandProcessor';
 
 const FIXED_DT_MS = 16.666;
 
@@ -956,147 +953,19 @@ export function startGameScreen(
       }
     }
 
-    const commands = collectCommands(inputState);
-    let openPause = false;
-    let moveDx = 0;
-    let jumpTriggered = false;
-    let interactTriggered = false;
-    for (let ci = 0; ci < commands.length; ci++) {
-      const cmd = commands[ci];
-      if (cmd.kind === CommandKind.ReturnToMap) {
-        openPause = true;
-      } else if (cmd.kind === CommandKind.MovePlayer) {
-        moveDx = cmd.dx;
-      } else if (cmd.kind === CommandKind.Jump) {
-        jumpTriggered = true;
-      } else if (cmd.kind === CommandKind.Attack) {
-        // Legacy attack command — no longer used for player (enemies still use it internally)
-        // Kept for backward compatibility; ignored for player
-      } else if (cmd.kind === CommandKind.BlockStart || cmd.kind === CommandKind.BlockUpdate) {
-        // Legacy block command — no longer used for player
-      } else if (cmd.kind === CommandKind.BlockEnd) {
-        // Legacy block end — no longer used for player
-      } else if (cmd.kind === CommandKind.WeaveActivatePrimary) {
-        const player = world.clusters[0];
-        if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-          // Check if tapping/clicking on a skill tomb (save point)
-          const tombIndex = skillTombRenderer.getNearbyTombIndex(aim.xWorld, aim.yWorld);
-          if (tombIndex >= 0) {
-            // Player is also near the tomb — open the save menu
-            const playerNearby = skillTombRenderer.getNearbyTombIndex(player.positionXWorld, player.positionYWorld);
-            if (playerNearby >= 0) {
-              interactTriggered = true;
-            }
-          } else {
-            // Normal weave attack
-            let dirX = aim.xWorld - player.positionXWorld;
-            let dirY = aim.yWorld - player.positionYWorld;
-            const len = Math.sqrt(dirX * dirX + dirY * dirY);
-            if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
-            world.playerWeaveAimDirXWorld = dirX;
-            world.playerWeaveAimDirYWorld = dirY;
-            world.playerPrimaryWeaveTriggeredFlag = 1;
-          }
-        }
-      } else if (cmd.kind === CommandKind.WeaveHoldPrimary) {
-        const player = world.clusters[0];
-        if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-          let dirX = aim.xWorld - player.positionXWorld;
-          let dirY = aim.yWorld - player.positionYWorld;
-          const len = Math.sqrt(dirX * dirX + dirY * dirY);
-          if (len < 1.0) { dirX = world.playerWeaveAimDirXWorld; dirY = world.playerWeaveAimDirYWorld; }
-          else { dirX /= len; dirY /= len; }
-          world.playerWeaveAimDirXWorld = dirX;
-          world.playerWeaveAimDirYWorld = dirY;
-          // For sustained weaves, trigger on first hold frame
-          if (world.isPlayerPrimaryWeaveActiveFlag === 0) {
-            world.playerPrimaryWeaveTriggeredFlag = 1;
-          }
-        }
-      } else if (cmd.kind === CommandKind.WeaveEndPrimary) {
-        world.playerPrimaryWeaveEndFlag = 1;
-      } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
-        const player = world.clusters[0];
-        if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-          let dirX = aim.xWorld - player.positionXWorld;
-          let dirY = aim.yWorld - player.positionYWorld;
-          const len = Math.sqrt(dirX * dirX + dirY * dirY);
-          if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
-          world.playerWeaveAimDirXWorld = dirX;
-          world.playerWeaveAimDirYWorld = dirY;
-          world.playerSecondaryWeaveTriggeredFlag = 1;
-        }
-      } else if (cmd.kind === CommandKind.WeaveHoldSecondary) {
-        const player = world.clusters[0];
-        if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-          let dirX = aim.xWorld - player.positionXWorld;
-          let dirY = aim.yWorld - player.positionYWorld;
-          const len = Math.sqrt(dirX * dirX + dirY * dirY);
-          if (len < 1.0) { dirX = world.playerWeaveAimDirXWorld; dirY = world.playerWeaveAimDirYWorld; }
-          else { dirX /= len; dirY /= len; }
-          world.playerWeaveAimDirXWorld = dirX;
-          world.playerWeaveAimDirYWorld = dirY;
-          if (world.isPlayerSecondaryWeaveActiveFlag === 0) {
-            world.playerSecondaryWeaveTriggeredFlag = 1;
-          }
-        }
-      } else if (cmd.kind === CommandKind.WeaveEndSecondary) {
-        world.playerSecondaryWeaveEndFlag = 1;
-      } else if (cmd.kind === CommandKind.GrappleFire) {
-        const player = world.clusters[0];
-        if (player !== undefined && player.isAliveFlag === 1) {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-          fireGrapple(world, aim.xWorld, aim.yWorld);
-        }
-      } else if (cmd.kind === CommandKind.GrappleRelease) {
-        releaseGrapple(world);
-      } else if (cmd.kind === CommandKind.ToggleFullscreen) {
-        if (!document.fullscreenElement) {
-          // Enter fullscreen on key press (requires user gesture; keydown path satisfies this).
-          void document.documentElement.requestFullscreen().catch(() => {});
-        }
-      } else if (cmd.kind === CommandKind.OpenMap) {
-        openMapOnly();
-      } else if (cmd.kind === CommandKind.Interact) {
-        interactInputPulseMs = 150;
-        const playerForInteract = world.clusters[0];
-        if (playerForInteract !== undefined && playerForInteract.isAliveFlag === 1) {
-          // Check if player is near a save tomb (opens the save menu)
-          const nearbyIndex = skillTombRenderer.getNearbyTombIndex(
-            playerForInteract.positionXWorld, playerForInteract.positionYWorld,
-          );
-          if (nearbyIndex >= 0) {
-            interactTriggered = true;
-          }
-          // Check if player is near a skill tomb (unlocks a dust weave).
-          // Only show the wave-obtained label — do NOT open the motes menu.
-          const nearbySkillTombIndex = skillTombEffectRenderer.getNearbyTombIndex(
-            playerForInteract.positionXWorld, playerForInteract.positionYWorld,
-          );
-          if (nearbySkillTombIndex >= 0 && progress) {
-            const tombPositionKey = skillTombEffectRenderer.getTombPositionKey(nearbySkillTombIndex);
-            const consumedKey = `${currentRoom.id}:${tombPositionKey}`;
-            if (!consumedSkillTombKeySet.has(consumedKey)) {
-              const weaveId = skillTombEffectRenderer.getTombWeaveId(nearbySkillTombIndex);
-              unlockActiveWeave(progress, weaveId);
-              consumedSkillTombKeySet.add(consumedKey);
-              skillTombEffectRenderer.removeTomb(nearbySkillTombIndex);
-              const weaveName = getWeaveDefinition(weaveId)?.displayName ?? 'Unknown Weave';
-              combatText.spawnLabel(
-                playerForInteract.positionXWorld,
-                playerForInteract.positionYWorld - 10,
-                `${weaveName} Obtained`,
-                performance.now(),
-              );
-            }
-            // Do NOT set interactTriggered — picking up a wave should not open the motes menu.
-          }
-        }
-      }
+    const { moveDx, jumpTriggered, openPause, interactTriggered, interactInputPulseTrigger } =
+      processPlayerCommands({
+        inputState, world, canvas,
+        offsetXPx, offsetYPx, zoom,
+        virtualWidthPx, virtualHeightPx,
+        skillTombRenderer, skillTombEffectRenderer,
+        progress, consumedSkillTombKeySet, combatText,
+        currentRoomId: currentRoom.id,
+        openMapOnly,
+      });
+
+    if (interactInputPulseTrigger) {
+      interactInputPulseMs = 150;
     }
 
     if (openPause) {
