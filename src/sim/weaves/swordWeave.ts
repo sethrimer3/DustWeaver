@@ -80,7 +80,7 @@ const SLASH_ARC_RAD     = Math.PI * 0.75;
 const SLASH_HALF_ARC_RAD = SLASH_ARC_RAD * 0.5;
 
 /** Damage applied to each enemy hit by a slash. */
-const SWORD_DAMAGE = 1.0;
+const SWORD_DAMAGE = 2.0;
 
 /**
  * Resting sword angle (radians) measured from the hand anchor while the

@@ -4,6 +4,69 @@
 
 ## Implementation Progress Log
 
+### BUILD 209 — Phase 13 complete (2026-04-30) ✅ ROADMAP COMPLETE
+
+**Phase 13 (Polish and Balancing): ✅ Complete**
+
+All tuning areas from the plan addressed:
+
+#### Mote Regeneration
+
+- **`BASE_MOTE_REGENERATION_TICKS`**: 180 → 150 (~2.5 s).
+  Snappier recovery makes losing motes dangerous but not permanently punishing.
+  The player regains full capability in a shorter window, reducing frustration.
+
+- **Grounded regen bonus** (`GROUNDED_REGEN_SPEED_MULTIPLIER = 2`):  
+  When the player cluster's `isGroundedFlag === 1`, depletion cooldowns tick
+  down at 2× speed (effectively ~1.25 s at full depletion instead of 2.5 s).
+  This rewards the player for landing safely after depleting motes in combat
+  and makes regeneration feel connected to player actions.
+  Implemented in `tickMoteSlotRegeneration` — finds player cluster once
+  per tick before the main slot loop; no per-tick allocation.
+
+#### Grapple
+
+- **`MIN_GRAPPLE_RANGE_RATIO`**: 0.25 → 0.30.
+  Minimum grapple range at full mote depletion is now 30% of max instead of
+  25%.  The grapple stays useful even at worst-case depletion — shrink is
+  noticeable but not frustrating.
+
+- **`GRAPPLE_RANGE_VISUAL_LERP_FACTOR`**: 0.12 → 0.10.
+  Slightly smoother circle resize transition (~10-tick lag instead of ~8-tick)
+  so sudden range changes (e.g., arrow fire depleting several motes at once)
+  animate more gracefully rather than snapping.
+
+#### Sword
+
+- **`SWORD_DAMAGE`**: 1.0 → 2.0 per mote hit.
+  Each sword mote now deals 2 damage on contact, making the sword feel
+  meaningfully powerful and the length reduction (fewer motes = fewer hits)
+  visually and numerically clear to the player.
+
+#### UI / Feedback
+
+- **Mote regeneration flash** (`MOTE_REGEN_FLASH_TICKS = 20`, ~0.33 s):
+  Added `moteRegenFlashTicksLeft: Uint8Array` (MAX_MOTE_SLOTS) to
+  `WorldState` and `createWorldState()`.  `initMoteQueueFromParticles`
+  clears the array on each room load.  `tickMoteSlotRegeneration` sets
+  `moteRegenFlashTicksLeft[i] = MOTE_REGEN_FLASH_TICKS` the moment a slot
+  transitions DEPLETED → AVAILABLE, and decrements all flash timers each tick.
+  The HUD mote dot row overlays a white flash (`rgba(255,255,255,alpha)`) that
+  fades to zero over the flash duration, giving clear and unmissable feedback
+  each time a mote comes back online.
+
+#### Exit Criteria Verification
+
+| Criterion | How addressed |
+|-----------|--------------|
+| Losing motes feels dangerous but not instantly punishing | 2.5 s base regen (was 3 s), grounded bonus cuts this to ~1.25 s |
+| Grapple range shrink is noticeable but not frustrating | Min ratio 30% (was 25%), smoother visual lerp |
+| Sword length reduction is visually clear | Damage doubled — fewer motes = fewer/weaker hits, tangible difference |
+| Shield weakening is understandable | Existing center-out crescent already maps mote count to density |
+| Regeneration feels satisfying | Grounded 2× bonus + white flash on each mote restore |
+
+---
+
 ### BUILD 208 — Phases 10–12 complete (2026-04-30)
 
 **Phase 10 (Arrow Weave Uses Ordered Mote Queue): ✅ Complete**

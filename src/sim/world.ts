@@ -546,6 +546,13 @@ export interface WorldState extends ParticleBuffers {
    */
   moteSlotParticleIndex: Int16Array;
   /**
+   * Phase 13: ticks remaining on the mote-regeneration flash animation
+   * (MAX_MOTE_SLOTS entries, Uint8 — max 255 ticks).
+   * Set to MOTE_REGEN_FLASH_TICKS when a slot transitions DEPLETED → AVAILABLE.
+   * Ticked down each tick; read by the HUD mote dot row for a brief white flash.
+   */
+  moteRegenFlashTicksLeft: Uint8Array;
+  /**
    * Smoothed display radius (world units) for the grapple influence circle.
    * Lerps toward getEffectiveGrappleRangeWorld() each tick so the circle
    * grows and shrinks visually with a small lag.
@@ -765,6 +772,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     moteSlotState:              new Uint8Array(MAX_MOTE_SLOTS),
     moteSlotCooldownTicksLeft:  new Uint16Array(MAX_MOTE_SLOTS),
     moteSlotParticleIndex:      new Int16Array(MAX_MOTE_SLOTS).fill(-1),
+    moteRegenFlashTicksLeft:    new Uint8Array(MAX_MOTE_SLOTS),
     // Default to full grapple range (96 world units = INFLUENCE_RADIUS_WORLD).
     // initMoteQueueFromParticles() will correct this on the first room load.
     moteGrappleDisplayRadiusWorld: 96.0,

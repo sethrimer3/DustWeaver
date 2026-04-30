@@ -31,8 +31,8 @@ import { WEAVE_STORM } from '../weaves/weaveDefinition';
 // Re-export MAX_MOTE_SLOTS for callers who import from this module.
 export { MAX_MOTE_SLOTS } from '../world';
 
-/** Ticks for standard mote regeneration after a combat kill (~3 s at 60 fps). */
-export const BASE_MOTE_REGENERATION_TICKS = 180;
+/** Ticks for standard mote regeneration after a combat kill (~2.5 s at 60 fps). */
+export const BASE_MOTE_REGENERATION_TICKS = 150;
 
 /** Faster regeneration for short-duration weave use (~1.5 s at 60 fps). */
 export const FAST_MOTE_REGENERATION_TICKS = 90;
@@ -40,14 +40,31 @@ export const FAST_MOTE_REGENERATION_TICKS = 90;
 /** Slower regeneration for heavy combat kills (~5 s at 60 fps). */
 export const SLOW_MOTE_REGENERATION_TICKS = 300;
 
+/**
+ * Duration (ticks) of the brief bright flash on a mote indicator when its
+ * slot transitions from DEPLETED back to AVAILABLE.
+ *
+ * At 60 fps this is ~0.33 s — visible but not intrusive.
+ */
+export const MOTE_REGEN_FLASH_TICKS = 20;
+
+/**
+ * Regeneration speed multiplier applied when the player is on the ground.
+ * Cooldown ticks decrement at this rate instead of 1 per tick.
+ *
+ * Value 2 = 2× faster regeneration while grounded (~1.25 s instead of 2.5 s).
+ * Rewards the player for landing safely after depleting motes in combat.
+ */
+const GROUNDED_REGEN_SPEED_MULTIPLIER = 2;
+
 /** Minimum grapple-range ratio when all motes are depleted. */
-const MIN_GRAPPLE_RANGE_RATIO = 0.25;
+const MIN_GRAPPLE_RANGE_RATIO = 0.30;
 
 /**
  * Lerp factor for smoothing the displayed grapple influence circle toward
- * the target effective range.  0.12 ≈ ~8-tick visual lag.
+ * the target effective range.  0.10 ≈ ~10-tick visual lag.
  */
-const GRAPPLE_RANGE_VISUAL_LERP_FACTOR = 0.12;
+const GRAPPLE_RANGE_VISUAL_LERP_FACTOR = 0.10;
 
 // ── Slot state values ─────────────────────────────────────────────────────────
 
@@ -74,6 +91,7 @@ export function initMoteQueueFromParticles(world: WorldState, playerEntityId: nu
   world.moteSlotState.fill(MOTE_STATE_AVAILABLE);
   world.moteSlotCooldownTicksLeft.fill(0);
   world.moteSlotParticleIndex.fill(-1);
+  world.moteRegenFlashTicksLeft.fill(0);
 
   for (let i = 0; i < world.particleCount; i++) {
     if (world.ownerEntityId[i] !== playerEntityId) continue;
@@ -281,17 +299,51 @@ export function syncMoteQueueWithParticles(world: WorldState): void {
 
 /**
  * Counts down depletion cooldowns and restores slots whose countdown has
- * reached zero.
+ * reached zero.  Also ticks down the per-slot regen flash animation.
+ *
+ * Phase 13 additions:
+ *   • **Grounded regen bonus** — when the player cluster is on the ground,
+ *     cooldowns decrement at GROUNDED_REGEN_SPEED_MULTIPLIER (2×) per tick
+ *     instead of 1×.  This rewards the player for landing safely after combat
+ *     and makes regeneration feel responsive to player actions.
+ *   • **Regen flash** — when a slot transitions DEPLETED → AVAILABLE, its
+ *     `moteRegenFlashTicksLeft` entry is set to MOTE_REGEN_FLASH_TICKS.
+ *     The HUD mote dot row reads this to render a brief white flash.
+ *   • **Flash countdown** — moteRegenFlashTicksLeft ticked down each call for
+ *     all slots (wraps at 0 thanks to Uint8 clamping).
  *
  * Call once per tick (step 7.5 of the tick pipeline).
  */
 export function tickMoteSlotRegeneration(world: WorldState): void {
+  // Locate the player cluster's grounded state once up-front.
+  let isPlayerGrounded = false;
+  for (let ci = 0; ci < world.clusters.length; ci++) {
+    const c = world.clusters[ci];
+    if (c.isPlayerFlag === 1 && c.isAliveFlag === 1) {
+      isPlayerGrounded = c.isGroundedFlag === 1;
+      break;
+    }
+  }
+  const decrementAmt = isPlayerGrounded ? GROUNDED_REGEN_SPEED_MULTIPLIER : 1;
+
   for (let i = 0; i < world.moteSlotCount; i++) {
+    // ── Flash animation tick-down (all slots, every tick) ─────────────────
+    if (world.moteRegenFlashTicksLeft[i] > 0) {
+      world.moteRegenFlashTicksLeft[i]--;
+    }
+
+    // ── Cooldown countdown and slot restoration ───────────────────────────
     if (world.moteSlotState[i] !== MOTE_STATE_DEPLETED) continue;
-    if (world.moteSlotCooldownTicksLeft[i] > 0) {
-      world.moteSlotCooldownTicksLeft[i]--;
+
+    if (world.moteSlotCooldownTicksLeft[i] > decrementAmt) {
+      world.moteSlotCooldownTicksLeft[i] -= decrementAmt;
+    } else if (world.moteSlotCooldownTicksLeft[i] > 0) {
+      // Cooldown has expired (may overshoot by less than decrementAmt — clamp to 0).
+      world.moteSlotCooldownTicksLeft[i] = 0;
     } else {
-      world.moteSlotState[i] = MOTE_STATE_AVAILABLE;
+      // Cooldown reached zero last tick — restore the slot and start flash.
+      world.moteSlotState[i]              = MOTE_STATE_AVAILABLE;
+      world.moteRegenFlashTicksLeft[i]    = MOTE_REGEN_FLASH_TICKS;
     }
   }
 }

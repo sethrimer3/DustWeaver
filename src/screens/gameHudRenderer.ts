@@ -22,6 +22,7 @@ import {
   MOTE_STATE_AVAILABLE,
   MOTE_STATE_DEPLETED,
   BASE_MOTE_REGENERATION_TICKS,
+  MOTE_REGEN_FLASH_TICKS,
 } from '../sim/motes/orderedMoteQueue';
 
 // ── HUD layout constants ────────────────────────────────────────────────────
@@ -39,6 +40,14 @@ const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red 
 
 /** Fixed simulation timestep for tick-to-ms conversion. */
 const FIXED_DT_MS = 16.666;
+
+// ── Mote dot row layout constants (virtual pixels) ──────────────────────────
+/** Side length of each mote indicator square. */
+const MOTE_DOT_SIZE_PX = 5;
+/** Horizontal gap between consecutive mote indicators. */
+const MOTE_DOT_GAP_PX  = 2;
+/** Vertical gap between the dust-container row and the mote indicator row. */
+const MOTE_ROW_GAP_PX  = 3;
 
 // ── HUD context interface ───────────────────────────────────────────────────
 
@@ -251,13 +260,6 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   // Available motes: bright gold square.  Depleted motes: dark square with
   // a clockwise cooldown arc that grows as the mote regenerates.
   if (world.moteSlotCount > 0) {
-    /** Side length of each mote indicator (virtual pixels). */
-    const MOTE_DOT_SIZE_PX = 5;
-    /** Gap between consecutive mote indicators (virtual pixels). */
-    const MOTE_DOT_GAP_PX  = 2;
-    /** Vertical gap between the dust-container row and the mote row. */
-    const MOTE_ROW_GAP_PX  = 3;
-
     const moteRowXPx = dustStartX;
     const moteRowYPx = dustStartY + dustSquareSize + MOTE_ROW_GAP_PX;
 
@@ -302,6 +304,16 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
       ctx.strokeStyle = isAvailable ? 'rgba(200,160,40,0.75)' : 'rgba(70,55,15,0.55)';
       ctx.lineWidth   = 0.5;
       ctx.strokeRect(mxPx + 0.25, myPx + 0.25, MOTE_DOT_SIZE_PX - 0.5, MOTE_DOT_SIZE_PX - 0.5);
+
+      // Phase 13: regen flash — bright white overlay that fades quickly when
+      // a depleted mote just came back online.  Only drawn while the flash
+      // timer is counting down (set to MOTE_REGEN_FLASH_TICKS at restore time).
+      const flashTicksLeft = world.moteRegenFlashTicksLeft[mi];
+      if (flashTicksLeft > 0) {
+        const flashAlpha = flashTicksLeft / MOTE_REGEN_FLASH_TICKS;
+        ctx.fillStyle = `rgba(255,255,255,${(flashAlpha * 0.75).toFixed(3)})`;
+        ctx.fillRect(mxPx, myPx, MOTE_DOT_SIZE_PX, MOTE_DOT_SIZE_PX);
+      }
     }
     ctx.restore();
   }
