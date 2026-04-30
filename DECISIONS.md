@@ -227,15 +227,34 @@ frame.
 from `wallLayout.solid2x2Map` each frame via `_populateCoveredBy2x2Keys()`.
 Avoids one `new Set<string>()` allocation per frame.
 
-### Procedural Block Open-Air Filter
+### Procedural Block Organic Edge Shading
 
 `proceduralBlockSprite.ts` applies a cached post-process to generated block
-sprites after the template mask is composited. Solid pixels adjacent to
-transparent open air blend 30% toward their inverted colour, pixels one step
-farther blend 20%, and pixels two steps farther blend 10%. This is independent
-from ambient lighting and is baked into each cached procedural sprite, so the
-wall layer still renders through the existing bake-canvas fast path.
+sprites after the template mask is composited. The system darkens pixels near
+open air using **multiply blending** (preserves hue; avoids colour inversion)
+with **smooth world-space value noise** for organic variation across connected
+blocks. The process (baked once per unique tile position + air-mask + seed):
 
+1. **Distance map (Chebyshev/8-connected BFS):** Solid pixels adjacent to open
+   air in any of the 8 directions receive internal depth 0 (spec depth 1).
+   BFS propagates inward up to depth 2 (spec depth 3).
+
+2. **Base multiply per depth:** 0.70 / 0.82 / 0.92 for depths 1 / 2 / 3.
+
+3. **Smooth noise variation (±0.08):** Bilinear value noise sampled at
+   `worldCoord × 0.15` (seed = world number) is centred and added to the base
+   multiplier. Noise uses world-unit coordinates so variation is seamless across
+   tile boundaries. Clamped per depth: [0.65–0.78] / [0.78–0.88] / [0.88–0.96].
+
+4. **Corner reinforcement (−0.05):** Pixels with ≥ 2 cardinal open-air
+   neighbours receive additional darkening, making corner recesses look natural.
+
+5. **Rim highlight (+0.07):** Outermost (depth 0) pixels that face north or west
+   (top-left light direction) are brightened slightly for a subtle ridge effect.
+
+The cache key includes world-origin coordinates and seed so each tile position
+produces its own correctly-shaded sprite while still being computed at most once.
+This is independent of the room ambient-light system.
 
 
 ### Gravity Model
