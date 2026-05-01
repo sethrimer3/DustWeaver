@@ -57,6 +57,8 @@ export interface RayHit {
   t: number;
   x: number;
   y: number;
+  /** Index into world.wallXWorld/Y/W/H of the wall that was hit. */
+  wallIndex: number;
 }
 
 /**
@@ -73,6 +75,7 @@ export function raycastWalls(
   let bestT = Number.POSITIVE_INFINITY;
   let bestX = 0;
   let bestY = 0;
+  let bestWi = -1;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
     const minX = world.wallXWorld[wi];
@@ -111,10 +114,11 @@ export function raycastWalls(
       bestT = tMin;
       bestX = ox + dx * tMin;
       bestY = oy + dy * tMin;
+      bestWi = wi;
     }
   }
 
-  return Number.isFinite(bestT) ? { t: bestT, x: bestX, y: bestY } : null;
+  return Number.isFinite(bestT) ? { t: bestT, x: bestX, y: bestY, wallIndex: bestWi } : null;
 }
 
 // ============================================================================
@@ -381,6 +385,8 @@ export function updateGrappleMissChain(world: WorldState): void {
 
         if (missLinkX[i] >= wx && missLinkX[i] <= wx + ww &&
           missLinkY[i] >= wy && missLinkY[i] <= wy + wh) {
+          // Bounce pad walls do not catch the grapple chain — pass through.
+          if (world.wallIsBouncePadFlag[wi] === 1) break;
           // This link hit a wall! Stick it here.
           missLinkStuckFlag[i] = 1;
           missLinkVx[i] = 0;

@@ -220,6 +220,100 @@ export function renderHazards(
     ctx.strokeRect(sx + 0.5, sy + 0.5, sz - 1, sz - 1);
   }
 
+  // ── Bounce pads (reflective blocks with animated glowing core) ──────────
+  for (let i = 0; i < world.bouncePadCount; i++) {
+    const bpX = world.bouncePadXWorld[i];
+    const bpY = world.bouncePadYWorld[i];
+    const bpW = world.bouncePadWWorld[i];
+    const bpH = world.bouncePadHWorld[i];
+    const sfIdx = world.bouncePadSpeedFactorIndex[i];
+    const rampOri = world.bouncePadRampOrientationIndex[i];
+
+    const px = bpX * zoom + offsetXPx;
+    const py = bpY * zoom + offsetYPx;
+    const pw = bpW * zoom;
+    const ph = bpH * zoom;
+
+    // ── Draw block body / ramp shape ─────────────────────────────────────
+    ctx.fillStyle = sfIdx === 1 ? 'rgba(80,40,10,0.85)' : 'rgba(60,30,8,0.80)';
+    ctx.strokeStyle = sfIdx === 1 ? 'rgba(255,140,30,0.75)' : 'rgba(200,80,10,0.55)';
+    ctx.lineWidth = zoom * 0.8;
+
+    if (rampOri === 255 || rampOri === undefined) {
+      // Solid rectangle
+      ctx.fillRect(px, py, pw, ph);
+      ctx.strokeRect(px, py, pw, ph);
+    } else {
+      // Ramp triangle
+      ctx.beginPath();
+      switch (rampOri) {
+        case 0: ctx.moveTo(px, py + ph); ctx.lineTo(px + pw, py + ph); ctx.lineTo(px + pw, py); break;
+        case 1: ctx.moveTo(px, py + ph); ctx.lineTo(px + pw, py + ph); ctx.lineTo(px, py);       break;
+        case 2: ctx.moveTo(px, py);       ctx.lineTo(px + pw, py);       ctx.lineTo(px + pw, py + ph); break;
+        case 3: ctx.moveTo(px, py);       ctx.lineTo(px + pw, py);       ctx.lineTo(px, py + ph);       break;
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // ── Glowing core — each pixel cycles at its own speed through orange palette ─
+    // Dim (sfIdx=0): 2×2 pixel core;  Bright (sfIdx=1): 4×4 pixel core.
+    const corePixels = sfIdx === 1 ? 4 : 2;
+    const pixWorld = 1.0; // 1 world unit = 1 virtual pixel
+    const pixPx = pixWorld * zoom;
+
+    // Center the core inside the block
+    const coreCenterXWorld = bpX + bpW * 0.5;
+    const coreCenterYWorld = bpY + bpH * 0.5;
+    const coreStartXWorld = coreCenterXWorld - corePixels * 0.5 * pixWorld;
+    const coreStartYWorld = coreCenterYWorld - corePixels * 0.5 * pixWorld;
+
+    for (let cy2 = 0; cy2 < corePixels; cy2++) {
+      for (let cx2 = 0; cx2 < corePixels; cx2++) {
+        // Each pixel gets a unique phase seed derived from its position + bounce pad index
+        const pixSeed = i * 37 + cy2 * 11 + cx2 * 7;
+        // Three cadence tiers (0.03, 0.07, 0.13) chosen by pixel seed
+        const cadenceTier = pixSeed % 3;
+        const freq = cadenceTier === 0 ? 0.03 : cadenceTier === 1 ? 0.07 : 0.13;
+        const phase = (pixSeed * 1.61803) % (Math.PI * 2);
+        // t oscillates 0..1
+        const t2 = (Math.sin(tick * freq + phase) * 0.5 + 0.5);
+
+        // Interpolate between dark red (#8B0000) and warm yellow (#FFD040) through orange
+        let r: number;
+        let g: number;
+        let b: number;
+        if (t2 < 0.5) {
+          // dark red → orange: r stays near 200-255, g goes 0→120, b stays 0
+          const s = t2 * 2.0;
+          r = Math.round(140 + s * 115);   // 140 → 255
+          g = Math.round(s * 100);          // 0 → 100
+          b = 0;
+        } else {
+          // orange → warm yellow: r stays 255, g goes 100→208, b 0→64
+          const s = (t2 - 0.5) * 2.0;
+          r = 255;
+          g = Math.round(100 + s * 108);   // 100 → 208
+          b = Math.round(s * 40);           // 0 → 40
+        }
+        const alpha = sfIdx === 1 ? (0.75 + t2 * 0.25) : (0.55 + t2 * 0.30);
+
+        const cxPx = (coreStartXWorld + cx2 * pixWorld) * zoom + offsetXPx;
+        const cyPx = (coreStartYWorld + cy2 * pixWorld) * zoom + offsetYPx;
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
+        ctx.fillRect(cxPx, cyPx, pixPx, pixPx);
+
+        // Extra bloom glow for bright pads
+        if (sfIdx === 1) {
+          const glowAlpha = (t2 * 0.25).toFixed(2);
+          ctx.fillStyle = `rgba(${r},${g},${b},${glowAlpha})`;
+          ctx.fillRect(cxPx - pixPx * 0.5, cyPx - pixPx * 0.5, pixPx * 2, pixPx * 2);
+        }
+      }
+    }
+  }
+
   // ── Springboards (metallic platform with spring coil) ──────────────────
   for (let i = 0; i < world.springboardCount; i++) {
     const sbx = world.springboardXWorld[i];

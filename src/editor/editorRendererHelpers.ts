@@ -109,6 +109,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     waterZone:        'water_zone',
     lavaZone:         'lava_zone',
     crumbleBlock:     'crumble_block',
+    bouncePad:        'bounce_pad',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;
@@ -173,6 +174,16 @@ export function buildElementTypeName(
       return `Crumble Block${sizeLabel}${variantLabel}`;
     }
     return 'Crumble Block';
+  }
+  if (type === 'bouncePad') {
+    const b = (room.bouncePads ?? []).find(x => x.uid === uid);
+    if (b) {
+      const sfLabel = b.speedFactorIndex === 1 ? '100%' : '50%';
+      const sizeLabel = b.wBlock > 1 || b.hBlock > 1 ? ` ${b.wBlock}×${b.hBlock}` : '';
+      const rampLabel = b.rampOrientation !== undefined ? ' Ramp' : '';
+      return `Bounce Pad${rampLabel}${sizeLabel} [${sfLabel}]`;
+    }
+    return 'Bounce Pad';
   }
   if (type === 'ambientLightBlocker') {
     const b = (room.ambientLightBlockers ?? []).find(x => x.uid === uid);

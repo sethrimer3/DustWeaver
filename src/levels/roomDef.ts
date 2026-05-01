@@ -474,6 +474,30 @@ export interface RoomCrumbleBlockDef {
   blockTheme?: BlockTheme;
 }
 
+/** A bounce pad that reflects the player's velocity on contact.
+ *
+ * speedFactorIndex:
+ *   0 = 50 % restitution (dim 2×2-pixel glowing core)
+ *   1 = 100 % restitution (bright 4×4-pixel glowing core)
+ *
+ * The player cannot grapple to it, jump off it, or wall-jump off it.
+ */
+export interface RoomBouncePadDef {
+  xBlock: number;
+  yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock?: number;
+  /** Height in blocks (default 1). */
+  hBlock?: number;
+  /**
+   * Ramp orientation (0-3). Undefined or absent = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** 0 = 50 % bounce (dim core), 1 = 100 % bounce (bright core). Default 0. */
+  speedFactorIndex?: 0 | 1;
+}
+
 /** A jar that grants temporary dust particles when broken. */
 export interface RoomDustBoostJarDef {
   xBlock: number;
@@ -627,6 +651,8 @@ export interface RoomDef {
   breakableBlocks?: readonly RoomBreakableBlockDef[];
   /** Crumble blocks that collapse on first player contact. */
   crumbleBlocks?: readonly RoomCrumbleBlockDef[];
+  /** Bounce pad blocks that reflect the player's velocity on contact. */
+  bouncePads?: readonly RoomBouncePadDef[];
   /** Jars that grant temporary dust particles when broken by the player. */
   dustBoostJars?: readonly RoomDustBoostJarDef[];
   /** Jars that release golden fireflies when broken by the player. */

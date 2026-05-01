@@ -321,6 +321,58 @@ export function renderEditorOverlays(
     ctx.stroke();
   }
 
+  // ── Bounce pads ──────────────────────────────────────────────────────────
+  for (const b of (room.bouncePads ?? [])) {
+    const isSelected = isElementSelected('bouncePad', b.uid);
+    const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = b.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = b.hBlock * BLOCK_SIZE_SMALL * zoom;
+
+    const fillAlpha = isSelected ? 0.45 : 0.25;
+    const strokeAlpha = isSelected ? 1.0 : 0.65;
+    // Dim (50%): orange-red; Bright (100%): bright orange
+    const fillColor = b.speedFactorIndex === 1
+      ? `rgba(200,80,10,${fillAlpha})`
+      : `rgba(140,50,5,${fillAlpha})`;
+    const strokeColor = b.speedFactorIndex === 1
+      ? `rgba(255,140,30,${strokeAlpha})`
+      : `rgba(220,90,15,${strokeAlpha})`;
+
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = isSelected ? 2 : 1;
+
+    if (b.rampOrientation !== undefined) {
+      ctx.beginPath();
+      switch (b.rampOrientation) {
+        case 0: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx); break;
+        case 1: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx, yPx); break;
+        case 2: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx + wPx, yPx + hPx); break;
+        case 3: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx, yPx + hPx); break;
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(xPx, yPx, wPx, hPx);
+      ctx.strokeRect(xPx, yPx, wPx, hPx);
+    }
+
+    // Core indicator: a small bright dot in the center
+    const dotR = (b.speedFactorIndex === 1 ? 3 : 2) * zoom;
+    const dotX = xPx + wPx * 0.5;
+    const dotY = yPx + hPx * 0.5;
+    ctx.fillStyle = b.speedFactorIndex === 1 ? 'rgba(255,200,50,0.90)' : 'rgba(255,110,20,0.75)';
+    ctx.fillRect(dotX - dotR * 0.5, dotY - dotR * 0.5, dotR, dotR);
+
+    // Label
+    ctx.fillStyle = 'rgba(255,180,60,0.85)';
+    ctx.font = `bold ${Math.max(7, zoom * 3.5)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(b.speedFactorIndex === 1 ? '⟳100%' : '⟳50%', dotX, dotY + dotR + zoom * 3);
+  }
+
   // ── Decorations ──────────────────────────────────────────────────────────
   for (const d of (room.decorations ?? [])) {
     const isSelected = isElementSelected('decoration', d.uid);
@@ -391,6 +443,41 @@ export function renderEditorOverlays(
         ctx.lineTo(cx + wPx * 0.25, cy - hPx * 0.25);
         ctx.stroke();
         ctx.globalAlpha = 1.0;
+      } else if (item.isBouncePadItem === 1) {
+        // Bounce pad preview — orange outline with optional ramp shape
+        const bpFillColor = item.bouncePadSpeedFactorIndex === 1 ? 'rgba(200,80,10,0.28)' : 'rgba(140,50,5,0.22)';
+        const bpStrokeColor = item.bouncePadSpeedFactorIndex === 1 ? 'rgba(255,140,30,0.70)' : 'rgba(220,90,15,0.55)';
+        if (item.isRampItem === 1) {
+          const base2 = state.placementRotationSteps % 4;
+          const rampOri2 = (state.placementFlipH ? (base2 ^ 1) : base2) as 0 | 1 | 2 | 3;
+          const bpXPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+          const bpYPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+          const bpWPx = preview.wBlock * BLOCK_SIZE_SMALL * zoom;
+          const bpHPx = preview.hBlock * BLOCK_SIZE_SMALL * zoom;
+          ctx.fillStyle = bpFillColor;
+          ctx.strokeStyle = bpStrokeColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          switch (rampOri2) {
+            case 0: ctx.moveTo(bpXPx, bpYPx + bpHPx); ctx.lineTo(bpXPx + bpWPx, bpYPx + bpHPx); ctx.lineTo(bpXPx + bpWPx, bpYPx); break;
+            case 1: ctx.moveTo(bpXPx, bpYPx + bpHPx); ctx.lineTo(bpXPx + bpWPx, bpYPx + bpHPx); ctx.lineTo(bpXPx, bpYPx); break;
+            case 2: ctx.moveTo(bpXPx, bpYPx); ctx.lineTo(bpXPx + bpWPx, bpYPx); ctx.lineTo(bpXPx + bpWPx, bpYPx + bpHPx); break;
+            case 3: ctx.moveTo(bpXPx, bpYPx); ctx.lineTo(bpXPx + bpWPx, bpYPx); ctx.lineTo(bpXPx, bpYPx + bpHPx); break;
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
+            preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, bpFillColor, 2);
+          const bpXPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+          const bpYPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+          const bpWPx = preview.wBlock * BLOCK_SIZE_SMALL * zoom;
+          const bpHPx = preview.hBlock * BLOCK_SIZE_SMALL * zoom;
+          ctx.strokeStyle = bpStrokeColor;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(bpXPx, bpYPx, bpWPx, bpHPx);
+        }
       } else if (item.isRampItem === 1) {
         // Show ramp preview as a triangle with current orientation
         const base = state.placementRotationSteps % 4;

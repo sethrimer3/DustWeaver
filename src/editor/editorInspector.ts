@@ -329,5 +329,20 @@ export function updateInspector(
         block.variant ?? 'normal',
         v => callbacks?.onPropertyChange('crumbleBlock.variant', v));
     }
+  } else if (el.type === 'bouncePad') {
+    const bp = (room.bouncePads ?? []).find(b => b.uid === el.uid);
+    if (bp) {
+      addField(div, 'xBlock', String(bp.xBlock),
+        v => callbacks?.onPropertyChange('bouncePad.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(bp.yBlock),
+        v => callbacks?.onPropertyChange('bouncePad.yBlock', parseInt(v)));
+      addSelect(div, 'speedFactor',
+        [
+          { label: '50 % (dim core)',    value: '0' },
+          { label: '100 % (bright core)', value: '1' },
+        ],
+        String(bp.speedFactorIndex ?? 0),
+        v => callbacks?.onPropertyChange('bouncePad.speedFactorIndex', parseInt(v)));
+    }
   }
 }

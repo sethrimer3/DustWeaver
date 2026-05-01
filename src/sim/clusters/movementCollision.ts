@@ -132,19 +132,31 @@ export function resolveWallsX(
     const prevRight = prevXWorld + hw;
     const prevLeft  = prevXWorld - hw;
 
+    const isBounce = world.wallIsBouncePadFlag[wi] === 1;
+    // Speed factor for bounce: index 0 → 50 %, index 1 → 100 %
+    const bounceSf = isBounce ? (world.wallBouncePadSpeedFactorIndex[wi] === 1 ? 1.0 : 0.5) : 0.0;
+
     // Determine push direction from previous position
     if (prevRight <= wallLeft + COLLISION_EPSILON) {
-      if (tryStepUpSingleBlock(cluster, world, wallTop, 1, wasGrounded)) continue;
+      if (!isBounce && tryStepUpSingleBlock(cluster, world, wallTop, 1, wasGrounded)) continue;
       // Was to the left of wall — push out left
       cluster.positionXWorld = wallLeft - hw;
-      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
-      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
+      if (isBounce) {
+        if (cluster.velocityXWorld > 0) cluster.velocityXWorld = -cluster.velocityXWorld * bounceSf;
+      } else {
+        if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+        if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
+      }
     } else if (prevLeft >= wallRight - COLLISION_EPSILON) {
-      if (tryStepUpSingleBlock(cluster, world, wallTop, -1, wasGrounded)) continue;
+      if (!isBounce && tryStepUpSingleBlock(cluster, world, wallTop, -1, wasGrounded)) continue;
       // Was to the right of wall — push out right
       cluster.positionXWorld = wallRight + hw;
-      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
-      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
+      if (isBounce) {
+        if (cluster.velocityXWorld < 0) cluster.velocityXWorld = -cluster.velocityXWorld * bounceSf;
+      } else {
+        if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+        if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
+      }
     } else {
       // Fallback: push out on the shortest X-axis direction.
       // Edge case where cluster was already overlapping on X at start of tick, e.g. spawn.
@@ -152,12 +164,20 @@ export function resolveWallsX(
       const penRight = wallRight - left;
       if (penLeft < penRight) {
         cluster.positionXWorld = wallLeft - hw;
-        if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
-        if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
+        if (isBounce) {
+          if (cluster.velocityXWorld > 0) cluster.velocityXWorld = -cluster.velocityXWorld * bounceSf;
+        } else {
+          if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+          if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
+        }
       } else {
         cluster.positionXWorld = wallRight + hw;
-        if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
-        if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
+        if (isBounce) {
+          if (cluster.velocityXWorld < 0) cluster.velocityXWorld = -cluster.velocityXWorld * bounceSf;
+        } else {
+          if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+          if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
+        }
       }
     }
   }
@@ -228,17 +248,29 @@ export function resolveWallsY(
 
     const prevTop    = prevYWorld - hh;
 
+    const isBounce = world.wallIsBouncePadFlag[wi] === 1;
+    const bounceSf = isBounce ? (world.wallBouncePadSpeedFactorIndex[wi] === 1 ? 1.0 : 0.5) : 0.0;
+
     // Determine push direction from previous position
     if (prevBottom <= wallTop + COLLISION_EPSILON && cluster.velocityYWorld >= 0) {
       // Was above wall — land on top
       cluster.positionYWorld = wallTop - hh;
-      cluster.velocityYWorld = 0;
-      cluster.isGroundedFlag = 1;
-      landed = true;
+      if (isBounce) {
+        cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
+        // Do NOT set isGroundedFlag — player cannot ground-jump off a bounce pad
+      } else {
+        cluster.velocityYWorld = 0;
+        cluster.isGroundedFlag = 1;
+        landed = true;
+      }
     } else if (prevTop >= wallBottom - COLLISION_EPSILON && cluster.velocityYWorld <= 0) {
       // Was below wall — push down
       cluster.positionYWorld = wallBottom + hh;
-      if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+      if (isBounce) {
+        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
+      } else {
+        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+      }
     } else {
       // Fallback: push out on the shortest Y-axis direction.
       // Edge case where cluster was already overlapping on Y at start of tick, e.g. spawn.
@@ -246,12 +278,20 @@ export function resolveWallsY(
       const penBottom = wallBottom - top;
       if (penTop < penBottom) {
         cluster.positionYWorld = wallTop - hh;
-        cluster.velocityYWorld = 0;
-        cluster.isGroundedFlag = 1;
-        landed = true;
+        if (isBounce) {
+          cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
+        } else {
+          cluster.velocityYWorld = 0;
+          cluster.isGroundedFlag = 1;
+          landed = true;
+        }
       } else {
         cluster.positionYWorld = wallBottom + hh;
-        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+        if (isBounce) {
+          if (cluster.velocityYWorld < 0) cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
+        } else {
+          if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+        }
       }
     }
   }
@@ -352,19 +392,36 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
     const cx = cluster.positionXWorld;
     const t = wallWidth > 0 ? (cx - wallLeft) / wallWidth : 0; // 0..1
 
+    const isBouncePad = world.wallIsBouncePadFlag[wi] === 1;
+    const bounceSf = isBouncePad ? (world.wallBouncePadSpeedFactorIndex[wi] === 1 ? 1.0 : 0.5) : 0.0;
+
+    // Pre-compute ramp diagonal length once for all orientation branches.
+    const rampDiag = Math.sqrt(wallWidth * wallWidth + wallHeight * wallHeight);
+
     if (ori === 0) {
       // Rises going right (/): surface at x goes from wallBottom (left) to wallTop (right)
       // y_surface = wallBottom - t * wallHeight
       const surfaceY = wallBottom - t * wallHeight;
-      // Catch range limited to hh below the surface so that ramp blocks higher up in the
-      // geometry cannot teleport the player upward from a surface they are legitimately on.
       if (clusterBottom >= surfaceY - COLLISION_EPSILON &&
           clusterBottom <= surfaceY + hh + COLLISION_EPSILON &&
           cluster.velocityYWorld >= 0) {
         cluster.positionYWorld = surfaceY - hh;
-        cluster.velocityYWorld = 0;
-        cluster.isGroundedFlag = 1;
-        landed = true;
+        if (isBouncePad) {
+          // Reflect velocity off the ramp normal: outward normal = (-wallHeight, -wallWidth)/|d|
+          if (rampDiag > 0.001) {
+            const nx = -wallHeight / rampDiag;
+            const ny = -wallWidth / rampDiag;
+            const vDotN = cluster.velocityXWorld * nx + cluster.velocityYWorld * ny;
+            if (vDotN < 0) {
+              cluster.velocityXWorld -= (1.0 + bounceSf) * vDotN * nx;
+              cluster.velocityYWorld -= (1.0 + bounceSf) * vDotN * ny;
+            }
+          }
+        } else {
+          cluster.velocityYWorld = 0;
+          cluster.isGroundedFlag = 1;
+          landed = true;
+        }
       }
     } else if (ori === 1) {
       // Rises going left (\): surface at x goes from wallTop (left) to wallBottom (right)
@@ -374,9 +431,21 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
           clusterBottom <= surfaceY + hh + COLLISION_EPSILON &&
           cluster.velocityYWorld >= 0) {
         cluster.positionYWorld = surfaceY - hh;
-        cluster.velocityYWorld = 0;
-        cluster.isGroundedFlag = 1;
-        landed = true;
+        if (isBouncePad) {
+          if (rampDiag > 0.001) {
+            const nx = wallHeight / rampDiag;
+            const ny = -wallWidth / rampDiag;
+            const vDotN = cluster.velocityXWorld * nx + cluster.velocityYWorld * ny;
+            if (vDotN < 0) {
+              cluster.velocityXWorld -= (1.0 + bounceSf) * vDotN * nx;
+              cluster.velocityYWorld -= (1.0 + bounceSf) * vDotN * ny;
+            }
+          }
+        } else {
+          cluster.velocityYWorld = 0;
+          cluster.isGroundedFlag = 1;
+          landed = true;
+        }
       }
     } else if (ori === 2) {
       // Ceiling ramp (⌐, upside-down /): ceiling goes from wallTop (left) to wallBottom (right)
@@ -385,7 +454,19 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
           clusterTop >= surfaceY - hh - COLLISION_EPSILON &&
           cluster.velocityYWorld <= 0) {
         cluster.positionYWorld = surfaceY + hh;
-        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+        if (isBouncePad) {
+          if (rampDiag > 0.001) {
+            const nx = -wallHeight / rampDiag;
+            const ny = wallWidth / rampDiag;
+            const vDotN = cluster.velocityXWorld * nx + cluster.velocityYWorld * ny;
+            if (vDotN < 0) {
+              cluster.velocityXWorld -= (1.0 + bounceSf) * vDotN * nx;
+              cluster.velocityYWorld -= (1.0 + bounceSf) * vDotN * ny;
+            }
+          }
+        } else {
+          if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+        }
       }
     } else if (ori === 3) {
       // Ceiling ramp (¬, upside-down \): ceiling goes from wallBottom (left) to wallTop (right)
@@ -394,7 +475,19 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
           clusterTop >= surfaceY - hh - COLLISION_EPSILON &&
           cluster.velocityYWorld <= 0) {
         cluster.positionYWorld = surfaceY + hh;
-        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+        if (isBouncePad) {
+          if (rampDiag > 0.001) {
+            const nx = wallHeight / rampDiag;
+            const ny = wallWidth / rampDiag;
+            const vDotN = cluster.velocityXWorld * nx + cluster.velocityYWorld * ny;
+            if (vDotN < 0) {
+              cluster.velocityXWorld -= (1.0 + bounceSf) * vDotN * nx;
+              cluster.velocityYWorld -= (1.0 + bounceSf) * vDotN * ny;
+            }
+          }
+        } else {
+          if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+        }
       }
     }
   }

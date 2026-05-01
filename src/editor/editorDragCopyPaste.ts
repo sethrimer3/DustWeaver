@@ -9,7 +9,7 @@
 import {
   EditorState,
   EditorWall, EditorEnemy, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
-  EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock,
+  EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
@@ -58,6 +58,9 @@ export function storeDragStartPositions(
       if (z) positions.set(key, { xBlock: z.xBlock, yBlock: z.yBlock });
     } else if (el.type === 'crumbleBlock') {
       const b = (s.roomData.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
+      if (b) positions.set(key, { xBlock: b.xBlock, yBlock: b.yBlock });
+    } else if (el.type === 'bouncePad') {
+      const b = (s.roomData.bouncePads ?? []).find(b2 => b2.uid === el.uid);
       if (b) positions.set(key, { xBlock: b.xBlock, yBlock: b.yBlock });
     } else if (el.type === 'grasshopperArea') {
       const a = s.roomData.grasshopperAreas.find(x => x.uid === el.uid);
@@ -131,6 +134,9 @@ export function moveSelectedElements(
     } else if (el.type === 'crumbleBlock') {
       const b = (s.roomData.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
       if (b) { b.xBlock = orig.xBlock + deltaX; b.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'bouncePad') {
+      const b = (s.roomData.bouncePads ?? []).find(b2 => b2.uid === el.uid);
+      if (b) { b.xBlock = orig.xBlock + deltaX; b.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'grasshopperArea') {
       const a = s.roomData.grasshopperAreas.find(x => x.uid === el.uid);
       if (a && orig) { a.xBlock = orig.xBlock + deltaX; a.yBlock = orig.yBlock + deltaY; }
@@ -186,12 +192,13 @@ export function serializeSelectedElements(
     waterZones: EditorWaterZone[];
     lavaZones: EditorLavaZone[];
     crumbleBlocks: EditorCrumbleBlock[];
+    bouncePads: EditorBouncePad[];
     grasshopperAreas: EditorGrasshopperArea[];
     fireflyAreas: EditorFireflyArea[];
   } = {
     walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [],
     decorations: [], lightSources: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
-    grasshopperAreas: [], fireflyAreas: [],
+    bouncePads: [], grasshopperAreas: [], fireflyAreas: [],
   };
   for (const el of elements) {
     if (el.type === 'wall') {
@@ -224,6 +231,9 @@ export function serializeSelectedElements(
     } else if (el.type === 'crumbleBlock') {
       const b = (room.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
       if (b) data.crumbleBlocks.push({ ...b });
+    } else if (el.type === 'bouncePad') {
+      const b = (room.bouncePads ?? []).find(b2 => b2.uid === el.uid);
+      if (b) data.bouncePads.push({ ...b });
     } else if (el.type === 'grasshopperArea') {
       const a = room.grasshopperAreas.find(a2 => a2.uid === el.uid);
       if (a) data.grasshopperAreas.push({ ...a });
@@ -252,6 +262,7 @@ export function pasteFromClipboard(s: EditorState): void {
     waterZones?: EditorWaterZone[];
     lavaZones?: EditorLavaZone[];
     crumbleBlocks?: EditorCrumbleBlock[];
+    bouncePads?: EditorBouncePad[];
     grasshopperAreas?: EditorGrasshopperArea[];
     fireflyAreas?: EditorFireflyArea[];
   };
@@ -270,7 +281,7 @@ export function pasteFromClipboard(s: EditorState): void {
     ...(data.saveTombs ?? []), ...(data.skillTombs ?? []), ...(data.dustPiles ?? []),
     ...(data.decorations ?? []), ...(data.lightSources ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
-    ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
+    ...(data.bouncePads ?? []), ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
   ];
   for (const e of allEntities) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
   if (!isFinite(minX)) minX = 0;
@@ -380,6 +391,17 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: b.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'crumbleBlock', uid: newUid });
+  }
+  for (const b of (data.bouncePads ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.bouncePads) s.roomData.bouncePads = [];
+    s.roomData.bouncePads.push({
+      ...b,
+      uid: newUid,
+      xBlock: b.xBlock - minX + offsetX,
+      yBlock: b.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'bouncePad', uid: newUid });
   }
   for (const a of (data.grasshopperAreas ?? [])) {
     const newUid = allocateUid(s);
