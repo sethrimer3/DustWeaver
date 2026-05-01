@@ -41,6 +41,8 @@ interface _ReusableBacking {
   grappleAttachFxTicks: number;
   grappleAttachFxXWorld: number;
   grappleAttachFxYWorld: number;
+  grappleProximityBounceTicksLeft: number;
+  grappleProximityBounceRotationAngleRad: number;
   isPlayerBlockingFlag: 0 | 1;
   hasGrappleChargeFlag: 0 | 1;
   isPlayerWeaveActiveFlag: 0 | 1;
@@ -313,6 +315,8 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     grappleAttachFxTicks:     world.grappleAttachFxTicks,
     grappleAttachFxXWorld:    world.grappleAttachFxXWorld,
     grappleAttachFxYWorld:    world.grappleAttachFxYWorld,
+    grappleProximityBounceTicksLeft:        world.grappleProximityBounceTicksLeft,
+    grappleProximityBounceRotationAngleRad: world.grappleProximityBounceRotationAngleRad,
     isPlayerBlockingFlag:     world.isPlayerBlockingFlag,
     hasGrappleChargeFlag:     world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag:  (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
@@ -407,6 +411,8 @@ export function updateSnapshotInPlace(
   b.grappleAttachFxTicks      = world.grappleAttachFxTicks;
   b.grappleAttachFxXWorld     = world.grappleAttachFxXWorld;
   b.grappleAttachFxYWorld     = world.grappleAttachFxYWorld;
+  b.grappleProximityBounceTicksLeft        = world.grappleProximityBounceTicksLeft;
+  b.grappleProximityBounceRotationAngleRad = world.grappleProximityBounceRotationAngleRad;
   b.isPlayerBlockingFlag      = world.isPlayerBlockingFlag;
   b.hasGrappleChargeFlag      = world.hasGrappleChargeFlag;
   b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
@@ -604,6 +610,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleAttachFxTicks: world.grappleAttachFxTicks,
     grappleAttachFxXWorld: world.grappleAttachFxXWorld,
     grappleAttachFxYWorld: world.grappleAttachFxYWorld,
+    grappleProximityBounceTicksLeft:        world.grappleProximityBounceTicksLeft,
+    grappleProximityBounceRotationAngleRad: world.grappleProximityBounceRotationAngleRad,
     isPlayerBlockingFlag: world.isPlayerBlockingFlag,
     hasGrappleChargeFlag: world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,

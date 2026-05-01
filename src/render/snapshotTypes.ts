@@ -249,6 +249,17 @@ export interface WorldSnapshot {
   readonly grappleAttachFxTicks: number;
   readonly grappleAttachFxXWorld: number;
   readonly grappleAttachFxYWorld: number;
+  /**
+   * Ticks remaining in the proximity-bounce sprite window.
+   * While > 0 the player renders the jumping sprite rotated toward the
+   * wall/ceiling that triggered the bounce.
+   */
+  readonly grappleProximityBounceTicksLeft: number;
+  /**
+   * Canvas rotation angle (radians) for the proximity-bounce jumping sprite.
+   * -π/2 = left-wall, +π/2 = right-wall, π = ceiling.
+   */
+  readonly grappleProximityBounceRotationAngleRad: number;
   /** 1 while the player is holding block or a sustained weave — used to drive player sprite rotation speed. */
   readonly isPlayerBlockingFlag: 0 | 1;
   /** 1 when the player has a grapple charge available (grapple hook is equipped). */

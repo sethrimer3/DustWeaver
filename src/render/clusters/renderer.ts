@@ -169,7 +169,15 @@ export function renderClusters(
       // ── Player: character sprite (no rotation; flip when facing left) ────
       const charSprites = getCharacterSprites(snapshot.characterId);
       const isGrappling = snapshot.isGrappleActiveFlag === 1;
-      const sprite = getPlayerSprite(charSprites, cluster, isGrappling);
+      // Proximity-bounce stub sprite: while the bounce timer is active, override
+      // the sprite with the jumping sprite and apply a surface-aligned rotation.
+      const isBouncing = snapshot.grappleProximityBounceTicksLeft > 0;
+      const sprite = isBouncing
+        ? charSprites.jumping
+        : getPlayerSprite(charSprites, cluster, isGrappling);
+      const bounceRotationAngleRad = isBouncing
+        ? snapshot.grappleProximityBounceRotationAngleRad
+        : 0;
       // spritePivotX is the x-offset from the flip-pivot (hitbox centre, screenX) to
       // the sprite's left edge.  Pixel 9.5 from the sprite left aligns with screenX,
       // so the sprite left is 9.5px to the left of screenX.
@@ -263,6 +271,10 @@ export function renderClusters(
         ctx.translate(screenX - 0.5, spriteCenterY);
         if (cluster.isFacingLeftFlag === 1) {
           ctx.scale(-1, 1);
+        }
+        // Proximity-bounce stub: rotate the jumping sprite to face the surface.
+        if (bounceRotationAngleRad !== 0) {
+          ctx.rotate(bounceRotationAngleRad);
         }
         // Draw black outer silhouette first, then the original sprite on top.
         ctx.drawImage(
