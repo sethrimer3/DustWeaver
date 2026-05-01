@@ -49,6 +49,15 @@ export interface ClusterState {
    */
   varJumpSpeedWorld: number;
 
+  // ---- Committed fast-fall mode --------------------------------------------
+  /**
+   * 1 while the player is in committed fast-fall mode.
+   * Set when the player holds down while falling; cleared by landing, jumping,
+   * attaching a grapple, or holding jump long enough to brake back to normalFallCap.
+   * While active, the terminal fall speed is fastFallCap instead of normalFallCap.
+   */
+  isFastFallModeFlag: 0 | 1;
+
   // ---- Wall interaction ---------------------------------------------------
   /** 1 when the player's left side is pressed against a solid wall this tick. */
   isTouchingWallLeftFlag: 0 | 1;
@@ -463,6 +472,7 @@ export function createClusterState(
     prevJumpHeldFlag: 0,
     varJumpTimerTicks: 0,
     varJumpSpeedWorld: 0,
+    isFastFallModeFlag: 0,
     isTouchingWallLeftFlag: 0,
     isTouchingWallRightFlag: 0,
     isWallSlidingFlag: 0,
