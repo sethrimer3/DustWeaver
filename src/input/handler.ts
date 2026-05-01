@@ -308,7 +308,14 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.isKeyS = false;
     state.isJumpHeldFlag = false;
     state.isSprintHeldFlag = false;
+    // Fire a grapple release so the rope is cancelled when the window loses
+    // focus (alt-tab, task switch, etc.).  Without this the grapple stays
+    // active in the sim and the player is frozen mid-swing on return.
+    if (state.isGrappleHeldFlag === 1) {
+      state.isGrappleReleaseTriggeredFlag = 1;
+    }
     state.isGrappleHeldFlag = 0;
+    state.isBlockingFlag = 0;
     state.isRightMouseDownFlag = 0;
     state.isMouseDownFlag = 0;
   }

@@ -4,7 +4,7 @@ import { initGrappleChainParticles } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng, nextFloat, nextFloatTriangle } from '../sim/rng';
-import { createSnapshot, createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
+import { createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
 import { PlayerCloak } from '../render/clusters/playerCloak';
@@ -899,7 +899,8 @@ export function startGameScreen(
         const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
-        const snapshot = createSnapshot(world);
+        updateSnapshotInPlace(reusableSnapshot, world, 1.0, prevClusterPosX, prevClusterPosY);
+        const snapshot = reusableSnapshot;
 
         if (webglRenderer.isAvailable) {
           webglRenderer.render(snapshot, eox, eoy, zoom);
@@ -1019,7 +1020,11 @@ export function startGameScreen(
 
 
     // ── Sim ticks ──────────────────────────────────────────────────────────
-    accumulatorMs += elapsedMs;
+    // Cap the catch-up budget to 5 fixed ticks so that long pauses (tab switch,
+    // DevTools breakpoint, OS sleep) cannot drive hundreds of unconstrained ticks
+    // in a single render frame, which would cause instant death, runaway enemy AI,
+    // and multi-second browser stalls.
+    accumulatorMs = Math.min(accumulatorMs + elapsedMs, FIXED_DT_MS * 5);
 
     while (accumulatorMs >= FIXED_DT_MS) {
       // Capture cluster positions just before THIS tick so that after the loop,
@@ -1049,6 +1054,13 @@ export function startGameScreen(
       world.playerSprintHeldFlag = inputState.isSprintHeldFlag ? 1 : 0;
       world.playerCrouchHeldFlag = inputState.isKeyS ? 1 : 0;
       tick(world);
+      // If the player died during this tick, stop processing further ticks in
+      // this frame.  Continuing to run enemy AI, spike contact, and force
+      // accumulation on a dead cluster produces erratic post-death effects.
+      if (world.clusters[0]?.isAliveFlag === 0) {
+        accumulatorMs -= FIXED_DT_MS;
+        break;
+      }
       // Process large slime splits (spawn child slimes when large slime dies)
       const newSlimes = processLargeSlimeSplits(world);
       for (let s = 0; s < newSlimes.length; s++) {
