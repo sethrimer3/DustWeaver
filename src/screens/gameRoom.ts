@@ -1,8 +1,9 @@
-import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES, MAX_BOUNCE_PADS } from '../sim/world';
+import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES, MAX_BOUNCE_PADS, MAX_ROPES, MAX_ROPE_SEGMENTS } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import {
   RoomDef,
   BLOCK_SIZE_MEDIUM,
+  BLOCK_SIZE_SMALL,
   blockThemeToIndex,
   WALL_THEME_DEFAULT_INDEX,
   PLAYER_HALF_WIDTH_WORLD,
@@ -15,6 +16,7 @@ import {
   SPIKE_DIR_LEFT,
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
+import { initRopeSegments } from '../sim/ropes/ropeSim';
 
 const FIREFLY_AREA_SPAWN_SPEED_WORLD = 30.0;
 
@@ -673,4 +675,50 @@ export function screenToWorld(
     xWorld: (virtualXPx - offsetXPx) / zoom,
     yWorld: (virtualYPx - offsetYPx) / zoom,
   };
+}
+
+// ── Rope destructibility index constants ──────────────────────────────────────
+const ROPE_DESTR_INDESTRUCTIBLE = 0;
+const ROPE_DESTR_PLAYER_ONLY = 1;
+const ROPE_DESTR_ANY = 2;
+
+/**
+ * Loads rope definitions from a RoomDef into the WorldState rope buffers.
+ * Initialises Verlet segment positions as a straight line from anchor A to B.
+ */
+export function loadRoomRopes(world: WorldState, room: RoomDef): void {
+  const ropes = room.ropes ?? [];
+  const count = Math.min(ropes.length, MAX_ROPES);
+  world.ropeCount = count;
+
+  for (let r = 0; r < count; r++) {
+    const def = ropes[r];
+    const segCount = Math.max(2, Math.min(def.segmentCount ?? 8, MAX_ROPE_SEGMENTS));
+    world.ropeSegmentCount[r] = segCount;
+
+    const ax = def.anchorAXBlock * BLOCK_SIZE_SMALL;
+    const ay = def.anchorAYBlock * BLOCK_SIZE_SMALL;
+    const bx = def.anchorBXBlock * BLOCK_SIZE_SMALL;
+    const by = def.anchorBYBlock * BLOCK_SIZE_SMALL;
+
+    world.ropeAnchorAXWorld[r] = ax;
+    world.ropeAnchorAYWorld[r] = ay;
+    world.ropeAnchorBXWorld[r] = bx;
+    world.ropeAnchorBYWorld[r] = by;
+    world.ropeIsAnchorBFixedFlag[r] = def.isAnchorBFixed === true ? 1 : 0;
+
+    const destr = def.destructibility ?? 'indestructible';
+    world.ropeDestructibilityIndex[r] =
+      destr === 'playerOnly' ? ROPE_DESTR_PLAYER_ONLY :
+      destr === 'any'        ? ROPE_DESTR_ANY :
+                               ROPE_DESTR_INDESTRUCTIBLE;
+
+    // Rest length = straight-line distance / (segCount - 1)
+    const dx = bx - ax;
+    const dy = by - ay;
+    const totalLen = Math.sqrt(dx * dx + dy * dy);
+    world.ropeSegRestLenWorld[r] = segCount > 1 ? totalLen / (segCount - 1) : totalLen;
+
+    initRopeSegments(world, r);
+  }
 }

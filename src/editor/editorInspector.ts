@@ -13,6 +13,7 @@ import {
   BLOCK_THEMES,
   FADE_COLOR_OPTIONS,
   CRUMBLE_VARIANT_OPTIONS,
+  ROPE_DESTRUCTIBILITY_OPTIONS,
 } from './editorState';
 import {
   addField,
@@ -343,6 +344,25 @@ export function updateInspector(
         ],
         String(bp.speedFactorIndex ?? 0),
         v => callbacks?.onPropertyChange('bouncePad.speedFactorIndex', parseInt(v)));
+    }
+  } else if (el.type === 'rope') {
+    const ropes = room.ropes ?? [];
+    const rope = ropes.find(r => r.uid === el.uid);
+    if (rope) {
+      addField(div, 'anchorA',
+        `(${rope.anchorAXBlock}, ${rope.anchorAYBlock}) blocks`,
+        () => {});
+      addField(div, 'anchorB',
+        `(${rope.anchorBXBlock}, ${rope.anchorBYBlock}) blocks`,
+        () => {});
+      addNumberField(div, 'segmentCount', rope.segmentCount, 2, 32,
+        v => callbacks?.onPropertyChange('rope.segmentCount', v));
+      addSelect(div, 'destructibility',
+        ROPE_DESTRUCTIBILITY_OPTIONS.map(o => ({ label: o.label, value: o.id })),
+        rope.destructibility,
+        v => callbacks?.onPropertyChange('rope.destructibility', v));
+      addCheckbox(div, 'anchorBFixed', rope.isAnchorBFixedFlag === 1,
+        v => callbacks?.onPropertyChange('rope.isAnchorBFixedFlag', v ? 1 : 0));
     }
   }
 }

@@ -32,7 +32,7 @@ export enum EditorTool {
 
 // ── Palette categories and items ─────────────────────────────────────────────
 
-export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'lighting' | 'liquids';
+export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'lighting' | 'liquids' | 'ropes';
 
 export interface PaletteItem {
   id: string;
@@ -76,6 +76,25 @@ export const CRUMBLE_VARIANT_OPTIONS: readonly { id: CrumbleVariant; label: stri
   { id: 'shadow',    label: 'Shadow'    },
   { id: 'nature',    label: 'Nature'    },
 ];
+
+export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
+
+export const ROPE_DESTRUCTIBILITY_OPTIONS: ReadonlyArray<{ id: RopeDestructibility; label: string }> = [
+  { id: 'indestructible', label: 'Indestructible' },
+  { id: 'playerOnly',     label: 'Player Only' },
+  { id: 'any',            label: 'Any' },
+];
+
+export interface EditorRope {
+  uid: number;
+  anchorAXBlock: number;
+  anchorAYBlock: number;
+  anchorBXBlock: number;
+  anchorBYBlock: number;
+  segmentCount: number;
+  isAnchorBFixedFlag: 0 | 1;
+  destructibility: RopeDestructibility;
+}
 
 /** Built-in palette items available in the editor. */
 export const PALETTE_ITEMS: readonly PaletteItem[] = [
@@ -144,6 +163,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'bounce_pad_ramp_1x1_bright', label: 'Bounce Ramp 1×1 (100%)', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
   { id: 'bounce_pad_ramp_1x2_bright', label: 'Bounce Ramp 1×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
   { id: 'bounce_pad_ramp_2x2_bright', label: 'Bounce Ramp 2×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
+  { id: 'rope', label: 'Rope', category: 'ropes', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
 ];
 
 /** Available block themes for placement and wall inspection. */
@@ -473,11 +493,13 @@ export interface EditorRoomData {
   crumbleBlocks?: EditorCrumbleBlock[];
   /** Bounce pads placed in this room (reflect player velocity on contact). */
   bouncePads?: EditorBouncePad[];
+  /** Ropes placed in this room. */
+  ropes?: EditorRope[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope';
 
 export interface SelectedElement {
   type: SelectedElementType;
@@ -541,6 +563,11 @@ export interface EditorState {
    */
   pendingCrumbleVariant: CrumbleVariant;
   /**
+   * Pending first anchor when placing a rope (null if not in rope-placement mode).
+   */
+  pendingRopeAnchorXBlock: number | null;
+  pendingRopeAnchorYBlock: number | null;
+  /**
    * The element the mouse is currently hovering over (Select tool only).
    * Null when no element is under the cursor or when not using the Select tool.
    */
@@ -577,6 +604,8 @@ export function createEditorState(): EditorState {
     clipboard: null,
     pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
     pendingCrumbleVariant: 'normal',
+    pendingRopeAnchorXBlock: null,
+    pendingRopeAnchorYBlock: null,
     hoverElement: null,
   };
 }

@@ -49,6 +49,11 @@ export const GRASSHOPPER_SELECTED = 'rgba(100,220,100,0.45)';
 export const FIREFLY_COLOR = 'rgba(255,220,60,0.20)';
 export const FIREFLY_SELECTED = 'rgba(255,230,80,0.45)';
 
+export const ROPE_COLOR = 'rgba(180, 140, 80, 0.7)';
+export const ROPE_SELECTED = 'rgba(220, 180, 100, 0.95)';
+export const ROPE_PREVIEW_COLOR = 'rgba(180, 140, 80, 0.4)';
+export const ROPE_ANCHOR_COLOR = 'rgba(255, 200, 100, 0.9)';
+
 /**
  * Crack-line stroke color for each crumble block variant.
  * The same crack geometry is drawn for every block size/shape;
@@ -110,6 +115,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     lavaZone:         'lava_zone',
     crumbleBlock:     'crumble_block',
     bouncePad:        'bounce_pad',
+    rope:             'rope',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;
@@ -164,6 +170,7 @@ export function buildElementTypeName(
     lightSource:        'Light Source',
     waterZone:          'Water Zone',
     lavaZone:           'Lava Zone',
+    rope:               'Rope',
   };
   if (type === 'crumbleBlock') {
     const b = (room.crumbleBlocks ?? []).find(x => x.uid === uid);

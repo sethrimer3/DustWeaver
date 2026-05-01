@@ -366,4 +366,13 @@ export interface WorldSnapshot {
    * Used by grappleInfluenceRenderer to pulse the ring as a tension warning.
    */
   readonly grappleTensionFactor: number;
+  // ── Ropes ────────────────────────────────────────────────────────────────
+  /** Number of ropes in the current room. */
+  readonly ropeCount: number;
+  /** Number of segments per rope. Shared view into WorldState buffer. */
+  readonly ropeSegmentCount: Uint8Array;
+  /** Verlet node X positions (shared view). */
+  readonly ropeSegPosXWorld: Float32Array;
+  /** Verlet node Y positions (shared view). */
+  readonly ropeSegPosYWorld: Float32Array;
 }

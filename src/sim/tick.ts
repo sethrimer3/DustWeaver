@@ -51,6 +51,7 @@ import {
   tickMoteSlotRegeneration,
   tickMoteGrappleDisplayRadius,
 } from './motes/orderedMoteQueue';
+import { tickRopes } from './ropes/ropeSim';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
@@ -60,6 +61,9 @@ export function tick(world: WorldState): void {
 
   // 0.1. Environmental hazards — spikes, springs, water buoyancy, lava, breakables, jars, fireflies
   applyHazards(world);
+
+  // 0.15. Rope physics — Verlet integration + constraint relaxation
+  tickRopes(world);
 
   // 0.25. Grapple rope constraint — corrects player cluster position/velocity
   applyGrappleClusterConstraint(world);

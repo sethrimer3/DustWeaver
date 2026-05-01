@@ -516,6 +516,32 @@ export function placeAtCursor(state: EditorState): void {
       yBlock: targetRow,
       kind,
     });
+  } else if (item.category === 'ropes') {
+    if (state.pendingRopeAnchorXBlock === null) {
+      state.pendingRopeAnchorXBlock = bx;
+      state.pendingRopeAnchorYBlock = by;
+    } else {
+      const ax = state.pendingRopeAnchorXBlock;
+      const ay = state.pendingRopeAnchorYBlock!;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const lenBlocks = Math.sqrt(dx * dx + dy * dy);
+      if (lenBlocks > 0.5) {
+        if (!room.ropes) room.ropes = [];
+        room.ropes.push({
+          uid: allocateUid(state),
+          anchorAXBlock: ax,
+          anchorAYBlock: ay,
+          anchorBXBlock: bx,
+          anchorBYBlock: by,
+          segmentCount: Math.max(2, Math.min(Math.round(lenBlocks * 1.5), 32)),
+          isAnchorBFixedFlag: 0,
+          destructibility: 'indestructible',
+        });
+      }
+      state.pendingRopeAnchorXBlock = null;
+      state.pendingRopeAnchorYBlock = null;
+    }
   }
 }
 
@@ -866,4 +892,30 @@ function hitTestTransitionRect(
     tx = t.positionBlock; ty = zoneY; tw = t.openingSizeBlocks; th = DEPTH;
   }
   return tx + tw > minX && tx < maxX + 1 && ty + th > minY && ty < maxY + 1;
+}
+
+/**
+ * Returns the uid and anchor side of the first rope in room.ropes whose
+ * anchor points are within `toleranceBlocks` of (bx, by), or null if none.
+ */
+export function hitTestRopeAnchor(
+  room: EditorRoomData,
+  bx: number,
+  by: number,
+  toleranceBlocks = 0.8,
+): { uid: number; anchorSide: 'A' | 'B' } | null {
+  const ropes = room.ropes ?? [];
+  for (const rope of ropes) {
+    const dax = rope.anchorAXBlock - bx;
+    const day = rope.anchorAYBlock - by;
+    if (Math.sqrt(dax * dax + day * day) <= toleranceBlocks) {
+      return { uid: rope.uid, anchorSide: 'A' };
+    }
+    const dbx = rope.anchorBXBlock - bx;
+    const dby = rope.anchorBYBlock - by;
+    if (Math.sqrt(dbx * dbx + dby * dby) <= toleranceBlocks) {
+      return { uid: rope.uid, anchorSide: 'B' };
+    }
+  }
+  return null;
 }

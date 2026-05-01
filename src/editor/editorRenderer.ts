@@ -24,6 +24,7 @@ import {
   CURSOR_COLOR, SELECTION_BOX_COLOR, SELECTION_BOX_BORDER,
   GRASSHOPPER_COLOR, GRASSHOPPER_SELECTED,
   FIREFLY_COLOR, FIREFLY_SELECTED,
+  ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR,
   CRUMBLE_VARIANT_CRACK_COLOR,
   SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
   SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
@@ -379,6 +380,55 @@ export function renderEditorOverlays(
     const emoji = d.kind === 'mushroom' ? '🍄' : d.kind === 'glowGrass' ? '🌿' : '🌱';
     const color = isSelected ? 'rgba(80,220,130,0.9)' : 'rgba(60,170,90,0.55)';
     drawMarker(ctx, d.xBlock, d.yBlock, offsetXPx, offsetYPx, zoom, color, emoji);
+  }
+
+  // ── Ropes ─────────────────────────────────────────────────────────────────
+  for (const r of (room.ropes ?? [])) {
+    const isSelected = isElementSelected('rope', r.uid);
+    const lineColor = isSelected ? ROPE_SELECTED : ROPE_COLOR;
+    const ax = r.anchorAXBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const ay = r.anchorAYBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const bx = r.anchorBXBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const by = r.anchorBYBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    ctx.save();
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = isSelected ? 2.5 : 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = ROPE_ANCHOR_COLOR;
+    ctx.beginPath(); ctx.arc(ax, ay, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx, by, 3, 0, Math.PI * 2); ctx.fill();
+    if (r.isAnchorBFixedFlag === 0) {
+      ctx.strokeStyle = 'rgba(255,180,60,0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // Rope placement preview: show first anchor already placed
+  if (
+    state.activeTool === EditorTool.Place &&
+    state.selectedPaletteItem?.category === 'ropes' &&
+    state.pendingRopeAnchorXBlock !== null
+  ) {
+    const ax = state.pendingRopeAnchorXBlock! * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const ay = state.pendingRopeAnchorYBlock! * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const bx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const by = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    ctx.save();
+    ctx.strokeStyle = ROPE_PREVIEW_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = ROPE_ANCHOR_COLOR;
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath(); ctx.arc(ax, ay, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
 
   // ── Placement preview ────────────────────────────────────────────────────
