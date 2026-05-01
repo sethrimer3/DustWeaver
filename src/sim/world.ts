@@ -1,7 +1,6 @@
 import { ParticleBuffers, createParticleBuffers, MAX_PARTICLES } from './particles/state';
 import { ClusterState } from './clusters/state';
 import { RngState, createRng } from './rng';
-import { MAX_ARROWS } from './weaves/arrowWeave';
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
 export const MAX_WALLS = 2000;
@@ -58,6 +57,8 @@ export const BEES_PER_SWARM = 10;
 
 /** Maximum number of logical mote slots (equals PARTICLE_COUNT_PER_CLUSTER). */
 export const MAX_MOTE_SLOTS = 20;
+/** Maximum simultaneous arrows in flight or stuck. */
+export const MAX_ARROWS = 8;
 
 export interface WorldState extends ParticleBuffers {
   tick: number;

@@ -16,7 +16,7 @@
  * Flying arrows that contact an enemy also trigger the mote sequence, then vanish.
  */
 
-import { WorldState } from '../world';
+import { WorldState, MAX_ARROWS } from '../world';
 import { raycastWalls } from '../clusters/grappleMiss';
 import {
   getAvailableMoteSlotCount,
@@ -24,9 +24,6 @@ import {
 } from '../motes/orderedMoteQueue';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-/** Maximum simultaneous arrows in flight or stuck. */
-export const MAX_ARROWS = 8;
 
 /** Ticks from loading start until mote 3 appears (0.5 s at 60 fps). */
 const MOTE_3_LOAD_TICKS = 30;
