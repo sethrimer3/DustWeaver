@@ -329,25 +329,26 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
     // Stub sprite: show jumping sprite rotated toward the wall/ceiling for a
     // brief window after the bounce.  Floor bounces (normalY < 0) use no
     // rotation — only wall and ceiling bounces get the special orientation.
-    let bounceRotationAngleRad = 0;
+    // Always reset the state first so a floor bounce after a wall/ceiling bounce
+    // doesn't leave a stale rotation active.
+    world.grappleProximityBounceTicksLeft = 0;
+    world.grappleProximityBounceRotationAngleRad = 0;
     if (Math.abs(normalY) > Math.abs(normalX)) {
       if (normalY > 0) {
         // Ceiling bounce — normal points downward; rotate 180° (upside-down).
-        bounceRotationAngleRad = Math.PI;
+        world.grappleProximityBounceRotationAngleRad = Math.PI;
+        world.grappleProximityBounceTicksLeft = GRAPPLE_PROXIMITY_BOUNCE_SPRITE_TICKS;
       }
-      // Floor bounce (normalY < 0): no rotation; jumping sprite looks correct.
-    } else {
+      // Floor bounce (normalY < 0): leave rotation at 0; jumping sprite looks correct.
+    } else if (normalX !== 0) {
       if (normalX > 0) {
         // Left-wall bounce — normal points rightward; rotate -90° (CCW).
-        bounceRotationAngleRad = -Math.PI / 2;
+        world.grappleProximityBounceRotationAngleRad = -Math.PI / 2;
       } else {
         // Right-wall bounce — normal points leftward; rotate +90° (CW).
-        bounceRotationAngleRad = Math.PI / 2;
+        world.grappleProximityBounceRotationAngleRad = Math.PI / 2;
       }
-    }
-    if (bounceRotationAngleRad !== 0) {
       world.grappleProximityBounceTicksLeft = GRAPPLE_PROXIMITY_BOUNCE_SPRITE_TICKS;
-      world.grappleProximityBounceRotationAngleRad = bounceRotationAngleRad;
     }
     return;
   }
