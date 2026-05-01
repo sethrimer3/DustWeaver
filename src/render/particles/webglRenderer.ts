@@ -21,6 +21,7 @@
 import { MAX_PARTICLES } from '../../sim/particles/state';
 import { WorldSnapshot } from '../snapshot';
 import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shaders';
+import { ParticleTrailRenderer } from './trailRenderer';
 
 /** [x, y, kind, normalizedAge, disturbanceFactor, isOffensive] per vertex */
 const FLOATS_PER_VERTEX = 6;
@@ -98,6 +99,13 @@ export class WebGLParticleRenderer {
   private readonly program: WebGLProgram | null = null;
   private readonly vertexBuffer: WebGLBuffer | null = null;
 
+  /**
+   * Neon trail renderer — handles ring-buffer sampling and batched trail
+   * rendering for attack-mode (behaviorMode === 1) particles.
+   * Created after successful GL initialisation; null on GL failure.
+   */
+  private readonly trailRenderer: ParticleTrailRenderer | null = null;
+
   // Attribute / uniform locations
   private readonly attrPositionScreen:    number = -1;
   private readonly attrKind:              number = -1;
@@ -163,6 +171,7 @@ export class WebGLParticleRenderer {
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
+    this.trailRenderer = new ParticleTrailRenderer(gl);
     this.isAvailable = true;
   }
 
@@ -185,6 +194,11 @@ export class WebGLParticleRenderer {
    *  - Vertex data packed into pre-allocated packedVertexData Float32Array.
    *  - Only the alive-particle slice is uploaded via gl.bufferSubData.
    *  - All particles drawn in a single gl.drawArrays(POINTS) call.
+   *
+   * Trail rendering:
+   *  - Trail ring buffers are updated first (distance-gated sampling).
+   *  - Trails are drawn before particles so particles sit on top of their trails.
+   *  - Both use the same additive-blend GL context.
    */
   render(
     snapshot: WorldSnapshot,
@@ -208,6 +222,11 @@ export class WebGLParticleRenderer {
       disturbanceFactor, behaviorMode,
     } = particles;
 
+    // ---- Update trail ring buffers (distance-gated, no allocations) -----
+    if (this.trailRenderer !== null) {
+      this.trailRenderer.update(particles);
+    }
+
     // ---- Pack alive-particle vertex data (no allocations) ---------------
     const packed = this.packedVertexData;
     let vertexCount = 0;
@@ -228,6 +247,15 @@ export class WebGLParticleRenderer {
     // ---- Clear to transparent so the 2D canvas below shows through ----------
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // ---- Draw trails BEFORE particles so particles appear on top of them ----
+    if (this.trailRenderer !== null && this.trailRenderer.isAvailable) {
+      this.trailRenderer.render(
+        particles,
+        offsetXPx, offsetYPx, scalePx,
+        this.canvas.width, this.canvas.height,
+      );
+    }
 
     if (vertexCount === 0) return;
 
@@ -260,8 +288,9 @@ export class WebGLParticleRenderer {
   dispose(): void {
     if (this.gl === null) return;
     const gl = this.gl;
-    if (this.program      !== null) gl.deleteProgram(this.program);
-    if (this.vertexBuffer !== null) gl.deleteBuffer(this.vertexBuffer);
+    if (this.trailRenderer  !== null) this.trailRenderer.dispose();
+    if (this.program        !== null) gl.deleteProgram(this.program);
+    if (this.vertexBuffer   !== null) gl.deleteBuffer(this.vertexBuffer);
     if (this.canvas.parentElement !== null) this.canvas.parentElement.removeChild(this.canvas);
   }
 }
