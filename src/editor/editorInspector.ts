@@ -27,6 +27,26 @@ import { makeBtn } from './editorUIHelpers';
 import { GREEN } from './editorStyles';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 
+const KIND_OPTIONS: { label: string; value: string }[] = [
+  { label: 'Physical',  value: 'Physical'  },
+  { label: 'Fire',      value: 'Fire'      },
+  { label: 'Ice',       value: 'Ice'       },
+  { label: 'Lightning', value: 'Lightning' },
+  { label: 'Poison',    value: 'Poison'    },
+  { label: 'Arcane',    value: 'Arcane'    },
+  { label: 'Wind',      value: 'Wind'      },
+  { label: 'Holy',      value: 'Holy'      },
+  { label: 'Shadow',    value: 'Shadow'    },
+  { label: 'Metal',     value: 'Metal'     },
+  { label: 'Earth',     value: 'Earth'     },
+  { label: 'Nature',    value: 'Nature'    },
+  { label: 'Crystal',   value: 'Crystal'   },
+  { label: 'Void',      value: 'Void'      },
+  { label: 'Water',     value: 'Water'     },
+  { label: 'Lava',      value: 'Lava'      },
+  { label: 'Stone',     value: 'Stone'     },
+];
+
 // ── Inspector ─────────────────────────────────────────────────────────────────
 
 export function updateInspector(
@@ -194,6 +214,36 @@ export function updateInspector(
         })),
         tomb.weaveId,
         v => callbacks?.onPropertyChange('skillTomb.weaveId', v));
+    }
+  } else if (el.type === 'dustContainer') {
+    const container = (room.dustContainers ?? []).find(c => c.uid === el.uid);
+    if (container) {
+      addField(div, 'xBlock', String(container.xBlock),
+        v => callbacks?.onPropertyChange('dustContainer.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(container.yBlock),
+        v => callbacks?.onPropertyChange('dustContainer.yBlock', parseInt(v)));
+    }
+  } else if (el.type === 'dustContainerPiece') {
+    const piece = (room.dustContainerPieces ?? []).find(c => c.uid === el.uid);
+    if (piece) {
+      addField(div, 'xBlock', String(piece.xBlock),
+        v => callbacks?.onPropertyChange('dustContainerPiece.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(piece.yBlock),
+        v => callbacks?.onPropertyChange('dustContainerPiece.yBlock', parseInt(v)));
+    }
+  } else if (el.type === 'dustBoostJar') {
+    const jar = (room.dustBoostJars ?? []).find(j => j.uid === el.uid);
+    if (jar) {
+      addField(div, 'xBlock', String(jar.xBlock),
+        v => callbacks?.onPropertyChange('dustBoostJar.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(jar.yBlock),
+        v => callbacks?.onPropertyChange('dustBoostJar.yBlock', parseInt(v)));
+      addSelect(div, 'dustKind',
+        KIND_OPTIONS,
+        jar.dustKind,
+        v => callbacks?.onPropertyChange('dustBoostJar.dustKind', v));
+      addNumberField(div, 'dustCount', jar.dustCount, 1, 20,
+        v => callbacks?.onPropertyChange('dustBoostJar.dustCount', v));
     }
   } else if (el.type === 'dustPile') {
     const pile = room.dustPiles.find(p => p.uid === el.uid);

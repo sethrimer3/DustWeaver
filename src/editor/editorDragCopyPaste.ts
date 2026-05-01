@@ -11,6 +11,7 @@ import {
   EditorWall, EditorEnemy, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
   EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea,
+  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
 
@@ -41,6 +42,15 @@ export function storeDragStartPositions(
     } else if (el.type === 'skillTomb') {
       const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
       if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
+    } else if (el.type === 'dustContainer') {
+      const c = (s.roomData.dustContainers ?? []).find(c2 => c2.uid === el.uid);
+      if (c) positions.set(key, { xBlock: c.xBlock, yBlock: c.yBlock });
+    } else if (el.type === 'dustContainerPiece') {
+      const c = (s.roomData.dustContainerPieces ?? []).find(c2 => c2.uid === el.uid);
+      if (c) positions.set(key, { xBlock: c.xBlock, yBlock: c.yBlock });
+    } else if (el.type === 'dustBoostJar') {
+      const j = (s.roomData.dustBoostJars ?? []).find(j2 => j2.uid === el.uid);
+      if (j) positions.set(key, { xBlock: j.xBlock, yBlock: j.yBlock });
     } else if (el.type === 'dustPile') {
       const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
@@ -116,6 +126,15 @@ export function moveSelectedElements(
     } else if (el.type === 'skillTomb') {
       const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
       if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'dustContainer') {
+      const c = (s.roomData.dustContainers ?? []).find(c2 => c2.uid === el.uid);
+      if (c) { c.xBlock = orig.xBlock + deltaX; c.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'dustContainerPiece') {
+      const c = (s.roomData.dustContainerPieces ?? []).find(c2 => c2.uid === el.uid);
+      if (c) { c.xBlock = orig.xBlock + deltaX; c.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'dustBoostJar') {
+      const j = (s.roomData.dustBoostJars ?? []).find(j2 => j2.uid === el.uid);
+      if (j) { j.xBlock = orig.xBlock + deltaX; j.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'dustPile') {
       const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) { p.xBlock = orig.xBlock + deltaX; p.yBlock = orig.yBlock + deltaY; }
@@ -186,6 +205,9 @@ export function serializeSelectedElements(
     enemies: EditorEnemy[];
     saveTombs: EditorSaveTomb[];
     skillTombs: EditorSkillTomb[];
+    dustContainers: EditorDustContainer[];
+    dustContainerPieces: EditorDustContainerPiece[];
+    dustBoostJars: EditorDustBoostJar[];
     dustPiles: EditorDustPile[];
     decorations: EditorDecoration[];
     lightSources: EditorLightSource[];
@@ -196,7 +218,9 @@ export function serializeSelectedElements(
     grasshopperAreas: EditorGrasshopperArea[];
     fireflyAreas: EditorFireflyArea[];
   } = {
-    walls: [], enemies: [], saveTombs: [], skillTombs: [], dustPiles: [],
+    walls: [], enemies: [], saveTombs: [], skillTombs: [],
+    dustContainers: [], dustContainerPieces: [], dustBoostJars: [],
+    dustPiles: [],
     decorations: [], lightSources: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
     bouncePads: [], grasshopperAreas: [], fireflyAreas: [],
   };
@@ -213,6 +237,15 @@ export function serializeSelectedElements(
     } else if (el.type === 'skillTomb') {
       const t = room.skillTombs.find(t2 => t2.uid === el.uid);
       if (t) data.skillTombs.push({ ...t });
+    } else if (el.type === 'dustContainer') {
+      const c = (room.dustContainers ?? []).find(c2 => c2.uid === el.uid);
+      if (c) data.dustContainers.push({ ...c });
+    } else if (el.type === 'dustContainerPiece') {
+      const c = (room.dustContainerPieces ?? []).find(c2 => c2.uid === el.uid);
+      if (c) data.dustContainerPieces.push({ ...c });
+    } else if (el.type === 'dustBoostJar') {
+      const j = (room.dustBoostJars ?? []).find(j2 => j2.uid === el.uid);
+      if (j) data.dustBoostJars.push({ ...j });
     } else if (el.type === 'dustPile') {
       const p = room.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) data.dustPiles.push({ ...p });
@@ -256,6 +289,9 @@ export function pasteFromClipboard(s: EditorState): void {
     enemies: EditorEnemy[];
     saveTombs?: EditorSaveTomb[];
     skillTombs: EditorSkillTomb[];
+    dustContainers?: EditorDustContainer[];
+    dustContainerPieces?: EditorDustContainerPiece[];
+    dustBoostJars?: EditorDustBoostJar[];
     dustPiles: EditorDustPile[];
     decorations?: EditorDecoration[];
     lightSources?: EditorLightSource[];
@@ -278,7 +314,9 @@ export function pasteFromClipboard(s: EditorState): void {
   let minX = Infinity, minY = Infinity;
   const allEntities: Array<{ xBlock: number; yBlock: number }> = [
     ...data.walls, ...data.enemies,
-    ...(data.saveTombs ?? []), ...(data.skillTombs ?? []), ...(data.dustPiles ?? []),
+    ...(data.saveTombs ?? []), ...(data.skillTombs ?? []),
+    ...(data.dustContainers ?? []), ...(data.dustContainerPieces ?? []), ...(data.dustBoostJars ?? []),
+    ...(data.dustPiles ?? []),
     ...(data.decorations ?? []), ...(data.lightSources ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
     ...(data.bouncePads ?? []), ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
@@ -326,6 +364,39 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: t.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'skillTomb', uid: newUid });
+  }
+  for (const c of (data.dustContainers ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.dustContainers) s.roomData.dustContainers = [];
+    s.roomData.dustContainers.push({
+      ...c,
+      uid: newUid,
+      xBlock: c.xBlock - minX + offsetX,
+      yBlock: c.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'dustContainer', uid: newUid });
+  }
+  for (const c of (data.dustContainerPieces ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.dustContainerPieces) s.roomData.dustContainerPieces = [];
+    s.roomData.dustContainerPieces.push({
+      ...c,
+      uid: newUid,
+      xBlock: c.xBlock - minX + offsetX,
+      yBlock: c.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'dustContainerPiece', uid: newUid });
+  }
+  for (const j of (data.dustBoostJars ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.dustBoostJars) s.roomData.dustBoostJars = [];
+    s.roomData.dustBoostJars.push({
+      ...j,
+      uid: newUid,
+      xBlock: j.xBlock - minX + offsetX,
+      yBlock: j.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'dustBoostJar', uid: newUid });
   }
   for (const p of (data.dustPiles ?? [])) {
     const newUid = allocateUid(s);

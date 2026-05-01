@@ -293,6 +293,8 @@ export interface RoomJsonDef {
   skillBooks?: RoomJsonSkillTomb[];
   /** Collectible dust container positions (block units). */
   dustContainers?: RoomJsonSkillTomb[];
+  /** Collectible dust container piece positions (block units). */
+  dustContainerPieces?: RoomJsonSkillTomb[];
   // ── Environmental hazards (all optional) ──────────────────────────────────
   spikes?: RoomJsonSpike[];
   springboards?: RoomJsonSpringboard[];

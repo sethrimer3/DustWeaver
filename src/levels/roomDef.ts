@@ -669,6 +669,11 @@ export interface RoomDef {
    * Each pickup grants +4 dust particles to the player.
    */
   dustContainers?: readonly { xBlock: number; yBlock: number }[];
+  /**
+   * Collectible dust container piece positions (block units).
+   * Pieces accumulate; when enough are collected they grant a full container.
+   */
+  dustContainerPieces?: readonly { xBlock: number; yBlock: number }[];
 
   // ── Environmental hazards ────────────────────────────────────────────────
   /** Spike tiles that damage the player on contact. */
