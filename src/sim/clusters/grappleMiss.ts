@@ -181,9 +181,11 @@ export function isSpecialZipGrapple(
 
 /**
  * Speed at which the grapple chain extends outward when fired (world units/sec).
- * Slightly slower than the max range to give a visible "throw" animation.
+ * High enough to cover the full influence radius (~96 world units) in ~3 frames
+ * (3/60 s = 0.05 s) so the throw feels nearly instant:
+ *   tip speed ≈ 2000 × 0.97 ≈ 1940 wu/s → 1940 × 0.05 ≈ 97 wu in 3 frames.
  */
-const GRAPPLE_MISS_EXTEND_SPEED_WORLD_PER_SEC = 400.0;
+const GRAPPLE_MISS_EXTEND_SPEED_WORLD_PER_SEC = 2000.0;
 
 /**
  * Gravity applied to limp chain links after full extension (world units/sec²).
@@ -406,9 +408,8 @@ export function updateGrappleMissChain(world: WorldState): void {
                 (missAnchorX - player.positionXWorld) ** 2 +
                 (missAnchorY - player.positionYWorld) ** 2,
               );
-              const isMissSpecialTopHit = isSpecialZipGrapple(world, player, missAnchorX, missAnchorY);
 
-              // Attach grapple at this point
+              // Attach grapple at this point (zip/stick mechanic replaced by proximity bounce)
               world.grappleAnchorXWorld = missAnchorX;
               world.grappleAnchorYWorld = missAnchorY;
               world.grappleLengthWorld = missAnchorDist;
@@ -416,7 +417,7 @@ export function updateGrappleMissChain(world: WorldState): void {
               world.grappleJumpHeldTickCount = 0;
               world.playerJumpTriggeredFlag = 0;
               world.isGrappleActiveFlag = 1;
-              world.isGrappleTopSurfaceFlag = isMissSpecialTopHit ? 1 : 0;
+              world.isGrappleTopSurfaceFlag = 0;
               world.isGrappleStuckFlag = 0;
               world.grappleStuckStoppedTickCount = 0;
               world.isGrappleMissActiveFlag = 0;
@@ -426,12 +427,8 @@ export function updateGrappleMissChain(world: WorldState): void {
               world.grappleAttachFxXWorld = missAnchorX;
               world.grappleAttachFxYWorld = missAnchorY;
 
-              // Charge: top-surface refreshes charge, wall consumes it
-              if (isMissSpecialTopHit) {
-                world.hasGrappleChargeFlag = 1;
-              } else {
-                world.hasGrappleChargeFlag = 0;
-              }
+              // Miss-chain attachment always consumes the charge (normal rope attach).
+              world.hasGrappleChargeFlag = 0;
               return;
             }
           }

@@ -82,7 +82,6 @@ import {
   BEHAVIOR_MODE_GRAPPLE_CHAIN,
   GRAPPLE_CHAIN_LIFETIME_TICKS,
   raycastWalls,
-  isSpecialZipGrapple,
   startGrappleMiss,
   cancelGrappleMiss,
   startGrappleRetract,
@@ -146,42 +145,14 @@ const GRAPPLE_SWING_DAMPING_PER_SEC = 0.12;
  */
 const GRAPPLE_JUMP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD;
 
-// ── Top-surface grapple (zip + stick) ────────────────────────────────────────
-
 /**
- * Speed at which the player zips toward a top-surface grapple anchor.
- * 3× the player's top sprint speed: MAX_RUN_SPEED(105) × SPRINT(1.5) × 3.
+ * Distance (world units) within which a grapple hit triggers the special
+ * proximity bounce instead of a normal rope attachment.  Equals 1 small block
+ * (8 virtual pixels = 8 world units).  If the player's centre is within this
+ * distance of the hit surface at fire time, the player is launched instantly
+ * in the surface-normal direction at super-jump speed.
  */
-const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 472.5;
-
-/**
- * Per-tick velocity multiplier while grapple-stuck, applied multiplicatively.
- * 0.05 = 95% speed loss each tick — almost instant stop in 2–3 frames.
- */
-const GRAPPLE_STUCK_DECEL_FACTOR = 0.05;
-
-/** Speed threshold (world units/sec) below which a stuck player is considered fully stopped. */
-const GRAPPLE_STUCK_STOP_THRESHOLD_WORLD = 1.0;
-
-/**
- * Ticks after coming to a full stop while grapple-stuck during which a jump
- * receives 100% extra vertical height (super jump).
- */
-const GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS = 10;
-
-/**
- * Distance threshold (world units) within which the player is considered to
- * have arrived at the zip destination.  Prevents overshooting the target on
- * the final tick when the remaining distance is smaller than the zip step.
- */
-const GRAPPLE_ZIP_ARRIVAL_THRESHOLD_WORLD = 1.0;
-
-/**
- * Minimum distance (world units) for computing a normalized direction toward
- * the zip target.  Prevents division-by-near-zero when the player is
- * essentially on top of the anchor.
- */
-const GRAPPLE_ZIP_MIN_DIST_WORLD = 0.01;
+const GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD = 8.0;
 
 
 
@@ -277,6 +248,41 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
 
   const hitDist = Math.sqrt((hit.x - player.positionXWorld) ** 2 + (hit.y - player.positionYWorld) ** 2);
 
+  // ── Special proximity bounce ────────────────────────────────────────────────
+  // If the player is within GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD (8 world
+  // units = 1 small block) of the hit surface at the moment the grapple
+  // fires, the hook acts as an instant surface-bounce rather than a rope attach.
+  // The player is launched in the surface-normal direction (from anchor toward
+  // player) at super-jump speed.  Works on any surface orientation: floor,
+  // wall, or ceiling.
+  if (hitDist > 0.01 && hitDist < GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD) {
+    // Cancel any active miss/retract animation before the bounce.
+    if (world.isGrappleMissActiveFlag === 1) {
+      cancelGrappleMiss(world);
+    }
+    // Normal direction: from anchor (surface) toward player.
+    const invHitDist = 1.0 / hitDist;
+    const normalX = (player.positionXWorld - hit.x) * invHitDist;
+    const normalY = (player.positionYWorld - hit.y) * invHitDist;
+    // Apply super-jump speed in the surface-normal direction.
+    const jumpSpeed = PLAYER_JUMP_SPEED_WORLD
+      * ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER);
+    player.velocityXWorld = normalX * jumpSpeed;
+    player.velocityYWorld = normalY * jumpSpeed;
+    player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
+    player.varJumpSpeedWorld = player.velocityYWorld;
+    player.isFastFallModeFlag = 0;
+    // Sparkle FX at the anchor point.
+    world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
+    world.grappleAttachFxXWorld = hit.x;
+    world.grappleAttachFxYWorld = hit.y;
+    // Consume grapple charge (proximity bounce is a one-shot move, no recharge).
+    world.hasGrappleChargeFlag = 0;
+    // Reset the jump trigger so the same press isn't replayed.
+    world.playerJumpTriggeredFlag = 0;
+    return;
+  }
+
   // Don't attach when the wall is closer than the minimum rope length — doing
   // so would place the anchor inside the block geometry, which causes the
   // visible dot to appear embedded in the tile and produces erratic physics.
@@ -290,7 +296,6 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const anchorX = hit.x;
   const anchorY = hit.y;
   const anchorDist = Math.sqrt((anchorX - player.positionXWorld) ** 2 + (anchorY - player.positionYWorld) ** 2);
-  const isSpecialTopHit = isSpecialZipGrapple(world, player, anchorX, anchorY);
 
   // Place the anchor exactly at the (potentially snapped) surface hit point.
   world.grappleAnchorXWorld = anchorX;
@@ -304,7 +309,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // first tick after attachment.
   world.playerJumpTriggeredFlag = 0;
   world.isGrappleActiveFlag = 1;
-  world.isGrappleTopSurfaceFlag = isSpecialTopHit ? 1 : 0;
+  world.isGrappleTopSurfaceFlag = 0;  // zip/stick mechanic replaced by proximity bounce
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
@@ -314,13 +319,8 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // swinging, not falling, so the fast-fall terminal velocity no longer applies.
   player.isFastFallModeFlag = 0;
 
-  // Consume grapple charge. Top-surface grapples instantly refresh the charge
-  // so the player can chain grapple between ledges.
-  if (isSpecialTopHit) {
-    world.hasGrappleChargeFlag = 1;
-  } else {
-    world.hasGrappleChargeFlag = 0;
-  }
+  // Consume grapple charge (normal rope attachment — no auto-recharge).
+  world.hasGrappleChargeFlag = 0;
 
   // Activate chain particles — fully reinitialise fields that may have been
   // overwritten while the slots were reused by stone shards or other transient
