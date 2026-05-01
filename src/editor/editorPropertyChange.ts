@@ -25,6 +25,7 @@ import type {
   EditorWaterZone,
   EditorLavaZone,
   EditorCrumbleBlock,
+  EditorBouncePad,
   SelectedElement,
   BlockTheme,
 } from './editorState';
@@ -133,6 +134,15 @@ export function applyPropertyToElement(
       if (prop === 'crumbleBlock.yBlock' && !isNaN(numVal)) block.yBlock = numVal;
       if (prop === 'crumbleBlock.variant' && typeof value === 'string') {
         block.variant = value as EditorCrumbleBlock['variant'];
+      }
+    }
+  } else if (el.type === 'bouncePad') {
+    const bp = (room.bouncePads ?? []).find((b: EditorBouncePad) => b.uid === el.uid);
+    if (bp) {
+      if (prop === 'bouncePad.xBlock' && !isNaN(numVal)) bp.xBlock = numVal;
+      if (prop === 'bouncePad.yBlock' && !isNaN(numVal)) bp.yBlock = numVal;
+      if (prop === 'bouncePad.speedFactorIndex' && !isNaN(numVal)) {
+        bp.speedFactorIndex = (numVal as 0 | 1);
       }
     }
   } else if (el.type === 'playerSpawn') {

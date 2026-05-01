@@ -266,6 +266,15 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
     return;
   }
 
+  // Bounce pad walls cannot be grappled — treat as a miss.
+  if (hit.wallIndex >= 0 && world.wallIsBouncePadFlag[hit.wallIndex] === 1) {
+    if (world.isGrappleMissActiveFlag === 1) {
+      cancelGrappleMiss(world);
+    }
+    startGrappleMiss(world, dirX, dirY);
+    return;
+  }
+
   const hitDist = Math.sqrt((hit.x - player.positionXWorld) ** 2 + (hit.y - player.positionYWorld) ** 2);
 
   // Don't attach when the wall is closer than the minimum rope length — doing

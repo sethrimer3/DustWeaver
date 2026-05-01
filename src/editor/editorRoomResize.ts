@@ -95,6 +95,10 @@ export function applyRoomDimensionChange(
     clampZoneToDimensions(b, room.widthBlocks, room.heightBlocks);
   }
 
+  for (const b of (room.bouncePads ?? [])) {
+    clampZoneToDimensions(b, room.widthBlocks, room.heightBlocks);
+  }
+
   // Clamp interior wall rectangles so they stay fully inside the room.
   for (const wall of room.interiorWalls) {
     wall.wBlock = Math.max(1, Math.min(wall.wBlock, room.widthBlocks));
@@ -217,6 +221,12 @@ export function applyEdgeResize(
 
     // Shift crumble blocks
     for (const b of (room.crumbleBlocks ?? [])) {
+      b.xBlock += shiftX;
+      b.yBlock += shiftY;
+    }
+
+    // Shift bounce pads
+    for (const b of (room.bouncePads ?? [])) {
       b.xBlock += shiftX;
       b.yBlock += shiftY;
     }

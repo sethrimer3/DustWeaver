@@ -18,6 +18,8 @@ export const MAX_LAVA_ZONES = 8;
 export const MAX_BREAKABLE_BLOCKS = 32;
 /** Maximum number of crumble blocks per room. */
 export const MAX_CRUMBLE_BLOCKS = 32;
+/** Maximum number of bounce pads per room. */
+export const MAX_BOUNCE_PADS = 64;
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -100,8 +102,36 @@ export interface WorldState extends ParticleBuffers {
    * Only meaningful for 1×2 pillar walls.
    */
   wallIsPillarHalfWidthFlag: Uint8Array;
+  /**
+   * 1 if the corresponding wall is a bounce pad.
+   * The collision resolver reflects cluster velocity instead of zeroing it.
+   */
+  wallIsBouncePadFlag: Uint8Array;
+  /**
+   * Bounce pad speed-factor index for this wall:
+   *   0 = 50 % restitution (dim glowing core)
+   *   1 = 100 % restitution (bright glowing core)
+   * Only meaningful when wallIsBouncePadFlag[wi] === 1.
+   */
+  wallBouncePadSpeedFactorIndex: Uint8Array;
 
-  // ---- Player combat state ------------------------------------------------
+  // ── Bounce pads ────────────────────────────────────────────────────────────
+  /** Number of bounce pads loaded in the current room. */
+  bouncePadCount: number;
+  /** Left edge X of each bounce pad (world units). */
+  bouncePadXWorld: Float32Array;
+  /** Top edge Y of each bounce pad (world units). */
+  bouncePadYWorld: Float32Array;
+  /** Width of each bounce pad (world units). */
+  bouncePadWWorld: Float32Array;
+  /** Height of each bounce pad (world units). */
+  bouncePadHWorld: Float32Array;
+  /** Speed-factor index: 0=50%, 1=100%. */
+  bouncePadSpeedFactorIndex: Uint8Array;
+  /** Ramp orientation: 255=not a ramp, 0-3=ramp. */
+  bouncePadRampOrientationIndex: Uint8Array;
+
+
   /**
    * World tick on which the most recent blocked hit (0-damage enemy attack)
    * occurred.  Initialised to -1 (no event yet).  Written by forces.ts;
@@ -614,6 +644,15 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsInvisibleFlag: new Uint8Array(MAX_WALLS),
     wallRampOrientationIndex: new Uint8Array(MAX_WALLS).fill(255),
     wallIsPillarHalfWidthFlag: new Uint8Array(MAX_WALLS),
+    wallIsBouncePadFlag: new Uint8Array(MAX_WALLS),
+    wallBouncePadSpeedFactorIndex: new Uint8Array(MAX_WALLS),
+    bouncePadCount: 0,
+    bouncePadXWorld: new Float32Array(MAX_BOUNCE_PADS),
+    bouncePadYWorld: new Float32Array(MAX_BOUNCE_PADS),
+    bouncePadWWorld: new Float32Array(MAX_BOUNCE_PADS),
+    bouncePadHWorld: new Float32Array(MAX_BOUNCE_PADS),
+    bouncePadSpeedFactorIndex: new Uint8Array(MAX_BOUNCE_PADS),
+    bouncePadRampOrientationIndex: new Uint8Array(MAX_BOUNCE_PADS).fill(255),
     lastPlayerBlockedTick: -1,
     playerAttackTriggeredFlag: 0,
     playerAttackDirXWorld: 1.0,

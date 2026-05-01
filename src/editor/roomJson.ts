@@ -13,7 +13,7 @@
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, BlockTheme } from '../levels/roomDef';
 import { blockThemeRefToTheme, blockThemeToId } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorFireflyArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, RoomSongId } from './editorState';
+import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorFireflyArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad, RoomSongId } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 import {
   particleKindToString,
@@ -43,6 +43,7 @@ export type {
   RoomJsonZone,
   RoomJsonBreakableBlock,
   RoomJsonCrumbleBlock,
+  RoomJsonBouncePad,
   RoomJsonDustBoostJar,
   RoomJsonFireflyJar,
   RoomJsonDustPile,
@@ -304,6 +305,16 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     blockTheme: resolveJsonBlockTheme(b.blockTheme, b.blockThemeId),
   }));
 
+  const bouncePads: EditorBouncePad[] = (json.bouncePads ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+    wBlock: b.wBlock ?? 1,
+    hBlock: b.hBlock ?? 1,
+    rampOrientation: b.rampOrientation,
+    speedFactorIndex: (b.speedFactorIndex ?? 0) as 0 | 1,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -333,6 +344,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       waterZones,
       lavaZones,
       crumbleBlocks,
+      bouncePads,
     },
     nextUid: uid,
   };
@@ -509,6 +521,19 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         entry.blockTheme = b.blockTheme;
         entry.blockThemeId = blockThemeToId(b.blockTheme);
       }
+      return entry;
+    });
+  }
+  if ((data.bouncePads ?? []).length > 0) {
+    json.bouncePads = (data.bouncePads ?? []).map(b => {
+      const entry: import('./roomJsonSchema').RoomJsonBouncePad = {
+        xBlock: b.xBlock,
+        yBlock: b.yBlock,
+      };
+      if (b.wBlock !== 1) entry.wBlock = b.wBlock;
+      if (b.hBlock !== 1) entry.hBlock = b.hBlock;
+      if (b.rampOrientation !== undefined) entry.rampOrientation = b.rampOrientation;
+      if (b.speedFactorIndex !== 0) entry.speedFactorIndex = b.speedFactorIndex;
       return entry;
     });
   }
@@ -734,6 +759,14 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       rampOrientation: b.rampOrientation,
       variant: b.variant !== 'normal' ? b.variant : undefined,
       blockTheme: b.blockTheme,
+    })),
+    bouncePads: (data.bouncePads ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+      wBlock: b.wBlock !== 1 ? b.wBlock : undefined,
+      hBlock: b.hBlock !== 1 ? b.hBlock : undefined,
+      rampOrientation: b.rampOrientation,
+      speedFactorIndex: b.speedFactorIndex !== 0 ? b.speedFactorIndex : undefined,
     })),
   };
 }

@@ -226,6 +226,17 @@ export interface RoomJsonLightSource {
   brightnessPct: number;
 }
 
+/** A bounce pad block that reflects the player's velocity when they collide with it. */
+export interface RoomJsonBouncePad {
+  xBlock: number;
+  yBlock: number;
+  wBlock?: number;
+  hBlock?: number;
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** 0 = 50 % restitution (dim core), 1 = 100 % restitution (bright core). */
+  speedFactorIndex?: 0 | 1;
+}
+
 export interface RoomJsonDef {
   id: string;
   name: string;
@@ -279,6 +290,7 @@ export interface RoomJsonDef {
   lavaZones?: RoomJsonZone[];
   breakableBlocks?: RoomJsonBreakableBlock[];
   crumbleBlocks?: RoomJsonCrumbleBlock[];
+  bouncePads?: RoomJsonBouncePad[];
   dustBoostJars?: RoomJsonDustBoostJar[];
   fireflyJars?: RoomJsonFireflyJar[];
   dustPiles?: RoomJsonDustPile[];

@@ -200,6 +200,44 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
         shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;
           clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
       };
+    case 'bounce_pad_1x1_dim':
+    case 'bounce_pad_1x1_bright':
+      return {
+        containerCss,
+        shapeCss: `width: 40px; height: 40px; background: rgba(80,30,5,0.85);
+          border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;`,
+      };
+    case 'bounce_pad_2x2_dim':
+    case 'bounce_pad_2x2_bright':
+      return {
+        containerCss,
+        shapeCss: `width: 40px; height: 40px; background: rgba(80,30,5,0.85);
+          border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;`,
+      };
+    case 'bounce_pad_ramp_1x1_dim':
+    case 'bounce_pad_ramp_1x1_bright':
+      return {
+        containerCss,
+        shapeCss: `width: 40px; height: 40px; background: rgba(80,30,5,0.85);
+          border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
+      };
+    case 'bounce_pad_ramp_1x2_dim':
+    case 'bounce_pad_ramp_1x2_bright':
+      return {
+        containerCss,
+        shapeCss: `width: 40px; height: 40px; background: rgba(80,30,5,0.85);
+          border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 50%);`,
+      };
+    case 'bounce_pad_ramp_2x2_dim':
+    case 'bounce_pad_ramp_2x2_bright':
+      return {
+        containerCss,
+        shapeCss: `width: 40px; height: 40px; background: rgba(80,30,5,0.85);
+          border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;
+          clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
+      };
     default:
       return {
         containerCss,
@@ -247,6 +285,27 @@ export function makeBlockPreviewCard(item: PaletteItem, theme: string, onClick: 
       cctx.stroke();
     }
     previewWrap.appendChild(crackCanvas);
+  }
+  // Bounce pads get a glowing core dot in the centre of the preview
+  if (item.isBouncePadItem === 1) {
+    const coreCanvas = document.createElement('canvas');
+    coreCanvas.width = 40;
+    coreCanvas.height = 40;
+    coreCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
+    const cctx2 = coreCanvas.getContext('2d');
+    if (cctx2) {
+      const dotSize = item.bouncePadSpeedFactorIndex === 1 ? 6 : 4;
+      const cx2 = 20;
+      const cy2 = 20;
+      // Outer glow
+      cctx2.fillStyle = 'rgba(255,140,30,0.35)';
+      cctx2.fillRect(cx2 - dotSize, cy2 - dotSize, dotSize * 2, dotSize * 2);
+      // Inner bright dot
+      const innerSize = dotSize * 0.5;
+      cctx2.fillStyle = item.bouncePadSpeedFactorIndex === 1 ? 'rgba(255,220,60,0.95)' : 'rgba(255,100,15,0.85)';
+      cctx2.fillRect(cx2 - innerSize, cy2 - innerSize, innerSize * 2, innerSize * 2);
+    }
+    previewWrap.appendChild(coreCanvas);
   }
 
   card.appendChild(previewWrap);

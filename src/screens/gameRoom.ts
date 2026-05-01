@@ -1,4 +1,4 @@
-import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES } from '../sim/world';
+import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES, MAX_BOUNCE_PADS } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import {
   RoomDef,
@@ -184,6 +184,8 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     world.wallIsInvisibleFlag[wi] = iv[wi];
     world.wallRampOrientationIndex[wi] = ro[wi];
     world.wallIsPillarHalfWidthFlag[wi] = ph[wi];
+    world.wallIsBouncePadFlag[wi] = 0;
+    world.wallBouncePadSpeedFactorIndex[wi] = 0;
   }
 }
 
@@ -203,6 +205,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.lavaInvulnTicks = 0;
   world.breakableBlockCount = 0;
   world.crumbleBlockCount = 0;
+  world.bouncePadCount = 0;
   world.dustBoostJarCount = 0;
   world.fireflyJarCount = 0;
   world.fireflyCount = 0;
@@ -315,6 +318,45 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.crumbleBlockHitCooldownTicks[ci] = 0;
     world.crumbleBlockWallIndex[ci] = wallIdx;
     world.crumbleBlockVariant[ci] = CRUMBLE_VARIANT_INDEX[b.variant ?? 'normal'];
+  }
+
+  // ── Bounce pads ──────────────────────────────────────────────────────────
+  // Each bounce pad is added as a wall AND tracked in the bouncePad* arrays
+  // for the renderer. The wall gets wallIsBouncePadFlag=1 so the collision
+  // resolver reflects velocity instead of stopping the player.
+  const bouncePadDefs = room.bouncePads ?? [];
+  for (let i = 0; i < bouncePadDefs.length && world.bouncePadCount < MAX_BOUNCE_PADS; i++) {
+    const b = bouncePadDefs[i];
+    const wBlocks = b.wBlock ?? 1;
+    const hBlocks = b.hBlock ?? 1;
+    const sfIndex = b.speedFactorIndex ?? 0;
+    const rampOri = b.rampOrientation !== undefined ? b.rampOrientation : 255;
+
+    let wallIdx = -1;
+    if (world.wallCount < MAX_WALLS) {
+      wallIdx = world.wallCount++;
+      world.wallXWorld[wallIdx] = b.xBlock * BLOCK_SIZE_MEDIUM;
+      world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
+      world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
+      world.wallIsInvisibleFlag[wallIdx] = 0;
+      world.wallIsPlatformFlag[wallIdx] = 0;
+      world.wallPlatformEdge[wallIdx] = 0;
+      world.wallRampOrientationIndex[wallIdx] = rampOri;
+      world.wallIsPillarHalfWidthFlag[wallIdx] = 0;
+      world.wallIsBouncePadFlag[wallIdx] = 1;
+      world.wallBouncePadSpeedFactorIndex[wallIdx] = sfIndex;
+    }
+
+    const pi = world.bouncePadCount++;
+    world.bouncePadXWorld[pi] = b.xBlock * BLOCK_SIZE_MEDIUM;
+    world.bouncePadYWorld[pi] = b.yBlock * BLOCK_SIZE_MEDIUM;
+    world.bouncePadWWorld[pi] = wBlocks * BLOCK_SIZE_MEDIUM;
+    world.bouncePadHWorld[pi] = hBlocks * BLOCK_SIZE_MEDIUM;
+    world.bouncePadSpeedFactorIndex[pi] = sfIndex;
+    world.bouncePadRampOrientationIndex[pi] = rampOri;
+    void wallIdx;
   }
 
   // ── Dust boost jars ───────────────────────────────────────────────────────

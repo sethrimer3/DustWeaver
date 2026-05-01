@@ -58,6 +58,10 @@ export interface PaletteItem {
   isLiquidZoneItem?: 1;
   /** 1 if this palette item places a crumble block (collapses on first contact). */
   isCrumbleBlockItem?: 1;
+  /** 1 if this palette item places a bounce pad (reflects player velocity). */
+  isBouncePadItem?: 1;
+  /** Speed-factor index for the placed bounce pad: 0=50%, 1=100%. */
+  bouncePadSpeedFactorIndex?: 0 | 1;
 }
 
 /** Options for the crumble-block weakness variant dropdown. */
@@ -127,6 +131,19 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'crumble_ramp_1x1', label: 'Crumble Ramp 1×1',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1, isRampItem: 1 },
   { id: 'crumble_ramp_1x2', label: 'Crumble Ramp 1×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isCrumbleBlockItem: 1, isRampItem: 1 },
   { id: 'crumble_ramp_2x2', label: 'Crumble Ramp 2×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1, isRampItem: 1 },
+  // ── Bounce pads ─────────────────────────────────────────────────────────
+  // Dim = 50 % restitution (small 2×2-pixel core)
+  { id: 'bounce_pad_1x1_dim',       label: 'Bounce 1×1 (50%)',      category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },
+  { id: 'bounce_pad_2x2_dim',       label: 'Bounce 2×2 (50%)',      category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },
+  { id: 'bounce_pad_ramp_1x1_dim',  label: 'Bounce Ramp 1×1 (50%)', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
+  { id: 'bounce_pad_ramp_1x2_dim',  label: 'Bounce Ramp 1×2 (50%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
+  { id: 'bounce_pad_ramp_2x2_dim',  label: 'Bounce Ramp 2×2 (50%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
+  // Bright = 100 % restitution (large 4×4-pixel core)
+  { id: 'bounce_pad_1x1_bright',      label: 'Bounce 1×1 (100%)',      category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1 },
+  { id: 'bounce_pad_2x2_bright',      label: 'Bounce 2×2 (100%)',      category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1 },
+  { id: 'bounce_pad_ramp_1x1_bright', label: 'Bounce Ramp 1×1 (100%)', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
+  { id: 'bounce_pad_ramp_1x2_bright', label: 'Bounce Ramp 1×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
+  { id: 'bounce_pad_ramp_2x2_bright', label: 'Bounce Ramp 2×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
 ];
 
 /** Available block themes for placement and wall inspection. */
@@ -302,6 +319,24 @@ export interface EditorCrumbleBlock {
   blockTheme?: BlockTheme;
 }
 
+/** A bounce pad block that reflects the player's velocity on contact. */
+export interface EditorBouncePad {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock: number;
+  /** Height in blocks (default 1). */
+  hBlock: number;
+  /**
+   * Ramp orientation (0-3). Undefined = not a ramp.
+   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   */
+  rampOrientation?: 0 | 1 | 2 | 3;
+  /** 0 = 50 % bounce (dim 2×2 core), 1 = 100 % bounce (bright 4×4 core). */
+  speedFactorIndex: 0 | 1;
+}
+
 /** Save Tomb — where the player saves their progress. */
 export interface EditorSaveTomb {
   uid: number;
@@ -436,11 +471,13 @@ export interface EditorRoomData {
   lavaZones?: EditorLavaZone[];
   /** Crumble blocks placed in this room (collapse on first player contact). */
   crumbleBlocks?: EditorCrumbleBlock[];
+  /** Bounce pads placed in this room (reflect player velocity on contact). */
+  bouncePads?: EditorBouncePad[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad';
 
 export interface SelectedElement {
   type: SelectedElementType;

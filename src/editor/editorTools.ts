@@ -6,7 +6,7 @@
 import {
   EditorState, EditorTool, EditorRoomData, EditorWall,
   EditorTransition, SelectedElement, allocateUid,
-  PaletteItem, DecorationKind,
+  PaletteItem, DecorationKind, EditorBouncePad,
 } from './editorState';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
 
@@ -146,6 +146,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const b of (room.crumbleBlocks ?? [])) {
     if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) {
       return { type: 'crumbleBlock', uid: b.uid };
+    }
+  }
+
+  // Check bounce pads
+  for (const b of (room.bouncePads ?? [])) {
+    if (hitTestZone({ xBlock: b.xBlock, yBlock: b.yBlock, wBlock: b.wBlock, hBlock: b.hBlock }, bx, by)) {
+      return { type: 'bouncePad', uid: b.uid };
     }
   }
 
@@ -319,8 +326,36 @@ export function placeAtCursor(state: EditorState): void {
 
     const isPillarHalfWidthFlag: 0 | 1 = item.isPillarHalfWidthItem === 1 ? 1 : 0;
 
+    if (item.isBouncePadItem === 1) {
+      const wBlock = getPlacementWidth(item, state.placementRotationSteps);
+      const hBlock = getPlacementHeight(item, state.placementRotationSteps);
+      let rampOrientation: 0 | 1 | 2 | 3 | undefined;
+      if (item.isRampItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+      if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
+      const existingBouncePads = room.bouncePads ?? [];
+      const overlapsBounce = existingBouncePads.some(b =>
+        bx < b.xBlock + b.wBlock && bx + wBlock > b.xBlock &&
+        by < b.yBlock + b.hBlock && by + hBlock > b.yBlock,
+      );
+      if (overlapsBounce) return;
+      if (!room.bouncePads) room.bouncePads = [];
+      const bp: EditorBouncePad = {
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        wBlock,
+        hBlock,
+        rampOrientation,
+        speedFactorIndex: item.bouncePadSpeedFactorIndex ?? 0,
+      };
+      room.bouncePads.push(bp);
+      return;
+    }
+
     if (item.isCrumbleBlockItem === 1) {
-      // Crumble blocks support different sizes and ramp orientations.
       const wBlock = getPlacementWidth(item, state.placementRotationSteps);
       const hBlock = getPlacementHeight(item, state.placementRotationSteps);
 
@@ -643,6 +678,17 @@ export function deleteAtCursor(state: EditorState): void {
       return;
     }
   }
+
+  // Check bounce pads
+  const bouncePads = room.bouncePads ?? [];
+  for (let i = 0; i < bouncePads.length; i++) {
+    if (hitTestZone({ xBlock: bouncePads[i].xBlock, yBlock: bouncePads[i].yBlock, wBlock: bouncePads[i].wBlock, hBlock: bouncePads[i].hBlock }, bx, by)) {
+      const removedUid = bouncePads[i].uid;
+      bouncePads.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
 }
 
 // ── Rotation helpers ─────────────────────────────────────────────────────────
@@ -782,6 +828,12 @@ export function getAllElementsInRect(
   for (const b of (room.crumbleBlocks ?? [])) {
     if (b.xBlock >= minX && b.xBlock <= maxX && b.yBlock >= minY && b.yBlock <= maxY) {
       results.push({ type: 'crumbleBlock', uid: b.uid });
+    }
+  }
+  for (const b of (room.bouncePads ?? [])) {
+    if (b.xBlock + b.wBlock > minX && b.xBlock < maxX + 1 &&
+        b.yBlock + b.hBlock > minY && b.yBlock < maxY + 1) {
+      results.push({ type: 'bouncePad', uid: b.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&
