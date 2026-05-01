@@ -12,7 +12,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, BlockTheme } from '../levels/roomDef';
-import { blockThemeRefToTheme, blockThemeToId } from '../levels/roomDef';
+import { blockThemeRefToTheme, blockThemeToId, DEFAULT_ROPE_SEGMENT_COUNT } from '../levels/roomDef';
 import type {
   EditorRoomData, EditorEnemy, EditorTransition, EditorWall,
   EditorSaveTomb, EditorSkillTomb, EditorDustPile,
@@ -330,7 +330,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     anchorAYBlock: r.aay,
     anchorBXBlock: r.abx,
     anchorBYBlock: r.aby,
-    segmentCount: r.segs ?? 8,
+    segmentCount: r.segs ?? DEFAULT_ROPE_SEGMENT_COUNT,
     isAnchorBFixedFlag: (r.fixed === true ? 1 : 0) as 0 | 1,
     destructibility: (r.destr ?? 'indestructible') as RopeDestructibility,
   }));
@@ -566,7 +566,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         abx: r.anchorBXBlock,
         aby: r.anchorBYBlock,
       };
-      if (r.segmentCount !== 8) entry.segs = r.segmentCount;
+      if (r.segmentCount !== DEFAULT_ROPE_SEGMENT_COUNT) entry.segs = r.segmentCount;
       if (r.isAnchorBFixedFlag === 1) entry.fixed = true;
       if (r.destructibility !== 'indestructible') entry.destr = r.destructibility;
       return entry;
@@ -987,7 +987,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     anchorAYBlock: r.anchorAYBlock,
     anchorBXBlock: r.anchorBXBlock,
     anchorBYBlock: r.anchorBYBlock,
-    segmentCount: r.segmentCount ?? 8,
+    segmentCount: r.segmentCount ?? DEFAULT_ROPE_SEGMENT_COUNT,
     isAnchorBFixedFlag: (r.isAnchorBFixed === true ? 1 : 0) as 0 | 1,
     destructibility: r.destructibility ?? 'indestructible',
   }));

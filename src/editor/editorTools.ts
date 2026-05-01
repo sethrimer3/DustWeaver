@@ -12,6 +12,8 @@ import {
   PaletteItem, DecorationKind, EditorBouncePad,
 } from './editorState';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
+import { MAX_ROPE_SEGMENTS } from '../sim/world';
+import { MIN_ROPE_LENGTH_BLOCKS } from '../levels/roomDef';
 
 // ── Hit testing helpers ──────────────────────────────────────────────────────
 
@@ -529,7 +531,7 @@ export function placeAtCursor(state: EditorState): void {
       const dx = bx - ax;
       const dy = by - ay;
       const lenBlocks = Math.sqrt(dx * dx + dy * dy);
-      if (lenBlocks > 0.5) {
+      if (lenBlocks > MIN_ROPE_LENGTH_BLOCKS) {
         if (!room.ropes) room.ropes = [];
         room.ropes.push({
           uid: allocateUid(state),
@@ -537,7 +539,7 @@ export function placeAtCursor(state: EditorState): void {
           anchorAYBlock: ay,
           anchorBXBlock: bx,
           anchorBYBlock: by,
-          segmentCount: Math.max(2, Math.min(Math.round(lenBlocks * ROPE_SEGMENTS_PER_BLOCK), 32)),
+          segmentCount: Math.max(2, Math.min(Math.round(lenBlocks * ROPE_SEGMENTS_PER_BLOCK), MAX_ROPE_SEGMENTS)),
           isAnchorBFixedFlag: 0,
           destructibility: 'indestructible',
         });

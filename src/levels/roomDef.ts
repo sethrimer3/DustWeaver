@@ -506,6 +506,12 @@ export interface RoomBouncePadDef {
  */
 export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
 
+/** Default number of rope segments when not explicitly specified. */
+export const DEFAULT_ROPE_SEGMENT_COUNT = 8;
+
+/** Minimum distance between rope anchors (in block units) for placement to be valid. */
+export const MIN_ROPE_LENGTH_BLOCKS = 0.5;
+
 /** A hanging rope between two world-space anchor points. */
 export interface RoomRopeDef {
   /** X position of the fixed top anchor (block units). */

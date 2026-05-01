@@ -9,6 +9,7 @@ import {
   PLAYER_HALF_WIDTH_WORLD,
   PLAYER_HALF_HEIGHT_WORLD,
   CrumbleVariant,
+  DEFAULT_ROPE_SEGMENT_COUNT,
 } from '../levels/roomDef';
 import {
   SPIKE_DIR_UP,
@@ -693,7 +694,7 @@ export function loadRoomRopes(world: WorldState, room: RoomDef): void {
 
   for (let r = 0; r < count; r++) {
     const def = ropes[r];
-    const segCount = Math.max(2, Math.min(def.segmentCount ?? 8, MAX_ROPE_SEGMENTS));
+    const segCount = Math.max(2, Math.min(def.segmentCount ?? DEFAULT_ROPE_SEGMENT_COUNT, MAX_ROPE_SEGMENTS));
     world.ropeSegmentCount[r] = segCount;
 
     const ax = def.anchorAXBlock * BLOCK_SIZE_SMALL;
