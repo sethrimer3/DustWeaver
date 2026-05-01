@@ -277,23 +277,48 @@ export function tickPlayerMovement(
       cluster.isFastFallModeFlag = 1;
     }
 
+    // Apply terminal velocity cap FIRST so gravity cannot push velocity above
+    // fastFallCap before the brake runs.  Without this, gravity adds ~15 units
+    // per tick, the cap would then restore it to fastFallCap each frame, and
+    // the brake would be completely nullified.
+    const maxFall = cluster.isFastFallModeFlag === 1 ? fastFallCap : normalFallCap;
+    if (cluster.velocityYWorld > maxFall) {
+      cluster.velocityYWorld = maxFall;
+    }
+
     // Upward brake: holding jump while in committed fast-fall brakes descent
     // back toward normalFallCap.  Once at or below normalFallCap, exit mode.
-    if (cluster.isFastFallModeFlag === 1
+    //
+    // Bug fix: we subtract (upwardBrake + grav * waterMult) instead of just
+    // upwardBrake.  Gravity was already applied above this section, so without
+    // canceling it the net deceleration would be (brake - gravity) ≈ negative
+    // (i.e., still accelerating).  Adding grav back cancels the gravity that
+    // was already baked in, giving a true net deceleration of brakeStrength/s.
+    const isBraking = cluster.isFastFallModeFlag === 1
         && world.playerJumpHeldFlag === 1
-        && cluster.velocityYWorld > normalFallCap) {
+        && cluster.velocityYWorld > normalFallCap;
+    const vyBeforeBrake = cluster.velocityYWorld;
+    if (isBraking) {
       const upwardBrake = ov(debugSpeedOverrides.upwardBrakeStrengthWorld, UPWARD_BRAKE_STRENGTH_PER_SEC2);
-      cluster.velocityYWorld -= upwardBrake * dtSec;
+      cluster.velocityYWorld -= (upwardBrake + grav * waterMult) * dtSec;
       if (cluster.velocityYWorld <= normalFallCap) {
         cluster.velocityYWorld = normalFallCap;
         cluster.isFastFallModeFlag = 0;
       }
     }
 
-    // Apply terminal velocity: fast-fall cap in committed mode, else normal cap.
-    const maxFall = cluster.isFastFallModeFlag === 1 ? fastFallCap : normalFallCap;
-    if (cluster.velocityYWorld > maxFall) {
-      cluster.velocityYWorld = maxFall;
+    // DEBUG: fast-fall brake diagnostics (temporary — remove once brake is verified)
+    if (cluster.isFastFallModeFlag === 1 || isBraking) {
+      console.log(
+        `[FF] tick=${world.tick}` +
+        ` isFastFallMode=${cluster.isFastFallModeFlag}` +
+        ` jumpHeld=${world.playerJumpHeldFlag}` +
+        ` vy_before=${vyBeforeBrake.toFixed(2)}` +
+        ` vy_after=${cluster.velocityYWorld.toFixed(2)}` +
+        ` normalCap=${normalFallCap.toFixed(2)}` +
+        ` fastCap=${fastFallCap.toFixed(2)}` +
+        ` brakeRan=${isBraking}`,
+      );
     }
   }
 
