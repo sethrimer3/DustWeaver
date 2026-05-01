@@ -395,6 +395,9 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
     const isBouncePad = world.wallIsBouncePadFlag[wi] === 1;
     const bounceSf = isBouncePad ? (world.wallBouncePadSpeedFactorIndex[wi] === 1 ? 1.0 : 0.5) : 0.0;
 
+    // Pre-compute ramp diagonal length once for all orientation branches.
+    const rampDiag = Math.sqrt(wallWidth * wallWidth + wallHeight * wallHeight);
+
     if (ori === 0) {
       // Rises going right (/): surface at x goes from wallBottom (left) to wallTop (right)
       // y_surface = wallBottom - t * wallHeight
@@ -405,10 +408,9 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
         cluster.positionYWorld = surfaceY - hh;
         if (isBouncePad) {
           // Reflect velocity off the ramp normal: outward normal = (-wallHeight, -wallWidth)/|d|
-          const d = Math.sqrt(wallWidth * wallWidth + wallHeight * wallHeight);
-          if (d > 0.001) {
-            const nx = -wallHeight / d;
-            const ny = -wallWidth / d;
+          if (rampDiag > 0.001) {
+            const nx = -wallHeight / rampDiag;
+            const ny = -wallWidth / rampDiag;
             const vDotN = cluster.velocityXWorld * nx + cluster.velocityYWorld * ny;
             if (vDotN < 0) {
               cluster.velocityXWorld -= (1.0 + bounceSf) * vDotN * nx;
@@ -430,10 +432,9 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
           cluster.velocityYWorld >= 0) {
         cluster.positionYWorld = surfaceY - hh;
         if (isBouncePad) {
-          const d = Math.sqrt(wallWidth * wallWidth + wallHeight * wallHeight);
-          if (d > 0.001) {
-            const nx = wallHeight / d;
-            const ny = -wallWidth / d;
+          if (rampDiag > 0.001) {
+            const nx = wallHeight / rampDiag;
+            const ny = -wallWidth / rampDiag;
             const vDotN = cluster.velocityXWorld * nx + cluster.velocityYWorld * ny;
             if (vDotN < 0) {
               cluster.velocityXWorld -= (1.0 + bounceSf) * vDotN * nx;
@@ -454,10 +455,9 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
           cluster.velocityYWorld <= 0) {
         cluster.positionYWorld = surfaceY + hh;
         if (isBouncePad) {
-          const d = Math.sqrt(wallWidth * wallWidth + wallHeight * wallHeight);
-          if (d > 0.001) {
-            const nx = -wallHeight / d;
-            const ny = wallWidth / d;
+          if (rampDiag > 0.001) {
+            const nx = -wallHeight / rampDiag;
+            const ny = wallWidth / rampDiag;
             const vDotN = cluster.velocityXWorld * nx + cluster.velocityYWorld * ny;
             if (vDotN < 0) {
               cluster.velocityXWorld -= (1.0 + bounceSf) * vDotN * nx;
@@ -476,10 +476,9 @@ export function resolveRampSurfaces(cluster: ClusterState, world: WorldState): b
           cluster.velocityYWorld <= 0) {
         cluster.positionYWorld = surfaceY + hh;
         if (isBouncePad) {
-          const d = Math.sqrt(wallWidth * wallWidth + wallHeight * wallHeight);
-          if (d > 0.001) {
-            const nx = wallHeight / d;
-            const ny = wallWidth / d;
+          if (rampDiag > 0.001) {
+            const nx = wallHeight / rampDiag;
+            const ny = wallWidth / rampDiag;
             const vDotN = cluster.velocityXWorld * nx + cluster.velocityYWorld * ny;
             if (vDotN < 0) {
               cluster.velocityXWorld -= (1.0 + bounceSf) * vDotN * nx;

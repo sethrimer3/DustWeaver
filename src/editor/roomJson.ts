@@ -13,7 +13,14 @@
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, BlockTheme } from '../levels/roomDef';
 import { blockThemeRefToTheme, blockThemeToId } from '../levels/roomDef';
-import type { EditorRoomData, EditorEnemy, EditorTransition, EditorWall, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorGrasshopperArea, EditorFireflyArea, EditorDecoration, EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad, RoomSongId } from './editorState';
+import type {
+  EditorRoomData, EditorEnemy, EditorTransition, EditorWall,
+  EditorSaveTomb, EditorSkillTomb, EditorDustPile,
+  EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,
+  EditorAmbientLightBlocker, EditorLightSource,
+  EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
+  RoomSongId,
+} from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 import {
   particleKindToString,
