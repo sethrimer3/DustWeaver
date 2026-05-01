@@ -250,7 +250,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
 
   // ── Special proximity bounce ────────────────────────────────────────────────
   // If the player is within GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD (8 world
-  // units = 1 virtual pixel block) of the hit surface at the moment the grapple
+  // units = 1 small block) of the hit surface at the moment the grapple
   // fires, the hook acts as an instant surface-bounce rather than a rope attach.
   // The player is launched in the surface-normal direction (from anchor toward
   // player) at super-jump speed.  Works on any surface orientation: floor,
