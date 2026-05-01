@@ -20,6 +20,10 @@ export const MAX_BREAKABLE_BLOCKS = 32;
 export const MAX_CRUMBLE_BLOCKS = 32;
 /** Maximum number of bounce pads per room. */
 export const MAX_BOUNCE_PADS = 64;
+/** Maximum number of ropes per room. */
+export const MAX_ROPES = 16;
+/** Maximum number of Verlet segments per rope (includes anchors). */
+export const MAX_ROPE_SEGMENTS = 32;
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -131,6 +135,38 @@ export interface WorldState extends ParticleBuffers {
   /** Ramp orientation: 255=not a ramp, 0-3=ramp. */
   bouncePadRampOrientationIndex: Uint8Array;
 
+  // ── Ropes ──────────────────────────────────────────────────────────────────
+  /** Number of ropes in the current room. */
+  ropeCount: number;
+  /** Number of Verlet segments per rope (includes both anchors). */
+  ropeSegmentCount: Uint8Array;
+  /** World X of each rope's fixed top anchor. */
+  ropeAnchorAXWorld: Float32Array;
+  /** World Y of each rope's fixed top anchor. */
+  ropeAnchorAYWorld: Float32Array;
+  /** World X of each rope's bottom anchor. */
+  ropeAnchorBXWorld: Float32Array;
+  /** World Y of each rope's bottom anchor. */
+  ropeAnchorBYWorld: Float32Array;
+  /** 1 if each rope's bottom anchor is also fixed (both ends pinned). */
+  ropeIsAnchorBFixedFlag: Uint8Array;
+  /**
+   * Destructibility index: 0=indestructible, 1=playerOnly, 2=any.
+   */
+  ropeDestructibilityIndex: Uint8Array;
+  /**
+   * Verlet positions for each segment, laid flat as [rope0seg0, rope0seg1, ..., rope1seg0, ...].
+   * Index = ropeIndex * MAX_ROPE_SEGMENTS + segIndex.
+   */
+  ropeSegPosXWorld: Float32Array;
+  /** Y positions parallel to ropeSegPosXWorld. */
+  ropeSegPosYWorld: Float32Array;
+  /** Previous X positions for Verlet integration. */
+  ropeSegPrevXWorld: Float32Array;
+  /** Previous Y positions for Verlet integration. */
+  ropeSegPrevYWorld: Float32Array;
+  /** Rest length between adjacent segments (world units) — one value per rope. */
+  ropeSegRestLenWorld: Float32Array;
 
   /**
    * World tick on which the most recent blocked hit (0-damage enemy attack)
@@ -653,6 +689,19 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     bouncePadHWorld: new Float32Array(MAX_BOUNCE_PADS),
     bouncePadSpeedFactorIndex: new Uint8Array(MAX_BOUNCE_PADS),
     bouncePadRampOrientationIndex: new Uint8Array(MAX_BOUNCE_PADS).fill(255),
+    ropeCount: 0,
+    ropeSegmentCount:       new Uint8Array(MAX_ROPES),
+    ropeAnchorAXWorld:      new Float32Array(MAX_ROPES),
+    ropeAnchorAYWorld:      new Float32Array(MAX_ROPES),
+    ropeAnchorBXWorld:      new Float32Array(MAX_ROPES),
+    ropeAnchorBYWorld:      new Float32Array(MAX_ROPES),
+    ropeIsAnchorBFixedFlag: new Uint8Array(MAX_ROPES),
+    ropeDestructibilityIndex: new Uint8Array(MAX_ROPES),
+    ropeSegPosXWorld:       new Float32Array(MAX_ROPES * MAX_ROPE_SEGMENTS),
+    ropeSegPosYWorld:       new Float32Array(MAX_ROPES * MAX_ROPE_SEGMENTS),
+    ropeSegPrevXWorld:      new Float32Array(MAX_ROPES * MAX_ROPE_SEGMENTS),
+    ropeSegPrevYWorld:      new Float32Array(MAX_ROPES * MAX_ROPE_SEGMENTS),
+    ropeSegRestLenWorld:    new Float32Array(MAX_ROPES),
     lastPlayerBlockedTick: -1,
     playerAttackTriggeredFlag: 0,
     playerAttackDirXWorld: 1.0,

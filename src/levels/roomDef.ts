@@ -498,6 +498,38 @@ export interface RoomBouncePadDef {
   speedFactorIndex?: 0 | 1;
 }
 
+/**
+ * How the rope can be destroyed.
+ * - 'indestructible' — cannot be destroyed.
+ * - 'playerOnly'     — destroyed only by player dust particles.
+ * - 'any'            — destroyed by any dust particle contact.
+ */
+export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
+
+/** Default number of rope segments when not explicitly specified. */
+export const DEFAULT_ROPE_SEGMENT_COUNT = 8;
+
+/** Minimum distance between rope anchors (in block units) for placement to be valid. */
+export const MIN_ROPE_LENGTH_BLOCKS = 0.5;
+
+/** A hanging rope between two world-space anchor points. */
+export interface RoomRopeDef {
+  /** X position of the fixed top anchor (block units). */
+  anchorAXBlock: number;
+  /** Y position of the fixed top anchor (block units). */
+  anchorAYBlock: number;
+  /** X position of the bottom anchor (block units). */
+  anchorBXBlock: number;
+  /** Y position of the bottom anchor (block units). */
+  anchorBYBlock: number;
+  /** Number of rope segments (default 8, clamped to MAX_ROPE_SEGMENTS at load). */
+  segmentCount?: number;
+  /** Whether anchor B is also fixed (true = both ends fixed, rope hangs between). */
+  isAnchorBFixed?: boolean;
+  /** How this rope can be destroyed. Defaults to 'indestructible'. */
+  destructibility?: RopeDestructibility;
+}
+
 /** A jar that grants temporary dust particles when broken. */
 export interface RoomDustBoostJarDef {
   xBlock: number;
@@ -653,6 +685,8 @@ export interface RoomDef {
   crumbleBlocks?: readonly RoomCrumbleBlockDef[];
   /** Bounce pad blocks that reflect the player's velocity on contact. */
   bouncePads?: readonly RoomBouncePadDef[];
+  /** Ropes hanging between anchor points in the room. */
+  ropes?: readonly RoomRopeDef[];
   /** Jars that grant temporary dust particles when broken by the player. */
   dustBoostJars?: readonly RoomDustBoostJarDef[];
   /** Jars that release golden fireflies when broken by the player. */

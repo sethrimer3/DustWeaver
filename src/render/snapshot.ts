@@ -74,6 +74,7 @@ interface _ReusableBacking {
   moteGrappleDisplayRadiusWorld: number;
   isMoteSourceOrbitFlag: 0 | 1;
   grappleTensionFactor: number;
+  ropeCount: number;
   /** @internal Pre-allocated cluster objects — not part of the public API. */
   readonly _clusterPool: _MutableCluster[];
 }
@@ -358,6 +359,10 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
     isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
     grappleTensionFactor:          world.grappleTensionFactor,
+    ropeCount:           world.ropeCount,
+    ropeSegmentCount:    world.ropeSegmentCount,
+    ropeSegPosXWorld:    world.ropeSegPosXWorld,
+    ropeSegPosYWorld:    world.ropeSegPosYWorld,
     _clusterPool:             clusterPool,
   };
 
@@ -429,6 +434,7 @@ export function updateSnapshotInPlace(
   b.moteGrappleDisplayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
   b.isMoteSourceOrbitFlag         = world.isMoteSourceOrbitFlag;
   b.grappleTensionFactor          = world.grappleTensionFactor;
+  b.ropeCount = world.ropeCount;
 
   const clusterCount = world.clusters.length;
   const pool = b._clusterPool;
@@ -642,5 +648,9 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
     isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
     grappleTensionFactor:          world.grappleTensionFactor,
+    ropeCount:           world.ropeCount,
+    ropeSegmentCount:    world.ropeSegmentCount,
+    ropeSegPosXWorld:    world.ropeSegPosXWorld,
+    ropeSegPosYWorld:    world.ropeSegPosYWorld,
   };
 }

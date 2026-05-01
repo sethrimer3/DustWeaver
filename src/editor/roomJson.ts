@@ -12,13 +12,14 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, BlockTheme } from '../levels/roomDef';
-import { blockThemeRefToTheme, blockThemeToId } from '../levels/roomDef';
+import { blockThemeRefToTheme, blockThemeToId, DEFAULT_ROPE_SEGMENT_COUNT } from '../levels/roomDef';
 import type {
   EditorRoomData, EditorEnemy, EditorTransition, EditorWall,
   EditorSaveTomb, EditorSkillTomb, EditorDustPile,
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,
   EditorAmbientLightBlocker, EditorLightSource,
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
+  EditorRope, RopeDestructibility,
   RoomSongId,
 } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
@@ -31,6 +32,7 @@ import type {
   RoomJsonWall,
   RoomJsonTransition,
   RoomJsonAmbientLightBlocker,
+  RoomJsonRope,
   ValidationError,
 } from './roomJsonSchema';
 export {
@@ -322,6 +324,17 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     speedFactorIndex: (b.speedFactorIndex ?? 0) as 0 | 1,
   }));
 
+  const ropes: EditorRope[] = (json.ropes ?? []).map(r => ({
+    uid: uid++,
+    anchorAXBlock: r.aax,
+    anchorAYBlock: r.aay,
+    anchorBXBlock: r.abx,
+    anchorBYBlock: r.aby,
+    segmentCount: r.segs ?? DEFAULT_ROPE_SEGMENT_COUNT,
+    isAnchorBFixedFlag: (r.fixed === true ? 1 : 0) as 0 | 1,
+    destructibility: (r.destr ?? 'indestructible') as RopeDestructibility,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -352,6 +365,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       lavaZones,
       crumbleBlocks,
       bouncePads,
+      ropes,
     },
     nextUid: uid,
   };
@@ -541,6 +555,20 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (b.hBlock !== 1) entry.hBlock = b.hBlock;
       if (b.rampOrientation !== undefined) entry.rampOrientation = b.rampOrientation;
       if (b.speedFactorIndex !== 0) entry.speedFactorIndex = b.speedFactorIndex;
+      return entry;
+    });
+  }
+  if ((data.ropes ?? []).length > 0) {
+    json.ropes = (data.ropes ?? []).map(r => {
+      const entry: RoomJsonRope = {
+        aax: r.anchorAXBlock,
+        aay: r.anchorAYBlock,
+        abx: r.anchorBXBlock,
+        aby: r.anchorBYBlock,
+      };
+      if (r.segmentCount !== DEFAULT_ROPE_SEGMENT_COUNT) entry.segs = r.segmentCount;
+      if (r.isAnchorBFixedFlag === 1) entry.fixed = true;
+      if (r.destructibility !== 'indestructible') entry.destr = r.destructibility;
       return entry;
     });
   }
@@ -775,6 +803,15 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       rampOrientation: b.rampOrientation,
       speedFactorIndex: b.speedFactorIndex !== 0 ? b.speedFactorIndex : undefined,
     })),
+    ropes: (data.ropes ?? []).map(r => ({
+      anchorAXBlock: r.anchorAXBlock,
+      anchorAYBlock: r.anchorAYBlock,
+      anchorBXBlock: r.anchorBXBlock,
+      anchorBYBlock: r.anchorBYBlock,
+      segmentCount: r.segmentCount,
+      isAnchorBFixed: r.isAnchorBFixedFlag === 1,
+      destructibility: r.destructibility,
+    })),
   };
 }
 
@@ -944,6 +981,17 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     blockTheme: b.blockTheme,
   }));
 
+  const ropes: EditorRope[] = (room.ropes ?? []).map(r => ({
+    uid: uid++,
+    anchorAXBlock: r.anchorAXBlock,
+    anchorAYBlock: r.anchorAYBlock,
+    anchorBXBlock: r.anchorBXBlock,
+    anchorBYBlock: r.anchorBYBlock,
+    segmentCount: r.segmentCount ?? DEFAULT_ROPE_SEGMENT_COUNT,
+    isAnchorBFixedFlag: (r.isAnchorBFixed === true ? 1 : 0) as 0 | 1,
+    destructibility: r.destructibility ?? 'indestructible',
+  }));
+
   return {
     data: {
       id: room.id,
@@ -973,6 +1021,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       waterZones,
       lavaZones,
       crumbleBlocks,
+      ropes,
     },
     nextUid: uid,
   };

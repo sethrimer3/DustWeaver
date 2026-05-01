@@ -45,6 +45,7 @@ import {
   DecorationWaveState,
 } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
+import { renderRopes } from '../render/ropes/ropeRenderer';
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import {
@@ -273,6 +274,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // Walls before cluster indicators so clusters are drawn on top
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderRopes(ctx, snapshot, ox, oy, zoom);
 
   const isDarkRoom = currentRoom.lightingEffect === 'DarkRoom';
 

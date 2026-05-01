@@ -57,6 +57,7 @@ import {
 import {
   loadRoomWalls,
   loadRoomHazards,
+  loadRoomRopes,
   worldBgColor,
   drawTunnelDarkness,
   resolveSpawnBlock,
@@ -342,6 +343,9 @@ export function startGameScreen(
 
     // Load environmental hazards (after walls so breakable blocks can be added as walls)
     loadRoomHazards(world, room);
+
+    // Load ropes
+    loadRoomRopes(world, room);
 
     // Reset and spawn grasshoppers
     world.grasshopperCount = 0;
