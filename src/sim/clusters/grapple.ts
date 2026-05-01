@@ -310,6 +310,9 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
   world.grappleAttachFxXWorld = anchorX;
   world.grappleAttachFxYWorld = anchorY;
+  // Attaching a grapple exits committed fast-fall mode — the player is now
+  // swinging, not falling, so the fast-fall terminal velocity no longer applies.
+  player.isFastFallModeFlag = 0;
 
   // Consume grapple charge. Top-surface grapples instantly refresh the charge
   // so the player can chain grapple between ledges.

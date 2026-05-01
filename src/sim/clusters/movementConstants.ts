@@ -28,6 +28,11 @@ export const debugSpeedOverrides = {
   skidJumpMultiplier: NaN,
   grappleSuperJumpMultiplier: NaN,
   wallJumpAirAccelMultiplier: NaN,
+  airMoveSpeedWorld: NaN,
+  airBrakingWorld: NaN,
+  momentumDecayWorld: NaN,
+  highSpeedSteeringFactor: NaN,
+  upwardBrakeStrengthWorld: NaN,
 };
 
 /** Helper: return override if finite, else fallback. */
@@ -145,6 +150,57 @@ export const AIR_DECELERATION_PER_SEC2 = 600.0;
  * Higher than ground acceleration so direction changes feel crisp and snappy.
  */
 export const TURN_ACCELERATION_PER_SEC2 = 1466.7;
+
+// ============================================================================
+// Air-momentum preservation system
+// ============================================================================
+// These constants govern post-grapple and high-speed airborne movement.
+// The design goal: earned momentum (from grapple swings, bounces, etc.) is
+// preserved unless the player intentionally brakes, lands, or re-grapples.
+// Normal air input cannot push the player above AIR_MOVE_SPEED_WORLD_PER_SEC.
+
+/**
+ * Soft cap for input-generated air speed (px/s).
+ * Matches MAX_RUN_SPEED_WORLD_PER_SEC so normal aerial movement feels
+ * consistent with ground movement.  Externally generated momentum (grapple
+ * launch, bounce pads, etc.) may legitimately exceed this value; input alone
+ * may not push the player above it.
+ */
+export const AIR_MOVE_SPEED_WORLD_PER_SEC = 105.0;
+
+/**
+ * Intentional air braking rate (px/s²).
+ * Applied when the player holds input *opposite* their current high-speed
+ * movement direction.  Faster than MOMENTUM_DECAY_PER_SEC2 so braking feels
+ * deliberate.  At 1000 px/s² the player can brake from 300 px/s to
+ * AIR_MOVE_SPEED in about 0.2 seconds — responsive but not jarring.
+ */
+export const AIR_BRAKING_PER_SEC2 = 1000.0;
+
+/**
+ * Passive momentum decay rate (px/s²) while airborne, no input, above
+ * AIR_MOVE_SPEED_WORLD_PER_SEC.  Subtle enough that a grapple launch feels
+ * rewarding for many seconds, but non-zero so momentum is never truly infinite.
+ * Decay stops once speed reaches AIR_MOVE_SPEED so normal-range air movement
+ * is not affected.
+ */
+export const MOMENTUM_DECAY_PER_SEC2 = 25.0;
+
+/**
+ * Fraction of AIR_ACCELERATION_PER_SEC2 applied when holding input in the
+ * same direction as high-speed movement.  Allows subtle arc-shaping without
+ * adding meaningful speed.  The player's abs(vx) is hard-capped to its value
+ * before the steering impulse so this can never push speed above the launch.
+ */
+export const HIGH_SPEED_STEERING_FACTOR = 0.35;
+
+/**
+ * Rate at which holding jump brakes the player's downward velocity when in
+ * committed fast-fall mode (px/s²).  At 350 px/s² the player can bleed from
+ * fastFallCap (240) to normalFallCap (160.5) in ~0.23 s — intentional and
+ * expressive but not punishing.
+ */
+export const UPWARD_BRAKE_STRENGTH_PER_SEC2 = 350.0;
 
 // ============================================================================
 // Wall slide
