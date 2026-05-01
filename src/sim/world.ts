@@ -287,6 +287,20 @@ export interface WorldState extends ParticleBuffers {
    */
   grappleStuckStoppedTickCount: number;
 
+  // ---- Grapple proximity bounce sprite state --------------------------------
+  /**
+   * Ticks remaining in the post-proximity-bounce sprite window.
+   * While > 0 the player renders the jumping sprite rotated toward the
+   * wall/ceiling they bounced off.  Counts down each tick; 0 = inactive.
+   */
+  grappleProximityBounceTicksLeft: number;
+  /**
+   * Canvas rotation angle (radians) to apply to the jumping sprite during the
+   * proximity bounce sprite window.  0 = no rotation (floor bounce, unused),
+   * -π/2 = left-wall bounce, +π/2 = right-wall bounce, π = ceiling bounce.
+   */
+  grappleProximityBounceRotationAngleRad: number;
+
   // ---- Grapple miss state (limp chain) ------------------------------------
   /** 1 while the grapple chain is in "miss" mode (extended to full length, falling limp). */
   isGrappleMissActiveFlag: 0 | 1;
@@ -742,6 +756,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isGrappleTopSurfaceFlag: 0,
     isGrappleStuckFlag: 0,
     grappleStuckStoppedTickCount: 0,
+    grappleProximityBounceTicksLeft: 0,
+    grappleProximityBounceRotationAngleRad: 0,
     isGrappleMissActiveFlag: 0,
     isGrappleRetractingFlag: 0,
     grappleMissDirXWorld: 0.0,
