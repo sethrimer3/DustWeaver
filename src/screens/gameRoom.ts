@@ -697,6 +697,9 @@ export function loadRoomRopes(world: WorldState, room: RoomDef): void {
     const segCount = Math.max(2, Math.min(def.segmentCount ?? DEFAULT_ROPE_SEGMENT_COUNT, MAX_ROPE_SEGMENTS));
     world.ropeSegmentCount[r] = segCount;
 
+    // All room elements use block units where 1 block = BLOCK_SIZE_SMALL world units.
+    // BLOCK_SIZE_MEDIUM and BLOCK_SIZE_LARGE are aliased to BLOCK_SIZE_SMALL in the
+    // current codebase (all tiers = 8), so BLOCK_SIZE_SMALL is the canonical multiplier.
     const ax = def.anchorAXBlock * BLOCK_SIZE_SMALL;
     const ay = def.anchorAYBlock * BLOCK_SIZE_SMALL;
     const bx = def.anchorBXBlock * BLOCK_SIZE_SMALL;

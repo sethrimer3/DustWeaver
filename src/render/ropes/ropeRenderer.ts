@@ -10,8 +10,12 @@ import { MAX_ROPE_SEGMENTS } from '../../sim/world';
 const ROPE_STROKE = 'rgba(180, 140, 80, 0.9)';
 /** Highlight color for anchor endpoints (slightly lighter). */
 const ROPE_HIGHLIGHT = 'rgba(220, 180, 100, 0.9)';
-/** Line width in virtual pixels. */
-const ROPE_LINE_WIDTH_PX = 1.5;
+/**
+ * Base line-width multiplier for the rope stroke.
+ * Multiplied by `zoom` at draw time so the rope scales with world zoom.
+ * Dimensionless — not a coordinate or pixel value.
+ */
+const ROPE_LINE_WIDTH = 1.5;
 
 export function renderRopes(
   ctx: CanvasRenderingContext2D,
@@ -23,7 +27,7 @@ export function renderRopes(
   if (snapshot.ropeCount === 0) return;
 
   ctx.save();
-  ctx.lineWidth = ROPE_LINE_WIDTH_PX;
+  ctx.lineWidth = ROPE_LINE_WIDTH;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
