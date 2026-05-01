@@ -3,6 +3,9 @@
  * Operates on EditorRoomData and modifies it in place.
  */
 
+/** Segments per block-length for auto-calculating rope segment count. */
+const ROPE_SEGMENTS_PER_BLOCK = 1.5;
+
 import {
   EditorState, EditorTool, EditorRoomData, EditorWall,
   EditorTransition, SelectedElement, allocateUid,
@@ -534,7 +537,7 @@ export function placeAtCursor(state: EditorState): void {
           anchorAYBlock: ay,
           anchorBXBlock: bx,
           anchorBYBlock: by,
-          segmentCount: Math.max(2, Math.min(Math.round(lenBlocks * 1.5), 32)),
+          segmentCount: Math.max(2, Math.min(Math.round(lenBlocks * ROPE_SEGMENTS_PER_BLOCK), 32)),
           isAnchorBFixedFlag: 0,
           destructibility: 'indestructible',
         });

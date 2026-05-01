@@ -50,10 +50,8 @@ export function renderRopes(
 
     // Draw small circles at the anchor endpoints
     ctx.fillStyle = ROPE_HIGHLIGHT;
-    const x0a = snapshot.ropeSegPosXWorld[base] * zoom + offsetXPx;
-    const y0a = snapshot.ropeSegPosYWorld[base] * zoom + offsetYPx;
     ctx.beginPath();
-    ctx.arc(x0a, y0a, 1.5, 0, Math.PI * 2);
+    ctx.arc(x0, y0, 1.5, 0, Math.PI * 2);
     ctx.fill();
 
     const lastIdx = base + segCount - 1;
