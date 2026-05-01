@@ -83,6 +83,12 @@ export const CRUMBLE_VARIANT_OPTIONS: readonly { id: CrumbleVariant; label: stri
   { id: 'nature',    label: 'Nature'    },
 ];
 
+/** Canonical list of ParticleKind string values available for editor dropdowns. */
+export const DUST_KIND_OPTIONS: readonly string[] = [
+  'Physical', 'Fire', 'Ice', 'Lightning', 'Poison', 'Arcane',
+  'Wind', 'Holy', 'Shadow', 'Metal', 'Earth', 'Nature', 'Crystal', 'Void', 'Water', 'Lava', 'Stone',
+];
+
 export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
 
 export const ROPE_DESTRUCTIBILITY_OPTIONS: ReadonlyArray<{ id: RopeDestructibility; label: string }> = [

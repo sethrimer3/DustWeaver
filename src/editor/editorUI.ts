@@ -11,6 +11,7 @@ import {
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
   AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
   CrumbleVariant, CRUMBLE_VARIANT_OPTIONS, RoomEdge, EditorUICallbacks,
+  DUST_KIND_OPTIONS,
 } from './editorState';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import {
@@ -365,11 +366,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
     border-radius: 2px; margin-bottom: 4px;
   `;
-  const DUST_JAR_KINDS = [
-    'Physical', 'Fire', 'Ice', 'Lightning', 'Poison', 'Arcane',
-    'Wind', 'Holy', 'Shadow', 'Metal', 'Earth', 'Nature', 'Crystal', 'Void', 'Water', 'Lava', 'Stone',
-  ];
-  for (const kind of DUST_JAR_KINDS) {
+  for (const kind of DUST_KIND_OPTIONS) {
     const o = document.createElement('option');
     o.value = kind;
     o.textContent = kind;

@@ -14,6 +14,7 @@ import {
   FADE_COLOR_OPTIONS,
   CRUMBLE_VARIANT_OPTIONS,
   ROPE_DESTRUCTIBILITY_OPTIONS,
+  DUST_KIND_OPTIONS,
 } from './editorState';
 import {
   addField,
@@ -27,25 +28,7 @@ import { makeBtn } from './editorUIHelpers';
 import { GREEN } from './editorStyles';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 
-const KIND_OPTIONS: { label: string; value: string }[] = [
-  { label: 'Physical',  value: 'Physical'  },
-  { label: 'Fire',      value: 'Fire'      },
-  { label: 'Ice',       value: 'Ice'       },
-  { label: 'Lightning', value: 'Lightning' },
-  { label: 'Poison',    value: 'Poison'    },
-  { label: 'Arcane',    value: 'Arcane'    },
-  { label: 'Wind',      value: 'Wind'      },
-  { label: 'Holy',      value: 'Holy'      },
-  { label: 'Shadow',    value: 'Shadow'    },
-  { label: 'Metal',     value: 'Metal'     },
-  { label: 'Earth',     value: 'Earth'     },
-  { label: 'Nature',    value: 'Nature'    },
-  { label: 'Crystal',   value: 'Crystal'   },
-  { label: 'Void',      value: 'Void'      },
-  { label: 'Water',     value: 'Water'     },
-  { label: 'Lava',      value: 'Lava'      },
-  { label: 'Stone',     value: 'Stone'     },
-];
+const KIND_OPTIONS: { label: string; value: string }[] = DUST_KIND_OPTIONS.map(k => ({ label: k, value: k }));
 
 // ── Inspector ─────────────────────────────────────────────────────────────────
 

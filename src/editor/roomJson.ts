@@ -237,16 +237,16 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     })),
   ];
 
-  const dustContainers: EditorDustContainer[] = (json.dustContainers ?? []).map(c => ({
+  const dustContainers: EditorDustContainer[] = (json.dustContainers ?? []).map(container => ({
     uid: uid++,
-    xBlock: c.xBlock,
-    yBlock: c.yBlock,
+    xBlock: container.xBlock,
+    yBlock: container.yBlock,
   }));
 
-  const dustContainerPieces: EditorDustContainerPiece[] = (json.dustContainerPieces ?? []).map(c => ({
+  const dustContainerPieces: EditorDustContainerPiece[] = (json.dustContainerPieces ?? []).map(piece => ({
     uid: uid++,
-    xBlock: c.xBlock,
-    yBlock: c.yBlock,
+    xBlock: piece.xBlock,
+    yBlock: piece.yBlock,
   }));
 
   const dustBoostJars: EditorDustBoostJar[] = (json.dustBoostJars ?? []).map(j => ({
