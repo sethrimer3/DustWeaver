@@ -1014,11 +1014,15 @@ export function startGameScreen(
       return;
     }
 
-    // Latch one-shot jump inputs into world state before ticking.
+    // Latch one-shot jump and down inputs into world state before ticking.
     // This preserves edge-triggered inputs on high-refresh frames where no
     // fixed sim tick runs (accumulator < FIXED_DT_MS).
     if (jumpTriggered) {
       world.playerJumpTriggeredFlag = 1;
+    }
+    if (inputState.isDownTriggeredFlag) {
+      world.playerDownTriggeredFlag = 1;
+      inputState.isDownTriggeredFlag = false;
     }
     world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
 

@@ -73,7 +73,7 @@ import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
-import { COYOTE_TIME_TICKS, debugSpeedOverrides, ov } from './movementConstants';
+import { COYOTE_TIME_TICKS, debugSpeedOverrides, ov, GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
 import {
   GRAPPLE_SEGMENT_COUNT,
@@ -161,14 +161,8 @@ const GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD = 16.0;
  */
 const GRAPPLE_PROXIMITY_BOUNCE_SPRITE_TICKS = 30;
 
-// ── Top-surface zip/stick constants ──────────────────────────────────────────
-// Used by the isGrappleTopSurfaceFlag === 1 code path (currently unreachable
-// since the zip/stick mechanic was replaced by proximity bounce, but kept for
-// future use).
-
 /**
- * Speed (world units/second) at which the player is zipped toward the top-
- * surface anchor — approximately 3 × sprint speed.
+ * Speed at which the player is zipped toward the grapple anchor — ~3× sprint speed.
  */
 const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 480.0;
 
@@ -197,10 +191,19 @@ const GRAPPLE_STUCK_STOP_THRESHOLD_WORLD = 10.0;
 const GRAPPLE_STUCK_DECEL_FACTOR = 0.7;
 
 /**
- * Ticks after coming to a complete stop during which a jump is treated as a
- * super jump (100 % extra height).  At 60 fps this is ~0.17 seconds.
+ * Ticks after coming to a complete stop during which a jump input fires a
+ * high-velocity zip-jump in the surface normal direction.  At 60 fps,
+ * 15 ticks = 0.25 seconds (¼ second).
  */
-const GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS = 10;
+const GRAPPLE_ZIP_JUMP_WINDOW_TICKS = 15;
+
+/**
+ * Speed (world units/second) applied as a gentle hop-off impulse when the
+ * zip-jump window expires without a jump input.  Equivalent to ~40 % of
+ * normal jump speed — enough to peel the player off the surface but not a
+ * powerful launch.
+ */
+const GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD * 0.4;
 
 /**
  * Initialises the GRAPPLE_SEGMENT_COUNT chain particle slots starting at
@@ -379,7 +382,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // first tick after attachment.
   world.playerJumpTriggeredFlag = 0;
   world.isGrappleActiveFlag = 1;
-  world.isGrappleTopSurfaceFlag = 0;  // zip/stick mechanic replaced by proximity bounce
+  world.isGrappleTopSurfaceFlag = 0;  // zip activated by double-tap down, not at fire time
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   // Clear any lingering proximity bounce sprite state — the player is now
@@ -454,6 +457,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   world.grapplePullInAmountWorld = 0.0;
   world.grappleOutOfRangeTicks = 0;
   world.grappleTensionFactor = 0;
+  world.playerDownLastPressTick = 0; // reset double-tap state on release
 
   if (shouldRetractFromActiveGrapple || shouldRetractFromMiss) {
     startGrappleRetract(world);
@@ -478,20 +482,27 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
  *   • Jump (W/Space/Up) → release grapple + upward velocity impulse.
  *   • Down (S/ArrowDown) held → retract (shorten) the rope.
  *     Shortening conserves angular momentum so the player swings faster.
+ *   • Down double-tap → activate zip: player rockets toward the anchor,
+ *     momentum stops on arrival, then a 0.25 s zip-jump window opens.
+ *     Jump in window = high-velocity zip-jump in surface normal direction.
+ *     Miss window = gentle hop off the surface.
+ *     Double-tap + hold after arrival = stay stuck until jump or release.
  *
  * Pipeline per tick:
- *   1. Consume playerJumpTriggeredFlag (movement.ts preserves it when grappling).
- *   2. If jump pressed → release grapple with upward impulse.
- *   3. While down held (retraction):
+ *   1. Consume playerJumpTriggeredFlag and playerDownTriggeredFlag.
+ *   2. Detect double-tap down → activate zip (isGrappleTopSurfaceFlag).
+ *   3. If zip active → run zip/stuck/hop-off logic; skip normal swing.
+ *   4. Jump pressed (normal swing) → release with upward impulse.
+ *   5. While down held (retraction):
  *      a. Decompose velocity into radial + tangential components.
  *      b. Shorten the rope.
  *      c. Scale tangential velocity by (oldLength / newLength) to conserve
  *         angular momentum.
  *      d. Recompose velocity from radial + boosted tangential.
- *   4. Enforce rope length: if player distance > ropeLength, snap position
+ *   6. Enforce rope length: if player distance > ropeLength, snap position
  *      onto the rope circle and remove the outward radial velocity component.
- *   5. Post-constraint wall collision check to prevent ground clipping.
- *   6. Apply subtle tangential damping (air resistance / friction).
+ *   7. Post-constraint wall collision check to prevent ground clipping.
+ *   8. Apply subtle tangential damping (air resistance / friction).
  */
 export function applyGrappleClusterConstraint(world: WorldState): void {
   if (world.isGrappleActiveFlag === 0) return;
@@ -504,42 +515,91 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
 
   const dtSec = world.dtMs / 1000.0;
 
-  // ── Jump input: release grapple with upward impulse ───────────────────────
+  // ── Jump input ────────────────────────────────────────────────────────────
   // movement.ts preserves playerJumpTriggeredFlag when grapple is active so we
   // can detect the rising edge of a jump press here.
   const jumpJustPressed = world.playerJumpTriggeredFlag === 1;
   world.playerJumpTriggeredFlag = 0; // consume — grapple owns the flag while active
 
+  // ── Down double-tap detection (zip activation) ────────────────────────────
+  // movement.ts preserves playerDownTriggeredFlag when grapple is active.
+  // A double-tap is two rising-edge down presses within ZIP_DOUBLE_TAP_WINDOW_TICKS.
+  // On double-tap: store the surface normal from anchor→player and activate zip.
+  const downJustPressed = world.playerDownTriggeredFlag === 1;
+  world.playerDownTriggeredFlag = 0; // consume
+
+  if (downJustPressed && world.isGrappleTopSurfaceFlag === 0) {
+    const ax = world.grappleAnchorXWorld;
+    const ay = world.grappleAnchorYWorld;
+    const currentTick = world.tick;
+    const lastPressTick = world.playerDownLastPressTick;
+    if (
+      lastPressTick > 0 &&
+      currentTick - lastPressTick <= GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS
+    ) {
+      // Double-tap confirmed — activate zip!
+      // Compute surface normal = normalized direction from anchor toward player.
+      const dxToPlayer = player.positionXWorld - ax;
+      const dyToPlayer = player.positionYWorld - ay;
+      const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+      if (distToPlayer > 0.001) {
+        world.grappleZipNormalXWorld = dxToPlayer / distToPlayer;
+        world.grappleZipNormalYWorld = dyToPlayer / distToPlayer;
+      } else {
+        world.grappleZipNormalXWorld = 0.0;
+        world.grappleZipNormalYWorld = -1.0; // default: floor normal (upward)
+      }
+      world.isGrappleTopSurfaceFlag = 1;
+      world.isGrappleStuckFlag = 0;
+      world.grappleStuckStoppedTickCount = 0;
+      world.playerDownLastPressTick = 0; // reset so next press starts fresh
+    } else {
+      // First press — record tick for double-tap detection
+      world.playerDownLastPressTick = currentTick;
+    }
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
-  // Top-surface grapple — zip toward anchor then stick
+  // Zip grapple — rocket toward anchor, stick, then zip-jump or hop off
   // ════════════════════════════════════════════════════════════════════════════
   if (world.isGrappleTopSurfaceFlag === 1) {
     const ax = world.grappleAnchorXWorld;
     const ay = world.grappleAnchorYWorld;
-    // Target position: player center such that feet rest on the wall surface.
-    const targetX = ax;
-    const targetY = ay - player.halfHeightWorld;
+    const nx = world.grappleZipNormalXWorld;
+    const ny = world.grappleZipNormalYWorld;
 
-    // ── Jump input while in top-surface mode ──────────────────────────────
-    // Any jump press releases the grapple and launches the player upward.
-    // If the player has recently stopped while stuck, they receive 100% extra
-    // jump height (super jump).
+    // Arrival target: player center at anchor + surfaceNormal * halfExtent,
+    // where halfExtent depends on the approach angle (box–box projection).
+    const halfExtent = Math.abs(nx) * player.halfWidthWorld
+      + Math.abs(ny) * player.halfHeightWorld;
+    const targetX = ax + nx * halfExtent;
+    const targetY = ay + ny * halfExtent;
+
+    // ── Jump input while zipping / stuck ──────────────────────────────────
     if (jumpJustPressed || (world.playerJumpHeldFlag === 1 && world.isGrappleStuckFlag === 1)) {
-      const hasSuperJump = world.isGrappleStuckFlag === 1 &&
+      const isInZipJumpWindow = world.isGrappleStuckFlag === 1 &&
         world.grappleStuckStoppedTickCount > 0 &&
-        world.grappleStuckStoppedTickCount <= GRAPPLE_STUCK_SUPER_JUMP_WINDOW_TICKS;
-      const jumpSpeed = PLAYER_JUMP_SPEED_WORLD *
-        (hasSuperJump ? ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER) : 1.0);
-      player.velocityYWorld = -jumpSpeed;
+        world.grappleStuckStoppedTickCount <= GRAPPLE_ZIP_JUMP_WINDOW_TICKS;
+      const jumpMultiplier = isInZipJumpWindow
+        ? ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER)
+        : 1.0;
+      const jumpSpeed = PLAYER_JUMP_SPEED_WORLD * jumpMultiplier;
+      // Launch in surface normal direction (away from anchor) for ceiling/wall zips,
+      // or upward for floor zips.  This allows ceiling → propel downward, etc.
+      player.velocityXWorld = nx * jumpSpeed;
+      player.velocityYWorld = ny * jumpSpeed;
       player.isGroundedFlag = 0;
-      player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
-      player.varJumpSpeedWorld = -jumpSpeed;
+      // Only sustain var jump when the launch has an upward component
+      if (player.velocityYWorld < 0) {
+        player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
+        player.varJumpSpeedWorld = player.velocityYWorld;
+      }
       releaseGrapple(world, false);
       return;
     }
 
     if (world.isGrappleStuckFlag === 0) {
-      // ── Zip phase: move player toward anchor at 3× sprint speed ────────
+      // ── Zip phase: move player toward anchor at zip speed ───────────────
       const dx = targetX - player.positionXWorld;
       const dy = targetY - player.positionYWorld;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -549,28 +609,26 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         // Arrived — snap to target and transition to stuck
         player.positionXWorld = targetX;
         player.positionYWorld = targetY;
-        // Preserve zip direction as velocity (for skid effect / release momentum)
+        // Store zip velocity for momentum on release
         if (dist > GRAPPLE_ZIP_MIN_DIST_WORLD) {
-          const nd = 1.0 / dist;
-          player.velocityXWorld = dx * nd * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
-          player.velocityYWorld = dy * nd * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+          const invDist = 1.0 / dist;
+          player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+          player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
         }
         world.isGrappleStuckFlag = 1;
         world.grappleStuckStoppedTickCount = 0;
       } else {
         // Move toward anchor
-        const nd = 1.0 / dist;
-        const ndx = dx * nd;
-        const ndy = dy * nd;
-        player.positionXWorld += ndx * zipStep;
-        player.positionYWorld += ndy * zipStep;
-        player.velocityXWorld = ndx * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
-        player.velocityYWorld = ndy * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+        const invDist = 1.0 / dist;
+        player.positionXWorld += dx * invDist * zipStep;
+        player.positionYWorld += dy * invDist * zipStep;
+        player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+        player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
       }
     }
 
     if (world.isGrappleStuckFlag === 1) {
-      // ── Stuck phase: lock position, decelerate rapidly, spawn skid debris ─
+      // ── Stuck phase: lock position, decelerate, then hop off if window expired
       player.positionXWorld = targetX;
       player.positionYWorld = targetY;
 
@@ -580,16 +638,25 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       );
 
       if (speed <= GRAPPLE_STUCK_STOP_THRESHOLD_WORLD) {
-        // Fully stopped
+        // Fully stopped — start/continue zip-jump window countdown
         player.velocityXWorld = 0;
         player.velocityYWorld = 0;
         world.grappleStuckStoppedTickCount++;
+
+        // Auto hop-off after zip-jump window expires
+        if (world.grappleStuckStoppedTickCount > GRAPPLE_ZIP_JUMP_WINDOW_TICKS) {
+          player.velocityXWorld = nx * GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD;
+          player.velocityYWorld = ny * GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD;
+          player.isFastFallModeFlag = 0;
+          releaseGrapple(world, false);
+          return;
+        }
       } else {
-        // Heavy deceleration — almost instantly lose most speed
+        // Still decelerating — heavy friction to stop quickly
         player.velocityXWorld *= GRAPPLE_STUCK_DECEL_FACTOR;
         player.velocityYWorld *= GRAPPLE_STUCK_DECEL_FACTOR;
 
-        // Set skid debris flags for the renderer (large burst of debris)
+        // Spawn skid debris while decelerating for dramatic effect
         world.isPlayerSkiddingFlag = 1;
         world.skidDebrisXWorld = player.positionXWorld;
         world.skidDebrisYWorld = player.positionYWorld + player.halfHeightWorld;

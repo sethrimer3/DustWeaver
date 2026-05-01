@@ -137,7 +137,7 @@ export const MAX_RUN_SPEED_WORLD_PER_SEC = 105.0;
 export const GROUND_ACCELERATION_PER_SEC2 = 800.0;
 
 /** Ground deceleration: how quickly the player stops on the ground when no input (px/s²). */
-export const GROUND_DECELERATION_PER_SEC2 = 1000.0;
+export const GROUND_DECELERATION_PER_SEC2 = 800.0;
 
 /** Air acceleration: slightly reduced control while airborne (px/s²). */
 export const AIR_ACCELERATION_PER_SEC2 = 520.0;
@@ -317,10 +317,36 @@ export const SKID_JUMP_MULTIPLIER = 1.153;
 export const SKID_VELOCITY_THRESHOLD_WORLD = 5.0;
 
 /**
- * Jump speed multiplier for the top-surface grapple super jump.
- * Targets ~8 small blocks of jump height from a top-surface grapple stick.
+ * Jump speed multiplier for the zip super jump.
+ * Targets ~8 small blocks of jump height from a zip-stuck position.
  */
 export const GRAPPLE_SUPER_JUMP_MULTIPLIER = 1.331;
+
+// ── Landing skid dust ────────────────────────────────────────────────────────
+
+/**
+ * Minimum horizontal speed (world units/s) required to trigger landing-skid
+ * dust when the player touches the ground.
+ * Set just above sprint speed (MAX_RUN_SPEED × SPRINT_SPEED_MULTIPLIER =
+ * 105 × 1.5 = 157.5).  Below this threshold no extra dust appears.
+ */
+export const LANDING_SKID_SPEED_THRESHOLD_WORLD = 157.5;
+
+/**
+ * Maximum scale factor for landing-skid dust (capped multiplier at very high
+ * speeds).  Above threshold, factor = (speed − threshold) / threshold, capped
+ * here.  At cap, spawn rate, spread, and velocity variance are 5× baseline.
+ */
+export const LANDING_SKID_SPEED_FACTOR_MAX = 4.0;
+
+// ── Grapple zip double-tap ───────────────────────────────────────────────────
+
+/**
+ * Maximum ticks between two successive down presses for a double-tap to be
+ * recognised and trigger the grapple zip.  At 60 fps, 18 ticks ≈ 0.3 s —
+ * wide enough to be comfortably hittable but narrow enough to feel intentional.
+ */
+export const GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS = 18;
 
 // ── Player crouch ───────────────────────────────────────────────────────────
 

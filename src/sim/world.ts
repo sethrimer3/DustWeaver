@@ -274,18 +274,47 @@ export interface WorldState extends ParticleBuffers {
    */
   hasGrappleChargeFlag: 0 | 1;
 
-  // ---- Grapple top-surface mechanics ---------------------------------------
-  /** 1 when the active grapple is attached to the top surface of a wall block. */
+  // ---- Grapple zip mechanics -----------------------------------------------
+  /**
+   * 1 when the player has activated a zip (double-tap down while grappled).
+   * The player zips quickly toward the anchor; upon arrival momentum stops.
+   * Works on any surface (floor, wall, ceiling); activated by double-tap down.
+   */
   isGrappleTopSurfaceFlag: 0 | 1;
-  /** 1 when the player has arrived at a top-surface grapple anchor and is sticking. */
+  /** 1 when the player has arrived at the zip target and is sticking. */
   isGrappleStuckFlag: 0 | 1;
   /**
    * Ticks since the player came to a complete stop while grapple-stuck.
-   * Used for super-jump detection: if the player jumps within 10 ticks
-   * of stopping, they receive 100% extra vertical jump height.
+   * Used for zip-jump detection: if the player jumps within GRAPPLE_ZIP_JUMP_WINDOW_TICKS
+   * of stopping they receive a high-velocity zip-jump in the surface normal direction.
    * 0 while still decelerating.
    */
   grappleStuckStoppedTickCount: number;
+  /**
+   * Normalized X component of the surface normal at the zip target (direction from
+   * anchor toward the player's arrival position).  Set when zip is activated.
+   * Used to determine zip-jump direction and arrival target position.
+   */
+  grappleZipNormalXWorld: number;
+  /**
+   * Normalized Y component of the surface normal at the zip target.
+   * Positive Y = pointing downward (ceiling zip), negative Y = pointing upward (floor zip).
+   */
+  grappleZipNormalYWorld: number;
+
+  // ---- Down double-tap tracking (for zip activation) -----------------------
+  /**
+   * Set to 1 for one tick when the down key (S / ArrowDown) is first pressed.
+   * Preserved across tick() while grapple is active, like playerJumpTriggeredFlag.
+   * Consumed by applyGrappleClusterConstraint for double-tap zip detection.
+   */
+  playerDownTriggeredFlag: 0 | 1;
+  /**
+   * World tick number on which the down key was last pressed.
+   * Used to detect a double-tap: two presses within GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS.
+   * 0 before any down press.
+   */
+  playerDownLastPressTick: number;
 
   // ---- Grapple proximity bounce sprite state --------------------------------
   /**
@@ -313,15 +342,23 @@ export interface WorldState extends ParticleBuffers {
   /** Ticks since the grapple miss started. */
   grappleMissTickCount: number;
 
-  // ---- Skid debris visual flag (read by renderer) -------------------------
+  // ---- Skid debris visual flags (read by renderer) ------------------------
   /** 1 while the player is skidding and debris should be spawned. */
   isPlayerSkiddingFlag: 0 | 1;
-  /** X position of the skid debris origin (bottom-front corner). */
+  /** X position of the skid debris origin (bottom-front corner or player center on landing). */
   skidDebrisXWorld: number;
   /** Y position of the skid debris origin (bottom edge). */
   skidDebrisYWorld: number;
   /** 1 for a single tick to force a skid-debris burst from an initial wall jump. */
   wallJumpSkidDebrisBurstFlag: 0 | 1;
+  /**
+   * Scale factor for skid debris when landing from high horizontal speed.
+   * 0 = normal skidding.  >0 = high-speed landing skid; proportional to how far
+   * above the landing-skid threshold the horizontal speed is.
+   * Renderer multiplies spawn rate, spread, and velocity variance by (1 + factor).
+   * Set per tick in applyClusterMovement; read by skidDebrisRenderer.
+   */
+  playerLandingSkidSpeedFactor: number;
 
   // ---- Environmental hazards -----------------------------------------------
 
@@ -756,6 +793,10 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isGrappleTopSurfaceFlag: 0,
     isGrappleStuckFlag: 0,
     grappleStuckStoppedTickCount: 0,
+    grappleZipNormalXWorld: 0.0,
+    grappleZipNormalYWorld: -1.0,
+    playerDownTriggeredFlag: 0,
+    playerDownLastPressTick: 0,
     grappleProximityBounceTicksLeft: 0,
     grappleProximityBounceRotationAngleRad: 0,
     isGrappleMissActiveFlag: 0,
@@ -767,6 +808,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     skidDebrisXWorld: 0.0,
     skidDebrisYWorld: 0.0,
     wallJumpSkidDebrisBurstFlag: 0,
+    playerLandingSkidSpeedFactor: 0.0,
     // ── Environmental hazards ─────────────────────────────────────────
     spikeCount: 0,
     spikeXWorld: new Float32Array(MAX_SPIKES),

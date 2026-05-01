@@ -15,6 +15,8 @@ export interface InputState {
   isEscapePressed: boolean;
   /** Set to true for one collectCommands call to trigger a jump. */
   isJumpTriggeredFlag: boolean;
+  /** Set to true for one collectCommands call when down (S/ArrowDown) is first pressed. */
+  isDownTriggeredFlag: boolean;
   /** True while any jump key (W / Space / ArrowUp) is physically held down. */
   isJumpHeldFlag: boolean;
   /** Tracks whether the joystick is already past the up-flick threshold (edge-detect). */
@@ -80,6 +82,7 @@ export function createInputState(): InputState {
     isKeyD: false,
     isEscapePressed: false,
     isJumpTriggeredFlag: false,
+    isDownTriggeredFlag: false,
     isJumpHeldFlag: false,
     isJoystickUpActiveFlag: false,
     isSprintHeldFlag: false,
@@ -163,7 +166,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     const b = getKeyboardBindings();
     if (keyMatches(e.key, b.moveLeft) || e.key === 'ArrowLeft') state.isKeyA = true;
     if (keyMatches(e.key, b.moveRight) || e.key === 'ArrowRight') state.isKeyD = true;
-    if (keyMatches(e.key, b.moveDown) || e.key === 'ArrowDown') state.isKeyS = true;
+    if (keyMatches(e.key, b.moveDown) || e.key === 'ArrowDown') {
+      state.isKeyS = true;
+      if (!e.repeat) { state.isDownTriggeredFlag = true; }
+    }
     if (e.key === 'Escape') state.isEscapePressed = true;
     if (keyMatches(e.key, b.jump) || e.key === ' ' || e.key === 'ArrowUp') {
       e.preventDefault();
