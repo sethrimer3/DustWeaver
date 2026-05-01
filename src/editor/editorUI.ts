@@ -11,6 +11,7 @@ import {
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
   AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
   CrumbleVariant, CRUMBLE_VARIANT_OPTIONS, RoomEdge, EditorUICallbacks,
+  DUST_KIND_OPTIONS,
 } from './editorState';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import {
@@ -215,7 +216,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
   catBar.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px;';
-  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'lighting', 'liquids', 'ropes'];
+  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'collectables', 'environment', 'objects', 'lighting', 'liquids', 'ropes'];
   const catBtns: HTMLButtonElement[] = [];
   for (const cat of categories) {
     const btn = makeBtn(cat, () => callbacks?.onCategoryChange(cat));
@@ -349,6 +350,53 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   crumbleVariantSelect.addEventListener('click', (e) => e.stopPropagation());
   crumblePickerDiv.appendChild(crumbleVariantSelect);
 
+  // ── Dust boost jar picker (shown above inspector when dust_boost_jar is selected) ──
+  const dustJarPickerDiv = document.createElement('div');
+  dustJarPickerDiv.style.cssText = `
+    border: 1px solid rgba(200,100,255,0.5); border-radius: 3px;
+    padding: 6px 8px; margin-top: 8px; background: rgba(15,0,20,0.4); display: none;
+  `;
+  const dustJarPickerTitle = document.createElement('div');
+  dustJarPickerTitle.textContent = 'Dust Jar Contents';
+  dustJarPickerTitle.style.cssText = `font-size: 11px; color: #d080ff; margin-bottom: 6px; font-weight: bold;`;
+  dustJarPickerDiv.appendChild(dustJarPickerTitle);
+  const dustJarKindSelect = document.createElement('select');
+  dustJarKindSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid rgba(200,100,255,0.4);
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px; margin-bottom: 4px;
+  `;
+  for (const kind of DUST_KIND_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = kind;
+    o.textContent = kind;
+    dustJarKindSelect.appendChild(o);
+  }
+  dustJarKindSelect.addEventListener('change', () => {
+    callbacks?.onDustBoostJarKindChange(dustJarKindSelect.value);
+  });
+  dustJarKindSelect.addEventListener('click', (e) => e.stopPropagation());
+  dustJarPickerDiv.appendChild(dustJarKindSelect);
+  const dustJarCountLabel = document.createElement('div');
+  dustJarCountLabel.textContent = 'Dust count';
+  dustJarCountLabel.style.cssText = `font-size: 10px; color: rgba(200,200,200,0.6); margin-bottom: 2px;`;
+  dustJarPickerDiv.appendChild(dustJarCountLabel);
+  const dustJarCountInput = document.createElement('input');
+  dustJarCountInput.type = 'number';
+  dustJarCountInput.min = '1';
+  dustJarCountInput.max = '20';
+  dustJarCountInput.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid rgba(200,100,255,0.4);
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px; box-sizing: border-box;
+  `;
+  dustJarCountInput.addEventListener('change', () => {
+    const v = parseInt(dustJarCountInput.value);
+    if (!isNaN(v) && v >= 1 && v <= 20) callbacks?.onDustBoostJarCountChange(v);
+  });
+  dustJarCountInput.addEventListener('click', (e) => e.stopPropagation());
+  dustJarPickerDiv.appendChild(dustJarCountInput);
+
   // ── Inspector ────────────────────────────────────────────────────────────
   const inspectorDiv = document.createElement('div');
   inspectorDiv.style.cssText = `
@@ -356,6 +404,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   `;
   container.appendChild(skillTombPickerDiv);
   container.appendChild(crumblePickerDiv);
+  container.appendChild(dustJarPickerDiv);
   container.appendChild(inspectorDiv);
 
   // Track rendered inspector state to avoid recreating fields every frame
@@ -571,6 +620,18 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     crumblePickerDiv.style.display = isCrumbleSelected ? '' : 'none';
     if (isCrumbleSelected && document.activeElement !== crumbleVariantSelect) {
       crumbleVariantSelect.value = state.pendingCrumbleVariant;
+    }
+
+    // Show/hide the dust boost jar picker based on selected palette item
+    const isDustBoostJarSelected = state.selectedPaletteItem?.isDustBoostJarItem === 1 || state.selectedPaletteItem?.id === 'dust_boost_jar';
+    dustJarPickerDiv.style.display = isDustBoostJarSelected ? '' : 'none';
+    if (isDustBoostJarSelected) {
+      if (document.activeElement !== dustJarKindSelect) {
+        dustJarKindSelect.value = state.pendingDustBoostJarKind;
+      }
+      if (document.activeElement !== dustJarCountInput) {
+        dustJarCountInput.value = String(state.pendingDustBoostJarCount);
+      }
     }
 
     // Update inspector (only recreate when selected element changes)

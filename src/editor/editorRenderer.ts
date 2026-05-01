@@ -28,6 +28,9 @@ import {
   CRUMBLE_VARIANT_CRACK_COLOR,
   SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
   SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
+  DUST_CONTAINER_COLOR, DUST_CONTAINER_SELECTED,
+  DUST_CONTAINER_PIECE_COLOR, DUST_CONTAINER_PIECE_SELECTED,
+  DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
   getDirectionVector, buildElementTooltipId, buildElementTypeName,
   drawHoverTooltip, drawGrid, drawBlockRect, drawRampTriangle,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
@@ -139,6 +142,39 @@ export function renderEditorOverlays(
       SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
       offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
     drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '✦');
+  }
+
+  // ── Dust containers (collectibles, +4 capacity) ─────────────────────────
+  for (const c of (room.dustContainers ?? [])) {
+    const isSelected = isElementSelected('dustContainer', c.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'dustContainer' && state.hoverElement.uid === c.uid;
+    const color = isSelected ? DUST_CONTAINER_SELECTED : DUST_CONTAINER_COLOR;
+    drawObjectFootprint(ctx, c.xBlock, c.yBlock, 1, 1,
+      offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
+    drawMarker(ctx, c.xBlock, c.yBlock, offsetXPx, offsetYPx, zoom, color, '◈');
+  }
+
+  // ── Dust container pieces (collectibles, accumulate toward full container) ─
+  for (const c of (room.dustContainerPieces ?? [])) {
+    const isSelected = isElementSelected('dustContainerPiece', c.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'dustContainerPiece' && state.hoverElement.uid === c.uid;
+    const color = isSelected ? DUST_CONTAINER_PIECE_SELECTED : DUST_CONTAINER_PIECE_COLOR;
+    drawObjectFootprint(ctx, c.xBlock, c.yBlock, 1, 1,
+      offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
+    drawMarker(ctx, c.xBlock, c.yBlock, offsetXPx, offsetYPx, zoom, color, '◇');
+  }
+
+  // ── Dust boost jars (objects, grant temporary dust of specific kind) ─────
+  for (const j of (room.dustBoostJars ?? [])) {
+    const isSelected = isElementSelected('dustBoostJar', j.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'dustBoostJar' && state.hoverElement.uid === j.uid;
+    const color = isSelected ? DUST_BOOST_JAR_SELECTED : DUST_BOOST_JAR_COLOR;
+    drawObjectFootprint(ctx, j.xBlock, j.yBlock, 1, 1,
+      offsetXPx, offsetYPx, zoom, color, isSelected || isHovered ? 2 : 1);
+    drawMarker(ctx, j.xBlock, j.yBlock, offsetXPx, offsetYPx, zoom, color, '⬡');
   }
 
   // ── Dust piles ──────────────────────────────────────────────────────────
@@ -595,6 +631,21 @@ export function renderEditorOverlays(
           offsetXPx, offsetYPx, zoom, 'rgba(220,70,70,0.35)', 2);
         drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
           'rgba(220,70,70,0.55)', '⚔');
+      } else if (item.isDustContainerItem === 1 || item.id === 'dust_container') {
+        drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
+          offsetXPx, offsetYPx, zoom, 'rgba(80,220,255,0.25)', 2);
+        drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+          'rgba(80,220,255,0.45)', '◈');
+      } else if (item.isDustContainerPieceItem === 1 || item.id === 'dust_container_piece') {
+        drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
+          offsetXPx, offsetYPx, zoom, 'rgba(130,200,255,0.25)', 2);
+        drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+          'rgba(130,200,255,0.45)', '◇');
+      } else if (item.isDustBoostJarItem === 1 || item.id === 'dust_boost_jar') {
+        drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
+          offsetXPx, offsetYPx, zoom, 'rgba(200,100,255,0.25)', 2);
+        drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+          'rgba(200,100,255,0.45)', '⬡');
       } else {
         drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
           preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 2);

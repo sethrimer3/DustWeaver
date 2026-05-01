@@ -49,6 +49,13 @@ export const GRASSHOPPER_SELECTED = 'rgba(100,220,100,0.45)';
 export const FIREFLY_COLOR = 'rgba(255,220,60,0.20)';
 export const FIREFLY_SELECTED = 'rgba(255,230,80,0.45)';
 
+export const DUST_CONTAINER_COLOR    = 'rgba(80,220,255,0.50)';
+export const DUST_CONTAINER_SELECTED = 'rgba(80,220,255,0.90)';
+export const DUST_CONTAINER_PIECE_COLOR    = 'rgba(130,200,255,0.45)';
+export const DUST_CONTAINER_PIECE_SELECTED = 'rgba(130,220,255,0.85)';
+export const DUST_BOOST_JAR_COLOR    = 'rgba(200,100,255,0.45)';
+export const DUST_BOOST_JAR_SELECTED = 'rgba(220,130,255,0.90)';
+
 export const ROPE_COLOR = 'rgba(180, 140, 80, 0.7)';
 export const ROPE_SELECTED = 'rgba(220, 180, 100, 0.95)';
 export const ROPE_PREVIEW_COLOR = 'rgba(180, 140, 80, 0.4)';
@@ -104,6 +111,9 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     transition:       'transition',
     saveTomb:         'save_tomb',
     skillTomb:        'skill_tomb',
+    dustContainer:    'dust_container',
+    dustContainerPiece: 'dust_container_piece',
+    dustBoostJar:     'dust_jar',
     dustPile:         'dust_pile',
     grasshopperArea:  'grasshopper_area',
     fireflyArea:      'firefly_area',
@@ -162,6 +172,8 @@ export function buildElementTypeName(
     wall:               'Wall',
     transition:         'Room Transition',
     saveTomb:           'Save Tomb',
+    dustContainer:      'Dust Container',
+    dustContainerPiece: 'Dust Container Piece',
     dustPile:           'Dust Pile',
     grasshopperArea:    'Grasshopper Area',
     fireflyArea:        'Firefly Area',
@@ -172,6 +184,11 @@ export function buildElementTypeName(
     lavaZone:           'Lava Zone',
     rope:               'Rope',
   };
+  if (type === 'dustBoostJar') {
+    const j = (room.dustBoostJars ?? []).find(x => x.uid === uid);
+    if (j) return `Dust Jar [${j.dustKind} ×${j.dustCount}]`;
+    return 'Dust Jar';
+  }
   if (type === 'crumbleBlock') {
     const b = (room.crumbleBlocks ?? []).find(x => x.uid === uid);
     if (b) {

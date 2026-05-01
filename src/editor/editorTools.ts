@@ -106,6 +106,27 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check dust containers
+  for (const c of (room.dustContainers ?? [])) {
+    if (hitTestPoint(c.xBlock, c.yBlock, bx, by)) {
+      return { type: 'dustContainer', uid: c.uid };
+    }
+  }
+
+  // Check dust container pieces
+  for (const c of (room.dustContainerPieces ?? [])) {
+    if (hitTestPoint(c.xBlock, c.yBlock, bx, by)) {
+      return { type: 'dustContainerPiece', uid: c.uid };
+    }
+  }
+
+  // Check dust boost jars
+  for (const j of (room.dustBoostJars ?? [])) {
+    if (hitTestPoint(j.xBlock, j.yBlock, bx, by)) {
+      return { type: 'dustBoostJar', uid: j.uid };
+    }
+  }
+
   // Check dust piles
   for (const p of room.dustPiles) {
     if (hitTestPoint(p.xBlock, p.yBlock, bx, by)) {
@@ -477,6 +498,29 @@ export function placeAtCursor(state: EditorState): void {
       yBlock: by,
       weaveId: state.pendingSkillTombWeaveId,
     });
+  } else if (item.isDustContainerItem === 1 || item.id === 'dust_container') {
+    if (!room.dustContainers) room.dustContainers = [];
+    room.dustContainers.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+    });
+  } else if (item.isDustContainerPieceItem === 1 || item.id === 'dust_container_piece') {
+    if (!room.dustContainerPieces) room.dustContainerPieces = [];
+    room.dustContainerPieces.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+    });
+  } else if (item.isDustBoostJarItem === 1 || item.id === 'dust_boost_jar') {
+    if (!room.dustBoostJars) room.dustBoostJars = [];
+    room.dustBoostJars.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      dustKind: state.pendingDustBoostJarKind,
+      dustCount: state.pendingDustBoostJarCount,
+    });
   } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
     let dustCount: number;
     if (item.id === 'dust_pile_small') {
@@ -597,6 +641,39 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestPoint(room.skillTombs[i].xBlock, room.skillTombs[i].yBlock, bx, by)) {
       const removedUid = room.skillTombs[i].uid;
       room.skillTombs.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check dust containers
+  const dustContainers = room.dustContainers ?? [];
+  for (let i = 0; i < dustContainers.length; i++) {
+    if (hitTestPoint(dustContainers[i].xBlock, dustContainers[i].yBlock, bx, by)) {
+      const removedUid = dustContainers[i].uid;
+      dustContainers.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check dust container pieces
+  const dustContainerPieces = room.dustContainerPieces ?? [];
+  for (let i = 0; i < dustContainerPieces.length; i++) {
+    if (hitTestPoint(dustContainerPieces[i].xBlock, dustContainerPieces[i].yBlock, bx, by)) {
+      const removedUid = dustContainerPieces[i].uid;
+      dustContainerPieces.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check dust boost jars
+  const dustBoostJars = room.dustBoostJars ?? [];
+  for (let i = 0; i < dustBoostJars.length; i++) {
+    if (hitTestPoint(dustBoostJars[i].xBlock, dustBoostJars[i].yBlock, bx, by)) {
+      const removedUid = dustBoostJars[i].uid;
+      dustBoostJars.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
@@ -810,6 +887,21 @@ export function getAllElementsInRect(
   for (const s of room.skillTombs) {
     if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
       results.push({ type: 'skillTomb', uid: s.uid });
+    }
+  }
+  for (const c of (room.dustContainers ?? [])) {
+    if (c.xBlock >= minX && c.xBlock <= maxX && c.yBlock >= minY && c.yBlock <= maxY) {
+      results.push({ type: 'dustContainer', uid: c.uid });
+    }
+  }
+  for (const c of (room.dustContainerPieces ?? [])) {
+    if (c.xBlock >= minX && c.xBlock <= maxX && c.yBlock >= minY && c.yBlock <= maxY) {
+      results.push({ type: 'dustContainerPiece', uid: c.uid });
+    }
+  }
+  for (const j of (room.dustBoostJars ?? [])) {
+    if (j.xBlock >= minX && j.xBlock <= maxX && j.yBlock >= minY && j.yBlock <= maxY) {
+      results.push({ type: 'dustBoostJar', uid: j.uid });
     }
   }
   for (const p of room.dustPiles) {

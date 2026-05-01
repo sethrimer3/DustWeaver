@@ -26,6 +26,9 @@ import type {
   EditorLavaZone,
   EditorCrumbleBlock,
   EditorBouncePad,
+  EditorDustContainer,
+  EditorDustContainerPiece,
+  EditorDustBoostJar,
   SelectedElement,
   BlockTheme,
 } from './editorState';
@@ -144,6 +147,26 @@ export function applyPropertyToElement(
       if (prop === 'bouncePad.speedFactorIndex' && !isNaN(numVal)) {
         bp.speedFactorIndex = (numVal as 0 | 1);
       }
+    }
+  } else if (el.type === 'dustContainer') {
+    const container = (room.dustContainers ?? []).find((c: EditorDustContainer) => c.uid === el.uid);
+    if (container) {
+      if (prop === 'dustContainer.xBlock' && !isNaN(numVal)) container.xBlock = numVal;
+      if (prop === 'dustContainer.yBlock' && !isNaN(numVal)) container.yBlock = numVal;
+    }
+  } else if (el.type === 'dustContainerPiece') {
+    const piece = (room.dustContainerPieces ?? []).find((c: EditorDustContainerPiece) => c.uid === el.uid);
+    if (piece) {
+      if (prop === 'dustContainerPiece.xBlock' && !isNaN(numVal)) piece.xBlock = numVal;
+      if (prop === 'dustContainerPiece.yBlock' && !isNaN(numVal)) piece.yBlock = numVal;
+    }
+  } else if (el.type === 'dustBoostJar') {
+    const jar = (room.dustBoostJars ?? []).find((j: EditorDustBoostJar) => j.uid === el.uid);
+    if (jar) {
+      if (prop === 'dustBoostJar.xBlock' && !isNaN(numVal)) jar.xBlock = numVal;
+      if (prop === 'dustBoostJar.yBlock' && !isNaN(numVal)) jar.yBlock = numVal;
+      if (prop === 'dustBoostJar.dustKind' && typeof value === 'string') jar.dustKind = value;
+      if (prop === 'dustBoostJar.dustCount' && !isNaN(numVal)) jar.dustCount = Math.max(1, Math.min(20, numVal));
     }
   } else if (el.type === 'playerSpawn') {
     if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;

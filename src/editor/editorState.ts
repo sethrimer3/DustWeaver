@@ -32,7 +32,7 @@ export enum EditorTool {
 
 // ── Palette categories and items ─────────────────────────────────────────────
 
-export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'lighting' | 'liquids' | 'ropes';
+export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'collectables' | 'environment' | 'objects' | 'lighting' | 'liquids' | 'ropes';
 
 export interface PaletteItem {
   id: string;
@@ -62,6 +62,12 @@ export interface PaletteItem {
   isBouncePadItem?: 1;
   /** Speed-factor index for the placed bounce pad: 0=50%, 1=100%. */
   bouncePadSpeedFactorIndex?: 0 | 1;
+  /** 1 if this palette item places a collectible dust container (grants +4 max capacity). */
+  isDustContainerItem?: 1;
+  /** 1 if this palette item places a collectible dust container piece. */
+  isDustContainerPieceItem?: 1;
+  /** 1 if this palette item places a dust boost jar object (grants temporary dust of a specific kind). */
+  isDustBoostJarItem?: 1;
 }
 
 /** Options for the crumble-block weakness variant dropdown. */
@@ -75,6 +81,12 @@ export const CRUMBLE_VARIANT_OPTIONS: readonly { id: CrumbleVariant; label: stri
   { id: 'poison',    label: 'Poison'    },
   { id: 'shadow',    label: 'Shadow'    },
   { id: 'nature',    label: 'Nature'    },
+];
+
+/** Canonical list of ParticleKind string values available for editor dropdowns. */
+export const DUST_KIND_OPTIONS: readonly string[] = [
+  'Physical', 'Fire', 'Ice', 'Lightning', 'Poison', 'Arcane',
+  'Wind', 'Holy', 'Shadow', 'Metal', 'Earth', 'Nature', 'Crystal', 'Void', 'Water', 'Lava', 'Stone',
 ];
 
 export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
@@ -119,22 +131,27 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_golden_mimic', label: 'Golden Mimic', category: 'enemies' },
   { id: 'enemy_golden_mimic_xy', label: 'Golden Mimic (XY)', category: 'enemies' },
   { id: 'enemy_bee_swarm', label: 'Bee Swarm', category: 'enemies' },
-  // Triggers
-  { id: 'player_spawn', label: 'Player Spawn', category: 'triggers' },
+  // Triggers (player-facing activators and room logic)
+  { id: 'player_spawn',    label: 'Player Spawn',    category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
-  { id: 'save_tomb', label: 'Save Tomb', category: 'triggers' },
-  { id: 'skill_tomb', label: 'Skill Tomb', category: 'triggers' },
-  { id: 'dust_pile_small',  label: 'Dust Pile (S)',  category: 'triggers' },
-  { id: 'dust_pile_medium', label: 'Dust Pile (M)',  category: 'triggers' },
-  { id: 'dust_pile_large',  label: 'Dust Pile (L)',  category: 'triggers' },
+  { id: 'save_tomb',       label: 'Save Tomb',       category: 'triggers' },
+  // Collectables (items the player can pick up for permanent upgrades)
+  { id: 'skill_tomb',            label: 'Skill Tomb',            category: 'collectables' },
+  { id: 'dust_container',        label: 'Dust Container',        category: 'collectables', isDustContainerItem: 1 },
+  { id: 'dust_container_piece',  label: 'Dust Container Piece',  category: 'collectables', isDustContainerPieceItem: 1 },
+  // Environment (world atmosphere and critters)
+  { id: 'dust_pile_small',  label: 'Dust Pile (S)', category: 'environment' },
+  { id: 'dust_pile_medium', label: 'Dust Pile (M)', category: 'environment' },
+  { id: 'dust_pile_large',  label: 'Dust Pile (L)', category: 'environment' },
   // Legacy alias kept for backward-compat with older room exports
-  { id: 'dust_pile', label: 'Dust Pile', category: 'triggers' },
-  { id: 'grasshopper_area', label: 'Grasshopper Area', category: 'triggers' },
-  { id: 'firefly_area', label: 'Firefly Area', category: 'triggers' },
-  // Decorations
-  { id: 'decoration_mushroom',  label: 'Glow Mushroom', category: 'triggers' },
-  { id: 'decoration_glowgrass', label: 'Glow Grass',    category: 'triggers' },
-  { id: 'decoration_vine',      label: 'Glow Vine',     category: 'triggers' },
+  { id: 'dust_pile', label: 'Dust Pile', category: 'environment' },
+  { id: 'grasshopper_area',     label: 'Grasshopper Area', category: 'environment' },
+  { id: 'firefly_area',         label: 'Firefly Area',     category: 'environment' },
+  { id: 'decoration_mushroom',  label: 'Glow Mushroom',    category: 'environment' },
+  { id: 'decoration_glowgrass', label: 'Glow Grass',       category: 'environment' },
+  { id: 'decoration_vine',      label: 'Glow Vine',        category: 'environment' },
+  // Objects (interactive world objects)
+  { id: 'dust_boost_jar', label: 'Dust Jar (Object)', category: 'objects', isDustBoostJarItem: 1 },
   // ── Lighting layer ─────────────────────────────────────────────────────
   // Designer-facing authoring for the unified ambient lighting system.
   // See `RoomAmbientLightBlockerDef` / `RoomLightSourceDef` in roomDef.ts.
@@ -373,6 +390,31 @@ export interface EditorSkillTomb {
   weaveId: string;
 }
 
+/** Collectible dust container — grants +4 max dust particle capacity when picked up. */
+export interface EditorDustContainer {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
+/** Collectible dust container piece — accumulates toward a full dust container. */
+export interface EditorDustContainerPiece {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
+/** Dust boost jar — a breakable world object that temporarily grants dust particles of a specific kind. */
+export interface EditorDustBoostJar {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** The ParticleKind string name of the dust inside (e.g. 'Physical', 'Fire'). */
+  dustKind: string;
+  /** Number of temporary dust particles granted when broken. */
+  dustCount: number;
+}
+
 export interface EditorDustPile {
   uid: number;
   xBlock: number;
@@ -475,6 +517,9 @@ export interface EditorRoomData {
   transitions: EditorTransition[];
   saveTombs: EditorSaveTomb[];
   skillTombs: EditorSkillTomb[];
+  dustContainers: EditorDustContainer[];
+  dustContainerPieces: EditorDustContainerPiece[];
+  dustBoostJars: EditorDustBoostJar[];
   dustPiles: EditorDustPile[];
   grasshopperAreas: EditorGrasshopperArea[];
   /** Firefly spawn areas (free-roaming fireflies, not jar-based). */
@@ -499,7 +544,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope';
 
 export interface SelectedElement {
   type: SelectedElementType;
@@ -563,6 +608,15 @@ export interface EditorState {
    */
   pendingCrumbleVariant: CrumbleVariant;
   /**
+   * Which dust kind a newly placed dust boost jar will contain.
+   * Populated from the dust kind dropdown when dust_boost_jar is selected.
+   */
+  pendingDustBoostJarKind: string;
+  /**
+   * How many dust particles a newly placed dust boost jar grants when broken.
+   */
+  pendingDustBoostJarCount: number;
+  /**
    * Pending first anchor when placing a rope (null if not in rope-placement mode).
    */
   pendingRopeAnchorXBlock: number | null;
@@ -604,6 +658,8 @@ export function createEditorState(): EditorState {
     clipboard: null,
     pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
     pendingCrumbleVariant: 'normal',
+    pendingDustBoostJarKind: 'Physical',
+    pendingDustBoostJarCount: 5,
     pendingRopeAnchorXBlock: null,
     pendingRopeAnchorYBlock: null,
     hoverElement: null,
@@ -647,6 +703,10 @@ export interface EditorUICallbacks {
   onSkillTombWeaveChange: (weaveId: string) => void;
   /** Called when the user picks a different crumble variant in the crumble variant dropdown. */
   onCrumbleVariantChange: (variant: CrumbleVariant) => void;
+  /** Called when the user picks a different dust kind for the dust boost jar. */
+  onDustBoostJarKindChange: (dustKind: string) => void;
+  /** Called when the user changes the dust count for the dust boost jar. */
+  onDustBoostJarCountChange: (dustCount: number) => void;
 }
 
 /** Selects the placement block theme and updates the recent-theme strip. */

@@ -211,6 +211,12 @@ export function createEditorController(
         onCrumbleVariantChange: (variant) => {
           state.pendingCrumbleVariant = variant;
         },
+        onDustBoostJarKindChange: (dustKind: string) => {
+          state.pendingDustBoostJarKind = dustKind;
+        },
+        onDustBoostJarCountChange: (dustCount: number) => {
+          state.pendingDustBoostJarCount = dustCount;
+        },
       });
     } else {
       closeEditor();

@@ -20,6 +20,7 @@ import type {
   EditorAmbientLightBlocker, EditorLightSource,
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorRope, RopeDestructibility,
+  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
   RoomSongId,
 } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
@@ -236,6 +237,26 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     })),
   ];
 
+  const dustContainers: EditorDustContainer[] = (json.dustContainers ?? []).map(container => ({
+    uid: uid++,
+    xBlock: container.xBlock,
+    yBlock: container.yBlock,
+  }));
+
+  const dustContainerPieces: EditorDustContainerPiece[] = (json.dustContainerPieces ?? []).map(piece => ({
+    uid: uid++,
+    xBlock: piece.xBlock,
+    yBlock: piece.yBlock,
+  }));
+
+  const dustBoostJars: EditorDustBoostJar[] = (json.dustBoostJars ?? []).map(j => ({
+    uid: uid++,
+    xBlock: j.xBlock,
+    yBlock: j.yBlock,
+    dustKind: j.dustKind,
+    dustCount: j.dustCount,
+  }));
+
   const dustPiles: EditorDustPile[] = (json.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -355,6 +376,9 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       transitions,
       saveTombs,
       skillTombs,
+      dustContainers,
+      dustContainerPieces,
+      dustBoostJars,
       dustPiles,
       grasshopperAreas,
       fireflyAreas,
@@ -456,6 +480,26 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       xBlock: s.xBlock,
       yBlock: s.yBlock,
       weaveId: s.weaveId,
+    }));
+  }
+  if ((data.dustContainers ?? []).length > 0) {
+    json.dustContainers = data.dustContainers.map(c => ({
+      xBlock: c.xBlock,
+      yBlock: c.yBlock,
+    }));
+  }
+  if ((data.dustContainerPieces ?? []).length > 0) {
+    json.dustContainerPieces = data.dustContainerPieces.map(c => ({
+      xBlock: c.xBlock,
+      yBlock: c.yBlock,
+    }));
+  }
+  if ((data.dustBoostJars ?? []).length > 0) {
+    json.dustBoostJars = data.dustBoostJars.map(j => ({
+      xBlock: j.xBlock,
+      yBlock: j.yBlock,
+      dustKind: j.dustKind,
+      dustCount: j.dustCount,
     }));
   }
   if (data.dustPiles.length > 0) {
@@ -739,6 +783,17 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     transitions,
     saveTombs: data.saveTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
     skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
+    dustContainers: (data.dustContainers ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
+    dustContainerPieces: (data.dustContainerPieces ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
+    dustBoostJars: (data.dustBoostJars ?? []).map(j => {
+      const kind = stringToParticleKind(j.dustKind);
+      return {
+        xBlock: j.xBlock,
+        yBlock: j.yBlock,
+        dustKind: kind !== null ? kind : 0,
+        dustCount: j.dustCount,
+      };
+    }),
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount, spreadBlocks: p.spreadBlocks ?? 0 })),
     grasshopperAreas: data.grasshopperAreas.map(a => ({
       xBlock: a.xBlock,
@@ -903,6 +958,26 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     weaveId: s.weaveId,
   }));
 
+  const dustContainers: EditorDustContainer[] = (room.dustContainers ?? []).map(c => ({
+    uid: uid++,
+    xBlock: c.xBlock,
+    yBlock: c.yBlock,
+  }));
+
+  const dustContainerPieces: EditorDustContainerPiece[] = (room.dustContainerPieces ?? []).map(c => ({
+    uid: uid++,
+    xBlock: c.xBlock,
+    yBlock: c.yBlock,
+  }));
+
+  const dustBoostJars: EditorDustBoostJar[] = (room.dustBoostJars ?? []).map(j => ({
+    uid: uid++,
+    xBlock: j.xBlock,
+    yBlock: j.yBlock,
+    dustKind: particleKindToString(j.dustKind),
+    dustCount: j.dustCount,
+  }));
+
   const dustPiles: EditorDustPile[] = (room.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -1012,6 +1087,9 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       transitions,
       saveTombs,
       skillTombs,
+      dustContainers,
+      dustContainerPieces,
+      dustBoostJars,
       dustPiles,
       grasshopperAreas,
       fireflyAreas,
