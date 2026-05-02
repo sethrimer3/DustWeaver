@@ -75,6 +75,7 @@ import { getElementProfile } from '../particles/elementProfiles';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
 import { COYOTE_TIME_TICKS, debugSpeedOverrides, ov, GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
+import { resolveClusterSolidWallCollision, resolveClusterFloorCollision } from './movementCollision';
 import {
   GRAPPLE_SEGMENT_COUNT,
   GRAPPLE_MIN_LENGTH_WORLD,
@@ -171,6 +172,16 @@ const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 480.0;
  * the remaining distance falls within one zip step plus this threshold.
  */
 const GRAPPLE_ZIP_ARRIVAL_THRESHOLD_WORLD = 4.0;
+
+/**
+ * Tolerance (world units) used by the per-frame line-of-sight check between
+ * the player and the grapple anchor during zip.  Wall hits whose distance to
+ * the anchor is within this margin are treated as the anchor surface itself
+ * (i.e. not an obstruction), preventing the LOS check from firing on the
+ * final approach into the wall.  Sized to comfortably cover rounding error
+ * and the player's AABB half-extents.
+ */
+const GRAPPLE_ZIP_LOS_TOLERANCE_WORLD = 8.0;
 
 /**
  * Minimum distance (world units) required to record the zip direction as the
@@ -656,31 +667,83 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     }
 
     if (world.isGrappleStuckFlag === 0) {
-      // ── Zip phase: move player toward anchor at zip speed ───────────────
+      // ── Zip phase: move player toward anchor using swept AABB collision ────
+      //
+      // Why swept collision instead of direct position assignment:
+      //   GRAPPLE_ZIP_SPEED_WORLD_PER_SEC (~480 wu/s) moves ~8 wu per tick at
+      //   60 fps.  Direct position assignment can carry the player through thin
+      //   walls (BLOCK_SIZE_SMALL = 3 wu) or into floor tiles in a single step.
+      //   resolveClusterSolidWallCollision uses the same axis-separated sweep
+      //   as normal movement, giving sub-tick safety and automatic wall/floor
+      //   sliding at no extra cost.
       const dx = targetX - player.positionXWorld;
       const dy = targetY - player.positionYWorld;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const zipStep = GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * dtSec;
 
+      // ── Per-frame LOS check: stop zip if a wall now blocks the path ────────
+      // Cast from the player position toward the grapple anchor.  If a wall is
+      // hit well before the anchor (farther than GRAPPLE_ZIP_LOS_TOLERANCE_WORLD
+      // from the anchor surface), the path is obstructed — continuing to zip
+      // would pull the player through solid geometry.  Release the grapple
+      // instead.  The anchor's own wall is excluded from the check by capping
+      // the cast distance at anchorDist - LOS_TOLERANCE.
+      {
+        const dxToAnchor = world.grappleAnchorXWorld - player.positionXWorld;
+        const dyToAnchor = world.grappleAnchorYWorld - player.positionYWorld;
+        const anchorDist = Math.sqrt(dxToAnchor * dxToAnchor + dyToAnchor * dyToAnchor);
+        const losCheckDist = anchorDist - GRAPPLE_ZIP_LOS_TOLERANCE_WORLD;
+        if (losCheckDist > 1.0) {
+          const invAD = 1.0 / anchorDist;
+          const losHit = raycastWalls(
+            world,
+            player.positionXWorld, player.positionYWorld,
+            dxToAnchor * invAD, dyToAnchor * invAD,
+            losCheckDist,
+          );
+          if (losHit !== null) {
+            // An intermediate wall blocks the direct line to the anchor.
+            // Releasing the grapple here prevents the zip from dragging the
+            // player through solid geometry.
+            releaseGrapple(world);
+            return;
+          }
+        }
+      }
+
       if (dist <= zipStep + GRAPPLE_ZIP_ARRIVAL_THRESHOLD_WORLD) {
-        // Arrived — snap to target and transition to stuck
-        player.positionXWorld = targetX;
-        player.positionYWorld = targetY;
-        // Store zip velocity for momentum on release
+        // ── Arrival frame: swept movement toward target, then transition to stuck
         if (dist > GRAPPLE_ZIP_MIN_DIST_WORLD) {
+          // Use swept collision even on the arrival frame to prevent floor/wall
+          // clipping on diagonal approaches (e.g. zipping down into a corner).
           const invDist = 1.0 / dist;
+          const oldX = player.positionXWorld;
+          const oldY = player.positionYWorld;
+          // Scale velocity so the integration moves exactly `dist` this tick.
+          player.velocityXWorld = dx * invDist * (dist / dtSec);
+          player.velocityYWorld = dy * invDist * (dist / dtSec);
+          resolveClusterSolidWallCollision(player, world, oldX, oldY, dtSec, false);
+          resolveClusterFloorCollision(player, world);
+          // Restore full zip velocity for momentum-on-release and stuck decel.
           player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
           player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
         }
         world.isGrappleStuckFlag = 1;
         world.grappleStuckStoppedTickCount = 0;
       } else {
-        // Move toward anchor
+        // ── Normal zip frame: move at full speed with swept collision ─────────
+        // resolveClusterSolidWallCollision zeroes velocity on the contact axis,
+        // so if the player hits a wall the perpendicular component continues —
+        // giving natural sliding behavior with no extra code.
         const invDist = 1.0 / dist;
-        player.positionXWorld += dx * invDist * zipStep;
-        player.positionYWorld += dy * invDist * zipStep;
+        const oldX = player.positionXWorld;
+        const oldY = player.positionYWorld;
         player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
         player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+        resolveClusterSolidWallCollision(player, world, oldX, oldY, dtSec, false);
+        resolveClusterFloorCollision(player, world);
+        // Velocity after collision correctly reflects the post-contact direction
+        // (zeroed on the blocked axis, preserved on the unblocked axis).
       }
     }
 
@@ -688,6 +751,25 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       // ── Stuck phase: lock position, decelerate, then hop off if window expired
       player.positionXWorld = targetX;
       player.positionYWorld = targetY;
+
+      // Safety pass: ensure the locked position is outside all solid walls.
+      // The stuck target is always geometrically safe (it is the player AABB
+      // resting against the anchor surface with halfExtent clearance), but a
+      // final penetration resolve catches any residual overlap from ramps or
+      // stacked geometry near the anchor.  We resolve all overlapping walls
+      // rather than stopping at the first, since the player AABB can overlap
+      // multiple walls simultaneously near stacked geometry.
+      {
+        const halfW = player.halfWidthWorld;
+        const halfH = player.halfHeightWorld;
+        for (let wi = 0; wi < world.wallCount; wi++) {
+          const wLeft   = world.wallXWorld[wi];
+          const wTop    = world.wallYWorld[wi];
+          const wRight  = wLeft + world.wallWWorld[wi];
+          const wBottom = wTop + world.wallHWorld[wi];
+          resolveAABBPenetration(player, halfW, halfH, wLeft, wTop, wRight, wBottom);
+        }
+      }
 
       const speed = Math.sqrt(
         player.velocityXWorld * player.velocityXWorld +
