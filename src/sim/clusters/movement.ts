@@ -52,6 +52,7 @@ import {
   VAR_JUMP_TIME_TICKS,
   COYOTE_TIME_TICKS,
   WALL_SLIDE_MAX_FALL_SPEED,
+  WALL_JUMP_GRACE_TICKS,
   SKID_JUMP_MULTIPLIER,
   GRAPPLE_SUPER_JUMP_MULTIPLIER,
   ROLLING_ENEMY_SPRITE_RADIUS_WORLD,
@@ -247,6 +248,9 @@ export function applyClusterMovement(world: WorldState): void {
         if (justLanded) {
           // Reset variable jump sustain on landing
           cluster.varJumpTimerTicks = 0;
+          // Clear wall grace timers — grounded cancels wall coyote time.
+          cluster.wallJumpGraceLeftTicks  = 0;
+          cluster.wallJumpGraceRightTicks = 0;
           // Fire buffered jump immediately on landing
           if (cluster.jumpBufferTicks > 0) {
             const baseJumpSpeedLand = ov(debugSpeedOverrides.jumpSpeedWorld, PLAYER_JUMP_SPEED_WORLD);
@@ -285,6 +289,17 @@ export function applyClusterMovement(world: WorldState): void {
         }
         if (cluster.isGroundedFlag === 1) {
           cluster.hasUsedWallJumpSinceResetFlag = 0;
+        }
+
+        // ── Wall jump grace timers: refresh when touching a wall ─────────────
+        // Set each frame the wall-touch flag is active so the timer resets to
+        // its full window; counts down in tickPlayerMovement via the timer block.
+        const graceTicks = ov(debugSpeedOverrides.wallJumpGraceTicks, WALL_JUMP_GRACE_TICKS);
+        if (cluster.isTouchingWallLeftFlag === 1) {
+          cluster.wallJumpGraceLeftTicks = graceTicks;
+        }
+        if (cluster.isTouchingWallRightFlag === 1) {
+          cluster.wallJumpGraceRightTicks = graceTicks;
         }
       }
 

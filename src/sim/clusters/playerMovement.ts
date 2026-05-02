@@ -27,8 +27,8 @@ import {
   PLAYER_JUMP_SPEED_WORLD,
   JUMP_CUT_GRAVITY_MULTIPLIER,
   VAR_JUMP_TIME_TICKS,
-  APEX_GRAVITY_MULTIPLIER,
-  APEX_THRESHOLD_WORLD_PER_SEC,
+  APEX_FLOAT_VELOCITY_THRESHOLD,
+  APEX_FLOAT_GRAVITY_MULTIPLIER,
   NORMAL_MAX_FALL_WORLD_PER_SEC,
   FAST_MAX_FALL_WORLD_PER_SEC,
   JUMP_BUFFER_TICKS,
@@ -43,6 +43,7 @@ import {
   WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD,
   WALL_JUMP_FORCE_TIME_TICKS,
   WALL_JUMP_LOCKOUT_TICKS,
+  WALL_JUMP_PROXIMITY_PIXELS,
   SPRINT_SPEED_MULTIPLIER,
   SPRINT_FRICTION_MULTIPLIER,
   SKID_FRICTION_MULTIPLIER,
@@ -61,6 +62,7 @@ import {
   HIGH_SPEED_STEERING_FACTOR,
   UPWARD_BRAKE_STRENGTH_PER_SEC2,
 } from './movementConstants';
+import { getNearbyWallForWallJump } from './movementCollision';
 
 /**
  * Tick all player-specific velocity and input logic for a single cluster.
@@ -92,6 +94,12 @@ export function tickPlayerMovement(
   }
   if (cluster.wallJumpForceTimeTicks > 0) {
     cluster.wallJumpForceTimeTicks -= 1;
+  }
+  if (cluster.wallJumpGraceLeftTicks > 0) {
+    cluster.wallJumpGraceLeftTicks -= 1;
+  }
+  if (cluster.wallJumpGraceRightTicks > 0) {
+    cluster.wallJumpGraceRightTicks -= 1;
   }
   if (cluster.varJumpTimerTicks > 0) {
     cluster.varJumpTimerTicks -= 1;
@@ -218,14 +226,15 @@ export function tickPlayerMovement(
     // Consistent gravity for pendulum swing.
     grav = baseGrav;
   } else if (cluster.velocityYWorld < 0) {
-    // Rising: check for apex half-gravity, then jump-cut multiplier.
+    // Rising: check for apex float, then jump-cut multiplier.
     const absVy = -cluster.velocityYWorld; // positive magnitude
     if (
-      absVy < APEX_THRESHOLD_WORLD_PER_SEC &&
+      absVy < ov(debugSpeedOverrides.apexFloatVelocityThreshold, APEX_FLOAT_VELOCITY_THRESHOLD) &&
       world.playerJumpHeldFlag === 1
     ) {
       // Apex band: reduce gravity for a brief floaty feel at the top.
-      grav = baseGrav * APEX_GRAVITY_MULTIPLIER;
+      // Fast-fall cannot be active while rising (cleared on jump), so no guard needed here.
+      grav = baseGrav * ov(debugSpeedOverrides.apexFloatGravityMultiplier, APEX_FLOAT_GRAVITY_MULTIPLIER);
     } else if (world.playerJumpHeldFlag === 0) {
       // Jump released while rising: apply jump-cut heavy gravity.
       grav = baseGrav * JUMP_CUT_GRAVITY_MULTIPLIER;
@@ -233,13 +242,15 @@ export function tickPlayerMovement(
       grav = baseGrav;
     }
   } else {
-    // Falling: check for apex half-gravity (vy just crossed zero, near apex).
+    // Falling: check for apex float (vy just crossed zero, near apex).
+    // Fast fall overrides apex float; early jump release is already handled above.
     const absVy = cluster.velocityYWorld; // already positive when falling
     if (
-      absVy < APEX_THRESHOLD_WORLD_PER_SEC &&
-      world.playerJumpHeldFlag === 1
+      absVy < ov(debugSpeedOverrides.apexFloatVelocityThreshold, APEX_FLOAT_VELOCITY_THRESHOLD) &&
+      world.playerJumpHeldFlag === 1 &&
+      cluster.isFastFallModeFlag === 0
     ) {
-      grav = baseGrav * APEX_GRAVITY_MULTIPLIER;
+      grav = baseGrav * ov(debugSpeedOverrides.apexFloatGravityMultiplier, APEX_FLOAT_GRAVITY_MULTIPLIER);
     } else {
       grav = baseGrav;
     }
@@ -343,11 +354,33 @@ export function tickPlayerMovement(
       cluster.varJumpTimerTicks   = VAR_JUMP_TIME_TICKS;
       cluster.varJumpSpeedWorld   = -jumpSpeed;
     } else {
-      // ── Wall jump (uses wall-touch flags from the previous tick) ───
-      const canJumpFromLeft  = cluster.isTouchingWallLeftFlag  === 1
-                            && cluster.wallJumpLockoutTicks === 0;
-      const canJumpFromRight = cluster.isTouchingWallRightFlag === 1
-                            && cluster.wallJumpLockoutTicks === 0;
+      // ── Wall jump (uses wall-touch flags, grace timers, and proximity) ───
+      // Grace timers extend the window after leaving a wall (wall coyote time).
+      // Proximity check allows wall jump when slightly away from a wall face.
+      const { nearLeftDistWorld, nearRightDistWorld } = getNearbyWallForWallJump(cluster, world);
+      const proximityPx = ov(debugSpeedOverrides.wallJumpProximityPixels, WALL_JUMP_PROXIMITY_PIXELS);
+      const nearLeft  = nearLeftDistWorld  <= proximityPx;
+      const nearRight = nearRightDistWorld <= proximityPx;
+
+      let canJumpFromLeft  = (cluster.isTouchingWallLeftFlag  === 1
+                           || cluster.wallJumpGraceLeftTicks  > 0
+                           || nearLeft)
+                           && cluster.wallJumpLockoutTicks === 0;
+      let canJumpFromRight = (cluster.isTouchingWallRightFlag === 1
+                           || cluster.wallJumpGraceRightTicks > 0
+                           || nearRight)
+                           && cluster.wallJumpLockoutTicks === 0;
+
+      // When both sides are eligible, prefer the nearer wall.
+      if (canJumpFromLeft && canJumpFromRight) {
+        const leftDist  = cluster.isTouchingWallLeftFlag  === 1 ? 0 : nearLeftDistWorld;
+        const rightDist = cluster.isTouchingWallRightFlag === 1 ? 0 : nearRightDistWorld;
+        if (leftDist <= rightDist) {
+          canJumpFromRight = false;
+        } else {
+          canJumpFromLeft = false;
+        }
+      }
 
       if (canJumpFromLeft || canJumpFromRight) {
         const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, WALL_JUMP_X_SPEED_WORLD);
@@ -367,6 +400,8 @@ export function tickPlayerMovement(
         cluster.wallJumpDirX            = -wallDir; // outward direction
         cluster.isWallSlidingFlag       = 0;
         cluster.coyoteTimeTicks         = 0;
+        cluster.wallJumpGraceLeftTicks  = 0;
+        cluster.wallJumpGraceRightTicks = 0;
         cluster.hasUsedWallJumpSinceResetFlag = 1;
         if (isInitialWallJump) {
           world.wallJumpSkidDebrisBurstFlag = 1;
