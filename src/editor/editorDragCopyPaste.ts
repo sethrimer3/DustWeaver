@@ -9,7 +9,7 @@
 import {
   EditorState,
   EditorWall, EditorEnemy, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
-  EditorLightSource, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
+  EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
   SelectedElement, allocateUid, EditorRoomData,
@@ -60,6 +60,9 @@ export function storeDragStartPositions(
     } else if (el.type === 'lightSource') {
       const l = (s.roomData.lightSources ?? []).find(l2 => l2.uid === el.uid);
       if (l) positions.set(key, { xBlock: l.xBlock, yBlock: l.yBlock });
+    } else if (el.type === 'sunbeam') {
+      const sb = (s.roomData.sunbeams ?? []).find(sb2 => sb2.uid === el.uid);
+      if (sb) positions.set(key, { xBlock: sb.xBlock, yBlock: sb.yBlock });
     } else if (el.type === 'waterZone') {
       const z = (s.roomData.waterZones ?? []).find(z2 => z2.uid === el.uid);
       if (z) positions.set(key, { xBlock: z.xBlock, yBlock: z.yBlock });
@@ -144,6 +147,9 @@ export function moveSelectedElements(
     } else if (el.type === 'lightSource') {
       const l = (s.roomData.lightSources ?? []).find(l2 => l2.uid === el.uid);
       if (l) { l.xBlock = orig.xBlock + deltaX; l.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'sunbeam') {
+      const sb = (s.roomData.sunbeams ?? []).find(sb2 => sb2.uid === el.uid);
+      if (sb) { sb.xBlock = orig.xBlock + deltaX; sb.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'waterZone') {
       const z = (s.roomData.waterZones ?? []).find(z2 => z2.uid === el.uid);
       if (z) { z.xBlock = orig.xBlock + deltaX; z.yBlock = orig.yBlock + deltaY; }
@@ -211,6 +217,7 @@ export function serializeSelectedElements(
     dustPiles: EditorDustPile[];
     decorations: EditorDecoration[];
     lightSources: EditorLightSource[];
+    sunbeams: EditorSunbeam[];
     waterZones: EditorWaterZone[];
     lavaZones: EditorLavaZone[];
     crumbleBlocks: EditorCrumbleBlock[];
@@ -221,7 +228,7 @@ export function serializeSelectedElements(
     walls: [], enemies: [], saveTombs: [], skillTombs: [],
     dustContainers: [], dustContainerPieces: [], dustBoostJars: [],
     dustPiles: [],
-    decorations: [], lightSources: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
+    decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
     bouncePads: [], grasshopperAreas: [], fireflyAreas: [],
   };
   for (const el of elements) {
@@ -255,6 +262,9 @@ export function serializeSelectedElements(
     } else if (el.type === 'lightSource') {
       const l = (room.lightSources ?? []).find(l2 => l2.uid === el.uid);
       if (l) data.lightSources.push({ ...l });
+    } else if (el.type === 'sunbeam') {
+      const sb = (room.sunbeams ?? []).find(sb2 => sb2.uid === el.uid);
+      if (sb) data.sunbeams.push({ ...sb });
     } else if (el.type === 'waterZone') {
       const z = (room.waterZones ?? []).find(z2 => z2.uid === el.uid);
       if (z) data.waterZones.push({ ...z });
@@ -295,6 +305,7 @@ export function pasteFromClipboard(s: EditorState): void {
     dustPiles: EditorDustPile[];
     decorations?: EditorDecoration[];
     lightSources?: EditorLightSource[];
+    sunbeams?: EditorSunbeam[];
     waterZones?: EditorWaterZone[];
     lavaZones?: EditorLavaZone[];
     crumbleBlocks?: EditorCrumbleBlock[];
@@ -317,7 +328,7 @@ export function pasteFromClipboard(s: EditorState): void {
     ...(data.saveTombs ?? []), ...(data.skillTombs ?? []),
     ...(data.dustContainers ?? []), ...(data.dustContainerPieces ?? []), ...(data.dustBoostJars ?? []),
     ...(data.dustPiles ?? []),
-    ...(data.decorations ?? []), ...(data.lightSources ?? []),
+    ...(data.decorations ?? []), ...(data.lightSources ?? []), ...(data.sunbeams ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
     ...(data.bouncePads ?? []), ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
   ];
@@ -429,6 +440,17 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: l.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'lightSource', uid: newUid });
+  }
+  for (const sb of (data.sunbeams ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.sunbeams) s.roomData.sunbeams = [];
+    s.roomData.sunbeams.push({
+      ...sb,
+      uid: newUid,
+      xBlock: sb.xBlock - minX + offsetX,
+      yBlock: sb.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'sunbeam', uid: newUid });
   }
   for (const z of (data.waterZones ?? [])) {
     const newUid = allocateUid(s);

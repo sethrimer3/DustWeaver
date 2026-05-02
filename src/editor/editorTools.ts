@@ -9,7 +9,7 @@ const ROPE_SEGMENTS_PER_BLOCK = 1.5;
 import {
   EditorState, EditorTool, EditorRoomData, EditorWall,
   EditorTransition, SelectedElement, allocateUid,
-  PaletteItem, DecorationKind, EditorBouncePad,
+  PaletteItem, DecorationKind, EditorBouncePad, EditorSunbeam,
 } from './editorState';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
 import { MAX_ROPE_SEGMENTS } from '../sim/world';
@@ -231,6 +231,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check sunbeams (point selection at origin block).
+  for (const sb of (room.sunbeams ?? [])) {
+    if (hitTestPoint(sb.xBlock, sb.yBlock, bx, by)) {
+      return { type: 'sunbeam', uid: sb.uid };
+    }
+  }
+
   // Check water zones
   for (const z of (room.waterZones ?? [])) {
     if (hitTestZone(z, bx, by)) {
@@ -386,10 +393,27 @@ export function placeAtCursor(state: EditorState): void {
         colorG: 230,
         colorB: 180,
         brightnessPct: 100,
+        dustMoteCount: 0,
+        dustMoteSpreadBlocks: 0,
       });
       return;
     }
-    return;
+    if (item.isSunbeamItem === 1) {
+      if (!room.sunbeams) room.sunbeams = [];
+      room.sunbeams.push({
+        uid: allocateUid(state),
+        xBlock: xFloor,
+        yBlock: yFloor,
+        angleRad: Math.PI / 4,
+        widthBlocks: 3,
+        lengthBlocks: 12,
+        colorR: 255,
+        colorG: 240,
+        colorB: 200,
+        intensityPct: 50,
+      } as EditorSunbeam);
+      return;
+    }
   }
 
   // ── Liquids layer ──────────────────────────────────────────────────────
@@ -822,6 +846,17 @@ export function deleteAtCursor(state: EditorState): void {
     }
   }
 
+  // Check sunbeams.
+  const sunbeams = room.sunbeams ?? [];
+  for (let i = 0; i < sunbeams.length; i++) {
+    if (hitTestPoint(sunbeams[i].xBlock, sunbeams[i].yBlock, bx, by)) {
+      const removedUid = sunbeams[i].uid;
+      sunbeams.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
   // Check ambient-light blockers (single-cell match).
   const blockers = room.ambientLightBlockers ?? [];
   const bxFloor = Math.floor(bx);
@@ -1010,6 +1045,11 @@ export function getAllElementsInRect(
   for (const ls of (room.lightSources ?? [])) {
     if (ls.xBlock >= minX && ls.xBlock <= maxX && ls.yBlock >= minY && ls.yBlock <= maxY) {
       results.push({ type: 'lightSource', uid: ls.uid });
+    }
+  }
+  for (const sb of (room.sunbeams ?? [])) {
+    if (sb.xBlock >= minX && sb.xBlock <= maxX && sb.yBlock >= minY && sb.yBlock <= maxY) {
+      results.push({ type: 'sunbeam', uid: sb.uid });
     }
   }
   for (const b of (room.ambientLightBlockers ?? [])) {

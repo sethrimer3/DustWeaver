@@ -11,6 +11,8 @@ import { PlayerCloak } from '../render/clusters/playerCloak';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
+import { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
+import { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
@@ -382,6 +384,8 @@ export function startGameScreen(
 
     // Init dust
     environmentalDust.initFromWorld(world, room.worldNumber);
+    sunbeamRenderer.initFromRoom(room);
+    atmosphericLightDust.initFromRoom(room);
 
     // Reset procedural cloak on room transition
     playerCloak.reset();
@@ -448,6 +452,8 @@ export function startGameScreen(
   world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
   const environmentalDust = new EnvironmentalDustLayer();
+  const sunbeamRenderer = new SunbeamRenderer();
+  const atmosphericLightDust = new AtmosphericLightDust();
   const skidDebris = new SkidDebrisRenderer();
   const crumbleDebris = new CrumbleDebrisRenderer();
   const skillTombRenderer = new SkillTombRenderer();
@@ -1075,6 +1081,7 @@ export function startGameScreen(
         world.clusters.push(newSlimes[s]);
       }
       environmentalDust.update(world, FIXED_DT_MS);
+      atmosphericLightDust.update(FIXED_DT_MS);
       skidDebris.update(world, FIXED_DT_MS);
 
       // ── Crumble block debris events & ambient lighting rebuild ────────────
@@ -1286,6 +1293,7 @@ export function startGameScreen(
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+      sunbeamRenderer, atmosphericLightDust,
       world, currentRoom,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,

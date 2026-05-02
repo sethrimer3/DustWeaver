@@ -224,6 +224,27 @@ export interface RoomJsonLightSource {
   colorB: number;
   /** 0-100 percent. */
   brightnessPct: number;
+  /** Number of atmospheric dust motes near this source (0 = none). */
+  dustMoteCount?: number;
+  /** Radius (blocks) in which dust motes spawn; defaults to radiusBlocks. */
+  dustMoteSpreadBlocks?: number;
+}
+
+/** A pixel-art sunbeam authored in the editor (see {@link RoomSunbeamDef}). */
+export interface RoomJsonSunbeam {
+  xBlock: number;
+  yBlock: number;
+  /** Angle (radians) the beam travels — 0 = right, π/2 = down. */
+  angleRad: number;
+  /** Width of the beam base in blocks. */
+  widthBlocks: number;
+  /** Length of the beam shaft in blocks. */
+  lengthBlocks: number;
+  colorR: number;
+  colorG: number;
+  colorB: number;
+  /** Intensity as 0–100 percent. */
+  intensityPct: number;
 }
 
 /** A bounce pad block that reflects the player's velocity when they collide with it. */
@@ -275,6 +296,8 @@ export interface RoomJsonDef {
   ambientLightBlockers?: RoomJsonAmbientLightBlocker[];
   /** Sparse list of authored local light sources. */
   lightSources?: RoomJsonLightSource[];
+  /** Designer-placed sunbeams (see {@link RoomJsonSunbeam}). */
+  sunbeams?: RoomJsonSunbeam[];
   /**
    * Background music. Omitting or setting to '_continue' means "keep playing
    * whatever was already playing".  '_silence' stops music.

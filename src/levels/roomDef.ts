@@ -204,6 +204,33 @@ export interface RoomLightSourceDef {
   readonly colorB: number;
   /** Brightness as a percent in 0-100. 100 = full lamp, 0 = off. */
   readonly brightnessPct: number;
+  /** Number of atmospheric dust motes hovering near this source (0 = none). */
+  readonly dustMoteCount?: number;
+  /** Radius (blocks) within which dust motes spawn; defaults to radiusBlocks. */
+  readonly dustMoteSpreadBlocks?: number;
+}
+
+/**
+ * A pixel-art sunbeam authored in the editor.
+ *
+ * The beam originates at (`xBlock`, `yBlock`) and travels in `angleRad` direction,
+ * forming a tapered rectangle.  Rendered behind walls so shafts appear to pierce
+ * through openings.
+ */
+export interface RoomSunbeamDef {
+  readonly xBlock: number;
+  readonly yBlock: number;
+  /** Angle (radians) the beam travels — 0 = right, π/2 = down. */
+  readonly angleRad: number;
+  /** Width of the beam base in blocks. */
+  readonly widthBlocks: number;
+  /** Length of the beam shaft in blocks. */
+  readonly lengthBlocks: number;
+  readonly colorR: number;
+  readonly colorG: number;
+  readonly colorB: number;
+  /** Intensity as 0–100 percent (controls peak alpha). */
+  readonly intensityPct: number;
 }
 
 /** Small block size in world units (8×8 virtual px, 32×32 physical px @ 4×). */
@@ -667,6 +694,8 @@ export interface RoomDef {
   ambientLightBlockers?: readonly RoomAmbientLightBlockerDef[];
   /** Designer-placed local light sources (see {@link RoomLightSourceDef}). */
   lightSources?: readonly RoomLightSourceDef[];
+  /** Designer-placed sunbeams (see {@link RoomSunbeamDef}). */
+  sunbeams?: readonly RoomSunbeamDef[];
   /** Room width in blocks. */
   widthBlocks: number;
   /** Room height in blocks. */

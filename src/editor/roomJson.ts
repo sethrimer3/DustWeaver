@@ -17,7 +17,7 @@ import type {
   EditorRoomData, EditorEnemy, EditorTransition, EditorWall,
   EditorSaveTomb, EditorSkillTomb, EditorDustPile,
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,
-  EditorAmbientLightBlocker, EditorLightSource,
+  EditorAmbientLightBlocker, EditorLightSource, EditorSunbeam,
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorRope, RopeDestructibility,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
@@ -33,6 +33,7 @@ import type {
   RoomJsonWall,
   RoomJsonTransition,
   RoomJsonAmbientLightBlocker,
+  RoomJsonLightSource,
   RoomJsonRope,
   ValidationError,
 } from './roomJsonSchema';
@@ -62,6 +63,7 @@ export type {
   RoomJsonDecoration,
   RoomJsonAmbientLightBlocker,
   RoomJsonLightSource,
+  RoomJsonSunbeam,
 } from './roomJsonSchema';
 
 export function validateRoomJson(data: unknown): ValidationError[] {
@@ -306,6 +308,21 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     colorG: l.colorG,
     colorB: l.colorB,
     brightnessPct: l.brightnessPct,
+    dustMoteCount: l.dustMoteCount ?? 0,
+    dustMoteSpreadBlocks: l.dustMoteSpreadBlocks ?? 0,
+  }));
+
+  const sunbeams: EditorSunbeam[] = (json.sunbeams ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    angleRad: s.angleRad,
+    widthBlocks: s.widthBlocks,
+    lengthBlocks: s.lengthBlocks,
+    colorR: s.colorR,
+    colorG: s.colorG,
+    colorB: s.colorB,
+    intensityPct: s.intensityPct,
   }));
 
   const waterZones: EditorWaterZone[] = (json.waterZones ?? []).map(z => ({
@@ -391,6 +408,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       crumbleBlocks,
       bouncePads,
       ropes,
+      sunbeams,
     },
     nextUid: uid,
   };
@@ -547,14 +565,32 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     });
   }
   if ((data.lightSources ?? []).length > 0) {
-    json.lightSources = data.lightSources.map(l => ({
-      xBlock: l.xBlock,
-      yBlock: l.yBlock,
-      radiusBlocks: l.radiusBlocks,
-      colorR: l.colorR,
-      colorG: l.colorG,
-      colorB: l.colorB,
-      brightnessPct: l.brightnessPct,
+    json.lightSources = data.lightSources.map(l => {
+      const entry: RoomJsonLightSource = {
+        xBlock: l.xBlock,
+        yBlock: l.yBlock,
+        radiusBlocks: l.radiusBlocks,
+        colorR: l.colorR,
+        colorG: l.colorG,
+        colorB: l.colorB,
+        brightnessPct: l.brightnessPct,
+      };
+      if (l.dustMoteCount > 0) entry.dustMoteCount = l.dustMoteCount;
+      if (l.dustMoteSpreadBlocks > 0) entry.dustMoteSpreadBlocks = l.dustMoteSpreadBlocks;
+      return entry;
+    });
+  }
+  if ((data.sunbeams ?? []).length > 0) {
+    json.sunbeams = (data.sunbeams ?? []).map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      angleRad: s.angleRad,
+      widthBlocks: s.widthBlocks,
+      lengthBlocks: s.lengthBlocks,
+      colorR: s.colorR,
+      colorG: s.colorG,
+      colorB: s.colorB,
+      intensityPct: s.intensityPct,
     }));
   }
   if ((data.waterZones ?? []).length > 0) {
@@ -830,6 +866,19 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       colorG: l.colorG,
       colorB: l.colorB,
       brightnessPct: l.brightnessPct,
+      dustMoteCount: l.dustMoteCount ?? 0,
+      dustMoteSpreadBlocks: l.dustMoteSpreadBlocks ?? 0,
+    })),
+    sunbeams: (data.sunbeams ?? []).map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      angleRad: s.angleRad,
+      widthBlocks: s.widthBlocks,
+      lengthBlocks: s.lengthBlocks,
+      colorR: s.colorR,
+      colorG: s.colorG,
+      colorB: s.colorB,
+      intensityPct: s.intensityPct,
     })),
     waterZones: (data.waterZones ?? []).map(z => ({
       xBlock: z.xBlock,
@@ -1030,6 +1079,21 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     colorG: l.colorG,
     colorB: l.colorB,
     brightnessPct: l.brightnessPct,
+    dustMoteCount: l.dustMoteCount ?? 0,
+    dustMoteSpreadBlocks: l.dustMoteSpreadBlocks ?? 0,
+  }));
+
+  const sunbeams: EditorSunbeam[] = (room.sunbeams ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    angleRad: s.angleRad,
+    widthBlocks: s.widthBlocks,
+    lengthBlocks: s.lengthBlocks,
+    colorR: s.colorR,
+    colorG: s.colorG,
+    colorB: s.colorB,
+    intensityPct: s.intensityPct,
   }));
 
   const waterZones: EditorWaterZone[] = (room.waterZones ?? []).map(z => ({
@@ -1104,6 +1168,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       lavaZones,
       crumbleBlocks,
       ropes,
+      sunbeams,
     },
     nextUid: uid,
   };

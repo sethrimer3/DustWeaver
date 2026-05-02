@@ -30,6 +30,8 @@ import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
+import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
+import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import {
   isTheroShowcaseRoom,
   renderTheroShowcaseEffect,
@@ -109,6 +111,10 @@ export interface RenderFrameContext {
   arrowWeaveRenderer: ArrowWeaveRenderer;
   /** Shield Sword Weave renderer — golden-crossguard sword and slash trail. */
   swordWeaveRenderer: SwordWeaveRenderer;
+  /** Pixel-art atmospheric sunbeam shafts. */
+  sunbeamRenderer: SunbeamRenderer;
+  /** Floating dust motes near local light sources. */
+  atmosphericLightDust: AtmosphericLightDust;
   /** Decoration sway state for push-wave animation driven by entity velocity. */
   decorationWaveState: DecorationWaveState;
 
@@ -182,6 +188,7 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+    sunbeamRenderer, atmosphericLightDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -271,6 +278,9 @@ export function renderFrame(r: RenderFrameContext): void {
     );
   }
 
+  // ── Sunbeams (light shafts behind walls) ────────────────────────────────
+  sunbeamRenderer.render(ctx, ox, oy, zoom, nowMs);
+
   // Walls before cluster indicators so clusters are drawn on top
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
@@ -332,6 +342,7 @@ export function renderFrame(r: RenderFrameContext): void {
   drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
 
   environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
+  atmosphericLightDust.render(ctx, ox, oy, zoom);
   skidDebris.render(ctx, ox, oy, zoom);
   crumbleDebris.render(ctx, ox, oy, zoom);
 
