@@ -722,8 +722,14 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
           // Scale velocity so the integration moves exactly `dist` this tick.
           player.velocityXWorld = dx * invDist * (dist / dtSec);
           player.velocityYWorld = dy * invDist * (dist / dtSec);
-          resolveClusterSolidWallCollision(player, world, oldX, oldY, dtSec, false);
+          const arrivalCollision = resolveClusterSolidWallCollision(player, world, oldX, oldY, dtSec, false);
           resolveClusterFloorCollision(player, world);
+          // If the player hit a bounce pad during the arrival sweep, launch them
+          // away with the reflected zip velocity and release the grapple.
+          if (arrivalCollision.bouncedX || arrivalCollision.bouncedY) {
+            releaseGrapple(world, false);
+            return;
+          }
           // Restore full zip velocity for momentum-on-release and stuck decel.
           player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
           player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
@@ -740,8 +746,16 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         const oldY = player.positionYWorld;
         player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
         player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
-        resolveClusterSolidWallCollision(player, world, oldX, oldY, dtSec, false);
+        const zipCollision = resolveClusterSolidWallCollision(player, world, oldX, oldY, dtSec, false);
         resolveClusterFloorCollision(player, world);
+        // If the player hit a bounce pad, the velocity has already been reflected
+        // by the collision resolver (pre-impact velocity = zip speed). Release
+        // the grapple so the reflected velocity carries the player away instead
+        // of the zip overriding it on the next tick.
+        if (zipCollision.bouncedX || zipCollision.bouncedY) {
+          releaseGrapple(world, false);
+          return;
+        }
         // Velocity after collision correctly reflects the post-contact direction
         // (zeroed on the blocked axis, preserved on the unblocked axis).
       }
@@ -912,9 +926,16 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     // axis-separated sub-stepped sweep as normal movement, so the snap cannot
     // carry the player through solid geometry.  If a wall obstructs the path
     // the player stops at the wall face rather than being clipped inside it.
-    // The helper restores the caller's velocity, so the radial-removal below
-    // still acts on the correct swing momentum.
-    moveClusterByDelta(player, world, deltaX, deltaY, false, dtSec);
+    // If a bounce pad is contacted, moveClusterByDelta applies the reflected
+    // real velocity (based on the swing momentum, not the snap delta), and we
+    // release the grapple so the player travels with the bounce trajectory.
+    const snapResult = moveClusterByDelta(player, world, deltaX, deltaY, false, dtSec);
+    if (snapResult.bounced) {
+      // Reflected swing velocity is already on the player cluster (applied by
+      // moveClusterByDelta).  Release the grapple so normal movement takes over.
+      releaseGrapple(world, false);
+      return;
+    }
 
     // Remove outward velocity component (rope can only pull — never push).
     // Use the pre-snap nx/ny direction; the position change is a small
