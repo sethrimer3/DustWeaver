@@ -14,6 +14,7 @@ import {
   FADE_COLOR_OPTIONS,
   CRUMBLE_VARIANT_OPTIONS,
   ROPE_DESTRUCTIBILITY_OPTIONS,
+  ROPE_THICKNESS_OPTIONS,
   DUST_KIND_OPTIONS,
 } from './editorState';
 import {
@@ -394,6 +395,10 @@ export function updateInspector(
         ROPE_DESTRUCTIBILITY_OPTIONS.map(o => ({ label: o.label, value: o.id })),
         rope.destructibility,
         v => callbacks?.onPropertyChange('rope.destructibility', v));
+      addSelect(div, 'thickness',
+        ROPE_THICKNESS_OPTIONS.map(o => ({ label: o.label, value: String(o.id) })),
+        String(rope.thicknessIndex ?? 0),
+        v => callbacks?.onPropertyChange('rope.thicknessIndex', parseInt(v)));
       addCheckbox(div, 'anchorBFixed', rope.isAnchorBFixedFlag === 1,
         v => callbacks?.onPropertyChange('rope.isAnchorBFixedFlag', v ? 1 : 0));
     }

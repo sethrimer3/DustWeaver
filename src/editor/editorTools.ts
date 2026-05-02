@@ -29,6 +29,92 @@ function hitTestPoint(xBlock: number, yBlock: number, bx: number, by: number): b
   return Math.abs(bx - xBlock) < 1.5 && Math.abs(by - yBlock) < 1.5;
 }
 
+/**
+ * Returns true if the straight line from (ax, ay) to (bx, by) in block
+ * coordinates intersects any solid interior wall in the room.
+ *
+ * Uses a segment-vs-AABB test: project the segment onto each wall's bounding
+ * box using the separating-axis theorem in 2D.
+ */
+export function ropeLineCrossesWall(
+  room: EditorRoomData,
+  axBlock: number,
+  ayBlock: number,
+  bxBlock: number,
+  byBlock: number,
+): boolean {
+  for (const w of room.interiorWalls) {
+    // Wall AABB in block space
+    const wl = w.xBlock;
+    const wr = w.xBlock + w.wBlock;
+    const wt = w.yBlock;
+    const wb = w.yBlock + w.hBlock;
+
+    // Segment direction
+    const sdx = bxBlock - axBlock;
+    const sdy = byBlock - ayBlock;
+
+    // Offset from wall min corner to segment start
+    const dx = axBlock - wl;
+    const dy = ayBlock - wt;
+    const ww = wr - wl;
+    const wh = wb - wt;
+
+    // We use the parametric clipping approach (Liang-Barsky for AABB).
+    // Segment: P = A + t*(B-A),  t in [0,1].
+    // For AABB [wl,wr] x [wt,wb]: find t intervals where P is inside.
+    let t0 = 0.0;
+    let t1 = 1.0;
+
+    // X axis
+    if (Math.abs(sdx) < 1e-9) {
+      // Parallel to X — outside if start X is outside wall X range
+      if (axBlock < wl || axBlock > wr) continue;
+    } else {
+      const invDx = 1.0 / sdx;
+      let tNear = (wl - axBlock) * invDx;
+      let tFar  = (wr - axBlock) * invDx;
+      if (tNear > tFar) { const tmp = tNear; tNear = tFar; tFar = tmp; }
+      t0 = Math.max(t0, tNear);
+      t1 = Math.min(t1, tFar);
+      if (t0 > t1) continue;
+    }
+
+    // Y axis
+    if (Math.abs(sdy) < 1e-9) {
+      if (ayBlock < wt || ayBlock > wb) continue;
+    } else {
+      const invDy = 1.0 / sdy;
+      let tNear = (wt - ayBlock) * invDy;
+      let tFar  = (wb - ayBlock) * invDy;
+      if (tNear > tFar) { const tmp = tNear; tNear = tFar; tFar = tmp; }
+      t0 = Math.max(t0, tNear);
+      t1 = Math.min(t1, tFar);
+      if (t0 > t1) continue;
+    }
+
+    // Suppress unused variable warnings
+    void dx; void dy; void ww; void wh;
+
+    // Overlap found in [t0, t1] — segment crosses this wall
+    return true;
+  }
+
+  // Also check room boundary: rope cannot extend outside the room
+  const roomLeft  = 0;
+  const roomRight = room.widthBlocks;
+  const roomTop   = 0;
+  const roomBot   = room.heightBlocks;
+  if (
+    axBlock < roomLeft || axBlock > roomRight || ayBlock < roomTop || ayBlock > roomBot ||
+    bxBlock < roomLeft || bxBlock > roomRight || byBlock < roomTop || byBlock > roomBot
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function hitTestTransition(t: EditorTransition, bx: number, by: number, roomData: EditorRoomData): boolean {
   const DEPTH = 6;
   if (t.direction === 'left' || t.direction === 'right') {
@@ -575,7 +661,9 @@ export function placeAtCursor(state: EditorState): void {
       const dx = bx - ax;
       const dy = by - ay;
       const lenBlocks = Math.sqrt(dx * dx + dy * dy);
-      if (lenBlocks > MIN_ROPE_LENGTH_BLOCKS) {
+      const isValid = lenBlocks > MIN_ROPE_LENGTH_BLOCKS
+        && !ropeLineCrossesWall(room, ax, ay, bx, by);
+      if (isValid) {
         if (!room.ropes) room.ropes = [];
         room.ropes.push({
           uid: allocateUid(state),
@@ -584,8 +672,10 @@ export function placeAtCursor(state: EditorState): void {
           anchorBXBlock: bx,
           anchorBYBlock: by,
           segmentCount: Math.max(2, Math.min(Math.round(lenBlocks * ROPE_SEGMENTS_PER_BLOCK), MAX_ROPE_SEGMENTS)),
-          isAnchorBFixedFlag: 0,
+          // Default: both anchors fixed — creates a bridge rope between two points.
+          isAnchorBFixedFlag: 1,
           destructibility: 'indestructible',
+          thicknessIndex: 0,
         });
       }
       state.pendingRopeAnchorXBlock = null;

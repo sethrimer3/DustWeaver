@@ -352,8 +352,9 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     anchorBXBlock: r.abx,
     anchorBYBlock: r.aby,
     segmentCount: r.segs ?? DEFAULT_ROPE_SEGMENT_COUNT,
-    isAnchorBFixedFlag: (r.fixed === true ? 1 : 0) as 0 | 1,
+    isAnchorBFixedFlag: (r.fixed !== false ? 1 : 0) as 0 | 1,
     destructibility: (r.destr ?? 'indestructible') as RopeDestructibility,
+    thicknessIndex: (r.thick === 1 ? 1 : r.thick === 2 ? 2 : 0) as 0 | 1 | 2,
   }));
 
   return {
@@ -611,8 +612,9 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         aby: r.anchorBYBlock,
       };
       if (r.segmentCount !== DEFAULT_ROPE_SEGMENT_COUNT) entry.segs = r.segmentCount;
-      if (r.isAnchorBFixedFlag === 1) entry.fixed = true;
+      if (r.isAnchorBFixedFlag === 0) entry.fixed = false;
       if (r.destructibility !== 'indestructible') entry.destr = r.destructibility;
+      if (r.thicknessIndex !== 0) entry.thick = r.thicknessIndex;
       return entry;
     });
   }
@@ -866,6 +868,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       segmentCount: r.segmentCount,
       isAnchorBFixed: r.isAnchorBFixedFlag === 1,
       destructibility: r.destructibility,
+      thicknessIndex: r.thicknessIndex,
     })),
   };
 }
@@ -1063,8 +1066,9 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     anchorBXBlock: r.anchorBXBlock,
     anchorBYBlock: r.anchorBYBlock,
     segmentCount: r.segmentCount ?? DEFAULT_ROPE_SEGMENT_COUNT,
-    isAnchorBFixedFlag: (r.isAnchorBFixed === true ? 1 : 0) as 0 | 1,
+    isAnchorBFixedFlag: (r.isAnchorBFixed !== false ? 1 : 0) as 0 | 1,
     destructibility: r.destructibility ?? 'indestructible',
+    thicknessIndex: (r.thicknessIndex ?? 0) as 0 | 1 | 2,
   }));
 
   return {

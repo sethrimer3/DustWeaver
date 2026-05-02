@@ -382,6 +382,8 @@ export interface WorldSnapshot {
   readonly ropeCount: number;
   /** Number of segments per rope. Shared view into WorldState buffer. */
   readonly ropeSegmentCount: Uint8Array;
+  /** Per-rope collision and visual half-thickness (world units). Shared view. */
+  readonly ropeHalfThickWorld: Float32Array;
   /** Verlet node X positions (shared view). */
   readonly ropeSegPosXWorld: Float32Array;
   /** Verlet node Y positions (shared view). */

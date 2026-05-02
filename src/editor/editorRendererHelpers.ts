@@ -60,6 +60,7 @@ export const ROPE_COLOR = 'rgba(180, 140, 80, 0.7)';
 export const ROPE_SELECTED = 'rgba(220, 180, 100, 0.95)';
 export const ROPE_PREVIEW_COLOR = 'rgba(180, 140, 80, 0.4)';
 export const ROPE_ANCHOR_COLOR = 'rgba(255, 200, 100, 0.9)';
+export const ROPE_INVALID_COLOR = 'rgba(255, 60, 60, 0.55)';
 
 /**
  * Crack-line stroke color for each crumble block variant.

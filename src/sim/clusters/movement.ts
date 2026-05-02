@@ -71,6 +71,7 @@ import {
   resolveClusterSolidWallCollision,
   resolveRampSurfaces,
 } from './movementCollision';
+import { resolvePlayerRopeCollisions } from '../ropes/ropeCollision';
 
 export { debugSpeedOverrides, PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER };
 
@@ -213,7 +214,14 @@ export function applyClusterMovement(world: WorldState): void {
 
       // Thin platform / world floor check (position already integrated by solid wall resolver)
       const thinLanded  = resolveClusterFloorCollision(cluster, world);
-      const justLanded  = thinLanded || thickLanded || rampLanded;
+
+      // Rope collision — player can stand on and collide with rope capsules.
+      // prevY from before integration is used for directional landing detection.
+      if (cluster.isPlayerFlag === 1) {
+        resolvePlayerRopeCollisions(cluster, world, prevY);
+      }
+
+      const justLanded  = thinLanded || thickLanded || rampLanded || cluster.isGroundedFlag === 1;
 
       if (cluster.isPlayerFlag === 1) {
         // ── Wall slide: cap downward velocity when pressing into a wall ─────

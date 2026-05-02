@@ -245,6 +245,8 @@ export interface RoomJsonRope {
   segs?: number;
   fixed?: boolean;
   destr?: string;
+  /** Thickness index: 0=8 px, 1=16 px, 2=24 px.  Omitted when 0 (default). */
+  thick?: number;
 }
 
 export interface RoomJsonDef {

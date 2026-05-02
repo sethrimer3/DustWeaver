@@ -8,6 +8,9 @@
  * Integration uses a simple position-Verlet scheme:
  *   newPos = 2·pos - prevPos + gravity·dt²
  * Constraints are relaxed ROPE_CONSTRAINT_ITERATIONS times per tick.
+ *
+ * Wall collision: after each constraint pass, non-pinned segments are pushed
+ * out of solid wall AABBs using the segment's half-thickness radius.
  */
 
 import { WorldState, MAX_ROPE_SEGMENTS } from '../world';
@@ -21,6 +24,63 @@ const ROPE_GRAVITY_WORLD_PER_SEC2 = 320.0;
 /** Small epsilon to avoid division by zero in constraint resolution. */
 const ROPE_LENGTH_EPSILON = 0.001;
 
+/**
+ * Number of synthetic ticks used to pre-settle ropes into their natural
+ * sagged position at room load time.  At 60 fps, 180 ticks = ~3 seconds
+ * of simulation time — sufficient for most rope configurations to reach
+ * a stable resting catenary without visible fall-in on first render.
+ */
+const ROPE_PRESIMULATE_TICKS = 180;
+
+/** Simulated dt (seconds) used during pre-settling. */
+const ROPE_PRESIMULATE_DT_SEC = 1.0 / 60.0;
+
+/**
+ * Pushes a single non-pinned rope node out of any overlapping solid wall.
+ * Treats the node as a circle of radius `halfThick` and finds the minimum
+ * penetration axis to resolve the overlap.
+ */
+function pushNodeOutOfWalls(
+  world: WorldState,
+  idx: number,
+  halfThick: number,
+): void {
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const wallLeft   = world.wallXWorld[wi];
+    const wallTop    = world.wallYWorld[wi];
+    const wallRight  = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop  + world.wallHWorld[wi];
+
+    const nx = world.ropeSegPosXWorld[idx];
+    const ny = world.ropeSegPosYWorld[idx];
+
+    // Expanded AABB by halfThick
+    if (nx < wallLeft   - halfThick) continue;
+    if (nx > wallRight  + halfThick) continue;
+    if (ny < wallTop    - halfThick) continue;
+    if (ny > wallBottom + halfThick) continue;
+
+    // Closest point on AABB to node center
+    const cpx = Math.max(wallLeft, Math.min(wallRight,  nx));
+    const cpy = Math.max(wallTop,  Math.min(wallBottom, ny));
+    const dx = nx - cpx;
+    const dy = ny - cpy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist >= halfThick) continue; // No overlap
+
+    if (dist < ROPE_LENGTH_EPSILON) {
+      // Node is exactly on wall surface — push up by halfThick
+      world.ropeSegPosXWorld[idx] = nx;
+      world.ropeSegPosYWorld[idx] = wallTop - halfThick;
+    } else {
+      const pen = halfThick - dist;
+      world.ropeSegPosXWorld[idx] = nx + (dx / dist) * pen;
+      world.ropeSegPosYWorld[idx] = ny + (dy / dist) * pen;
+    }
+  }
+}
+
 export function tickRopes(world: WorldState): void {
   if (world.ropeCount === 0) return;
 
@@ -33,6 +93,7 @@ export function tickRopes(world: WorldState): void {
     if (segCount < 2) continue;
     const base = r * MAX_ROPE_SEGMENTS;
     const restLen = world.ropeSegRestLenWorld[r];
+    const halfThick = world.ropeHalfThickWorld[r];
 
     // ── Verlet integration (skip segment 0 — always anchored) ───────────
     for (let s = 1; s < segCount; s++) {
@@ -91,6 +152,54 @@ export function tickRopes(world: WorldState): void {
         world.ropeSegPosXWorld[lastIdx] = world.ropeAnchorBXWorld[r];
         world.ropeSegPosYWorld[lastIdx] = world.ropeAnchorBYWorld[r];
       }
+
+      // ── Wall collision for non-pinned segments ─────────────────────────
+      if (world.wallCount > 0 && halfThick > 0) {
+        // Segment 0 (anchor A) is always pinned — skip.
+        // Segment (segCount-1) skipped only if anchor B is also pinned.
+        const lastFree = world.ropeIsAnchorBFixedFlag[r] === 1 ? segCount - 2 : segCount - 1;
+        for (let s = 1; s <= lastFree; s++) {
+          pushNodeOutOfWalls(world, base + s, halfThick);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Pre-settles all ropes into their natural sagged resting position.
+ *
+ * Runs ROPE_PRESIMULATE_TICKS iterations using a fixed dt of 1/60 s so that
+ * when the room first renders, ropes appear already hanging under gravity
+ * rather than falling from a straight-line initial state.
+ *
+ * This is called once per room load (after initRopeSegments).  It is
+ * deterministic: given the same room geometry the settled shape is identical
+ * every time the room is entered.
+ */
+export function presettleRopes(world: WorldState): void {
+  if (world.ropeCount === 0) return;
+
+  // Temporarily override dtMs for the pre-simulation
+  const savedDtMs = world.dtMs;
+  world.dtMs = ROPE_PRESIMULATE_DT_SEC * 1000.0;
+
+  for (let i = 0; i < ROPE_PRESIMULATE_TICKS; i++) {
+    tickRopes(world);
+  }
+
+  // Restore the original dtMs
+  world.dtMs = savedDtMs;
+
+  // Sync prev positions to current so that Verlet integration on the first
+  // real tick starts with zero initial velocity (settled position).
+  for (let r = 0; r < world.ropeCount; r++) {
+    const segCount = world.ropeSegmentCount[r];
+    const base = r * MAX_ROPE_SEGMENTS;
+    for (let s = 0; s < segCount; s++) {
+      const idx = base + s;
+      world.ropeSegPrevXWorld[idx] = world.ropeSegPosXWorld[idx];
+      world.ropeSegPrevYWorld[idx] = world.ropeSegPosYWorld[idx];
     }
   }
 }

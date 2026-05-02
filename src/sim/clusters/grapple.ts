@@ -69,7 +69,7 @@
  * grapple active state.
  */
 
-import { WorldState } from '../world';
+import { WorldState, MAX_ROPE_SEGMENTS } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
@@ -274,6 +274,56 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const dirY = dy * invDist;
   const effectiveRangeWorld = getEffectiveGrappleRangeWorld(world);
   const maxCastDist = Math.min(dist, effectiveRangeWorld);
+
+  // ── Check rope segments first — ropes take priority over walls ──────────
+  const ropeHit = raycastRopeSegments(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
+  if (ropeHit !== null) {
+    const ropeDist = ropeHit.distWorld;
+    if (ropeDist >= GRAPPLE_MIN_LENGTH_WORLD) {
+      if (world.isGrappleMissActiveFlag === 1) cancelGrappleMiss(world);
+      world.grappleAnchorXWorld = ropeHit.hitX;
+      world.grappleAnchorYWorld = ropeHit.hitY;
+      world.grappleLengthWorld  = ropeDist;
+      world.grapplePullInAmountWorld = 0.0;
+      world.grappleJumpHeldTickCount = 0;
+      world.playerJumpTriggeredFlag = 0;
+      world.isGrappleActiveFlag = 1;
+      world.isGrappleZipActiveFlag = 0;
+      world.isGrappleStuckFlag = 0;
+      world.grappleStuckStoppedTickCount = 0;
+      world.grappleProximityBounceTicksLeft = 0;
+      world.grappleProximityBounceRotationAngleRad = 0;
+      world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
+      world.grappleAttachFxXWorld = ropeHit.hitX;
+      world.grappleAttachFxYWorld = ropeHit.hitY;
+      player.isFastFallModeFlag = 0;
+      world.hasGrappleChargeFlag = 0;
+      // Track which rope segment we're attached to so the anchor moves with rope
+      world.grappleRopeIndex = ropeHit.ropeIndex;
+      world.grappleRopeAttachSegF = ropeHit.segF;
+      // Activate chain particles
+      if (world.grappleParticleStartIndex >= 0) {
+        const start = world.grappleParticleStartIndex;
+        const chainProfile = getElementProfile(ParticleKind.Gold);
+        for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+          const idx = start + i;
+          world.isAliveFlag[idx]        = 1;
+          world.ageTicks[idx]           = 0.0;
+          world.lifetimeTicks[idx]      = GRAPPLE_CHAIN_LIFETIME_TICKS;
+          world.kindBuffer[idx]         = ParticleKind.Gold;
+          world.ownerEntityId[idx]      = playerEntityId;
+          world.behaviorMode[idx]       = BEHAVIOR_MODE_GRAPPLE_CHAIN;
+          world.isTransientFlag[idx]    = 1;
+          world.particleDurability[idx] = chainProfile.toughness;
+          world.respawnDelayTicks[idx]  = 0;
+          world.velocityXWorld[idx]     = 0.0;
+          world.velocityYWorld[idx]     = 0.0;
+        }
+      }
+      return;
+    }
+  }
+
   const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
 
   if (hit === null) {
@@ -458,6 +508,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   world.grappleOutOfRangeTicks = 0;
   world.grappleTensionFactor = 0;
   world.playerDownLastPressTick = 0; // reset double-tap state on release
+  world.grappleRopeIndex = -1; // detach from rope segment (if any)
 
   if (shouldRetractFromActiveGrapple || shouldRetractFromMiss) {
     startGrappleRetract(world);
@@ -892,5 +943,146 @@ export function updateGrappleChainParticles(world: WorldState): void {
     world.forceX[idx]         = 0.0;
     world.forceY[idx]         = 0.0;
   }
+}
+
+// ── Rope segment grapple support ─────────────────────────────────────────────
+
+/** Small epsilon for rope-segment raycast distance comparisons. */
+const ROPE_RAYCAST_EPSILON = 0.001;
+
+interface RopeHitResult {
+  /** World X of the hit point on the rope capsule surface. */
+  hitX: number;
+  /** World Y of the hit point on the rope capsule surface. */
+  hitY: number;
+  /** Travel distance from ray origin to hit point. */
+  distWorld: number;
+  /** Index of the rope that was hit. */
+  ropeIndex: number;
+  /** Float segment index (e.g. 2.7 = 70 % along segment 2→3). */
+  segF: number;
+}
+
+/**
+ * Casts a ray from (ox, oy) in direction (dirX, dirY) and tests it against
+ * all rope capsule chains.  Returns the nearest hit within maxDist, or null.
+ *
+ * Each rope segment is modelled as a capsule (cylinder with hemispherical caps)
+ * of radius ropeHalfThickWorld.  The 2D ray-vs-capsule test used here is:
+ *   1. Ray vs. infinite cylinder (line segment) → two potential entry/exit t values.
+ *   2. Clamp t to [0, 1] along the segment and keep the closest entry.
+ *   3. Take the minimum across all segments.
+ */
+export function raycastRopeSegments(
+  world: WorldState,
+  ox: number,
+  oy: number,
+  dirX: number,
+  dirY: number,
+  maxDist: number,
+): RopeHitResult | null {
+  let bestDist = maxDist;
+  let bestResult: RopeHitResult | null = null;
+
+  for (let r = 0; r < world.ropeCount; r++) {
+    const segCount = world.ropeSegmentCount[r];
+    if (segCount < 2) continue;
+    const halfThick = world.ropeHalfThickWorld[r];
+    const base = r * MAX_ROPE_SEGMENTS;
+
+    for (let s = 0; s < segCount - 1; s++) {
+      const ax = world.ropeSegPosXWorld[base + s];
+      const ay = world.ropeSegPosYWorld[base + s];
+      const bx = world.ropeSegPosXWorld[base + s + 1];
+      const by = world.ropeSegPosYWorld[base + s + 1];
+
+      // Ray-vs-capsule: decompose into ray-vs-cylinder + ray-vs-sphere caps.
+      // Use the 2D infinite cylinder approach:
+      //   Segment direction: S = (bx-ax, by-ay)
+      //   Ray relative to segment start: dRay = (ox-ax, oy-ay)
+      //   Solve: |dRay + t·dir - u·S|² = R² for t (ray parameter) and u ∈ [0,1]
+      // Simplification: find t by minimising distance from ray to segment.
+      const segDx = bx - ax;
+      const segDy = by - ay;
+      const rdx = ox - ax;
+      const rdy = oy - ay;
+
+      // Closest point on ray to closest point on segment.
+      const segLenSq = segDx * segDx + segDy * segDy;
+      if (segLenSq < ROPE_RAYCAST_EPSILON) continue;
+
+      // Project ray onto plane perpendicular to segment direction.
+      // This reduces to a 2D ray-vs-circle in the plane perpendicular to S.
+      // For gameplay purposes, we use a simpler sphere-based approximation:
+      // test the ray against a sphere at the closest point on the segment.
+      const t_seg = Math.max(0.0, Math.min(1.0,
+        (rdx * segDx + rdy * segDy) / segLenSq,
+      ));
+      const cpx = ax + t_seg * segDx - ox;
+      const cpy = ay + t_seg * segDy - oy;
+
+      // Closest point on segment to ray line (perpendicular dist):
+      // project cp onto ray direction
+      const cpDotDir = cpx * dirX + cpy * dirY;
+      const perpX = cpx - cpDotDir * dirX;
+      const perpY = cpy - cpDotDir * dirY;
+      const perpDistSq = perpX * perpX + perpY * perpY;
+
+      if (perpDistSq > halfThick * halfThick) continue;
+
+      // Ray hits the capsule — compute entry t along ray.
+      const offset = Math.sqrt(halfThick * halfThick - perpDistSq);
+      const tEntry = cpDotDir - offset;
+
+      if (tEntry < ROPE_RAYCAST_EPSILON || tEntry >= bestDist) continue;
+
+      // Valid hit
+      bestDist = tEntry;
+      bestResult = {
+        hitX:       ox + dirX * tEntry,
+        hitY:       oy + dirY * tEntry,
+        distWorld:  tEntry,
+        ropeIndex:  r,
+        segF:       s + t_seg,
+      };
+    }
+  }
+
+  return bestResult;
+}
+
+/**
+ * Updates the grapple anchor world position from the moving rope segment it is
+ * attached to.  Called once per tick (after tickRopes) when grappleRopeIndex >= 0.
+ *
+ * This keeps the grapple anchor point moving with the rope as it sways,
+ * so the player swings naturally from the dynamic rope segment position.
+ */
+export function updateGrappleRopeAnchor(world: WorldState): void {
+  if (world.grappleRopeIndex < 0) return;
+  if (world.isGrappleActiveFlag === 0) {
+    world.grappleRopeIndex = -1;
+    return;
+  }
+
+  const r = world.grappleRopeIndex;
+  if (r >= world.ropeCount) {
+    world.grappleRopeIndex = -1;
+    return;
+  }
+
+  const segCount = world.ropeSegmentCount[r];
+  const base = r * MAX_ROPE_SEGMENTS;
+  const segF = world.grappleRopeAttachSegF;
+  const si = Math.min(Math.floor(segF), segCount - 2);
+  const frac = segF - si;
+
+  const ax = world.ropeSegPosXWorld[base + si];
+  const ay = world.ropeSegPosYWorld[base + si];
+  const bx = world.ropeSegPosXWorld[base + si + 1];
+  const by = world.ropeSegPosYWorld[base + si + 1];
+
+  world.grappleAnchorXWorld = ax + (bx - ax) * frac;
+  world.grappleAnchorYWorld = ay + (by - ay) * frac;
 }
 

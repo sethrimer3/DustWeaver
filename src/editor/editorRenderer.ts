@@ -7,7 +7,7 @@
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import type { EditorState, EditorWall } from './editorState';
 import { EditorTool } from './editorState';
-import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow } from './editorTools';
+import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow, ropeLineCrossesWall } from './editorTools';
 import {
   WALL_HIGHLIGHT, WALL_SELECTED,
   PLATFORM_HIGHLIGHT, PLATFORM_SELECTED,
@@ -24,7 +24,7 @@ import {
   CURSOR_COLOR, SELECTION_BOX_COLOR, SELECTION_BOX_BORDER,
   GRASSHOPPER_COLOR, GRASSHOPPER_SELECTED,
   FIREFLY_COLOR, FIREFLY_SELECTED,
-  ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR,
+  ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR, ROPE_INVALID_COLOR,
   CRUMBLE_VARIANT_CRACK_COLOR,
   SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
   SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
@@ -455,13 +455,22 @@ export function renderEditorOverlays(
     const ay = state.pendingRopeAnchorYBlock! * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     const bx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const by = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const isBlocked = ropeLineCrossesWall(
+      room,
+      state.pendingRopeAnchorXBlock!,
+      state.pendingRopeAnchorYBlock!,
+      state.cursorBlockX,
+      state.cursorBlockY,
+    );
+    const previewStroke = isBlocked ? ROPE_INVALID_COLOR : ROPE_PREVIEW_COLOR;
+    const previewAnchor = isBlocked ? 'rgba(255, 100, 100, 0.7)' : ROPE_ANCHOR_COLOR;
     ctx.save();
-    ctx.strokeStyle = ROPE_PREVIEW_COLOR;
+    ctx.strokeStyle = previewStroke;
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 3]);
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = ROPE_ANCHOR_COLOR;
+    ctx.fillStyle = previewAnchor;
     ctx.globalAlpha = 0.7;
     ctx.beginPath(); ctx.arc(ax, ay, 3, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
