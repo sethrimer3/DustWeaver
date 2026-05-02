@@ -87,6 +87,18 @@ export interface ClusterState {
    * Reset points: touching ground or attaching a grapple.
    */
   hasUsedWallJumpSinceResetFlag: 0 | 1;
+  /**
+   * Grace timer for the left wall.  Set to WALL_JUMP_GRACE_TICKS when the
+   * player leaves a left-wall contact; while > 0 a wall jump off the left
+   * wall is still allowed (wall coyote time).
+   */
+  wallJumpGraceLeftTicks: number;
+  /**
+   * Grace timer for the right wall.  Set to WALL_JUMP_GRACE_TICKS when the
+   * player leaves a right-wall contact; while > 0 a wall jump off the right
+   * wall is still allowed (wall coyote time).
+   */
+  wallJumpGraceRightTicks: number;
 
   // ---- Dash (player and enemy) -------------------------------------------
   /** Remaining cooldown ticks before dash is available again.  0 = ready. */
@@ -480,6 +492,8 @@ export function createClusterState(
     wallJumpForceTimeTicks: 0,
     wallJumpDirX: 0,
     hasUsedWallJumpSinceResetFlag: 0,
+    wallJumpGraceLeftTicks: 0,
+    wallJumpGraceRightTicks: 0,
     dashCooldownTicks: 0,
     dashRechargeAnimTicks: 0,
     enemyAiAttackCooldownTicks: 30,

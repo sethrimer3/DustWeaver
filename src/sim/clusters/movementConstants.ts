@@ -33,6 +33,14 @@ export const debugSpeedOverrides = {
   momentumDecayWorld: NaN,
   highSpeedSteeringFactor: NaN,
   upwardBrakeStrengthWorld: NaN,
+  // Forgiveness mechanics
+  jumpBufferMs: NaN,
+  apexFloatVelocityThreshold: NaN,
+  apexFloatGravityMultiplier: NaN,
+  jumpCornerCorrectionPixels: NaN,
+  blockPopMaxPixels: NaN,
+  wallJumpProximityPixels: NaN,
+  wallJumpGraceTicks: NaN,
 };
 
 /** Helper: return override if finite, else fallback. */
@@ -79,18 +87,23 @@ export const VAR_JUMP_TIME_SEC = 0.20;
 /** Variable jump sustain window in ticks (60 fps). */
 export const VAR_JUMP_TIME_TICKS = Math.round(VAR_JUMP_TIME_SEC * 60.0);
 
-// ── Apex half-gravity ────────────────────────────────────────────────────────
+// ── Apex half-gravity (apex float) ──────────────────────────────────────────
 // Near the top of the jump arc, gravity is halved for a brief "floaty apex"
-// feel — only when vertical speed is near zero and jump is held.
-
-/** Gravity multiplier applied at the apex of a jump. */
-export const APEX_GRAVITY_MULTIPLIER = 0.5;
+// feel — only when vertical speed is near zero, jump is held, and the player
+// is not in committed fast-fall mode.
 
 /**
- * Vertical speed threshold (px/s) below which the apex gravity kicks in.
- * Only active when abs(vy) < this value and jump is held.
+ * Vertical speed threshold (world units/s) below which apex float kicks in.
+ * Only active when abs(vy) < this value, jump is held, and not fast-falling.
  */
-export const APEX_THRESHOLD_WORLD_PER_SEC = 33.0;
+export const APEX_FLOAT_VELOCITY_THRESHOLD = 35;
+
+/** Gravity multiplier applied at the apex of a jump (apex float). */
+export const APEX_FLOAT_GRAVITY_MULTIPLIER = 0.5;
+
+// Legacy aliases preserved for backward compatibility
+export const APEX_THRESHOLD_WORLD_PER_SEC  = APEX_FLOAT_VELOCITY_THRESHOLD;
+export const APEX_GRAVITY_MULTIPLIER       = APEX_FLOAT_GRAVITY_MULTIPLIER;
 
 // ── Fall system (normal fall + fast fall) ────────────────────────────────────
 // By default gravity approaches normalMaxFall.  If the player holds down
@@ -120,11 +133,16 @@ export const FAST_MAX_FALL_APPROACH_PER_SEC = 300.0;
 export const COYOTE_TIME_TICKS = 6;
 
 /**
- * Ticks a jump input is remembered while airborne (jump buffer).
- * When the player lands while bufferTicks > 0 the jump fires immediately.
- * At 60 fps, 6 ticks ≈ 0.10 s.
+ * Milliseconds a jump input is remembered while airborne (jump buffer).
+ * When the player lands while the buffer is active, the jump fires immediately.
  */
-export const JUMP_BUFFER_TICKS = 6;
+export const JUMP_BUFFER_MS = 120;
+
+/**
+ * Ticks a jump input is remembered while airborne (derived from JUMP_BUFFER_MS).
+ * At 60 fps, 7 ticks ≈ 117 ms (quantized from the 120 ms source value).
+ */
+export const JUMP_BUFFER_TICKS = Math.round(JUMP_BUFFER_MS / 1000.0 * 60);
 
 // ============================================================================
 // Horizontal movement
@@ -266,6 +284,52 @@ export const WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER = 0.5;
  * At 60 fps, 12 ticks ≈ 0.20 s — enough time for the forced outward trajectory.
  */
 export const WALL_JUMP_LOCKOUT_TICKS = 12;
+
+// ============================================================================
+// Wall-jump forgiveness
+// ============================================================================
+
+/**
+ * Horizontal proximity distance (world units) within which the player can
+ * trigger a wall jump even without physically touching the wall.
+ * Allows wall jumps when 1–3 pixels away from a solid wall face.
+ */
+export const WALL_JUMP_PROXIMITY_PIXELS = 3;
+
+/**
+ * Milliseconds after leaving a wall during which a wall jump is still allowed
+ * (wall coyote time).
+ */
+export const WALL_JUMP_GRACE_MS = 100;
+
+/**
+ * Ticks derived from WALL_JUMP_GRACE_MS.  At 60 fps, 6 ticks = 100 ms (exact at this rate).
+ */
+export const WALL_JUMP_GRACE_TICKS = Math.round(WALL_JUMP_GRACE_MS / 1000.0 * 60);
+
+// ============================================================================
+// Jump corner correction
+// ============================================================================
+
+/**
+ * Maximum horizontal nudge (world units) applied when the player bonks the
+ * underside corner of a block while jumping upward.  The engine tests offsets
+ * 1, 2, … JUMP_CORNER_CORRECTION_PIXELS in the player's movement direction to
+ * find a clear path around the corner.
+ */
+export const JUMP_CORNER_CORRECTION_PIXELS = 3;
+
+// ============================================================================
+// Block pop (ledge lip assist)
+// ============================================================================
+
+/**
+ * Maximum upward pop distance (world units) for the ledge lip assist.
+ * If the player's feet are within this distance below a block's top edge
+ * while moving horizontally into it, the player is gently placed on top.
+ * Kept small to prevent stair-climbing exploits.
+ */
+export const BLOCK_POP_MAX_PIXELS = 2;
 
 // ============================================================================
 // Enemy movement

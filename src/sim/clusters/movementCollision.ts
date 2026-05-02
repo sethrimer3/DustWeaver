@@ -9,11 +9,15 @@
 
 import type { WorldState } from '../world';
 import type { ClusterState } from './state';
-import { COLLISION_EPSILON } from './movementConstants';
-import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
+import {
+  COLLISION_EPSILON,
+  BLOCK_POP_MAX_PIXELS,
+  JUMP_CORNER_CORRECTION_PIXELS,
+  WALL_JUMP_PROXIMITY_PIXELS,
+  debugSpeedOverrides,
+  ov,
+} from './movementConstants';
 
-/** Maximum auto step-up height (single block only). */
-const PLAYER_STEP_UP_MAX_HEIGHT_WORLD = BLOCK_SIZE_SMALL;
 
 function hasWallOverlapAtPosition(
   cluster: ClusterState,
@@ -39,6 +43,145 @@ function hasWallOverlapAtPosition(
   return false;
 }
 
+/**
+ * Tests whether the player AABB at (posX, posY) overlaps any solid (non-platform,
+ * non-ramp) wall.  Used for forgiveness collision probes so that corrections do
+ * not push the player into adjacent solid geometry.
+ */
+function hasSolidWallOverlapAtPosition(
+  cluster: ClusterState,
+  world: WorldState,
+  posX: number,
+  posY: number,
+): boolean {
+  const hw = cluster.halfWidthWorld;
+  const hh = cluster.halfHeightWorld;
+  const left = posX - hw;
+  const right = posX + hw;
+  const top = posY - hh;
+  const bottom = posY + hh;
+
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    if (world.wallIsPlatformFlag[wi] === 1) continue;
+    if (world.wallRampOrientationIndex[wi] !== 255) continue;
+    const wallLeft = world.wallXWorld[wi];
+    const wallTop = world.wallYWorld[wi];
+    const wallRight = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop + world.wallHWorld[wi];
+    if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Jump corner correction: when the player is moving upward and bonks the
+ * underside corner of a solid block, attempt to nudge the player horizontally
+ * by up to JUMP_CORNER_CORRECTION_PIXELS so the jump continues cleanly.
+ *
+ * Only applies to the player, only on upward motion, and only when the nudged
+ * position would be completely collision-free.  The direction of horizontal
+ * velocity is preferred; if near zero, both sides are tested.
+ *
+ * Returns true if a correction was applied (caller should skip the normal
+ * ceiling velocity-zero response for this wall).
+ */
+function tryJumpCornerCorrection(
+  cluster: ClusterState,
+  world: WorldState,
+  wallIndex: number,
+): boolean {
+  if (cluster.isPlayerFlag === 0) return false;
+  if (cluster.velocityYWorld >= 0) return false; // only for upward motion
+
+  const wallLeft  = world.wallXWorld[wallIndex];
+  const wallRight = wallLeft + world.wallWWorld[wallIndex];
+  const hw = cluster.halfWidthWorld;
+  const maxCorrection = ov(debugSpeedOverrides.jumpCornerCorrectionPixels, JUMP_CORNER_CORRECTION_PIXELS);
+
+  // Prefer the direction the player is already moving horizontally.
+  const preferRight = cluster.velocityXWorld >= 0;
+
+  for (let offset = 1; offset <= maxCorrection; offset++) {
+    const dx1 = preferRight ? offset : -offset;
+    const dx2 = preferRight ? -offset : offset;
+
+    for (let pass = 0; pass < 2; pass++) {
+      const dx = pass === 0 ? dx1 : dx2;
+      const testX = cluster.positionXWorld + dx;
+      const testLeft  = testX - hw;
+      const testRight = testX + hw;
+
+      // If the nudged box no longer overlaps this wall horizontally, the ceiling
+      // collision is cleared for this wall.
+      const stillOverlapsCeiling = testRight > wallLeft && testLeft < wallRight;
+      if (stillOverlapsCeiling) continue;
+
+      // Verify no other solid wall is hit at the nudged position.
+      // (The ceiling wall itself is excluded by the horizontal overlap check above.)
+      if (!hasSolidWallOverlapAtPosition(cluster, world, testX, cluster.positionYWorld)) {
+        cluster.positionXWorld = testX;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Returns the gap distance (world units) between the player AABB and the nearest
+ * solid wall on each side, clamped to WALL_JUMP_PROXIMITY_PIXELS.
+ * Returns Infinity when no wall is within proximity on a given side.
+ *
+ * Used to implement the wide wall-jump window: the player can initiate a wall
+ * jump even when slightly away from a wall face.
+ */
+export function getNearbyWallForWallJump(
+  cluster: ClusterState,
+  world: WorldState,
+): { nearLeftDistWorld: number; nearRightDistWorld: number } {
+  const hw = cluster.halfWidthWorld;
+  const hh = cluster.halfHeightWorld;
+  const posX = cluster.positionXWorld;
+  const posY = cluster.positionYWorld;
+  const proximity = ov(debugSpeedOverrides.wallJumpProximityPixels, WALL_JUMP_PROXIMITY_PIXELS);
+
+  const top    = posY - hh;
+  const bottom = posY + hh;
+  const playerLeft  = posX - hw;
+  const playerRight = posX + hw;
+
+  let nearLeftDistWorld  = Infinity;
+  let nearRightDistWorld = Infinity;
+
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    if (world.wallIsPlatformFlag[wi] === 1) continue;
+    if (world.wallRampOrientationIndex[wi] !== 255) continue;
+
+    const wallLeft   = world.wallXWorld[wi];
+    const wallTop    = world.wallYWorld[wi];
+    const wallRight  = wallLeft + world.wallWWorld[wi];
+    const wallBottom = wallTop + world.wallHWorld[wi];
+
+    // Require vertical overlap with the player box.
+    if (bottom <= wallTop || top >= wallBottom) continue;
+
+    // Left side: wall face is to the player's left and within proximity.
+    const leftGap = playerLeft - wallRight;
+    if (leftGap >= 0 && leftGap <= proximity) {
+      nearLeftDistWorld = Math.min(nearLeftDistWorld, leftGap);
+    }
+
+    // Right side: wall face is to the player's right and within proximity.
+    const rightGap = wallLeft - playerRight;
+    if (rightGap >= 0 && rightGap <= proximity) {
+      nearRightDistWorld = Math.min(nearRightDistWorld, rightGap);
+    }
+  }
+
+  return { nearLeftDistWorld, nearRightDistWorld };
+}
+
 function tryStepUpSingleBlock(
   cluster: ClusterState,
   world: WorldState,
@@ -47,16 +190,19 @@ function tryStepUpSingleBlock(
   wasGrounded: boolean,
 ): boolean {
   if (cluster.isPlayerFlag === 0) return false;
-  // Step-up is only valid when the player was grounded at the start of this tick.
-  if (!wasGrounded) return false;
-  if (cluster.velocityYWorld < 0) return false;
+  if (cluster.velocityYWorld < 0) return false; // never when rising
+  if (cluster.isFastFallModeFlag === 1) return false; // not during fast fall
+  // Apply only when grounded OR falling (not while airborne and stationary/rising).
+  const isFalling = cluster.velocityYWorld > 0;
+  if (!wasGrounded && !isFalling) return false;
 
   const inputDxWorld = world.playerMoveInputDxWorld;
   if (inputDxWorld * requiredInputDirX <= 0) return false;
 
   const playerBottomWorld = cluster.positionYWorld + cluster.halfHeightWorld;
   const stepUpHeightWorld = playerBottomWorld - wallTopWorld;
-  if (stepUpHeightWorld <= 0 || stepUpHeightWorld > PLAYER_STEP_UP_MAX_HEIGHT_WORLD) return false;
+  const maxPopPixels = ov(debugSpeedOverrides.blockPopMaxPixels, BLOCK_POP_MAX_PIXELS);
+  if (stepUpHeightWorld <= 0 || stepUpHeightWorld > maxPopPixels) return false;
 
   const targetYWorld = wallTopWorld - cluster.halfHeightWorld;
   if (hasWallOverlapAtPosition(cluster, world, cluster.positionXWorld, targetYWorld)) return false;
@@ -264,7 +410,13 @@ export function resolveWallsY(
         landed = true;
       }
     } else if (prevTop >= wallBottom - COLLISION_EPSILON && cluster.velocityYWorld <= 0) {
-      // Was below wall — push down
+      // Was below wall — bonked ceiling moving upward.
+      // Attempt jump corner correction before committing to the ceiling response.
+      if (!isBounce && tryJumpCornerCorrection(cluster, world, wi)) {
+        // Corner was cleared — skip velocity zeroing for this wall and continue.
+        continue;
+      }
+      // Normal ceiling response.
       cluster.positionYWorld = wallBottom + hh;
       if (isBounce) {
         if (cluster.velocityYWorld < 0) cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
