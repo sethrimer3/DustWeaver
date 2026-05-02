@@ -756,7 +756,9 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       // The stuck target is always geometrically safe (it is the player AABB
       // resting against the anchor surface with halfExtent clearance), but a
       // final penetration resolve catches any residual overlap from ramps or
-      // stacked geometry near the anchor.
+      // stacked geometry near the anchor.  We resolve all overlapping walls
+      // rather than stopping at the first, since the player AABB can overlap
+      // multiple walls simultaneously near stacked geometry.
       {
         const halfW = player.halfWidthWorld;
         const halfH = player.halfHeightWorld;
@@ -765,9 +767,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
           const wTop    = world.wallYWorld[wi];
           const wRight  = wLeft + world.wallWWorld[wi];
           const wBottom = wTop + world.wallHWorld[wi];
-          if (resolveAABBPenetration(player, halfW, halfH, wLeft, wTop, wRight, wBottom)) {
-            break;
-          }
+          resolveAABBPenetration(player, halfW, halfH, wLeft, wTop, wRight, wBottom);
         }
       }
 

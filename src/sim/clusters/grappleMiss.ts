@@ -395,7 +395,6 @@ export function updateGrappleMissChain(world: WorldState): void {
       const moveDy = missLinkVy[i] * dtSec;
       const moveDist = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
 
-      let didHitWall = false;
       if (moveDist > 0.001) {
         const moveDirX = moveDx / moveDist;
         const moveDirY = moveDy / moveDist;
@@ -410,7 +409,6 @@ export function updateGrappleMissChain(world: WorldState): void {
           missLinkStuckFlag[i] = 1;
           missLinkVx[i] = 0;
           missLinkVy[i] = 0;
-          didHitWall = true;
 
           // If this is the tip (last link), attach the grapple here.
           if (i === GRAPPLE_SEGMENT_COUNT - 1) {
@@ -455,7 +453,8 @@ export function updateGrappleMissChain(world: WorldState): void {
           missLinkY[i] = prevLinkY + moveDy;
         }
       }
-      void didHitWall; // wall-hit links still pass through the floor/circle checks below
+      // Both wall-hit and clear-path links fall through to the world-floor and
+      // circle-of-influence checks below.
 
       // ── Check world floor ────────────────────────────────────────────────
       if (missLinkY[i] >= world.worldHeightWorld) {
