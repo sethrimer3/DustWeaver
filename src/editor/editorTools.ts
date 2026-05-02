@@ -54,12 +54,6 @@ export function ropeLineCrossesWall(
     const sdx = bxBlock - axBlock;
     const sdy = byBlock - ayBlock;
 
-    // Offset from wall min corner to segment start
-    const dx = axBlock - wl;
-    const dy = ayBlock - wt;
-    const ww = wr - wl;
-    const wh = wb - wt;
-
     // We use the parametric clipping approach (Liang-Barsky for AABB).
     // Segment: P = A + t*(B-A),  t in [0,1].
     // For AABB [wl,wr] x [wt,wb]: find t intervals where P is inside.
@@ -92,9 +86,6 @@ export function ropeLineCrossesWall(
       t1 = Math.min(t1, tFar);
       if (t0 > t1) continue;
     }
-
-    // Suppress unused variable warnings
-    void dx; void dy; void ww; void wh;
 
     // Overlap found in [t0, t1] — segment crosses this wall
     return true;

@@ -996,12 +996,16 @@ export function raycastRopeSegments(
       const bx = world.ropeSegPosXWorld[base + s + 1];
       const by = world.ropeSegPosYWorld[base + s + 1];
 
-      // Ray-vs-capsule: decompose into ray-vs-cylinder + ray-vs-sphere caps.
-      // Use the 2D infinite cylinder approach:
-      //   Segment direction: S = (bx-ax, by-ay)
-      //   Ray relative to segment start: dRay = (ox-ax, oy-ay)
-      //   Solve: |dRay + t·dir - u·S|² = R² for t (ray parameter) and u ∈ [0,1]
-      // Simplification: find t by minimising distance from ray to segment.
+      // 2D ray-vs-capsule algorithm:
+      //   1. Find the point P* on segment [A, B] closest to the ray origin,
+      //      parameterised as t_seg ∈ [0,1]: P* = A + t_seg·S.
+      //   2. Express P* in ray-relative coordinates: cp = P* - O.
+      //   3. Decompose cp into a radial component along the ray direction and a
+      //      perpendicular component.  The perpendicular distance is the minimum
+      //      distance from the ray to the capsule axis at P*.
+      //   4. If perpDist < R (capsule radius), compute the entry t along the ray
+      //      using the standard circle-intersection formula: tEntry = cpDotDir - √(R²-perpDist²).
+      // This gives a tight capsule hit without building a full swept-volume test.
       const segDx = bx - ax;
       const segDy = by - ay;
       const rdx = ox - ax;
@@ -1011,18 +1015,15 @@ export function raycastRopeSegments(
       const segLenSq = segDx * segDx + segDy * segDy;
       if (segLenSq < ROPE_RAYCAST_EPSILON) continue;
 
-      // Project ray onto plane perpendicular to segment direction.
-      // This reduces to a 2D ray-vs-circle in the plane perpendicular to S.
-      // For gameplay purposes, we use a simpler sphere-based approximation:
-      // test the ray against a sphere at the closest point on the segment.
+      // Step 1: t_seg — closest point on the segment to the ray origin.
       const t_seg = Math.max(0.0, Math.min(1.0,
         (rdx * segDx + rdy * segDy) / segLenSq,
       ));
+      // cp = P* - O (P* in ray-relative coords)
       const cpx = ax + t_seg * segDx - ox;
       const cpy = ay + t_seg * segDy - oy;
 
-      // Closest point on segment to ray line (perpendicular dist):
-      // project cp onto ray direction
+      // Step 2–3: project cp onto ray direction; compute perpendicular distance.
       const cpDotDir = cpx * dirX + cpy * dirY;
       const perpX = cpx - cpDotDir * dirX;
       const perpY = cpy - cpDotDir * dirY;
@@ -1030,7 +1031,7 @@ export function raycastRopeSegments(
 
       if (perpDistSq > halfThick * halfThick) continue;
 
-      // Ray hits the capsule — compute entry t along ray.
+      // Step 4: entry t along ray.
       const offset = Math.sqrt(halfThick * halfThick - perpDistSq);
       const tEntry = cpDotDir - offset;
 

@@ -94,7 +94,7 @@ export function resolvePlayerRopeCollisions(
         cluster.positionYWorld = cpy - halfThick - hh;
         if (cluster.velocityYWorld > 0) cluster.velocityYWorld = 0;
         cluster.isGroundedFlag = 1;
-        _applyPlayerWeightToRope(world, r, base, s, t, halfThick);
+        _applyPlayerWeightToRope(world, r, base, s, t);
         continue;
       }
 
@@ -111,7 +111,7 @@ export function resolvePlayerRopeCollisions(
         cluster.positionYWorld = ropeTopY - hh;
         if (cluster.velocityYWorld > 0) cluster.velocityYWorld = 0;
         cluster.isGroundedFlag = 1;
-        _applyPlayerWeightToRope(world, r, base, s, t, halfThick);
+        _applyPlayerWeightToRope(world, r, base, s, t);
       } else {
         // General push-out: apply penetration correction along normal.
         cluster.positionXWorld += nx * pen;
@@ -119,7 +119,7 @@ export function resolvePlayerRopeCollisions(
         if (ny < -0.3) {
           if (cluster.velocityYWorld > 0) cluster.velocityYWorld = 0;
           cluster.isGroundedFlag = 1;
-          _applyPlayerWeightToRope(world, r, base, s, t, halfThick);
+          _applyPlayerWeightToRope(world, r, base, s, t);
         } else if (ny > 0.3) {
           if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
         }
@@ -139,7 +139,6 @@ function _applyPlayerWeightToRope(
   base: number,
   segIndex: number,
   t: number,
-  halfThick: number,
 ): void {
   const segCount = world.ropeSegmentCount[ropeIndex];
   const pushAmount = ROPE_PLAYER_WEIGHT_PUSH_WORLD;
@@ -157,7 +156,4 @@ function _applyPlayerWeightToRope(
     world.ropeSegPosYWorld[base + bIdx] += pushAmount * t;
     world.ropeSegPrevYWorld[base + bIdx] += pushAmount * t;
   }
-
-  // Suppress unused-var warning for halfThick
-  void halfThick;
 }
