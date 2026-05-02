@@ -228,9 +228,7 @@ export function applyPropertyToElement(
       if (prop === 'lightSource.brightnessPct' && !isNaN(numVal)) light.brightnessPct = Math.max(0, Math.min(100, numVal));
       if (prop === 'lightSource.dustMoteCount' && !isNaN(numVal)) light.dustMoteCount = Math.max(0, Math.min(200, numVal));
       if (prop === 'lightSource.dustMoteSpreadBlocks' && !isNaN(numVal)) light.dustMoteSpreadBlocks = Math.max(0, Math.min(32, numVal));
-      if (prop === 'lightSource.color') {
-        // Color change already applied in UI handler; just mark dirty
-      }
+
     }
   } else if (el.type === 'sunbeam') {
     const sb = (room.sunbeams ?? []).find((s: EditorSunbeam) => s.uid === el.uid);
@@ -241,9 +239,7 @@ export function applyPropertyToElement(
       if (prop === 'sunbeam.widthBlocks' && !isNaN(numVal)) sb.widthBlocks = Math.max(1, Math.min(20, numVal));
       if (prop === 'sunbeam.lengthBlocks' && !isNaN(numVal)) sb.lengthBlocks = Math.max(1, Math.min(80, numVal));
       if (prop === 'sunbeam.intensityPct' && !isNaN(numVal)) sb.intensityPct = Math.max(0, Math.min(100, numVal));
-      if (prop === 'sunbeam.color') {
-        // Color change already applied in UI handler; just mark dirty
-      }
+
     }
   } else if (el.type === 'rope') {
     const rope = (room.ropes ?? []).find((r: EditorRope) => r.uid === el.uid);

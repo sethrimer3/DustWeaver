@@ -33,8 +33,8 @@ import type {
   RoomJsonWall,
   RoomJsonTransition,
   RoomJsonAmbientLightBlocker,
+  RoomJsonLightSource,
   RoomJsonRope,
-  RoomJsonSunbeam,
   ValidationError,
 } from './roomJsonSchema';
 export {
