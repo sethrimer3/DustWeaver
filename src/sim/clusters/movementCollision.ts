@@ -62,10 +62,38 @@ interface BounceScratch {
   restitutionX: number;
   restitutionY: number;
 }
-const _bounceScratch: BounceScratch = {
+const bounceScratch: BounceScratch = {
   bouncedX: false, bouncedY: false,
   restitutionX: 0, restitutionY: 0,
 };
+
+/**
+ * Emits a bounce pad diagnostic line to the console when DEBUG_BOUNCE_PADS is
+ * enabled.  Calling this after the velocity has been updated means
+ * cluster.velocityXWorld / velocityYWorld already hold the outgoing values.
+ *
+ * @param cluster      The cluster that bounced (only logs for player clusters).
+ * @param axis         Which axis was bounced ('x' or 'y').
+ * @param restitution  The restitution coefficient that was applied.
+ * @param incomingVel  The velocity component on the bounce axis before reflection.
+ */
+function logBouncePadHit(
+  cluster: ClusterState,
+  axis: 'x' | 'y',
+  restitution: number,
+  incomingVel: number,
+): void {
+  if (!DEBUG_BOUNCE_PADS || cluster.isPlayerFlag !== 1) return;
+  const outVX = cluster.velocityXWorld.toFixed(1);
+  const outVY = cluster.velocityYWorld.toFixed(1);
+  if (axis === 'x') {
+    const inVY = cluster.velocityYWorld.toFixed(1);
+    console.log(`[BouncePad] axis=x restitution=${restitution.toFixed(2)} incoming=(${incomingVel.toFixed(1)}, ${inVY}) outgoing=(${outVX}, ${outVY})`);
+  } else {
+    const inVX = cluster.velocityXWorld.toFixed(1);
+    console.log(`[BouncePad] axis=y restitution=${restitution.toFixed(2)} incoming=(${inVX}, ${incomingVel.toFixed(1)}) outgoing=(${outVX}, ${outVY})`);
+  }
+}
 
 
 function hasWallOverlapAtPosition(
@@ -343,9 +371,7 @@ export function resolveWallsX(
           cluster.velocityXWorld = -inVX * bounceSf;
           bounceScratch.bouncedX = true;
           bounceScratch.restitutionX = bounceSf;
-          if (DEBUG_BOUNCE_PADS && cluster.isPlayerFlag === 1) {
-            console.log(`[BouncePad] axis=x restitution=${bounceSf.toFixed(2)} incoming=(${inVX.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)}) outgoing=(${cluster.velocityXWorld.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)})`);
-          }
+          logBouncePadHit(cluster, 'x', bounceSf, inVX);
         }
       } else {
         if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
@@ -361,9 +387,7 @@ export function resolveWallsX(
           cluster.velocityXWorld = -inVX * bounceSf;
           bounceScratch.bouncedX = true;
           bounceScratch.restitutionX = bounceSf;
-          if (DEBUG_BOUNCE_PADS && cluster.isPlayerFlag === 1) {
-            console.log(`[BouncePad] axis=x restitution=${bounceSf.toFixed(2)} incoming=(${inVX.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)}) outgoing=(${cluster.velocityXWorld.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)})`);
-          }
+          logBouncePadHit(cluster, 'x', bounceSf, inVX);
         }
       } else {
         if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
@@ -382,9 +406,7 @@ export function resolveWallsX(
             cluster.velocityXWorld = -inVX * bounceSf;
             bounceScratch.bouncedX = true;
             bounceScratch.restitutionX = bounceSf;
-            if (DEBUG_BOUNCE_PADS && cluster.isPlayerFlag === 1) {
-              console.log(`[BouncePad] axis=x restitution=${bounceSf.toFixed(2)} incoming=(${inVX.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)}) outgoing=(${cluster.velocityXWorld.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)})`);
-            }
+            logBouncePadHit(cluster, 'x', bounceSf, inVX);
           }
         } else {
           if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
@@ -398,9 +420,7 @@ export function resolveWallsX(
             cluster.velocityXWorld = -inVX * bounceSf;
             bounceScratch.bouncedX = true;
             bounceScratch.restitutionX = bounceSf;
-            if (DEBUG_BOUNCE_PADS && cluster.isPlayerFlag === 1) {
-              console.log(`[BouncePad] axis=x restitution=${bounceSf.toFixed(2)} incoming=(${inVX.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)}) outgoing=(${cluster.velocityXWorld.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)})`);
-            }
+            logBouncePadHit(cluster, 'x', bounceSf, inVX);
           }
         } else {
           if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
@@ -490,9 +510,7 @@ export function resolveWallsY(
         // Do NOT set isGroundedFlag — player cannot ground-jump off a bounce pad
         bounceScratch.bouncedY = true;
         bounceScratch.restitutionY = bounceSf;
-        if (DEBUG_BOUNCE_PADS && cluster.isPlayerFlag === 1) {
-          console.log(`[BouncePad] axis=y restitution=${bounceSf.toFixed(2)} incoming=(${cluster.velocityXWorld.toFixed(1)}, ${inVY.toFixed(1)}) outgoing=(${cluster.velocityXWorld.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)})`);
-        }
+        logBouncePadHit(cluster, 'y', bounceSf, inVY);
       } else {
         cluster.velocityYWorld = 0;
         cluster.isGroundedFlag = 1;
@@ -513,9 +531,7 @@ export function resolveWallsY(
           cluster.velocityYWorld = -inVY * bounceSf;
           bounceScratch.bouncedY = true;
           bounceScratch.restitutionY = bounceSf;
-          if (DEBUG_BOUNCE_PADS && cluster.isPlayerFlag === 1) {
-            console.log(`[BouncePad] axis=y restitution=${bounceSf.toFixed(2)} incoming=(${cluster.velocityXWorld.toFixed(1)}, ${inVY.toFixed(1)}) outgoing=(${cluster.velocityXWorld.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)})`);
-          }
+          logBouncePadHit(cluster, 'y', bounceSf, inVY);
         }
       } else {
         if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
@@ -532,9 +548,7 @@ export function resolveWallsY(
           cluster.velocityYWorld = -inVY * bounceSf;
           bounceScratch.bouncedY = true;
           bounceScratch.restitutionY = bounceSf;
-          if (DEBUG_BOUNCE_PADS && cluster.isPlayerFlag === 1) {
-            console.log(`[BouncePad] axis=y restitution=${bounceSf.toFixed(2)} incoming=(${cluster.velocityXWorld.toFixed(1)}, ${inVY.toFixed(1)}) outgoing=(${cluster.velocityXWorld.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)})`);
-          }
+          logBouncePadHit(cluster, 'y', bounceSf, inVY);
         } else {
           cluster.velocityYWorld = 0;
           cluster.isGroundedFlag = 1;
@@ -548,9 +562,7 @@ export function resolveWallsY(
             cluster.velocityYWorld = -inVY * bounceSf;
             bounceScratch.bouncedY = true;
             bounceScratch.restitutionY = bounceSf;
-            if (DEBUG_BOUNCE_PADS && cluster.isPlayerFlag === 1) {
-              console.log(`[BouncePad] axis=y restitution=${bounceSf.toFixed(2)} incoming=(${cluster.velocityXWorld.toFixed(1)}, ${inVY.toFixed(1)}) outgoing=(${cluster.velocityXWorld.toFixed(1)}, ${cluster.velocityYWorld.toFixed(1)})`);
-            }
+            logBouncePadHit(cluster, 'y', bounceSf, inVY);
           }
         } else {
           if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
@@ -583,10 +595,10 @@ export function resolveClusterSolidWallCollision(
   wasGrounded: boolean,
 ): SolidWallCollisionResult {
   // Reset bounce tracking for this sweep.
-  _bounceScratch.bouncedX = false;
-  _bounceScratch.bouncedY = false;
-  _bounceScratch.restitutionX = 0;
-  _bounceScratch.restitutionY = 0;
+  bounceScratch.bouncedX = false;
+  bounceScratch.bouncedY = false;
+  bounceScratch.restitutionX = 0;
+  bounceScratch.restitutionY = 0;
 
   // Restore position to pre-integration state — we re-integrate per axis.
   cluster.positionXWorld = prevX;
@@ -601,7 +613,7 @@ export function resolveClusterSolidWallCollision(
   for (let i = 0; i < stepsX; i++) {
     const subPrevX = cluster.positionXWorld;
     cluster.positionXWorld += cluster.velocityXWorld * dtX;
-    resolveWallsX(cluster, world, subPrevX, wasGrounded, _bounceScratch);
+    resolveWallsX(cluster, world, subPrevX, wasGrounded, bounceScratch);
   }
 
   // ── Y pass with sub-tick safety ──────────────────────────────────────────
@@ -614,17 +626,17 @@ export function resolveClusterSolidWallCollision(
   for (let i = 0; i < stepsY; i++) {
     const subPrevY = cluster.positionYWorld;
     cluster.positionYWorld += cluster.velocityYWorld * dtY;
-    if (resolveWallsY(cluster, world, subPrevY, _bounceScratch)) {
+    if (resolveWallsY(cluster, world, subPrevY, bounceScratch)) {
       landed = true;
     }
   }
 
   return {
     landed,
-    bouncedX: _bounceScratch.bouncedX,
-    bouncedY: _bounceScratch.bouncedY,
-    bounceRestitutionX: _bounceScratch.restitutionX,
-    bounceRestitutionY: _bounceScratch.restitutionY,
+    bouncedX: bounceScratch.bouncedX,
+    bouncedY: bounceScratch.bouncedY,
+    bounceRestitutionX: bounceScratch.restitutionX,
+    bounceRestitutionY: bounceScratch.restitutionY,
   };
 }
 
@@ -757,10 +769,10 @@ export function moveClusterByDelta(
   // axis so high-speed forced movement (e.g. grapple swing) produces a proper
   // elastic response rather than a tiny "pop" based on the synthetic delta velocity.
   const bounced = swResult.bouncedX || swResult.bouncedY;
-  const finalVelX = swResult.bouncedX ? -savedVelX * swResult.bounceRestitutionX : savedVelX;
-  const finalVelY = swResult.bouncedY ? -savedVelY * swResult.bounceRestitutionY : savedVelY;
-  cluster.velocityXWorld = finalVelX;
-  cluster.velocityYWorld = finalVelY;
+  const finalVelXWorld = swResult.bouncedX ? -savedVelX * swResult.bounceRestitutionX : savedVelX;
+  const finalVelYWorld = swResult.bouncedY ? -savedVelY * swResult.bounceRestitutionY : savedVelY;
+  cluster.velocityXWorld = finalVelXWorld;
+  cluster.velocityYWorld = finalVelYWorld;
 
   // A displacement axis is "blocked" when the cluster moved measurably less
   // than requested.  Threshold of 0.5 wu absorbs float rounding without
@@ -779,8 +791,8 @@ export function moveClusterByDelta(
     bounced,
     bounceRestitutionX: swResult.bounceRestitutionX,
     bounceRestitutionY: swResult.bounceRestitutionY,
-    reflectedVelocityXWorld: finalVelX,
-    reflectedVelocityYWorld: finalVelY,
+    reflectedVelocityXWorld: finalVelXWorld,
+    reflectedVelocityYWorld: finalVelYWorld,
   };
 }
 
