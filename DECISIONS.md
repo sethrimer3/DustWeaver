@@ -785,3 +785,48 @@ can verify the collision boundary matches the visual tile geometry.
 - At room load, piles spawn unowned Physical particles with near-permanent lifetime (99999 ticks)
 - Storm Weave attracts and claims these particles when the player is nearby
 - Environmental dust layer skips procedural generation in lobby rooms to avoid duplication
+
+## Collision-Safe Movement Layer (BUILD 224)
+
+### ClusterMoveResult + moveClusterByDelta
+
+`ClusterMoveResult` (interface in `movementCollision.ts`) is a lightweight struct
+that describes what was contacted during a forced displacement:
+  - `collidedLeft / Right / Above / Below` — which side was blocked, relative to
+    the requested delta direction.
+  - `landed` — cluster landed on a top surface during this move.
+  - `blockedX / blockedY` — shorthand for "at least one axis was stopped early."
+
+`moveClusterByDelta(cluster, world, deltaX, deltaY, wasGrounded, dtSec)` wraps
+`resolveClusterSolidWallCollision` for use by forced-movement paths that only know
+their desired displacement (not velocity).  It:
+1. Converts delta → temporary velocity (delta / dtSec).
+2. Runs the full axis-separated, sub-stepped sweep from the current position.
+3. Restores the caller's original velocity so the caller decides the final velocity.
+4. Returns `ClusterMoveResult`.
+
+**Key design choice — velocity restoration:** The helper restores the caller's
+velocity so that forced-displacement paths (grapple constraint snap) are not
+inadvertently affected by the small "virtual" velocity used internally for
+sub-step math.  Callers that want wall-contact velocity zeroing (like zip movement)
+should set velocity explicitly and call `resolveClusterSolidWallCollision` directly,
+as zip already does.
+
+### Grapple Constraint Snap
+
+`applyGrappleClusterConstraint` previously snapped the player directly to the rope
+circle (`player.positionXWorld = ax + nx * ropeLength`) and then ran a single-pass
+`resolveAABBPenetration` loop as a safety net.  The minimum-penetration fallback
+can push the player in an unexpected direction when the snap is obstructed by a
+diagonal corner or stacked walls.
+
+BUILD 224 replaces the direct snap with `moveClusterByDelta`.  The sweep:
+- Prevents the player from being carried through any geometry by the rope snap.
+- Gives correct side-of-contact information via `ClusterMoveResult`.
+- Eliminates the need for the single-pass `resolveAABBPenetration` fallback on the
+  constraint path.
+
+The stuck-phase position lock (direct assignment to targetX/targetY) retains its
+own `resolveAABBPenetration` loop because the stuck target is a geometrically
+determined safe position (anchor + surfaceNormal × halfExtent) and the loop
+resolves residual overlap from ramps or stacked geometry near the anchor.

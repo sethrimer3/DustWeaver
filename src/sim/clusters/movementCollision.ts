@@ -5,6 +5,36 @@
  * input handling and physics integration.  Every function here was previously
  * a module-private helper inside movement.ts — signatures, logic, and
  * doc-comments are preserved verbatim.
+ *
+ * ── Collision-safe movement layer ────────────────────────────────────────────
+ *
+ * `ClusterMoveResult` and `moveClusterByDelta` form a lightweight reusable
+ * collision-safe movement path inspired by Celeste/TowerFall: all forced or
+ * special movement (grapple constraint correction, future knockback, etc.)
+ * should move through this helper instead of directly assigning positions and
+ * then trying to fix the result with a minimum-penetration fallback.
+ *
+ * Usage contract:
+ *   - The helper moves the cluster from its CURRENT position by (deltaX, deltaY).
+ *   - It restores the caller's velocity after the move, so the caller controls
+ *     what velocity ends up on the cluster after the call.
+ *   - Wall-touch flags (isTouchingWallLeftFlag / isTouchingWallRightFlag) may be
+ *     mutated as a side effect if the cluster is the player — callers should
+ *     reset them beforehand if that matters.
+ *
+ * ── Future moving-platform notes (not yet implemented) ───────────────────────
+ *
+ * When moving solids are added, extend this layer as follows:
+ *   1. isRiding(cluster, solid): returns true when cluster is standing on the
+ *      solid's top surface — used to carry actors with the platform.
+ *   2. Push before carry: each tick, push all actors out of the solid's new AABB
+ *      first (displacing them), THEN move riding actors with the platform delta.
+ *   3. Squish / obstruction: if a pushed actor would be displaced into another
+ *      solid, mark it as squished (kill or bounce it).
+ *   4. Carried actors use moveClusterByDelta so they still respect other geometry
+ *      even while being carried.
+ *   5. Collision iteration order must remain deterministic (same wall index order
+ *      each tick) so moving-platform pushes are reproducible.
  */
 
 import type { WorldState } from '../world';
@@ -506,7 +536,120 @@ export function resolveClusterSolidWallCollision(
 }
 
 /**
+ * Structured result returned by moveClusterByDelta.
+ * Tells the caller which axes were blocked and whether the cluster landed.
+ *
+ * All booleans are set relative to the requested delta direction:
+ *   collidedLeft  — blocked while moving left  (deltaX < 0 and X was stopped)
+ *   collidedRight — blocked while moving right (deltaX > 0 and X was stopped)
+ *   collidedAbove — blocked while moving up    (deltaY < 0 and Y was stopped)
+ *   collidedBelow — blocked while moving down  (deltaY > 0 and Y was stopped)
+ *   landed        — cluster landed on a top surface this move (implies collidedBelow)
+ *   blockedX      — X axis reached less than requested displacement (any direction)
+ *   blockedY      — Y axis reached less than requested displacement (any direction)
+ */
+export interface ClusterMoveResult {
+  collidedLeft: boolean;
+  collidedRight: boolean;
+  collidedAbove: boolean;
+  collidedBelow: boolean;
+  landed: boolean;
+  blockedX: boolean;
+  blockedY: boolean;
+}
+
+/**
+ * Collision-safe movement helper.
+ *
+ * Moves the cluster from its CURRENT position by (deltaXWorld, deltaYWorld)
+ * using the same axis-separated, sub-stepped collision logic as normal movement.
+ * Returns a ClusterMoveResult describing what was contacted.
+ *
+ * This function:
+ *   - Does NOT restore the caller's velocity (the internal velocity set for
+ *     substep calculations is temporary; it is restored after the sweep).
+ *   - Does NOT call resolveRampSurfaces — callers that need ramp landing
+ *     should call that separately.
+ *   - Preserves all side effects of resolveClusterSolidWallCollision
+ *     (wall-touch flags, isGroundedFlag updates) as a by-product of the sweep.
+ *
+ * Typical use: forced position corrections (grapple constraint snap, future
+ * knockback) that must not clip through walls.  Normal per-tick movement should
+ * continue to call resolveClusterSolidWallCollision directly.
+ *
+ * @param cluster     The cluster to move.
+ * @param world       Current world state.
+ * @param deltaXWorld Desired X displacement this step (world units).
+ * @param deltaYWorld Desired Y displacement this step (world units).
+ * @param wasGrounded Whether the cluster was grounded before this move.
+ * @param dtSec       Tick duration in seconds (used to convert delta → velocity
+ *                    for the sweep; sub-step count is derived from this).
+ *                    Pass the current frame's dtSec; never 0.
+ */
+export function moveClusterByDelta(
+  cluster: ClusterState,
+  world: WorldState,
+  deltaXWorld: number,
+  deltaYWorld: number,
+  wasGrounded: boolean,
+  dtSec: number,
+): ClusterMoveResult {
+  // Guard: zero-delta is a no-op.
+  if (deltaXWorld === 0 && deltaYWorld === 0) {
+    return {
+      collidedLeft: false, collidedRight: false,
+      collidedAbove: false, collidedBelow: false,
+      landed: false, blockedX: false, blockedY: false,
+    };
+  }
+
+  const startX = cluster.positionXWorld;
+  const startY = cluster.positionYWorld;
+
+  // Save the caller's velocity — we temporarily overwrite it to drive the sweep,
+  // then restore it so the caller controls the final velocity on the cluster.
+  const savedVelX = cluster.velocityXWorld;
+  const savedVelY = cluster.velocityYWorld;
+
+  // Convert displacement to velocity so that (velocity × dtSec) == delta,
+  // which is what resolveClusterSolidWallCollision integrates per axis.
+  const invDt = dtSec > 0.00001 ? 1.0 / dtSec : 0;
+  cluster.velocityXWorld = deltaXWorld * invDt;
+  cluster.velocityYWorld = deltaYWorld * invDt;
+
+  const landed = resolveClusterSolidWallCollision(
+    cluster, world, startX, startY, dtSec, wasGrounded,
+  );
+
+  const actualDeltaX = cluster.positionXWorld - startX;
+  const actualDeltaY = cluster.positionYWorld - startY;
+
+  // Restore caller velocity — caller is responsible for deciding what the
+  // cluster's velocity should be after a forced displacement.
+  cluster.velocityXWorld = savedVelX;
+  cluster.velocityYWorld = savedVelY;
+
+  // A displacement axis is "blocked" when the cluster moved measurably less
+  // than requested.  Threshold of 0.5 wu absorbs float rounding without
+  // masking real collisions (the smallest wall is BLOCK_SIZE_SMALL = 3 wu).
+  const blockedX = Math.abs(actualDeltaX - deltaXWorld) > 0.5;
+  const blockedY = Math.abs(actualDeltaY - deltaYWorld) > 0.5;
+
+  return {
+    collidedLeft:  blockedX && deltaXWorld < 0,
+    collidedRight: blockedX && deltaXWorld > 0,
+    collidedAbove: blockedY && deltaYWorld < 0,
+    collidedBelow: blockedY && deltaYWorld > 0 || landed,
+    landed,
+    blockedX,
+    blockedY,
+  };
+}
+
+
+/**
  * Ramp surface collision resolver.
+ *
  * Called AFTER resolveClusterSolidWallCollision for each cluster.
  *
  * For each ramp wall the cluster overlaps horizontally, computes the ramp
