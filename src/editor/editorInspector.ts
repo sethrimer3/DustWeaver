@@ -327,6 +327,56 @@ export function updateInspector(
         light.colorB = b;
         callbacks?.onPropertyChange('lightSource.color', 0);
       });
+      addNumberField(div, 'dustMoteCount', light.dustMoteCount, 0, 200, v => {
+        light.dustMoteCount = v;
+        callbacks?.onPropertyChange('lightSource.dustMoteCount', v);
+      });
+      addNumberField(div, 'dustMoteSpreadBlocks', light.dustMoteSpreadBlocks, 0, 32, v => {
+        light.dustMoteSpreadBlocks = v;
+        callbacks?.onPropertyChange('lightSource.dustMoteSpreadBlocks', v);
+      });
+    }
+  } else if (el.type === 'sunbeam') {
+    const sb = (room.sunbeams ?? []).find(s => s.uid === el.uid);
+    if (sb) {
+      addField(div, 'xBlock', String(sb.xBlock),
+        v => {
+          const num = parseInt(v);
+          if (!isNaN(num)) {
+            sb.xBlock = num;
+            callbacks?.onPropertyChange('sunbeam.xBlock', num);
+          }
+        });
+      addField(div, 'yBlock', String(sb.yBlock),
+        v => {
+          const num = parseInt(v);
+          if (!isNaN(num)) {
+            sb.yBlock = num;
+            callbacks?.onPropertyChange('sunbeam.yBlock', num);
+          }
+        });
+      addNumberField(div, 'angleRad', sb.angleRad, -Math.PI, Math.PI, v => {
+        sb.angleRad = v;
+        callbacks?.onPropertyChange('sunbeam.angleRad', v);
+      });
+      addNumberField(div, 'widthBlocks', sb.widthBlocks, 1, 20, v => {
+        sb.widthBlocks = v;
+        callbacks?.onPropertyChange('sunbeam.widthBlocks', v);
+      });
+      addNumberField(div, 'lengthBlocks', sb.lengthBlocks, 1, 80, v => {
+        sb.lengthBlocks = v;
+        callbacks?.onPropertyChange('sunbeam.lengthBlocks', v);
+      });
+      addSliderField(div, 'intensityPct', sb.intensityPct, 0, 100, v => {
+        sb.intensityPct = v;
+        callbacks?.onPropertyChange('sunbeam.intensityPct', v);
+      });
+      addColorSliders(div, 'color', sb.colorR, sb.colorG, sb.colorB, (r, g, b) => {
+        sb.colorR = r;
+        sb.colorG = g;
+        sb.colorB = b;
+        callbacks?.onPropertyChange('sunbeam.color', 0);
+      });
     }
   } else if (el.type === 'waterZone') {
     const zone = (room.waterZones ?? []).find(z => z.uid === el.uid);

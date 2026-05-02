@@ -56,6 +56,8 @@ import type {
   RoomJsonDustPile,
   RoomJsonGrasshopperArea,
   RoomJsonDecoration,
+  RoomJsonLightSource,
+  RoomJsonSunbeam,
 } from '../editor/roomJson';
 import { createTileGrid, paintRect, extractLayerFromGrid } from './tileGridCompressor';
 import type { SavedRect, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
@@ -191,6 +193,13 @@ export interface SavedRoomV2 {
    * [xBlock, yBlock, radiusBlocks, r, g, b, brightnessPct].
    */
   lights?: [number, number, number, number, number, number, number][];
+  /**
+   * Full light-source objects used when any source has extended fields
+   * (e.g. dustMoteCount > 0). When present, takes priority over `lights`.
+   */
+  lightSourcesExt?: RoomJsonLightSource[];
+  /** Designer-placed sunbeams. Stored as full objects (small count). */
+  sunbeams?: RoomJsonSunbeam[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -462,9 +471,17 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     );
   }
   if (json.lightSources && json.lightSources.length > 0) {
-    out.lights = json.lightSources.map(l => [
-      l.xBlock, l.yBlock, l.radiusBlocks, l.colorR, l.colorG, l.colorB, l.brightnessPct,
-    ] as [number, number, number, number, number, number, number]);
+    const hasExtended = json.lightSources.some(l => (l.dustMoteCount ?? 0) > 0);
+    if (hasExtended) {
+      out.lightSourcesExt = json.lightSources.map(l => ({ ...l }));
+    } else {
+      out.lights = json.lightSources.map(l => [
+        l.xBlock, l.yBlock, l.radiusBlocks, l.colorR, l.colorG, l.colorB, l.brightnessPct,
+      ] as [number, number, number, number, number, number, number]);
+    }
+  }
+  if (json.sunbeams && json.sunbeams.length > 0) {
+    out.sunbeams = json.sunbeams.map(s => ({ ...s }));
   }
 
   return out;
@@ -596,11 +613,16 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       isDark: entry[2] === 1,
     }));
   }
-  if (saved.lights && saved.lights.length > 0) {
+  if (saved.lightSourcesExt && saved.lightSourcesExt.length > 0) {
+    json.lightSources = saved.lightSourcesExt.map(l => ({ ...l }));
+  } else if (saved.lights && saved.lights.length > 0) {
     json.lightSources = saved.lights.map(([x, y, r, cr, cg, cb, br]) => ({
       xBlock: x, yBlock: y, radiusBlocks: r,
       colorR: cr, colorG: cg, colorB: cb, brightnessPct: br,
     }));
+  }
+  if (saved.sunbeams && saved.sunbeams.length > 0) {
+    json.sunbeams = saved.sunbeams.map(s => ({ ...s }));
   }
 
   return json;

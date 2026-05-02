@@ -54,6 +54,8 @@ export interface PaletteItem {
   isDarkAmbientLightBlockerItem?: 1;
   /** 1 if this palette item places a local light source. */
   isLightSourceItem?: 1;
+  /** 1 if this palette item places a sunbeam. */
+  isSunbeamItem?: 1;
   /** 1 if this palette item places a liquid zone (water or lava). */
   isLiquidZoneItem?: 1;
   /** 1 if this palette item places a crumble block (collapses on first contact). */
@@ -166,6 +168,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'ambient_light_blocker',      label: 'Ambient Blocker', category: 'lighting', isAmbientLightBlockerItem: 1 },
   { id: 'dark_ambient_light_blocker', label: 'Dark Blocker',    category: 'lighting', isAmbientLightBlockerItem: 1, isDarkAmbientLightBlockerItem: 1 },
   { id: 'light_source',          label: 'Light Source',    category: 'lighting', isLightSourceItem: 1 },
+  { id: 'sunbeam',               label: 'Sunbeam',         category: 'lighting', isSunbeamItem: 1 },
   // ── Liquids layer ───────────────────────────────────────────────────────
   { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
   { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
@@ -488,6 +491,28 @@ export interface EditorLightSource {
   colorB: number;
   /** Designer-facing 0-100 percent brightness slider value. */
   brightnessPct: number;
+  /** Number of atmospheric dust motes near this source (0 = none). */
+  dustMoteCount: number;
+  /** Radius (blocks) in which dust motes spawn; 0 = use radiusBlocks. */
+  dustMoteSpreadBlocks: number;
+}
+
+/** An editor-placed sunbeam (see {@link RoomSunbeamDef}). */
+export interface EditorSunbeam {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Angle (radians) the beam travels — 0 = right, π/2 = down. */
+  angleRad: number;
+  /** Width of the beam base in blocks. */
+  widthBlocks: number;
+  /** Length of the beam shaft in blocks. */
+  lengthBlocks: number;
+  colorR: number;
+  colorG: number;
+  colorB: number;
+  /** Intensity as 0–100 percent. */
+  intensityPct: number;
 }
 
 export interface EditorRoomData {
@@ -548,11 +573,13 @@ export interface EditorRoomData {
   bouncePads?: EditorBouncePad[];
   /** Ropes placed in this room. */
   ropes?: EditorRope[];
+  /** Sunbeams placed in this room. */
+  sunbeams?: EditorSunbeam[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam';
 
 export interface SelectedElement {
   type: SelectedElementType;
