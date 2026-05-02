@@ -28,7 +28,7 @@ import { BLOCK_SIZE_SMALL, type RoomLightSourceDef } from '../../levels/roomDef'
  *     \            /
  *    tipA ──── tipB       (shadow-tip end, narrower)
  *
- * Both the core polygon (alpha) and a soft penumbra (drawn at alpha*0.4
+ * Both the core polygon (alpha) and a soft penumbra (drawn at alpha*0.38
  * with 30 % extra width) are rendered from a single occluder.
  */
 export interface ShadowCasterOccluderPx {
@@ -45,7 +45,7 @@ export interface ShadowCasterOccluderPx {
   readonly tipBx: number;
   readonly tipBy: number;
   /**
-   * Core fill opacity (0-1).  The penumbra is drawn at `alpha * 0.4`.
+   * Core fill opacity (0-1).  The penumbra is drawn at `alpha * 0.38`.
    * Defaults to SHADOW_CORE_ALPHA if omitted.
    */
   readonly alpha?: number;
