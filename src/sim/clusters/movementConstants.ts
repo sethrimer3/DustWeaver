@@ -140,7 +140,7 @@ export const JUMP_BUFFER_MS = 120;
 
 /**
  * Ticks a jump input is remembered while airborne (derived from JUMP_BUFFER_MS).
- * At 60 fps, 7 ticks ≈ 116 ms.
+ * At 60 fps, 7 ticks ≈ 117 ms (quantized from the 120 ms source value).
  */
 export const JUMP_BUFFER_TICKS = Math.round(JUMP_BUFFER_MS / 1000.0 * 60);
 
@@ -303,7 +303,7 @@ export const WALL_JUMP_PROXIMITY_PIXELS = 3;
 export const WALL_JUMP_GRACE_MS = 100;
 
 /**
- * Ticks derived from WALL_JUMP_GRACE_MS.  At 60 fps, 6 ticks ≈ 100 ms.
+ * Ticks derived from WALL_JUMP_GRACE_MS.  At 60 fps, 6 ticks = 100 ms (exact at this rate).
  */
 export const WALL_JUMP_GRACE_TICKS = Math.round(WALL_JUMP_GRACE_MS / 1000.0 * 60);
 

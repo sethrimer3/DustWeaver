@@ -372,13 +372,23 @@ export function tickPlayerMovement(
                            && cluster.wallJumpLockoutTicks === 0;
 
       // When both sides are eligible, prefer the nearer wall.
+      // If equidistant (e.g., touching both walls simultaneously), prefer the
+      // wall on the side the player is facing / moving toward so the launch
+      // direction feels intentional rather than always favouring the left wall.
       if (canJumpFromLeft && canJumpFromRight) {
         const leftDist  = cluster.isTouchingWallLeftFlag  === 1 ? 0 : nearLeftDistWorld;
         const rightDist = cluster.isTouchingWallRightFlag === 1 ? 0 : nearRightDistWorld;
-        if (leftDist <= rightDist) {
+        if (leftDist < rightDist) {
           canJumpFromRight = false;
-        } else {
+        } else if (rightDist < leftDist) {
           canJumpFromLeft = false;
+        } else {
+          // Equal distances: prefer the side the player is moving toward (or right by default).
+          if (cluster.velocityXWorld < 0) {
+            canJumpFromRight = false; // moving left → prefer left wall
+          } else {
+            canJumpFromLeft = false;  // moving right or stationary → prefer right wall
+          }
         }
       }
 
