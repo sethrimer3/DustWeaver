@@ -5,7 +5,7 @@
 
 import { WorldState } from '../sim/world';
 
-const MAX_DEBRIS = 60;
+const MAX_DEBRIS = 120;
 const DEBRIS_LIFETIME_MS = 400;
 const SPAWN_RATE_PER_TICK = 3;
 /** Spawn rate multiplier when the player is grapple-stuck and decelerating. */
@@ -41,21 +41,35 @@ export class SkidDebrisRenderer {
 
     // Spawn new debris if skidding
     if (world.isPlayerSkiddingFlag === 1) {
-      // Spawn more debris when grapple-stuck for a dramatic skid effect
-      const rate = world.isGrappleStuckFlag === 1
+      // Landing skid at high speed: scale spawn rate, spread, and velocity by
+      // (1 + landingFactor), so faster landings kick up more and farther dust.
+      // Normal skid (no landing): effectMultiplier = 1.0 (no extra scale).
+      const landFactor = world.playerLandingSkidSpeedFactor;
+      const effectMultiplier = 1.0 + landFactor;
+
+      // Grapple-stuck skid uses its own multiplier (applied on top of effectMultiplier).
+      const baseRate = world.isGrappleStuckFlag === 1
         ? SPAWN_RATE_PER_TICK * GRAPPLE_STUCK_SPAWN_MULTIPLIER
         : SPAWN_RATE_PER_TICK;
+      const rate = Math.ceil(baseRate * effectMultiplier);
+
+      const spreadX = DEBRIS_SPAWN_SPREAD_X_WORLD * effectMultiplier;
+      const spreadY = DEBRIS_SPAWN_SPREAD_Y_WORLD * effectMultiplier;
+      const vxVar   = DEBRIS_VX_VARIANCE_WORLD * effectMultiplier;
+      const vyMin   = DEBRIS_VY_MIN_WORLD;
+      const vyRange = DEBRIS_VY_RANGE_WORLD * effectMultiplier;
+
       for (let s = 0; s < rate; s++) {
         if (this.count >= MAX_DEBRIS) {
           // Recycle oldest
           this.recycleOldest();
         }
         const i = this.count;
-        this.xWorld[i] = world.skidDebrisXWorld + (this.nextRandom() - 0.5) * DEBRIS_SPAWN_SPREAD_X_WORLD;
-        this.yWorld[i] = world.skidDebrisYWorld - this.nextRandom() * DEBRIS_SPAWN_SPREAD_Y_WORLD;
+        this.xWorld[i] = world.skidDebrisXWorld + (this.nextRandom() - 0.5) * spreadX;
+        this.yWorld[i] = world.skidDebrisYWorld - this.nextRandom() * spreadY;
         // Debris flies upward and slightly outward
-        this.vxWorld[i] = (this.nextRandom() - 0.5) * DEBRIS_VX_VARIANCE_WORLD;
-        this.vyWorld[i] = -(this.nextRandom() * DEBRIS_VY_RANGE_WORLD + DEBRIS_VY_MIN_WORLD);
+        this.vxWorld[i] = (this.nextRandom() - 0.5) * vxVar;
+        this.vyWorld[i] = -(this.nextRandom() * vyRange + vyMin);
         this.ageMs[i] = 0;
         this.colorIdx[i] = (this.nextRandom() * COLORS.length) | 0;
         this.count++;

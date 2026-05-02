@@ -238,7 +238,7 @@ export interface WorldSnapshot {
   /** Start index in particle buffers for grapple chain links (or -1 if unavailable). */
   readonly grappleParticleStartIndex: number;
   /** 1 when the grapple is attached to the top surface of a wall block. */
-  readonly isGrappleTopSurfaceFlag: 0 | 1;
+  readonly isGrappleZipActiveFlag: 0 | 1;
   /** 1 when the player has arrived at a top-surface grapple anchor and is sticking. */
   readonly isGrappleStuckFlag: 0 | 1;
   /** World-space X of the grapple anchor point (only valid when isGrappleActiveFlag=1). */

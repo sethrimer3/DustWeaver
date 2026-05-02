@@ -269,7 +269,7 @@ export function startGameScreen(
     world.isGrappleActiveFlag     = 0;
     world.isGrappleMissActiveFlag = 0;
     world.isGrappleRetractingFlag = 0;
-    world.isGrappleTopSurfaceFlag = 0;
+    world.isGrappleZipActiveFlag = 0;
     world.isGrappleStuckFlag      = 0;
     world.hasGrappleChargeFlag    = 1;
     world.grappleParticleStartIndex = -1;
@@ -1014,11 +1014,15 @@ export function startGameScreen(
       return;
     }
 
-    // Latch one-shot jump inputs into world state before ticking.
+    // Latch one-shot jump and down inputs into world state before ticking.
     // This preserves edge-triggered inputs on high-refresh frames where no
     // fixed sim tick runs (accumulator < FIXED_DT_MS).
     if (jumpTriggered) {
       world.playerJumpTriggeredFlag = 1;
+    }
+    if (inputState.isDownTriggeredFlag) {
+      world.playerDownTriggeredFlag = 1;
+      inputState.isDownTriggeredFlag = false;
     }
     world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
 

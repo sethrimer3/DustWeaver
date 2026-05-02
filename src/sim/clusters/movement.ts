@@ -57,6 +57,8 @@ import {
   ROLLING_ENEMY_SPRITE_RADIUS_WORLD,
   FLYING_EYE_VERTICAL_MARGIN_WORLD,
   CLUSTER_EDGE_MARGIN_WORLD,
+  LANDING_SKID_SPEED_THRESHOLD_WORLD,
+  LANDING_SKID_SPEED_FACTOR_MAX,
 } from './movementConstants';
 
 // ============================================================================
@@ -78,6 +80,9 @@ export { debugSpeedOverrides, PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAP
 
 export function applyClusterMovement(world: WorldState): void {
   const dtSec = world.dtMs / 1000.0;
+
+  // Reset per-tick landing skid factor (set again below if player just landed at high speed).
+  world.playerLandingSkidSpeedFactor = 0.0;
 
   // ── Locate the player cluster position (needed by enemy AI) ───────────────
   let playerX = 0.0;
@@ -246,6 +251,19 @@ export function applyClusterMovement(world: WorldState): void {
             cluster.varJumpTimerTicks   = VAR_JUMP_TIME_TICKS;
             cluster.varJumpSpeedWorld   = -landJumpSpeed;
           }
+
+          // ── Landing skid dust at high horizontal speed ───────────────────
+          // When the player touches the ground at above-sprint horizontal speed,
+          // trigger skid-dust scaled to the excess speed.
+          // factor = 0 at threshold, increasing linearly:
+          //   factor = (speed − threshold) / threshold
+          // So factor = 1.0 at 2× threshold, 4.0 (max) at 5× threshold.
+          const absVx = Math.abs(cluster.velocityXWorld);
+          if (absVx > LANDING_SKID_SPEED_THRESHOLD_WORLD) {
+            const rawFactor = (absVx - LANDING_SKID_SPEED_THRESHOLD_WORLD)
+              / LANDING_SKID_SPEED_THRESHOLD_WORLD;
+            world.playerLandingSkidSpeedFactor = Math.min(rawFactor, LANDING_SKID_SPEED_FACTOR_MAX);
+          }
         } else if (wasGrounded && cluster.isGroundedFlag === 0) {
           // Player walked off a ledge — start coyote time
           cluster.coyoteTimeTicks = COYOTE_TIME_TICKS;
@@ -290,16 +308,21 @@ export function applyClusterMovement(world: WorldState): void {
   } // end for (clusters)
 
   // ── Update skid debris flag for renderer ──────────────────────────────────
+  // playerLandingSkidSpeedFactor is written above per-tick; read here and by renderer.
   const player = world.clusters[0];
   if (
     player !== undefined &&
     player.isAliveFlag === 1 &&
-    (player.isSkiddingFlag === 1 || world.wallJumpSkidDebrisBurstFlag === 1)
+    (player.isSkiddingFlag === 1 || world.wallJumpSkidDebrisBurstFlag === 1
+     || world.playerLandingSkidSpeedFactor > 0)
   ) {
     world.isPlayerSkiddingFlag = 1;
-    // Front corner = bottom edge, in the direction the player is sliding
-    // (opposite to facing direction since they are skidding)
-    if (player.isSkiddingFlag === 1) {
+    if (world.playerLandingSkidSpeedFactor > 0) {
+      // Landing skid: center the debris on the player's feet, not just a front corner.
+      world.skidDebrisXWorld = player.positionXWorld;
+      world.skidDebrisYWorld = player.positionYWorld + player.halfHeightWorld;
+    } else if (player.isSkiddingFlag === 1) {
+      // Normal skid: front corner = bottom edge in the direction the player is sliding
       const isMovingRight = player.velocityXWorld > 0;
       world.skidDebrisXWorld = isMovingRight
         ? player.positionXWorld + player.halfWidthWorld
@@ -312,11 +335,13 @@ export function applyClusterMovement(world: WorldState): void {
   world.wallJumpSkidDebrisBurstFlag = 0;
 
   // Clear per-tick player inputs (consumed this tick).
-  // playerJumpTriggeredFlag is preserved when grappling so applyGrappleClusterConstraint
-  // (step 0.25) can detect the rising edge of a jump press for tap/hold detection.
+  // playerJumpTriggeredFlag and playerDownTriggeredFlag are preserved when
+  // grappling so applyGrappleClusterConstraint (step 0.25) can detect the
+  // rising edge of these inputs for tap/hold detection.
   world.playerMoveInputDxWorld  = 0.0;
   world.playerMoveInputDyWorld  = 0.0;
   if (world.isGrappleActiveFlag === 0) {
     world.playerJumpTriggeredFlag = 0;
+    world.playerDownTriggeredFlag = 0;
   }
 }

@@ -652,7 +652,7 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
   }
 
   // ── Top-surface grapple special effect: rotating golden starburst at anchor ─
-  if (snapshot.isGrappleTopSurfaceFlag === 1 && snapshot.isGrappleActiveFlag === 1) {
+  if (snapshot.isGrappleZipActiveFlag === 1 && snapshot.isGrappleActiveFlag === 1) {
     /** Tick-to-radians scale for starburst rotation speed. */
     const STARBURST_TIME_SCALE = 0.12;
     /** Number of radiating rays in the starburst. */
