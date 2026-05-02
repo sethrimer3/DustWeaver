@@ -40,6 +40,7 @@ import {
 } from '../render/effects/theroEffectManager';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
+import { buildPlayerShadowOccluders, type ShadowCasterOccluderPx } from '../render/effects/shadowCaster';
 import {
   renderDecorationSprites,
   addDecorationBloom,
@@ -448,7 +449,28 @@ export function renderFrame(r: RenderFrameContext): void {
       particleLightCount++;
     }
 
-    darkRoomOverlay.render(ctx, lights);
+    // ── Player shadow occluders ──────────────────────────────────────────────
+    // For each authored local light source, build a tapered shadow polygon
+    // that the player casts away from the light.  The occluders are drawn into
+    // the darkness mask *after* the light holes so the player visibly blocks
+    // part of each light cone.  Only authored lightSources are used — not
+    // decoration glows or particle lights.
+    const shadows: ShadowCasterOccluderPx[] = [];
+    if (playerSnap !== undefined && currentRoom.lightSources && currentRoom.lightSources.length > 0) {
+      buildPlayerShadowOccluders(
+        playerSnap.positionXWorld * zoom + ox,
+        playerSnap.positionYWorld * zoom + oy,
+        playerSnap.halfWidthWorld  * zoom,
+        playerSnap.halfHeightWorld * zoom,
+        currentRoom.lightSources,
+        ox,
+        oy,
+        zoom,
+        shadows,
+      );
+    }
+
+    darkRoomOverlay.render(ctx, lights, shadows);
   }
 
   // End room clip before any HUD/screen-space overlays are drawn.
