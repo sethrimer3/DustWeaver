@@ -269,7 +269,7 @@ export function startGameScreen(
     world.isGrappleActiveFlag     = 0;
     world.isGrappleMissActiveFlag = 0;
     world.isGrappleRetractingFlag = 0;
-    world.isGrappleTopSurfaceFlag = 0;
+    world.isGrappleZipActiveFlag = 0;
     world.isGrappleStuckFlag      = 0;
     world.hasGrappleChargeFlag    = 1;
     world.grappleParticleStartIndex = -1;

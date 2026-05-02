@@ -317,8 +317,10 @@ export const SKID_JUMP_MULTIPLIER = 1.153;
 export const SKID_VELOCITY_THRESHOLD_WORLD = 5.0;
 
 /**
- * Jump speed multiplier for the zip super jump.
- * Targets ~8 small blocks of jump height from a zip-stuck position.
+ * Jump speed multiplier for the zip-jump (zip super jump).
+ * Applied to PLAYER_JUMP_SPEED_WORLD in the direction of the surface normal.
+ * At 1.331× the total speed magnitude is 1.331 × 255 ≈ 340 world units/s,
+ * giving ~8 small blocks of effective height when launched vertically.
  */
 export const GRAPPLE_SUPER_JUMP_MULTIPLIER = 1.331;
 

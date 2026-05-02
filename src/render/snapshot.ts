@@ -34,7 +34,7 @@ interface _ReusableBacking {
   isGrappleActiveFlag: 0 | 1;
   isGrappleMissActiveFlag: 0 | 1;
   grappleParticleStartIndex: number;
-  isGrappleTopSurfaceFlag: 0 | 1;
+  isGrappleZipActiveFlag: 0 | 1;
   isGrappleStuckFlag: 0 | 1;
   grappleAnchorXWorld: number;
   grappleAnchorYWorld: number;
@@ -308,7 +308,7 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     isGrappleActiveFlag:      world.isGrappleActiveFlag,
     isGrappleMissActiveFlag:  world.isGrappleMissActiveFlag,
     grappleParticleStartIndex: world.grappleParticleStartIndex,
-    isGrappleTopSurfaceFlag:  world.isGrappleTopSurfaceFlag,
+    isGrappleZipActiveFlag:  world.isGrappleZipActiveFlag,
     isGrappleStuckFlag:       world.isGrappleStuckFlag,
     grappleAnchorXWorld:      world.grappleAnchorXWorld,
     grappleAnchorYWorld:      world.grappleAnchorYWorld,
@@ -404,7 +404,7 @@ export function updateSnapshotInPlace(
   b.isGrappleActiveFlag       = world.isGrappleActiveFlag;
   b.isGrappleMissActiveFlag   = world.isGrappleMissActiveFlag;
   b.grappleParticleStartIndex = world.grappleParticleStartIndex;
-  b.isGrappleTopSurfaceFlag   = world.isGrappleTopSurfaceFlag;
+  b.isGrappleZipActiveFlag   = world.isGrappleZipActiveFlag;
   b.isGrappleStuckFlag        = world.isGrappleStuckFlag;
   b.grappleAnchorXWorld       = world.grappleAnchorXWorld;
   b.grappleAnchorYWorld       = world.grappleAnchorYWorld;
@@ -603,7 +603,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     isGrappleActiveFlag: world.isGrappleActiveFlag,
     isGrappleMissActiveFlag: world.isGrappleMissActiveFlag,
     grappleParticleStartIndex: world.grappleParticleStartIndex,
-    isGrappleTopSurfaceFlag: world.isGrappleTopSurfaceFlag,
+    isGrappleZipActiveFlag: world.isGrappleZipActiveFlag,
     isGrappleStuckFlag: world.isGrappleStuckFlag,
     grappleAnchorXWorld: world.grappleAnchorXWorld,
     grappleAnchorYWorld: world.grappleAnchorYWorld,

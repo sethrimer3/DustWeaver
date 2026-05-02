@@ -43,20 +43,21 @@ export class SkidDebrisRenderer {
     if (world.isPlayerSkiddingFlag === 1) {
       // Landing skid at high speed: scale spawn rate, spread, and velocity by
       // (1 + landingFactor), so faster landings kick up more and farther dust.
+      // Normal skid (no landing): effectMultiplier = 1.0 (no extra scale).
       const landFactor = world.playerLandingSkidSpeedFactor;
-      const speedScale = 1.0 + landFactor;
+      const effectMultiplier = 1.0 + landFactor;
 
-      // Grapple-stuck skid uses its own multiplier (applied on top of speedScale).
+      // Grapple-stuck skid uses its own multiplier (applied on top of effectMultiplier).
       const baseRate = world.isGrappleStuckFlag === 1
         ? SPAWN_RATE_PER_TICK * GRAPPLE_STUCK_SPAWN_MULTIPLIER
         : SPAWN_RATE_PER_TICK;
-      const rate = Math.ceil(baseRate * speedScale);
+      const rate = Math.ceil(baseRate * effectMultiplier);
 
-      const spreadX = DEBRIS_SPAWN_SPREAD_X_WORLD * speedScale;
-      const spreadY = DEBRIS_SPAWN_SPREAD_Y_WORLD * speedScale;
-      const vxVar   = DEBRIS_VX_VARIANCE_WORLD * speedScale;
+      const spreadX = DEBRIS_SPAWN_SPREAD_X_WORLD * effectMultiplier;
+      const spreadY = DEBRIS_SPAWN_SPREAD_Y_WORLD * effectMultiplier;
+      const vxVar   = DEBRIS_VX_VARIANCE_WORLD * effectMultiplier;
       const vyMin   = DEBRIS_VY_MIN_WORLD;
-      const vyRange = DEBRIS_VY_RANGE_WORLD * speedScale;
+      const vyRange = DEBRIS_VY_RANGE_WORLD * effectMultiplier;
 
       for (let s = 0; s < rate; s++) {
         if (this.count >= MAX_DEBRIS) {

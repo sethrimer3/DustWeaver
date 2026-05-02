@@ -254,8 +254,10 @@ export function applyClusterMovement(world: WorldState): void {
 
           // ── Landing skid dust at high horizontal speed ───────────────────
           // When the player touches the ground at above-sprint horizontal speed,
-          // trigger skid-dust scaled to the excess speed.  factor = 0 at
-          // threshold, increasing linearly with speed up to LANDING_SKID_SPEED_FACTOR_MAX.
+          // trigger skid-dust scaled to the excess speed.
+          // factor = 0 at threshold, increasing linearly:
+          //   factor = (speed − threshold) / threshold
+          // So factor = 1.0 at 2× threshold, 4.0 (max) at 5× threshold.
           const absVx = Math.abs(cluster.velocityXWorld);
           if (absVx > LANDING_SKID_SPEED_THRESHOLD_WORLD) {
             const rawFactor = (absVx - LANDING_SKID_SPEED_THRESHOLD_WORLD)

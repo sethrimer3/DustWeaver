@@ -382,7 +382,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // first tick after attachment.
   world.playerJumpTriggeredFlag = 0;
   world.isGrappleActiveFlag = 1;
-  world.isGrappleTopSurfaceFlag = 0;  // zip activated by double-tap down, not at fire time
+  world.isGrappleZipActiveFlag = 0;  // zip activated by double-tap down, not at fire time
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   // Clear any lingering proximity bounce sprite state — the player is now
@@ -450,7 +450,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   }
 
   world.isGrappleActiveFlag = 0;
-  world.isGrappleTopSurfaceFlag = 0;
+  world.isGrappleZipActiveFlag = 0;
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   world.grappleJumpHeldTickCount = 0;
@@ -490,7 +490,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
  *
  * Pipeline per tick:
  *   1. Consume playerJumpTriggeredFlag and playerDownTriggeredFlag.
- *   2. Detect double-tap down → activate zip (isGrappleTopSurfaceFlag).
+ *   2. Detect double-tap down → activate zip (isGrappleZipActiveFlag).
  *   3. If zip active → run zip/stuck/hop-off logic; skip normal swing.
  *   4. Jump pressed (normal swing) → release with upward impulse.
  *   5. While down held (retraction):
@@ -528,7 +528,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   const downJustPressed = world.playerDownTriggeredFlag === 1;
   world.playerDownTriggeredFlag = 0; // consume
 
-  if (downJustPressed && world.isGrappleTopSurfaceFlag === 0) {
+  if (downJustPressed && world.isGrappleZipActiveFlag === 0) {
     const ax = world.grappleAnchorXWorld;
     const ay = world.grappleAnchorYWorld;
     const currentTick = world.tick;
@@ -549,7 +549,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         world.grappleZipNormalXWorld = 0.0;
         world.grappleZipNormalYWorld = -1.0; // default: floor normal (upward)
       }
-      world.isGrappleTopSurfaceFlag = 1;
+      world.isGrappleZipActiveFlag = 1;
       world.isGrappleStuckFlag = 0;
       world.grappleStuckStoppedTickCount = 0;
       world.playerDownLastPressTick = 0; // reset so next press starts fresh
@@ -562,14 +562,17 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // ════════════════════════════════════════════════════════════════════════════
   // Zip grapple — rocket toward anchor, stick, then zip-jump or hop off
   // ════════════════════════════════════════════════════════════════════════════
-  if (world.isGrappleTopSurfaceFlag === 1) {
+  if (world.isGrappleZipActiveFlag === 1) {
     const ax = world.grappleAnchorXWorld;
     const ay = world.grappleAnchorYWorld;
     const nx = world.grappleZipNormalXWorld;
     const ny = world.grappleZipNormalYWorld;
 
     // Arrival target: player center at anchor + surfaceNormal * halfExtent,
-    // where halfExtent depends on the approach angle (box–box projection).
+    // where halfExtent is the projection of the player's AABB half-extents
+    // onto the surface normal (so the player touches the surface regardless
+    // of approach angle: e.g. full halfHeight for a floor/ceiling, full
+    // halfWidth for a wall, blended for diagonal normals).
     const halfExtent = Math.abs(nx) * player.halfWidthWorld
       + Math.abs(ny) * player.halfHeightWorld;
     const targetX = ax + nx * halfExtent;
@@ -584,8 +587,11 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         ? ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER)
         : 1.0;
       const jumpSpeed = PLAYER_JUMP_SPEED_WORLD * jumpMultiplier;
-      // Launch in surface normal direction (away from anchor) for ceiling/wall zips,
-      // or upward for floor zips.  This allows ceiling → propel downward, etc.
+      // Launch in surface normal direction (away from anchor).
+      // Total speed magnitude = jumpSpeed because ||(nx,ny)|| = 1 (unit vector).
+      // For ceiling zip: ny > 0 → propels downward.
+      // For floor zip: ny < 0 → propels upward.
+      // For wall zip: nx ≠ 0 → propels sideways.
       player.velocityXWorld = nx * jumpSpeed;
       player.velocityYWorld = ny * jumpSpeed;
       player.isGroundedFlag = 0;
@@ -643,7 +649,13 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         player.velocityYWorld = 0;
         world.grappleStuckStoppedTickCount++;
 
-        // Auto hop-off after zip-jump window expires
+        // Auto hop-off after zip-jump window expires.
+        // The normal vector (nx, ny) points from the anchor toward the player's
+        // arrival position (away from the surface), so multiplying by a positive
+        // speed peels the player off in the correct direction:
+        //   floor zip (ny < 0 = upward)   → player pushed up
+        //   ceiling zip (ny > 0 = down)   → player drops away
+        //   wall zip (nx ≠ 0 = sideways)  → player pushed away from wall
         if (world.grappleStuckStoppedTickCount > GRAPPLE_ZIP_JUMP_WINDOW_TICKS) {
           player.velocityXWorld = nx * GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD;
           player.velocityYWorld = ny * GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD;

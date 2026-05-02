@@ -280,7 +280,7 @@ export interface WorldState extends ParticleBuffers {
    * The player zips quickly toward the anchor; upon arrival momentum stops.
    * Works on any surface (floor, wall, ceiling); activated by double-tap down.
    */
-  isGrappleTopSurfaceFlag: 0 | 1;
+  isGrappleZipActiveFlag: 0 | 1;
   /** 1 when the player has arrived at the zip target and is sticking. */
   isGrappleStuckFlag: 0 | 1;
   /**
@@ -790,7 +790,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleParticleStartIndex: -1,
     grappleJumpHeldTickCount: 0,
     hasGrappleChargeFlag: 1,
-    isGrappleTopSurfaceFlag: 0,
+    isGrappleZipActiveFlag: 0,
     isGrappleStuckFlag: 0,
     grappleStuckStoppedTickCount: 0,
     grappleZipNormalXWorld: 0.0,

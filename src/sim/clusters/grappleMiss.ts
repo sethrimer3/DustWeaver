@@ -417,7 +417,7 @@ export function updateGrappleMissChain(world: WorldState): void {
               world.grappleJumpHeldTickCount = 0;
               world.playerJumpTriggeredFlag = 0;
               world.isGrappleActiveFlag = 1;
-              world.isGrappleTopSurfaceFlag = 0;
+              world.isGrappleZipActiveFlag = 0;
               world.isGrappleStuckFlag = 0;
               world.grappleStuckStoppedTickCount = 0;
               world.isGrappleMissActiveFlag = 0;
