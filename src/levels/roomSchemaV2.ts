@@ -471,7 +471,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     );
   }
   if (json.lightSources && json.lightSources.length > 0) {
-    const hasExtendedLightSources = json.lightSources.some(l => (l.dustMoteCount ?? 0) > 0);
+    const hasExtendedLightSources = json.lightSources.some(l => (l.dustMoteCount ?? 0) > 0 || (l.dustMoteSpreadBlocks ?? 0) > 0);
     if (hasExtendedLightSources) {
       out.lightSourcesExt = json.lightSources.map(l => ({ ...l }));
     } else {

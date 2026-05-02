@@ -49,12 +49,12 @@ export class SunbeamRenderer {
     zoom: number,
     nowMs: number,
   ): void {
-    const bsPx = BLOCK_SIZE_SMALL * zoom;
-    const originXPx = beam.xBlock * bsPx + offsetXPx;
-    const originYPx = beam.yBlock * bsPx + offsetYPx;
+    const blockSizeZoomedPx = BLOCK_SIZE_SMALL * zoom;
+    const originXPx = beam.xBlock * blockSizeZoomedPx + offsetXPx;
+    const originYPx = beam.yBlock * blockSizeZoomedPx + offsetYPx;
 
-    const halfWidthPx = (beam.widthBlocks * bsPx) / 2;
-    const lengthPx = beam.lengthBlocks * bsPx;
+    const halfWidthPx = (beam.widthBlocks * blockSizeZoomedPx) / 2;
+    const lengthPx = beam.lengthBlocks * blockSizeZoomedPx;
 
     const cosA = Math.cos(beam.angleRad);
     const sinA = Math.sin(beam.angleRad);

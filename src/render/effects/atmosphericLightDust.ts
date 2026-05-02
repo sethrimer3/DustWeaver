@@ -15,10 +15,10 @@ import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 
 const MAX_MOTES = 512;
 
-/** Pixels per millisecond — upward drift speed for motes. */
-const DRIFT_SPEED_PX_PER_MS = 0.008;
-/** Maximum horizontal wander speed (px/ms). */
-const WANDER_SPEED_PX_PER_MS = 0.004;
+/** World units per millisecond — upward drift speed for motes. */
+const DRIFT_SPEED_WORLD_PER_MS = 0.008;
+/** Maximum horizontal wander speed (world units/ms). */
+const WANDER_SPEED_WORLD_PER_MS = 0.004;
 
 interface SpawnZone {
   xWorld: number;
@@ -97,7 +97,7 @@ export class AtmosphericLightDust {
       this.moteX[i] += this.moteVx[i] * dtMs;
       this.moteY[i] += this.moteVy[i] * dtMs;
       // Wander: gradually nudge horizontal velocity toward zero with small noise.
-      this.moteVx[i] += (Math.random() - 0.5) * WANDER_SPEED_PX_PER_MS * 2;
+      this.moteVx[i] += (Math.random() - 0.5) * WANDER_SPEED_WORLD_PER_MS * 2;
       this.moteVx[i] *= 0.99;
     }
 
@@ -152,8 +152,8 @@ export class AtmosphericLightDust {
     const spread = zone.spreadWorld;
     this.moteX[i] = zone.xWorld + (Math.random() - 0.5) * spread * 2;
     this.moteY[i] = zone.yWorld + (Math.random() - 0.5) * spread * 2;
-    this.moteVx[i] = (Math.random() - 0.5) * WANDER_SPEED_PX_PER_MS * 2;
-    this.moteVy[i] = -DRIFT_SPEED_PX_PER_MS * (0.5 + Math.random() * 0.5);
+    this.moteVx[i] = (Math.random() - 0.5) * WANDER_SPEED_WORLD_PER_MS * 2;
+    this.moteVy[i] = -DRIFT_SPEED_WORLD_PER_MS * (0.5 + Math.random() * 0.5);
     const lifetimeMs = 3000 + Math.random() * 4000;
     this.moteLifetime[i] = lifetimeMs;
     this.moteAge[i] = randomizeAge ? Math.random() * lifetimeMs : 0;
