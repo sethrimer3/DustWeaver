@@ -566,7 +566,7 @@ export interface ClusterMoveResult {
  * Returns a ClusterMoveResult describing what was contacted.
  *
  * This function:
- *   - Does NOT restore the caller's velocity (the internal velocity set for
+ *   - DOES restore the caller's velocity (the internal velocity set for
  *     substep calculations is temporary; it is restored after the sweep).
  *   - Does NOT call resolveRampSurfaces — callers that need ramp landing
  *     should call that separately.
