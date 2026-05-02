@@ -181,11 +181,20 @@ export function isSpecialZipGrapple(
 
 /**
  * Speed at which the grapple chain extends outward when fired (world units/sec).
- * High enough to cover the full influence radius (~96 world units) in ~3 frames
- * (3/60 s = 0.05 s) so the throw feels nearly instant:
- *   tip speed ≈ 2000 × 0.97 ≈ 1940 wu/s → 1940 × 0.05 ≈ 97 wu in 3 frames.
+ * Set so the tip reaches the full influence radius (96 wu) in exactly 1/8 second:
+ *   768 wu/s × 0.125 s = 96 wu
+ * This keeps the throw responsive while limiting per-tick movement to ~12.8 wu
+ * at 60 fps — small enough for the swept collision check to catch all solid walls.
  */
-const GRAPPLE_MISS_EXTEND_SPEED_WORLD_PER_SEC = 2000.0;
+const GRAPPLE_MISS_EXTEND_SPEED_WORLD_PER_SEC = 768.0;
+
+/**
+ * Skin thickness (world units) used when clamping the grapple tip to a wall
+ * surface during swept extension.  The tip rests just outside the tile instead
+ * of exactly on (or inside) the wall face, which prevents re-triggering on the
+ * very next tick.
+ */
+const GRAPPLE_TIP_SKIN_WORLD = 0.5;
 
 /**
  * Gravity applied to limp chain links after full extension (world units/sec²).
@@ -374,29 +383,37 @@ export function updateGrappleMissChain(world: WorldState): void {
       missLinkVx[i] *= dragFactor;
       missLinkVy[i] *= dragFactor;
 
-      // Integrate position
-      missLinkX[i] += missLinkVx[i] * dtSec;
-      missLinkY[i] += missLinkVy[i] * dtSec;
+      // ── Swept tip collision — cast ray from old position to new position ──
+      // Anti-tunneling: at the configured extension speed (~12.8 wu/tick at
+      // 60 fps) a simple point-in-box check can miss thin walls entirely if
+      // the tip teleports across them.  Raycasting from the previous position
+      // to the intended next position ensures the tip always stops at the first
+      // solid surface it would cross.
+      const prevLinkX = missLinkX[i];
+      const prevLinkY = missLinkY[i];
+      const moveDx = missLinkVx[i] * dtSec;
+      const moveDy = missLinkVy[i] * dtSec;
+      const moveDist = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
 
-      // ── Check wall collision — stick on contact ──────────────────────────
-      for (let wi = 0; wi < world.wallCount; wi++) {
-        const wx = world.wallXWorld[wi];
-        const wy = world.wallYWorld[wi];
-        const ww = world.wallWWorld[wi];
-        const wh = world.wallHWorld[wi];
-
-        if (missLinkX[i] >= wx && missLinkX[i] <= wx + ww &&
-          missLinkY[i] >= wy && missLinkY[i] <= wy + wh) {
-          // Bounce pad walls do not catch the grapple chain — pass through.
-          if (world.wallIsBouncePadFlag[wi] === 1) break;
-          // This link hit a wall! Stick it here.
+      let didHitWall = false;
+      if (moveDist > 0.001) {
+        const moveDirX = moveDx / moveDist;
+        const moveDirY = moveDy / moveDist;
+        const swept = raycastWalls(world, prevLinkX, prevLinkY, moveDirX, moveDirY, moveDist);
+        if (swept !== null && world.wallIsBouncePadFlag[swept.wallIndex] !== 1) {
+          // Clamp tip to just outside the wall surface (skin offset prevents
+          // the contact point from resting exactly on the face and re-triggering
+          // the same hit next tick).
+          const clampedDist = Math.max(0.0, swept.t - GRAPPLE_TIP_SKIN_WORLD);
+          missLinkX[i] = prevLinkX + moveDirX * clampedDist;
+          missLinkY[i] = prevLinkY + moveDirY * clampedDist;
           missLinkStuckFlag[i] = 1;
           missLinkVx[i] = 0;
           missLinkVy[i] = 0;
+          didHitWall = true;
 
-          // If this is the tip (last link), attach the grapple here
+          // If this is the tip (last link), attach the grapple here.
           if (i === GRAPPLE_SEGMENT_COUNT - 1) {
-            // Check if distance is valid for grapple attachment
             const hitDist = Math.sqrt(
               (missLinkX[i] - player.positionXWorld) ** 2 +
               (missLinkY[i] - player.positionYWorld) ** 2,
@@ -432,9 +449,13 @@ export function updateGrappleMissChain(world: WorldState): void {
               return;
             }
           }
-          break;
+        } else {
+          // Path is clear — advance to the new position.
+          missLinkX[i] = prevLinkX + moveDx;
+          missLinkY[i] = prevLinkY + moveDy;
         }
       }
+      void didHitWall; // wall-hit links still pass through the floor/circle checks below
 
       // ── Check world floor ────────────────────────────────────────────────
       if (missLinkY[i] >= world.worldHeightWorld) {
