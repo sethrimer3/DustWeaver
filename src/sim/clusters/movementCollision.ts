@@ -48,6 +48,53 @@ import {
   ov,
 } from './movementConstants';
 
+/** Set to true to log bounce pad events to the console for debugging. */
+const DEBUG_BOUNCE_PADS = false;
+
+/**
+ * Module-private scratch object used to propagate bounce information through the
+ * collision pass without per-tick heap allocation.
+ * Cleared at the start of every resolveClusterSolidWallCollision call.
+ */
+interface BounceScratch {
+  bouncedX: boolean;
+  bouncedY: boolean;
+  restitutionX: number;
+  restitutionY: number;
+}
+const bounceScratch: BounceScratch = {
+  bouncedX: false, bouncedY: false,
+  restitutionX: 0, restitutionY: 0,
+};
+
+/**
+ * Emits a bounce pad diagnostic line to the console when DEBUG_BOUNCE_PADS is
+ * enabled.  Calling this after the velocity has been updated means
+ * cluster.velocityXWorld / velocityYWorld already hold the outgoing values.
+ *
+ * @param cluster      The cluster that bounced (only logs for player clusters).
+ * @param axis         Which axis was bounced ('x' or 'y').
+ * @param restitution  The restitution coefficient that was applied.
+ * @param incomingVel  The velocity component on the bounce axis before reflection.
+ */
+function logBouncePadHit(
+  cluster: ClusterState,
+  axis: 'x' | 'y',
+  restitution: number,
+  incomingVel: number,
+): void {
+  if (!DEBUG_BOUNCE_PADS || cluster.isPlayerFlag !== 1) return;
+  const outVX = cluster.velocityXWorld.toFixed(1);
+  const outVY = cluster.velocityYWorld.toFixed(1);
+  if (axis === 'x') {
+    const inVY = cluster.velocityYWorld.toFixed(1);
+    console.log(`[BouncePad] axis=x restitution=${restitution.toFixed(2)} incoming=(${incomingVel.toFixed(1)}, ${inVY}) outgoing=(${outVX}, ${outVY})`);
+  } else {
+    const inVX = cluster.velocityXWorld.toFixed(1);
+    console.log(`[BouncePad] axis=y restitution=${restitution.toFixed(2)} incoming=(${inVX}, ${incomingVel.toFixed(1)}) outgoing=(${outVX}, ${outVY})`);
+  }
+}
+
 
 function hasWallOverlapAtPosition(
   cluster: ClusterState,
@@ -283,6 +330,7 @@ export function resolveWallsX(
   world: WorldState,
   prevXWorld: number,
   wasGrounded: boolean,
+  bounceScratch: BounceScratch,
 ): void {
   const hw = cluster.halfWidthWorld;
   const hh = cluster.halfHeightWorld;
@@ -318,7 +366,13 @@ export function resolveWallsX(
       // Was to the left of wall — push out left
       cluster.positionXWorld = wallLeft - hw;
       if (isBounce) {
-        if (cluster.velocityXWorld > 0) cluster.velocityXWorld = -cluster.velocityXWorld * bounceSf;
+        if (cluster.velocityXWorld > 0) {
+          const inVX = cluster.velocityXWorld;
+          cluster.velocityXWorld = -inVX * bounceSf;
+          bounceScratch.bouncedX = true;
+          bounceScratch.restitutionX = bounceSf;
+          logBouncePadHit(cluster, 'x', bounceSf, inVX);
+        }
       } else {
         if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
         if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
@@ -328,7 +382,13 @@ export function resolveWallsX(
       // Was to the right of wall — push out right
       cluster.positionXWorld = wallRight + hw;
       if (isBounce) {
-        if (cluster.velocityXWorld < 0) cluster.velocityXWorld = -cluster.velocityXWorld * bounceSf;
+        if (cluster.velocityXWorld < 0) {
+          const inVX = cluster.velocityXWorld;
+          cluster.velocityXWorld = -inVX * bounceSf;
+          bounceScratch.bouncedX = true;
+          bounceScratch.restitutionX = bounceSf;
+          logBouncePadHit(cluster, 'x', bounceSf, inVX);
+        }
       } else {
         if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
         if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
@@ -341,7 +401,13 @@ export function resolveWallsX(
       if (penLeft < penRight) {
         cluster.positionXWorld = wallLeft - hw;
         if (isBounce) {
-          if (cluster.velocityXWorld > 0) cluster.velocityXWorld = -cluster.velocityXWorld * bounceSf;
+          if (cluster.velocityXWorld > 0) {
+            const inVX = cluster.velocityXWorld;
+            cluster.velocityXWorld = -inVX * bounceSf;
+            bounceScratch.bouncedX = true;
+            bounceScratch.restitutionX = bounceSf;
+            logBouncePadHit(cluster, 'x', bounceSf, inVX);
+          }
         } else {
           if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
           if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
@@ -349,7 +415,13 @@ export function resolveWallsX(
       } else {
         cluster.positionXWorld = wallRight + hw;
         if (isBounce) {
-          if (cluster.velocityXWorld < 0) cluster.velocityXWorld = -cluster.velocityXWorld * bounceSf;
+          if (cluster.velocityXWorld < 0) {
+            const inVX = cluster.velocityXWorld;
+            cluster.velocityXWorld = -inVX * bounceSf;
+            bounceScratch.bouncedX = true;
+            bounceScratch.restitutionX = bounceSf;
+            logBouncePadHit(cluster, 'x', bounceSf, inVX);
+          }
         } else {
           if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
           if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
@@ -371,6 +443,7 @@ export function resolveWallsY(
   cluster: ClusterState,
   world: WorldState,
   prevYWorld: number,
+  bounceScratch: BounceScratch,
 ): boolean {
   const hw = cluster.halfWidthWorld;
   const hh = cluster.halfHeightWorld;
@@ -432,8 +505,12 @@ export function resolveWallsY(
       // Was above wall — land on top
       cluster.positionYWorld = wallTop - hh;
       if (isBounce) {
-        cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
+        const inVY = cluster.velocityYWorld;
+        cluster.velocityYWorld = -inVY * bounceSf;
         // Do NOT set isGroundedFlag — player cannot ground-jump off a bounce pad
+        bounceScratch.bouncedY = true;
+        bounceScratch.restitutionY = bounceSf;
+        logBouncePadHit(cluster, 'y', bounceSf, inVY);
       } else {
         cluster.velocityYWorld = 0;
         cluster.isGroundedFlag = 1;
@@ -449,7 +526,13 @@ export function resolveWallsY(
       // Normal ceiling response.
       cluster.positionYWorld = wallBottom + hh;
       if (isBounce) {
-        if (cluster.velocityYWorld < 0) cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
+        if (cluster.velocityYWorld < 0) {
+          const inVY = cluster.velocityYWorld;
+          cluster.velocityYWorld = -inVY * bounceSf;
+          bounceScratch.bouncedY = true;
+          bounceScratch.restitutionY = bounceSf;
+          logBouncePadHit(cluster, 'y', bounceSf, inVY);
+        }
       } else {
         if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
       }
@@ -461,7 +544,11 @@ export function resolveWallsY(
       if (penTop < penBottom) {
         cluster.positionYWorld = wallTop - hh;
         if (isBounce) {
-          cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
+          const inVY = cluster.velocityYWorld;
+          cluster.velocityYWorld = -inVY * bounceSf;
+          bounceScratch.bouncedY = true;
+          bounceScratch.restitutionY = bounceSf;
+          logBouncePadHit(cluster, 'y', bounceSf, inVY);
         } else {
           cluster.velocityYWorld = 0;
           cluster.isGroundedFlag = 1;
@@ -470,7 +557,13 @@ export function resolveWallsY(
       } else {
         cluster.positionYWorld = wallBottom + hh;
         if (isBounce) {
-          if (cluster.velocityYWorld < 0) cluster.velocityYWorld = -cluster.velocityYWorld * bounceSf;
+          if (cluster.velocityYWorld < 0) {
+            const inVY = cluster.velocityYWorld;
+            cluster.velocityYWorld = -inVY * bounceSf;
+            bounceScratch.bouncedY = true;
+            bounceScratch.restitutionY = bounceSf;
+            logBouncePadHit(cluster, 'y', bounceSf, inVY);
+          }
         } else {
           if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
         }
@@ -491,7 +584,7 @@ export function resolveWallsY(
  * cluster's dimension on that axis, preventing tunneling through thin
  * walls at high speed (e.g. sprint-boost through a BLOCK_SIZE_SMALL = 3 unit wall).
  *
- * Returns true if the cluster landed on a top surface this tick.
+ * Returns a SolidWallCollisionResult with landing and bounce information.
  */
 export function resolveClusterSolidWallCollision(
   cluster: ClusterState,
@@ -500,7 +593,13 @@ export function resolveClusterSolidWallCollision(
   prevY: number,
   dtSec: number,
   wasGrounded: boolean,
-): boolean {
+): SolidWallCollisionResult {
+  // Reset bounce tracking for this sweep.
+  bounceScratch.bouncedX = false;
+  bounceScratch.bouncedY = false;
+  bounceScratch.restitutionX = 0;
+  bounceScratch.restitutionY = 0;
+
   // Restore position to pre-integration state — we re-integrate per axis.
   cluster.positionXWorld = prevX;
   cluster.positionYWorld = prevY;
@@ -514,7 +613,7 @@ export function resolveClusterSolidWallCollision(
   for (let i = 0; i < stepsX; i++) {
     const subPrevX = cluster.positionXWorld;
     cluster.positionXWorld += cluster.velocityXWorld * dtX;
-    resolveWallsX(cluster, world, subPrevX, wasGrounded);
+    resolveWallsX(cluster, world, subPrevX, wasGrounded, bounceScratch);
   }
 
   // ── Y pass with sub-tick safety ──────────────────────────────────────────
@@ -527,12 +626,34 @@ export function resolveClusterSolidWallCollision(
   for (let i = 0; i < stepsY; i++) {
     const subPrevY = cluster.positionYWorld;
     cluster.positionYWorld += cluster.velocityYWorld * dtY;
-    if (resolveWallsY(cluster, world, subPrevY)) {
+    if (resolveWallsY(cluster, world, subPrevY, bounceScratch)) {
       landed = true;
     }
   }
 
-  return landed;
+  return {
+    landed,
+    bouncedX: bounceScratch.bouncedX,
+    bouncedY: bounceScratch.bouncedY,
+    bounceRestitutionX: bounceScratch.restitutionX,
+    bounceRestitutionY: bounceScratch.restitutionY,
+  };
+}
+
+/**
+ * Structured result returned by resolveClusterSolidWallCollision.
+ */
+export interface SolidWallCollisionResult {
+  /** Cluster landed on a top surface this tick. */
+  landed: boolean;
+  /** A bounce pad was hit on the X axis (left or right face). */
+  bouncedX: boolean;
+  /** A bounce pad was hit on the Y axis (top or bottom face). */
+  bouncedY: boolean;
+  /** Restitution applied to the X-axis bounce (0 if no X bounce). */
+  bounceRestitutionX: number;
+  /** Restitution applied to the Y-axis bounce (0 if no Y bounce). */
+  bounceRestitutionY: number;
 }
 
 /**
@@ -547,6 +668,13 @@ export function resolveClusterSolidWallCollision(
  *   landed        — cluster landed on a top surface this move (implies collidedBelow)
  *   blockedX      — X axis reached less than requested displacement (any direction)
  *   blockedY      — Y axis reached less than requested displacement (any direction)
+ *
+ * Bounce fields (only meaningful when bounced is true):
+ *   bounced                — a bounce pad was contacted during the sweep
+ *   bounceRestitutionX     — restitution for X-axis bounce (0 if none)
+ *   bounceRestitutionY     — restitution for Y-axis bounce (0 if none)
+ *   reflectedVelocityXWorld — reflected real velocity X after applying restitution
+ *   reflectedVelocityYWorld — reflected real velocity Y after applying restitution
  */
 export interface ClusterMoveResult {
   collidedLeft: boolean;
@@ -556,6 +684,11 @@ export interface ClusterMoveResult {
   landed: boolean;
   blockedX: boolean;
   blockedY: boolean;
+  bounced: boolean;
+  bounceRestitutionX: number;
+  bounceRestitutionY: number;
+  reflectedVelocityXWorld: number;
+  reflectedVelocityYWorld: number;
 }
 
 /**
@@ -566,8 +699,11 @@ export interface ClusterMoveResult {
  * Returns a ClusterMoveResult describing what was contacted.
  *
  * This function:
- *   - DOES restore the caller's velocity (the internal velocity set for
- *     substep calculations is temporary; it is restored after the sweep).
+ *   - Applies the caller's velocity after the sweep.  When a bounce pad is
+ *     contacted the affected axis velocity is replaced with the reflected real
+ *     velocity (-savedVel * restitution); on non-bounced axes the saved velocity
+ *     is restored unchanged.  Callers should inspect ClusterMoveResult.bounced
+ *     and act on the reflected velocity if needed (e.g. release a grapple).
  *   - Does NOT call resolveRampSurfaces — callers that need ramp landing
  *     should call that separately.
  *   - Preserves all side effects of resolveClusterSolidWallCollision
@@ -600,14 +736,18 @@ export function moveClusterByDelta(
       collidedLeft: false, collidedRight: false,
       collidedAbove: false, collidedBelow: false,
       landed: false, blockedX: false, blockedY: false,
+      bounced: false, bounceRestitutionX: 0, bounceRestitutionY: 0,
+      reflectedVelocityXWorld: 0, reflectedVelocityYWorld: 0,
     };
   }
 
   const startX = cluster.positionXWorld;
   const startY = cluster.positionYWorld;
 
-  // Save the caller's velocity — we temporarily overwrite it to drive the sweep,
-  // then restore it so the caller controls the final velocity on the cluster.
+  // Save the caller's velocity — we temporarily overwrite it to drive the sweep.
+  // If no bounce occurs, it is fully restored after the sweep.
+  // If a bounce occurs on an axis, the reflected velocity (based on the REAL
+  // pre-impact velocity) replaces the saved value on that axis.
   const savedVelX = cluster.velocityXWorld;
   const savedVelY = cluster.velocityYWorld;
 
@@ -617,17 +757,22 @@ export function moveClusterByDelta(
   cluster.velocityXWorld = deltaXWorld * invDt;
   cluster.velocityYWorld = deltaYWorld * invDt;
 
-  const landed = resolveClusterSolidWallCollision(
+  const swResult = resolveClusterSolidWallCollision(
     cluster, world, startX, startY, dtSec, wasGrounded,
   );
 
   const actualDeltaX = cluster.positionXWorld - startX;
   const actualDeltaY = cluster.positionYWorld - startY;
 
-  // Restore caller velocity — caller is responsible for deciding what the
-  // cluster's velocity should be after a forced displacement.
-  cluster.velocityXWorld = savedVelX;
-  cluster.velocityYWorld = savedVelY;
+  // Determine final velocity for the cluster.
+  // If a bounce occurred, reflect the REAL pre-impact velocity on the bounced
+  // axis so high-speed forced movement (e.g. grapple swing) produces a proper
+  // elastic response rather than a tiny "pop" based on the synthetic delta velocity.
+  const bounced = swResult.bouncedX || swResult.bouncedY;
+  const finalVelXWorld = swResult.bouncedX ? -savedVelX * swResult.bounceRestitutionX : savedVelX;
+  const finalVelYWorld = swResult.bouncedY ? -savedVelY * swResult.bounceRestitutionY : savedVelY;
+  cluster.velocityXWorld = finalVelXWorld;
+  cluster.velocityYWorld = finalVelYWorld;
 
   // A displacement axis is "blocked" when the cluster moved measurably less
   // than requested.  Threshold of 0.5 wu absorbs float rounding without
@@ -639,10 +784,15 @@ export function moveClusterByDelta(
     collidedLeft:  blockedX && deltaXWorld < 0,
     collidedRight: blockedX && deltaXWorld > 0,
     collidedAbove: blockedY && deltaYWorld < 0,
-    collidedBelow: blockedY && deltaYWorld > 0 || landed,
-    landed,
+    collidedBelow: blockedY && deltaYWorld > 0 || swResult.landed,
+    landed: swResult.landed,
     blockedX,
     blockedY,
+    bounced,
+    bounceRestitutionX: swResult.bounceRestitutionX,
+    bounceRestitutionY: swResult.bounceRestitutionY,
+    reflectedVelocityXWorld: finalVelXWorld,
+    reflectedVelocityYWorld: finalVelYWorld,
   };
 }
 
