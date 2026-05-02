@@ -75,7 +75,7 @@ import { getElementProfile } from '../particles/elementProfiles';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
 import { COYOTE_TIME_TICKS, debugSpeedOverrides, ov, GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
-import { resolveClusterSolidWallCollision, resolveClusterFloorCollision } from './movementCollision';
+import { resolveClusterSolidWallCollision, resolveClusterFloorCollision, moveClusterByDelta } from './movementCollision';
 import {
   GRAPPLE_SEGMENT_COUNT,
   GRAPPLE_MIN_LENGTH_WORLD,
@@ -893,46 +893,36 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
 
   // ── Enforce rope length constraint ────────────────────────────────────────
   // If the player has drifted beyond the current rope length (due to gravity,
-  // movement, or the rope shortening around them), snap their position back
-  // onto the rope circle and remove the outward radial velocity component.
+  // movement, or the rope shortening around them), move their position back
+  // onto the rope circle using the collision-safe helper so the correction
+  // cannot push them through a wall.  The outward radial velocity component
+  // is removed afterward to prevent the rope from being stretched further.
   // The tangential (swing) component is fully preserved — this is what makes
   // the pendulum feel physical rather than scripted.
   const ropeLength = world.grappleLengthWorld;
 
   if (dist > ropeLength) {
-    // 1. Snap player position back onto the rope circle
-    player.positionXWorld = ax + nx * ropeLength;
-    player.positionYWorld = ay + ny * ropeLength;
+    // Target position: player centre on the rope circle.
+    const targetX = ax + nx * ropeLength;
+    const targetY = ay + ny * ropeLength;
+    const deltaX  = targetX - player.positionXWorld;
+    const deltaY  = targetY - player.positionYWorld;
 
-    // 2. Remove outward velocity component (rope can only pull — never push)
+    // Move toward the target safely.  moveClusterByDelta uses the same
+    // axis-separated sub-stepped sweep as normal movement, so the snap cannot
+    // carry the player through solid geometry.  If a wall obstructs the path
+    // the player stops at the wall face rather than being clipped inside it.
+    // The helper restores the caller's velocity, so the radial-removal below
+    // still acts on the correct swing momentum.
+    moveClusterByDelta(player, world, deltaX, deltaY, false, dtSec);
+
+    // Remove outward velocity component (rope can only pull — never push).
+    // Use the pre-snap nx/ny direction; the position change is a small
+    // correction so the angular error is negligible.
     const velDotN = player.velocityXWorld * nx + player.velocityYWorld * ny;
     if (velDotN > 0) {
       player.velocityXWorld -= velDotN * nx;
       player.velocityYWorld -= velDotN * ny;
-    }
-  }
-
-  // ── Post-constraint wall collision (last-resort fallback) ──────────────────
-  // The primary collision resolver is the axis-separated sweep in movement.ts
-  // (step 0).  This minimum-penetration push-out is a *fallback safety net*
-  // that only fires when the rope constraint (above) re-introduces a small
-  // overlap — typically when the anchor is on a nearby floor and the rope pulls
-  // the player downward into geometry.  Because the overlap is always small
-  // (≤ one tick of rope correction) and velocities are low at this point,
-  // minimum-penetration is acceptable here.  The axis-separated sweep is not
-  // re-run because it would require re-doing the full X-then-Y integration
-  // pass, which is disproportionate to the tiny correction needed.
-  {
-    const halfW = player.halfWidthWorld;
-    const halfH = player.halfHeightWorld;
-    for (let wi = 0; wi < world.wallCount; wi++) {
-      const wLeft   = world.wallXWorld[wi];
-      const wTop    = world.wallYWorld[wi];
-      const wRight  = wLeft + world.wallWWorld[wi];
-      const wBottom = wTop + world.wallHWorld[wi];
-      if (resolveAABBPenetration(player, halfW, halfH, wLeft, wTop, wRight, wBottom)) {
-        break; // resolve one wall per tick — sufficient for the grapple correction
-      }
     }
   }
 

@@ -59,6 +59,35 @@ Input → Commands → Game Loop → Sim (tick) → Snapshot → Renderer
 4. Create `WorldSnapshot`.
 5. Render snapshot.
 
+## Collision Pipeline (`sim/clusters/movementCollision.ts`)
+
+Cluster wall collision uses axis-separated sweeps with sub-step safety to prevent
+tunneling through thin walls at high speed.
+
+**Primary path** (`resolveClusterSolidWallCollision`):
+  1. X pass: integrate X velocity, resolve all X overlaps (push out, zero velX on contact).
+  2. Y pass: integrate Y velocity, resolve all Y overlaps (push out, zero velY on contact,
+     set `isGroundedFlag` on top-face landing).
+  Sub-steps fire when `|velocity × dt| > halfExtent` to guarantee no thin-wall tunneling.
+
+**Ramp path** (`resolveRampSurfaces`): called after the wall sweep; handles diagonal
+  surfaces by computing per-axis surface height at the cluster center X.
+
+**Collision-safe displacement helper** (`moveClusterByDelta`):
+  For forced/special movement (e.g. grapple constraint snap) that knows a desired
+  displacement but not a velocity.  Converts delta → velocity, runs the full sweep
+  from the current position, restores original velocity, returns `ClusterMoveResult`.
+  Preferred over direct position assignment + `resolveAABBPenetration` fallback for
+  any path that can displace the cluster by more than a fraction of a world unit.
+
+**Last-resort fallback** (`resolveAABBPenetration` in `sim/physics/collision.ts`):
+  Minimum-penetration push-out.  Used only for micro-corrections after the grapple
+  stuck-phase locks position each tick.  Must not be used as the primary resolver.
+
+**Collision iteration order**: walls are always iterated in `world.wallCount` order
+(the order they were merged and stored in `loadRoomWalls`).  This order is fixed at
+room load time and is deterministic.  Do not sort or reorder walls at runtime.
+
 ## Particle Integration Pipeline
 
 Each tick:
