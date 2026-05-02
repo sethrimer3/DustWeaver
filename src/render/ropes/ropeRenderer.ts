@@ -1,21 +1,35 @@
 /**
- * Rope renderer — draws Verlet rope chains as connected line segments
- * on the 2D canvas.
+ * Rope renderer — draws Verlet rope chains as thick strokes on the 2D canvas.
+ *
+ * Each rope is rendered with a lineWidth matching its collision half-thickness
+ * (2 × ropeHalfThickWorld × zoom), giving a visual width that corresponds to
+ * the physics capsule the player interacts with.
+ *
+ * A thin dark outline (shadow pass) is drawn first to improve readability
+ * against varied backgrounds.
  */
 
 import type { WorldSnapshot } from '../snapshotTypes';
 import { MAX_ROPE_SEGMENTS } from '../../sim/world';
 
-/** Base rope stroke color (RGBA). */
-const ROPE_STROKE = 'rgba(180, 140, 80, 0.9)';
-/** Highlight color for anchor endpoints (slightly lighter). */
-const ROPE_HIGHLIGHT = 'rgba(220, 180, 100, 0.9)';
+/** Rope body fill color. */
+const ROPE_FILL = 'rgba(180, 140, 80, 0.95)';
+/** Dark outline drawn slightly wider than the fill to create depth. */
+const ROPE_OUTLINE = 'rgba(80, 50, 20, 0.7)';
+/** Anchor cap color (slightly lighter than rope body). */
+const ROPE_ANCHOR = 'rgba(230, 195, 120, 1.0)';
+/** Anchor cap radius in virtual pixels (not scaled by zoom — always readable). */
+const ROPE_ANCHOR_RADIUS_PX = 2.5;
+/** Outline-to-fill line-width ratio (outline is this many extra pixels wider). */
+const ROPE_OUTLINE_EXTRA_PX = 2.0;
+
 /**
- * Base line-width multiplier for the rope stroke.
- * Multiplied by `zoom` at draw time so the rope scales with world zoom.
- * Dimensionless — not a coordinate or pixel value.
+ * Pre-allocated scratch arrays for rope segment pixel positions.
+ * MAX_ROPE_SEGMENTS is imported to bound the size.  These buffers are reused
+ * every frame to avoid per-frame heap allocations in the render hot path.
  */
-const ROPE_LINE_WIDTH = 1.5;
+const _scratchXsPx = new Float32Array(MAX_ROPE_SEGMENTS);
+const _scratchYsPx = new Float32Array(MAX_ROPE_SEGMENTS);
 
 export function renderRopes(
   ctx: CanvasRenderingContext2D,
@@ -27,7 +41,6 @@ export function renderRopes(
   if (snapshot.ropeCount === 0) return;
 
   ctx.save();
-  ctx.lineWidth = ROPE_LINE_WIDTH;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
@@ -36,33 +49,45 @@ export function renderRopes(
     if (segCount < 2) continue;
     const base = r * MAX_ROPE_SEGMENTS;
 
-    ctx.beginPath();
-    ctx.strokeStyle = ROPE_STROKE;
+    // Line width in canvas pixels = 2 × halfThick × zoom
+    const halfThick = snapshot.ropeHalfThickWorld[r];
+    const bodyWidth = Math.max(1.0, halfThick * 2.0 * zoom);
 
-    const x0 = snapshot.ropeSegPosXWorld[base] * zoom + offsetXPx;
-    const y0 = snapshot.ropeSegPosYWorld[base] * zoom + offsetYPx;
-    ctx.moveTo(x0, y0);
-
-    for (let s = 1; s < segCount; s++) {
-      const idx = base + s;
-      const sx = snapshot.ropeSegPosXWorld[idx] * zoom + offsetXPx;
-      const sy = snapshot.ropeSegPosYWorld[idx] * zoom + offsetYPx;
-      ctx.lineTo(sx, sy);
+    // Precompute pixel positions into pre-allocated scratch buffers
+    for (let s = 0; s < segCount; s++) {
+      _scratchXsPx[s] = snapshot.ropeSegPosXWorld[base + s] * zoom + offsetXPx;
+      _scratchYsPx[s] = snapshot.ropeSegPosYWorld[base + s] * zoom + offsetYPx;
     }
 
+    // ── Shadow / outline pass ──────────────────────────────────────────
+    ctx.strokeStyle = ROPE_OUTLINE;
+    ctx.lineWidth   = bodyWidth + ROPE_OUTLINE_EXTRA_PX;
+    ctx.beginPath();
+    ctx.moveTo(_scratchXsPx[0], _scratchYsPx[0]);
+    for (let s = 1; s < segCount; s++) {
+      ctx.lineTo(_scratchXsPx[s], _scratchYsPx[s]);
+    }
     ctx.stroke();
 
-    // Draw small circles at the anchor endpoints
-    ctx.fillStyle = ROPE_HIGHLIGHT;
+    // ── Body pass ─────────────────────────────────────────────────────
+    ctx.strokeStyle = ROPE_FILL;
+    ctx.lineWidth   = bodyWidth;
     ctx.beginPath();
-    ctx.arc(x0, y0, 1.5, 0, Math.PI * 2);
+    ctx.moveTo(_scratchXsPx[0], _scratchYsPx[0]);
+    for (let s = 1; s < segCount; s++) {
+      ctx.lineTo(_scratchXsPx[s], _scratchYsPx[s]);
+    }
+    ctx.stroke();
+
+    // ── Anchor caps ───────────────────────────────────────────────────
+    ctx.fillStyle = ROPE_ANCHOR;
+    const anchorR = Math.max(ROPE_ANCHOR_RADIUS_PX, halfThick * zoom);
+    ctx.beginPath();
+    ctx.arc(_scratchXsPx[0], _scratchYsPx[0], anchorR, 0, Math.PI * 2);
     ctx.fill();
 
-    const lastIdx = base + segCount - 1;
-    const xlast = snapshot.ropeSegPosXWorld[lastIdx] * zoom + offsetXPx;
-    const ylast = snapshot.ropeSegPosYWorld[lastIdx] * zoom + offsetYPx;
     ctx.beginPath();
-    ctx.arc(xlast, ylast, 1.5, 0, Math.PI * 2);
+    ctx.arc(_scratchXsPx[segCount - 1], _scratchYsPx[segCount - 1], anchorR, 0, Math.PI * 2);
     ctx.fill();
   }
 

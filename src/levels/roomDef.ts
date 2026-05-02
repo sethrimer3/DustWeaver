@@ -512,6 +512,14 @@ export const DEFAULT_ROPE_SEGMENT_COUNT = 8;
 /** Minimum distance between rope anchors (in block units) for placement to be valid. */
 export const MIN_ROPE_LENGTH_BLOCKS = 0.5;
 
+/**
+ * Pre-computed half-thickness (world units) for each rope thickness index.
+ * Index 0 = 8 px wide  (half = 4),
+ * Index 1 = 16 px wide (half = 8),
+ * Index 2 = 24 px wide (half = 12).
+ */
+export const ROPE_THICKNESS_HALF_WORLD: readonly number[] = [4, 8, 12] as const;
+
 /** A hanging rope between two world-space anchor points. */
 export interface RoomRopeDef {
   /** X position of the fixed top anchor (block units). */
@@ -524,10 +532,21 @@ export interface RoomRopeDef {
   anchorBYBlock: number;
   /** Number of rope segments (default 8, clamped to MAX_ROPE_SEGMENTS at load). */
   segmentCount?: number;
-  /** Whether anchor B is also fixed (true = both ends fixed, rope hangs between). */
+  /**
+   * Whether anchor B is also fixed.
+   * true  = both ends pinned (bridge rope between two wall points).
+   * false = only anchor A is pinned (dangling rope).
+   * Defaults to true.
+   */
   isAnchorBFixed?: boolean;
   /** How this rope can be destroyed. Defaults to 'indestructible'. */
   destructibility?: RopeDestructibility;
+  /**
+   * Visual and collision thickness index.
+   * 0 = 8 px (thin),  1 = 16 px (medium),  2 = 24 px (thick).
+   * Defaults to 0.
+   */
+  thicknessIndex?: 0 | 1 | 2;
 }
 
 /** A jar that grants temporary dust particles when broken. */

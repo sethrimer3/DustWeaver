@@ -10,6 +10,7 @@ import {
   PLAYER_HALF_HEIGHT_WORLD,
   CrumbleVariant,
   DEFAULT_ROPE_SEGMENT_COUNT,
+  ROPE_THICKNESS_HALF_WORLD,
 } from '../levels/roomDef';
 import {
   SPIKE_DIR_UP,
@@ -17,7 +18,7 @@ import {
   SPIKE_DIR_LEFT,
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
-import { initRopeSegments } from '../sim/ropes/ropeSim';
+import { initRopeSegments, presettleRopes } from '../sim/ropes/ropeSim';
 
 const FIREFLY_AREA_SPAWN_SPEED_WORLD = 30.0;
 
@@ -685,12 +686,17 @@ const ROPE_DESTR_ANY = 2;
 
 /**
  * Loads rope definitions from a RoomDef into the WorldState rope buffers.
- * Initialises Verlet segment positions as a straight line from anchor A to B.
+ * Initialises Verlet segment positions as a straight line from anchor A to B,
+ * then pre-settles the rope by running many Verlet iterations so it starts in
+ * its natural sagged shape on first render.
  */
 export function loadRoomRopes(world: WorldState, room: RoomDef): void {
   const ropes = room.ropes ?? [];
   const count = Math.min(ropes.length, MAX_ROPES);
   world.ropeCount = count;
+  // Reset grapple-to-rope attachment state
+  world.grappleRopeIndex = -1;
+  world.grappleRopeAttachSegF = 0.0;
 
   for (let r = 0; r < count; r++) {
     const def = ropes[r];
@@ -709,13 +715,18 @@ export function loadRoomRopes(world: WorldState, room: RoomDef): void {
     world.ropeAnchorAYWorld[r] = ay;
     world.ropeAnchorBXWorld[r] = bx;
     world.ropeAnchorBYWorld[r] = by;
-    world.ropeIsAnchorBFixedFlag[r] = def.isAnchorBFixed === true ? 1 : 0;
+    // Default: both anchors fixed (isAnchorBFixed undefined or true → pinned).
+    world.ropeIsAnchorBFixedFlag[r] = def.isAnchorBFixed !== false ? 1 : 0;
 
     const destr = def.destructibility ?? 'indestructible';
     world.ropeDestructibilityIndex[r] =
       destr === 'playerOnly' ? ROPE_DESTR_PLAYER_ONLY :
       destr === 'any'        ? ROPE_DESTR_ANY :
                                ROPE_DESTR_INDESTRUCTIBLE;
+
+    // Thickness: half-world-units from ROPE_THICKNESS_HALF_WORLD table.
+    const thickIdx = def.thicknessIndex ?? 0;
+    world.ropeHalfThickWorld[r] = ROPE_THICKNESS_HALF_WORLD[thickIdx];
 
     // Rest length = straight-line distance / (segCount - 1)
     const dx = bx - ax;
@@ -724,5 +735,10 @@ export function loadRoomRopes(world: WorldState, room: RoomDef): void {
     world.ropeSegRestLenWorld[r] = segCount > 1 ? totalLen / (segCount - 1) : totalLen;
 
     initRopeSegments(world, r);
+  }
+
+  // Pre-settle all ropes: run Verlet iterations so they appear sagged on first frame.
+  if (count > 0) {
+    presettleRopes(world);
   }
 }

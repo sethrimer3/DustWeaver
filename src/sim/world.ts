@@ -156,6 +156,11 @@ export interface WorldState extends ParticleBuffers {
    */
   ropeDestructibilityIndex: Uint8Array;
   /**
+   * Per-rope collision and visual half-thickness in world units.
+   * Derived from thicknessIndex at load time: 0→4, 1→8, 2→12 world units.
+   */
+  ropeHalfThickWorld: Float32Array;
+  /**
    * Verlet positions for each segment, laid flat as [rope0seg0, rope0seg1, ..., rope1seg0, ...].
    * Index = ropeIndex * MAX_ROPE_SEGMENTS + segIndex.
    */
@@ -168,6 +173,16 @@ export interface WorldState extends ParticleBuffers {
   ropeSegPrevYWorld: Float32Array;
   /** Rest length between adjacent segments (world units) — one value per rope. */
   ropeSegRestLenWorld: Float32Array;
+  /**
+   * Index of the room rope the player's grapple is currently attached to.
+   * -1 when the grapple is not attached to a rope.
+   */
+  grappleRopeIndex: number;
+  /**
+   * Float segment index (e.g. 2.7 = 70 % between segment 2 and segment 3) along
+   * the attached rope.  Only meaningful when grappleRopeIndex >= 0.
+   */
+  grappleRopeAttachSegF: number;
 
   /**
    * World tick on which the most recent blocked hit (0-damage enemy attack)
@@ -749,11 +764,14 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     ropeAnchorBYWorld:      new Float32Array(MAX_ROPES),
     ropeIsAnchorBFixedFlag: new Uint8Array(MAX_ROPES),
     ropeDestructibilityIndex: new Uint8Array(MAX_ROPES),
+    ropeHalfThickWorld:     new Float32Array(MAX_ROPES),
     ropeSegPosXWorld:       new Float32Array(MAX_ROPES * MAX_ROPE_SEGMENTS),
     ropeSegPosYWorld:       new Float32Array(MAX_ROPES * MAX_ROPE_SEGMENTS),
     ropeSegPrevXWorld:      new Float32Array(MAX_ROPES * MAX_ROPE_SEGMENTS),
     ropeSegPrevYWorld:      new Float32Array(MAX_ROPES * MAX_ROPE_SEGMENTS),
     ropeSegRestLenWorld:    new Float32Array(MAX_ROPES),
+    grappleRopeIndex:       -1,
+    grappleRopeAttachSegF:  0.0,
     lastPlayerBlockedTick: -1,
     playerAttackTriggeredFlag: 0,
     playerAttackDirXWorld: 1.0,

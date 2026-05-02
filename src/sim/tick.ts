@@ -20,7 +20,7 @@
 
 import { WorldState } from './world';
 import { applyClusterMovement } from './clusters/movement';
-import { applyGrappleClusterConstraint, updateGrappleChainParticles } from './clusters/grapple';
+import { applyGrappleClusterConstraint, updateGrappleChainParticles, updateGrappleRopeAnchor } from './clusters/grapple';
 import { updateGrappleMissChain } from './clusters/grappleMiss';
 import { applyEnemyAI } from './clusters/enemyAi';
 import { applyRockElementalAI } from './clusters/rockElementalAi';
@@ -65,6 +65,9 @@ export function tick(world: WorldState): void {
 
   // 0.15. Rope physics — Verlet integration + constraint relaxation
   tickRopes(world);
+
+  // 0.2. Grapple rope anchor tracking — keep anchor moving with rope segment
+  updateGrappleRopeAnchor(world);
 
   // 0.25. Grapple rope constraint — corrects player cluster position/velocity
   applyGrappleClusterConstraint(world);

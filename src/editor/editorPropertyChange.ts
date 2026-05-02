@@ -29,8 +29,10 @@ import type {
   EditorDustContainer,
   EditorDustContainerPiece,
   EditorDustBoostJar,
+  EditorRope,
   SelectedElement,
   BlockTheme,
+  RopeDestructibility,
 } from './editorState';
 import type { EditorHistory } from './editorHistory';
 import { pushSnapshot } from './editorHistory';
@@ -225,6 +227,20 @@ export function applyPropertyToElement(
       if (prop === 'lightSource.brightnessPct' && !isNaN(numVal)) light.brightnessPct = Math.max(0, Math.min(100, numVal));
       if (prop === 'lightSource.color') {
         // Color change already applied in UI handler; just mark dirty
+      }
+    }
+  } else if (el.type === 'rope') {
+    const rope = (room.ropes ?? []).find((r: EditorRope) => r.uid === el.uid);
+    if (rope) {
+      if (prop === 'rope.segmentCount' && !isNaN(numVal)) rope.segmentCount = Math.max(2, Math.min(32, numVal));
+      if (prop === 'rope.destructibility' && typeof value === 'string') {
+        rope.destructibility = value as RopeDestructibility;
+      }
+      if (prop === 'rope.thicknessIndex' && !isNaN(numVal)) {
+        rope.thicknessIndex = (Math.max(0, Math.min(2, numVal))) as 0 | 1 | 2;
+      }
+      if (prop === 'rope.isAnchorBFixedFlag' && !isNaN(numVal)) {
+        rope.isAnchorBFixedFlag = (numVal ? 1 : 0) as 0 | 1;
       }
     }
   }

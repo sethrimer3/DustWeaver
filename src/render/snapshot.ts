@@ -365,6 +365,7 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     grappleTensionFactor:          world.grappleTensionFactor,
     ropeCount:           world.ropeCount,
     ropeSegmentCount:    world.ropeSegmentCount,
+    ropeHalfThickWorld:  world.ropeHalfThickWorld,
     ropeSegPosXWorld:    world.ropeSegPosXWorld,
     ropeSegPosYWorld:    world.ropeSegPosYWorld,
     _clusterPool:             clusterPool,

@@ -97,6 +97,12 @@ export const ROPE_DESTRUCTIBILITY_OPTIONS: ReadonlyArray<{ id: RopeDestructibili
   { id: 'any',            label: 'Any' },
 ];
 
+export const ROPE_THICKNESS_OPTIONS: ReadonlyArray<{ id: 0 | 1 | 2; label: string }> = [
+  { id: 0, label: '8 px (thin)' },
+  { id: 1, label: '16 px (medium)' },
+  { id: 2, label: '24 px (thick)' },
+];
+
 export interface EditorRope {
   uid: number;
   anchorAXBlock: number;
@@ -106,6 +112,8 @@ export interface EditorRope {
   segmentCount: number;
   isAnchorBFixedFlag: 0 | 1;
   destructibility: RopeDestructibility;
+  /** Visual and collision thickness index: 0=8 px, 1=16 px, 2=24 px. */
+  thicknessIndex: 0 | 1 | 2;
 }
 
 /** Built-in palette items available in the editor. */
