@@ -245,6 +245,24 @@ export interface WorldSnapshot {
   readonly grappleAnchorXWorld:  number;
   /** World-space Y of the grapple anchor point (only valid when isGrappleActiveFlag=1). */
   readonly grappleAnchorYWorld:  number;
+  /**
+   * Outward surface normal at the anchor (unit axis vector, 0,0 when not on a wall).
+   * Set by fireGrapple and the miss-chain attachment path.  Used by debug rendering.
+   */
+  readonly grappleAnchorNormalXWorld: number;
+  readonly grappleAnchorNormalYWorld: number;
+  // ── Debug grapple collision fields ───────────────────────────────────────────
+  /** Sweep ray origin from the last grapple fire (for debug overlay). */
+  readonly grappleDebugSweepFromXWorld: number;
+  readonly grappleDebugSweepFromYWorld: number;
+  /** Sweep ray endpoint (full cast distance, before hit clamping). */
+  readonly grappleDebugSweepToXWorld:   number;
+  readonly grappleDebugSweepToYWorld:   number;
+  /** Raw raycast hit point before surface-epsilon offset. */
+  readonly grappleDebugRawHitXWorld:    number;
+  readonly grappleDebugRawHitYWorld:    number;
+  /** 1 if debug data is valid (written by last grapple fire). */
+  readonly isGrappleDebugActiveFlag:    0 | 1;
   /** Remaining ticks for grapple attach burst visual effect. */
   readonly grappleAttachFxTicks: number;
   readonly grappleAttachFxXWorld: number;

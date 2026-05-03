@@ -725,6 +725,43 @@ export interface WorldState extends ParticleBuffers {
    * "rope under tension" warning.  Reset to 0 in `releaseGrapple`.
    */
   grappleTensionFactor: number;
+
+  // ── Phase 10: Grapple surface-anchor state ─────────────────────────────────
+  /**
+   * Outward surface normal at the current grapple anchor (unit axis vector).
+   *
+   * Set when the grapple attaches to a wall face via `fireGrapple` or the
+   * miss-chain attachment path in `updateGrappleMissChain`.  Points away from
+   * the wall toward the player at the moment of attachment.
+   *
+   * 0,0 when not attached to a wall (rope grapple or not active).
+   *
+   * Used by debug rendering and surface-aware validation: the anchor is a
+   * surface-contact point; validate it by checking the referenced wall still
+   * exists, NOT by testing whether the point is inside solid geometry.
+   */
+  grappleAnchorNormalXWorld: number;
+  grappleAnchorNormalYWorld: number;
+
+  // ── Debug: grapple collision visualization ──────────────────────────────────
+  /**
+   * Stores the last grapple sweep segment (from/to) and raw hit point so the
+   * debug overlay can visualise the continuous collision detection path.
+   * Written by fireGrapple and updateGrappleMissChain; reset each fire.
+   * These fields are only consumed by the renderer and have no physics effect.
+   */
+  grappleDebugSweepFromXWorld: number;
+  grappleDebugSweepFromYWorld: number;
+  grappleDebugSweepToXWorld:   number;
+  grappleDebugSweepToYWorld:   number;
+  /** Raw raycast hit point before the surface-epsilon offset is applied. */
+  grappleDebugRawHitXWorld: number;
+  grappleDebugRawHitYWorld: number;
+  /**
+   * 1 for one frame after a grapple fire so the renderer knows the debug data
+   * is fresh.  Not ticked down; cleared lazily when grapple releases.
+   */
+  isGrappleDebugActiveFlag: 0 | 1;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -946,6 +983,16 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     // Phase 9: grapple tension initialised clear.
     grappleOutOfRangeTicks:        0,
     grappleTensionFactor:          0,
+    // Phase 10: grapple surface-anchor normal and debug state initialised clear.
+    grappleAnchorNormalXWorld:     0.0,
+    grappleAnchorNormalYWorld:     0.0,
+    grappleDebugSweepFromXWorld:   0.0,
+    grappleDebugSweepFromYWorld:   0.0,
+    grappleDebugSweepToXWorld:     0.0,
+    grappleDebugSweepToYWorld:     0.0,
+    grappleDebugRawHitXWorld:      0.0,
+    grappleDebugRawHitYWorld:      0.0,
+    isGrappleDebugActiveFlag:      0,
     ...createParticleBuffers(),
   };
 }

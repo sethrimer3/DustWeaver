@@ -38,6 +38,17 @@ interface _ReusableBacking {
   isGrappleStuckFlag: 0 | 1;
   grappleAnchorXWorld: number;
   grappleAnchorYWorld: number;
+  /** Outward surface normal at the anchor — 0,0 when not on a wall surface. */
+  grappleAnchorNormalXWorld: number;
+  grappleAnchorNormalYWorld: number;
+  // Debug grapple collision visualization fields
+  grappleDebugSweepFromXWorld: number;
+  grappleDebugSweepFromYWorld: number;
+  grappleDebugSweepToXWorld:   number;
+  grappleDebugSweepToYWorld:   number;
+  grappleDebugRawHitXWorld:    number;
+  grappleDebugRawHitYWorld:    number;
+  isGrappleDebugActiveFlag:    0 | 1;
   grappleAttachFxTicks: number;
   grappleAttachFxXWorld: number;
   grappleAttachFxYWorld: number;
@@ -312,6 +323,15 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     isGrappleStuckFlag:       world.isGrappleStuckFlag,
     grappleAnchorXWorld:      world.grappleAnchorXWorld,
     grappleAnchorYWorld:      world.grappleAnchorYWorld,
+    grappleAnchorNormalXWorld: world.grappleAnchorNormalXWorld,
+    grappleAnchorNormalYWorld: world.grappleAnchorNormalYWorld,
+    grappleDebugSweepFromXWorld: world.grappleDebugSweepFromXWorld,
+    grappleDebugSweepFromYWorld: world.grappleDebugSweepFromYWorld,
+    grappleDebugSweepToXWorld:   world.grappleDebugSweepToXWorld,
+    grappleDebugSweepToYWorld:   world.grappleDebugSweepToYWorld,
+    grappleDebugRawHitXWorld:    world.grappleDebugRawHitXWorld,
+    grappleDebugRawHitYWorld:    world.grappleDebugRawHitYWorld,
+    isGrappleDebugActiveFlag:    world.isGrappleDebugActiveFlag,
     grappleAttachFxTicks:     world.grappleAttachFxTicks,
     grappleAttachFxXWorld:    world.grappleAttachFxXWorld,
     grappleAttachFxYWorld:    world.grappleAttachFxYWorld,
@@ -409,6 +429,15 @@ export function updateSnapshotInPlace(
   b.isGrappleStuckFlag        = world.isGrappleStuckFlag;
   b.grappleAnchorXWorld       = world.grappleAnchorXWorld;
   b.grappleAnchorYWorld       = world.grappleAnchorYWorld;
+  b.grappleAnchorNormalXWorld = world.grappleAnchorNormalXWorld;
+  b.grappleAnchorNormalYWorld = world.grappleAnchorNormalYWorld;
+  b.grappleDebugSweepFromXWorld = world.grappleDebugSweepFromXWorld;
+  b.grappleDebugSweepFromYWorld = world.grappleDebugSweepFromYWorld;
+  b.grappleDebugSweepToXWorld   = world.grappleDebugSweepToXWorld;
+  b.grappleDebugSweepToYWorld   = world.grappleDebugSweepToYWorld;
+  b.grappleDebugRawHitXWorld    = world.grappleDebugRawHitXWorld;
+  b.grappleDebugRawHitYWorld    = world.grappleDebugRawHitYWorld;
+  b.isGrappleDebugActiveFlag    = world.isGrappleDebugActiveFlag;
   b.grappleAttachFxTicks      = world.grappleAttachFxTicks;
   b.grappleAttachFxXWorld     = world.grappleAttachFxXWorld;
   b.grappleAttachFxYWorld     = world.grappleAttachFxYWorld;
@@ -608,6 +637,15 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     isGrappleStuckFlag: world.isGrappleStuckFlag,
     grappleAnchorXWorld: world.grappleAnchorXWorld,
     grappleAnchorYWorld: world.grappleAnchorYWorld,
+    grappleAnchorNormalXWorld: world.grappleAnchorNormalXWorld,
+    grappleAnchorNormalYWorld: world.grappleAnchorNormalYWorld,
+    grappleDebugSweepFromXWorld: world.grappleDebugSweepFromXWorld,
+    grappleDebugSweepFromYWorld: world.grappleDebugSweepFromYWorld,
+    grappleDebugSweepToXWorld:   world.grappleDebugSweepToXWorld,
+    grappleDebugSweepToYWorld:   world.grappleDebugSweepToYWorld,
+    grappleDebugRawHitXWorld:    world.grappleDebugRawHitXWorld,
+    grappleDebugRawHitYWorld:    world.grappleDebugRawHitYWorld,
+    isGrappleDebugActiveFlag:    world.isGrappleDebugActiveFlag,
     grappleAttachFxTicks: world.grappleAttachFxTicks,
     grappleAttachFxXWorld: world.grappleAttachFxXWorld,
     grappleAttachFxYWorld: world.grappleAttachFxYWorld,

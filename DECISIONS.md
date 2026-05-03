@@ -830,3 +830,84 @@ The stuck-phase position lock (direct assignment to targetX/targetY) retains its
 own `resolveAABBPenetration` loop because the stuck target is a geometrically
 determined safe position (anchor + surfaceNormal × halfExtent) and the loop
 resolves residual overlap from ramps or stacked geometry near the anchor.
+
+## Grapple Collision Authority & Surface-Anchor Design (BUILD 231)
+
+### Merged Wall Rectangles are the Authoritative Solid Source
+
+DustWeaver does NOT maintain a separate tile-occupancy grid at runtime.  The merged
+wall rectangles written by `loadRoomWalls()` (gameRoom.ts) are the canonical solid
+geometry.  They are the sole input to:
+- `raycastWalls()` — used for grapple fire, LOS checks, and the miss-chain swept tip
+- `resolveClusterSolidWallCollision()` — physics movement for all clusters
+- `resolveClusterFloorCollision()` — thin-platform landing
+
+Because merging is performed against exact BLOCK_SIZE_MEDIUM (8 wu) integer
+boundaries, there are no subpixel gaps between adjacent merged rectangles.  The
+merged representation is exact for solid walls; individual tile boundaries are not
+needed at runtime.
+
+The description "merged rectangles are broad-phase only" that appears in some design
+documents refers to a possible future where a tile grid is also maintained alongside
+merged rectangles for very narrow collision queries.  As of BUILD 231 merged rects
+are both the broad-phase and the precise collision source.
+
+### RayHit Surface Normal
+
+`raycastWalls()` now returns `normalX, normalY` in addition to `t, x, y, wallIndex`.
+The normal is the outward surface normal at the hit point — an axis-aligned unit
+vector pointing away from the wall toward the ray origin.
+
+Normal computation: The slab intersection tracks which axis' entry (tMin) was the
+tightest constraint.  For an X-face hit: `normalX = –sign(dx)`, `normalY = 0`.
+For a Y-face hit: `normalX = 0`, `normalY = –sign(dy)`.
+
+Corner hits (txMin ≈ tyMin) give the last-updated axis as the normal axis; the
+result is not uniquely defined but is acceptable because corner hits are geometrically
+degenerate and the epsilon offset below makes them safe.
+
+### Surface-Epsilon Anchor Placement
+
+`fireGrapple()` places the anchor at:
+
+    anchorX = hit.x - hit.normalX * GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD
+    anchorY = hit.y - hit.normalY * GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD
+
+where `GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD = 0.1` world units.
+
+This prevents the anchor from sitting exactly on the wall face where floating-point
+arithmetic could classify it as "inside" solid during subsequent frame validation.
+The offset is well within the block size (8 wu), so there is no visible gap.
+
+The miss-chain path uses `GRAPPLE_TIP_SKIN_WORLD = 0.5 wu` which already subsumes
+this epsilon, so no additional offset is applied there.
+
+### Surface-Anchor Validation Rule
+
+A grapple anchor placed by a successful raycast is a **surface-contact point**, not
+a free floating point.  It must NOT be validated using a generic "is this point
+inside solid?" test because:
+1. The anchor intentionally sits just outside the wall face (by the epsilon above).
+2. Floating-point noise at the face boundary can produce false-positive inside tests.
+
+Correct validation:
+- Check that `hit.wallIndex` is still solid (for breakable/crumble blocks).
+- Cast a ray from the player to the anchor and check for obstructions (see zip LOS
+  check in `applyGrappleClusterConstraint`).
+- Do NOT use point-in-AABB tests on the anchor coordinates.
+
+The anchor's surface normal is stored in `world.grappleAnchorNormalXWorld/Y` and
+snapshotted for renderers and debug overlays.
+
+### Debug Grapple Collision Overlay (BUILD 231)
+
+When `isDebugMode = true`, `renderGrapple()` draws:
+- **Cyan dashed line** — the full sweep segment (from/to) cast during the last
+  grapple fire.
+- **Yellow cross** — the raw raycast hit point before the surface-epsilon offset.
+- **Magenta arrow** — the outward surface normal at the raw hit point.
+- **Green circle** — the final snapped anchor position (epsilon-offset from face).
+- **"AABB" label** — indicates the merged-rectangle broad-phase was used.
+
+These fields are stored in `world.grappleDebugSweep*/RawHit*/isGrappleDebugActiveFlag`
+and are read-only from the renderer; they have no physics effect.
