@@ -128,6 +128,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     crumbleBlock:     'crumble_block',
     bouncePad:        'bounce_pad',
     rope:             'rope',
+    fallingBlock:     'falling_block',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;
@@ -211,6 +212,14 @@ export function buildElementTypeName(
       return `Bounce Pad${rampLabel}${sizeLabel} [${sfLabel}]`;
     }
     return 'Bounce Pad';
+  }
+  if (type === 'fallingBlock') {
+    const fb = (room.fallingBlocks ?? []).find(x => x.uid === uid);
+    if (fb) {
+      const varLabel = fb.variant === 'tough' ? 'Tough' : fb.variant === 'sensitive' ? 'Sensitive' : 'Crumbling';
+      return `Falling Block [${varLabel}]`;
+    }
+    return 'Falling Block';
   }
   if (type === 'ambientLightBlocker') {
     const b = (room.ambientLightBlockers ?? []).find(x => x.uid === uid);

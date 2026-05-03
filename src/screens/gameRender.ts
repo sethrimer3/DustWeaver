@@ -34,6 +34,8 @@ import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
+import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
+import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
 import {
   isTheroShowcaseRoom,
   renderTheroShowcaseEffect,
@@ -112,6 +114,8 @@ export interface RenderFrameContext {
   atmosphericLightDust: AtmosphericLightDust;
   /** Decoration sway state for push-wave animation driven by entity velocity. */
   decorationWaveState: DecorationWaveState;
+  /** Falling block group dust + tile renderer. */
+  fallingBlockDust: FallingBlockDustRenderer;
 
   // World / room
   world: WorldState;
@@ -188,7 +192,7 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
-    sunbeamRenderer, atmosphericLightDust,
+    sunbeamRenderer, atmosphericLightDust, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -380,6 +384,10 @@ export function renderFrame(r: RenderFrameContext): void {
   atmosphericLightDust.render(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   skidDebris.render(ctx, ox, oy, zoom);
   crumbleDebris.render(ctx, ox, oy, zoom);
+  // Falling block groups — tiles + dust effects
+  if (world.fallingBlockGroups.length > 0) {
+    renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust);
+  }
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
   // Save tombs (sprite + swirling/falling dust particles)

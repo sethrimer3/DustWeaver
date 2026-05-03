@@ -647,6 +647,26 @@ export interface RoomDecorationDef {
   kind: DecorationKind;
 }
 
+// ── Falling blocks ────────────────────────────────────────────────────────────
+
+/**
+ * The three falling block variants:
+ * - 'tough'     — only triggers from strong downward force or downward grapple pull.
+ * - 'sensitive' — triggers from almost any contact.
+ * - 'crumbling' — like sensitive, but disappears after falling to top speed.
+ */
+export type FallingBlockVariant = 'tough' | 'sensitive' | 'crumbling';
+
+/** An individual falling block tile placed by the editor. */
+export interface RoomFallingBlockDef {
+  /** Block column (X). */
+  xBlock: number;
+  /** Block row (Y). */
+  yBlock: number;
+  /** Which falling block variant this tile belongs to. */
+  variant: FallingBlockVariant;
+}
+
 /** A rectangular area where grasshopper critters spawn randomly. */
 export interface RoomGrasshopperAreaDef {
   /** Left edge X (block units). */
@@ -773,6 +793,8 @@ export interface RoomDef {
   fireflyAreas?: readonly RoomFireflyAreaDef[];
   /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
   decorations?: readonly RoomDecorationDef[];
+  /** Falling block tiles — grouped into rigid falling units at load time. */
+  fallingBlocks?: readonly RoomFallingBlockDef[];
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default / undefined).

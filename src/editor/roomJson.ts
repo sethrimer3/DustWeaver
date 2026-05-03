@@ -21,6 +21,7 @@ import type {
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorRope, RopeDestructibility,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
+  EditorFallingBlock,
   RoomSongId,
 } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
@@ -64,6 +65,7 @@ export type {
   RoomJsonAmbientLightBlocker,
   RoomJsonLightSource,
   RoomJsonSunbeam,
+  RoomJsonFallingBlock,
 } from './roomJsonSchema';
 
 export function validateRoomJson(data: unknown): ValidationError[] {
@@ -325,6 +327,13 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     intensityPct: s.intensityPct,
   }));
 
+  const fallingBlocks: EditorFallingBlock[] = (json.fallingBlocks ?? []).map(fb => ({
+    uid: uid++,
+    xBlock: fb.xBlock,
+    yBlock: fb.yBlock,
+    variant: (fb.variant ?? 'tough') as import('../levels/roomDef').FallingBlockVariant,
+  }));
+
   const waterZones: EditorWaterZone[] = (json.waterZones ?? []).map(z => ({
     uid: uid++,
     xBlock: z.xBlock,
@@ -409,6 +418,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       bouncePads,
       ropes,
       sunbeams,
+      fallingBlocks,
     },
     nextUid: uid,
   };
@@ -653,6 +663,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (r.thicknessIndex !== 0) entry.thick = r.thicknessIndex;
       return entry;
     });
+  }
+  if ((data.fallingBlocks ?? []).length > 0) {
+    json.fallingBlocks = (data.fallingBlocks ?? []).map(fb => ({
+      xBlock: fb.xBlock,
+      yBlock: fb.yBlock,
+      variant: fb.variant,
+    }));
   }
   return json;
 }
@@ -919,6 +936,11 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       destructibility: r.destructibility,
       thicknessIndex: r.thicknessIndex,
     })),
+    fallingBlocks: (data.fallingBlocks ?? []).map(fb => ({
+      xBlock: fb.xBlock,
+      yBlock: fb.yBlock,
+      variant: fb.variant,
+    })),
   };
 }
 
@@ -1135,6 +1157,13 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     thicknessIndex: (r.thicknessIndex ?? 0) as 0 | 1 | 2,
   }));
 
+  const fallingBlocks: EditorFallingBlock[] = (room.fallingBlocks ?? []).map(fb => ({
+    uid: uid++,
+    xBlock: fb.xBlock,
+    yBlock: fb.yBlock,
+    variant: fb.variant,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -1169,6 +1198,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       crumbleBlocks,
       ropes,
       sunbeams,
+      fallingBlocks,
     },
     nextUid: uid,
   };

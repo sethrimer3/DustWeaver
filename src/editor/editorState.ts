@@ -71,6 +71,10 @@ export interface PaletteItem {
   isDustContainerPieceItem?: 1;
   /** 1 if this palette item places a dust boost jar object (grants temporary dust of a specific kind). */
   isDustBoostJarItem?: 1;
+  /** 1 if this palette item places a falling block tile (triggers as a rigid group when disturbed). */
+  isFallingBlockItem?: 1;
+  /** Which falling block variant this item places. Only meaningful when isFallingBlockItem === 1. */
+  fallingBlockVariant?: import('../levels/roomDef').FallingBlockVariant;
 }
 
 /** Options for the crumble-block weakness variant dropdown. */
@@ -192,6 +196,10 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'bounce_pad_ramp_1x1_bright', label: 'Bounce Ramp 1×1 (100%)', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
   { id: 'bounce_pad_ramp_1x2_bright', label: 'Bounce Ramp 1×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
   { id: 'bounce_pad_ramp_2x2_bright', label: 'Bounce Ramp 2×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
+  // ── Falling blocks (triggers as rigid group when disturbed) ──────────────
+  { id: 'falling_block_tough',     label: 'Falling Block, Tough',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'tough' as const },
+  { id: 'falling_block_sensitive', label: 'Falling Block, Sensitive', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'sensitive' as const },
+  { id: 'falling_block_crumbling', label: 'Falling Block, Crumbling', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'crumbling' as const },
   { id: 'rope', label: 'Rope', category: 'ropes', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
 ];
 
@@ -519,6 +527,15 @@ export interface EditorSunbeam {
   intensityPct: number;
 }
 
+/** An editor-painted falling block tile (one tile per entry). */
+export interface EditorFallingBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Which falling block variant this tile belongs to. */
+  variant: import('../levels/roomDef').FallingBlockVariant;
+}
+
 export interface EditorRoomData {
   id: string;
   name: string;
@@ -579,11 +596,13 @@ export interface EditorRoomData {
   ropes?: EditorRope[];
   /** Sunbeams placed in this room. */
   sunbeams?: EditorSunbeam[];
+  /** Falling block tiles placed in this room. */
+  fallingBlocks?: EditorFallingBlock[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

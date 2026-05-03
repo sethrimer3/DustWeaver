@@ -270,6 +270,14 @@ export interface RoomJsonRope {
   thick?: number;
 }
 
+/** JSON representation of a single falling block tile. */
+export interface RoomJsonFallingBlock {
+  xBlock: number;
+  yBlock: number;
+  /** 'tough' | 'sensitive' | 'crumbling'. Defaults to 'tough' if missing. */
+  variant?: string;
+}
+
 export interface RoomJsonDef {
   id: string;
   name: string;
@@ -336,6 +344,8 @@ export interface RoomJsonDef {
   fireflyAreas?: RoomJsonFireflyArea[];
   /** Editor-placed decorations (glowing mushrooms, grass tufts, vines). */
   decorations?: RoomJsonDecoration[];
+  /** Editor-painted falling block tiles (grouped into rigid falling units at runtime). */
+  fallingBlocks?: RoomJsonFallingBlock[];
 }
 
 // ── Validation result ────────────────────────────────────────────────────────

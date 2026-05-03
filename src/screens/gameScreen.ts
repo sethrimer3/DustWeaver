@@ -17,6 +17,7 @@ import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
+import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, RoomTransitionDef, TransitionDirection, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
@@ -61,6 +62,7 @@ import {
   loadRoomWalls,
   loadRoomHazards,
   loadRoomRopes,
+  loadRoomFallingBlocks,
   worldBgColor,
   drawTunnelDarkness,
   resolveSpawnBlock,
@@ -351,6 +353,9 @@ export function startGameScreen(
     // Load ropes
     loadRoomRopes(world, room);
 
+    // Load falling block groups (after walls so group wall slots come after static geometry)
+    loadRoomFallingBlocks(world, room);
+
     // Reset and spawn grasshoppers
     world.grasshopperCount = 0;
     if (room.grasshopperAreas) {
@@ -465,6 +470,7 @@ export function startGameScreen(
   const decorationWaveState = new DecorationWaveState();
   const arrowWeaveRenderer = new ArrowWeaveRenderer();
   const swordWeaveRenderer = new SwordWeaveRenderer();
+  const fallingBlockDust = new FallingBlockDustRenderer();
 
   // ── Per-frame allocation-free state ─────────────────────────────────────
   // All three are populated once per room load in loadRoom() and reused every
@@ -1298,7 +1304,7 @@ export function startGameScreen(
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
-      sunbeamRenderer, atmosphericLightDust,
+      sunbeamRenderer, atmosphericLightDust, fallingBlockDust,
       world, currentRoom,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,

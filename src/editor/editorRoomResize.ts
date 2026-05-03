@@ -99,6 +99,14 @@ export function applyRoomDimensionChange(
     clampZoneToDimensions(b, room.widthBlocks, room.heightBlocks);
   }
 
+  // Clamp falling block tiles — remove any that fall outside the room
+  if (room.fallingBlocks) {
+    room.fallingBlocks = room.fallingBlocks.filter(
+      fb => fb.xBlock >= 0 && fb.xBlock < room.widthBlocks &&
+            fb.yBlock >= 0 && fb.yBlock < room.heightBlocks,
+    );
+  }
+
   // Clamp interior wall rectangles so they stay fully inside the room.
   for (const wall of room.interiorWalls) {
     wall.wBlock = Math.max(1, Math.min(wall.wBlock, room.widthBlocks));
@@ -229,6 +237,12 @@ export function applyEdgeResize(
     for (const b of (room.bouncePads ?? [])) {
       b.xBlock += shiftX;
       b.yBlock += shiftY;
+    }
+
+    // Shift falling block tiles
+    for (const fb of (room.fallingBlocks ?? [])) {
+      fb.xBlock += shiftX;
+      fb.yBlock += shiftY;
     }
 
     // Shift interior walls

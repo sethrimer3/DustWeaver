@@ -418,6 +418,38 @@ export function renderEditorOverlays(
     drawMarker(ctx, d.xBlock, d.yBlock, offsetXPx, offsetYPx, zoom, color, emoji);
   }
 
+  // ── Falling block tiles ───────────────────────────────────────────────────
+  for (const fb of (room.fallingBlocks ?? [])) {
+    const isSelected = isElementSelected('fallingBlock', fb.uid);
+    const xPx = fb.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = fb.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const szPx = BLOCK_SIZE_SMALL * zoom;
+
+    const fillColor =
+      fb.variant === 'tough'     ? (isSelected ? 'rgba(60,100,200,0.55)' : 'rgba(50,90,180,0.30)') :
+      fb.variant === 'sensitive' ? (isSelected ? 'rgba(210,60,40,0.55)'  : 'rgba(190,50,30,0.30)') :
+                                   (isSelected ? 'rgba(200,170,20,0.55)' : 'rgba(180,150,15,0.30)');
+    const strokeColor =
+      fb.variant === 'tough'     ? (isSelected ? 'rgba(100,160,255,0.95)' : 'rgba(80,140,240,0.65)') :
+      fb.variant === 'sensitive' ? (isSelected ? 'rgba(255,80,60,0.95)'   : 'rgba(220,60,40,0.65)') :
+                                   (isSelected ? 'rgba(255,210,30,0.95)'  : 'rgba(220,190,20,0.65)');
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(xPx, yPx, szPx, szPx);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, szPx, szPx);
+
+    // Downward arrow indicator
+    const cx = xPx + szPx * 0.5;
+    const cy = yPx + szPx * 0.5;
+    ctx.fillStyle = strokeColor;
+    ctx.font = `bold ${Math.max(6, szPx * 0.55)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = fb.variant === 'tough' ? '▼T' : fb.variant === 'sensitive' ? '▼S' : '▼C';
+    ctx.fillText(label, cx, cy);
+  }
+
   // ── Ropes ─────────────────────────────────────────────────────────────────
   for (const r of (room.ropes ?? [])) {
     const isSelected = isElementSelected('rope', r.uid);
