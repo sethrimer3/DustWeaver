@@ -11,6 +11,7 @@ import type { WorldSnapshot } from '../render/snapshot';
 import { ParticleKind } from '../sim/particles/kinds';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
+import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../sim/clusters/grappleMiss';
 
 /** Visual spacing between grapple bloom dots along the chain (virtual px). */
 export const GRAPPLE_BLOOM_SEGMENT_PX = 6;
@@ -51,7 +52,11 @@ export function drawGrappleBloom(
 
   let ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
   let ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
-  if (snapshot.isGrappleMissActiveFlag === 1 && snapshot.grappleParticleStartIndex >= 0) {
+  // For a miss-chain still extending, use the live tip particle position so
+  // bloom tracks the projectile. For an active (attached) grapple, always use
+  // the fixed anchor — not a particle position — so the bloom matches the
+  // renderGrapple() line exactly.
+  if (snapshot.isGrappleMissActiveFlag === 1 && snapshot.isGrappleActiveFlag === 0 && snapshot.grappleParticleStartIndex >= 0) {
     const tipIndex = snapshot.grappleParticleStartIndex + 9;
     const isTipAlive = tipIndex < snapshot.particles.particleCount && snapshot.particles.isAliveFlag[tipIndex] === 1;
     if (isTipAlive) {
@@ -115,6 +120,8 @@ export function drawParticleGlow(
 
   for (let i = 0; i < particles.particleCount; i++) {
     if (particles.isAliveFlag[i] === 0) continue;
+    // Grapple chain particles are excluded — drawGrappleBloom() handles their glow.
+    if (particles.behaviorMode[i] === BEHAVIOR_MODE_GRAPPLE_CHAIN) continue;
     // Only glow gold dust (Physical) particles
     const kind = particles.kindBuffer[i];
     if (kind !== ParticleKind.Physical && kind !== ParticleKind.Gold) continue;
