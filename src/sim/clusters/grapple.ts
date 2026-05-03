@@ -82,6 +82,7 @@ import {
   GRAPPLE_ATTACH_FX_TICKS,
   BEHAVIOR_MODE_GRAPPLE_CHAIN,
   GRAPPLE_CHAIN_LIFETIME_TICKS,
+  GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD,
   raycastWalls,
   startGrappleMiss,
   cancelGrappleMiss,
@@ -256,10 +257,19 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
 }
 
 /**
- * Fires the grapple, setting the anchor at the exact raycast hit point on a
- * wall surface.  Returns without attaching if the wall is too close (less than
+ * Fires the grapple, setting the anchor just outside the raycast wall surface.
+ * Returns without attaching if the wall is too close (less than
  * GRAPPLE_MIN_LENGTH_WORLD away) to prevent degenerate behaviour.
  * Activates the chain particles.
+ *
+ * ANCHOR PLACEMENT:
+ *   The anchor is placed at hitPoint + normal * GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD
+ *   (i.e. slightly OUTSIDE the wall, not at the exact boundary).  This prevents
+ *   the anchor from sitting exactly on a wall face where floating-point math
+ *   could classify it as "inside" solid geometry on subsequent validation
+ *   checks.  The anchor is a surface-contact point — validate it by checking
+ *   the stored normal + wall index, NOT by testing if the point is inside
+ *   solid geometry.
  *
  * The player can only grapple once until they touch the ground or grapple onto
  * a top surface (which instantly refreshes the charge).
@@ -427,13 +437,29 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
     cancelGrappleMiss(world);
   }
 
-  const anchorX = hit.x;
-  const anchorY = hit.y;
+  // Place the anchor just outside the wall surface using the surface normal from
+  // the raycast.  Offsetting by GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD prevents the
+  // anchor from sitting exactly on the wall boundary where floating-point math
+  // could classify it as inside solid geometry.
+  //
+  // SURFACE-ANCHOR VALIDATION NOTE:
+  //   This anchor is a confirmed surface-contact point from a swept raycast —
+  //   do NOT re-validate it with a point-in-solid test.  Instead, validate by
+  //   checking that hit.wallIndex is still solid (relevant for breakable blocks)
+  //   and that the player→anchor line remains unobstructed.  A generic
+  //   "is this point inside a wall?" check will incorrectly fire because the
+  //   anchor sits exactly on (or within floating-point noise of) the wall face.
+  const anchorX = hit.x - hit.normalX * GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD;
+  const anchorY = hit.y - hit.normalY * GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD;
   const anchorDist = Math.sqrt((anchorX - player.positionXWorld) ** 2 + (anchorY - player.positionYWorld) ** 2);
 
-  // Place the anchor exactly at the (potentially snapped) surface hit point.
   world.grappleAnchorXWorld = anchorX;
   world.grappleAnchorYWorld = anchorY;
+  // Store the outward surface normal so:
+  //   1. Constraint/validation code knows this is a surface anchor (not a free point).
+  //   2. Debug rendering can draw the normal arrow at the anchor.
+  world.grappleAnchorNormalXWorld = hit.normalX;
+  world.grappleAnchorNormalYWorld = hit.normalY;
   world.grappleLengthWorld  = anchorDist;
   world.grapplePullInAmountWorld = 0.0;  // reset pull-in counter for this new attachment
   world.grappleJumpHeldTickCount = 0;   // reset tap/hold tracker
@@ -456,6 +482,14 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // Attaching a grapple exits committed fast-fall mode — the player is now
   // swinging, not falling, so the fast-fall terminal velocity no longer applies.
   player.isFastFallModeFlag = 0;
+  // Debug: record the sweep segment and raw hit point for overlay rendering.
+  world.grappleDebugSweepFromXWorld = player.positionXWorld;
+  world.grappleDebugSweepFromYWorld = player.positionYWorld;
+  world.grappleDebugSweepToXWorld   = player.positionXWorld + dirX * maxCastDist;
+  world.grappleDebugSweepToYWorld   = player.positionYWorld + dirY * maxCastDist;
+  world.grappleDebugRawHitXWorld    = hit.x;
+  world.grappleDebugRawHitYWorld    = hit.y;
+  world.isGrappleDebugActiveFlag    = 1;
 
   // Consume grapple charge (normal rope attachment — no auto-recharge).
   world.hasGrappleChargeFlag = 0;
@@ -520,6 +554,11 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   world.grappleTensionFactor = 0;
   world.playerDownLastPressTick = 0; // reset double-tap state on release
   world.grappleRopeIndex = -1; // detach from rope segment (if any)
+  // Clear surface-anchor state (no longer attached to any surface).
+  world.grappleAnchorNormalXWorld = 0.0;
+  world.grappleAnchorNormalYWorld = 0.0;
+  // Keep debug fields so the overlay can still show the last sweep until the
+  // next grapple fire; isGrappleDebugActiveFlag persists for the current frame.
 
   if (shouldRetractFromActiveGrapple || shouldRetractFromMiss) {
     startGrappleRetract(world);

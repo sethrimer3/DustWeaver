@@ -64,6 +64,23 @@ const CRUMBLE_VARIANT_INDEX: Readonly<Record<CrumbleVariant, number>> = {
  * After converting block units to world units, runs an iterative merge pass
  * that combines axis-aligned, contiguous wall rectangles into larger AABBs.
  * This eliminates internal seam edges that cause ghost collisions.
+ *
+ * COLLISION AUTHORITY:
+ *   The merged rectangles produced here are the AUTHORITATIVE source of solid
+ *   geometry at runtime.  Individual tile boundaries are not stored separately.
+ *   Merging produces exact integer boundaries (BLOCK_SIZE_MEDIUM = 8 wu), so
+ *   there are no subpixel gaps between adjacent merged solids.
+ *
+ *   Raycasts, grapple anchor placement, and LOS checks use these merged AABBs
+ *   directly — they are NOT a "broad-phase only" approximation.  The merged
+ *   representation is exact for solid walls because same-theme neighbours are
+ *   fused into a single rectangle, and different-theme neighbours share integer
+ *   boundaries with zero gap.
+ *
+ *   The only scenario where a merged rectangle is less precise than the tile
+ *   grid is when two tiles of DIFFERENT themes share a face (they are not
+ *   merged); in that case the shared face is an exact integer boundary so
+ *   raycasts still return the correct normal.
  */
 export function loadRoomWalls(world: WorldState, room: RoomDef): void {
   const rawCount = Math.min(room.walls.length, MAX_WALLS);

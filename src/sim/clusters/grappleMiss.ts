@@ -59,12 +59,52 @@ export interface RayHit {
   y: number;
   /** Index into world.wallXWorld/Y/W/H of the wall that was hit. */
   wallIndex: number;
+  /**
+   * Outward surface normal at the hit point — points away from the wall
+   * toward the ray origin (unit axis vector: one of ±(1,0) or ±(0,1)).
+   *
+   * Used to offset the grapple anchor slightly outside the wall surface so
+   * the anchor is never epsilon-inside solid geometry.  This is the
+   * canonical surface contact direction for validation purposes.
+   *
+   * Convention: normalX = –sign(dx) when X-face was hit; normalY = –sign(dy)
+   * when Y-face was hit; the other component is 0.
+   */
+  normalX: number;
+  normalY: number;
 }
+
+/**
+ * Small epsilon (world units) used when placing the grapple anchor just
+ * outside a wall surface.  Prevents the anchor from sitting exactly on the
+ * boundary where floating-point math might classify it as "inside" solid.
+ *
+ * Value chosen to be large enough to avoid float noise (tile coordinates
+ * are exact multiples of 8 wu, so 0.1 wu is well within the safe margin)
+ * yet small enough that the anchor appears visually attached to the surface.
+ *
+ * NOTE: The miss-chain path uses GRAPPLE_TIP_SKIN_WORLD (0.5 wu) which
+ * already subsumes this epsilon; the direct-fire path needs this separately.
+ */
+export const GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD = 0.1;
 
 /**
  * Ray–AABB slab intersection against all world walls.
  * Returns the closest hit along ray (ox,oy) + t*(dx,dy) within [0,maxDist],
  * or null if the ray misses all walls.
+ *
+ * COLLISION AUTHORITY NOTE:
+ *   Merged wall rectangles (world.wallXWorld/Y/W/H) are a broad-phase
+ *   optimisation that eliminates internal seam edges between same-theme
+ *   adjacent tiles.  For exact collision queries (grapple raycast, anchor
+ *   placement, LOS checks) these merged rectangles ARE the authoritative
+ *   source of solid geometry — individual tile boundaries are not stored at
+ *   runtime.  Seam-free merging at load time (gameRoom.ts loadRoomWalls)
+ *   ensures adjacent same-theme blocks present a single face to raycasts
+ *   instead of a crack at every tile boundary.
+ *
+ *   Platform walls (isPlatformFlag === 1) are NOT excluded from the raycast;
+ *   callers that should skip platforms must filter on hit.wallIndex.
  */
 export function raycastWalls(
   world: WorldState,
@@ -76,6 +116,10 @@ export function raycastWalls(
   let bestX = 0;
   let bestY = 0;
   let bestWi = -1;
+  // 0 = hit X-face (left/right), 1 = hit Y-face (top/bottom).
+  // Tracks which axis' slab entry was the tightest constraint, which
+  // determines the outward normal direction at the hit point.
+  let bestHitAxis = 1;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
     const minX = world.wallXWorld[wi];
@@ -85,6 +129,8 @@ export function raycastWalls(
 
     let tMin = 0;
     let tMax = maxDist;
+    // hitAxis for this wall: updated as each axis tightens tMin.
+    let hitAxis = 1;
 
     if (Math.abs(dx) < 1e-6) {
       if (ox < minX || ox > maxX) continue;
@@ -93,7 +139,7 @@ export function raycastWalls(
       const tx2 = (maxX - ox) / dx;
       const txMin = tx1 < tx2 ? tx1 : tx2;
       const txMax = tx1 > tx2 ? tx1 : tx2;
-      tMin = txMin > tMin ? txMin : tMin;
+      if (txMin > tMin) { tMin = txMin; hitAxis = 0; }
       tMax = txMax < tMax ? txMax : tMax;
       if (tMin > tMax) continue;
     }
@@ -105,7 +151,7 @@ export function raycastWalls(
       const ty2 = (maxY - oy) / dy;
       const tyMin = ty1 < ty2 ? ty1 : ty2;
       const tyMax = ty1 > ty2 ? ty1 : ty2;
-      tMin = tyMin > tMin ? tyMin : tMin;
+      if (tyMin > tMin) { tMin = tyMin; hitAxis = 1; }
       tMax = tyMax < tMax ? tyMax : tMax;
       if (tMin > tMax) continue;
     }
@@ -115,10 +161,19 @@ export function raycastWalls(
       bestX = ox + dx * tMin;
       bestY = oy + dy * tMin;
       bestWi = wi;
+      bestHitAxis = hitAxis;
     }
   }
 
-  return Number.isFinite(bestT) ? { t: bestT, x: bestX, y: bestY, wallIndex: bestWi } : null;
+  if (!Number.isFinite(bestT)) return null;
+
+  // Outward surface normal: points away from the wall toward the ray origin.
+  // For an X-face hit the normal is –sign(dx) on the X axis (0 on Y).
+  // For a Y-face hit the normal is –sign(dy) on the Y axis (0 on X).
+  const normalX = bestHitAxis === 0 ? (dx > 0 ? -1 : 1) : 0;
+  const normalY = bestHitAxis === 1 ? (dy > 0 ? -1 : 1) : 0;
+
+  return { t: bestT, x: bestX, y: bestY, wallIndex: bestWi, normalX, normalY };
 }
 
 // ============================================================================
@@ -417,6 +472,20 @@ export function updateGrappleMissChain(world: WorldState): void {
               (missLinkY[i] - player.positionYWorld) ** 2,
             );
             if (hitDist >= GRAPPLE_MIN_LENGTH_WORLD) {
+              // The miss-chain tip already sits GRAPPLE_TIP_SKIN_WORLD (0.5 wu)
+              // outside the wall face (see clampedDist above), so the anchor is
+              // a surface contact point — not embedded in solid geometry.
+              //
+              // Store the surface normal from the swept hit so that:
+              //   1. The constraint solver can treat this as a surface anchor
+              //      rather than a free floating point (avoiding false "inside
+              //      solid" re-validation).
+              //   2. Debug rendering can draw the normal arrow.
+              //
+              // NOTE: The anchor is intentionally NOT the exact wall face
+              // (it is offset by the skin).  Merged wall rectangles are the
+              // authoritative solid source for this query; the individual tile
+              // boundaries are not stored at runtime.
               const missAnchorX = missLinkX[i];
               const missAnchorY = missLinkY[i];
               const missAnchorDist = Math.sqrt(
@@ -427,6 +496,8 @@ export function updateGrappleMissChain(world: WorldState): void {
               // Attach grapple at this point (zip/stick mechanic replaced by proximity bounce)
               world.grappleAnchorXWorld = missAnchorX;
               world.grappleAnchorYWorld = missAnchorY;
+              world.grappleAnchorNormalXWorld = swept.normalX;
+              world.grappleAnchorNormalYWorld = swept.normalY;
               world.grappleLengthWorld = missAnchorDist;
               world.grapplePullInAmountWorld = 0.0;
               world.grappleJumpHeldTickCount = 0;
@@ -441,6 +512,14 @@ export function updateGrappleMissChain(world: WorldState): void {
               world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
               world.grappleAttachFxXWorld = missAnchorX;
               world.grappleAttachFxYWorld = missAnchorY;
+              // Debug: record sweep segment and raw hit for overlay rendering.
+              world.grappleDebugSweepFromXWorld = prevLinkX;
+              world.grappleDebugSweepFromYWorld = prevLinkY;
+              world.grappleDebugSweepToXWorld   = prevLinkX + moveDirX * moveDist;
+              world.grappleDebugSweepToYWorld   = prevLinkY + moveDirY * moveDist;
+              world.grappleDebugRawHitXWorld    = swept.x;
+              world.grappleDebugRawHitYWorld    = swept.y;
+              world.isGrappleDebugActiveFlag    = 1;
 
               // Miss-chain attachment always consumes the charge (normal rope attach).
               world.hasGrappleChargeFlag = 0;

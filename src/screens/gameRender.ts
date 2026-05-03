@@ -350,7 +350,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
-  renderGrapple(ctx, snapshot, ox, oy, zoom);
+  renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
 
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows
   arrowWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);

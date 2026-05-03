@@ -546,7 +546,7 @@ export function renderClusters(
   ctx.restore();
 }
 
-export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
+export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
   const hasActiveOrMiss = snapshot.isGrappleActiveFlag === 1 || snapshot.isGrappleMissActiveFlag === 1;
   if (!hasActiveOrMiss && snapshot.grappleAttachFxTicks <= 0) return;
 
@@ -700,6 +700,61 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     ctx.strokeStyle = `rgba(255, 236, 170, ${ringAlpha})`;
     ctx.lineWidth = 1;
     ctx.stroke();
+  }
+
+  // ── Debug grapple collision visualization ───────────────────────────────────
+  // Draws the last sweep segment, raw hit point, surface normal, and snapped
+  // anchor when debug mode is on.  Shows how CCD placed the anchor relative
+  // to the wall surface so seam or epsilon issues are immediately visible.
+  if (isDebugMode && snapshot.isGrappleDebugActiveFlag === 1) {
+    const sfx = snapshot.grappleDebugSweepFromXWorld * scalePx + offsetXPx;
+    const sfy = snapshot.grappleDebugSweepFromYWorld * scalePx + offsetYPx;
+    const stx = snapshot.grappleDebugSweepToXWorld * scalePx + offsetXPx;
+    const sty = snapshot.grappleDebugSweepToYWorld * scalePx + offsetYPx;
+    const rhx = snapshot.grappleDebugRawHitXWorld * scalePx + offsetXPx;
+    const rhy = snapshot.grappleDebugRawHitYWorld * scalePx + offsetYPx;
+    const snx = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
+    const sny = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
+    const nx  = snapshot.grappleAnchorNormalXWorld;
+    const ny  = snapshot.grappleAnchorNormalYWorld;
+
+    // Sweep segment (cyan dashed line)
+    ctx.beginPath();
+    ctx.moveTo(sfx, sfy);
+    ctx.lineTo(stx, sty);
+    ctx.strokeStyle = 'rgba(0, 220, 255, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Raw hit point (yellow cross)
+    ctx.strokeStyle = 'rgba(255, 230, 0, 0.9)';
+    ctx.lineWidth = 1.5;
+    const cs = 4;
+    ctx.beginPath(); ctx.moveTo(rhx - cs, rhy); ctx.lineTo(rhx + cs, rhy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(rhx, rhy - cs); ctx.lineTo(rhx, rhy + cs); ctx.stroke();
+
+    // Surface normal arrow (magenta) from snapped anchor outward
+    const normalLenPx = 12;
+    ctx.beginPath();
+    ctx.moveTo(snx, sny);
+    ctx.lineTo(snx + nx * normalLenPx, sny + ny * normalLenPx);
+    ctx.strokeStyle = 'rgba(255, 80, 230, 0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Snapped anchor point (green circle)
+    ctx.beginPath();
+    ctx.arc(snx, sny, 3, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(80, 255, 120, 0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Label: "AABB" to indicate merged-rectangle broad-phase was used
+    ctx.fillStyle = 'rgba(0, 220, 255, 0.85)';
+    ctx.font = '8px monospace';
+    ctx.fillText('AABB', rhx + 5, rhy - 4);
   }
 
   ctx.restore();
