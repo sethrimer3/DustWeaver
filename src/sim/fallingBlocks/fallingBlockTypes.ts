@@ -5,13 +5,14 @@
  * that shake, pause, and then fall as a single rigid body when disturbed.
  *
  * State machine:
- *   idleStable  → warning      (triggered by qualifying disturbance)
- *   warning     → preFallPause (after WARN_DURATION_TICKS)
- *   preFallPause→ falling      (after PRE_FALL_PAUSE_TICKS)
- *   falling     → landedStable (landed on solid terrain / stable group)
- *   falling     → crumbling    (crumbling variant only, after top speed reached
- *                               for CRUMBLE_DELAY_TICKS)
- *   crumbling   → removed      (after CRUMBLE_DURATION_TICKS)
+ *   idleStable  → warning       (triggered by qualifying disturbance)
+ *   warning     → preFallPause  (after WARN_DURATION_TICKS)
+ *   preFallPause→ falling       (after PRE_FALL_PAUSE_TICKS)
+ *   falling     → landedStable  (landed before reaching terminal speed)
+ *   falling     → crumbling     (crumbling variant only: landed after reaching
+ *                                terminal speed, or crumble timer runs out
+ *                                while still airborne)
+ *   crumbling   → removed       (after CRUMBLE_DURATION_TICKS)
  */
 
 // ── Variant identifiers ──────────────────────────────────────────────────────
@@ -89,8 +90,15 @@ export const FB_COLLISION_EPSILON = 0.5;
 /** Maximum number of falling block groups per room. */
 export const MAX_FALLING_BLOCK_GROUPS = 64;
 
-/** Maximum tiles in a single falling block group (bounds the pre-allocated array). */
+/**
+ * Maximum tiles in a single falling block group.
+ * Used only as a safety cap in the editor / loader; collider arrays are
+ * allocated to exact component size at load time.
+ */
 export const MAX_TILES_PER_GROUP = 128;
+
+/** Maximum landing contact segments stored per landing event. */
+export const MAX_LANDING_CONTACTS = 8;
 
 // ── Shake animation ──────────────────────────────────────────────────────────
 
@@ -134,14 +142,47 @@ export interface FallingBlockGroup {
   tileCount: number;
   /**
    * Tile left edges relative to restXWorld (world units).
-   * Length = MAX_TILES_PER_GROUP; only [0..tileCount-1] are valid.
+   * Exact-size Float32Array (length = tileCount).
    */
   tileRelXWorld: Float32Array;
   /**
    * Tile top edges relative to restYWorld (world units).
-   * Length = MAX_TILES_PER_GROUP; only [0..tileCount-1] are valid.
+   * Exact-size Float32Array (length = tileCount).
    */
   tileRelYWorld: Float32Array;
+
+  // ── Per-tile collider rectangles ───────────────────────────────────────────
+  //
+  // Used for precise sim-side checks: landing detection, trigger detection,
+  // crush detection, chain reaction, and grapple-anchor tests.
+  // The bounding box (wWorld × hWorld) is kept for broad-phase culling and
+  // for the wall slot shared with the movement system.
+  // Each collider rect is one tile (BLOCK_SIZE_MEDIUM × BLOCK_SIZE_MEDIUM).
+
+  /** Number of collider rects (equals tileCount). */
+  colliderRectCount: number;
+  /** Left edge of each collider rect relative to restXWorld (world units). */
+  colliderRelXWorld: Float32Array;
+  /** Top edge of each collider rect relative to restYWorld (world units). */
+  colliderRelYWorld: Float32Array;
+  /** Width of each collider rect (world units, = BLOCK_SIZE_MEDIUM). */
+  colliderWWorld: Float32Array;
+  /** Height of each collider rect (world units, = BLOCK_SIZE_MEDIUM). */
+  colliderHWorld: Float32Array;
+
+  // ── Landing contact buffer ─────────────────────────────────────────────────
+  //
+  // Populated by findLandingSurface() when the group touches down.
+  // Read by the renderer to spawn landing dust along actual contact segments.
+
+  /** Number of valid contact segments from the most recent landing. */
+  lastLandingContactCount: number;
+  /** Left world-X of each contact segment (length = MAX_LANDING_CONTACTS). */
+  lastLandingContactX1World: Float32Array;
+  /** Right world-X of each contact segment (length = MAX_LANDING_CONTACTS). */
+  lastLandingContactX2World: Float32Array;
+  /** World-Y of each contact segment (the surface Y, equal to group bottom at snap). */
+  lastLandingContactYWorld: Float32Array;
 
   // ── Dynamic state ─────────────────────────────────────────────────────────
 

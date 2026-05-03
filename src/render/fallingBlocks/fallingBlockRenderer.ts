@@ -112,25 +112,46 @@ export class FallingBlockDustRenderer {
   }
 
   /**
-   * Landing dust — bursts outward from the left and right edges of the contact
-   * segment where the group bottom meets the surface.
+   * Landing dust — bursts outward from the actual contact segment ends where
+   * the group's tile bottoms met the surface.  Falls back to the group bounding
+   * box if no contact segments were recorded.
    */
   spawnLandingDust(g: FallingBlockGroup): void {
-    const by  = getBottom(g);
-    const lx  = getLeft(g);
-    const rx  = getRight(g);
-    // Left-edge burst
-    this.spawnDust(lx, by, -40, -10, 1, 10);
-    // Right-edge burst
-    this.spawnDust(rx, by,  40, -10, 1, 10);
-    // Center splay for wider groups (dust squeezed out from under)
-    const groupW = g.wWorld;
-    const extraBursts = Math.floor(groupW / (BLOCK_SIZE_MEDIUM * 2));
-    for (let k = 1; k <= extraBursts; k++) {
-      const frac = k / (extraBursts + 1);
-      const ex = lx + groupW * frac;
-      const dir = frac < 0.5 ? -20 : 20;
-      this.spawnDust(ex, by, dir, -8, 1, 4);
+    if (g.lastLandingContactCount > 0) {
+      // Use per-segment contact data for precise dust placement
+      for (let k = 0; k < g.lastLandingContactCount; k++) {
+        const lx  = g.lastLandingContactX1World[k];
+        const rx  = g.lastLandingContactX2World[k];
+        const by  = g.lastLandingContactYWorld[k];
+        // Left-edge burst
+        this.spawnDust(lx, by, -40, -10, 1, 6);
+        // Right-edge burst
+        this.spawnDust(rx, by,  40, -10, 1, 6);
+        // Center splay if segment is wide
+        const segW = rx - lx;
+        const extraBursts = Math.floor(segW / (BLOCK_SIZE_MEDIUM * 2));
+        for (let e = 1; e <= extraBursts; e++) {
+          const frac = e / (extraBursts + 1);
+          const ex  = lx + segW * frac;
+          const dir = frac < 0.5 ? -20 : 20;
+          this.spawnDust(ex, by, dir, -8, 1, 3);
+        }
+      }
+    } else {
+      // Fallback: use bounding-box edges
+      const by  = getBottom(g);
+      const lx  = getLeft(g);
+      const rx  = getRight(g);
+      this.spawnDust(lx, by, -40, -10, 1, 10);
+      this.spawnDust(rx, by,  40, -10, 1, 10);
+      const groupW = g.wWorld;
+      const extraBursts = Math.floor(groupW / (BLOCK_SIZE_MEDIUM * 2));
+      for (let k = 1; k <= extraBursts; k++) {
+        const frac = k / (extraBursts + 1);
+        const ex = lx + groupW * frac;
+        const dir = frac < 0.5 ? -20 : 20;
+        this.spawnDust(ex, by, dir, -8, 1, 4);
+      }
     }
   }
 
@@ -216,6 +237,13 @@ const _warnDustCooldown = new Uint16Array(64); // up to 64 groups per room
 const _prevStateByGroup = new Uint8Array(64);
 
 /**
+ * Crumble burst dust is spawned once when the crumble visual phase begins.
+ * Tracked separately to prevent repeated spawns if multiple render frames
+ * see the same crumbleTimerTicks value.
+ */
+const _crumbleBurstDoneByGroup = new Uint8Array(64);
+
+/**
  * Render all active falling block groups into the virtual canvas.
  *
  * @param ctx           2D canvas context (the virtual 480×270 canvas).
@@ -251,6 +279,8 @@ export function renderFallingBlocks(
       } else if (g.state === FB_STATE_CRUMBLING) {
         dustRenderer.spawnLandingDust(g);
       }
+      // Reset crumble burst flag on any state change into or out of crumbling
+      _crumbleBurstDoneByGroup[gi] = 0;
       _prevStateByGroup[gi] = g.state;
     }
 
@@ -266,9 +296,12 @@ export function renderFallingBlocks(
       _warnDustCooldown[gi] = 0;
     }
 
-    // Crumble burst dust just before disappearing
-    if (g.state === FB_STATE_CRUMBLING && g.crumbleTimerTicks === CRUMBLE_DURATION_TICKS) {
+    // Crumble burst dust at the start of the visual phase (once per crumbling entry)
+    if (g.state === FB_STATE_CRUMBLING &&
+        _crumbleBurstDoneByGroup[gi] === 0 &&
+        g.crumbleTimerTicks <= CRUMBLE_DURATION_TICKS) {
       dustRenderer.spawnCrumbleDust(g);
+      _crumbleBurstDoneByGroup[gi] = 1;
     }
 
     // ── Draw each tile ──────────────────────────────────────────────────────
