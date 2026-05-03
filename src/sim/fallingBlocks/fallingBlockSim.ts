@@ -67,6 +67,18 @@ const CRUSH_DAMAGE = 999;
  *  it is considered "landed" — prevents micro-oscillation at rest. */
 const LAND_OVERLAP_EPSILON = 0.1;
 
+// ── Module-level scratch buffers ──────────────────────────────────────────────
+// Pre-allocated to MAX_LANDING_CONTACTS to avoid per-frame allocations in the
+// landing contact computation loop.  Only valid within a single findLandingSurface
+// call (single-threaded, synchronous execution).
+const _tmpContactX1 = new Float32Array(MAX_LANDING_CONTACTS);
+const _tmpContactX2 = new Float32Array(MAX_LANDING_CONTACTS);
+const _tmpContactY  = new Float32Array(MAX_LANDING_CONTACTS);
+
+// Reusable Set for the set of wall indices owned by falling block groups.
+// Cleared and rebuilt at the start of each tickFallingBlocks call.
+const _fbWallIndexSet = new Set<number>();
+
 /**
  * Returns the current effective Y top of the group in world space.
  */
@@ -273,8 +285,10 @@ function checkTriggers(g: FallingBlockGroup, world: WorldState): void {
       // Grapple downward pull:
       //   • Anchor must be on or inside the group's actual tile shape.
       //   • Pull vector (anchor → player) must point within 30° of straight down.
-      //   • Player must be actively retracting the rope (holding down/S) — this
-      //     is the "pulling down" action; simply hanging does NOT trigger.
+      //   • Player must be actively retracting the rope by holding the crouch /
+      //     down key (playerCrouchHeldFlag).  In DustWeaver the same key serves
+      //     as both crouch-on-ground and rope-retract-while-grappling; simply
+      //     hanging below the block without holding down does NOT trigger.
       if (world.isGrappleActiveFlag === 1 && world.playerCrouchHeldFlag === 1) {
         const ax = world.grappleAnchorXWorld;
         const ay = world.grappleAnchorYWorld;
@@ -344,11 +358,8 @@ function findLandingSurface(
   // downward movement the most (= smallest newGroupTopY).
   let nearestGroupTopY = Infinity;
 
-  // Temporary contact storage: up to MAX_LANDING_CONTACTS segments.
-  // We collect them into the group's arrays after finding the snap Y.
-  const tmpX1 = new Float32Array(MAX_LANDING_CONTACTS);
-  const tmpX2 = new Float32Array(MAX_LANDING_CONTACTS);
-  const tmpY  = new Float32Array(MAX_LANDING_CONTACTS);
+  // Temporary contact storage using pre-allocated module-level scratch buffers.
+  // These are only valid within this synchronous call.
   let tmpCount = 0;
 
   const gx = g.restXWorld;
@@ -456,9 +467,9 @@ function findLandingSurface(
       if (cx2 <= cx1) continue;
 
       if (tmpCount < MAX_LANDING_CONTACTS) {
-        tmpX1[tmpCount] = cx1;
-        tmpX2[tmpCount] = cx2;
-        tmpY[tmpCount]  = wTop;
+        _tmpContactX1[tmpCount] = cx1;
+        _tmpContactX2[tmpCount] = cx2;
+        _tmpContactY[tmpCount]  = wTop;
         tmpCount++;
       }
     }
@@ -482,9 +493,9 @@ function findLandingSurface(
         if (cx2 <= cx1) continue;
 
         if (tmpCount < MAX_LANDING_CONTACTS) {
-          tmpX1[tmpCount] = cx1;
-          tmpX2[tmpCount] = cx2;
-          tmpY[tmpCount]  = orTop;
+          _tmpContactX1[tmpCount] = cx1;
+          _tmpContactX2[tmpCount] = cx2;
+          _tmpContactY[tmpCount]  = orTop;
           tmpCount++;
         }
       }
@@ -496,21 +507,21 @@ function findLandingSurface(
   for (let k = 0; k < tmpCount; k++) {
     let merged = false;
     for (let m = 0; m < g.lastLandingContactCount; m++) {
-      if (Math.abs(g.lastLandingContactYWorld[m] - tmpY[k]) < FB_COLLISION_EPSILON &&
-          tmpX1[k] <= g.lastLandingContactX2World[m] + FB_COLLISION_EPSILON &&
-          tmpX2[k] >= g.lastLandingContactX1World[m] - FB_COLLISION_EPSILON) {
+      if (Math.abs(g.lastLandingContactYWorld[m] - _tmpContactY[k]) < FB_COLLISION_EPSILON &&
+          _tmpContactX1[k] <= g.lastLandingContactX2World[m] + FB_COLLISION_EPSILON &&
+          _tmpContactX2[k] >= g.lastLandingContactX1World[m] - FB_COLLISION_EPSILON) {
         // Extend existing segment
-        g.lastLandingContactX1World[m] = Math.min(g.lastLandingContactX1World[m], tmpX1[k]);
-        g.lastLandingContactX2World[m] = Math.max(g.lastLandingContactX2World[m], tmpX2[k]);
+        g.lastLandingContactX1World[m] = Math.min(g.lastLandingContactX1World[m], _tmpContactX1[k]);
+        g.lastLandingContactX2World[m] = Math.max(g.lastLandingContactX2World[m], _tmpContactX2[k]);
         merged = true;
         break;
       }
     }
     if (!merged && g.lastLandingContactCount < MAX_LANDING_CONTACTS) {
       const idx = g.lastLandingContactCount++;
-      g.lastLandingContactX1World[idx] = tmpX1[k];
-      g.lastLandingContactX2World[idx] = tmpX2[k];
-      g.lastLandingContactYWorld[idx]  = tmpY[k];
+      g.lastLandingContactX1World[idx] = _tmpContactX1[k];
+      g.lastLandingContactX2World[idx] = _tmpContactX2[k];
+      g.lastLandingContactYWorld[idx]  = _tmpContactY[k];
     }
   }
 
@@ -630,12 +641,12 @@ export function tickFallingBlocks(world: WorldState, dtMs: number): void {
   if (world.fallingBlockGroups.length === 0) return;
   const dtSec = dtMs / 1000.0;
 
-  // Build a set of wall indices owned by ANY falling block group so that the
-  // static wall scan in findLandingSurface can skip them all.
-  // Group count is small (≤ MAX_FALLING_BLOCK_GROUPS = 64), so this is cheap.
-  const fbWallIndexSet = new Set<number>();
+  // Rebuild the falling-block wall index set from scratch each tick.
+  // Group count is small (≤ MAX_FALLING_BLOCK_GROUPS = 64); clearing + filling
+  // a module-level Set is faster than allocating a new one every tick.
+  _fbWallIndexSet.clear();
   for (const g of world.fallingBlockGroups) {
-    if (g.wallIndex >= 0) fbWallIndexSet.add(g.wallIndex);
+    if (g.wallIndex >= 0) _fbWallIndexSet.add(g.wallIndex);
   }
 
   for (const g of world.fallingBlockGroups) {
@@ -696,7 +707,7 @@ export function tickFallingBlocks(world: WorldState, dtMs: number): void {
           g.offsetYWorld += step;
           remainingMovement -= step;
 
-          const snapY = findLandingSurface(g, world, fbWallIndexSet);
+          const snapY = findLandingSurface(g, world, _fbWallIndexSet);
           if (snapY !== null && snapY <= g.restYWorld + g.offsetYWorld + LAND_OVERLAP_EPSILON) {
             // Snap the group to the contact surface
             g.offsetYWorld = snapY - g.restYWorld;
