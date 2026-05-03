@@ -9,22 +9,35 @@
 import type { PaletteItem } from './editorState';
 import { addHoverStyle } from '../ui/helpers';
 import { PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, GREEN } from './editorStyles';
+import { FOLDER_BLOCK_THEMES } from '../render/walls/folderBlockThemes';
 
 // ── Block-theme visual constants ─────────────────────────────────────────────
 
 /** Fill colour shown in palette previews for each block theme. */
-export const THEME_FILL_COLOR: Readonly<Record<string, string>> = {
+export const THEME_FILL_COLOR: Record<string, string> = {
   blackRock: '#484856',
   brownRock: '#7a5230',
   dirt:      '#7a6038',
 };
 
 /** Representative block sprite URL for each block theme. */
-export const THEME_BLOCK_SPRITE_URL: Readonly<Record<string, string>> = {
+export const THEME_BLOCK_SPRITE_URL: Record<string, string> = {
   blackRock: 'SPRITES/BLOCKS/blackRock/blackRock (1).png',
   brownRock: 'SPRITES/BLOCKS/brownRock/brownRock_8x8.png',
   dirt:      'SPRITES/BLOCKS/dirt/dirt_8x8.png',
 };
+
+// Populate folder-based theme entries from discovered sprites.
+for (const theme of FOLDER_BLOCK_THEMES) {
+  if (theme.sprite16Urls.length > 0) {
+    THEME_BLOCK_SPRITE_URL[theme.id] = theme.sprite16Urls[0];
+  }
+  // Use a neutral grey as the fill-color fallback for folder-based themes.
+  // The sprite thumbnail in the chip gives the primary visual identity.
+  if (!(theme.id in THEME_FILL_COLOR)) {
+    THEME_FILL_COLOR[theme.id] = '#555555';
+  }
+}
 
 // ── Button helpers ────────────────────────────────────────────────────────────
 

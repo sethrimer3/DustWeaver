@@ -12,6 +12,7 @@
 
 import type { BlockTheme } from '../../levels/roomDef';
 import { loadImg, isSpriteReady } from '../imageCache';
+import { isFolderBasedTheme } from './folderBlockThemes';
 
 export { isSpriteReady };
 
@@ -123,7 +124,7 @@ export function getFullSpriteFor2x2(theme: BlockTheme | null, blockSizePx: numbe
 /** Returns true if the active theme supports 2×2 full-sprite rendering. */
 export function themeSupports2x2(theme: BlockTheme | null, blockSizePx: number): boolean {
   if (blockSizePx !== 8) return false;
-  return theme === 'brownRock' || theme === 'dirt' || theme === 'blackRock';
+  return theme === 'brownRock' || theme === 'dirt' || theme === 'blackRock' || isFolderBasedTheme(theme);
 }
 
 /**
