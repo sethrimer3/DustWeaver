@@ -506,7 +506,7 @@ export function collectDecorationLights(
       const lx = sx + Math.round(blockSizePx * scalePx * 0.5);
       const ly = sy - Math.round(2 * scalePx);
       const lr = 14 * scalePx;
-      if (!isScreenRectVisible(lx - lr, ly - lr, lr * 2, lr * 2, vpW, vpH)) continue;
+      if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
       lights.push({
         xPx:           lx,
         yPx:           ly,
@@ -522,7 +522,7 @@ export function collectDecorationLights(
       const lx    = sx + offX + px;
       const ly    = sy - (stemH + 1) * px;
       const lr    = 26 * scalePx;
-      if (!isScreenRectVisible(lx - lr, ly - lr, lr * 2, lr * 2, vpW, vpH)) continue;
+      if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
       lights.push({
         xPx:           lx,
         yPx:           ly,
@@ -539,7 +539,7 @@ export function collectDecorationLights(
       const lx    = sx + offX;
       const ly    = sy + vineH * px;
       const lr    = 18 * scalePx;
-      if (!isScreenRectVisible(lx - lr, ly - lr, lr * 2, lr * 2, vpW, vpH)) continue;
+      if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
       lights.push({
         xPx:           lx,
         yPx:           ly,
