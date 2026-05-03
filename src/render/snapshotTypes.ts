@@ -395,6 +395,22 @@ export interface WorldSnapshot {
    * Used by grappleInfluenceRenderer to pulse the ring as a tension warning.
    */
   readonly grappleTensionFactor: number;
+  // ── Grapple geometric wrapping (Phase 2) ─────────────────────────────────
+  /**
+   * 1 when geometric corner wrapping is enabled (debug/feature flag).
+   * 0 = disabled (default) — wrapping code is entirely skipped.
+   */
+  readonly isGrappleWrappingEnabled: 0 | 1;
+  /**
+   * Number of active wrap corner points (0–MAX_GRAPPLE_WRAP_POINTS).
+   * When > 0, the active swing anchor is the newest wrap point rather than
+   * the main grapple anchor.
+   */
+  readonly grappleWrapPointCount: number;
+  /** World-X of each wrap corner (shared view). Valid for indices 0..grappleWrapPointCount-1. */
+  readonly grappleWrapPointXWorld: Float32Array;
+  /** World-Y of each wrap corner (shared view). Valid for indices 0..grappleWrapPointCount-1. */
+  readonly grappleWrapPointYWorld: Float32Array;
   // ── Ropes ────────────────────────────────────────────────────────────────
   /** Number of ropes in the current room. */
   readonly ropeCount: number;

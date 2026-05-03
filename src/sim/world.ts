@@ -5,6 +5,9 @@ import { RngState, createRng } from './rng';
 /** Maximum number of axis-aligned wall rectangles supported per world. */
 export const MAX_WALLS = 2000;
 
+/** Maximum number of grapple corner wrap points (geometric wrapping, Phase 2). */
+export const MAX_GRAPPLE_WRAP_POINTS = 3;
+
 /** Maximum number of spike hazards per room. */
 export const MAX_SPIKES = 32;
 /** Maximum number of springboards per room. */
@@ -762,6 +765,37 @@ export interface WorldState extends ParticleBuffers {
    */
   isGrappleDebugActiveFlag: 0 | 1;
 
+  // ── Grapple retraction ramp (Phase 1) ─────────────────────────────────────
+  /**
+   * Number of consecutive ticks the down/crouch key has been held while the
+   * grapple is active.  Used to compute the retraction ramp-up factor so the
+   * first ~0.15 s retracts at partial speed, reaching full speed by ~0.35 s.
+   * Reset to 0 in releaseGrapple, fireGrapple, and when the key is released.
+   */
+  grappleRetractHeldTicks: number;
+
+  // ── Grapple geometric wrapping (Phase 2) ──────────────────────────────────
+  /**
+   * Debug/feature flag.  1 = geometric corner wrapping is active; 0 = disabled.
+   * Defaults to 0 (off).  Toggle via debug panel / settings to prototype wrapping.
+   */
+  isGrappleWrappingEnabled: 0 | 1;
+  /**
+   * Number of active wrap-corner points on the current grapple (0–MAX_GRAPPLE_WRAP_POINTS).
+   * Cleared by releaseGrapple and fireGrapple.
+   */
+  grappleWrapPointCount: number;
+  /** World-X of each wrap corner, indexed 0..grappleWrapPointCount-1. */
+  grappleWrapPointXWorld: Float32Array;
+  /** World-Y of each wrap corner, indexed 0..grappleWrapPointCount-1. */
+  grappleWrapPointYWorld: Float32Array;
+  /**
+   * Wall index (into world.wallXWorld etc.) for the wall whose corner produced
+   * each wrap point.  -1 if unknown.  Used for validity checks (e.g. breakable
+   * walls that have since been destroyed).
+   */
+  grappleWrapPointWallIndex: Int16Array;
+
   // ── Falling blocks ──────────────────────────────────────────────────────────
   /**
    * Runtime list of falling block groups for the current room.
@@ -1009,6 +1043,14 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleDebugRawHitXWorld:      0.0,
     grappleDebugRawHitYWorld:      0.0,
     isGrappleDebugActiveFlag:      0,
+    // Phase 1 retraction ramp — starts clear (not holding).
+    grappleRetractHeldTicks:       0,
+    // Phase 2 geometric wrapping — disabled by default.
+    isGrappleWrappingEnabled:      0,
+    grappleWrapPointCount:         0,
+    grappleWrapPointXWorld:        new Float32Array(MAX_GRAPPLE_WRAP_POINTS),
+    grappleWrapPointYWorld:        new Float32Array(MAX_GRAPPLE_WRAP_POINTS),
+    grappleWrapPointWallIndex:     new Int16Array(MAX_GRAPPLE_WRAP_POINTS).fill(-1),
     // ── Falling blocks ────────────────────────────────────────────────────
     fallingBlockGroups:            [],
     playerPrevVelocityYWorld:      0,
