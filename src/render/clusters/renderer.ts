@@ -2,6 +2,7 @@ import { WorldSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_MEDIUM, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
+import { MAX_GRAPPLE_WRAP_POINTS } from '../../sim/world';
 import type { PlayerCloak } from './playerCloak';
 import type { PhantomCloakExtension } from './phantomCloak';
 import { loadImg, isSpriteReady } from '../imageCache';
@@ -546,6 +547,12 @@ export function renderClusters(
   ctx.restore();
 }
 
+// Pre-allocated scratch arrays for the grapple polyline waypoints.
+// Max waypoints = 1 (player) + MAX_GRAPPLE_WRAP_POINTS + 1 (anchor).
+// Module-level to avoid per-frame heap allocation.
+const _scratchWpX = new Float32Array(2 + MAX_GRAPPLE_WRAP_POINTS);
+const _scratchWpY = new Float32Array(2 + MAX_GRAPPLE_WRAP_POINTS);
+
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
   const hasActiveGrapple = snapshot.isGrappleActiveFlag === 1;
   if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0) return;
@@ -571,41 +578,78 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
   const ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
   const ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
 
+  // ── Build polyline waypoints ──────────────────────────────────────────────
+  // When wrapping is enabled and wrap points exist, the rope is a polyline:
+  //   player → wrap[count-1] → … → wrap[0] → main anchor
+  // Otherwise it is a single straight segment: player → main anchor.
+  const wrapCount = (snapshot.isGrappleWrappingEnabled === 1)
+    ? snapshot.grappleWrapPointCount
+    : 0;
+
+  // waypoints[0] = player; waypoints[last] = main anchor.
+  // Max length = 1 (player) + MAX_GRAPPLE_WRAP_POINTS (wraps) + 1 (anchor) = 5.
+  // We keep these as screen-space Px coords.
+  // Pre-alloc to avoid per-frame heap allocation (max 5 waypoints).
+  const waypointCount = 2 + wrapCount;          // player + wraps + anchor
+  // Use module-level scratch to avoid hot-path allocation.
+  _scratchWpX[0] = px;
+  _scratchWpY[0] = py;
+  for (let wi = 0; wi < wrapCount; wi++) {
+    // Polyline goes from player toward anchor, so the newest wrap is index 1,
+    // the oldest is index wrapCount.
+    const wIdx = wrapCount - 1 - wi; // newest first
+    _scratchWpX[1 + wi] = snapshot.grappleWrapPointXWorld[wIdx] * scalePx + offsetXPx;
+    _scratchWpY[1 + wi] = snapshot.grappleWrapPointYWorld[wIdx] * scalePx + offsetYPx;
+  }
+  _scratchWpX[1 + wrapCount] = ax;
+  _scratchWpY[1 + wrapCount] = ay;
+
   ctx.save();
 
   if (hasActiveGrapple && playerCluster !== undefined) {
-    // Faint guide glow only — the "rope" itself is represented by gold particles.
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(ax, ay);
+    // Faint guide glow along the whole polyline.
     ctx.strokeStyle = 'rgba(255, 215, 0, 0.08)';
     ctx.lineWidth = 2.0;
     ctx.setLineDash([1, 10]);
+    ctx.beginPath();
+    ctx.moveTo(_scratchWpX[0], _scratchWpY[0]);
+    for (let wi = 1; wi < waypointCount; wi++) {
+      ctx.lineTo(_scratchWpX[wi], _scratchWpY[wi]);
+    }
     ctx.stroke();
     ctx.setLineDash([]);
   }
 
   if (hasActiveGrapple && playerCluster !== undefined) {
-    const dx = ax - px;
-    const dy = ay - py;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const segmentCount = Math.max(1, Math.floor(dist / GRAPPLE_DUST_SEGMENT_PX));
+    // Draw dust sprites along each segment of the polyline.
     const dustSizePx = GRAPPLE_DUST_SIZE_PX * Math.max(1, scalePx * 0.5);
+    const spriteReady = isSpriteReady(_grappleDustSprite);
 
-    if (isSpriteReady(_grappleDustSprite)) {
-      for (let segmentIndex = 0; segmentIndex <= segmentCount; segmentIndex++) {
-        const t = segmentCount > 0 ? segmentIndex / segmentCount : 0;
-        const sx = px + dx * t;
-        const sy = py + dy * t;
-        ctx.drawImage(_grappleDustSprite, sx - dustSizePx * 0.5, sy - dustSizePx * 0.5, dustSizePx, dustSizePx);
-      }
-    } else {
-      for (let segmentIndex = 0; segmentIndex <= segmentCount; segmentIndex++) {
-        const t = segmentCount > 0 ? segmentIndex / segmentCount : 0;
-        const sx = px + dx * t;
-        const sy = py + dy * t;
+    for (let seg = 0; seg < waypointCount - 1; seg++) {
+      const x0 = _scratchWpX[seg];
+      const y0 = _scratchWpY[seg];
+      const x1 = _scratchWpX[seg + 1];
+      const y1 = _scratchWpY[seg + 1];
+      const sdx = x1 - x0;
+      const sdy = y1 - y0;
+      const segLen = Math.sqrt(sdx * sdx + sdy * sdy);
+      const segCount = Math.max(1, Math.floor(segLen / GRAPPLE_DUST_SEGMENT_PX));
+
+      if (spriteReady) {
+        for (let si = 0; si <= segCount; si++) {
+          const t = segCount > 0 ? si / segCount : 0;
+          const sx = x0 + sdx * t;
+          const sy = y0 + sdy * t;
+          ctx.drawImage(_grappleDustSprite, sx - dustSizePx * 0.5, sy - dustSizePx * 0.5, dustSizePx, dustSizePx);
+        }
+      } else {
         ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
-        ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+        for (let si = 0; si <= segCount; si++) {
+          const t = segCount > 0 ? si / segCount : 0;
+          const sx = x0 + sdx * t;
+          const sy = y0 + sdy * t;
+          ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+        }
       }
     }
   }
@@ -615,6 +659,14 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     if (isSpriteReady(_grappleDustEndSprite)) {
       ctx.drawImage(_grappleDustEndSprite, ax - endSizePx * 0.5, ay - endSizePx * 0.5, endSizePx, endSizePx);
       ctx.drawImage(_grappleDustEndSprite, px - endSizePx * 0.5, py - endSizePx * 0.5, endSizePx, endSizePx);
+      // Draw end sprites at wrap corners too (shows the bend points clearly).
+      if (wrapCount > 0) {
+        for (let wi = 0; wi < wrapCount; wi++) {
+          const wpxPx = snapshot.grappleWrapPointXWorld[wi] * scalePx + offsetXPx;
+          const wpyPx = snapshot.grappleWrapPointYWorld[wi] * scalePx + offsetYPx;
+          ctx.drawImage(_grappleDustEndSprite, wpxPx - endSizePx * 0.5, wpyPx - endSizePx * 0.5, endSizePx, endSizePx);
+        }
+      }
     } else {
       ctx.beginPath();
       ctx.arc(ax, ay, 7, 0, Math.PI * 2);
@@ -623,6 +675,17 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
       ctx.strokeStyle = 'rgba(255, 255, 200, 0.95)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
+      // Fallback circles at wrap corners.
+      if (wrapCount > 0) {
+        for (let wi = 0; wi < wrapCount; wi++) {
+          const wpxPx = snapshot.grappleWrapPointXWorld[wi] * scalePx + offsetXPx;
+          const wpyPx = snapshot.grappleWrapPointYWorld[wi] * scalePx + offsetYPx;
+          ctx.beginPath();
+          ctx.arc(wpxPx, wpyPx, 4, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 215, 0, 0.7)';
+          ctx.fill();
+        }
+      }
     }
   }
 
@@ -747,6 +810,50 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     ctx.fillStyle = 'rgba(0, 220, 255, 0.85)';
     ctx.font = '8px monospace';
     ctx.fillText('AABB', rhx + 5, rhy - 4);
+  }
+
+  // ── Debug: grapple wrapping overlay ─────────────────────────────────────────
+  // When debug mode is on and wrapping is enabled, draws the original anchor,
+  // all active wrap corners numbered 1–3, and labels for each polyline segment.
+  if (isDebugMode && snapshot.isGrappleWrappingEnabled === 1 && hasActiveGrapple) {
+    const dbgWrapCount = snapshot.grappleWrapPointCount;
+    const origAx = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
+    const origAy = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
+    ctx.font = '7px monospace';
+
+    // Original grapple anchor — white diamond
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.0;
+    const ds = 4;
+    ctx.beginPath();
+    ctx.moveTo(origAx, origAy - ds);
+    ctx.lineTo(origAx + ds, origAy);
+    ctx.lineTo(origAx, origAy + ds);
+    ctx.lineTo(origAx - ds, origAy);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fillText('anchor', origAx + 5, origAy - 3);
+
+    // Wrap point circles + labels
+    for (let wi = 0; wi < dbgWrapCount; wi++) {
+      const wpxPx2 = snapshot.grappleWrapPointXWorld[wi] * scalePx + offsetXPx;
+      const wpyPx2 = snapshot.grappleWrapPointYWorld[wi] * scalePx + offsetYPx;
+      ctx.beginPath();
+      ctx.arc(wpxPx2, wpyPx2, 4, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(80, 255, 200, 0.95)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(80, 255, 200, 0.9)';
+      ctx.fillText(`W${wi + 1}`, wpxPx2 + 5, wpyPx2 - 3);
+    }
+
+    // Wrapping-enabled status label
+    ctx.fillStyle = 'rgba(80, 255, 200, 0.85)';
+    ctx.font = '8px monospace';
+    const labelX = hasActiveGrapple ? origAx - 24 : 4;
+    const labelY = hasActiveGrapple ? origAy + 14 : 14;
+    ctx.fillText(`wrap: ${dbgWrapCount > 0 ? 'ON (' + dbgWrapCount + ')' : 'active(0)'}`, labelX, labelY);
   }
 
   ctx.restore();

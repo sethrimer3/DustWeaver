@@ -69,7 +69,7 @@
  * grapple active state.
  */
 
-import { WorldState, MAX_ROPE_SEGMENTS } from '../world';
+import { WorldState, MAX_ROPE_SEGMENTS, MAX_GRAPPLE_WRAP_POINTS } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
@@ -92,10 +92,25 @@ import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 // ============================================================================
 
 /**
- * Speed at which the rope shortens while the jump button is held (world units per second).
+ * Base speed at which the rope shortens while the down key is held (world units per second).
+ * Applied at the start of a retraction hold before the ramp reaches full speed.
+ * Intentionally equal to the old constant so the feel is identical at tick 0.
+ */
+const GRAPPLE_PULL_IN_SPEED_BASE_WORLD_PER_SEC = 60.0;
+
+/**
+ * Full speed at which the rope shortens while the down key is held (world units per second).
+ * Reached after GRAPPLE_PULL_IN_RAMP_TICKS ticks of continuous hold.
  * Shorter rope = tighter swing radius = faster rotation = bigger launch when released.
  */
-const GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC = 60.0;
+const GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC = 180.0;
+
+/**
+ * Number of ticks over which the retraction speed ramps from the base speed
+ * to the full speed.  At 60 fps this is 0.35 seconds.
+ * Prevents an instantaneous velocity spike when the player starts retracting.
+ */
+const GRAPPLE_PULL_IN_RAMP_TICKS = 21;
 
 /**
  * Ticks of out-of-range rope before grapple breaks automatically.
@@ -118,8 +133,9 @@ const GRAPPLE_RANGE_SHRINK_GRACE_TICKS = 20;
  * Maximum total rope that can be pulled in before the grapple breaks (world units).
  * This is a tension limit — pulling too hard snaps the rope and the player flies
  * off with their accumulated swing momentum.  Acts as the skill ceiling for the mechanic.
+ * Raised from 100 to 150 to give more retraction time at the higher pull speed.
  */
-const GRAPPLE_MAX_PULL_IN_WORLD = 100.0;
+const GRAPPLE_MAX_PULL_IN_WORLD = 150.0;
 
 /**
  * Maximum ratio by which tangential velocity can increase in a single tick due
@@ -127,6 +143,14 @@ const GRAPPLE_MAX_PULL_IN_WORLD = 100.0;
  * speed spikes when the rope is very short.  1.1 = max 10 % boost per tick.
  */
 const GRAPPLE_MAX_RETRACT_SPEED_RATIO = 1.1;
+
+/**
+ * Maximum tangential speed (world units/second) the player can reach via rope
+ * retraction.  Acts as a hard cap so unbounded speed cannot accumulate even
+ * when the rope is very short and angular-momentum conservation would produce
+ * extreme values.  540 wu/s ≈ 9 wu/tick at 60 fps — fast but safe.
+ */
+const GRAPPLE_MAX_TANGENTIAL_SPEED_WORLD_PER_SEC = 540.0;
 
 /**
  * Tangential velocity damping coefficient (fraction of speed lost per second).
@@ -213,6 +237,36 @@ const GRAPPLE_ZIP_JUMP_WINDOW_TICKS = 15;
  * powerful launch.
  */
 const GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD * 0.4;
+
+// ============================================================================
+// Phase 2: Geometric grapple wrapping constants
+// ============================================================================
+
+/**
+ * Minimum world-unit distance from the player centre to a candidate wrap corner.
+ * Corners closer than this are discarded to prevent degenerate short-rope behaviour.
+ */
+const GRAPPLE_WRAP_MIN_PLAYER_DIST_WORLD = 14.0;
+
+/**
+ * Minimum world-unit distance between consecutive wrap corners.
+ * Prevents two wrap points from crowding the same geometric feature.
+ */
+const GRAPPLE_WRAP_MIN_WRAP_DIST_WORLD = 8.0;
+
+/**
+ * Distance (world units) by which each candidate wrap corner is offset outward
+ * from the originating wall surface.  Prevents the constraint anchor from sitting
+ * exactly on (or inside) the wall face under floating-point precision.
+ */
+const GRAPPLE_WRAP_CORNER_SKIN_WORLD = 0.6;
+
+/**
+ * LOS tolerance (world units) used when checking line-of-sight from a wrap
+ * candidate to the player or to the previous anchor.  Rays that hit within
+ * this distance of the target endpoint are treated as unobstructed.
+ */
+const GRAPPLE_WRAP_LOS_TOLERANCE_WORLD = 2.0;
 
 /**
  * Initialises the GRAPPLE_SEGMENT_COUNT chain particle slots starting at
@@ -446,6 +500,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   world.grappleLengthWorld  = anchorDist;
   world.grapplePullInAmountWorld = 0.0;  // reset pull-in counter for this new attachment
   world.grappleJumpHeldTickCount = 0;   // reset tap/hold tracker
+  world.grappleRetractHeldTicks  = 0;   // reset retraction ramp counter
   // Clear any pending jump trigger so that a jump press made on the same frame
   // as the grapple fire (e.g. jumping then immediately grappling) is not
   // misread as a tap-release by applyGrappleClusterConstraint on the very
@@ -455,6 +510,8 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   world.isGrappleZipActiveFlag = 0;  // zip activated by double-tap down, not at fire time
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
+  // Clear wrap points — this is a new grapple attachment.
+  world.grappleWrapPointCount = 0;
   // Clear any lingering proximity bounce sprite state — the player is now
   // swinging on a normal rope, so the bounce rotation is no longer relevant.
   world.grappleProximityBounceTicksLeft = 0;
@@ -531,11 +588,13 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   world.grappleJumpHeldTickCount = 0;
+  world.grappleRetractHeldTicks = 0;
   world.grapplePullInAmountWorld = 0.0;
   world.grappleOutOfRangeTicks = 0;
   world.grappleTensionFactor = 0;
   world.playerDownLastPressTick = 0; // reset double-tap state on release
   world.grappleRopeIndex = -1; // detach from rope segment (if any)
+  world.grappleWrapPointCount = 0;  // clear wrap corners
   // Clear surface-anchor state (no longer attached to any surface).
   world.grappleAnchorNormalXWorld = 0.0;
   world.grappleAnchorNormalYWorld = 0.0;
@@ -854,6 +913,12 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // Normal grapple — pendulum swing
   // ════════════════════════════════════════════════════════════════════════════
 
+  // ── Phase 2: Geometric wrapping tick ─────────────────────────────────────
+  // Must run before the constraint so wrap points are current this tick.
+  if (world.isGrappleWrappingEnabled === 1) {
+    _tickGrappleWrapping(world, player);
+  }
+
   // ── Jump input: release grapple + upward impulse ──────────────────────────
   // Any jump press immediately releases the grapple and gives the player an
   // upward velocity boost so they can "jump off" the rope.
@@ -866,8 +931,14 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   }
 
   // ── Compute radial direction from anchor to player ────────────────────────
-  const ax = world.grappleAnchorXWorld;
-  const ay = world.grappleAnchorYWorld;
+  // Phase 2: When wrapping is enabled and wrap points exist, the active swing
+  // anchor is the newest wrap point rather than the main grapple anchor.
+  const ax = (world.isGrappleWrappingEnabled === 1 && world.grappleWrapPointCount > 0)
+    ? world.grappleWrapPointXWorld[world.grappleWrapPointCount - 1]
+    : world.grappleAnchorXWorld;
+  const ay = (world.isGrappleWrappingEnabled === 1 && world.grappleWrapPointCount > 0)
+    ? world.grappleWrapPointYWorld[world.grappleWrapPointCount - 1]
+    : world.grappleAnchorYWorld;
   let dx = player.positionXWorld - ax;
   let dy = player.positionYWorld - ay;
   let dist = Math.sqrt(dx * dx + dy * dy);
@@ -883,8 +954,16 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // While the down key is held the rope shortens, and angular momentum is
   // conserved: v_tangential_new = v_tangential_old × (L_old / L_new).
   // This is why figure skaters spin faster when they pull their arms in.
+  // A ramp-up over GRAPPLE_PULL_IN_RAMP_TICKS prevents an instant speed spike
+  // on the first tick of a retraction hold.
   if (world.playerCrouchHeldFlag === 1) {
-    const pullThisTick = GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC * dtSec;
+    world.grappleRetractHeldTicks++;
+    // Ramp: starts at base speed on tick 1, reaches full speed at RAMP_TICKS.
+    const rampFactor = Math.max(
+      GRAPPLE_PULL_IN_SPEED_BASE_WORLD_PER_SEC / GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC,
+      Math.min(1.0, world.grappleRetractHeldTicks / GRAPPLE_PULL_IN_RAMP_TICKS),
+    );
+    const pullThisTick = GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC * rampFactor * dtSec;
     const oldLength = world.grappleLengthWorld;
     const newLength = Math.max(oldLength - pullThisTick, GRAPPLE_MIN_LENGTH_WORLD);
 
@@ -913,8 +992,22 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         // Scale tangential velocity to conserve angular momentum (L = m·v·r).
         // The ratio is clamped to prevent extreme spikes when the rope is very short.
         const ratio = Math.min(oldLength / newLength, GRAPPLE_MAX_RETRACT_SPEED_RATIO);
-        player.velocityXWorld = vRadial * nx + vTangX * ratio;
-        player.velocityYWorld = vRadial * ny + vTangY * ratio;
+        let newVTangX = vTangX * ratio;
+        let newVTangY = vTangY * ratio;
+
+        // Hard cap on tangential speed to prevent unbounded acceleration when
+        // the rope becomes very short.  Clamp after the ratio is applied so the
+        // cap is consistent regardless of rope length.
+        const tangSpeedSq = newVTangX * newVTangX + newVTangY * newVTangY;
+        const maxTangSpeedSq = GRAPPLE_MAX_TANGENTIAL_SPEED_WORLD_PER_SEC * GRAPPLE_MAX_TANGENTIAL_SPEED_WORLD_PER_SEC;
+        if (tangSpeedSq > maxTangSpeedSq) {
+          const invTangSpeed = 1.0 / Math.sqrt(tangSpeedSq);
+          newVTangX *= GRAPPLE_MAX_TANGENTIAL_SPEED_WORLD_PER_SEC * invTangSpeed;
+          newVTangY *= GRAPPLE_MAX_TANGENTIAL_SPEED_WORLD_PER_SEC * invTangSpeed;
+        }
+
+        player.velocityXWorld = vRadial * nx + newVTangX;
+        player.velocityYWorld = vRadial * ny + newVTangY;
 
         world.grappleLengthWorld        = newLength;
         world.grapplePullInAmountWorld += (oldLength - newLength);
@@ -928,6 +1021,9 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       // If a wall blocks retraction, or if newLength equals GRAPPLE_MIN_LENGTH_WORLD,
       // no further pull occurs this tick.
     }
+  } else {
+    // Crouch key released — reset ramp counter so the next press starts fresh.
+    world.grappleRetractHeldTicks = 0;
   }
 
   // ── Enforce rope length constraint ────────────────────────────────────────
@@ -1017,6 +1113,240 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     player.velocityXWorld = vRadial * nx + vTangX * dampFactor;
     player.velocityYWorld = vRadial * ny + vTangY * dampFactor;
   }
+}
+
+// ============================================================================
+// Phase 2: Geometric grapple wrapping helpers (internal)
+// ============================================================================
+
+/**
+ * Returns true when a ray from (ox,oy) to (tx,ty) has clear line of sight —
+ * i.e. no solid wall hits within (distance - tolerance) of the origin.
+ */
+function _grappleHasLOS(
+  world: WorldState,
+  ox: number, oy: number,
+  tx: number, ty: number,
+  tolerance: number,
+): boolean {
+  const dx = tx - ox;
+  const dy = ty - oy;
+  const distSq = dx * dx + dy * dy;
+  if (distSq < 0.001) return true;
+  const dist = Math.sqrt(distSq);
+  const checkDist = dist - tolerance;
+  if (checkDist <= 0) return true;
+  const invDist = 1.0 / dist;
+  const hit = raycastWalls(world, ox, oy, dx * invDist, dy * invDist, checkDist);
+  return hit === null;
+}
+
+/**
+ * Returns true when point (px, py) is strictly inside any solid wall AABB
+ * (excluding the wall at skipWallIndex, and excluding platforms and bounce pads).
+ */
+function _grapplePointInSolid(world: WorldState, px: number, py: number, skipWallIndex: number): boolean {
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    if (wi === skipWallIndex) continue;
+    if (world.wallIsPlatformFlag[wi] === 1) continue;
+    if (world.wallIsBouncePadFlag[wi] === 1) continue;
+    const minX = world.wallXWorld[wi];
+    const minY = world.wallYWorld[wi];
+    const maxX = minX + world.wallWWorld[wi];
+    const maxY = minY + world.wallHWorld[wi];
+    if (px > minX && px < maxX && py > minY && py < maxY) return true;
+  }
+  return false;
+}
+
+/**
+ * Ticks the geometric wrapping system each pendulum frame:
+ * 1. Check if the current player→active-anchor segment is obstructed.
+ *    If so, pick a wall corner as a new wrap point.
+ * 2. Check if the newest wrap point can be unwrapped (LOS from player to
+ *    the previous anchor is clear).  If so, remove it.
+ *
+ * Updates grappleWrapPointCount, grappleWrapPointXWorld/Y, and
+ * grappleLengthWorld when wrap points change.
+ *
+ * @param world  Mutable world state.
+ * @param player The player ClusterState (passed in to avoid repeated lookup).
+ */
+function _tickGrappleWrapping(world: WorldState, player: import('./state').ClusterState): void {
+  const px = player.positionXWorld;
+  const py = player.positionYWorld;
+  let wrapCount = world.grappleWrapPointCount;
+
+  // ── Safety: validate existing wrap points ────────────────────────────────
+  // If any wrap point's originating wall is gone (breakable/crumble destroyed)
+  // or if a wrap point has ended up inside solid geometry, clear all wraps and
+  // fall back to normal grapple to avoid an invalid constraint.
+  for (let wi = 0; wi < wrapCount; wi++) {
+    const wallIdx = world.grappleWrapPointWallIndex[wi];
+    if (wallIdx >= 0 && wallIdx < world.wallCount) {
+      // Check that the wall is still solid (e.g. not a destroyed crumble block).
+      // For now we rely on the wall still being in the array; breakable blocks
+      // shrink the wall count when destroyed.  A stale index is safe to ignore.
+    }
+    // Check: if the wrap point is inside solid geometry it is invalid.
+    if (_grapplePointInSolid(world, world.grappleWrapPointXWorld[wi], world.grappleWrapPointYWorld[wi], wallIdx)) {
+      world.grappleWrapPointCount = 0;
+      // Restore length to main-anchor distance.
+      const dX = px - world.grappleAnchorXWorld;
+      const dY = py - world.grappleAnchorYWorld;
+      world.grappleLengthWorld = Math.max(
+        GRAPPLE_MIN_LENGTH_WORLD,
+        Math.sqrt(dX * dX + dY * dY),
+      );
+      return;
+    }
+  }
+  wrapCount = world.grappleWrapPointCount; // reload after safety pass
+
+  // ── Compute current active anchor ────────────────────────────────────────
+  const activeAx = wrapCount > 0
+    ? world.grappleWrapPointXWorld[wrapCount - 1]
+    : world.grappleAnchorXWorld;
+  const activeAy = wrapCount > 0
+    ? world.grappleWrapPointYWorld[wrapCount - 1]
+    : world.grappleAnchorYWorld;
+
+  // ── Unwrap check: can we see the previous anchor directly? ────────────────
+  // This is done before the wrap check so we don't immediately re-wrap after
+  // unwrapping in the same tick.
+  if (wrapCount > 0) {
+    const prevAx = wrapCount > 1
+      ? world.grappleWrapPointXWorld[wrapCount - 2]
+      : world.grappleAnchorXWorld;
+    const prevAy = wrapCount > 1
+      ? world.grappleWrapPointYWorld[wrapCount - 2]
+      : world.grappleAnchorYWorld;
+    if (_grappleHasLOS(world, px, py, prevAx, prevAy, GRAPPLE_WRAP_LOS_TOLERANCE_WORLD)) {
+      // Player can see the previous anchor — unwrap the newest wrap point.
+      world.grappleWrapPointCount--;
+      wrapCount--;
+      // Update grappleLengthWorld to the new active segment distance.
+      const newAx2 = wrapCount > 0
+        ? world.grappleWrapPointXWorld[wrapCount - 1]
+        : world.grappleAnchorXWorld;
+      const newAy2 = wrapCount > 0
+        ? world.grappleWrapPointYWorld[wrapCount - 1]
+        : world.grappleAnchorYWorld;
+      const uDx = px - newAx2;
+      const uDy = py - newAy2;
+      world.grappleLengthWorld = Math.max(
+        GRAPPLE_MIN_LENGTH_WORLD,
+        Math.sqrt(uDx * uDx + uDy * uDy),
+      );
+      return; // process at most one wrap change per tick to prevent flickering
+    }
+  }
+
+  // ── Wrap check: is the active segment obstructed? ─────────────────────────
+  if (wrapCount >= MAX_GRAPPLE_WRAP_POINTS) return; // already at capacity
+
+  const dxToAnchor = activeAx - px;
+  const dyToAnchor = activeAy - py;
+  const distToAnchor = Math.sqrt(dxToAnchor * dxToAnchor + dyToAnchor * dyToAnchor);
+  if (distToAnchor < GRAPPLE_WRAP_MIN_PLAYER_DIST_WORLD) return; // too close
+
+  const checkDist = distToAnchor - GRAPPLE_WRAP_LOS_TOLERANCE_WORLD;
+  if (checkDist <= 0) return;
+  const invDist = 1.0 / distToAnchor;
+  const hit = raycastWalls(
+    world,
+    px, py,
+    dxToAnchor * invDist, dyToAnchor * invDist,
+    checkDist,
+  );
+  if (hit === null) return; // clear LOS — no wrap needed
+
+  // Must be a solid non-platform, non-bounce-pad wall.
+  const hitWallIdx = hit.wallIndex;
+  if (hitWallIdx < 0 || hitWallIdx >= world.wallCount) return;
+  if (world.wallIsPlatformFlag[hitWallIdx] === 1) return;
+  if (world.wallIsBouncePadFlag[hitWallIdx] === 1) return;
+  // Ignore ramp walls for wrapping (geometry is ambiguous at corners of ramps).
+  if (world.wallRampOrientationIndex[hitWallIdx] !== 255) return;
+
+  // ── Select best corner of the blocking wall ───────────────────────────────
+  const minX = world.wallXWorld[hitWallIdx];
+  const minY = world.wallYWorld[hitWallIdx];
+  const maxX = minX + world.wallWWorld[hitWallIdx];
+  const maxY = minY + world.wallHWorld[hitWallIdx];
+
+  // The 4 AABB corners with outward skin offsets.
+  // Corner offset direction: inward from the center of the wall to ensure the
+  // wrap point sits just outside the wall surface, not inside it.
+  const skin = GRAPPLE_WRAP_CORNER_SKIN_WORLD;
+  const corners: Array<{ cx: number; cy: number }> = [
+    { cx: minX - skin, cy: minY - skin },
+    { cx: maxX + skin, cy: minY - skin },
+    { cx: minX - skin, cy: maxY + skin },
+    { cx: maxX + skin, cy: maxY + skin },
+  ];
+
+  // Evaluate each corner and pick the best valid one (closest to the ray intersection).
+  let bestCornerX = 0.0;
+  let bestCornerY = 0.0;
+  let bestDistSqToHit = Infinity;
+  let foundCorner = false;
+
+  for (let ci = 0; ci < corners.length; ci++) {
+    const cx = corners[ci].cx;
+    const cy = corners[ci].cy;
+
+    // 1. Must not be inside another solid wall.
+    if (_grapplePointInSolid(world, cx, cy, hitWallIdx)) continue;
+
+    // 2. Must not be too close to the player.
+    const pdx = cx - px;
+    const pdy = cy - py;
+    const pdistSq = pdx * pdx + pdy * pdy;
+    if (pdistSq < GRAPPLE_WRAP_MIN_PLAYER_DIST_WORLD * GRAPPLE_WRAP_MIN_PLAYER_DIST_WORLD) continue;
+
+    // 3. Must not be too close to the current newest wrap point (if any).
+    if (wrapCount > 0) {
+      const wpx = world.grappleWrapPointXWorld[wrapCount - 1];
+      const wpy = world.grappleWrapPointYWorld[wrapCount - 1];
+      const wdx = cx - wpx;
+      const wdy = cy - wpy;
+      if (wdx * wdx + wdy * wdy < GRAPPLE_WRAP_MIN_WRAP_DIST_WORLD * GRAPPLE_WRAP_MIN_WRAP_DIST_WORLD) continue;
+    }
+
+    // 4. Must have LOS to the player.
+    if (!_grappleHasLOS(world, cx, cy, px, py, GRAPPLE_WRAP_LOS_TOLERANCE_WORLD)) continue;
+
+    // 5. Must have LOS to the previous/main anchor.
+    if (!_grappleHasLOS(world, cx, cy, activeAx, activeAy, GRAPPLE_WRAP_LOS_TOLERANCE_WORLD)) continue;
+
+    // Score by squared distance from the ray hit point.
+    const scX = cx - hit.x;
+    const scY = cy - hit.y;
+    const scoreSq = scX * scX + scY * scY;
+    if (scoreSq < bestDistSqToHit) {
+      bestDistSqToHit = scoreSq;
+      bestCornerX = cx;
+      bestCornerY = cy;
+      foundCorner = true;
+    }
+  }
+
+  if (!foundCorner) return;
+
+  // ── Add the wrap point ─────────────────────────────────────────────────────
+  world.grappleWrapPointXWorld[wrapCount]     = bestCornerX;
+  world.grappleWrapPointYWorld[wrapCount]     = bestCornerY;
+  world.grappleWrapPointWallIndex[wrapCount]  = hitWallIdx;
+  world.grappleWrapPointCount                 = wrapCount + 1;
+
+  // Update grappleLengthWorld to player → new wrap point distance.
+  const wDx = px - bestCornerX;
+  const wDy = py - bestCornerY;
+  world.grappleLengthWorld = Math.max(
+    GRAPPLE_MIN_LENGTH_WORLD,
+    Math.sqrt(wDx * wDx + wDy * wDy),
+  );
 }
 
 /**

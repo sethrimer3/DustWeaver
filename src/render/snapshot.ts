@@ -87,6 +87,8 @@ interface _ReusableBacking {
   moteGrappleDisplayRadiusWorld: number;
   isMoteSourceOrbitFlag: 0 | 1;
   grappleTensionFactor: number;
+  isGrappleWrappingEnabled: 0 | 1;
+  grappleWrapPointCount: number;
   ropeCount: number;
   /** @internal Pre-allocated cluster objects — not part of the public API. */
   readonly _clusterPool: _MutableCluster[];
@@ -383,6 +385,11 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
     isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
     grappleTensionFactor:          world.grappleTensionFactor,
+    // Phase 2: geometric grapple wrapping (shared typed-array views)
+    isGrappleWrappingEnabled:      world.isGrappleWrappingEnabled,
+    grappleWrapPointCount:         world.grappleWrapPointCount,
+    grappleWrapPointXWorld:        world.grappleWrapPointXWorld,
+    grappleWrapPointYWorld:        world.grappleWrapPointYWorld,
     ropeCount:           world.ropeCount,
     ropeSegmentCount:    world.ropeSegmentCount,
     ropeHalfThickWorld:  world.ropeHalfThickWorld,
@@ -470,6 +477,9 @@ export function updateSnapshotInPlace(
   b.moteGrappleDisplayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
   b.isMoteSourceOrbitFlag         = world.isMoteSourceOrbitFlag;
   b.grappleTensionFactor          = world.grappleTensionFactor;
+  // Phase 2: geometric wrapping (typed-array fields are shared views — no copy needed)
+  b.isGrappleWrappingEnabled      = world.isGrappleWrappingEnabled;
+  b.grappleWrapPointCount         = world.grappleWrapPointCount;
   b.ropeCount = world.ropeCount;
 
   const clusterCount = world.clusters.length;
@@ -695,6 +705,11 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
     isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
     grappleTensionFactor:          world.grappleTensionFactor,
+    // Phase 2: geometric grapple wrapping
+    isGrappleWrappingEnabled:      world.isGrappleWrappingEnabled,
+    grappleWrapPointCount:         world.grappleWrapPointCount,
+    grappleWrapPointXWorld:        world.grappleWrapPointXWorld,
+    grappleWrapPointYWorld:        world.grappleWrapPointYWorld,
     ropeCount:           world.ropeCount,
     ropeSegmentCount:    world.ropeSegmentCount,
     ropeHalfThickWorld:  world.ropeHalfThickWorld,
