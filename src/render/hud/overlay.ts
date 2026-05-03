@@ -25,6 +25,9 @@ export interface HudDebugState {
   isGrappleActive: boolean;
   grappleLengthWorld: number;
   grapplePullInAmountWorld: number;
+  isGrappleMissActive: boolean;
+  grappleParticleStartIndex: number;
+  isGrappleChainHiddenFlag: boolean;
   isSkidding: boolean;
   isSliding: boolean;
   isSprinting: boolean;
@@ -73,6 +76,7 @@ export function renderHudOverlay(
       `WallLock: ${d.wallJumpLockoutTicks}t`,
       `Sprint:${d.isSprinting ? 'Y' : 'N'} Skid:${d.isSkidding ? 'Y' : 'N'} Sld:${d.isSliding ? 'Y' : 'N'}`,
       `Grapple:  ${d.isGrappleActive ? `len=${d.grappleLengthWorld.toFixed(0)} pull=${d.grapplePullInAmountWorld.toFixed(0)}` : 'off'}`,
+      `GrpMiss:${d.isGrappleMissActive ? 'Y' : 'N'} pIdx=${d.grappleParticleStartIndex} chain=${d.isGrappleChainHiddenFlag ? 'hidden' : 'visible'}`,
       `Input U/L/R/D/Sh: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}${d.inputShift ? 'S' : '-'}`,
       `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
       `Input Grap/Int: ${d.inputGrapple ? 'G' : '-'} / ${d.inputInteract ? 'I' : '-'}`,

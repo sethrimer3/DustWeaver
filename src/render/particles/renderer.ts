@@ -1,6 +1,7 @@
 import { WorldSnapshot } from '../snapshot';
 import { getParticleStyle } from './styles';
 import { getKindShape, ParticleShape, ParticleKind } from '../../sim/particles/kinds';
+import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleMiss';
 
 // ---- Shape drawing helpers -----------------------------------------------
 
@@ -135,7 +136,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     particleCount, isAliveFlag,
     positionXWorld, positionYWorld,
     kindBuffer, ageTicks, lifetimeTicks,
-    disturbanceFactor,
+    disturbanceFactor, behaviorMode,
   } = particles;
 
   // Radius in screen pixels: world-unit radius scaled by zoom.
@@ -143,6 +144,8 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
 
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
+    // Grapple chain particles are hidden here — renderGrapple() is the visual authority.
+    if (behaviorMode[i] === BEHAVIOR_MODE_GRAPPLE_CHAIN) continue;
 
     const kind  = kindBuffer[i];
     const style = getParticleStyle(kind);
