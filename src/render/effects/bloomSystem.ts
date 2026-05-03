@@ -60,6 +60,20 @@ export class BloomSystem {
     this.blurPongCtx.imageSmoothingEnabled = true;
   }
 
+  /** Update the quality-dependent bloom parameters without triggering a resize.
+   *  Call this once per frame before beginFrame() to apply the current quality tier.
+   *
+   *  @param isEnabled    Whether the bloom pass runs at all.  When false,
+   *                      beginFrame() and compositeToDevice() are no-ops.
+   *  @param intensity    Additive-blend alpha for the composited bloom layer (0–1).
+   *  @param blurRadiusPx CSS blur radius applied to the downscale canvas (px).
+   */
+  setQualityParams(isEnabled: boolean, intensity: number, blurRadiusPx: number): void {
+    this.config.enabled      = isEnabled;
+    this.config.intensity    = intensity;
+    this.config.blurRadiusPx = blurRadiusPx;
+  }
+
   beginFrame(): void {
     if (!this.config.enabled) return;
     this.glowPass.clear(this.widthPx, this.heightPx);

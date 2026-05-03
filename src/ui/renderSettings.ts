@@ -26,12 +26,12 @@ export function setSfxVolume(volume: number): void {
 // ── Graphics Quality ─────────────────────────────────────────────────────────
 
 const GRAPHICS_QUALITY_STORAGE_KEY = 'dustweaver-graphics-quality';
-export type GraphicsQuality = 'low' | 'high';
-const DEFAULT_GRAPHICS_QUALITY: GraphicsQuality = 'high';
+export type GraphicsQuality = 'low' | 'med' | 'high';
+const DEFAULT_GRAPHICS_QUALITY: GraphicsQuality = 'med';
 
 export function getGraphicsQuality(): GraphicsQuality {
   const value = localStorage.getItem(GRAPHICS_QUALITY_STORAGE_KEY);
-  if (value === 'low' || value === 'high') return value;
+  if (value === 'low' || value === 'med' || value === 'high') return value;
   return DEFAULT_GRAPHICS_QUALITY;
 }
 

@@ -20,6 +20,8 @@ import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
 import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
+import type { RenderProfiler } from '../render/hud/renderProfiler';
+import { STAGE_BACKGROUND, STAGE_WALLS, STAGE_ENTITIES, STAGE_PARTICLES, STAGE_DUST, STAGE_SUNBEAMS, STAGE_BLOOM, STAGE_LIGHTING, STAGE_HUD } from '../render/hud/renderProfiler';
 import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
@@ -56,6 +58,8 @@ import {
   DUST_CONTAINER_SIZE_WORLD,
 } from './gameRoom';
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
+import type { GraphicsQuality } from '../ui/renderSettings';
+import { getQualityConfig } from '../render/renderQualityConfig';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
 import { renderDarkAmbientBlockerOverlay } from '../render/walls/blockSpriteRenderer';
 import {
@@ -75,16 +79,6 @@ const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
 const JOYSTICK_INNER_RADIUS_PX = 22;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-// ── Optional high-water glow guard (disabled by default) ──────────────────
-// When HIGH_WATER_GLOW_GUARD_ENABLED is true and the cached decoration count
-// exceeds HIGH_WATER_DECORATION_BLOOM_LIMIT, addDecorationBloom only processes
-// decorations whose screen-space position falls within the virtual canvas
-// bounds (cheap sx/sy AABB check), skipping off-screen decorations.
-// Flip HIGH_WATER_GLOW_GUARD_ENABLED to true for pathological scenes; see
-// DECISIONS.md for full guidance.  Has no effect when false.
-const HIGH_WATER_GLOW_GUARD_ENABLED       = false;
-const HIGH_WATER_DECORATION_BLOOM_LIMIT   = 128;
 
 // ── Public interface ───────────────────────────────────────────────────────
 
@@ -177,6 +171,11 @@ export interface RenderFrameContext {
 
   // Callbacks
   getPlayerDustCount: () => number;
+
+  // Graphics quality for this frame — drives quality-tier rendering decisions.
+  graphicsQuality: GraphicsQuality;
+  /** Render-stage profiler.  When provided, timings are recorded when debug is on. */
+  renderProfiler?: RenderProfiler;
 }
 
 /**
@@ -197,9 +196,30 @@ export function renderFrame(r: RenderFrameContext): void {
     collectedDustContainerKeySet,
     isDustContainerSpriteLoaded,
     dustContainerSprite,
+    graphicsQuality,
+    renderProfiler,
   } = r;
 
   const nowMs = performance.now();
+
+  // ── Quality tier config ────────────────────────────────────────────────────
+  // Derive all rendering cost parameters from the current quality tier.  This
+  // object is a small immutable constant reference — no allocation per frame.
+  const qc = getQualityConfig(graphicsQuality);
+
+  // Apply quality-dependent bloom parameters.  Mutates the BloomSystem's
+  // internal config object in place — no resize needed since glowTargetScale
+  // is left unchanged (all tiers share the same 0.5× downscale canvas).
+  bloomSystem.setQualityParams(qc.isBloomEnabled, qc.bloomIntensity, qc.bloomBlurRadiusPx);
+
+  // Propagate sunbeam enable/disable to the renderer.
+  sunbeamRenderer.setEnabled(qc.isSunbeamEnabled);
+
+  // Propagate mote cap to the atmospheric dust system.
+  atmosphericLightDust.setMaxMotes(qc.maxDustMoteCount);
+
+  // Start the render profiler for this frame.
+  if (renderProfiler !== undefined) renderProfiler.beginFrame(isDebugMode);
 
   const roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_SMALL;
   const roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_SMALL;
@@ -232,6 +252,7 @@ export function renderFrame(r: RenderFrameContext): void {
   ctx.clip();
 
   // ── World background with parallax ──────────────────────────────────────
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BACKGROUND);
   renderWorldBackground(
     ctx,
     currentRoom.worldNumber,
@@ -278,10 +299,15 @@ export function renderFrame(r: RenderFrameContext): void {
       relCameraOffsetXPx, relCameraOffsetYPx,
     );
   }
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BACKGROUND);
 
   // ── Sunbeams (light shafts behind walls) ────────────────────────────────
-  sunbeamRenderer.render(ctx, ox, oy, zoom, nowMs);
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_SUNBEAMS);
+  sunbeamRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx);
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_SUNBEAMS);
 
+  // ── Walls ────────────────────────────────────────────────────────────────
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_WALLS);
   // Walls before cluster indicators so clusters are drawn on top
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
@@ -302,6 +328,10 @@ export function renderFrame(r: RenderFrameContext): void {
   );
 
   renderDecorationSprites(ctx, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, decorationWaveState);
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_WALLS);
+
+  // ── Entities and grapple ─────────────────────────────────────────────────
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_ENTITIES);
 
   // Grapple influence visuals (golden circle + edge glow) drawn on top of walls
   // but behind clusters/particles so they don't obscure the action.
@@ -321,31 +351,36 @@ export function renderFrame(r: RenderFrameContext): void {
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom);
-  drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
-  drawParticleGlow(bloomSystem, snapshot, ox, oy, zoom);
 
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows
   arrowWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
   // Shield Sword Weave — golden-crossguard sword + slash trail (drawn on top
   // of the player so the crossguard reads against the body).
   swordWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
-  // Decoration bloom — always added (even outside DarkRoom) so moss/mushrooms
-  // visibly glow with the atmospheric bloom pass on any lighting setting.
-  // HIGH_WATER_GLOW_GUARD_ENABLED: when true and decoration count exceeds
-  // HIGH_WATER_DECORATION_BLOOM_LIMIT, only viewport-visible decorations are
-  // processed (viewport sx/sy AABB check).  Disabled by default — see DECISIONS.md.
-  if (HIGH_WATER_GLOW_GUARD_ENABLED && cachedDecorations.length > HIGH_WATER_DECORATION_BLOOM_LIMIT) {
-    // TODO: filter cachedDecorations to viewport-visible subset before calling addDecorationBloom.
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_ENTITIES);
+
+  // ── Bloom glow pass (skipped entirely on low quality) ────────────────────
+  if (qc.isBloomEnabled) {
+    drawGrappleBloom(bloomSystem, snapshot, ox, oy, zoom);
+    drawParticleGlow(bloomSystem, snapshot, ox, oy, zoom);
+    // Decoration bloom — capped by quality tier and viewport-culled so only
+    // visible decorations submit glow circles.
+    addDecorationBloom(
+      bloomSystem, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, nowMs,
+      qc.maxDecorationBloomCount, virtualWidthPx, virtualHeightPx,
+    );
   }
-  addDecorationBloom(bloomSystem, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, nowMs);
 
   // Tunnel darkness overlays
   drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
 
+  // ── Atmospheric effects (dust, debris) ──────────────────────────────────
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DUST);
   environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
-  atmosphericLightDust.render(ctx, ox, oy, zoom);
+  atmosphericLightDust.render(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   skidDebris.render(ctx, ox, oy, zoom);
   crumbleDebris.render(ctx, ox, oy, zoom);
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
   // Save tombs (sprite + swirling/falling dust particles)
   skillTombRenderer.render(ctx, ox, oy, zoom);
@@ -377,11 +412,14 @@ export function renderFrame(r: RenderFrameContext): void {
     }
   }
 
+  // ── Particles ─────────────────────────────────────────────────────────────
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_PARTICLES);
   // Particles drawn on top of all game layers (Canvas 2D fallback only —
   // WebGL renders to its own offscreen canvas at virtual resolution)
   if (!webglRenderer.isAvailable) {
     renderParticles(ctx, snapshot, ox, oy, zoom);
   }
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_PARTICLES);
 
   // ── Dark room overlay (applied last, inside the room clip) ───────────────
   // Covers the entire room with a near-opaque darkness layer, then "punches"
@@ -389,7 +427,13 @@ export function renderFrame(r: RenderFrameContext): void {
   // The bloom pass (composited later on the device canvas) adds atmospheric
   // glow on top of the darkness, making light sources feel warm and radiant.
   if (isDarkRoom) {
-    const lights = collectDecorationLights(cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL);
+    if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_LIGHTING);
+
+    // Collect viewport-visible decoration lights, capped by quality tier.
+    const lights = collectDecorationLights(
+      cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL,
+      qc.maxDynamicLightCount, virtualWidthPx, virtualHeightPx,
+    );
 
     // ── Authored local light sources (see RoomLightSourceDef) ──────────────
     // Designer-placed lights are serialised in `RoomDef.lightSources`.  When
@@ -405,17 +449,22 @@ export function renderFrame(r: RenderFrameContext): void {
     // preserved end-to-end for a future coloured-light pass.
     if (currentRoom.lightSources) {
       for (const ls of currentRoom.lightSources) {
+        if (lights.length >= qc.maxDynamicLightCount) break;
         const bPct = Math.max(0, Math.min(100, ls.brightnessPct)) / 100;
         if (bPct <= 0) continue;
         const worldX = (ls.xBlock + 0.5) * BLOCK_SIZE_SMALL;
         const worldY = (ls.yBlock + 0.5) * BLOCK_SIZE_SMALL;
         const radiusWorld = Math.max(1, ls.radiusBlocks) * BLOCK_SIZE_SMALL;
-        // Brightness 100% → full radius + wide core; 25% → half radius + tiny core.
+        const lx = worldX * zoom + ox;
+        const ly = worldY * zoom + oy;
+        // Viewport cull: skip lights whose radius circle is entirely offscreen.
         const radiusPx = radiusWorld * zoom * (0.5 + 0.5 * bPct);
+        if (lx + radiusPx < 0 || lx - radiusPx > virtualWidthPx) continue;
+        if (ly + radiusPx < 0 || ly - radiusPx > virtualHeightPx) continue;
         const innerFraction = 0.1 + 0.3 * bPct;
         lights.push({
-          xPx: worldX * zoom + ox,
-          yPx: worldY * zoom + oy,
+          xPx: lx,
+          yPx: ly,
           radiusPx,
           innerFraction,
         });
@@ -433,17 +482,23 @@ export function renderFrame(r: RenderFrameContext): void {
       });
     }
 
-    // Alive Physical (golden) dust particles each contribute a small light.
-    const MAX_PARTICLE_LIGHTS = 24;
+    // Alive Physical (golden) dust particles each contribute a small light,
+    // capped by the quality-tier particle light limit.
     let particleLightCount = 0;
     const parts = snapshot.particles;
-    for (let pi = 0; pi < parts.particleCount && particleLightCount < MAX_PARTICLE_LIGHTS; pi++) {
+    for (let pi = 0; pi < parts.particleCount && particleLightCount < qc.maxParticleLightCount; pi++) {
       if (parts.isAliveFlag[pi] === 0) continue;
       if (parts.kindBuffer[pi] !== ParticleKind.Physical) continue;
+      const plx = parts.positionXWorld[pi] * zoom + ox;
+      const ply = parts.positionYWorld[pi] * zoom + oy;
+      const plr = 11 * zoom;
+      // Viewport cull particle lights.
+      if (plx + plr < 0 || plx - plr > virtualWidthPx) continue;
+      if (ply + plr < 0 || ply - plr > virtualHeightPx) continue;
       lights.push({
-        xPx:          parts.positionXWorld[pi] * zoom + ox,
-        yPx:          parts.positionYWorld[pi] * zoom + oy,
-        radiusPx:     11 * zoom,
+        xPx:          plx,
+        yPx:          ply,
+        radiusPx:     plr,
         innerFraction: 0.05,
       });
       particleLightCount++;
@@ -471,15 +526,19 @@ export function renderFrame(r: RenderFrameContext): void {
     }
 
     darkRoomOverlay.render(ctx, lights, shadows);
+    if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_LIGHTING);
   }
 
   // End room clip before any HUD/screen-space overlays are drawn.
   ctx.restore();
 
   // ── HUD layers (debug overlay, health bar, dust display, enemy bars, combat text) ──
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_HUD);
   renderGameHud(r, nowMs);
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_HUD);
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BLOOM);
   deviceCtx.imageSmoothingEnabled = false;
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   // Composite WebGL particle canvas on top (also at virtual resolution)
@@ -487,6 +546,7 @@ export function renderFrame(r: RenderFrameContext): void {
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
   }
   bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BLOOM);
   drawOffensiveDustOutlineOverlay(deviceCtx, snapshot, canvas.width, canvas.height, ox, oy, zoom);
 
   // ── Touch joystick (drawn on device canvas in screen space) ───────────
@@ -538,4 +598,7 @@ export function renderFrame(r: RenderFrameContext): void {
     const hintWidthPx = deviceCtx.measureText(controlHintText).width;
     deviceCtx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
   }
+
+  // Finalise the profiler — updates EMA-smoothed values used by next frame's overlay.
+  if (renderProfiler !== undefined) renderProfiler.endFrame();
 }

@@ -5,7 +5,12 @@
  * optional movement debug panel driven by HudDebugState.  The debug panel is
  * omitted when the `debug` field is absent from HudState, so it can be
  * removed by simply not populating it in gameScreen.ts.
+ *
+ * When debug mode is on a second panel (the render profiler) is drawn in the
+ * top-right corner by delegating to RenderProfiler.drawOverlay().
  */
+
+import type { RenderProfiler } from './renderProfiler';
 
 /** Optional per-tick player movement debug data shown in the debug panel. */
 export interface HudDebugState {
@@ -42,7 +47,13 @@ export interface HudState {
   debug?: HudDebugState;
 }
 
-export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): void {
+export function renderHudOverlay(
+  ctx: CanvasRenderingContext2D,
+  hud: HudState,
+  renderProfiler?: RenderProfiler,
+  virtualWidthPx?: number,
+  isDebugMode?: boolean,
+): void {
   const perfLines = [
     `FPS: ${hud.fps.toFixed(1)}`,
     `Frame: ${hud.frameTimeMs.toFixed(2)}ms`,
@@ -99,4 +110,10 @@ export function renderHudOverlay(ctx: CanvasRenderingContext2D, hud: HudState): 
   }
 
   ctx.restore();
+
+  // Render-stage profiler panel (top-right corner, debug only).
+  if (renderProfiler !== undefined && virtualWidthPx !== undefined && isDebugMode === true) {
+    renderProfiler.drawOverlay(ctx, virtualWidthPx, true);
+  }
 }
+

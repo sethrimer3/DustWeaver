@@ -38,12 +38,13 @@ import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
-import { getSelectedRenderSize, getMusicVolume, getSfxVolume } from '../ui/renderSettings';
+import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { BloomSystem } from '../render/effects/bloomSystem';
 import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
+import { RenderProfiler } from '../render/hud/renderProfiler';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import {
@@ -124,8 +125,9 @@ export function startGameScreen(
   progress?: PlayerProgress,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
-  const bloomSystem = new BloomSystem(DEFAULT_BLOOM_CONFIG);
+  const bloomSystem = new BloomSystem({ ...DEFAULT_BLOOM_CONFIG });
   const darkRoomOverlay = new DarkRoomOverlay();
+  const renderProfiler = new RenderProfiler();
 
   // ── Weave loadout (replaces flat particle loadout for combat) ──────────
   // Initialize from progress if available, otherwise create default
@@ -623,7 +625,7 @@ export function startGameScreen(
     isDebugOn: false,
     musicVolume: getMusicVolume(),
     sfxVolume: getSfxVolume(),
-    graphicsQuality: 'med',
+    graphicsQuality: getGraphicsQuality(),
   };
 
   function openPauseMenu(): void {
@@ -1307,6 +1309,8 @@ export function startGameScreen(
       isDustContainerSpriteLoaded,
       dustContainerSprite,
       getPlayerDustCount,
+      graphicsQuality: pauseMenuState.graphicsQuality,
+      renderProfiler,
     });
 
     rafHandle = requestAnimationFrame(frame);
