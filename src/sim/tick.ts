@@ -52,13 +52,30 @@ import {
   tickMoteGrappleDisplayRadius,
 } from './motes/orderedMoteQueue';
 import { tickRopes } from './ropes/ropeSim';
+import { tickFallingBlocks } from './fallingBlocks/fallingBlockSim';
 
 export function tick(world: WorldState): void {
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
   if (world.grappleProximityBounceTicksLeft > 0) world.grappleProximityBounceTicksLeft -= 1;
 
+  // Capture the player's downward velocity BEFORE movement/collision zeroes it
+  // on landing.  The tough falling block trigger reads this to detect hard landings.
+  {
+    const player = world.clusters.length > 0 ? world.clusters[0] : undefined;
+    world.playerPrevVelocityYWorld =
+      (player !== undefined && player.isPlayerFlag === 1 && player.isAliveFlag === 1)
+        ? player.velocityYWorld
+        : 0;
+  }
+
   // 0. Cluster movement — smooth acceleration/deceleration for player and enemies
   applyClusterMovement(world);
+
+  // 0.05. Falling block simulation — state machine tick (after movement so
+  //        wall slots are current and playerPrevVelocityYWorld is set)
+  if (world.fallingBlockGroups.length > 0) {
+    tickFallingBlocks(world, world.dtMs);
+  }
 
   // 0.1. Environmental hazards — spikes, springs, water buoyancy, lava, breakables, jars, fireflies
   applyHazards(world);

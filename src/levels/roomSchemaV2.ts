@@ -200,6 +200,8 @@ export interface SavedRoomV2 {
   lightSourcesExt?: RoomJsonLightSource[];
   /** Designer-placed sunbeams. Stored as full objects (small count). */
   sunbeams?: RoomJsonSunbeam[];
+  /** Editor-painted falling block tiles. Stored as compact tuples [x, y, variant_char]. */
+  fallingBlocks?: [number, number, string][];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -483,6 +485,15 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.sunbeams && json.sunbeams.length > 0) {
     out.sunbeams = json.sunbeams.map(s => ({ ...s }));
   }
+  if (json.fallingBlocks && json.fallingBlocks.length > 0) {
+    // Compact format: [xBlock, yBlock, variant_shortchar]
+    // 't' = tough, 's' = sensitive, 'c' = crumbling
+    out.fallingBlocks = json.fallingBlocks.map(fb => {
+      const v = fb.variant ?? 'tough';
+      const code = v === 'sensitive' ? 's' : v === 'crumbling' ? 'c' : 't';
+      return [fb.xBlock, fb.yBlock, code] as [number, number, string];
+    });
+  }
 
   return out;
 }
@@ -623,6 +634,13 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   }
   if (saved.sunbeams && saved.sunbeams.length > 0) {
     json.sunbeams = saved.sunbeams.map(s => ({ ...s }));
+  }
+  if (saved.fallingBlocks && saved.fallingBlocks.length > 0) {
+    json.fallingBlocks = saved.fallingBlocks.map(([x, y, code]) => ({
+      xBlock: x,
+      yBlock: y,
+      variant: code === 's' ? 'sensitive' : code === 'c' ? 'crumbling' : 'tough',
+    }));
   }
 
   return json;

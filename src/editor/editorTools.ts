@@ -9,7 +9,7 @@ const ROPE_SEGMENTS_PER_BLOCK = 1.5;
 import {
   EditorState, EditorTool, EditorRoomData, EditorWall,
   EditorTransition, SelectedElement, allocateUid,
-  PaletteItem, DecorationKind, EditorBouncePad, EditorSunbeam,
+  PaletteItem, DecorationKind, EditorBouncePad, EditorSunbeam, EditorFallingBlock,
 } from './editorState';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
 import { MAX_ROPE_SEGMENTS } from '../sim/world';
@@ -256,6 +256,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const b of (room.crumbleBlocks ?? [])) {
     if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) {
       return { type: 'crumbleBlock', uid: b.uid };
+    }
+  }
+
+  // Check falling block tiles
+  for (const fb of (room.fallingBlocks ?? [])) {
+    if (hitTestPoint(fb.xBlock, fb.yBlock, bx, by)) {
+      return { type: 'fallingBlock', uid: fb.uid };
     }
   }
 
@@ -515,6 +522,25 @@ export function placeAtCursor(state: EditorState): void {
         variant: state.pendingCrumbleVariant,
         blockTheme: state.selectedBlockTheme,
       });
+      return;
+    }
+
+    // ── Falling block tiles ──────────────────────────────────────────────────
+    if (item.isFallingBlockItem === 1) {
+      const variant = item.fallingBlockVariant ?? 'tough';
+      // Don't place if a falling block tile of any variant already occupies this cell
+      const existingFBs = room.fallingBlocks ?? [];
+      const occupied = existingFBs.some(fb => fb.xBlock === bx && fb.yBlock === by);
+      if (occupied) return;
+      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
+      if (!room.fallingBlocks) room.fallingBlocks = [];
+      const fb: EditorFallingBlock = {
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        variant,
+      };
+      room.fallingBlocks.push(fb);
       return;
     }
 
@@ -903,6 +929,18 @@ export function deleteAtCursor(state: EditorState): void {
     }
   }
 
+  // Check falling block tiles
+  const fallingBlocks = room.fallingBlocks ?? [];
+  for (let i = 0; i < fallingBlocks.length; i++) {
+    if (hitTestPoint(fallingBlocks[i].xBlock, fallingBlocks[i].yBlock, bx, by)) {
+      const removedUid = fallingBlocks[i].uid;
+      fallingBlocks.splice(i, 1);
+      if (room.fallingBlocks) room.fallingBlocks = fallingBlocks;
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
   // Check bounce pads
   const bouncePads = room.bouncePads ?? [];
   for (let i = 0; i < bouncePads.length; i++) {
@@ -1078,6 +1116,11 @@ export function getAllElementsInRect(
     if (b.xBlock + b.wBlock > minX && b.xBlock < maxX + 1 &&
         b.yBlock + b.hBlock > minY && b.yBlock < maxY + 1) {
       results.push({ type: 'bouncePad', uid: b.uid });
+    }
+  }
+  for (const fb of (room.fallingBlocks ?? [])) {
+    if (fb.xBlock >= minX && fb.xBlock <= maxX && fb.yBlock >= minY && fb.yBlock <= maxY) {
+      results.push({ type: 'fallingBlock', uid: fb.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&

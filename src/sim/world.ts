@@ -762,6 +762,23 @@ export interface WorldState extends ParticleBuffers {
    * is fresh.  Not ticked down; cleared lazily when grapple releases.
    */
   isGrappleDebugActiveFlag: 0 | 1;
+
+  // ── Falling blocks ──────────────────────────────────────────────────────────
+  /**
+   * Runtime list of falling block groups for the current room.
+   * Each group is a set of orthogonally-connected same-variant tiles that fall
+   * together as a single rigid body when triggered.
+   * Managed by fallingBlockSim.ts; populated by loadRoomFallingBlocks().
+   */
+  fallingBlockGroups: import('./fallingBlocks/fallingBlockTypes').FallingBlockGroup[];
+
+  /**
+   * Player's downward velocity from the END of the previous tick, before this
+   * tick's collision resolution zeros it on landing.
+   * Set at the start of tick() before applyClusterMovement runs.
+   * Used by the tough falling block trigger to detect hard landings.
+   */
+  playerPrevVelocityYWorld: number;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -993,6 +1010,9 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     grappleDebugRawHitXWorld:      0.0,
     grappleDebugRawHitYWorld:      0.0,
     isGrappleDebugActiveFlag:      0,
+    // ── Falling blocks ────────────────────────────────────────────────────
+    fallingBlockGroups:            [],
+    playerPrevVelocityYWorld:      0,
     ...createParticleBuffers(),
   };
 }
