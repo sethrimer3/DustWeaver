@@ -44,6 +44,11 @@ import {
   themeToProceduralMaterial,
 } from './blockSpriteSets';
 import {
+  isFolderBasedTheme,
+  getTheme1x1Sprite,
+  getTheme2x2Sprite,
+} from './folderBlockThemes';
+import {
   CachedWallLayout,
   wallTileKey,
   isWallOccupied,
@@ -59,6 +64,7 @@ import {
   drawVertexOverlays,
   drawPlatformLine,
   drawRampTriangle,
+  applyRampClipPath,
 } from './wallTileDrawHelpers';
 
 /** Active sprite set for world-number mode. */
@@ -497,6 +503,15 @@ function _doRenderWallTilesDirect(
         const sprite = getFullSpriteFor2x2(resolvedTheme, blockSizePx);
         if (sprite !== null && isSpriteReady(sprite)) {
           ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
+        } else if (isFolderBasedTheme(resolvedTheme)) {
+          // Folder-based theme: use 16×16 source sprite for the 2×2 group.
+          const folderSprite = getTheme2x2Sprite(resolvedTheme, col, row, _activeWorldNumber);
+          if (folderSprite !== null) {
+            ctx.drawImage(folderSprite, tileX, tileY, drawSize, drawSize);
+          } else {
+            _bakePassHadFallbacks = true;
+            drawFallbackTile(ctx, tileX, tileY, drawSize);
+          }
         } else {
           _bakePassHadFallbacks = true;
           drawFallbackTile(ctx, tileX, tileY, drawSize);
@@ -558,6 +573,15 @@ function _doRenderWallTilesDirect(
       const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, _activeWorldNumber, openAirSidesMask);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
+      } else {
+        _bakePassHadFallbacks = true;
+        drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
+      }
+    } else if (isFolderBasedTheme(tileTheme)) {
+      // Folder-based theme: use 8×8 nearest-neighbor downscaled sprite for 1×1 tiles.
+      const folderSprite = getTheme1x1Sprite(tileTheme, col, row, _activeWorldNumber);
+      if (folderSprite !== null) {
+        ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
         _bakePassHadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
@@ -710,6 +734,30 @@ function _doRenderWallTilesDirect(
         // Fallback: solid triangle while sprites are loading.
         _bakePassHadFallbacks = true;
         drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, '#1a2535', '#5080b0', scalePx);
+      }
+    } else if (isFolderBasedTheme(rampTheme)) {
+      // Folder-based theme: clip canvas to triangle shape, then draw the flat sprite inside.
+      const rCol = Math.floor(walls.xWorld[wi] / blockSizePx);
+      const rRow = Math.floor(walls.yWorld[wi] / blockSizePx);
+      const use2x2 = Math.round(walls.wWorld[wi] / blockSizePx) >= 2 ||
+                     Math.round(walls.hWorld[wi] / blockSizePx) >= 2;
+      const folderRampSprite = use2x2
+        ? getTheme2x2Sprite(rampTheme, rCol, rRow, _activeWorldNumber)
+        : getTheme1x1Sprite(rampTheme, rCol, rRow, _activeWorldNumber);
+      if (folderRampSprite !== null) {
+        const rX = Math.round(wxPx);
+        const rY = Math.round(wyPx);
+        const rW = Math.round(wwPx);
+        const rH = Math.round(whPx);
+        ctx.save();
+        applyRampClipPath(ctx, rX, rY, rW, rH, ori);
+        ctx.clip();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(folderRampSprite, rX, rY, rW, rH);
+        ctx.restore();
+      } else {
+        _bakePassHadFallbacks = true;
+        drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, '#555555', '#777777', scalePx);
       }
     } else {
       // Legacy solid-color triangle path (brownRock, dirt, world 1+).

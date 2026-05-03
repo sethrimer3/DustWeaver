@@ -10,6 +10,7 @@ import type { TransitionDirection, BlockTheme, BlockThemeId, BackgroundId, Light
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
+import { FOLDER_BLOCK_THEMES, folderThemeShortId } from '../render/walls/folderBlockThemes';
 
 // Re-export for convenience in editor modules
 export type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
@@ -196,9 +197,12 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
 
 /** Available block themes for placement and wall inspection. */
 export const BLOCK_THEMES: readonly { id: BlockTheme; shortId: BlockThemeId; label: string }[] = [
+  // ── Legacy themes (dedicated rendering paths) ──
   { id: 'blackRock', shortId: 'bk', label: 'Black Rock' },
   { id: 'brownRock', shortId: 'br', label: 'Brown Rock' },
   { id: 'dirt',      shortId: 'dt', label: 'Dirt' },
+  // ── Folder-based themes (auto-discovered from ASSETS/SPRITES/BLOCKS/) ──
+  ...FOLDER_BLOCK_THEMES.map(t => ({ id: t.id, shortId: folderThemeShortId(t.id), label: t.label })),
 ];
 
 const DEFAULT_RECENT_BLOCK_THEMES: readonly BlockTheme[] = ['blackRock', 'brownRock', 'dirt'];

@@ -222,3 +222,34 @@ export function drawRampTriangle(
   ctx.stroke();
   ctx.lineWidth = 1;
 }
+
+/**
+ * Applies a closed triangular clip path to `ctx` matching the ramp triangle
+ * for the given orientation.  Call `ctx.clip()` after this to restrict drawing
+ * to the ramp shape.  The caller is responsible for `ctx.save()` / `ctx.restore()`.
+ *
+ * Orientation codes match `drawRampTriangle`:
+ *   0 = rises right (/)      → BL → BR → TR
+ *   1 = rises left  (\)      → BL → BR → TL
+ *   2 = ceiling ramp (⌐)     → TL → TR → BL
+ *   3 = ceiling ramp (¬)     → TL → TR → BR
+ */
+export function applyRampClipPath(
+  ctx: CanvasRenderingContext2D,
+  wxPx: number, wyPx: number,
+  wwPx: number, whPx: number,
+  ori: number,
+): void {
+  const x0 = wxPx;        const y0 = wyPx;
+  const x1 = wxPx + wwPx; const y1 = wyPx;
+  const x2 = wxPx;        const y2 = wyPx + whPx;
+  const x3 = wxPx + wwPx; const y3 = wyPx + whPx;
+  ctx.beginPath();
+  switch (ori) {
+    case 0: ctx.moveTo(x2, y2); ctx.lineTo(x3, y3); ctx.lineTo(x1, y1); break; // /
+    case 1: ctx.moveTo(x2, y2); ctx.lineTo(x3, y3); ctx.lineTo(x0, y0); break; // \
+    case 2: ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); break; // ⌐
+    default: ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x3, y3); break; // ¬
+  }
+  ctx.closePath();
+}
