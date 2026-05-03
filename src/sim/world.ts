@@ -730,9 +730,8 @@ export interface WorldState extends ParticleBuffers {
   /**
    * Outward surface normal at the current grapple anchor (unit axis vector).
    *
-   * Set when the grapple attaches to a wall face via `fireGrapple` or the
-   * miss-chain attachment path in `updateGrappleMissChain`.  Points away from
-   * the wall toward the player at the moment of attachment.
+   * Set when the grapple attaches to a wall face via `fireGrapple`. Points
+   * away from the wall toward the player at the moment of attachment.
    *
    * 0,0 when not attached to a wall (rope grapple or not active).
    *
@@ -747,7 +746,7 @@ export interface WorldState extends ParticleBuffers {
   /**
    * Stores the last grapple sweep segment (from/to) and raw hit point so the
    * debug overlay can visualise the continuous collision detection path.
-   * Written by fireGrapple and updateGrappleMissChain; reset each fire.
+   * Written by fireGrapple; reset each fire.
    * These fields are only consumed by the renderer and have no physics effect.
    */
   grappleDebugSweepFromXWorld: number;

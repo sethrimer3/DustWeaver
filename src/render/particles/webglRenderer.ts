@@ -22,6 +22,7 @@ import { MAX_PARTICLES } from '../../sim/particles/state';
 import { WorldSnapshot } from '../snapshot';
 import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shaders';
 import { ParticleTrailRenderer } from './trailRenderer';
+import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
 
 /** [x, y, kind, normalizedAge, disturbanceFactor, isOffensive] per vertex */
 const FLOATS_PER_VERTEX = 6;
@@ -232,6 +233,7 @@ export class WebGLParticleRenderer {
     let vertexCount = 0;
     for (let i = 0; i < particleCount; i++) {
       if (isAliveFlag[i] === 0) continue;
+      if (behaviorMode[i] === BEHAVIOR_MODE_GRAPPLE_CHAIN) continue;
       const base = vertexCount * FLOATS_PER_VERTEX;
       const lt = lifetimeTicks[i];
       const normAge = lt > 0 ? Math.min(1.0, ageTicks[i] / lt) : 0.0;

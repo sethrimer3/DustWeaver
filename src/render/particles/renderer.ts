@@ -1,7 +1,7 @@
 import { WorldSnapshot } from '../snapshot';
 import { getParticleStyle } from './styles';
 import { getKindShape, ParticleShape, ParticleKind } from '../../sim/particles/kinds';
-import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleMiss';
+import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
 
 // ---- Shape drawing helpers -----------------------------------------------
 

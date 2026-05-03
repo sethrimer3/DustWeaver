@@ -17,7 +17,7 @@
  */
 
 import { WorldState, MAX_ARROWS } from '../world';
-import { raycastWalls } from '../clusters/grappleMiss';
+import { raycastWalls } from '../clusters/grappleShared';
 import {
   getAvailableMoteSlotCount,
   depleteFirstNMoteSlots,

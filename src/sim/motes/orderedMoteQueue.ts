@@ -23,7 +23,7 @@
 
 import { WorldState, MAX_MOTE_SLOTS } from '../world';
 import { ParticleKind } from '../particles/kinds';
-import { GRAPPLE_MAX_LENGTH_WORLD } from '../clusters/grappleMiss';
+import { GRAPPLE_MAX_LENGTH_WORLD } from '../clusters/grappleShared';
 import { WEAVE_STORM } from '../weaves/weaveDefinition';
 
 // ── Constants ──────────────────────────────────────────────────────────────────

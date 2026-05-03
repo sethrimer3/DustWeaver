@@ -11,7 +11,7 @@ import type { WorldSnapshot } from '../render/snapshot';
 import { ParticleKind } from '../sim/particles/kinds';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import { isOffensiveDustOutlineEnabled } from '../ui/renderSettings';
-import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../sim/clusters/grappleMiss';
+import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../sim/clusters/grappleShared';
 
 /** Visual spacing between grapple bloom dots along the chain (virtual px). */
 export const GRAPPLE_BLOOM_SEGMENT_PX = 6;
@@ -32,8 +32,7 @@ export function drawGrappleBloom(
   offsetYPx: number,
   scalePx: number,
 ): void {
-  const hasActiveOrMiss = snapshot.isGrappleActiveFlag === 1 || snapshot.isGrappleMissActiveFlag === 1;
-  if (!hasActiveOrMiss) return;
+  if (snapshot.isGrappleActiveFlag !== 1) return;
 
   let playerCluster: (typeof snapshot.clusters)[0] | undefined;
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {
@@ -50,20 +49,8 @@ export function drawGrappleBloom(
   const px = playerCluster.positionXWorld * scalePx + offsetXPx + offsetDir * playerHalfWidthPx;
   const py = playerCluster.positionYWorld * scalePx + offsetYPx;
 
-  let ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
-  let ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
-  // For a miss-chain still extending, use the live tip particle position so
-  // bloom tracks the projectile. For an active (attached) grapple, always use
-  // the fixed anchor — not a particle position — so the bloom matches the
-  // renderGrapple() line exactly.
-  if (snapshot.isGrappleMissActiveFlag === 1 && snapshot.isGrappleActiveFlag === 0 && snapshot.grappleParticleStartIndex >= 0) {
-    const tipIndex = snapshot.grappleParticleStartIndex + 9;
-    const isTipAlive = tipIndex < snapshot.particles.particleCount && snapshot.particles.isAliveFlag[tipIndex] === 1;
-    if (isTipAlive) {
-      ax = snapshot.particles.positionXWorld[tipIndex] * scalePx + offsetXPx;
-      ay = snapshot.particles.positionYWorld[tipIndex] * scalePx + offsetYPx;
-    }
-  }
+  const ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
+  const ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
 
   const dx = ax - px;
   const dy = ay - py;

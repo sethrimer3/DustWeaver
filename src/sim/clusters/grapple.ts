@@ -84,10 +84,7 @@ import {
   GRAPPLE_CHAIN_LIFETIME_TICKS,
   GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD,
   raycastWalls,
-  startGrappleMiss,
-  cancelGrappleMiss,
-  startGrappleRetract,
-} from './grappleMiss';
+} from './grappleShared';
 import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 
 // ============================================================================
@@ -301,7 +298,6 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   if (ropeHit !== null) {
     const ropeDist = ropeHit.distWorld;
     if (ropeDist >= GRAPPLE_MIN_LENGTH_WORLD) {
-      if (world.isGrappleMissActiveFlag === 1) cancelGrappleMiss(world);
       world.grappleAnchorXWorld = ropeHit.hitX;
       world.grappleAnchorYWorld = ropeHit.hitY;
       world.grappleLengthWorld  = ropeDist;
@@ -348,21 +344,13 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
 
   if (hit === null) {
-    // No wall hit. Cancel any pre-existing miss/retract animation, then start
-    // a fresh miss throw from the current player position.
-    if (world.isGrappleMissActiveFlag === 1) {
-      cancelGrappleMiss(world);
-    }
-    startGrappleMiss(world, dirX, dirY);
+    clearLegacyGrappleMissState(world);
     return;
   }
 
   // Bounce pad walls cannot be grappled — treat as a miss.
   if (hit.wallIndex >= 0 && world.wallIsBouncePadFlag[hit.wallIndex] === 1) {
-    if (world.isGrappleMissActiveFlag === 1) {
-      cancelGrappleMiss(world);
-    }
-    startGrappleMiss(world, dirX, dirY);
+    clearLegacyGrappleMissState(world);
     return;
   }
 
@@ -376,10 +364,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // player) at super-jump speed.  Works on any surface orientation: floor,
   // wall, or ceiling.
   if (hitDist > 0.01 && hitDist < GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD) {
-    // Cancel any active miss/retract animation before the bounce.
-    if (world.isGrappleMissActiveFlag === 1) {
-      cancelGrappleMiss(world);
-    }
+    clearLegacyGrappleMissState(world);
     // Normal direction: from anchor (surface) toward player.
     const invHitDist = 1.0 / hitDist;
     const normalX = (player.positionXWorld - hit.x) * invHitDist;
@@ -433,9 +418,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   if (hitDist < GRAPPLE_MIN_LENGTH_WORLD) return;
 
   // Confirmed wall hit — cancel any active miss/retract before attaching.
-  if (world.isGrappleMissActiveFlag === 1) {
-    cancelGrappleMiss(world);
-  }
+  clearLegacyGrappleMissState(world);
 
   // Place the anchor just outside the wall surface using the surface normal from
   // the raycast.  Offsetting by GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD prevents the
@@ -533,7 +516,6 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
  */
 export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void {
   const shouldRetractFromActiveGrapple = world.isGrappleActiveFlag === 1;
-  const shouldRetractFromMiss = world.isGrappleMissActiveFlag === 1;
 
   // Grant coyote time so the player can jump in the first few frames after
   // releasing the grapple without pressing jump at the exact release moment.
@@ -557,13 +539,9 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   // Clear surface-anchor state (no longer attached to any surface).
   world.grappleAnchorNormalXWorld = 0.0;
   world.grappleAnchorNormalYWorld = 0.0;
+  clearLegacyGrappleMissState(world);
   // Keep debug fields so the overlay can still show the last sweep until the
   // next grapple fire; isGrappleDebugActiveFlag persists for the current frame.
-
-  if (shouldRetractFromActiveGrapple || shouldRetractFromMiss) {
-    startGrappleRetract(world);
-    return;
-  }
 
   if (world.grappleParticleStartIndex >= 0) {
     const start = world.grappleParticleStartIndex;
@@ -571,6 +549,14 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
       world.isAliveFlag[start + i] = 0;
     }
   }
+}
+
+function clearLegacyGrappleMissState(world: WorldState): void {
+  world.isGrappleMissActiveFlag = 0;
+  world.isGrappleRetractingFlag = 0;
+  world.grappleMissDirXWorld = 0.0;
+  world.grappleMissDirYWorld = 0.0;
+  world.grappleMissTickCount = 0;
 }
 
 /**

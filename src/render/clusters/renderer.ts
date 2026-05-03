@@ -547,8 +547,8 @@ export function renderClusters(
 }
 
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
-  const hasActiveOrMiss = snapshot.isGrappleActiveFlag === 1 || snapshot.isGrappleMissActiveFlag === 1;
-  if (!hasActiveOrMiss && snapshot.grappleAttachFxTicks <= 0) return;
+  const hasActiveGrapple = snapshot.isGrappleActiveFlag === 1;
+  if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0) return;
 
   let playerCluster: (typeof snapshot.clusters)[0] | undefined;
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {
@@ -568,20 +568,12 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     px = playerCluster.positionXWorld * scalePx + offsetXPx + offsetDir * halfW;
     py = playerCluster.positionYWorld * scalePx + offsetYPx;
   }
-  let ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
-  let ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
-  if (snapshot.isGrappleMissActiveFlag === 1 && snapshot.grappleParticleStartIndex >= 0) {
-    const tipIndex = snapshot.grappleParticleStartIndex + 9;
-    const isTipAlive = tipIndex < snapshot.particles.particleCount && snapshot.particles.isAliveFlag[tipIndex] === 1;
-    if (isTipAlive) {
-      ax = snapshot.particles.positionXWorld[tipIndex] * scalePx + offsetXPx;
-      ay = snapshot.particles.positionYWorld[tipIndex] * scalePx + offsetYPx;
-    }
-  }
+  const ax = snapshot.grappleAnchorXWorld * scalePx + offsetXPx;
+  const ay = snapshot.grappleAnchorYWorld * scalePx + offsetYPx;
 
   ctx.save();
 
-  if (hasActiveOrMiss && playerCluster !== undefined) {
+  if (hasActiveGrapple && playerCluster !== undefined) {
     // Faint guide glow only — the "rope" itself is represented by gold particles.
     ctx.beginPath();
     ctx.moveTo(px, py);
@@ -593,7 +585,7 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     ctx.setLineDash([]);
   }
 
-  if (hasActiveOrMiss && playerCluster !== undefined) {
+  if (hasActiveGrapple && playerCluster !== undefined) {
     const dx = ax - px;
     const dy = ay - py;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -618,20 +610,20 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     }
   }
 
-  const endSizePx = GRAPPLE_DUST_END_SIZE_PX * Math.max(1, scalePx * 0.5);
-  if (isSpriteReady(_grappleDustEndSprite)) {
-    ctx.drawImage(_grappleDustEndSprite, ax - endSizePx * 0.5, ay - endSizePx * 0.5, endSizePx, endSizePx);
-    if (hasActiveOrMiss && playerCluster !== undefined) {
+  if (hasActiveGrapple && playerCluster !== undefined) {
+    const endSizePx = GRAPPLE_DUST_END_SIZE_PX * Math.max(1, scalePx * 0.5);
+    if (isSpriteReady(_grappleDustEndSprite)) {
+      ctx.drawImage(_grappleDustEndSprite, ax - endSizePx * 0.5, ay - endSizePx * 0.5, endSizePx, endSizePx);
       ctx.drawImage(_grappleDustEndSprite, px - endSizePx * 0.5, py - endSizePx * 0.5, endSizePx, endSizePx);
+    } else {
+      ctx.beginPath();
+      ctx.arc(ax, ay, 7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.85)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 200, 0.95)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
-  } else {
-    ctx.beginPath();
-    ctx.arc(ax, ay, 7, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.85)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 200, 0.95)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
   }
 
   if (snapshot.grappleAttachFxTicks > 0) {
