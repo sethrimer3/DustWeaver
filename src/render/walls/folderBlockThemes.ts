@@ -194,6 +194,8 @@ export function folderThemeShortId(folderId: string): string {
 
 /** Pre-allocated 8×8 downscale cache. Keyed by the 16×16 source URL. */
 const _cache8x8 = new Map<string, HTMLCanvasElement | null>();
+/** URLs for which image loading has been requested but the image isn't ready yet. */
+const _pendingUrls = new Set<string>();
 
 /**
  * Generates an 8×8 nearest-neighbor downscaled canvas from a loaded 16×16
@@ -213,22 +215,38 @@ function _downscaleTo8x8(src: HTMLImageElement): HTMLCanvasElement | null {
 
 /**
  * Returns the cached 8×8 downscaled canvas for `url`, generating it if the
- * source image has loaded.  Returns null when the image is still in-flight
- * (the renderer will draw a fallback tile and retry next frame).
+ * source image has loaded.
+ *
+ * On the first call for a URL, this function attaches a one-time `load`
+ * listener so subsequent frames avoid repeated `loadImg` + readiness checks.
+ * Returns null while the source is still loading (the renderer will draw a
+ * fallback tile; once the listener fires the canvas is cached and the next
+ * frame will draw the sprite).
  */
 function _getOrCreate8x8(url: string): HTMLCanvasElement | null {
   const cached = _cache8x8.get(url);
-  if (cached !== undefined) return cached; // may be null if image not yet ready
+  if (cached !== undefined) return cached; // null = creation failed; canvas = ready
+
+  if (_pendingUrls.has(url)) return null; // already waiting for this image to load
 
   const img = loadImg(url);
-  if (!img.complete || img.naturalWidth === 0) {
-    // Image not ready; do NOT cache null yet so we retry on the next frame.
-    return null;
+  if (img.complete && img.naturalWidth > 0) {
+    // Image was already loaded (e.g., browser cache hit) — create immediately.
+    const canvas = _downscaleTo8x8(img);
+    _cache8x8.set(url, canvas);
+    return canvas;
   }
 
-  const canvas = _downscaleTo8x8(img);
-  _cache8x8.set(url, canvas);
-  return canvas;
+  // Image not yet ready: register a one-time listener to create the canvas
+  // when it arrives. This avoids re-checking every frame.
+  _pendingUrls.add(url);
+  img.addEventListener('load', () => {
+    _pendingUrls.delete(url);
+    const canvas = _downscaleTo8x8(img);
+    _cache8x8.set(url, canvas);
+  }, { once: true });
+
+  return null;
 }
 
 // ── Private theme lookup ──────────────────────────────────────────────────────

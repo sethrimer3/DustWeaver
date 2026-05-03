@@ -64,6 +64,7 @@ import {
   drawVertexOverlays,
   drawPlatformLine,
   drawRampTriangle,
+  applyRampClipPath,
 } from './wallTileDrawHelpers';
 
 /** Active sprite set for world-number mode. */
@@ -748,20 +749,8 @@ function _doRenderWallTilesDirect(
         const rY = Math.round(wyPx);
         const rW = Math.round(wwPx);
         const rH = Math.round(whPx);
-        // Triangle vertex coordinates matching drawRampTriangle orientations:
-        //   ori 0 (/) : BL → BR → TR
-        //   ori 1 (\) : BL → BR → TL
-        //   ori 2 (⌐) : TL → TR → BL
-        //   ori 3 (¬) : TL → TR → BR
         ctx.save();
-        ctx.beginPath();
-        switch (ori) {
-          case 0: ctx.moveTo(rX,      rY + rH); ctx.lineTo(rX + rW, rY + rH); ctx.lineTo(rX + rW, rY     ); break;
-          case 1: ctx.moveTo(rX,      rY + rH); ctx.lineTo(rX + rW, rY + rH); ctx.lineTo(rX,      rY     ); break;
-          case 2: ctx.moveTo(rX,      rY     ); ctx.lineTo(rX + rW, rY     ); ctx.lineTo(rX,      rY + rH); break;
-          default: ctx.moveTo(rX,     rY     ); ctx.lineTo(rX + rW, rY     ); ctx.lineTo(rX + rW, rY + rH); break;
-        }
-        ctx.closePath();
+        applyRampClipPath(ctx, rX, rY, rW, rH, ori);
         ctx.clip();
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(folderRampSprite, rX, rY, rW, rH);
