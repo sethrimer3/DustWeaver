@@ -5,7 +5,7 @@
  *
  * Usage:
  *   initFromRoom(room)  — populate beam list from a RoomDef
- *   render(ctx, ox, oy, zoom, nowMs) — draw on each frame
+ *   render(ctx, ox, oy, zoom, nowMs, vpW, vpH) — draw on each frame
  *
  * Placement: call render() BEFORE rendering the dark-ambient overlay so beams
  * appear behind walls but above the background.
@@ -13,12 +13,20 @@
 
 import type { RoomDef, RoomSunbeamDef } from '../../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
+import { isScreenRectVisible } from '../viewportCull';
 
 export class SunbeamRenderer {
   private beams: readonly RoomSunbeamDef[] = [];
+  /** Whether sunbeams are enabled (wired to the quality config). */
+  private _isEnabled = true;
 
   initFromRoom(room: RoomDef): void {
     this.beams = room.sunbeams ?? [];
+  }
+
+  /** Toggle sunbeam rendering on/off based on graphics quality tier. */
+  setEnabled(enabled: boolean): void {
+    this._isEnabled = enabled;
   }
 
   render(
@@ -27,14 +35,16 @@ export class SunbeamRenderer {
     offsetYPx: number,
     zoom: number,
     nowMs: number,
+    vpW: number,
+    vpH: number,
   ): void {
-    if (this.beams.length === 0) return;
+    if (!this._isEnabled || this.beams.length === 0) return;
 
     const prevComposite = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = 'screen';
 
     for (let i = 0; i < this.beams.length; i++) {
-      this._drawBeam(ctx, this.beams[i], i, offsetXPx, offsetYPx, zoom, nowMs);
+      this._drawBeam(ctx, this.beams[i], i, offsetXPx, offsetYPx, zoom, nowMs, vpW, vpH);
     }
 
     ctx.globalCompositeOperation = prevComposite;
@@ -48,6 +58,8 @@ export class SunbeamRenderer {
     offsetYPx: number,
     zoom: number,
     nowMs: number,
+    vpW: number,
+    vpH: number,
   ): void {
     const blockSizeZoomedPx = BLOCK_SIZE_SMALL * zoom;
     const originXPx = beam.xBlock * blockSizeZoomedPx + offsetXPx;
@@ -63,11 +75,6 @@ export class SunbeamRenderer {
     const perpXPx = -sinA;
     const perpYPx = cosA;
 
-    // Beam shaft: trapezoid — wide at origin, narrows to a point at tip.
-    // Subtle shimmer so the beam appears to breathe.
-    const shimmer = 0.85 + 0.15 * Math.sin(nowMs * 0.0009 + beamIndex * 1.3);
-    const alpha = (beam.intensityPct / 100) * shimmer;
-
     // Base corners (at origin)
     const bx0 = originXPx + perpXPx * halfWidthPx;
     const by0 = originYPx + perpYPx * halfWidthPx;
@@ -77,6 +84,18 @@ export class SunbeamRenderer {
     // Tip (at length)
     const tx = originXPx + cosA * lengthPx;
     const ty = originYPx + sinA * lengthPx;
+
+    // Viewport cull: compute the AABB of the beam triangle and skip if offscreen.
+    const minX = Math.min(bx0, bx1, tx);
+    const minY = Math.min(by0, by1, ty);
+    const maxX = Math.max(bx0, bx1, tx);
+    const maxY = Math.max(by0, by1, ty);
+    if (!isScreenRectVisible(minX, minY, maxX - minX, maxY - minY, vpW, vpH)) return;
+
+    // Beam shaft: trapezoid — wide at origin, narrows to a point at tip.
+    // Subtle shimmer so the beam appears to breathe.
+    const shimmer = 0.85 + 0.15 * Math.sin(nowMs * 0.0009 + beamIndex * 1.3);
+    const alpha = (beam.intensityPct / 100) * shimmer;
 
     ctx.beginPath();
     ctx.moveTo(bx0, by0);
@@ -97,3 +116,4 @@ export class SunbeamRenderer {
     ctx.fill();
   }
 }
+

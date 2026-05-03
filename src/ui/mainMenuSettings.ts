@@ -303,6 +303,7 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
     tabContent.appendChild(qualityLbl);
     const qualityOptions: { value: string; label: string }[] = [
       { value: 'low',  label: 'Low'  },
+      { value: 'med',  label: 'Med'  },
       { value: 'high', label: 'High' },
     ];
     const qualityDropdown = makeStyledDropdown(

@@ -16,6 +16,7 @@ import {
   getInfluenceCircleOpacity, setInfluenceCircleOpacity,
   getInfluenceHighlightWidth, setInfluenceHighlightWidth,
   setMusicVolume, setSfxVolume,
+  setGraphicsQuality,
 } from './renderSettings';
 import { makeButton, makeSlider, makeTabButton, GOLD, PANEL_BORDER } from './helpers';
 
@@ -158,14 +159,17 @@ export function showPauseMenu(
 
       const lowBtn = makeQualityButton('Low', state.graphicsQuality === 'low', () => {
         state.graphicsQuality = 'low';
+        setGraphicsQuality('low');
         buildOptionsContent();
       });
       const medBtn = makeQualityButton('Med', state.graphicsQuality === 'med', () => {
         state.graphicsQuality = 'med';
+        setGraphicsQuality('med');
         buildOptionsContent();
       });
       const highBtn = makeQualityButton('High', state.graphicsQuality === 'high', () => {
         state.graphicsQuality = 'high';
+        setGraphicsQuality('high');
         buildOptionsContent();
       });
       btnRow.appendChild(lowBtn);

@@ -22,6 +22,7 @@ import type { RoomDecorationDef, DecorationKind } from '../../levels/roomDef';
 import type { BloomSystem } from './bloomSystem';
 import type { LightSourcePx } from './darkRoomOverlay';
 import type { ClusterSnapshot } from '../snapshot';
+import { isScreenCircleVisible, isScreenRectVisible } from '../viewportCull';
 
 // ── Decoration types ──────────────────────────────────────────────────────────
 
@@ -378,9 +379,15 @@ export function renderDecorationSprites(
 }
 
 /**
- * Adds glowing halos for all decorations to the bloom system.
+ * Adds glowing halos for decorations to the bloom system.
  * Call this during the bloom accumulation phase (alongside drawParticleGlow).
  * Uses `performance.now()` for a gentle pulse — render-side use is permitted.
+ *
+ * @param maxCount      Maximum decorations to submit (quality-tier cap).  Pass
+ *                      a large value (e.g. 512) to effectively disable the cap.
+ * @param vpW / vpH     Virtual viewport dimensions for screen-space culling.
+ *                      Decorations whose glow circle falls entirely outside the
+ *                      viewport are skipped.
  */
 export function addDecorationBloom(
   bloomSystem: BloomSystem,
@@ -390,8 +397,12 @@ export function addDecorationBloom(
   scalePx: number,
   blockSizePx: number,
   nowMs: number,
+  maxCount: number,
+  vpW: number,
+  vpH: number,
 ): void {
-  for (let i = 0; i < decorations.length; i++) {
+  let submitted = 0;
+  for (let i = 0; i < decorations.length && submitted < maxCount; i++) {
     const d  = decorations[i];
     const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
     const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
@@ -399,17 +410,20 @@ export function addDecorationBloom(
     if (d.kind === 'glowGrass') {
       const centerXPx = sx + Math.round(blockSizePx * scalePx * 0.5);
       const centerYPx = sy - Math.round(2 * scalePx);
+      const glowR     = 5 * scalePx;
+      if (!isScreenCircleVisible(centerXPx, centerYPx, glowR, vpW, vpH)) continue;
       const pulse     = 0.8 + 0.2 * Math.sin(nowMs * 0.0011 + d.seed * 0.013);
       bloomSystem.glowPass.drawCircle({
         x:    centerXPx,
         y:    centerYPx,
-        radius: 5 * scalePx,
+        radius: glowR,
         glow: {
           enabled:   true,
           intensity: 0.22 * pulse,
           color:     '#22aa44',
         },
       });
+      submitted++;
     } else if (d.kind === 'mushroom') {
       const h2       = _hash(d.seed, 0, 0xf00dface);
       const bw       = Math.round(blockSizePx * scalePx);
@@ -418,19 +432,22 @@ export function addDecorationBloom(
       const px       = Math.max(1, Math.round(scalePx));
       const capCX    = sx + offX + px;
       const capCY    = sy - (stemH + 1) * px;
+      const glowR    = 7 * scalePx;
+      if (!isScreenCircleVisible(capCX, capCY, glowR, vpW, vpH)) continue;
       const isBlue   = ((h2 >> 4) & 1) === 0;
       const glowColor = isBlue ? '#8860e0' : '#44cc88';
       const pulse     = 0.75 + 0.25 * Math.sin(nowMs * 0.0009 + d.seed * 0.017);
       bloomSystem.glowPass.drawCircle({
         x:    capCX,
         y:    capCY,
-        radius: 7 * scalePx,
+        radius: glowR,
         glow: {
           enabled:   true,
           intensity: 0.55 * pulse,
           color:     glowColor,
         },
       });
+      submitted++;
     } else {
       // Vine: glow at the tip (bottom) of the longest strand
       const h2    = _hash(d.seed, 0, 0xc0ffee77);
@@ -440,17 +457,20 @@ export function addDecorationBloom(
       const px    = Math.max(1, Math.round(scalePx));
       const tipCX = sx + offX;
       const tipCY = sy + vineH * px;
+      const glowR = 5 * scalePx;
+      if (!isScreenCircleVisible(tipCX, tipCY, glowR, vpW, vpH)) continue;
       const pulse = 0.8 + 0.2 * Math.sin(nowMs * 0.0013 + d.seed * 0.019);
       bloomSystem.glowPass.drawCircle({
         x:    tipCX,
         y:    tipCY,
-        radius: 5 * scalePx,
+        radius: glowR,
         glow: {
           enabled:   true,
           intensity: 0.30 * pulse,
           color:     '#2ad46a',
         },
       });
+      submitted++;
     }
   }
 }
@@ -458,6 +478,13 @@ export function addDecorationBloom(
 /**
  * Converts decorations to screen-space light source descriptors for the
  * DarkRoomOverlay.  Must be called after the camera offset is known.
+ *
+ * @param maxLightCount  Maximum lights to return.  Decorations beyond this cap
+ *                       are skipped (furthest from origin are dropped first via
+ *                       iteration order).  Pass a large value to disable cap.
+ * @param vpW / vpH      Virtual viewport dimensions for screen-space culling.
+ *                       Decorations whose light circle falls entirely outside
+ *                       the viewport are not added to the array.
  */
 export function collectDecorationLights(
   decorations: readonly WallDecoration[],
@@ -465,18 +492,25 @@ export function collectDecorationLights(
   offsetYPx: number,
   scalePx: number,
   blockSizePx: number,
+  maxLightCount: number,
+  vpW: number,
+  vpH: number,
 ): LightSourcePx[] {
   const lights: LightSourcePx[] = [];
-  for (let i = 0; i < decorations.length; i++) {
+  for (let i = 0; i < decorations.length && lights.length < maxLightCount; i++) {
     const d  = decorations[i];
     const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
     const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
 
     if (d.kind === 'glowGrass') {
+      const lx = sx + Math.round(blockSizePx * scalePx * 0.5);
+      const ly = sy - Math.round(2 * scalePx);
+      const lr = 14 * scalePx;
+      if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
       lights.push({
-        xPx:           sx + Math.round(blockSizePx * scalePx * 0.5),
-        yPx:           sy - Math.round(2 * scalePx),
-        radiusPx:      14 * scalePx,
+        xPx:           lx,
+        yPx:           ly,
+        radiusPx:      lr,
         innerFraction: 0.1,
       });
     } else if (d.kind === 'mushroom') {
@@ -485,10 +519,14 @@ export function collectDecorationLights(
       const px    = Math.max(1, Math.round(scalePx));
       const offX  = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - 3 * px)) + px;
       const stemH = 2 + (h2 & 1);
+      const lx    = sx + offX + px;
+      const ly    = sy - (stemH + 1) * px;
+      const lr    = 26 * scalePx;
+      if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
       lights.push({
-        xPx:           sx + offX + px,
-        yPx:           sy - (stemH + 1) * px,
-        radiusPx:      26 * scalePx,
+        xPx:           lx,
+        yPx:           ly,
+        radiusPx:      lr,
         innerFraction: 0.08,
       });
     } else {
@@ -498,10 +536,14 @@ export function collectDecorationLights(
       const offX  = Math.floor(((h2 & 0xff) / 255.0) * Math.max(0, bw - Math.max(1, Math.round(scalePx))));
       const vineH = 3 + ((h2 >> 8) & 0x7);
       const px    = Math.max(1, Math.round(scalePx));
+      const lx    = sx + offX;
+      const ly    = sy + vineH * px;
+      const lr    = 18 * scalePx;
+      if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
       lights.push({
-        xPx:           sx + offX,
-        yPx:           sy + vineH * px,
-        radiusPx:      18 * scalePx,
+        xPx:           lx,
+        yPx:           ly,
+        radiusPx:      lr,
         innerFraction: 0.1,
       });
     }

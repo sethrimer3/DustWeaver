@@ -5,9 +5,10 @@
  * upward with gentle horizontal wander, fading in and out over their lifetime.
  *
  * Usage:
- *   initFromRoom(room)    — populate spawn zones from a RoomDef
- *   update(dtMs)          — advance mote positions each game tick
- *   render(ctx, ox, oy, zoom) — draw motes onto a 2D canvas
+ *   initFromRoom(room)              — populate spawn zones from a RoomDef
+ *   setMaxMotes(n)                  — apply a quality-tier mote cap
+ *   update(dtMs)                    — advance mote positions each game tick
+ *   render(ctx, ox, oy, zoom, vpW, vpH) — draw visible motes onto a 2D canvas
  */
 
 import type { RoomDef } from '../../levels/roomDef';
@@ -43,6 +44,14 @@ export class AtmosphericLightDust {
   private moteCount = 0;
   private spawnZones: SpawnZone[] = [];
   private spawnZoneIndex = 0;
+  /** Effective mote cap for the current quality tier.  Defaults to MAX_MOTES. */
+  private _maxMotes = MAX_MOTES;
+
+  /** Update the maximum live mote count.  New motes won't spawn above this cap;
+   *  existing motes above it fade out naturally over their lifetime. */
+  setMaxMotes(n: number): void {
+    this._maxMotes = Math.max(0, Math.min(n, MAX_MOTES));
+  }
 
   initFromRoom(room: RoomDef): void {
     this.spawnZones = [];
@@ -62,9 +71,9 @@ export class AtmosphericLightDust {
         colorB: ls.colorB,
       });
 
-      // Pre-seed up to dustMoteCount motes for this zone.
+      // Pre-seed up to dustMoteCount motes for this zone, capped by _maxMotes.
       const count = ls.dustMoteCount ?? 0;
-      for (let n = 0; n < count && this.moteCount < MAX_MOTES; n++) {
+      for (let n = 0; n < count && this.moteCount < this._maxMotes; n++) {
         this._spawnMote(this.spawnZones[this.spawnZones.length - 1], true);
       }
     }
@@ -101,8 +110,8 @@ export class AtmosphericLightDust {
       this.moteVx[i] *= 0.99;
     }
 
-    // Spawn replacement motes so the pool stays filled.
-    if (this.spawnZones.length > 0 && this.moteCount < MAX_MOTES) {
+    // Spawn replacement motes so the pool stays filled, respecting the quality cap.
+    if (this.spawnZones.length > 0 && this.moteCount < this._maxMotes) {
       const zone = this.spawnZones[this.spawnZoneIndex % this.spawnZones.length];
       this._spawnMote(zone, false);
       this.spawnZoneIndex++;
@@ -114,13 +123,24 @@ export class AtmosphericLightDust {
     offsetXPx: number,
     offsetYPx: number,
     zoom: number,
+    vpW: number,
+    vpH: number,
   ): void {
     if (this.moteCount === 0) return;
 
     const prevComposite = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = 'screen';
 
+    // Motes are 2×2 px; add 2 px margin so partially-visible motes are drawn.
+    const cullMarginPx = 2;
+
     for (let i = 0; i < this.moteCount; i++) {
+      const px = this.moteX[i] * zoom + offsetXPx;
+      const py = this.moteY[i] * zoom + offsetYPx;
+
+      // Skip motes outside the visible viewport.
+      if (px + cullMarginPx < 0 || px > vpW || py + cullMarginPx < 0 || py > vpH) continue;
+
       const t = this.moteAge[i] / this.moteLifetime[i];
       // Fade in over first 20%, fade out over last 30%.
       let alpha: number;
@@ -133,8 +153,6 @@ export class AtmosphericLightDust {
       }
       alpha *= 0.5; // Max opacity 50% so motes are subtle.
 
-      const px = this.moteX[i] * zoom + offsetXPx;
-      const py = this.moteY[i] * zoom + offsetYPx;
       const r = this.moteR[i];
       const g = this.moteG[i];
       const b = this.moteB[i];
@@ -147,7 +165,7 @@ export class AtmosphericLightDust {
   }
 
   private _spawnMote(zone: SpawnZone, randomizeAge: boolean): void {
-    if (this.moteCount >= MAX_MOTES) return;
+    if (this.moteCount >= this._maxMotes) return;
     const i = this.moteCount++;
     const spread = zone.spreadWorld;
     this.moteX[i] = zone.xWorld + (Math.random() - 0.5) * spread * 2;
@@ -162,3 +180,4 @@ export class AtmosphericLightDust {
     this.moteB[i] = zone.colorB;
   }
 }
+

@@ -13,6 +13,7 @@ import type { WorldState } from '../sim/world';
 import { renderHudOverlay } from '../render/hud/overlay';
 import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
+import type { RenderProfiler } from '../render/hud/renderProfiler';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
 import { HEALTH_BAR_DISPLAY_MS } from './gameRoom';
 import {
@@ -67,6 +68,8 @@ export interface HudRenderContext {
   combatText: CombatTextSystem;
   prevLastPlayerBlockedTick: { value: number };
   getPlayerDustCount: () => number;
+  /** When provided, the render profiler panel is drawn in the top-right corner. */
+  renderProfiler?: RenderProfiler;
 }
 
 /**
@@ -83,12 +86,12 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     isDebugMode, hudState, currentRoom,
     prevHealthMap, healthBarDisplayUntilTick,
     combatText, prevLastPlayerBlockedTick,
-    getPlayerDustCount,
+    getPlayerDustCount, renderProfiler,
   } = r;
 
   // ── Debug-only overlay and room name banner ─────────────────────────────────
   if (isDebugMode) {
-    renderHudOverlay(ctx, hudState);
+    renderHudOverlay(ctx, hudState, renderProfiler, virtualWidthPx, true);
 
     // ── Room name banner (top-center) ──────────────────────────────────────
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
