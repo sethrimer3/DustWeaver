@@ -697,6 +697,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleTensionFactor:          world.grappleTensionFactor,
     ropeCount:           world.ropeCount,
     ropeSegmentCount:    world.ropeSegmentCount,
+    ropeHalfThickWorld:  world.ropeHalfThickWorld,
     ropeSegPosXWorld:    world.ropeSegPosXWorld,
     ropeSegPosYWorld:    world.ropeSegPosYWorld,
   };
