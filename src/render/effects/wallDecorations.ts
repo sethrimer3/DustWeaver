@@ -22,7 +22,7 @@ import type { RoomDecorationDef, DecorationKind } from '../../levels/roomDef';
 import type { BloomSystem } from './bloomSystem';
 import type { LightSourcePx } from './darkRoomOverlay';
 import type { ClusterSnapshot } from '../snapshot';
-import { isScreenCircleVisible, isScreenRectVisible } from '../viewportCull';
+import { isScreenCircleVisible } from '../viewportCull';
 
 // ── Decoration types ──────────────────────────────────────────────────────────
 
@@ -550,4 +550,3 @@ export function collectDecorationLights(
   }
   return lights;
 }
-
