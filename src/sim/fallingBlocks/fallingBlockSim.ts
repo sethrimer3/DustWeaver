@@ -8,12 +8,25 @@
  *   - idleStable → warning when a qualifying disturbance occurs.
  *   - warning     → preFallPause after WARN_DURATION_TICKS.
  *   - preFallPause→ falling after PRE_FALL_PAUSE_TICKS.
- *   - falling     → landedStable when downward collision detected.
- *   - falling     → crumbling for the crumbling variant after top speed reached
- *                   for CRUMBLE_DELAY_TICKS.
+ *   - falling     → landedStable when collision detected (only if crumbling
+ *                   variant has NOT yet reached terminal speed).
+ *   - falling     → crumbling for the crumbling variant if it landed AFTER
+ *                   reaching terminal speed, or airborne crumble timer expires.
  *   - crumbling   → removed after CRUMBLE_DURATION_TICKS.
  *
  * All geometry is in world units.  Positive Y = downward.
+ *
+ * Collision shape:
+ *   Each group stores per-tile collider rects in colliderRel{X,Y}World plus
+ *   collider{W,H}World.  All sim-side checks (triggers, landing, crush,
+ *   chain reaction, grapple) use these rects.  The bounding box (wWorld ×
+ *   hWorld) is used only for broad-phase culling and the movement-system
+ *   wall slot.
+ *
+ * Dynamic wall slots:
+ *   Every falling block group owns a wall slot (wallIndex).  findLandingSurface
+ *   builds a Set of ALL falling-block wall indices and skips them in the static
+ *   wall scan.  Landing on another group is handled in a dedicated group pass.
  */
 
 import type { WorldState } from '../world';
@@ -35,6 +48,7 @@ import {
   CRUMBLE_DELAY_TICKS,
   CRUMBLE_DURATION_TICKS,
   FB_COLLISION_EPSILON,
+  MAX_LANDING_CONTACTS,
   SHAKE_AMPLITUDE_WORLD,
   SHAKE_PERIOD_TICKS,
   FB_TRIGGER_PLAYER_TOP_LAND,
@@ -77,13 +91,65 @@ export function getFBGroupRightWorld(g: FallingBlockGroup): number {
   return g.restXWorld + g.wWorld;
 }
 
-// ── AABB overlap test ──────────────────────────────────────────────────────────
+// ── Per-tile shape contact helpers ────────────────────────────────────────────
 
-function aabbOverlap(
+/**
+ * Returns true if the given AABB (ax1,ay1)→(ax2,ay2) contacts any of the
+ * group's collider rects within `epsilon` tolerance.
+ *
+ * Uses a broad-phase bounding-box check first, then tests each rect.
+ */
+function contactsGroupShape(
+  g: FallingBlockGroup,
   ax1: number, ay1: number, ax2: number, ay2: number,
-  bx1: number, by1: number, bx2: number, by2: number,
+  epsilon: number,
 ): boolean {
-  return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+  // Broad-phase: bounding box
+  const gbLeft   = getFBGroupLeftWorld(g);
+  const gbTop    = getFBGroupTopWorld(g);
+  const gbRight  = getFBGroupRightWorld(g);
+  const gbBottom = getFBGroupBottomWorld(g);
+  if (ax1 > gbRight + epsilon || ax2 < gbLeft - epsilon ||
+      ay1 > gbBottom + epsilon || ay2 < gbTop - epsilon) return false;
+
+  // Per-rect check
+  const gx = g.restXWorld;
+  const gy = g.restYWorld + g.offsetYWorld;
+  for (let ri = 0; ri < g.colliderRectCount; ri++) {
+    const rx1 = gx + g.colliderRelXWorld[ri];
+    const ry1 = gy + g.colliderRelYWorld[ri];
+    const rx2 = rx1 + g.colliderWWorld[ri];
+    const ry2 = ry1 + g.colliderHWorld[ri];
+    if (ax1 < rx2 + epsilon && ax2 > rx1 - epsilon &&
+        ay1 < ry2 + epsilon && ay2 > ry1 - epsilon) return true;
+  }
+  return false;
+}
+
+/**
+ * Returns true if the point (px, py) is inside any of the group's collider
+ * rects (within epsilon tolerance).  Used for grapple anchor hit-testing.
+ */
+function pointInGroupShape(
+  g: FallingBlockGroup,
+  px: number, py: number,
+  epsilon: number,
+): boolean {
+  // Broad-phase
+  if (px < getFBGroupLeftWorld(g) - epsilon || px > getFBGroupRightWorld(g) + epsilon ||
+      py < getFBGroupTopWorld(g) - epsilon  || py > getFBGroupBottomWorld(g) + epsilon) return false;
+
+  const gx = g.restXWorld;
+  const gy = g.restYWorld + g.offsetYWorld;
+  for (let ri = 0; ri < g.colliderRectCount; ri++) {
+    const rx1 = gx + g.colliderRelXWorld[ri];
+    const ry1 = gy + g.colliderRelYWorld[ri];
+    const rx2 = rx1 + g.colliderWWorld[ri];
+    const ry2 = ry1 + g.colliderHWorld[ri];
+    if (px >= rx1 - epsilon && px <= rx2 + epsilon &&
+        py >= ry1 - epsilon && py <= ry2 + epsilon) return true;
+  }
+  return false;
 }
 
 // ── Trigger helpers ────────────────────────────────────────────────────────────
@@ -100,65 +166,74 @@ function triggerGroup(g: FallingBlockGroup, triggerType: number): void {
 }
 
 /**
- * Check whether the player cluster is resting on top of the falling block group.
- * Returns true if the player's bottom edge is at or within epsilon of the group's
- * top surface, and the player's AABB horizontally overlaps the group.
+ * Check whether the player cluster is resting on top of any of the group's
+ * collider rects.  Returns true if the player's bottom edge is within epsilon
+ * of any rect's top surface and horizontally overlaps that rect.
  */
 function isPlayerRestingOnGroupTop(
   g: FallingBlockGroup,
   playerX: number, playerY: number,
   playerHW: number, playerHH: number,
 ): boolean {
-  const groupTop    = getFBGroupTopWorld(g);
-  const groupLeft   = getFBGroupLeftWorld(g);
-  const groupRight  = getFBGroupRightWorld(g);
   const playerLeft  = playerX - playerHW;
   const playerRight = playerX + playerHW;
   const playerBot   = playerY + playerHH;
 
-  // Player must overlap the group horizontally
+  // Broad-phase bounding box
+  const groupTop   = getFBGroupTopWorld(g);
+  const groupLeft  = getFBGroupLeftWorld(g);
+  const groupRight = getFBGroupRightWorld(g);
   if (playerRight <= groupLeft || playerLeft >= groupRight) return false;
+  if (playerBot < groupTop - (FB_COLLISION_EPSILON + 1.0)) return false;
 
-  // Player bottom must be within epsilon of the group top (above or just touching)
-  return Math.abs(playerBot - groupTop) <= FB_COLLISION_EPSILON + 1.0;
+  // Per-rect: check each collider rect's top surface
+  const gx = g.restXWorld;
+  const gy = g.restYWorld + g.offsetYWorld;
+  for (let ri = 0; ri < g.colliderRectCount; ri++) {
+    const rx1 = gx + g.colliderRelXWorld[ri];
+    const rx2 = rx1 + g.colliderWWorld[ri];
+    const ry1 = gy + g.colliderRelYWorld[ri];
+    // Horizontal overlap with this specific rect
+    if (playerRight <= rx1 || playerLeft >= rx2) continue;
+    // Player bottom within epsilon of this rect's top
+    if (Math.abs(playerBot - ry1) <= FB_COLLISION_EPSILON + 1.0) return true;
+  }
+  return false;
 }
 
 /**
- * Check whether any part of the player AABB overlaps the group AABB
- * (any side contact or standing on top).
+ * Check whether any part of the player AABB contacts the group shape
+ * (any side contact, standing on top, or within epsilon of any face).
  */
-function playerOverlapsGroup(
+function playerContactsGroup(
   g: FallingBlockGroup,
   playerX: number, playerY: number,
   playerHW: number, playerHH: number,
 ): boolean {
-  return aabbOverlap(
-    playerX - playerHW, playerY - playerHH, playerX + playerHW, playerY + playerHH,
-    getFBGroupLeftWorld(g), getFBGroupTopWorld(g),
-    getFBGroupRightWorld(g), getFBGroupBottomWorld(g),
+  return contactsGroupShape(
+    g,
+    playerX - playerHW, playerY - playerHH,
+    playerX + playerHW, playerY + playerHH,
+    FB_COLLISION_EPSILON,
   );
 }
 
 /**
- * Check whether any enemy cluster AABB overlaps the group.
- * Returns the index of the first overlapping enemy cluster, or -1.
+ * Check whether any enemy cluster AABB contacts the group shape.
+ * Returns the index of the first matching enemy cluster, or -1.
  */
-function findOverlappingEnemyIndex(g: FallingBlockGroup, world: WorldState): number {
-  const gLeft   = getFBGroupLeftWorld(g);
-  const gTop    = getFBGroupTopWorld(g);
-  const gRight  = getFBGroupRightWorld(g);
-  const gBottom = getFBGroupBottomWorld(g);
-
+function findContactingEnemyIndex(g: FallingBlockGroup, world: WorldState): number {
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const c = world.clusters[ci];
     if (c.isPlayerFlag === 1 || c.isAliveFlag === 0) continue;
-    const cLeft   = c.positionXWorld - c.halfWidthWorld;
-    const cRight  = c.positionXWorld + c.halfWidthWorld;
-    const cTop    = c.positionYWorld - c.halfHeightWorld;
-    const cBottom = c.positionYWorld + c.halfHeightWorld;
-    if (cLeft < gRight && cRight > gLeft && cTop < gBottom && cBottom > gTop) {
-      return ci;
-    }
+    if (contactsGroupShape(
+      g,
+      c.positionXWorld - c.halfWidthWorld,
+      c.positionYWorld - c.halfHeightWorld,
+      c.positionXWorld + c.halfWidthWorld,
+      c.positionYWorld + c.halfHeightWorld,
+      FB_COLLISION_EPSILON,
+    )) return ci;
   }
   return -1;
 }
@@ -194,21 +269,21 @@ function checkTriggers(g: FallingBlockGroup, world: WorldState): void {
           return;
         }
       }
-      // Grapple downward pull
-      if (world.isGrappleActiveFlag === 1) {
+
+      // Grapple downward pull:
+      //   • Anchor must be on or inside the group's actual tile shape.
+      //   • Pull vector (anchor → player) must point within 30° of straight down.
+      //   • Player must be actively retracting the rope (holding down/S) — this
+      //     is the "pulling down" action; simply hanging does NOT trigger.
+      if (world.isGrappleActiveFlag === 1 && world.playerCrouchHeldFlag === 1) {
         const ax = world.grappleAnchorXWorld;
         const ay = world.grappleAnchorYWorld;
-        // Anchor must be inside this group's AABB
-        if (
-          ax >= getFBGroupLeftWorld(g) && ax <= getFBGroupRightWorld(g) &&
-          ay >= getFBGroupTopWorld(g)  && ay <= getFBGroupBottomWorld(g)
-        ) {
+        if (pointInGroupShape(g, ax, ay, FB_COLLISION_EPSILON)) {
           // Pull direction = from anchor toward player
           const dx = px - ax;
           const dy = py - ay;
           const len = Math.sqrt(dx * dx + dy * dy);
           if (len > 0.001) {
-            // normalised downward component must exceed threshold
             const normY = dy / len; // positive = downward
             if (normY >= TOUGH_GRAPPLE_DOWN_DOT_THRESHOLD) {
               triggerGroup(g, FB_TRIGGER_GRAPPLE_DOWN);
@@ -219,26 +294,23 @@ function checkTriggers(g: FallingBlockGroup, world: WorldState): void {
       }
     }
 
-    // ── Sensitive / Crumbling: any player contact ─────────────────────────
+    // ── Sensitive / Crumbling: any player contact (with epsilon) ──────────
     if (variant === 'sensitive' || variant === 'crumbling') {
-      if (playerOverlapsGroup(g, px, py, phw, phh)) {
+      if (playerContactsGroup(g, px, py, phw, phh)) {
         triggerGroup(g, FB_TRIGGER_PLAYER_TOUCH);
         return;
       }
-      // Any grapple contact (anchor in group AABB)
+      // Any grapple contact (anchor on group tile shape)
       if (world.isGrappleActiveFlag === 1) {
         const ax = world.grappleAnchorXWorld;
         const ay = world.grappleAnchorYWorld;
-        if (
-          ax >= getFBGroupLeftWorld(g) && ax <= getFBGroupRightWorld(g) &&
-          ay >= getFBGroupTopWorld(g)  && ay <= getFBGroupBottomWorld(g)
-        ) {
+        if (pointInGroupShape(g, ax, ay, FB_COLLISION_EPSILON)) {
           triggerGroup(g, FB_TRIGGER_GRAPPLE_ANY);
           return;
         }
       }
-      // Enemy contact
-      if (findOverlappingEnemyIndex(g, world) >= 0) {
+      // Enemy contact (per-rect with epsilon)
+      if (findContactingEnemyIndex(g, world) >= 0) {
         triggerGroup(g, FB_TRIGGER_ENEMY_TOUCH);
         return;
       }
@@ -249,79 +321,200 @@ function checkTriggers(g: FallingBlockGroup, world: WorldState): void {
 // ── Landing collision ─────────────────────────────────────────────────────────
 
 /**
- * Find the lowest Y position the group bottom can reach without entering solid
- * terrain.  Returns the new group top Y (i.e. the group's yWorld after snapping)
- * or null if no solid was found below.
+ * Find the highest Y position (lowest numeric value = highest on screen) at
+ * which the group lands without penetrating any static terrain or stable
+ * falling block group.
  *
- * Checks both the static wall array and other stable/warning falling block groups.
+ * Fills the group's `lastLandingContactX1/X2/YWorld` arrays with the horizontal
+ * spans where contact occurs.
  *
- * Uses a swept approach: finds the first solid surface below the group bottom
- * within the horizontal span of the group, then snaps the group to rest just
- * above it.
+ * @param fbWallIndexSet  Set of all wall indices reserved by ANY falling block
+ *                        group.  These are skipped in the static wall scan and
+ *                        handled separately in the group-on-group pass.
+ *
+ * @returns  The new `g.restYWorld + g.offsetYWorld` value after snapping, or
+ *           null if no surface was found.
  */
 function findLandingSurface(
   g: FallingBlockGroup,
   world: WorldState,
+  fbWallIndexSet: Set<number>,
 ): number | null {
-  const groupLeft   = getFBGroupLeftWorld(g);
-  const groupRight  = getFBGroupRightWorld(g);
-  const groupBottom = getFBGroupBottomWorld(g);
-  const groupTop    = getFBGroupTopWorld(g);
+  // We test each collider rect independently and find the surface that limits
+  // downward movement the most (= smallest newGroupTopY).
+  let nearestGroupTopY = Infinity;
 
-  let nearestSurfaceTop = Infinity;
+  // Temporary contact storage: up to MAX_LANDING_CONTACTS segments.
+  // We collect them into the group's arrays after finding the snap Y.
+  const tmpX1 = new Float32Array(MAX_LANDING_CONTACTS);
+  const tmpX2 = new Float32Array(MAX_LANDING_CONTACTS);
+  const tmpY  = new Float32Array(MAX_LANDING_CONTACTS);
+  let tmpCount = 0;
 
-  // ── Static wall array ────────────────────────────────────────────────────
-  for (let wi = 0; wi < world.wallCount; wi++) {
-    // Skip: platform walls (one-way)
-    if (world.wallIsPlatformFlag[wi] === 1) continue;
-    // Skip: ramp walls (don't land on ramps for simplicity)
-    if (world.wallRampOrientationIndex[wi] !== 255) continue;
-    // Skip: this group's own wall slot
-    if (wi === g.wallIndex) continue;
+  const gx = g.restXWorld;
+  const gy = g.restYWorld + g.offsetYWorld;
 
-    const wLeft   = world.wallXWorld[wi];
-    const wTop    = world.wallYWorld[wi];
-    const wRight  = wLeft + world.wallWWorld[wi];
+  for (let ri = 0; ri < g.colliderRectCount; ri++) {
+    const rectLeft   = gx + g.colliderRelXWorld[ri];
+    const rectRight  = rectLeft + g.colliderWWorld[ri];
+    const rectTop    = gy + g.colliderRelYWorld[ri];
+    const rectBottom = rectTop + g.colliderHWorld[ri];
 
-    // Wall must overlap the group horizontally
-    if (groupRight <= wLeft || groupLeft >= wRight) continue;
+    // ── Static wall array ─────────────────────────────────────────────────
+    for (let wi = 0; wi < world.wallCount; wi++) {
+      // Skip platform walls (one-way)
+      if (world.wallIsPlatformFlag[wi] === 1) continue;
+      // Skip ramp walls
+      if (world.wallRampOrientationIndex[wi] !== 255) continue;
+      // Skip ALL falling block wall slots — handled in the group pass below.
+      if (fbWallIndexSet.has(wi)) continue;
 
-    // Wall top must be below the group top (we're falling downward)
-    if (wTop < groupTop) continue;
+      const wLeft  = world.wallXWorld[wi];
+      const wTop   = world.wallYWorld[wi];
+      const wRight = wLeft + world.wallWWorld[wi];
 
-    // Group bottom must now be at or past the wall top
-    if (groupBottom >= wTop - FB_COLLISION_EPSILON) {
-      if (wTop < nearestSurfaceTop) {
-        nearestSurfaceTop = wTop;
+      // Horizontal overlap with this rect
+      if (rectRight <= wLeft || rectLeft >= wRight) continue;
+      // Wall must be at or below this rect's top (falling downward)
+      if (wTop < rectTop) continue;
+      // This rect's bottom must have reached or passed the wall top
+      if (rectBottom < wTop - FB_COLLISION_EPSILON) continue;
+
+      // snapGroupTopY: where does the group top land so this rect's bottom
+      // sits exactly on wTop?
+      const snapGroupTopY = wTop - g.colliderRelYWorld[ri] - g.colliderHWorld[ri];
+      if (snapGroupTopY < nearestGroupTopY) {
+        nearestGroupTopY = snapGroupTopY;
+      }
+    }
+
+    // ── Other falling block groups in stable/landed states ────────────────
+    for (const other of world.fallingBlockGroups) {
+      if (other === g) continue;
+      // Only allow landing on groups that are resting/idle (not falling/crumbling/removed)
+      if (
+        other.state !== FB_STATE_IDLE_STABLE &&
+        other.state !== FB_STATE_LANDED_STABLE &&
+        other.state !== FB_STATE_WARNING &&
+        other.state !== FB_STATE_PRE_FALL_PAUSE
+      ) continue;
+
+      // Broad-phase against other group's bounding box
+      const oLeft   = getFBGroupLeftWorld(other);
+      const oRight  = getFBGroupRightWorld(other);
+      const oTop    = getFBGroupTopWorld(other);
+
+      if (rectRight <= oLeft || rectLeft >= oRight) continue;
+      if (oTop < rectTop) continue;
+      if (rectBottom < oTop - FB_COLLISION_EPSILON) continue;
+
+      // Per-rect check against the other group's collider rects
+      const ox = other.restXWorld;
+      const oy = other.restYWorld + other.offsetYWorld;
+      for (let ori = 0; ori < other.colliderRectCount; ori++) {
+        const orLeft  = ox + other.colliderRelXWorld[ori];
+        const orRight = orLeft + other.colliderWWorld[ori];
+        const orTop   = oy + other.colliderRelYWorld[ori];
+
+        if (rectRight <= orLeft || rectLeft >= orRight) continue;
+        if (orTop < rectTop) continue;
+        if (rectBottom < orTop - FB_COLLISION_EPSILON) continue;
+
+        const snapGroupTopY = orTop - g.colliderRelYWorld[ri] - g.colliderHWorld[ri];
+        if (snapGroupTopY < nearestGroupTopY) {
+          nearestGroupTopY = snapGroupTopY;
+        }
       }
     }
   }
 
-  // ── Other falling block groups in stable/landed states ───────────────────
-  for (const other of world.fallingBlockGroups) {
-    if (other === g) continue;
-    if (
-      other.state !== FB_STATE_IDLE_STABLE &&
-      other.state !== FB_STATE_LANDED_STABLE &&
-      other.state !== FB_STATE_WARNING &&
-      other.state !== FB_STATE_PRE_FALL_PAUSE
-    ) continue;
+  if (nearestGroupTopY === Infinity) return null;
 
-    const oLeft   = getFBGroupLeftWorld(other);
-    const oTop    = getFBGroupTopWorld(other);
-    const oRight  = getFBGroupRightWorld(other);
+  // ── Compute landing contact segments ──────────────────────────────────────
+  // Walk through the collider rects again at the snapped position and record
+  // which rects' bottom edges align with an underlying surface.
+  const snappedGY = nearestGroupTopY; // = g.restYWorld + new offsetYWorld
 
-    if (groupRight <= oLeft || groupLeft >= oRight) continue;
-    if (oTop < groupTop) continue;
-    if (groupBottom >= oTop - FB_COLLISION_EPSILON) {
-      if (oTop < nearestSurfaceTop) {
-        nearestSurfaceTop = oTop;
+  for (let ri = 0; ri < g.colliderRectCount; ri++) {
+    const rectLeft   = gx + g.colliderRelXWorld[ri];
+    const rectRight  = rectLeft + g.colliderWWorld[ri];
+    const rectBottom = snappedGY + g.colliderRelYWorld[ri] + g.colliderHWorld[ri];
+
+    // Static walls
+    for (let wi = 0; wi < world.wallCount; wi++) {
+      if (world.wallIsPlatformFlag[wi] === 1) continue;
+      if (world.wallRampOrientationIndex[wi] !== 255) continue;
+      if (fbWallIndexSet.has(wi)) continue;
+
+      const wLeft  = world.wallXWorld[wi];
+      const wTop   = world.wallYWorld[wi];
+      const wRight = wLeft + world.wallWWorld[wi];
+
+      if (Math.abs(rectBottom - wTop) > FB_COLLISION_EPSILON + LAND_OVERLAP_EPSILON) continue;
+      const cx1 = Math.max(rectLeft, wLeft);
+      const cx2 = Math.min(rectRight, wRight);
+      if (cx2 <= cx1) continue;
+
+      if (tmpCount < MAX_LANDING_CONTACTS) {
+        tmpX1[tmpCount] = cx1;
+        tmpX2[tmpCount] = cx2;
+        tmpY[tmpCount]  = wTop;
+        tmpCount++;
+      }
+    }
+
+    // Other stable falling block groups
+    for (const other of world.fallingBlockGroups) {
+      if (other === g) continue;
+      if (other.state !== FB_STATE_IDLE_STABLE && other.state !== FB_STATE_LANDED_STABLE &&
+          other.state !== FB_STATE_WARNING && other.state !== FB_STATE_PRE_FALL_PAUSE) continue;
+
+      const ox = other.restXWorld;
+      const oy = other.restYWorld + other.offsetYWorld;
+      for (let ori = 0; ori < other.colliderRectCount; ori++) {
+        const orLeft  = ox + other.colliderRelXWorld[ori];
+        const orRight = orLeft + other.colliderWWorld[ori];
+        const orTop   = oy + other.colliderRelYWorld[ori];
+
+        if (Math.abs(rectBottom - orTop) > FB_COLLISION_EPSILON + LAND_OVERLAP_EPSILON) continue;
+        const cx1 = Math.max(rectLeft, orLeft);
+        const cx2 = Math.min(rectRight, orRight);
+        if (cx2 <= cx1) continue;
+
+        if (tmpCount < MAX_LANDING_CONTACTS) {
+          tmpX1[tmpCount] = cx1;
+          tmpX2[tmpCount] = cx2;
+          tmpY[tmpCount]  = orTop;
+          tmpCount++;
+        }
       }
     }
   }
 
-  if (nearestSurfaceTop === Infinity) return null;
-  return nearestSurfaceTop - g.hWorld;
+  // Write contacts into the group (merge overlapping segments at the same Y)
+  g.lastLandingContactCount = 0;
+  for (let k = 0; k < tmpCount; k++) {
+    let merged = false;
+    for (let m = 0; m < g.lastLandingContactCount; m++) {
+      if (Math.abs(g.lastLandingContactYWorld[m] - tmpY[k]) < FB_COLLISION_EPSILON &&
+          tmpX1[k] <= g.lastLandingContactX2World[m] + FB_COLLISION_EPSILON &&
+          tmpX2[k] >= g.lastLandingContactX1World[m] - FB_COLLISION_EPSILON) {
+        // Extend existing segment
+        g.lastLandingContactX1World[m] = Math.min(g.lastLandingContactX1World[m], tmpX1[k]);
+        g.lastLandingContactX2World[m] = Math.max(g.lastLandingContactX2World[m], tmpX2[k]);
+        merged = true;
+        break;
+      }
+    }
+    if (!merged && g.lastLandingContactCount < MAX_LANDING_CONTACTS) {
+      const idx = g.lastLandingContactCount++;
+      g.lastLandingContactX1World[idx] = tmpX1[k];
+      g.lastLandingContactX2World[idx] = tmpX2[k];
+      g.lastLandingContactYWorld[idx]  = tmpY[k];
+    }
+  }
+
+  return nearestGroupTopY;
 }
 
 // ── Entity crush detection ────────────────────────────────────────────────────
@@ -330,14 +523,13 @@ function findLandingSurface(
  * Check whether any entity (player or enemy) was caught under the landing group
  * and apply lethal damage.
  *
- * This is called once when the group transitions to landedStable.
+ * Uses per-rect collision so only entities under actual tile shapes are crushed.
+ * Called once when the group transitions to landedStable or crumbling.
  */
 function checkCrush(g: FallingBlockGroup, world: WorldState): void {
-  const gLeft   = getFBGroupLeftWorld(g);
-  const gTop    = getFBGroupTopWorld(g);
-  const gRight  = getFBGroupRightWorld(g);
-  const gBottom = getFBGroupBottomWorld(g);
-  const gCenterX = (gLeft + gRight) * 0.5;
+  const gx = g.restXWorld;
+  const gy = g.restYWorld + g.offsetYWorld;
+  const gCenterX = gx + g.wWorld * 0.5;
 
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const c = world.clusters[ci];
@@ -348,16 +540,23 @@ function checkCrush(g: FallingBlockGroup, world: WorldState): void {
     const cTop    = c.positionYWorld - c.halfHeightWorld;
     const cBottom = c.positionYWorld + c.halfHeightWorld;
 
-    // Overlap check
-    if (cLeft >= gRight || cRight <= gLeft || cTop >= gBottom || cBottom <= gTop) continue;
+    // Per-rect overlap check
+    let crushed = false;
+    for (let ri = 0; ri < g.colliderRectCount; ri++) {
+      const rx1 = gx + g.colliderRelXWorld[ri];
+      const ry1 = gy + g.colliderRelYWorld[ri];
+      const rx2 = rx1 + g.colliderWWorld[ri];
+      const ry2 = ry1 + g.colliderHWorld[ri];
+      if (cLeft < rx2 && cRight > rx1 && cTop < ry2 && cBottom > ry1) {
+        crushed = true;
+        break;
+      }
+    }
+    if (!crushed) continue;
 
     if (c.isPlayerFlag === 1) {
-      // Apply lethal crush damage to the player
-      // TODO: replace CRUSH_DAMAGE with a proper "instakill" API if one is added
-      applyPlayerDamageWithKnockback(c, CRUSH_DAMAGE, gCenterX, gTop);
+      applyPlayerDamageWithKnockback(c, CRUSH_DAMAGE, gCenterX, gy);
     } else {
-      // Kill enemy directly (no crush damage API for enemies yet)
-      // TODO: replace with formal enemy instakill API when available
       c.healthPoints = 0;
       c.isAliveFlag  = 0;
     }
@@ -431,6 +630,14 @@ export function tickFallingBlocks(world: WorldState, dtMs: number): void {
   if (world.fallingBlockGroups.length === 0) return;
   const dtSec = dtMs / 1000.0;
 
+  // Build a set of wall indices owned by ANY falling block group so that the
+  // static wall scan in findLandingSurface can skip them all.
+  // Group count is small (≤ MAX_FALLING_BLOCK_GROUPS = 64), so this is cheap.
+  const fbWallIndexSet = new Set<number>();
+  for (const g of world.fallingBlockGroups) {
+    if (g.wallIndex >= 0) fbWallIndexSet.add(g.wallIndex);
+  }
+
   for (const g of world.fallingBlockGroups) {
     switch (g.state) {
 
@@ -489,7 +696,7 @@ export function tickFallingBlocks(world: WorldState, dtMs: number): void {
           g.offsetYWorld += step;
           remainingMovement -= step;
 
-          const snapY = findLandingSurface(g, world);
+          const snapY = findLandingSurface(g, world, fbWallIndexSet);
           if (snapY !== null && snapY <= g.restYWorld + g.offsetYWorld + LAND_OVERLAP_EPSILON) {
             // Snap the group to the contact surface
             g.offsetYWorld = snapY - g.restYWorld;
@@ -499,21 +706,23 @@ export function tickFallingBlocks(world: WorldState, dtMs: number): void {
         }
 
         if (landed) {
-          if (g.variant === 'crumbling') {
-            // Crumbling variant: enter crumbling state instead of stable
+          g.velocityYWorld = 0;
+          if (g.variant === 'crumbling' && g.hasReachedTopSpeedFlag === 1) {
+            // Reached terminal speed before landing — crumble countdown is already
+            // running; just enter the crumbling visual state to let it finish.
             g.state = FB_STATE_CRUMBLING;
             g.stateTimerTicks = 0;
-            g.crumbleTimerTicks = CRUMBLE_DELAY_TICKS + CRUMBLE_DURATION_TICKS;
+            // crumbleTimerTicks keeps its current countdown value
           } else {
+            // Did not reach terminal speed before landing — become stable.
             g.state = FB_STATE_LANDED_STABLE;
             g.stateTimerTicks = 0;
           }
-          g.velocityYWorld = 0;
           updateWallSlot(g, world);
           checkCrush(g, world);
           triggerGroupsBelow(g, world);
         } else {
-          // Check if the crumbling variant has reached top speed
+          // Still airborne — check if the crumbling variant just hit terminal speed
           if (
             g.variant === 'crumbling' &&
             g.hasReachedTopSpeedFlag === 0 &&
@@ -523,12 +732,14 @@ export function tickFallingBlocks(world: WorldState, dtMs: number): void {
             g.crumbleTimerTicks = CRUMBLE_DELAY_TICKS + CRUMBLE_DURATION_TICKS;
           }
 
-          // Crumbling variant: once the crumble timer starts, countdown even while falling
+          // Crumbling variant: countdown once terminal speed is reached
           if (g.variant === 'crumbling' && g.hasReachedTopSpeedFlag === 1) {
             g.crumbleTimerTicks -= 1;
             if (g.crumbleTimerTicks <= 0) {
+              // Disappeared mid-air — clear collision immediately
               g.state = FB_STATE_REMOVED;
               g.velocityYWorld = 0;
+              updateWallSlot(g, world);
             }
           }
         }
@@ -548,18 +759,22 @@ export function tickFallingBlocks(world: WorldState, dtMs: number): void {
         g.crumbleTimerTicks -= 1;
         if (g.crumbleTimerTicks <= 0) {
           g.state = FB_STATE_REMOVED;
+          // Clear collision immediately on removal
+          updateWallSlot(g, world);
         }
         break;
       }
 
       // ── removed ────────────────────────────────────────────────────────────
       case FB_STATE_REMOVED: {
-        // Already fully removed — just keep the wall slot cleared
+        // Wall slot was already cleared when transitioning to removed.
         break;
       }
     }
 
-    // Sync wall slot position every tick (covers both moving and static states)
-    updateWallSlot(g, world);
+    // Sync wall slot position every tick for all non-removed states
+    if (g.state !== FB_STATE_REMOVED) {
+      updateWallSlot(g, world);
+    }
   }
 }

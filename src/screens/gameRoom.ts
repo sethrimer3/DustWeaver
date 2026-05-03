@@ -20,7 +20,7 @@ import {
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
 import { initRopeSegments, presettleRopes } from '../sim/ropes/ropeSim';
-import { MAX_TILES_PER_GROUP } from '../sim/fallingBlocks/fallingBlockTypes';
+import { MAX_TILES_PER_GROUP, MAX_LANDING_CONTACTS } from '../sim/fallingBlocks/fallingBlockTypes';
 import type { FallingBlockGroup } from '../sim/fallingBlocks/fallingBlockTypes';
 
 const FIREFLY_AREA_SPAWN_SPEED_WORLD = 30.0;
@@ -516,7 +516,8 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
     const wWorld     = (maxX - minX + 1) * BLOCK_SIZE_MEDIUM;
     const hWorld     = (maxY - minY + 1) * BLOCK_SIZE_MEDIUM;
 
-    // Reserve a wall slot for this group
+    // Reserve a wall slot for this group (bounding-box AABB — used by the
+    // movement system so the player can stand on the group).
     let wallIndex = -1;
     if (world.wallCount < MAX_WALLS) {
       wallIndex = world.wallCount++;
@@ -534,13 +535,26 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
       world.wallBouncePadSpeedFactorIndex[wallIndex] = 0;
     }
 
-    // Build per-tile relative offsets (clamped to MAX_TILES_PER_GROUP)
-    const tileRelXWorld = new Float32Array(MAX_TILES_PER_GROUP);
-    const tileRelYWorld = new Float32Array(MAX_TILES_PER_GROUP);
+    // Clamp to hard cap (editor/importer should enforce this, but be safe)
     const tileCount = Math.min(component.length, MAX_TILES_PER_GROUP);
+
+    // Allocate exact-size arrays so collision shape matches rendered shape.
+    const tileRelXWorld = new Float32Array(tileCount);
+    const tileRelYWorld = new Float32Array(tileCount);
+    const colliderRelXWorld = new Float32Array(tileCount);
+    const colliderRelYWorld = new Float32Array(tileCount);
+    const colliderWWorld    = new Float32Array(tileCount);
+    const colliderHWorld    = new Float32Array(tileCount);
+
     for (let ti = 0; ti < tileCount; ti++) {
-      tileRelXWorld[ti] = (component[ti].xBlock - minX) * BLOCK_SIZE_MEDIUM;
-      tileRelYWorld[ti] = (component[ti].yBlock - minY) * BLOCK_SIZE_MEDIUM;
+      const relX = (component[ti].xBlock - minX) * BLOCK_SIZE_MEDIUM;
+      const relY = (component[ti].yBlock - minY) * BLOCK_SIZE_MEDIUM;
+      tileRelXWorld[ti] = relX;
+      tileRelYWorld[ti] = relY;
+      colliderRelXWorld[ti] = relX;
+      colliderRelYWorld[ti] = relY;
+      colliderWWorld[ti]    = BLOCK_SIZE_MEDIUM;
+      colliderHWorld[ti]    = BLOCK_SIZE_MEDIUM;
     }
 
     const group: FallingBlockGroup = {
@@ -553,6 +567,11 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
       tileCount,
       tileRelXWorld,
       tileRelYWorld,
+      colliderRectCount:     tileCount,
+      colliderRelXWorld,
+      colliderRelYWorld,
+      colliderWWorld,
+      colliderHWorld,
       offsetYWorld:          0,
       velocityYWorld:        0,
       shakeOffsetXWorld:     0,
@@ -560,6 +579,10 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
       stateTimerTicks:       0,
       hasReachedTopSpeedFlag: 0,
       crumbleTimerTicks:     0,
+      lastLandingContactCount: 0,
+      lastLandingContactX1World: new Float32Array(MAX_LANDING_CONTACTS),
+      lastLandingContactX2World: new Float32Array(MAX_LANDING_CONTACTS),
+      lastLandingContactYWorld:  new Float32Array(MAX_LANDING_CONTACTS),
       wallIndex,
       lastTriggerType:       0,
     };

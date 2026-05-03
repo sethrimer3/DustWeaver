@@ -131,6 +131,58 @@ function wallsOverlap(a: EditorWall, bx: number, by: number, bw: number, bh: num
          a.yBlock + a.hBlock > by;
 }
 
+// ── Falling block overlap helpers ─────────────────────────────────────────────
+
+/**
+ * Returns true if a falling block tile already occupies the given block cell.
+ */
+export function isFallingBlockAt(room: EditorRoomData, xBlock: number, yBlock: number): boolean {
+  return (room.fallingBlocks ?? []).some(fb => fb.xBlock === xBlock && fb.yBlock === yBlock);
+}
+
+/**
+ * Returns true if any falling block tile overlaps the given block rectangle
+ * (xBlock, yBlock, wBlock × hBlock).
+ */
+export function rectOverlapsFallingBlocks(
+  room: EditorRoomData,
+  xBlock: number, yBlock: number,
+  wBlock: number, hBlock: number,
+): boolean {
+  return (room.fallingBlocks ?? []).some(fb =>
+    fb.xBlock >= xBlock && fb.xBlock < xBlock + wBlock &&
+    fb.yBlock >= yBlock && fb.yBlock < yBlock + hBlock,
+  );
+}
+
+/**
+ * Returns true if any solid editor object (interior wall, crumble block, bounce
+ * pad) overlaps the given block rectangle.
+ *
+ * Used when placing falling block tiles to prevent overlap with solid geometry.
+ */
+export function rectOverlapsSolidEditorObject(
+  room: EditorRoomData,
+  xBlock: number, yBlock: number,
+  wBlock: number, hBlock: number,
+): boolean {
+  // Interior walls
+  if (room.interiorWalls.some(w => wallsOverlap(w, xBlock, yBlock, wBlock, hBlock))) return true;
+  // Crumble blocks
+  if ((room.crumbleBlocks ?? []).some(b => {
+    const bw = b.wBlock ?? 1;
+    const bh = b.hBlock ?? 1;
+    return xBlock < b.xBlock + bw && xBlock + wBlock > b.xBlock &&
+           yBlock < b.yBlock + bh && yBlock + hBlock > b.yBlock;
+  })) return true;
+  // Bounce pads
+  if ((room.bouncePads ?? []).some(b =>
+    xBlock < b.xBlock + b.wBlock && xBlock + wBlock > b.xBlock &&
+    yBlock < b.yBlock + b.hBlock && yBlock + hBlock > b.yBlock,
+  )) return true;
+  return false;
+}
+
 
 function isInsideRoom(room: EditorRoomData, xBlock: number, yBlock: number): boolean {
   return xBlock >= 0 && yBlock >= 0 && xBlock < room.widthBlocks && yBlock < room.heightBlocks;
@@ -475,6 +527,8 @@ export function placeAtCursor(state: EditorState): void {
         by < b.yBlock + b.hBlock && by + hBlock > b.yBlock,
       );
       if (overlapsBounce) return;
+      // Don't place over falling block tiles
+      if (rectOverlapsFallingBlocks(room, bx, by, wBlock, hBlock)) return;
       if (!room.bouncePads) room.bouncePads = [];
       const bp: EditorBouncePad = {
         uid: allocateUid(state),
@@ -501,7 +555,7 @@ export function placeAtCursor(state: EditorState): void {
 
       if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
 
-      // Prevent overlapping crumble blocks (can't place on top of itself).
+      // Prevent overlapping crumble blocks or falling block tiles
       const crumbles = room.crumbleBlocks ?? [];
       const overlapsCrumble = crumbles.some(b => {
         const bw = b.wBlock ?? 1;
@@ -510,6 +564,7 @@ export function placeAtCursor(state: EditorState): void {
                by < b.yBlock + bh && by + hBlock > b.yBlock;
       });
       if (overlapsCrumble) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, wBlock, hBlock)) return;
 
       if (!room.crumbleBlocks) room.crumbleBlocks = [];
       room.crumbleBlocks.push({
@@ -528,11 +583,11 @@ export function placeAtCursor(state: EditorState): void {
     // ── Falling block tiles ──────────────────────────────────────────────────
     if (item.isFallingBlockItem === 1) {
       const variant = item.fallingBlockVariant ?? 'tough';
-      // Don't place if a falling block tile of any variant already occupies this cell
-      const existingFBs = room.fallingBlocks ?? [];
-      const occupied = existingFBs.some(fb => fb.xBlock === bx && fb.yBlock === by);
-      if (occupied) return;
       if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
+      // Don't place if a falling block tile already occupies this cell
+      if (isFallingBlockAt(room, bx, by)) return;
+      // Don't place over solid objects (walls, crumble blocks, bounce pads)
+      if (rectOverlapsSolidEditorObject(room, bx, by, 1, 1)) return;
       if (!room.fallingBlocks) room.fallingBlocks = [];
       const fb: EditorFallingBlock = {
         uid: allocateUid(state),
@@ -545,9 +600,10 @@ export function placeAtCursor(state: EditorState): void {
     }
 
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
-    // Prevent overlapping walls
+    // Prevent overlapping walls or falling block tiles
     const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
     if (overlaps) return;
+    if (rectOverlapsFallingBlocks(room, bx, by, wBlock, hBlock)) return;
     room.interiorWalls.push({
       uid: allocateUid(state),
       xBlock: bx,
