@@ -1274,10 +1274,10 @@ function _tickGrappleWrapping(world: WorldState, player: import('./state').Clust
   const minY = world.wallYWorld[hitWallIdx];
   const maxX = minX + world.wallWWorld[hitWallIdx];
   const maxY = minY + world.wallHWorld[hitWallIdx];
-  const wallCx = (minX + maxX) * 0.5;
-  const wallCy = (minY + maxY) * 0.5;
 
   // The 4 AABB corners with outward skin offsets.
+  // Corner offset direction: inward from the center of the wall to ensure the
+  // wrap point sits just outside the wall surface, not inside it.
   const skin = GRAPPLE_WRAP_CORNER_SKIN_WORLD;
   const corners: Array<{ cx: number; cy: number }> = [
     { cx: minX - skin, cy: minY - skin },
@@ -1285,8 +1285,6 @@ function _tickGrappleWrapping(world: WorldState, player: import('./state').Clust
     { cx: minX - skin, cy: maxY + skin },
     { cx: maxX + skin, cy: maxY + skin },
   ];
-  // Suppress tsc "unused variable" for wallCx/wallCy — they are referenced below
-  void wallCx; void wallCy;
 
   // Evaluate each corner and pick the best valid one (closest to the ray intersection).
   let bestCornerX = 0.0;

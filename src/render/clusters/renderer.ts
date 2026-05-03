@@ -2,6 +2,7 @@ import { WorldSnapshot } from '../snapshot';
 import { DASH_RECHARGE_ANIM_TICKS } from '../../sim/clusters/dashConstants';
 import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_MEDIUM, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
+import { MAX_GRAPPLE_WRAP_POINTS } from '../../sim/world';
 import type { PlayerCloak } from './playerCloak';
 import type { PhantomCloakExtension } from './phantomCloak';
 import { loadImg, isSpriteReady } from '../imageCache';
@@ -547,10 +548,10 @@ export function renderClusters(
 }
 
 // Pre-allocated scratch arrays for the grapple polyline waypoints.
-// Max waypoints = 1 (player) + MAX_GRAPPLE_WRAP_POINTS (3) + 1 (anchor) = 5.
+// Max waypoints = 1 (player) + MAX_GRAPPLE_WRAP_POINTS + 1 (anchor).
 // Module-level to avoid per-frame heap allocation.
-const _scratchWpX = new Float32Array(5);
-const _scratchWpY = new Float32Array(5);
+const _scratchWpX = new Float32Array(2 + MAX_GRAPPLE_WRAP_POINTS);
+const _scratchWpY = new Float32Array(2 + MAX_GRAPPLE_WRAP_POINTS);
 
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
   const hasActiveGrapple = snapshot.isGrappleActiveFlag === 1;
