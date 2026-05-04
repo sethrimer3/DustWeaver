@@ -47,6 +47,8 @@ import {
   isFolderBasedTheme,
   getTheme1x1Sprite,
   getTheme2x2Sprite,
+  getTheme1x1SpriteShaded,
+  getTheme2x2SpriteShaded,
 } from './folderBlockThemes';
 import {
   CachedWallLayout,
@@ -474,23 +476,26 @@ function _doRenderWallTilesDirect(
       const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
       const material = themeToProceduralMaterial(resolvedTheme, _activeWorldNumber);
+
+      // Compute open-air sides for the 2×2 group: a side is open when ALL
+      // cells along that border have no solid neighbour on that edge.
+      // Used by both the procedural and folder-based paths.
+      const northOpenA = !isWallOccupied(wallLayout.occupied, col,     row - 1);
+      const northOpenB = !isWallOccupied(wallLayout.occupied, col + 1, row - 1);
+      const southOpenA = !isWallOccupied(wallLayout.occupied, col,     row + 2);
+      const southOpenB = !isWallOccupied(wallLayout.occupied, col + 1, row + 2);
+      const eastOpenA  = !isWallOccupied(wallLayout.occupied, col + 2, row    );
+      const eastOpenB  = !isWallOccupied(wallLayout.occupied, col + 2, row + 1);
+      const westOpenA  = !isWallOccupied(wallLayout.occupied, col - 1, row    );
+      const westOpenB  = !isWallOccupied(wallLayout.occupied, col - 1, row + 1);
+      const openAirSidesMask2x2 =
+        ((northOpenA && northOpenB) ? OPEN_AIR_SIDE_N : 0) |
+        ((eastOpenA  && eastOpenB)  ? OPEN_AIR_SIDE_E : 0) |
+        ((southOpenA && southOpenB) ? OPEN_AIR_SIDE_S : 0) |
+        ((westOpenA  && westOpenB)  ? OPEN_AIR_SIDE_W : 0);
+
       if (material !== null) {
         // Procedural path: base sprite cut with 2×2 block template.
-        // Compute open-air sides for the 2×2 group: a side is open when ALL
-        // cells along that border have no solid neighbor on that edge.
-        const northOpenA = !isWallOccupied(wallLayout.occupied, col,     row - 1);
-        const northOpenB = !isWallOccupied(wallLayout.occupied, col + 1, row - 1);
-        const southOpenA = !isWallOccupied(wallLayout.occupied, col,     row + 2);
-        const southOpenB = !isWallOccupied(wallLayout.occupied, col + 1, row + 2);
-        const eastOpenA  = !isWallOccupied(wallLayout.occupied, col + 2, row    );
-        const eastOpenB  = !isWallOccupied(wallLayout.occupied, col + 2, row + 1);
-        const westOpenA  = !isWallOccupied(wallLayout.occupied, col - 1, row    );
-        const westOpenB  = !isWallOccupied(wallLayout.occupied, col - 1, row + 1);
-        const openAirSidesMask2x2 =
-          ((northOpenA && northOpenB) ? OPEN_AIR_SIDE_N : 0) |
-          ((eastOpenA  && eastOpenB)  ? OPEN_AIR_SIDE_E : 0) |
-          ((southOpenA && southOpenB) ? OPEN_AIR_SIDE_S : 0) |
-          ((westOpenA  && westOpenB)  ? OPEN_AIR_SIDE_W : 0);
         const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, _activeWorldNumber, openAirSidesMask2x2);
         if (procSprite !== null) {
           ctx.drawImage(procSprite, tileX, tileY, drawSize, drawSize);
@@ -499,13 +504,13 @@ function _doRenderWallTilesDirect(
           drawFallbackTile(ctx, tileX, tileY, drawSize);
         }
       } else {
-        // Legacy flat-sprite path (brownRock, dirt).
+        // Legacy flat-sprite path (brownRock, dirt) and folder-based themes.
         const sprite = getFullSpriteFor2x2(resolvedTheme, blockSizePx);
         if (sprite !== null && isSpriteReady(sprite)) {
           ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
         } else if (isFolderBasedTheme(resolvedTheme)) {
-          // Folder-based theme: use 16×16 source sprite for the 2×2 group.
-          const folderSprite = getTheme2x2Sprite(resolvedTheme, col, row, _activeWorldNumber);
+          // Folder-based theme: use edge-shaded 16×16 canvas for the 2×2 group.
+          const folderSprite = getTheme2x2SpriteShaded(resolvedTheme, col, row, _activeWorldNumber, openAirSidesMask2x2, blockSizePx);
           if (folderSprite !== null) {
             ctx.drawImage(folderSprite, tileX, tileY, drawSize, drawSize);
           } else {
@@ -564,7 +569,8 @@ function _doRenderWallTilesDirect(
 
     if (material !== null) {
       // Procedural path (blackRock): base sprite cut with 1×1 block template.
-      // Only apply the inversion filter on sides that are actually open to air.
+      // Edge shading is only applied on sides that are actually open to air
+      // so adjacent same-material blocks share a seamless join.
       const openAirSidesMask =
         (northSolid ? 0 : OPEN_AIR_SIDE_N) |
         (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
@@ -578,8 +584,15 @@ function _doRenderWallTilesDirect(
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else if (isFolderBasedTheme(tileTheme)) {
-      // Folder-based theme: use 8×8 nearest-neighbor downscaled sprite for 1×1 tiles.
-      const folderSprite = getTheme1x1Sprite(tileTheme, col, row, _activeWorldNumber);
+      // Folder-based theme: use edge-shaded 8×8 canvas for 1×1 tiles.
+      // Shading uses the same openAirSidesMask as the procedural path so
+      // solid-neighbour sides do not get a dark seam.
+      const openAirSidesMask =
+        (northSolid ? 0 : OPEN_AIR_SIDE_N) |
+        (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
+        (southSolid ? 0 : OPEN_AIR_SIDE_S) |
+        (westSolid  ? 0 : OPEN_AIR_SIDE_W);
+      const folderSprite = getTheme1x1SpriteShaded(tileTheme, col, row, _activeWorldNumber, openAirSidesMask, blockSizePx);
       if (folderSprite !== null) {
         ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
