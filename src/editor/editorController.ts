@@ -379,6 +379,7 @@ export function createEditorController(
             room.id,
             editorTargetTrans,
             room.widthBlocks,
+            room.heightBlocks,
           );
           linkSourceRoomData = null;
           linkTargetRoomId = '';
@@ -584,6 +585,7 @@ export function createEditorController(
                 linkTargetRoomId || state.roomData.id,
                 targetTrans,
                 state.roomData.widthBlocks,
+                state.roomData.heightBlocks,
               );
               linkSourceRoomData = null;
               linkTargetRoomId = '';

@@ -37,6 +37,7 @@ export function completeTransitionLink(
   targetRoomId: string,
   targetTransition: EditorTransition,
   targetRoomWidthBlocks?: number,
+  targetRoomHeightBlocks?: number,
 ): void {
   const sourceTrans = sourceRoomTransitions.find(t => t.uid === state.linkSourceTransitionUid);
   if (sourceTrans) {
@@ -53,8 +54,8 @@ export function completeTransitionLink(
     } else if (targetTransition.direction === 'up') {
       sourceTrans.targetSpawnBlock = [targetTransition.positionBlock + spawnOffset, SPAWN_INSET_BLOCKS];
     } else {
-      // down
-      sourceTrans.targetSpawnBlock = [targetTransition.positionBlock + spawnOffset, SPAWN_INSET_BLOCKS];
+      const bottomY = (targetRoomHeightBlocks ?? 30) - SPAWN_INSET_BLOCKS - 1;
+      sourceTrans.targetSpawnBlock = [targetTransition.positionBlock + spawnOffset, bottomY];
     }
   }
 

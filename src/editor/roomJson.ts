@@ -687,10 +687,13 @@ function buildBoundaryWalls(
 ): RoomWallDef[] {
   const walls: RoomWallDef[] = [];
 
-  // Top wall (full width) — invisible boundary
-  walls.push({ xBlock: 0, yBlock: 0, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
-  // Bottom wall (full width) — invisible boundary
-  walls.push({ xBlock: 0, yBlock: heightBlocks - 1, wBlock: widthBlocks, hBlock: 1, isInvisibleFlag: 1 });
+  // Top wall — split around edge-transition openings only
+  const upTunnels = transitions.filter(t => t.direction === 'up' && t.depthBlock === undefined);
+  buildHorizontalWall(walls, 0, 0, widthBlocks, upTunnels);
+
+  // Bottom wall — split around edge-transition openings only
+  const downTunnels = transitions.filter(t => t.direction === 'down' && t.depthBlock === undefined);
+  buildHorizontalWall(walls, heightBlocks - 1, 0, widthBlocks, downTunnels);
 
   // Left wall — split around edge-transition openings only
   const leftTunnels = transitions.filter(t => t.direction === 'left' && t.depthBlock === undefined);
@@ -728,8 +731,34 @@ function buildSideWall(
   }
 }
 
+function buildHorizontalWall(
+  out: RoomWallDef[],
+  yBlock: number,
+  startXBlock: number,
+  totalWidthBlocks: number,
+  tunnels: EditorTransition[],
+): void {
+  const sorted = [...tunnels].sort((a, b) => a.positionBlock - b.positionBlock);
+  let currentX = startXBlock;
+  const endX = startXBlock + totalWidthBlocks;
+
+  for (const tunnel of sorted) {
+    const tunnelLeft = tunnel.positionBlock;
+    const tunnelRight = tunnel.positionBlock + tunnel.openingSizeBlocks;
+    if (tunnelLeft > currentX) {
+      out.push({ xBlock: currentX, yBlock, wBlock: tunnelLeft - currentX, hBlock: 1, isInvisibleFlag: 1 });
+    }
+    currentX = tunnelRight;
+  }
+
+  if (currentX < endX) {
+    out.push({ xBlock: currentX, yBlock, wBlock: endX - currentX, hBlock: 1, isInvisibleFlag: 1 });
+  }
+}
+
 function buildTunnelWalls(
   roomWidthBlocks: number,
+  roomHeightBlocks: number,
   transitions: EditorTransition[],
 ): RoomWallDef[] {
   const walls: RoomWallDef[] = [];
@@ -741,6 +770,8 @@ function buildTunnelWalls(
 
     const topY = tunnel.positionBlock - 1;
     const bottomY = tunnel.positionBlock + tunnel.openingSizeBlocks;
+    const leftX = tunnel.positionBlock - 1;
+    const rightX = tunnel.positionBlock + tunnel.openingSizeBlocks;
 
     if (tunnel.direction === 'left') {
       walls.push({ xBlock: -TUNNEL_OVERHANG_BLOCKS, yBlock: topY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
@@ -748,8 +779,13 @@ function buildTunnelWalls(
     } else if (tunnel.direction === 'right') {
       walls.push({ xBlock: roomWidthBlocks - 1, yBlock: topY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
       walls.push({ xBlock: roomWidthBlocks - 1, yBlock: bottomY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
+    } else if (tunnel.direction === 'up') {
+      walls.push({ xBlock: leftX, yBlock: -TUNNEL_OVERHANG_BLOCKS, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
+      walls.push({ xBlock: rightX, yBlock: -TUNNEL_OVERHANG_BLOCKS, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
+    } else if (tunnel.direction === 'down') {
+      walls.push({ xBlock: leftX, yBlock: roomHeightBlocks - 1, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
+      walls.push({ xBlock: rightX, yBlock: roomHeightBlocks - 1, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
     }
-    // TODO: up/down tunnel wall generation when runtime supports it
   }
 
   return walls;
@@ -761,7 +797,7 @@ function buildTunnelWalls(
  */
 export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
   const boundaryWalls = buildBoundaryWalls(data.widthBlocks, data.heightBlocks, data.transitions);
-  const tunnelWalls = buildTunnelWalls(data.widthBlocks, data.transitions);
+  const tunnelWalls = buildTunnelWalls(data.widthBlocks, data.heightBlocks, data.transitions);
 
   const interiorWalls: RoomWallDef[] = data.interiorWalls.map(w => ({
     xBlock: w.xBlock,

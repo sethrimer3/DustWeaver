@@ -858,6 +858,10 @@ export function startGameScreen(
         isInTunnel = px < TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
       } else if (t.direction === 'right') {
         isInTunnel = px > roomWidthWorld - TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
+      } else if (t.direction === 'up') {
+        isInTunnel = py < TUNNEL_DETECT_MARGIN_WORLD && px >= openTopWorld && px <= openBottomWorld;
+      } else if (t.direction === 'down') {
+        isInTunnel = py > roomHeightWorld - TUNNEL_DETECT_MARGIN_WORLD && px >= openTopWorld && px <= openBottomWorld;
       }
 
       if (isInTunnel) {

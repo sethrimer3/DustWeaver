@@ -90,6 +90,29 @@ export function setRoomWorldOverride(roomId: string, worldId: number): void {
   }
 }
 
+/** Links one room transition to another room and spawn point. */
+export function setRoomTransitionLink(
+  roomId: string,
+  transitionIndex: number,
+  targetRoomId: string,
+  targetSpawnBlock: readonly [number, number],
+): boolean {
+  const room = registryMap.get(roomId);
+  const transitions = room?.transitions as RoomDef['transitions'] | undefined;
+  const transition = transitions?.[transitionIndex];
+  if (!room || !transition) return false;
+
+  (transition as {
+    targetRoomId: string;
+    targetSpawnBlock: readonly [number, number];
+  }).targetRoomId = targetRoomId;
+  (transition as {
+    targetRoomId: string;
+    targetSpawnBlock: readonly [number, number];
+  }).targetSpawnBlock = [targetSpawnBlock[0], targetSpawnBlock[1]] as readonly [number, number];
+  return true;
+}
+
 /**
  * Registers a RoomDef directly into the registry.
  * Used by the editor when a new room is created at runtime.

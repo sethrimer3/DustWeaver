@@ -49,6 +49,11 @@
 - [ ] Procedural block sprites show a faint inverted-colour rim on the three innermost pixels next to open air
 - [ ] The rim appears independently from ambient-light darkness settings
 
+## Room Transitions / Map Editor
+- [ ] Edge transitions on ceilings and floors render on the correct map edge and trigger room changes in gameplay
+- [ ] Snapping two transitions together in the visual map editor shows the "Link rooms?" prompt with a 5-second timer bar
+- [ ] Clicking the prompt or "Yes" links both transitions and exported room files include the updated targets
+
 ## Performance
 - [ ] 60 FPS with particles active
 - [ ] Performance overlay shows FPS, frame time, particle count

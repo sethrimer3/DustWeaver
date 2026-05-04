@@ -132,17 +132,24 @@ export function buildMapTab(
       // ── Markers: always at full opacity (doors, tombs, labels) ───────────
       // Doorways — shown in both modes so connections remain readable.
       for (const t of room.transitions) {
-        const openTop = t.positionBlock;
         const openSize = t.openingSizeBlocks;
 
         mapCtx.fillStyle = 'rgba(100,200,255,0.5)';
         for (let d = 0; d < openSize; d++) {
           let bx = 0;
-          const by = openTop + d;
+          let by = 0;
           if (t.direction === 'left') {
             bx = 0;
+            by = t.positionBlock + d;
           } else if (t.direction === 'right') {
             bx = room.widthBlocks - 1;
+            by = t.positionBlock + d;
+          } else if (t.direction === 'up') {
+            bx = t.positionBlock + d;
+            by = 0;
+          } else if (t.direction === 'down') {
+            bx = t.positionBlock + d;
+            by = room.heightBlocks - 1;
           }
           const screenX = centerX + (mapXBlock + bx) * cellSize;
           const screenY = centerY + (mapYBlock + by) * cellSize;
