@@ -3,7 +3,7 @@ import { createClusterState } from '../sim/clusters/state';
 import { initGrappleChainParticles } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
-import { createRng, nextFloat, nextFloatTriangle } from '../sim/rng';
+import { createRng } from '../sim/rng';
 import { createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
 import { renderClusters, renderWalls } from '../render/clusters/renderer';
@@ -53,8 +53,8 @@ import {
   spawnClusterParticles,
   spawnWeaveLoadoutParticles,
   spawnBackgroundFluidParticles,
-  spawnDustPileParticles,
   spawnEnemyClusters,
+  spawnAllDustPiles,
   PARTICLE_COUNT_PER_CLUSTER,
   BACKGROUND_FLUID_COUNT,
   PLAYER_INITIAL_HEALTH,
@@ -64,11 +64,10 @@ import {
   loadRoomHazards,
   loadRoomRopes,
   loadRoomFallingBlocks,
+  loadRoomGrasshoppers,
   worldBgColor,
   drawTunnelDarkness,
   resolveSpawnBlock,
-  DUST_CONTAINER_PICKUP_RADIUS_WORLD,
-  DUST_CONTAINER_DUST_GAIN,
 } from './gameRoom';
 import { renderFrame } from './gameRender';
 import { createCombatTextSystem } from '../render/hud/combatText';
@@ -76,12 +75,13 @@ import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
-import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_CRUMBLE_BLOCKS } from '../sim/world';
+import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import {
   checkRoomTransitions,
 } from './gameTransitions';
+import { processRoomPickups } from './gamePickups';
 
 const FIXED_DT_MS = 16.666;
 
@@ -360,37 +360,10 @@ export function startGameScreen(
     loadRoomFallingBlocks(world, room);
 
     // Reset and spawn grasshoppers
-    world.grasshopperCount = 0;
-    if (room.grasshopperAreas) {
-      for (const area of room.grasshopperAreas) {
-        const areaXWorld = area.xBlock * BLOCK_SIZE_MEDIUM;
-        const areaYWorld = area.yBlock * BLOCK_SIZE_MEDIUM;
-        const areaWidthWorld = area.wBlock * BLOCK_SIZE_MEDIUM;
-        const areaHeightWorld = area.hBlock * BLOCK_SIZE_MEDIUM;
-        for (let g = 0; g < area.count && world.grasshopperCount < MAX_GRASSHOPPERS; g++) {
-          const gi = world.grasshopperCount++;
-          world.grasshopperXWorld[gi] = areaXWorld + areaWidthWorld  * 0.5
-            + nextFloatTriangle(world.rng) * areaWidthWorld  * 0.5;
-          world.grasshopperYWorld[gi] = areaYWorld + areaHeightWorld * 0.5
-            + nextFloatTriangle(world.rng) * areaHeightWorld * 0.5;
-          world.grasshopperVelXWorld[gi] = 0;
-          world.grasshopperVelYWorld[gi] = 0;
-          world.grasshopperHopTimerTicks[gi] = nextFloat(world.rng) * GRASSHOPPER_INITIAL_TIMER_MAX_TICKS;
-          world.isGrasshopperAliveFlag[gi] = 1;
-        }
-      }
-    }
+    loadRoomGrasshoppers(world, room);
 
     // Spawn dust pile particles (unowned Gold Dust for Storm Weave attraction)
-    for (let i = 0; i < world.dustPileCount; i++) {
-      spawnDustPileParticles(
-        world,
-        world.dustPileXWorld[i],
-        world.dustPileYWorld[i],
-        world.dustPileDustCount[i],
-        world.rng,
-      );
-    }
+    spawnAllDustPiles(world);
 
     // Init dust
     environmentalDust.initFromWorld(world, room.worldNumber);
@@ -1046,55 +1019,7 @@ export function startGameScreen(
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
       skillTombEffectRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
-      // Dust container pickup: grants +1 dust container (+4 capacity) and spawns particles.
-      const roomDustContainers = currentRoom.dustContainers ?? [];
-      for (let i = 0; i < roomDustContainers.length; i++) {
-        const pickupKey = `${currentRoom.id}:${i}`;
-        if (collectedDustContainerKeySet.has(pickupKey)) continue;
-
-        const dc = roomDustContainers[i];
-        const cx = (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-        const cy = (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-        const dx = playerForTomb.positionXWorld - cx;
-        const dy = playerForTomb.positionYWorld - cy;
-        if (dx * dx + dy * dy <= DUST_CONTAINER_PICKUP_RADIUS_WORLD * DUST_CONTAINER_PICKUP_RADIUS_WORLD) {
-          collectedDustContainerKeySet.add(pickupKey);
-          // Grant a container to the player's progression state
-          if (progress) {
-            progress.dustContainerCount += 1;
-          }
-          spawnClusterParticles(
-            world,
-            playerForTomb.entityId,
-            playerForTomb.positionXWorld,
-            playerForTomb.positionYWorld,
-            ParticleKind.Physical,
-            DUST_CONTAINER_DUST_GAIN,
-            levelRng,
-          );
-        }
-      }
-
-      // Dust boost jar pickup: spawn temporary dust particles of the jar's kind.
-      // The sim (hazards.ts) sets isDustBoostJarActiveFlag=0 on contact; we detect
-      // the transition here and spawn particles on the renderer side.
-      for (let i = 0; i < world.dustBoostJarCount; i++) {
-        const jarKey = `dustjar:${currentRoom.id}:${i}`;
-        if (world.isDustBoostJarActiveFlag[i] === 0 && !collectedDustContainerKeySet.has(jarKey)) {
-          collectedDustContainerKeySet.add(jarKey);
-          const dustKind = world.dustBoostJarKind[i] as ParticleKind;
-          const dustCount = world.dustBoostJarDustCount[i];
-          spawnClusterParticles(
-            world,
-            playerForTomb.entityId,
-            playerForTomb.positionXWorld,
-            playerForTomb.positionYWorld,
-            dustKind,
-            dustCount,
-            levelRng,
-          );
-        }
-      }
+      processRoomPickups(world, currentRoom, collectedDustContainerKeySet, progress, playerForTomb, levelRng);
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
