@@ -1,11 +1,12 @@
 /**
- * Grapple zip — the double-tap zip-to-anchor state machine.
+ * Grapple zip — the zip-to-anchor state machine.
  *
- * Activated by double-tapping the down key while the grapple is active.
- * The player rockets toward the anchor, decelerates to a stop (stuck phase),
- * then either:
- *   • jump in window  → high-velocity zip-jump in surface normal direction
- *   • window expires  → gentle hop off the surface
+ * Activated by pressing right mouse button while the grapple is attached to a
+ * surface.  The player rockets toward the anchor, decelerates to a stop (stuck
+ * phase), then either:
+ *   • jump pressed within the window → high-velocity zip-jump (direction biased
+ *     toward held horizontal input, or purely in the surface normal direction).
+ *   • window expires without a jump → grapple releases; no automatic launch.
  *
  * Extracted from grapple.ts to keep the zip logic self-contained and the
  * main constraint function focused on normal pendulum physics.
@@ -14,12 +15,11 @@
 import { WorldState } from '../world';
 import { ClusterState } from './state';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
-import { debugSpeedOverrides, ov, GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS } from './movementConstants';
+import { debugSpeedOverrides, ov } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
 import {
   resolveClusterSolidWallCollision,
   resolveClusterFloorCollision,
-  moveClusterByDelta,
 } from './movementCollision';
 import { raycastWalls, releaseGrapple } from './grappleShared';
 
@@ -67,19 +67,19 @@ const GRAPPLE_STUCK_STOP_THRESHOLD_WORLD = 10.0;
 const GRAPPLE_STUCK_DECEL_FACTOR = 0.7;
 
 /**
- * Ticks after coming to a complete stop during which a jump input fires a
- * high-velocity zip-jump in the surface normal direction.  At 60 fps,
- * 15 ticks = 0.25 seconds (¼ second).
+ * Window after reaching the zip endpoint during which a jump press fires a
+ * high-velocity zip-jump.  Tune ZIP_JUMP_WINDOW_SECONDS to adjust feel.
+ * At 60 fps the default 0.15 s gives 9 ticks.
  */
-const GRAPPLE_ZIP_JUMP_WINDOW_TICKS = 15;
+export const ZIP_JUMP_WINDOW_SECONDS = 0.15;
+const GRAPPLE_ZIP_JUMP_WINDOW_TICKS = Math.round(ZIP_JUMP_WINDOW_SECONDS * 60);
 
 /**
- * Speed (world units/second) applied as a gentle hop-off impulse when the
- * zip-jump window expires without a jump input.  Equivalent to ~40 % of
- * normal jump speed — enough to peel the player off the surface but not a
- * powerful launch.
+ * How much the player's held horizontal direction biases the zip-jump launch
+ * vector.  0 = pure surface normal, 1 = pure input direction.
+ * 0.35 gives a noticeable but not overriding directional influence.
  */
-const GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD * 0.4;
+const ZIP_JUMP_INPUT_BIAS = 0.35;
 
 // ============================================================================
 // Public API
@@ -92,55 +92,45 @@ const GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD * 0.4;
  * and down triggered flags.
  *
  * Returns true if the zip path was taken this tick (caller must skip normal
- * pendulum swing).  Returns false when neither zip activation nor the zip state
- * machine fired, leaving normal pendulum physics to continue.
+ * pendulum swing).  Returns false when zip is not active and was not activated,
+ * leaving normal pendulum physics to continue.
  *
  * @param jumpJustPressed  Whether the jump key was pressed this tick (rising edge).
- * @param downJustPressed  Whether the down key was pressed this tick (rising edge).
  */
 export function tickGrappleZip(
   world: WorldState,
   player: ClusterState,
   jumpJustPressed: boolean,
-  downJustPressed: boolean,
   dtSec: number,
 ): boolean {
-  // ── Down double-tap detection (zip activation) ────────────────────────────
-  // A double-tap is two rising-edge down presses within ZIP_DOUBLE_TAP_WINDOW_TICKS.
-  // On double-tap: store the surface normal from anchor→player and activate zip.
-  if (downJustPressed && world.isGrappleZipActiveFlag === 0) {
+  // ── RMB zip activation (triggered flag, consumed once) ────────────────────
+  // The flag is set by the command processor when right-click is received while
+  // the grapple is attached (isGrappleActiveFlag === 1).
+  if (world.isGrappleZipTriggeredFlag === 1 && world.isGrappleZipActiveFlag === 0) {
+    world.isGrappleZipTriggeredFlag = 0;
+    // Compute surface normal = normalized direction from anchor toward player.
     const ax = world.grappleAnchorXWorld;
     const ay = world.grappleAnchorYWorld;
-    const currentTick = world.tick;
-    const lastPressTick = world.playerDownLastPressTick;
-    if (
-      lastPressTick > 0 &&
-      currentTick - lastPressTick <= GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS
-    ) {
-      // Double-tap confirmed — activate zip!
-      // Compute surface normal = normalized direction from anchor toward player.
-      const dxToPlayer = player.positionXWorld - ax;
-      const dyToPlayer = player.positionYWorld - ay;
-      const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
-      if (distToPlayer > 0.001) {
-        world.grappleZipNormalXWorld = dxToPlayer / distToPlayer;
-        world.grappleZipNormalYWorld = dyToPlayer / distToPlayer;
-      } else {
-        world.grappleZipNormalXWorld = 0.0;
-        world.grappleZipNormalYWorld = -1.0; // default: floor normal (upward)
-      }
-      world.isGrappleZipActiveFlag = 1;
-      world.isGrappleStuckFlag = 0;
-      world.grappleStuckStoppedTickCount = 0;
-      world.playerDownLastPressTick = 0; // reset so next press starts fresh
+    const dxToPlayer = player.positionXWorld - ax;
+    const dyToPlayer = player.positionYWorld - ay;
+    const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+    if (distToPlayer > 0.001) {
+      world.grappleZipNormalXWorld = dxToPlayer / distToPlayer;
+      world.grappleZipNormalYWorld = dyToPlayer / distToPlayer;
     } else {
-      // First press — record tick for double-tap detection
-      world.playerDownLastPressTick = currentTick;
+      world.grappleZipNormalXWorld = 0.0;
+      world.grappleZipNormalYWorld = -1.0; // default: floor normal (upward)
     }
+    world.isGrappleZipActiveFlag = 1;
+    world.isGrappleStuckFlag = 0;
+    world.grappleStuckStoppedTickCount = 0;
+  } else if (world.isGrappleZipTriggeredFlag === 1) {
+    // Zip already active — discard duplicate trigger
+    world.isGrappleZipTriggeredFlag = 0;
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // Zip grapple — rocket toward anchor, stick, then zip-jump or hop off
+  // Zip grapple — rocket toward anchor, stick, then zip-jump or release quietly
   // ════════════════════════════════════════════════════════════════════════════
   if (world.isGrappleZipActiveFlag === 0) {
     return false; // zip not active — normal pendulum continues
@@ -161,7 +151,7 @@ export function tickGrappleZip(
   const targetX = ax + nx * halfExtent;
   const targetY = ay + ny * halfExtent;
 
-  // ── Jump input while zipping / stuck ──────────────────────────────────
+  // ── Jump input while zipping / stuck ────────────────────────────────────
   if (jumpJustPressed || (world.playerJumpHeldFlag === 1 && world.isGrappleStuckFlag === 1)) {
     const isInZipJumpWindow = world.isGrappleStuckFlag === 1 &&
       world.grappleStuckStoppedTickCount > 0 &&
@@ -170,15 +160,26 @@ export function tickGrappleZip(
       ? ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER)
       : 1.0;
     const jumpSpeed = PLAYER_JUMP_SPEED_WORLD * jumpMultiplier;
-    // Launch in surface normal direction (away from anchor).
-    // Total speed magnitude = jumpSpeed because ||(nx,ny)|| = 1 (unit vector).
-    // For ceiling zip: ny > 0 → propels downward.
-    // For floor zip: ny < 0 → propels upward.
-    // For wall zip: nx ≠ 0 → propels sideways.
-    player.velocityXWorld = nx * jumpSpeed;
-    player.velocityYWorld = ny * jumpSpeed;
+
+    // Launch direction: surface normal biased toward held horizontal input.
+    // This lets the player redirect the zip-jump without ignoring the physics.
+    let launchX = nx;
+    let launchY = ny;
+    const inputDx = world.playerMoveInputDxWorld;
+    if (Math.abs(inputDx) > 0.5) {
+      launchX = nx * (1.0 - ZIP_JUMP_INPUT_BIAS) + inputDx * ZIP_JUMP_INPUT_BIAS;
+      // Normalize so launch speed equals jumpSpeed exactly.
+      const launchLen = Math.sqrt(launchX * launchX + launchY * launchY);
+      if (launchLen > 0.001) {
+        launchX /= launchLen;
+        launchY /= launchLen;
+      }
+    }
+
+    player.velocityXWorld = launchX * jumpSpeed;
+    player.velocityYWorld = launchY * jumpSpeed;
     player.isGroundedFlag = 0;
-    // Only sustain var jump when the launch has an upward component
+    // Sustain variable jump only when the launch has an upward component.
     if (player.velocityYWorld < 0) {
       player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
       player.varJumpSpeedWorld = player.velocityYWorld;
@@ -283,7 +284,7 @@ export function tickGrappleZip(
   }
 
   if (world.isGrappleStuckFlag === 1) {
-    // ── Stuck phase: lock position, decelerate, then hop off if window expired
+    // ── Stuck phase: lock position, decelerate, then release if window expired
     player.positionXWorld = targetX;
     player.positionYWorld = targetY;
 
@@ -291,9 +292,7 @@ export function tickGrappleZip(
     // The stuck target is always geometrically safe (it is the player AABB
     // resting against the anchor surface with halfExtent clearance), but a
     // final penetration resolve catches any residual overlap from ramps or
-    // stacked geometry near the anchor.  We resolve all overlapping walls
-    // rather than stopping at the first, since the player AABB can overlap
-    // multiple walls simultaneously near stacked geometry.
+    // stacked geometry near the anchor.
     {
       const halfW = player.halfWidthWorld;
       const halfH = player.halfHeightWorld;
@@ -317,18 +316,11 @@ export function tickGrappleZip(
       player.velocityYWorld = 0;
       world.grappleStuckStoppedTickCount++;
 
-      // Auto hop-off after zip-jump window expires.
-      // The normal vector (nx, ny) points from the anchor toward the player's
-      // arrival position (away from the surface), so multiplying by a positive
-      // speed peels the player off in the correct direction:
-      //   floor zip (ny < 0 = upward)   → player pushed up
-      //   ceiling zip (ny > 0 = down)   → player drops away
-      //   wall zip (nx ≠ 0 = sideways)  → player pushed away from wall
+      // Zip-jump window expired: release grapple quietly without any impulse.
+      // The player remains in place until gravity or their own movement takes over.
+      // (Jump within the window is handled in the jump-input block above.)
       if (world.grappleStuckStoppedTickCount > GRAPPLE_ZIP_JUMP_WINDOW_TICKS) {
-        player.velocityXWorld = nx * GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD;
-        player.velocityYWorld = ny * GRAPPLE_ZIP_HOP_OFF_SPEED_WORLD;
-        player.isFastFallModeFlag = 0;
-        releaseGrapple(world, false);
+        releaseGrapple(world, true); // grant coyote time for a natural follow-up jump
         return true;
       }
     } else {

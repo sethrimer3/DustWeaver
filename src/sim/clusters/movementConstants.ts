@@ -405,15 +405,6 @@ export const LANDING_SKID_SPEED_THRESHOLD_WORLD = 157.5;
  */
 export const LANDING_SKID_SPEED_FACTOR_MAX = 4.0;
 
-// ── Grapple zip double-tap ───────────────────────────────────────────────────
-
-/**
- * Maximum ticks between two successive down presses for a double-tap to be
- * recognised and trigger the grapple zip.  At 60 fps, 18 ticks ≈ 0.3 s —
- * wide enough to be comfortably hittable but narrow enough to feel intentional.
- */
-export const GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS = 18;
-
 // ── Player crouch ───────────────────────────────────────────────────────────
 
 /** Half-height of the player hitbox when crouching (world units). Sprite y 8–24 = 16 px, half = 8. */

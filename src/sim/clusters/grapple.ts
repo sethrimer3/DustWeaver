@@ -73,7 +73,7 @@ import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { ClusterState } from './state';
-import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS } from './movement';
+import { PLAYER_JUMP_SPEED_WORLD } from './movement';
 import { moveClusterByDelta } from './movementCollision';
 import {
   GRAPPLE_SEGMENT_COUNT,
@@ -181,22 +181,6 @@ const GRAPPLE_SWING_DAMPING_PER_SEC = 0.12;
  * Applied by *subtracting* from velocityYWorld — negative Y is upward.
  */
 const GRAPPLE_JUMP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD;
-
-/**
- * Distance (world units) within which a grapple hit triggers the special
- * proximity bounce instead of a normal rope attachment.  Equals the side
- * length of a 2×2 small-block area (16 virtual pixels = 16 world units).
- * If the player's centre is within this distance of the hit surface at fire
- * time, the player is launched instantly in the surface-normal direction at
- * super-jump speed.  Works on any surface orientation: floor, wall, or ceiling.
- */
-const GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD = 16.0;
-
-/**
- * How many ticks to display the rotated jumping sprite after a proximity bounce
- * off a wall or ceiling (0.5 seconds at 60 fps).
- */
-const GRAPPLE_PROXIMITY_BOUNCE_SPRITE_TICKS = 30;
 
 /**
  * Initialises the GRAPPLE_SEGMENT_COUNT chain particle slots starting at
@@ -383,63 +367,6 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
 
   const hitDist = Math.sqrt((hit.x - player.positionXWorld) ** 2 + (hit.y - player.positionYWorld) ** 2);
 
-  // ── Special proximity bounce ────────────────────────────────────────────────
-  // If the player is within GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD (16 world
-  // units = 2 small blocks) of the hit surface at the moment the grapple
-  // fires, the hook acts as an instant surface-bounce rather than a rope attach.
-  // The player is launched in the surface-normal direction (from anchor toward
-  // player) at super-jump speed.  Works on any surface orientation: floor,
-  // wall, or ceiling.
-  if (hitDist > 0.01 && hitDist < GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD) {
-    clearLegacyGrappleMissState(world);
-    clearGrappleFailureFx(world);
-    // Normal direction: from anchor (surface) toward player.
-    const invHitDist = 1.0 / hitDist;
-    const normalX = (player.positionXWorld - hit.x) * invHitDist;
-    const normalY = (player.positionYWorld - hit.y) * invHitDist;
-    // Apply super-jump speed in the surface-normal direction.
-    const jumpSpeed = PLAYER_JUMP_SPEED_WORLD
-      * ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER);
-    player.velocityXWorld = normalX * jumpSpeed;
-    player.velocityYWorld = normalY * jumpSpeed;
-    player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
-    player.varJumpSpeedWorld = player.velocityYWorld;
-    player.isFastFallModeFlag = 0;
-    // Sparkle FX at the anchor point.
-    world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
-    world.grappleAttachFxXWorld = hit.x;
-    world.grappleAttachFxYWorld = hit.y;
-    // Consume grapple charge (proximity bounce is a one-shot move, no recharge).
-    world.hasGrappleChargeFlag = 0;
-    // Reset the jump trigger so the same press isn't replayed.
-    world.playerJumpTriggeredFlag = 0;
-    // Stub sprite: show jumping sprite rotated toward the wall/ceiling for a
-    // brief window after the bounce.  Floor bounces (normalY < 0) use no
-    // rotation — only wall and ceiling bounces get the special orientation.
-    // Always reset the state first so a floor bounce after a wall/ceiling bounce
-    // doesn't leave a stale rotation active.
-    world.grappleProximityBounceTicksLeft = 0;
-    world.grappleProximityBounceRotationAngleRad = 0;
-    if (Math.abs(normalY) > Math.abs(normalX)) {
-      if (normalY > 0) {
-        // Ceiling bounce — normal points downward; rotate 180° (upside-down).
-        world.grappleProximityBounceRotationAngleRad = Math.PI;
-        world.grappleProximityBounceTicksLeft = GRAPPLE_PROXIMITY_BOUNCE_SPRITE_TICKS;
-      }
-      // Floor bounce (normalY < 0): leave rotation at 0; jumping sprite looks correct.
-    } else if (normalX !== 0) {
-      if (normalX > 0) {
-        // Left-wall bounce — normal points rightward; rotate -90° (CCW).
-        world.grappleProximityBounceRotationAngleRad = -Math.PI / 2;
-      } else {
-        // Right-wall bounce — normal points leftward; rotate +90° (CW).
-        world.grappleProximityBounceRotationAngleRad = Math.PI / 2;
-      }
-      world.grappleProximityBounceTicksLeft = GRAPPLE_PROXIMITY_BOUNCE_SPRITE_TICKS;
-    }
-    return;
-  }
-
   // Don't attach when the wall is closer than the minimum rope length — doing
   // so would place the anchor inside the block geometry, which causes the
   // visible dot to appear embedded in the tile and produces erratic physics.
@@ -485,7 +412,8 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // first tick after attachment.
   world.playerJumpTriggeredFlag = 0;
   world.isGrappleActiveFlag = 1;
-  world.isGrappleZipActiveFlag = 0;  // zip activated by double-tap down, not at fire time
+  world.isGrappleZipActiveFlag = 0;  // zip activated by RMB, not at fire time
+  world.isGrappleZipTriggeredFlag = 0; // clear any pending zip request from before attachment
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   // Clear wrap points — this is a new grapple attachment.
@@ -550,15 +478,14 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
  *   • Jump (W/Space/Up) → release grapple + upward velocity impulse.
  *   • Down (S/ArrowDown) held → retract (shorten) the rope.
  *     Shortening conserves angular momentum so the player swings faster.
- *   • Down double-tap → activate zip: player rockets toward the anchor,
- *     momentum stops on arrival, then a 0.25 s zip-jump window opens.
- *     Jump in window = high-velocity zip-jump in surface normal direction.
- *     Miss window = gentle hop off the surface.
- *     Double-tap + hold after arrival = stay stuck until jump or release.
+ *     RMB while attached → activate zip: player rockets toward the anchor,
+ *     momentum stops on arrival, then a 0.15 s zip-jump window opens.
+ *     Jump in window = high-velocity zip-jump biased by held input direction.
+ *     Miss window = grapple releases quietly, no automatic impulse.
  *
  * Pipeline per tick:
  *   1. Consume playerJumpTriggeredFlag and playerDownTriggeredFlag.
- *   2. Delegate zip detection + state machine to tickGrappleZip.
+ *   2. Delegate zip activation + state machine to tickGrappleZip.
  *   3. If zip active → skip normal swing.
  *   4. Jump pressed (normal swing) → release with upward impulse.
  *   5. While down held (retraction):
@@ -589,14 +516,12 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   const jumpJustPressed = world.playerJumpTriggeredFlag === 1;
   world.playerJumpTriggeredFlag = 0; // consume — grapple owns the flag while active
 
-  // ── Down input (double-tap detection and zip state machine) ──────────────
-  // Delegate to grappleZip.ts: detects double-tap activation and runs the
-  // zip-to-anchor state machine.  Returns true when the zip path was taken
-  // this tick so we skip normal pendulum swing.
-  const downJustPressed = world.playerDownTriggeredFlag === 1;
-  world.playerDownTriggeredFlag = 0; // consume
+  // Consume the down triggered flag so it does not accumulate during grapple.
+  // (Retraction uses playerCrouchHeldFlag; playerDownTriggeredFlag was only
+  //  needed by the old double-tap zip detection which has been replaced by RMB.)
+  world.playerDownTriggeredFlag = 0;
 
-  if (tickGrappleZip(world, player, jumpJustPressed, downJustPressed, dtSec)) {
+  if (tickGrappleZip(world, player, jumpJustPressed, dtSec)) {
     return;
   }
 

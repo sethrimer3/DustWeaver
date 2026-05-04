@@ -12,6 +12,7 @@ import { collectCommands, InputState } from '../input/handler';
 import { CommandKind } from '../input/commands';
 import { WorldState } from '../sim/world';
 import { fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
+import { GrappleInputMode } from '../sim/worldGrappleState';
 import { screenToWorld } from './gameRoom';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
@@ -75,6 +76,8 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
   let jumpTriggered = false;
   let interactTriggered = false;
   let interactInputPulseTrigger = false;
+  // True when right-click triggered a zip this frame — suppresses secondary Weave.
+  let zipInterceptedRmb = false;
 
   for (let ci = 0; ci < commands.length; ci++) {
     const cmd = commands[ci];
@@ -132,43 +135,67 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
       }
     } else if (cmd.kind === CommandKind.WeaveEndPrimary) {
       world.playerPrimaryWeaveEndFlag = 1;
-    } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
-      const player = world.clusters[0];
-      if (player !== undefined && player.isAliveFlag === 1) {
-        const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-        let dirX = aim.xWorld - player.positionXWorld;
-        let dirY = aim.yWorld - player.positionYWorld;
-        const len = Math.sqrt(dirX * dirX + dirY * dirY);
-        if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
-        world.playerWeaveAimDirXWorld = dirX;
-        world.playerWeaveAimDirYWorld = dirY;
-        world.playerSecondaryWeaveTriggeredFlag = 1;
+    } else if (cmd.kind === CommandKind.GrappleZip) {
+      // Right mouse pressed — zip toward anchor if grapple is attached.
+      // If no grapple is active, the subsequent secondary Weave commands handle it.
+      if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0) {
+        world.isGrappleZipTriggeredFlag = 1;
+        zipInterceptedRmb = true;
       }
-    } else if (cmd.kind === CommandKind.WeaveHoldSecondary) {
-      const player = world.clusters[0];
-      if (player !== undefined && player.isAliveFlag === 1) {
-        const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-        let dirX = aim.xWorld - player.positionXWorld;
-        let dirY = aim.yWorld - player.positionYWorld;
-        const len = Math.sqrt(dirX * dirX + dirY * dirY);
-        if (len < 1.0) { dirX = world.playerWeaveAimDirXWorld; dirY = world.playerWeaveAimDirYWorld; }
-        else { dirX /= len; dirY /= len; }
-        world.playerWeaveAimDirXWorld = dirX;
-        world.playerWeaveAimDirYWorld = dirY;
-        if (world.isPlayerSecondaryWeaveActiveFlag === 0) {
+    } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
+      // Skip secondary Weave if right-click was consumed as a grapple zip this frame.
+      if (!zipInterceptedRmb && !world.isGrappleActiveFlag) {
+        const player = world.clusters[0];
+        if (player !== undefined && player.isAliveFlag === 1) {
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
+          let dirX = aim.xWorld - player.positionXWorld;
+          let dirY = aim.yWorld - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = 1.0; dirY = 0.0; } else { dirX /= len; dirY /= len; }
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
           world.playerSecondaryWeaveTriggeredFlag = 1;
         }
       }
+    } else if (cmd.kind === CommandKind.WeaveHoldSecondary) {
+      // Suppress secondary Weave sustained hold while grapple is active (RMB = zip).
+      if (!world.isGrappleActiveFlag) {
+        const player = world.clusters[0];
+        if (player !== undefined && player.isAliveFlag === 1) {
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
+          let dirX = aim.xWorld - player.positionXWorld;
+          let dirY = aim.yWorld - player.positionYWorld;
+          const len = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len < 1.0) { dirX = world.playerWeaveAimDirXWorld; dirY = world.playerWeaveAimDirYWorld; }
+          else { dirX /= len; dirY /= len; }
+          world.playerWeaveAimDirXWorld = dirX;
+          world.playerWeaveAimDirYWorld = dirY;
+          if (world.isPlayerSecondaryWeaveActiveFlag === 0) {
+            world.playerSecondaryWeaveTriggeredFlag = 1;
+          }
+        }
+      }
     } else if (cmd.kind === CommandKind.WeaveEndSecondary) {
-      world.playerSecondaryWeaveEndFlag = 1;
+      if (!world.isGrappleActiveFlag) {
+        world.playerSecondaryWeaveEndFlag = 1;
+      }
     } else if (cmd.kind === CommandKind.GrappleFire) {
       const player = world.clusters[0];
       if (player !== undefined && player.isAliveFlag === 1) {
-        const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-        fireGrapple(world, aim.xWorld, aim.yWorld);
+        if (world.grappleInputMode === GrappleInputMode.Toggle && world.isGrappleActiveFlag === 1) {
+          // Toggle mode: a second left-click releases the grapple instead of re-firing.
+          releaseGrapple(world);
+        } else {
+          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
+          fireGrapple(world, aim.xWorld, aim.yWorld);
+        }
       }
     } else if (cmd.kind === CommandKind.GrappleRelease) {
-      releaseGrapple(world);
+      // In Hold mode the grapple releases on mouse-up.
+      // In Toggle mode releasing the mouse does nothing; the player clicks again to release.
+      if (world.grappleInputMode === GrappleInputMode.Hold) {
+        releaseGrapple(world);
+      }
     } else if (cmd.kind === CommandKind.ToggleFullscreen) {
       if (!document.fullscreenElement) {
         // Enter fullscreen on key press (requires user gesture; keydown path satisfies this).

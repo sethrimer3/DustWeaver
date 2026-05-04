@@ -267,6 +267,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
 
   world.isGrappleActiveFlag = 0;
   world.isGrappleZipActiveFlag = 0;
+  world.isGrappleZipTriggeredFlag = 0; // cancel any pending zip request
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   world.grappleJumpHeldTickCount = 0;
@@ -274,7 +275,6 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   world.grapplePullInAmountWorld = 0.0;
   world.grappleOutOfRangeTicks = 0;
   world.grappleTensionFactor = 0;
-  world.playerDownLastPressTick = 0; // reset double-tap state on release
   world.grappleRopeIndex = -1; // detach from rope segment (if any)
   world.grappleWrapPointCount = 0;  // clear wrap corners
   // Clear surface-anchor state (no longer attached to any surface).

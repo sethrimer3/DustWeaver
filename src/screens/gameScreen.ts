@@ -39,6 +39,7 @@ import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/pla
 import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
+import { ZIP_JUMP_WINDOW_SECONDS } from '../sim/clusters/grappleZip';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
@@ -1075,6 +1076,12 @@ export function startGameScreen(
           isGrappleMissActive:  world.isGrappleMissActiveFlag === 1,
           grappleParticleStartIndex: world.grappleParticleStartIndex,
           isGrappleChainHiddenFlag: true,
+          isGrappleZipActive:   world.isGrappleZipActiveFlag === 1,
+          isGrappleStuck:       world.isGrappleStuckFlag === 1,
+          zipJumpWindowTicksLeft: world.isGrappleStuckFlag === 1
+            ? Math.max(0, Math.round(ZIP_JUMP_WINDOW_SECONDS * 60) - world.grappleStuckStoppedTickCount)
+            : 0,
+          grappleInputMode:     world.grappleInputMode,
           isSkidding:           playerClusterForHud.isSkiddingFlag === 1,
           isSliding:            playerClusterForHud.isSlidingFlag === 1,
           isSprinting:          playerClusterForHud.isSprintingFlag === 1,
