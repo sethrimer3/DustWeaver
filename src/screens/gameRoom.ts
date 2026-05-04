@@ -1,4 +1,4 @@
-import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES, MAX_BOUNCE_PADS, MAX_ROPES, MAX_ROPE_SEGMENTS } from '../sim/world';
+import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES, MAX_BOUNCE_PADS, MAX_ROPES, MAX_ROPE_SEGMENTS, MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import {
   RoomDef,
@@ -910,5 +910,32 @@ export function loadRoomRopes(world: WorldState, room: RoomDef): void {
   // Pre-settle all ropes: run Verlet iterations so they appear sagged on first frame.
   if (count > 0) {
     presettleRopes(world);
+  }
+}
+
+/**
+ * Resets and spawns all grasshoppers for the given room into world state.
+ * Grasshoppers are placed randomly within each authored grasshopper area.
+ */
+export function loadRoomGrasshoppers(world: WorldState, room: RoomDef): void {
+  world.grasshopperCount = 0;
+  if (!room.grasshopperAreas) return;
+
+  for (const area of room.grasshopperAreas) {
+    const areaXWorld = area.xBlock * BLOCK_SIZE_MEDIUM;
+    const areaYWorld = area.yBlock * BLOCK_SIZE_MEDIUM;
+    const areaWidthWorld = area.wBlock * BLOCK_SIZE_MEDIUM;
+    const areaHeightWorld = area.hBlock * BLOCK_SIZE_MEDIUM;
+    for (let g = 0; g < area.count && world.grasshopperCount < MAX_GRASSHOPPERS; g++) {
+      const gi = world.grasshopperCount++;
+      world.grasshopperXWorld[gi] = areaXWorld + areaWidthWorld  * 0.5
+        + nextFloatTriangle(world.rng) * areaWidthWorld  * 0.5;
+      world.grasshopperYWorld[gi] = areaYWorld + areaHeightWorld * 0.5
+        + nextFloatTriangle(world.rng) * areaHeightWorld * 0.5;
+      world.grasshopperVelXWorld[gi] = 0;
+      world.grasshopperVelYWorld[gi] = 0;
+      world.grasshopperHopTimerTicks[gi] = nextFloat(world.rng) * GRASSHOPPER_INITIAL_TIMER_MAX_TICKS;
+      world.isGrasshopperAliveFlag[gi] = 1;
+    }
   }
 }
