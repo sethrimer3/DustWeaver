@@ -206,7 +206,6 @@ export function tickGrappleZip(
     // Cast from the player position toward the grapple anchor.  If a wall is
     // hit well before the anchor (farther than GRAPPLE_ZIP_LOS_TOLERANCE_WORLD
     // from the anchor surface), the path is obstructed — continuing to zip
-    // from the anchor surface), the path is obstructed — continuing to zip
     // would pull the player through solid geometry.  Release the grapple
     // instead.  The anchor's own wall is excluded from the check by capping
     // the cast distance at anchorDist - LOS_TOLERANCE.
