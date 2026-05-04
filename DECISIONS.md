@@ -745,6 +745,8 @@ can verify the collision boundary matches the visual tile geometry.
 - The editor shows the last three used block themes inline and opens a full palette menu for all available themes
 - Individual wall themes can be changed via the inspector when a wall is selected
 - Compact v2 room JSON writes block themes with very short IDs (`bk`, `br`, `dt`) while retaining legacy long-name loading
+- The editor theme catalog is built from `ASSETS/SPRITES/BLOCKS/<theme>/` folder discovery; Blackstone (`blackRock`), Brownstone (`brownRock`), and Dirt (`dirt`) keep compact legacy IDs but are discovered through the same folder path as newer themes
+- Block theme chips render a representative discovered sprite thumbnail, with the old flat colour swatch only as a fallback if no image URL is available
 
 ## 2x2 BlackRock Block Sprites (BUILD 107)
 - blackRock 1x1 sprites are 16×16 source images drawn at 8×8 virtual pixels (downscaled)

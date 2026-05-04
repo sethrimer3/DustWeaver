@@ -348,6 +348,19 @@ export interface WorldState extends ParticleBuffers {
    */
   grappleProximityBounceRotationAngleRad: number;
 
+  // ---- Grapple failure visual FX -------------------------------------------
+  grappleFailBeamTicksLeft: number;
+  grappleFailBeamTotalTicks: number;
+  grappleFailBeamStartXWorld: number;
+  grappleFailBeamStartYWorld: number;
+  grappleFailBeamEndXWorld: number;
+  grappleFailBeamEndYWorld: number;
+
+  grappleEmptyFxTicksLeft: number;
+  grappleEmptyFxTotalTicks: number;
+  grappleEmptyFxXWorld: number;
+  grappleEmptyFxYWorld: number;
+
   // ---- Grapple miss state (limp chain) ------------------------------------
   /** 1 while the grapple chain is in "miss" mode (extended to full length, falling limp). */
   isGrappleMissActiveFlag: 0 | 1;
@@ -904,6 +917,16 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerDownLastPressTick: 0,
     grappleProximityBounceTicksLeft: 0,
     grappleProximityBounceRotationAngleRad: 0,
+    grappleFailBeamTicksLeft: 0,
+    grappleFailBeamTotalTicks: 14,
+    grappleFailBeamStartXWorld: 0.0,
+    grappleFailBeamStartYWorld: 0.0,
+    grappleFailBeamEndXWorld: 0.0,
+    grappleFailBeamEndYWorld: 0.0,
+    grappleEmptyFxTicksLeft: 0,
+    grappleEmptyFxTotalTicks: 12,
+    grappleEmptyFxXWorld: 0.0,
+    grappleEmptyFxYWorld: 0.0,
     isGrappleMissActiveFlag: 0,
     isGrappleRetractingFlag: 0,
     grappleMissDirXWorld: 0.0,

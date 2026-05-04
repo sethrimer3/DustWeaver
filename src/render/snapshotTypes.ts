@@ -278,6 +278,17 @@ export interface WorldSnapshot {
    * -π/2 = left-wall, +π/2 = right-wall, π = ceiling.
    */
   readonly grappleProximityBounceRotationAngleRad: number;
+  readonly grappleFailBeamTicksLeft: number;
+  readonly grappleFailBeamTotalTicks: number;
+  readonly grappleFailBeamStartXWorld: number;
+  readonly grappleFailBeamStartYWorld: number;
+  readonly grappleFailBeamEndXWorld: number;
+  readonly grappleFailBeamEndYWorld: number;
+
+  readonly grappleEmptyFxTicksLeft: number;
+  readonly grappleEmptyFxTotalTicks: number;
+  readonly grappleEmptyFxXWorld: number;
+  readonly grappleEmptyFxYWorld: number;
   /** 1 while the player is holding block or a sustained weave — used to drive player sprite rotation speed. */
   readonly isPlayerBlockingFlag: 0 | 1;
   /** 1 when the player has a grapple charge available (grapple hook is equipped). */

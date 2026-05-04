@@ -72,6 +72,7 @@
 import { WorldState, MAX_ROPE_SEGMENTS, MAX_GRAPPLE_WRAP_POINTS } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
+import { ClusterState } from './state';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
 import { COYOTE_TIME_TICKS, debugSpeedOverrides, ov, GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
@@ -128,6 +129,11 @@ const GRAPPLE_OUT_OF_RANGE_BREAK_TICKS = 45;
  * this many out-of-range ticks so the player gets a warning before the break.
  */
 const GRAPPLE_RANGE_SHRINK_GRACE_TICKS = 20;
+
+export const GRAPPLE_FAIL_BEAM_TOTAL_TICKS = 14;
+export const GRAPPLE_FAIL_BEAM_EXTEND_TICKS = 5;
+export const GRAPPLE_FAIL_BEAM_HOVER_TICKS = 3;
+export const GRAPPLE_EMPTY_FX_TOTAL_TICKS = 12;
 
 /**
  * Maximum total rope that can be pulled in before the grapple breaks (world units).
@@ -307,6 +313,43 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
   world.grappleParticleStartIndex = startIndex;
 }
 
+function getPlayerGrappleOriginWorld(player: ClusterState): { x: number; y: number } {
+  const offsetDir = player.isFacingLeftFlag === 1 ? -1 : 1;
+  return {
+    x: player.positionXWorld + offsetDir * player.halfWidthWorld,
+    y: player.positionYWorld,
+  };
+}
+
+function clearGrappleFailureFx(world: WorldState): void {
+  world.grappleFailBeamTicksLeft = 0;
+  world.grappleEmptyFxTicksLeft = 0;
+}
+
+function triggerGrappleFailBeam(world: WorldState, dirXWorld: number, dirYWorld: number, maxDistWorld: number): void {
+  const player = world.clusters[0];
+  if (player === undefined || player.isAliveFlag === 0) return;
+
+  const origin = getPlayerGrappleOriginWorld(player);
+  world.grappleFailBeamTicksLeft = GRAPPLE_FAIL_BEAM_TOTAL_TICKS;
+  world.grappleFailBeamTotalTicks = GRAPPLE_FAIL_BEAM_TOTAL_TICKS;
+  world.grappleFailBeamStartXWorld = origin.x;
+  world.grappleFailBeamStartYWorld = origin.y;
+  world.grappleFailBeamEndXWorld = origin.x + dirXWorld * maxDistWorld;
+  world.grappleFailBeamEndYWorld = origin.y + dirYWorld * maxDistWorld;
+}
+
+function triggerGrappleEmptyFx(world: WorldState): void {
+  const player = world.clusters[0];
+  if (player === undefined || player.isAliveFlag === 0) return;
+
+  const origin = getPlayerGrappleOriginWorld(player);
+  world.grappleEmptyFxTicksLeft = GRAPPLE_EMPTY_FX_TOTAL_TICKS;
+  world.grappleEmptyFxTotalTicks = GRAPPLE_EMPTY_FX_TOTAL_TICKS;
+  world.grappleEmptyFxXWorld = origin.x;
+  world.grappleEmptyFxYWorld = origin.y;
+}
+
 /**
  * Fires the grapple, setting the anchor just outside the raycast wall surface.
  * Returns without attaching if the wall is too close (less than
@@ -334,7 +377,10 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // shortcut is intentionally removed — the charge system already refreshes
   // after top-surface grapples and ground contact, so a genuine refire only
   // succeeds when the player actually has a charge.
-  if (world.hasGrappleChargeFlag === 0) return;
+  if (world.hasGrappleChargeFlag === 0) {
+    triggerGrappleEmptyFx(world);
+    return;
+  }
 
   const dx = anchorXWorld - player.positionXWorld;
   const dy = anchorYWorld - player.positionYWorld;
@@ -352,6 +398,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   if (ropeHit !== null) {
     const ropeDist = ropeHit.distWorld;
     if (ropeDist >= GRAPPLE_MIN_LENGTH_WORLD) {
+      clearGrappleFailureFx(world);
       world.grappleAnchorXWorld = ropeHit.hitX;
       world.grappleAnchorYWorld = ropeHit.hitY;
       world.grappleLengthWorld  = ropeDist;
@@ -399,12 +446,14 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
 
   if (hit === null) {
     clearLegacyGrappleMissState(world);
+    triggerGrappleFailBeam(world, dirX, dirY, maxCastDist);
     return;
   }
 
   // Bounce pad walls cannot be grappled — treat as a miss.
   if (hit.wallIndex >= 0 && world.wallIsBouncePadFlag[hit.wallIndex] === 1) {
     clearLegacyGrappleMissState(world);
+    triggerGrappleFailBeam(world, dirX, dirY, maxCastDist);
     return;
   }
 
@@ -419,6 +468,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // wall, or ceiling.
   if (hitDist > 0.01 && hitDist < GRAPPLE_PROXIMITY_BOUNCE_THRESHOLD_WORLD) {
     clearLegacyGrappleMissState(world);
+    clearGrappleFailureFx(world);
     // Normal direction: from anchor (surface) toward player.
     const invHitDist = 1.0 / hitDist;
     const normalX = (player.positionXWorld - hit.x) * invHitDist;
@@ -469,10 +519,14 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // Don't attach when the wall is closer than the minimum rope length — doing
   // so would place the anchor inside the block geometry, which causes the
   // visible dot to appear embedded in the tile and produces erratic physics.
-  if (hitDist < GRAPPLE_MIN_LENGTH_WORLD) return;
+  if (hitDist < GRAPPLE_MIN_LENGTH_WORLD) {
+    triggerGrappleFailBeam(world, dirX, dirY, maxCastDist);
+    return;
+  }
 
   // Confirmed wall hit — cancel any active miss/retract before attaching.
   clearLegacyGrappleMissState(world);
+  clearGrappleFailureFx(world);
 
   // Place the anchor just outside the wall surface using the surface normal from
   // the raycast.  Offsetting by GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD prevents the

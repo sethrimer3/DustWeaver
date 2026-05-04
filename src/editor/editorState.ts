@@ -203,15 +203,33 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'rope', label: 'Rope', category: 'ropes', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
 ];
 
+const LEGACY_BLOCK_THEME_META: Readonly<Record<string, { shortId: BlockThemeId; label: string }>> = {
+  blackRock: { shortId: 'bk', label: 'Blackstone' },
+  brownRock: { shortId: 'br', label: 'Brownstone' },
+  dirt:      { shortId: 'dt', label: 'Dirt' },
+};
+const LEGACY_BLOCK_THEME_ORDER: Readonly<Record<string, number>> = {
+  blackRock: 0,
+  brownRock: 1,
+  dirt:      2,
+};
+
+function makeBlockThemeOption(theme: { id: string; label: string }): { id: BlockTheme; shortId: BlockThemeId; label: string } {
+  const legacyMeta = LEGACY_BLOCK_THEME_META[theme.id];
+  if (legacyMeta !== undefined) {
+    return { id: theme.id, shortId: legacyMeta.shortId, label: legacyMeta.label };
+  }
+  return { id: theme.id, shortId: folderThemeShortId(theme.id), label: theme.label };
+}
+
 /** Available block themes for placement and wall inspection. */
-export const BLOCK_THEMES: readonly { id: BlockTheme; shortId: BlockThemeId; label: string }[] = [
-  // ── Legacy themes (dedicated rendering paths) ──
-  { id: 'blackRock', shortId: 'bk', label: 'Black Rock' },
-  { id: 'brownRock', shortId: 'br', label: 'Brown Rock' },
-  { id: 'dirt',      shortId: 'dt', label: 'Dirt' },
-  // ── Folder-based themes (auto-discovered from ASSETS/SPRITES/BLOCKS/) ──
-  ...FOLDER_BLOCK_THEMES.map(t => ({ id: t.id, shortId: folderThemeShortId(t.id), label: t.label })),
-];
+export const BLOCK_THEMES: readonly { id: BlockTheme; shortId: BlockThemeId; label: string }[] = [...FOLDER_BLOCK_THEMES]
+  .sort((a, b) => {
+    const orderA = LEGACY_BLOCK_THEME_ORDER[a.id] ?? 1000;
+    const orderB = LEGACY_BLOCK_THEME_ORDER[b.id] ?? 1000;
+    return orderA !== orderB ? orderA - orderB : a.id.localeCompare(b.id);
+  })
+  .map(makeBlockThemeOption);
 
 const DEFAULT_RECENT_BLOCK_THEMES: readonly BlockTheme[] = ['blackRock', 'brownRock', 'dirt'];
 

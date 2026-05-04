@@ -11,8 +11,10 @@
  *   • 8×8 nearest-neighbor downscaled versions are generated lazily and
  *     cached → used for 1×1 block tiles.
  *
- * Legacy themes ('blackRock', 'brownRock', 'dirt') are excluded from this
- * system and continue to use their dedicated rendering paths.
+ * The original themes ('blackRock', 'brownRock', 'dirt') are included in this
+ * system so the editor and generic wall paths discover their sprite folders the
+ * same way as newer themes. Some runtime draw paths still use dedicated
+ * rendering for compatibility where needed.
  *
  * Adding new themes requires no code changes:
  *   1. Create a subfolder under ASSETS/SPRITES/BLOCKS/<ThemeName>/
@@ -38,12 +40,6 @@ const _BLOCKS_GLOB = import.meta.glob(
 );
 
 // ── Folder name filter ────────────────────────────────────────────────────────
-
-/**
- * Legacy theme folders that have dedicated rendering paths and must NOT be
- * treated as folder-based themes.
- */
-const _LEGACY_FOLDERS = new Set(['blackRock', 'brownRock', 'dirt']);
 
 /**
  * System/template folders that should be ignored regardless of content.
@@ -125,8 +121,7 @@ function _buildFolderThemes(): FolderThemeData[] {
 
     const folder = m[1];
 
-    // Skip legacy and system folders
-    if (_LEGACY_FOLDERS.has(folder)) continue;
+    // Skip system folders
     if (_SYSTEM_FOLDERS.has(folder)) continue;
 
     // Skip folders that start with a digit (e.g. "1 - OLD")
@@ -178,7 +173,7 @@ export const FOLDER_BLOCK_THEMES: readonly FolderThemeData[] = _buildFolderTheme
 
 const _FOLDER_THEME_IDS = new Set<string>(FOLDER_BLOCK_THEMES.map(t => t.id));
 
-/** Returns true when `theme` is a discovered folder-based theme (not a legacy theme). */
+/** Returns true when `theme` is a discovered folder-based theme. */
 export function isFolderBasedTheme(theme: string | null): boolean {
   return theme !== null && _FOLDER_THEME_IDS.has(theme);
 }

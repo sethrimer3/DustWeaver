@@ -22,9 +22,9 @@ const _fillColorMutable: Record<string, string> = {
 };
 
 const _spriteUrlMutable: Record<string, string> = {
-  blackRock: 'SPRITES/BLOCKS/blackRock/blackRock (1).png',
-  brownRock: 'SPRITES/BLOCKS/brownRock/brownRock_8x8.png',
-  dirt:      'SPRITES/BLOCKS/dirt/dirt_8x8.png',
+  blackRock: 'SPRITES/BLOCKS/blackRock/blackRockBlock (1).png',
+  brownRock: 'SPRITES/BLOCKS/brownRock/brownRockBlock.png',
+  dirt:      'SPRITES/BLOCKS/dirt/dirtBlock.png',
 };
 
 // Populate folder-based theme entries from discovered sprites.
@@ -44,6 +44,10 @@ export const THEME_FILL_COLOR: Readonly<Record<string, string>> = Object.freeze(
 
 /** Representative block sprite URL for each block theme. */
 export const THEME_BLOCK_SPRITE_URL: Readonly<Record<string, string>> = Object.freeze(_spriteUrlMutable);
+
+function cssUrl(url: string): string {
+  return url.length > 0 ? `url("${url.replace(/"/g, '\\"')}")` : 'none';
+}
 
 // ── Button helpers ────────────────────────────────────────────────────────────
 
@@ -94,9 +98,20 @@ export function makeThemeChip(themeId: string, label: string, shortId: string, i
     width: 24px; height: 24px; border-radius: 3px;
     background: ${fill};
     border: 1px solid rgba(255,255,255,0.15);
-    background-image: url(${THEME_BLOCK_SPRITE_URL[themeId] ?? ''});
-    background-size: cover; image-rendering: pixelated;
+    overflow: hidden; display: flex; align-items: center; justify-content: center;
   `;
+  const spriteUrl = THEME_BLOCK_SPRITE_URL[themeId] ?? '';
+  if (spriteUrl.length > 0) {
+    const img = document.createElement('img');
+    img.src = spriteUrl;
+    img.alt = '';
+    img.draggable = false;
+    img.style.cssText = `
+      width: 100%; height: 100%; object-fit: cover;
+      image-rendering: pixelated; pointer-events: none;
+    `;
+    swatch.appendChild(img);
+  }
   const text = document.createElement('span');
   text.textContent = shortId.toUpperCase();
   text.title = label;
@@ -137,7 +152,7 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
   const spriteUrl = THEME_BLOCK_SPRITE_URL[theme] ?? '';
   const baseTile = `
     background-color: ${fill};
-    background-image: url(${spriteUrl});
+    background-image: ${cssUrl(spriteUrl)};
     image-rendering: pixelated;
   `;
   const containerCss = `
@@ -184,7 +199,7 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
           position: absolute; left: 0; top: 17px;
           width: 40px; height: 6px;
           background-color: ${pfill};
-          background-image: url(${spriteUrl});
+          background-image: ${cssUrl(spriteUrl)};
           background-size: auto 6px; image-rendering: pixelated;
           border-top: 1px solid rgba(255,255,255,0.2);
         `,

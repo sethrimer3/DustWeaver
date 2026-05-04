@@ -1,0 +1,295 @@
+{
+  "v": 2,
+  "id": "overgrown_chasm",
+  "name": "Overgrown Chasm",
+  "world": 1,
+  "size": [
+    200,
+    120
+  ],
+  "spawn": [
+    101,
+    115
+  ],
+  "solids": {
+    "byTheme": {
+      "overgrowth": {
+        "rects": [
+          [
+            0,
+            118,
+            90,
+            2
+          ],
+          [
+            110,
+            118,
+            90,
+            2
+          ]
+        ]
+      }
+    }
+  },
+  "map": [
+    57,
+    -376
+  ],
+  "theme": "bk",
+  "bg": "brownRock",
+  "light": "Ambient",
+  "specialWalls": [
+    {
+      "r": [
+        88,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        89,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        90,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        91,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        92,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        93,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        94,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        95,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        96,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        97,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        98,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        99,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        100,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        101,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        102,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        103,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        104,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        105,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        106,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        107,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        108,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        109,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        110,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    },
+    {
+      "r": [
+        111,
+        116,
+        1,
+        1
+      ],
+      "theme": "overgrowth",
+      "plat": 1
+    }
+  ],
+  "transitions": [
+    {
+      "dir": "down",
+      "to": "tall_shaft",
+      "pos": 90,
+      "size": 20,
+      "spawn": [
+        30,
+        3
+      ]
+    }
+  ]
+}

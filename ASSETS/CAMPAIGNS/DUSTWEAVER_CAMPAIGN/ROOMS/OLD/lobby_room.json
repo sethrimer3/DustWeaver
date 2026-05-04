@@ -277,7 +277,7 @@
     -147,
     87.5
   ],
-  "theme": "blackRock",
+  "theme": "bk",
   "bg": "crystallineCracks",
   "light": "DEFAULT",
   "transitions": [
@@ -290,6 +290,32 @@
         4,
         19
       ]
+    }
+  ],
+  "sunbeams": [
+    {
+      "xBlock": 10,
+      "yBlock": 2,
+      "angleRad": 0.7854,
+      "widthBlocks": 3,
+      "lengthBlocks": 20,
+      "colorR": 255,
+      "colorG": 240,
+      "colorB": 180,
+      "intensityPct": 45
+    }
+  ],
+  "lightSourcesExt": [
+    {
+      "xBlock": 20,
+      "yBlock": 10,
+      "radiusBlocks": 8,
+      "colorR": 255,
+      "colorG": 220,
+      "colorB": 160,
+      "brightnessPct": 80,
+      "dustMoteCount": 30,
+      "dustMoteSpreadBlocks": 6
     }
   ]
 }

@@ -553,9 +553,105 @@ export function renderClusters(
 const _scratchWpX = new Float32Array(2 + MAX_GRAPPLE_WRAP_POINTS);
 const _scratchWpY = new Float32Array(2 + MAX_GRAPPLE_WRAP_POINTS);
 
+function renderGrappleFailBeam(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  if (snapshot.grappleFailBeamTicksLeft <= 0) return;
+
+  const totalTicks = Math.max(1, snapshot.grappleFailBeamTotalTicks);
+  const elapsedTicks = totalTicks - snapshot.grappleFailBeamTicksLeft;
+  const extendTicks = 5;
+  const hoverTicks = 3;
+  const extendT = Math.min(1, elapsedTicks / extendTicks);
+
+  let alpha = 1;
+  if (elapsedTicks > extendTicks + hoverTicks) {
+    const fadeT = (elapsedTicks - extendTicks - hoverTicks) / Math.max(1, totalTicks - extendTicks - hoverTicks);
+    alpha = Math.max(0, 1 - fadeT);
+  }
+
+  const sx = snapshot.grappleFailBeamStartXWorld * scalePx + offsetXPx;
+  const sy = snapshot.grappleFailBeamStartYWorld * scalePx + offsetYPx;
+  const exFull = snapshot.grappleFailBeamEndXWorld * scalePx + offsetXPx;
+  const eyFull = snapshot.grappleFailBeamEndYWorld * scalePx + offsetYPx;
+  const ex = sx + (exFull - sx) * extendT;
+  const ey = sy + (eyFull - sy) * extendT;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = false;
+
+  ctx.strokeStyle = 'rgba(255, 230, 120, 0.85)';
+  ctx.lineWidth = Math.max(1, scalePx * 0.75);
+  ctx.setLineDash([2 * scalePx, 2 * scalePx]);
+  ctx.beginPath();
+  ctx.moveTo(Math.round(sx), Math.round(sy));
+  ctx.lineTo(Math.round(ex), Math.round(ey));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = 'rgba(255, 245, 170, 0.9)';
+  const r = Math.max(1, scalePx);
+  ctx.fillRect(Math.round(ex) - r, Math.round(ey) - r, r * 2, r * 2);
+
+  ctx.restore();
+}
+
+function renderGrappleEmptyFx(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  if (snapshot.grappleEmptyFxTicksLeft <= 0) return;
+
+  const totalTicks = Math.max(1, snapshot.grappleEmptyFxTotalTicks);
+  const elapsedTicks = totalTicks - snapshot.grappleEmptyFxTicksLeft;
+  const t = elapsedTicks / totalTicks;
+  const alpha = Math.max(0, 1 - t);
+
+  const cx = snapshot.grappleEmptyFxXWorld * scalePx + offsetXPx;
+  const cy = snapshot.grappleEmptyFxYWorld * scalePx + offsetYPx;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = false;
+
+  const radius = (2 + t * 5) * scalePx;
+  ctx.strokeStyle = 'rgba(255, 180, 80, 0.8)';
+  ctx.lineWidth = Math.max(1, scalePx * 0.75);
+  ctx.beginPath();
+  ctx.arc(Math.round(cx), Math.round(cy), radius, -Math.PI * 0.2, Math.PI * 1.15);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255, 220, 90, 0.9)';
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2 + t * 2.0;
+    const inward = (1 - t) * 4 * scalePx;
+    const x = cx + Math.cos(angle) * inward;
+    const y = cy + Math.sin(angle) * inward;
+    const s = Math.max(1, scalePx);
+    ctx.fillRect(Math.round(x) - s, Math.round(y) - s, s * 2, s * 2);
+  }
+
+  ctx.restore();
+}
+
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
   const hasActiveGrapple = snapshot.isGrappleActiveFlag === 1;
-  if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0) return;
+  const hasFailFx =
+    snapshot.grappleFailBeamTicksLeft > 0 ||
+    snapshot.grappleEmptyFxTicksLeft > 0;
+
+  if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0 && !hasFailFx) return;
+
+  renderGrappleFailBeam(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+  renderGrappleEmptyFx(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
 
   let playerCluster: (typeof snapshot.clusters)[0] | undefined;
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {

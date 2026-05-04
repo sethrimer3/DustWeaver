@@ -54,6 +54,16 @@ interface _ReusableBacking {
   grappleAttachFxYWorld: number;
   grappleProximityBounceTicksLeft: number;
   grappleProximityBounceRotationAngleRad: number;
+  grappleFailBeamTicksLeft: number;
+  grappleFailBeamTotalTicks: number;
+  grappleFailBeamStartXWorld: number;
+  grappleFailBeamStartYWorld: number;
+  grappleFailBeamEndXWorld: number;
+  grappleFailBeamEndYWorld: number;
+  grappleEmptyFxTicksLeft: number;
+  grappleEmptyFxTotalTicks: number;
+  grappleEmptyFxXWorld: number;
+  grappleEmptyFxYWorld: number;
   isPlayerBlockingFlag: 0 | 1;
   hasGrappleChargeFlag: 0 | 1;
   isPlayerWeaveActiveFlag: 0 | 1;
@@ -339,6 +349,16 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     grappleAttachFxYWorld:    world.grappleAttachFxYWorld,
     grappleProximityBounceTicksLeft:        world.grappleProximityBounceTicksLeft,
     grappleProximityBounceRotationAngleRad: world.grappleProximityBounceRotationAngleRad,
+    grappleFailBeamTicksLeft:       world.grappleFailBeamTicksLeft,
+    grappleFailBeamTotalTicks:      world.grappleFailBeamTotalTicks,
+    grappleFailBeamStartXWorld:     world.grappleFailBeamStartXWorld,
+    grappleFailBeamStartYWorld:     world.grappleFailBeamStartYWorld,
+    grappleFailBeamEndXWorld:       world.grappleFailBeamEndXWorld,
+    grappleFailBeamEndYWorld:       world.grappleFailBeamEndYWorld,
+    grappleEmptyFxTicksLeft:        world.grappleEmptyFxTicksLeft,
+    grappleEmptyFxTotalTicks:       world.grappleEmptyFxTotalTicks,
+    grappleEmptyFxXWorld:           world.grappleEmptyFxXWorld,
+    grappleEmptyFxYWorld:           world.grappleEmptyFxYWorld,
     isPlayerBlockingFlag:     world.isPlayerBlockingFlag,
     hasGrappleChargeFlag:     world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag:  (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
@@ -450,6 +470,16 @@ export function updateSnapshotInPlace(
   b.grappleAttachFxYWorld     = world.grappleAttachFxYWorld;
   b.grappleProximityBounceTicksLeft        = world.grappleProximityBounceTicksLeft;
   b.grappleProximityBounceRotationAngleRad = world.grappleProximityBounceRotationAngleRad;
+  b.grappleFailBeamTicksLeft       = world.grappleFailBeamTicksLeft;
+  b.grappleFailBeamTotalTicks      = world.grappleFailBeamTotalTicks;
+  b.grappleFailBeamStartXWorld     = world.grappleFailBeamStartXWorld;
+  b.grappleFailBeamStartYWorld     = world.grappleFailBeamStartYWorld;
+  b.grappleFailBeamEndXWorld       = world.grappleFailBeamEndXWorld;
+  b.grappleFailBeamEndYWorld       = world.grappleFailBeamEndYWorld;
+  b.grappleEmptyFxTicksLeft        = world.grappleEmptyFxTicksLeft;
+  b.grappleEmptyFxTotalTicks       = world.grappleEmptyFxTotalTicks;
+  b.grappleEmptyFxXWorld           = world.grappleEmptyFxXWorld;
+  b.grappleEmptyFxYWorld           = world.grappleEmptyFxYWorld;
   b.isPlayerBlockingFlag      = world.isPlayerBlockingFlag;
   b.hasGrappleChargeFlag      = world.hasGrappleChargeFlag;
   b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
@@ -661,6 +691,16 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleAttachFxYWorld: world.grappleAttachFxYWorld,
     grappleProximityBounceTicksLeft:        world.grappleProximityBounceTicksLeft,
     grappleProximityBounceRotationAngleRad: world.grappleProximityBounceRotationAngleRad,
+    grappleFailBeamTicksLeft:       world.grappleFailBeamTicksLeft,
+    grappleFailBeamTotalTicks:      world.grappleFailBeamTotalTicks,
+    grappleFailBeamStartXWorld:     world.grappleFailBeamStartXWorld,
+    grappleFailBeamStartYWorld:     world.grappleFailBeamStartYWorld,
+    grappleFailBeamEndXWorld:       world.grappleFailBeamEndXWorld,
+    grappleFailBeamEndYWorld:       world.grappleFailBeamEndYWorld,
+    grappleEmptyFxTicksLeft:        world.grappleEmptyFxTicksLeft,
+    grappleEmptyFxTotalTicks:       world.grappleEmptyFxTotalTicks,
+    grappleEmptyFxXWorld:           world.grappleEmptyFxXWorld,
+    grappleEmptyFxYWorld:           world.grappleEmptyFxYWorld,
     isPlayerBlockingFlag: world.isPlayerBlockingFlag,
     hasGrappleChargeFlag: world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
