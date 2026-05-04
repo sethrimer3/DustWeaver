@@ -13,6 +13,7 @@
 
 import { WorldState } from '../world';
 import { INFLUENCE_RADIUS_WORLD } from './binding';
+import { COYOTE_TIME_TICKS } from './movementConstants';
 
 // ============================================================================
 // Shared constants (re-used by grapple.ts)
@@ -226,3 +227,67 @@ export function isSpecialZipGrapple(
 
 /** Minimum rope length to prevent degenerate zero-length rope attachment (world units). */
 export const GRAPPLE_MIN_LENGTH_WORLD = 20;
+
+// ============================================================================
+// Release helpers (used by grapple.ts, grappleZip.ts, and gameCommandProcessor)
+// ============================================================================
+
+/** Resets all legacy "miss" (fail-beam retract) state fields. */
+export function clearLegacyGrappleMissState(world: WorldState): void {
+  world.isGrappleMissActiveFlag = 0;
+  world.isGrappleRetractingFlag = 0;
+  world.grappleMissDirXWorld = 0.0;
+  world.grappleMissDirYWorld = 0.0;
+  world.grappleMissTickCount = 0;
+}
+
+/**
+ * Releases the grapple and deactivates the chain particles.
+ * The player retains their current velocity (built-up swing momentum).
+ *
+ * Grants the player coyote-time frames so they can still jump immediately
+ * after releasing the grapple (e.g. letting go of the mouse button mid-swing).
+ *
+ * @param grantCoyoteTime  When true (default), sets the player's coyoteTimeTicks so
+ *   a jump pressed in the next few frames still counts.  Pass false when the
+ *   release is itself a jump (jump-off and stuck-jump paths) because those paths
+ *   already apply an upward velocity impulse directly.
+ */
+export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void {
+  const shouldRetractFromActiveGrapple = world.isGrappleActiveFlag === 1;
+
+  // Grant coyote time so the player can jump in the first few frames after
+  // releasing the grapple without pressing jump at the exact release moment.
+  if (grantCoyoteTime && shouldRetractFromActiveGrapple) {
+    const player = world.clusters[0];
+    if (player !== undefined && player.isPlayerFlag === 1 && player.isAliveFlag === 1) {
+      player.coyoteTimeTicks = COYOTE_TIME_TICKS;
+    }
+  }
+
+  world.isGrappleActiveFlag = 0;
+  world.isGrappleZipActiveFlag = 0;
+  world.isGrappleStuckFlag = 0;
+  world.grappleStuckStoppedTickCount = 0;
+  world.grappleJumpHeldTickCount = 0;
+  world.grappleRetractHeldTicks = 0;
+  world.grapplePullInAmountWorld = 0.0;
+  world.grappleOutOfRangeTicks = 0;
+  world.grappleTensionFactor = 0;
+  world.playerDownLastPressTick = 0; // reset double-tap state on release
+  world.grappleRopeIndex = -1; // detach from rope segment (if any)
+  world.grappleWrapPointCount = 0;  // clear wrap corners
+  // Clear surface-anchor state (no longer attached to any surface).
+  world.grappleAnchorNormalXWorld = 0.0;
+  world.grappleAnchorNormalYWorld = 0.0;
+  clearLegacyGrappleMissState(world);
+  // Keep debug fields so the overlay can still show the last sweep until the
+  // next grapple fire; isGrappleDebugActiveFlag persists for the current frame.
+
+  if (world.grappleParticleStartIndex >= 0) {
+    const start = world.grappleParticleStartIndex;
+    for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+      world.isAliveFlag[start + i] = 0;
+    }
+  }
+}

@@ -16,13 +16,14 @@ import {
   EditorTransition, EditorRoomData,
   selectBlockTheme,
 } from './editorState';
-import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './roomJson';
+import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBuilder';
 import { updateEditorCamera, EditorCameraInput } from './editorCamera';
 import {
   createEditorInputState,
   attachEditorInputListeners, clearEditorOneShots,
 } from './editorInput';
-import { selectAtCursor, placeAtCursor, deleteAtCursor, rotateSelectedElement, getAllElementsInRect } from './editorTools';
+import { selectAtCursor, deleteAtCursor, rotateSelectedElement, getAllElementsInRect } from './editorTools';
+import { placeAtCursor } from './editorPlaceTool';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';

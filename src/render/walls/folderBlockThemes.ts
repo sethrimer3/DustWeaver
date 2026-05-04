@@ -24,6 +24,7 @@
 
 import { loadImg } from '../imageCache';
 import { hashTilePosition } from './proceduralBlockSprite';
+import { applyOrganicEdgeShading, OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
 
 // ── Build-time asset discovery ────────────────────────────────────────────────
 
@@ -304,3 +305,147 @@ export function getTheme1x1Sprite(
   const varIdx = hash % entry.sprite16Urls.length;
   return _getOrCreate8x8(entry.sprite16Urls[varIdx]);
 }
+
+// ── Edge-shaded sprite cache ──────────────────────────────────────────────────
+
+/**
+ * Cache of edge-shaded canvases for folder-based sprites.
+ *
+ * Keyed by a string encoding (source URL, dimensions, openAirSidesMask,
+ * worldOriginX, worldOriginY, seed) so each unique per-tile configuration
+ * is baked at most once.
+ */
+const _shadedCache = new Map<string, HTMLCanvasElement>();
+
+function _shadedCacheKey(
+  url: string,
+  widthPx: number,
+  heightPx: number,
+  openAirSidesMask: number,
+  worldOriginXWorld: number,
+  worldOriginYWorld: number,
+  seed: number,
+): string {
+  return `${url}|${widthPx}|${heightPx}|${openAirSidesMask}|${worldOriginXWorld}|${worldOriginYWorld}|${seed}`;
+}
+
+/**
+ * Draws `src` into a new canvas of the given size and applies organic edge
+ * shading, then caches the result.  Returns the shaded canvas.
+ */
+function _createShadedCanvas(
+  src: HTMLImageElement | HTMLCanvasElement,
+  widthPx: number,
+  heightPx: number,
+  openAirSidesMask: number,
+  worldOriginXWorld: number,
+  worldOriginYWorld: number,
+  seed: number,
+): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width  = widthPx;
+  c.height = heightPx;
+  const ctx = c.getContext('2d');
+  if (ctx === null) return c;
+  ctx.imageSmoothingEnabled = false; // preserve pixel-art crispness
+  ctx.drawImage(src, 0, 0, widthPx, heightPx);
+  applyOrganicEdgeShading(ctx, widthPx, heightPx, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
+  return c;
+}
+
+/**
+ * Returns an edge-shaded 8×8 canvas for a folder-based 1×1 block tile.
+ *
+ * The canvas is generated from the downscaled source, shaded once using
+ * `applyOrganicEdgeShading`, and cached permanently so each unique
+ * (tile position, neighbour configuration, seed) combination is baked at most once.
+ *
+ * Returns null while the source image is still loading.
+ *
+ * @param themeId          Folder-based block theme ID (e.g. `'grayStone'`).
+ * @param col              Tile column (0-based).
+ * @param row              Tile row (0-based).
+ * @param seed             World/room hash seed — same value passed to the BFS noise.
+ * @param openAirSidesMask Bitmask of sides exposed to air (OPEN_AIR_SIDE_* constants).
+ *                         Sides NOT set are solid-neighbour edges; shading is suppressed
+ *                         on those sides to prevent seams between adjacent blocks.
+ * @param blockSizePx      Block size in world units (= virtual pixels at zoom 1).
+ *                         Used to compute the world-space origin of the sprite for
+ *                         seamless noise across tile boundaries.
+ */
+export function getTheme1x1SpriteShaded(
+  themeId:          string | null,
+  col:              number,
+  row:              number,
+  seed:             number,
+  openAirSidesMask: number = OPEN_AIR_ALL_SIDES,
+  blockSizePx:      number = 8,
+): HTMLCanvasElement | null {
+  if (themeId === null) return null;
+  const entry = _getEntry(themeId);
+  if (entry === null || entry.sprite16Urls.length === 0) return null;
+
+  const hash   = hashTilePosition(col, row, seed);
+  const varIdx = hash % entry.sprite16Urls.length;
+  const url    = entry.sprite16Urls[varIdx];
+
+  const base = _getOrCreate8x8(url);
+  if (base === null) return null; // source still loading
+
+  const worldX = col * blockSizePx;
+  const worldY = row * blockSizePx;
+  const key    = _shadedCacheKey(url, 8, 8, openAirSidesMask, worldX, worldY, seed);
+  const cached = _shadedCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, worldX, worldY, seed);
+  _shadedCache.set(key, shaded);
+  return shaded;
+}
+
+/**
+ * Returns an edge-shaded 16×16 canvas for a folder-based 2×2 block group.
+ *
+ * Works identically to {@link getTheme1x1SpriteShaded} but uses the full 16×16
+ * source image and is intended for 2×2 block tile groups (top-left coordinates
+ * provided as `col`/`row`).
+ *
+ * Returns null while the source image is still loading.
+ *
+ * @param themeId          Folder-based block theme ID.
+ * @param col              Tile column of the 2×2 group's top-left corner.
+ * @param row              Tile row of the 2×2 group's top-left corner.
+ * @param seed             World/room hash seed.
+ * @param openAirSidesMask Bitmask of sides exposed to air (OPEN_AIR_SIDE_* constants).
+ * @param blockSizePx      Block size in world units (= virtual pixels at zoom 1).
+ */
+export function getTheme2x2SpriteShaded(
+  themeId:          string | null,
+  col:              number,
+  row:              number,
+  seed:             number,
+  openAirSidesMask: number = OPEN_AIR_ALL_SIDES,
+  blockSizePx:      number = 8,
+): HTMLCanvasElement | null {
+  if (themeId === null) return null;
+  const entry = _getEntry(themeId);
+  if (entry === null || entry.sprite16Urls.length === 0) return null;
+
+  const hash   = hashTilePosition(col, row, seed);
+  const varIdx = hash % entry.sprite16Urls.length;
+  const url    = entry.sprite16Urls[varIdx];
+
+  const img = loadImg(url);
+  if (!img.complete || img.naturalWidth === 0) return null; // source still loading
+
+  const worldX = col * blockSizePx;
+  const worldY = row * blockSizePx;
+  const key    = _shadedCacheKey(url, 16, 16, openAirSidesMask, worldX, worldY, seed);
+  const cached = _shadedCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, worldX, worldY, seed);
+  _shadedCache.set(key, shaded);
+  return shaded;
+}
+

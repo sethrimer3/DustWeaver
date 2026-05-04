@@ -7,7 +7,7 @@
 
 import type { EditorRoomData } from './editorState';
 import { editorRoomDataToJson } from './roomJson';
-import { roomDefToEditorRoomData } from './roomJson';
+import { roomDefToEditorRoomData } from './editorRoomBuilder';
 import { dehydrateRoom, validateRoomRoundtrip } from '../levels/roomSchemaV2';
 import {
   ROOM_REGISTRY,

@@ -14,18 +14,20 @@
  * 1 map world unit per keypress.
  */
 
-import { ROOM_REGISTRY, setRoomMapPosition, setRoomNameOverride, setRoomTransitionLink } from '../levels/rooms';
-import type { RoomDef, RoomTransitionDef, TransitionDirection } from '../levels/roomDef';
+import { ROOM_REGISTRY, setRoomMapPosition, setRoomNameOverride } from '../levels/rooms';
+import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
 import { exportWorldMapJson } from './editorExport';
 import { createSubstrateEffect } from '../render/effects/substrateEffect';
 import {
   MapRoomPlacement,
+  SnapIndicator,
   VisualMapCallbacks,
   effectiveRoomName,
   effectiveWorldId,
   worldDisplayName,
   hexToRgba,
   computeAutoLayout,
+  applyDoorSnap,
 } from './editorVisualMapHelpers';
 import {
   VisualMapDialogContext,
@@ -35,6 +37,15 @@ import {
   showAddWorldDialog,
   showColorPickerDialog,
 } from './editorVisualMapDialogs';
+import {
+  type DoorHitArea,
+  type PendingDoorLink,
+  type VisualMapLinkContext,
+  showLinkRoomsPrompt,
+  dismissLinkRoomsPrompt,
+  completeDoorLink,
+  cancelDoorLink,
+} from './editorVisualMapLinkPrompt';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,42 +66,12 @@ const GREEN = '#00c864';
 
 /** Screen-pixel distance within which two facing doorways snap together. */
 const SNAP_THRESHOLD_PX = 40;
-/** Highlight color for doorways that are about to snap together. */
+/** Highlight color for doorways that are about to snap together or have been linked. */
 const DOOR_SNAP_COLOR = '#ffe840';
 
 
 /** Scale factor: screen pixels per map world unit at default zoom. */
 const DEFAULT_ZOOM_SCALE = 4;
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface DoorHitArea {
-  roomId: string;
-  transitionIndex: number;
-  xPx: number;
-  yPx: number;
-  wPx: number;
-  hPx: number;
-}
-
-/** Tracks which two doorways are about to snap together during a room drag. */
-interface SnapIndicator {
-  srcRoomId: string;
-  srcTransIdx: number;
-  tgtRoomId: string;
-  tgtTransIdx: number;
-}
-
-interface PendingDoorLink {
-  sourceRoomId: string;
-  sourceTransIndex: number;
-  targetRoomId: string;
-  targetTransIndex: number;
-  promptEl: HTMLDivElement;
-  timeoutId: number;
-  removeTimeoutId: number;
-  hasResolved: boolean;
-}
 
 // ── Public entry point ───────────────────────────────────────────────────────
 
@@ -240,6 +221,28 @@ export function showVisualWorldMap(
   let doorHitAreas: DoorHitArea[] = [];
 
   let pendingDoorLink: PendingDoorLink | null = null;
+
+  // ── Link context ────────────────────────────────────────────────────────
+  // Bundles mutable link state behind getter/setter closures so the
+  // door-link functions in editorVisualMapLinkPrompt.ts can access it.
+  const linkCtx: VisualMapLinkContext = {
+    overlay,
+    statusBar,
+    render: () => render(),
+    onWorldMapDataChanged: callbacks.onWorldMapDataChanged,
+    getPendingLink:          () => pendingDoorLink,
+    setPendingLink:          (link) => { pendingDoorLink = link; },
+    getLinkSourceRoomId:     () => linkSourceRoomId,
+    getLinkSourceTransIndex: () => linkSourceTransIndex,
+    setLinkSource: (roomId, transIndex) => {
+      linkSourceRoomId = roomId;
+      linkSourceTransIndex = transIndex;
+    },
+    clearLinkSource: () => {
+      linkSourceRoomId = '';
+      linkSourceTransIndex = -1;
+    },
+  };
 
   // Center on current room
   centerOnRoom(currentRoomId);
@@ -634,7 +637,7 @@ export function showVisualWorldMap(
         placement.mapXWorld = Math.round(dragRoomStartXPx + dx / zoom);
         placement.mapYWorld = Math.round(dragRoomStartYPx + dy / zoom);
         // Doorway snap: adjust position if a compatible door pair is close enough
-        snapIndicator = applyDoorSnap(dragRoomId, placement);
+        snapIndicator = applyDoorSnap(dragRoomId, placement, placements, SNAP_THRESHOLD_PX / zoom);
       }
       render();
     } else if (isDraggingPan) {
@@ -679,10 +682,9 @@ export function showVisualWorldMap(
     if (door) {
       if (linkSourceRoomId) {
         isDraggingDoorLink = false;
-        completeDoorLink(door);
+        completeDoorLink_impl(door);
       } else {
-        linkSourceRoomId = door.roomId;
-        linkSourceTransIndex = door.transitionIndex;
+        linkCtx.setLinkSource(door.roomId, door.transitionIndex);
         isDraggingDoorLink = true;
         statusBar.textContent = `Linking: ${door.roomId} Door #${door.transitionIndex + 1} \u2014 click another door to link, or ESC to cancel`;
         render();
@@ -691,7 +693,7 @@ export function showVisualWorldMap(
     }
 
     if (linkSourceRoomId) {
-      cancelDoorLink();
+      cancelDoorLink_impl();
       return;
     }
 
@@ -732,7 +734,7 @@ export function showVisualWorldMap(
         const rect = canvas.getBoundingClientRect();
         const door = hitTestDoor(e.clientX - rect.left, e.clientY - rect.top);
         if (door && (door.roomId !== linkSourceRoomId || door.transitionIndex !== linkSourceTransIndex)) {
-          completeDoorLink(door);
+          completeDoorLink_impl(door);
         }
         isDraggingDoorLink = false;
       }
@@ -748,6 +750,7 @@ export function showVisualWorldMap(
               ' — confirm to link the transitions';
             statusBar.style.color = DOOR_SNAP_COLOR;
             showLinkRoomsPrompt(
+              linkCtx,
               snapIndicator.srcRoomId,
               snapIndicator.srcTransIdx,
               snapIndicator.tgtRoomId,
@@ -802,192 +805,13 @@ export function showVisualWorldMap(
     render();
   }
 
-  function completeDoorLink(targetDoor: DoorHitArea): void {
-    const sourceRoom = ROOM_REGISTRY.get(linkSourceRoomId);
-    const targetRoom = ROOM_REGISTRY.get(targetDoor.roomId);
-    if (sourceRoom && targetRoom) {
-      statusBar.textContent =
-        `Linked: ${linkSourceRoomId} Door #${linkSourceTransIndex + 1} \u2192 ${targetDoor.roomId} Door #${targetDoor.transitionIndex + 1}` +
-        ' — confirm to update the room files';
-      statusBar.style.color = DOOR_SNAP_COLOR;
-      showLinkRoomsPrompt(
-        linkSourceRoomId,
-        linkSourceTransIndex,
-        targetDoor.roomId,
-        targetDoor.transitionIndex,
-      );
-    }
-    linkSourceRoomId = '';
-    linkSourceTransIndex = -1;
-    render();
+  function completeDoorLink_impl(targetDoor: DoorHitArea): void {
+    completeDoorLink(linkCtx, targetDoor);
   }
 
-  function cancelDoorLink(): void {
-    linkSourceRoomId = '';
-    linkSourceTransIndex = -1;
+  function cancelDoorLink_impl(): void {
     isDraggingDoorLink = false;
-    statusBar.textContent = 'Link cancelled';
-    statusBar.style.color = 'rgba(200,255,200,0.6)';
-    render();
-  }
-
-  function computeSpawnBlockForMapLink(
-    room: RoomDef,
-    transition: RoomTransitionDef,
-  ): readonly [number, number] {
-    const SPAWN_INSET_BLOCKS = 3;
-    const spawnOffset = Math.floor(transition.openingSizeBlocks / 2);
-    if (transition.direction === 'left') {
-      return [SPAWN_INSET_BLOCKS, transition.positionBlock + spawnOffset];
-    }
-    if (transition.direction === 'right') {
-      return [room.widthBlocks - SPAWN_INSET_BLOCKS - 1, transition.positionBlock + spawnOffset];
-    }
-    if (transition.direction === 'up') {
-      return [transition.positionBlock + spawnOffset, SPAWN_INSET_BLOCKS];
-    }
-    return [transition.positionBlock + spawnOffset, room.heightBlocks - SPAWN_INSET_BLOCKS - 1];
-  }
-
-  function applyPendingDoorLink(link: PendingDoorLink): void {
-    const sourceRoom = ROOM_REGISTRY.get(link.sourceRoomId);
-    const targetRoom = ROOM_REGISTRY.get(link.targetRoomId);
-    const sourceTransition = sourceRoom?.transitions[link.sourceTransIndex];
-    const targetTransition = targetRoom?.transitions[link.targetTransIndex];
-    if (!sourceRoom || !targetRoom || !sourceTransition || !targetTransition) return;
-
-    const sourceSpawn = computeSpawnBlockForMapLink(sourceRoom, sourceTransition);
-    const targetSpawn = computeSpawnBlockForMapLink(targetRoom, targetTransition);
-    const didLinkSource = setRoomTransitionLink(
-      link.sourceRoomId,
-      link.sourceTransIndex,
-      link.targetRoomId,
-      targetSpawn,
-    );
-    const didLinkTarget = setRoomTransitionLink(
-      link.targetRoomId,
-      link.targetTransIndex,
-      link.sourceRoomId,
-      sourceSpawn,
-    );
-
-    if (didLinkSource && didLinkTarget) {
-      callbacks.onWorldMapDataChanged?.();
-      statusBar.textContent =
-        `Linked: ${effectiveRoomName(link.sourceRoomId)} door #${link.sourceTransIndex + 1}` +
-        ` <-> ${effectiveRoomName(link.targetRoomId)} door #${link.targetTransIndex + 1}`;
-      statusBar.style.color = '#88ff88';
-    }
-  }
-
-  function dismissLinkRoomsPrompt(shouldAnimate: boolean): void {
-    const link = pendingDoorLink;
-    if (!link) return;
-    pendingDoorLink = null;
-    window.clearTimeout(link.timeoutId);
-    window.clearTimeout(link.removeTimeoutId);
-
-    if (shouldAnimate) {
-      link.promptEl.style.opacity = '0';
-      link.promptEl.style.transform = 'translateY(16px)';
-      link.removeTimeoutId = window.setTimeout(() => {
-        if (link.promptEl.parentElement) link.promptEl.parentElement.removeChild(link.promptEl);
-      }, 240);
-      return;
-    }
-
-    if (link.promptEl.parentElement) link.promptEl.parentElement.removeChild(link.promptEl);
-  }
-
-  function confirmPendingDoorLink(): void {
-    const link = pendingDoorLink;
-    if (!link || link.hasResolved) return;
-    link.hasResolved = true;
-    applyPendingDoorLink(link);
-    dismissLinkRoomsPrompt(false);
-    render();
-  }
-
-  function showLinkRoomsPrompt(
-    sourceRoomId: string,
-    sourceTransIndex: number,
-    targetRoomId: string,
-    targetTransIndex: number,
-  ): void {
-    dismissLinkRoomsPrompt(false);
-
-    const promptEl = document.createElement('div');
-    promptEl.style.cssText = `
-      position: absolute; top: 64px; left: 16px; z-index: 1300;
-      width: 210px; overflow: hidden; border-radius: 4px;
-      background: rgba(8,12,18,0.96); border: 1px solid rgba(80,255,160,0.75);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.55);
-      color: #d8ffe8; font-family: monospace; cursor: pointer;
-      opacity: 0; transform: translateY(-12px);
-      transition: opacity 180ms ease, transform 180ms ease;
-    `;
-
-    const contentEl = document.createElement('div');
-    contentEl.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 10px 9px;';
-
-    const labelEl = document.createElement('div');
-    labelEl.textContent = 'Link rooms?';
-    labelEl.style.cssText = 'font-size:13px; font-weight:bold;';
-    contentEl.appendChild(labelEl);
-
-    const yesBtn = document.createElement('button');
-    yesBtn.type = 'button';
-    yesBtn.textContent = 'Yes';
-    yesBtn.style.cssText = `
-      padding: 4px 10px; border-radius: 3px; border: 1px solid rgba(120,255,180,0.8);
-      background: rgba(30,120,70,0.75); color: #ecfff4; font-family: monospace;
-      font-size: 12px; cursor: pointer;
-    `;
-    contentEl.appendChild(yesBtn);
-    promptEl.appendChild(contentEl);
-
-    const timerBar = document.createElement('div');
-    timerBar.style.cssText = `
-      height: 3px; width: 100%; background: #66ffaa;
-      transition: width 5000ms linear;
-    `;
-    promptEl.appendChild(timerBar);
-    overlay.appendChild(promptEl);
-
-    const pending: PendingDoorLink = {
-      sourceRoomId,
-      sourceTransIndex,
-      targetRoomId,
-      targetTransIndex,
-      promptEl,
-      timeoutId: 0,
-      removeTimeoutId: 0,
-      hasResolved: false,
-    };
-    pendingDoorLink = pending;
-
-    promptEl.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      confirmPendingDoorLink();
-    });
-    yesBtn.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      confirmPendingDoorLink();
-    });
-
-    requestAnimationFrame(() => {
-      promptEl.style.opacity = '1';
-      promptEl.style.transform = 'translateY(0)';
-      timerBar.style.width = '0%';
-    });
-
-    pending.timeoutId = window.setTimeout(() => {
-      if (pendingDoorLink === pending && !pending.hasResolved) {
-        dismissLinkRoomsPrompt(true);
-      }
-    }, 5000);
+    cancelDoorLink(linkCtx);
   }
 
   // ── Context menu ───────────────────────────────────────────────────────
@@ -1070,109 +894,6 @@ export function showVisualWorldMap(
     contextMenuEl = menu;
   }
 
-  // ── Door snap helpers ─────────────────────────────────────────────────
-
-  /**
-   * Returns the door's centre in map-world coordinates given its containing
-   * room's current placement.
-   */
-  function getDoorCenterWorld(
-    trans: RoomTransitionDef,
-    placement: MapRoomPlacement,
-  ): [number, number] {
-    const room = placement.room;
-    const cx = placement.mapXWorld;
-    const cy = placement.mapYWorld;
-    const mid = trans.positionBlock + trans.openingSizeBlocks / 2;
-    const DEPTH = 6;
-    if (trans.depthBlock !== undefined) {
-      // Interior transition: report center of the zone
-      const depthMid = trans.depthBlock + DEPTH / 2;
-      if (trans.direction === 'left' || trans.direction === 'right') {
-        return [cx + depthMid, cy + mid];
-      } else {
-        return [cx + mid, cy + depthMid];
-      }
-    }
-    if (trans.direction === 'left')  return [cx,                   cy + mid];
-    if (trans.direction === 'right') return [cx + room.widthBlocks, cy + mid];
-    if (trans.direction === 'up')    return [cx + mid,              cy];
-    if (trans.direction === 'down')  return [cx + mid,              cy + room.heightBlocks];
-    // Exhaustive check for TransitionDirection — should never reach here
-    throw new Error(`Unknown transition direction: ${(trans as RoomTransitionDef).direction}`);
-  }
-
-  /** True when direction `a` and `b` face each other (and can be aligned). */
-  function isOppositeDoor(a: TransitionDirection, b: TransitionDirection): boolean {
-    return (a === 'left'  && b === 'right') ||
-           (a === 'right' && b === 'left')  ||
-           (a === 'up'    && b === 'down')  ||
-           (a === 'down'  && b === 'up');
-  }
-
-  /**
-   * Checks all pairs of (dragged-room door, other-room door) for compatible
-   * facing pairs within SNAP_THRESHOLD_PX on screen.  When found, the
-   * dragged room's placement is moved so the door centres coincide (seamless
-   * wall-to-wall alignment).  Returns a SnapIndicator when snapping occurred.
-   */
-  function applyDoorSnap(
-    draggingRoomId: string,
-    draggingPlacement: MapRoomPlacement,
-  ): SnapIndicator | null {
-    const draggingRoom = draggingPlacement.room;
-
-    let bestDistPx = SNAP_THRESHOLD_PX;
-    let bestSnap: {
-      worldDX: number;
-      worldDY: number;
-      srcTransIdx: number;
-      tgtRoomId: string;
-      tgtTransIdx: number;
-    } | null = null;
-
-    for (let si = 0; si < draggingRoom.transitions.length; si++) {
-      const srcTrans = draggingRoom.transitions[si];
-      const [srcWx, srcWy] = getDoorCenterWorld(srcTrans, draggingPlacement);
-      const [srcSx, srcSy] = worldToScreen(srcWx, srcWy);
-
-      for (const [otherId, otherPlacement] of placements) {
-        if (otherId === draggingRoomId) continue;
-        for (let ti = 0; ti < otherPlacement.room.transitions.length; ti++) {
-          const tgtTrans = otherPlacement.room.transitions[ti];
-          if (!isOppositeDoor(srcTrans.direction, tgtTrans.direction)) continue;
-
-          const [tgtWx, tgtWy] = getDoorCenterWorld(tgtTrans, otherPlacement);
-          const [tgtSx, tgtSy] = worldToScreen(tgtWx, tgtWy);
-          const distPx = Math.hypot(srcSx - tgtSx, srcSy - tgtSy);
-
-          if (distPx < bestDistPx) {
-            bestDistPx = distPx;
-            bestSnap = {
-              worldDX: tgtWx - srcWx,
-              worldDY: tgtWy - srcWy,
-              srcTransIdx: si,
-              tgtRoomId: otherId,
-              tgtTransIdx: ti,
-            };
-          }
-        }
-      }
-    }
-
-    if (bestSnap) {
-      draggingPlacement.mapXWorld += bestSnap.worldDX;
-      draggingPlacement.mapYWorld += bestSnap.worldDY;
-      return {
-        srcRoomId: draggingRoomId,
-        srcTransIdx: bestSnap.srcTransIdx,
-        tgtRoomId: bestSnap.tgtRoomId,
-        tgtTransIdx: bestSnap.tgtTransIdx,
-      };
-    }
-    return null;
-  }
-
   // ── Keyboard ───────────────────────────────────────────────────────────
   function isTypingIntoField(e: KeyboardEvent): boolean {
     const target = e.target;
@@ -1207,7 +928,7 @@ export function showVisualWorldMap(
       e.stopImmediatePropagation();
       dismissContextMenu();
       if (linkSourceRoomId) {
-        cancelDoorLink();
+        cancelDoorLink_impl();
       } else {
         destroy();
         callbacks.onClose();
@@ -1231,7 +952,7 @@ export function showVisualWorldMap(
 
   function destroy(): void {
     dismissContextMenu();
-    dismissLinkRoomsPrompt(false);
+    dismissLinkRoomsPrompt(linkCtx, false);
     substrateEffect.reset();
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('mousedown', onMouseDown);

@@ -3,10 +3,11 @@ import { createClusterState } from '../sim/clusters/state';
 import { initGrappleChainParticles } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
-import { createRng, nextFloat, nextFloatTriangle } from '../sim/rng';
+import { createRng } from '../sim/rng';
 import { createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
 import { renderParticles } from '../render/particles/renderer';
-import { renderClusters, renderWalls, renderGrapple } from '../render/clusters/renderer';
+import { renderClusters, renderWalls } from '../render/clusters/renderer';
+import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
@@ -20,7 +21,7 @@ import { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
-import { RoomDef, RoomTransitionDef, TransitionDirection, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
@@ -52,8 +53,8 @@ import {
   spawnClusterParticles,
   spawnWeaveLoadoutParticles,
   spawnBackgroundFluidParticles,
-  spawnDustPileParticles,
   spawnEnemyClusters,
+  spawnAllDustPiles,
   PARTICLE_COUNT_PER_CLUSTER,
   BACKGROUND_FLUID_COUNT,
   PLAYER_INITIAL_HEALTH,
@@ -63,12 +64,10 @@ import {
   loadRoomHazards,
   loadRoomRopes,
   loadRoomFallingBlocks,
+  loadRoomGrasshoppers,
   worldBgColor,
   drawTunnelDarkness,
   resolveSpawnBlock,
-  TUNNEL_DETECT_MARGIN_WORLD,
-  DUST_CONTAINER_PICKUP_RADIUS_WORLD,
-  DUST_CONTAINER_DUST_GAIN,
 } from './gameRoom';
 import { renderFrame } from './gameRender';
 import { createCombatTextSystem } from '../render/hud/combatText';
@@ -76,9 +75,13 @@ import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
-import { MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS, MAX_CRUMBLE_BLOCKS } from '../sim/world';
+import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
+import {
+  checkRoomTransitions,
+} from './gameTransitions';
+import { processRoomPickups } from './gamePickups';
 
 const FIXED_DT_MS = 16.666;
 
@@ -357,37 +360,10 @@ export function startGameScreen(
     loadRoomFallingBlocks(world, room);
 
     // Reset and spawn grasshoppers
-    world.grasshopperCount = 0;
-    if (room.grasshopperAreas) {
-      for (const area of room.grasshopperAreas) {
-        const areaXWorld = area.xBlock * BLOCK_SIZE_MEDIUM;
-        const areaYWorld = area.yBlock * BLOCK_SIZE_MEDIUM;
-        const areaWidthWorld = area.wBlock * BLOCK_SIZE_MEDIUM;
-        const areaHeightWorld = area.hBlock * BLOCK_SIZE_MEDIUM;
-        for (let g = 0; g < area.count && world.grasshopperCount < MAX_GRASSHOPPERS; g++) {
-          const gi = world.grasshopperCount++;
-          world.grasshopperXWorld[gi] = areaXWorld + areaWidthWorld  * 0.5
-            + nextFloatTriangle(world.rng) * areaWidthWorld  * 0.5;
-          world.grasshopperYWorld[gi] = areaYWorld + areaHeightWorld * 0.5
-            + nextFloatTriangle(world.rng) * areaHeightWorld * 0.5;
-          world.grasshopperVelXWorld[gi] = 0;
-          world.grasshopperVelYWorld[gi] = 0;
-          world.grasshopperHopTimerTicks[gi] = nextFloat(world.rng) * GRASSHOPPER_INITIAL_TIMER_MAX_TICKS;
-          world.isGrasshopperAliveFlag[gi] = 1;
-        }
-      }
-    }
+    loadRoomGrasshoppers(world, room);
 
     // Spawn dust pile particles (unowned Gold Dust for Storm Weave attraction)
-    for (let i = 0; i < world.dustPileCount; i++) {
-      spawnDustPileParticles(
-        world,
-        world.dustPileXWorld[i],
-        world.dustPileYWorld[i],
-        world.dustPileDustCount[i],
-        world.rng,
-      );
-    }
+    spawnAllDustPiles(world);
 
     // Init dust
     environmentalDust.initFromWorld(world, room.worldNumber);
@@ -790,102 +766,6 @@ export function startGameScreen(
   }
   window.addEventListener('resize', onResize);
 
-  const TRANSITION_SPAWN_INSET_BLOCKS = 3;
-
-  function getOppositeTransitionDirection(direction: TransitionDirection): TransitionDirection {
-    if (direction === 'left') return 'right';
-    if (direction === 'right') return 'left';
-    if (direction === 'up') return 'down';
-    return 'up';
-  }
-
-  function computeSpawnBlockForTransition(room: RoomDef, transition: RoomTransitionDef): readonly [number, number] {
-    const openingCenterOffsetBlocks = Math.floor(transition.openingSizeBlocks / 2);
-    if (transition.direction === 'left') {
-      return [
-        TRANSITION_SPAWN_INSET_BLOCKS,
-        transition.positionBlock + openingCenterOffsetBlocks,
-      ] as const;
-    }
-    if (transition.direction === 'right') {
-      return [
-        room.widthBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1,
-        transition.positionBlock + openingCenterOffsetBlocks,
-      ] as const;
-    }
-    if (transition.direction === 'up') {
-      return [
-        transition.positionBlock + openingCenterOffsetBlocks,
-        TRANSITION_SPAWN_INSET_BLOCKS,
-      ] as const;
-    }
-    return [
-      transition.positionBlock + openingCenterOffsetBlocks,
-      room.heightBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1,
-    ] as const;
-  }
-
-  /**
-   * Check if the player has entered a transition tunnel and should move
-   * to the adjacent room.
-   */
-  function checkRoomTransitions(): boolean {
-    const player = world.clusters[0];
-    if (player === undefined || player.isAliveFlag === 0) return false;
-
-    const px = player.positionXWorld;
-    const py = player.positionYWorld;
-
-    for (let ti = 0; ti < currentRoom.transitions.length; ti++) {
-      const t = currentRoom.transitions[ti];
-      const openTopWorld = t.positionBlock * BLOCK_SIZE_MEDIUM;
-      const openBottomWorld = (t.positionBlock + t.openingSizeBlocks) * BLOCK_SIZE_MEDIUM;
-
-      let isInTunnel = false;
-      if (t.depthBlock !== undefined) {
-        // Interior transition: fire when the player's center enters the zone
-        const FADE_DEPTH = 6 * BLOCK_SIZE_MEDIUM;
-        const zoneStartWorld = t.depthBlock * BLOCK_SIZE_MEDIUM;
-        const zoneEndWorld   = zoneStartWorld + FADE_DEPTH;
-        isInTunnel = px >= zoneStartWorld && px <= zoneEndWorld
-          && py >= openTopWorld && py <= openBottomWorld;
-        // For up/down interior transitions
-        if (t.direction === 'up' || t.direction === 'down') {
-          isInTunnel = py >= zoneStartWorld && py <= zoneEndWorld
-            && px >= openTopWorld && px <= openBottomWorld;
-        }
-      } else if (t.direction === 'left') {
-        isInTunnel = px < TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
-      } else if (t.direction === 'right') {
-        isInTunnel = px > roomWidthWorld - TUNNEL_DETECT_MARGIN_WORLD && py >= openTopWorld && py <= openBottomWorld;
-      } else if (t.direction === 'up') {
-        isInTunnel = py < TUNNEL_DETECT_MARGIN_WORLD && px >= openTopWorld && px <= openBottomWorld;
-      } else if (t.direction === 'down') {
-        isInTunnel = py > roomHeightWorld - TUNNEL_DETECT_MARGIN_WORLD && px >= openTopWorld && px <= openBottomWorld;
-      }
-
-      if (isInTunnel) {
-        const targetRoom = ROOM_REGISTRY.get(t.targetRoomId);
-        if (targetRoom !== undefined) {
-          const oppositeDirection = getOppositeTransitionDirection(t.direction);
-          const targetReturnTransition = targetRoom.transitions.find((targetTransition) =>
-            targetTransition.targetRoomId === currentRoom.id
-            && targetTransition.direction === oppositeDirection,
-          );
-
-          if (targetReturnTransition !== undefined) {
-            const spawnBlock = computeSpawnBlockForTransition(targetRoom, targetReturnTransition);
-            loadRoom(targetRoom, spawnBlock[0], spawnBlock[1]);
-          } else {
-            loadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1]);
-          }
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   function frame(timestampMs: number): void {
     if (!isRunning) return;
 
@@ -1026,7 +906,7 @@ export function startGameScreen(
     }
 
     // ── Room transition check ──────────────────────────────────────────────
-    if (checkRoomTransitions()) {
+    if (checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY) => loadRoom(room, spawnX, spawnY))) {
       // Room changed — skip this frame's sim, render the new room next frame
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1139,55 +1019,7 @@ export function startGameScreen(
       skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
       skillTombEffectRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
 
-      // Dust container pickup: grants +1 dust container (+4 capacity) and spawns particles.
-      const roomDustContainers = currentRoom.dustContainers ?? [];
-      for (let i = 0; i < roomDustContainers.length; i++) {
-        const pickupKey = `${currentRoom.id}:${i}`;
-        if (collectedDustContainerKeySet.has(pickupKey)) continue;
-
-        const dc = roomDustContainers[i];
-        const cx = (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-        const cy = (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-        const dx = playerForTomb.positionXWorld - cx;
-        const dy = playerForTomb.positionYWorld - cy;
-        if (dx * dx + dy * dy <= DUST_CONTAINER_PICKUP_RADIUS_WORLD * DUST_CONTAINER_PICKUP_RADIUS_WORLD) {
-          collectedDustContainerKeySet.add(pickupKey);
-          // Grant a container to the player's progression state
-          if (progress) {
-            progress.dustContainerCount += 1;
-          }
-          spawnClusterParticles(
-            world,
-            playerForTomb.entityId,
-            playerForTomb.positionXWorld,
-            playerForTomb.positionYWorld,
-            ParticleKind.Physical,
-            DUST_CONTAINER_DUST_GAIN,
-            levelRng,
-          );
-        }
-      }
-
-      // Dust boost jar pickup: spawn temporary dust particles of the jar's kind.
-      // The sim (hazards.ts) sets isDustBoostJarActiveFlag=0 on contact; we detect
-      // the transition here and spawn particles on the renderer side.
-      for (let i = 0; i < world.dustBoostJarCount; i++) {
-        const jarKey = `dustjar:${currentRoom.id}:${i}`;
-        if (world.isDustBoostJarActiveFlag[i] === 0 && !collectedDustContainerKeySet.has(jarKey)) {
-          collectedDustContainerKeySet.add(jarKey);
-          const dustKind = world.dustBoostJarKind[i] as ParticleKind;
-          const dustCount = world.dustBoostJarDustCount[i];
-          spawnClusterParticles(
-            world,
-            playerForTomb.entityId,
-            playerForTomb.positionXWorld,
-            playerForTomb.positionYWorld,
-            dustKind,
-            dustCount,
-            levelRng,
-          );
-        }
-      }
+      processRoomPickups(world, currentRoom, collectedDustContainerKeySet, progress, playerForTomb, levelRng);
     }
 
     // ── Update camera to follow player ──────────────────────────────────────

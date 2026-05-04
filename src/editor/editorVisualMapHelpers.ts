@@ -5,7 +5,7 @@
  * keep that file focused on interaction and rendering.
  */
 
-import type { RoomDef } from '../levels/roomDef';
+import type { RoomDef, RoomTransitionDef, TransitionDirection } from '../levels/roomDef';
 import {
   ROOM_REGISTRY,
   WORLD_NAMES,
@@ -155,4 +155,117 @@ export function computeAutoLayout(
       visited.add(room.id);
     }
   }
+}
+
+// ── Door-snap helpers ─────────────────────────────────────────────────────────
+
+/** Tracks which two doorways are about to snap together during a room drag. */
+export interface SnapIndicator {
+  srcRoomId: string;
+  srcTransIdx: number;
+  tgtRoomId: string;
+  tgtTransIdx: number;
+}
+
+/**
+ * Returns the door's centre in map-world coordinates given its containing
+ * room's current placement.
+ */
+export function getDoorCenterWorld(
+  trans: RoomTransitionDef,
+  placement: MapRoomPlacement,
+): [number, number] {
+  const room = placement.room;
+  const cx = placement.mapXWorld;
+  const cy = placement.mapYWorld;
+  const mid = trans.positionBlock + trans.openingSizeBlocks / 2;
+  const DEPTH = 6;
+  if (trans.depthBlock !== undefined) {
+    const depthMid = trans.depthBlock + DEPTH / 2;
+    if (trans.direction === 'left' || trans.direction === 'right') {
+      return [cx + depthMid, cy + mid];
+    } else {
+      return [cx + mid, cy + depthMid];
+    }
+  }
+  if (trans.direction === 'left')  return [cx,                    cy + mid];
+  if (trans.direction === 'right') return [cx + room.widthBlocks,  cy + mid];
+  if (trans.direction === 'up')    return [cx + mid,               cy];
+  if (trans.direction === 'down')  return [cx + mid,               cy + room.heightBlocks];
+  // Exhaustive check for TransitionDirection — should never reach here
+  throw new Error(`Unknown transition direction: ${(trans as RoomTransitionDef).direction}`);
+}
+
+/** True when direction `a` and `b` face each other (and can be aligned). */
+export function isOppositeDoor(a: TransitionDirection, b: TransitionDirection): boolean {
+  return (a === 'left'  && b === 'right') ||
+         (a === 'right' && b === 'left')  ||
+         (a === 'up'    && b === 'down')  ||
+         (a === 'down'  && b === 'up');
+}
+
+/**
+ * Checks all pairs of (dragged-room door, other-room door) for compatible
+ * facing pairs within `snapThresholdWorld` world units.  When found, the
+ * dragged room's placement is moved so the door centres coincide (seamless
+ * wall-to-wall alignment).  Returns a SnapIndicator when snapping occurred.
+ *
+ * @param snapThresholdWorld  Maximum world-space distance to trigger snap
+ *   (typically `SNAP_THRESHOLD_PX / zoom` so the pixel feel is consistent).
+ */
+export function applyDoorSnap(
+  draggingRoomId: string,
+  draggingPlacement: MapRoomPlacement,
+  allPlacements: Map<string, MapRoomPlacement>,
+  snapThresholdWorld: number,
+): SnapIndicator | null {
+  const draggingRoom = draggingPlacement.room;
+
+  let bestDistWorld = snapThresholdWorld;
+  let bestSnap: {
+    worldDX: number;
+    worldDY: number;
+    srcTransIdx: number;
+    tgtRoomId: string;
+    tgtTransIdx: number;
+  } | null = null;
+
+  for (let si = 0; si < draggingRoom.transitions.length; si++) {
+    const srcTrans = draggingRoom.transitions[si];
+    const [srcWx, srcWy] = getDoorCenterWorld(srcTrans, draggingPlacement);
+
+    for (const [otherId, otherPlacement] of allPlacements) {
+      if (otherId === draggingRoomId) continue;
+      for (let ti = 0; ti < otherPlacement.room.transitions.length; ti++) {
+        const tgtTrans = otherPlacement.room.transitions[ti];
+        if (!isOppositeDoor(srcTrans.direction, tgtTrans.direction)) continue;
+
+        const [tgtWx, tgtWy] = getDoorCenterWorld(tgtTrans, otherPlacement);
+        const distWorld = Math.hypot(srcWx - tgtWx, srcWy - tgtWy);
+
+        if (distWorld < bestDistWorld) {
+          bestDistWorld = distWorld;
+          bestSnap = {
+            worldDX: tgtWx - srcWx,
+            worldDY: tgtWy - srcWy,
+            srcTransIdx: si,
+            tgtRoomId: otherId,
+            tgtTransIdx: ti,
+          };
+        }
+      }
+    }
+  }
+
+  if (bestSnap) {
+    draggingPlacement.mapXWorld += bestSnap.worldDX;
+    draggingPlacement.mapYWorld += bestSnap.worldDY;
+    return {
+      srcRoomId: draggingRoomId,
+      srcTransIdx: bestSnap.srcTransIdx,
+      tgtRoomId: bestSnap.tgtRoomId,
+      tgtTransIdx: bestSnap.tgtTransIdx,
+    };
+  }
+  return null;
 }

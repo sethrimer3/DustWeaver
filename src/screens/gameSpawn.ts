@@ -254,6 +254,22 @@ export function spawnDustPileParticles(
   }
 }
 
+/**
+ * Spawns all dust pile particles for the current world state.
+ * Called once per room load after `loadRoomHazards` has populated the dust pile arrays.
+ */
+export function spawnAllDustPiles(world: WorldState): void {
+  for (let i = 0; i < world.dustPileCount; i++) {
+    spawnDustPileParticles(
+      world,
+      world.dustPileXWorld[i],
+      world.dustPileYWorld[i],
+      world.dustPileDustCount[i],
+      world.rng,
+    );
+  }
+}
+
 // ── Enemy cluster initialisation ─────────────────────────────────────────────
 
 /** Initial hop delay for slime enemies (ticks). */
