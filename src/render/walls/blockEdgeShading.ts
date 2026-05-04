@@ -90,8 +90,8 @@ const _EDGE_CLAMP_MAX       = [0.78, 0.88, 0.96] as const;
 const _EDGE_NOISE_SCALE     = 0.15;
 /** Amplitude of centred noise variation (+/−). */
 const _EDGE_VARIATION_STR   = 0.08;
-/** Extra darkening for depth-0 pixels with ≥ 2 open-air cardinal neighbours (inner corner). */
-const _EDGE_INNER_CORNER_BOOST = -0.08;
+/** Extra darkening offset for depth-0 pixels with ≥ 2 open-air cardinal neighbours (inner corner). Negative value darkens the multiplier. */
+const _EDGE_INNER_CORNER_DARKEN = -0.08;
 /** Subtle darkening for outer-corner pixels (diagonal-air only, no cardinal-air). */
 const _EDGE_OUTER_CORNER_DARKEN = 0.95;
 /** Additive highlight for outermost (depth-0) pixels exposed toward the top-left light. */
@@ -360,7 +360,7 @@ export function applyOrganicEdgeShading(
     // Inner-corner boost: stronger darkening for pixels with ≥ 2 cardinal air neighbours.
     const airNeighborCount = _countCardinalAirNeighbors(data, widthPx, heightPx, xPx, yPx, openAirSidesMask);
     if (airNeighborCount >= 2) {
-      rawMultiplier += _EDGE_INNER_CORNER_BOOST;
+      rawMultiplier += _EDGE_INNER_CORNER_DARKEN;
     }
 
     // Clamp to the allowed range for this depth.
