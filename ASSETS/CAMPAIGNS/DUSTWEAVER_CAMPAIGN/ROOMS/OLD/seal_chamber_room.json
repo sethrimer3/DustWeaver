@@ -939,12 +939,12 @@
     },
     {
       "dir": "right",
-      "to": "",
+      "to": "tall_shaft",
       "pos": 6,
       "size": 6,
       "spawn": [
         3,
-        11
+        287
       ]
     },
     {
