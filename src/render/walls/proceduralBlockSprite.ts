@@ -23,6 +23,24 @@
 
 import type { BlockShapeName } from './blockSpriteCatalog';
 import { TEMPLATE_URLS, getBaseSpriteProbePool } from './blockSpriteCatalog';
+import {
+  applyOrganicEdgeShading,
+  OPEN_AIR_SIDE_N,
+  OPEN_AIR_SIDE_E,
+  OPEN_AIR_SIDE_S,
+  OPEN_AIR_SIDE_W,
+  OPEN_AIR_ALL_SIDES,
+} from './blockEdgeShading';
+
+// Re-export open-air side constants so callers (blockSpriteRenderer.ts) do not
+// need to change their import paths.
+export {
+  OPEN_AIR_SIDE_N,
+  OPEN_AIR_SIDE_E,
+  OPEN_AIR_SIDE_S,
+  OPEN_AIR_SIDE_W,
+  OPEN_AIR_ALL_SIDES,
+};
 
 // ── Image loading ─────────────────────────────────────────────────────────────
 
@@ -48,40 +66,6 @@ function _isReady(img: HTMLImageElement): boolean {
 
 /** Cache of fully generated sprites keyed by a unique string. */
 const _spriteCache = new Map<string, HTMLCanvasElement>();
-
-const _OPEN_AIR_EDGE_DISTANCE_NONE = 255;
-/** Max internal BFS depth (0-indexed). Depths 0..2 map to spec distances 1..3. */
-const _OPEN_AIR_FILTER_MAX_DISTANCE_PX = 2;
-
-// ── Organic edge shading constants ────────────────────────────────────────────
-/** Base multiply per internal depth (0=spec-1, 1=spec-2, 2=spec-3). */
-const _EDGE_BASE_MULTIPLIER = [0.70, 0.82, 0.92] as const;
-/** Minimum multiplier per depth — ensures darkest-allowed shade at each level. */
-const _EDGE_CLAMP_MIN       = [0.65, 0.78, 0.88] as const;
-/** Maximum multiplier per depth — prevents shallower depth from exceeding deeper. */
-const _EDGE_CLAMP_MAX       = [0.78, 0.88, 0.96] as const;
-/** Noise-coordinate scale (noise-grid-units per world pixel). */
-const _EDGE_NOISE_SCALE     = 0.15;
-/** Amplitude of centred noise variation (+/−). */
-const _EDGE_VARIATION_STR   = 0.08;
-/** Additional darkening for pixels with ≥ 2 open-air neighbours (corner recessing). */
-const _EDGE_CORNER_BOOST    = -0.05;
-/** Additive highlight for outermost (depth 0) pixels exposed toward the top-left light. */
-const _EDGE_HIGHLIGHT_AMOUNT = 0.07;
-
-/**
- * Bit mask for open-air sides of a block sprite canvas.
- * Bit 0 = North (y=0 border), Bit 1 = East (x=widthPx-1 border),
- * Bit 2 = South (y=heightPx-1 border), Bit 3 = West (x=0 border).
- * A set bit means that border is exposed to air (no solid block neighbor on that side).
- * Pass 0xF to treat all four canvas borders as open air (default/ramp/platform behavior).
- */
-export const OPEN_AIR_SIDE_N = 1;
-export const OPEN_AIR_SIDE_E = 2;
-export const OPEN_AIR_SIDE_S = 4;
-export const OPEN_AIR_SIDE_W = 8;
-/** All four borders exposed to air — use for ramps, platforms, and isolated blocks. */
-export const OPEN_AIR_ALL_SIDES = 0xF;
 
 function _cacheKey(
   baseUrl: string,
@@ -144,269 +128,12 @@ function _generateSprite(
   }
   ctx.globalCompositeOperation = 'source-over';
 
-  // Step 3: add a cached organic edge-shading pass. This is separate from room
-  // ambient lighting: it only depends on the final sprite alpha mask and world
-  // position. Pixels near open air are darkened via multiply, with smooth
-  // world-space noise variation for an organic look across connected blocks.
-  _applyOrganicEdgeShadingFilter(ctx, widthPx, heightPx, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
+  // Step 3: apply organic edge shading (shared with folder-based sprites).
+  // Pixels near open air are darkened via multiply, with smooth world-space
+  // noise variation for an organic look across connected blocks.
+  applyOrganicEdgeShading(ctx, widthPx, heightPx, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
 
   return canvas;
-}
-
-// ── Smooth value noise (deterministic world-space) ────────────────────────────
-
-/**
- * Hashes integer grid coordinates to a float in [0, 1].
- * Used as the corner values for 2-D value noise.
- */
-function _hashNoiseCorner(ix: number, iy: number, seed: number): number {
-  let h = (ix * 73856093) ^ (iy * 19349663) ^ (seed * 83492791);
-  h |= 0;
-  h ^= h >>> 16;
-  h = Math.imul(h, 2246822519);
-  h ^= h >>> 13;
-  h = Math.imul(h, 3266489917);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967295; // [0, 1]
-}
-
-/**
- * Bilinear smooth value noise in [0, 1].
- * Continuous and differentiable across all real (x, y) — no tile-edge seams.
- * Input coordinates are in noise-grid units; use a small scale (e.g. 0.15)
- * so adjacent world pixels produce very similar values.
- */
-function _smoothNoise2d(x: number, y: number, seed: number): number {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  const fx = x - ix;
-  const fy = y - iy;
-  // Smoothstep interpolation weights — removes visible derivative discontinuity.
-  const ux = fx * fx * (3.0 - 2.0 * fx);
-  const uy = fy * fy * (3.0 - 2.0 * fy);
-  const a = _hashNoiseCorner(ix,     iy,     seed);
-  const b = _hashNoiseCorner(ix + 1, iy,     seed);
-  const c = _hashNoiseCorner(ix,     iy + 1, seed);
-  const d = _hashNoiseCorner(ix + 1, iy + 1, seed);
-  return a + ux * (b - a) + uy * (c - a) + ux * uy * (a - b - c + d);
-}
-
-// ── Organic edge shading filter ───────────────────────────────────────────────
-
-/**
- * Returns true when pixel (xPx, yPx) has at least one open-air neighbour in
- * any of the 8 directions (orthogonal + diagonal).
- *
- * Open-air means:
- *   – Transparent (alpha 0) interior pixel.
- *   – Canvas border on a side flagged in openAirSidesMask.
- *     For diagonal-border positions the mask for either adjacent side suffices.
- */
-function _hasAnyAirNeighbor8(
-  data: Uint8ClampedArray,
-  widthPx: number,
-  heightPx: number,
-  xPx: number,
-  yPx: number,
-  openAirSidesMask: number,
-): boolean {
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const nx = xPx + dx;
-      const ny = yPx + dy;
-      if (nx < 0) {
-        if (openAirSidesMask & OPEN_AIR_SIDE_W) return true;
-        continue;
-      }
-      if (nx >= widthPx) {
-        if (openAirSidesMask & OPEN_AIR_SIDE_E) return true;
-        continue;
-      }
-      if (ny < 0) {
-        if (openAirSidesMask & OPEN_AIR_SIDE_N) return true;
-        continue;
-      }
-      if (ny >= heightPx) {
-        if (openAirSidesMask & OPEN_AIR_SIDE_S) return true;
-        continue;
-      }
-      if (data[(ny * widthPx + nx) * 4 + 3] === 0) return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Returns true when the cardinal neighbour of (xPx, yPx) in the direction
- * (dx, dy) — where exactly one of dx/dy is ±1 and the other is 0 — is open air.
- *
- * Open air means transparent (alpha 0) or a canvas border flagged in openAirSidesMask.
- */
-function _isCardinalAirNeighbor(
-  data: Uint8ClampedArray,
-  widthPx: number,
-  heightPx: number,
-  xPx: number,
-  yPx: number,
-  openAirSidesMask: number,
-  dx: -1 | 0 | 1,
-  dy: -1 | 0 | 1,
-): boolean {
-  const nx = xPx + dx;
-  const ny = yPx + dy;
-  if (ny < 0)         return !!(openAirSidesMask & OPEN_AIR_SIDE_N);
-  if (nx >= widthPx)  return !!(openAirSidesMask & OPEN_AIR_SIDE_E);
-  if (ny >= heightPx) return !!(openAirSidesMask & OPEN_AIR_SIDE_S);
-  if (nx < 0)         return !!(openAirSidesMask & OPEN_AIR_SIDE_W);
-  return data[(ny * widthPx + nx) * 4 + 3] === 0;
-}
-
-/**
- * Counts the number of open-air cardinal (N/E/S/W) neighbours of (xPx, yPx).
- * Used for corner-reinforcement detection: ≥ 2 means the pixel is at a corner.
- */
-function _countCardinalAirNeighbors(
-  data: Uint8ClampedArray,
-  widthPx: number,
-  heightPx: number,
-  xPx: number,
-  yPx: number,
-  openAirSidesMask: number,
-): number {
-  let count = 0;
-  if (_isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0, -1)) count++;
-  if (_isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  1,  0)) count++;
-  if (_isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0,  1)) count++;
-  if (_isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask, -1,  0)) count++;
-  return count;
-}
-
-/**
- * Replaces the previous colour-inversion filter with a multiply-based darkening
- * pass that preserves hue and uses smooth world-space noise for organic variation.
- *
- * Algorithm:
- *   1. Compute each solid pixel's Chebyshev distance from open air (BFS, depth ≤ 3).
- *   2. Look up base multiply multiplier for that depth (0.70 / 0.82 / 0.92).
- *   3. Add centred smooth noise variation (±0.08) and clamp to the depth range.
- *   4. Apply corner boost (−0.05) when ≥ 2 cardinal neighbours are open air.
- *   5. Apply rim highlight (+0.07) on depth-0 pixels exposed to N or W (top-left light).
- *   6. Multiply the pixel's RGB channels by the final multiplier.
- *
- * The noise uses world-space coordinates so it is seamless across tile boundaries.
- *
- * @param worldOriginXWorld  World-unit X of the sprite's top-left pixel.
- * @param worldOriginYWorld  World-unit Y of the sprite's top-left pixel.
- * @param seed               World/room seed for noise variety between worlds.
- */
-function _applyOrganicEdgeShadingFilter(
-  ctx: CanvasRenderingContext2D,
-  widthPx: number,
-  heightPx: number,
-  openAirSidesMask: number,
-  worldOriginXWorld: number,
-  worldOriginYWorld: number,
-  seed: number,
-): void {
-  const imageData = ctx.getImageData(0, 0, widthPx, heightPx);
-  const data = imageData.data;
-  const pixelCount = widthPx * heightPx;
-
-  // ── Step 1: BFS to compute Chebyshev distance from open air ─────────────
-  const distBuf = new Uint8Array(pixelCount);
-  distBuf.fill(_OPEN_AIR_EDGE_DISTANCE_NONE);
-
-  // One slot per pixel is sufficient: each pixel enters the queue at most once
-  // (the guard in _pushNeighborIfCloser prevents duplicate entries).
-  const queue = new Uint16Array(pixelCount);
-  let qHead = 0;
-  let qCount = 0;
-
-  // Seed: all solid pixels with any 8-connected air neighbour → internal depth 0.
-  for (let yPx = 0; yPx < heightPx; yPx++) {
-    for (let xPx = 0; xPx < widthPx; xPx++) {
-      const pi = yPx * widthPx + xPx;
-      if (data[pi * 4 + 3] === 0) continue; // transparent = air, skip
-      if (!_hasAnyAirNeighbor8(data, widthPx, heightPx, xPx, yPx, openAirSidesMask)) continue;
-      distBuf[pi] = 0;
-      queue[qCount++] = pi;
-    }
-  }
-
-  // Propagate inward (8-connected BFS, max depth = _OPEN_AIR_FILTER_MAX_DISTANCE_PX).
-  while (qHead < qCount) {
-    const pi = queue[qHead++];
-    const d = distBuf[pi];
-    if (d >= _OPEN_AIR_FILTER_MAX_DISTANCE_PX) continue; // depth 2 → do not propagate further
-
-    const nd = d + 1;
-    const xPx = pi % widthPx;
-    const yPx = (pi / widthPx) | 0;
-
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        const nx = xPx + dx;
-        const ny = yPx + dy;
-        if (nx < 0 || nx >= widthPx || ny < 0 || ny >= heightPx) continue;
-        const npi = ny * widthPx + nx;
-        if (data[npi * 4 + 3] === 0) continue; // air
-        if (distBuf[npi] <= nd) continue;       // already at equal or shorter distance
-        distBuf[npi] = nd;
-        queue[qCount++] = npi;
-      }
-    }
-  }
-
-  // ── Steps 2–6: compute multiplier and apply to RGB ────────────────────────
-  for (let pi = 0; pi < pixelCount; pi++) {
-    const d = distBuf[pi];
-    if (d > _OPEN_AIR_FILTER_MAX_DISTANCE_PX) continue; // beyond shading range → no change
-
-    const xPx = pi % widthPx;
-    const yPx = (pi / widthPx) | 0;
-
-    // Step 3: smooth world-space noise variation centred at 0.
-    const worldX = worldOriginXWorld + xPx;
-    const worldY = worldOriginYWorld + yPx;
-    const noiseVal = _smoothNoise2d(worldX * _EDGE_NOISE_SCALE, worldY * _EDGE_NOISE_SCALE, seed);
-    const variation = (noiseVal * 2.0 - 1.0) * _EDGE_VARIATION_STR;
-
-    // Step 2: base multiplier with noise variation.
-    let multiplier = _EDGE_BASE_MULTIPLIER[d] + variation;
-
-    // Step 4: corner reinforcement — extra darkening for corner pixels.
-    const airNeighborCount = _countCardinalAirNeighbors(data, widthPx, heightPx, xPx, yPx, openAirSidesMask);
-    if (airNeighborCount >= 2) {
-      multiplier += _EDGE_CORNER_BOOST;
-    }
-
-    // Clamp to the allowed range for this depth.
-    const cMin = _EDGE_CLAMP_MIN[d];
-    const cMax = _EDGE_CLAMP_MAX[d];
-    if (multiplier < cMin) multiplier = cMin;
-    if (multiplier > cMax) multiplier = cMax;
-
-    // Step 6: rim highlight for outermost pixels (depth 0) facing the top-left light.
-    // A pixel is "facing the light" when it has an open-air cardinal neighbour to
-    // the north or west (the presumed light direction).
-    if (d === 0) {
-      const facesLightN = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0, -1);
-      const facesLightW = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask, -1,  0);
-      if (facesLightN || facesLightW) {
-        multiplier = Math.min(multiplier + _EDGE_HIGHLIGHT_AMOUNT, 1.0);
-      }
-    }
-
-    // Apply multiply — darkens the pixel while preserving hue.
-    const di = pi * 4;
-    data[di]     = Math.round(data[di]     * multiplier);
-    data[di + 1] = Math.round(data[di + 1] * multiplier);
-    data[di + 2] = Math.round(data[di + 2] * multiplier);
-  }
-
-  ctx.putImageData(imageData, 0, 0);
 }
 
 // ── Public sprite accessor ────────────────────────────────────────────────────
