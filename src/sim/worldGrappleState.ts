@@ -2,8 +2,8 @@
  * Grapple hook sub-state for WorldState.
  *
  * All fields related to the player's grapple hook, zip mechanics, rope
- * attachment, proximity bounce, failure visual effects, miss animation, and
- * geometric corner-wrapping live here.
+ * attachment, failure visual effects, miss animation, and geometric
+ * corner-wrapping live here.
  *
  * WorldState extends this interface; consumers always work through WorldState
  * and never need to import GrappleWorldState directly.
@@ -11,6 +11,21 @@
 
 /** Maximum number of grapple corner wrap points (geometric wrapping, Phase 2). */
 export const MAX_GRAPPLE_WRAP_POINTS = 3;
+
+/**
+ * Grapple input mode — controls whether the grapple is held or toggled.
+ *
+ * Hold (0): Hold left mouse button to keep the grapple active; release to drop.
+ * Toggle (1): Click once to fire/attach; click again to release. Holding is
+ *             not required in this mode.
+ *
+ * The setting is stored on WorldState so it is trivially exposable in the
+ * settings menu without plumbing through additional context.
+ */
+export const enum GrappleInputMode {
+  Hold   = 0,
+  Toggle = 1,
+}
 
 export interface GrappleWorldState {
   // ---- Rope attachment point (grapple hooked onto a room rope) -----------
@@ -69,13 +84,29 @@ export interface GrappleWorldState {
    */
   hasGrappleChargeFlag: 0 | 1;
 
+  // ---- Grapple input mode --------------------------------------------------
+  /**
+   * Controls how the left mouse button interacts with the grapple.
+   * GrappleInputMode.Hold   (0): hold to keep active, release to drop.
+   * GrappleInputMode.Toggle (1): click to attach, click again to release.
+   */
+  grappleInputMode: GrappleInputMode;
+
   // ---- Grapple zip mechanics -----------------------------------------------
   /**
-   * 1 when the player has activated a zip (double-tap down while grappled).
-   * The player zips quickly toward the anchor; upon arrival momentum stops.
-   * Works on any surface (floor, wall, ceiling); activated by double-tap down.
+   * 1 when the player has activated a zip toward the anchor.
+   * Activated explicitly by pressing right mouse button while the grapple is
+   * attached.  The player rockets toward the anchor; upon arrival momentum
+   * stops and a zip-jump window opens.
+   * Works on any surface (floor, wall, ceiling).
    */
   isGrappleZipActiveFlag: 0 | 1;
+  /**
+   * Set to 1 for one tick when the player requests a zip (right-click while
+   * grapple is attached).  Consumed by tickGrappleZip to activate the zip
+   * state machine.  Cleared by releaseGrapple and by zip activation.
+   */
+  isGrappleZipTriggeredFlag: 0 | 1;
   /** 1 when the player has arrived at the zip target and is sticking. */
   isGrappleStuckFlag: 0 | 1;
   /**
@@ -97,19 +128,13 @@ export interface GrappleWorldState {
    */
   grappleZipNormalYWorld: number;
 
-  // ---- Down double-tap tracking (for zip activation) -----------------------
+  // ---- Down key tracking (for grapple retraction, movement crouch) ---------
   /**
    * Set to 1 for one tick when the down key (S / ArrowDown) is first pressed.
    * Preserved across tick() while grapple is active, like playerJumpTriggeredFlag.
-   * Consumed by applyGrappleClusterConstraint for double-tap zip detection.
+   * Consumed by applyGrappleClusterConstraint (discarded) and movement.ts.
    */
   playerDownTriggeredFlag: 0 | 1;
-  /**
-   * World tick number on which the down key was last pressed.
-   * Used to detect a double-tap: two presses within GRAPPLE_ZIP_DOUBLE_TAP_WINDOW_TICKS.
-   * 0 before any down press.
-   */
-  playerDownLastPressTick: number;
 
   // ---- Grapple proximity bounce sprite state --------------------------------
   /**
@@ -255,13 +280,14 @@ export function createGrappleWorldState(): GrappleWorldState {
     grappleParticleStartIndex:             -1,
     grappleJumpHeldTickCount:              0,
     hasGrappleChargeFlag:                  1,
+    grappleInputMode:                      GrappleInputMode.Hold,
     isGrappleZipActiveFlag:                0,
+    isGrappleZipTriggeredFlag:             0,
     isGrappleStuckFlag:                    0,
     grappleStuckStoppedTickCount:          0,
     grappleZipNormalXWorld:                0.0,
     grappleZipNormalYWorld:                -1.0,
     playerDownTriggeredFlag:               0,
-    playerDownLastPressTick:               0,
     grappleProximityBounceTicksLeft:       0,
     grappleProximityBounceRotationAngleRad: 0,
     grappleFailBeamTicksLeft:              0,

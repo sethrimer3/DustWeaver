@@ -66,6 +66,13 @@ export interface InputState {
   /** Screen-space aim position where the grapple fires. */
   grappleAimXPx: number;
   grappleAimYPx: number;
+  /**
+   * Set to 1 for one frame when the right mouse button is first pressed.
+   * Consumed by collectCommands to emit a GrappleZip command.  If no grapple
+   * is currently attached, the command processor falls through to the secondary
+   * Weave instead.
+   */
+  isGrappleZipRequestedFlag: 0 | 1;
   /** Set to true for one collectCommands call to trigger an interact (F key). */
   isInteractTriggeredFlag: boolean;
   /** Set to true for one collectCommands call to toggle fullscreen. */
@@ -113,6 +120,7 @@ export function createInputState(): InputState {
     isGrappleReleaseTriggeredFlag: 0,
     grappleAimXPx: 0,
     grappleAimYPx: 0,
+    isGrappleZipRequestedFlag: 0,
     isInteractTriggeredFlag: false,
     isFullscreenToggleTriggeredFlag: false,
     isMapKeyTriggeredFlag: false,
@@ -226,6 +234,10 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       state.grappleAimYPx = mouse.yPx;
     } else if (e.button === 2) {
       state.isRightMouseDownFlag = 1;
+      // Signal a potential zip request on the right mouse press.
+      // collectCommands emits GrappleZip; the command processor decides whether
+      // to use it as a zip (grapple active) or ignore it (weave takes over).
+      state.isGrappleZipRequestedFlag = 1;
     }
   }
   function onMouseUp(e: MouseEvent): void {
@@ -427,6 +439,14 @@ export function collectCommands(input: InputState): GameCommand[] {
   if (input.isMouseDownFlag === 0 && input.isBlockingFlag === 1 && input.isRightMouseDownFlag === 0) {
     input.isBlockingFlag = 0;
     commands.push({ kind: CommandKind.WeaveEndPrimary });
+  }
+
+  // ---- Grapple zip (right mouse press, consumed before weave commands) -----
+  // emitted early so the command processor can intercept right-click for zip
+  // before it is interpreted as a secondary Weave activation.
+  if (input.isGrappleZipRequestedFlag === 1) {
+    input.isGrappleZipRequestedFlag = 0;
+    commands.push({ kind: CommandKind.GrappleZip });
   }
 
   // ---- Secondary Weave (right click) --------------------------------------
