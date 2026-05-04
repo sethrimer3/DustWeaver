@@ -257,15 +257,11 @@ function buildRoomContour(room: RoomDef): ContourData {
   }
 
   // ── Degenerate case: no contours found ────────────────────────────────────
+  // rawContours.length === 0 means the adjacency graph had no edges, which
+  // implies no solid tiles exist in the room (any solid tile touching the room
+  // boundary or an empty neighbor would emit at least one edge).
   if (rawContours.length === 0) {
-    // Emit bounding box only if there is at least one solid tile.
-    let hasSolid = false;
-    for (let i = 0; i < solid.length; i++) {
-      if (solid[i] === 1) { hasSolid = true; break; }
-    }
-    const result: ContourData = hasSolid
-      ? { contours: [new Float32Array([0, 0, w, 0, w, h, 0, h])] }
-      : { contours: [] };
+    const result: ContourData = { contours: [] };
     contourCache.set(room.id, result);
     return result;
   }
@@ -293,7 +289,10 @@ function buildRoomContour(room: RoomDef): ContourData {
         kept.push(cx, cy);
       }
     }
-    return new Float32Array(kept.length >= 6 ? kept : pts);
+    // If simplification collapses the contour below 3 vertices (a degenerate
+    // case that cannot arise for valid closed tile polygons), return an empty
+    // array so the ptCount < 3 guard in drawRoomSketch skips it cleanly.
+    return new Float32Array(kept.length >= 6 ? kept : []);
   });
 
   const result: ContourData = { contours: simplifiedContours };
