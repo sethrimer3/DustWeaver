@@ -15,8 +15,8 @@ export const MAX_GRAPPLE_WRAP_POINTS = 3;
 /**
  * Grapple input mode — controls whether the grapple is held or toggled.
  *
- * Hold  (0): Hold left mouse button to keep the grapple active; release to drop.
- * Toggle (1): Click once to fire/attach; click again to release.  Holding is
+ * Hold (0): Hold left mouse button to keep the grapple active; release to drop.
+ * Toggle (1): Click once to fire/attach; click again to release. Holding is
  *             not required in this mode.
  *
  * The setting is stored on WorldState so it is trivially exposable in the

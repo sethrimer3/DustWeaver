@@ -76,8 +76,6 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
   let jumpTriggered = false;
   let interactTriggered = false;
   let interactInputPulseTrigger = false;
-  // True when right-click triggered a zip this frame — suppresses secondary Weave.
-  let zipInterceptedRmb = false;
 
   for (let ci = 0; ci < commands.length; ci++) {
     const cmd = commands[ci];
@@ -140,11 +138,10 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
       // If no grapple is active, the subsequent secondary Weave commands handle it.
       if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0) {
         world.isGrappleZipTriggeredFlag = 1;
-        zipInterceptedRmb = true;
       }
     } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
-      // Skip secondary Weave if right-click was consumed as a grapple zip this frame.
-      if (!zipInterceptedRmb && !world.isGrappleActiveFlag) {
+      // Skip secondary Weave while grapple is active (right-click = zip in that state).
+      if (!world.isGrappleActiveFlag) {
         const player = world.clusters[0];
         if (player !== undefined && player.isAliveFlag === 1) {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);

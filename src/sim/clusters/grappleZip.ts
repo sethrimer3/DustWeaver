@@ -81,6 +81,18 @@ const GRAPPLE_ZIP_JUMP_WINDOW_TICKS = Math.round(ZIP_JUMP_WINDOW_SECONDS * 60);
  */
 const ZIP_JUMP_INPUT_BIAS = 0.35;
 
+/**
+ * Minimum held-input magnitude required to apply horizontal direction bias to
+ * the zip-jump launch vector.  Values below this are treated as no input.
+ */
+const ZIP_JUMP_INPUT_THRESHOLD = 0.5;
+
+/**
+ * Epsilon guard for launch vector normalization.  If the biased launch vector
+ * has a length smaller than this, normalization is skipped to avoid NaN.
+ */
+const MIN_LAUNCH_VECTOR_LENGTH = 0.001;
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -166,11 +178,11 @@ export function tickGrappleZip(
     let launchX = nx;
     let launchY = ny;
     const inputDx = world.playerMoveInputDxWorld;
-    if (Math.abs(inputDx) > 0.5) {
+    if (Math.abs(inputDx) > ZIP_JUMP_INPUT_THRESHOLD) {
       launchX = nx * (1.0 - ZIP_JUMP_INPUT_BIAS) + inputDx * ZIP_JUMP_INPUT_BIAS;
       // Normalize so launch speed equals jumpSpeed exactly.
       const launchLen = Math.sqrt(launchX * launchX + launchY * launchY);
-      if (launchLen > 0.001) {
+      if (launchLen > MIN_LAUNCH_VECTOR_LENGTH) {
         launchX /= launchLen;
         launchY /= launchLen;
       }
