@@ -9,8 +9,15 @@
  * Key design decisions:
  *  - Contours are computed once per room and cached; they never regenerate
  *    per frame.
- *  - All jitter is deterministic: derived from the room ID hash and the point
- *    index — never from Math.random().
+ *  - Sketch outlines are generated from exposed solid-tile boundaries:
+ *    for every solid tile, each neighbor that is empty or out-of-bounds
+ *    contributes an edge segment.  These segments are chained into closed
+ *    polylines, so interior islands, platforms, and holes all produce their
+ *    own outline — not just the crude outer cave envelope.
+ *  - Multiple contours per room are fully supported; the single-contour
+ *    scanline-envelope approach has been replaced.
+ *  - All jitter is deterministic: derived from the room ID hash, contour
+ *    index, and point index — never from Math.random().
  *  - The sketch pass is separate from (and drawn beneath) the detail pass, so
  *    both can be composited with individual alpha values during the transition.
  */
@@ -61,12 +68,6 @@ const FILL_RGB_CURRENT = '180, 130, 60';
 const FILL_RGB_OTHER = '90, 85, 78';
 
 /**
- * Sample interval when walking the column-scan to build the contour.
- * One contour vertex is emitted for every CONTOUR_STEP_BLOCKS columns.
- */
-const CONTOUR_STEP_BLOCKS = 2;
-
-/**
  * Index offset used when generating stroke-level jitter noise.
  * Must be large enough to be disjoint from per-point indices (max room size
  * is several hundred blocks, so 0xffff is safely out of range).
@@ -97,8 +98,8 @@ function hashRoomId(roomId: string): number {
  * Uses a multiply-shift hash mix so the values are well-distributed and
  * stable across frames.
  */
-function deterministicNoise(roomHash: number, pointIndex: number, channel: number): number {
-  let h = (roomHash + Math.imul(pointIndex, 0x9e3779b9) + Math.imul(channel, 0x6b43a9b5)) | 0;
+function deterministicNoise(seed: number, pointIndex: number, channel: number): number {
+  let h = (seed + Math.imul(pointIndex, 0x9e3779b9) + Math.imul(channel, 0x6b43a9b5)) | 0;
   h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
   h = Math.imul(h ^ (h >>> 15), 0xd762a71f);
   h ^= h >>> 17;
@@ -107,38 +108,48 @@ function deterministicNoise(roomHash: number, pointIndex: number, channel: numbe
 
 // ── Contour data ──────────────────────────────────────────────────────────────
 
-/** Immutable contour for a single room, cached after first build. */
+/**
+ * Immutable contours for a single room, cached after first build.
+ *
+ * Each contour is one closed polyline tracing the boundary between solid and
+ * empty tiles.  The sketch outline is generated from exposed solid-tile
+ * boundaries, not from a top/bottom scanline envelope, so interior platforms,
+ * islands, and holes each contribute their own outline loop.
+ */
 interface ContourData {
   /**
-   * Interleaved [x, y] pairs in room-local block units, forming a closed
-   * polygon.  Length = pointCount * 2.
+   * Each element is one closed contour loop.
+   * Stored as interleaved [x, y] pairs in room-local block (vertex) units.
+   * Vertices lie on tile corners (integer positions 0..widthBlocks / heightBlocks)
+   * after collinear simplification to corner-only points.
    */
-  readonly points: Float32Array;
-  /** Number of vertices in the contour. */
-  readonly pointCount: number;
+  readonly contours: readonly Float32Array[];
 }
 
 /** Per-room contour cache — rooms are static, so this never needs invalidation. */
 const contourCache = new Map<string, ContourData>();
 
 /**
- * Builds and caches the silhouette contour for a room.
+ * Builds and caches silhouette contours for a room.
  *
- * Algorithm (orientation-aware):
- * 1. Rasterise all (non-invisible) walls into a boolean solid grid.
- * 2a. If the room is wider than tall (or square): **column-scan** — find the
- *     topmost and bottommost empty cell per column, then walk L→R along the
- *     top edge and R→L along the bottom edge.
- * 2b. If the room is taller than wide: **row-scan** — find the leftmost and
- *     rightmost empty cell per row, then walk top→bottom along the left edge
- *     and bottom→top along the right edge.
- * 3. Sample every CONTOUR_STEP_BLOCKS steps and build a single closed polygon.
+ * Algorithm:
+ * 1. Rasterize all non-invisible walls into a boolean solid grid.
+ * 2. For each solid tile, inspect its four axis-aligned neighbors.
+ *    If a neighbor is out of bounds or empty, emit the corresponding tile edge
+ *    as a directed segment.  This produces outlines around all exposed wall
+ *    boundaries, including interior platforms, islands, and holes — not just
+ *    a crude outer cave envelope.
+ * 3. Chain directed segments into closed polylines via a directed adjacency
+ *    graph.  Multiple disjoint contours per room are fully supported.
+ * 4. Remove collinear intermediate vertices (consecutive points sharing the
+ *    same x or y coordinate) so only corner vertices are retained.  This
+ *    keeps point counts small without losing shape information.
+ * 5. Store the resulting Float32Array contours in the cache.
  *
- * Using the dominant axis ensures that rooms with a winding vertical corridor
- * (e.g. tall S-shaped rooms) sketch their sinuous left/right edges rather than
- * producing flat vertical lines.
- *
- * If every cell is solid (degenerate room) the full bounding box is used.
+ * The sketch outline is generated from exposed solid-tile boundaries,
+ * NOT from a top/bottom (or left/right) scanline envelope.  This ensures
+ * that interior geometry — platforms, islands, disconnected wall masses —
+ * is always visible in the zoomed-out map view.
  */
 function buildRoomContour(room: RoomDef): ContourData {
   const cached = contourCache.get(room.id);
@@ -147,7 +158,7 @@ function buildRoomContour(room: RoomDef): ContourData {
   const w = room.widthBlocks;
   const h = room.heightBlocks;
 
-  // Rasterise walls into a Uint8Array solid grid.
+  // ── Step 1: Rasterize walls into a Uint8Array solid grid ─────────────────
   const solid = new Uint8Array(w * h);
   for (const wall of room.walls) {
     if (wall.isInvisibleFlag === 1) continue;
@@ -162,157 +173,131 @@ function buildRoomContour(room: RoomDef): ContourData {
     }
   }
 
-  // ── Tall rooms: row-scan (left/right edges per row) ───────────────────────
-  if (h > w) {
-    const leftEdge  = new Int16Array(h).fill(-1);
-    const rightEdge = new Int16Array(h).fill(-1);
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (solid[y * w + x] === 0) {
-          if (leftEdge[y] === -1) leftEdge[y] = x;
-          rightEdge[y] = x;
-        }
+  // ── Step 2: Build directed edge adjacency graph ───────────────────────────
+  //
+  // Vertices are tile corners at integer positions (0..w) × (0..h).
+  // For each solid tile (gx, gy), inspect each of the 4 neighbors:
+  //   - If the neighbor is out of bounds or empty, emit a directed edge along
+  //     that tile face.  Direction: walking the edge, the solid tile is always
+  //     on the left (clockwise winding around solid in Y-down screen space).
+  //
+  // This generates edges for every exposed solid-tile boundary, so
+  // interior islands, platforms, and holes all get their own outline.
+  const vertexStride = w + 1;
+  // adjacency maps fromVertex → array of toVertex (outgoing directed edges)
+  const adjacency = new Map<number, number[]>();
+
+  function addEdge(x0: number, y0: number, x1: number, y1: number): void {
+    const from = y0 * vertexStride + x0;
+    const to   = y1 * vertexStride + x1;
+    const arr = adjacency.get(from);
+    if (arr !== undefined) arr.push(to);
+    else adjacency.set(from, [to]);
+  }
+
+  for (let gy = 0; gy < h; gy++) {
+    for (let gx = 0; gx < w; gx++) {
+      if (solid[gy * w + gx] !== 1) continue;
+      // Top edge: emit if top neighbor is empty or out of bounds
+      if (gy === 0 || solid[(gy - 1) * w + gx] === 0)
+        addEdge(gx, gy, gx + 1, gy);
+      // Right edge: emit if right neighbor is empty or out of bounds
+      if (gx === w - 1 || solid[gy * w + (gx + 1)] === 0)
+        addEdge(gx + 1, gy, gx + 1, gy + 1);
+      // Bottom edge: emit if bottom neighbor is empty or out of bounds
+      if (gy === h - 1 || solid[(gy + 1) * w + gx] === 0)
+        addEdge(gx + 1, gy + 1, gx, gy + 1);
+      // Left edge: emit if left neighbor is empty or out of bounds
+      if (gx === 0 || solid[gy * w + (gx - 1)] === 0)
+        addEdge(gx, gy + 1, gx, gy);
+    }
+  }
+
+  // ── Step 3: Trace closed contours ─────────────────────────────────────────
+  //
+  // Each directed edge is consumed exactly once via a per-vertex cursor index.
+  // Starting from each unprocessed vertex (outer loop), follow outgoing edges
+  // until the loop closes (returns to startVertex) or the chain terminates.
+  // Multiple disjoint closed contours are each collected as a separate flat
+  // [x, y, x, y, …] point list.
+  //
+  // A cursor Map (vertex → next unread edge index) is used instead of
+  // Array.shift() to keep each edge access O(1).
+  const rawContours: number[][] = [];
+  // edgeCursor tracks the index of the next unconsumed outgoing edge per vertex.
+  const edgeCursor = new Map<number, number>();
+
+  for (const [startVertex, outEdges] of adjacency) {
+    let startCursor = edgeCursor.get(startVertex) ?? 0;
+    while (startCursor < outEdges.length) {
+      const points: number[] = [];
+      let cur = startVertex;
+
+      for (;;) {
+        const outs = adjacency.get(cur);
+        if (outs === undefined) break;
+        const cursor = edgeCursor.get(cur) ?? 0;
+        if (cursor >= outs.length) break;
+        // Advance cursor and consume edge at current position (O(1)).
+        edgeCursor.set(cur, cursor + 1);
+        const next = outs[cursor];
+        const vx = cur % vertexStride;
+        const vy = Math.floor(cur / vertexStride);
+        points.push(vx, vy);
+        cur = next;
+        if (cur === startVertex) break; // closed the loop
+      }
+
+      if (points.length >= 6) {
+        rawContours.push(points);
+      }
+
+      startCursor = edgeCursor.get(startVertex) ?? 0;
+    }
+  }
+
+  // ── Degenerate case: no contours found ────────────────────────────────────
+  // rawContours.length === 0 means the adjacency graph had no edges, which
+  // implies no solid tiles exist in the room (any solid tile touching the room
+  // boundary or an empty neighbor would emit at least one edge).
+  if (rawContours.length === 0) {
+    const result: ContourData = { contours: [] };
+    contourCache.set(room.id, result);
+    return result;
+  }
+
+  // ── Step 4: Simplify — remove collinear intermediate vertices ─────────────
+  //
+  // On an axis-aligned grid, three consecutive points are collinear when they
+  // share the same x (vertical run) or the same y (horizontal run).  Removing
+  // the middle point leaves only corner vertices, which:
+  //   - Keeps point counts small (a 20-block horizontal wall → 2 vertices).
+  //   - Gives the jitter a natural "per-corner" feel rather than ticking
+  //     along every block boundary.
+  const simplifiedContours: Float32Array[] = rawContours.map((pts) => {
+    const n = pts.length / 2;
+    if (n < 4) return new Float32Array(pts);
+    const kept: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const pi = (i + n - 1) % n;
+      const ni = (i + 1) % n;
+      const px = pts[pi * 2],  py = pts[pi * 2 + 1];
+      const cx = pts[i  * 2],  cy = pts[i  * 2 + 1];
+      const nx = pts[ni * 2],  ny = pts[ni * 2 + 1];
+      // Retain vertex only when it is NOT collinear with both neighbors.
+      if (!((px === cx && cx === nx) || (py === cy && cy === ny))) {
+        kept.push(cx, cy);
       }
     }
+    // If simplification collapses the contour below 3 vertices (a degenerate
+    // case that cannot arise for valid closed tile polygons), return an empty
+    // array so the ptCount < 3 guard in drawRoomSketch skips it cleanly.
+    return new Float32Array(kept.length >= 6 ? kept : []);
+  });
 
-    // Find the topmost and bottommost row with at least one empty cell.
-    let rowMin = -1;
-    let rowMax = -1;
-    for (let y = 0; y < h; y++) {
-      if (leftEdge[y] !== -1) {
-        if (rowMin === -1) rowMin = y;
-        rowMax = y;
-      }
-    }
-
-    // Degenerate case: all solid — use full bounding box.
-    if (rowMin === -1) {
-      const pts = new Float32Array([0, 0, w, 0, w, h, 0, h]);
-      const contour: ContourData = { points: pts, pointCount: 4 };
-      contourCache.set(room.id, contour);
-      return contour;
-    }
-
-    // Sample left/right edge vertices at CONTOUR_STEP_BLOCKS row intervals.
-    // leftPoints/rightPoints are flat [x0,y0, x1,y1, …] arrays.
-    const leftPoints:  number[] = [];
-    const rightPoints: number[] = [];
-
-    for (let y = rowMin; y <= rowMax; y += CONTOUR_STEP_BLOCKS) {
-      const lx = leftEdge[y];
-      const rx = rightEdge[y];
-      if (lx === -1) continue; // skip all-solid rows within the range
-      // lx is the left boundary of the leftmost empty cell;
-      // rx + 1 is the right boundary of the rightmost empty cell (mirrors
-      // the column-scan's use of "by + 1" for the bottom cell boundary).
-      leftPoints.push(lx, y);
-      rightPoints.push(rx + 1, y);
-    }
-
-    // Ensure the bottommost row is always included (rowMax is guaranteed
-    // to have at least one empty cell by construction, so lx !== -1).
-    const lastSampledY = rowMin + Math.floor((rowMax - rowMin) / CONTOUR_STEP_BLOCKS) * CONTOUR_STEP_BLOCKS;
-    if (lastSampledY < rowMax) {
-      const lx = leftEdge[rowMax];
-      const rx = rightEdge[rowMax];
-      leftPoints.push(lx, rowMax);
-      rightPoints.push(rx + 1, rowMax);
-    }
-
-    // Build closed polygon: left edge top→bottom then right edge bottom→top.
-    const leftPtCount  = leftPoints.length  / 2;
-    const rightPtCount = rightPoints.length / 2;
-    const pointCount   = leftPtCount + rightPtCount;
-    const points = new Float32Array(pointCount * 2);
-    let pi = 0;
-
-    for (let i = 0; i < leftPoints.length; i++) {
-      points[pi++] = leftPoints[i];
-    }
-    // Reverse the right edge so the polygon winds correctly.
-    for (let i = rightPtCount - 1; i >= 0; i--) {
-      points[pi++] = rightPoints[i * 2];
-      points[pi++] = rightPoints[i * 2 + 1];
-    }
-
-    const contour: ContourData = { points, pointCount };
-    contourCache.set(room.id, contour);
-    return contour;
-  }
-
-  // ── Wide/square rooms: column-scan (top/bottom edges per column) ──────────
-
-  const topEdge = new Int16Array(w).fill(-1);
-  const botEdge = new Int16Array(w).fill(-1);
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) {
-      if (solid[y * w + x] === 0) {
-        if (topEdge[x] === -1) topEdge[x] = y;
-        botEdge[x] = y;
-      }
-    }
-  }
-
-  // Find the leftmost and rightmost column that has at least one empty cell.
-  let colMin = -1;
-  let colMax = -1;
-  for (let x = 0; x < w; x++) {
-    if (topEdge[x] !== -1) {
-      if (colMin === -1) colMin = x;
-      colMax = x;
-    }
-  }
-
-  // Degenerate case: all solid — use full bounding box.
-  if (colMin === -1) {
-    const pts = new Float32Array([0, 0, w, 0, w, h, 0, h]);
-    const contour: ContourData = { points: pts, pointCount: 4 };
-    contourCache.set(room.id, contour);
-    return contour;
-  }
-
-  // Sample contour vertices at CONTOUR_STEP_BLOCKS intervals.
-  // topPoints/botPoints are flat [x0,y0, x1,y1, …] arrays.
-  const topPoints: number[] = [];
-  const botPoints: number[] = [];
-
-  for (let x = colMin; x <= colMax; x += CONTOUR_STEP_BLOCKS) {
-    let ty = topEdge[x];
-    let by = botEdge[x];
-    if (ty === -1) { ty = 0; by = h - 1; }
-    topPoints.push(x, ty);
-    botPoints.push(x, by + 1);
-  }
-
-  // Ensure the rightmost column is always included.
-  const lastSampledX = colMin + Math.floor((colMax - colMin) / CONTOUR_STEP_BLOCKS) * CONTOUR_STEP_BLOCKS;
-  if (lastSampledX < colMax) {
-    let ty = topEdge[colMax];
-    let by = botEdge[colMax];
-    if (ty === -1) { ty = 0; by = h - 1; }
-    topPoints.push(colMax, ty);
-    botPoints.push(colMax, by + 1);
-  }
-
-  // Build closed polygon: top L→R then bottom R→L.
-  const topPtCount = topPoints.length / 2;
-  const botPtCount = botPoints.length / 2;
-  const pointCount = topPtCount + botPtCount;
-  const points = new Float32Array(pointCount * 2);
-  let pi = 0;
-
-  for (let i = 0; i < topPoints.length; i++) {
-    points[pi++] = topPoints[i];
-  }
-  // Reverse the bottom edge so the polygon winds correctly.
-  for (let i = botPtCount - 1; i >= 0; i--) {
-    points[pi++] = botPoints[i * 2];
-    points[pi++] = botPoints[i * 2 + 1];
-  }
-
-  const contour: ContourData = { points, pointCount };
-  contourCache.set(room.id, contour);
-  return contour;
+  const result: ContourData = { contours: simplifiedContours };
+  contourCache.set(room.id, result);
+  return result;
 }
 
 // ── Smoothstep helper ─────────────────────────────────────────────────────────
@@ -326,14 +311,104 @@ export function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+// ── Internal per-contour sketch draw ─────────────────────────────────────────
+
+/**
+ * Draws fill and multi-stroke sketch outline for one contour polyline.
+ *
+ * @param ctx          Canvas 2D rendering context.
+ * @param pts          Interleaved [x, y] Float32Array in room-local block units.
+ * @param ptCount      Number of vertices (pts.length / 2).
+ * @param contourSeed  Deterministic noise seed for this contour (room hash XOR contour index mix).
+ * @param mapXBlock    Room origin X in map-block coordinates.
+ * @param mapYBlock    Room origin Y in map-block coordinates.
+ * @param centerX      Canvas X of block-coordinate origin (including pan).
+ * @param centerY      Canvas Y of block-coordinate origin (including pan).
+ * @param cellSizePx   Pixels per block (= mapZoom).
+ * @param alpha        Overall sketch opacity (0–1); controlled by LOD blend.
+ * @param strokeRgb    CSS RGB string for stroke color.
+ * @param fillRgb      CSS RGB string for fill color.
+ */
+function drawContour(
+  ctx: CanvasRenderingContext2D,
+  pts: Float32Array,
+  ptCount: number,
+  contourSeed: number,
+  mapXBlock: number,
+  mapYBlock: number,
+  centerX: number,
+  centerY: number,
+  cellSizePx: number,
+  alpha: number,
+  strokeRgb: string,
+  fillRgb: string,
+): void {
+  // Interior fill — drawn first, beneath strokes.
+  ctx.save();
+  ctx.globalAlpha = alpha * SKETCH_FILL_ALPHA;
+  ctx.fillStyle = `rgb(${fillRgb})`;
+  ctx.beginPath();
+  for (let i = 0; i < ptCount; i++) {
+    const bx = pts[i * 2];
+    const by = pts[i * 2 + 1];
+    const jx = deterministicNoise(contourSeed, i, 0) * JITTER_PX;
+    const jy = deterministicNoise(contourSeed, i, 1) * JITTER_PX;
+    const sx = centerX + (mapXBlock + bx) * cellSizePx + jx;
+    const sy = centerY + (mapYBlock + by) * cellSizePx + jy;
+    if (i === 0) ctx.moveTo(sx, sy);
+    else ctx.lineTo(sx, sy);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Multi-stroke sketch outline — layered passes for a pencil-like look.
+  for (let strokeIndex = 0; strokeIndex < STROKE_COUNT; strokeIndex++) {
+    // Stable whole-stroke offset gives each pass a slightly different position.
+    const strokeOffX = deterministicNoise(contourSeed, STROKE_JITTER_INDEX_OFFSET + strokeIndex, strokeIndex * 2)     * JITTER_PX * 0.4;
+    const strokeOffY = deterministicNoise(contourSeed, STROKE_JITTER_INDEX_OFFSET + strokeIndex, strokeIndex * 2 + 1) * JITTER_PX * 0.4;
+
+    // Per-stroke jitter channels (different per stroke, stable per point).
+    const chanX = POINT_JITTER_CHANNEL_BASE + strokeIndex * 2;
+    const chanY = POINT_JITTER_CHANNEL_BASE + strokeIndex * 2 + 1;
+
+    ctx.save();
+    ctx.globalAlpha = alpha * (STROKE_ALPHA_BASE - strokeIndex * STROKE_ALPHA_STEP);
+    ctx.strokeStyle = `rgb(${strokeRgb})`;
+    ctx.lineWidth   = STROKE_LINE_WIDTH_PX - strokeIndex * STROKE_LINE_WIDTH_STEP;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
+
+    ctx.beginPath();
+    for (let i = 0; i < ptCount; i++) {
+      const bx = pts[i * 2];
+      const by = pts[i * 2 + 1];
+      const jx = deterministicNoise(contourSeed, i, chanX) * JITTER_PX + strokeOffX;
+      const jy = deterministicNoise(contourSeed, i, chanY) * JITTER_PX + strokeOffY;
+      const sx = centerX + (mapXBlock + bx) * cellSizePx + jx;
+      const sy = centerY + (mapYBlock + by) * cellSizePx + jy;
+      if (i === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 // ── Public sketch draw call ───────────────────────────────────────────────────
 
 /**
  * Draws the sketch-mode silhouette of one room.
  *
- * The silhouette is rendered as 2–3 layered strokes with deterministic per-point
- * jitter to produce a hand-drawn appearance.  A very faint interior fill
- * improves readability.
+ * All contours for the room are drawn — outer cave boundary, interior
+ * platforms, island masses, and hole boundaries alike.  Each contour is
+ * rendered as fill + 2–3 layered strokes with deterministic per-point jitter
+ * to produce a hand-drawn appearance.
+ *
+ * Jitter is seeded per contour using: roomHash XOR (contourIndex * prime),
+ * plus the point index and channel, so the same room never flickers and
+ * different contours within the same room have independent noise fields.
  *
  * @param ctx          Canvas 2D rendering context.
  * @param room         Room definition (used for contour building and ID hash).
@@ -356,62 +431,29 @@ export function drawRoomSketch(
   alpha: number,
   isCurrentRoom: boolean,
 ): void {
-  const contour = buildRoomContour(room);
-  if (contour.pointCount < 3) return;
+  const data = buildRoomContour(room);
+  if (data.contours.length === 0) return;
 
-  const roomHash = hashRoomId(room.id);
+  const roomHash  = hashRoomId(room.id);
   const strokeRgb = isCurrentRoom ? STROKE_RGB_CURRENT : STROKE_RGB_OTHER;
   const fillRgb   = isCurrentRoom ? FILL_RGB_CURRENT   : FILL_RGB_OTHER;
 
-  // ── Interior fill (drawn first, beneath strokes) ──────────────────────────
-  ctx.save();
-  ctx.globalAlpha = alpha * SKETCH_FILL_ALPHA;
-  ctx.fillStyle = `rgb(${fillRgb})`;
-  ctx.beginPath();
-  for (let i = 0; i < contour.pointCount; i++) {
-    const bx = contour.points[i * 2];
-    const by = contour.points[i * 2 + 1];
-    const jx = deterministicNoise(roomHash, i, 0) * JITTER_PX;
-    const jy = deterministicNoise(roomHash, i, 1) * JITTER_PX;
-    const sx = centerX + (mapXBlock + bx) * cellSizePx + jx;
-    const sy = centerY + (mapYBlock + by) * cellSizePx + jy;
-    if (i === 0) ctx.moveTo(sx, sy);
-    else ctx.lineTo(sx, sy);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
+  // Draw every contour — outer boundary, interior islands, and hole boundaries
+  // all get their own sketch outline.  Jitter seed is varied per contour so
+  // each loop has independent noise (stable across frames, different per loop).
+  for (let contourIndex = 0; contourIndex < data.contours.length; contourIndex++) {
+    const pts = data.contours[contourIndex];
+    const ptCount = pts.length / 2;
+    if (ptCount < 3) continue;
 
-  // ── Multi-stroke sketch outline ───────────────────────────────────────────
-  for (let strokeIndex = 0; strokeIndex < STROKE_COUNT; strokeIndex++) {
-    // Each stroke gets a stable whole-stroke offset for hand-drawn wobble.
-    const strokeOffX = deterministicNoise(roomHash, STROKE_JITTER_INDEX_OFFSET + strokeIndex, strokeIndex * 2)     * JITTER_PX * 0.4;
-    const strokeOffY = deterministicNoise(roomHash, STROKE_JITTER_INDEX_OFFSET + strokeIndex, strokeIndex * 2 + 1) * JITTER_PX * 0.4;
+    // Mix the contour index into the room hash so each contour has its own
+    // stable noise field: same room + same contour index → same jitter.
+    const contourSeed = (roomHash ^ Math.imul(contourIndex + 1, 0x9e3779b9)) | 0;
 
-    // Per-stroke jitter channel seeds (different per stroke, stable per point).
-    const chanX = POINT_JITTER_CHANNEL_BASE + strokeIndex * 2;
-    const chanY = POINT_JITTER_CHANNEL_BASE + strokeIndex * 2 + 1;
-
-    ctx.save();
-    ctx.globalAlpha = alpha * (STROKE_ALPHA_BASE - strokeIndex * STROKE_ALPHA_STEP);
-    ctx.strokeStyle = `rgb(${strokeRgb})`;
-    ctx.lineWidth   = STROKE_LINE_WIDTH_PX - strokeIndex * STROKE_LINE_WIDTH_STEP;
-    ctx.lineJoin    = 'round';
-    ctx.lineCap     = 'round';
-
-    ctx.beginPath();
-    for (let i = 0; i < contour.pointCount; i++) {
-      const bx = contour.points[i * 2];
-      const by = contour.points[i * 2 + 1];
-      const jx = deterministicNoise(roomHash, i, chanX) * JITTER_PX + strokeOffX;
-      const jy = deterministicNoise(roomHash, i, chanY) * JITTER_PX + strokeOffY;
-      const sx = centerX + (mapXBlock + bx) * cellSizePx + jx;
-      const sy = centerY + (mapYBlock + by) * cellSizePx + jy;
-      if (i === 0) ctx.moveTo(sx, sy);
-      else ctx.lineTo(sx, sy);
-    }
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
+    drawContour(
+      ctx, pts, ptCount, contourSeed,
+      mapXBlock, mapYBlock, centerX, centerY,
+      cellSizePx, alpha, strokeRgb, fillRgb,
+    );
   }
 }
