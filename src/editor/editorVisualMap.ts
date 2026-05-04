@@ -15,17 +15,19 @@
  */
 
 import { ROOM_REGISTRY, setRoomMapPosition, setRoomNameOverride, setRoomTransitionLink } from '../levels/rooms';
-import type { RoomDef, RoomTransitionDef, TransitionDirection } from '../levels/roomDef';
+import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
 import { exportWorldMapJson } from './editorExport';
 import { createSubstrateEffect } from '../render/effects/substrateEffect';
 import {
   MapRoomPlacement,
+  SnapIndicator,
   VisualMapCallbacks,
   effectiveRoomName,
   effectiveWorldId,
   worldDisplayName,
   hexToRgba,
   computeAutoLayout,
+  applyDoorSnap,
 } from './editorVisualMapHelpers';
 import {
   VisualMapDialogContext,
@@ -71,14 +73,6 @@ interface DoorHitArea {
   yPx: number;
   wPx: number;
   hPx: number;
-}
-
-/** Tracks which two doorways are about to snap together during a room drag. */
-interface SnapIndicator {
-  srcRoomId: string;
-  srcTransIdx: number;
-  tgtRoomId: string;
-  tgtTransIdx: number;
 }
 
 interface PendingDoorLink {
@@ -634,7 +628,7 @@ export function showVisualWorldMap(
         placement.mapXWorld = Math.round(dragRoomStartXPx + dx / zoom);
         placement.mapYWorld = Math.round(dragRoomStartYPx + dy / zoom);
         // Doorway snap: adjust position if a compatible door pair is close enough
-        snapIndicator = applyDoorSnap(dragRoomId, placement);
+        snapIndicator = applyDoorSnap(dragRoomId, placement, placements, SNAP_THRESHOLD_PX / zoom);
       }
       render();
     } else if (isDraggingPan) {
@@ -1068,109 +1062,6 @@ export function showVisualWorldMap(
 
     overlay.appendChild(menu);
     contextMenuEl = menu;
-  }
-
-  // ── Door snap helpers ─────────────────────────────────────────────────
-
-  /**
-   * Returns the door's centre in map-world coordinates given its containing
-   * room's current placement.
-   */
-  function getDoorCenterWorld(
-    trans: RoomTransitionDef,
-    placement: MapRoomPlacement,
-  ): [number, number] {
-    const room = placement.room;
-    const cx = placement.mapXWorld;
-    const cy = placement.mapYWorld;
-    const mid = trans.positionBlock + trans.openingSizeBlocks / 2;
-    const DEPTH = 6;
-    if (trans.depthBlock !== undefined) {
-      // Interior transition: report center of the zone
-      const depthMid = trans.depthBlock + DEPTH / 2;
-      if (trans.direction === 'left' || trans.direction === 'right') {
-        return [cx + depthMid, cy + mid];
-      } else {
-        return [cx + mid, cy + depthMid];
-      }
-    }
-    if (trans.direction === 'left')  return [cx,                   cy + mid];
-    if (trans.direction === 'right') return [cx + room.widthBlocks, cy + mid];
-    if (trans.direction === 'up')    return [cx + mid,              cy];
-    if (trans.direction === 'down')  return [cx + mid,              cy + room.heightBlocks];
-    // Exhaustive check for TransitionDirection — should never reach here
-    throw new Error(`Unknown transition direction: ${(trans as RoomTransitionDef).direction}`);
-  }
-
-  /** True when direction `a` and `b` face each other (and can be aligned). */
-  function isOppositeDoor(a: TransitionDirection, b: TransitionDirection): boolean {
-    return (a === 'left'  && b === 'right') ||
-           (a === 'right' && b === 'left')  ||
-           (a === 'up'    && b === 'down')  ||
-           (a === 'down'  && b === 'up');
-  }
-
-  /**
-   * Checks all pairs of (dragged-room door, other-room door) for compatible
-   * facing pairs within SNAP_THRESHOLD_PX on screen.  When found, the
-   * dragged room's placement is moved so the door centres coincide (seamless
-   * wall-to-wall alignment).  Returns a SnapIndicator when snapping occurred.
-   */
-  function applyDoorSnap(
-    draggingRoomId: string,
-    draggingPlacement: MapRoomPlacement,
-  ): SnapIndicator | null {
-    const draggingRoom = draggingPlacement.room;
-
-    let bestDistPx = SNAP_THRESHOLD_PX;
-    let bestSnap: {
-      worldDX: number;
-      worldDY: number;
-      srcTransIdx: number;
-      tgtRoomId: string;
-      tgtTransIdx: number;
-    } | null = null;
-
-    for (let si = 0; si < draggingRoom.transitions.length; si++) {
-      const srcTrans = draggingRoom.transitions[si];
-      const [srcWx, srcWy] = getDoorCenterWorld(srcTrans, draggingPlacement);
-      const [srcSx, srcSy] = worldToScreen(srcWx, srcWy);
-
-      for (const [otherId, otherPlacement] of placements) {
-        if (otherId === draggingRoomId) continue;
-        for (let ti = 0; ti < otherPlacement.room.transitions.length; ti++) {
-          const tgtTrans = otherPlacement.room.transitions[ti];
-          if (!isOppositeDoor(srcTrans.direction, tgtTrans.direction)) continue;
-
-          const [tgtWx, tgtWy] = getDoorCenterWorld(tgtTrans, otherPlacement);
-          const [tgtSx, tgtSy] = worldToScreen(tgtWx, tgtWy);
-          const distPx = Math.hypot(srcSx - tgtSx, srcSy - tgtSy);
-
-          if (distPx < bestDistPx) {
-            bestDistPx = distPx;
-            bestSnap = {
-              worldDX: tgtWx - srcWx,
-              worldDY: tgtWy - srcWy,
-              srcTransIdx: si,
-              tgtRoomId: otherId,
-              tgtTransIdx: ti,
-            };
-          }
-        }
-      }
-    }
-
-    if (bestSnap) {
-      draggingPlacement.mapXWorld += bestSnap.worldDX;
-      draggingPlacement.mapYWorld += bestSnap.worldDY;
-      return {
-        srcRoomId: draggingRoomId,
-        srcTransIdx: bestSnap.srcTransIdx,
-        tgtRoomId: bestSnap.tgtRoomId,
-        tgtTransIdx: bestSnap.tgtTransIdx,
-      };
-    }
-    return null;
   }
 
   // ── Keyboard ───────────────────────────────────────────────────────────
