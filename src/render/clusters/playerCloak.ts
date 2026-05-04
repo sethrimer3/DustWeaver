@@ -43,25 +43,16 @@ import {
   CLOAK_LANDING_DURATION_SEC,
   CLOAK_LANDING_COMPRESSION,
   CLOAK_CONSTRAINT_ITERATIONS,
-  CLOAK_BACK_WIDTH_ROOT_WORLD,
-  CLOAK_BACK_WIDTH_TIP_WORLD,
-  CLOAK_BACK_FAST_FALL_TIP_EXTRA_WORLD,
   CLOAK_BACK_FILL_COLOR,
   CLOAK_BACK_OUTLINE_COLOR,
   CLOAK_BACK_OUTLINE_WIDTH_WORLD,
   CLOAK_FRONT_FILL_COLOR,
   CLOAK_FRONT_OUTLINE_COLOR,
   CLOAK_FRONT_OUTLINE_WIDTH_WORLD,
-  CLOAK_FRONT_WIDTH_RATIO,
-  CLOAK_FRONT_PROJECTION_WORLD,
   CLOAK_FRONT_LENGTH_RATIO,
-  CLOAK_FRONT_PROJECTION_TAPER,
-  CLOAK_FAST_FALL_CORNER_SHARPNESS,
-  CLOAK_DEBUG_POINT_RADIUS_PX,
   CLOAK_MAX_FRAME_DT_SEC,
   CLOAK_MIN_DT_SEC,
   CLOAK_MIN_DISTANCE_WORLD,
-  CLOAK_MIN_TANGENT_LENGTH,
   CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD,
   CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD,
   CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD,
@@ -94,6 +85,13 @@ import {
   BACK_BUNCHING_FIX_BLEND,
   getCloakTuningValue,
 } from './cloakConstants';
+import {
+  buildBackCloakPolygon,
+  buildFrontCloakPolygon,
+  drawCloakPolygon,
+  renderCloakDebug,
+  type CloakDebugParams,
+} from './cloakPolygonRenderer';
 
 // ── Player sprite metrics (duplicated from renderer.ts to avoid circular) ──
 const PLAYER_SPRITE_WIDTH_WORLD = 16;
@@ -167,6 +165,14 @@ export class PlayerCloak {
 
   private _tunedValue(value: number, overrideKey: Parameters<typeof getCloakTuningValue>[1]): number {
     return getCloakTuningValue(value, overrideKey);
+  }
+
+  /** Pre-compute the landing compression scale for this frame (1.0 = no compression). */
+  private _computeLandingScale(): number {
+    if (this.landingTimerSec <= 0) return 1.0;
+    const compression = this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression');
+    const duration = this._tunedValue(CLOAK_LANDING_DURATION_SEC, 'landingDurationSec');
+    return compression + (1 - compression) * (1 - this.landingTimerSec / duration);
   }
 
   constructor() {
@@ -342,8 +348,13 @@ export class PlayerCloak {
     scalePx: number,
   ): void {
     if (!this.isInitialisedFlag || this.pointCount < 2) return;
-    this._buildBackPolygon(offsetXPx, offsetYPx, scalePx);
-    this._drawPolygon(
+    buildBackCloakPolygon(
+      this.posXWorld, this.posYWorld, this.pointCount,
+      this.spreadAmount, this.isFastFallActiveFlag, this._computeLandingScale(),
+      scalePx, offsetXPx, offsetYPx,
+      this.backLeftXPx, this.backLeftYPx, this.backRightXPx, this.backRightYPx,
+    );
+    drawCloakPolygon(
       ctx,
       this.backLeftXPx, this.backLeftYPx,
       this.backRightXPx, this.backRightYPx,
@@ -365,8 +376,14 @@ export class PlayerCloak {
     player: CloakPlayerState,
   ): void {
     if (!this.isInitialisedFlag || this.pointCount < 2) return;
-    this._buildFrontPolygon(offsetXPx, offsetYPx, scalePx, player);
-    this._drawPolygon(
+    buildFrontCloakPolygon(
+      this.posXWorld, this.posYWorld, this.pointCount, this.frontPointCount,
+      this.spreadAmount, this.opennessAmount,
+      player.isFacingLeftFlag === 1 ? -1 : 1, this._computeLandingScale(),
+      scalePx, offsetXPx, offsetYPx,
+      this.frontLeftXPx, this.frontLeftYPx, this.frontRightXPx, this.frontRightYPx,
+    );
+    drawCloakPolygon(
       ctx,
       this.frontLeftXPx, this.frontLeftYPx,
       this.frontRightXPx, this.frontRightYPx,
@@ -398,161 +415,40 @@ export class PlayerCloak {
     player: CloakPlayerState,
   ): void {
     if (!this.isInitialisedFlag) return;
-    ctx.save();
-
-    // Anchor point (red).
-    const anchorSX = Math.round(this._anchorWorldX(player) * scalePx + offsetXPx);
-    const anchorSY = Math.round(this._anchorWorldY(player) * scalePx + offsetYPx);
-    ctx.fillStyle = '#ff0000';
-    ctx.beginPath();
-    ctx.arc(anchorSX, anchorSY, CLOAK_DEBUG_POINT_RADIUS_PX, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Shoulder reference (yellow).
-    const shoulderSX = Math.round(this._shoulderWorldX(player) * scalePx + offsetXPx);
-    const shoulderSY = Math.round(this._shoulderWorldY(player) * scalePx + offsetYPx);
-    ctx.fillStyle = '#ffff00';
-    ctx.beginPath();
-    ctx.arc(shoulderSX, shoulderSY, CLOAK_DEBUG_POINT_RADIUS_PX, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Chain points (cyan circles + lines).
-    ctx.strokeStyle = '#00ffff';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < this.pointCount; i++) {
-      const sx = Math.round(this.posXWorld[i] * scalePx + offsetXPx);
-      const sy = Math.round(this.posYWorld[i] * scalePx + offsetYPx);
-
-      ctx.fillStyle = i === 0 ? '#ff8800' : '#00ffff';
-      ctx.beginPath();
-      ctx.arc(sx, sy, CLOAK_DEBUG_POINT_RADIUS_PX, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (i > 0) {
-        const prevSx = Math.round(this.posXWorld[i - 1] * scalePx + offsetXPx);
-        const prevSy = Math.round(this.posYWorld[i - 1] * scalePx + offsetYPx);
-        ctx.beginPath();
-        ctx.moveTo(prevSx, prevSy);
-        ctx.lineTo(sx, sy);
-        ctx.stroke();
-      }
-    }
-
-    // Back polygon outline (magenta, dashed).
-    this._buildBackPolygon(offsetXPx, offsetYPx, scalePx);
-    ctx.strokeStyle = '#ff00ff';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 2]);
-    ctx.beginPath();
-    ctx.moveTo(this.backLeftXPx[0], this.backLeftYPx[0]);
-    for (let i = 1; i < this.pointCount; i++) {
-      ctx.lineTo(this.backLeftXPx[i], this.backLeftYPx[i]);
-    }
-    for (let i = this.pointCount - 1; i >= 0; i--) {
-      ctx.lineTo(this.backRightXPx[i], this.backRightYPx[i]);
-    }
-    ctx.closePath();
-    ctx.stroke();
-
-    // Front polygon outline (green, dashed).
-    this._buildFrontPolygon(offsetXPx, offsetYPx, scalePx, player);
-    ctx.strokeStyle = '#00ff00';
-    ctx.beginPath();
-    ctx.moveTo(this.frontLeftXPx[0], this.frontLeftYPx[0]);
-    for (let i = 1; i < this.frontPointCount; i++) {
-      ctx.lineTo(this.frontLeftXPx[i], this.frontLeftYPx[i]);
-    }
-    for (let i = this.frontPointCount - 1; i >= 0; i--) {
-      ctx.lineTo(this.frontRightXPx[i], this.frontRightYPx[i]);
-    }
-    ctx.closePath();
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Shape value text.
-    const textX = anchorSX + 12;
-    let textY = anchorSY - 20;
-    ctx.font = '8px monospace';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(`spread: ${this.spreadAmount.toFixed(2)}`, textX, textY); textY += 10;
-    ctx.fillText(`openness: ${this.opennessAmount.toFixed(2)}`, textX, textY); textY += 10;
-    ctx.fillText(`fastFall: ${this.isFastFallActiveFlag ? 'YES' : 'no'}`, textX, textY); textY += 10;
-    if (this.turnTimerSec > 0) {
-      ctx.fillText(`turn: ${this.turnTimerSec.toFixed(2)}s`, textX, textY); textY += 10;
-    }
-    if (this.landingTimerSec > 0) {
-      ctx.fillText(`land: ${this.landingTimerSec.toFixed(2)}s`, textX, textY);
-    }
-
-    // ── Back collision boundary line (orange) ──────────────────────────
-    const backBoundX = this._backBoundaryWorldX(player);
-    const backTopY = this._backBoundaryTopWorldY(player);
-    const backBottomY = this._backBoundaryBottomWorldY(player);
-    const backLineSX = Math.round(backBoundX * scalePx + offsetXPx);
-    const backLineTopSY = Math.round(backTopY * scalePx + offsetYPx);
-    const backLineBottomSY = Math.round(backBottomY * scalePx + offsetYPx);
-
-    ctx.strokeStyle = '#ff8800';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(backLineSX, backLineTopSY);
-    ctx.lineTo(backLineSX, backLineBottomSY);
-    ctx.stroke();
-
-    // Back boundary top/bottom markers (small horizontal ticks).
-    const tickHalfLenPx = 2;
-    ctx.beginPath();
-    ctx.moveTo(backLineSX - tickHalfLenPx, backLineTopSY);
-    ctx.lineTo(backLineSX + tickHalfLenPx, backLineTopSY);
-    ctx.moveTo(backLineSX - tickHalfLenPx, backLineBottomSY);
-    ctx.lineTo(backLineSX + tickHalfLenPx, backLineBottomSY);
-    ctx.stroke();
-
-    // Highlight cloak points that are within the back boundary Y range.
-    const backToleranceWorld = 1.5;
-    const isFacingRight = player.isFacingLeftFlag === 0;
-    for (let i = 1; i < this.pointCount; i++) {
-      const py = this.posYWorld[i];
-      if (py >= backTopY && py <= backBottomY) {
-        const sx = Math.round(this.posXWorld[i] * scalePx + offsetXPx);
-        const sy = Math.round(py * scalePx + offsetYPx);
-
-        // Check if point is on the back surface (constrained).
-        const px = this.posXWorld[i];
-        const distFromBack = isFacingRight ? (backBoundX - px) : (px - backBoundX);
-        const isConstrained = distFromBack >= -0.5 && distFromBack <= backToleranceWorld;
-
-        ctx.fillStyle = isConstrained ? '#ff00ff' : '#ff4400';
-        ctx.beginPath();
-        ctx.arc(sx, sy, CLOAK_DEBUG_POINT_RADIUS_PX + 1, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // Drape target positions along the back (small green diamonds).
-    const drapeSpacing = this._tunedValue(BACK_DRAPE_SPACING, 'backDrapeSpacing');
-    const anchorY = this.posYWorld[0];
-    ctx.fillStyle = '#00ff88';
-    for (let i = 1; i < this.pointCount; i++) {
-      const idealY = anchorY + (i * drapeSpacing);
-      const targetY = Math.min(Math.max(idealY, backTopY), backBottomY);
-      const dtsx = backLineSX;
-      const dtsy = Math.round(targetY * scalePx + offsetYPx);
-      // Draw a small diamond marker.
-      ctx.beginPath();
-      ctx.moveTo(dtsx, dtsy - 2);
-      ctx.lineTo(dtsx + 2, dtsy);
-      ctx.lineTo(dtsx, dtsy + 2);
-      ctx.lineTo(dtsx - 2, dtsy);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    ctx.fillStyle = '#ff8800';
-    ctx.fillText('backCol', backLineSX + 4, backLineTopSY - 2);
-
-    ctx.restore();
+    const params: CloakDebugParams = {
+      posXWorld: this.posXWorld,
+      posYWorld: this.posYWorld,
+      pointCount: this.pointCount,
+      frontPointCount: this.frontPointCount,
+      spreadAmount: this.spreadAmount,
+      opennessAmount: this.opennessAmount,
+      isFastFallActive: this.isFastFallActiveFlag,
+      turnTimerSec: this.turnTimerSec,
+      landingTimerSec: this.landingTimerSec,
+      landingScale: this._computeLandingScale(),
+      foldDirX: player.isFacingLeftFlag === 1 ? -1 : 1,
+      backLeftXPx: this.backLeftXPx,
+      backLeftYPx: this.backLeftYPx,
+      backRightXPx: this.backRightXPx,
+      backRightYPx: this.backRightYPx,
+      frontLeftXPx: this.frontLeftXPx,
+      frontLeftYPx: this.frontLeftYPx,
+      frontRightXPx: this.frontRightXPx,
+      frontRightYPx: this.frontRightYPx,
+      anchorWorldX: this._anchorWorldX(player),
+      anchorWorldY: this._anchorWorldY(player),
+      shoulderWorldX: this._shoulderWorldX(player),
+      shoulderWorldY: this._shoulderWorldY(player),
+      backBoundaryWorldX: this._backBoundaryWorldX(player),
+      backBoundaryTopWorldY: this._backBoundaryTopWorldY(player),
+      backBoundaryBottomWorldY: this._backBoundaryBottomWorldY(player),
+      drapeSpacing: this._tunedValue(BACK_DRAPE_SPACING, 'backDrapeSpacing'),
+      isFacingRight: player.isFacingLeftFlag === 0,
+      offsetXPx,
+      offsetYPx,
+      scalePx,
+    };
+    renderCloakDebug(ctx, params);
   }
 
   /**
@@ -582,190 +478,6 @@ export class PlayerCloak {
     this.isFastFallActiveFlag = false;
     this.turnTimerSec = 0;
     this.landingTimerSec = 0;
-  }
-
-  // ── Private: polygon builders ──────────────────────────────────────────
-
-  /**
-   * Build the back cloak polygon edges into pre-allocated buffers.
-   * Shape is wider at spread, with sharp outer corners during fast fall.
-   */
-  private _buildBackPolygon(
-    offsetXPx: number,
-    offsetYPx: number,
-    scalePx: number,
-  ): void {
-    const spread = this.spreadAmount;
-    const isFastFall = this.isFastFallActiveFlag;
-    const landingScale = this.landingTimerSec > 0
-      ? this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression')
-        + (1 - this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression'))
-          * (1 - this.landingTimerSec / this._tunedValue(CLOAK_LANDING_DURATION_SEC, 'landingDurationSec'))
-      : 1.0;
-
-    for (let i = 0; i < this.pointCount; i++) {
-      const screenX = Math.round(this.posXWorld[i] * scalePx + offsetXPx);
-      const screenY = Math.round(this.posYWorld[i] * scalePx + offsetYPx);
-
-      // Interpolate base width from root to tip.
-      const t = i / (this.pointCount - 1);
-      const baseRootW = CLOAK_BACK_WIDTH_ROOT_WORLD;
-      let baseTipW = CLOAK_BACK_WIDTH_TIP_WORLD;
-
-      // During fast fall, tip widens dramatically.
-      if (isFastFall) {
-        baseTipW += CLOAK_BACK_FAST_FALL_TIP_EXTRA_WORLD * spread;
-      }
-
-      const baseWidth = baseRootW * (1 - t) + baseTipW * t;
-      // Apply spread multiplier: spread makes the whole cloak wider.
-      const widthWorld = baseWidth * (1 + spread * 0.8) * landingScale;
-      const halfWidth = (widthWorld * scalePx) * 0.5;
-
-      // Compute perpendicular from chain tangent.
-      const perp = this._getPerp(i, offsetXPx, offsetYPx, scalePx, screenX, screenY);
-
-      // During fast fall, push outer corners outward for a sharper silhouette.
-      // cornerSharpX uses 2× horizontal emphasis for a visually dramatic wing-out.
-      // cornerSharpY forces upward (negative) to lift corners regardless of perp direction.
-      let cornerSharpX = 0;
-      let cornerSharpY = 0;
-      if (isFastFall && t > 0.5) {
-        const cornerT = (t - 0.5) * 2; // 0..1 over bottom half
-        cornerSharpX = perp[0] * CLOAK_FAST_FALL_CORNER_SHARPNESS * cornerT * spread * scalePx * 2;
-        cornerSharpY = -Math.abs(perp[1]) * CLOAK_FAST_FALL_CORNER_SHARPNESS * cornerT * spread * scalePx;
-      }
-
-      this.backLeftXPx[i] = Math.round(screenX + perp[0] * halfWidth + cornerSharpX);
-      this.backLeftYPx[i] = Math.round(screenY + perp[1] * halfWidth + cornerSharpY);
-      this.backRightXPx[i] = Math.round(screenX - perp[0] * halfWidth - cornerSharpX);
-      this.backRightYPx[i] = Math.round(screenY - perp[1] * halfWidth + cornerSharpY);
-    }
-  }
-
-  /**
-   * Build the front cloak polygon edges — shorter, narrower, offset toward player front.
-   */
-  private _buildFrontPolygon(
-    offsetXPx: number,
-    offsetYPx: number,
-    scalePx: number,
-    player: CloakPlayerState,
-  ): void {
-    const spread = this.spreadAmount;
-    const openness = this.opennessAmount;
-    // Front fold direction: toward the player's facing side.
-    const foldDirX = player.isFacingLeftFlag === 1 ? -1 : 1;
-    const projectionPx = CLOAK_FRONT_PROJECTION_WORLD * openness * scalePx * foldDirX;
-
-    const landingScale = this.landingTimerSec > 0
-      ? this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression')
-        + (1 - this._tunedValue(CLOAK_LANDING_COMPRESSION, 'landingCompression'))
-          * (1 - this.landingTimerSec / this._tunedValue(CLOAK_LANDING_DURATION_SEC, 'landingDurationSec'))
-      : 1.0;
-
-    for (let i = 0; i < this.frontPointCount; i++) {
-      // Map front index to the chain (front is shorter, so use proportional indexing).
-      const chainT = i / (this.frontPointCount - 1);
-      const chainIdx = Math.min(this.pointCount - 1, chainT * (this.pointCount - 1));
-      const lowerIdx = Math.floor(chainIdx);
-      const upperIdx = Math.min(this.pointCount - 1, lowerIdx + 1);
-      const frac = chainIdx - lowerIdx;
-
-      // Interpolated chain position.
-      const worldX = this.posXWorld[lowerIdx] + (this.posXWorld[upperIdx] - this.posXWorld[lowerIdx]) * frac;
-      const worldY = this.posYWorld[lowerIdx] + (this.posYWorld[upperIdx] - this.posYWorld[lowerIdx]) * frac;
-      const screenX = Math.round(worldX * scalePx + offsetXPx);
-      const screenY = Math.round(worldY * scalePx + offsetYPx);
-
-      // Front cloak width: narrower via FRONT_WIDTH_RATIO, modulated by spread.
-      const t = i / (this.frontPointCount - 1);
-      const backWidth = CLOAK_BACK_WIDTH_ROOT_WORLD * (1 - t) + CLOAK_BACK_WIDTH_TIP_WORLD * t;
-      const frontWidth = backWidth * CLOAK_FRONT_WIDTH_RATIO * (1 + spread * 0.4) * landingScale;
-      const halfWidth = (frontWidth * scalePx) * 0.5;
-
-      // Perpendicular from nearest chain segment.
-      const perpIdx = Math.min(lowerIdx, this.pointCount - 2);
-      const perp = this._getPerp(perpIdx, offsetXPx, offsetYPx, scalePx, screenX, screenY);
-
-      // Offset toward front (projection).
-      // Root projects more, tip less — creates a front fold that tapers toward the cloak's end.
-      const projX = projectionPx * (1 - t * CLOAK_FRONT_PROJECTION_TAPER);
-
-      this.frontLeftXPx[i] = Math.round(screenX + perp[0] * halfWidth + projX);
-      this.frontLeftYPx[i] = Math.round(screenY + perp[1] * halfWidth);
-      this.frontRightXPx[i] = Math.round(screenX - perp[0] * halfWidth + projX);
-      this.frontRightYPx[i] = Math.round(screenY - perp[1] * halfWidth);
-    }
-  }
-
-  // ── Private: render helpers ────────────────────────────────────────────
-
-  /** Draw a tapered polygon from left/right edge buffers. */
-  private _drawPolygon(
-    ctx: CanvasRenderingContext2D,
-    leftX: Float32Array, leftY: Float32Array,
-    rightX: Float32Array, rightY: Float32Array,
-    count: number,
-    fillColor: string,
-    outlineColor: string,
-    outlineWidth: number,
-  ): void {
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(leftX[0], leftY[0]);
-    for (let i = 1; i < count; i++) {
-      ctx.lineTo(leftX[i], leftY[i]);
-    }
-    for (let i = count - 1; i >= 0; i--) {
-      ctx.lineTo(rightX[i], rightY[i]);
-    }
-    ctx.closePath();
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    ctx.strokeStyle = outlineColor;
-    ctx.lineWidth = outlineWidth;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // ── Private: perpendicular calculation ─────────────────────────────────
-
-  // Scratch perpendicular to avoid allocation.
-  private readonly _scratchPerp: [number, number] = [0, 0];
-
-  /** Get perpendicular unit vector at chain index. Returns shared scratch buffer. */
-  private _getPerp(
-    i: number,
-    offsetXPx: number,
-    offsetYPx: number,
-    scalePx: number,
-    screenX: number,
-    screenY: number,
-  ): readonly [number, number] {
-    let tangentX = 0;
-    let tangentY = 1;
-    if (i < this.pointCount - 1) {
-      const nextSX = Math.round(this.posXWorld[i + 1] * scalePx + offsetXPx);
-      const nextSY = Math.round(this.posYWorld[i + 1] * scalePx + offsetYPx);
-      tangentX = nextSX - screenX;
-      tangentY = nextSY - screenY;
-    } else if (i > 0) {
-      const prevSX = Math.round(this.posXWorld[i - 1] * scalePx + offsetXPx);
-      const prevSY = Math.round(this.posYWorld[i - 1] * scalePx + offsetYPx);
-      tangentX = screenX - prevSX;
-      tangentY = screenY - prevSY;
-    }
-    const len = Math.sqrt(tangentX * tangentX + tangentY * tangentY);
-    if (len > CLOAK_MIN_TANGENT_LENGTH) {
-      this._scratchPerp[0] = -tangentY / len;
-      this._scratchPerp[1] = tangentX / len;
-    } else {
-      this._scratchPerp[0] = 1;
-      this._scratchPerp[1] = 0;
-    }
-    return this._scratchPerp;
   }
 
   // ── Private: anchor / shoulder helpers ─────────────────────────────────

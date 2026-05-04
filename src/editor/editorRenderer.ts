@@ -24,9 +24,11 @@ import {
   drawEditorBouncePads,
   drawEditorEnvironmentItems,
   drawEditorRopes,
+} from './editorOverlayDrawers';
+import {
   drawPlacementPreview,
   drawEditorUIOverlays,
-} from './editorOverlayDrawers';
+} from './editorPlacementPreviewDrawer';
 
 /**
  * Renders all editor overlays on the 2D canvas.
