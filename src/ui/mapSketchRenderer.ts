@@ -215,23 +215,32 @@ function buildRoomContour(room: RoomDef): ContourData {
 
   // ── Step 3: Trace closed contours ─────────────────────────────────────────
   //
-  // Each directed edge is consumed exactly once by shifting it from the
-  // adjacency list.  Starting from each unprocessed vertex (outer loop),
-  // follow outgoing edges until the loop closes (returns to startVertex)
-  // or the chain terminates.  Multiple disjoint closed contours are each
-  // collected as a separate flat [x, y, x, y, …] point list.
+  // Each directed edge is consumed exactly once via a per-vertex cursor index.
+  // Starting from each unprocessed vertex (outer loop), follow outgoing edges
+  // until the loop closes (returns to startVertex) or the chain terminates.
+  // Multiple disjoint closed contours are each collected as a separate flat
+  // [x, y, x, y, …] point list.
+  //
+  // A cursor Map (vertex → next unread edge index) is used instead of
+  // Array.shift() to keep each edge access O(1).
   const rawContours: number[][] = [];
+  // edgeCursor tracks the index of the next unconsumed outgoing edge per vertex.
+  const edgeCursor = new Map<number, number>();
 
   for (const [startVertex, outEdges] of adjacency) {
-    while (outEdges.length > 0) {
+    let startCursor = edgeCursor.get(startVertex) ?? 0;
+    while (startCursor < outEdges.length) {
       const points: number[] = [];
       let cur = startVertex;
 
       for (;;) {
         const outs = adjacency.get(cur);
-        if (outs === undefined || outs.length === 0) break;
-        // Consume the next outgoing edge from cur.
-        const next = outs.shift()!;
+        if (outs === undefined) break;
+        const cursor = edgeCursor.get(cur) ?? 0;
+        if (cursor >= outs.length) break;
+        // Advance cursor and consume edge at current position (O(1)).
+        edgeCursor.set(cur, cursor + 1);
+        const next = outs[cursor];
         const vx = cur % vertexStride;
         const vy = Math.floor(cur / vertexStride);
         points.push(vx, vy);
@@ -242,6 +251,8 @@ function buildRoomContour(room: RoomDef): ContourData {
       if (points.length >= 6) {
         rawContours.push(points);
       }
+
+      startCursor = edgeCursor.get(startVertex) ?? 0;
     }
   }
 
@@ -431,14 +442,14 @@ export function drawRoomSketch(
   // Draw every contour — outer boundary, interior islands, and hole boundaries
   // all get their own sketch outline.  Jitter seed is varied per contour so
   // each loop has independent noise (stable across frames, different per loop).
-  for (let ci = 0; ci < data.contours.length; ci++) {
-    const pts = data.contours[ci];
+  for (let contourIndex = 0; contourIndex < data.contours.length; contourIndex++) {
+    const pts = data.contours[contourIndex];
     const ptCount = pts.length / 2;
     if (ptCount < 3) continue;
 
     // Mix the contour index into the room hash so each contour has its own
     // stable noise field: same room + same contour index → same jitter.
-    const contourSeed = (roomHash ^ Math.imul(ci + 1, 0x9e3779b9)) | 0;
+    const contourSeed = (roomHash ^ Math.imul(contourIndex + 1, 0x9e3779b9)) | 0;
 
     drawContour(
       ctx, pts, ptCount, contourSeed,
