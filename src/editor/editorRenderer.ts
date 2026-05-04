@@ -7,7 +7,8 @@
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import type { EditorState, EditorWall } from './editorState';
 import { EditorTool } from './editorState';
-import { getPlacementPreview, findFloorBlockRow, findCeilingBlockRow, ropeLineCrossesWall } from './editorTools';
+import { getPlacementPreview } from './editorPlaceTool';
+import { findFloorBlockRow, findCeilingBlockRow, ropeLineCrossesWall } from './editorHitTest';
 import {
   WALL_HIGHLIGHT, WALL_SELECTED,
   PLATFORM_HIGHLIGHT, PLATFORM_SELECTED,
