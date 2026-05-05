@@ -30,10 +30,33 @@ const FLOOR_FRICTION_PER_SEC = 6.0;
 const DUST_CONTACT_RADIUS_WORLD = 2.0;
 
 /** Outward launch speed (world units/sec) given to dust particles when swirl deactivates. */
-const DUST_FALL_LAUNCH_SPEED_WORLD = 18.0;
+const DUST_FALL_LAUNCH_SPEED_WORLD = 10.0;
 
-/** Rendered size of each dust particle in screen pixels (uniform, 4×4). */
-const DUST_PIXEL_SIZE = 4;
+/** Rendered size of each dust particle in virtual pixels (uniform, 2×2). */
+const DUST_PIXEL_SIZE = 2;
+
+/** World units from a floor surface at which a falling particle gently settles (no instant snap). */
+const LANDING_THRESHOLD_WORLD = 2.0;
+
+/** Soft gravity for falling dust particles (world units/s²). */
+const DUST_GRAVITY_WORLD = 22.0;
+
+/** Base terminal fall speed (world units/s); scaled per particle by fallSpeedScale. */
+const DUST_TERMINAL_FALL_SPEED_BASE = 28.0;
+
+/** Gold color variants [R, G, B] for per-particle color variation. */
+const GOLD_VARIANTS: [number, number, number][] = [
+  [255, 215,   0], // 0: base gold
+  [255, 238, 130], // 1: pale highlight
+  [255, 180,  40], // 2: amber
+  [255, 245, 180], // 3: white-hot gold accent
+];
+
+/** Alpha multiplier for the thin trail line drawn behind each dust particle. */
+const DUST_TRAIL_ALPHA_FACTOR = 0.35;
+
+/** Alpha multiplier for the soft glow square drawn around each dust particle core. */
+const DUST_GLOW_ALPHA_FACTOR = 0.18;
 /** Save tomb sprite width in world units (2 small blocks wide). */
 const TOMB_SPRITE_WIDTH_WORLD = 2 * BLOCK_SIZE_MEDIUM;
 /** Save tomb sprite height in world units (3 small blocks tall). */
@@ -81,6 +104,24 @@ interface DustParticle {
   alphaFade: number;
   /** Y-coordinate of the floor this particle landed on (relative to tomb center, world units). */
   groundYRelWorld: number;
+  /** Per-particle fall speed scale (0.7–1.3) for variation. */
+  fallSpeedScale: number;
+  /** Phase offset for sinusoidal horizontal drift while falling. */
+  driftPhase: number;
+  /** Oscillation frequency of the horizontal drift (rad/s relative to swirlAngleRad). */
+  driftSpeed: number;
+  /** Horizontal drift force amplitude (world units/s²). */
+  driftAmplitudeWorld: number;
+  /** Gold color variant index 0–3. */
+  colorVariant: number;
+  /** Trail: previous-frame X position relative to tomb center (world units). */
+  trailPrevXWorld: number;
+  /** Trail: previous-frame Y position relative to tomb center (world units). */
+  trailPrevYWorld: number;
+  /** Per-particle swirl angle speed scale (0.8–1.2). */
+  swirlAngleSpeedScale: number;
+  /** Per-particle vertical squish scale for swirl orbit (0.50–0.70). */
+  swirlSquishScale: number;
 }
 
 interface TombState {
@@ -137,6 +178,14 @@ export class SkillTombRenderer {
         const angle = (p / DUST_PARTICLE_COUNT) * Math.PI * 2;
         const radius = 8 + Math.random() * 12;
         const initY = Math.sin(angle) * radius;
+        // Deterministic per-particle variation fields (based on index)
+        const fallSpeedScale = 0.7 + (p / Math.max(1, DUST_PARTICLE_COUNT - 1)) * 0.6;
+        const driftPhase = p * (Math.PI * 2 / DUST_PARTICLE_COUNT) * 3;
+        const driftSpeed = 0.7 + (p % 5) * 0.15;
+        const driftAmplitudeWorld = 2.5 + (p % 3) * 1.5;
+        const colorVariant = p % 4;
+        const swirlAngleSpeedScale = 0.85 + (p % 7) * 0.05;
+        const swirlSquishScale = 0.50 + (p % 5) * 0.04;
         particles.push({
           xWorld: Math.cos(angle) * radius,
           yWorld: initY,
@@ -149,6 +198,15 @@ export class SkillTombRenderer {
           isGroundedFlag: true,
           alphaFade: 1.0,
           groundYRelWorld: initY,
+          fallSpeedScale,
+          driftPhase,
+          driftSpeed,
+          driftAmplitudeWorld,
+          colorVariant,
+          trailPrevXWorld: Math.cos(angle) * radius,
+          trailPrevYWorld: initY,
+          swirlAngleSpeedScale,
+          swirlSquishScale,
         });
       }
 
@@ -212,20 +270,32 @@ export class SkillTombRenderer {
       for (let p = 0; p < tomb.dustParticles.length; p++) {
         const dp = tomb.dustParticles[p];
 
+        // Store previous position for trail rendering before any movement this frame
+        dp.trailPrevXWorld = dp.xWorld;
+        dp.trailPrevYWorld = dp.yWorld;
+
         if (tomb.activationFactor > 0.1) {
           // Swirling mode — fade alphaFade back to 1 so respawned particles reappear
           dp.alphaFade = Math.min(1.0, dp.alphaFade + 2.0 * dtSec);
           dp.isGroundedFlag = false;
-          dp.angleRad += dtSec * (1.2 + p * 0.05);
+          dp.angleRad += dtSec * (1.2 + p * 0.05) * dp.swirlAngleSpeedScale;
           const targetX = Math.cos(dp.angleRad) * dp.radiusWorld;
-          const targetY = Math.sin(dp.angleRad) * dp.radiusWorld * 0.6; // slight vertical squish
+          const targetY = Math.sin(dp.angleRad) * dp.radiusWorld * dp.swirlSquishScale;
           dp.xWorld += (targetX - dp.xWorld) * Math.min(1, 4.0 * dtSec);
           dp.yWorld += (targetY - dp.yWorld) * Math.min(1, 4.0 * dtSec);
           dp.brightness = 0.7 + 0.3 * tomb.activationFactor;
         } else {
           // Falling / grounded mode
           if (!dp.isGroundedFlag && dp.alphaFade > 0) {
-            dp.vyWorld += 40 * dtSec; // gravity
+            // Soft gravity with per-particle terminal velocity
+            const terminalFallSpeed = DUST_TERMINAL_FALL_SPEED_BASE * dp.fallSpeedScale;
+            dp.vyWorld = Math.min(dp.vyWorld + DUST_GRAVITY_WORLD * dtSec, terminalFallSpeed);
+
+            // Sinusoidal horizontal drift — floats like light dust in a breeze
+            const timeProxy = tomb.swirlAngleRad;
+            dp.vxWorld += Math.sin(timeProxy * dp.driftSpeed + dp.driftPhase) * dp.driftAmplitudeWorld * dtSec;
+            dp.vxWorld *= Math.max(0, 1 - 1.5 * dtSec); // light air drag
+
             dp.xWorld += dp.vxWorld * dtSec;
             dp.yWorld += dp.vyWorld * dtSec;
 
@@ -235,12 +305,16 @@ export class SkillTombRenderer {
             const floorTopWorld = this.findFloorTopWorld(absX, absY);
 
             if (floorTopWorld !== null) {
-              // Landed on a wall surface
-              dp.yWorld = floorTopWorld - tomb.yWorld;
-              dp.groundYRelWorld = dp.yWorld;
-              dp.vyWorld *= -0.15; // small bounce
-              if (Math.abs(dp.vyWorld) < 2) dp.vyWorld = 0;
-              dp.isGroundedFlag = true;
+              const floorRelY = floorTopWorld - tomb.yWorld;
+              // Only settle when the particle is very close to the floor — no instant snap
+              if (floorRelY - dp.yWorld <= LANDING_THRESHOLD_WORLD) {
+                dp.yWorld = floorRelY;
+                dp.groundYRelWorld = floorRelY;
+                dp.vyWorld *= -0.1; // tiny bounce
+                if (Math.abs(dp.vyWorld) < 1) dp.vyWorld = 0;
+                dp.isGroundedFlag = true;
+              }
+              // else: floor is still further below — keep falling naturally
             } else if (dp.yWorld > MAX_FALL_OFFSET_REL_WORLD) {
               // Fell too far with no floor in reach — fade out then respawn
               dp.alphaFade -= FADE_SPEED_PER_SEC * dtSec;
@@ -415,6 +489,9 @@ export class SkillTombRenderer {
     dp.alphaFade = 0.0; // keep invisible until swirl re-activates
     dp.groundYRelWorld = dp.yWorld;
     dp.brightness = 0.3;
+    // Reset trail to current position so no stale trail appears on reactivation
+    dp.trailPrevXWorld = dp.xWorld;
+    dp.trailPrevYWorld = dp.yWorld;
   }
 
 
@@ -465,24 +542,45 @@ export class SkillTombRenderer {
         );
       }
 
-      // Draw dust particles
+      // Draw dust particles — additive blending produces the neon-gold light glow
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
       for (let p = 0; p < tomb.dustParticles.length; p++) {
         const dp = tomb.dustParticles[p];
         if (dp.alphaFade <= 0) continue; // skip faded-out particles
         const px = (tomb.xWorld + dp.xWorld) * zoom + offsetXPx;
         const py = (tomb.yWorld + dp.yWorld) * zoom + offsetYPx;
-        const size = DUST_PIXEL_SIZE;
+        const prevPx = (tomb.xWorld + dp.trailPrevXWorld) * zoom + offsetXPx;
+        const prevPy = (tomb.yWorld + dp.trailPrevYWorld) * zoom + offsetYPx;
 
-        // Match the player's Physical golden dust particle colour (#ffd700).
-        // At full brightness: rgb(255,215,0); at dim: slightly darker amber.
-        const r = Math.round(180 + 75 * dp.brightness);
-        const g = Math.round(130 + 85 * dp.brightness);
-        const b = Math.round(10 * (1 - dp.brightness));
-        const alpha = (0.5 + 0.5 * dp.brightness) * dp.alphaFade;
+        const variant = GOLD_VARIANTS[dp.colorVariant];
+        const cr = variant[0];
+        const cg = variant[1];
+        const cb = variant[2];
+        const coreAlpha = (0.5 + 0.5 * dp.brightness) * dp.alphaFade;
 
-        ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
-        ctx.fillRect(px - size / 2, py - size / 2, size, size);
+        // Thin gold trail from previous to current position
+        const trailDx = px - prevPx;
+        const trailDy = py - prevPy;
+        if (trailDx * trailDx + trailDy * trailDy > 0.25) {
+          ctx.strokeStyle = `rgba(${cr},${cg},${cb},${coreAlpha * DUST_TRAIL_ALPHA_FACTOR})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(prevPx, prevPy);
+          ctx.lineTo(px, py);
+          ctx.stroke();
+        }
+
+        // Soft glow: low-alpha square slightly larger than the core
+        const glowSize = DUST_PIXEL_SIZE + 2;
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},${coreAlpha * DUST_GLOW_ALPHA_FACTOR})`;
+        ctx.fillRect(px - glowSize / 2, py - glowSize / 2, glowSize, glowSize);
+
+        // Crisp 2×2 pixel core square
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},${coreAlpha})`;
+        ctx.fillRect(px - DUST_PIXEL_SIZE / 2, py - DUST_PIXEL_SIZE / 2, DUST_PIXEL_SIZE, DUST_PIXEL_SIZE);
       }
+      ctx.restore();
 
       // Draw interact prompt ("F" key indicator)
       if (tomb.isPlayerNearbyFlag) {

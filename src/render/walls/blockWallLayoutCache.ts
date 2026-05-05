@@ -83,6 +83,10 @@ function _buildSolid2x2Map(walls: WallSnapshot, blockSizePx: number): Map<string
   for (let wi = 0; wi < walls.count; wi++) {
     if (walls.isPlatformFlag[wi] === 1) continue;
     if (walls.isInvisibleFlag[wi] === 1) continue;
+    // Ramp walls are rendered by the ramp path (triangles/sprites), never as solid 2×2 blocks.
+    if (walls.rampOrientationIndex[wi] !== 255) continue;
+    // Half-pillar walls are rendered by the half-pillar path, never as solid 2×2 blocks.
+    if (walls.isPillarHalfWidthFlag[wi] === 1) continue;
 
     const colStart = Math.floor(walls.xWorld[wi] / blockSizePx);
     const rowStart = Math.floor(walls.yWorld[wi] / blockSizePx);

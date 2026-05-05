@@ -5,6 +5,16 @@
  * All rendering uses pixel-aligned world-to-canvas coordinates via
  * the standard (offsetXPx, offsetYPx, zoom) transform.
  *
+ * Visual split:
+ *   Physical collider shape — rectangular per-tile AABB kept in FallingBlockGroup
+ *     (used only by the sim for collision, trigger, and chain-reaction checks).
+ *   Visual / cookie-cutter shape — each tile is drawn using the same procedural
+ *     sprite system as normal walls: getBlockSprite1x1 with the active block
+ *     material.  A neutral dark fallback is shown while sprites are loading.
+ *   Debug overlay — variant-coloured fill + crosshatch and motion-line helpers
+ *     are ONLY drawn when isDebugMode=true; they are never shown during normal
+ *     gameplay.
+ *
  * Dust effects are purely visual: they do NOT affect the simulation.
  * A lightweight per-renderer PRNG (LCG) provides visual variety without
  * compromising simulation determinism.
@@ -28,6 +38,7 @@ import {
   getFBGroupBottomWorld as getBottom,
 } from '../../sim/fallingBlocks/fallingBlockSim';
 import { BLOCK_SIZE_MEDIUM } from '../../levels/roomDef';
+import { getBlockSprite1x1 } from '../walls/proceduralBlockSprite';
 
 // ── Dust particle pool ────────────────────────────────────────────────────────
 
@@ -43,12 +54,13 @@ const DUST_COLORS_WARN    = ['#c8b8a0', '#b0a090', '#988070', '#806858'];
 const DUST_COLORS_LAND    = ['#d0c0a0', '#b8a888', '#907860', '#706050'];
 const DUST_COLORS_CRUMBLE = ['#e0d0b0', '#c8b898', '#a89070', '#888060', '#606040'];
 
-/** Variant display colours for falling block tile fill/stroke. */
+/** Debug-mode variant fill colours for falling block tiles (not shown in normal play). */
 const VARIANT_FILL_COLOR: Record<string, string> = {
-  tough:     'rgba(90, 120, 180, 0.72)',
-  sensitive: 'rgba(200, 80, 50, 0.72)',
-  crumbling: 'rgba(190, 150, 30, 0.72)',
+  tough:     'rgba(90, 120, 180, 0.55)',
+  sensitive: 'rgba(200, 80, 50, 0.55)',
+  crumbling: 'rgba(190, 150, 30, 0.55)',
 };
+/** Debug-mode variant stroke colours for falling block tiles. */
 const VARIANT_STROKE_COLOR: Record<string, string> = {
   tough:     '#6090e0',
   sensitive: '#e05030',
@@ -253,6 +265,11 @@ const _crumbleBurstDoneByGroup = new Uint8Array(64);
  * @param zoom          Current zoom (normally 1.0).
  * @param dtMs          Frame delta time in ms (for dust particle update).
  * @param dustRenderer  Shared dust renderer instance.
+ * @param isDebugMode   When true, draws debug overlays (variant colours, crosshatch).
+ *                      These are NEVER shown during normal gameplay.
+ * @param blockMaterial Procedural material name (e.g. 'blackRock') used to look up
+ *                      the cookie-cutter block sprite.  Pass null to use the
+ *                      neutral dark fallback colour for all tiles.
  */
 export function renderFallingBlocks(
   ctx: CanvasRenderingContext2D,
@@ -262,6 +279,8 @@ export function renderFallingBlocks(
   zoom: number,
   dtMs: number,
   dustRenderer: FallingBlockDustRenderer,
+  isDebugMode = false,
+  blockMaterial: string | null = null,
 ): void {
   dustRenderer.update(dtMs);
 
@@ -307,10 +326,8 @@ export function renderFallingBlocks(
     // ── Draw each tile ──────────────────────────────────────────────────────
 
     const shakeX = g.shakeOffsetXWorld;
-    const fillColor   = VARIANT_FILL_COLOR[g.variant] ?? 'rgba(100,100,100,0.7)';
-    const strokeColor = VARIANT_STROKE_COLOR[g.variant] ?? '#aaa';
 
-    // Crumble state: fade out as the timer counts down
+    // Crumble state: fade out as the timer counts down.
     let alpha = 1.0;
     if (g.state === FB_STATE_CRUMBLING) {
       alpha = Math.max(0, Math.min(1, g.crumbleTimerTicks / CRUMBLE_DURATION_TICKS));
@@ -318,31 +335,71 @@ export function renderFallingBlocks(
 
     ctx.save();
     ctx.globalAlpha = alpha;
+    ctx.imageSmoothingEnabled = false;
 
     for (let ti = 0; ti < g.tileCount; ti++) {
-      const tileLeft = (g.restXWorld + g.tileRelXWorld[ti] + shakeX) * zoom + offsetXPx;
-      const tileTop  = (g.restYWorld + g.tileRelYWorld[ti] + g.offsetYWorld)  * zoom + offsetYPx;
-      const tileSz   = BLOCK_SIZE_MEDIUM * zoom;
+      const tileLeft = Math.round((g.restXWorld + g.tileRelXWorld[ti] + shakeX) * zoom + offsetXPx);
+      const tileTop  = Math.round((g.restYWorld + g.tileRelYWorld[ti] + g.offsetYWorld) * zoom + offsetYPx);
+      const tileSz   = Math.round(BLOCK_SIZE_MEDIUM * zoom);
 
-      ctx.fillStyle = fillColor;
-      ctx.fillRect(tileLeft, tileTop, tileSz, tileSz);
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = Math.max(1, zoom * 0.5);
-      ctx.strokeRect(tileLeft, tileTop, tileSz, tileSz);
+      // ── Visual: physical collider is a solid rect; the cookie-cutter sprite
+      //    system draws the same textured appearance as normal walls.
+      // The col/row are based on rest position so the texture variation stays
+      // stable while the block falls and shakes.
+      const col = Math.floor((g.restXWorld + g.tileRelXWorld[ti]) / BLOCK_SIZE_MEDIUM);
+      const row = Math.floor((g.restYWorld + g.tileRelYWorld[ti]) / BLOCK_SIZE_MEDIUM);
 
-      // Warning cross-hatch pattern overlay
-      if (g.state === FB_STATE_WARNING || g.state === FB_STATE_PRE_FALL_PAUSE) {
-        ctx.strokeStyle = 'rgba(255,220,80,0.45)';
-        ctx.lineWidth = Math.max(1, zoom * 0.5);
-        ctx.beginPath();
-        ctx.moveTo(tileLeft, tileTop + tileSz * 0.5);
-        ctx.lineTo(tileLeft + tileSz, tileTop + tileSz * 0.5);
-        ctx.moveTo(tileLeft + tileSz * 0.5, tileTop);
-        ctx.lineTo(tileLeft + tileSz * 0.5, tileTop + tileSz);
-        ctx.stroke();
+      let spriteDrawn = false;
+      if (blockMaterial !== null) {
+        const tileSprite = getBlockSprite1x1(col, row, blockMaterial, BLOCK_SIZE_MEDIUM, 0);
+        if (tileSprite !== null) {
+          ctx.drawImage(tileSprite, tileLeft, tileTop, tileSz, tileSz);
+          spriteDrawn = true;
+        }
       }
 
-      // Falling state: downward motion lines
+      if (!spriteDrawn) {
+        // Fallback: neutral dark block matching the default blackRock look.
+        // In debug mode, use the variant colour for quick identification.
+        ctx.fillStyle = isDebugMode
+          ? (VARIANT_FILL_COLOR[g.variant] ?? 'rgba(100,100,100,0.55)')
+          : '#1a2535';
+        ctx.fillRect(tileLeft, tileTop, tileSz, tileSz);
+      }
+
+      // ── Debug overlay: variant tint + border on top of the sprite ──────────
+      // Only drawn when isDebugMode is true; never visible in normal gameplay.
+      if (isDebugMode) {
+        ctx.fillStyle = VARIANT_FILL_COLOR[g.variant] ?? 'rgba(100,100,100,0.35)';
+        ctx.fillRect(tileLeft, tileTop, tileSz, tileSz);
+        ctx.strokeStyle = VARIANT_STROKE_COLOR[g.variant] ?? '#aaa';
+        ctx.lineWidth = Math.max(1, zoom * 0.5);
+        ctx.strokeRect(tileLeft, tileTop, tileSz, tileSz);
+      }
+
+      // ── Warning/pre-fall indicator ──────────────────────────────────────────
+      // Non-debug: subtle yellow outline so the player has a gameplay hint.
+      // Debug: full crosshatch for easy identification.
+      if (g.state === FB_STATE_WARNING || g.state === FB_STATE_PRE_FALL_PAUSE) {
+        if (isDebugMode) {
+          ctx.strokeStyle = 'rgba(255,220,80,0.55)';
+          ctx.lineWidth = Math.max(1, zoom * 0.5);
+          ctx.beginPath();
+          ctx.moveTo(tileLeft, tileTop + tileSz * 0.5);
+          ctx.lineTo(tileLeft + tileSz, tileTop + tileSz * 0.5);
+          ctx.moveTo(tileLeft + tileSz * 0.5, tileTop);
+          ctx.lineTo(tileLeft + tileSz * 0.5, tileTop + tileSz);
+          ctx.stroke();
+        } else {
+          // Subtle yellow outline — visible gameplay cue, not a debug rect.
+          ctx.strokeStyle = 'rgba(255,220,80,0.3)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(tileLeft + 0.5, tileTop + 0.5, tileSz - 1, tileSz - 1);
+        }
+      }
+
+      // ── Falling motion lines ────────────────────────────────────────────────
+      // Subtle downward-motion hint visible in both normal and debug mode.
       if (g.state === FB_STATE_FALLING) {
         ctx.strokeStyle = 'rgba(200,200,255,0.25)';
         ctx.lineWidth = Math.max(1, zoom * 0.4);
