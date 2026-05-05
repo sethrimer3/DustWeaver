@@ -18,7 +18,7 @@ export const MAX_DIALOGUE_ENTRIES = 99;
  * eventually map to a sprite sheet slice or a pre-loaded image element
  * loaded through the asset pipeline (e.g., SPRITES/portraits/{id}.png).
  */
-export const STUB_PORTRAIT_IDS: readonly string[] = [
+export const STUB_PORTRAIT_IDS = [
   'none',
   'narrator',
   'hero',

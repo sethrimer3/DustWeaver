@@ -87,7 +87,6 @@ import { createDialogueState } from '../dialogue/dialogueState';
 import { startDialogue, advanceDialogue, closeDialogue } from '../dialogue/dialogueRuntime';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 import type { Conversation } from '../dialogue/dialogueTypes';
-import { CommandKind } from '../input/commands';
 
 const FIXED_DT_MS = 16.666;
 
@@ -373,6 +372,22 @@ export function startGameScreen(
     dialogueRenderer.hide();
     // Reset fired trigger tracking — triggers fire once per room visit.
     firedDialogueTriggerUids = new Set<number>();
+    // Pre-convert room conversation defs to runtime Conversation objects so
+    // the trigger detection path never allocates per frame (Section 5 guideline).
+    const roomTriggers = room.dialogueTriggers ?? [];
+    cachedRoomConversations = new Array<Conversation>(roomTriggers.length);
+    for (let _ti = 0; _ti < roomTriggers.length; _ti++) {
+      const _src = roomTriggers[_ti].conversation;
+      cachedRoomConversations[_ti] = {
+        id: _src.id,
+        title: _src.title,
+        entries: _src.entries.map(e => ({
+          text: e.text,
+          portraitId: e.portraitId,
+          portraitSide: e.portraitSide,
+        })),
+      };
+    }
 
     // Spawn dust pile particles (unowned Gold Dust for Storm Weave attraction)
     spawnAllDustPiles(world);
@@ -473,6 +488,12 @@ export function startGameScreen(
    * player leaves and re-enters the room (the Set is reset in loadRoom).
    */
   let firedDialogueTriggerUids = new Set<number>();
+  /**
+   * Pre-converted runtime Conversation objects for the current room.
+   * Built once in loadRoom() from RoomConversationDef → Conversation to avoid
+   * per-frame allocations in the trigger detection hot path (Section 5 guideline).
+   */
+  let cachedRoomConversations: Conversation[] = [];
 
   // ── Per-frame allocation-free state ─────────────────────────────────────
   // All three are populated once per room load in loadRoom() and reused every
@@ -965,27 +986,18 @@ export function startGameScreen(
       const playerXBlock = player ? Math.floor(player.positionXWorld / BLOCK_SIZE_SMALL) : -1;
       const playerYBlock = player ? Math.floor(player.positionYWorld / BLOCK_SIZE_SMALL) : -1;
       const triggers = currentRoom.dialogueTriggers ?? [];
-      for (let ti = 0; ti < triggers.length; ti++) {
-        const trig = triggers[ti];
-        // Use the trigger's uid as the per-visit key. Since RoomDialogueTriggerDef
-        // does not store a uid, we use the array index as a stable key per room load.
-        const trigKey = ti;
-        if (firedDialogueTriggerUids.has(trigKey)) continue;
+      for (let triggerIndex = 0; triggerIndex < triggers.length; triggerIndex++) {
+        const trig = triggers[triggerIndex];
+        // Use the array index as a stable per-room-visit key.
+        // (RoomDialogueTriggerDef has no uid — index is stable per room load.)
+        if (firedDialogueTriggerUids.has(triggerIndex)) continue;
         const inZone = playerXBlock >= trig.xBlock && playerXBlock < trig.xBlock + trig.wBlock &&
                        playerYBlock >= trig.yBlock && playerYBlock < trig.yBlock + trig.hBlock;
         if (inZone) {
-          firedDialogueTriggerUids.add(trigKey);
-          // Convert RoomConversationDef to runtime Conversation
-          const conv: Conversation = {
-            id: trig.conversation.id,
-            title: trig.conversation.title,
-            entries: trig.conversation.entries.map(e => ({
-              text: e.text,
-              portraitId: e.portraitId,
-              portraitSide: e.portraitSide,
-            })),
-          };
-          if (conv.entries.length > 0) {
+          firedDialogueTriggerUids.add(triggerIndex);
+          // Use the pre-converted runtime Conversation (no allocation in hot path).
+          const conv = cachedRoomConversations[triggerIndex];
+          if (conv && conv.entries.length > 0) {
             startDialogue(dialogueState, conv);
             const firstEntry = conv.entries[0];
             const isLast = conv.entries.length === 1;
