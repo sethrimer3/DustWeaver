@@ -150,6 +150,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'player_spawn',    label: 'Player Spawn',    category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
   { id: 'save_tomb',       label: 'Save Tomb',       category: 'triggers' },
+  { id: 'dialogue_trigger', label: 'Dialogue Trigger', category: 'triggers' },
   // Collectables (items the player can pick up for permanent upgrades)
   { id: 'skill_tomb',            label: 'Skill Tomb',            category: 'collectables' },
   { id: 'dust_container',        label: 'Dust Container',        category: 'collectables', isDustContainerItem: 1 },
@@ -554,6 +555,28 @@ export interface EditorFallingBlock {
   variant: import('../levels/roomDef').FallingBlockVariant;
 }
 
+/** A dialogue trigger zone that starts a conversation when the player enters it. */
+export interface EditorDialogueEntry {
+  text: string;
+  portraitId: string;
+  portraitSide: 'left' | 'right';
+}
+
+export interface EditorDialogueTrigger {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Width in blocks (default 4). */
+  wBlock: number;
+  /** Height in blocks (default 4). */
+  hBlock: number;
+  conversationId: string;
+  /** Optional speaker name displayed above the dialogue text. */
+  conversationTitle: string;
+  /** Dialogue entries, max 99. */
+  entries: EditorDialogueEntry[];
+}
+
 export interface EditorRoomData {
   id: string;
   name: string;
@@ -616,11 +639,13 @@ export interface EditorRoomData {
   sunbeams?: EditorSunbeam[];
   /** Falling block tiles placed in this room. */
   fallingBlocks?: EditorFallingBlock[];
+  /** Dialogue trigger zones placed in this room. */
+  dialogueTriggers?: EditorDialogueTrigger[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock' | 'dialogueTrigger';
 
 export interface SelectedElement {
   type: SelectedElementType;

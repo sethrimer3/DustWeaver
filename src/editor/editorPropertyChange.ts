@@ -37,6 +37,7 @@ import type {
 } from './editorState';
 import type { EditorHistory } from './editorHistory';
 import { pushSnapshot } from './editorHistory';
+import { createDefaultDialogueEntry, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
 
 /**
  * Applies a single named property change to one selected element.
@@ -253,6 +254,61 @@ export function applyPropertyToElement(
       }
       if (prop === 'rope.isAnchorBFixedFlag' && !isNaN(numVal)) {
         rope.isAnchorBFixedFlag = (numVal ? 1 : 0) as 0 | 1;
+      }
+    }
+  } else if (el.type === 'dialogueTrigger') {
+    const triggers = room.dialogueTriggers ?? [];
+    const trigger = triggers.find(t => t.uid === el.uid);
+    if (trigger) {
+      if (prop === 'dialogueTrigger.xBlock' && !isNaN(numVal)) trigger.xBlock = numVal;
+      else if (prop === 'dialogueTrigger.yBlock' && !isNaN(numVal)) trigger.yBlock = numVal;
+      else if (prop === 'dialogueTrigger.wBlock' && !isNaN(numVal)) trigger.wBlock = Math.max(1, numVal);
+      else if (prop === 'dialogueTrigger.hBlock' && !isNaN(numVal)) trigger.hBlock = Math.max(1, numVal);
+      else if (prop === 'dialogueTrigger.title' && typeof value === 'string') {
+        trigger.conversationTitle = value;
+      } else if (prop === 'dialogueTrigger.entry.add') {
+        if (trigger.entries.length < MAX_DIALOGUE_ENTRIES) {
+          const def = createDefaultDialogueEntry();
+          trigger.entries.push({
+            text: def.text,
+            portraitId: def.portraitId,
+            portraitSide: def.portraitSide,
+          });
+        }
+      } else if (prop === 'dialogueTrigger.entry.remove' && !isNaN(numVal)) {
+        const idx = numVal;
+        if (idx >= 0 && idx < trigger.entries.length) {
+          trigger.entries.splice(idx, 1);
+        }
+      } else if (prop === 'dialogueTrigger.entry.moveUp' && !isNaN(numVal)) {
+        const idx = numVal;
+        if (idx > 0 && idx < trigger.entries.length) {
+          const temp = trigger.entries[idx - 1];
+          trigger.entries[idx - 1] = trigger.entries[idx];
+          trigger.entries[idx] = temp;
+        }
+      } else if (prop === 'dialogueTrigger.entry.moveDown' && !isNaN(numVal)) {
+        const idx = numVal;
+        if (idx >= 0 && idx < trigger.entries.length - 1) {
+          const temp = trigger.entries[idx + 1];
+          trigger.entries[idx + 1] = trigger.entries[idx];
+          trigger.entries[idx] = temp;
+        }
+      } else if (prop.startsWith('dialogueTrigger.entry.text.')) {
+        const idx = parseInt(prop.split('.').pop() ?? '-1', 10);
+        if (idx >= 0 && idx < trigger.entries.length && typeof value === 'string') {
+          trigger.entries[idx].text = value;
+        }
+      } else if (prop.startsWith('dialogueTrigger.entry.portraitId.')) {
+        const idx = parseInt(prop.split('.').pop() ?? '-1', 10);
+        if (idx >= 0 && idx < trigger.entries.length && typeof value === 'string') {
+          trigger.entries[idx].portraitId = value;
+        }
+      } else if (prop.startsWith('dialogueTrigger.entry.portraitSide.')) {
+        const idx = parseInt(prop.split('.').pop() ?? '-1', 10);
+        if (idx >= 0 && idx < trigger.entries.length && (value === 'left' || value === 'right')) {
+          trigger.entries[idx].portraitSide = value;
+        }
       }
     }
   }

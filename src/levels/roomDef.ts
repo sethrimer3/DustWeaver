@@ -690,6 +690,49 @@ export interface RoomFireflyAreaDef {
   count: number;
 }
 
+// ── Dialogue trigger definitions ──────────────────────────────────────────────
+
+/**
+ * A single text box within a dialogue conversation.
+ * Mirrors DialogueEntry in src/dialogue/dialogueTypes.ts — kept separate to
+ * avoid coupling the levels layer to the dialogue/UI layer.
+ */
+export interface RoomDialogueEntryDef {
+  text: string;
+  portraitId: string;
+  portraitSide: 'left' | 'right';
+}
+
+/**
+ * A conversation — an ordered list of dialogue entries (max 99).
+ * How dialogue triggers are stored: inline within RoomDialogueTriggerDef so that
+ * each room JSON file is self-contained (no external conversation asset files).
+ */
+export interface RoomConversationDef {
+  id: string;
+  /** Optional speaker name shown above the text. */
+  title?: string;
+  entries: readonly RoomDialogueEntryDef[];
+}
+
+/**
+ * A trigger zone placed in the room that starts a dialogue conversation
+ * when the player enters (or activates) it.
+ *
+ * Retrigger rule: fires once per room visit. The set of triggered UIDs is
+ * cleared when the player loads a new room, so the trigger fires again if
+ * the player leaves and re-enters the room. This is intentional — it lets
+ * designers repeat intro dialogues when revisiting an area without requiring
+ * a separate "seen" persistence layer.
+ */
+export interface RoomDialogueTriggerDef {
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  conversation: RoomConversationDef;
+}
+
 /** Full definition for a single room in the Metroidvania world. */
 export interface RoomDef {
   /** Unique identifier for this room. */
@@ -795,6 +838,8 @@ export interface RoomDef {
   decorations?: readonly RoomDecorationDef[];
   /** Falling block tiles — grouped into rigid falling units at load time. */
   fallingBlocks?: readonly RoomFallingBlockDef[];
+  /** Dialogue trigger zones — start a conversation when the player enters. */
+  dialogueTriggers?: readonly RoomDialogueTriggerDef[];
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default / undefined).

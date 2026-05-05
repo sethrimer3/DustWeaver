@@ -19,7 +19,7 @@ import type {
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorRope, RopeDestructibility,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
-  EditorFallingBlock,
+  EditorFallingBlock, EditorDialogueTrigger,
   RoomSongId,
 } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
@@ -33,6 +33,7 @@ import type {
   RoomJsonAmbientLightBlocker,
   RoomJsonLightSource,
   RoomJsonRope,
+  RoomJsonDialogueTrigger,
   ValidationError,
 } from './roomJsonSchema';
 export {
@@ -63,6 +64,9 @@ export type {
   RoomJsonLightSource,
   RoomJsonSunbeam,
   RoomJsonFallingBlock,
+  RoomJsonDialogueTrigger,
+  RoomJsonConversation,
+  RoomJsonDialogueEntry,
 } from './roomJsonSchema';
 
 export function validateRoomJson(data: unknown): ValidationError[] {
@@ -380,6 +384,21 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     thicknessIndex: (r.thick === 1 ? 1 : r.thick === 2 ? 2 : 0) as 0 | 1 | 2,
   }));
 
+  const dialogueTriggers: EditorDialogueTrigger[] = (json.dialogueTriggers ?? []).map(dt => ({
+    uid: uid++,
+    xBlock: dt.xBlock,
+    yBlock: dt.yBlock,
+    wBlock: dt.wBlock,
+    hBlock: dt.hBlock,
+    conversationId: dt.conversation.id,
+    conversationTitle: dt.conversation.title ?? '',
+    entries: (dt.conversation.entries ?? []).map(e => ({
+      text: e.text,
+      portraitId: e.portraitId,
+      portraitSide: e.portraitSide,
+    })),
+  }));
+
   return {
     data: {
       id: json.id,
@@ -416,6 +435,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       ropes,
       sunbeams,
       fallingBlocks,
+      dialogueTriggers,
     },
     nextUid: uid,
   };
@@ -667,6 +687,28 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: fb.yBlock,
       variant: fb.variant,
     }));
+  }
+  if ((data.dialogueTriggers ?? []).length > 0) {
+    json.dialogueTriggers = (data.dialogueTriggers ?? []).map(dt => {
+      const entry: RoomJsonDialogueTrigger = {
+        xBlock: dt.xBlock,
+        yBlock: dt.yBlock,
+        wBlock: dt.wBlock,
+        hBlock: dt.hBlock,
+        conversation: {
+          id: dt.conversationId,
+          entries: dt.entries.map(e => ({
+            text: e.text,
+            portraitId: e.portraitId,
+            portraitSide: e.portraitSide,
+          })),
+        },
+      };
+      if (dt.conversationTitle && dt.conversationTitle.trim().length > 0) {
+        entry.conversation.title = dt.conversationTitle;
+      }
+      return entry;
+    });
   }
   return json;
 }

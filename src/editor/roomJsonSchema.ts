@@ -278,6 +278,36 @@ export interface RoomJsonFallingBlock {
   variant?: string;
 }
 
+/** JSON representation of a single dialogue entry within a conversation. */
+export interface RoomJsonDialogueEntry {
+  text: string;
+  portraitId: string;
+  portraitSide: 'left' | 'right';
+}
+
+/** JSON representation of a dialogue conversation. */
+export interface RoomJsonConversation {
+  id: string;
+  title?: string;
+  entries: RoomJsonDialogueEntry[];
+}
+
+/**
+ * JSON representation of a dialogue trigger zone.
+ *
+ * How dialogue triggers are stored in room JSON:
+ * Each trigger contains its zone rect and a full inline conversation object.
+ * No external conversation asset file is needed — the room JSON is self-contained.
+ * Older rooms without this field continue to load normally (field is optional).
+ */
+export interface RoomJsonDialogueTrigger {
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  conversation: RoomJsonConversation;
+}
+
 export interface RoomJsonDef {
   id: string;
   name: string;
@@ -346,6 +376,8 @@ export interface RoomJsonDef {
   decorations?: RoomJsonDecoration[];
   /** Editor-painted falling block tiles (grouped into rigid falling units at runtime). */
   fallingBlocks?: RoomJsonFallingBlock[];
+  /** Dialogue trigger zones. Absent in older rooms — ignored on load (backward-compatible). */
+  dialogueTriggers?: RoomJsonDialogueTrigger[];
 }
 
 // ── Validation result ────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ const ROPE_SEGMENTS_PER_BLOCK = 1.5;
 import {
   EditorState, EditorTool, allocateUid,
   PaletteItem, DecorationKind, EditorBouncePad, EditorSunbeam, EditorFallingBlock,
+  EditorDialogueTrigger,
 } from './editorState';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
 import { MAX_ROPE_SEGMENTS } from '../sim/world';
@@ -52,6 +53,9 @@ export function getPlacementPreview(state: EditorState): { wBlock: number; hBloc
       wBlock: item.defaultWidthBlocks ?? 4,
       hBlock: item.defaultHeightBlocks ?? 4,
     };
+  }
+  if (item.id === 'dialogue_trigger') {
+    return { wBlock: 4, hBlock: 4 };
   }
   if (item.category !== 'blocks') {
     return { wBlock: 1, hBlock: 1 };
@@ -333,6 +337,20 @@ export function placeAtCursor(state: EditorState): void {
       xBlock: bx,
       yBlock: by,
     });
+  } else if (item.id === 'dialogue_trigger') {
+    if (!room.dialogueTriggers) room.dialogueTriggers = [];
+    const newUid = allocateUid(state);
+    const trigger: EditorDialogueTrigger = {
+      uid: newUid,
+      xBlock: bx,
+      yBlock: by,
+      wBlock: 4,
+      hBlock: 4,
+      conversationId: `conv_${newUid}`,
+      conversationTitle: '',
+      entries: [],
+    };
+    room.dialogueTriggers.push(trigger);
   } else if (item.id === 'skill_tomb') {
     room.skillTombs.push({
       uid: allocateUid(state),

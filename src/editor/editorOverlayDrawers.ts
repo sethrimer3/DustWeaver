@@ -34,6 +34,7 @@ import {
   DUST_CONTAINER_COLOR, DUST_CONTAINER_SELECTED,
   DUST_CONTAINER_PIECE_COLOR, DUST_CONTAINER_PIECE_SELECTED,
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
+  DIALOGUE_TRIGGER_COLOR, DIALOGUE_TRIGGER_SELECTED,
   drawBlockRect, drawRampTriangle,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   getEnemyFootprintBlocks, drawTransitionZone,
@@ -639,3 +640,44 @@ export function drawEditorRopes(
 // ============================================================================
 // Placement preview and UI overlays are in editorPlacementPreviewDrawer.ts
 // ============================================================================
+
+// ============================================================================
+// Dialogue triggers
+// ============================================================================
+
+export function drawEditorDialogueTriggers(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  const triggers = room.dialogueTriggers ?? [];
+  if (triggers.length === 0) return;
+  const bs = BLOCK_SIZE_SMALL * zoom;
+  for (const dt of triggers) {
+    const sel = isSelected('dialogueTrigger', dt.uid);
+    const color = sel ? DIALOGUE_TRIGGER_SELECTED : DIALOGUE_TRIGGER_COLOR;
+    const x = dt.xBlock * bs + offsetXPx;
+    const y = dt.yBlock * bs + offsetYPx;
+    const w = dt.wBlock * bs;
+    const h = dt.hBlock * bs;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = sel ? 'rgba(80, 220, 255, 0.9)' : 'rgba(80, 200, 255, 0.5)';
+    ctx.lineWidth = sel ? 2 : 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+    // Label
+    ctx.fillStyle = sel ? 'rgba(200, 240, 255, 0.95)' : 'rgba(140, 210, 255, 0.7)';
+    ctx.font = `${Math.max(8, Math.round(8 * zoom))}px monospace`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    const label = dt.entries.length > 0 ? `💬 ${dt.entries.length}` : '💬 Dialogue';
+    ctx.fillText(label, x + 3, y + 3);
+    ctx.restore();
+  }
+}

@@ -24,6 +24,7 @@ import {
   drawEditorBouncePads,
   drawEditorEnvironmentItems,
   drawEditorRopes,
+  drawEditorDialogueTriggers,
 } from './editorOverlayDrawers';
 import {
   drawPlacementPreview,
@@ -65,6 +66,7 @@ export function renderEditorOverlays(
   drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorEnvironmentItems(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorRopes(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorDialogueTriggers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawPlacementPreview(ctx, room, state, offsetXPx, offsetYPx, zoom);
   drawEditorUIOverlays(ctx, room, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
 
