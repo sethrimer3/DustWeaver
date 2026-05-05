@@ -375,6 +375,40 @@ export function getPlatformSprite1x1(
 }
 
 /**
+ * Returns the procedural platform sprite for a 1×1 cell using an explicit
+ * base sprite URL instead of a material probe pool.
+ *
+ * Used for folder-based themes where the sprite URL is already known (e.g.
+ * discovered via `import.meta.glob`), bypassing the probe-pool mechanism.
+ *
+ * @param baseUrl      Direct URL of the base sprite image.
+ * @param col          Tile column.
+ * @param row          Tile row.
+ * @param blockSizePx  Block size in virtual pixels.
+ * @param platformEdge Platform edge index: 0=top, 1=bottom, 2=left, 3=right.
+ * @param seed         Hash seed.
+ */
+export function getPlatformSpriteFromBaseUrl(
+  baseUrl: string,
+  col: number,
+  row: number,
+  blockSizePx: number,
+  platformEdge: number,
+  seed: number,
+): HTMLCanvasElement | null {
+  const [flipX, flipY, rotStep] = _platformEdgeToTransform(platformEdge);
+  return getProceduralSprite(
+    baseUrl, TEMPLATE_URLS['1x1 platform'],
+    blockSizePx, blockSizePx,
+    flipX, flipY, rotStep,
+    OPEN_AIR_ALL_SIDES,
+    col * blockSizePx, row * blockSizePx,
+    seed,
+  );
+}
+
+
+/**
  * Returns the procedural sprite for a 2×2 platform cell (top-left coordinates).
  *
  * @param col          Tile column of the 2×2 top-left corner.

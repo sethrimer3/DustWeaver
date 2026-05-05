@@ -449,3 +449,31 @@ export function getTheme2x2SpriteShaded(
   return shaded;
 }
 
+
+// ── Direct URL accessor for use in cookie-cutter platform rendering ───────────
+
+/**
+ * Returns a deterministic base sprite URL for a folder-based block theme tile.
+ *
+ * Used by the platform sprite generator to apply the platform cookie-cutter
+ * template to a folder theme's base texture without going through the probe-pool
+ * system.  The URL is picked from the theme's discovered 16×16 sprite list using
+ * the same hash as the tile-position hash, ensuring stable per-cell variation.
+ *
+ * @param themeId  Folder-based block theme ID (e.g. 'grayStone').
+ * @param col      Tile column.
+ * @param row      Tile row.
+ * @param seed     World/room seed passed to {@link hashTilePosition}.
+ * @returns        A URL string, or null if the theme is unknown or has no sprites.
+ */
+export function getFolderThemeBaseUrl(
+  themeId: string,
+  col:     number,
+  row:     number,
+  seed:    number,
+): string | null {
+  const entry = _getEntry(themeId);
+  if (entry === null || entry.sprite16Urls.length === 0) return null;
+  const hash = hashTilePosition(col, row, seed);
+  return entry.sprite16Urls[hash % entry.sprite16Urls.length];
+}
