@@ -712,7 +712,9 @@ function _doRenderWallTilesDirect(
     } else if (isFolderBasedTheme(platTheme)) {
       // Folder-based theme: apply the platform template cookie-cutter to the folder sprite.
       // A direct base URL is used instead of the probe-pool system.
-      const baseUrl = getFolderThemeBaseUrl(platTheme!, col, row, _activeWorldNumber);
+      // isFolderBasedTheme guarantees platTheme is a non-null string here.
+      const folderThemeId = platTheme as string;
+      const baseUrl = getFolderThemeBaseUrl(folderThemeId, col, row, _activeWorldNumber);
       if (baseUrl !== null) {
         const folderSprite = getPlatformSpriteFromBaseUrl(baseUrl, col, row, blockSizePx, platformEdgeForTile, _activeWorldNumber);
         if (folderSprite !== null) {
