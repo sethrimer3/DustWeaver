@@ -93,6 +93,48 @@ const ZIP_JUMP_INPUT_THRESHOLD = 0.5;
  */
 const MIN_LAUNCH_VECTOR_LENGTH = 0.001;
 
+/**
+ * Duration (ticks) of the zip impact shockwave + dust plume FX.
+ * At 60 fps this is ~0.27 s — quick, readable, and not distracting.
+ */
+const ZIP_IMPACT_FX_TICKS = 16;
+
+/**
+ * Scale multiplier for the larger zip-jump shockwave.
+ * Slightly larger than the normal 1.0 completion ring to signal timed success.
+ */
+const ZIP_JUMP_FX_SCALE = 1.35;
+
+// ============================================================================
+// Internal helpers
+// ============================================================================
+
+/**
+ * Triggers the zip impact shockwave and dust plume FX.
+ *
+ * @param x       World-space X of the impact point (player center or contact point).
+ * @param y       World-space Y of the impact point.
+ * @param normalX Surface normal X at the contact — used to orient the dust plume.
+ * @param normalY Surface normal Y at the contact.
+ * @param scale   1.0 for a normal zip completion; ZIP_JUMP_FX_SCALE for a zip-jump.
+ */
+function triggerZipImpactFx(
+  world: WorldState,
+  x: number,
+  y: number,
+  normalX: number,
+  normalY: number,
+  scale: number,
+): void {
+  world.zipImpactFxXWorld       = x;
+  world.zipImpactFxYWorld       = y;
+  world.zipImpactFxNormalXWorld = normalX;
+  world.zipImpactFxNormalYWorld = normalY;
+  world.zipImpactFxScale        = scale;
+  world.zipImpactFxTotalTicks   = ZIP_IMPACT_FX_TICKS;
+  world.zipImpactFxTicksLeft    = ZIP_IMPACT_FX_TICKS;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -136,6 +178,7 @@ export function tickGrappleZip(
     world.isGrappleZipActiveFlag = 1;
     world.isGrappleStuckFlag = 0;
     world.grappleStuckStoppedTickCount = 0;
+    world.hasZipImpactFxFiredFlag = 0;
   } else if (world.isGrappleZipTriggeredFlag === 1) {
     // Zip already active — discard duplicate trigger
     world.isGrappleZipTriggeredFlag = 0;
@@ -172,6 +215,19 @@ export function tickGrappleZip(
       ? ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER)
       : 1.0;
     const jumpSpeed = PLAYER_JUMP_SPEED_WORLD * jumpMultiplier;
+
+    // Spawn a larger zip-jump shockwave when the jump is within the timing window.
+    // This communicates that the timed zip-jump was successful.
+    if (isInZipJumpWindow) {
+      triggerZipImpactFx(
+        world,
+        player.positionXWorld,
+        player.positionYWorld,
+        world.grappleZipNormalXWorld,
+        world.grappleZipNormalYWorld,
+        ZIP_JUMP_FX_SCALE,
+      );
+    }
 
     // Launch direction: surface normal biased toward held horizontal input.
     // This lets the player redirect the zip-jump without ignoring the physics.
@@ -215,13 +271,17 @@ export function tickGrappleZip(
     const dist = Math.sqrt(dx * dx + dy * dy);
     const zipStep = GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * dtSec;
 
-    // ── Per-frame LOS check: stop zip if a wall now blocks the path ────────
+    // ── Per-frame LOS check: complete zip against obstructing wall ─────────
     // Cast from the player position toward the grapple anchor.  If a wall is
     // hit well before the anchor (farther than GRAPPLE_ZIP_LOS_TOLERANCE_WORLD
-    // from the anchor surface), the path is obstructed — continuing to zip
-    // would pull the player through solid geometry.  Release the grapple
-    // instead.  The anchor's own wall is excluded from the check by capping
-    // the cast distance at anchorDist - LOS_TOLERANCE.
+    // from the anchor surface), the path is obstructed.
+    //
+    // Previously this branch called releaseGrapple(), making the hook disappear.
+    // Now it performs a blocked-zip completion instead: the player is moved as
+    // far as safely possible via the existing swept AABB movement, stopped flush
+    // against the obstructing wall, and then the same stuck / zip-jump window
+    // opens as for a normal unobstructed arrival.  The grapple is NOT released
+    // until the stuck window expires or a zip-jump consumes it.
     {
       const dxToAnchor = world.grappleAnchorXWorld - player.positionXWorld;
       const dyToAnchor = world.grappleAnchorYWorld - player.positionYWorld;
@@ -237,9 +297,57 @@ export function tickGrappleZip(
         );
         if (losHit !== null) {
           // An intermediate wall blocks the direct line to the anchor.
-          // Releasing the grapple here prevents the zip from dragging the
-          // player through solid geometry.
-          releaseGrapple(world);
+          // Use the LOS hit's surface normal for the zip-jump direction —
+          // it points away from the obstructing wall toward the player.
+          // Fall back to the reverse-zip direction when losHit has no normal.
+          let blockNx = losHit.normalX;
+          let blockNy = losHit.normalY;
+          if (blockNx === 0 && blockNy === 0) {
+            if (dist > GRAPPLE_ZIP_MIN_DIST_WORLD) {
+              const invDist = 1.0 / dist;
+              blockNx = -(dx * invDist);
+              blockNy = -(dy * invDist);
+            } else {
+              blockNy = -1.0; // default upward
+            }
+          }
+          world.grappleZipNormalXWorld = blockNx;
+          world.grappleZipNormalYWorld = blockNy;
+
+          // Move toward the obstruction this tick using the same swept AABB
+          // path as normal zip movement.  resolveClusterSolidWallCollision will
+          // stop the player flush against the blocking geometry without clipping.
+          if (dist > GRAPPLE_ZIP_MIN_DIST_WORLD) {
+            const invDist = 1.0 / dist;
+            const oldX = player.positionXWorld;
+            const oldY = player.positionYWorld;
+            player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+            player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+            const blockedCollision = resolveClusterSolidWallCollision(player, world, oldX, oldY, dtSec, false);
+            resolveClusterFloorCollision(player, world);
+            // resolveClusterSolidWallCollision always detects bounce pads regardless
+            // of the wasGrounded (last) parameter — the bounce flag is independent.
+            if (blockedCollision.bouncedX || blockedCollision.bouncedY) {
+              // Bounce pad in the path — release and let the reflected velocity carry the player.
+              releaseGrapple(world, false);
+              return true;
+            }
+            // Restore zip velocity for stuck-phase deceleration to pick up from.
+            player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+            player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
+          }
+
+          // Lock the stuck position at the player's current (collision-resolved) location.
+          // This differs from normal arrival where grappleZipStickXWorld/Y is set to targetX/Y;
+          // here the player may be touching an intermediate wall instead of the anchor surface.
+          world.grappleZipStickXWorld       = player.positionXWorld;
+          world.grappleZipStickYWorld       = player.positionYWorld;
+          world.isGrappleStuckFlag          = 1;
+          world.grappleStuckStoppedTickCount = 0;
+          world.hasZipImpactFxFiredFlag      = 0;
+          // Return here so the normal zip / arrival code does not run.
+          // The stuck phase will execute on the next tick with the correct
+          // lock position.
           return true;
         }
       }
@@ -268,8 +376,12 @@ export function tickGrappleZip(
         player.velocityXWorld = dx * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
         player.velocityYWorld = dy * invDist * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC;
       }
-      world.isGrappleStuckFlag = 1;
+      // Record the anchor-surface lock position for the stuck phase.
+      world.grappleZipStickXWorld       = targetX;
+      world.grappleZipStickYWorld       = targetY;
+      world.isGrappleStuckFlag          = 1;
       world.grappleStuckStoppedTickCount = 0;
+      world.hasZipImpactFxFiredFlag      = 0;
     } else {
       // ── Normal zip frame: move at full speed with swept collision ─────────
       // resolveClusterSolidWallCollision zeroes velocity on the contact axis,
@@ -297,8 +409,13 @@ export function tickGrappleZip(
 
   if (world.isGrappleStuckFlag === 1) {
     // ── Stuck phase: lock position, decelerate, then release if window expired
-    player.positionXWorld = targetX;
-    player.positionYWorld = targetY;
+    //
+    // Use grappleZipStickXWorld/Y (set on stuck entry) as the lock target.
+    // For normal unobstructed arrival this equals targetX/Y.
+    // For blocked-zip completion this is the player's position at the
+    // intermediate wall, which may differ from the anchor-surface target.
+    player.positionXWorld = world.grappleZipStickXWorld;
+    player.positionYWorld = world.grappleZipStickYWorld;
 
     // Safety pass: ensure the locked position is outside all solid walls.
     // The stuck target is always geometrically safe (it is the player AABB
@@ -327,6 +444,20 @@ export function tickGrappleZip(
       player.velocityXWorld = 0;
       player.velocityYWorld = 0;
       world.grappleStuckStoppedTickCount++;
+
+      // Fire the zip impact FX exactly once on the first fully-stopped tick.
+      // hasZipImpactFxFiredFlag prevents re-triggering during the zip-jump window.
+      if (world.hasZipImpactFxFiredFlag === 0) {
+        world.hasZipImpactFxFiredFlag = 1;
+        triggerZipImpactFx(
+          world,
+          player.positionXWorld,
+          player.positionYWorld,
+          world.grappleZipNormalXWorld,
+          world.grappleZipNormalYWorld,
+          1.0,
+        );
+      }
 
       // Zip-jump window expired: release grapple quietly without any impulse.
       // The player remains in place until gravity or their own movement takes over.

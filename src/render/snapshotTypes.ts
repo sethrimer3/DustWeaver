@@ -289,6 +289,25 @@ export interface WorldSnapshot {
   readonly grappleEmptyFxTotalTicks: number;
   readonly grappleEmptyFxXWorld: number;
   readonly grappleEmptyFxYWorld: number;
+
+  // ── Zip impact FX ─────────────────────────────────────────────────────────
+  /** Ticks remaining for the zip impact shockwave + dust plume. 0 = inactive. */
+  readonly zipImpactFxTicksLeft: number;
+  /** Total ticks of the zip impact FX (for progress / alpha calculation). */
+  readonly zipImpactFxTotalTicks: number;
+  /** World-space X center of the zip impact FX. */
+  readonly zipImpactFxXWorld: number;
+  /** World-space Y center of the zip impact FX. */
+  readonly zipImpactFxYWorld: number;
+  /**
+   * Scale factor: 1.0 = normal completion ring; ZIP_JUMP_FX_SCALE (1.35) = timed zip-jump ring.
+   */
+  readonly zipImpactFxScale: number;
+  /** Surface normal X at the impact point — used to orient the dust plume direction. */
+  readonly zipImpactFxNormalXWorld: number;
+  /** Surface normal Y at the impact point. */
+  readonly zipImpactFxNormalYWorld: number;
+
   /** 1 while the player is holding block or a sustained weave — used to drive player sprite rotation speed. */
   readonly isPlayerBlockingFlag: 0 | 1;
   /** 1 when the player has a grapple charge available (grapple hook is equipped). */
