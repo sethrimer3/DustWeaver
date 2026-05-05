@@ -73,7 +73,7 @@ import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { ClusterState } from './state';
-import { PLAYER_JUMP_SPEED_WORLD } from './movement';
+import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS } from './movement';
 import { moveClusterByDelta } from './movementCollision';
 import {
   GRAPPLE_SEGMENT_COUNT,

@@ -131,6 +131,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     bouncePad:        'bounce_pad',
     rope:             'rope',
     fallingBlock:     'falling_block',
+    dialogueTrigger:  'dialogue_trigger',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;

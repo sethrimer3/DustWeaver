@@ -26,7 +26,7 @@ import {
   addColorSliders,
 } from './editorFormWidgets';
 import { makeBtn } from './editorUIHelpers';
-import { GREEN, PANEL_BORDER, PANEL_BG, BTN_BG, TEXT_COLOR } from './editorStyles';
+import { GREEN, PANEL_BORDER, BTN_BG, TEXT_COLOR } from './editorStyles';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { STUB_PORTRAIT_IDS, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
 
