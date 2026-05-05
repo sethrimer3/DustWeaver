@@ -41,19 +41,25 @@ function _buildProbeUrls(dirPath: string, filePrefix: string): readonly string[]
 /**
  * Probe URLs for the blackRock 1×1 base sprites.
  * Shapes that use this pool: 1×1 block, 1×1 platform, 1×1 ramp.
+ *
+ * Source files live at ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (N).png
+ * (served as SPRITES/BLOCKS/blackRock/blackRockBlock (N).png via Vite publicDir).
  */
 export const BLACKROCK_1X1_PROBE_URLS: readonly string[] = _buildProbeUrls(
-  'SPRITES/BLOCKS/blackRock/block 1x1',
-  'blackRock_block_1x1',
+  'SPRITES/BLOCKS/blackRock',
+  'blackRockBlock',
 );
 
 /**
  * Probe URLs for the blackRock 2×2 base sprites.
  * Shapes that use this pool: 2×2 block, 2×2 platform, 2×2 ramp, 1×2 ramp.
+ *
+ * The same blackRock folder is used for both pool tiers; the sprite system
+ * scales the chosen image to the appropriate pixel dimensions at generation time.
  */
 export const BLACKROCK_2X2_PROBE_URLS: readonly string[] = _buildProbeUrls(
-  'SPRITES/BLOCKS/blackRock/block 2x2',
-  'blackRock_block_2x2',
+  'SPRITES/BLOCKS/blackRock',
+  'blackRockBlock',
 );
 
 // ── Template URLs ─────────────────────────────────────────────────────────────

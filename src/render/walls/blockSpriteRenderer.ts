@@ -24,6 +24,7 @@ import {
   getBlockSprite1x1,
   getBlockSprite2x2,
   getPlatformSprite1x1,
+  getPlatformSpriteFromBaseUrl,
   getRampSprite,
   OPEN_AIR_SIDE_N,
   OPEN_AIR_SIDE_E,
@@ -49,6 +50,7 @@ import {
   getTheme2x2Sprite,
   getTheme1x1SpriteShaded,
   getTheme2x2SpriteShaded,
+  getFolderThemeBaseUrl,
 } from './folderBlockThemes';
 import {
   CachedWallLayout,
@@ -120,6 +122,20 @@ export function setActiveBlockSpriteWorld(worldNumber: number): void {
 export function setActiveBlockSpriteTheme(theme: BlockTheme): void {
   _activeBlockTheme = theme;
   _invalidateBakedWallCanvas();
+}
+
+/**
+ * Returns the procedural material name currently active for block rendering,
+ * based on the active block theme and world number set via
+ * {@link setActiveBlockSpriteTheme} / {@link setActiveBlockSpriteWorld}.
+ *
+ * Returns null when no procedural material applies (e.g. folder-based themes,
+ * legacy brownRock, dirt, or non-zero world numbers without an explicit theme).
+ *
+ * Used by falling block renderers that need to match the room's block visuals.
+ */
+export function getActiveProceduralMaterial(): string | null {
+  return themeToProceduralMaterial(_activeBlockTheme, _activeWorldNumber);
 }
 
 /**
@@ -680,19 +696,38 @@ function _doRenderWallTilesDirect(
     const platTheme: BlockTheme | null = wallLayout.tileTheme.get(key) ?? roomTheme;
     const platMaterial = themeToProceduralMaterial(platTheme, _activeWorldNumber);
 
+    // Track whether we drew a proper sprite so we know when to show the fallback line.
+    let platformDrawn = false;
+
     if (platMaterial !== null) {
-      // Procedural path (blackRock): base sprite cut with platform template.
+      // Procedural path (blackRock): base sprite cut with 1×1 platform template.
       const procSprite = getPlatformSprite1x1(col, row, platMaterial, blockSizePx, platformEdgeForTile, _activeWorldNumber);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
+        platformDrawn = true;
       } else {
-        // Fallback: thin solid-color line while sprites are loading.
+        // Sprites still loading — schedule a re-bake.
         _bakePassHadFallbacks = true;
-        ctx.fillStyle = '#8899aa';
-        drawPlatformLine(ctx, tileX, tileY, tileSizeScreen, platformEdgeForTile, scalePx);
       }
-    } else {
-      // Legacy flat-color line (brownRock, dirt, world 1+).
+    } else if (isFolderBasedTheme(platTheme)) {
+      // Folder-based theme: apply the platform template cookie-cutter to the folder sprite.
+      // A direct base URL is used instead of the probe-pool system.
+      const baseUrl = getFolderThemeBaseUrl(platTheme!, col, row, _activeWorldNumber);
+      if (baseUrl !== null) {
+        const folderSprite = getPlatformSpriteFromBaseUrl(baseUrl, col, row, blockSizePx, platformEdgeForTile, _activeWorldNumber);
+        if (folderSprite !== null) {
+          ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
+          platformDrawn = true;
+        } else {
+          // Sprites still loading — schedule a re-bake.
+          _bakePassHadFallbacks = true;
+        }
+      }
+    }
+
+    if (!platformDrawn) {
+      // Fallback: thin solid-color line for legacy themes (brownRock, dirt, non-zero worlds)
+      // or while base/template sprites are still loading.
       const isLegacyBlackRockPlatform = (platTheme === null) && (_activeWorldNumber === 0);
       let lineColor: string;
       if (platTheme === 'dirt') {

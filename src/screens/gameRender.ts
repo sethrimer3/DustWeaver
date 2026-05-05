@@ -64,7 +64,7 @@ import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHig
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { getQualityConfig } from '../render/renderQualityConfig';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
-import { renderDarkAmbientBlockerOverlay } from '../render/walls/blockSpriteRenderer';
+import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial } from '../render/walls/blockSpriteRenderer';
 import {
   drawGrappleBloom,
   drawParticleGlow,
@@ -387,7 +387,7 @@ export function renderFrame(r: RenderFrameContext): void {
   crumbleDebris.render(ctx, ox, oy, zoom);
   // Falling block groups — tiles + dust effects
   if (world.fallingBlockGroups.length > 0) {
-    renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust);
+    renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust, isDebugMode, getActiveProceduralMaterial());
   }
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
