@@ -411,6 +411,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   let inspectorElementUid: number = -1;
   let inspectorElementType: string = '';
   let inspectorElementCount: number = 0;
+  let inspectorDialogueEntryCount: number = -1;
 
   // ── Export button ────────────────────────────────────────────────────────
   const exportBtn = makeBtn('📥 Export Room JSON', () => callbacks?.onExport());
@@ -638,10 +639,17 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     const selUid = state.selectedElements.length > 0 ? state.selectedElements[0].uid : -1;
     const selType = state.selectedElements.length > 0 ? state.selectedElements[0].type : '';
     const selCount = state.selectedElements.length;
-    if (inspectorElementUid !== selUid || inspectorElementType !== selType || inspectorElementCount !== selCount) {
+    // For dialogue triggers, also rebuild when entry count changes (add/remove/reorder).
+    let dialogueEntryCount = -1;
+    if (selType === 'dialogueTrigger' && state.roomData) {
+      const dt = (state.roomData.dialogueTriggers ?? []).find(t => t.uid === selUid);
+      dialogueEntryCount = dt ? dt.entries.length : -1;
+    }
+    if (inspectorElementUid !== selUid || inspectorElementType !== selType || inspectorElementCount !== selCount || inspectorDialogueEntryCount !== dialogueEntryCount) {
       inspectorElementUid = selUid;
       inspectorElementType = selType;
       inspectorElementCount = selCount;
+      inspectorDialogueEntryCount = dialogueEntryCount;
       updateInspector(inspectorDiv, state, callbacks);
     }
   }
@@ -656,6 +664,7 @@ export function createEditorUI(root: HTMLElement): EditorUI {
       inspectorElementUid = -1;
       inspectorElementType = '';
       inspectorElementCount = 0;
+      inspectorDialogueEntryCount = -1;
       lastRenderedRoomId = '';
       lastRenderedWidthBlocks = -1;
       lastRenderedHeightBlocks = -1;

@@ -140,6 +140,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check dialogue triggers
+  for (const dt of (room.dialogueTriggers ?? [])) {
+    if (hitTestZone({ xBlock: dt.xBlock, yBlock: dt.yBlock, wBlock: dt.wBlock, hBlock: dt.hBlock }, bx, by)) {
+      return { type: 'dialogueTrigger', uid: dt.uid };
+    }
+  }
+
   // Check bounce pads
   for (const b of (room.bouncePads ?? [])) {
     if (hitTestZone({ xBlock: b.xBlock, yBlock: b.yBlock, wBlock: b.wBlock, hBlock: b.hBlock }, bx, by)) {
@@ -401,6 +408,18 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestZone({ xBlock: bouncePads[i].xBlock, yBlock: bouncePads[i].yBlock, wBlock: bouncePads[i].wBlock, hBlock: bouncePads[i].hBlock }, bx, by)) {
       const removedUid = bouncePads[i].uid;
       bouncePads.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check dialogue triggers
+  const dialogueTriggers = room.dialogueTriggers ?? [];
+  for (let i = 0; i < dialogueTriggers.length; i++) {
+    if (hitTestZone({ xBlock: dialogueTriggers[i].xBlock, yBlock: dialogueTriggers[i].yBlock, wBlock: dialogueTriggers[i].wBlock, hBlock: dialogueTriggers[i].hBlock }, bx, by)) {
+      const removedUid = dialogueTriggers[i].uid;
+      dialogueTriggers.splice(i, 1);
+      if (room.dialogueTriggers) room.dialogueTriggers = dialogueTriggers;
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }

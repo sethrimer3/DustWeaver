@@ -79,6 +79,12 @@ export interface InputState {
   isFullscreenToggleTriggeredFlag: boolean;
   /** Set to true for one collectCommands call to open the world map (M key). */
   isMapKeyTriggeredFlag: boolean;
+  /**
+   * Set to true for one collectCommands call when the player presses the
+   * dialogue advance key (Enter or E). Edge-triggered — only fires once per keydown,
+   * never on key repeat. Consumed by the dialogue system before normal game input.
+   */
+  isDialogueAdvanceTriggeredFlag: boolean;
 }
 
 export function createInputState(): InputState {
@@ -124,6 +130,7 @@ export function createInputState(): InputState {
     isInteractTriggeredFlag: false,
     isFullscreenToggleTriggeredFlag: false,
     isMapKeyTriggeredFlag: false,
+    isDialogueAdvanceTriggeredFlag: false,
   };
 }
 
@@ -196,6 +203,11 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     }
     if ((e.key === 'm' || e.key === 'M') && !e.repeat) {
       state.isMapKeyTriggeredFlag = true;
+    }
+    // Dialogue advance: Enter or E key, edge-triggered (no repeat).
+    // Using Enter/E allows advancing dialogue without conflicting with jump (Space/W).
+    if ((e.key === 'Enter' || e.key === 'e' || e.key === 'E') && !e.repeat) {
+      state.isDialogueAdvanceTriggeredFlag = true;
     }
   }
   function onKeyUp(e: KeyboardEvent): void {
@@ -502,6 +514,16 @@ export function collectCommands(input: InputState): GameCommand[] {
   if (input.isMapKeyTriggeredFlag) {
     input.isMapKeyTriggeredFlag = false;
     commands.push({ kind: CommandKind.OpenMap });
+  }
+
+  // ---- Dialogue advance command ------------------------------------------
+  // Emitted when Enter or E key is pressed (edge-triggered, no key-repeat).
+  // Also emitted when the left mouse fires (isAttackFiredFlag set on mouseup).
+  // The dialogue system in gameScreen.ts will consume AdvanceDialogue commands
+  // before they reach normal game processing when dialogue is active.
+  if (input.isDialogueAdvanceTriggeredFlag) {
+    input.isDialogueAdvanceTriggeredFlag = false;
+    commands.push({ kind: CommandKind.AdvanceDialogue });
   }
 
   return commands;

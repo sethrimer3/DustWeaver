@@ -83,6 +83,11 @@ import {
   checkRoomTransitions,
 } from './gameTransitions';
 import { processRoomPickups } from './gamePickups';
+import { createDialogueState } from '../dialogue/dialogueState';
+import { startDialogue, advanceDialogue, closeDialogue } from '../dialogue/dialogueRuntime';
+import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
+import type { Conversation } from '../dialogue/dialogueTypes';
+import { CommandKind } from '../input/commands';
 
 const FIXED_DT_MS = 16.666;
 
@@ -363,6 +368,12 @@ export function startGameScreen(
     // Reset and spawn grasshoppers
     loadRoomGrasshoppers(world, room);
 
+    // Close any active dialogue when loading a new room.
+    closeDialogue(dialogueState);
+    dialogueRenderer.hide();
+    // Reset fired trigger tracking — triggers fire once per room visit.
+    firedDialogueTriggerUids = new Set<number>();
+
     // Spawn dust pile particles (unowned Gold Dust for Storm Weave attraction)
     spawnAllDustPiles(world);
 
@@ -448,6 +459,20 @@ export function startGameScreen(
   const arrowWeaveRenderer = new ArrowWeaveRenderer();
   const swordWeaveRenderer = new SwordWeaveRenderer();
   const fallingBlockDust = new FallingBlockDustRenderer();
+
+  // ── Dialogue system ──────────────────────────────────────────────────────
+  // The dialogue overlay renders at full device resolution (not the virtual
+  // 480×270 canvas) so that text is always crisp regardless of screen DPI.
+  // See src/render/ui/dialogueOverlayRenderer.ts for the full rationale.
+  const dialogueState = createDialogueState();
+  const dialogueRenderer = new DialogueOverlayRenderer(uiRoot);
+  /**
+   * UIDs of dialogue triggers that have already fired this room visit.
+   * Cleared on every room load so each trigger fires once per visit.
+   * Retrigger rule: a trigger fires once per room visit; it fires again if the
+   * player leaves and re-enters the room (the Set is reset in loadRoom).
+   */
+  let firedDialogueTriggerUids = new Set<number>();
 
   // ── Per-frame allocation-free state ─────────────────────────────────────
   // All three are populated once per room load in loadRoom() and reused every
@@ -868,6 +893,9 @@ export function startGameScreen(
       }
     }
 
+    // ── Dialogue advance input (capture before collectCommands drains the flag)
+    const dialogueAdvanceRequested = inputState.isDialogueAdvanceTriggeredFlag;
+
     const { moveDx, jumpTriggered, openPause, interactTriggered, interactInputPulseTrigger } =
       processPlayerCommands({
         inputState, world, canvas,
@@ -878,6 +906,20 @@ export function startGameScreen(
         currentRoomId: currentRoom.id,
         openMapOnly,
       });
+
+    // ── Dialogue advance ───────────────────────────────────────────────────
+    // When dialogue is active, advance (or close) the overlay and suppress
+    // normal gameplay logic for this frame (player movement is blocked below).
+    if (dialogueAdvanceRequested && dialogueState.isDialogueActiveFlag) {
+      advanceDialogue(dialogueState);
+      if (dialogueState.isDialogueActiveFlag && dialogueState.activeConversation !== null) {
+        const entry = dialogueState.activeConversation.entries[dialogueState.activeEntryIndex];
+        const isLast = dialogueState.activeEntryIndex === dialogueState.activeConversation.entries.length - 1;
+        dialogueRenderer.show(entry, dialogueState.activeConversation.title, isLast);
+      } else {
+        dialogueRenderer.hide();
+      }
+    }
 
     if (interactInputPulseTrigger) {
       interactInputPulseMs = 150;
@@ -913,17 +955,64 @@ export function startGameScreen(
       return;
     }
 
+    // ── Dialogue trigger check ─────────────────────────────────────────────
+    // Check if the player has entered any dialogue trigger zone.
+    // Each trigger fires once per room visit (firedDialogueTriggerUids is
+    // reset on room load). A trigger fires only when dialogue is not already
+    // open to prevent repeated starts while standing still.
+    if (!dialogueState.isDialogueActiveFlag) {
+      const player = world.clusters[0];
+      const playerXBlock = player ? Math.floor(player.positionXWorld / BLOCK_SIZE_SMALL) : -1;
+      const playerYBlock = player ? Math.floor(player.positionYWorld / BLOCK_SIZE_SMALL) : -1;
+      const triggers = currentRoom.dialogueTriggers ?? [];
+      for (let ti = 0; ti < triggers.length; ti++) {
+        const trig = triggers[ti];
+        // Use the trigger's uid as the per-visit key. Since RoomDialogueTriggerDef
+        // does not store a uid, we use the array index as a stable key per room load.
+        const trigKey = ti;
+        if (firedDialogueTriggerUids.has(trigKey)) continue;
+        const inZone = playerXBlock >= trig.xBlock && playerXBlock < trig.xBlock + trig.wBlock &&
+                       playerYBlock >= trig.yBlock && playerYBlock < trig.yBlock + trig.hBlock;
+        if (inZone) {
+          firedDialogueTriggerUids.add(trigKey);
+          // Convert RoomConversationDef to runtime Conversation
+          const conv: Conversation = {
+            id: trig.conversation.id,
+            title: trig.conversation.title,
+            entries: trig.conversation.entries.map(e => ({
+              text: e.text,
+              portraitId: e.portraitId,
+              portraitSide: e.portraitSide,
+            })),
+          };
+          if (conv.entries.length > 0) {
+            startDialogue(dialogueState, conv);
+            const firstEntry = conv.entries[0];
+            const isLast = conv.entries.length === 1;
+            dialogueRenderer.show(firstEntry, conv.title, isLast);
+          }
+          break;
+        }
+      }
+    }
+
+    // During active dialogue, freeze player movement (suppress moveDx/jump inputs).
+    const isDialogueBlockingInput = dialogueState.isDialogueActiveFlag;
+
     // Latch one-shot jump and down inputs into world state before ticking.
     // This preserves edge-triggered inputs on high-refresh frames where no
     // fixed sim tick runs (accumulator < FIXED_DT_MS).
-    if (jumpTriggered) {
+    // Suppress movement inputs while dialogue is active so the player stands still.
+    if (jumpTriggered && !isDialogueBlockingInput) {
       world.playerJumpTriggeredFlag = 1;
     }
-    if (inputState.isDownTriggeredFlag) {
+    if (inputState.isDownTriggeredFlag && !isDialogueBlockingInput) {
       world.playerDownTriggeredFlag = 1;
       inputState.isDownTriggeredFlag = false;
+    } else if (isDialogueBlockingInput) {
+      inputState.isDownTriggeredFlag = false;
     }
-    world.playerJumpHeldFlag = inputState.isJumpHeldFlag ? 1 : 0;
+    world.playerJumpHeldFlag = (!isDialogueBlockingInput && inputState.isJumpHeldFlag) ? 1 : 0;
 
 
     // ── Sim ticks ──────────────────────────────────────────────────────────
@@ -954,12 +1043,13 @@ export function startGameScreen(
 
       const player = world.clusters[0];
       if (player !== undefined) {
-        world.playerMoveInputDxWorld = moveDx !== 0 ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
-        world.playerMoveInputDyWorld = inputState.isKeyS ? 1.0 : 0.0;
+        // Suppress horizontal movement during active dialogue.
+        world.playerMoveInputDxWorld = (!isDialogueBlockingInput && moveDx !== 0) ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
+        world.playerMoveInputDyWorld = (!isDialogueBlockingInput && inputState.isKeyS) ? 1.0 : 0.0;
       }
       // Pass sprint and crouch input to the sim
-      world.playerSprintHeldFlag = inputState.isSprintHeldFlag ? 1 : 0;
-      world.playerCrouchHeldFlag = inputState.isKeyS ? 1 : 0;
+      world.playerSprintHeldFlag = (!isDialogueBlockingInput && inputState.isSprintHeldFlag) ? 1 : 0;
+      world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
       tick(world);
       // If the player died during this tick, stop processing further ticks in
       // this frame.  Continuing to run enemy AI, spike contact, and force
@@ -1183,6 +1273,7 @@ export function startGameScreen(
     removeEditorButton();
     detachInput();
     webglRenderer.dispose();
+    dialogueRenderer.destroy();
     window.removeEventListener('resize', onResize);
     if (menuButton !== null && menuButton.parentElement !== null) {
       menuButton.parentElement.removeChild(menuButton);

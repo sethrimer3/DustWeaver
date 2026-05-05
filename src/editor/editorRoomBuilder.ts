@@ -21,7 +21,7 @@ import type {
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock,
   EditorRope,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
-  EditorFallingBlock,
+  EditorFallingBlock, EditorDialogueTrigger,
 } from './editorState';
 import { particleKindToString, stringToParticleKind } from './roomJsonSchema';
 
@@ -330,6 +330,21 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       yBlock: fb.yBlock,
       variant: fb.variant,
     })),
+    dialogueTriggers: (data.dialogueTriggers ?? []).map(dt => ({
+      xBlock: dt.xBlock,
+      yBlock: dt.yBlock,
+      wBlock: dt.wBlock,
+      hBlock: dt.hBlock,
+      conversation: {
+        id: dt.conversationId,
+        title: dt.conversationTitle || undefined,
+        entries: dt.entries.map(e => ({
+          text: e.text,
+          portraitId: e.portraitId,
+          portraitSide: e.portraitSide,
+        })),
+      },
+    })),
   };
 }
 
@@ -553,6 +568,21 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     variant: fb.variant,
   }));
 
+  const dialogueTriggers: EditorDialogueTrigger[] = (room.dialogueTriggers ?? []).map(dt => ({
+    uid: uid++,
+    xBlock: dt.xBlock,
+    yBlock: dt.yBlock,
+    wBlock: dt.wBlock,
+    hBlock: dt.hBlock,
+    conversationId: dt.conversation.id,
+    conversationTitle: dt.conversation.title ?? '',
+    entries: (dt.conversation.entries ?? []).map(e => ({
+      text: e.text,
+      portraitId: e.portraitId,
+      portraitSide: e.portraitSide,
+    })),
+  }));
+
   return {
     data: {
       id: room.id,
@@ -588,6 +618,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       ropes,
       sunbeams,
       fallingBlocks,
+      dialogueTriggers,
     },
     nextUid: uid,
   };

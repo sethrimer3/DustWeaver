@@ -31,6 +31,8 @@ export enum CommandKind {
    * no grapple is active.
    */
   GrappleZip = 18,
+  /** Advance the current dialogue entry (Enter or E key, left mouse click). */
+  AdvanceDialogue = 19,
 }
 
 export interface MovePlayerCommand {
@@ -151,6 +153,11 @@ export interface GrappleZipCommand {
   kind: CommandKind.GrappleZip;
 }
 
+/** Advance the dialogue overlay to the next entry (Enter / E / left click). */
+export interface AdvanceDialogueCommand {
+  kind: CommandKind.AdvanceDialogue;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
@@ -170,4 +177,5 @@ export type GameCommand =
   | WeaveEndSecondaryCommand
   | ToggleFullscreenCommand
   | OpenMapCommand
-  | GrappleZipCommand;
+  | GrappleZipCommand
+  | AdvanceDialogueCommand;
