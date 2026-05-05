@@ -322,7 +322,9 @@ export function createEditorController(
       state.nextUid = result.nextUid;
     }
     state.selectedElements = [];
-    selectBlockTheme(state, state.roomData?.blockTheme ?? 'blackRock');
+    // Set the active theme to match the room's default without affecting the
+    // recent-theme list — recent themes reflect only explicit user selections.
+    state.selectedBlockTheme = state.roomData?.blockTheme ?? 'blackRock';
     isCurrentRoomDirty = false;
   }
 

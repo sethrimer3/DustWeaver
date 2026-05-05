@@ -80,6 +80,9 @@ let _activeWorldNumber = 0;
  * world-number-based sprite selection.
  */
 let _activeBlockTheme: BlockTheme | null = null;
+
+/** Dev-mode set of theme keys that have already triggered a missing-sprite warning. */
+const _warnedMissingThemes: Set<string> = import.meta.env.DEV ? new Set() : (null as unknown as Set<string>);
 let _activeLightingEffect: LightingEffect = 'Ambient';
 let _activeAmbientDirection: AmbientLightDirection = 'omni';
 let _activeRoomWidthBlocks = 0;
@@ -617,6 +620,17 @@ function _doRenderWallTilesDirect(
       }
     } else if (!tileIsLegacyBlackRock && tileTheme !== null) {
       // Legacy flat-sprite / auto-tiling path (brownRock, dirt).
+      if (import.meta.env.DEV && !isFolderBasedTheme(tileTheme)) {
+        const warnKey = `1x1:${tileTheme}`;
+        if (!_warnedMissingThemes.has(warnKey)) {
+          _warnedMissingThemes.add(warnKey);
+          console.warn(
+            `[blockSpriteRenderer] No procedural or folder-based sprite for theme '${tileTheme}' ` +
+            `(shape: 1×1 block, world: ${_activeWorldNumber}). ` +
+            'Add a sprite folder under ASSETS/SPRITES/BLOCKS/<themeId>/ or check the theme ID spelling.',
+          );
+        }
+      }
       const img = getSpriteForLegacyTheme(tileTheme, spec.variant, blockSizePx);
       if (isSpriteReady(img)) {
         if (tileTheme === 'brownRock' || spec.rotationRad === 0) {

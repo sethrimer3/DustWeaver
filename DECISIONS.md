@@ -913,3 +913,48 @@ When `isDebugMode = true`, `renderGrapple()` draws:
 
 These fields are stored in `world.grappleDebugSweep*/RawHit*/isGrappleDebugActiveFlag`
 and are read-only from the renderer; they have no physics effect.
+
+## BUILD 255: Ramp Physics, Blackstone Sprites, Palette Recent-Theme
+
+### Ramp Collision (BUILD 255)
+
+- Ramp collision now uses the full player AABB for overlap detection instead of
+  center-X only. This ensures the ramp engages when any part of the player's body
+  overlaps the ramp's bounding box, not just when the center is inside it.
+- Player center X is **clamped** to `[wallLeft, wallRight]` before sampling the
+  surface height. When the player's center overshoots the ramp boundary (only the
+  edge still overlaps), the clamped value equals the ramp's high endpoint, which
+  matches the top of an adjacent flush rectangular block — producing a smooth
+  seam instead of a snap or pop.
+- Solid side faces are now resolved for all floor ramps:
+  - Ori 0 (`/` rises right): right vertical face + horizontal bottom edge.
+  - Ori 1 (`\` rises left): left vertical face + horizontal bottom edge.
+- Solid side faces are now resolved for ceiling ramps:
+  - Ori 2 (⌐ inverted `/`): left vertical face + horizontal top edge.
+  - Ori 3 (¬ inverted `\`): right vertical face + horizontal top edge.
+- Side face resolution uses previous-position direction detection (same pattern as
+  rectangular walls) and fires only when the player is in the solid region of the
+  ramp, preventing false triggers on corner landings.
+- Bounce pad ramps retain existing normal-reflection behaviour; new side/bottom
+  face logic is gated to non-bounce-pad ramps only.
+
+### Blackstone Theme IDs (BUILD 255)
+
+- `normalizeBlockThemeId()` added to `roomDef.ts`. Normalises common variant
+  spellings (case mismatches, spaces, underscores) to the canonical camelCase ID
+  at external data ingress. All internal paths already use the canonical ID.
+- Dev-mode diagnostic warning added to `blockSpriteRenderer.ts`: logs once per
+  missing-theme key when a placed tile falls through to the legacy path without
+  a matching sprite catalog entry, including theme ID, shape, and world number.
+
+### Palette Recent-Theme Tracking (BUILD 255)
+
+- `recentBlockThemes` is now initialised **empty** at editor creation instead of
+  being pre-populated with `['blackRock', 'brownRock', 'dirt']`. Blackstone no
+  longer occupies slot 1 before the user has used it.
+- `selectBlockTheme()` no longer pads the recent list to 3 entries with hardcoded
+  fallback themes. The recent strip grows from 0 → 1 → 2 → 3 as the user selects
+  distinct themes.
+- Room loading now sets `selectedBlockTheme` directly without calling
+  `selectBlockTheme()`, so loading a room with `blockTheme: 'blackRock'` no longer
+  pushes blackRock into the recent-theme list.

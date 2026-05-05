@@ -212,7 +212,7 @@ export function applyClusterMovement(world: WorldState): void {
       resetClusterGroundedFlag(cluster);
       const wallResult  = resolveClusterSolidWallCollision(cluster, world, prevX, prevY, dtSec, wasGrounded);
       const thickLanded = wallResult.landed;
-      const rampLanded  = resolveRampSurfaces(cluster, world);
+      const rampLanded  = resolveRampSurfaces(cluster, world, prevX, prevY);
 
       // Thin platform / world floor check (position already integrated by solid wall resolver)
       const thinLanded  = resolveClusterFloorCollision(cluster, world);

@@ -737,7 +737,7 @@ export function createEditorState(): EditorState {
     selectedPaletteItem: null,
     selectedElements: [],
     selectedBlockTheme: 'blackRock',
-    recentBlockThemes: [...DEFAULT_RECENT_BLOCK_THEMES],
+    recentBlockThemes: [],
     placementRotationSteps: 0,
     placementFlipH: false,
     cursorBlockX: 0,
@@ -816,9 +816,6 @@ export function selectBlockTheme(state: EditorState, theme: BlockTheme): void {
   const nextRecent: BlockTheme[] = [theme];
   for (const recentTheme of state.recentBlockThemes) {
     if (recentTheme !== theme && nextRecent.length < 3) nextRecent.push(recentTheme);
-  }
-  for (const fallbackTheme of DEFAULT_RECENT_BLOCK_THEMES) {
-    if (!nextRecent.includes(fallbackTheme) && nextRecent.length < 3) nextRecent.push(fallbackTheme);
   }
   state.recentBlockThemes = nextRecent;
 }
