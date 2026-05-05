@@ -232,8 +232,6 @@ export const BLOCK_THEMES: readonly { id: BlockTheme; shortId: BlockThemeId; lab
   })
   .map(makeBlockThemeOption);
 
-const DEFAULT_RECENT_BLOCK_THEMES: readonly BlockTheme[] = ['blackRock', 'brownRock', 'dirt'];
-
 /** Available background options for the editor dropdown. */
 export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] = [
   { id: 'brownRock',        label: 'Brown Rock Cave' },
