@@ -212,6 +212,55 @@ export interface GrappleWorldState {
   grappleAnchorNormalXWorld: number;
   grappleAnchorNormalYWorld: number;
 
+  // ── Zip stuck lock position ────────────────────────────────────────────────
+  /**
+   * World-space X position at which to lock the player during the stuck phase.
+   *
+   * For normal (unobstructed) arrival: set to (anchorX + normalX * halfExtent).
+   * For blocked zip completion: set to the player's position after the last
+   * swept AABB step against the obstructing wall.
+   *
+   * This prevents the stuck phase from snapping the player back to the
+   * original anchor-surface target when they stopped at an intermediate wall.
+   * Reset by releaseGrapple and set whenever isGrappleStuckFlag transitions 0→1.
+   */
+  grappleZipStickXWorld: number;
+  /** World-space Y position to lock the player during the stuck phase. */
+  grappleZipStickYWorld: number;
+
+  // ── Zip impact FX ──────────────────────────────────────────────────────────
+  /**
+   * Ticks remaining for the zip impact shockwave + dust plume effect.
+   * 0 = inactive.  Ticked down every tick by tick.ts.
+   */
+  zipImpactFxTicksLeft: number;
+  /** Total ticks for the zip impact FX (used for alpha / progress calculation). */
+  zipImpactFxTotalTicks: number;
+  /** World-space X center of the zip impact FX. */
+  zipImpactFxXWorld: number;
+  /** World-space Y center of the zip impact FX. */
+  zipImpactFxYWorld: number;
+  /**
+   * Scale factor for the zip impact FX.
+   * 1.0 = normal zip completion shockwave.
+   * 1.35 = successful zip-jump (slightly larger ring communicates the timed jump).
+   */
+  zipImpactFxScale: number;
+  /**
+   * Surface normal X at the zip impact point — used to orient the dust plume.
+   * If no surface was hit, this may be set to the reverse of the zip direction.
+   */
+  zipImpactFxNormalXWorld: number;
+  /** Surface normal Y at the zip impact point. */
+  zipImpactFxNormalYWorld: number;
+  /**
+   * 1 once the zip impact FX has fired for the current stuck session.
+   * Prevents the shockwave from re-triggering every tick while decelerating.
+   * Reset to 0 on zip activation (isGrappleZipTriggeredFlag consumed) and by
+   * releaseGrapple.
+   */
+  hasZipImpactFxFiredFlag: 0 | 1;
+
   // ── Debug: grapple collision visualization ──────────────────────────────────
   /**
    * Stores the last grapple sweep segment (from/to) and raw hit point so the
@@ -287,6 +336,16 @@ export function createGrappleWorldState(): GrappleWorldState {
     grappleStuckStoppedTickCount:          0,
     grappleZipNormalXWorld:                0.0,
     grappleZipNormalYWorld:                -1.0,
+    grappleZipStickXWorld:                 0.0,
+    grappleZipStickYWorld:                 0.0,
+    zipImpactFxTicksLeft:                  0,
+    zipImpactFxTotalTicks:                 16,
+    zipImpactFxXWorld:                     0.0,
+    zipImpactFxYWorld:                     0.0,
+    zipImpactFxScale:                      1.0,
+    zipImpactFxNormalXWorld:               0.0,
+    zipImpactFxNormalYWorld:               -1.0,
+    hasZipImpactFxFiredFlag:               0,
     playerDownTriggeredFlag:               0,
     grappleProximityBounceTicksLeft:       0,
     grappleProximityBounceRotationAngleRad: 0,

@@ -64,6 +64,13 @@ interface _ReusableBacking {
   grappleEmptyFxTotalTicks: number;
   grappleEmptyFxXWorld: number;
   grappleEmptyFxYWorld: number;
+  zipImpactFxTicksLeft: number;
+  zipImpactFxTotalTicks: number;
+  zipImpactFxXWorld: number;
+  zipImpactFxYWorld: number;
+  zipImpactFxScale: number;
+  zipImpactFxNormalXWorld: number;
+  zipImpactFxNormalYWorld: number;
   isPlayerBlockingFlag: 0 | 1;
   hasGrappleChargeFlag: 0 | 1;
   isPlayerWeaveActiveFlag: 0 | 1;
@@ -359,6 +366,13 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     grappleEmptyFxTotalTicks:       world.grappleEmptyFxTotalTicks,
     grappleEmptyFxXWorld:           world.grappleEmptyFxXWorld,
     grappleEmptyFxYWorld:           world.grappleEmptyFxYWorld,
+    zipImpactFxTicksLeft:           world.zipImpactFxTicksLeft,
+    zipImpactFxTotalTicks:          world.zipImpactFxTotalTicks,
+    zipImpactFxXWorld:              world.zipImpactFxXWorld,
+    zipImpactFxYWorld:              world.zipImpactFxYWorld,
+    zipImpactFxScale:               world.zipImpactFxScale,
+    zipImpactFxNormalXWorld:        world.zipImpactFxNormalXWorld,
+    zipImpactFxNormalYWorld:        world.zipImpactFxNormalYWorld,
     isPlayerBlockingFlag:     world.isPlayerBlockingFlag,
     hasGrappleChargeFlag:     world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag:  (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
@@ -480,6 +494,13 @@ export function updateSnapshotInPlace(
   b.grappleEmptyFxTotalTicks       = world.grappleEmptyFxTotalTicks;
   b.grappleEmptyFxXWorld           = world.grappleEmptyFxXWorld;
   b.grappleEmptyFxYWorld           = world.grappleEmptyFxYWorld;
+  b.zipImpactFxTicksLeft           = world.zipImpactFxTicksLeft;
+  b.zipImpactFxTotalTicks          = world.zipImpactFxTotalTicks;
+  b.zipImpactFxXWorld              = world.zipImpactFxXWorld;
+  b.zipImpactFxYWorld              = world.zipImpactFxYWorld;
+  b.zipImpactFxScale               = world.zipImpactFxScale;
+  b.zipImpactFxNormalXWorld        = world.zipImpactFxNormalXWorld;
+  b.zipImpactFxNormalYWorld        = world.zipImpactFxNormalYWorld;
   b.isPlayerBlockingFlag      = world.isPlayerBlockingFlag;
   b.hasGrappleChargeFlag      = world.hasGrappleChargeFlag;
   b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
@@ -701,6 +722,13 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     grappleEmptyFxTotalTicks:       world.grappleEmptyFxTotalTicks,
     grappleEmptyFxXWorld:           world.grappleEmptyFxXWorld,
     grappleEmptyFxYWorld:           world.grappleEmptyFxYWorld,
+    zipImpactFxTicksLeft:           world.zipImpactFxTicksLeft,
+    zipImpactFxTotalTicks:          world.zipImpactFxTotalTicks,
+    zipImpactFxXWorld:              world.zipImpactFxXWorld,
+    zipImpactFxYWorld:              world.zipImpactFxYWorld,
+    zipImpactFxScale:               world.zipImpactFxScale,
+    zipImpactFxNormalXWorld:        world.zipImpactFxNormalXWorld,
+    zipImpactFxNormalYWorld:        world.zipImpactFxNormalYWorld,
     isPlayerBlockingFlag: world.isPlayerBlockingFlag,
     hasGrappleChargeFlag: world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
