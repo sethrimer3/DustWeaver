@@ -81,6 +81,31 @@ export function blockThemeRefToTheme(themeRef: string | undefined): string | und
   }
 }
 
+/**
+ * Normalizes a block theme string to its canonical camelCase ID.
+ *
+ * Handles common variant spellings that may appear in external data or user
+ * input (case mismatches, spaces, underscores).  Returns the input unchanged
+ * if no known normalization applies — folder-based IDs are already canonical.
+ *
+ * Use this at all external-data ingress points (JSON import, URL params) to
+ * ensure every downstream path receives the canonical ID.
+ */
+export function normalizeBlockThemeId(themeId: string): string {
+  if (!themeId) return themeId;
+  // Normalise legacy themes that have common alternate spellings.
+  switch (themeId.toLowerCase().replace(/[^a-z0-9]/g, '')) {
+    case 'blackrock':  return 'blackRock';
+    case 'brownrock':  return 'brownRock';
+    case 'dirt':       return 'dirt';
+    // Compact IDs pass through normalizeBlockThemeId → blockThemeRefToTheme for full resolution.
+    case 'bk':         return 'blackRock';
+    case 'br':         return 'brownRock';
+    case 'dt':         return 'dirt';
+    default:           return themeId;
+  }
+}
+
 // ── Dynamic theme index registry ──────────────────────────────────────────────
 //
 // Wall snapshots store themes as Uint8Array indices (0–254) for compact storage.
