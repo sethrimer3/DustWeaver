@@ -13,6 +13,18 @@
   ],
   "solids": {
     "byTheme": {
+      "__default__": {
+        "points": [
+          [
+            19,
+            0
+          ],
+          [
+            40,
+            0
+          ]
+        ]
+      },
       "grayStone": {
         "rects": [
           [

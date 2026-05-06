@@ -13,6 +13,18 @@
   ],
   "solids": {
     "byTheme": {
+      "__default__": {
+        "points": [
+          [
+            89,
+            119
+          ],
+          [
+            110,
+            119
+          ]
+        ]
+      },
       "overgrowth": {
         "rects": [
           [
