@@ -7,6 +7,7 @@
  */
 
 import type { RoomDef, RoomTransitionDef, TransitionDirection } from '../levels/roomDef';
+export type { TransitionDirection };
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
 import type { WorldState } from '../sim/world';
@@ -61,7 +62,7 @@ export function checkRoomTransitions(
   currentRoom: RoomDef,
   roomWidthWorld: number,
   roomHeightWorld: number,
-  onLoadRoom: (room: RoomDef, spawnX: number, spawnY: number) => void,
+  onLoadRoom: (room: RoomDef, spawnX: number, spawnY: number, transitionDirection: TransitionDirection) => void,
 ): boolean {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return false;
@@ -108,9 +109,9 @@ export function checkRoomTransitions(
 
         if (targetReturnTransition !== undefined) {
           const spawnBlock = computeSpawnBlockForTransition(targetRoom, targetReturnTransition);
-          onLoadRoom(targetRoom, spawnBlock[0], spawnBlock[1]);
+          onLoadRoom(targetRoom, spawnBlock[0], spawnBlock[1], t.direction);
         } else {
-          onLoadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1]);
+          onLoadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1], t.direction);
         }
         return true;
       }

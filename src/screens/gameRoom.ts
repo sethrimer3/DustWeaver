@@ -528,7 +528,10 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
       world.wallIsPlatformFlag[wallIndex]      = 0;
       world.wallPlatformEdge[wallIndex]        = 0;
       world.wallThemeIndex[wallIndex]          = WALL_THEME_DEFAULT_INDEX;
-      world.wallIsInvisibleFlag[wallIndex]     = 0;
+      // Falling block groups render through renderFallingBlocks(). This wall
+      // slot exists only for broad collision/movement integration and must
+      // stay invisible or the group's bounding box will be drawn as terrain.
+      world.wallIsInvisibleFlag[wallIndex]     = 1;
       world.wallRampOrientationIndex[wallIndex]    = 255;
       world.wallIsPillarHalfWidthFlag[wallIndex]   = 0;
       world.wallIsBouncePadFlag[wallIndex]         = 0;

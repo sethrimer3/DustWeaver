@@ -122,7 +122,12 @@ export function getWallLayoutCache(
 ): CachedWallLayout {
   let signature = `${blockSizePx}|${walls.count}`;
   for (let wi = 0; wi < walls.count; wi++) {
-    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.platformEdge[wi]},${walls.themeIndex[wi]},${walls.isInvisibleFlag[wi]},${walls.rampOrientationIndex[wi]},${walls.isPillarHalfWidthFlag[wi]}`;
+    // Invisible walls (e.g. falling-block collision slots) are never rendered
+    // as visible geometry, so they must not contribute to the visible-layout
+    // signature.  Excluding them prevents moving invisible walls from
+    // invalidating the baked wall sprite cache every frame while a block falls.
+    if (walls.isInvisibleFlag[wi] === 1) continue;
+    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.platformEdge[wi]},${walls.themeIndex[wi]},${walls.rampOrientationIndex[wi]},${walls.isPillarHalfWidthFlag[wi]}`;
   }
 
   if (_cachedWallLayout !== null &&

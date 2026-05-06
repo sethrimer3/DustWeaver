@@ -181,6 +181,19 @@ export interface RenderFrameContext {
   graphicsQuality: GraphicsQuality;
   /** Render-stage profiler.  When provided, timings are recorded when debug is on. */
   renderProfiler?: RenderProfiler;
+  /**
+   * Fraction of a fixed tick elapsed since the last physics step.
+   * Used to interpolate falling block tile positions between sim updates
+   * (0 = just ticked, 1 = full tick elapsed with no physics step yet).
+   */
+  renderAlpha: number;
+  /**
+   * Per-group Y offsets captured immediately before the most recent physics
+   * tick.  Indexed by fallingBlockGroups array position (capped at
+   * MAX_FALLING_BLOCK_GROUPS = 64).  Used by renderFallingBlocks to blend
+   * between the pre-tick and post-tick offsetYWorld values for smooth motion.
+   */
+  prevFallingBlockOffsetY: Float32Array;
 }
 
 /**
@@ -387,7 +400,7 @@ export function renderFrame(r: RenderFrameContext): void {
   crumbleDebris.render(ctx, ox, oy, zoom);
   // Falling block groups — tiles + dust effects
   if (world.fallingBlockGroups.length > 0) {
-    renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust, isDebugMode, getActiveProceduralMaterial());
+    renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust, isDebugMode, getActiveProceduralMaterial(), r.renderAlpha, r.prevFallingBlockOffsetY);
   }
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
