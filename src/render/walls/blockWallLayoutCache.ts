@@ -127,7 +127,7 @@ export function getWallLayoutCache(
     // signature.  Excluding them prevents moving invisible walls from
     // invalidating the baked wall sprite cache every frame while a block falls.
     if (walls.isInvisibleFlag[wi] === 1) continue;
-    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.platformEdge[wi]},${walls.themeIndex[wi]},${walls.isInvisibleFlag[wi]},${walls.rampOrientationIndex[wi]},${walls.isPillarHalfWidthFlag[wi]}`;
+    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.platformEdge[wi]},${walls.themeIndex[wi]},${walls.rampOrientationIndex[wi]},${walls.isPillarHalfWidthFlag[wi]}`;
   }
 
   if (_cachedWallLayout !== null &&

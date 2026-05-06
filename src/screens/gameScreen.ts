@@ -1081,8 +1081,9 @@ export function startGameScreen(
 
       // Capture falling block Y offsets before this tick so the renderer can
       // smoothly interpolate tile positions between physics steps.
-      const fbGroupCount = world.fallingBlockGroups.length;
-      for (let gi = 0; gi < fbGroupCount && gi < MAX_FALLING_BLOCK_GROUPS; gi++) {
+      // Cap at MAX_FALLING_BLOCK_GROUPS — the buffer is pre-allocated to that size.
+      const fbGroupCount = Math.min(world.fallingBlockGroups.length, MAX_FALLING_BLOCK_GROUPS);
+      for (let gi = 0; gi < fbGroupCount; gi++) {
         prevFallingBlockOffsetY[gi] = world.fallingBlockGroups[gi].offsetYWorld;
       }
 
