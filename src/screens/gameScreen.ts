@@ -77,6 +77,8 @@ import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wal
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
 import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
+import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
+import { MAX_FALLING_BLOCK_GROUPS } from '../sim/fallingBlocks/fallingBlockTypes';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import {
@@ -517,6 +519,12 @@ export function startGameScreen(
   // Sized to match MAX_REUSABLE_CLUSTERS; grows lazily if needed.
   let prevClusterPosX = new Float32Array(64);
   let prevClusterPosY = new Float32Array(64);
+
+  // ── Falling block render-interpolation buffers ───────────────────────────
+  // Stores offsetYWorld before each physics tick so renderFallingBlocks can
+  // blend between the pre-tick and post-tick positions using renderAlpha.
+  // Pre-allocated to MAX_FALLING_BLOCK_GROUPS to avoid per-frame allocation.
+  const prevFallingBlockOffsetY = new Float32Array(MAX_FALLING_BLOCK_GROUPS);
 
   // ── Health bar state ─────────────────────────────────────────────────────
   /** Map of entityId -> tick when health bar should hide. */
@@ -970,7 +978,25 @@ export function startGameScreen(
     }
 
     // ── Room transition check ──────────────────────────────────────────────
-    if (checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY) => loadRoom(room, spawnX, spawnY))) {
+    // Capture the player's velocity before the transition so it can be
+    // preserved into the new room (momentum continuity through doors).
+    const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
+    const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
+    if (checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY, dir) => {
+      loadRoom(room, spawnX, spawnY);
+      // Re-apply the player's pre-transition velocity so momentum is not lost.
+      // For upward transitions, add a jump's worth of upward velocity so the
+      // player clears the doorway ceiling instead of stalling at the entrance.
+      const newPlayer = world.clusters[0];
+      if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
+        newPlayer.velocityXWorld = preTransVX;
+        if (dir === 'up') {
+          newPlayer.velocityYWorld = preTransVY - PLAYER_JUMP_SPEED_WORLD;
+        } else {
+          newPlayer.velocityYWorld = preTransVY;
+        }
+      }
+    })) {
       // Room changed — skip this frame's sim, render the new room next frame
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1051,6 +1077,13 @@ export function startGameScreen(
       for (let clusterIndex = 0; clusterIndex < clusterCountForTick; clusterIndex++) {
         prevClusterPosX[clusterIndex] = world.clusters[clusterIndex].positionXWorld;
         prevClusterPosY[clusterIndex] = world.clusters[clusterIndex].positionYWorld;
+      }
+
+      // Capture falling block Y offsets before this tick so the renderer can
+      // smoothly interpolate tile positions between physics steps.
+      const fbGroupCount = world.fallingBlockGroups.length;
+      for (let gi = 0; gi < fbGroupCount && gi < MAX_FALLING_BLOCK_GROUPS; gi++) {
+        prevFallingBlockOffsetY[gi] = world.fallingBlockGroups[gi].offsetYWorld;
       }
 
       const player = world.clusters[0];
@@ -1265,6 +1298,8 @@ export function startGameScreen(
       getPlayerDustCount,
       graphicsQuality: pauseMenuState.graphicsQuality,
       renderProfiler,
+      renderAlpha,
+      prevFallingBlockOffsetY,
     });
 
     rafHandle = requestAnimationFrame(frame);
