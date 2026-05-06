@@ -281,6 +281,8 @@ export function renderFallingBlocks(
   dustRenderer: FallingBlockDustRenderer,
   isDebugMode = false,
   blockMaterial: string | null = null,
+  renderAlpha = 1.0,
+  prevFallingBlockOffsetY: Float32Array | null = null,
 ): void {
   dustRenderer.update(dtMs);
 
@@ -327,6 +329,12 @@ export function renderFallingBlocks(
 
     const shakeX = g.shakeOffsetXWorld;
 
+    // Interpolate the vertical fall offset between the pre-tick and post-tick
+    // positions so tiles move smoothly at any display refresh rate instead of
+    // snapping once per physics step.
+    const prevOffY = (prevFallingBlockOffsetY !== null) ? prevFallingBlockOffsetY[gi] : g.offsetYWorld;
+    const interpOffsetYWorld = prevOffY + (g.offsetYWorld - prevOffY) * renderAlpha;
+
     // Crumble state: fade out as the timer counts down.
     let alpha = 1.0;
     if (g.state === FB_STATE_CRUMBLING) {
@@ -339,7 +347,7 @@ export function renderFallingBlocks(
 
     for (let ti = 0; ti < g.tileCount; ti++) {
       const tileLeft = Math.round((g.restXWorld + g.tileRelXWorld[ti] + shakeX) * zoom + offsetXPx);
-      const tileTop  = Math.round((g.restYWorld + g.tileRelYWorld[ti] + g.offsetYWorld) * zoom + offsetYPx);
+      const tileTop  = Math.round((g.restYWorld + g.tileRelYWorld[ti] + interpOffsetYWorld) * zoom + offsetYPx);
       const tileSz   = Math.round(BLOCK_SIZE_MEDIUM * zoom);
 
       // ── Visual: physical collider is a solid rect; the cookie-cutter sprite
