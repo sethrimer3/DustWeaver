@@ -318,16 +318,16 @@ const _chunkCache = new RoomChunkCache();
  * before the walls pass.  Defaults cover the standard 480×270 virtual canvas
  * so any call-site that omits the explicit setter still works correctly.
  */
-let _vpW = 480;
-let _vpH = 270;
+let _vpWPx = 480;
+let _vpHPx = 270;
 
 /**
  * Update the viewport size used for chunk visibility culling.
  * Must be called from renderFrame() before renderWalls() each frame.
  */
 export function setRenderViewportSize(vpW: number, vpH: number): void {
-  _vpW = vpW;
-  _vpH = vpH;
+  _vpWPx = vpW;
+  _vpHPx = vpH;
 }
 
 /** Returns the current chunk-cache diagnostic counters for the debug overlay. */
@@ -405,8 +405,8 @@ export function renderWallSprites(
     offsetYPx,
     scalePx,
     blockSizePx,
-    _vpW,
-    _vpH,
+    _vpWPx,
+    _vpHPx,
     (chunkCtx, chunkOffX, chunkOffY, s, bsz, colMin, rowMin, colMax, rowMax) =>
       _doRenderWallTilesDirect(
         chunkCtx,
@@ -450,10 +450,10 @@ function _doRenderWallTilesDirect(
   offsetYPx:             number,
   scalePx:               number,
   blockSizePx:           number,
-  filterColMin          = 0,
-  filterColMax          = 0x7FFFFFFF,
-  filterRowMin          = 0,
-  filterRowMax          = 0x7FFFFFFF,
+  filterColMinBlocks          = 0,
+  filterColMaxBlocks          = 0x7FFFFFFF,
+  filterRowMinBlocks          = 0,
+  filterRowMaxBlocks          = 0x7FFFFFFF,
 ): boolean {
   let _hadFallbacks = false;
 
@@ -494,8 +494,8 @@ function _doRenderWallTilesDirect(
       // A 2×2 block spans [col, col+1] × [row, row+1].  Include in every
       // chunk that overlaps its footprint so canvas auto-clipping splits it
       // cleanly at chunk boundaries.
-      if (col + 1 < filterColMin || col > filterColMax) continue;
-      if (row + 1 < filterRowMin || row > filterRowMax) continue;
+      if (col + 1 < filterColMinBlocks || col > filterColMaxBlocks) continue;
+      if (row + 1 < filterRowMinBlocks || row > filterRowMaxBlocks) continue;
 
       const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
       const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
@@ -557,8 +557,8 @@ function _doRenderWallTilesDirect(
     const row = tile.row;
 
     // Skip tiles entirely outside this chunk's tile range.
-    if (col < filterColMin || col > filterColMax) continue;
-    if (row < filterRowMin || row > filterRowMax) continue;
+    if (col < filterColMinBlocks || col > filterColMaxBlocks) continue;
+    if (row < filterRowMinBlocks || row > filterRowMaxBlocks) continue;
 
     const northSolid = isWallOccupied(wallLayout.occupied, col,     row - 1);
     const eastSolid  = isWallOccupied(wallLayout.occupied, col + 1, row    );
@@ -711,8 +711,8 @@ function _doRenderWallTilesDirect(
     const row = tile.row;
 
     // Skip platform tiles outside this chunk's range.
-    if (col < filterColMin || col > filterColMax) continue;
-    if (row < filterRowMin || row > filterRowMax) continue;
+    if (col < filterColMinBlocks || col > filterColMaxBlocks) continue;
+    if (row < filterRowMinBlocks || row > filterRowMaxBlocks) continue;
 
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
@@ -800,8 +800,8 @@ function _doRenderWallTilesDirect(
     const rampRowFirst = Math.floor(walls.yWorld[wi] / blockSizePx);
     const rampColLast  = Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - 1;
     const rampRowLast  = Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - 1;
-    if (rampColLast < filterColMin || rampColFirst > filterColMax) continue;
-    if (rampRowLast < filterRowMin || rampRowFirst > filterRowMax) continue;
+    if (rampColLast < filterColMinBlocks || rampColFirst > filterColMaxBlocks) continue;
+    if (rampRowLast < filterRowMinBlocks || rampRowFirst > filterRowMaxBlocks) continue;
 
     // Resolve theme for this ramp wall.
     const rampTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
@@ -884,8 +884,8 @@ function _doRenderWallTilesDirect(
     const pillarRowFirst = Math.floor(walls.yWorld[wi] / blockSizePx);
     const pillarColLast  = Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - 1;
     const pillarRowLast  = Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - 1;
-    if (pillarColLast < filterColMin || pillarColFirst > filterColMax) continue;
-    if (pillarRowLast < filterRowMin || pillarRowFirst > filterRowMax) continue;
+    if (pillarColLast < filterColMinBlocks || pillarColFirst > filterColMaxBlocks) continue;
+    if (pillarRowLast < filterRowMinBlocks || pillarRowFirst > filterRowMaxBlocks) continue;
 
     // Resolve theme color
     const pillarTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX

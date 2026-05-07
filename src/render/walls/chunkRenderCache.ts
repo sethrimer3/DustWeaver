@@ -168,8 +168,8 @@ export class RoomChunkCache {
    * @param offsetYPx   Camera Y offset in virtual pixels.
    * @param scalePx     World-to-virtual-pixel scale factor (zoom; normally 1.0).
    * @param blockSizePx Block size in world units (BLOCK_SIZE_SMALL = 8).
-   * @param vpW         Viewport width in virtual pixels (e.g. 480).
-   * @param vpH         Viewport height in virtual pixels (e.g. 270).
+   * @param vpWPx         Viewport width in virtual pixels (e.g. 480).
+   * @param vpHPx         Viewport height in virtual pixels (e.g. 270).
    * @param buildChunkFn
    *   Callback that renders the static tile content for one chunk into the
    *   provided canvas context.  Arguments:
@@ -192,8 +192,8 @@ export class RoomChunkCache {
     offsetYPx: number,
     scalePx: number,
     blockSizePx: number,
-    vpW: number,
-    vpH: number,
+    vpWPx: number,
+    vpHPx: number,
     buildChunkFn: (
       chunkCtx: CanvasRenderingContext2D,
       chunkOffsetXPx: number,
@@ -222,8 +222,8 @@ export class RoomChunkCache {
     // block index    = floor(world / blockSizePx)
     const blockLeft  = Math.floor(-offsetXPx / (blockSizePx * scalePx));
     const blockTop   = Math.floor(-offsetYPx / (blockSizePx * scalePx));
-    const blockRight = Math.ceil((vpW - offsetXPx) / (blockSizePx * scalePx));
-    const blockBot   = Math.ceil((vpH - offsetYPx) / (blockSizePx * scalePx));
+    const blockRight = Math.ceil((vpWPx - offsetXPx) / (blockSizePx * scalePx));
+    const blockBot   = Math.ceil((vpHPx - offsetYPx) / (blockSizePx * scalePx));
 
     // Chunk grid indices covering the visible area plus the safety margin.
     const cxMin = Math.max(0, Math.floor(blockLeft  / CHUNK_SIZE_BLOCKS) - CHUNK_MARGIN);
