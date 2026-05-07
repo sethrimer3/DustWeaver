@@ -15,6 +15,7 @@ import type { EditorState, EditorRoomData, EditorWall } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview } from './editorPlaceTool';
 import { findFloorBlockRow, findCeilingBlockRow } from './editorHitTest';
+import { getRectBrushPreview } from './editorBrush';
 import {
   PREVIEW_COLOR, PREVIEW_RAMP_COLOR, PREVIEW_PLATFORM_COLOR, PREVIEW_PILLAR_HALF_COLOR,
   CURSOR_COLOR, SELECTION_BOX_COLOR, SELECTION_BOX_BORDER,
@@ -39,6 +40,29 @@ export function drawPlacementPreview(
   zoom: number,
 ): void {
   if (state.activeTool !== EditorTool.Place || state.selectedPaletteItem === null) return;
+
+  // Rect brush: show the selection rectangle while first click is pending.
+  if (state.brushMode === 'rect' && state.brushRectStartBlockX !== null) {
+    const rectPreview = getRectBrushPreview(
+      state.cursorBlockX,
+      state.cursorBlockY,
+      state.brushRectStartBlockX,
+      state.brushRectStartBlockY,
+    );
+    if (rectPreview !== null) {
+      drawBlockRect(ctx, rectPreview.x, rectPreview.y, rectPreview.w, rectPreview.h,
+        offsetXPx, offsetYPx, zoom, 'rgba(100,200,255,0.18)', 2);
+      const rx = rectPreview.x * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+      const ry = rectPreview.y * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+      const rw = rectPreview.w * BLOCK_SIZE_SMALL * zoom;
+      const rh = rectPreview.h * BLOCK_SIZE_SMALL * zoom;
+      ctx.strokeStyle = 'rgba(100,200,255,0.7)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.setLineDash([]);
+    }
+  }
 
   const preview = getPlacementPreview(state);
   if (preview === null) return;

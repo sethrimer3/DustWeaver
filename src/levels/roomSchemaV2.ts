@@ -58,6 +58,7 @@ import type {
   RoomJsonDecoration,
   RoomJsonLightSource,
   RoomJsonSunbeam,
+  RoomJsonDialogueTrigger,
 } from '../editor/roomJson';
 import { createTileGrid, paintRect, extractLayerFromGrid } from './tileGridCompressor';
 import type { SavedRect, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
@@ -140,6 +141,40 @@ export interface SavedTransition {
   depth?: number;
 }
 
+/** Compact crumble block entry. */
+export interface SavedCrumble {
+  /** [x, y, w, h] */
+  r: SavedRect;
+  /** Variant string (omit if 'normal'). */
+  v?: string;
+  /** Ramp orientation 0-3 (omit if not a ramp). */
+  ramp?: 0 | 1 | 2 | 3;
+  /** Block theme ID override (omit if using room default). */
+  theme?: string;
+}
+
+/** Compact bounce pad entry. */
+export interface SavedBounce {
+  /** [x, y, w, h] */
+  r: SavedRect;
+  /** Ramp orientation 0-3 (omit if not a ramp). */
+  ramp?: 0 | 1 | 2 | 3;
+  /** Speed factor index: 0=50%, 1=100% (omit if 0). */
+  spd?: 0 | 1;
+}
+
+/** Compact rope entry matching RoomJsonRope shape for simplicity. */
+export interface SavedRoomRope {
+  aax: number;
+  aay: number;
+  abx: number;
+  aby: number;
+  segs?: number;
+  fixed?: false;
+  destr?: string;
+  thick?: 0 | 1 | 2;
+}
+
 export interface SavedRoomV2 {
   v: 2;
   id: string;
@@ -202,6 +237,16 @@ export interface SavedRoomV2 {
   sunbeams?: RoomJsonSunbeam[];
   /** Editor-painted falling block tiles. Stored as compact tuples [x, y, variant_char]. */
   fallingBlocks?: [number, number, string][];
+  /** Crumble blocks. */
+  crumbles?: SavedCrumble[];
+  /** Bounce pads. */
+  bounces?: SavedBounce[];
+  /** Ropes. */
+  ropes?: SavedRoomRope[];
+  /** Dialogue triggers. */
+  dialogueTriggers?: RoomJsonDialogueTrigger[];
+  /** Dust container pieces (xBlock, yBlock). */
+  dcPieces?: [number, number][];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -494,6 +539,41 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       return [fb.xBlock, fb.yBlock, code] as [number, number, string];
     });
   }
+  if (json.crumbleBlocks && json.crumbleBlocks.length > 0) {
+    out.crumbles = json.crumbleBlocks.map(c => {
+      const entry: SavedCrumble = { r: [c.xBlock, c.yBlock, c.wBlock ?? 1, c.hBlock ?? 1] };
+      if (c.variant && c.variant !== 'normal') entry.v = c.variant;
+      if (c.rampOrientation !== undefined) entry.ramp = c.rampOrientation as 0 | 1 | 2 | 3;
+      if (c.blockThemeId) entry.theme = c.blockThemeId;
+      return entry;
+    });
+  }
+  if (json.bouncePads && json.bouncePads.length > 0) {
+    out.bounces = json.bouncePads.map(b => {
+      const entry: SavedBounce = { r: [b.xBlock, b.yBlock, b.wBlock ?? 1, b.hBlock ?? 1] };
+      if (b.rampOrientation !== undefined) entry.ramp = b.rampOrientation as 0 | 1 | 2 | 3;
+      if (b.speedFactorIndex !== undefined && b.speedFactorIndex !== 0) entry.spd = b.speedFactorIndex as 0 | 1;
+      return entry;
+    });
+  }
+  if (json.ropes && json.ropes.length > 0) {
+    out.ropes = json.ropes.map(r => {
+      const entry: SavedRoomRope = {
+        aax: r.aax, aay: r.aay, abx: r.abx, aby: r.aby,
+      };
+      if (r.segs !== undefined) entry.segs = r.segs;
+      if (r.fixed === false) entry.fixed = false;
+      if (r.destr) entry.destr = r.destr;
+      if (r.thick !== undefined) entry.thick = r.thick as 0 | 1 | 2;
+      return entry;
+    });
+  }
+  if (json.dialogueTriggers && json.dialogueTriggers.length > 0) {
+    out.dialogueTriggers = json.dialogueTriggers.map(d => ({ ...d }));
+  }
+  if (json.dustContainerPieces && json.dustContainerPieces.length > 0) {
+    out.dcPieces = json.dustContainerPieces.map(p => [p.xBlock, p.yBlock] as [number, number]);
+  }
 
   return out;
 }
@@ -641,6 +721,42 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       yBlock: y,
       variant: code === 's' ? 'sensitive' : code === 'c' ? 'crumbling' : 'tough',
     }));
+  }
+  if (saved.crumbles && saved.crumbles.length > 0) {
+    json.crumbleBlocks = saved.crumbles.map(c => {
+      const entry: { xBlock: number; yBlock: number; wBlock?: number; hBlock?: number; rampOrientation?: 0 | 1 | 2 | 3; variant?: string; blockThemeId?: string } = {
+        xBlock: c.r[0],
+        yBlock: c.r[1],
+      };
+      if (c.r[2] !== 1) entry.wBlock = c.r[2];
+      if (c.r[3] !== 1) entry.hBlock = c.r[3];
+      if (c.v) entry.variant = c.v;
+      if (c.ramp !== undefined) entry.rampOrientation = c.ramp;
+      if (c.theme) entry.blockThemeId = c.theme;
+      return entry;
+    });
+  }
+  if (saved.bounces && saved.bounces.length > 0) {
+    json.bouncePads = saved.bounces.map(b => {
+      const entry: { xBlock: number; yBlock: number; wBlock?: number; hBlock?: number; rampOrientation?: 0 | 1 | 2 | 3; speedFactorIndex?: 0 | 1 } = {
+        xBlock: b.r[0],
+        yBlock: b.r[1],
+      };
+      if (b.r[2] !== 1) entry.wBlock = b.r[2];
+      if (b.r[3] !== 1) entry.hBlock = b.r[3];
+      if (b.ramp !== undefined) entry.rampOrientation = b.ramp;
+      if (b.spd !== undefined) entry.speedFactorIndex = b.spd;
+      return entry;
+    });
+  }
+  if (saved.ropes && saved.ropes.length > 0) {
+    json.ropes = saved.ropes.map(r => ({ ...r, fixed: r.fixed === false ? false : undefined }));
+  }
+  if (saved.dialogueTriggers && saved.dialogueTriggers.length > 0) {
+    json.dialogueTriggers = saved.dialogueTriggers.map(d => ({ ...d }));
+  }
+  if (saved.dcPieces && saved.dcPieces.length > 0) {
+    json.dustContainerPieces = saved.dcPieces.map(([x, y]) => ({ xBlock: x, yBlock: y }));
   }
 
   return json;

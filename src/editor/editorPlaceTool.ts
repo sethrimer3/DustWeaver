@@ -27,6 +27,7 @@ import {
   findFloorBlockRow,
   findCeilingBlockRow,
 } from './editorHitTest';
+import { getBrushCells } from './editorBrush';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
 
@@ -50,8 +51,8 @@ export function getPlacementPreview(state: EditorState): { wBlock: number; hBloc
   const item = state.selectedPaletteItem;
   if (item.category === 'liquids') {
     return {
-      wBlock: item.defaultWidthBlocks ?? 4,
-      hBlock: item.defaultHeightBlocks ?? 4,
+      wBlock: item.defaultWidthBlocks ?? 1,
+      hBlock: item.defaultHeightBlocks ?? 1,
     };
   }
   if (item.id === 'dialogue_trigger') {
@@ -69,22 +70,49 @@ export function getPlacementPreview(state: EditorState): { wBlock: number; hBloc
 // ── Place tool ───────────────────────────────────────────────────────────────
 
 /**
- * Places the currently selected palette item at the cursor location.
+ * Places the currently selected palette item at the cursor location,
+ * respecting the active brush mode for tile-like items.
  */
 export function placeAtCursor(state: EditorState): void {
   const room = state.roomData;
   const item = state.selectedPaletteItem;
   if (room === null || item === null) return;
 
-  const bx = state.cursorBlockX;
-  const by = state.cursorBlockY;
+  // Brush painting: tile-like items support multi-cell brushes.
+  const isBrushable =
+    item.category === 'blocks' ||
+    item.category === 'liquids' ||
+    (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
+
+  if (isBrushable && state.brushMode !== 'single') {
+    const cells = getBrushCells(
+      state.brushMode,
+      state.cursorBlockX,
+      state.cursorBlockY,
+      state.brushRectStartBlockX,
+      state.brushRectStartBlockY,
+    );
+    for (const cell of cells) {
+      placeAt(state, cell.x, cell.y);
+    }
+    return;
+  }
+
+  placeAt(state, state.cursorBlockX, state.cursorBlockY);
+}
+
+/**
+ * Places the currently selected palette item at the given block coordinates.
+ * Internal helper — use placeAtCursor() externally.
+ */
+function placeAt(state: EditorState, bx: number, by: number): void {
+  const room = state.roomData;
+  const item = state.selectedPaletteItem;
+  if (room === null || item === null) return;
 
   if (!isInsideRoom(room, bx, by)) return;
 
   // ── Lighting layer ─────────────────────────────────────────────────────
-  // Paint/place handlers for the ambientLightBlockers and local lightSources
-  // authoring workflows. Ambient blockers are single-cell and idempotent:
-  // clicking the same cell twice leaves it painted once.
   if (item.category === 'lighting') {
     const xFloor = Math.floor(bx);
     const yFloor = Math.floor(by);
@@ -105,11 +133,10 @@ export function placeAtCursor(state: EditorState): void {
     }
     if (item.isLightSourceItem === 1) {
       if (!room.lightSources) room.lightSources = [];
-      // Sensible editor defaults: warm white, full brightness, ~6-block radius.
       room.lightSources.push({
         uid: allocateUid(state),
-        xBlock: xFloor,
-        yBlock: yFloor,
+        xBlock: Math.floor(bx),
+        yBlock: Math.floor(by),
         radiusBlocks: 6,
         colorR: 255,
         colorG: 230,
@@ -124,8 +151,8 @@ export function placeAtCursor(state: EditorState): void {
       if (!room.sunbeams) room.sunbeams = [];
       room.sunbeams.push({
         uid: allocateUid(state),
-        xBlock: xFloor,
-        yBlock: yFloor,
+        xBlock: Math.floor(bx),
+        yBlock: Math.floor(by),
         angleRad: Math.PI / 4,
         widthBlocks: 3,
         lengthBlocks: 12,
@@ -139,15 +166,26 @@ export function placeAtCursor(state: EditorState): void {
   }
 
   // ── Liquids layer ──────────────────────────────────────────────────────
+  // Liquids are paintable 1×1 tiles (no gravity, no floor requirement).
+  // Painting the same cell twice is idempotent — no duplicates created.
   if (item.category === 'liquids') {
-    const wBlock = item.defaultWidthBlocks ?? 4;
-    const hBlock = item.defaultHeightBlocks ?? 4;
+    const wBlock = item.defaultWidthBlocks ?? 1;
+    const hBlock = item.defaultHeightBlocks ?? 1;
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
     if (item.id === 'water_zone') {
       if (!room.waterZones) room.waterZones = [];
+      // Dedup: skip if an identical zone already exists at this position+size.
+      const alreadyWater = room.waterZones.some(
+        z => z.xBlock === bx && z.yBlock === by && z.wBlock === wBlock && z.hBlock === hBlock,
+      );
+      if (alreadyWater) return;
       room.waterZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
     } else if (item.id === 'lava_zone') {
       if (!room.lavaZones) room.lavaZones = [];
+      const alreadyLava = room.lavaZones.some(
+        z => z.xBlock === bx && z.yBlock === by && z.wBlock === wBlock && z.hBlock === hBlock,
+      );
+      if (alreadyLava) return;
       room.lavaZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
     }
     return;
@@ -158,16 +196,12 @@ export function placeAtCursor(state: EditorState): void {
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
     const isPlatformFlag: 0 | 1 = item.isPlatformItem === 1 ? 1 : 0;
 
-    // Compute ramp orientation from rotation steps and flip
     let rampOrientation: 0 | 1 | 2 | 3 | undefined;
     if (item.isRampItem === 1) {
       const base = state.placementRotationSteps % 4;
-      // flipH toggles within pairs: 0↔1, 2↔3
       rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
     }
 
-    // Compute platform edge from rotation steps
-    // R=0→top(0), R=1→right(3), R=2→bottom(1), R=3→left(2)
     const platformEdgeMap: readonly (0 | 1 | 2 | 3)[] = [0, 3, 1, 2];
     const platformEdge: 0 | 1 | 2 | 3 = isPlatformFlag === 1
       ? platformEdgeMap[state.placementRotationSteps % 4]
@@ -176,30 +210,29 @@ export function placeAtCursor(state: EditorState): void {
     const isPillarHalfWidthFlag: 0 | 1 = item.isPillarHalfWidthItem === 1 ? 1 : 0;
 
     if (item.isBouncePadItem === 1) {
-      const wBlock = getPlacementWidth(item, state.placementRotationSteps);
-      const hBlock = getPlacementHeight(item, state.placementRotationSteps);
-      let rampOrientation: 0 | 1 | 2 | 3 | undefined;
+      const bpW = getPlacementWidth(item, state.placementRotationSteps);
+      const bpH = getPlacementHeight(item, state.placementRotationSteps);
+      let bpRamp: 0 | 1 | 2 | 3 | undefined;
       if (item.isRampItem === 1) {
         const base = state.placementRotationSteps % 4;
-        rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+        bpRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
       }
-      if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
+      if (!rectFitsInsideRoom(room, bx, by, bpW, bpH)) return;
       const existingBouncePads = room.bouncePads ?? [];
       const overlapsBounce = existingBouncePads.some(b =>
-        bx < b.xBlock + b.wBlock && bx + wBlock > b.xBlock &&
-        by < b.yBlock + b.hBlock && by + hBlock > b.yBlock,
+        bx < b.xBlock + b.wBlock && bx + bpW > b.xBlock &&
+        by < b.yBlock + b.hBlock && by + bpH > b.yBlock,
       );
       if (overlapsBounce) return;
-      // Don't place over falling block tiles
-      if (rectOverlapsFallingBlocks(room, bx, by, wBlock, hBlock)) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, bpW, bpH)) return;
       if (!room.bouncePads) room.bouncePads = [];
       const bp: EditorBouncePad = {
         uid: allocateUid(state),
         xBlock: bx,
         yBlock: by,
-        wBlock,
-        hBlock,
-        rampOrientation,
+        wBlock: bpW,
+        hBlock: bpH,
+        rampOrientation: bpRamp,
         speedFactorIndex: item.bouncePadSpeedFactorIndex ?? 0,
       };
       room.bouncePads.push(bp);
@@ -207,36 +240,35 @@ export function placeAtCursor(state: EditorState): void {
     }
 
     if (item.isCrumbleBlockItem === 1) {
-      const wBlock = getPlacementWidth(item, state.placementRotationSteps);
-      const hBlock = getPlacementHeight(item, state.placementRotationSteps);
+      const cbW = getPlacementWidth(item, state.placementRotationSteps);
+      const cbH = getPlacementHeight(item, state.placementRotationSteps);
 
-      let rampOrientation: 0 | 1 | 2 | 3 | undefined;
+      let cbRamp: 0 | 1 | 2 | 3 | undefined;
       if (item.isRampItem === 1) {
         const base = state.placementRotationSteps % 4;
-        rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+        cbRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
       }
 
-      if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
+      if (!rectFitsInsideRoom(room, bx, by, cbW, cbH)) return;
 
-      // Prevent overlapping crumble blocks or falling block tiles
       const crumbles = room.crumbleBlocks ?? [];
       const overlapsCrumble = crumbles.some(b => {
         const bw = b.wBlock ?? 1;
         const bh = b.hBlock ?? 1;
-        return bx < b.xBlock + bw && bx + wBlock > b.xBlock &&
-               by < b.yBlock + bh && by + hBlock > b.yBlock;
+        return bx < b.xBlock + bw && bx + cbW > b.xBlock &&
+               by < b.yBlock + bh && by + cbH > b.yBlock;
       });
       if (overlapsCrumble) return;
-      if (rectOverlapsFallingBlocks(room, bx, by, wBlock, hBlock)) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, cbW, cbH)) return;
 
       if (!room.crumbleBlocks) room.crumbleBlocks = [];
       room.crumbleBlocks.push({
         uid: allocateUid(state),
         xBlock: bx,
         yBlock: by,
-        wBlock,
-        hBlock,
-        rampOrientation,
+        wBlock: cbW,
+        hBlock: cbH,
+        rampOrientation: cbRamp,
         variant: state.pendingCrumbleVariant,
         blockTheme: state.selectedBlockTheme,
       });
@@ -247,9 +279,7 @@ export function placeAtCursor(state: EditorState): void {
     if (item.isFallingBlockItem === 1) {
       const variant = item.fallingBlockVariant ?? 'tough';
       if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
-      // Don't place if a falling block tile already occupies this cell
       if (isFallingBlockAt(room, bx, by)) return;
-      // Don't place over solid objects (walls, crumble blocks, bounce pads)
       if (rectOverlapsSolidEditorObject(room, bx, by, 1, 1)) return;
       if (!room.fallingBlocks) room.fallingBlocks = [];
       const fb: EditorFallingBlock = {
@@ -263,7 +293,6 @@ export function placeAtCursor(state: EditorState): void {
     }
 
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
-    // Prevent overlapping walls or falling block tiles
     const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
     if (overlaps) return;
     if (rectOverlapsFallingBlocks(room, bx, by, wBlock, hBlock)) return;
@@ -284,13 +313,6 @@ export function placeAtCursor(state: EditorState): void {
   } else if (item.id === 'player_spawn') {
     room.playerSpawnBlock = [bx, by];
   } else if (item.id === 'room_transition') {
-    /**
-     * Placement convention for placementRotationSteps:
-     *   0 → right  (player walks rightward to exit)
-     *   1 → down   (player walks downward to exit)
-     *   2 → left   (player walks leftward to exit)
-     *   3 → up     (player walks upward to exit)
-     */
     const directionMap: ('right' | 'down' | 'left' | 'up')[] = ['right', 'down', 'left', 'up'];
     const direction = directionMap[state.placementRotationSteps % 4];
     const isHoriz = direction === 'left' || direction === 'right';
@@ -302,15 +324,12 @@ export function placeAtCursor(state: EditorState): void {
       ? Math.max(1, Math.min(DEFAULT_WIDTH, room.heightBlocks - 2))
       : Math.max(1, Math.min(DEFAULT_WIDTH, room.widthBlocks  - 2));
 
-    // Use cursor block as top-left anchor of the transition zone.
-    // Clamp so the zone stays within the room.
     const gw = DEFAULT_GRADIENT;
     const zoneW = isHoriz ? gw : openingSizeBlocks;
     const zoneH = isHoriz ? openingSizeBlocks : gw;
     const xBlock = Math.min(Math.max(0, bx), room.widthBlocks  - zoneW);
     const yBlock = Math.min(Math.max(0, by), room.heightBlocks - zoneH);
 
-    // Legacy backward-compat fields (computed from xBlock/yBlock).
     const positionBlock = isHoriz ? yBlock : xBlock;
 
     room.transitions.push({
@@ -325,6 +344,8 @@ export function placeAtCursor(state: EditorState): void {
       positionBlock,
     });
   } else if (item.id === 'save_tomb') {
+    // Dedup: no duplicate at same position.
+    if (room.saveTombs.some(t => t.xBlock === bx && t.yBlock === by)) return;
     room.saveTombs.push({
       uid: allocateUid(state),
       xBlock: bx,
@@ -345,6 +366,8 @@ export function placeAtCursor(state: EditorState): void {
     };
     room.dialogueTriggers.push(trigger);
   } else if (item.id === 'skill_tomb') {
+    // Dedup: no duplicate at same position.
+    if (room.skillTombs.some(t => t.xBlock === bx && t.yBlock === by)) return;
     room.skillTombs.push({
       uid: allocateUid(state),
       xBlock: bx,
@@ -353,6 +376,8 @@ export function placeAtCursor(state: EditorState): void {
     });
   } else if (item.isDustContainerItem === 1 || item.id === 'dust_container') {
     if (!room.dustContainers) room.dustContainers = [];
+    // Dedup: no duplicate at same position.
+    if (room.dustContainers.some(c => c.xBlock === bx && c.yBlock === by)) return;
     room.dustContainers.push({
       uid: allocateUid(state),
       xBlock: bx,
@@ -360,6 +385,7 @@ export function placeAtCursor(state: EditorState): void {
     });
   } else if (item.isDustContainerPieceItem === 1 || item.id === 'dust_container_piece') {
     if (!room.dustContainerPieces) room.dustContainerPieces = [];
+    if (room.dustContainerPieces.some(c => c.xBlock === bx && c.yBlock === by)) return;
     room.dustContainerPieces.push({
       uid: allocateUid(state),
       xBlock: bx,
@@ -377,11 +403,11 @@ export function placeAtCursor(state: EditorState): void {
   } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
     let dustCount: number;
     if (item.id === 'dust_pile_small') {
-      dustCount = 3;  // small pile — tight cluster
+      dustCount = 3;
     } else if (item.id === 'dust_pile_large') {
-      dustCount = 8;  // large pile — wide scatter
+      dustCount = 8;
     } else {
-      dustCount = 5;  // medium pile (dust_pile / dust_pile_medium)
+      dustCount = 5;
     }
     room.dustPiles.push({
       uid: allocateUid(state),
@@ -396,16 +422,13 @@ export function placeAtCursor(state: EditorState): void {
 
     let targetRow: number | null;
     if (kind === 'vine') {
-      // Vine: find the first solid block ABOVE the cursor, hang from its bottom.
       targetRow = findCeilingBlockRow(room, bx, by);
     } else {
-      // Floor decorations: find the first solid block AT OR BELOW the cursor.
       targetRow = findFloorBlockRow(room, bx, by);
     }
 
-    if (targetRow === null) return; // no valid surface — do not place
+    if (targetRow === null) return;
 
-    // Avoid duplicate decoration at the same cell and kind.
     const alreadyPlaced = (room.decorations ?? []).some(
       d => d.xBlock === bx && d.yBlock === targetRow && d.kind === kind,
     );
@@ -439,7 +462,6 @@ export function placeAtCursor(state: EditorState): void {
           anchorBXBlock: bx,
           anchorBYBlock: by,
           segmentCount: Math.max(2, Math.min(Math.round(lenBlocks * ROPE_SEGMENTS_PER_BLOCK), MAX_ROPE_SEGMENTS)),
-          // Default: both anchors fixed — creates a bridge rope between two points.
           isAnchorBFixedFlag: 1,
           destructibility: 'indestructible',
           thicknessIndex: 0,

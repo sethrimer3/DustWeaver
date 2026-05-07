@@ -11,7 +11,7 @@ import {
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
   AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
   CrumbleVariant, CRUMBLE_VARIANT_OPTIONS, RoomEdge, EditorUICallbacks,
-  DUST_KIND_OPTIONS,
+  DUST_KIND_OPTIONS, BrushMode,
 } from './editorState';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import {
@@ -103,7 +103,31 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   }
   container.appendChild(toolBar);
 
-  // ── Room dimensions ──────────────────────────────────────────────────────
+  // ── Brush mode selector ──────────────────────────────────────────────────
+  const brushRow = document.createElement('div');
+  brushRow.style.cssText = `
+    display: flex; gap: 4px; margin-bottom: 10px; align-items: center;
+  `;
+  const brushLabel = document.createElement('span');
+  brushLabel.textContent = 'Brush:';
+  brushLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); min-width: 38px;`;
+  brushRow.appendChild(brushLabel);
+
+  const brushModes: { mode: BrushMode; label: string }[] = [
+    { mode: 'single', label: '1' },
+    { mode: '3x3',   label: '3×3' },
+    { mode: '5x5',   label: '5×5' },
+    { mode: 'rect',  label: '▭' },
+  ];
+  const brushBtns: HTMLButtonElement[] = [];
+  for (const { mode, label } of brushModes) {
+    const btn = makeBtn(label, () => callbacks?.onBrushModeChange(mode));
+    btn.dataset.brushMode = mode;
+    btn.style.cssText += `flex: 1; font-size: 11px; padding: 3px 4px;`;
+    brushBtns.push(btn);
+    brushRow.appendChild(btn);
+  }
+  container.appendChild(brushRow);
   const roomDimDiv = document.createElement('div');
   roomDimDiv.style.cssText = `
     border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
@@ -441,6 +465,10 @@ export function createEditorUI(root: HTMLElement): EditorUI {
     // Update tool highlight
     for (const btn of toolBtns) {
       btn.style.background = btn.dataset.tool === state.activeTool ? ACTIVE_BG : BTN_BG;
+    }
+    // Update brush mode highlight
+    for (const btn of brushBtns) {
+      btn.style.background = btn.dataset.brushMode === state.brushMode ? ACTIVE_BG : BTN_BG;
     }
     // Update category highlight
     for (const btn of catBtns) {
