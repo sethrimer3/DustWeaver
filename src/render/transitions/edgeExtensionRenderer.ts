@@ -63,7 +63,7 @@ export function renderEdgeExtension(
   bgColor: string,
   lightingEffect: string,
 ): void {
-  const tilePx = BLOCK_SIZE_SMALL * zoom;
+  const tileSizePx = BLOCK_SIZE_SMALL * zoom;
   const isFullyLit = lightingEffect === 'FullyLit';
   // DarkRoom extension tiles should not have the ambient tint applied because
   // the DarkRoom overlay already darkens everything uniformly; adding a tint
@@ -75,12 +75,12 @@ export function renderEdgeExtension(
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i];
 
-    const screenX = tile.colBlock * tilePx + ox;
-    const screenY = tile.rowBlock * tilePx + oy;
+    const screenX = tile.colBlock * tileSizePx + ox;
+    const screenY = tile.rowBlock * tileSizePx + oy;
 
     // Viewport cull — skip tiles entirely outside the virtual canvas
-    if (screenX + tilePx < 0 || screenX > vpW) continue;
-    if (screenY + tilePx < 0 || screenY > vpH) continue;
+    if (screenX + tileSizePx < 0 || screenX > vpW) continue;
+    if (screenY + tileSizePx < 0 || screenY > vpH) continue;
 
     if (tile.isSolid) {
       // Compute ambient darkness alpha for this extension step.
@@ -109,8 +109,8 @@ export function renderEdgeExtension(
       ctx.fillRect(
         Math.round(screenX),
         Math.round(screenY),
-        Math.ceil(tilePx),
-        Math.ceil(tilePx),
+        Math.ceil(tileSizePx),
+        Math.ceil(tileSizePx),
       );
     }
   }

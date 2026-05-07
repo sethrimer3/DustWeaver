@@ -58,18 +58,18 @@ export function renderEditorOverlays(
   // ── Edge extension ghost tiles ────────────────────────────────────────────
   // Drawn before all other overlays so grid / wall borders sit on top.
   if (edgeExtensionCache !== null && edgeExtensionCache !== undefined) {
-    const tilePx = BLOCK_SIZE_SMALL * zoom;
+    const tileSizePx = BLOCK_SIZE_SMALL * zoom;
     const tiles = edgeExtensionCache.tiles;
     ctx.fillStyle = 'rgba(60,120,255,0.30)';
     for (let i = 0; i < tiles.length; i++) {
       const tile = tiles[i];
       if (!tile.isSolid) continue;
-      const sx = Math.round(tile.colBlock * tilePx + offsetXPx);
-      const sy = Math.round(tile.rowBlock * tilePx + offsetYPx);
+      const sx = Math.round(tile.colBlock * tileSizePx + offsetXPx);
+      const sy = Math.round(tile.rowBlock * tileSizePx + offsetYPx);
       // Viewport cull
-      if (sx + tilePx < 0 || sx > canvasWidth)  continue;
-      if (sy + tilePx < 0 || sy > canvasHeight) continue;
-      ctx.fillRect(sx, sy, Math.ceil(tilePx), Math.ceil(tilePx));
+      if (sx + tileSizePx < 0 || sx > canvasWidth)  continue;
+      if (sy + tileSizePx < 0 || sy > canvasHeight) continue;
+      ctx.fillRect(sx, sy, Math.ceil(tileSizePx), Math.ceil(tileSizePx));
     }
   }
 
