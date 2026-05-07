@@ -305,3 +305,43 @@ In `gameRender.ts`, active preview bubbles are injected as `LightSourcePx` entri
 | `src/editor/editorUI.ts` | Brush size selector UI |
 | `src/editor/editorPlacementPreviewDrawer.ts` | Rect brush preview overlay |
 | `src/build-info.ts` | BUILD_NUMBER 263 → 264 |
+
+---
+
+## BUILD 265 — Liquid Visual Effects (Rounded Corners, Wave Edges, Lava Sparks)
+
+### What Was Completed
+
+1. **Increased MAX_WATER_ZONES and MAX_LAVA_ZONES** (`src/sim/worldHazardState.ts`):
+   - Raised from 8 → 512 to support the 1×1 tile painting added in BUILD 264.
+
+2. **New `src/render/liquidRenderer.ts`** — All liquid visual logic extracted from `hazards.ts`:
+   - **Neighbor-aware rounded corners**: Each liquid zone checks all 4 orthogonal directions for adjacent walls or other liquid zones. Free (unexposed) corners receive an `arcTo` arc radius of `0.4 × BLOCK_SIZE_MEDIUM`. Corners touching walls or other liquids stay square, so adjacent liquids merge cleanly.
+   - **Smooth sine-wave surface**: The exposed top edge of each zone is drawn as a multi-step polyline driven by two overlapping sine waves (`WAVE_FREQ × tick` + spatial frequency). The amplitude tapers to zero near rounded corners and at blocked sides, preventing discontinuities.
+   - **Lava spark particles**: Module-level `LavaSpark` pool (max 256). Each tick, exposed lava edges randomly emit sparks (probability `SPARK_EMIT_PROB = 0.055` per block-width of edge per tick). Sparks receive a perpendicular outward velocity + random tangential component, then integrate gravity (`0.10 wu/tick²`) and slight drag each tick. They fade from bright yellow-white to red over `SPARK_LIFETIME_TICKS = 28` ticks. Sparks can emerge from any exposed edge (top, bottom, left, right).
+
+3. **Updated `src/render/hazards.ts`**:
+   - Removed the old inline water/lava rendering loops.
+   - Now delegates to `renderWaterZones()` and `renderLavaZones()` from `liquidRenderer.ts`.
+
+### Architecture Notes
+
+- All liquid effects are purely cosmetic render-layer state — no sim state is modified.
+- The `sparks` pool in `liquidRenderer.ts` is module-level (reset survives room transitions). Sparks automatically expire after `SPARK_LIFETIME_TICKS` ticks.
+- The neighbor check (`isSideBlocked`) is O(wallCount + waterZoneCount + lavaZoneCount) per zone per side. With 512 max zones this could be up to ~512 × 4 × 1000 operations per frame in pathological cases. For typical rooms with few hundred tiles this is fine. A spatial hash could be added later if profiling shows a bottleneck.
+
+### Known Limitations / Follow-Up
+
+- **Water rounded corners**: Currently water only has top-corner rounding on 4 corners. Side/bottom corners also round. This looks correct for isolated cells. If the water pool is intentionally contained by walls on 3 sides with only the top free, it will also render correctly.
+- **Lava sparks and room transitions**: Sparks are not cleared on room load. They naturally expire within ~28 ticks (~0.5 seconds at 60fps). A future improvement could clear the pool on room load for instant cleanup.
+- **Performance with 512 zones**: The current neighbor check is O(n) per zone side. For rooms with many hundreds of 1×1 zones, this may be noticeable. Add a spatial hash or sorted-list acceleration if frame time regresses.
+- **Rounded corner clipping**: When a liquid zone is adjacent to a solid wall, the corner arc is suppressed (corner remains sharp). This is intentional — liquid touching a wall should have a hard edge there.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `src/sim/worldHazardState.ts` | MAX_WATER_ZONES and MAX_LAVA_ZONES 8 → 512 |
+| `src/render/liquidRenderer.ts` | New: neighbor checks, rounded corners, wave surface, lava sparks |
+| `src/render/hazards.ts` | Delegated water/lava rendering to liquidRenderer; removed inline loops |
+| `src/build-info.ts` | BUILD_NUMBER 264 → 265 |

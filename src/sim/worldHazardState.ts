@@ -14,10 +14,10 @@
 export const MAX_SPIKES = 32;
 /** Maximum number of springboards per room. */
 export const MAX_SPRINGBOARDS = 16;
-/** Maximum number of water zones per room. */
-export const MAX_WATER_ZONES = 8;
-/** Maximum number of lava zones per room. */
-export const MAX_LAVA_ZONES = 8;
+/** Maximum number of water zones per room (raised to 512 to support 1×1 tile painting). */
+export const MAX_WATER_ZONES = 512;
+/** Maximum number of lava zones per room (raised to 512 to support 1×1 tile painting). */
+export const MAX_LAVA_ZONES = 512;
 /** Maximum number of breakable blocks per room. */
 export const MAX_BREAKABLE_BLOCKS = 32;
 /** Maximum number of crumble blocks per room. */

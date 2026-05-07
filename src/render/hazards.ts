@@ -4,6 +4,9 @@
  * All coordinates are world-space, transformed by camera offset + zoom.
  * Drawing order: water/lava zones (background) → breakable blocks →
  *   springboards → spikes → jars → fireflies (foreground).
+ *
+ * Liquid zone rendering is delegated to liquidRenderer.ts, which handles
+ * neighbor-aware rounded corners, sine-wave surfaces, and lava sparks.
  */
 
 import { WorldState } from '../sim/world';
@@ -14,6 +17,7 @@ import {
   SPIKE_DIR_LEFT,
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
+import { renderWaterZones, renderLavaZones } from './liquidRenderer';
 
 const BLOCK_HALF = BLOCK_SIZE_MEDIUM * 0.5;
 
@@ -30,112 +34,11 @@ export function renderHazards(
 ): void {
   ctx.save();
 
-  // ── Water zones (depth-gradient fill + 3-wave surface + caustics + foam) ─
-  for (let i = 0; i < world.waterZoneCount; i++) {
-    const x = world.waterZoneXWorld[i] * zoom + offsetXPx;
-    const y = world.waterZoneYWorld[i] * zoom + offsetYPx;
-    const w = world.waterZoneWWorld[i] * zoom;
-    const h = world.waterZoneHWorld[i] * zoom;
+  // ── Water zones (neighbor-aware rounded corners + wave surface) ──────────
+  renderWaterZones(ctx, world, offsetXPx, offsetYPx, zoom, tick);
 
-    // Three overlapping surface waves with different frequencies and phases
-    const wave1 = Math.sin(tick * 0.08 + i * 1.3) * 1.5 * zoom;
-    const wave2 = Math.sin(tick * 0.05 + i * 0.7 + 1.0) * 0.8 * zoom;
-    const wave3 = Math.sin(tick * 0.12 + i * 2.1 + 2.5) * 0.5 * zoom;
-    const surfaceOffsetPx = wave1 + wave2 + wave3;
-
-    const surfaceY = y + surfaceOffsetPx;
-
-    // Depth gradient: lighter cyan at top fading to deeper blue at bottom
-    const grad = ctx.createLinearGradient(0, surfaceY, 0, y + h);
-    grad.addColorStop(0.0, 'rgba(100,190,255,0.35)');
-    grad.addColorStop(0.4, 'rgba(40,120,220,0.45)');
-    grad.addColorStop(1.0, 'rgba(10,60,160,0.60)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(x, surfaceY, w, h - surfaceOffsetPx);
-
-    // Animated caustic dots — scattered bright flecks simulating light refraction
-    const causticSeed = tick * 0.04 + i * 17.3;
-    ctx.fillStyle = 'rgba(160,220,255,0.18)';
-    for (let c = 0; c < 6; c++) {
-      const cx = x + ((Math.sin(causticSeed + c * 2.3) * 0.5 + 0.5)) * w;
-      const cy = surfaceY + 3 * zoom + ((Math.cos(causticSeed * 0.7 + c * 1.9) * 0.5 + 0.5)) * (h * 0.6);
-      const cr = (0.6 + Math.sin(causticSeed + c) * 0.4) * zoom;
-      ctx.fillRect(cx - cr, cy - cr, cr * 2, cr * 2);
-    }
-
-    // Foam line at the surface
-    ctx.strokeStyle = 'rgba(200,240,255,0.55)';
-    ctx.lineWidth = zoom * 0.8;
-    ctx.beginPath();
-    ctx.moveTo(x, surfaceY);
-    // Slightly wavy foam edge using a second small wave
-    for (let fx = 0; fx <= w; fx += zoom * 2) {
-      const foamY = surfaceY + Math.sin(tick * 0.15 + fx * 0.05 + i) * 0.4 * zoom;
-      ctx.lineTo(x + fx, foamY);
-    }
-    ctx.stroke();
-
-    // Secondary, dimmer wave line slightly below the surface
-    ctx.strokeStyle = 'rgba(80,160,255,0.30)';
-    ctx.lineWidth = zoom * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, surfaceY + 2 * zoom);
-    ctx.lineTo(x + w, surfaceY + 2 * zoom);
-    ctx.stroke();
-  }
-
-  // ── Lava zones (pulsing glow + depth gradient + hot-spot dots) ────────
-  for (let i = 0; i < world.lavaZoneCount; i++) {
-    const x = world.lavaZoneXWorld[i] * zoom + offsetXPx;
-    const y = world.lavaZoneYWorld[i] * zoom + offsetYPx;
-    const w = world.lavaZoneWWorld[i] * zoom;
-    const h = world.lavaZoneHWorld[i] * zoom;
-
-    // Pulsing base glow with slight per-zone phase offset
-    const pulse = 0.30 + Math.sin(tick * 0.06 + i * 2.1) * 0.08;
-
-    // Depth gradient: bright orange at surface, deep red at bottom
-    const lavaGrad = ctx.createLinearGradient(0, y, 0, y + h);
-    lavaGrad.addColorStop(0.0, `rgba(255,120,20,${pulse})`);
-    lavaGrad.addColorStop(0.5, `rgba(220,50,5,${pulse * 0.9})`);
-    lavaGrad.addColorStop(1.0, `rgba(140,20,0,${pulse * 1.2})`);
-    ctx.fillStyle = lavaGrad;
-    ctx.fillRect(x, y, w, h);
-
-    // Hot-spot dots — bright orange blobs drifting up from the depths
-    const hotSeed = tick * 0.03 + i * 11.7;
-    for (let d = 0; d < 5; d++) {
-      const dotX = x + ((Math.sin(hotSeed * 0.8 + d * 3.1) * 0.5 + 0.5)) * w;
-      // Dots rise slowly and wrap at the top
-      const rawY = ((hotSeed * 0.4 + d * 0.7) % 1.0);
-      const dotY = y + h - rawY * h * 1.2;
-      if (dotY < y) continue;
-      const dotR = (0.8 + Math.sin(hotSeed + d * 2.7) * 0.4) * zoom;
-      const dotAlpha = 0.25 + Math.sin(hotSeed * 1.3 + d) * 0.12;
-      ctx.fillStyle = `rgba(255,160,40,${dotAlpha})`;
-      ctx.fillRect(dotX - dotR, dotY - dotR, dotR * 2, dotR * 2);
-    }
-
-    // Animated surface shimmer — two overlapping waves
-    const shim1 = Math.sin(tick * 0.10 + i * 3.0) * 1.2 * zoom;
-    const shim2 = Math.sin(tick * 0.07 + i * 1.4 + 1.8) * 0.6 * zoom;
-    const shimY = shim1 + shim2;
-
-    ctx.strokeStyle = 'rgba(255,160,30,0.65)';
-    ctx.lineWidth = zoom * 0.9;
-    ctx.beginPath();
-    ctx.moveTo(x, y + shimY);
-    ctx.lineTo(x + w, y + shimY);
-    ctx.stroke();
-
-    // Secondary crust line
-    ctx.strokeStyle = 'rgba(200,60,0,0.40)';
-    ctx.lineWidth = zoom * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, y + shimY + 2 * zoom);
-    ctx.lineTo(x + w, y + shimY + 2 * zoom);
-    ctx.stroke();
-  }
+  // ── Lava zones (neighbor-aware rounded corners + wave + spark particles) ─
+  renderLavaZones(ctx, world, offsetXPx, offsetYPx, zoom, tick);
 
   // ── Breakable blocks (cracked appearance) ──────────────────────────────
   for (let i = 0; i < world.breakableBlockCount; i++) {
