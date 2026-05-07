@@ -141,6 +141,16 @@ function _transitionCenterScreen(
   };
 }
 
+// ── Pre-allocated candidates buffer ─────────────────────────────────────────
+// Reused across frames to avoid per-frame allocation in the hot path.
+// Sized to accommodate the maximum plausible number of transitions per room.
+const MAX_TRANSITIONS_PER_ROOM = 16;
+type _Candidate = { index: number; dist: number };
+const _candidateBuffer: _Candidate[] = [];
+for (let _i = 0; _i < MAX_TRANSITIONS_PER_ROOM; _i++) {
+  _candidateBuffer.push({ index: 0, dist: 0 });
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -169,10 +179,8 @@ export function computePreviewBubbles(
 ): number {
   const transitions = room.transitions;
 
-  // Compute distance for each transition and collect candidates
-  type Candidate = { index: number; dist: number };
-  // Reuse a small fixed-size local array (max transitions per room is tiny)
-  const candidates: Candidate[] = [];
+  // Collect nearby-transition candidates into pre-allocated buffer.
+  let candidateCount = 0;
 
   for (let i = 0; i < transitions.length; i++) {
     const dist = _distanceToTransitionEdge(
@@ -182,14 +190,28 @@ export function computePreviewBubbles(
       room.widthBlocks,
       room.heightBlocks,
     );
-    if (dist < PREVIEW_START_DISTANCE_WORLD) {
-      candidates.push({ index: i, dist });
+    if (dist < PREVIEW_START_DISTANCE_WORLD && candidateCount < MAX_TRANSITIONS_PER_ROOM) {
+      _candidateBuffer[candidateCount].index = i;
+      _candidateBuffer[candidateCount].dist  = dist;
+      candidateCount++;
     }
   }
 
-  // Sort nearest-first, cap at PREVIEW_MAX_BUBBLES
-  candidates.sort((a, b) => a.dist - b.dist);
-  const count = Math.min(candidates.length, PREVIEW_MAX_BUBBLES);
+  // Sort nearest-first using insertion sort (tiny count, O(n²) is fine here)
+  for (let i = 1; i < candidateCount; i++) {
+    const keyIdx  = _candidateBuffer[i].index;
+    const keyDist = _candidateBuffer[i].dist;
+    let j = i - 1;
+    while (j >= 0 && _candidateBuffer[j].dist > keyDist) {
+      _candidateBuffer[j + 1].index = _candidateBuffer[j].index;
+      _candidateBuffer[j + 1].dist  = _candidateBuffer[j].dist;
+      j--;
+    }
+    _candidateBuffer[j + 1].index = keyIdx;
+    _candidateBuffer[j + 1].dist  = keyDist;
+  }
+
+  const count = Math.min(candidateCount, PREVIEW_MAX_BUBBLES);
 
   // Ensure output array is long enough
   while (out.length < count) {
@@ -197,11 +219,11 @@ export function computePreviewBubbles(
   }
 
   for (let i = 0; i < count; i++) {
-    const { index, dist } = candidates[i];
-    const t = transitions[index];
+    const cand = _candidateBuffer[i];
+    const t = transitions[cand.index];
 
-    // t = 0 at the start distance, 1 at the edge
-    const rawT = Math.max(0, Math.min(1, 1 - dist / PREVIEW_START_DISTANCE_WORLD));
+    // rawT = 0 at the start distance, 1 at the edge
+    const rawT = Math.max(0, Math.min(1, 1 - cand.dist / PREVIEW_START_DISTANCE_WORLD));
     const eased = _smoothstep(rawT);
 
     const radiusPx = _lerp(PREVIEW_MIN_RADIUS_PX, PREVIEW_MAX_RADIUS_PX, eased);
@@ -211,11 +233,11 @@ export function computePreviewBubbles(
       t, room.widthBlocks, room.heightBlocks, ox, oy, zoom,
     );
 
-    out[i].centerXPx      = cx;
-    out[i].centerYPx      = cy;
-    out[i].radiusPx       = radiusPx;
-    out[i].opacity        = opacity;
-    out[i].transitionIndex = index;
+    out[i].centerXPx       = cx;
+    out[i].centerYPx       = cy;
+    out[i].radiusPx        = radiusPx;
+    out[i].opacity         = opacity;
+    out[i].transitionIndex = cand.index;
   }
 
   return count;

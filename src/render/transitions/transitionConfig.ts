@@ -14,11 +14,6 @@
 export const TRANSITION_MAX_DURATION_MS = 280;
 
 /**
- * Total transition duration at sprint speed (ms).
- */
-export const TRANSITION_MID_DURATION_MS = 160;
-
-/**
  * Total transition duration when moving faster than sprint (grappling, etc.) (ms).
  * Should feel nearly seamless at peak speed.
  */
