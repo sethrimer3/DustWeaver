@@ -185,17 +185,59 @@ In `src/editor/editorRenderer.ts`, draw the edge extension tiles with a distinct
 
 In `previewBubbleState.ts`, reduce `opacity` to 0 when the connected room's sprites are not yet ready (`areRoomSpritesReady` from `roomAssetPreloader.ts`).
 
+---
+
+# BUILD 263 — Transition System Visual Improvements
+
+## What was implemented (BUILD 263)
+
+### 1. Sprite-based edge extension tiles ✅
+
+Extension tiles now render using the same auto-tiling sprite system as the main wall renderer.
+
+- `EdgeExtensionTile` gains `extensionStep: number` (1 = adjacent to room, N = outermost layer).
+- `EdgeExtensionCache` gains `occupancySet: ReadonlySet<string>` — a pre-built set of solid tile positions (extension + room edge cells) used for per-tile neighbour-mask lookups.
+- `blockSpriteRenderer.ts` exports new `renderSingleExtensionTile(ctx, col, row, theme, occupancy, ox, oy, scale, blockSizePx, darknessAlpha)` that handles procedural, folder-based, and legacy sprite paths.
+- `edgeExtensionRenderer.ts` calls `renderSingleExtensionTile` for every solid extension tile; the solid-colour fallback path is removed.
+
+### 2. Connected-room tile preview inside the bubble
+
+**Status:** Still deferred. Requires pre-rendering adjacent room wall tiles to an OffscreenCanvas (see `roomPreviewCache.ts` stub in nextSteps.md). Preview bubbles still show a glow-only cue.
+
+### 3. FullyLit empty-extension background
+
+Empty extension tiles in FullyLit mode are filled with `bgColor` (unchanged from BUILD 262). Extension of the `renderWorldBackground` clip rect is deferred to a future pass.
+
+### 4. Ambient lighting integration for edge tiles ✅
+
+- `_extensionDepth(step)` maps extension step → air depth (step 1 → depth 2 = 30 % dark; step 2 → depth 3 = 70 %; step 3+ → 100 %).
+- `getDarknessAlphaFromAirDepth` tint is applied as a `darknessAlpha` overlay on top of each extension sprite.
+- Tinting is skipped for `FullyLit` (no tint) and `DarkRoom` (overlay handles it globally).
+
+### 5. DarkRoom overlay integration for preview bubbles ✅
+
+In `gameRender.ts`, active preview bubbles are injected as `LightSourcePx` entries into the DarkRoom lights array before `darkRoomOverlay.render()`.  The `innerFraction` is scaled by `b.opacity` so the aperture fades in as the player approaches — matching the existing bubble glow animation.
+
+### 6. Editor visibility of edge extension layer ✅
+
+- `renderEditorOverlays` gains an optional `edgeExtensionCache` parameter.
+- When provided, solid extension tiles are drawn as 30 % transparent blue rectangles before the grid and wall overlays.
+- `editorController.ts` builds the cache in `loadRoomForEditing` (via `buildEdgeExtensionCache`) and passes it to `renderEditorOverlays`.
+
 ## File map
 
 | File | Status | Notes |
 |---|---|---|
 | `src/render/transitions/transitionConfig.ts` | ✅ Done | All tunables |
 | `src/render/transitions/transitionState.ts` | ✅ Done | Types only |
-| `src/render/transitions/edgeExtensionCache.ts` | ✅ Done | Build logic |
-| `src/render/transitions/edgeExtensionRenderer.ts` | ⚠️ Partial | Sprite rendering TBD |
+| `src/render/transitions/edgeExtensionCache.ts` | ✅ Done | `extensionStep` + `occupancySet` added |
+| `src/render/transitions/edgeExtensionRenderer.ts` | ✅ Done | Sprite rendering + ambient tint |
 | `src/render/transitions/previewBubbleState.ts` | ✅ Done | Glow proximity |
-| `src/render/transitions/previewBubbleRenderer.ts` | ⚠️ Partial | Room tiles TBD |
+| `src/render/transitions/previewBubbleRenderer.ts` | ⚠️ Partial | Room tiles still TBD |
 | `src/render/transitions/roomPreviewCache.ts` | ❌ Not started | See #2 above |
+| `src/render/walls/blockSpriteRenderer.ts` | ✅ Done | `renderSingleExtensionTile` export |
 | `src/screens/gameScreen.ts` | ✅ Done | Speed-based fade, camera entry |
-| `src/screens/gameRender.ts` | ✅ Done | Edge ext + bubble integration |
+| `src/screens/gameRender.ts` | ✅ Done | DarkRoom bubble lights added |
+| `src/editor/editorRenderer.ts` | ✅ Done | Edge extension ghost overlay |
+| `src/editor/editorController.ts` | ✅ Done | Cache build + pass-through |
 | `src/render/hud/renderProfiler.ts` | ✅ Done | Transition debug panel |
