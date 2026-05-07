@@ -509,30 +509,67 @@ export function getEnemyFootprintBlocks(enemy: EditorEnemy): { wBlock: number; h
 export function drawTransitionZone(
   ctx: CanvasRenderingContext2D,
   t: EditorTransition,
-  room: EditorRoomData,
+  _room: EditorRoomData,
   ox: number, oy: number, zoom: number,
   color: string,
   doorNumber: number,
+  isHovered: boolean,
 ): void {
-  const DEPTH = 6;
-  let xBlock: number, yBlock: number, wBlock: number, hBlock: number;
-  if (t.direction === 'left' || t.direction === 'right') {
-    const zoneX = t.depthBlock !== undefined
-      ? t.depthBlock
-      : (t.direction === 'left' ? 0 : room.widthBlocks - DEPTH);
-    xBlock = zoneX; yBlock = t.positionBlock; wBlock = DEPTH; hBlock = t.openingSizeBlocks;
-  } else {
-    const zoneY = t.depthBlock !== undefined
-      ? t.depthBlock
-      : (t.direction === 'up' ? 0 : room.heightBlocks - DEPTH);
-    xBlock = t.positionBlock; yBlock = zoneY; wBlock = t.openingSizeBlocks; hBlock = DEPTH;
-  }
+  const gw = t.gradientWidthBlocks ?? 3;
+  const isHoriz = t.direction === 'left' || t.direction === 'right';
+  const xBlock = t.xBlock;
+  const yBlock = t.yBlock;
+  const wBlock = isHoriz ? gw : t.openingSizeBlocks;
+  const hBlock = isHoriz ? t.openingSizeBlocks : gw;
 
+  const bs = BLOCK_SIZE_SMALL;
+
+  // Draw translucent zone rectangle
   drawBlockRect(ctx, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom, color, 2);
 
+  // Draw thick red trigger edge
+  const triggerEdgeColor = '#ff2222';
+  const triggerLineWidth = Math.max(2, 3 * zoom);
+  ctx.save();
+  ctx.strokeStyle = triggerEdgeColor;
+  ctx.lineWidth = triggerLineWidth;
+  ctx.beginPath();
+  if (t.direction === 'right') {
+    // Trigger edge = right edge
+    const ex = (xBlock + wBlock) * bs * zoom + ox;
+    const ey1 = yBlock * bs * zoom + oy;
+    const ey2 = (yBlock + hBlock) * bs * zoom + oy;
+    ctx.moveTo(ex, ey1); ctx.lineTo(ex, ey2);
+  } else if (t.direction === 'left') {
+    // Trigger edge = left edge
+    const ex = xBlock * bs * zoom + ox;
+    const ey1 = yBlock * bs * zoom + oy;
+    const ey2 = (yBlock + hBlock) * bs * zoom + oy;
+    ctx.moveTo(ex, ey1); ctx.lineTo(ex, ey2);
+  } else if (t.direction === 'down') {
+    // Trigger edge = bottom edge
+    const ey = (yBlock + hBlock) * bs * zoom + oy;
+    const ex1 = xBlock * bs * zoom + ox;
+    const ex2 = (xBlock + wBlock) * bs * zoom + ox;
+    ctx.moveTo(ex1, ey); ctx.lineTo(ex2, ey);
+  } else {
+    // up: trigger edge = top edge
+    const ey = yBlock * bs * zoom + oy;
+    const ex1 = xBlock * bs * zoom + ox;
+    const ex2 = (xBlock + wBlock) * bs * zoom + ox;
+    ctx.moveTo(ex1, ey); ctx.lineTo(ex2, ey);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Draw hover arrow pointing outward in the transition's facing direction
+  if (isHovered) {
+    _drawTransitionHoverArrow(ctx, t, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom);
+  }
+
   // Draw label with door number
-  const cx = (xBlock + wBlock / 2) * BLOCK_SIZE_SMALL * zoom + ox;
-  const cy = (yBlock + hBlock / 2) * BLOCK_SIZE_SMALL * zoom + oy;
+  const cx = (xBlock + wBlock / 2) * bs * zoom + ox;
+  const cy = (yBlock + hBlock / 2) * bs * zoom + oy;
   ctx.fillStyle = '#fff';
   ctx.font = '11px monospace';
   ctx.textAlign = 'center';
@@ -540,3 +577,82 @@ export function drawTransitionZone(
   const label = t.targetRoomId ? `#${doorNumber} →${t.targetRoomId}` : `#${doorNumber} (unlinked)`;
   ctx.fillText(label, cx, cy);
 }
+
+/** Draws a red arrow starting at the trigger edge, pointing outward in the facing direction. */
+function _drawTransitionHoverArrow(
+  ctx: CanvasRenderingContext2D,
+  t: EditorTransition,
+  xBlock: number,
+  yBlock: number,
+  wBlock: number,
+  hBlock: number,
+  ox: number,
+  oy: number,
+  zoom: number,
+): void {
+  const bs = BLOCK_SIZE_SMALL;
+  /** Minimum arrow shaft length in pixels. */
+  const ARROW_MIN_LEN_PX = 12;
+  /** Scale factor for arrow length relative to block size. */
+  const ARROW_LEN_BLOCKS = 3;
+  /** Fraction of arrow length used for the arrowhead. */
+  const ARROW_HEAD_RATIO = 0.35;
+  /** Minimum arrowhead length in pixels. */
+  const ARROW_HEAD_MIN_PX = 6;
+  /** Half-angle of the arrowhead in radians (30°). */
+  const ARROW_HEAD_ANGLE_RAD = Math.PI / 6;
+
+  const arrowLenPx = Math.max(ARROW_MIN_LEN_PX, ARROW_LEN_BLOCKS * bs * zoom);
+  const headLen = Math.max(ARROW_HEAD_MIN_PX, arrowLenPx * ARROW_HEAD_RATIO);
+
+  // Center of the trigger edge
+  let startX: number, startY: number, dirX: number, dirY: number;
+  if (t.direction === 'right') {
+    startX = (xBlock + wBlock) * bs * zoom + ox;
+    startY = (yBlock + hBlock / 2) * bs * zoom + oy;
+    dirX = 1; dirY = 0;
+  } else if (t.direction === 'left') {
+    startX = xBlock * bs * zoom + ox;
+    startY = (yBlock + hBlock / 2) * bs * zoom + oy;
+    dirX = -1; dirY = 0;
+  } else if (t.direction === 'down') {
+    startX = (xBlock + wBlock / 2) * bs * zoom + ox;
+    startY = (yBlock + hBlock) * bs * zoom + oy;
+    dirX = 0; dirY = 1;
+  } else {
+    startX = (xBlock + wBlock / 2) * bs * zoom + ox;
+    startY = yBlock * bs * zoom + oy;
+    dirX = 0; dirY = -1;
+  }
+
+  const endX = startX + dirX * arrowLenPx;
+  const endY = startY + dirY * arrowLenPx;
+
+  ctx.save();
+  ctx.strokeStyle = '#ff2222';
+  ctx.fillStyle = '#ff2222';
+  ctx.lineWidth = Math.max(2, 2 * zoom);
+
+  // Shaft
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+
+  // Arrow head (two lines)
+  const angleRad = Math.atan2(dirY, dirX);
+  const h1X = endX - headLen * Math.cos(angleRad - ARROW_HEAD_ANGLE_RAD);
+  const h1Y = endY - headLen * Math.sin(angleRad - ARROW_HEAD_ANGLE_RAD);
+  const h2X = endX - headLen * Math.cos(angleRad + ARROW_HEAD_ANGLE_RAD);
+  const h2Y = endY - headLen * Math.sin(angleRad + ARROW_HEAD_ANGLE_RAD);
+
+  ctx.beginPath();
+  ctx.moveTo(endX, endY);
+  ctx.lineTo(h1X, h1Y);
+  ctx.moveTo(endX, endY);
+  ctx.lineTo(h2X, h2Y);
+  ctx.stroke();
+
+  ctx.restore();
+}
+

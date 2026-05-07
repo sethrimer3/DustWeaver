@@ -15,6 +15,7 @@
 import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
 import { ROOM_REGISTRY, setRoomTransitionLink } from '../levels/rooms';
 import { effectiveRoomName } from './editorVisualMapHelpers';
+import { validateTransitionLink, transitionLinkWarningMessage } from './transitionValidation';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -70,23 +71,28 @@ export interface VisualMapLinkContext {
 /**
  * Returns the [xBlock, yBlock] spawn position for a player entering a room
  * through the given transition, inset from the door edge.
+ * Uses xBlock/yBlock if available, otherwise falls back to positionBlock.
  */
 export function computeSpawnBlockForMapLink(
   room: RoomDef,
   transition: RoomTransitionDef,
 ): readonly [number, number] {
   const SPAWN_INSET_BLOCKS = 3;
-  const spawnOffset = Math.floor(transition.openingSizeBlocks / 2);
+  // For left/right: opening runs along Y axis → center Y = yBlock + half opening.
+  // For up/down:   opening runs along X axis → center X = xBlock + half opening.
+  const openingCenterY = (transition.yBlock ?? transition.positionBlock) + Math.floor(transition.openingSizeBlocks / 2);
+  const openingCenterX = (transition.xBlock ?? transition.positionBlock) + Math.floor(transition.openingSizeBlocks / 2);
+
   if (transition.direction === 'left') {
-    return [SPAWN_INSET_BLOCKS, transition.positionBlock + spawnOffset];
+    return [SPAWN_INSET_BLOCKS, openingCenterY];
   }
   if (transition.direction === 'right') {
-    return [room.widthBlocks - SPAWN_INSET_BLOCKS - 1, transition.positionBlock + spawnOffset];
+    return [room.widthBlocks - SPAWN_INSET_BLOCKS - 1, openingCenterY];
   }
   if (transition.direction === 'up') {
-    return [transition.positionBlock + spawnOffset, SPAWN_INSET_BLOCKS];
+    return [openingCenterX, SPAWN_INSET_BLOCKS];
   }
-  return [transition.positionBlock + spawnOffset, room.heightBlocks - SPAWN_INSET_BLOCKS - 1];
+  return [openingCenterX, room.heightBlocks - SPAWN_INSET_BLOCKS - 1];
 }
 
 // ── Link persistence ──────────────────────────────────────────────────────────
@@ -249,10 +255,44 @@ export function showLinkRoomsPrompt(
   }, 5000);
 }
 
+/**
+ * Shows a temporary warning popup (non-interactive) when a door link is invalid.
+ * Auto-dismisses after 4 seconds.
+ */
+export function showLinkWarningPopup(ctx: VisualMapLinkContext, message: string): void {
+  const popupEl = document.createElement('div');
+  popupEl.style.cssText = `
+    position: absolute; top: 64px; left: 16px; z-index: 1300;
+    min-width: 210px; max-width: 300px; overflow: hidden; border-radius: 4px;
+    background: rgba(120,40,0,0.96); border: 1px solid rgba(255,120,0,0.85);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+    color: #ffe8cc; font-family: monospace; font-size: 13px; font-weight: bold;
+    padding: 10px 12px; pointer-events: none;
+    opacity: 0; transform: translateY(-12px);
+    transition: opacity 180ms ease, transform 180ms ease;
+  `;
+  popupEl.textContent = message;
+  ctx.overlay.appendChild(popupEl);
+
+  requestAnimationFrame(() => {
+    popupEl.style.opacity = '1';
+    popupEl.style.transform = 'translateY(0)';
+  });
+
+  window.setTimeout(() => {
+    popupEl.style.opacity = '0';
+    popupEl.style.transform = 'translateY(16px)';
+    window.setTimeout(() => {
+      if (popupEl.parentElement) popupEl.parentElement.removeChild(popupEl);
+    }, 240);
+  }, 4000);
+}
+
 // ── Link initiation / cancellation ───────────────────────────────────────────
 
 /**
- * Completes an in-progress door link by showing the confirmation prompt.
+ * Completes an in-progress door link by validating and showing the confirmation prompt.
+ * If invalid, shows a warning popup and does NOT mutate room data.
  * Clears the link source after recording the target.
  */
 export function completeDoorLink(ctx: VisualMapLinkContext, targetDoor: DoorHitArea): void {
@@ -260,7 +300,24 @@ export function completeDoorLink(ctx: VisualMapLinkContext, targetDoor: DoorHitA
   const targetRoom = ROOM_REGISTRY.get(targetDoor.roomId);
   const srcRoomId = ctx.getLinkSourceRoomId();
   const srcTransIndex = ctx.getLinkSourceTransIndex();
+
   if (sourceRoom && targetRoom) {
+    const sourceTrans = sourceRoom.transitions[srcTransIndex];
+    const targetTrans = targetRoom.transitions[targetDoor.transitionIndex];
+
+    if (sourceTrans && targetTrans) {
+      const validation = validateTransitionLink(sourceTrans, targetTrans);
+      if (!validation.ok) {
+        const warnMsg = transitionLinkWarningMessage(validation);
+        ctx.statusBar.textContent = warnMsg;
+        ctx.statusBar.style.color = '#ff9933';
+        showLinkWarningPopup(ctx, warnMsg);
+        ctx.clearLinkSource();
+        ctx.render();
+        return;
+      }
+    }
+
     ctx.statusBar.textContent =
       `Linked: ${srcRoomId} Door #${srcTransIndex + 1} \u2192 ${targetDoor.roomId} Door #${targetDoor.transitionIndex + 1}` +
       ' — confirm to update the room files';

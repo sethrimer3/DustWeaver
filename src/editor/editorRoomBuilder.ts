@@ -28,8 +28,16 @@ import { particleKindToString, stringToParticleKind } from './roomJsonSchema';
 // ── Boundary wall generation ─────────────────────────────────────────────────
 
 /**
- * Builds boundary walls with gaps for edge-transition tunnel openings.
- * Interior transitions (depthBlock defined) do not create gaps.
+ * Builds boundary walls with gaps where transitions are placed at the room edge.
+ *
+ * A gap is only created when the transition zone actually touches the wall:
+ *   left  → xBlock === 0
+ *   right → xBlock + gradientWidth === widthBlocks
+ *   up    → yBlock === 0
+ *   down  → yBlock + gradientHeight === heightBlocks
+ *
+ * Interior transitions (zone not touching boundary) do not create gaps.
+ * Transition zones never generate out-of-room corridor/tunnel walls.
  */
 function buildBoundaryWalls(
   widthBlocks: number,
@@ -38,21 +46,23 @@ function buildBoundaryWalls(
 ): RoomWallDef[] {
   const walls: RoomWallDef[] = [];
 
-  // Top wall — split around edge-transition openings only
-  const upTunnels = transitions.filter(t => t.direction === 'up' && t.depthBlock === undefined);
-  buildHorizontalWall(walls, 0, 0, widthBlocks, upTunnels);
+  const gw = (t: EditorTransition) => t.gradientWidthBlocks ?? 3;
 
-  // Bottom wall — split around edge-transition openings only
-  const downTunnels = transitions.filter(t => t.direction === 'down' && t.depthBlock === undefined);
-  buildHorizontalWall(walls, heightBlocks - 1, 0, widthBlocks, downTunnels);
+  // Top wall — gap where an 'up' transition's zone starts at y=0
+  const upTunnels = transitions.filter(t => t.direction === 'up' && t.yBlock === 0);
+  buildHorizontalWall(walls, 0, 0, widthBlocks, upTunnels.map(t => ({ positionBlock: t.xBlock, openingSizeBlocks: t.openingSizeBlocks })));
 
-  // Left wall — split around edge-transition openings only
-  const leftTunnels = transitions.filter(t => t.direction === 'left' && t.depthBlock === undefined);
-  buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
+  // Bottom wall — gap where a 'down' transition's zone ends at y=heightBlocks
+  const downTunnels = transitions.filter(t => t.direction === 'down' && t.yBlock + gw(t) >= heightBlocks);
+  buildHorizontalWall(walls, heightBlocks - 1, 0, widthBlocks, downTunnels.map(t => ({ positionBlock: t.xBlock, openingSizeBlocks: t.openingSizeBlocks })));
 
-  // Right wall — split around edge-transition openings only
-  const rightTunnels = transitions.filter(t => t.direction === 'right' && t.depthBlock === undefined);
-  buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
+  // Left wall — gap where a 'left' transition's zone starts at x=0
+  const leftTunnels = transitions.filter(t => t.direction === 'left' && t.xBlock === 0);
+  buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels.map(t => ({ positionBlock: t.yBlock, openingSizeBlocks: t.openingSizeBlocks })));
+
+  // Right wall — gap where a 'right' transition's zone ends at x=widthBlocks
+  const rightTunnels = transitions.filter(t => t.direction === 'right' && t.xBlock + gw(t) >= widthBlocks);
+  buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels.map(t => ({ positionBlock: t.yBlock, openingSizeBlocks: t.openingSizeBlocks })));
 
   return walls;
 }
@@ -62,7 +72,7 @@ function buildSideWall(
   xBlock: number,
   startYBlock: number,
   totalHeightBlocks: number,
-  tunnels: EditorTransition[],
+  tunnels: Array<{ positionBlock: number; openingSizeBlocks: number }>,
 ): void {
   const sorted = [...tunnels].sort((a, b) => a.positionBlock - b.positionBlock);
   let currentY = startYBlock;
@@ -87,7 +97,7 @@ function buildHorizontalWall(
   yBlock: number,
   startXBlock: number,
   totalWidthBlocks: number,
-  tunnels: EditorTransition[],
+  tunnels: Array<{ positionBlock: number; openingSizeBlocks: number }>,
 ): void {
   const sorted = [...tunnels].sort((a, b) => a.positionBlock - b.positionBlock);
   let currentX = startXBlock;
@@ -107,50 +117,15 @@ function buildHorizontalWall(
   }
 }
 
-function buildTunnelWalls(
-  roomWidthBlocks: number,
-  roomHeightBlocks: number,
-  transitions: EditorTransition[],
-): RoomWallDef[] {
-  const walls: RoomWallDef[] = [];
-  const TUNNEL_OVERHANG_BLOCKS = 4;
-
-  // Only edge transitions (depthBlock undefined) get physical corridor walls.
-  for (const tunnel of transitions) {
-    if (tunnel.depthBlock !== undefined) continue; // interior transition — no corridor walls
-
-    const topY = tunnel.positionBlock - 1;
-    const bottomY = tunnel.positionBlock + tunnel.openingSizeBlocks;
-    const leftX = tunnel.positionBlock - 1;
-    const rightX = tunnel.positionBlock + tunnel.openingSizeBlocks;
-
-    if (tunnel.direction === 'left') {
-      walls.push({ xBlock: -TUNNEL_OVERHANG_BLOCKS, yBlock: topY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
-      walls.push({ xBlock: -TUNNEL_OVERHANG_BLOCKS, yBlock: bottomY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
-    } else if (tunnel.direction === 'right') {
-      walls.push({ xBlock: roomWidthBlocks - 1, yBlock: topY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
-      walls.push({ xBlock: roomWidthBlocks - 1, yBlock: bottomY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
-    } else if (tunnel.direction === 'up') {
-      walls.push({ xBlock: leftX, yBlock: -TUNNEL_OVERHANG_BLOCKS, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
-      walls.push({ xBlock: rightX, yBlock: -TUNNEL_OVERHANG_BLOCKS, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
-    } else if (tunnel.direction === 'down') {
-      walls.push({ xBlock: leftX, yBlock: roomHeightBlocks - 1, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
-      walls.push({ xBlock: rightX, yBlock: roomHeightBlocks - 1, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
-    }
-  }
-
-  return walls;
-}
-
 // ── Conversion: EditorRoomData → RoomDef (for runtime loading) ───────────────
 
 /**
  * Converts editor room data into a full RoomDef suitable for runtime loading.
- * Boundary walls and tunnel corridor walls are regenerated here.
+ * Boundary walls are regenerated; tunnel corridor walls are no longer generated
+ * (transitions are purely trigger/fade zones, not wall geometry sources).
  */
 export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
   const boundaryWalls = buildBoundaryWalls(data.widthBlocks, data.heightBlocks, data.transitions);
-  const tunnelWalls = buildTunnelWalls(data.widthBlocks, data.heightBlocks, data.transitions);
 
   const interiorWalls: RoomWallDef[] = data.interiorWalls.map(w => ({
     xBlock: w.xBlock,
@@ -164,7 +139,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
   }));
 
-  const allWalls: RoomWallDef[] = [...boundaryWalls, ...tunnelWalls, ...interiorWalls];
+  const allWalls: RoomWallDef[] = [...boundaryWalls, ...interiorWalls];
 
   const enemies: RoomEnemyDef[] = data.enemies.map(e => {
     const kinds: ParticleKind[] = [];
@@ -200,6 +175,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
   const transitions: RoomTransitionDef[] = data.transitions.map(t => ({
     direction: t.direction,
     targetRoomId: t.targetRoomId,
+    xBlock: t.xBlock,
+    yBlock: t.yBlock,
     positionBlock: t.positionBlock,
     openingSizeBlocks: t.openingSizeBlocks,
     targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
@@ -351,6 +328,24 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
 // ── Conversion: RoomDef → EditorRoomData (for editing existing rooms) ────────
 
 /**
+ * Migrates a legacy RoomTransitionDef's xBlock from positionBlock/depthBlock.
+ * Called when the RoomTransitionDef was created before the xBlock field existed.
+ */
+function migrateRoomDefTransitionXBlock(t: RoomTransitionDef, roomWidthBlocks: number): number {
+  const gw = t.gradientWidthBlocks ?? 3;
+  if (t.direction === 'left')  return t.depthBlock ?? 0;
+  if (t.direction === 'right') return t.depthBlock ?? (roomWidthBlocks - gw);
+  return t.positionBlock; // up/down: xBlock = positionBlock
+}
+
+function migrateRoomDefTransitionYBlock(t: RoomTransitionDef, roomHeightBlocks: number): number {
+  const gw = t.gradientWidthBlocks ?? 3;
+  if (t.direction === 'up')   return t.depthBlock ?? 0;
+  if (t.direction === 'down') return t.depthBlock ?? (roomHeightBlocks - gw);
+  return t.positionBlock; // left/right: yBlock = positionBlock
+}
+
+/**
  * Extracts interior walls from a RoomDef by removing regenerated boundary/tunnel walls.
  * This is a heuristic: boundary walls are at edges (x=0, x=w-1, y=0, y=h-1) and
  * tunnel walls extend past room boundaries (negative coordinates or past room width).
@@ -410,18 +405,25 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isGoldenMimicYFlippedFlag: (e.isGoldenMimicYFlippedFlag ?? 0) as 0 | 1,
   }));
 
-  const transitions: EditorTransition[] = room.transitions.map(t => ({
-    uid: uid++,
-    direction: t.direction,
-    positionBlock: t.positionBlock,
-    openingSizeBlocks: t.openingSizeBlocks,
-    targetRoomId: t.targetRoomId,
-    targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as [number, number],
-    fadeColor: t.fadeColor,
-    depthBlock: t.depthBlock,
-    isSecretDoor: t.isSecretDoor,
-    gradientWidthBlocks: t.gradientWidthBlocks,
-  }));
+  const transitions: EditorTransition[] = room.transitions.map(t => {
+    // Prefer explicit xBlock/yBlock when present (new format), otherwise migrate.
+    const xBlock = t.xBlock !== undefined ? t.xBlock : migrateRoomDefTransitionXBlock(t, room.widthBlocks);
+    const yBlock = t.yBlock !== undefined ? t.yBlock : migrateRoomDefTransitionYBlock(t, room.heightBlocks);
+    return {
+      uid: uid++,
+      direction: t.direction,
+      xBlock,
+      yBlock,
+      openingSizeBlocks: t.openingSizeBlocks,
+      targetRoomId: t.targetRoomId,
+      targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as [number, number],
+      fadeColor: t.fadeColor,
+      depthBlock: t.depthBlock,
+      isSecretDoor: t.isSecretDoor,
+      gradientWidthBlocks: t.gradientWidthBlocks,
+      positionBlock: t.positionBlock,
+    };
+  });
 
   const saveTombs: EditorSaveTomb[] = room.saveTombs.map(s => ({
     uid: uid++,

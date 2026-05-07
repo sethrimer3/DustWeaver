@@ -284,52 +284,45 @@ export function placeAtCursor(state: EditorState): void {
   } else if (item.id === 'player_spawn') {
     room.playerSpawnBlock = [bx, by];
   } else if (item.id === 'room_transition') {
-    // Determine direction from the nearest room edge
-    const distLeft   = bx;
-    const distRight  = room.widthBlocks  - 1 - bx;
-    const distTop    = by;
-    const distBottom = room.heightBlocks - 1 - by;
-    const minDist    = Math.min(distLeft, distRight, distTop, distBottom);
-    const direction: 'left' | 'right' | 'up' | 'down' =
-      minDist === distLeft   ? 'left'  :
-      minDist === distRight  ? 'right' :
-      minDist === distTop    ? 'up'    : 'down';
-
-    const OPENING_SIZE = 6;
+    /**
+     * Placement convention for placementRotationSteps:
+     *   0 → right  (player walks rightward to exit)
+     *   1 → down   (player walks downward to exit)
+     *   2 → left   (player walks leftward to exit)
+     *   3 → up     (player walks upward to exit)
+     */
+    const directionMap: ('right' | 'down' | 'left' | 'up')[] = ['right', 'down', 'left', 'up'];
+    const direction = directionMap[state.placementRotationSteps % 4];
     const isHoriz = direction === 'left' || direction === 'right';
 
+    const DEFAULT_WIDTH  = 6;
+    const DEFAULT_GRADIENT = 3;
+
     const openingSizeBlocks = isHoriz
-      ? Math.max(1, Math.min(OPENING_SIZE, room.heightBlocks - 2))
-      : Math.max(1, Math.min(OPENING_SIZE, room.widthBlocks - 2));
+      ? Math.max(1, Math.min(DEFAULT_WIDTH, room.heightBlocks - 2))
+      : Math.max(1, Math.min(DEFAULT_WIDTH, room.widthBlocks  - 2));
 
-    const positionBlock = isHoriz
-      ? Math.min(Math.max(1, by - Math.floor(openingSizeBlocks / 2)), room.heightBlocks - 1 - openingSizeBlocks)
-      : Math.min(Math.max(1, bx - Math.floor(openingSizeBlocks / 2)), room.widthBlocks - 1 - openingSizeBlocks);
+    // Use cursor block as top-left anchor of the transition zone.
+    // Clamp so the zone stays within the room.
+    const gw = DEFAULT_GRADIENT;
+    const zoneW = isHoriz ? gw : openingSizeBlocks;
+    const zoneH = isHoriz ? openingSizeBlocks : gw;
+    const xBlock = Math.min(Math.max(0, bx), room.widthBlocks  - zoneW);
+    const yBlock = Math.min(Math.max(0, by), room.heightBlocks - zoneH);
 
-    // Determine whether this is an interior transition (cursor not at the boundary edge)
-    const ZONE_DEPTH = 6;
-    const isEdge =
-      (direction === 'left'  && bx <= ZONE_DEPTH)      ||
-      (direction === 'right' && bx >= room.widthBlocks - ZONE_DEPTH) ||
-      (direction === 'up'    && by <= ZONE_DEPTH)      ||
-      (direction === 'down'  && by >= room.heightBlocks - ZONE_DEPTH);
-
-    let depthBlock: number | undefined;
-    if (!isEdge) {
-      // Interior: anchor the zone so the cursor is at the entry side
-      depthBlock = isHoriz
-        ? Math.min(Math.max(0, bx), room.widthBlocks - ZONE_DEPTH)
-        : Math.min(Math.max(0, by), room.heightBlocks - ZONE_DEPTH);
-    }
+    // Legacy backward-compat fields (computed from xBlock/yBlock).
+    const positionBlock = isHoriz ? yBlock : xBlock;
 
     room.transitions.push({
       uid: allocateUid(state),
       direction,
-      positionBlock,
+      xBlock,
+      yBlock,
       openingSizeBlocks,
+      gradientWidthBlocks: DEFAULT_GRADIENT,
       targetRoomId: '',
-      targetSpawnBlock: [3, by + 2],
-      depthBlock,
+      targetSpawnBlock: [3, 3],
+      positionBlock,
     });
   } else if (item.id === 'save_tomb') {
     room.saveTombs.push({

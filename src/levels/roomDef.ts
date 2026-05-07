@@ -442,11 +442,25 @@ export interface RoomTransitionDef {
   /** ID of the room this tunnel leads to. */
   targetRoomId: string;
   /**
-   * For left/right tunnels: Y position (top of tunnel opening, block units).
-   * For up/down tunnels: X position (left of tunnel opening, block units).
+   * X block coordinate of the top-left corner of the transition zone.
+   * For left/right: x-start of the gradient zone.
+   * For up/down: x-start of the opening.
+   * Populated by editorRoomBuilder at conversion time.
+   */
+  xBlock: number;
+  /**
+   * Y block coordinate of the top-left corner of the transition zone.
+   * For left/right: y-start of the opening.
+   * For up/down: y-start of the gradient zone.
+   * Populated by editorRoomBuilder at conversion time.
+   */
+  yBlock: number;
+  /**
+   * @deprecated Legacy field: for left/right = y-start of opening;
+   * for up/down = x-start of opening. Superseded by xBlock/yBlock.
    */
   positionBlock: number;
-  /** Size of the tunnel opening in blocks (height for L/R, width for U/D). */
+  /** Size of the opening in blocks (height for L/R, width for U/D). */
   openingSizeBlocks: number;
   /**
    * Block coordinate where the player spawns in the target room.
@@ -456,10 +470,8 @@ export interface RoomTransitionDef {
   /** Color used for the tunnel fade gradient. Defaults to black if unset. */
   fadeColor?: string;
   /**
-   * Left edge (for left/right) or top edge (for up/down) of the 6-block-deep
-   * transition zone, in block units. When undefined the transition is an edge
-   * transition sitting against the room boundary; when defined it is an
-   * interior transition that can be placed anywhere inside the room.
+   * @deprecated Legacy field: left edge (L/R) or top edge (U/D) of the gradient
+   * zone. Superseded by xBlock/yBlock.
    */
   depthBlock?: number;
   /**
@@ -468,8 +480,7 @@ export interface RoomTransitionDef {
    */
   isSecretDoor?: boolean;
   /**
-   * Width of the fade gradient in blocks (default: 3). Larger values create
-   * a slower, more gradual fade-to-black effect at the tunnel entrance.
+   * Depth of the fade gradient zone in the facing direction, in blocks (default: 3).
    */
   gradientWidthBlocks?: number;
 }

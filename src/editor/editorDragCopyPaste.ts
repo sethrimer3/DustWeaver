@@ -89,17 +89,7 @@ export function storeDragStartPositions(
     } else if (el.type === 'transition') {
       const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
       if (tr) {
-        const isHoriz = tr.direction === 'left' || tr.direction === 'right';
-        const edgeDepth = isHoriz
-          ? (tr.direction === 'left' ? 0 : s.roomData.widthBlocks - 6)
-          : (tr.direction === 'up' ? 0 : s.roomData.heightBlocks - 6);
-        const depth = tr.depthBlock !== undefined ? tr.depthBlock : edgeDepth;
-        // xBlock = depth for left/right, positionBlock for up/down
-        // yBlock = positionBlock for left/right, depth for up/down
-        positions.set(key, {
-          xBlock: isHoriz ? depth : tr.positionBlock,
-          yBlock: isHoriz ? tr.positionBlock : depth,
-        });
+        positions.set(key, { xBlock: tr.xBlock, yBlock: tr.yBlock });
       }
     }
   }
@@ -181,22 +171,16 @@ export function moveSelectedElements(
       const tr = s.roomData.transitions.find(t2 => t2.uid === el.uid);
       if (tr) {
         const isHoriz = tr.direction === 'left' || tr.direction === 'right';
+        const gw = tr.gradientWidthBlocks ?? 3;
+        const zoneW = isHoriz ? gw : tr.openingSizeBlocks;
+        const zoneH = isHoriz ? tr.openingSizeBlocks : gw;
         const room = s.roomData;
-        if (isHoriz) {
-          // Y drag → positionBlock, X drag → depthBlock
-          const maxPos = room.heightBlocks - 1 - tr.openingSizeBlocks;
-          tr.positionBlock = Math.min(Math.max(0, orig.yBlock + deltaY), maxPos);
-          const newDepth = orig.xBlock + deltaX;
-          const maxDepth = room.widthBlocks - 6;
-          tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
-        } else {
-          // X drag → positionBlock, Y drag → depthBlock
-          const maxPos = room.widthBlocks - 1 - tr.openingSizeBlocks;
-          tr.positionBlock = Math.min(Math.max(0, orig.xBlock + deltaX), maxPos);
-          const newDepth = orig.yBlock + deltaY;
-          const maxDepth = room.heightBlocks - 6;
-          tr.depthBlock = Math.min(Math.max(0, newDepth), maxDepth);
-        }
+        const newX = Math.min(Math.max(0, orig.xBlock + deltaX), room.widthBlocks  - zoneW);
+        const newY = Math.min(Math.max(0, orig.yBlock + deltaY), room.heightBlocks - zoneH);
+        tr.xBlock = newX;
+        tr.yBlock = newY;
+        // Keep legacy positionBlock in sync
+        tr.positionBlock = isHoriz ? newY : newX;
       }
     }
   }

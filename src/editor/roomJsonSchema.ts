@@ -97,14 +97,20 @@ export interface RoomJsonWall {
 
 export interface RoomJsonTransition {
   direction: TransitionDirection;
+  /** @deprecated Superseded by xBlock/yBlock. Kept for backward compat. */
   positionBlock: number;
   openingSizeBlocks: number;
   targetRoomId: string;
   targetSpawnBlock: [number, number];
   fadeColor?: string;
+  /** @deprecated Superseded by xBlock/yBlock. Kept for backward compat. */
   depthBlock?: number;
   isSecretDoor?: boolean;
   gradientWidthBlocks?: number;
+  /** X block of the top-left corner of the zone (new primary field). */
+  xBlock?: number;
+  /** Y block of the top-left corner of the zone (new primary field). */
+  yBlock?: number;
 }
 
 /** Save Tomb — where the player saves their progress. Uses "skillTombs" JSON key for backward compat. */

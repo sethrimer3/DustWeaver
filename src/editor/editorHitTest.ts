@@ -110,22 +110,14 @@ export function hitTestTransition(
   t: EditorTransition,
   bx: number,
   by: number,
-  roomData: EditorRoomData,
+  _roomData: EditorRoomData,
 ): boolean {
-  const DEPTH = 6;
-  if (t.direction === 'left' || t.direction === 'right') {
-    const zoneX = t.depthBlock !== undefined
-      ? t.depthBlock
-      : (t.direction === 'left' ? 0 : roomData.widthBlocks - DEPTH);
-    return bx >= zoneX && bx < zoneX + DEPTH
-      && by >= t.positionBlock && by < t.positionBlock + t.openingSizeBlocks;
-  } else {
-    const zoneY = t.depthBlock !== undefined
-      ? t.depthBlock
-      : (t.direction === 'up' ? 0 : roomData.heightBlocks - DEPTH);
-    return by >= zoneY && by < zoneY + DEPTH
-      && bx >= t.positionBlock && bx < t.positionBlock + t.openingSizeBlocks;
-  }
+  const gw = t.gradientWidthBlocks ?? 3;
+  const isHoriz = t.direction === 'left' || t.direction === 'right';
+  const zoneW = isHoriz ? gw : t.openingSizeBlocks;
+  const zoneH = isHoriz ? t.openingSizeBlocks : gw;
+  return bx >= t.xBlock && bx < t.xBlock + zoneW
+      && by >= t.yBlock && by < t.yBlock + zoneH;
 }
 
 /** Returns true if two wall rectangles (in block coordinates) overlap. */
@@ -258,20 +250,11 @@ export function findCeilingBlockRow(room: EditorRoomData, col: number, startRow:
 
 export function hitTestTransitionRect(
   t: EditorTransition, minX: number, minY: number, maxX: number, maxY: number,
-  room: EditorRoomData,
+  _room: EditorRoomData,
 ): boolean {
-  const DEPTH = 6;
-  let tx: number, ty: number, tw: number, th: number;
-  if (t.direction === 'left' || t.direction === 'right') {
-    const zoneX = t.depthBlock !== undefined
-      ? t.depthBlock
-      : (t.direction === 'left' ? 0 : room.widthBlocks - DEPTH);
-    tx = zoneX; ty = t.positionBlock; tw = DEPTH; th = t.openingSizeBlocks;
-  } else {
-    const zoneY = t.depthBlock !== undefined
-      ? t.depthBlock
-      : (t.direction === 'up' ? 0 : room.heightBlocks - DEPTH);
-    tx = t.positionBlock; ty = zoneY; tw = t.openingSizeBlocks; th = DEPTH;
-  }
-  return tx + tw > minX && tx < maxX + 1 && ty + th > minY && ty < maxY + 1;
+  const gw = t.gradientWidthBlocks ?? 3;
+  const isHoriz = t.direction === 'left' || t.direction === 'right';
+  const tw = isHoriz ? gw : t.openingSizeBlocks;
+  const th = isHoriz ? t.openingSizeBlocks : gw;
+  return t.xBlock + tw > minX && t.xBlock < maxX + 1 && t.yBlock + th > minY && t.yBlock < maxY + 1;
 }

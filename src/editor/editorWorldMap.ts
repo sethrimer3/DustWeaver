@@ -208,7 +208,10 @@ export function showEditorWorldMap(
               for (let i = 0; i < room.transitions.length; i++) {
                 const trans = room.transitions[i];
                 const transBtn = document.createElement('button');
-                transBtn.textContent = `Door #${i + 1}: ${trans.direction} @ pos ${trans.positionBlock}, size ${trans.openingSizeBlocks}`;
+                const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+                const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
+                const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
+                transBtn.textContent = `Door #${i + 1}: ${trans.direction} x=${xB} y=${yB} w=${trans.openingSizeBlocks}`;
                 transBtn.style.cssText = `
                   display: block; width: 100%; text-align: left;
                   background: rgba(0,80,200,0.15);

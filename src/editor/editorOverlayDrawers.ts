@@ -125,12 +125,14 @@ export function drawEditorTransitions(
     const sel = isSelected('transition', t.uid);
     const isLinkSource = state.isLinkingTransition && state.linkSourceTransitionUid === t.uid;
     const isLinkCandidate = state.isLinkingTransition && state.linkSourceTransitionUid !== t.uid;
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'transition' && state.hoverElement.uid === t.uid;
     let color = TRANSITION_COLOR;
     if (isLinkSource) color = TRANSITION_LINK_SOURCE;
     else if (isLinkCandidate) color = TRANSITION_LINK_CANDIDATE;
     else if (t.isSecretDoor) color = sel ? SECRET_DOOR_SELECTED : SECRET_DOOR_COLOR;
     else if (sel) color = TRANSITION_SELECTED;
-    drawTransitionZone(ctx, t, room, offsetXPx, offsetYPx, zoom, color, tIndex + 1);
+    drawTransitionZone(ctx, t, room, offsetXPx, offsetYPx, zoom, color, tIndex + 1, isHovered || sel);
   }
 }
 

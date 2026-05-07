@@ -368,33 +368,19 @@ export function showVisualWorldMap(
   ): void {
     const trans = room.transitions[transIndex];
     const ds = Math.max(4, Math.min(DOOR_SIZE, zoom * 1.5));
+    const gw = trans.gradientWidthBlocks ?? 3;
+    const isHoriz = trans.direction === 'left' || trans.direction === 'right';
 
-    let dx: number, dy: number;
-    const DEPTH = 6;
-    if (trans.depthBlock !== undefined) {
-      // Interior transition: show door at center of the zone
-      const depthMid = (trans.depthBlock + DEPTH / 2) * zoom;
-      const posMid   = (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom;
-      if (trans.direction === 'left' || trans.direction === 'right') {
-        dx = roomSx + depthMid - ds / 2;
-        dy = roomSy + posMid   - ds / 2;
-      } else {
-        dx = roomSx + posMid   - ds / 2;
-        dy = roomSy + depthMid - ds / 2;
-      }
-    } else if (trans.direction === 'left') {
-      dx = roomSx - ds / 2;
-      dy = roomSy + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom - ds / 2;
-    } else if (trans.direction === 'right') {
-      dx = roomSx + roomW - ds / 2;
-      dy = roomSy + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom - ds / 2;
-    } else if (trans.direction === 'up') {
-      dx = roomSx + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom - ds / 2;
-      dy = roomSy - ds / 2;
-    } else {
-      dx = roomSx + (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom - ds / 2;
-      dy = roomSy + roomH - ds / 2;
-    }
+    // Use xBlock/yBlock for zone center; fall back to positionBlock for old data.
+    const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
+    const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
+    const zoneW = isHoriz ? gw : trans.openingSizeBlocks;
+    const zoneH = isHoriz ? trans.openingSizeBlocks : gw;
+    const zoneCxPx = (xB + zoneW / 2) * zoom;
+    const zoneCyPx = (yB + zoneH / 2) * zoom;
+
+    const dx = roomSx + zoneCxPx - ds / 2;
+    const dy = roomSy + zoneCyPx - ds / 2;
 
     const isHovered = hoveredDoor?.roomId === room.id && hoveredDoor?.transitionIndex === transIndex;
     const isLinkSource = linkSourceRoomId === room.id && linkSourceTransIndex === transIndex;
@@ -484,28 +470,16 @@ export function showVisualWorldMap(
     trans: RoomTransitionDef,
     roomSx: number,
     roomSy: number,
-    roomW: number,
-    roomH: number,
+    _roomW: number,
+    _roomH: number,
   ): [number, number] {
-    const DEPTH = 6;
-    const posMid = (trans.positionBlock + trans.openingSizeBlocks / 2) * zoom;
-    if (trans.depthBlock !== undefined) {
-      const depthMid = (trans.depthBlock + DEPTH / 2) * zoom;
-      if (trans.direction === 'left' || trans.direction === 'right') {
-        return [roomSx + depthMid, roomSy + posMid];
-      } else {
-        return [roomSx + posMid, roomSy + depthMid];
-      }
-    }
-    if (trans.direction === 'left') {
-      return [roomSx, roomSy + posMid];
-    } else if (trans.direction === 'right') {
-      return [roomSx + roomW, roomSy + posMid];
-    } else if (trans.direction === 'up') {
-      return [roomSx + posMid, roomSy];
-    } else {
-      return [roomSx + posMid, roomSy + roomH];
-    }
+    const gw = trans.gradientWidthBlocks ?? 3;
+    const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+    const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
+    const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
+    const zoneW = isHoriz ? gw : trans.openingSizeBlocks;
+    const zoneH = isHoriz ? trans.openingSizeBlocks : gw;
+    return [roomSx + (xB + zoneW / 2) * zoom, roomSy + (yB + zoneH / 2) * zoom];
   }
 
   function drawActiveLinkLine(ctx2d: CanvasRenderingContext2D): void {

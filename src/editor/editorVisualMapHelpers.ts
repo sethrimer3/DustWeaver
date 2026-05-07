@@ -175,25 +175,15 @@ export function getDoorCenterWorld(
   trans: RoomTransitionDef,
   placement: MapRoomPlacement,
 ): [number, number] {
-  const room = placement.room;
   const cx = placement.mapXWorld;
   const cy = placement.mapYWorld;
-  const mid = trans.positionBlock + trans.openingSizeBlocks / 2;
-  const DEPTH = 6;
-  if (trans.depthBlock !== undefined) {
-    const depthMid = trans.depthBlock + DEPTH / 2;
-    if (trans.direction === 'left' || trans.direction === 'right') {
-      return [cx + depthMid, cy + mid];
-    } else {
-      return [cx + mid, cy + depthMid];
-    }
-  }
-  if (trans.direction === 'left')  return [cx,                    cy + mid];
-  if (trans.direction === 'right') return [cx + room.widthBlocks,  cy + mid];
-  if (trans.direction === 'up')    return [cx + mid,               cy];
-  if (trans.direction === 'down')  return [cx + mid,               cy + room.heightBlocks];
-  // Exhaustive check for TransitionDirection — should never reach here
-  throw new Error(`Unknown transition direction: ${(trans as RoomTransitionDef).direction}`);
+  const gw = trans.gradientWidthBlocks ?? 3;
+  const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+  const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
+  const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
+  const zoneW = isHoriz ? gw : trans.openingSizeBlocks;
+  const zoneH = isHoriz ? trans.openingSizeBlocks : gw;
+  return [cx + xB + zoneW / 2, cy + yB + zoneH / 2];
 }
 
 /** True when direction `a` and `b` face each other (and can be aligned). */

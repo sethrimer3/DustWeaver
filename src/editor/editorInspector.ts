@@ -140,12 +140,14 @@ export function updateInspector(
       addSelect(div, 'direction',
         ['left', 'right', 'up', 'down'].map(d => ({ label: d, value: d })),
         trans.direction, v => callbacks?.onPropertyChange('transition.direction', v));
-      addField(div, 'positionBlock', String(trans.positionBlock),
-        v => callbacks?.onPropertyChange('transition.positionBlock', parseInt(v)));
-      addField(div, 'openingSizeBlocks', String(trans.openingSizeBlocks),
+      addField(div, 'xBlock', String(trans.xBlock),
+        v => callbacks?.onPropertyChange('transition.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(trans.yBlock),
+        v => callbacks?.onPropertyChange('transition.yBlock', parseInt(v)));
+      addField(div, 'Width (openingSizeBlocks)', String(trans.openingSizeBlocks),
         v => callbacks?.onPropertyChange('transition.openingSizeBlocks', parseInt(v)));
-      addField(div, 'depthBlock (blank=edge)', trans.depthBlock !== undefined ? String(trans.depthBlock) : '',
-        v => callbacks?.onPropertyChange('transition.depthBlock', v.trim() === '' ? '' : parseInt(v)));
+      addNumberField(div, 'Gradient Width', trans.gradientWidthBlocks ?? 3, 1, 20,
+        v => callbacks?.onPropertyChange('transition.gradientWidthBlocks', v));
       addField(div, 'targetRoomId', trans.targetRoomId,
         v => callbacks?.onPropertyChange('transition.targetRoomId', v));
       addField(div, 'targetSpawnX', String(trans.targetSpawnBlock[0]),
@@ -161,8 +163,6 @@ export function updateInspector(
 
       addCheckbox(div, 'isSecretDoor', trans.isSecretDoor === true,
         v => callbacks?.onPropertyChange('transition.isSecretDoor', v ? 1 : 0));
-      addNumberField(div, 'gradientWidthBlocks', trans.gradientWidthBlocks ?? 3, 1, 20,
-        v => callbacks?.onPropertyChange('transition.gradientWidthBlocks', v));
 
       // Link Transition button
       const linkBtn = makeBtn('🔗 Link Transition', () => callbacks?.onLinkTransition());
