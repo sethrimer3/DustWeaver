@@ -64,7 +64,7 @@ import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHig
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { getQualityConfig } from '../render/renderQualityConfig';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
-import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial } from '../render/walls/blockSpriteRenderer';
+import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats } from '../render/walls/blockSpriteRenderer';
 import {
   drawGrappleBloom,
   drawParticleGlow,
@@ -333,10 +333,16 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Walls ────────────────────────────────────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_WALLS);
+  // Inform the chunk cache of the current viewport dimensions so it can cull
+  // invisible chunks correctly (virtualWidthPx can be > 480 on wider screens).
+  setRenderViewportSize(virtualWidthPx, virtualHeightPx);
   // Walls before cluster indicators so clusters are drawn on top
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRopes(ctx, snapshot, ox, oy, zoom);
+  if (renderProfiler !== undefined && isDebugMode) {
+    renderProfiler.updateChunkStats(getChunkCacheStats());
+  }
 
   const isDarkRoom = currentRoom.lightingEffect === 'DarkRoom';
 

@@ -24,6 +24,8 @@
  * than flickering every frame.
  */
 
+import type { ChunkCacheStats } from '../walls/chunkRenderCache';
+
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
 export const STAGE_BACKGROUND  = 0;
@@ -69,6 +71,18 @@ export class RenderProfiler {
   private readonly _stageSumMs    = new Float64Array(STAGE_COUNT);
   private readonly _smoothedMs    = new Float64Array(STAGE_COUNT);
   private _frameStartMs = 0;
+
+  /** Latest chunk cache stats, set each frame when debug mode is active. */
+  private _chunkStats: ChunkCacheStats | null = null;
+
+  /**
+   * Store the latest chunk-cache diagnostic counters.
+   * Call this from gameRender.ts after the walls render stage when debug mode
+   * is on; drawOverlay() will append the values to the profiler panel.
+   */
+  updateChunkStats(stats: ChunkCacheStats): void {
+    this._chunkStats = stats;
+  }
 
   /**
    * Call at the very start of renderFrame.
@@ -145,5 +159,25 @@ export class RenderProfiler {
     }
 
     ctx.restore();
+
+    // ── Chunk cache stats panel (below timing panel) ─────────────────────────
+    if (this._chunkStats !== null) {
+      const cs = this._chunkStats;
+      const chunkLines = [
+        `Chunks V=${cs.visibleChunkCount} T=${cs.totalChunkCount}`,
+        `Dirty=${cs.dirtyChunkCount} Built=${cs.rebuiltThisFrame}`,
+        `Mem~${cs.memoryEstimateKB}KB`,
+      ];
+      const chunkPanelY = padYPx - 4 + panelHeight + 4;
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(padXPx - 4, chunkPanelY, panelWidth + 8, chunkLines.length * lineHeightPx + 8);
+      ctx.fillStyle = '#90ee90';
+      for (let i = 0; i < chunkLines.length; i++) {
+        ctx.fillText(chunkLines[i], padXPx, chunkPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+    }
   }
 }
