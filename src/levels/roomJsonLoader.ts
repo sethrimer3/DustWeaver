@@ -38,8 +38,6 @@ const DISCOVERED_ROOM_FILE_PATHS = Object.keys(import.meta.glob('/ASSETS/CAMPAIG
   import: 'default',
 }));
 
-const TUNNEL_OVERHANG_BLOCKS = 4;
-
 function discoverRoomFilenames(campaignFolderNames: readonly string[]): string[] {
   const campaignFolderSet = new Set(campaignFolderNames);
   const filenames: string[] = [];
@@ -76,21 +74,41 @@ function buildBoundaryWalls(
 ): RoomWallDef[] {
   const walls: RoomWallDef[] = [];
 
-  // Top wall — split around edge-transition openings only
-  const upTunnels = transitions.filter(t => t.direction === 'up' && t.depthBlock === undefined);
-  buildHorizontalWall(walls, 0, 0, widthBlocks, upTunnels);
+  const gw = (t: RoomJsonTransition) => t.gradientWidthBlocks ?? 3;
 
-  // Bottom wall — split around edge-transition openings only
-  const downTunnels = transitions.filter(t => t.direction === 'down' && t.depthBlock === undefined);
-  buildHorizontalWall(walls, heightBlocks - 1, 0, widthBlocks, downTunnels);
+  // Compute xBlock/yBlock from positionBlock/depthBlock for JSON that lacks the new fields.
+  function getXBlock(t: RoomJsonTransition): number {
+    if (t.xBlock !== undefined) return t.xBlock;
+    const isHoriz = t.direction === 'left' || t.direction === 'right';
+    if (isHoriz) return t.depthBlock ?? 0;
+    return t.positionBlock;
+  }
+  function getYBlock(t: RoomJsonTransition): number {
+    if (t.yBlock !== undefined) return t.yBlock;
+    const isHoriz = t.direction === 'left' || t.direction === 'right';
+    if (isHoriz) return t.positionBlock;
+    return t.depthBlock ?? 0;
+  }
 
-  // Left wall — split around edge-transition openings only (interior transitions keep wall intact)
-  const leftTunnels = transitions.filter(t => t.direction === 'left' && t.depthBlock === undefined);
-  buildSideWall(walls, 0, 1, heightBlocks - 2, leftTunnels);
+  // Top wall — gap where an 'up' transition's zone starts at y=0
+  const upTunnels = transitions.filter(t => t.direction === 'up' && getYBlock(t) === 0);
+  buildHorizontalWall(walls, 0, 0, widthBlocks,
+    upTunnels.map(t => ({ positionBlock: getXBlock(t), openingSizeBlocks: t.openingSizeBlocks })));
 
-  // Right wall — split around edge-transition openings only
-  const rightTunnels = transitions.filter(t => t.direction === 'right' && t.depthBlock === undefined);
-  buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2, rightTunnels);
+  // Bottom wall — gap where a 'down' transition's zone ends at y=heightBlocks
+  const downTunnels = transitions.filter(t => t.direction === 'down' && getYBlock(t) + gw(t) >= heightBlocks);
+  buildHorizontalWall(walls, heightBlocks - 1, 0, widthBlocks,
+    downTunnels.map(t => ({ positionBlock: getXBlock(t), openingSizeBlocks: t.openingSizeBlocks })));
+
+  // Left wall — gap where a 'left' transition's zone starts at x=0
+  const leftTunnels = transitions.filter(t => t.direction === 'left' && getXBlock(t) === 0);
+  buildSideWall(walls, 0, 1, heightBlocks - 2,
+    leftTunnels.map(t => ({ positionBlock: getYBlock(t), openingSizeBlocks: t.openingSizeBlocks })));
+
+  // Right wall — gap where a 'right' transition's zone ends at x=widthBlocks
+  const rightTunnels = transitions.filter(t => t.direction === 'right' && getXBlock(t) + gw(t) >= widthBlocks);
+  buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2,
+    rightTunnels.map(t => ({ positionBlock: getYBlock(t), openingSizeBlocks: t.openingSizeBlocks })));
 
   return walls;
 }
@@ -100,7 +118,7 @@ function buildSideWall(
   xBlock: number,
   startYBlock: number,
   totalHeightBlocks: number,
-  tunnels: RoomJsonTransition[],
+  tunnels: Array<{ positionBlock: number; openingSizeBlocks: number }>,
 ): void {
   const sorted = [...tunnels].sort((a, b) => a.positionBlock - b.positionBlock);
   let currentY = startYBlock;
@@ -125,7 +143,7 @@ function buildHorizontalWall(
   yBlock: number,
   startXBlock: number,
   totalWidthBlocks: number,
-  tunnels: RoomJsonTransition[],
+  tunnels: Array<{ positionBlock: number; openingSizeBlocks: number }>,
 ): void {
   const sorted = [...tunnels].sort((a, b) => a.positionBlock - b.positionBlock);
   let currentX = startXBlock;
@@ -145,49 +163,13 @@ function buildHorizontalWall(
   }
 }
 
-function buildTunnelWalls(
-  roomWidthBlocks: number,
-  roomHeightBlocks: number,
-  transitions: RoomJsonTransition[],
-): RoomWallDef[] {
-  const walls: RoomWallDef[] = [];
-
-  // Only edge transitions (depthBlock undefined) get physical corridor walls.
-  for (const tunnel of transitions) {
-    if (tunnel.depthBlock !== undefined) continue; // interior transition — no corridor walls
-
-    const topY = tunnel.positionBlock - 1;
-    const bottomY = tunnel.positionBlock + tunnel.openingSizeBlocks;
-    const leftX = tunnel.positionBlock - 1;
-    const rightX = tunnel.positionBlock + tunnel.openingSizeBlocks;
-
-    if (tunnel.direction === 'left') {
-      walls.push({ xBlock: -TUNNEL_OVERHANG_BLOCKS, yBlock: topY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
-      walls.push({ xBlock: -TUNNEL_OVERHANG_BLOCKS, yBlock: bottomY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
-    } else if (tunnel.direction === 'right') {
-      walls.push({ xBlock: roomWidthBlocks - 1, yBlock: topY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
-      walls.push({ xBlock: roomWidthBlocks - 1, yBlock: bottomY, wBlock: TUNNEL_OVERHANG_BLOCKS + 1, hBlock: 1 });
-    } else if (tunnel.direction === 'up') {
-      walls.push({ xBlock: leftX, yBlock: -TUNNEL_OVERHANG_BLOCKS, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
-      walls.push({ xBlock: rightX, yBlock: -TUNNEL_OVERHANG_BLOCKS, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
-    } else if (tunnel.direction === 'down') {
-      walls.push({ xBlock: leftX, yBlock: roomHeightBlocks - 1, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
-      walls.push({ xBlock: rightX, yBlock: roomHeightBlocks - 1, wBlock: 1, hBlock: TUNNEL_OVERHANG_BLOCKS + 1 });
-    }
-  }
-
-  return walls;
-}
-
-// ── RoomJsonDef → RoomDef conversion ─────────────────────────────────────────
-
 /**
  * Converts a validated RoomJsonDef into a full RoomDef suitable for runtime
- * loading. Boundary walls and tunnel corridor walls are regenerated.
+ * loading. Boundary walls are regenerated. Tunnel corridor walls are no longer
+ * generated — transitions are purely trigger/fade zones.
  */
 export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   const boundaryWalls = buildBoundaryWalls(json.widthBlocks, json.heightBlocks, json.transitions);
-  const tunnelWalls = buildTunnelWalls(json.widthBlocks, json.heightBlocks, json.transitions);
 
   const interiorWalls: RoomWallDef[] = json.interiorWalls.map(w => ({
     xBlock: w.xBlock,
@@ -201,7 +183,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? (1 as const) : (0 as const),
   }));
 
-  const allWalls: RoomWallDef[] = [...boundaryWalls, ...tunnelWalls, ...interiorWalls];
+  const allWalls: RoomWallDef[] = [...boundaryWalls, ...interiorWalls];
 
   const enemies: RoomEnemyDef[] = json.enemies.map(e => {
     const kinds: ParticleKind[] = [];
@@ -229,15 +211,37 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     };
   });
 
-  const transitions: RoomTransitionDef[] = json.transitions.map(t => ({
-    direction: t.direction,
-    targetRoomId: t.targetRoomId,
-    positionBlock: t.positionBlock,
-    openingSizeBlocks: t.openingSizeBlocks,
-    targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
-    fadeColor: t.fadeColor,
-    depthBlock: t.depthBlock,
-  }));
+  const transitions: RoomTransitionDef[] = json.transitions.map(t => {
+    // Prefer explicit xBlock/yBlock; fall back to positionBlock/depthBlock migration.
+    const isHoriz = t.direction === 'left' || t.direction === 'right';
+    const gw = t.gradientWidthBlocks ?? 3;
+    const xBlock = t.xBlock !== undefined ? t.xBlock
+      : (isHoriz ? (t.depthBlock ?? 0) : t.positionBlock);
+    const yBlock = t.yBlock !== undefined ? t.yBlock
+      : (isHoriz ? t.positionBlock : (t.depthBlock ?? 0));
+    // For right/down edge transitions that were never given a depthBlock, derive from room dims
+    const xBlockFinal = (t.direction === 'right' && t.depthBlock === undefined && t.xBlock === undefined)
+      ? json.widthBlocks - gw
+      : (t.direction === 'down' && t.depthBlock === undefined && t.yBlock === undefined)
+        ? (isHoriz ? xBlock : json.heightBlocks - gw)
+        : xBlock;
+    const yBlockFinal = (t.direction === 'down' && t.depthBlock === undefined && t.yBlock === undefined)
+      ? json.heightBlocks - gw
+      : yBlock;
+    return {
+      direction: t.direction,
+      targetRoomId: t.targetRoomId,
+      xBlock: xBlockFinal,
+      yBlock: yBlockFinal,
+      positionBlock: t.positionBlock,
+      openingSizeBlocks: t.openingSizeBlocks,
+      targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
+      fadeColor: t.fadeColor,
+      depthBlock: t.depthBlock,
+      gradientWidthBlocks: t.gradientWidthBlocks,
+      isSecretDoor: t.isSecretDoor,
+    };
+  });
 
   // ── Hazards ──────────────────────────────────────────────────────────────
 

@@ -164,7 +164,26 @@ function resolveJsonBlockTheme(
   return blockThemeRefToTheme(blockThemeId) ?? blockThemeRefToTheme(blockTheme);
 }
 
-// ── Conversion: RoomJsonDef → EditorRoomData ─────────────────────────────────
+/**
+ * Migrates legacy positionBlock / depthBlock into the new xBlock / yBlock model.
+ * If the JSON already carries xBlock and yBlock, those values are used directly.
+ */
+function migrateTransitionPosition(
+  t: RoomJsonTransition,
+  roomWidthBlocks: number,
+  roomHeightBlocks: number,
+): { xBlock: number; yBlock: number } {
+  if (t.xBlock !== undefined && t.yBlock !== undefined) {
+    return { xBlock: t.xBlock, yBlock: t.yBlock };
+  }
+  const gw = t.gradientWidthBlocks ?? 3;
+  switch (t.direction) {
+    case 'left':  return { xBlock: t.depthBlock ?? 0,                          yBlock: t.positionBlock };
+    case 'right': return { xBlock: t.depthBlock ?? (roomWidthBlocks  - gw),    yBlock: t.positionBlock };
+    case 'up':    return { xBlock: t.positionBlock, yBlock: t.depthBlock ?? 0                          };
+    case 'down':  return { xBlock: t.positionBlock, yBlock: t.depthBlock ?? (roomHeightBlocks - gw)   };
+  }
+}
 
 export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { data: EditorRoomData; nextUid: number } {
   let uid = startUid;
@@ -207,18 +226,24 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isBeeSwarmFlag: (e.isBeeSwarm ?? false) ? 1 : 0,
   }));
 
-  const transitions: EditorTransition[] = json.transitions.map(t => ({
-    uid: uid++,
-    direction: t.direction,
-    positionBlock: t.positionBlock,
-    openingSizeBlocks: t.openingSizeBlocks,
-    targetRoomId: t.targetRoomId,
-    targetSpawnBlock: [...t.targetSpawnBlock] as [number, number],
-    fadeColor: t.fadeColor,
-    depthBlock: t.depthBlock,
-    isSecretDoor: t.isSecretDoor,
-    gradientWidthBlocks: t.gradientWidthBlocks,
-  }));
+  const transitions: EditorTransition[] = json.transitions.map(t => {
+    const { xBlock, yBlock } = migrateTransitionPosition(t, json.widthBlocks, json.heightBlocks);
+    return {
+      uid: uid++,
+      direction: t.direction,
+      xBlock,
+      yBlock,
+      openingSizeBlocks: t.openingSizeBlocks,
+      targetRoomId: t.targetRoomId,
+      targetSpawnBlock: [...t.targetSpawnBlock] as [number, number],
+      fadeColor: t.fadeColor,
+      isSecretDoor: t.isSecretDoor,
+      gradientWidthBlocks: t.gradientWidthBlocks,
+      // Legacy backward-compat fields:
+      positionBlock: t.positionBlock,
+      depthBlock: t.depthBlock,
+    };
+  });
 
   const saveTombs: EditorSaveTomb[] = json.skillTombs.map(s => ({
     uid: uid++,
@@ -494,17 +519,28 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isBeeSwarm: e.isBeeSwarmFlag === 1,
     })),
     transitions: data.transitions.map(t => {
+      // Compute legacy positionBlock / depthBlock from xBlock/yBlock for backward compat.
+      const isHoriz = t.direction === 'left' || t.direction === 'right';
+      const legacyPositionBlock = isHoriz ? t.yBlock : t.xBlock;
+      const legacyDepthBlock    = isHoriz ? t.xBlock : t.yBlock;
       const jt: RoomJsonTransition = {
         direction: t.direction,
-        positionBlock: t.positionBlock,
+        positionBlock: legacyPositionBlock,
         openingSizeBlocks: t.openingSizeBlocks,
         targetRoomId: t.targetRoomId,
         targetSpawnBlock: [...t.targetSpawnBlock],
+        xBlock: t.xBlock,
+        yBlock: t.yBlock,
       };
+      // Only emit depthBlock when it differs from the boundary-edge default, to
+      // avoid confusing old readers that treat depthBlock===undefined as "edge".
+      const gw = t.gradientWidthBlocks ?? 3;
+      const isAtEdge = (t.direction === 'left' && t.xBlock === 0)
+        || (t.direction === 'up'   && t.yBlock === 0);
+      if (!isAtEdge || legacyDepthBlock !== 0) jt.depthBlock = legacyDepthBlock;
       if (t.fadeColor) jt.fadeColor = t.fadeColor;
-      if (t.depthBlock !== undefined) jt.depthBlock = t.depthBlock;
       if (t.isSecretDoor) jt.isSecretDoor = t.isSecretDoor;
-      if (t.gradientWidthBlocks !== undefined) jt.gradientWidthBlocks = t.gradientWidthBlocks;
+      if (gw !== 3 || t.gradientWidthBlocks !== undefined) jt.gradientWidthBlocks = gw;
       return jt;
     }),
     skillTombs: data.saveTombs.map(s => ({

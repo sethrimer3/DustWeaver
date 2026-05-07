@@ -30,6 +30,7 @@ import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
 import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
+import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges } from './editorExport';
 import { ROOM_REGISTRY, initRoomRegistry, registerRoom } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
@@ -83,9 +84,30 @@ export interface EditorController {
 }
 
 /**
- * Creates the editor controller. Call once at game screen init.
- * @param onEditorClose Called when the editor closes via confirm or cancel.
+ * Shows a temporary warning toast message in the editor UI root.
+ * Auto-dismisses after 3 seconds.
  */
+function showEditorToast(root: HTMLElement, message: string): void {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = [
+    'position:absolute', 'left:50%', 'top:32px',
+    'transform:translateX(-50%)',
+    'background:rgba(180,60,0,0.92)',
+    'color:#fff',
+    'font:bold 13px monospace',
+    'padding:8px 18px',
+    'border-radius:6px',
+    'border:1.5px solid #ff9933',
+    'z-index:10000',
+    'pointer-events:none',
+    'white-space:pre',
+    'text-align:center',
+  ].join(';');
+  root.appendChild(toast);
+  setTimeout(() => { toast.remove(); }, 3000);
+}
+
 export function createEditorController(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
@@ -367,16 +389,28 @@ export function createEditorController(
         // Complete the link using the selected transition from the target room
         if (linkSourceRoomData && room.transitions[transitionIndex]) {
           const targetTrans = room.transitions[transitionIndex];
-          // Build a temporary EditorTransition for completeTransitionLink
+          // Build a temporary EditorTransition for completeTransitionLink.
+          // Prefer xBlock/yBlock from the RoomTransitionDef; fall back to positionBlock migration.
+          const isHoriz = targetTrans.direction === 'left' || targetTrans.direction === 'right';
+          const gw = targetTrans.gradientWidthBlocks ?? 3;
+          const xB = targetTrans.xBlock !== undefined
+            ? targetTrans.xBlock
+            : (isHoriz ? (targetTrans.depthBlock ?? 0) : targetTrans.positionBlock);
+          const yB = targetTrans.yBlock !== undefined
+            ? targetTrans.yBlock
+            : (isHoriz ? targetTrans.positionBlock : (targetTrans.depthBlock ?? 0));
           const editorTargetTrans: EditorTransition = {
             uid: -1,
             direction: targetTrans.direction,
-            positionBlock: targetTrans.positionBlock,
+            xBlock: xB,
+            yBlock: yB,
             openingSizeBlocks: targetTrans.openingSizeBlocks,
             targetRoomId: '',
             targetSpawnBlock: [targetTrans.targetSpawnBlock[0], targetTrans.targetSpawnBlock[1]],
+            positionBlock: targetTrans.positionBlock,
+            gradientWidthBlocks: gw,
           };
-          completeTransitionLink(
+          const result = completeTransitionLink(
             state,
             linkSourceRoomData.transitions,
             room.id,
@@ -384,11 +418,14 @@ export function createEditorController(
             room.widthBlocks,
             room.heightBlocks,
           );
-          linkSourceRoomData = null;
-          linkTargetRoomId = '';
-
-          // Rebuild the current room to reflect the change
-          applyEdits();
+          if (!result.ok) {
+            showEditorToast(uiRoot, transitionLinkWarningMessage(result));
+          } else {
+            linkSourceRoomData = null;
+            linkTargetRoomId = '';
+            // Rebuild the current room to reflect the change
+            applyEdits();
+          }
         }
       },
       onClose: () => {
@@ -582,7 +619,7 @@ export function createEditorController(
           if (clicked && clicked.type === 'transition' && linkSourceRoomData) {
             const targetTrans = state.roomData.transitions.find((t: EditorTransition) => t.uid === clicked.uid);
             if (targetTrans) {
-              completeTransitionLink(
+              const result = completeTransitionLink(
                 state,
                 linkSourceRoomData.transitions,
                 linkTargetRoomId || state.roomData.id,
@@ -590,8 +627,12 @@ export function createEditorController(
                 state.roomData.widthBlocks,
                 state.roomData.heightBlocks,
               );
-              linkSourceRoomData = null;
-              linkTargetRoomId = '';
+              if (!result.ok) {
+                showEditorToast(uiRoot, transitionLinkWarningMessage(result));
+              } else {
+                linkSourceRoomData = null;
+                linkTargetRoomId = '';
+              }
             }
           }
         } else if (state.activeTool === EditorTool.Select) {

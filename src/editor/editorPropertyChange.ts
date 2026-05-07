@@ -97,20 +97,27 @@ export function applyPropertyToElement(
     if (trans) {
       if (prop === 'transition.direction' && typeof value === 'string') {
         trans.direction = value as 'left' | 'right' | 'up' | 'down';
+        // Recompute legacy positionBlock after direction change
+        const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+        trans.positionBlock = isHoriz ? trans.yBlock : trans.xBlock;
       }
-      if (prop === 'transition.positionBlock' && !isNaN(numVal)) trans.positionBlock = numVal;
+      if (prop === 'transition.xBlock' && !isNaN(numVal)) {
+        trans.xBlock = numVal;
+        // Keep legacy positionBlock in sync
+        const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+        if (!isHoriz) trans.positionBlock = numVal;
+      }
+      if (prop === 'transition.yBlock' && !isNaN(numVal)) {
+        trans.yBlock = numVal;
+        // Keep legacy positionBlock in sync
+        const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+        if (isHoriz) trans.positionBlock = numVal;
+      }
       if (prop === 'transition.openingSizeBlocks' && !isNaN(numVal)) trans.openingSizeBlocks = Math.max(1, numVal);
       if (prop === 'transition.targetRoomId' && typeof value === 'string') trans.targetRoomId = value;
       if (prop === 'transition.targetSpawnBlockX' && !isNaN(numVal)) trans.targetSpawnBlock[0] = numVal;
       if (prop === 'transition.targetSpawnBlockY' && !isNaN(numVal)) trans.targetSpawnBlock[1] = numVal;
       if (prop === 'transition.fadeColor' && typeof value === 'string') trans.fadeColor = value;
-      if (prop === 'transition.depthBlock') {
-        if (value === '' || value === '-' || (typeof value === 'number' && isNaN(value))) {
-          trans.depthBlock = undefined; // clear = edge transition
-        } else if (!isNaN(numVal)) {
-          trans.depthBlock = Math.max(0, numVal);
-        }
-      }
       if (prop === 'transition.isSecretDoor') {
         trans.isSecretDoor = numVal === 1;
       }

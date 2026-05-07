@@ -138,18 +138,21 @@ export function buildMapTab(
         for (let d = 0; d < openSize; d++) {
           let bx = 0;
           let by = 0;
+          const isHoriz = t.direction === 'left' || t.direction === 'right';
+          const xB = t.xBlock !== undefined ? t.xBlock : (isHoriz ? 0 : t.positionBlock);
+          const yB = t.yBlock !== undefined ? t.yBlock : (isHoriz ? t.positionBlock : 0);
           if (t.direction === 'left') {
-            bx = 0;
-            by = t.positionBlock + d;
+            bx = xB;
+            by = yB + d;
           } else if (t.direction === 'right') {
-            bx = room.widthBlocks - 1;
-            by = t.positionBlock + d;
+            bx = xB;
+            by = yB + d;
           } else if (t.direction === 'up') {
-            bx = t.positionBlock + d;
-            by = 0;
+            bx = xB + d;
+            by = yB;
           } else if (t.direction === 'down') {
-            bx = t.positionBlock + d;
-            by = room.heightBlocks - 1;
+            bx = xB + d;
+            by = yB;
           }
           const screenX = centerX + (mapXBlock + bx) * cellSize;
           const screenY = centerY + (mapYBlock + by) * cellSize;

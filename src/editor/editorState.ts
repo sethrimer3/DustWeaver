@@ -341,21 +341,37 @@ export interface EditorEnemy {
 export interface EditorTransition {
   uid: number;
   direction: TransitionDirection;
-  positionBlock: number;
+  /**
+   * X block coordinate of the top-left corner of the transition zone.
+   * For left/right transitions this is the x-start of the gradient zone.
+   * For up/down transitions this is the x-start of the opening.
+   */
+  xBlock: number;
+  /**
+   * Y block coordinate of the top-left corner of the transition zone.
+   * For left/right transitions this is the y-start of the opening.
+   * For up/down transitions this is the y-start of the gradient zone.
+   */
+  yBlock: number;
   openingSizeBlocks: number;
   targetRoomId: string;
   targetSpawnBlock: [number, number];
   fadeColor?: string;
-  /**
-   * Left edge (for left/right) or top edge (for up/down) of the 6-block-deep
-   * transition zone. When undefined the transition sits on the room boundary.
-   * When defined the transition is an interior zone at this block position.
-   */
-  depthBlock?: number;
   /** When true, this transition is a secret door hidden from the player until approached. */
   isSecretDoor?: boolean;
-  /** Width of the fade gradient in blocks (default: 3). */
+  /** Depth of the fade gradient zone in the facing direction, in blocks (default: 3). */
   gradientWidthBlocks?: number;
+  /**
+   * @deprecated Legacy field — y-start (for left/right) or x-start (for up/down) of the
+   * opening. Superseded by xBlock/yBlock. Kept for backward-compatible JSON round-trips.
+   */
+  positionBlock: number;
+  /**
+   * @deprecated Legacy field — x-start (for left/right) or y-start (for up/down) of the
+   * gradient zone. Superseded by xBlock/yBlock. When undefined in old data the transition
+   * sat on the room boundary. Kept for backward-compatible JSON round-trips.
+   */
+  depthBlock?: number;
 }
 
 /** A water zone rectangle placed in the room. */

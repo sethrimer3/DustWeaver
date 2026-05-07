@@ -117,26 +117,26 @@ export function applyRoomDimensionChange(
 
   // Keep transitions valid for the updated room dimensions.
   for (const trans of room.transitions) {
-    if (trans.direction === 'left' || trans.direction === 'right') {
+    const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+    const gw = trans.gradientWidthBlocks ?? 3;
+    if (isHoriz) {
       const maxOpening = Math.max(1, room.heightBlocks - 2);
       trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
-      trans.positionBlock = Math.min(
-        Math.max(1, trans.positionBlock),
-        room.heightBlocks - 1 - trans.openingSizeBlocks,
-      );
-      if (trans.depthBlock !== undefined) {
-        trans.depthBlock = Math.min(Math.max(0, trans.depthBlock), room.widthBlocks - 6);
-      }
+      // Clamp zone y (opening start) to room bounds
+      trans.yBlock = Math.min(Math.max(0, trans.yBlock), room.heightBlocks - trans.openingSizeBlocks);
+      // Clamp zone x (gradient start) to room bounds
+      trans.xBlock = Math.min(Math.max(0, trans.xBlock), room.widthBlocks - gw);
+      // Keep legacy positionBlock in sync
+      trans.positionBlock = trans.yBlock;
     } else {
       const maxOpening = Math.max(1, room.widthBlocks - 2);
       trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
-      trans.positionBlock = Math.min(
-        Math.max(1, trans.positionBlock),
-        room.widthBlocks - 1 - trans.openingSizeBlocks,
-      );
-      if (trans.depthBlock !== undefined) {
-        trans.depthBlock = Math.min(Math.max(0, trans.depthBlock), room.heightBlocks - 6);
-      }
+      // Clamp zone x (opening start) to room bounds
+      trans.xBlock = Math.min(Math.max(0, trans.xBlock), room.widthBlocks - trans.openingSizeBlocks);
+      // Clamp zone y (gradient start) to room bounds
+      trans.yBlock = Math.min(Math.max(0, trans.yBlock), room.heightBlocks - gw);
+      // Keep legacy positionBlock in sync
+      trans.positionBlock = trans.xBlock;
     }
   }
 }
@@ -254,10 +254,12 @@ export function applyEdgeResize(
     // Shift transitions along the shifted axis
     for (const trans of room.transitions) {
       if (edge === 'top' && (trans.direction === 'left' || trans.direction === 'right')) {
-        trans.positionBlock += shiftY;
+        trans.yBlock += shiftY;
+        trans.positionBlock = trans.yBlock; // keep legacy in sync
       }
       if (edge === 'left' && (trans.direction === 'up' || trans.direction === 'down')) {
-        trans.positionBlock += shiftX;
+        trans.xBlock += shiftX;
+        trans.positionBlock = trans.xBlock; // keep legacy in sync
       }
     }
   }
