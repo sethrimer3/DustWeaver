@@ -13,11 +13,15 @@
  * assets via Vite's publicDir.  The image cache is module-level so each
  * sprite is loaded exactly once.
  *
- * No per-frame allocations in the hot draw path — the occupancy Set is
- * cleared and rebuilt each call (acceptable given MAX_WALLS = 64).
+ * Static wall content is split into 32×32-block chunks backed by small
+ * offscreen canvases.  Only camera-visible chunks are blitted per frame;
+ * dirty chunks (e.g. after a tile edit) are rebuilt on demand.  This avoids
+ * single room-sized canvases that exceed browser memory limits for large rooms.
  */
 
 import { WallSnapshot } from '../snapshot';
+import { RoomChunkCache } from './chunkRenderCache';
+export type { ChunkCacheStats } from './chunkRenderCache';
 import type { BlockTheme, LightingEffect, AmbientLightDirection } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 import {
@@ -294,45 +298,60 @@ function _populateCoveredBy2x2Keys(
   }
 }
 
-// ── Wall layer bake cache ─────────────────────────────────────────────────────
+// ── Chunk-based wall cache ────────────────────────────────────────────────────
 
 /**
- * Pre-rendered offscreen canvas holding the fully composited wall layer for the
- * current room.  Built once when sprites are ready; blitted cheaply each frame.
- * Replaced whenever `_bakedWallLayoutRef` or `_bakedWallScalePx` changes, or
- * when `_invalidateBakedWallCanvas()` is called on room/theme/lighting updates.
+ * Chunk-based wall render cache.  Replaces the former single-canvas bake with
+ * many small per-chunk canvases so:
+ *   • Only camera-visible chunks are blitted each frame.
+ *   • Only dirty chunks are rebuilt (e.g. one tile changed → one chunk rebuilt).
+ *   • Very large rooms never require a room-sized canvas.
+ *
+ * Owned by this module; invalidated via _invalidateBakedWallCanvas() whenever
+ * theme, lighting, or wall layout changes (same call-sites as before).
  */
-let _bakedWallCanvas: HTMLCanvasElement | null = null;
-/**
- * Reference to the `CachedWallLayout` that was used to build `_bakedWallCanvas`.
- * Identity comparison (`===`) in `renderWallSprites` detects wall-layout changes
- * without rebuilding a long signature string on every fast-path frame.
- */
-let _bakedWallLayoutRef: CachedWallLayout | null = null;
-/**
- * The `scalePx` value used when building `_bakedWallCanvas`.
- * Included in the validity check alongside `_bakedWallLayoutRef`.
- */
-let _bakedWallScalePx = 0;
-/**
- * True when the current `_bakedWallCanvas` was rendered with at least one
- * fallback tile (sprite still loading).  Triggers a re-bake next frame so that
- * the canvas is refreshed once all sprites have loaded.
- */
-let _bakedWallHadFallbacks = false;
-/**
- * Tracks whether the current bake pass used any fallback tiles.
- * Set to false at the start of each `_doRenderWallTilesDirect` call; set to
- * true by any code path that falls back to placeholder drawing.
- */
-let _bakePassHadFallbacks = false;
+const _chunkCache = new RoomChunkCache();
 
-/** Invalidates the baked wall canvas so it will be rebuilt on the next render. */
+/**
+ * Viewport dimensions used for visible-chunk range computation.
+ * Set once per frame by setRenderViewportSize() called from gameRender.ts
+ * before the walls pass.  Defaults cover the standard 480×270 virtual canvas
+ * so any call-site that omits the explicit setter still works correctly.
+ */
+let _vpW = 480;
+let _vpH = 270;
+
+/**
+ * Update the viewport size used for chunk visibility culling.
+ * Must be called from renderFrame() before renderWalls() each frame.
+ */
+export function setRenderViewportSize(vpW: number, vpH: number): void {
+  _vpW = vpW;
+  _vpH = vpH;
+}
+
+/** Returns the current chunk-cache diagnostic counters for the debug overlay. */
+export function getChunkCacheStats(): import('./chunkRenderCache').ChunkCacheStats {
+  return _chunkCache.stats;
+}
+
+/**
+ * Marks every chunk overlapping the given tile rectangle dirty so only those
+ * chunks are rebuilt the next time they are visible.
+ * Useful for targeted invalidation when the editor changes a small tile region.
+ */
+export function invalidateChunkRect(
+  colMin: number,
+  rowMin: number,
+  colMax: number,
+  rowMax: number,
+): void {
+  _chunkCache.invalidateBlockRect(colMin, rowMin, colMax, rowMax);
+}
+
+/** Invalidates the chunk cache so all chunks are rebuilt on the next render. */
 function _invalidateBakedWallCanvas(): void {
-  _bakedWallCanvas = null;
-  _bakedWallLayoutRef = null;
-  _bakedWallScalePx = 0;
-  _bakedWallHadFallbacks = false;
+  _chunkCache.invalidateAll();
 }
 
 // ── Public render function ────────────────────────────────────────────────────
@@ -375,76 +394,52 @@ export function renderWallSprites(
     ? _getAmbientDepths(wallLayout)
     : null;
 
-  // Fast path: blit the pre-rendered canvas when the layout, scale, and
-  // rendering configuration are all unchanged and no sprite fallbacks remain.
-  // Uses object-reference comparison for the layout (no string allocation) since
-  // `getWallLayoutCache` returns the same object when the signature is stable.
-  // Theme/lighting/world changes are detected via `_invalidateBakedWallCanvas()`
-  // which nulls `_bakedWallCanvas` before we reach this check.
-  const bakeCurrentMatch =
-    _bakedWallCanvas !== null &&
-    _bakedWallLayoutRef === wallLayout &&
-    _bakedWallScalePx === scalePx;
-
-  if (bakeCurrentMatch && !_bakedWallHadFallbacks) {
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(_bakedWallCanvas!, Math.round(offsetXPx), Math.round(offsetYPx));
-    ctx.restore();
-    return;
-  }
-
-  // Determine or create the offscreen bake canvas.
-  // When the match is current but had fallbacks we reuse the existing canvas
-  // (same size) and re-render into it this frame.
-  let bakeCanvas: HTMLCanvasElement;
-  if (bakeCurrentMatch) {
-    bakeCanvas = _bakedWallCanvas!;
-  } else {
-    // Layout or scale changed — allocate a fresh canvas sized to the room
-    // bounds in virtual pixels (scalePx ≈ 1.0 always).
-    const roomW = Math.max(1, Math.ceil(_activeRoomWidthBlocks * blockSizePx * scalePx));
-    const roomH = Math.max(1, Math.ceil(_activeRoomHeightBlocks * blockSizePx * scalePx));
-    bakeCanvas = document.createElement('canvas');
-    bakeCanvas.width = roomW;
-    bakeCanvas.height = roomH;
-  }
-
-  const bakeCtx = bakeCanvas.getContext('2d');
-  if (bakeCtx === null) {
-    // Context unavailable — render directly without baking.
-    _doRenderWallTilesDirect(ctx, walls, wallLayout, ambientDepths, offsetXPx, offsetYPx, scalePx, blockSizePx);
-    return;
-  }
-
-  // Render all tiles into the bake canvas at world origin (offset = 0, 0).
-  bakeCtx.clearRect(0, 0, bakeCanvas.width, bakeCanvas.height);
-  _doRenderWallTilesDirect(bakeCtx, walls, wallLayout, ambientDepths, 0, 0, scalePx, blockSizePx);
-
-  // Commit the bake (even if fallbacks were used — they'll be corrected on the
-  // next frame once the sprites finish loading).
-  _bakedWallCanvas = bakeCanvas;
-  _bakedWallLayoutRef = wallLayout;
-  _bakedWallScalePx = scalePx;
-  _bakedWallHadFallbacks = _bakePassHadFallbacks;
-
-  // Blit the freshly-baked canvas to the target context.
-  ctx.save();
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(bakeCanvas, Math.round(offsetXPx), Math.round(offsetYPx));
-  ctx.restore();
+  // Render visible chunks via the chunk cache.
+  // Each dirty chunk is built by calling _doRenderWallTilesDirect with that
+  // chunk's tile-range filter and per-chunk canvas offset.  Clean chunks are
+  // blitted cheaply with a single drawImage call.
+  _chunkCache.renderVisibleChunks(
+    ctx,
+    wallLayout,   // identity used for layout-change detection
+    offsetXPx,
+    offsetYPx,
+    scalePx,
+    blockSizePx,
+    _vpW,
+    _vpH,
+    (chunkCtx, chunkOffX, chunkOffY, s, bsz, colMin, rowMin, colMax, rowMax) =>
+      _doRenderWallTilesDirect(
+        chunkCtx,
+        walls,
+        wallLayout,
+        ambientDepths,
+        chunkOffX,
+        chunkOffY,
+        s,
+        bsz,
+        colMin,
+        colMax,
+        rowMin,
+        rowMax,
+      ),
+  );
 }
 
 /**
- * Draws all wall tiles, platforms, ramps, and half-pillars into `ctx`.
+ * Draws wall tiles, platforms, ramps, and half-pillars into `ctx`.
  *
- * `offsetXPx` / `offsetYPx` are applied to every tile position, allowing the
- * function to render either directly to the virtual canvas (with camera offset)
- * or to the bake canvas at origin (offset = 0, 0).
+ * `offsetXPx` / `offsetYPx` are applied to every tile position.  When called
+ * from the chunk cache the offsets are set so that tiles at (colMin, rowMin)
+ * land at canvas origin (0, 0).
  *
- * Sets `_bakePassHadFallbacks = true` whenever a sprite is not yet loaded and
- * a placeholder tile is drawn instead.  The caller uses this to decide whether
- * to re-bake on the next frame.
+ * The optional `filterCol/RowMin/Max` parameters limit rendering to the tile
+ * range covered by one chunk.  Elements whose entire AABB falls outside the
+ * range are skipped (O(tiles_in_chunk) cost after filtering).  Elements that
+ * straddle a chunk boundary are included in every chunk they overlap; the
+ * chunk canvas auto-clips any overhang, so no artefact results.
+ *
+ * Returns `true` when any sprite was still loading and a placeholder was
+ * drawn; the chunk cache uses this to schedule a rebuild on the next frame.
  */
 function _doRenderWallTilesDirect(
   ctx:                   CanvasRenderingContext2D,
@@ -455,8 +450,12 @@ function _doRenderWallTilesDirect(
   offsetYPx:             number,
   scalePx:               number,
   blockSizePx:           number,
-): void {
-  _bakePassHadFallbacks = false;
+  filterColMin          = 0,
+  filterColMax          = 0x7FFFFFFF,
+  filterRowMin          = 0,
+  filterRowMax          = 0x7FFFFFFF,
+): boolean {
+  let _hadFallbacks = false;
 
   const tileSizeScreen = blockSizePx * scalePx;
 
@@ -491,6 +490,13 @@ function _doRenderWallTilesDirect(
       const commaIdx = topLeftKey.indexOf(',');
       const col = parseInt(topLeftKey.slice(0, commaIdx), 10);
       const row = parseInt(topLeftKey.slice(commaIdx + 1), 10);
+
+      // A 2×2 block spans [col, col+1] × [row, row+1].  Include in every
+      // chunk that overlaps its footprint so canvas auto-clipping splits it
+      // cleanly at chunk boundaries.
+      if (col + 1 < filterColMin || col > filterColMax) continue;
+      if (row + 1 < filterRowMin || row > filterRowMax) continue;
+
       const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
       const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
@@ -519,7 +525,7 @@ function _doRenderWallTilesDirect(
         if (procSprite !== null) {
           ctx.drawImage(procSprite, tileX, tileY, drawSize, drawSize);
         } else {
-          _bakePassHadFallbacks = true;
+          _hadFallbacks = true;
           drawFallbackTile(ctx, tileX, tileY, drawSize);
         }
       } else {
@@ -533,11 +539,11 @@ function _doRenderWallTilesDirect(
           if (folderSprite !== null) {
             ctx.drawImage(folderSprite, tileX, tileY, drawSize, drawSize);
           } else {
-            _bakePassHadFallbacks = true;
+            _hadFallbacks = true;
             drawFallbackTile(ctx, tileX, tileY, drawSize);
           }
         } else {
-          _bakePassHadFallbacks = true;
+          _hadFallbacks = true;
           drawFallbackTile(ctx, tileX, tileY, drawSize);
         }
       }
@@ -549,6 +555,10 @@ function _doRenderWallTilesDirect(
     const key = tile.key;
     const col = tile.col;
     const row = tile.row;
+
+    // Skip tiles entirely outside this chunk's tile range.
+    if (col < filterColMin || col > filterColMax) continue;
+    if (row < filterRowMin || row > filterRowMax) continue;
 
     const northSolid = isWallOccupied(wallLayout.occupied, col,     row - 1);
     const eastSolid  = isWallOccupied(wallLayout.occupied, col + 1, row    );
@@ -599,7 +609,7 @@ function _doRenderWallTilesDirect(
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
-        _bakePassHadFallbacks = true;
+        _hadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else if (isFolderBasedTheme(tileTheme)) {
@@ -615,7 +625,7 @@ function _doRenderWallTilesDirect(
       if (folderSprite !== null) {
         ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
-        _bakePassHadFallbacks = true;
+        _hadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else if (!tileIsLegacyBlackRock && tileTheme !== null) {
@@ -646,7 +656,7 @@ function _doRenderWallTilesDirect(
           ctx.restore();
         }
       } else {
-        _bakePassHadFallbacks = true;
+        _hadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else {
@@ -666,7 +676,7 @@ function _doRenderWallTilesDirect(
           ctx.restore();
         }
       } else {
-        _bakePassHadFallbacks = true;
+        _hadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     }
@@ -684,7 +694,7 @@ function _doRenderWallTilesDirect(
     // Theme-based modes and world-0 blackRock do not use vertex overlays.
     if (isWorldMode && spec.variant === 'corner') {
       if (!isSpriteReady(_sprites.vertex)) {
-        _bakePassHadFallbacks = true;
+        _hadFallbacks = true;
       } else {
         drawVertexOverlays(
           ctx, _sprites.vertex, wallLayout.occupied, col, row, tileX, tileY, tileSizeScreen,
@@ -699,6 +709,10 @@ function _doRenderWallTilesDirect(
     const key = tile.key;
     const col = tile.col;
     const row = tile.row;
+
+    // Skip platform tiles outside this chunk's range.
+    if (col < filterColMin || col > filterColMax) continue;
+    if (row < filterRowMin || row > filterRowMax) continue;
 
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
@@ -721,7 +735,7 @@ function _doRenderWallTilesDirect(
         platformDrawn = true;
       } else {
         // Sprites still loading — schedule a re-bake.
-        _bakePassHadFallbacks = true;
+        _hadFallbacks = true;
       }
     } else if (isFolderBasedTheme(platTheme)) {
       // Folder-based theme: apply the platform template cookie-cutter to the folder sprite.
@@ -736,7 +750,7 @@ function _doRenderWallTilesDirect(
           platformDrawn = true;
         } else {
           // Sprites still loading — schedule a re-bake.
-          _bakePassHadFallbacks = true;
+          _hadFallbacks = true;
         }
       }
     }
@@ -779,6 +793,16 @@ function _doRenderWallTilesDirect(
     const wwPx = walls.wWorld[wi] * scalePx;
     const whPx = walls.hWorld[wi] * scalePx;
 
+    // Skip ramps whose entire tile footprint is outside this chunk.
+    // A ramp may span multiple blocks (1×1, 1×2, 2×1, 2×2); include it in
+    // every chunk it overlaps and rely on canvas auto-clipping for the rest.
+    const rampColFirst = Math.floor(walls.xWorld[wi] / blockSizePx);
+    const rampRowFirst = Math.floor(walls.yWorld[wi] / blockSizePx);
+    const rampColLast  = Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - 1;
+    const rampRowLast  = Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - 1;
+    if (rampColLast < filterColMin || rampColFirst > filterColMax) continue;
+    if (rampRowLast < filterRowMin || rampRowFirst > filterRowMax) continue;
+
     // Resolve theme for this ramp wall.
     const rampTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(walls.themeIndex[wi])
@@ -796,7 +820,7 @@ function _doRenderWallTilesDirect(
         ctx.drawImage(procSprite, Math.round(wxPx), Math.round(wyPx), Math.round(wwPx), Math.round(whPx));
       } else {
         // Fallback: solid triangle while sprites are loading.
-        _bakePassHadFallbacks = true;
+        _hadFallbacks = true;
         drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, '#1a2535', '#5080b0', scalePx);
       }
     } else if (isFolderBasedTheme(rampTheme)) {
@@ -820,7 +844,7 @@ function _doRenderWallTilesDirect(
         ctx.drawImage(folderRampSprite, rX, rY, rW, rH);
         ctx.restore();
       } else {
-        _bakePassHadFallbacks = true;
+        _hadFallbacks = true;
         drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, '#555555', '#777777', scalePx);
       }
     } else {
@@ -855,6 +879,14 @@ function _doRenderWallTilesDirect(
     const wwPx = walls.wWorld[wi] * scalePx;
     const whPx = walls.hWorld[wi] * scalePx;
 
+    // Skip pillars outside this chunk.
+    const pillarColFirst = Math.floor(walls.xWorld[wi] / blockSizePx);
+    const pillarRowFirst = Math.floor(walls.yWorld[wi] / blockSizePx);
+    const pillarColLast  = Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - 1;
+    const pillarRowLast  = Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - 1;
+    if (pillarColLast < filterColMin || pillarColFirst > filterColMax) continue;
+    if (pillarRowLast < filterRowMin || pillarRowFirst > filterRowMax) continue;
+
     // Resolve theme color
     const pillarTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(walls.themeIndex[wi])
@@ -881,4 +913,5 @@ function _doRenderWallTilesDirect(
   }
 
   ctx.restore();
+  return _hadFallbacks;
 }
