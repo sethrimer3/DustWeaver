@@ -210,29 +210,29 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     const isPillarHalfWidthFlag: 0 | 1 = item.isPillarHalfWidthItem === 1 ? 1 : 0;
 
     if (item.isBouncePadItem === 1) {
-      const bpW = getPlacementWidth(item, state.placementRotationSteps);
-      const bpH = getPlacementHeight(item, state.placementRotationSteps);
-      let bpRamp: 0 | 1 | 2 | 3 | undefined;
+      const bounceW = getPlacementWidth(item, state.placementRotationSteps);
+      const bounceH = getPlacementHeight(item, state.placementRotationSteps);
+      let bounceRamp: 0 | 1 | 2 | 3 | undefined;
       if (item.isRampItem === 1) {
         const base = state.placementRotationSteps % 4;
-        bpRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+        bounceRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
       }
-      if (!rectFitsInsideRoom(room, bx, by, bpW, bpH)) return;
+      if (!rectFitsInsideRoom(room, bx, by, bounceW, bounceH)) return;
       const existingBouncePads = room.bouncePads ?? [];
       const overlapsBounce = existingBouncePads.some(b =>
-        bx < b.xBlock + b.wBlock && bx + bpW > b.xBlock &&
-        by < b.yBlock + b.hBlock && by + bpH > b.yBlock,
+        bx < b.xBlock + b.wBlock && bx + bounceW > b.xBlock &&
+        by < b.yBlock + b.hBlock && by + bounceH > b.yBlock,
       );
       if (overlapsBounce) return;
-      if (rectOverlapsFallingBlocks(room, bx, by, bpW, bpH)) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, bounceW, bounceH)) return;
       if (!room.bouncePads) room.bouncePads = [];
       const bp: EditorBouncePad = {
         uid: allocateUid(state),
         xBlock: bx,
         yBlock: by,
-        wBlock: bpW,
-        hBlock: bpH,
-        rampOrientation: bpRamp,
+        wBlock: bounceW,
+        hBlock: bounceH,
+        rampOrientation: bounceRamp,
         speedFactorIndex: item.bouncePadSpeedFactorIndex ?? 0,
       };
       room.bouncePads.push(bp);
@@ -240,35 +240,35 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     }
 
     if (item.isCrumbleBlockItem === 1) {
-      const cbW = getPlacementWidth(item, state.placementRotationSteps);
-      const cbH = getPlacementHeight(item, state.placementRotationSteps);
+      const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
+      const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
 
-      let cbRamp: 0 | 1 | 2 | 3 | undefined;
+      let crumbleRamp: 0 | 1 | 2 | 3 | undefined;
       if (item.isRampItem === 1) {
         const base = state.placementRotationSteps % 4;
-        cbRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+        crumbleRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
       }
 
-      if (!rectFitsInsideRoom(room, bx, by, cbW, cbH)) return;
+      if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return;
 
       const crumbles = room.crumbleBlocks ?? [];
       const overlapsCrumble = crumbles.some(b => {
         const bw = b.wBlock ?? 1;
         const bh = b.hBlock ?? 1;
-        return bx < b.xBlock + bw && bx + cbW > b.xBlock &&
-               by < b.yBlock + bh && by + cbH > b.yBlock;
+        return bx < b.xBlock + bw && bx + crumbleW > b.xBlock &&
+               by < b.yBlock + bh && by + crumbleH > b.yBlock;
       });
       if (overlapsCrumble) return;
-      if (rectOverlapsFallingBlocks(room, bx, by, cbW, cbH)) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, crumbleW, crumbleH)) return;
 
       if (!room.crumbleBlocks) room.crumbleBlocks = [];
       room.crumbleBlocks.push({
         uid: allocateUid(state),
         xBlock: bx,
         yBlock: by,
-        wBlock: cbW,
-        hBlock: cbH,
-        rampOrientation: cbRamp,
+        wBlock: crumbleW,
+        hBlock: crumbleH,
+        rampOrientation: crumbleRamp,
         variant: state.pendingCrumbleVariant,
         blockTheme: state.selectedBlockTheme,
       });

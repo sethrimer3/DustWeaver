@@ -750,6 +750,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     });
   }
   if (saved.ropes && saved.ropes.length > 0) {
+    // `fixed` defaults to true (both ends pinned); only `false` is stored.
     json.ropes = saved.ropes.map(r => ({ ...r, fixed: r.fixed === false ? false : undefined }));
   }
   if (saved.dialogueTriggers && saved.dialogueTriggers.length > 0) {
