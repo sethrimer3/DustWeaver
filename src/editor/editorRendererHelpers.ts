@@ -591,9 +591,19 @@ function _drawTransitionHoverArrow(
   zoom: number,
 ): void {
   const bs = BLOCK_SIZE_SMALL;
-  const arrowLenPx = Math.max(12, 3 * bs * zoom);
-  const headLen = Math.max(6, arrowLenPx * 0.35);
-  const headAngleRad = Math.PI / 6; // 30°
+  /** Minimum arrow shaft length in pixels. */
+  const ARROW_MIN_LEN_PX = 12;
+  /** Scale factor for arrow length relative to block size. */
+  const ARROW_LEN_BLOCKS = 3;
+  /** Fraction of arrow length used for the arrowhead. */
+  const ARROW_HEAD_RATIO = 0.35;
+  /** Minimum arrowhead length in pixels. */
+  const ARROW_HEAD_MIN_PX = 6;
+  /** Half-angle of the arrowhead in radians (30°). */
+  const ARROW_HEAD_ANGLE_RAD = Math.PI / 6;
+
+  const arrowLenPx = Math.max(ARROW_MIN_LEN_PX, ARROW_LEN_BLOCKS * bs * zoom);
+  const headLen = Math.max(ARROW_HEAD_MIN_PX, arrowLenPx * ARROW_HEAD_RATIO);
 
   // Center of the trigger edge
   let startX: number, startY: number, dirX: number, dirY: number;
@@ -631,10 +641,10 @@ function _drawTransitionHoverArrow(
 
   // Arrow head (two lines)
   const angleRad = Math.atan2(dirY, dirX);
-  const h1X = endX - headLen * Math.cos(angleRad - headAngleRad);
-  const h1Y = endY - headLen * Math.sin(angleRad - headAngleRad);
-  const h2X = endX - headLen * Math.cos(angleRad + headAngleRad);
-  const h2Y = endY - headLen * Math.sin(angleRad + headAngleRad);
+  const h1X = endX - headLen * Math.cos(angleRad - ARROW_HEAD_ANGLE_RAD);
+  const h1Y = endY - headLen * Math.sin(angleRad - ARROW_HEAD_ANGLE_RAD);
+  const h2X = endX - headLen * Math.cos(angleRad + ARROW_HEAD_ANGLE_RAD);
+  const h2Y = endY - headLen * Math.sin(angleRad + ARROW_HEAD_ANGLE_RAD);
 
   ctx.beginPath();
   ctx.moveTo(endX, endY);

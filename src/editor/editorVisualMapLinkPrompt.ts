@@ -78,23 +78,21 @@ export function computeSpawnBlockForMapLink(
   transition: RoomTransitionDef,
 ): readonly [number, number] {
   const SPAWN_INSET_BLOCKS = 3;
-  const isHoriz = transition.direction === 'left' || transition.direction === 'right';
-  // Opening center: for left/right = yBlock + half; for up/down = xBlock + half
-  const openingStartHoriz = transition.yBlock !== undefined ? transition.yBlock : transition.positionBlock;
-  const openingStartVert  = transition.xBlock !== undefined ? transition.xBlock : transition.positionBlock;
-  const spawnOffsetHoriz = openingStartHoriz + Math.floor(transition.openingSizeBlocks / 2);
-  const spawnOffsetVert  = openingStartVert  + Math.floor(transition.openingSizeBlocks / 2);
+  // For left/right: opening runs along Y axis → center Y = yBlock + half opening.
+  // For up/down:   opening runs along X axis → center X = xBlock + half opening.
+  const openingCenterY = (transition.yBlock ?? transition.positionBlock) + Math.floor(transition.openingSizeBlocks / 2);
+  const openingCenterX = (transition.xBlock ?? transition.positionBlock) + Math.floor(transition.openingSizeBlocks / 2);
 
   if (transition.direction === 'left') {
-    return [SPAWN_INSET_BLOCKS, isHoriz ? spawnOffsetHoriz : spawnOffsetVert];
+    return [SPAWN_INSET_BLOCKS, openingCenterY];
   }
   if (transition.direction === 'right') {
-    return [room.widthBlocks - SPAWN_INSET_BLOCKS - 1, isHoriz ? spawnOffsetHoriz : spawnOffsetVert];
+    return [room.widthBlocks - SPAWN_INSET_BLOCKS - 1, openingCenterY];
   }
   if (transition.direction === 'up') {
-    return [spawnOffsetVert, SPAWN_INSET_BLOCKS];
+    return [openingCenterX, SPAWN_INSET_BLOCKS];
   }
-  return [spawnOffsetVert, room.heightBlocks - SPAWN_INSET_BLOCKS - 1];
+  return [openingCenterX, room.heightBlocks - SPAWN_INSET_BLOCKS - 1];
 }
 
 // ── Link persistence ──────────────────────────────────────────────────────────

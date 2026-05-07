@@ -219,15 +219,17 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       : (isHoriz ? (t.depthBlock ?? 0) : t.positionBlock);
     const yBlock = t.yBlock !== undefined ? t.yBlock
       : (isHoriz ? t.positionBlock : (t.depthBlock ?? 0));
-    // For right/down edge transitions that were never given a depthBlock, derive from room dims
-    const xBlockFinal = (t.direction === 'right' && t.depthBlock === undefined && t.xBlock === undefined)
-      ? json.widthBlocks - gw
-      : (t.direction === 'down' && t.depthBlock === undefined && t.yBlock === undefined)
-        ? (isHoriz ? xBlock : json.heightBlocks - gw)
-        : xBlock;
-    const yBlockFinal = (t.direction === 'down' && t.depthBlock === undefined && t.yBlock === undefined)
-      ? json.heightBlocks - gw
-      : yBlock;
+
+    // For right/down edge transitions that have no depthBlock or explicit xBlock/yBlock,
+    // derive zone start from room dimensions so the zone is flush with the far edge.
+    let xBlockFinal = xBlock;
+    let yBlockFinal = yBlock;
+    if (t.direction === 'right' && t.depthBlock === undefined && t.xBlock === undefined) {
+      xBlockFinal = json.widthBlocks - gw;
+    } else if (t.direction === 'down' && t.depthBlock === undefined && t.yBlock === undefined) {
+      yBlockFinal = json.heightBlocks - gw;
+    }
+
     return {
       direction: t.direction,
       targetRoomId: t.targetRoomId,

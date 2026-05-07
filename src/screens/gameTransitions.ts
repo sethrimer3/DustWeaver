@@ -103,16 +103,18 @@ export function checkRoomTransitions(
     // Player must be inside the zone
     if (px < zoneLeft || px > zoneRight || py < zoneTop || py > zoneBottom) continue;
 
-    // Trigger edge check: player must be past the trigger edge
+    // Trigger edge check: player must be past the trigger edge.
+    // TRIGGER_EDGE_THRESHOLD_BLOCKS: how close to the trigger edge before the transition fires.
+    const TRIGGER_EDGE_THRESHOLD_BLOCKS = 0.5;
     let isTriggered = false;
     if (t.direction === 'right') {
-      isTriggered = px >= zoneRight - BS * 0.5;
+      isTriggered = px >= zoneRight - BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
     } else if (t.direction === 'left') {
-      isTriggered = px <= zoneLeft + BS * 0.5;
+      isTriggered = px <= zoneLeft + BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
     } else if (t.direction === 'down') {
-      isTriggered = py >= zoneBottom - BS * 0.5;
+      isTriggered = py >= zoneBottom - BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
     } else {
-      isTriggered = py <= zoneTop + BS * 0.5;
+      isTriggered = py <= zoneTop + BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
     }
 
     if (isTriggered) {
