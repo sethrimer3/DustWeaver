@@ -612,6 +612,23 @@ export function renderFrame(r: RenderFrameContext): void {
       );
     }
 
+    // ── Preview bubbles as DarkRoom light sources ────────────────────────────
+    // Each active preview bubble punches a small aperture-shaped hole in the
+    // darkness mask at the transition opening.  This ensures the glowing cue
+    // is visible through the DarkRoom overlay and blends naturally with the
+    // player's lantern light.  The bubble opacity drives the inner-fraction so
+    // the hole fades in as the player approaches, matching the glow animation.
+    for (let bi = 0; bi < r.previewBubbleCount; bi++) {
+      const b = r.previewBubbles[bi];
+      if (b.opacity <= 0 || b.radiusPx <= 0) continue;
+      lights.push({
+        xPx:          b.centerXPx,
+        yPx:          b.centerYPx,
+        radiusPx:     b.radiusPx,
+        innerFraction: b.opacity * 0.4,
+      });
+    }
+
     darkRoomOverlay.render(ctx, lights, shadows);
     if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_LIGHTING);
   }

@@ -8,6 +8,8 @@
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RoomDef } from '../levels/roomDef';
 import type { CameraState } from '../render/camera';
+import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
+import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 
 import {
   EditorState, createEditorState, EditorTool,
@@ -147,6 +149,11 @@ export function createEditorController(
   let isWorldMapDirty = false;
   // True if the current room has unsaved edits since it was last loaded.
   let isCurrentRoomDirty = false;
+
+  // Edge extension cache rebuilt whenever a new room is loaded into the editor.
+  // Passed to renderEditorOverlays so extension tiles are visible as blue ghost
+  // tiles (30 % opacity) outside the room boundary.
+  let editorEdgeExtensionCache: EdgeExtensionCache | null = null;
 
   function toggle(currentRoom: RoomDef): void {
     state.isActive = !state.isActive;
@@ -348,6 +355,9 @@ export function createEditorController(
     // recent-theme list — recent themes reflect only explicit user selections.
     state.selectedBlockTheme = state.roomData?.blockTheme ?? 'blackRock';
     isCurrentRoomDirty = false;
+    // Rebuild edge extension cache for the newly loaded room so the editor
+    // can show extension tiles as non-editable ghost overlays.
+    editorEdgeExtensionCache = buildEdgeExtensionCache(room);
   }
 
   function openWorldMap(): void {
@@ -798,7 +808,7 @@ export function createEditorController(
     if (!state.isActive) return;
 
     renderEditorIndicator(ctx, canvasWidth, state);
-    renderEditorOverlays(ctx, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
+    renderEditorOverlays(ctx, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, editorEdgeExtensionCache);
   }
 
   function getRoomDef(): RoomDef | null {

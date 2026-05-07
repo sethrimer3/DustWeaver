@@ -30,9 +30,15 @@ import {
   drawPlacementPreview,
   drawEditorUIOverlays,
 } from './editorPlacementPreviewDrawer';
+import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
+import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 
 /**
  * Renders all editor overlays on the 2D canvas.
+ *
+ * @param edgeExtensionCache  Optional pre-built edge extension cache.  When
+ *   provided, extension tiles are drawn with a semi-transparent blue tint
+ *   (30 % opacity) so they read as non-editable structural extensions.
  */
 export function renderEditorOverlays(
   ctx: CanvasRenderingContext2D,
@@ -42,11 +48,30 @@ export function renderEditorOverlays(
   zoom: number,
   canvasWidth: number,
   canvasHeight: number,
+  edgeExtensionCache?: EdgeExtensionCache | null,
 ): void {
   const room = state.roomData;
   if (room === null) return;
 
   ctx.save();
+
+  // ── Edge extension ghost tiles ────────────────────────────────────────────
+  // Drawn before all other overlays so grid / wall borders sit on top.
+  if (edgeExtensionCache !== null && edgeExtensionCache !== undefined) {
+    const tileSizePx = BLOCK_SIZE_SMALL * zoom;
+    const tiles = edgeExtensionCache.tiles;
+    ctx.fillStyle = 'rgba(60,120,255,0.30)';
+    for (let i = 0; i < tiles.length; i++) {
+      const tile = tiles[i];
+      if (!tile.isSolid) continue;
+      const sx = Math.round(tile.colBlock * tileSizePx + offsetXPx);
+      const sy = Math.round(tile.rowBlock * tileSizePx + offsetYPx);
+      // Viewport cull
+      if (sx + tileSizePx < 0 || sx > canvasWidth)  continue;
+      if (sy + tileSizePx < 0 || sy > canvasHeight) continue;
+      ctx.fillRect(sx, sy, Math.ceil(tileSizePx), Math.ceil(tileSizePx));
+    }
+  }
 
   const isElementSelected = (type: string, uid: number): boolean =>
     state.selectedElements.some(e => e.type === type && e.uid === uid);

@@ -34,6 +34,12 @@ export interface EdgeExtensionTile {
   isSolid: boolean;
   /** Per-wall theme override (null = use room default). */
   theme: string | null;
+  /**
+   * Distance in blocks from the room edge (1 = immediately adjacent to room,
+   * EDGE_EXTENSION_EXTRA_BLOCKS = outermost layer).
+   * Used to compute progressive ambient depth tinting.
+   */
+  extensionStep: number;
 }
 
 /** Cached edge extension data for a single room. */
@@ -42,6 +48,18 @@ export interface EdgeExtensionCache {
   roomId: string;
   /** Flat tile list.  All entries are pre-allocated; no sparse gaps. */
   tiles: readonly EdgeExtensionTile[];
+  /**
+   * "col,row" key set of every solid position in the extension region plus the
+   * room's outermost edge cells.  Used by the renderer to compute per-tile
+   * neighbor masks for sprite auto-tiling without needing the full WallSnapshot.
+   *
+   * Included positions:
+   *  - Every extension tile where `isSolid === true`.
+   *  - Room edge cells (col=0, col=W-1, row=0, row=H-1) that are occupied,
+   *    so extension tiles adjacent to the room interior can look up their
+   *    inner-facing neighbor correctly.
+   */
+  occupancySet: ReadonlySet<string>;
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -128,7 +146,7 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const solid = isSolid(0, row);
     const theme = solid ? themeAt(0, row) : null;
     for (let d = 1; d <= N; d++) {
-      tiles.push({ colBlock: -d, rowBlock: row, isSolid: solid, theme });
+      tiles.push({ colBlock: -d, rowBlock: row, isSolid: solid, theme, extensionStep: d });
     }
   }
 
@@ -137,7 +155,7 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const solid = isSolid(W - 1, row);
     const theme = solid ? themeAt(W - 1, row) : null;
     for (let d = 0; d < N; d++) {
-      tiles.push({ colBlock: W + d, rowBlock: row, isSolid: solid, theme });
+      tiles.push({ colBlock: W + d, rowBlock: row, isSolid: solid, theme, extensionStep: d + 1 });
     }
   }
 
@@ -146,7 +164,7 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const solid = isSolid(col, 0);
     const theme = solid ? themeAt(col, 0) : null;
     for (let d = 1; d <= N; d++) {
-      tiles.push({ colBlock: col, rowBlock: -d, isSolid: solid, theme });
+      tiles.push({ colBlock: col, rowBlock: -d, isSolid: solid, theme, extensionStep: d });
     }
   }
 
@@ -155,19 +173,20 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const solid = isSolid(col, H - 1);
     const theme = solid ? themeAt(col, H - 1) : null;
     for (let d = 0; d < N; d++) {
-      tiles.push({ colBlock: col, rowBlock: H + d, isSolid: solid, theme });
+      tiles.push({ colBlock: col, rowBlock: H + d, isSolid: solid, theme, extensionStep: d + 1 });
     }
   }
 
   // ── Corner extensions ─────────────────────────────────────────────────────
   // Each corner cell borrows solid/theme from the nearest room corner cell.
+  // extensionStep for corners is the Chebyshev distance (max of dc, dr).
   // Top-left
   {
     const solid = isSolid(0, 0);
     const theme = solid ? themeAt(0, 0) : null;
     for (let dc = 1; dc <= N; dc++) {
       for (let dr = 1; dr <= N; dr++) {
-        tiles.push({ colBlock: -dc, rowBlock: -dr, isSolid: solid, theme });
+        tiles.push({ colBlock: -dc, rowBlock: -dr, isSolid: solid, theme, extensionStep: Math.max(dc, dr) });
       }
     }
   }
@@ -177,7 +196,7 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const theme = solid ? themeAt(W - 1, 0) : null;
     for (let dc = 0; dc < N; dc++) {
       for (let dr = 1; dr <= N; dr++) {
-        tiles.push({ colBlock: W + dc, rowBlock: -dr, isSolid: solid, theme });
+        tiles.push({ colBlock: W + dc, rowBlock: -dr, isSolid: solid, theme, extensionStep: Math.max(dc + 1, dr) });
       }
     }
   }
@@ -187,7 +206,7 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const theme = solid ? themeAt(0, H - 1) : null;
     for (let dc = 1; dc <= N; dc++) {
       for (let dr = 0; dr < N; dr++) {
-        tiles.push({ colBlock: -dc, rowBlock: H + dr, isSolid: solid, theme });
+        tiles.push({ colBlock: -dc, rowBlock: H + dr, isSolid: solid, theme, extensionStep: Math.max(dc, dr + 1) });
       }
     }
   }
@@ -197,10 +216,39 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const theme = solid ? themeAt(W - 1, H - 1) : null;
     for (let dc = 0; dc < N; dc++) {
       for (let dr = 0; dr < N; dr++) {
-        tiles.push({ colBlock: W + dc, rowBlock: H + dr, isSolid: solid, theme });
+        tiles.push({ colBlock: W + dc, rowBlock: H + dr, isSolid: solid, theme, extensionStep: Math.max(dc + 1, dr + 1) });
       }
     }
   }
 
-  return { roomId: room.id, tiles };
+  // ── Occupancy set for sprite neighbor-mask lookups ────────────────────────
+  // Includes every solid extension tile plus the room's outermost edge cells.
+  // The room-edge entries allow extension tiles adjacent to the room boundary
+  // to see their inner-facing neighbour as occupied without scanning the full
+  // WallSnapshot.
+  const occupancySet = new Set<string>();
+
+  for (let ti = 0; ti < tiles.length; ti++) {
+    const t = tiles[ti];
+    if (t.isSolid) occupancySet.add(`${t.colBlock},${t.rowBlock}`);
+  }
+
+  // Room left edge (col = 0)
+  for (let row = 0; row < H; row++) {
+    if (isSolid(0, row)) occupancySet.add(`0,${row}`);
+  }
+  // Room right edge (col = W-1)
+  for (let row = 0; row < H; row++) {
+    if (isSolid(W - 1, row)) occupancySet.add(`${W - 1},${row}`);
+  }
+  // Room top edge (row = 0)
+  for (let col = 0; col < W; col++) {
+    if (isSolid(col, 0)) occupancySet.add(`${col},0`);
+  }
+  // Room bottom edge (row = H-1)
+  for (let col = 0; col < W; col++) {
+    if (isSolid(col, H - 1)) occupancySet.add(`${col},${H - 1}`);
+  }
+
+  return { roomId: room.id, tiles, occupancySet };
 }
