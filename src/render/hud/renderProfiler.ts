@@ -25,6 +25,7 @@
  */
 
 import type { ChunkCacheStats } from '../walls/chunkRenderCache';
+import type { TransitionDebugStats } from '../transitions/transitionState';
 
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
@@ -75,6 +76,9 @@ export class RenderProfiler {
   /** Latest chunk cache stats, set each frame when debug mode is active. */
   private _chunkStats: ChunkCacheStats | null = null;
 
+  /** Latest transition debug stats, set each frame when debug mode is active. */
+  private _transitionStats: TransitionDebugStats | null = null;
+
   /**
    * Store the latest chunk-cache diagnostic counters.
    * Call this from gameRender.ts after the walls render stage when debug mode
@@ -82,6 +86,14 @@ export class RenderProfiler {
    */
   updateChunkStats(stats: ChunkCacheStats): void {
     this._chunkStats = stats;
+  }
+
+  /**
+   * Store the latest room-transition debug stats.
+   * Call this once per frame from gameScreen.ts when debug mode is on.
+   */
+  updateTransitionStats(stats: TransitionDebugStats): void {
+    this._transitionStats = stats;
   }
 
   /**
@@ -176,6 +188,31 @@ export class RenderProfiler {
       ctx.fillStyle = '#90ee90';
       for (let i = 0; i < chunkLines.length; i++) {
         ctx.fillText(chunkLines[i], padXPx, chunkPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+    }
+
+    // ── Transition debug panel (below chunk stats) ───────────────────────────
+    if (this._transitionStats !== null) {
+      const ts = this._transitionStats;
+      const chunkPanelH = this._chunkStats !== null ? 3 * lineHeightPx + 8 : 0;
+      const chunkPanelY = padYPx - 4 + panelHeight + 4;
+      const transPanelY = chunkPanelY + chunkPanelH + 4;
+      const transLines = [
+        `Room: ${ts.currentRoomId.slice(0, 14)}`,
+        `Trans: ${ts.isTransitioning ? 'YES' : 'no'}`,
+        `Spd@X: ${ts.lastPlayerSpeedWorld.toFixed(0)}wu/s`,
+        `Dur:   ${ts.lastDurationMs.toFixed(0)}ms`,
+        `Bubbs: ${ts.activeBubbleCount}`,
+        `Edge$: ${ts.edgeCacheFilled ? 'OK' : '--'}`,
+      ];
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(padXPx - 4, transPanelY, panelWidth + 8, transLines.length * lineHeightPx + 8);
+      ctx.fillStyle = '#ffa040';
+      for (let i = 0; i < transLines.length; i++) {
+        ctx.fillText(transLines[i], padXPx, transPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
     }

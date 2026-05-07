@@ -126,3 +126,76 @@ not yet cleaned up, and what remains for future work.
   changed. It still uses `positionBlock` internally in the game-room rendering
   (`gameRoom.ts`). If secret-door rendering is explicitly migrated in a future
   session, it should use `xBlock`/`yBlock` from the RoomTransitionDef.
+
+---
+
+# BUILD 262 — Room Transition Visuals, Edge Extension, Preview Bubbles
+
+## What was implemented (BUILD 262)
+
+- **Speed-based transition duration** — Transitions are faster for fast-moving players (grapple/dash → ~70 ms, walking → ~280 ms). See `src/render/transitions/transitionConfig.ts`.
+- **Asymmetric fade** — Fade-out is 55% of the total duration; fade-in is 45%, so entering a room feels snappier than leaving.
+- **Camera entry offset** — After `loadRoom()`, the camera starts 4 blocks behind the player's spawn direction and lerps naturally to the player. Gives a sense of arriving from a direction.
+- **6-block edge extension (visual only)** — `src/render/transitions/edgeExtensionCache.ts` builds a per-room tile list of wall continuations 6 blocks past every edge. `src/render/transitions/edgeExtensionRenderer.ts` draws them as solid-colour rectangles matching the edge wall's theme. No collision impact.
+- **Preview glow bubbles** — `src/render/transitions/previewBubbleState.ts` computes per-transition bubble state (size, opacity) based on player proximity. `src/render/transitions/previewBubbleRenderer.ts` renders a radial-gradient glow at each transition opening. Grows and brightens as the player approaches.
+- **Debug panel** — `renderProfiler.ts` now shows a transition info panel: current room ID, transition state, last player speed, last duration, active bubble count, edge cache status.
+
+## Remaining work (BUILD 262)
+
+### 1. Sprite-based edge extension tiles
+
+**Status:** Currently solid-colour fill (`_themeSolidColor`).
+
+**Goal:** Match the auto-tiling sprites used inside the room.
+
+**Recommended approach:**
+- In `src/render/walls/blockSpriteRenderer.ts`, export a new function `renderWallTilesDirect(ctx, tiles, ox, oy, scale, blockSizePx)` that accepts an array of `{col, row, themeOverride}` descriptors and draws them without the chunk cache.
+- Call this from `src/render/transitions/edgeExtensionRenderer.ts` for solid extension tiles.
+- The current `_doRenderWallTilesDirect` internal function is the correct building block; it just needs to be made accessible.
+
+### 2. Connected-room tile preview inside the bubble
+
+**Status:** Preview bubbles show a glow but not actual room tiles from the connected room.
+
+**Goal:** The circular reveal area should show tiles from the target room.
+
+**Recommended approach:**
+- Add a `RoomPreviewCache` class in `src/render/transitions/roomPreviewCache.ts`.
+  - Pre-render the connected room's wall tiles to an `OffscreenCanvas` once per adjacent-room load.
+  - Build a temporary `WallSnapshot`-like structure from `ROOM_REGISTRY.get(transition.targetRoomId)?.walls`.
+- In `previewBubbleRenderer.ts`, clip to the bubble circle and draw the relevant portion of the pre-rendered canvas, spatially aligned so the transition edge mates correctly with the current room's edge.
+
+### 3. FullyLit empty-extension background
+
+In `FullyLit` mode, the procedural background (`renderWorldBackground`) should extend into the empty extension strips. The simplest approach: extend the room clip rect to `room + 6 blocks` in `FullyLit` mode only and let the background renderer fill it naturally.
+
+### 4. Lighting integration for edge extension tiles
+
+Edge extension tiles should participate in ambient lighting depth. Compute a synthetic depth from the extension step and apply the same tint formula used by `_doRenderWallTilesDirect`. Modify `src/render/transitions/edgeExtensionRenderer.ts`.
+
+### 5. Preview bubble in DarkRoom lighting
+
+In DarkRoom mode, pass bubble positions to `DarkRoomOverlay` as secondary light sources so it punches a small hole in the darkness mask at each transition opening. Modify `src/render/effects/darkRoomOverlay.ts`.
+
+### 6. Editor edge extension visibility
+
+In `src/editor/editorRenderer.ts`, draw the edge extension tiles with a distinct tint (e.g., 30% transparent blue) so they read as non-editable. Pass `edgeExtensionCache` into the editor's render context. Invalidate the cache when edge tiles change.
+
+### 7. Preload check in preview bubble
+
+In `previewBubbleState.ts`, reduce `opacity` to 0 when the connected room's sprites are not yet ready (`areRoomSpritesReady` from `roomAssetPreloader.ts`).
+
+## File map
+
+| File | Status | Notes |
+|---|---|---|
+| `src/render/transitions/transitionConfig.ts` | ✅ Done | All tunables |
+| `src/render/transitions/transitionState.ts` | ✅ Done | Types only |
+| `src/render/transitions/edgeExtensionCache.ts` | ✅ Done | Build logic |
+| `src/render/transitions/edgeExtensionRenderer.ts` | ⚠️ Partial | Sprite rendering TBD |
+| `src/render/transitions/previewBubbleState.ts` | ✅ Done | Glow proximity |
+| `src/render/transitions/previewBubbleRenderer.ts` | ⚠️ Partial | Room tiles TBD |
+| `src/render/transitions/roomPreviewCache.ts` | ❌ Not started | See #2 above |
+| `src/screens/gameScreen.ts` | ✅ Done | Speed-based fade, camera entry |
+| `src/screens/gameRender.ts` | ✅ Done | Edge ext + bubble integration |
+| `src/render/hud/renderProfiler.ts` | ✅ Done | Transition debug panel |
