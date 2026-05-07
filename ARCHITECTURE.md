@@ -23,9 +23,50 @@ The render call order each frame:
 6. `environmentalDust.render(ctx, offsetX, offsetY, zoom)` — environmental dust layer (2D)
 7. `renderHudOverlay(ctx, hud)` — FPS / frame-time / particle-count (2D)
 8. Room name banner, control hints, touch joystick (2D)
+9. **Transition fade overlay** — black full-screen rect at `transitionFadeAlpha` (0–1), drawn
+   on the device canvas after all compositing.  Covers WebGL particles and bloom.
 
 Camera (`render/camera.ts`) follows the player cluster position with a smooth
 lerp, clamped to room bounds so the viewport never shows outside the room.
+
+## Room Transition System (BUILD 259)
+
+### Fade-out / Fade-in on every door crossing
+
+When the player crosses a door trigger (`checkRoomTransitions` returns `true`), the
+transition is **not** executed immediately.  Instead:
+
+1. The room load is queued in `pendingRoomTransition` (a `PendingRoomTransition` object).
+2. `transitionFadeDir = +1` starts fading `transitionFadeAlpha` from 0 → 1 at
+   ~6 alpha/second (≈167 ms to fully black).
+3. While fading the sim is frozen (`isTransitionFreezing = true`): accumulator is drained to
+   zero, all player inputs are suppressed, and transition detection is skipped.
+4. When `transitionFadeAlpha` reaches 1 (fully black), `loadRoom()` is called synchronously,
+   pre-transition velocity is restored, adjacent room assets are preloaded, and
+   `transitionFadeDir = -1` starts the fade-in.
+5. The fade-in returns `transitionFadeAlpha` to 0 over another ≈167 ms.  The sim unfreezes.
+
+Result: the player sees a brief cinematic black flash instead of a freeze.
+
+### Asset Preloading (`render/roomAssetPreloader.ts`)
+
+- `preloadRoomThemeSprites(room)` — fires `loadImg()` for every sprite URL in the room's
+  folder-based block themes.  Idempotent (cached images are instant no-ops).
+- `preloadAdjacentRoomAssets(room)` — calls `preloadRoomThemeSprites()` for every room
+  reachable via a door transition from `room`.
+- `areRoomSpritesReady(room)` — returns `true` once all folder-based sprites are loaded.
+
+Calls are made:
+- Inside `loadRoom()` for the current room's sprites.
+- After each `loadRoom()` (in both the initial load path and the fade-state-machine path)
+  for adjacent rooms.
+
+### Initial Loading Overlay
+
+At `startGameScreen()` startup, if `areRoomSpritesReady(currentRoom)` returns `false`,
+a full-screen black DOM overlay with "Loading…" text is inserted into `uiRoot`.  The overlay
+is polled every 50 ms (throttled) and removed (with a 300 ms CSS fade) once sprites are ready
+and a 200 ms minimum display time has elapsed.
 
 ## Metroidvania Room System
 
