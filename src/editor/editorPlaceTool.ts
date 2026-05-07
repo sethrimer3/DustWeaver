@@ -135,8 +135,8 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       if (!room.lightSources) room.lightSources = [];
       room.lightSources.push({
         uid: allocateUid(state),
-        xBlock: Math.floor(bx),
-        yBlock: Math.floor(by),
+        xBlock: xFloor,
+        yBlock: yFloor,
         radiusBlocks: 6,
         colorR: 255,
         colorG: 230,
@@ -151,8 +151,8 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       if (!room.sunbeams) room.sunbeams = [];
       room.sunbeams.push({
         uid: allocateUid(state),
-        xBlock: Math.floor(bx),
-        yBlock: Math.floor(by),
+        xBlock: xFloor,
+        yBlock: yFloor,
         angleRad: Math.PI / 4,
         widthBlocks: 3,
         lengthBlocks: 12,

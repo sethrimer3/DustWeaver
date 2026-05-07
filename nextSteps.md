@@ -241,3 +241,67 @@ In `gameRender.ts`, active preview bubbles are injected as `LightSourcePx` entri
 | `src/editor/editorRenderer.ts` | ✅ Done | Edge extension ghost overlay |
 | `src/editor/editorController.ts` | ✅ Done | Cache build + pass-through |
 | `src/render/hud/renderProfiler.ts` | ✅ Done | Transition debug panel |
+
+---
+
+## BUILD 264 — Editor Save/Load Fixes & Brush Improvements
+
+### What Was Completed
+
+**TASK 1: Save/Load Fixes**
+
+1. **Fixed missing fields in SavedRoomV2** (`src/levels/roomSchemaV2.ts`):
+   - Added `SavedCrumble`, `SavedBounce`, `SavedRoomRope` compact interfaces.
+   - Added `crumbles`, `bounces`, `ropes`, `dialogueTriggers`, `dcPieces` to `SavedRoomV2`.
+   - Implemented dehydrate (export) and hydrate (import) for all five missing types.
+   - Crumble blocks, bounce pads, ropes, dialogue triggers, and dust container pieces now survive the full v2 export/import round-trip.
+
+2. **Fixed edge interior wall filtering** (`src/editor/editorRoomBuilder.ts`):
+   - `extractInteriorWalls()` now filters boundary walls by `isInvisibleFlag === 1` instead of position heuristics.
+   - User-placed 1×1 interior walls at room edges (x=0, x=widthBlocks-1, y=0, y=heightBlocks-1) are no longer stripped when loading a room into the editor.
+
+**TASK 2: Liquid Block Improvements**
+
+3. **1×1 liquid painting** (`src/editor/editorState.ts`, `src/editor/editorPlaceTool.ts`):
+   - Water zones and lava zones now default to 1×1 size — paintable like tiles.
+   - Liquids are gravity-free: no floor/support check enforced.
+   - Duplicate placement at the same position+size is idempotent (no stacking).
+
+**TASK 3: Brush Palette**
+
+4. **BrushMode state** (`src/editor/editorState.ts`): Added `BrushMode` type and `brushMode`, `brushRectStartBlockX`, `brushRectStartBlockY` fields to `EditorState`.
+
+5. **Brush helper** (`src/editor/editorBrush.ts`): New file with `getBrushCells()` and `getRectBrushPreview()`.
+
+6. **Brush dispatch** (`src/editor/editorPlaceTool.ts`): `placeAtCursor` uses brush cells for tile-like items (blocks, liquids, crumble blocks, falling blocks, bounce pads, ambient light blockers).
+
+7. **Rect brush logic** (`src/editor/editorController.ts`): Click-to-start, click-to-fill rectangle. Drag-paint suppressed in rect mode. ESC clears pending rect start.
+
+8. **Brush UI** (`src/editor/editorUI.ts`): Compact brush size selector (1×1, 3×3, 5×5, ▭ rect) appears below tool buttons.
+
+9. **Rect brush preview** (`src/editor/editorPlacementPreviewDrawer.ts`): Shows a preview rectangle while in rect mode with a drag start set.
+
+**TASK 4: Duplicate Self-Overlap Prevention**
+
+10. **Dedup guards** (`src/editor/editorPlaceTool.ts`): Added position-based duplicate prevention for save tombs, skill tombs, dust containers, dust container pieces, water zones, and lava zones.
+
+### Known Limitations / Not Completed
+
+- **Liquid rounded corners**: Floating liquid blocks do not yet render with rounded corners. This is a cosmetic enhancement for a future pass — implement neighbor-aware drawing in the zone renderer.
+- **Manual tests**: All items in TASK 5 of the problem statement (save/load tests, brush tests, duplicate prevention tests, performance tests) need manual validation in the running editor.
+- **Migration**: Room files exported before BUILD 264 that contained crumble blocks, bounce pads, ropes, or dialogue triggers will be missing those items (they were silently dropped in v2 export). Those rooms need to be re-authored.
+- **Falling blocks at room edges**: The `dehydrateRoom` already handled falling blocks in v2 format; no change was needed for those. The edge wall fix in `extractInteriorWalls` covers edge interior wall blocks.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `src/levels/roomSchemaV2.ts` | New SavedCrumble/SavedBounce/SavedRoomRope types; dehydrate/hydrate for 5 missing object types |
+| `src/editor/editorRoomBuilder.ts` | extractInteriorWalls uses isInvisibleFlag instead of position heuristic |
+| `src/editor/editorState.ts` | BrushMode type, brushMode/brushRectStart fields, 1×1 liquid defaults |
+| `src/editor/editorBrush.ts` | New: getBrushCells, getRectBrushPreview |
+| `src/editor/editorPlaceTool.ts` | Brush dispatch, 1×1 liquid dedup, save/skill tomb/container dedup |
+| `src/editor/editorController.ts` | Rect brush click logic, canDragPaint rect exclusion, ESC clear |
+| `src/editor/editorUI.ts` | Brush size selector UI |
+| `src/editor/editorPlacementPreviewDrawer.ts` | Rect brush preview overlay |
+| `src/build-info.ts` | BUILD_NUMBER 263 → 264 |
