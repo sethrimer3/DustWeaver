@@ -353,13 +353,13 @@ function migrateRoomDefTransitionYBlock(t: RoomTransitionDef, roomHeightBlocks: 
 function extractInteriorWalls(room: RoomDef): RoomWallDef[] {
   const interior: RoomWallDef[] = [];
   for (const w of room.walls) {
-    // Skip boundary walls: top row, bottom row, leftmost column, rightmost column
-    const isTopOrBottom = (w.yBlock === 0 && w.hBlock === 1) || (w.yBlock === room.heightBlocks - 1 && w.hBlock === 1);
-    const isLeftBoundary = w.xBlock === 0 && w.wBlock === 1;
-    const isRightBoundary = w.xBlock === room.widthBlocks - 1 && w.wBlock === 1;
-    const isOutOfBounds = w.xBlock < 0 || w.xBlock + w.wBlock > room.widthBlocks;
-
-    if (isTopOrBottom || isLeftBoundary || isRightBoundary || isOutOfBounds) continue;
+    // Boundary/tunnel walls are marked invisible — skip them.
+    // User-placed interior walls are never invisible, even when placed at room edges.
+    if (w.isInvisibleFlag === 1) continue;
+    // Also skip anything genuinely out of bounds (defensive check).
+    if (w.xBlock < 0 || w.yBlock < 0 ||
+        w.xBlock + w.wBlock > room.widthBlocks ||
+        w.yBlock + w.hBlock > room.heightBlocks) continue;
     interior.push(w);
   }
   return interior;

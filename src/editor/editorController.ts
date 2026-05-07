@@ -247,6 +247,13 @@ export function createEditorController(
         onDustBoostJarCountChange: (dustCount: number) => {
           state.pendingDustBoostJarCount = dustCount;
         },
+        onBrushModeChange: (mode) => {
+          state.brushMode = mode;
+          if (mode !== 'rect') {
+            state.brushRectStartBlockX = null;
+            state.brushRectStartBlockY = null;
+          }
+        },
       });
     } else {
       closeEditor();
@@ -585,6 +592,8 @@ export function createEditorController(
         cancelTransitionLink(state);
       } else {
         state.selectedElements = [];
+        state.brushRectStartBlockX = null;
+        state.brushRectStartBlockY = null;
       }
     }
 
@@ -675,11 +684,22 @@ export function createEditorController(
             state.selectionBoxStartBlockY = state.cursorBlockY;
           }
         } else if (state.activeTool === EditorTool.Place) {
-          pushSnapshot(history, state.roomData);
-          placeAtCursor(state);
-          applyEdits();
-          lastDragBlockX = state.cursorBlockX;
-          lastDragBlockY = state.cursorBlockY;
+          if (state.brushMode === 'rect' && state.brushRectStartBlockX === null) {
+            // Rect brush: first click sets the drag start — don't place yet.
+            state.brushRectStartBlockX = state.cursorBlockX;
+            state.brushRectStartBlockY = state.cursorBlockY;
+          } else {
+            pushSnapshot(history, state.roomData);
+            placeAtCursor(state);
+            // Rect brush: clear drag start after placement.
+            if (state.brushMode === 'rect') {
+              state.brushRectStartBlockX = null;
+              state.brushRectStartBlockY = null;
+            }
+            applyEdits();
+            lastDragBlockX = state.cursorBlockX;
+            lastDragBlockY = state.cursorBlockY;
+          }
         } else if (state.activeTool === EditorTool.Delete) {
           pushSnapshot(history, state.roomData);
           deleteAtCursor(state);
@@ -763,6 +783,7 @@ export function createEditorController(
       !state.isLinkingTransition &&
       !state.isDragging &&
       !state.isSelectionBoxActive &&
+      state.brushMode !== 'rect' &&
       inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX &&
       (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete);
 

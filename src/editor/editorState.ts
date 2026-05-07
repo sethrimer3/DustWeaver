@@ -23,6 +23,9 @@ export const SONG_OPTIONS: readonly { id: RoomSongId; label: string }[] = [
   ...AVAILABLE_SONGS.map(id => ({ id, label: SONG_DISPLAY_NAMES[id] })),
 ];
 
+/** Active brush mode for painting tools. */
+export type BrushMode = 'single' | '3x3' | '5x5' | 'rect';
+
 // ── Editor tool enum ─────────────────────────────────────────────────────────
 
 export enum EditorTool {
@@ -176,8 +179,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'light_source',          label: 'Light Source',    category: 'lighting', isLightSourceItem: 1 },
   { id: 'sunbeam',               label: 'Sunbeam',         category: 'lighting', isSunbeamItem: 1 },
   // ── Liquids layer ───────────────────────────────────────────────────────
-  { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
-  { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 4, defaultHeightBlocks: 4, isLiquidZoneItem: 1 },
+  { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLiquidZoneItem: 1 },
+  { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLiquidZoneItem: 1 },
   // ── Crumble blocks ──────────────────────────────────────────────────────
   { id: 'crumble_block',    label: 'Crumble 1×1',       category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1 },
   { id: 'crumble_block_2x2', label: 'Crumble 2×2',      category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1 },
@@ -741,6 +744,12 @@ export interface EditorState {
    * Null when no element is under the cursor or when not using the Select tool.
    */
   hoverElement: SelectedElement | null;
+  /** Active brush mode for the Place tool. */
+  brushMode: BrushMode;
+  /** Block X where a rect-brush drag started (null when not dragging). */
+  brushRectStartBlockX: number | null;
+  /** Block Y where a rect-brush drag started (null when not dragging). */
+  brushRectStartBlockY: number | null;
 }
 
 export function createEditorState(): EditorState {
@@ -778,6 +787,9 @@ export function createEditorState(): EditorState {
     pendingRopeAnchorXBlock: null,
     pendingRopeAnchorYBlock: null,
     hoverElement: null,
+    brushMode: 'single',
+    brushRectStartBlockX: null,
+    brushRectStartBlockY: null,
   };
 }
 
@@ -822,6 +834,8 @@ export interface EditorUICallbacks {
   onDustBoostJarKindChange: (dustKind: string) => void;
   /** Called when the user changes the dust count for the dust boost jar. */
   onDustBoostJarCountChange: (dustCount: number) => void;
+  /** Called when the user changes the brush mode. */
+  onBrushModeChange: (mode: BrushMode) => void;
 }
 
 /** Selects the placement block theme and updates the recent-theme strip. */
