@@ -92,6 +92,18 @@ import {
   preloadAdjacentRoomAssets,
   areRoomSpritesReady,
 } from '../render/roomAssetPreloader';
+import { buildEdgeExtensionCache, EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
+import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions/previewBubbleState';
+import type { TransitionDebugStats } from '../render/transitions/transitionState';
+import {
+  TRANSITION_MAX_DURATION_MS,
+  TRANSITION_MID_DURATION_MS,
+  TRANSITION_MIN_DURATION_MS,
+  TRANSITION_FADE_OUT_FRACTION,
+  TRANSITION_SPRINT_SPEED_WORLD,
+  TRANSITION_FAST_SPEED_WORLD,
+  TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS,
+} from '../render/transitions/transitionConfig';
 
 const FIXED_DT_MS = 16.666;
 
@@ -465,6 +477,11 @@ export function startGameScreen(
     // Calling preloadRoomThemeSprites() fires loadImg() on every sprite URL —
     // already cached URLs are instant no-ops so re-entering a room is free.
     preloadRoomThemeSprites(room);
+
+    // Build the edge extension cache for the new room.
+    // Must run after loadRoomWalls() so wall geometry is finalised.
+    // Invalidates any previous cache via reference replacement.
+    edgeExtensionCache = buildEdgeExtensionCache(room);
   }
 
   const world = createWorldState(FIXED_DT_MS, 42);
@@ -545,18 +562,41 @@ export function startGameScreen(
   /** Tracks the last seen world.lastPlayerBlockedTick to detect new BLOCKED events. */
   const prevLastPlayerBlockedTick = { value: -1 };
 
+  // ── Edge extension cache ──────────────────────────────────────────────────
+  // Built once per loadRoom() call.  Rendered as visual tiles beyond the
+  // room edge boundary to prevent a hard black cutoff at room walls.
+  let edgeExtensionCache: EdgeExtensionCache | null = null;
+
+  // ── Preview bubble state ──────────────────────────────────────────────────
+  // Pre-allocated array of per-bubble state, updated each frame via
+  // computePreviewBubbles().  Only entries [0, previewBubbleCount) are valid.
+  const previewBubbles: PreviewBubbleState[] = [];
+  let previewBubbleCount = 0;
+
   // ── Room transition fade state ────────────────────────────────────────────
   // A brief black fade-out/in overlay prevents the player from seeing the
   // partially-constructed room during loadRoom().  The room load runs at peak
   // fade (fully black); then we fade back in.
+  //
+  // Duration is speed-based: fast-moving players get a shorter fade so grapple
+  // and dash transitions feel seamless.  See transitionConfig.ts for tunables.
+  //
   //   transitionFadeAlpha: 0 = transparent (normal gameplay), 1 = fully opaque black
   //   transitionFadeDir:   +1 = fading to black, -1 = fading back, 0 = idle
   /** Current fade alpha (0–1). Drawn on the device canvas by renderFrame(). */
   let transitionFadeAlpha = 0;
   /** Fade direction: +1 = fading to black, -1 = fading back, 0 = idle. */
   let transitionFadeDir = 0;
-  /** How many alpha units per millisecond when fading. ~167 ms to full black. */
-  const TRANSITION_FADE_SPEED_PER_MS = 1 / 167;
+  /**
+   * Speed at which fade-OUT progresses (alpha per ms), derived from player
+   * speed at transition trigger.  Updated each time a transition fires.
+   */
+  let transitionFadeOutSpeedPerMs = 1 / (TRANSITION_MAX_DURATION_MS * TRANSITION_FADE_OUT_FRACTION);
+  /**
+   * Speed at which fade-IN progresses (alpha per ms), derived from player
+   * speed at transition trigger.
+   */
+  let transitionFadeInSpeedPerMs = 1 / (TRANSITION_MAX_DURATION_MS * (1 - TRANSITION_FADE_OUT_FRACTION));
   /** Queued room load that fires once the fade reaches alpha=1. */
   interface PendingRoomTransition {
     room: RoomDef;
@@ -567,6 +607,11 @@ export function startGameScreen(
     preVY: number;
   }
   let pendingRoomTransition: PendingRoomTransition | null = null;
+
+  // ── Transition debug stats ────────────────────────────────────────────────
+  // Populated each frame and forwarded to the render profiler debug panel.
+  let lastTransitionPlayerSpeedWorld = 0;
+  let lastTransitionDurationMs = TRANSITION_MAX_DURATION_MS;
 
   // ── Initial loading overlay ───────────────────────────────────────────────
   // Shown when gameplay first starts (or when a room's sprites are not yet
@@ -1084,7 +1129,11 @@ export function startGameScreen(
 
     // Update the fade overlay each frame (both fade-out and fade-in).
     if (transitionFadeDir !== 0) {
-      transitionFadeAlpha += transitionFadeDir * TRANSITION_FADE_SPEED_PER_MS * elapsedMs;
+      if (transitionFadeDir === 1) {
+        transitionFadeAlpha += transitionFadeOutSpeedPerMs * elapsedMs;
+      } else {
+        transitionFadeAlpha -= transitionFadeInSpeedPerMs * elapsedMs;
+      }
       if (transitionFadeDir === 1 && transitionFadeAlpha >= 1) {
         transitionFadeAlpha = 1;
         // Fade fully black — execute the queued room load now.
@@ -1103,6 +1152,20 @@ export function startGameScreen(
             } else {
               newPlayer.velocityYWorld = args.preVY;
             }
+
+            // ── Camera entry offset ─────────────────────────────────────────
+            // Push the camera slightly "behind" the spawn direction so it lerps
+            // naturally to the player instead of snapping.  Gives the sense of
+            // entering from a direction without a separate slide animation.
+            // clampCameraToRoom will prevent this from going OOB on small rooms.
+            const entryOffsetWorld = TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS * BLOCK_SIZE_SMALL;
+            let camEntryX = newPlayer.positionXWorld;
+            let camEntryY = newPlayer.positionYWorld;
+            if (args.dir === 'right') camEntryX -= entryOffsetWorld;
+            else if (args.dir === 'left') camEntryX += entryOffsetWorld;
+            else if (args.dir === 'down')  camEntryY -= entryOffsetWorld;
+            else /* 'up' */                camEntryY += entryOffsetWorld;
+            snapCamera(camera, camEntryX, camEntryY, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
           }
           // Start fading back in.
           transitionFadeDir = -1;
@@ -1126,6 +1189,35 @@ export function startGameScreen(
       const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
       if (checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY, dir) => {
         pendingRoomTransition = { room, spawnX, spawnY, dir, preVX: preTransVX, preVY: preTransVY };
+
+        // ── Speed-based transition duration ──────────────────────────────────
+        // Faster-moving players get a shorter transition so grapple/dash
+        // through a transition feels nearly seamless.
+        // Velocity is in world units per tick (60fps sim); convert to wu/sec.
+        const speedWorldPerSec = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
+        lastTransitionPlayerSpeedWorld = speedWorldPerSec;
+
+        // Smooth-step from mid to min over the [sprint, fast] speed range.
+        // Below sprint → max duration; between sprint and fast → lerp; above fast → min.
+        let totalDurationMs: number;
+        if (speedWorldPerSec <= TRANSITION_SPRINT_SPEED_WORLD) {
+          totalDurationMs = TRANSITION_MAX_DURATION_MS;
+        } else if (speedWorldPerSec >= TRANSITION_FAST_SPEED_WORLD) {
+          totalDurationMs = TRANSITION_MIN_DURATION_MS;
+        } else {
+          const t = (speedWorldPerSec - TRANSITION_SPRINT_SPEED_WORLD)
+                    / (TRANSITION_FAST_SPEED_WORLD - TRANSITION_SPRINT_SPEED_WORLD);
+          const eased = t * t * (3 - 2 * t); // smoothstep
+          totalDurationMs = TRANSITION_MAX_DURATION_MS
+            + (TRANSITION_MIN_DURATION_MS - TRANSITION_MAX_DURATION_MS) * eased;
+        }
+        lastTransitionDurationMs = totalDurationMs;
+
+        const fadeOutMs = totalDurationMs * TRANSITION_FADE_OUT_FRACTION;
+        const fadeInMs  = totalDurationMs * (1 - TRANSITION_FADE_OUT_FRACTION);
+        transitionFadeOutSpeedPerMs = 1 / Math.max(1, fadeOutMs);
+        transitionFadeInSpeedPerMs  = 1 / Math.max(1, fadeInMs);
+
         transitionFadeDir = 1;
         transitionFadeAlpha = 0;
       })) {
@@ -1423,6 +1515,36 @@ export function startGameScreen(
 
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
     updateSnapshotInPlace(reusableSnapshot, world, renderAlpha, prevClusterPosX, prevClusterPosY);
+
+    // ── Preview bubble computation ────────────────────────────────────────
+    // Compute proximity-based preview bubble state for nearby transitions.
+    // Skipped during transitions to avoid flicker at room boundaries.
+    const playerForBubbles = world.clusters[0];
+    if (playerForBubbles !== undefined && transitionFadeDir === 0 && pendingRoomTransition === null) {
+      previewBubbleCount = computePreviewBubbles(
+        playerForBubbles.positionXWorld,
+        playerForBubbles.positionYWorld,
+        currentRoom,
+        ox, oy, zoom,
+        previewBubbles,
+      );
+    } else {
+      previewBubbleCount = 0;
+    }
+
+    // ── Transition debug stats ────────────────────────────────────────────
+    if (isDebugMode && renderProfiler !== undefined) {
+      const debugStats: TransitionDebugStats = {
+        currentRoomId: currentRoom.id,
+        isTransitioning: transitionFadeDir !== 0 || pendingRoomTransition !== null,
+        lastDurationMs: lastTransitionDurationMs,
+        lastPlayerSpeedWorld: lastTransitionPlayerSpeedWorld,
+        activeBubbleCount: previewBubbleCount,
+        edgeCacheFilled: edgeExtensionCache !== null,
+      };
+      renderProfiler.updateTransitionStats(debugStats);
+    }
+
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
@@ -1446,6 +1568,9 @@ export function startGameScreen(
       renderAlpha,
       prevFallingBlockOffsetY,
       transitionFadeAlpha,
+      edgeExtensionCache,
+      previewBubbles,
+      previewBubbleCount,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.

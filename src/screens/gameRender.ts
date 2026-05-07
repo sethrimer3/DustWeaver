@@ -71,6 +71,10 @@ import {
   drawOffensiveDustOutlineOverlay,
 } from './gameRenderHelpers';
 import { renderGameHud } from './gameHudRenderer';
+import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
+import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer';
+import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
+import { renderPreviewBubbles } from '../render/transitions/previewBubbleRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -201,6 +205,25 @@ export interface RenderFrameContext {
    * everything.  Driven by the fade-out/in state machine in gameScreen.ts.
    */
   transitionFadeAlpha: number;
+
+  /**
+   * Cached edge extension tile data for the current room.
+   * Built once per loadRoom() call; null before the first room is loaded.
+   * Passed to renderEdgeExtension() to draw wall tiles beyond the room boundary.
+   */
+  edgeExtensionCache: EdgeExtensionCache | null;
+
+  /**
+   * Pre-allocated array of PreviewBubbleState entries.
+   * Written by computePreviewBubbles() in gameScreen.ts each frame.
+   * Only entries [0, previewBubbleCount) are valid for this frame.
+   */
+  previewBubbles: PreviewBubbleState[];
+
+  /**
+   * Number of valid entries in previewBubbles for this frame (0 = none active).
+   */
+  previewBubbleCount: number;
 }
 
 /**
@@ -267,6 +290,26 @@ export function renderFrame(r: RenderFrameContext): void {
     // is active, while preserving black room margins via clipping below.
     ctx.fillStyle = bgColor;
     ctx.fillRect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
+  }
+
+  // ── Edge extension layer (drawn BEFORE room clip) ────────────────────────
+  // Renders procedural wall tiles 6 blocks beyond every room edge so the
+  // void outside the room appears as a continuation of the boundary walls
+  // rather than a hard black cutout.  The tiles have no collision.
+  // Must be called here (before ctx.clip()) so tiles outside the room rect
+  // are visible.
+  if (r.edgeExtensionCache !== null) {
+    renderEdgeExtension(
+      ctx,
+      r.edgeExtensionCache,
+      ox,
+      oy,
+      zoom,
+      virtualWidthPx,
+      virtualHeightPx,
+      bgColor,
+      currentRoom.lightingEffect ?? 'Ambient',
+    );
   }
 
   // Constrain all world-space rendering to the room rectangle so out-of-room
@@ -404,6 +447,15 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // Tunnel darkness overlays
   drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
+
+  // ── Nearby-transition preview bubbles ────────────────────────────────────
+  // Glowing aperture cues rendered at each nearby room transition.  The
+  // bubble grows and brightens as the player approaches the opening.
+  // Drawn on top of tunnel darkness but below HUD elements so the glow
+  // integrates naturally with the room edge.
+  if (r.previewBubbleCount > 0) {
+    renderPreviewBubbles(ctx, r.previewBubbles, r.previewBubbleCount);
+  }
 
   // ── Atmospheric effects (dust, debris) ──────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DUST);
