@@ -38,7 +38,7 @@
  * stable.
  */
 
-import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, TransitionDirection } from './roomDef';
+import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, TransitionDirection, CrumbleVariant } from './roomDef';
 import { blockThemeRefToTheme, blockThemeToId } from './roomDef';
 import type {
   RoomJsonDef,
@@ -60,6 +60,7 @@ import type {
   RoomJsonLightSource,
   RoomJsonSunbeam,
   RoomJsonDialogueTrigger,
+  RoomJsonCrumbleBlock,
 } from '../editor/roomJson';
 import { createTileGrid, paintRect, extractLayerFromGrid } from './tileGridCompressor';
 import type { SavedRect, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
@@ -147,7 +148,7 @@ export interface SavedCrumble {
   /** [x, y, w, h] */
   r: SavedRect;
   /** Variant string (omit if 'normal'). */
-  v?: string;
+  v?: CrumbleVariant;
   /** Ramp orientation 0-3 (omit if not a ramp). */
   ramp?: 0 | 1 | 2 | 3;
   /** Block theme ID override (omit if using room default). */
@@ -731,7 +732,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   }
   if (saved.crumbles && saved.crumbles.length > 0) {
     json.crumbleBlocks = saved.crumbles.map(c => {
-      const entry: { xBlock: number; yBlock: number; wBlock?: number; hBlock?: number; rampOrientation?: 0 | 1 | 2 | 3; variant?: string; blockThemeId?: string } = {
+      const entry: RoomJsonCrumbleBlock = {
         xBlock: c.r[0],
         yBlock: c.r[1],
       };

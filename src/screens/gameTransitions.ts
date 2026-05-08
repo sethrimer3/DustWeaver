@@ -42,7 +42,6 @@ export function computeSpawnBlockForTransition(
   room: RoomDef,
   transition: RoomTransitionDef,
 ): readonly [number, number] {
-  const isHoriz = transition.direction === 'left' || transition.direction === 'right';
   const { xBlock, yBlock } = getTransitionXYBlock(transition, room);
   // Opening center: for left/right = yBlock + half opening; for up/down = xBlock + half opening
   const openingCenterHoriz = yBlock + Math.floor(transition.openingSizeBlocks / 2);

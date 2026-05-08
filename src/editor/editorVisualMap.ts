@@ -363,8 +363,8 @@ export function showVisualWorldMap(
     transIndex: number,
     roomSx: number,
     roomSy: number,
-    roomW: number,
-    roomH: number,
+    _roomW: number,
+    _roomH: number,
   ): void {
     const trans = room.transitions[transIndex];
     const ds = Math.max(4, Math.min(DOOR_SIZE, zoom * 1.5));

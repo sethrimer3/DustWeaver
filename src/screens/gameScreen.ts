@@ -97,7 +97,6 @@ import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import {
   TRANSITION_MAX_DURATION_MS,
-  TRANSITION_MID_DURATION_MS,
   TRANSITION_MIN_DURATION_MS,
   TRANSITION_FADE_OUT_FRACTION,
   TRANSITION_SPRINT_SPEED_WORLD,
