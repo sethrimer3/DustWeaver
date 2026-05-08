@@ -285,7 +285,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
               playerForInteract.positionXWorld,
               playerForInteract.positionYWorld - 10,
               `+${sw.dustCount} ${kindName} Dust`,
-              performance.now(),
+              performance.now(), // Cosmetic: UI timestamp for floating label fade-out only.
             );
           }
         }

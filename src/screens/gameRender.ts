@@ -539,7 +539,7 @@ export function renderFrame(r: RenderFrameContext): void {
       const sw = roomDustSwarms[i];
       const cx = (sw.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
       const cy = (sw.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-      // Draw a swirling cluster of ~12 small dots (Math.random() intentional — cosmetic only)
+      // Draw a swirling cluster of ~12 small dots using deterministic time/index math.
       const particleCount = 12;
       for (let p = 0; p < particleCount; p++) {
         const angle = (p / particleCount) * Math.PI * 2 + t * (1.4 + (p % 3) * 0.3);

@@ -236,7 +236,7 @@ export function drawEditorCollectibles(
     const color = sel ? DUST_SWARM_SELECTED : DUST_SWARM_COLOR;
     drawObjectFootprint(ctx, s.xBlock, s.yBlock, 1, 1,
       offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
-    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '🌪');
+    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '⟳');
   }
 
   // Dust piles (unowned Gold Dust for Storm Weave attraction)
