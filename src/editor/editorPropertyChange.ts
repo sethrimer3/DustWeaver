@@ -30,6 +30,7 @@ import type {
   EditorDustContainer,
   EditorDustContainerPiece,
   EditorDustBoostJar,
+  EditorDustSwarm,
   EditorRope,
   SelectedElement,
   BlockTheme,
@@ -178,6 +179,14 @@ export function applyPropertyToElement(
       if (prop === 'dustBoostJar.yBlock' && !isNaN(numVal)) jar.yBlock = numVal;
       if (prop === 'dustBoostJar.dustKind' && typeof value === 'string') jar.dustKind = value;
       if (prop === 'dustBoostJar.dustCount' && !isNaN(numVal)) jar.dustCount = Math.max(1, Math.min(20, numVal));
+    }
+  } else if (el.type === 'dustSwarm') {
+    const swarm = (room.dustSwarms ?? []).find((s: EditorDustSwarm) => s.uid === el.uid);
+    if (swarm) {
+      if (prop === 'dustSwarm.xBlock' && !isNaN(numVal)) swarm.xBlock = numVal;
+      if (prop === 'dustSwarm.yBlock' && !isNaN(numVal)) swarm.yBlock = numVal;
+      if (prop === 'dustSwarm.dustKind' && typeof value === 'string') swarm.dustKind = value;
+      if (prop === 'dustSwarm.dustCount' && !isNaN(numVal)) swarm.dustCount = Math.max(1, Math.min(50, numVal));
     }
   } else if (el.type === 'playerSpawn') {
     if (prop === 'playerSpawn.xBlock' && !isNaN(numVal)) room.playerSpawnBlock[0] = numVal;

@@ -230,6 +230,20 @@ export function updateInspector(
       addNumberField(div, 'dustCount', jar.dustCount, 1, 20,
         v => callbacks?.onPropertyChange('dustBoostJar.dustCount', v));
     }
+  } else if (el.type === 'dustSwarm') {
+    const swarm = (room.dustSwarms ?? []).find(s => s.uid === el.uid);
+    if (swarm) {
+      addField(div, 'xBlock', String(swarm.xBlock),
+        v => callbacks?.onPropertyChange('dustSwarm.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(swarm.yBlock),
+        v => callbacks?.onPropertyChange('dustSwarm.yBlock', parseInt(v)));
+      addSelect(div, 'dustKind',
+        KIND_OPTIONS,
+        swarm.dustKind,
+        v => callbacks?.onPropertyChange('dustSwarm.dustKind', v));
+      addNumberField(div, 'dustCount', swarm.dustCount, 1, 50,
+        v => callbacks?.onPropertyChange('dustSwarm.dustCount', v));
+    }
   } else if (el.type === 'dustPile') {
     const pile = room.dustPiles.find(p => p.uid === el.uid);
     if (pile) {

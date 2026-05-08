@@ -236,6 +236,8 @@ export function startGameScreen(
   dustContainerSprite.onload = () => { isDustContainerSpriteLoaded = true; };
   /** Keys in the format `${roomId}:${containerIndex}` for already-collected dust containers. */
   const collectedDustContainerKeySet: Set<string> = new Set();
+  /** Keys in the format `${roomId}:dustswarm:${index}` for already-collected dust swarms. */
+  const collectedDustSwarmKeySet: Set<string> = new Set();
   /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
   const consumedSkillTombKeySet: Set<string> = new Set();
 
@@ -1071,6 +1073,9 @@ export function startGameScreen(
         progress, consumedSkillTombKeySet, combatText,
         currentRoomId: currentRoom.id,
         openMapOnly,
+        currentRoom,
+        collectedDustSwarmKeySet,
+        levelRng,
       });
 
     // ── Dialogue advance ───────────────────────────────────────────────────
@@ -1562,6 +1567,7 @@ export function startGameScreen(
       collectedDustContainerKeySet,
       isDustContainerSpriteLoaded,
       dustContainerSprite,
+      collectedDustSwarmKeySet,
       getPlayerDustCount,
       graphicsQuality: pauseMenuState.graphicsQuality,
       renderProfiler,

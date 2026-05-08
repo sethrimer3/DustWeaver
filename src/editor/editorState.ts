@@ -74,6 +74,8 @@ export interface PaletteItem {
   isDustContainerPieceItem?: 1;
   /** 1 if this palette item places a dust boost jar object (grants temporary dust of a specific kind). */
   isDustBoostJarItem?: 1;
+  /** 1 if this palette item places a collectable dust swarm (press F to collect dust particles). */
+  isDustSwarmItem?: 1;
   /** 1 if this palette item places a falling block tile (triggers as a rigid group when disturbed). */
   isFallingBlockItem?: 1;
   /** Which falling block variant this item places. Only meaningful when isFallingBlockItem === 1. */
@@ -158,6 +160,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'skill_tomb',            label: 'Skill Tomb',            category: 'collectables' },
   { id: 'dust_container',        label: 'Dust Container',        category: 'collectables', isDustContainerItem: 1 },
   { id: 'dust_container_piece',  label: 'Dust Container Piece',  category: 'collectables', isDustContainerPieceItem: 1 },
+  { id: 'dust_swarm',            label: 'Dust Swarm',            category: 'collectables', isDustSwarmItem: 1 },
   // Environment (world atmosphere and critters)
   { id: 'dust_pile_small',  label: 'Dust Pile (S)', category: 'environment' },
   { id: 'dust_pile_medium', label: 'Dust Pile (M)', category: 'environment' },
@@ -474,6 +477,20 @@ export interface EditorDustBoostJar {
   dustCount: number;
 }
 
+/**
+ * Dust swarm — a collectable sandstorm of a specific dust kind.
+ * Player walks nearby and presses F to collect and receive the dust particles.
+ */
+export interface EditorDustSwarm {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** The ParticleKind string name of the dust (e.g. 'Fire', 'Ice', 'Physical'). */
+  dustKind: string;
+  /** Number of dust particles granted on collection. */
+  dustCount: number;
+}
+
 export interface EditorDustPile {
   uid: number;
   xBlock: number;
@@ -632,6 +649,8 @@ export interface EditorRoomData {
   dustContainers: EditorDustContainer[];
   dustContainerPieces: EditorDustContainerPiece[];
   dustBoostJars: EditorDustBoostJar[];
+  /** Collectable dust-type swarms placed in this room. */
+  dustSwarms: EditorDustSwarm[];
   dustPiles: EditorDustPile[];
   grasshopperAreas: EditorGrasshopperArea[];
   /** Firefly spawn areas (free-roaming fireflies, not jar-based). */
@@ -662,7 +681,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock' | 'dialogueTrigger';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock' | 'dialogueTrigger';
 
 export interface SelectedElement {
   type: SelectedElementType;
@@ -735,6 +754,14 @@ export interface EditorState {
    */
   pendingDustBoostJarCount: number;
   /**
+   * Which dust kind a newly placed dust swarm will contain.
+   */
+  pendingDustSwarmKind: string;
+  /**
+   * How many dust particles a newly placed dust swarm grants when collected.
+   */
+  pendingDustSwarmCount: number;
+  /**
    * Pending first anchor when placing a rope (null if not in rope-placement mode).
    */
   pendingRopeAnchorXBlock: number | null;
@@ -784,6 +811,8 @@ export function createEditorState(): EditorState {
     pendingCrumbleVariant: 'normal',
     pendingDustBoostJarKind: 'Physical',
     pendingDustBoostJarCount: 5,
+    pendingDustSwarmKind: 'Physical',
+    pendingDustSwarmCount: 5,
     pendingRopeAnchorXBlock: null,
     pendingRopeAnchorYBlock: null,
     hoverElement: null,

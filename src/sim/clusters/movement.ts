@@ -289,7 +289,7 @@ export function applyClusterMovement(world: WorldState): void {
           world.hasGrappleChargeFlag = 1;
         }
         if (cluster.isGroundedFlag === 1) {
-          cluster.hasUsedWallJumpSinceResetFlag = 0;
+          cluster.wallJumpCountSinceReset = 0;
         }
 
         // ── Wall jump grace timers: refresh when touching a wall ─────────────

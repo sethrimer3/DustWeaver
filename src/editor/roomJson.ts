@@ -18,7 +18,7 @@ import type {
   EditorAmbientLightBlocker, EditorLightSource, EditorSunbeam,
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorRope, RopeDestructibility,
-  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
+  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorFallingBlock, EditorDialogueTrigger,
   RoomSongId,
 } from './editorState';
@@ -55,6 +55,7 @@ export type {
   RoomJsonCrumbleBlock,
   RoomJsonBouncePad,
   RoomJsonDustBoostJar,
+  RoomJsonDustSwarm,
   RoomJsonFireflyJar,
   RoomJsonDustPile,
   RoomJsonGrasshopperArea,
@@ -287,6 +288,14 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     dustCount: j.dustCount,
   }));
 
+  const dustSwarms: EditorDustSwarm[] = (json.dustSwarms ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    dustKind: s.dustKind,
+    dustCount: s.dustCount,
+  }));
+
   const dustPiles: EditorDustPile[] = (json.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -447,6 +456,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       dustContainers,
       dustContainerPieces,
       dustBoostJars,
+      dustSwarms,
       dustPiles,
       grasshopperAreas,
       fireflyAreas,
@@ -582,6 +592,14 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: j.yBlock,
       dustKind: j.dustKind,
       dustCount: j.dustCount,
+    }));
+  }
+  if ((data.dustSwarms ?? []).length > 0) {
+    json.dustSwarms = data.dustSwarms.map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      dustKind: s.dustKind,
+      dustCount: s.dustCount,
     }));
   }
   if (data.dustPiles.length > 0) {

@@ -20,6 +20,15 @@ import type { PlayerProgress } from '../progression/playerProgress';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import { unlockActiveWeave } from '../progression/unlocks';
 import { getWeaveDefinition } from '../sim/weaves/weaveDefinition';
+import type { RoomDef } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import type { RngState } from '../sim/rng';
+import { ParticleKind } from '../sim/particles/kinds';
+import { stringToParticleKind } from '../editor/roomJsonSchema';
+import { spawnClusterParticles } from './gameSpawn';
+
+/** Radius within which the player can collect a dust swarm by pressing F. */
+const DUST_SWARM_COLLECT_RADIUS_WORLD = BLOCK_SIZE_MEDIUM * 2;
 
 /** Context passed to {@link processPlayerCommands} each frame. */
 export interface GameCommandContext {
@@ -38,6 +47,12 @@ export interface GameCommandContext {
   combatText: CombatTextSystem;
   currentRoomId: string;
   openMapOnly: () => void;
+  /** The active room definition (used for dust swarm pickups). */
+  currentRoom: RoomDef;
+  /** Keys in the format `${roomId}:dustswarm:${index}` for collected dust swarms. */
+  collectedDustSwarmKeySet: Set<string>;
+  /** Room-level RNG for particle spawning. */
+  levelRng: RngState;
 }
 
 /** Output of {@link processPlayerCommands} consumed by the game loop. */
@@ -68,6 +83,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
     skillTombRenderer, skillTombEffectRenderer,
     progress, consumedSkillTombKeySet, combatText,
     currentRoomId, openMapOnly,
+    currentRoom, collectedDustSwarmKeySet, levelRng,
   } = ctx;
 
   const commands = collectCommands(inputState);
@@ -185,6 +201,11 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
         } else {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           fireGrapple(world, aim.xWorld, aim.yWorld);
+          // If RMB is held while firing, trigger an instant zip toward the new anchor.
+          if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0
+              && ctx.inputState.isRightMouseDownFlag === 1) {
+            world.isGrappleZipTriggeredFlag = 1;
+          }
         }
       }
     } else if (cmd.kind === CommandKind.GrappleRelease) {
@@ -233,6 +254,40 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
             );
           }
           // Do NOT set interactTriggered — picking up a weave should not open the motes menu.
+        }
+
+        // ── Dust swarm collection ──────────────────────────────────────────────
+        // Player presses F near a dust swarm to collect it, receiving dust particles.
+        const roomDustSwarms = currentRoom.dustSwarms ?? [];
+        for (let i = 0; i < roomDustSwarms.length; i++) {
+          const swarmKey = `${currentRoomId}:dustswarm:${i}`;
+          if (collectedDustSwarmKeySet.has(swarmKey)) continue;
+          const sw = roomDustSwarms[i];
+          const swCx = (sw.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const swCy = (sw.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const sdx = playerForInteract.positionXWorld - swCx;
+          const sdy = playerForInteract.positionYWorld - swCy;
+          if (sdx * sdx + sdy * sdy <= DUST_SWARM_COLLECT_RADIUS_WORLD * DUST_SWARM_COLLECT_RADIUS_WORLD) {
+            collectedDustSwarmKeySet.add(swarmKey);
+            const rawKind = stringToParticleKind(sw.dustKind);
+            const dustKind = rawKind !== null ? rawKind : ParticleKind.Physical;
+            spawnClusterParticles(
+              world,
+              playerForInteract.entityId,
+              playerForInteract.positionXWorld,
+              playerForInteract.positionYWorld,
+              dustKind,
+              sw.dustCount,
+              levelRng,
+            );
+            const kindName = sw.dustKind;
+            combatText.spawnLabel(
+              playerForInteract.positionXWorld,
+              playerForInteract.positionYWorld - 10,
+              `+${sw.dustCount} ${kindName} Dust`,
+              performance.now(), // Cosmetic: UI timestamp for floating label fade-out only.
+            );
+          }
         }
       }
     }

@@ -73,9 +73,8 @@ export function createModal(overlay: HTMLElement): { panel: HTMLElement; destroy
     if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
   };
 
-  backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) destroyFn();
-  });
+  // Intentionally no backdrop click-to-close: dialogs must be explicitly
+  // dismissed via their Cancel button to prevent accidental data loss.
 
   return { panel, destroy: destroyFn };
 }

@@ -52,6 +52,7 @@ import type {
   RoomJsonZone,
   RoomJsonBreakableBlock,
   RoomJsonDustBoostJar,
+  RoomJsonDustSwarm,
   RoomJsonFireflyJar,
   RoomJsonDustPile,
   RoomJsonGrasshopperArea,
@@ -206,6 +207,8 @@ export interface SavedRoomV2 {
   lavaZones?: SavedRect[];
   breakableBlocks?: SavedPoint[];
   dustBoostJars?: [number, number, string, number][];
+  /** [x, y, kind, count] */
+  dustSwarms?: [number, number, string, number][];
   fireflyJars?: SavedPoint[];
   /** [x, y, count] */
   dustPiles?: [number, number, number][];
@@ -494,6 +497,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.dustBoostJars && json.dustBoostJars.length > 0) {
     out.dustBoostJars = json.dustBoostJars.map(j => [j.xBlock, j.yBlock, j.dustKind, j.dustCount]);
   }
+  if (json.dustSwarms && json.dustSwarms.length > 0) {
+    out.dustSwarms = json.dustSwarms.map(s => [s.xBlock, s.yBlock, s.dustKind, s.dustCount]);
+  }
   if (json.fireflyJars && json.fireflyJars.length > 0) {
     out.fireflyJars = json.fireflyJars.map(j => [j.xBlock, j.yBlock] as SavedPoint);
   }
@@ -689,6 +695,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.lavaZones)      json.lavaZones       = saved.lavaZones.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }) as RoomJsonZone);
   if (saved.breakableBlocks) json.breakableBlocks = saved.breakableBlocks.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonBreakableBlock);
   if (saved.dustBoostJars)  json.dustBoostJars   = saved.dustBoostJars.map(([x, y, kind, count]) => ({ xBlock: x, yBlock: y, dustKind: kind, dustCount: count }) as RoomJsonDustBoostJar);
+  if (saved.dustSwarms)     json.dustSwarms      = saved.dustSwarms.map(([x, y, kind, count]) => ({ xBlock: x, yBlock: y, dustKind: kind, dustCount: count }) as RoomJsonDustSwarm);
   if (saved.fireflyJars)    json.fireflyJars     = saved.fireflyJars.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonFireflyJar);
   if (saved.dustPiles)      json.dustPiles       = saved.dustPiles.map(([x, y, count]) => ({ xBlock: x, yBlock: y, dustCount: count }) as RoomJsonDustPile);
   if (saved.grasshopperAreas) json.grasshopperAreas = saved.grasshopperAreas.map(([x, y, w, h, count]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h, count }) as RoomJsonGrasshopperArea);

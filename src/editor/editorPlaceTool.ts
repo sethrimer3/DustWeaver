@@ -400,6 +400,17 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       dustKind: state.pendingDustBoostJarKind,
       dustCount: state.pendingDustBoostJarCount,
     });
+  } else if (item.isDustSwarmItem === 1 || item.id === 'dust_swarm') {
+    if (!room.dustSwarms) room.dustSwarms = [];
+    // Dedup: no duplicate at same position.
+    if (room.dustSwarms.some(s => s.xBlock === bx && s.yBlock === by)) return;
+    room.dustSwarms.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      dustKind: state.pendingDustSwarmKind,
+      dustCount: state.pendingDustSwarmCount,
+    });
   } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
     let dustCount: number;
     if (item.id === 'dust_pile_small') {
