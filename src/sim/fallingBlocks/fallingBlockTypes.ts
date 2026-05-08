@@ -223,3 +223,28 @@ export interface FallingBlockGroup {
   /** Last trigger type that caused the transition from idleStable to warning. */
   lastTriggerType: number;
 }
+
+// ── Group bounds accessors ─────────────────────────────────────────────────────
+// Pure helpers that compute the group's current AABB edges from its mutable state.
+// Exported here (rather than in fallingBlockSim) so both the sim and the collision
+// module can import them without creating a circular dependency.
+
+/** Returns the current effective Y top of the group in world space. */
+export function getFBGroupTopWorld(g: FallingBlockGroup): number {
+  return g.restYWorld + g.offsetYWorld;
+}
+
+/** Returns the current effective Y bottom of the group. */
+export function getFBGroupBottomWorld(g: FallingBlockGroup): number {
+  return g.restYWorld + g.offsetYWorld + g.hWorld;
+}
+
+/** Returns the current left edge (X never changes). */
+export function getFBGroupLeftWorld(g: FallingBlockGroup): number {
+  return g.restXWorld;
+}
+
+/** Returns the current right edge. */
+export function getFBGroupRightWorld(g: FallingBlockGroup): number {
+  return g.restXWorld + g.wWorld;
+}
