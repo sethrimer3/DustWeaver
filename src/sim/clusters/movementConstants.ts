@@ -271,7 +271,18 @@ export const WALL_JUMP_FORCE_TIME_TICKS = 10;
 export const WALL_JUMP_AIR_ACCEL_MULTIPLIER = 2.0;
 
 /**
- * Multiplier applied to wallJumpYBase for wall jumps after the first;
+ * Multiplier applied to the first-wall-jump Y speed for the second wall jump.
+ * Produces a launch speed 20% below the first jump but well above the 0.5×
+ * subsequent-jump floor, giving a noticeable but not harsh step-down.
+ *
+ * first  = wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD = 152
+ * second = first × 0.80                                        = ~122
+ * rest   = wallJumpYBase × WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER   =  71
+ */
+export const WALL_JUMP_SECOND_Y_MULTIPLIER = 0.80;
+
+/**
+ * Multiplier applied to wallJumpYBase for wall jumps after the second;
  * produces half the vertical launch speed to prevent altitude gain from
  * chained wall-jumps.
  */

@@ -299,7 +299,10 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const dirX = dx * invDist;
   const dirY = dy * invDist;
   const effectiveRangeWorld = getEffectiveGrappleRangeWorld(world);
-  const maxCastDist = Math.min(dist, effectiveRangeWorld);
+  // Always cast the full grapple range — the mouse position indicates direction only,
+  // not the desired length. This ensures the grapple always fires to its full reach
+  // even when the cursor is inside the influence radius.
+  const maxCastDist = effectiveRangeWorld;
 
   // ── Check rope segments first — ropes take priority over walls ──────────
   const ropeHit = raycastRopeSegments(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);

@@ -55,6 +55,7 @@ import {
   IDLE_TRIGGER_TICKS,
   IDLE_BLINK_DURATION_TICKS,
   WALL_JUMP_AIR_ACCEL_MULTIPLIER,
+  WALL_JUMP_SECOND_Y_MULTIPLIER,
   WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER,
   AIR_MOVE_SPEED_WORLD_PER_SEC,
   AIR_BRAKING_PER_SEC2,
@@ -116,7 +117,7 @@ export function tickPlayerMovement(
   }
   // Grappling resets the "first wall jump" bonus state.
   if (world.isGrappleActiveFlag === 1 || world.isGrappleStuckFlag === 1) {
-    cluster.hasUsedWallJumpSinceResetFlag = 0;
+    cluster.wallJumpCountSinceReset = 0;
   }
 
   // ── Update player facing direction ──────────────────────────────────
@@ -395,10 +396,14 @@ export function tickPlayerMovement(
       if (canJumpFromLeft || canJumpFromRight) {
         const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, WALL_JUMP_X_SPEED_WORLD);
         const wallJumpYBase = ov(debugSpeedOverrides.wallJumpYWorld, WALL_JUMP_Y_SPEED_WORLD);
-        const isInitialWallJump = cluster.hasUsedWallJumpSinceResetFlag === 0;
+        const isInitialWallJump = cluster.wallJumpCountSinceReset === 0;
+        const isSecondWallJump  = cluster.wallJumpCountSinceReset === 1;
+        const firstJumpY = wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD;
         const wallJumpY = isInitialWallJump
-          ? wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD
-          : wallJumpYBase * WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER;
+          ? firstJumpY
+          : isSecondWallJump
+            ? firstJumpY * WALL_JUMP_SECOND_Y_MULTIPLIER
+            : wallJumpYBase * WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER;
         // wallDir = +1 if wall is to the right, -1 if wall is to the left
         const wallDir = canJumpFromRight ? 1 : -1;
         // Launch away: strong diagonal push prevents same-wall climbing.
@@ -412,7 +417,7 @@ export function tickPlayerMovement(
         cluster.coyoteTimeTicks         = 0;
         cluster.wallJumpGraceLeftTicks  = 0;
         cluster.wallJumpGraceRightTicks = 0;
-        cluster.hasUsedWallJumpSinceResetFlag = 1;
+        cluster.wallJumpCountSinceReset += 1;
         if (isInitialWallJump) {
           world.wallJumpSkidDebrisBurstFlag = 1;
           world.skidDebrisXWorld = cluster.positionXWorld;
@@ -528,7 +533,7 @@ export function tickPlayerMovement(
         } else {
           // Normal speed range: standard air control clamped to airMoveSpeed.
           // Normal input cannot push the player above this soft cap.
-          const wallJumpMult = cluster.hasUsedWallJumpSinceResetFlag === 1
+          const wallJumpMult = cluster.wallJumpCountSinceReset > 0
             ? ov(debugSpeedOverrides.wallJumpAirAccelMultiplier, WALL_JUMP_AIR_ACCEL_MULTIPLIER)
             : 1.0;
           const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||

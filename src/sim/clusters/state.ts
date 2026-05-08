@@ -83,10 +83,14 @@ export interface ClusterState {
    */
   wallJumpDirX: number;
   /**
-   * 1 after any wall jump has been used since the last reset point.
+   * Number of wall jumps used since the last reset point (0 = none yet).
    * Reset points: touching ground or attaching a grapple.
+   * Used to apply a three-tier height profile:
+   *   0 → first jump (full bonus)
+   *   1 → second jump (WALL_JUMP_SECOND_Y_MULTIPLIER × first-jump speed)
+   *   2+ → subsequent jumps (WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER × base speed)
    */
-  hasUsedWallJumpSinceResetFlag: 0 | 1;
+  wallJumpCountSinceReset: number;
   /**
    * Grace timer for the left wall.  Set to WALL_JUMP_GRACE_TICKS when the
    * player leaves a left-wall contact; while > 0 a wall jump off the left
@@ -491,7 +495,7 @@ export function createClusterState(
     wallJumpLockoutTicks: 0,
     wallJumpForceTimeTicks: 0,
     wallJumpDirX: 0,
-    hasUsedWallJumpSinceResetFlag: 0,
+    wallJumpCountSinceReset: 0,
     wallJumpGraceLeftTicks: 0,
     wallJumpGraceRightTicks: 0,
     dashCooldownTicks: 0,

@@ -185,6 +185,11 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
         } else {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           fireGrapple(world, aim.xWorld, aim.yWorld);
+          // If RMB is held while firing, trigger an instant zip toward the new anchor.
+          if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0
+              && ctx.inputState.isRightMouseDownFlag === 1) {
+            world.isGrappleZipTriggeredFlag = 1;
+          }
         }
       }
     } else if (cmd.kind === CommandKind.GrappleRelease) {
