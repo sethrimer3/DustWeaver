@@ -103,6 +103,7 @@ import {
   TRANSITION_FAST_SPEED_WORLD,
   TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS,
 } from '../render/transitions/transitionConfig';
+import { GameLoadingOverlay } from './gameLoadingOverlay';
 
 const FIXED_DT_MS = 16.666;
 
@@ -617,52 +618,15 @@ export function startGameScreen(
   // ── Initial loading overlay ───────────────────────────────────────────────
   // Shown when gameplay first starts (or when a room's sprites are not yet
   // loaded).  Polled each frame and dismissed once areRoomSpritesReady().
-  let loadingOverlayEl: HTMLDivElement | null = null;
-  /** Earliest time (ms) at which the overlay may be dismissed, to avoid flash. */
-  let loadingOverlayMinShowMs = 0;
-  /** Track the last time we polled sprite readiness (ms). */
-  let loadingOverlayLastCheckMs = 0;
-  const LOADING_OVERLAY_CHECK_INTERVAL_MS = 50;
+  const loadingOverlay = new GameLoadingOverlay(uiRoot);
 
   function showLoadingOverlay(): void {
-    if (loadingOverlayEl !== null) return;
-    const div = document.createElement('div');
-    div.style.cssText = [
-      'position:absolute',
-      'inset:0',
-      'background:#000',
-      'display:flex',
-      'align-items:center',
-      'justify-content:center',
-      'z-index:9999',
-      "font-family:'Cinzel',serif",
-      'font-size:1.2rem',
-      'color:#00cfff',
-      'pointer-events:none',
-      'transition:opacity 0.3s',
-    ].join(';');
-    div.textContent = 'Loading\u2026';
-    uiRoot.appendChild(div);
-    loadingOverlayEl = div;
-    loadingOverlayMinShowMs = performance.now() + 200;
-    loadingOverlayLastCheckMs = 0;
+    loadingOverlay.show();
   }
 
   /** Hides the overlay once sprites are ready and the minimum show time has passed. */
   function tickLoadingOverlay(): void {
-    if (loadingOverlayEl === null) return;
-    const now = performance.now();
-    if (now < loadingOverlayMinShowMs) return;
-    if (now - loadingOverlayLastCheckMs < LOADING_OVERLAY_CHECK_INTERVAL_MS) return;
-    loadingOverlayLastCheckMs = now;
-    if (!areRoomSpritesReady(currentRoom)) return;
-    // Sprites ready — fade out and remove the overlay.
-    const el = loadingOverlayEl;
-    loadingOverlayEl = null;
-    el.style.opacity = '0';
-    setTimeout(() => {
-      if (el.parentElement !== null) el.parentElement.removeChild(el);
-    }, 300);
+    loadingOverlay.tick(() => areRoomSpritesReady(currentRoom));
   }
 
   // ── Dust container state (armor system) ─────────────────────────────────
@@ -1601,10 +1565,7 @@ export function startGameScreen(
     webglRenderer.dispose();
     dialogueRenderer.destroy();
     window.removeEventListener('resize', onResize);
-    if (loadingOverlayEl !== null && loadingOverlayEl.parentElement !== null) {
-      loadingOverlayEl.parentElement.removeChild(loadingOverlayEl);
-      loadingOverlayEl = null;
-    }
+    loadingOverlay.destroy();
     if (menuButton !== null && menuButton.parentElement !== null) {
       menuButton.parentElement.removeChild(menuButton);
     }
