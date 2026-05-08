@@ -177,6 +177,8 @@ export interface RenderFrameContext {
   collectedDustContainerKeySet: Set<string>;
   isDustContainerSpriteLoaded: boolean;
   dustContainerSprite: HTMLImageElement;
+  /** Keys for already-collected dust swarms (passed from gameScreen). */
+  collectedDustSwarmKeySet: Set<string>;
 
   // Callbacks
   getPlayerDustCount: () => number;
@@ -227,6 +229,32 @@ export interface RenderFrameContext {
 }
 
 /**
+ * Returns a CSS colour string for a given dust kind name.
+ * Used to tint dust swarm particles cosmetically.
+ */
+function getDustKindColor(dustKind: string): string {
+  switch (dustKind) {
+    case 'Fire':      return '#ff6020';
+    case 'Ice':       return '#60c8ff';
+    case 'Lightning': return '#ffe040';
+    case 'Poison':    return '#60ff40';
+    case 'Arcane':    return '#c060ff';
+    case 'Wind':      return '#c0f0ff';
+    case 'Holy':      return '#ffffa0';
+    case 'Shadow':    return '#8040a0';
+    case 'Metal':     return '#b0b8c8';
+    case 'Earth':     return '#a07040';
+    case 'Nature':    return '#40c840';
+    case 'Crystal':   return '#80ffe0';
+    case 'Void':      return '#4020a0';
+    case 'Water':     return '#2080ff';
+    case 'Lava':      return '#ff4010';
+    case 'Stone':     return '#909090';
+    default:          return '#d0c080'; // Physical / unknown
+  }
+}
+
+/**
  * Render a single frame to the virtual canvas and upscale to the device
  * canvas.  Handles every rendering layer: world background, geometry,
  * particles, HUD, touch-joystick overlay.
@@ -244,6 +272,7 @@ export function renderFrame(r: RenderFrameContext): void {
     collectedDustContainerKeySet,
     isDustContainerSpriteLoaded,
     dustContainerSprite,
+    collectedDustSwarmKeySet,
     graphicsQuality,
     renderProfiler,
   } = r;
@@ -497,6 +526,40 @@ export function renderFrame(r: RenderFrameContext): void {
         drawSize,
       );
     }
+  }
+
+  // Dust swarms (collectibles — press F to collect)
+  {
+    const roomDustSwarms = currentRoom.dustSwarms ?? [];
+    const t = nowMs * 0.001;
+    ctx.save();
+    for (let i = 0; i < roomDustSwarms.length; i++) {
+      const swarmKey = `${currentRoom.id}:dustswarm:${i}`;
+      if (collectedDustSwarmKeySet.has(swarmKey)) continue;
+      const sw = roomDustSwarms[i];
+      const cx = (sw.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+      const cy = (sw.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+      // Draw a swirling cluster of ~12 small dots (Math.random() intentional — cosmetic only)
+      const particleCount = 12;
+      for (let p = 0; p < particleCount; p++) {
+        const angle = (p / particleCount) * Math.PI * 2 + t * (1.4 + (p % 3) * 0.3);
+        const wobble = Math.sin(t * 2.0 + p * 1.1) * 0.5;
+        const radius = (3.5 + (p % 4) * 1.2 + wobble) * BLOCK_SIZE_MEDIUM * 0.12;
+        const px = cx + Math.cos(angle) * radius;
+        const py = cy + Math.sin(angle) * radius * 0.6 + Math.sin(t * 1.7 + p) * 1.0;
+        const alpha = 0.55 + Math.sin(t * 2.5 + p * 0.9) * 0.25;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = getDustKindColor(sw.dustKind);
+        const size = (1.2 + (p % 3) * 0.4) * zoom;
+        ctx.fillRect(
+          Math.round((px * zoom + ox) - size * 0.5),
+          Math.round((py * zoom + oy) - size * 0.5),
+          Math.ceil(size), Math.ceil(size),
+        );
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
   // ── Particles ─────────────────────────────────────────────────────────────

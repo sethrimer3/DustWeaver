@@ -649,6 +649,21 @@ export interface RoomFireflyJarDef {
   yBlock: number;
 }
 
+/**
+ * A collectable dust-type swarm placed in the world.
+ * Appears as an animated sandstorm/swirl of particles of the chosen kind.
+ * The player collects it by approaching within DUST_SWARM_COLLECT_RADIUS_WORLD
+ * and pressing F, receiving `dustCount` particles of `dustKind`.
+ */
+export interface RoomDustSwarmDef {
+  xBlock: number;
+  yBlock: number;
+  /** ParticleKind string name (e.g. 'Fire', 'Ice', 'Physical'). */
+  dustKind: string;
+  /** Number of dust particles granted on collection. */
+  dustCount: number;
+}
+
 /** A pile of gold dust placed on the ground that can be attracted by the Storm Weave. */
 export interface RoomDustPileDef {
   xBlock: number;
@@ -842,6 +857,12 @@ export interface RoomDef {
    * Pieces accumulate; when enough are collected they grant a full container.
    */
   dustContainerPieces?: readonly { xBlock: number; yBlock: number }[];
+  /**
+   * Dust type swarms — collectible sandstorm clusters of a specific dust kind.
+   * Each swarm appears as a small animated swirl of coloured particles; the player
+   * collects it by walking nearby and pressing F, receiving `dustCount` particles.
+   */
+  dustSwarms?: readonly RoomDustSwarmDef[];
 
   // ── Environmental hazards ────────────────────────────────────────────────
   /** Spike tiles that damage the player on contact. */

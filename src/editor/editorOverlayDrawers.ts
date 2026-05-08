@@ -34,6 +34,7 @@ import {
   DUST_CONTAINER_COLOR, DUST_CONTAINER_SELECTED,
   DUST_CONTAINER_PIECE_COLOR, DUST_CONTAINER_PIECE_SELECTED,
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
+  DUST_SWARM_COLOR, DUST_SWARM_SELECTED,
   DIALOGUE_TRIGGER_COLOR, DIALOGUE_TRIGGER_SELECTED,
   drawBlockRect, drawRampTriangle,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
@@ -225,6 +226,17 @@ export function drawEditorCollectibles(
     drawObjectFootprint(ctx, j.xBlock, j.yBlock, 1, 1,
       offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
     drawMarker(ctx, j.xBlock, j.yBlock, offsetXPx, offsetYPx, zoom, color, '⬡');
+  }
+
+  // Dust swarms (collectible sandstorms — press F to collect)
+  for (const s of (room.dustSwarms ?? [])) {
+    const sel = isSelected('dustSwarm', s.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'dustSwarm' && state.hoverElement.uid === s.uid;
+    const color = sel ? DUST_SWARM_SELECTED : DUST_SWARM_COLOR;
+    drawObjectFootprint(ctx, s.xBlock, s.yBlock, 1, 1,
+      offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
+    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '🌪');
   }
 
   // Dust piles (unowned Gold Dust for Storm Weave attraction)

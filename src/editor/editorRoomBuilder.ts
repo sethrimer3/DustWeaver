@@ -20,7 +20,7 @@ import type {
   EditorAmbientLightBlocker, EditorLightSource, EditorSunbeam,
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock,
   EditorRope,
-  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
+  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorFallingBlock, EditorDialogueTrigger,
 } from './editorState';
 import { particleKindToString, stringToParticleKind } from './roomJsonSchema';
@@ -215,6 +215,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
         dustCount: j.dustCount,
       };
     }),
+    dustSwarms: (data.dustSwarms ?? []).map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      dustKind: s.dustKind,
+      dustCount: s.dustCount,
+    })),
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount, spreadBlocks: p.spreadBlocks ?? 0 })),
     grasshopperAreas: data.grasshopperAreas.map(a => ({
       xBlock: a.xBlock,
@@ -458,6 +464,14 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     dustCount: j.dustCount,
   }));
 
+  const dustSwarms: EditorDustSwarm[] = (room.dustSwarms ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+    dustKind: s.dustKind,
+    dustCount: s.dustCount,
+  }));
+
   const dustPiles: EditorDustPile[] = (room.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -608,6 +622,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       dustContainers,
       dustContainerPieces,
       dustBoostJars,
+      dustSwarms,
       dustPiles,
       grasshopperAreas,
       fireflyAreas,

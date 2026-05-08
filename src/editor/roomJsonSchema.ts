@@ -177,6 +177,13 @@ export interface RoomJsonDustBoostJar {
   dustCount: number;
 }
 
+export interface RoomJsonDustSwarm {
+  xBlock: number;
+  yBlock: number;
+  dustKind: string;
+  dustCount: number;
+}
+
 export interface RoomJsonFireflyJar {
   xBlock: number;
   yBlock: number;
@@ -374,6 +381,7 @@ export interface RoomJsonDef {
   bouncePads?: RoomJsonBouncePad[];
   ropes?: RoomJsonRope[];
   dustBoostJars?: RoomJsonDustBoostJar[];
+  dustSwarms?: RoomJsonDustSwarm[];
   fireflyJars?: RoomJsonFireflyJar[];
   dustPiles?: RoomJsonDustPile[];
   grasshopperAreas?: RoomJsonGrasshopperArea[];

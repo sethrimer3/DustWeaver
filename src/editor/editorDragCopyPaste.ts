@@ -11,7 +11,7 @@ import {
   EditorWall, EditorEnemy, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
   EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea, EditorFallingBlock,
-  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar,
+  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
 
@@ -51,6 +51,9 @@ export function storeDragStartPositions(
     } else if (el.type === 'dustBoostJar') {
       const j = (s.roomData.dustBoostJars ?? []).find(j2 => j2.uid === el.uid);
       if (j) positions.set(key, { xBlock: j.xBlock, yBlock: j.yBlock });
+    } else if (el.type === 'dustSwarm') {
+      const sw = (s.roomData.dustSwarms ?? []).find(sw2 => sw2.uid === el.uid);
+      if (sw) positions.set(key, { xBlock: sw.xBlock, yBlock: sw.yBlock });
     } else if (el.type === 'dustPile') {
       const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
@@ -131,6 +134,9 @@ export function moveSelectedElements(
     } else if (el.type === 'dustBoostJar') {
       const j = (s.roomData.dustBoostJars ?? []).find(j2 => j2.uid === el.uid);
       if (j) { j.xBlock = orig.xBlock + deltaX; j.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'dustSwarm') {
+      const sw = (s.roomData.dustSwarms ?? []).find(sw2 => sw2.uid === el.uid);
+      if (sw) { sw.xBlock = orig.xBlock + deltaX; sw.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'dustPile') {
       const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) { p.xBlock = orig.xBlock + deltaX; p.yBlock = orig.yBlock + deltaY; }
@@ -204,6 +210,7 @@ export function serializeSelectedElements(
     dustContainers: EditorDustContainer[];
     dustContainerPieces: EditorDustContainerPiece[];
     dustBoostJars: EditorDustBoostJar[];
+    dustSwarms: EditorDustSwarm[];
     dustPiles: EditorDustPile[];
     decorations: EditorDecoration[];
     lightSources: EditorLightSource[];
@@ -218,6 +225,7 @@ export function serializeSelectedElements(
   } = {
     walls: [], enemies: [], saveTombs: [], skillTombs: [],
     dustContainers: [], dustContainerPieces: [], dustBoostJars: [],
+    dustSwarms: [],
     dustPiles: [],
     decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
     bouncePads: [], grasshopperAreas: [], fireflyAreas: [], fallingBlocks: [],
@@ -244,6 +252,9 @@ export function serializeSelectedElements(
     } else if (el.type === 'dustBoostJar') {
       const j = (room.dustBoostJars ?? []).find(j2 => j2.uid === el.uid);
       if (j) data.dustBoostJars.push({ ...j });
+    } else if (el.type === 'dustSwarm') {
+      const sw = (room.dustSwarms ?? []).find(sw2 => sw2.uid === el.uid);
+      if (sw) data.dustSwarms.push({ ...sw });
     } else if (el.type === 'dustPile') {
       const p = room.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) data.dustPiles.push({ ...p });
@@ -296,6 +307,7 @@ export function pasteFromClipboard(s: EditorState): void {
     dustContainers?: EditorDustContainer[];
     dustContainerPieces?: EditorDustContainerPiece[];
     dustBoostJars?: EditorDustBoostJar[];
+    dustSwarms?: EditorDustSwarm[];
     dustPiles: EditorDustPile[];
     decorations?: EditorDecoration[];
     lightSources?: EditorLightSource[];
@@ -322,6 +334,7 @@ export function pasteFromClipboard(s: EditorState): void {
     ...data.walls, ...data.enemies,
     ...(data.saveTombs ?? []), ...(data.skillTombs ?? []),
     ...(data.dustContainers ?? []), ...(data.dustContainerPieces ?? []), ...(data.dustBoostJars ?? []),
+    ...(data.dustSwarms ?? []),
     ...(data.dustPiles ?? []),
     ...(data.decorations ?? []), ...(data.lightSources ?? []), ...(data.sunbeams ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
@@ -404,6 +417,17 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: j.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'dustBoostJar', uid: newUid });
+  }
+  for (const sw of (data.dustSwarms ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.dustSwarms) s.roomData.dustSwarms = [];
+    s.roomData.dustSwarms.push({
+      ...sw,
+      uid: newUid,
+      xBlock: sw.xBlock - minX + offsetX,
+      yBlock: sw.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'dustSwarm', uid: newUid });
   }
   for (const p of (data.dustPiles ?? [])) {
     const newUid = allocateUid(s);
