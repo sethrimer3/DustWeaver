@@ -26,6 +26,7 @@
 
 import type { ChunkCacheStats } from '../walls/chunkRenderCache';
 import type { TransitionDebugStats } from '../transitions/transitionState';
+import type { LiquidDebugStats } from '../liquidBodyCache';
 
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
@@ -79,6 +80,9 @@ export class RenderProfiler {
   /** Latest transition debug stats, set each frame when debug mode is active. */
   private _transitionStats: TransitionDebugStats | null = null;
 
+  /** Latest liquid body debug stats. */
+  private _liquidStats: LiquidDebugStats | null = null;
+
   /**
    * Store the latest chunk-cache diagnostic counters.
    * Call this from gameRender.ts after the walls render stage when debug mode
@@ -94,6 +98,14 @@ export class RenderProfiler {
    */
   updateTransitionStats(stats: TransitionDebugStats): void {
     this._transitionStats = stats;
+  }
+
+  /**
+   * Store the latest liquid body debug stats.
+   * Call this once per frame from gameRender.ts when debug mode is on.
+   */
+  updateLiquidStats(stats: LiquidDebugStats): void {
+    this._liquidStats = stats;
   }
 
   /**
@@ -213,6 +225,31 @@ export class RenderProfiler {
       ctx.fillStyle = '#ffa040';
       for (let i = 0; i < transLines.length; i++) {
         ctx.fillText(transLines[i], padXPx, transPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+    }
+
+    // ── Liquid body debug panel ───────────────────────────────────────────────
+    if (this._liquidStats !== null) {
+      const ls = this._liquidStats;
+      const chunkPanelH  = this._chunkStats !== null ? 3 * lineHeightPx + 8 : 0;
+      const transPanelH  = this._transitionStats !== null ? 6 * lineHeightPx + 8 : 0;
+      const chunkPanelY  = padYPx - 4 + panelHeight + 4;
+      const liquidPanelY = chunkPanelY + chunkPanelH + transPanelH + 8;
+      const liquidLines  = [
+        `Liq tiles: ${ls.liquidTileCount}`,
+        `Bodies:    ${ls.liquidBodyCount}`,
+        `MrgRects:  ${ls.mergedRectCount}`,
+        `Bubbles:   ${ls.activeBubbleCount}`,
+        `Rebuilds:  ${ls.cacheRebuildCount}`,
+      ];
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(padXPx - 4, liquidPanelY, panelWidth + 8, liquidLines.length * lineHeightPx + 8);
+      ctx.fillStyle = '#40d0ff';
+      for (let i = 0; i < liquidLines.length; i++) {
+        ctx.fillText(liquidLines[i], padXPx, liquidPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
     }

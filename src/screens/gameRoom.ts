@@ -1,5 +1,6 @@
 import { WorldState, MAX_WALLS, MAX_DUST_PILES, MAX_FIREFLIES, MAX_BOUNCE_PADS, MAX_ROPES, MAX_ROPE_SEGMENTS, MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
+import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import {
   RoomDef,
   BLOCK_SIZE_MEDIUM,
@@ -282,6 +283,9 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.lavaZoneWWorld[li] = l.wBlock * BLOCK_SIZE_MEDIUM;
     world.lavaZoneHWorld[li] = l.hBlock * BLOCK_SIZE_MEDIUM;
   }
+
+  // Invalidate the liquid body render cache whenever zones are (re)loaded.
+  markLiquidBodiesDirty();
 
   // ── Breakable blocks ──────────────────────────────────────────────────────
   // Each breakable block is added as a wall AND tracked in the breakable arrays.

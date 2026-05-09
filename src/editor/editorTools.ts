@@ -15,6 +15,7 @@ import {
   hitTestTransition,
   hitTestTransitionRect,
 } from './editorHitTest';
+import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 
 // ── Select tool ──────────────────────────────────────────────────────────────
 
@@ -400,6 +401,7 @@ export function deleteAtCursor(state: EditorState): void {
       const removedUid = waterZones[i].uid;
       waterZones.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      markLiquidBodiesDirty();
       return;
     }
   }
@@ -411,6 +413,7 @@ export function deleteAtCursor(state: EditorState): void {
       const removedUid = lavaZones[i].uid;
       lavaZones.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      markLiquidBodiesDirty();
       return;
     }
   }
