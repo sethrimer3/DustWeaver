@@ -76,6 +76,7 @@ import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer
 import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import { renderPreviewBubbles } from '../render/transitions/previewBubbleRenderer';
 import { renderLambdaAnchors, renderTeleportFlash } from '../render/lambdaAnchorRenderer';
+import { getLiquidDebugStats } from '../render/liquidBodyCache';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -463,6 +464,9 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
   renderHazards(ctx, world, ox, oy, zoom, world.tick);
+  if (renderProfiler !== undefined && isDebugMode) {
+    renderProfiler.updateLiquidStats(getLiquidDebugStats());
+  }
 
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);

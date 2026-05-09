@@ -28,6 +28,7 @@ import {
   findCeilingBlockRow,
 } from './editorHitTest';
 import { getBrushCells } from './editorBrush';
+import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
 
@@ -188,6 +189,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       if (alreadyLava) return;
       room.lavaZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
     }
+    markLiquidBodiesDirty();
     return;
   }
 
