@@ -128,6 +128,11 @@ export interface LiquidBody {
   readonly bubbles: LiquidBubble[];
   /** Ticks until the next bubble spawn attempt. */
   nextBubbleSpawnTicks: number;
+  /**
+   * Maximum bubbles allowed for this body, scaled to body size.
+   * Smaller bodies have a lower cap than LIQUID_BUBBLE_BODY_CAP.
+   */
+  bubbleCap: number;
 }
 
 // ── Module-level cache state ───────────────────────────────────────────────────
@@ -241,7 +246,7 @@ export function tickLiquidBubbles(tick: number): void {
     // ── Spawn new bubbles ─────────────────────────────────────────────────
     body.nextBubbleSpawnTicks--;
     if (body.nextBubbleSpawnTicks <= 0
-      && bubbles.length < LIQUID_BUBBLE_BODY_CAP
+      && bubbles.length < body.bubbleCap
       && globalBubbleCount < LIQUID_BUBBLE_GLOBAL_CAP
       && bottomByColumn.size > 0
     ) {
@@ -387,12 +392,10 @@ function extractBodies(kind: 'water' | 'lava', tileSet: Set<number>): void {
       }
     }
 
-    const body = buildBody(kind, componentKeys, tileSet);
+    const body = buildBody(kind, componentKeys);
     _bodies.push(body);
   }
 }
-
-const _NEIGHBOURS: number[] = [0, 0, 0, 0];
 
 /**
  * Builds a fully initialised LiquidBody from the given component tile keys.
@@ -400,9 +403,7 @@ const _NEIGHBOURS: number[] = [0, 0, 0, 0];
 function buildBody(
   kind: 'water' | 'lava',
   keys: number[],
-  fullSet: Set<number>,
 ): LiquidBody {
-  void _NEIGHBOURS; // used below inline for readability
   const B = BLOCK_SIZE_MEDIUM;
 
   // Per-body tile set
@@ -449,12 +450,8 @@ function buildBody(
     }
   }
 
-  // Use fullSet for the body's own tile lookups (neighbour checks refer only
-  // to this body, not to other-type liquid, so bodySet is correct).
-  void fullSet;
-
-  // Scale bubble cap to body size (small puddle → fewer bubbles)
-  const scaledCap = Math.min(
+  // Scale bubble cap to body size so small puddles have fewer bubbles.
+  const bubbleCap = Math.min(
     LIQUID_BUBBLE_BODY_CAP,
     Math.max(0, Math.floor(Math.sqrt(keys.length) * 0.8)),
   );
@@ -471,15 +468,12 @@ function buildBody(
     topEdgeRuns,
     bottomByColumn,
     bubbles: [],
+    bubbleCap,
     nextBubbleSpawnTicks: Math.floor(
       LIQUID_BUBBLE_SPAWN_RATE_MIN
       + Math.random() * (LIQUID_BUBBLE_SPAWN_RATE_MAX - LIQUID_BUBBLE_SPAWN_RATE_MIN),
     ),
   };
-
-  // Store scaled cap on body (used in tickLiquidBubbles via LIQUID_BUBBLE_BODY_CAP)
-  // For very small bodies (0 tiles possible in theory), cap stays 0.
-  void scaledCap; // exposing through LIQUID_BUBBLE_BODY_CAP constant; tiny bodies pruned by bottomByColumn
 
   return body;
 }
