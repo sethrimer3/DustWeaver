@@ -20,6 +20,19 @@ const POLE_WIDTH_WORLD  = 1;
 /** Radius of the glyph cap circle (world units). */
 const CAP_RADIUS_WORLD  = BLOCK_SIZE_MEDIUM * 0.55;
 
+/** Minimum glyph font size (virtual pixels) — keeps λ legible at low zoom. */
+const MIN_GLYPH_SIZE_PX = 5;
+/** Pulse oscillation speed (cycles/sec) when the anchor is linked. */
+const PULSE_SPEED_LINKED = 2.8;
+/** Pulse oscillation speed (cycles/sec) when the anchor is unlinked. */
+const PULSE_SPEED_UNLINKED = 1.1;
+/** Pulse amplitude (fraction of base radius) when the anchor is linked. */
+const PULSE_AMP_LINKED = 0.22;
+/** Pulse amplitude (fraction of base radius) when the anchor is unlinked. */
+const PULSE_AMP_UNLINKED = 0.08;
+/** Glow circle radius as a multiple of the cap display radius. */
+const GLOW_RADIUS_MULTIPLIER = 1.55;
+
 /** Render all Lambda Anchors in the current room. */
 export function renderLambdaAnchors(
   ctx: CanvasRenderingContext2D,
@@ -59,8 +72,8 @@ function renderAnchor(
   const capRadiusPx  = CAP_RADIUS_WORLD * zoom;
 
   // Gentle pulse when linked; subtle breathing when unlinked.
-  const pulseSpeed = isLinked ? 2.8 : 1.1;
-  const pulseAmp   = isLinked ? 0.22 : 0.08;
+  const pulseSpeed = isLinked ? PULSE_SPEED_LINKED : PULSE_SPEED_UNLINKED;
+  const pulseAmp   = isLinked ? PULSE_AMP_LINKED : PULSE_AMP_UNLINKED;
   const pulseFactor = 1 + Math.sin((nowMs / 1000) * pulseSpeed * Math.PI * 2) * pulseAmp;
 
   // Pole
@@ -86,7 +99,7 @@ function renderAnchor(
 
   // Outer glow when linked
   if (isLinked) {
-    const glowRadius = displayRadius * 1.55;
+    const glowRadius = displayRadius * GLOW_RADIUS_MULTIPLIER;
     const grad = ctx.createRadialGradient(capCX, capCY, 0, capCX, capCY, glowRadius);
     grad.addColorStop(0,   'rgba(255, 235, 80, 0.55)');
     grad.addColorStop(0.6, 'rgba(220, 180, 20, 0.18)');
@@ -106,7 +119,7 @@ function renderAnchor(
 
   // λ glyph text
   ctx.save();
-  const glyphSize = Math.max(5, displayRadius * 1.4);
+  const glyphSize = Math.max(MIN_GLYPH_SIZE_PX, displayRadius * 1.4);
   ctx.font = `bold ${glyphSize}px monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

@@ -320,7 +320,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
             const player = world.clusters.find(c => c.isPlayerFlag === 1);
             if (player) {
               player.positionXWorld = anchorCX;
-              player.positionYWorld = anchorCY - playerForInteract.halfHeightWorld;
+              player.positionYWorld = anchorCY - player.halfHeightWorld;
               player.velocityXWorld = 0;
               player.velocityYWorld = 0;
               lambdaTeleportFlash();
