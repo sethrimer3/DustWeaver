@@ -76,6 +76,8 @@ export interface PaletteItem {
   isDustBoostJarItem?: 1;
   /** 1 if this palette item places a collectable dust swarm (press F to collect dust particles). */
   isDustSwarmItem?: 1;
+  /** 1 if this palette item places a Lambda Anchor (temporary recall point, press F to link/teleport). */
+  isLambdaAnchorItem?: 1;
   /** 1 if this palette item places a falling block tile (triggers as a rigid group when disturbed). */
   isFallingBlockItem?: 1;
   /** Which falling block variant this item places. Only meaningful when isFallingBlockItem === 1. */
@@ -173,6 +175,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'decoration_glowgrass', label: 'Glow Grass',       category: 'environment' },
   { id: 'decoration_vine',      label: 'Glow Vine',        category: 'environment' },
   // Objects (interactive world objects)
+  { id: 'lambda_anchor', label: 'Lambda Anchor', category: 'objects', isLambdaAnchorItem: 1 },
   { id: 'dust_boost_jar', label: 'Dust Jar (Object)', category: 'objects', isDustBoostJarItem: 1 },
   // ── Lighting layer ─────────────────────────────────────────────────────
   // Designer-facing authoring for the unified ambient lighting system.
@@ -491,6 +494,12 @@ export interface EditorDustSwarm {
   dustCount: number;
 }
 
+export interface EditorLambdaAnchor {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
 export interface EditorDustPile {
   uid: number;
   xBlock: number;
@@ -651,6 +660,8 @@ export interface EditorRoomData {
   dustBoostJars: EditorDustBoostJar[];
   /** Collectable dust-type swarms placed in this room. */
   dustSwarms: EditorDustSwarm[];
+  /** Lambda Anchors — golden λ-glyph poles acting as temporary recall points. */
+  lambdaAnchors: EditorLambdaAnchor[];
   dustPiles: EditorDustPile[];
   grasshopperAreas: EditorGrasshopperArea[];
   /** Firefly spawn areas (free-roaming fireflies, not jar-based). */
@@ -681,7 +692,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock' | 'dialogueTrigger';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock' | 'dialogueTrigger';
 
 export interface SelectedElement {
   type: SelectedElementType;

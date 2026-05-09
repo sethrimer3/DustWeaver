@@ -238,6 +238,26 @@ export function startGameScreen(
   const collectedDustContainerKeySet: Set<string> = new Set();
   /** Keys in the format `${roomId}:dustswarm:${index}` for already-collected dust swarms. */
   const collectedDustSwarmKeySet: Set<string> = new Set();
+
+  /** Index (0-based) into `currentRoom.lambdaAnchors[]` for the linked anchor, or -1. */
+  let linkedAnchorIndex = -1;
+  /** Room ID of the room where the linked anchor lives, or '' if none. */
+  let linkedAnchorRoomId = '';
+  /** Alpha for the teleport flash overlay; decays to 0 over time in renderFrame. */
+  let teleportFlashAlpha = 0;
+
+  function setLambdaAnchorLink(index: number, roomId: string): void {
+    linkedAnchorIndex = index;
+    linkedAnchorRoomId = roomId;
+  }
+  function clearLambdaAnchorLink(): void {
+    linkedAnchorIndex = -1;
+    linkedAnchorRoomId = '';
+  }
+  function lambdaTeleportFlash(): void {
+    teleportFlashAlpha = 1.0;
+  }
+
   /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
   const consumedSkillTombKeySet: Set<string> = new Set();
 
@@ -1039,6 +1059,12 @@ export function startGameScreen(
         currentRoom,
         collectedDustSwarmKeySet,
         levelRng,
+        nowMs: timestampMs,
+        linkedAnchorIndex,
+        linkedAnchorRoomId,
+        setLambdaAnchorLink,
+        clearLambdaAnchorLink,
+        lambdaTeleportFlash,
       });
 
     // ── Dialogue advance ───────────────────────────────────────────────────
@@ -1531,6 +1557,10 @@ export function startGameScreen(
       isDustContainerSpriteLoaded,
       dustContainerSprite,
       collectedDustSwarmKeySet,
+      linkedAnchorIndex,
+      linkedAnchorRoomId,
+      teleportFlashAlpha,
+      setTeleportFlashAlpha: (a: number) => { teleportFlashAlpha = a; },
       getPlayerDustCount,
       graphicsQuality: pauseMenuState.graphicsQuality,
       renderProfiler,

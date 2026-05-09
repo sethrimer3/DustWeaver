@@ -650,6 +650,16 @@ export interface RoomFireflyJarDef {
 }
 
 /**
+ * A Lambda Anchor — a golden lambda (λ) glyph on a pole that acts as a
+ * temporary recall point. First press F to link; press F again while linked
+ * to teleport back to the anchor.
+ */
+export interface RoomLambdaAnchorDef {
+  xBlock: number;
+  yBlock: number;
+}
+
+/**
  * A collectable dust-type swarm placed in the world.
  * Appears as an animated sandstorm/swirl of particles of the chosen kind.
  * The player collects it by approaching within DUST_SWARM_COLLECT_RADIUS_WORLD
@@ -863,6 +873,8 @@ export interface RoomDef {
    * collects it by walking nearby and pressing F, receiving `dustCount` particles.
    */
   dustSwarms?: readonly RoomDustSwarmDef[];
+  /** Lambda Anchors — golden λ-glyph poles acting as temporary recall points. */
+  lambdaAnchors?: readonly RoomLambdaAnchorDef[];
 
   // ── Environmental hazards ────────────────────────────────────────────────
   /** Spike tiles that damage the player on contact. */

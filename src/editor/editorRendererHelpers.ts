@@ -120,6 +120,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     dustContainerPiece: 'dust_container_piece',
     dustBoostJar:     'dust_jar',
     dustSwarm:        'dust_swarm',
+    lambdaAnchor:     'lambda_anchor',
     dustPile:         'dust_pile',
     grasshopperArea:  'grasshopper_area',
     fireflyArea:      'firefly_area',

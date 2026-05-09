@@ -239,6 +239,19 @@ export function drawEditorCollectibles(
     drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '⟳');
   }
 
+  // Lambda Anchors (temporary recall points — press F to link/teleport)
+  const LAMBDA_ANCHOR_COLOR    = 'rgba(255, 215, 0, 0.55)';
+  const LAMBDA_ANCHOR_SELECTED = 'rgba(255, 235, 80, 0.95)';
+  for (const a of (room.lambdaAnchors ?? [])) {
+    const sel = isSelected('lambdaAnchor', a.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'lambdaAnchor' && state.hoverElement.uid === a.uid;
+    const color = sel ? LAMBDA_ANCHOR_SELECTED : LAMBDA_ANCHOR_COLOR;
+    drawObjectFootprint(ctx, a.xBlock, a.yBlock, 1, 1,
+      offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
+    drawMarker(ctx, a.xBlock, a.yBlock, offsetXPx, offsetYPx, zoom, color, 'λ');
+  }
+
   // Dust piles (unowned Gold Dust for Storm Weave attraction)
   for (const p of room.dustPiles) {
     const sel = isSelected('dustPile', p.uid);

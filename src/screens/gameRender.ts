@@ -75,6 +75,7 @@ import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCach
 import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer';
 import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import { renderPreviewBubbles } from '../render/transitions/previewBubbleRenderer';
+import { renderLambdaAnchors, renderTeleportFlash } from '../render/lambdaAnchorRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -179,6 +180,14 @@ export interface RenderFrameContext {
   dustContainerSprite: HTMLImageElement;
   /** Keys for already-collected dust swarms (passed from gameScreen). */
   collectedDustSwarmKeySet: Set<string>;
+  /** Index of the linked lambda anchor in currentRoom.lambdaAnchors, or -1 if not linked. */
+  linkedAnchorIndex: number;
+  /** Room ID of the room where the linked anchor lives, or '' if none. */
+  linkedAnchorRoomId: string;
+  /** Current alpha of the full-screen teleport flash (0 = none, 1 = full). */
+  teleportFlashAlpha: number;
+  /** Called by renderFrame to decay and update the teleport flash alpha. */
+  setTeleportFlashAlpha: (a: number) => void;
 
   // Callbacks
   getPlayerDustCount: () => number;
@@ -273,6 +282,10 @@ export function renderFrame(r: RenderFrameContext): void {
     isDustContainerSpriteLoaded,
     dustContainerSprite,
     collectedDustSwarmKeySet,
+    linkedAnchorIndex,
+    linkedAnchorRoomId,
+    teleportFlashAlpha,
+    setTeleportFlashAlpha,
     graphicsQuality,
     renderProfiler,
   } = r;
@@ -562,6 +575,17 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx.restore();
   }
 
+  // Lambda Anchors (recall points — press F to link, press F again to teleport)
+  renderLambdaAnchors(
+    ctx,
+    currentRoom.lambdaAnchors ?? [],
+    linkedAnchorRoomId === currentRoom.id ? linkedAnchorIndex : -1,
+    ox,
+    oy,
+    zoom,
+    nowMs,
+  );
+
   // ── Particles ─────────────────────────────────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_PARTICLES);
   // Particles drawn on top of all game layers (Canvas 2D fallback only —
@@ -775,6 +799,14 @@ export function renderFrame(r: RenderFrameContext): void {
     deviceCtx.fillStyle = '#000000';
     deviceCtx.fillRect(0, 0, canvas.width, canvas.height);
     deviceCtx.restore();
+  }
+
+  // ── Teleport flash overlay ───────────────────────────────────────────────
+  // Golden flash when the player teleports back to a Lambda Anchor.
+  // Rendered on the virtual canvas; decays over ~12 frames at 60 fps.
+  if (teleportFlashAlpha > 0) {
+    renderTeleportFlash(ctx, virtualWidthPx, virtualHeightPx, teleportFlashAlpha);
+    setTeleportFlashAlpha(Math.max(0, teleportFlashAlpha - 1 / 12));
   }
 
   // Finalise the profiler — updates EMA-smoothed values used by next frame's overlay.

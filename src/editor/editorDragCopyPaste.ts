@@ -11,7 +11,7 @@ import {
   EditorWall, EditorEnemy, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
   EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea, EditorFallingBlock,
-  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
+  EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
   SelectedElement, allocateUid, EditorRoomData,
 } from './editorState';
 
@@ -54,6 +54,9 @@ export function storeDragStartPositions(
     } else if (el.type === 'dustSwarm') {
       const sw = (s.roomData.dustSwarms ?? []).find(sw2 => sw2.uid === el.uid);
       if (sw) positions.set(key, { xBlock: sw.xBlock, yBlock: sw.yBlock });
+    } else if (el.type === 'lambdaAnchor') {
+      const a = (s.roomData.lambdaAnchors ?? []).find(a2 => a2.uid === el.uid);
+      if (a) positions.set(key, { xBlock: a.xBlock, yBlock: a.yBlock });
     } else if (el.type === 'dustPile') {
       const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
@@ -137,6 +140,9 @@ export function moveSelectedElements(
     } else if (el.type === 'dustSwarm') {
       const sw = (s.roomData.dustSwarms ?? []).find(sw2 => sw2.uid === el.uid);
       if (sw) { sw.xBlock = orig.xBlock + deltaX; sw.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'lambdaAnchor') {
+      const a = (s.roomData.lambdaAnchors ?? []).find(a2 => a2.uid === el.uid);
+      if (a) { a.xBlock = orig.xBlock + deltaX; a.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'dustPile') {
       const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) { p.xBlock = orig.xBlock + deltaX; p.yBlock = orig.yBlock + deltaY; }
@@ -211,6 +217,7 @@ export function serializeSelectedElements(
     dustContainerPieces: EditorDustContainerPiece[];
     dustBoostJars: EditorDustBoostJar[];
     dustSwarms: EditorDustSwarm[];
+    lambdaAnchors: EditorLambdaAnchor[];
     dustPiles: EditorDustPile[];
     decorations: EditorDecoration[];
     lightSources: EditorLightSource[];
@@ -226,6 +233,7 @@ export function serializeSelectedElements(
     walls: [], enemies: [], saveTombs: [], skillTombs: [],
     dustContainers: [], dustContainerPieces: [], dustBoostJars: [],
     dustSwarms: [],
+    lambdaAnchors: [],
     dustPiles: [],
     decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
     bouncePads: [], grasshopperAreas: [], fireflyAreas: [], fallingBlocks: [],
@@ -255,6 +263,9 @@ export function serializeSelectedElements(
     } else if (el.type === 'dustSwarm') {
       const sw = (room.dustSwarms ?? []).find(sw2 => sw2.uid === el.uid);
       if (sw) data.dustSwarms.push({ ...sw });
+    } else if (el.type === 'lambdaAnchor') {
+      const a = (room.lambdaAnchors ?? []).find(a2 => a2.uid === el.uid);
+      if (a) data.lambdaAnchors.push({ ...a });
     } else if (el.type === 'dustPile') {
       const p = room.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) data.dustPiles.push({ ...p });
@@ -308,6 +319,7 @@ export function pasteFromClipboard(s: EditorState): void {
     dustContainerPieces?: EditorDustContainerPiece[];
     dustBoostJars?: EditorDustBoostJar[];
     dustSwarms?: EditorDustSwarm[];
+    lambdaAnchors?: EditorLambdaAnchor[];
     dustPiles: EditorDustPile[];
     decorations?: EditorDecoration[];
     lightSources?: EditorLightSource[];
@@ -335,6 +347,7 @@ export function pasteFromClipboard(s: EditorState): void {
     ...(data.saveTombs ?? []), ...(data.skillTombs ?? []),
     ...(data.dustContainers ?? []), ...(data.dustContainerPieces ?? []), ...(data.dustBoostJars ?? []),
     ...(data.dustSwarms ?? []),
+    ...(data.lambdaAnchors ?? []),
     ...(data.dustPiles ?? []),
     ...(data.decorations ?? []), ...(data.lightSources ?? []), ...(data.sunbeams ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
@@ -428,6 +441,17 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: sw.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'dustSwarm', uid: newUid });
+  }
+  for (const a of (data.lambdaAnchors ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.lambdaAnchors) s.roomData.lambdaAnchors = [];
+    s.roomData.lambdaAnchors.push({
+      ...a,
+      uid: newUid,
+      xBlock: a.xBlock - minX + offsetX,
+      yBlock: a.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'lambdaAnchor', uid: newUid });
   }
   for (const p of (data.dustPiles ?? [])) {
     const newUid = allocateUid(s);
