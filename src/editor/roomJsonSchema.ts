@@ -184,6 +184,11 @@ export interface RoomJsonDustSwarm {
   dustCount: number;
 }
 
+export interface RoomJsonLambdaAnchor {
+  xBlock: number;
+  yBlock: number;
+}
+
 export interface RoomJsonFireflyJar {
   xBlock: number;
   yBlock: number;
@@ -392,6 +397,8 @@ export interface RoomJsonDef {
   fallingBlocks?: RoomJsonFallingBlock[];
   /** Dialogue trigger zones. Absent in older rooms — ignored on load (backward-compatible). */
   dialogueTriggers?: RoomJsonDialogueTrigger[];
+  /** Lambda Anchors — golden λ-glyph poles acting as temporary recall points. */
+  lambdaAnchors?: RoomJsonLambdaAnchor[];
 }
 
 // ── Validation result ────────────────────────────────────────────────────────

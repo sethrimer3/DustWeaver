@@ -53,6 +53,18 @@ export interface GameCommandContext {
   collectedDustSwarmKeySet: Set<string>;
   /** Room-level RNG for particle spawning. */
   levelRng: RngState;
+  /** Wall-clock timestamp for the current frame (ms); used for UI animations only. */
+  nowMs: number;
+  /** Index (0-based) into `currentRoom.lambdaAnchors[]` for the linked anchor, or -1 if none. */
+  linkedAnchorIndex: number;
+  /** Room ID of the room where the linked anchor lives, or '' if none. */
+  linkedAnchorRoomId: string;
+  /** Called to link (or re-link) to anchor `index` in room `roomId`. */
+  setLambdaAnchorLink: (index: number, roomId: string) => void;
+  /** Called to clear the lambda anchor link. */
+  clearLambdaAnchorLink: () => void;
+  /** Called to trigger a teleport flash effect. `alpha` starts at 1.0. */
+  lambdaTeleportFlash: () => void;
 }
 
 /** Output of {@link processPlayerCommands} consumed by the game loop. */
@@ -83,7 +95,9 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
     skillTombRenderer, skillTombEffectRenderer,
     progress, consumedSkillTombKeySet, combatText,
     currentRoomId, openMapOnly,
-    currentRoom, collectedDustSwarmKeySet, levelRng,
+    currentRoom, collectedDustSwarmKeySet, levelRng, nowMs,
+    linkedAnchorIndex, linkedAnchorRoomId,
+    setLambdaAnchorLink, clearLambdaAnchorLink, lambdaTeleportFlash,
   } = ctx;
 
   const commands = collectCommands(inputState);
@@ -250,7 +264,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
               playerForInteract.positionXWorld,
               playerForInteract.positionYWorld - 10,
               `${weaveName} Obtained`,
-              performance.now(),
+              nowMs,
             );
           }
           // Do NOT set interactTriggered — picking up a weave should not open the motes menu.
@@ -285,9 +299,46 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
               playerForInteract.positionXWorld,
               playerForInteract.positionYWorld - 10,
               `+${sw.dustCount} ${kindName} Dust`,
-              performance.now(), // Cosmetic: UI timestamp for floating label fade-out only.
+              nowMs,
             );
           }
+        }
+        // ── Lambda Anchor interaction ──────────────────────────────────────────
+        // First press F near anchor → link. Second press F while already linked
+        // in this room → teleport back to the anchor's position.
+        const LAMBDA_INTERACT_RADIUS_WORLD = BLOCK_SIZE_MEDIUM * 2;
+        const roomAnchors = currentRoom.lambdaAnchors ?? [];
+        for (let i = 0; i < roomAnchors.length; i++) {
+          const anchor = roomAnchors[i];
+          const anchorCX = (anchor.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const anchorCY = (anchor.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+          const adx = playerForInteract.positionXWorld - anchorCX;
+          const ady = playerForInteract.positionYWorld - anchorCY;
+          const distSq = adx * adx + ady * ady;
+          if (distSq > LAMBDA_INTERACT_RADIUS_WORLD * LAMBDA_INTERACT_RADIUS_WORLD) continue;
+
+          if (linkedAnchorIndex === i && linkedAnchorRoomId === currentRoomId) {
+            // Already linked to this anchor — teleport back to it.
+            const player = world.clusters.find(c => c.isPlayerFlag === 1);
+            if (player) {
+              player.positionXWorld = anchorCX;
+              player.positionYWorld = anchorCY - player.halfHeightWorld;
+              player.velocityXWorld = 0;
+              player.velocityYWorld = 0;
+              lambdaTeleportFlash();
+              clearLambdaAnchorLink();
+            }
+          } else {
+            // Not yet linked — link to this anchor.
+            setLambdaAnchorLink(i, currentRoomId);
+            combatText.spawnLabel(
+              playerForInteract.positionXWorld,
+              playerForInteract.positionYWorld - 10,
+              'Anchor Linked',
+              nowMs,
+            );
+          }
+          break; // Only interact with the nearest anchor (first match).
         }
       }
     }

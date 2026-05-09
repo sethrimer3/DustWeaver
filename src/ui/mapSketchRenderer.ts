@@ -173,6 +173,17 @@ function buildRoomContour(room: RoomDef): ContourData {
     }
   }
 
+  // Dark ambient light blockers also count as solid tiles on the map so they
+  // conceal secrets and off-screen areas, matching their in-game purpose.
+  for (const blocker of (room.ambientLightBlockers ?? [])) {
+    if (!blocker.isDark) continue;
+    const bx = blocker.xBlock;
+    const by = blocker.yBlock;
+    if (bx >= 0 && bx < w && by >= 0 && by < h) {
+      solid[by * w + bx] = 1;
+    }
+  }
+
   // ── Step 2: Build directed edge adjacency graph ───────────────────────────
   //
   // Vertices are tile corners at integer positions (0..w) × (0..h).

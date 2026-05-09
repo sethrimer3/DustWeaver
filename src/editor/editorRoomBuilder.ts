@@ -21,6 +21,7 @@ import type {
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock,
   EditorRope,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
+  EditorLambdaAnchor,
   EditorFallingBlock, EditorDialogueTrigger,
 } from './editorState';
 import { particleKindToString, stringToParticleKind } from './roomJsonSchema';
@@ -220,6 +221,10 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       yBlock: s.yBlock,
       dustKind: s.dustKind,
       dustCount: s.dustCount,
+    })),
+    lambdaAnchors: (data.lambdaAnchors ?? []).map(a => ({
+      xBlock: a.xBlock,
+      yBlock: a.yBlock,
     })),
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount, spreadBlocks: p.spreadBlocks ?? 0 })),
     grasshopperAreas: data.grasshopperAreas.map(a => ({
@@ -472,6 +477,12 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     dustCount: s.dustCount,
   }));
 
+  const lambdaAnchors: EditorLambdaAnchor[] = (room.lambdaAnchors ?? []).map(a => ({
+    uid: uid++,
+    xBlock: a.xBlock,
+    yBlock: a.yBlock,
+  }));
+
   const dustPiles: EditorDustPile[] = (room.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -623,6 +634,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       dustContainerPieces,
       dustBoostJars,
       dustSwarms,
+      lambdaAnchors,
       dustPiles,
       grasshopperAreas,
       fireflyAreas,
