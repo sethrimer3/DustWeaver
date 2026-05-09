@@ -411,6 +411,15 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       dustKind: state.pendingDustSwarmKind,
       dustCount: state.pendingDustSwarmCount,
     });
+  } else if (item.isLambdaAnchorItem === 1 || item.id === 'lambda_anchor') {
+    if (!room.lambdaAnchors) room.lambdaAnchors = [];
+    // Dedup: no duplicate at same position.
+    if (room.lambdaAnchors.some(a => a.xBlock === bx && a.yBlock === by)) return;
+    room.lambdaAnchors.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+    });
   } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
     let dustCount: number;
     if (item.id === 'dust_pile_small') {

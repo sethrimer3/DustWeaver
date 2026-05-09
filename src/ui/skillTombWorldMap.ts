@@ -126,6 +126,16 @@ export function buildMapTab(
             }
           }
         }
+        // Dark ambient light blockers — treated as solid on the map to conceal secrets.
+        for (const blocker of (room.ambientLightBlockers ?? [])) {
+          if (!blocker.isDark) continue;
+          const worldBx = mapXBlock + blocker.xBlock;
+          const worldBy = mapYBlock + blocker.yBlock;
+          const screenX = centerX + worldBx * cellSize;
+          const screenY = centerY + worldBy * cellSize;
+          mapCtx.fillStyle = isCurrentRoom ? 'rgba(212,168,75,0.6)' : 'rgba(150,140,120,0.4)';
+          mapCtx.fillRect(screenX, screenY, cellSize, cellSize);
+        }
         mapCtx.restore();
       }
 

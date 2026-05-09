@@ -85,6 +85,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check lambda anchors
+  for (const a of (room.lambdaAnchors ?? [])) {
+    if (hitTestPoint(a.xBlock, a.yBlock, bx, by)) {
+      return { type: 'lambdaAnchor', uid: a.uid };
+    }
+  }
+
   // Check dust piles
   for (const p of room.dustPiles) {
     if (hitTestPoint(p.xBlock, p.yBlock, bx, by)) {
@@ -284,6 +291,17 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestPoint(dustSwarms[i].xBlock, dustSwarms[i].yBlock, bx, by)) {
       const removedUid = dustSwarms[i].uid;
       dustSwarms.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check lambda anchors
+  const lambdaAnchors = room.lambdaAnchors ?? [];
+  for (let i = 0; i < lambdaAnchors.length; i++) {
+    if (hitTestPoint(lambdaAnchors[i].xBlock, lambdaAnchors[i].yBlock, bx, by)) {
+      const removedUid = lambdaAnchors[i].uid;
+      lambdaAnchors.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }
@@ -517,6 +535,11 @@ export function getAllElementsInRect(
   for (const s of (room.dustSwarms ?? [])) {
     if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
       results.push({ type: 'dustSwarm', uid: s.uid });
+    }
+  }
+  for (const a of (room.lambdaAnchors ?? [])) {
+    if (a.xBlock >= minX && a.xBlock <= maxX && a.yBlock >= minY && a.yBlock <= maxY) {
+      results.push({ type: 'lambdaAnchor', uid: a.uid });
     }
   }
   for (const p of room.dustPiles) {
