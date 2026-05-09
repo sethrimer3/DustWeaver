@@ -53,6 +53,8 @@ export interface GameCommandContext {
   collectedDustSwarmKeySet: Set<string>;
   /** Room-level RNG for particle spawning. */
   levelRng: RngState;
+  /** Wall-clock timestamp for the current frame (ms); used for UI animations only. */
+  nowMs: number;
   /** Index (0-based) into `currentRoom.lambdaAnchors[]` for the linked anchor, or -1 if none. */
   linkedAnchorIndex: number;
   /** Room ID of the room where the linked anchor lives, or '' if none. */
@@ -93,7 +95,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
     skillTombRenderer, skillTombEffectRenderer,
     progress, consumedSkillTombKeySet, combatText,
     currentRoomId, openMapOnly,
-    currentRoom, collectedDustSwarmKeySet, levelRng,
+    currentRoom, collectedDustSwarmKeySet, levelRng, nowMs,
     linkedAnchorIndex, linkedAnchorRoomId,
     setLambdaAnchorLink, clearLambdaAnchorLink, lambdaTeleportFlash,
   } = ctx;
@@ -262,7 +264,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
               playerForInteract.positionXWorld,
               playerForInteract.positionYWorld - 10,
               `${weaveName} Obtained`,
-              performance.now(),
+              nowMs,
             );
           }
           // Do NOT set interactTriggered — picking up a weave should not open the motes menu.
@@ -297,7 +299,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
               playerForInteract.positionXWorld,
               playerForInteract.positionYWorld - 10,
               `+${sw.dustCount} ${kindName} Dust`,
-              performance.now(), // Cosmetic: UI timestamp for floating label fade-out only.
+              nowMs,
             );
           }
         }
@@ -333,7 +335,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
               playerForInteract.positionXWorld,
               playerForInteract.positionYWorld - 10,
               'Anchor Linked',
-              performance.now(), // Cosmetic: UI timestamp for floating label fade-out only.
+              nowMs,
             );
           }
           break; // Only interact with the nearest anchor (first match).

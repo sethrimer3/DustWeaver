@@ -1059,6 +1059,7 @@ export function startGameScreen(
         currentRoom,
         collectedDustSwarmKeySet,
         levelRng,
+        nowMs: timestampMs,
         linkedAnchorIndex,
         linkedAnchorRoomId,
         setLambdaAnchorLink,

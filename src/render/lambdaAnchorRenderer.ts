@@ -61,10 +61,10 @@ function renderAnchor(
   zoom: number,
   nowMs: number,
 ): void {
-  const halfBlock = (BLOCK_SIZE_MEDIUM * zoom) / 2;
+  const halfBlockPx = (BLOCK_SIZE_MEDIUM * zoom) / 2;
 
   // Anchor origin: centre-bottom of its block cell.
-  const baseCX = anchor.xBlock * BLOCK_SIZE_MEDIUM * zoom + offsetXPx + halfBlock;
+  const baseCX = anchor.xBlock * BLOCK_SIZE_MEDIUM * zoom + offsetXPx + halfBlockPx;
   const baseCY = anchor.yBlock * BLOCK_SIZE_MEDIUM * zoom + offsetYPx + BLOCK_SIZE_MEDIUM * zoom;
 
   const poleHeightPx = POLE_HEIGHT_WORLD * zoom;
