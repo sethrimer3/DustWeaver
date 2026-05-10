@@ -6,9 +6,11 @@
  *
  * Solid extension tiles are drawn using the same auto-tiling sprites as the
  * main wall renderer via {@link renderSingleExtensionTile} from
- * blockSpriteRenderer.ts.  Ambient depth tinting is applied progressively
- * based on the tile's distance from the room edge, matching the lighting depth
- * model used inside the room.
+ * blockSpriteRenderer.ts.  Ambient depth tinting is applied using each tile's
+ * pre-computed {@link EdgeExtensionTile.edgeAmbientDepth} — the ambient depth
+ * of the room boundary tile it was derived from — plus its extensionStep, so
+ * the darkness matches the adjacent room tiles exactly and then deepens
+ * progressively away from the room.
  *
  * Empty extension tiles are left black (the virtual canvas is pre-filled
  * with black at the start of every frame).  In FullyLit rooms the bg colour
@@ -19,23 +21,6 @@ import type { EdgeExtensionCache } from './edgeExtensionCache';
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 import { renderSingleExtensionTile } from '../walls/blockSpriteRenderer';
 import { getDarknessAlphaFromAirDepth } from '../walls/ambientLightDepths';
-
-// ── Extension-step → ambient depth mapping ───────────────────────────────────
-
-/**
- * Maps an extension step (1 = adjacent to room edge) to the equivalent
- * ambient-light air depth used by `getDarknessAlphaFromAirDepth`.
- *
- * Extension tiles are outside the room and have no air exposure from the
- * room interior, so their depth is treated as if they were deep underground.
- * Step 1 tiles start at depth 2 (30 % darkness) and each further step adds
- * one more depth unit so the wall progressively darkens away from the room.
- * This matches the exponential formula in ambientLightDepths.ts.
- */
-function _extensionDepth(step: number): number {
-  // depth 2 at step 1 → 30 % darkness; depth 3 at step 2 → 70 %; depth 4+ → 100 %
-  return step + 1;
-}
 
 // ── Public render function ────────────────────────────────────────────────────
 
@@ -83,9 +68,10 @@ export function renderEdgeExtension(
     if (screenY + tileSizePx < 0 || screenY > vpH) continue;
 
     if (tile.isSolid) {
-      // Compute ambient darkness alpha for this extension step.
+      // Darkness = room-edge depth + outward step, so extension tiles are at
+      // least as dark as the adjacent room tile and deepen progressively.
       const darknessAlpha = applyAmbientTint
-        ? getDarknessAlphaFromAirDepth(_extensionDepth(tile.extensionStep))
+        ? getDarknessAlphaFromAirDepth(tile.edgeAmbientDepth + tile.extensionStep)
         : 0;
 
       renderSingleExtensionTile(
