@@ -33,6 +33,25 @@ import {
   TRANSITION_REVEAL_EASE_SPEED,
 } from './transitionConfig';
 
+// ── Local constants ────────────────────────────────────────────────────────────
+
+/**
+ * Player-to-opening tolerance in blocks used by `_distToTransitionEdge`.
+ * A player is considered "aligned" with a transition if they are within this
+ * many blocks of the opening span on either side.  3 blocks gives enough slack
+ * to begin revealing the edge even when the player approaches from a shallow
+ * angle or the opening is only 2–3 blocks tall/wide.
+ */
+const TRANSITION_EDGE_ALIGNMENT_TOLERANCE_BLOCKS = 3;
+
+/**
+ * Fraction of `maxRevealWorld` below which the PostTransition reveal is
+ * considered "not dominant" and NearTransition activation is permitted.
+ * 0.25 prevents NearTransition from fighting an active PostTransition reveal
+ * (which would cause the camera to ping-pong between two edges simultaneously).
+ */
+const TRANSITION_NEAR_ACTIVATION_THRESHOLD = 0.25;
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 /** Mutable state for the transition reveal offset.  Pre-allocated; no GC per frame. */
@@ -169,7 +188,7 @@ export function updateTransitionReveal(
   // ── NearTransition reveal ──────────────────────────────────────────────────
   // Only activated when PostTransition is not dominant (avoid fighting).
   const postMagnitude = Math.abs(targetX) + Math.abs(targetY);
-  if (postMagnitude < maxRevealWorld * 0.25) {
+  if (postMagnitude < maxRevealWorld * TRANSITION_NEAR_ACTIVATION_THRESHOLD) {
     let nearestDist = startDist;
     let nearestDir: TransitionDirection | null = null;
 
@@ -231,7 +250,7 @@ function _distToTransitionEdge(
   room: RoomDef,
 ): number {
   const BS = BLOCK_SIZE_SMALL;
-  const tolerance = BS * 3;
+  const tolerance = TRANSITION_EDGE_ALIGNMENT_TOLERANCE_BLOCKS * BS;
   const isHoriz = t.direction === 'left' || t.direction === 'right';
 
   if (isHoriz) {
