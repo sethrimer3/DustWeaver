@@ -137,7 +137,29 @@ export class SunbeamRenderer {
     // animation is factored out into ctx.globalAlpha so the gradient's colour
     // stops remain constant (base ratios 0.60, 0.25, 0.00) and the cache stays
     // valid across frames while the camera is not moving.
-    const bi = beamIndex < MAX_SUNBEAMS ? beamIndex : 0;
+    //
+    // Guard: if beamIndex is out of the pre-allocated cache range, skip caching
+    // and fall back to a fresh gradient (the fallback is still cheaper than the
+    // old path which always created a new gradient, and avoids cache-slot 0
+    // being corrupted by an out-of-range beam).
+    if (beamIndex >= MAX_SUNBEAMS) {
+      // Out-of-range: draw without caching.
+      const r0 = beam.colorR;
+      const g0 = beam.colorG;
+      const b0 = beam.colorB;
+      const fallbackGrad = ctx.createLinearGradient(originXPx, originYPx, tx, ty);
+      fallbackGrad.addColorStop(0,   `rgba(${r0},${g0},${b0},0.600)`);
+      fallbackGrad.addColorStop(0.4, `rgba(${r0},${g0},${b0},0.250)`);
+      fallbackGrad.addColorStop(1,   `rgba(${r0},${g0},${b0},0)`);
+      const prevAlphaFb = ctx.globalAlpha;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = fallbackGrad;
+      ctx.fill();
+      ctx.globalAlpha = prevAlphaFb;
+      return;
+    }
+
+    const bi = beamIndex;
     const dx0 = Math.abs(originXPx - this._cacheOriginX[bi]);
     const dy0 = Math.abs(originYPx - this._cacheOriginY[bi]);
     const dx1 = Math.abs(tx - this._cacheTipX[bi]);

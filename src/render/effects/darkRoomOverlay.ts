@@ -289,42 +289,40 @@ export class DarkRoomOverlay {
     // (which changes with the camera) and colour (which is per-light).  Since
     // coloured lights are rare in practice (designer-placed only), this is an
     // acceptable trade-off versus building a complex colour-keyed cache.
-    let hasColouredLight = false;
+    let colouredLightCtxOpen = false;
     for (let li = 0; li < lightCount; li++) {
       const base = li * LIGHT_BUFFER_STRIDE;
       const cr = lights[base + 4];
       const cg = lights[base + 5];
       const cb = lights[base + 6];
-      if (cr < 255 || cg < 255 || cb < 255) { hasColouredLight = true; break; }
-    }
+      // Skip achromatic lights to avoid unnecessary gradient draws.
+      if (cr >= 255 && cg >= 255 && cb >= 255) continue;
 
-    if (hasColouredLight) {
-      targetCtx.save();
-      targetCtx.globalCompositeOperation = 'lighter';
-      for (let li = 0; li < lightCount; li++) {
-        const base = li * LIGHT_BUFFER_STRIDE;
-        const cr = lights[base + 4];
-        const cg = lights[base + 5];
-        const cb = lights[base + 6];
-        // Skip achromatic lights to avoid unnecessary gradient draws.
-        if (cr >= 255 && cg >= 255 && cb >= 255) continue;
-        const xPx      = lights[base + 0];
-        const yPx      = lights[base + 1];
-        const radiusPx = lights[base + 2];
-        const frac     = lights[base + 3];
-        // Build a soft radial gradient: full colour at inner radius, transparent
-        // at outer radius.  Max alpha is kept low (0.30) so colours tint rather
-        // than blow out the scene.
-        const innerR = radiusPx * frac;
-        const colGrad = targetCtx.createRadialGradient(xPx, yPx, Math.max(0, innerR), xPx, yPx, radiusPx);
-        colGrad.addColorStop(0,   `rgba(${cr},${cg},${cb},0.30)`);
-        colGrad.addColorStop(0.5, `rgba(${cr},${cg},${cb},0.12)`);
-        colGrad.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
-        targetCtx.fillStyle = colGrad;
-        targetCtx.beginPath();
-        targetCtx.arc(xPx, yPx, radiusPx, 0, Math.PI * 2);
-        targetCtx.fill();
+      // Open the additive compositing context on first coloured light.
+      if (!colouredLightCtxOpen) {
+        targetCtx.save();
+        targetCtx.globalCompositeOperation = 'lighter';
+        colouredLightCtxOpen = true;
       }
+
+      const xPx      = lights[base + 0];
+      const yPx      = lights[base + 1];
+      const radiusPx = lights[base + 2];
+      const frac     = lights[base + 3];
+      // Build a soft radial gradient: full colour at inner radius, transparent
+      // at outer radius.  Max alpha is kept low (0.30) so colours tint rather
+      // than blow out the scene.
+      const innerR = radiusPx * frac;
+      const colGrad = targetCtx.createRadialGradient(xPx, yPx, Math.max(0, innerR), xPx, yPx, radiusPx);
+      colGrad.addColorStop(0,   `rgba(${cr},${cg},${cb},0.30)`);
+      colGrad.addColorStop(0.5, `rgba(${cr},${cg},${cb},0.12)`);
+      colGrad.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
+      targetCtx.fillStyle = colGrad;
+      targetCtx.beginPath();
+      targetCtx.arc(xPx, yPx, radiusPx, 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+    if (colouredLightCtxOpen) {
       targetCtx.restore();
     }
   }

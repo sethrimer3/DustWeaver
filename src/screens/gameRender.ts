@@ -134,6 +134,24 @@ function _pushLight(
  */
 const _scratchShadows: ShadowCasterOccluderPx[] = [];
 
+/**
+ * Pre-allocated mutable quality config scratch object used when adaptive
+ * reduction is active.  Written each frame by renderFrame() from qcBase to
+ * avoid creating a new object via spread (`{ ...qcBase, ... }`) on every frame.
+ * Import type only — mutated in-place inside renderFrame().
+ */
+import { type RenderQualityConfig } from '../render/renderQualityConfig';
+const _adaptiveQcScratch: RenderQualityConfig = {
+  isBloomEnabled:           false,
+  bloomIntensity:           0,
+  bloomBlurRadiusPx:        0,
+  maxDecorationBloomCount:  0,
+  maxDustMoteCount:         0,
+  maxDynamicLightCount:     0,
+  maxParticleLightCount:    0,
+  isSunbeamEnabled:         false,
+};
+
 // ── Public interface ───────────────────────────────────────────────────────
 
 /** All data needed by `renderFrame` — avoids a 20+ positional parameter list. */
@@ -351,16 +369,22 @@ export function renderFrame(r: RenderFrameContext): void {
   const qcBase = getQualityConfig(graphicsQuality);
 
   // Adaptive quality: when persistently over budget, halve expensive caps to
-  // recover frame rate.  Only the mote count and light counts are reduced; the
-  // bloom and sunbeam enable flags are left unchanged so the visual change is
-  // minimal and the player is unlikely to notice on a transient stall.
-  const qc = isAdaptiveReductionActive ? {
-    ...qcBase,
-    maxDustMoteCount:        Math.max(32, qcBase.maxDustMoteCount       >> 1),
-    maxDynamicLightCount:    Math.max(4,  qcBase.maxDynamicLightCount   >> 1),
-    maxParticleLightCount:   Math.max(4,  qcBase.maxParticleLightCount  >> 1),
-    maxDecorationBloomCount: Math.max(16, qcBase.maxDecorationBloomCount >> 1),
-  } : qcBase;
+  // recover frame rate.  To avoid a per-frame object allocation (spread), the
+  // pre-allocated module-level _adaptiveQcScratch is written in-place.
+  let qc: RenderQualityConfig;
+  if (isAdaptiveReductionActive) {
+    _adaptiveQcScratch.isBloomEnabled           = qcBase.isBloomEnabled;
+    _adaptiveQcScratch.bloomIntensity           = qcBase.bloomIntensity;
+    _adaptiveQcScratch.bloomBlurRadiusPx        = qcBase.bloomBlurRadiusPx;
+    _adaptiveQcScratch.isSunbeamEnabled         = qcBase.isSunbeamEnabled;
+    _adaptiveQcScratch.maxDustMoteCount         = Math.max(32, qcBase.maxDustMoteCount       >> 1);
+    _adaptiveQcScratch.maxDynamicLightCount     = Math.max(4,  qcBase.maxDynamicLightCount   >> 1);
+    _adaptiveQcScratch.maxParticleLightCount    = Math.max(4,  qcBase.maxParticleLightCount  >> 1);
+    _adaptiveQcScratch.maxDecorationBloomCount  = Math.max(16, qcBase.maxDecorationBloomCount >> 1);
+    qc = _adaptiveQcScratch;
+  } else {
+    qc = qcBase;
+  }
 
   // Apply quality-dependent bloom parameters.  Mutates the BloomSystem's
   // internal config object in place — no resize needed since glowTargetScale

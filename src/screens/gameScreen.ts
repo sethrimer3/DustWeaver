@@ -271,7 +271,8 @@ export function startGameScreen(
   function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera = false): void {
     const gen = _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, preserveCamera);
     // Run all phases synchronously (for initial load / save-load paths).
-    while (!gen.next().done) { /* advance */ }
+    let result = gen.next();
+    while (!result.done) result = gen.next();
   }
 
   /**
