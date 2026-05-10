@@ -131,3 +131,40 @@ The DarkRoom particle-light loop scans all particles linearly (`particleCount`
 iterations).  With thousands of particles this is O(n); a spatial grid (already
 present in `sim/` for physics) could accelerate the screen-visible subset query.
 
+---
+
+## BUILD 274 — Smooth Camera Transition Reveal (no fade)
+
+### What was implemented
+
+- **Removed black-screen fade**: The fade-out/fade-in overlay (`transitionFadeAlpha`, `transitionFadeDir`, `pendingRoomTransition`, `pendingAsyncLoad`) is removed. Transitions no longer black out the screen.
+- **Synchronous transition loading**: `checkRoomTransitions` now calls `loadRoom()` synchronously in its callback. The ~30–80 ms stall replaces the multi-frame black fade.
+- **Camera reveal system**: New module `src/render/transitions/transitionCameraReveal.ts`:
+  - **NearTransition**: Camera eases outward as player approaches a room exit.
+  - **PostTransition**: Camera shows entry-edge extension tiles and eases back to neutral as the player walks deeper into the new room.
+- **New constants** in `transitionConfig.ts`: `TRANSITION_REVEAL_START_DIST_WORLD`, `TRANSITION_REVEAL_MAX_BLOCKS`, `TRANSITION_REVEAL_DECAY_DIST_WORLD`, `TRANSITION_REVEAL_EASE_SPEED`.
+
+### Known limitations / remaining work
+
+1. **No dual-room rendering**: True seamless crossing would require pre-loading the adjacent room, rendering both rooms simultaneously, and sliding the camera across the boundary over ~0.3–0.5 seconds — a larger architectural change requiring a staging world state and two-room renderer.
+
+2. **Next room's edge blocks not shown**: The spec requests 2 blocks of the *connected* room's edge visible. This is blocked by the same issue as (1); only the current room's edge extension is revealed.
+
+3. **Lambda-anchor teleport**: `notifyFreshRoomLoaded(transitionRevealState)` is not called after a lambda teleport. Add it to the lambda-anchor handler in `gameCommandProcessor.ts` to prevent stale reveal state after teleporting.
+
+4. **Small rooms**: Reveal offset on rooms narrower than the viewport may push the view past the available extension tiles. Cap the reveal offset by the available room margin.
+
+5. **`TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS`** in `transitionConfig.ts` is now unused — can be removed in a cleanup pass.
+
+### Tuning guide
+
+All reveal constants live in `src/render/transitions/transitionConfig.ts`:
+
+| Constant | Default | Effect |
+|---|---|---|
+| `TRANSITION_REVEAL_START_DIST_WORLD` | 48 | Reveal begins this many world units from the exit |
+| `TRANSITION_REVEAL_MAX_BLOCKS` | 2 | Max extension blocks revealed by camera shift |
+| `TRANSITION_REVEAL_DECAY_DIST_WORLD` | 48 | PostTransition fades over this walk distance |
+| `TRANSITION_REVEAL_EASE_SPEED` | 6.0 | Camera easing speed (higher = snappier) |
+
+
