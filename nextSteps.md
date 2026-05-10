@@ -223,33 +223,139 @@ All reveal constants live in `src/render/transitions/transitionConfig.ts`:
 | `TRANSITION_REVEAL_DECAY_DIST_WORLD` | 48 | PostTransition fades over this walk distance |
 | `TRANSITION_REVEAL_EASE_SPEED` | 6.0 | Camera easing speed (higher = snappier) |
 
+---
+
+## BUILD 276 — Transition Origin Alignment + Seam Auto-tiling + Staging Snapshot
+
+### What was implemented
+
+#### 1. Connected-room origin alignment using matched transition positions ✅
+
+Previously `NextRoomFacingEdge.originXWorld`/`originYWorld` were hardcoded to 0
+for the non-primary axis (e.g., `originYWorld = 0` for all horizontal transitions).
+This caused offset door openings to misalign — the next-room tiles rendered at the
+wrong row/column when the two transitions' `yBlock`/`xBlock` differed.
+
+**Fix**: `_buildNextRoomFacingEdge` now finds the matched transition in the
+connected room (same logic as `checkRoomTransitions`) and computes:
+- `seamDeltaRowBlocks = currentTrans.yBlock − connectedTrans.yBlock` (horizontal)
+- `seamDeltaColBlocks = currentTrans.xBlock − connectedTrans.xBlock` (vertical)
+
+The connected-room origin is then placed so the two openings align at the seam:
+- `'right'`: `originYWorld = seamDeltaRowBlocks × BLOCK_SIZE_SMALL`
+- `'left'`:  same, `originXWorld = -connectedW × BS`
+- `'down'`:  `originXWorld = seamDeltaColBlocks × BS`
+- `'up'`:    same, `originYWorld = -connectedH × BS`
+
+If no matching transition is found, origin defaults to 0 and a console warning
+is emitted.
+
+#### 2. Seam auto-tiling improvements ✅
+
+Two improvements to `occupancySet` in `NextRoomFacingEdge`:
+
+**4th reference column/row**: Added `refCol2`/`refRow2` (one step deeper than
+the existing 3rd reference) so the inner-face tile (`col1`/`row1`) has a correct
+east/south neighbor mask for the block immediately behind it, rather than
+treating it as open air.
+
+**Seam-face entries from current room**: `_buildCurrentRoomSeamSolid()` builds
+a set of rows/cols where the current room's boundary edge is solid. These are
+mapped into connected-room coordinates and added to `occupancySet` at
+`seamCol`/`seamRow` (one step outside `col0`/`row0`). The facing tile therefore
+sees its neighbor toward the current room as solid when the current-room wall
+continues to the edge — eliminating the "exposed outer face" artifact on
+connected seam tiles.
+
+#### 3. `TwoRoomTransitionSnapshot` staging data structure ✅
+
+New exported type in `transitionPreviewContext.ts`. Provides:
+- `activeTransitionIndex`, `exitDirection`, `currentRoomId`, `connectedRoomId`
+- `currentRoomOriginXWorld/Y` (always 0 — current room IS the reference frame)
+- `nextRoomOriginXWorld/Y` — correctly aligned origin from matched transitions
+- `nextRoomFacingEdge: NextRoomFacingEdge | null` — the facing-edge strip
+- `revealProgress: number` — updated in-place each frame (no per-frame allocation)
+
+Reserved fields documented for future dual-room rendering:
+- `nextRoomWorldSnapshot` — full WorldSnapshot for the connected room
+- `nextRoomEdgeExtensionCache` — edge tiles for the connected room
+- `isNextRoomStaged` — true once staging is ready
+
+#### 4. `stagingSnapshot` field on `TransitionPreviewContext` ✅
+
+`TransitionPreviewContext` gains a `stagingSnapshot: TwoRoomTransitionSnapshot | null`
+field. The existing `nextRoomFacingEdge` field is retained as a backward-compatible
+alias pointing to `stagingSnapshot.nextRoomFacingEdge`.
+
+The cache key now includes the current room ID and transition index (not just the
+target room ID + direction) so two different transitions in the same room with
+different `yBlock`/`xBlock` values are cached separately.
+
+#### 5. Exported helper functions ✅
+
+- `computeTransitionOpeningOffset(currentTrans, connectedTrans, exitDir)` — returns
+  the signed delta in blocks between the two opening positions.
+- `computeConnectedRoomOrigin(exitDir, currentW, currentH, connectedW, connectedH,
+  seamDeltaRowBlocks, seamDeltaColBlocks)` — returns the connected room's `originXWorld`
+  / `originYWorld` in current-room world space.  Pure, side-effect-free, usable by
+  future staging code.
+
+#### 6. `renderNextRoomFacingEdge` documented as staging renderer ✅
+
+`nextRoomEdgeRenderer.ts` is documented as the **StagingRoomRenderer** equivalent:
+the opt-in renderer path that activates only during transition preview or crossing.
+
+### Files changed in BUILD 276
+
+| File | Change |
+|------|--------|
+| `src/build-info.ts` | BUILD_NUMBER 275 → 276 |
+| `src/render/transitions/transitionPreviewContext.ts` | Added `TwoRoomTransitionSnapshot`; added `stagingSnapshot` to context; added `computeTransitionOpeningOffset`, `computeConnectedRoomOrigin` helpers; fixed origin offset; improved seam auto-tiling (4th ref + seam face); updated cache key; improved failure warning |
+| `src/render/transitions/nextRoomEdgeRenderer.ts` | Updated module comment to document it as the StagingRoomRenderer equivalent; documents BUILD 276 alignment fix |
+| `nextSteps.md` | Updated to reflect BUILD 276 completions and remaining work |
+
 ### Known limitations / remaining work
 
-1. **No dual-room rendering** (the main remaining work):
+1. **No full dual-room rendering** (primary remaining work):
    True seamless crossing requires:
-   a. A staging `WorldState` for the connected room — pre-loaded asynchronously while the
-      player is in the current room.
-   b. A two-room `WorldSnapshot` snapshot boundary: both `WorldState` instances are ticked
-      and snapshotted independently.
-   c. A `StagingRoomRenderer` (or equivalent) that renders the connected room's snapshot
-      onto an offscreen canvas in the correct world-space offset.
-   d. The `TransitionPreviewContext.nextRoomFacingEdge` field is already the attachment
-      point: replace (or augment) it with the full staging snapshot when it becomes
-      available, and `renderNextRoomFacingEdge` can be updated to read from it.
+   a. A staging `WorldState` for the connected room — pre-loaded asynchronously
+      while the player is in the current room.
+   b. A two-room snapshot tick: both rooms' `WorldState` instances are ticked and
+      snapshotted; the connected room's snapshot is stored in
+      `TwoRoomTransitionSnapshot.nextRoomWorldSnapshot`.
+   c. `renderNextRoomFacingEdge` (or a new `renderStagingRoom` function that reads
+      the full `stagingSnapshot`) renders the connected room's enemies, particles,
+      and all walls at `nextRoomOriginXWorld`/`Y` offset.
+   d. Camera bounds: during crossing, clamp the camera to the union of both room
+      bounds; after the active-room swap, restore normal single-room clamping.
 
-2. **Row/column alignment at transitions with non-matching openings**:
-   The current implementation assumes the connected room's rows/cols line up 1-to-1 with
-   the current room's rows/cols. For rooms where the transition opening is vertically or
-   horizontally offset (e.g., a 3-block opening at row 2 in the current room connecting to
-   a 3-block opening at row 5 in the next room), the next-room edge tiles will be rendered
-   at the "wrong" rows. Fix: store the Y-offset (for horizontal transitions) or X-offset
-   (for vertical) in `NextRoomFacingEdge.originYWorld`/`originXWorld` using the matched
-   transition's `yBlock`/`xBlock` difference.
+2. **Active room swap timing** (existing behavior is correct):
+   The active room swaps the moment the player crosses the trigger boundary in
+   `checkRoomTransitions`. The staging snapshot is cleared immediately after swap
+   by `notifyFreshRoomLoaded`. No change needed here unless full dual-room rendering
+   requires a later swap point.
 
-3. **Auto-tiling accuracy at the seam**:
-   The `NextRoomFacingEdge` occupancy set contains only 3 columns/rows from the connected
-   room. Tiles at the innermost face of the 2-block strip do not know their room-interior
-   neighbor, so the east/south/west/north open-air-side may be wrong for those tiles.
-   Fix: include a 4th column/row of reference data in the occupancy set, or fall back to
-   a fixed "interior wall" tile at the inner face.
+3. **Seam auto-tiling edge cases**:
+   - Corner tiles near the seam (where a horizontal wall meets a vertical wall
+     at the transition opening corner) may still show incorrect diagonal auto-tiling
+     because only 4 reference columns/rows of connected-room data are available.
+   - Transitions with very small rooms (< 4 blocks in the exit direction) may have
+     fewer reference columns/rows available; `refCol2`/`refRow2` bounds checks handle
+     this gracefully (skipped when out of bounds).
+   - The `_buildCurrentRoomSeamSolid` function captures wall-level solidity only;
+     crumble blocks and falling blocks at the boundary edge are not included. This
+     is acceptable for the current use case.
+
+4. **Editor compatibility**:
+   The cache key now includes the current room ID and transition index. If the
+   editor modifies a transition's `yBlock`/`xBlock` without triggering a full
+   room reload, the cache will be stale. This is acceptable because the editor
+   calls `notifyFreshRoomLoaded` (via the editor load callback) which resets
+   `activeTransitionIndex = -1` and effectively clears the preview context.
+
+5. **Performance note**:
+   `_buildCurrentRoomSeamSolid` iterates all walls in the current room each time
+   the cache key changes (not every frame — only on transition/room change).
+   For rooms with very large wall counts this is still fast (O(walls), not O(n²)).
+
 
