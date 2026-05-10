@@ -280,14 +280,6 @@ export interface RenderFrameContext {
    */
   prevFallingBlockOffsetY: Float32Array;
   /**
-   * Room transition fade overlay alpha (0 = transparent, 1 = fully opaque black).
-   * When non-zero a full-screen black rectangle is composited on the device
-   * canvas after all game content, WebGL particles, and bloom — so it covers
-   * everything.  Driven by the fade-out/in state machine in gameScreen.ts.
-   */
-  transitionFadeAlpha: number;
-
-  /**
    * Cached edge extension tile data for the current room.
    * Built once per loadRoom() call; null before the first room is loaded.
    * Passed to renderEdgeExtension() to draw wall tiles beyond the room boundary.
@@ -871,17 +863,6 @@ export function renderFrame(r: RenderFrameContext): void {
     deviceCtx.font = '12px monospace';
     const hintWidthPx = deviceCtx.measureText(controlHintText).width;
     deviceCtx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
-  }
-
-  // ── Transition fade overlay ─────────────────────────────────────────────
-  // Drawn on the device canvas after all compositing so it covers WebGL
-  // particles, bloom, and the touch joystick.  Alpha = 1 means fully black.
-  if (r.transitionFadeAlpha > 0) {
-    deviceCtx.save();
-    deviceCtx.globalAlpha = r.transitionFadeAlpha;
-    deviceCtx.fillStyle = '#000000';
-    deviceCtx.fillRect(0, 0, canvas.width, canvas.height);
-    deviceCtx.restore();
   }
 
   // ── Teleport flash overlay ───────────────────────────────────────────────

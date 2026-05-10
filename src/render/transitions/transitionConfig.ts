@@ -56,6 +56,35 @@ export const TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS = 4;
  */
 export const EDGE_EXTENSION_EXTRA_BLOCKS = 6;
 
+// ── Camera transition reveal ──────────────────────────────────────────────────
+
+/**
+ * World-unit distance from a transition edge at which the NearTransition
+ * camera reveal begins.  The camera starts easing outward once the player
+ * is closer than this distance to any room exit.
+ */
+export const TRANSITION_REVEAL_START_DIST_WORLD = 48;  // 6 blocks × 8 px
+
+/**
+ * Maximum blocks of edge-extension content revealed by the camera on each side.
+ * The camera shifts up to (TRANSITION_REVEAL_MAX_BLOCKS × BLOCK_SIZE_SMALL)
+ * world units past the room boundary to show this many extension tiles.
+ */
+export const TRANSITION_REVEAL_MAX_BLOCKS = 2;
+
+/**
+ * World-unit distance from the entry edge within which the PostTransition
+ * reveal is active.  Beyond this distance the camera has fully returned to
+ * normal clamped behaviour and reveals no extra edge content.
+ */
+export const TRANSITION_REVEAL_DECAY_DIST_WORLD = 48;  // 6 blocks × 8 px
+
+/**
+ * Easing speed (per second) for smoothing the reveal camera offset.
+ * Higher = snappier response; lower = more gentle lag.
+ */
+export const TRANSITION_REVEAL_EASE_SPEED = 6.0;
+
 // ── Preview bubble tunables ───────────────────────────────────────────────────
 
 /**

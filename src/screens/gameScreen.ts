@@ -82,7 +82,7 @@ import { MAX_FALLING_BLOCK_GROUPS } from '../sim/fallingBlocks/fallingBlockTypes
 import { processPlayerCommands } from './gameCommandProcessor';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
-import { checkRoomTransitions } from './gameTransitions';
+import { checkRoomTransitions, getOppositeTransitionDirection } from './gameTransitions';
 import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
 import { startDialogue, advanceDialogue, closeDialogue } from '../dialogue/dialogueRuntime';
@@ -95,15 +95,14 @@ import {
 } from '../render/roomAssetPreloader';
 import { buildEdgeExtensionCache, EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions/previewBubbleState';
-import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import {
-  TRANSITION_MAX_DURATION_MS,
-  TRANSITION_MIN_DURATION_MS,
-  TRANSITION_FADE_OUT_FRACTION,
-  TRANSITION_SPRINT_SPEED_WORLD,
-  TRANSITION_FAST_SPEED_WORLD,
-  TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS,
-} from '../render/transitions/transitionConfig';
+  createTransitionRevealState,
+  notifyTransitionRoomEntered,
+  notifyFreshRoomLoaded,
+  updateTransitionReveal,
+  getTransitionRevealOffset,
+} from '../render/transitions/transitionCameraReveal';
+import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import { GameLoadingOverlay } from './gameLoadingOverlay';
 
 const FIXED_DT_MS = 16.666;
@@ -575,58 +574,16 @@ export function startGameScreen(
   const previewBubbles: PreviewBubbleState[] = [];
   let previewBubbleCount = 0;
 
-  // ── Room transition fade state ────────────────────────────────────────────
-  // A brief black fade-out/in overlay prevents the player from seeing the
-  // partially-constructed room during loadRoom().  The room load runs at peak
-  // fade (fully black); then we fade back in.
-  //
-  // Duration is speed-based: fast-moving players get a shorter fade so grapple
-  // and dash transitions feel seamless.  See transitionConfig.ts for tunables.
-  //
-  //   transitionFadeAlpha: 0 = transparent (normal gameplay), 1 = fully opaque black
-  //   transitionFadeDir:   +1 = fading to black, -1 = fading back, 0 = idle
-  /** Current fade alpha (0–1). Drawn on the device canvas by renderFrame(). */
-  let transitionFadeAlpha = 0;
-  /** Fade direction: +1 = fading to black, -1 = fading back, 0 = idle. */
-  let transitionFadeDir = 0;
-  /**
-   * Speed at which fade-OUT progresses (alpha per ms), derived from player
-   * speed at transition trigger.  Updated each time a transition fires.
-   */
-  let transitionFadeOutSpeedPerMs = 1 / (TRANSITION_MAX_DURATION_MS * TRANSITION_FADE_OUT_FRACTION);
-  /**
-   * Speed at which fade-IN progresses (alpha per ms), derived from player
-   * speed at transition trigger.
-   */
-  let transitionFadeInSpeedPerMs = 1 / (TRANSITION_MAX_DURATION_MS * (1 - TRANSITION_FADE_OUT_FRACTION));
-  /** Queued room load that fires once the fade reaches alpha=1. */
-  interface PendingRoomTransition {
-    room: RoomDef;
-    spawnX: number;
-    spawnY: number;
-    dir: string;
-    preVX: number;
-    preVY: number;
-  }
-  let pendingRoomTransition: PendingRoomTransition | null = null;
-
-  /**
-   * Active async room-load generator.  Non-null while a generator-based
-   * incremental load is in progress (i.e., the screen is blacked out and we
-   * are advancing the load one phase per RAF frame).  Set to null when the
-   * generator finishes; the fade-in then begins.
-   */
-  let pendingAsyncLoad: Generator<void, void, void> | null = null;
-  /**
-   * Transition data saved when an async load starts so the post-load camera
-   * entry offset and velocity restore can be applied once all phases complete.
-   */
-  let pendingAsyncLoadPost: PendingRoomTransition | null = null;
+  // ── Camera transition reveal state ───────────────────────────────────────
+  // Tracks a smooth camera offset applied on top of the normal follow-and-clamp
+  // camera to reveal edge-extension tiles as the player approaches or crosses
+  // a room transition.  No fade overlay is used — transitions feel like a
+  // camera pan toward the room boundary.
+  const transitionRevealState = createTransitionRevealState();
 
   // ── Transition debug stats ────────────────────────────────────────────────
   // Populated each frame and forwarded to the render profiler debug panel.
   let lastTransitionPlayerSpeedWorld = 0;
-  let lastTransitionDurationMs = TRANSITION_MAX_DURATION_MS;
 
   // ── Initial loading overlay ───────────────────────────────────────────────
   // Shown when gameplay first starts (or when a room's sprites are not yet
@@ -708,6 +665,8 @@ export function startGameScreen(
     // to an open position so the player isn't stuck on entry.
     const [validX, validY] = resolveSpawnBlock(roomDef, spawnX, spawnY);
     loadRoom(roomDef, validX, validY, preserveCamera);
+    // Editor loads are not transitions — reset reveal to neutral.
+    notifyFreshRoomLoaded(transitionRevealState);
   }, () => {
     // Called when editor closes (confirm or cancel)
     if (editorToggleBtn) {
@@ -851,6 +810,8 @@ export function startGameScreen(
         } else {
           loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
         }
+        // Death respawn is not a transition — reset reveal to neutral.
+        notifyFreshRoomLoaded(transitionRevealState);
         lastTimestampMs = 0;
       },
       onReturnToMainMenu: () => {
@@ -1162,136 +1123,34 @@ export function startGameScreen(
     }
 
     // ── Room transition check ──────────────────────────────────────────────
-    // Transitions now use a brief black fade-out / fade-in to hide the
-    // loadRoom() stall and make the switch feel intentional.
-    //
-    // When a transition fires we queue the room load into pendingRoomTransition
-    // and start fading to black (transitionFadeDir = +1).  While fading, the
-    // player input and sim are frozen so the old scene stays static under the
-    // darkening overlay.  When the fade reaches alpha=1 (fully black) we call
-    // loadRoom() and immediately start fading back in (transitionFadeDir = -1).
-    //
-    // If pendingRoomTransition is already set, skip the transition check to
-    // prevent re-triggering while the fade is in progress.
+    // When the player crosses a transition boundary, load the new room
+    // synchronously and activate the PostTransition camera reveal.
+    // No black-screen fade is used — the camera instead smoothly reveals
+    // edge-extension tiles as the player approaches and exits transitions.
+    const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
+    const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
+    checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY, dir) => {
+      // Record speed for debug overlay before the world state changes.
+      lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
 
-    // Update the fade overlay each frame (both fade-out and fade-in).
-    if (transitionFadeDir !== 0) {
-      if (transitionFadeDir === 1) {
-        transitionFadeAlpha += transitionFadeOutSpeedPerMs * elapsedMs;
-      } else {
-        transitionFadeAlpha -= transitionFadeInSpeedPerMs * elapsedMs;
+      // Load the new room synchronously (30–80 ms stall, hidden by single-frame skip).
+      loadRoom(room, spawnX, spawnY);
+
+      // Restore pre-transition velocity so momentum feels continuous.
+      const newPlayer = world.clusters[0];
+      if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
+        newPlayer.velocityXWorld = preTransVX;
+        newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
       }
-      if (transitionFadeDir === 1 && transitionFadeAlpha >= 1) {
-        transitionFadeAlpha = 1;
-        // Fade fully black — begin incremental room load via generator.
-        // While the generator is running, the screen stays black (transitionFadeDir
-        // remains +1) and we advance one phase per RAF frame.  When all phases
-        // complete we apply post-load setup and start the fade-in.
-        if (pendingRoomTransition !== null && pendingAsyncLoad === null) {
-          pendingAsyncLoadPost = pendingRoomTransition;
-          pendingRoomTransition = null;
-          pendingAsyncLoad = _makeLoadRoomPhases(
-            pendingAsyncLoadPost.room,
-            pendingAsyncLoadPost.spawnX,
-            pendingAsyncLoadPost.spawnY,
-            false,
-          );
-        }
-        // Advance the generator by one phase this frame.
-        if (pendingAsyncLoad !== null) {
-          const loadResult = pendingAsyncLoad.next();
-          if (loadResult.done) {
-            // All phases complete — apply post-load setup.
-            pendingAsyncLoad = null;
-            const args = pendingAsyncLoadPost!;
-            pendingAsyncLoadPost = null;
 
-            // Preload sprites for adjacent rooms in the background.
-            preloadAdjacentRoomAssets(currentRoom);
-            // Restore the player's pre-transition velocity for momentum continuity.
-            const newPlayer = world.clusters[0];
-            if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
-              newPlayer.velocityXWorld = args.preVX;
-              if (args.dir === 'up') {
-                newPlayer.velocityYWorld = args.preVY - PLAYER_JUMP_SPEED_WORLD;
-              } else {
-                newPlayer.velocityYWorld = args.preVY;
-              }
+      // Activate PostTransition reveal: camera shows the entry edge until the
+      // player walks TRANSITION_REVEAL_DECAY_DIST_WORLD units into the room.
+      const entryEdge = getOppositeTransitionDirection(dir);
+      notifyTransitionRoomEntered(transitionRevealState, entryEdge);
 
-              // ── Camera entry offset ─────────────────────────────────────────
-              // Push the camera slightly "behind" the spawn direction so it lerps
-              // naturally to the player instead of snapping.  Gives the sense of
-              // entering from a direction without a separate slide animation.
-              // clampCameraToRoom will prevent this from going OOB on small rooms.
-              const entryOffsetWorld = TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS * BLOCK_SIZE_SMALL;
-              let camEntryX = newPlayer.positionXWorld;
-              let camEntryY = newPlayer.positionYWorld;
-              if (args.dir === 'right') camEntryX -= entryOffsetWorld;
-              else if (args.dir === 'left') camEntryX += entryOffsetWorld;
-              else if (args.dir === 'down')  camEntryY -= entryOffsetWorld;
-              else /* 'up' */                camEntryY += entryOffsetWorld;
-              snapCamera(camera, camEntryX, camEntryY, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
-            }
-            // Start fading back in.
-            transitionFadeDir = -1;
-          }
-          // Else: more phases remain; stay black and advance again next frame.
-        } else if (pendingRoomTransition === null) {
-          transitionFadeDir = 0;
-        }
-      } else if (transitionFadeDir === -1 && transitionFadeAlpha <= 0) {
-        transitionFadeAlpha = 0;
-        transitionFadeDir = 0;
-      }
-    }
-
-    // While a transition fade or async load is in progress, freeze player sim.
-    if (transitionFadeDir !== 0 || pendingRoomTransition !== null || pendingAsyncLoad !== null) {
-      // Still render (shows the fade overlay), but skip sim and input.
-      // Fall through to the render call at the bottom of the frame function.
-    } else {
-      // Only check for a new transition when there is no fade in progress.
-      const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
-      const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
-      if (checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY, dir) => {
-        pendingRoomTransition = { room, spawnX, spawnY, dir, preVX: preTransVX, preVY: preTransVY };
-
-        // ── Speed-based transition duration ──────────────────────────────────
-        // Faster-moving players get a shorter transition so grapple/dash
-        // through a transition feels nearly seamless.
-        // Velocity is in world units per tick (60fps sim); convert to wu/sec.
-        const speedWorldPerSec = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
-        lastTransitionPlayerSpeedWorld = speedWorldPerSec;
-
-        // Smooth-step from mid to min over the [sprint, fast] speed range.
-        // Below sprint → max duration; between sprint and fast → lerp; above fast → min.
-        let totalDurationMs: number;
-        if (speedWorldPerSec <= TRANSITION_SPRINT_SPEED_WORLD) {
-          totalDurationMs = TRANSITION_MAX_DURATION_MS;
-        } else if (speedWorldPerSec >= TRANSITION_FAST_SPEED_WORLD) {
-          totalDurationMs = TRANSITION_MIN_DURATION_MS;
-        } else {
-          const t = (speedWorldPerSec - TRANSITION_SPRINT_SPEED_WORLD)
-                    / (TRANSITION_FAST_SPEED_WORLD - TRANSITION_SPRINT_SPEED_WORLD);
-          const eased = t * t * (3 - 2 * t); // smoothstep
-          totalDurationMs = TRANSITION_MAX_DURATION_MS
-            + (TRANSITION_MIN_DURATION_MS - TRANSITION_MAX_DURATION_MS) * eased;
-        }
-        lastTransitionDurationMs = totalDurationMs;
-
-        const fadeOutMs = totalDurationMs * TRANSITION_FADE_OUT_FRACTION;
-        const fadeInMs  = totalDurationMs * (1 - TRANSITION_FADE_OUT_FRACTION);
-        transitionFadeOutSpeedPerMs = 1 / Math.max(1, fadeOutMs);
-        transitionFadeInSpeedPerMs  = 1 / Math.max(1, fadeInMs);
-
-        transitionFadeDir = 1;
-        transitionFadeAlpha = 0;
-      })) {
-        // Transition queued — the fade state machine will handle the rest.
-        // Do NOT return early here; we continue to the render so the fade starts
-        // appearing on this frame rather than the next.
-      }
-    }
+      // Preload sprites for rooms adjacent to the new room.
+      preloadAdjacentRoomAssets(currentRoom);
+    });
 
     // ── Dialogue trigger check ─────────────────────────────────────────────
     // Check if the player has entered any dialogue trigger zone.
@@ -1328,24 +1187,20 @@ export function startGameScreen(
     // During active dialogue, freeze player movement (suppress moveDx/jump inputs).
     const isDialogueBlockingInput = dialogueState.isDialogueActiveFlag;
 
-    // Also freeze sim during a room-transition fade so the old scene stays
-    // static and the accumulator doesn't drift during the load stall.
-    const isTransitionFreezing = transitionFadeDir !== 0 || pendingRoomTransition !== null;
-
     // Latch one-shot jump and down inputs into world state before ticking.
     // This preserves edge-triggered inputs on high-refresh frames where no
     // fixed sim tick runs (accumulator < FIXED_DT_MS).
     // Suppress movement inputs while dialogue is active so the player stands still.
-    if (jumpTriggered && !isDialogueBlockingInput && !isTransitionFreezing) {
+    if (jumpTriggered && !isDialogueBlockingInput) {
       world.playerJumpTriggeredFlag = 1;
     }
-    if (inputState.isDownTriggeredFlag && !isDialogueBlockingInput && !isTransitionFreezing) {
+    if (inputState.isDownTriggeredFlag && !isDialogueBlockingInput) {
       world.playerDownTriggeredFlag = 1;
       inputState.isDownTriggeredFlag = false;
-    } else if (isDialogueBlockingInput || isTransitionFreezing) {
+    } else if (isDialogueBlockingInput) {
       inputState.isDownTriggeredFlag = false;
     }
-    world.playerJumpHeldFlag = !isDialogueBlockingInput && !isTransitionFreezing && inputState.isJumpHeldFlag ? 1 : 0;
+    world.playerJumpHeldFlag = !isDialogueBlockingInput && inputState.isJumpHeldFlag ? 1 : 0;
 
 
     // ── Sim ticks ──────────────────────────────────────────────────────────
@@ -1353,14 +1208,7 @@ export function startGameScreen(
     // DevTools breakpoint, OS sleep) cannot drive hundreds of unconstrained ticks
     // in a single render frame, which would cause instant death, runaway enemy AI,
     // and multi-second browser stalls.
-    // Skip ticks entirely during a room-transition fade so the accumulator
-    // doesn't accumulate a large debt during the loadRoom() stall.
-    if (!isTransitionFreezing) {
-      accumulatorMs = Math.min(accumulatorMs + elapsedMs, FIXED_DT_MS * 5);
-    } else {
-      // Drain any residual accumulator so we don't burst-tick after the fade ends.
-      accumulatorMs = 0;
-    }
+    accumulatorMs = Math.min(accumulatorMs + elapsedMs, FIXED_DT_MS * 5);
 
     while (accumulatorMs >= FIXED_DT_MS) {
       // Capture cluster positions just before THIS tick so that after the loop,
@@ -1391,13 +1239,13 @@ export function startGameScreen(
 
       const player = world.clusters[0];
       if (player !== undefined) {
-        // Suppress horizontal movement during active dialogue or transition fade.
-        world.playerMoveInputDxWorld = (!isDialogueBlockingInput && !isTransitionFreezing && moveDx !== 0) ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
-        world.playerMoveInputDyWorld = (!isDialogueBlockingInput && !isTransitionFreezing && inputState.isKeyS) ? 1.0 : 0.0;
+        // Suppress horizontal movement during active dialogue.
+        world.playerMoveInputDxWorld = (!isDialogueBlockingInput && moveDx !== 0) ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
+        world.playerMoveInputDyWorld = (!isDialogueBlockingInput && inputState.isKeyS) ? 1.0 : 0.0;
       }
       // Pass sprint and crouch input to the sim
-      world.playerSprintHeldFlag = (!isDialogueBlockingInput && !isTransitionFreezing && inputState.isSprintHeldFlag) ? 1 : 0;
-      world.playerCrouchHeldFlag = (!isDialogueBlockingInput && !isTransitionFreezing && inputState.isKeyS) ? 1 : 0;
+      world.playerSprintHeldFlag = (!isDialogueBlockingInput && inputState.isSprintHeldFlag) ? 1 : 0;
+      world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
       tick(world);
       // If the player died during this tick, stop processing further ticks in
       // this frame.  Continuing to run enemy AI, spike contact, and force
@@ -1482,10 +1330,28 @@ export function startGameScreen(
       );
     }
 
+    // ── Update camera transition reveal offset ──────────────────────────────
+    // Compute the NearTransition and PostTransition reveal each frame and ease
+    // the current offset smoothly toward the target.  Applied to ox/oy below.
+    const playerForReveal = world.clusters[0];
+    if (playerForReveal !== undefined) {
+      updateTransitionReveal(
+        transitionRevealState,
+        playerForReveal.positionXWorld,
+        playerForReveal.positionYWorld,
+        currentRoom,
+        elapsedMs / 1000,
+      );
+    }
+
     // ── Recompute camera offset after update ─────────────────────────────────
+    // Apply the transition reveal offset on top of the normal clamped follow
+    // offset so the camera can temporarily peek past the room boundary to show
+    // edge-extension tiles.
     const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
-    const ox = camOff.offsetXPx;
-    const oy = camOff.offsetYPx;
+    const revealOff = getTransitionRevealOffset(transitionRevealState);
+    const ox = camOff.offsetXPx - revealOff.revealXWorld * camera.zoom;
+    const oy = camOff.offsetYPx - revealOff.revealYWorld * camera.zoom;
 
     let aliveCount = 0;
     for (let i = 0; i < world.particleCount; i++) {
@@ -1584,9 +1450,8 @@ export function startGameScreen(
 
     // ── Preview bubble computation ────────────────────────────────────────
     // Compute proximity-based preview bubble state for nearby transitions.
-    // Skipped during transitions to avoid flicker at room boundaries.
     const playerForBubbles = world.clusters[0];
-    if (playerForBubbles !== undefined && transitionFadeDir === 0 && pendingRoomTransition === null) {
+    if (playerForBubbles !== undefined) {
       previewBubbleCount = computePreviewBubbles(
         playerForBubbles.positionXWorld,
         playerForBubbles.positionYWorld,
@@ -1602,8 +1467,8 @@ export function startGameScreen(
     if (isDebugMode && renderProfiler !== undefined) {
       const debugStats: TransitionDebugStats = {
         currentRoomId: currentRoom.id,
-        isTransitioning: transitionFadeDir !== 0 || pendingRoomTransition !== null,
-        lastDurationMs: lastTransitionDurationMs,
+        isTransitioning: false,
+        lastDurationMs: 0,
         lastPlayerSpeedWorld: lastTransitionPlayerSpeedWorld,
         activeBubbleCount: previewBubbleCount,
         edgeCacheFilled: edgeExtensionCache !== null,
@@ -1639,7 +1504,6 @@ export function startGameScreen(
       renderProfiler,
       renderAlpha,
       prevFallingBlockOffsetY,
-      transitionFadeAlpha,
       edgeExtensionCache,
       previewBubbles,
       previewBubbleCount,
