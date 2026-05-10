@@ -949,6 +949,10 @@ export function startGameScreen(
     const elapsedMs = lastTimestampMs === 0 ? FIXED_DT_MS : timestampMs - lastTimestampMs;
     lastTimestampMs = timestampMs;
 
+    // Record raw frame time to the profiler ring buffer unconditionally so
+    // frame-pacing stats are available immediately when debug mode is enabled.
+    renderProfiler.recordFrameTime(elapsedMs);
+
     hudState.frameTimeMs = elapsedMs;
     fpsAccMs += elapsedMs;
     frameCount++;

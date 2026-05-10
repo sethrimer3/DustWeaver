@@ -22,6 +22,16 @@
  *
  * Displayed values are exponentially-smoothed so numbers are readable rather
  * than flickering every frame.
+ *
+ * Frame-pacing diagnostics (BUILD 271):
+ *   - recordFrameTime(ms) — call once per RAF frame with the raw elapsed ms.
+ *     Updates the ring buffer and long-frame counters unconditionally so
+ *     stats are populated the moment debug mode is enabled.
+ *   - setAdaptiveReduction(active) — signal whether adaptive quality has
+ *     automatically lowered effects to stay within the frame budget.
+ *   - The overlay shows: current FPS, average FPS, 1% low FPS, current frame
+ *     time, worst frame time in the ring window, and cumulative long-frame
+ *     counts (>20 ms, >33 ms, >50 ms).
  */
 
 import type { ChunkCacheStats } from '../walls/chunkRenderCache';
@@ -74,6 +84,34 @@ export class RenderProfiler {
   private readonly _smoothedMs    = new Float64Array(STAGE_COUNT);
   private _frameStartMs = 0;
 
+  // ── Ring buffer for raw frame-time history ─────────────────────────────────
+  // Pre-allocated so recordFrameTime() never allocates.  Holds ~4 seconds of
+  // history at 60 fps.  Updated unconditionally every RAF frame so the stats
+  // are immediately useful when debug mode is first enabled.
+  private static readonly RING_SIZE = 256;
+  private readonly _frameTimes = new Float32Array(RenderProfiler.RING_SIZE);
+  /** Write position in the ring buffer (wraps modulo RING_SIZE). */
+  private _ringHead = 0;
+  /** Number of valid entries written so far (saturates at RING_SIZE). */
+  private _ringCount = 0;
+
+  // ── Long-frame event counters ──────────────────────────────────────────────
+  // Cumulative since the profiler was constructed; never reset automatically.
+  /** Frames > 20 ms (~50 fps budget exceeded). */
+  private _longFrames20ms = 0;
+  /** Frames > 33 ms (~30 fps budget exceeded). */
+  private _longFrames33ms = 0;
+  /** Frames > 50 ms (~20 fps budget exceeded). */
+  private _longFrames50ms = 0;
+
+  // ── Adaptive quality status ────────────────────────────────────────────────
+  /** True when adaptive quality has automatically lowered effects. */
+  private _adaptiveReductionActive = false;
+
+  // ── Scratch for 1% low computation (allocation-free) ──────────────────────
+  // Stores the 3 worst frame times found during the ring-buffer scan.
+  private readonly _worstScratch = new Float32Array(3);
+
   /** Latest chunk cache stats, set each frame when debug mode is active. */
   private _chunkStats: ChunkCacheStats | null = null;
 
@@ -106,6 +144,87 @@ export class RenderProfiler {
    */
   updateLiquidStats(stats: LiquidDebugStats): void {
     this._liquidStats = stats;
+  }
+
+  // ── Frame-pacing API ──────────────────────────────────────────────────────
+
+  /**
+   * Record the raw elapsed time for this RAF frame.
+   *
+   * Call this ONCE per `requestAnimationFrame` callback, before `beginFrame`,
+   * using the raw `elapsedMs` value (timestamp delta, not profiler-measured
+   * render time).  The ring buffer is always updated so stats are ready the
+   * moment debug mode is enabled.
+   *
+   * Long-frame event counters are only incremented when debug mode is active
+   * (i.e. after `beginFrame(true)` has been called at least once this frame).
+   */
+  recordFrameTime(frameMs: number): void {
+    // Always update the ring buffer — unconditional so stats are immediately
+    // available when debug mode is first toggled on.
+    this._frameTimes[this._ringHead] = frameMs;
+    this._ringHead = (this._ringHead + 1) % RenderProfiler.RING_SIZE;
+    if (this._ringCount < RenderProfiler.RING_SIZE) this._ringCount++;
+
+    // Accumulate long-frame counts only while actively monitoring.
+    if (!this._isActive) return;
+    if (frameMs > 50) {
+      this._longFrames50ms++;
+      this._longFrames33ms++;
+      this._longFrames20ms++;
+    } else if (frameMs > 33) {
+      this._longFrames33ms++;
+      this._longFrames20ms++;
+    } else if (frameMs > 20) {
+      this._longFrames20ms++;
+    }
+  }
+
+  /**
+   * Signal whether the adaptive quality system has currently reduced effects
+   * to maintain frame-rate.  The debug overlay shows a warning when true.
+   */
+  setAdaptiveReduction(active: boolean): void {
+    this._adaptiveReductionActive = active;
+  }
+
+  /**
+   * Compute the approximate 1% low FPS from the ring buffer.
+   * Finds the worst 3 frame times (allocation-free via _worstScratch) and
+   * averages them, then converts to FPS.  Returns 0 when the buffer is empty.
+   *
+   * "1% low" here means: average the worst 1% of frames in the populated ring
+   * buffer (i.e., Math.ceil(count × 0.01) frames, capped at 3 by the scratch
+   * buffer size), then express the result as FPS.
+   */
+  private _getOnePercentLow(): number {
+    const count = this._ringCount;
+    if (count === 0) return 0;
+
+    const s = this._worstScratch;
+    s[0] = 0; s[1] = 0; s[2] = 0;
+    for (let i = 0; i < count; i++) {
+      const t = this._frameTimes[i];
+      if (t > s[0])      { s[2] = s[1]; s[1] = s[0]; s[0] = t; }
+      else if (t > s[1]) { s[2] = s[1]; s[1] = t; }
+      else if (t > s[2]) { s[2] = t; }
+    }
+    // 1% of populated count (max 3 because scratch has 3 slots).
+    const nWorst = Math.min(3, Math.max(1, Math.ceil(count * 0.01)));
+    let sum = 0;
+    for (let i = 0; i < nWorst; i++) sum += s[i];
+    const avgWorstMs = sum / nWorst;
+    return avgWorstMs > 0 ? 1000 / avgWorstMs : 0;
+  }
+
+  /** Worst (highest) frame time in the current ring buffer window (ms). */
+  private _getWorstFrameMs(): number {
+    let worst = 0;
+    const count = this._ringCount;
+    for (let i = 0; i < count; i++) {
+      if (this._frameTimes[i] > worst) worst = this._frameTimes[i];
+    }
+    return worst;
   }
 
   /**
@@ -159,32 +278,72 @@ export class RenderProfiler {
 
     const lineHeightPx = 9;
     const fontSizePx   = 7;
-    const panelWidth   = 112;
-    const panelHeight  = STAGE_COUNT * lineHeightPx + 8;
+    const panelWidth   = 128;
     const padXPx       = virtualWidthPx - panelWidth - 4;
-    const padYPx       = 8;
+    let   nextPanelY   = 8;
+
+    ctx.save();
+    ctx.font = `${fontSizePx}px monospace`;
+
+    // ── FPS / frame-time panel (BUILD 271) ────────────────────────────────────
+    const ringCount = this._ringCount;
+    const lastFrameMs = ringCount > 0
+      ? this._frameTimes[(this._ringHead - 1 + RenderProfiler.RING_SIZE) % RenderProfiler.RING_SIZE]
+      : 0;
+    const avgFrameMs   = this._smoothedMs[STAGE_TOTAL];
+    const avgFps       = avgFrameMs > 0  ? 1000 / avgFrameMs  : 0;
+    const currentFps   = lastFrameMs > 0 ? 1000 / lastFrameMs : 0;
+    const onePercentLow = this._getOnePercentLow();
+    const worstFrameMs  = this._getWorstFrameMs();
+
+    const fpsLines: readonly string[] = [
+      `FPS cur:${currentFps.toFixed(0)} avg:${avgFps.toFixed(0)} 1%:${onePercentLow.toFixed(0)}`,
+      `Frame now:${lastFrameMs.toFixed(1)}ms wrst:${worstFrameMs.toFixed(1)}ms`,
+      `>20ms:${this._longFrames20ms} >33:${this._longFrames33ms} >50:${this._longFrames50ms}`,
+    ];
+    const fpsPanelH = fpsLines.length * lineHeightPx + 8;
+    ctx.fillStyle = 'rgba(0,0,0,0.60)';
+    ctx.fillRect(padXPx - 4, nextPanelY - 4, panelWidth + 8, fpsPanelH);
+    for (let i = 0; i < fpsLines.length; i++) {
+      let lineColor: string;
+      if (i === 0) {
+        lineColor = '#ffff60';
+      } else if (i === 2 && this._longFrames50ms > 0) {
+        lineColor = '#ff6060'; // warn red when there are >50 ms frames
+      } else {
+        lineColor = '#e0e080';
+      }
+      ctx.fillStyle = lineColor;
+      ctx.fillText(fpsLines[i], padXPx, nextPanelY + fontSizePx + i * lineHeightPx);
+    }
+    if (this._adaptiveReductionActive) {
+      ctx.fillStyle = '#ff4040';
+      ctx.fillText('! ADAPTIVE QUALITY', padXPx, nextPanelY + fpsPanelH - 2);
+    }
+    nextPanelY += fpsPanelH + 4;
+
+    // ── Per-stage timing panel ────────────────────────────────────────────────
+    const panelHeight  = STAGE_COUNT * lineHeightPx + 8;
 
     // Build label strings (reuses _lineBuffer — no per-call allocation)
     for (let i = 0; i < STAGE_COUNT; i++) {
       _lineBuffer[i] = `${STAGE_LABELS[i]} ${this._smoothedMs[i].toFixed(2)}ms`;
     }
 
-    ctx.save();
-    ctx.font = `${fontSizePx}px monospace`;
-
     // Background panel
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(padXPx - 4, padYPx - 4, panelWidth + 8, panelHeight);
+    ctx.fillRect(padXPx - 4, nextPanelY - 4, panelWidth + 8, panelHeight);
 
     // Render stage lines in cyan; total line in yellow
     for (let i = 0; i < STAGE_COUNT; i++) {
       ctx.fillStyle = i === STAGE_TOTAL ? '#ffd23c' : '#00e5ff';
-      ctx.fillText(_lineBuffer[i], padXPx, padYPx + fontSizePx + i * lineHeightPx);
+      ctx.fillText(_lineBuffer[i], padXPx, nextPanelY + fontSizePx + i * lineHeightPx);
     }
 
+    nextPanelY += panelHeight + 4;
     ctx.restore();
 
-    // ── Chunk cache stats panel (below timing panel) ─────────────────────────
+    // ── Chunk cache stats panel ───────────────────────────────────────────────
     if (this._chunkStats !== null) {
       const cs = this._chunkStats;
       const chunkLines = [
@@ -192,24 +351,22 @@ export class RenderProfiler {
         `Dirty=${cs.dirtyChunkCount} Built=${cs.rebuiltThisFrame}`,
         `Mem~${cs.memoryEstimateKB}KB`,
       ];
-      const chunkPanelY = padYPx - 4 + panelHeight + 4;
+      const chunkPanelH = chunkLines.length * lineHeightPx + 8;
       ctx.save();
       ctx.font = `${fontSizePx}px monospace`;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(padXPx - 4, chunkPanelY, panelWidth + 8, chunkLines.length * lineHeightPx + 8);
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, chunkPanelH);
       ctx.fillStyle = '#90ee90';
       for (let i = 0; i < chunkLines.length; i++) {
-        ctx.fillText(chunkLines[i], padXPx, chunkPanelY + fontSizePx + 4 + i * lineHeightPx);
+        ctx.fillText(chunkLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
+      nextPanelY += chunkPanelH + 4;
     }
 
-    // ── Transition debug panel (below chunk stats) ───────────────────────────
+    // ── Transition debug panel ────────────────────────────────────────────────
     if (this._transitionStats !== null) {
       const ts = this._transitionStats;
-      const chunkPanelH = this._chunkStats !== null ? 3 * lineHeightPx + 8 : 0;
-      const chunkPanelY = padYPx - 4 + panelHeight + 4;
-      const transPanelY = chunkPanelY + chunkPanelH + 4;
       const transLines = [
         `Room: ${ts.currentRoomId.slice(0, 14)}`,
         `Trans: ${ts.isTransitioning ? 'YES' : 'no'}`,
@@ -218,24 +375,22 @@ export class RenderProfiler {
         `Bubbs: ${ts.activeBubbleCount}`,
         `Edge$: ${ts.edgeCacheFilled ? 'OK' : '--'}`,
       ];
+      const transPanelH = transLines.length * lineHeightPx + 8;
       ctx.save();
       ctx.font = `${fontSizePx}px monospace`;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(padXPx - 4, transPanelY, panelWidth + 8, transLines.length * lineHeightPx + 8);
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, transPanelH);
       ctx.fillStyle = '#ffa040';
       for (let i = 0; i < transLines.length; i++) {
-        ctx.fillText(transLines[i], padXPx, transPanelY + fontSizePx + 4 + i * lineHeightPx);
+        ctx.fillText(transLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
+      nextPanelY += transPanelH + 4;
     }
 
     // ── Liquid body debug panel ───────────────────────────────────────────────
     if (this._liquidStats !== null) {
       const ls = this._liquidStats;
-      const chunkPanelH  = this._chunkStats !== null ? 3 * lineHeightPx + 8 : 0;
-      const transPanelH  = this._transitionStats !== null ? 6 * lineHeightPx + 8 : 0;
-      const chunkPanelY  = padYPx - 4 + panelHeight + 4;
-      const liquidPanelY = chunkPanelY + chunkPanelH + transPanelH + 8;
       const liquidLines  = [
         `Liq tiles: ${ls.liquidTileCount}`,
         `Bodies:    ${ls.liquidBodyCount}`,
@@ -243,13 +398,14 @@ export class RenderProfiler {
         `Bubbles:   ${ls.activeBubbleCount}`,
         `Rebuilds:  ${ls.cacheRebuildCount}`,
       ];
+      const liquidPanelH = liquidLines.length * lineHeightPx + 8;
       ctx.save();
       ctx.font = `${fontSizePx}px monospace`;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(padXPx - 4, liquidPanelY, panelWidth + 8, liquidLines.length * lineHeightPx + 8);
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, liquidPanelH);
       ctx.fillStyle = '#40d0ff';
       for (let i = 0; i < liquidLines.length; i++) {
-        ctx.fillText(liquidLines[i], padXPx, liquidPanelY + fontSizePx + 4 + i * lineHeightPx);
+        ctx.fillText(liquidLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
     }

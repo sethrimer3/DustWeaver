@@ -44,7 +44,7 @@ import {
   renderCrystallineCracksBackground,
 } from '../render/effects/theroEffectManager';
 import type { BloomSystem } from '../render/effects/bloomSystem';
-import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
+import type { DarkRoomOverlay, LightSourcePx } from '../render/effects/darkRoomOverlay';
 import { buildPlayerShadowOccluders, type ShadowCasterOccluderPx } from '../render/effects/shadowCaster';
 import {
   renderDecorationSprites,
@@ -88,6 +88,26 @@ const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
 const JOYSTICK_INNER_RADIUS_PX = 22;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+// ── Module-level scratch buffers (allocation-free hot path) ────────────────
+// These arrays are allocated once and reused every frame to collect light
+// sources and shadow occluders for the DarkRoom overlay.  Using stable module-
+// level arrays avoids the per-frame cost of allocating new arrays and the GC
+// pressure from discarding them.
+
+/**
+ * Pre-allocated scratch array for DarkRoom light sources.
+ * Filled each frame by collectDecorationLights() plus inline additions for the
+ * player, particle lights, authored lights, and preview bubbles.
+ * Sized for the maximum possible lights per frame.
+ */
+const _scratchLights: LightSourcePx[] = [];
+
+/**
+ * Pre-allocated scratch array for shadow occluder polygons.
+ * Cleared and filled by buildPlayerShadowOccluders() each frame.
+ */
+const _scratchShadows: ShadowCasterOccluderPx[] = [];
 
 // ── Public interface ───────────────────────────────────────────────────────
 
@@ -607,9 +627,11 @@ export function renderFrame(r: RenderFrameContext): void {
   if (isDarkRoom) {
     if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_LIGHTING);
 
-    // Collect viewport-visible decoration lights, capped by quality tier.
-    const lights = collectDecorationLights(
-      cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL,
+    // Collect viewport-visible decoration lights into the module-level scratch
+    // array (cleared inside collectDecorationLights), capped by quality tier.
+    // This avoids allocating a new LightSourcePx[] array every frame.
+    collectDecorationLights(
+      _scratchLights, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL,
       qc.maxDynamicLightCount, virtualWidthPx, virtualHeightPx,
     );
 
@@ -627,7 +649,7 @@ export function renderFrame(r: RenderFrameContext): void {
     // preserved end-to-end for a future coloured-light pass.
     if (currentRoom.lightSources) {
       for (const ls of currentRoom.lightSources) {
-        if (lights.length >= qc.maxDynamicLightCount) break;
+        if (_scratchLights.length >= qc.maxDynamicLightCount) break;
         const bPct = Math.max(0, Math.min(100, ls.brightnessPct)) / 100;
         if (bPct <= 0) continue;
         const worldX = (ls.xBlock + 0.5) * BLOCK_SIZE_SMALL;
@@ -640,7 +662,7 @@ export function renderFrame(r: RenderFrameContext): void {
         if (lx + radiusPx < 0 || lx - radiusPx > virtualWidthPx) continue;
         if (ly + radiusPx < 0 || ly - radiusPx > virtualHeightPx) continue;
         const innerFraction = 0.1 + 0.3 * bPct;
-        lights.push({
+        _scratchLights.push({
           xPx: lx,
           yPx: ly,
           radiusPx,
@@ -650,9 +672,14 @@ export function renderFrame(r: RenderFrameContext): void {
     }
 
     // Player emits a personal lantern-sized light.
-    const playerSnap = snapshot.clusters.find(c => c.isPlayerFlag === 1 && c.isAliveFlag === 1);
+    // Use a for-loop instead of Array.find() to avoid closure allocation.
+    let playerSnap: (typeof snapshot.clusters)[0] | undefined;
+    for (let ci = 0; ci < snapshot.clusters.length; ci++) {
+      const c = snapshot.clusters[ci];
+      if (c.isPlayerFlag === 1 && c.isAliveFlag === 1) { playerSnap = c; break; }
+    }
     if (playerSnap !== undefined) {
-      lights.push({
+      _scratchLights.push({
         xPx:          playerSnap.positionXWorld * zoom + ox,
         yPx:          playerSnap.positionYWorld * zoom + oy,
         radiusPx:     38 * zoom,
@@ -673,7 +700,7 @@ export function renderFrame(r: RenderFrameContext): void {
       // Viewport cull particle lights.
       if (plx + plr < 0 || plx - plr > virtualWidthPx) continue;
       if (ply + plr < 0 || ply - plr > virtualHeightPx) continue;
-      lights.push({
+      _scratchLights.push({
         xPx:          plx,
         yPx:          ply,
         radiusPx:     plr,
@@ -688,7 +715,7 @@ export function renderFrame(r: RenderFrameContext): void {
     // the darkness mask *after* the light holes so the player visibly blocks
     // part of each light cone.  Only authored lightSources are used — not
     // decoration glows or particle lights.
-    const shadows: ShadowCasterOccluderPx[] = [];
+    // Reuse module-level _scratchShadows array (cleared inside buildPlayerShadowOccluders).
     if (playerSnap !== undefined && currentRoom.lightSources && currentRoom.lightSources.length > 0) {
       buildPlayerShadowOccluders(
         playerSnap.positionXWorld * zoom + ox,
@@ -699,8 +726,10 @@ export function renderFrame(r: RenderFrameContext): void {
         ox,
         oy,
         zoom,
-        shadows,
+        _scratchShadows,
       );
+    } else {
+      _scratchShadows.length = 0;
     }
 
     // ── Preview bubbles as DarkRoom light sources ────────────────────────────
@@ -712,7 +741,7 @@ export function renderFrame(r: RenderFrameContext): void {
     for (let bi = 0; bi < r.previewBubbleCount; bi++) {
       const b = r.previewBubbles[bi];
       if (b.opacity <= 0 || b.radiusPx <= 0) continue;
-      lights.push({
+      _scratchLights.push({
         xPx:          b.centerXPx,
         yPx:          b.centerYPx,
         radiusPx:     b.radiusPx,
@@ -720,7 +749,7 @@ export function renderFrame(r: RenderFrameContext): void {
       });
     }
 
-    darkRoomOverlay.render(ctx, lights, shadows);
+    darkRoomOverlay.render(ctx, _scratchLights, _scratchShadows);
     if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_LIGHTING);
   }
 
