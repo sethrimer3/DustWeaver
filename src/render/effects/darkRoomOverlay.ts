@@ -14,6 +14,13 @@
  *
  * The bloom system is separate and composited on top at device resolution,
  * giving the glow sources extra atmospheric radiance.
+ *
+ * Performance (BUILD 271):
+ *   Light holes are drawn using pre-rendered 128×128 "hole canvases" instead
+ *   of creating a new radial gradient per light per frame.  Gradients are
+ *   pre-built for 8 quantized innerFraction values (0.05 … 0.40 in steps of
+ *   0.05) and reused via drawImage scaling.  This eliminates all per-light
+ *   gradient allocations in the hot render path.
  */
 
 import type { ShadowCasterOccluderPx } from './shadowCaster';
@@ -41,11 +48,62 @@ export interface LightSourcePx {
 /** How opaque the darkness layer is.  1 = pitch black, < 1 = some ambient. */
 const DARKNESS_ALPHA = 0.96;
 
+// ── Pre-rendered light-hole canvas cache ─────────────────────────────────────
+// Instead of calling createRadialGradient() for every light every frame we
+// pre-render 8 small canvases (one per quantized innerFraction value) in the
+// constructor and reuse them via drawImage().  Each canvas is 128×128 so that
+// drawImage with bilinear scaling looks smooth at any light radius.
+//
+// Each canvas contains:
+//   - Black pixels with alpha varying from 1.0 at the gradient centre
+//     (innerFraction * 64 px from (64,64)) down to 0.0 at the outer radius
+//     (64 px), with an intermediate stop at 0.75 alpha at the midpoint.
+//   - Corners are fully transparent because the gradient fades to 0 at r=64.
+//
+// With destination-out compositing, high-alpha pixels erase the destination
+// (punch holes in the darkness), and zero-alpha pixels leave it unchanged.
+// The result is visually identical to the per-frame gradient approach.
+
+/** Texture size for pre-rendered light-hole canvases (pixels). */
+const HOLE_CANVAS_SIZE = 128;
+/** Half of HOLE_CANVAS_SIZE for computing the gradient centre. */
+const HOLE_CANVAS_HALF = HOLE_CANVAS_SIZE / 2;
+
+/** Quantized innerFraction values for which a hole canvas is pre-built. */
+const INNER_FRACTIONS = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40] as const;
+
+/** Build a 128×128 light-hole canvas for a given innerFraction. */
+function _buildLightHoleCanvas(innerFraction: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width  = HOLE_CANVAS_SIZE;
+  canvas.height = HOLE_CANVAS_SIZE;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) return canvas; // fallback: empty canvas (no punch)
+  const innerR = HOLE_CANVAS_HALF * innerFraction;
+  const grad = ctx.createRadialGradient(
+    HOLE_CANVAS_HALF, HOLE_CANVAS_HALF, Math.max(0, innerR),
+    HOLE_CANVAS_HALF, HOLE_CANVAS_HALF, HOLE_CANVAS_HALF,
+  );
+  grad.addColorStop(0,   'rgba(0,0,0,1)');
+  grad.addColorStop(0.5, 'rgba(0,0,0,0.75)');
+  grad.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  // Fill the full square — corners are alpha=0 so they do not affect compositing.
+  ctx.fillRect(0, 0, HOLE_CANVAS_SIZE, HOLE_CANVAS_SIZE);
+  return canvas;
+}
+
 export class DarkRoomOverlay {
   private readonly _canvas: HTMLCanvasElement;
   private readonly _ctx: CanvasRenderingContext2D;
   private _widthPx = 1;
   private _heightPx = 1;
+
+  /**
+   * Pre-rendered light-hole canvases keyed by (innerFraction * 100) rounded.
+   * Built once in the constructor; reused every frame.
+   */
+  private readonly _holeCanvases = new Map<number, HTMLCanvasElement>();
 
   constructor() {
     this._canvas = document.createElement('canvas');
@@ -53,6 +111,12 @@ export class DarkRoomOverlay {
     if (ctx === null) throw new Error('DarkRoomOverlay: failed to get 2D context');
     this._ctx = ctx;
     this.resize(1, 1);
+
+    // Pre-render hole canvases for each quantized innerFraction.
+    for (const frac of INNER_FRACTIONS) {
+      const key = Math.round(frac * 100);
+      this._holeCanvases.set(key, _buildLightHoleCanvas(frac));
+    }
   }
 
   resize(widthPx: number, heightPx: number): void {
@@ -93,21 +157,39 @@ export class DarkRoomOverlay {
     ctx.globalAlpha = 1.0;
 
     // ── Step 2: punch light holes using destination-out ──────────────────────
+    // Each light is rendered by drawing a pre-built hole canvas scaled to the
+    // light's radius.  This replaces per-frame createRadialGradient() calls
+    // with cheaper drawImage() calls (BUILD 271 performance fix).
     ctx.globalCompositeOperation = 'destination-out';
+    // Bilinear smoothing is important here so the scaled gradient remains soft.
+    ctx.imageSmoothingEnabled = true;
     for (let li = 0; li < lights.length; li++) {
-      const light = lights[li];
-      const innerR = light.radiusPx * (light.innerFraction ?? 0.25);
-      const grad = ctx.createRadialGradient(
-        light.xPx, light.yPx, Math.max(0, innerR),
-        light.xPx, light.yPx, light.radiusPx,
-      );
-      grad.addColorStop(0,   'rgba(0,0,0,1)');
-      grad.addColorStop(0.5, 'rgba(0,0,0,0.75)');
-      grad.addColorStop(1,   'rgba(0,0,0,0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(light.xPx, light.yPx, light.radiusPx, 0, Math.PI * 2);
-      ctx.fill();
+      const light   = lights[li];
+      const frac    = light.innerFraction ?? 0.25;
+      // Map frac → nearest pre-built key (integers 5, 10, 15, 20, 25, 30, 35, 40).
+      const mapKey  = Math.max(5, Math.min(40, Math.round(frac / 0.05) * 5));
+      const holeCanvas = this._holeCanvases.get(mapKey);
+      if (holeCanvas === undefined) {
+        // Fallback: create gradient on the fly (should not happen in practice).
+        const innerR = light.radiusPx * frac;
+        const grad   = ctx.createRadialGradient(
+          light.xPx, light.yPx, Math.max(0, innerR),
+          light.xPx, light.yPx, light.radiusPx,
+        );
+        grad.addColorStop(0,   'rgba(0,0,0,1)');
+        grad.addColorStop(0.5, 'rgba(0,0,0,0.75)');
+        grad.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(light.xPx, light.yPx, light.radiusPx, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Fast path: drawImage scales the pre-rendered soft-gradient canvas.
+        // The hole canvas has alpha=0 in the outer corners, so drawing a full
+        // square is safe — transparent pixels have no effect in destination-out.
+        const d = 2 * light.radiusPx;
+        ctx.drawImage(holeCanvas, light.xPx - light.radiusPx, light.yPx - light.radiusPx, d, d);
+      }
     }
 
     // ── Step 2.5: draw shadow occluder polygons ──────────────────────────────

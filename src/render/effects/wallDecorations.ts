@@ -476,10 +476,14 @@ export function addDecorationBloom(
 }
 
 /**
- * Converts decorations to screen-space light source descriptors for the
- * DarkRoomOverlay.  Must be called after the camera offset is known.
+ * Fills `out` with screen-space light source descriptors for the DarkRoomOverlay.
+ * The `out` array is cleared at the start of each call so the caller can pass
+ * a stable module-level array to avoid per-frame allocation.
  *
- * @param maxLightCount  Maximum lights to return.  Decorations beyond this cap
+ * Must be called after the camera offset is known.
+ *
+ * @param out            Pre-allocated output array.  Cleared and filled in place.
+ * @param maxLightCount  Maximum lights to add.  Decorations beyond this cap
  *                       are skipped (furthest from origin are dropped first via
  *                       iteration order).  Pass a large value to disable cap.
  * @param vpW / vpH      Virtual viewport dimensions for screen-space culling.
@@ -487,6 +491,7 @@ export function addDecorationBloom(
  *                       the viewport are not added to the array.
  */
 export function collectDecorationLights(
+  out: LightSourcePx[],
   decorations: readonly WallDecoration[],
   offsetXPx: number,
   offsetYPx: number,
@@ -495,9 +500,9 @@ export function collectDecorationLights(
   maxLightCount: number,
   vpW: number,
   vpH: number,
-): LightSourcePx[] {
-  const lights: LightSourcePx[] = [];
-  for (let i = 0; i < decorations.length && lights.length < maxLightCount; i++) {
+): void {
+  out.length = 0;
+  for (let i = 0; i < decorations.length && out.length < maxLightCount; i++) {
     const d  = decorations[i];
     const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
     const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
@@ -507,7 +512,7 @@ export function collectDecorationLights(
       const ly = sy - Math.round(2 * scalePx);
       const lr = 14 * scalePx;
       if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
-      lights.push({
+      out.push({
         xPx:           lx,
         yPx:           ly,
         radiusPx:      lr,
@@ -523,7 +528,7 @@ export function collectDecorationLights(
       const ly    = sy - (stemH + 1) * px;
       const lr    = 26 * scalePx;
       if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
-      lights.push({
+      out.push({
         xPx:           lx,
         yPx:           ly,
         radiusPx:      lr,
@@ -540,7 +545,7 @@ export function collectDecorationLights(
       const ly    = sy + vineH * px;
       const lr    = 18 * scalePx;
       if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
-      lights.push({
+      out.push({
         xPx:           lx,
         yPx:           ly,
         radiusPx:      lr,
@@ -548,5 +553,4 @@ export function collectDecorationLights(
       });
     }
   }
-  return lights;
 }
