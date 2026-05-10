@@ -252,11 +252,11 @@ export function computeConnectedRoomOrigin(
   const BS = BLOCK_SIZE_SMALL;
   switch (exitDir) {
     case 'right':
-      return { originXWorld: currentW  * BS, originYWorld: seamDeltaRowBlocks * BS };
+      return { originXWorld: currentW * BS, originYWorld: seamDeltaRowBlocks * BS };
     case 'left':
       return { originXWorld: -connectedW * BS, originYWorld: seamDeltaRowBlocks * BS };
     case 'down':
-      return { originXWorld: seamDeltaColBlocks * BS, originYWorld: currentH  * BS };
+      return { originXWorld: seamDeltaColBlocks * BS, originYWorld: currentH * BS };
     case 'up':
       return { originXWorld: seamDeltaColBlocks * BS, originYWorld: -connectedH * BS };
   }
