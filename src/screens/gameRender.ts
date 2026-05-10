@@ -44,7 +44,8 @@ import {
   renderCrystallineCracksBackground,
 } from '../render/effects/theroEffectManager';
 import type { BloomSystem } from '../render/effects/bloomSystem';
-import type { DarkRoomOverlay, LightSourcePx } from '../render/effects/darkRoomOverlay';
+import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
+import { LIGHT_BUFFER_STRIDE, MAX_LIGHT_BUFFER_COUNT } from '../render/effects/darkRoomOverlay';
 import { buildPlayerShadowOccluders, type ShadowCasterOccluderPx } from '../render/effects/shadowCaster';
 import {
   renderDecorationSprites,
@@ -96,12 +97,36 @@ const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0
 // pressure from discarding them.
 
 /**
- * Pre-allocated scratch array for DarkRoom light sources.
- * Filled each frame by collectDecorationLights() plus inline additions for the
- * player, particle lights, authored lights, and preview bubbles.
- * Sized for the maximum possible lights per frame.
+ * Pre-allocated flat Float32Array for DarkRoom light sources.
+ * Interleaved format: LIGHT_BUFFER_STRIDE floats per light
+ *   [0] xPx, [1] yPx, [2] radiusPx, [3] innerFraction,
+ *   [4] colorR, [5] colorG, [6] colorB  (all 0–255)
+ * Filled each frame by collectDecorationLights() plus inline additions.
+ * Sized to hold MAX_LIGHT_BUFFER_COUNT lights (BUILD 272 flat-array refactor).
  */
-const _scratchLights: LightSourcePx[] = [];
+const _scratchLights = new Float32Array(MAX_LIGHT_BUFFER_COUNT * LIGHT_BUFFER_STRIDE);
+/** Number of valid lights currently written into _scratchLights. */
+let _scratchLightCount = 0;
+
+/**
+ * Write one light entry into the flat _scratchLights buffer and advance the count.
+ * No-op when the buffer is full (count ≥ MAX_LIGHT_BUFFER_COUNT).
+ */
+function _pushLight(
+  xPx: number, yPx: number, radiusPx: number, innerFraction: number,
+  cr = 255, cg = 255, cb = 255,
+): void {
+  if (_scratchLightCount >= MAX_LIGHT_BUFFER_COUNT) return;
+  const base = _scratchLightCount * LIGHT_BUFFER_STRIDE;
+  _scratchLights[base + 0] = xPx;
+  _scratchLights[base + 1] = yPx;
+  _scratchLights[base + 2] = radiusPx;
+  _scratchLights[base + 3] = innerFraction;
+  _scratchLights[base + 4] = cr;
+  _scratchLights[base + 5] = cg;
+  _scratchLights[base + 6] = cb;
+  _scratchLightCount++;
+}
 
 /**
  * Pre-allocated scratch array for shadow occluder polygons.
@@ -215,6 +240,12 @@ export interface RenderFrameContext {
 
   // Graphics quality for this frame — drives quality-tier rendering decisions.
   graphicsQuality: GraphicsQuality;
+  /**
+   * When true, adaptive quality has triggered and rendering should use reduced
+   * caps (lower dust mote count, fewer dynamic lights) to recover frame rate.
+   * Set by the adaptive quality monitor in gameScreen.ts.
+   */
+  isAdaptiveReductionActive: boolean;
   /** Render-stage profiler.  When provided, timings are recorded when debug is on. */
   renderProfiler?: RenderProfiler;
   /**
@@ -308,6 +339,7 @@ export function renderFrame(r: RenderFrameContext): void {
     teleportFlashAlpha,
     setTeleportFlashAlpha,
     graphicsQuality,
+    isAdaptiveReductionActive,
     renderProfiler,
   } = r;
 
@@ -316,7 +348,19 @@ export function renderFrame(r: RenderFrameContext): void {
   // ── Quality tier config ────────────────────────────────────────────────────
   // Derive all rendering cost parameters from the current quality tier.  This
   // object is a small immutable constant reference — no allocation per frame.
-  const qc = getQualityConfig(graphicsQuality);
+  const qcBase = getQualityConfig(graphicsQuality);
+
+  // Adaptive quality: when persistently over budget, halve expensive caps to
+  // recover frame rate.  Only the mote count and light counts are reduced; the
+  // bloom and sunbeam enable flags are left unchanged so the visual change is
+  // minimal and the player is unlikely to notice on a transient stall.
+  const qc = isAdaptiveReductionActive ? {
+    ...qcBase,
+    maxDustMoteCount:        Math.max(32, qcBase.maxDustMoteCount       >> 1),
+    maxDynamicLightCount:    Math.max(4,  qcBase.maxDynamicLightCount   >> 1),
+    maxParticleLightCount:   Math.max(4,  qcBase.maxParticleLightCount  >> 1),
+    maxDecorationBloomCount: Math.max(16, qcBase.maxDecorationBloomCount >> 1),
+  } : qcBase;
 
   // Apply quality-dependent bloom parameters.  Mutates the BloomSystem's
   // internal config object in place — no resize needed since glowTargetScale
@@ -627,12 +671,13 @@ export function renderFrame(r: RenderFrameContext): void {
   if (isDarkRoom) {
     if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_LIGHTING);
 
-    // Collect viewport-visible decoration lights into the module-level scratch
-    // array (cleared inside collectDecorationLights), capped by quality tier.
-    // This avoids allocating a new LightSourcePx[] array every frame.
-    collectDecorationLights(
-      _scratchLights, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL,
-      qc.maxDynamicLightCount, virtualWidthPx, virtualHeightPx,
+    // Collect viewport-visible decoration lights into the flat scratch buffer.
+    // BUILD 272: collectDecorationLights now writes directly into the typed
+    // array and returns the updated count, eliminating per-frame object-literal
+    // allocations.
+    _scratchLightCount = collectDecorationLights(
+      _scratchLights, 0, qc.maxDynamicLightCount,
+      cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx,
     );
 
     // ── Authored local light sources (see RoomLightSourceDef) ──────────────
@@ -642,14 +687,11 @@ export function renderFrame(r: RenderFrameContext): void {
     // mapped onto both the inner-radius fraction (brighter → wider fully-lit
     // core) and a radius scalar so low-brightness lights feel dimmer.
     //
-    // NOTE: colour is stored on RoomLightSourceDef but the DarkRoom overlay
-    // currently uses an achromatic darkness mask, so colour is not applied
-    // here yet.  This is consistent with the existing decoration-light path
-    // and matches phase-1 scope (see task spec §9).  The colour data is
-    // preserved end-to-end for a future coloured-light pass.
+    // BUILD 272: colour (colorR/G/B) is now forwarded to the flat light buffer
+    // and consumed by the DarkRoomOverlay's coloured additive pass.
     if (currentRoom.lightSources) {
       for (const ls of currentRoom.lightSources) {
-        if (_scratchLights.length >= qc.maxDynamicLightCount) break;
+        if (_scratchLightCount >= qc.maxDynamicLightCount) break;
         const bPct = Math.max(0, Math.min(100, ls.brightnessPct)) / 100;
         if (bPct <= 0) continue;
         const worldX = (ls.xBlock + 0.5) * BLOCK_SIZE_SMALL;
@@ -662,12 +704,7 @@ export function renderFrame(r: RenderFrameContext): void {
         if (lx + radiusPx < 0 || lx - radiusPx > virtualWidthPx) continue;
         if (ly + radiusPx < 0 || ly - radiusPx > virtualHeightPx) continue;
         const innerFraction = 0.1 + 0.3 * bPct;
-        _scratchLights.push({
-          xPx: lx,
-          yPx: ly,
-          radiusPx,
-          innerFraction,
-        });
+        _pushLight(lx, ly, radiusPx, innerFraction, ls.colorR, ls.colorG, ls.colorB);
       }
     }
 
@@ -679,12 +716,11 @@ export function renderFrame(r: RenderFrameContext): void {
       if (c.isPlayerFlag === 1 && c.isAliveFlag === 1) { playerSnap = c; break; }
     }
     if (playerSnap !== undefined) {
-      _scratchLights.push({
-        xPx:          playerSnap.positionXWorld * zoom + ox,
-        yPx:          playerSnap.positionYWorld * zoom + oy,
-        radiusPx:     38 * zoom,
-        innerFraction: 0.18,
-      });
+      _pushLight(
+        playerSnap.positionXWorld * zoom + ox,
+        playerSnap.positionYWorld * zoom + oy,
+        38 * zoom, 0.18,
+      );
     }
 
     // Alive Physical (golden) dust particles each contribute a small light,
@@ -700,12 +736,7 @@ export function renderFrame(r: RenderFrameContext): void {
       // Viewport cull particle lights.
       if (plx + plr < 0 || plx - plr > virtualWidthPx) continue;
       if (ply + plr < 0 || ply - plr > virtualHeightPx) continue;
-      _scratchLights.push({
-        xPx:          plx,
-        yPx:          ply,
-        radiusPx:     plr,
-        innerFraction: 0.05,
-      });
+      _pushLight(plx, ply, plr, 0.05);
       particleLightCount++;
     }
 
@@ -741,15 +772,10 @@ export function renderFrame(r: RenderFrameContext): void {
     for (let bi = 0; bi < r.previewBubbleCount; bi++) {
       const b = r.previewBubbles[bi];
       if (b.opacity <= 0 || b.radiusPx <= 0) continue;
-      _scratchLights.push({
-        xPx:          b.centerXPx,
-        yPx:          b.centerYPx,
-        radiusPx:     b.radiusPx,
-        innerFraction: b.opacity * 0.4,
-      });
+      _pushLight(b.centerXPx, b.centerYPx, b.radiusPx, b.opacity * 0.4);
     }
 
-    darkRoomOverlay.render(ctx, _scratchLights, _scratchShadows);
+    darkRoomOverlay.render(ctx, _scratchLights, _scratchLightCount, _scratchShadows);
     if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_LIGHTING);
   }
 

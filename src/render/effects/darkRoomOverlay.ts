@@ -21,29 +21,36 @@
  *   pre-built for 8 quantized innerFraction values (0.05 … 0.40 in steps of
  *   0.05) and reused via drawImage scaling.  This eliminates all per-light
  *   gradient allocations in the hot render path.
+ *
+ * Light buffer interface (BUILD 272 — flat typed-array):
+ *   Callers write light data into a pre-allocated Float32Array using the
+ *   LIGHT_BUFFER_STRIDE interleaved layout.  This eliminates per-frame
+ *   LightSourcePx object-literal allocations in the hot path.
+ *
+ * Coloured lights (BUILD 272):
+ *   Light sources with non-white colour (colorR/G/B ≠ 255) receive an
+ *   additional additive compositing pass directly onto the target canvas.
+ *   This tints the illuminated area with the light's colour without changing
+ *   the achromatic darkness-mask path for white/neutral lights.
  */
 
 import type { ShadowCasterOccluderPx } from './shadowCaster';
 export type { ShadowCasterOccluderPx } from './shadowCaster';
 
-/** A single point light source in virtual-pixel coordinates. */
-export interface LightSourcePx {
-  /** Horizontal centre of the light, in virtual canvas pixels. */
-  xPx: number;
-  /** Vertical centre of the light, in virtual canvas pixels. */
-  yPx: number;
-  /**
-   * Outer radius of the illuminated circle (virtual pixels).
-   * Darkness fades from transparent at the centre to fully opaque at this radius.
-   */
-  radiusPx: number;
-  /**
-   * Inner radius fraction in [0, 1].  The circle interior up to
-   * (innerFraction * radiusPx) is fully transparent (maximum light).
-   * Defaults to 0.25 when omitted.
-   */
-  innerFraction?: number;
-}
+// ── Flat light-buffer layout ──────────────────────────────────────────────────
+// Each light occupies LIGHT_BUFFER_STRIDE consecutive floats:
+//   [0] xPx          — horizontal centre (virtual canvas pixels)
+//   [1] yPx          — vertical centre (virtual canvas pixels)
+//   [2] radiusPx     — outer radius (virtual canvas pixels)
+//   [3] innerFraction — fraction [0, 1] of radius that is fully lit
+//   [4] colorR       — red channel [0, 255]
+//   [5] colorG       — green channel [0, 255]
+//   [6] colorB       — blue channel [0, 255]
+
+/** Number of floats per light entry in the flat light buffer. */
+export const LIGHT_BUFFER_STRIDE = 7;
+/** Maximum number of lights that fit in the pre-allocated flat light buffer. */
+export const MAX_LIGHT_BUFFER_COUNT = 256;
 
 /** How opaque the darkness layer is.  1 = pitch black, < 1 = some ambient. */
 const DARKNESS_ALPHA = 0.96;
@@ -127,21 +134,25 @@ export class DarkRoomOverlay {
   }
 
   /**
-   * Builds the darkness mask and composites it over `targetCtx`.
+   * Builds the darkness mask, composites it over `targetCtx`, then applies
+   * a coloured additive pass for any non-white (tinted) light sources.
    *
    * Must be called while the target context's clip region is still active
    * (i.e. inside the room-clipped `ctx.save()` block in `renderFrame`).
    * The clip automatically constrains the darkness to the room rectangle.
    *
-   * @param targetCtx  The virtual canvas 2D context.
-   * @param lights     Light sources to illuminate (punch holes in darkness).
-   * @param shadows    Shadow occluder polygons drawn after the light holes,
-   *                   re-darkening parts of the illuminated area behind the
-   *                   player.  Defaults to an empty array (no shadows).
+   * @param targetCtx   The virtual canvas 2D context.
+   * @param lights      Pre-allocated flat Float32Array of interleaved light data
+   *                    (LIGHT_BUFFER_STRIDE floats per light).
+   * @param lightCount  Number of valid lights in `lights` (≤ MAX_LIGHT_BUFFER_COUNT).
+   * @param shadows     Shadow occluder polygons drawn after the light holes,
+   *                    re-darkening parts of the illuminated area behind the
+   *                    player.  Defaults to zero shadows.
    */
   render(
     targetCtx: CanvasRenderingContext2D,
-    lights: readonly LightSourcePx[],
+    lights: Float32Array,
+    lightCount: number,
     shadows: readonly ShadowCasterOccluderPx[] = [],
   ): void {
     const w = this._widthPx;
@@ -163,9 +174,12 @@ export class DarkRoomOverlay {
     ctx.globalCompositeOperation = 'destination-out';
     // Bilinear smoothing is important here so the scaled gradient remains soft.
     ctx.imageSmoothingEnabled = true;
-    for (let li = 0; li < lights.length; li++) {
-      const light   = lights[li];
-      const frac    = light.innerFraction ?? 0.25;
+    for (let li = 0; li < lightCount; li++) {
+      const base = li * LIGHT_BUFFER_STRIDE;
+      const xPx        = lights[base + 0];
+      const yPx        = lights[base + 1];
+      const radiusPx   = lights[base + 2];
+      const frac       = lights[base + 3];
       // Map frac → nearest pre-built key (integers 5, 10, 15, 20, 25, 30, 35, 40).
       // Multiply by 100 then divide by 5 to avoid float-division imprecision
       // when computing frac / 0.05 (e.g. 0.08 / 0.05 = 1.5999...).
@@ -173,24 +187,24 @@ export class DarkRoomOverlay {
       const holeCanvas = this._holeCanvases.get(mapKey);
       if (holeCanvas === undefined) {
         // Fallback: create gradient on the fly (should not happen in practice).
-        const innerR = light.radiusPx * frac;
+        const innerR = radiusPx * frac;
         const grad   = ctx.createRadialGradient(
-          light.xPx, light.yPx, Math.max(0, innerR),
-          light.xPx, light.yPx, light.radiusPx,
+          xPx, yPx, Math.max(0, innerR),
+          xPx, yPx, radiusPx,
         );
         grad.addColorStop(0,   'rgba(0,0,0,1)');
         grad.addColorStop(0.5, 'rgba(0,0,0,0.75)');
         grad.addColorStop(1,   'rgba(0,0,0,0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(light.xPx, light.yPx, light.radiusPx, 0, Math.PI * 2);
+        ctx.arc(xPx, yPx, radiusPx, 0, Math.PI * 2);
         ctx.fill();
       } else {
         // Fast path: drawImage scales the pre-rendered soft-gradient canvas.
         // The hole canvas has alpha=0 in the outer corners, so drawing a full
         // square is safe — transparent pixels have no effect in destination-out.
-        const d = 2 * light.radiusPx;
-        ctx.drawImage(holeCanvas, light.xPx - light.radiusPx, light.yPx - light.radiusPx, d, d);
+        const d = 2 * radiusPx;
+        ctx.drawImage(holeCanvas, xPx - radiusPx, yPx - radiusPx, d, d);
       }
     }
 
@@ -263,5 +277,55 @@ export class DarkRoomOverlay {
     targetCtx.imageSmoothingEnabled = false;
     targetCtx.drawImage(this._canvas, 0, 0);
     targetCtx.restore();
+
+    // ── Step 4: coloured light additive pass (BUILD 272) ─────────────────────
+    // For each light source with a non-white colour (R, G, B ≠ 255), draw a
+    // soft radial gradient with 'lighter' (additive) compositing directly onto
+    // the target canvas.  This tints the illuminated area with the light's
+    // colour.  Achromatic / white lights are skipped so the common case
+    // (white decorative glows, the player lantern) incurs no extra draw calls.
+    //
+    // The gradient is created on-the-fly here because it depends on position
+    // (which changes with the camera) and colour (which is per-light).  Since
+    // coloured lights are rare in practice (designer-placed only), this is an
+    // acceptable trade-off versus building a complex colour-keyed cache.
+    let hasColouredLight = false;
+    for (let li = 0; li < lightCount; li++) {
+      const base = li * LIGHT_BUFFER_STRIDE;
+      const cr = lights[base + 4];
+      const cg = lights[base + 5];
+      const cb = lights[base + 6];
+      if (cr < 255 || cg < 255 || cb < 255) { hasColouredLight = true; break; }
+    }
+
+    if (hasColouredLight) {
+      targetCtx.save();
+      targetCtx.globalCompositeOperation = 'lighter';
+      for (let li = 0; li < lightCount; li++) {
+        const base = li * LIGHT_BUFFER_STRIDE;
+        const cr = lights[base + 4];
+        const cg = lights[base + 5];
+        const cb = lights[base + 6];
+        // Skip achromatic lights to avoid unnecessary gradient draws.
+        if (cr >= 255 && cg >= 255 && cb >= 255) continue;
+        const xPx      = lights[base + 0];
+        const yPx      = lights[base + 1];
+        const radiusPx = lights[base + 2];
+        const frac     = lights[base + 3];
+        // Build a soft radial gradient: full colour at inner radius, transparent
+        // at outer radius.  Max alpha is kept low (0.30) so colours tint rather
+        // than blow out the scene.
+        const innerR = radiusPx * frac;
+        const colGrad = targetCtx.createRadialGradient(xPx, yPx, Math.max(0, innerR), xPx, yPx, radiusPx);
+        colGrad.addColorStop(0,   `rgba(${cr},${cg},${cb},0.30)`);
+        colGrad.addColorStop(0.5, `rgba(${cr},${cg},${cb},0.12)`);
+        colGrad.addColorStop(1,   `rgba(${cr},${cg},${cb},0)`);
+        targetCtx.fillStyle = colGrad;
+        targetCtx.beginPath();
+        targetCtx.arc(xPx, yPx, radiusPx, 0, Math.PI * 2);
+        targetCtx.fill();
+      }
+      targetCtx.restore();
+    }
   }
 }

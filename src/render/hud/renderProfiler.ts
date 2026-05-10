@@ -189,6 +189,17 @@ export class RenderProfiler {
   }
 
   /**
+   * Returns the exponentially-smoothed average frame time (milliseconds).
+   *
+   * Used by the adaptive quality system in gameScreen.ts to decide whether
+   * to lower quality caps.  Returns 0 before any frames have been recorded.
+   * Safe to call every RAF frame — reads from a pre-smoothed scalar.
+   */
+  getAvgFrameMs(): number {
+    return this._smoothedMs[STAGE_TOTAL];
+  }
+
+  /**
    * Compute the approximate 1% low FPS from the ring buffer.
    * Finds the worst 3 frame times (allocation-free via _worstScratch) and
    * averages them, then converts to FPS.  Returns 0 when the buffer is empty.
