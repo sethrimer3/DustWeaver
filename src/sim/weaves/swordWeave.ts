@@ -252,12 +252,19 @@ export function tickSwordWeave(
   player: ClusterState,
   isShieldHeld: boolean,
 ): boolean {
+  // ── Dormant guard: no motes configured → sword stays hidden in ORBIT ────
+  // When the player has no mote slots (no dust bound to the secondary weave),
+  // the sword cannot exist.  Keep the FSM in ORBIT so the renderer skips
+  // drawing, and return false so no shield crescent is attempted via this path.
+  if (world.moteSlotCount === 0) {
+    world.swordWeaveStateEnum = SWORD_STATE_ORBIT;
+    return false;
+  }
+
   // ── Phase 6: compute current blade length from available motes ──────────
   const availableCount = getAvailableMoteSlotCount(world);
   const activeSwordMoteCount = Math.min(MAX_SWORD_BLADE_MOTES, availableCount);
-  const lengthRatio = world.moteSlotCount > 0
-    ? activeSwordMoteCount / MAX_SWORD_BLADE_MOTES
-    : 1.0;  // full reach when no mote queue configured
+  const lengthRatio = activeSwordMoteCount / MAX_SWORD_BLADE_MOTES;
   world.swordWeaveLengthRatio = lengthRatio;
   const currentReachWorld = SWORD_REACH_WORLD * Math.max(lengthRatio, 0.0);
 

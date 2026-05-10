@@ -9,19 +9,47 @@
  *
  * Placement: call render() BEFORE rendering the dark-ambient overlay so beams
  * appear behind walls but above the background.
+ *
+ * Performance (BUILD 272):
+ *   Linear gradients are cached per beam and invalidated only when the beam's
+ *   virtual-pixel-space endpoints shift by more than GRADIENT_REUSE_THRESHOLD_PX
+ *   (0.5 px).  The shimmer animation is applied via ctx.globalAlpha rather than
+ *   being baked into the gradient colour stops, so the cached gradient object
+ *   remains valid across frames while the room is stationary.  createLinearGradient
+ *   is now called at most once per beam per room visit rather than every frame.
  */
 
 import type { RoomDef, RoomSunbeamDef } from '../../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 import { isScreenRectVisible } from '../viewportCull';
 
+/** Endpoint drift (virtual px) at which the cached gradient is rebuilt. */
+const GRADIENT_REUSE_THRESHOLD_PX = 0.5;
+
+/** Maximum number of sunbeams supported per room (pre-allocated cache arrays). */
+const MAX_SUNBEAMS = 64;
+
 export class SunbeamRenderer {
   private beams: readonly RoomSunbeamDef[] = [];
   /** Whether sunbeams are enabled (wired to the quality config). */
   private _isEnabled = true;
 
+  // ── Per-beam gradient cache ──────────────────────────────────────────────
+  // Pre-allocated arrays: null entries mean no gradient cached for that beam slot.
+  private readonly _cachedGrads: (CanvasGradient | null)[] = new Array<CanvasGradient | null>(MAX_SUNBEAMS).fill(null);
+  /** Cached origin X (virtual px) for each beam's last gradient build. */
+  private readonly _cacheOriginX = new Float32Array(MAX_SUNBEAMS);
+  /** Cached origin Y (virtual px) for each beam's last gradient build. */
+  private readonly _cacheOriginY = new Float32Array(MAX_SUNBEAMS);
+  /** Cached tip X (virtual px) for each beam's last gradient build. */
+  private readonly _cacheTipX    = new Float32Array(MAX_SUNBEAMS);
+  /** Cached tip Y (virtual px) for each beam's last gradient build. */
+  private readonly _cacheTipY    = new Float32Array(MAX_SUNBEAMS);
+
   initFromRoom(room: RoomDef): void {
     this.beams = room.sunbeams ?? [];
+    // Invalidate all cached gradients when a new room is loaded.
+    this._cachedGrads.fill(null);
   }
 
   /** Toggle sunbeam rendering on/off based on graphics quality tier. */
@@ -103,17 +131,68 @@ export class SunbeamRenderer {
     ctx.lineTo(tx, ty);
     ctx.closePath();
 
-    // Gradient from opaque at base to transparent at tip.
-    const grad = ctx.createLinearGradient(originXPx, originYPx, tx, ty);
-    const r = beam.colorR;
-    const g = beam.colorG;
-    const b = beam.colorB;
-    grad.addColorStop(0,   `rgba(${r},${g},${b},${(alpha * 0.6).toFixed(3)})`);
-    grad.addColorStop(0.4, `rgba(${r},${g},${b},${(alpha * 0.25).toFixed(3)})`);
-    grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+    // ── Gradient cache (BUILD 272) ──────────────────────────────────────────
+    // Reuse the cached gradient unless the beam's pixel-space endpoints have
+    // drifted by more than GRADIENT_REUSE_THRESHOLD_PX (0.5 px).  The shimmer
+    // animation is factored out into ctx.globalAlpha so the gradient's colour
+    // stops remain constant (base ratios 0.60, 0.25, 0.00) and the cache stays
+    // valid across frames while the camera is not moving.
+    //
+    // Guard: if beamIndex is out of the pre-allocated cache range, skip caching
+    // and fall back to a fresh gradient (the fallback is still cheaper than the
+    // old path which always created a new gradient, and avoids cache-slot 0
+    // being corrupted by an out-of-range beam).
+    if (beamIndex >= MAX_SUNBEAMS) {
+      // Out-of-range: draw without caching.
+      const r0 = beam.colorR;
+      const g0 = beam.colorG;
+      const b0 = beam.colorB;
+      const fallbackGrad = ctx.createLinearGradient(originXPx, originYPx, tx, ty);
+      fallbackGrad.addColorStop(0,   `rgba(${r0},${g0},${b0},0.600)`);
+      fallbackGrad.addColorStop(0.4, `rgba(${r0},${g0},${b0},0.250)`);
+      fallbackGrad.addColorStop(1,   `rgba(${r0},${g0},${b0},0)`);
+      const prevAlphaFb = ctx.globalAlpha;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = fallbackGrad;
+      ctx.fill();
+      ctx.globalAlpha = prevAlphaFb;
+      return;
+    }
 
-    ctx.fillStyle = grad;
+    const bi = beamIndex;
+    const dx0 = Math.abs(originXPx - this._cacheOriginX[bi]);
+    const dy0 = Math.abs(originYPx - this._cacheOriginY[bi]);
+    const dx1 = Math.abs(tx - this._cacheTipX[bi]);
+    const dy1 = Math.abs(ty - this._cacheTipY[bi]);
+    const needsRebuild =
+      this._cachedGrads[bi] === null ||
+      dx0 > GRADIENT_REUSE_THRESHOLD_PX ||
+      dy0 > GRADIENT_REUSE_THRESHOLD_PX ||
+      dx1 > GRADIENT_REUSE_THRESHOLD_PX ||
+      dy1 > GRADIENT_REUSE_THRESHOLD_PX;
+
+    if (needsRebuild) {
+      const r = beam.colorR;
+      const g = beam.colorG;
+      const b = beam.colorB;
+      const newGrad = ctx.createLinearGradient(originXPx, originYPx, tx, ty);
+      // Colour stops use base ratios (0.60, 0.25); shimmer is applied via globalAlpha.
+      newGrad.addColorStop(0,   `rgba(${r},${g},${b},0.600)`);
+      newGrad.addColorStop(0.4, `rgba(${r},${g},${b},0.250)`);
+      newGrad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+      this._cachedGrads[bi]    = newGrad;
+      this._cacheOriginX[bi] = originXPx;
+      this._cacheOriginY[bi] = originYPx;
+      this._cacheTipX[bi]    = tx;
+      this._cacheTipY[bi]    = ty;
+    }
+
+    // Apply shimmer intensity via globalAlpha (multiplied with gradient alpha).
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = this._cachedGrads[bi] as CanvasGradient;
     ctx.fill();
+    ctx.globalAlpha = prevAlpha;
   }
 }
 

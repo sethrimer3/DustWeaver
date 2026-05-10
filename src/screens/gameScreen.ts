@@ -81,6 +81,7 @@ import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { MAX_FALLING_BLOCK_GROUPS } from '../sim/fallingBlocks/fallingBlockTypes';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
+import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
 import { checkRoomTransitions } from './gameTransitions';
 import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
@@ -261,8 +262,39 @@ export function startGameScreen(
   /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
   const consumedSkillTombKeySet: Set<string> = new Set();
 
-  /** Initialises (or re-initialises) world state for the given room. */
+  /** Initialises (or re-initialises) world state for the given room.
+   *
+   * Internally runs _makeLoadRoomPhases() to completion synchronously.
+   * For room transitions, prefer startAsyncLoadRoom() so the work is
+   * spread across multiple RAF frames while the screen is blacked out.
+   */
   function loadRoom(room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera = false): void {
+    const gen = _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, preserveCamera);
+    // Run all phases synchronously (for initial load / save-load paths).
+    let result = gen.next();
+    while (!result.done) result = gen.next();
+  }
+
+  /**
+   * Generator that executes the room-load in 6 incremental phases.
+   * Yields between each phase so the RAF loop can interleave rendering
+   * (keeping the screen black with the fade overlay) while loading.
+   *
+   * Phase A — room metadata + world reset   (~1 ms)
+   * Phase B — spawn player + particles      (~1 ms)
+   * Phase C — spawn enemies                 (~5–15 ms on complex rooms)
+   * Phase D — background particles + walls  (~5–10 ms)
+   * Phase E — hazards/ropes/blocks/dialogue (~2–5 ms)
+   * Phase F — env effects + rendering setup (~1 ms)
+   */
+  function* _makeLoadRoomPhases(
+    room: RoomDef,
+    spawnXBlock: number,
+    spawnYBlock: number,
+    preserveCamera: boolean,
+  ): Generator<void, void, void> {
+
+    // ── Phase A: room metadata + world reset ──────────────────────────────
     currentRoom = room;
     bgColor = worldBgColor(room.worldNumber);
     roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
@@ -274,10 +306,6 @@ export function startGameScreen(
     } else {
       setActiveBlockSpriteWorld(room.worldNumber);
     }
-    // Build the ambientLightBlockers tile-key set from authored room data.
-    // These tiles are opaque to the ambient-light solver in
-    // `blockSpriteRenderer` (but NOT to collision and NOT to local lights
-    // — see `roomDef.ts` for the full authoring model).
     let blockerKeys: Set<string> | undefined;
     let darkBlockerKeys: Set<string> | undefined;
     if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
@@ -299,18 +327,13 @@ export function startGameScreen(
       blockerKeys,
     );
     setActiveDarkAmbientBlockers(darkBlockerKeys);
-
-    // Notify the music manager about the new room
     musicManager.notifyRoomEntered(room.songId ?? '_continue');
 
-    // Preserve the player's current health across room transitions.
-    // On the very first load there is no existing player, so fall back to full health.
     let carryHealthPoints = PLAYER_INITIAL_HEALTH;
     if (world.clusters.length > 0 && world.clusters[0].isPlayerFlag === 1) {
       carryHealthPoints = world.clusters[0].healthPoints;
     }
 
-    // Reset world state
     world.tick = 0;
     world.particleCount = 0;
     world.clusters.length = 0;
@@ -318,72 +341,58 @@ export function startGameScreen(
     world.worldWidthWorld = roomWidthWorld;
     world.worldHeightWorld = roomHeightWorld;
 
-    // Reset grapple state
     world.isGrappleActiveFlag     = 0;
     world.isGrappleMissActiveFlag = 0;
     world.isGrappleRetractingFlag = 0;
-    world.isGrappleZipActiveFlag = 0;
+    world.isGrappleZipActiveFlag  = 0;
     world.isGrappleStuckFlag      = 0;
     world.hasGrappleChargeFlag    = 1;
     world.grappleParticleStartIndex = -1;
 
-    // Reset Radiant Tether boss state
     resetRadiantTetherState();
 
-    // Spawn player at the given block position
+    yield; // ── Phase A complete ─────────────────────────────────────────────
+
+    // ── Phase B: spawn player + particles + mote queue ───────────────────
     const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
     const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
     const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
-    // Restore health carried from the previous room (createClusterState sets both
-    // healthPoints and maxHealthPoints to PLAYER_INITIAL_HEALTH; we only override
-    // healthPoints so the health bar displays correctly).
-    // Clamp to maxHealthPoints so an out-of-range carry value cannot violate the invariant.
     playerCluster.healthPoints = Math.min(carryHealthPoints, playerCluster.maxHealthPoints);
     world.clusters.push(playerCluster);
 
-    // Spawn player dust particles based on capacity model.
-    // If the player has dust containers and unlocked dust, use capacity-based spawning.
-    // If the player has a weave loadout with bound dust, use that for weave-slot assignment.
-    // Otherwise (brand new profile with nothing), spawn no particles.
     const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
     const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
       || playerWeaveLoadout.secondary.boundDust.length > 0;
 
     if (hasWeaveBoundDust) {
-      // Player has dust bound to weaves — use weave loadout spawning
       spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
     } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
-      // Player has unlocked dust and capacity but no weave bindings.
-      // Spawn particles based on capacity (e.g., auto-assigned Golden Dust).
       const dustKind = progress.unlockedDustKinds[0];
       const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
       if (particleCount > 0) {
         spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
       }
     }
-    // else: brand new profile with nothing — no particles spawned
 
-    // Apply weave IDs to world state for combat dispatch
     world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
     world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
-    // Phase 8: set orbit source flag — 1 if Storm is primary, 0 for inventory source
     world.isMoteSourceOrbitFlag = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
 
-    // Initialise the ordered mote queue from the player particles just spawned.
-    // Must be called after player particle spawning and before enemy spawning
-    // (enemy particles are excluded by ownerEntityId, but calling early is safer).
     initMoteQueueFromParticles(world, playerCluster.entityId);
+    resetSwordWeaveState(world);
 
-    // Spawn enemies
+    yield; // ── Phase B complete ─────────────────────────────────────────────
+
+    // ── Phase C: spawn enemies (5–15 ms on complex rooms) ────────────────
     spawnEnemyClusters(world, room.enemies, 2, levelRng);
 
-    // Spawn background Fluid particles
+    yield; // ── Phase C complete ─────────────────────────────────────────────
+
+    // ── Phase D: background particles + grapple chains + walls ───────────
     spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
 
-    // Reserve grapple chain particle slots
     initGrappleChainParticles(world, 1);
 
-    // Reserve grapple hunter chain particle slots
     for (let ci = 0; ci < world.clusters.length; ci++) {
       const cl = world.clusters[ci];
       if (cl.isGrappleHunterFlag === 1) {
@@ -391,28 +400,19 @@ export function startGameScreen(
       }
     }
 
-    // Load walls
     loadRoomWalls(world, room);
 
-    // Load environmental hazards (after walls so breakable blocks can be added as walls)
+    yield; // ── Phase D complete ─────────────────────────────────────────────
+
+    // ── Phase E: hazards + ropes + blocks + grasshoppers + dialogue ──────
     loadRoomHazards(world, room);
-
-    // Load ropes
     loadRoomRopes(world, room);
-
-    // Load falling block groups (after walls so group wall slots come after static geometry)
     loadRoomFallingBlocks(world, room);
-
-    // Reset and spawn grasshoppers
     loadRoomGrasshoppers(world, room);
 
-    // Close any active dialogue when loading a new room.
     closeDialogue(dialogueState);
     dialogueRenderer.hide();
-    // Reset fired trigger tracking — triggers fire once per room visit.
     firedDialogueTriggerUids = new Set<number>();
-    // Pre-convert room conversation defs to runtime Conversation objects so
-    // the trigger detection path never allocates per frame (Section 5 guideline).
     const roomTriggers = room.dialogueTriggers ?? [];
     cachedRoomConversations = new Array<Conversation>(roomTriggers.length);
     for (let _ti = 0; _ti < roomTriggers.length; _ti++) {
@@ -428,39 +428,29 @@ export function startGameScreen(
       };
     }
 
-    // Spawn dust pile particles (unowned Gold Dust for Storm Weave attraction)
     spawnAllDustPiles(world);
 
-    // Init dust
+    yield; // ── Phase E complete ─────────────────────────────────────────────
+
+    // ── Phase F: environment effects + rendering state + camera setup ─────
     environmentalDust.initFromWorld(world, room.worldNumber);
     sunbeamRenderer.initFromRoom(room);
     atmosphericLightDust.initFromRoom(room);
 
-    // Reset procedural cloak on room transition
     playerCloak.reset();
     phantomCloak.reset();
 
-    // Reset decoration wave state for new room
     decorationWaveState.reset(room.decorations?.length ?? 0);
 
-    // Build and cache wall decorations and their center coordinates once per
-    // room load so renderFrame() never allocates a WallDecoration[] each frame.
     cachedWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
     for (let _di = 0; _di < cachedWallDecorations.length; _di++) {
       const _d = cachedWallDecorations[_di];
-      // Decoration center X = left edge + half block width (mid-block horizontally).
       cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
       cachedDecorationCenterY[_di] = _d.worldAnchorYPx;
     }
 
-    // Rebuild the reusable snapshot cluster pool to match this room's cluster
-    // count so updateSnapshotInPlace() never needs to grow the pool mid-frame.
     resetReusableSnapshot(reusableSnapshot, world);
 
-    // Seed the render-interpolation buffers with the freshly spawned cluster
-    // positions so the very first rendered frame has a valid prevPos baseline.
-    // Without this, prevPos stays at zero until the first physics tick runs,
-    // which can show a one-frame teleport glitch on high-refresh-rate displays.
     if (prevClusterPosX.length < world.clusters.length) {
       prevClusterPosX = new Float32Array(world.clusters.length * 2);
       prevClusterPosY = new Float32Array(world.clusters.length * 2);
@@ -470,13 +460,8 @@ export function startGameScreen(
       prevClusterPosY[ci] = world.clusters[ci].positionYWorld;
     }
 
-    // Init save tomb renderer (with room walls for floor detection)
     skillTombRenderer.init(room.saveTombs, room.walls);
-
-    // Init skill tomb effect renderer
     skillTombEffectRenderer.init(room.skillTombs);
-    // Remove any skill tombs that were already consumed in this session.
-    // Iterate in reverse so splice indices remain valid.
     const roomSkillTombsForInit = room.skillTombs ?? [];
     for (let i = roomSkillTombsForInit.length - 1; i >= 0; i--) {
       const st = roomSkillTombsForInit[i];
@@ -485,25 +470,20 @@ export function startGameScreen(
       }
     }
 
-    // Track explored room
     if (progress && !progress.exploredRoomIds.includes(room.id)) {
       progress.exploredRoomIds.push(room.id);
     }
 
-    // Snap camera to player position (skip when called from editor to preserve editor camera)
     if (!preserveCamera) {
       snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
     }
 
-    // Trigger async loading of block-sprite images for this room's themes.
-    // Calling preloadRoomThemeSprites() fires loadImg() on every sprite URL —
-    // already cached URLs are instant no-ops so re-entering a room is free.
     preloadRoomThemeSprites(room);
 
-    // Build the edge extension cache for the new room.
-    // Must run after loadRoomWalls() so wall geometry is finalised.
-    // Invalidates any previous cache via reference replacement.
+    // Must run after loadRoomWalls() (Phase D) so wall geometry is finalised.
     edgeExtensionCache = buildEdgeExtensionCache(room);
+
+    // Generator complete — Phase F has no trailing yield.
   }
 
   const world = createWorldState(FIXED_DT_MS, 42);
@@ -629,6 +609,19 @@ export function startGameScreen(
     preVY: number;
   }
   let pendingRoomTransition: PendingRoomTransition | null = null;
+
+  /**
+   * Active async room-load generator.  Non-null while a generator-based
+   * incremental load is in progress (i.e., the screen is blacked out and we
+   * are advancing the load one phase per RAF frame).  Set to null when the
+   * generator finishes; the fade-in then begins.
+   */
+  let pendingAsyncLoad: Generator<void, void, void> | null = null;
+  /**
+   * Transition data saved when an async load starts so the post-load camera
+   * entry offset and velocity restore can be applied once all phases complete.
+   */
+  let pendingAsyncLoadPost: PendingRoomTransition | null = null;
 
   // ── Transition debug stats ────────────────────────────────────────────────
   // Populated each frame and forwarded to the render profiler debug panel.
@@ -776,7 +769,31 @@ export function startGameScreen(
   let rafHandle = 0;
   let interactInputPulseMs = 0;
 
-  // ── Pause / debug / settings state ──────────────────────────────────────
+  // ── Adaptive quality state ───────────────────────────────────────────────
+  // Monitors rolling average frame time.  When the average exceeds the
+  // over-budget threshold for ADAPTIVE_TRIGGER_FRAMES consecutive frames,
+  // adaptive reduction kicks in (lower quality caps, profiler warning).
+  // When the average drops below the recovery threshold for
+  // ADAPTIVE_RECOVERY_FRAMES consecutive frames, normal quality is restored.
+  //
+  // Thresholds:
+  //   Over budget  : avg > 33 ms (~30 fps) for 90 consecutive frames (~1.5 s)
+  //   Recovery     : avg < 20 ms (~50 fps) for 180 consecutive frames (~3 s)
+  /** Target budget for one render frame (33 ms ≈ 30 fps minimum). */
+  const ADAPTIVE_OVER_BUDGET_MS = 33;
+  /** Recovery threshold: avg frame must drop below this to restore quality. */
+  const ADAPTIVE_RECOVERY_MS = 20;
+  /** Consecutive frames over budget before reducing quality. */
+  const ADAPTIVE_TRIGGER_FRAMES = 90;
+  /** Consecutive frames under recovery threshold before restoring quality. */
+  const ADAPTIVE_RECOVERY_FRAMES = 180;
+
+  let isAdaptiveReductionActive = false;
+  /** Consecutive frames the avg has been above the over-budget threshold. */
+  let adaptiveOverBudgetStreak = 0;
+  /** Consecutive frames the avg has been below the recovery threshold. */
+  let adaptiveRecoveryStreak = 0;
+
   let isPaused = false;
   let pauseMenuCleanup: (() => void) | null = null;
   let isDebugMode = false;
@@ -952,6 +969,38 @@ export function startGameScreen(
     // Record raw frame time to the profiler ring buffer unconditionally so
     // frame-pacing stats are available immediately when debug mode is enabled.
     renderProfiler.recordFrameTime(elapsedMs);
+
+    // ── Adaptive quality update ───────────────────────────────────────────
+    // Check the EMA average frame time (populated by the profiler) and toggle
+    // adaptive reduction when the average is persistently over/under budget.
+    // This runs every frame but reads only a single cached float from the
+    // profiler — no per-frame allocations.
+    {
+      const avgMs = renderProfiler.getAvgFrameMs();
+      if (avgMs > 0) {
+        if (avgMs > ADAPTIVE_OVER_BUDGET_MS) {
+          adaptiveOverBudgetStreak++;
+          adaptiveRecoveryStreak = 0;
+        } else if (avgMs < ADAPTIVE_RECOVERY_MS) {
+          adaptiveRecoveryStreak++;
+          adaptiveOverBudgetStreak = 0;
+        } else {
+          // Between thresholds: neither streak accumulates.
+          adaptiveOverBudgetStreak = 0;
+          adaptiveRecoveryStreak = 0;
+        }
+
+        if (!isAdaptiveReductionActive && adaptiveOverBudgetStreak >= ADAPTIVE_TRIGGER_FRAMES) {
+          isAdaptiveReductionActive = true;
+          adaptiveOverBudgetStreak = 0;
+          renderProfiler.setAdaptiveReduction(true);
+        } else if (isAdaptiveReductionActive && adaptiveRecoveryStreak >= ADAPTIVE_RECOVERY_FRAMES) {
+          isAdaptiveReductionActive = false;
+          adaptiveRecoveryStreak = 0;
+          renderProfiler.setAdaptiveReduction(false);
+        }
+      }
+    }
 
     hudState.frameTimeMs = elapsedMs;
     fpsAccMs += elapsedMs;
@@ -1134,40 +1183,60 @@ export function startGameScreen(
       }
       if (transitionFadeDir === 1 && transitionFadeAlpha >= 1) {
         transitionFadeAlpha = 1;
-        // Fade fully black — execute the queued room load now.
-        if (pendingRoomTransition !== null) {
-          const args = pendingRoomTransition;
+        // Fade fully black — begin incremental room load via generator.
+        // While the generator is running, the screen stays black (transitionFadeDir
+        // remains +1) and we advance one phase per RAF frame.  When all phases
+        // complete we apply post-load setup and start the fade-in.
+        if (pendingRoomTransition !== null && pendingAsyncLoad === null) {
+          pendingAsyncLoadPost = pendingRoomTransition;
           pendingRoomTransition = null;
-          loadRoom(args.room, args.spawnX, args.spawnY);
-          // Preload sprites for adjacent rooms in the background.
-          preloadAdjacentRoomAssets(currentRoom);
-          // Restore the player's pre-transition velocity for momentum continuity.
-          const newPlayer = world.clusters[0];
-          if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
-            newPlayer.velocityXWorld = args.preVX;
-            if (args.dir === 'up') {
-              newPlayer.velocityYWorld = args.preVY - PLAYER_JUMP_SPEED_WORLD;
-            } else {
-              newPlayer.velocityYWorld = args.preVY;
-            }
+          pendingAsyncLoad = _makeLoadRoomPhases(
+            pendingAsyncLoadPost.room,
+            pendingAsyncLoadPost.spawnX,
+            pendingAsyncLoadPost.spawnY,
+            false,
+          );
+        }
+        // Advance the generator by one phase this frame.
+        if (pendingAsyncLoad !== null) {
+          const loadResult = pendingAsyncLoad.next();
+          if (loadResult.done) {
+            // All phases complete — apply post-load setup.
+            pendingAsyncLoad = null;
+            const args = pendingAsyncLoadPost!;
+            pendingAsyncLoadPost = null;
 
-            // ── Camera entry offset ─────────────────────────────────────────
-            // Push the camera slightly "behind" the spawn direction so it lerps
-            // naturally to the player instead of snapping.  Gives the sense of
-            // entering from a direction without a separate slide animation.
-            // clampCameraToRoom will prevent this from going OOB on small rooms.
-            const entryOffsetWorld = TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS * BLOCK_SIZE_SMALL;
-            let camEntryX = newPlayer.positionXWorld;
-            let camEntryY = newPlayer.positionYWorld;
-            if (args.dir === 'right') camEntryX -= entryOffsetWorld;
-            else if (args.dir === 'left') camEntryX += entryOffsetWorld;
-            else if (args.dir === 'down')  camEntryY -= entryOffsetWorld;
-            else /* 'up' */                camEntryY += entryOffsetWorld;
-            snapCamera(camera, camEntryX, camEntryY, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
+            // Preload sprites for adjacent rooms in the background.
+            preloadAdjacentRoomAssets(currentRoom);
+            // Restore the player's pre-transition velocity for momentum continuity.
+            const newPlayer = world.clusters[0];
+            if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
+              newPlayer.velocityXWorld = args.preVX;
+              if (args.dir === 'up') {
+                newPlayer.velocityYWorld = args.preVY - PLAYER_JUMP_SPEED_WORLD;
+              } else {
+                newPlayer.velocityYWorld = args.preVY;
+              }
+
+              // ── Camera entry offset ─────────────────────────────────────────
+              // Push the camera slightly "behind" the spawn direction so it lerps
+              // naturally to the player instead of snapping.  Gives the sense of
+              // entering from a direction without a separate slide animation.
+              // clampCameraToRoom will prevent this from going OOB on small rooms.
+              const entryOffsetWorld = TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS * BLOCK_SIZE_SMALL;
+              let camEntryX = newPlayer.positionXWorld;
+              let camEntryY = newPlayer.positionYWorld;
+              if (args.dir === 'right') camEntryX -= entryOffsetWorld;
+              else if (args.dir === 'left') camEntryX += entryOffsetWorld;
+              else if (args.dir === 'down')  camEntryY -= entryOffsetWorld;
+              else /* 'up' */                camEntryY += entryOffsetWorld;
+              snapCamera(camera, camEntryX, camEntryY, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
+            }
+            // Start fading back in.
+            transitionFadeDir = -1;
           }
-          // Start fading back in.
-          transitionFadeDir = -1;
-        } else {
+          // Else: more phases remain; stay black and advance again next frame.
+        } else if (pendingRoomTransition === null) {
           transitionFadeDir = 0;
         }
       } else if (transitionFadeDir === -1 && transitionFadeAlpha <= 0) {
@@ -1176,9 +1245,8 @@ export function startGameScreen(
       }
     }
 
-    // While a transition fade is in progress, freeze player sim so the old
-    // room stays static and the new room isn't half-rendered before the fade.
-    if (transitionFadeDir !== 0 || pendingRoomTransition !== null) {
+    // While a transition fade or async load is in progress, freeze player sim.
+    if (transitionFadeDir !== 0 || pendingRoomTransition !== null || pendingAsyncLoad !== null) {
       // Still render (shows the fade overlay), but skip sim and input.
       // Fall through to the render call at the bottom of the frame function.
     } else {
@@ -1567,6 +1635,7 @@ export function startGameScreen(
       setTeleportFlashAlpha: (a: number) => { teleportFlashAlpha = a; },
       getPlayerDustCount,
       graphicsQuality: pauseMenuState.graphicsQuality,
+      isAdaptiveReductionActive,
       renderProfiler,
       renderAlpha,
       prevFallingBlockOffsetY,

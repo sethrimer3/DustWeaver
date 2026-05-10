@@ -20,7 +20,7 @@
 
 import type { RoomDecorationDef, DecorationKind } from '../../levels/roomDef';
 import type { BloomSystem } from './bloomSystem';
-import type { LightSourcePx } from './darkRoomOverlay';
+import { LIGHT_BUFFER_STRIDE } from './darkRoomOverlay';
 import type { ClusterSnapshot } from '../snapshot';
 import { isScreenCircleVisible } from '../viewportCull';
 
@@ -491,18 +491,19 @@ export function addDecorationBloom(
  *                       the viewport are not added to the array.
  */
 export function collectDecorationLights(
-  out: LightSourcePx[],
+  out: Float32Array,
+  startCount: number,
+  maxCount: number,
   decorations: readonly WallDecoration[],
   offsetXPx: number,
   offsetYPx: number,
   scalePx: number,
   blockSizePx: number,
-  maxLightCount: number,
   vpW: number,
   vpH: number,
-): void {
-  out.length = 0;
-  for (let i = 0; i < decorations.length && out.length < maxLightCount; i++) {
+): number {
+  let count = startCount;
+  for (let i = 0; i < decorations.length && count < maxCount; i++) {
     const d  = decorations[i];
     const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
     const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
@@ -512,12 +513,15 @@ export function collectDecorationLights(
       const ly = sy - Math.round(2 * scalePx);
       const lr = 14 * scalePx;
       if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
-      out.push({
-        xPx:           lx,
-        yPx:           ly,
-        radiusPx:      lr,
-        innerFraction: 0.1,
-      });
+      const base = count * LIGHT_BUFFER_STRIDE;
+      out[base + 0] = lx;
+      out[base + 1] = ly;
+      out[base + 2] = lr;
+      out[base + 3] = 0.1;
+      out[base + 4] = 255;
+      out[base + 5] = 255;
+      out[base + 6] = 255;
+      count++;
     } else if (d.kind === 'mushroom') {
       const h2    = _hash(d.seed, 0, 0xf00dface);
       const bw    = Math.round(blockSizePx * scalePx);
@@ -528,12 +532,15 @@ export function collectDecorationLights(
       const ly    = sy - (stemH + 1) * px;
       const lr    = 26 * scalePx;
       if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
-      out.push({
-        xPx:           lx,
-        yPx:           ly,
-        radiusPx:      lr,
-        innerFraction: 0.08,
-      });
+      const base = count * LIGHT_BUFFER_STRIDE;
+      out[base + 0] = lx;
+      out[base + 1] = ly;
+      out[base + 2] = lr;
+      out[base + 3] = 0.08;
+      out[base + 4] = 255;
+      out[base + 5] = 255;
+      out[base + 6] = 255;
+      count++;
     } else {
       // Vine: light at tip
       const h2    = _hash(d.seed, 0, 0xc0ffee77);
@@ -545,12 +552,16 @@ export function collectDecorationLights(
       const ly    = sy + vineH * px;
       const lr    = 18 * scalePx;
       if (!isScreenCircleVisible(lx, ly, lr, vpW, vpH)) continue;
-      out.push({
-        xPx:           lx,
-        yPx:           ly,
-        radiusPx:      lr,
-        innerFraction: 0.1,
-      });
+      const base = count * LIGHT_BUFFER_STRIDE;
+      out[base + 0] = lx;
+      out[base + 1] = ly;
+      out[base + 2] = lr;
+      out[base + 3] = 0.1;
+      out[base + 4] = 255;
+      out[base + 5] = 255;
+      out[base + 6] = 255;
+      count++;
     }
   }
+  return count;
 }
