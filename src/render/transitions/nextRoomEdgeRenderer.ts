@@ -37,8 +37,8 @@ const NEXT_ROOM_RENDER_THRESHOLD = 0.05;
  * @param ox             Camera X offset (world → screen).
  * @param oy             Camera Y offset (world → screen).
  * @param zoom           Camera zoom factor.
- * @param vpW            Viewport width (virtual pixels).
- * @param vpH            Viewport height (virtual pixels).
+ * @param viewportWidthPx   Viewport width (virtual pixels).
+ * @param viewportHeightPx  Viewport height (virtual pixels).
  * @param lightingEffect Current room lighting effect (e.g. 'Ambient', 'DarkRoom').
  */
 export function renderNextRoomFacingEdge(
@@ -47,8 +47,8 @@ export function renderNextRoomFacingEdge(
   ox: number,
   oy: number,
   zoom: number,
-  vpW: number,
-  vpH: number,
+  viewportWidthPx: number,
+  viewportHeightPx: number,
   lightingEffect: string,
 ): void {
   if (!preview.isActive) return;
@@ -84,8 +84,8 @@ export function renderNextRoomFacingEdge(
     const screenY = worldY * zoom + oy;
 
     // Viewport cull.
-    if (screenX + tileSizePx < 0 || screenX > vpW) continue;
-    if (screenY + tileSizePx < 0 || screenY > vpH) continue;
+    if (screenX + tileSizePx < 0 || screenX > viewportWidthPx) continue;
+    if (screenY + tileSizePx < 0 || screenY > viewportHeightPx) continue;
 
     // Use a modest fixed darkness so next-room tiles appear slightly darker
     // than the lit room interior, suggesting depth/distance.  In Ambient mode
