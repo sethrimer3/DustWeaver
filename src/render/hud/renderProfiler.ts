@@ -192,6 +192,10 @@ export class RenderProfiler {
    * Compute the approximate 1% low FPS from the ring buffer.
    * Finds the worst 3 frame times (allocation-free via _worstScratch) and
    * averages them, then converts to FPS.  Returns 0 when the buffer is empty.
+   *
+   * "1% low" here means: average the worst 1% of frames in the populated ring
+   * buffer (i.e., Math.ceil(count × 0.01) frames, capped at 3 by the scratch
+   * buffer size), then express the result as FPS.
    */
   private _getOnePercentLow(): number {
     const count = this._ringCount;
@@ -205,11 +209,11 @@ export class RenderProfiler {
       else if (t > s[1]) { s[2] = s[1]; s[1] = t; }
       else if (t > s[2]) { s[2] = t; }
     }
-    // 1% of RING_SIZE (256) = 2.56 → 3 worst frames.
-    const nWorst = Math.max(1, Math.ceil(count * 0.01));
+    // 1% of populated count (max 3 because scratch has 3 slots).
+    const nWorst = Math.min(3, Math.max(1, Math.ceil(count * 0.01)));
     let sum = 0;
-    for (let i = 0; i < nWorst && i < 3; i++) sum += s[i];
-    const avgWorstMs = sum / Math.min(nWorst, 3);
+    for (let i = 0; i < nWorst; i++) sum += s[i];
+    const avgWorstMs = sum / nWorst;
     return avgWorstMs > 0 ? 1000 / avgWorstMs : 0;
   }
 
@@ -301,7 +305,15 @@ export class RenderProfiler {
     ctx.fillStyle = 'rgba(0,0,0,0.60)';
     ctx.fillRect(padXPx - 4, nextPanelY - 4, panelWidth + 8, fpsPanelH);
     for (let i = 0; i < fpsLines.length; i++) {
-      ctx.fillStyle = i === 0 ? '#ffff60' : (i === 2 && this._longFrames50ms > 0 ? '#ff6060' : '#e0e080');
+      let lineColor: string;
+      if (i === 0) {
+        lineColor = '#ffff60';
+      } else if (i === 2 && this._longFrames50ms > 0) {
+        lineColor = '#ff6060'; // warn red when there are >50 ms frames
+      } else {
+        lineColor = '#e0e080';
+      }
+      ctx.fillStyle = lineColor;
       ctx.fillText(fpsLines[i], padXPx, nextPanelY + fontSizePx + i * lineHeightPx);
     }
     if (this._adaptiveReductionActive) {

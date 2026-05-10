@@ -167,7 +167,9 @@ export class DarkRoomOverlay {
       const light   = lights[li];
       const frac    = light.innerFraction ?? 0.25;
       // Map frac → nearest pre-built key (integers 5, 10, 15, 20, 25, 30, 35, 40).
-      const mapKey  = Math.max(5, Math.min(40, Math.round(frac / 0.05) * 5));
+      // Multiply by 100 then divide by 5 to avoid float-division imprecision
+      // when computing frac / 0.05 (e.g. 0.08 / 0.05 = 1.5999...).
+      const mapKey  = Math.max(5, Math.min(40, Math.round(frac * 100 / 5) * 5));
       const holeCanvas = this._holeCanvases.get(mapKey);
       if (holeCanvas === undefined) {
         // Fallback: create gradient on the fly (should not happen in practice).
