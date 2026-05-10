@@ -31,6 +31,7 @@ import {
   TRANSITION_REVEAL_MAX_BLOCKS,
   TRANSITION_REVEAL_DECAY_DIST_WORLD,
   TRANSITION_REVEAL_EASE_SPEED,
+  EDGE_EXTENSION_EXTRA_BLOCKS,
 } from './transitionConfig';
 
 // ── Local constants ────────────────────────────────────────────────────────────
@@ -65,6 +66,18 @@ export interface TransitionRevealState {
    * Null when no post-transition reveal is active.
    */
   postTransitionEdge: TransitionDirection | null;
+  /**
+   * Index into `currentRoom.transitions` for the transition currently driving
+   * the reveal (nearest NearTransition or the post-transition entry edge).
+   * -1 when no transition is active.  Updated each frame by `updateTransitionReveal`.
+   * Read by `updateTransitionPreviewContext` to resolve the connected room.
+   */
+  activeTransitionIndex: number;
+  /**
+   * Current reveal progress [0, 1]: 0 = no reveal, 1 = full max-blocks reveal.
+   * Derived each frame as |currentReveal| / maxRevealWorld.
+   */
+  revealProgress: number;
 }
 
 /** Create the initial reveal state (neutral, no reveal). */
@@ -73,6 +86,8 @@ export function createTransitionRevealState(): TransitionRevealState {
     currentRevealXWorld: 0,
     currentRevealYWorld: 0,
     postTransitionEdge: null,
+    activeTransitionIndex: -1,
+    revealProgress: 0,
   };
 }
 
@@ -89,12 +104,17 @@ export function createTransitionRevealState(): TransitionRevealState {
  * @param entryEdge  The side of the NEW room the player entered from.
  *                   (Opposite of the crossing direction in the old room.)
  *                   e.g., crossing a 'right' exit → entryEdge = 'left'.
+ * @param entryTransitionIndex  Index into the NEW room's `transitions` array
+ *                              for the entry transition (opposite-facing).
+ *                              -1 if not found; the context will still snap.
  */
 export function notifyTransitionRoomEntered(
   state: TransitionRevealState,
   entryEdge: TransitionDirection,
+  entryTransitionIndex: number = -1,
 ): void {
   state.postTransitionEdge = entryEdge;
+  state.activeTransitionIndex = entryTransitionIndex;
   const maxRevealWorld = TRANSITION_REVEAL_MAX_BLOCKS * BLOCK_SIZE_SMALL;
   // Snap to max reveal immediately so the entry edge is visible on frame 1.
   state.currentRevealXWorld =
@@ -103,17 +123,20 @@ export function notifyTransitionRoomEntered(
   state.currentRevealYWorld =
     entryEdge === 'up'   ? -maxRevealWorld :
     entryEdge === 'down' ?  maxRevealWorld : 0;
+  state.revealProgress = 1;
 }
 
 /**
  * Called when a room is loaded outside of a normal transition
- * (initial load, death respawn, editor playtest).
+ * (initial load, death respawn, editor playtest, lambda-anchor teleport).
  * Resets reveal to neutral immediately — no easing.
  */
 export function notifyFreshRoomLoaded(state: TransitionRevealState): void {
   state.postTransitionEdge = null;
   state.currentRevealXWorld = 0;
   state.currentRevealYWorld = 0;
+  state.activeTransitionIndex = -1;
+  state.revealProgress = 0;
 }
 
 /**
@@ -142,9 +165,16 @@ export function updateTransitionReveal(
   const maxRevealWorld = TRANSITION_REVEAL_MAX_BLOCKS * BLOCK_SIZE_SMALL;
   const decayDist = TRANSITION_REVEAL_DECAY_DIST_WORLD;
   const startDist = TRANSITION_REVEAL_START_DIST_WORLD;
+  // Cap reveal so we never scroll past the available extension tiles even in
+  // very small rooms (never more than EDGE_EXTENSION_EXTRA_BLOCKS-1 blocks).
+  const maxSafeRevealWorld = Math.min(
+    maxRevealWorld,
+    (EDGE_EXTENSION_EXTRA_BLOCKS - 1) * BLOCK_SIZE_SMALL,
+  );
 
   let targetX = 0;
   let targetY = 0;
+  let activeTi = -1;
 
   // ── PostTransition reveal ──────────────────────────────────────────────────
   if (state.postTransitionEdge !== null) {
@@ -175,9 +205,21 @@ export function updateTransitionReveal(
     }
 
     const t = _smoothstep(1 - Math.min(1, distFromEdge / decayDist));
-    const revealAmt = maxRevealWorld * t * revealSign;
+    const revealAmt = maxSafeRevealWorld * t * revealSign;
     if (isXAxis) targetX = revealAmt;
     else         targetY = revealAmt;
+
+    // Find the transition index for the post-transition edge (first match).
+    if (state.activeTransitionIndex === -1) {
+      for (let ti = 0; ti < room.transitions.length; ti++) {
+        if (room.transitions[ti].direction === edge) {
+          activeTi = ti;
+          break;
+        }
+      }
+    } else {
+      activeTi = state.activeTransitionIndex;
+    }
 
     // Clear post-transition state once the player is far enough from the entry edge.
     if (distFromEdge >= decayDist) {
@@ -188,25 +230,29 @@ export function updateTransitionReveal(
   // ── NearTransition reveal ──────────────────────────────────────────────────
   // Only activated when PostTransition is not dominant (avoid fighting).
   const postMagnitude = Math.abs(targetX) + Math.abs(targetY);
-  if (postMagnitude < maxRevealWorld * TRANSITION_NEAR_ACTIVATION_THRESHOLD) {
+  if (postMagnitude < maxSafeRevealWorld * TRANSITION_NEAR_ACTIVATION_THRESHOLD) {
     let nearestDist = startDist;
     let nearestDir: TransitionDirection | null = null;
+    let nearestTi = -1;
 
-    for (const t of room.transitions) {
+    for (let ti = 0; ti < room.transitions.length; ti++) {
+      const t = room.transitions[ti];
       const dist = _distToTransitionEdge(playerXWorld, playerYWorld, t, room);
       if (dist < nearestDist) {
         nearestDist = dist;
         nearestDir = t.direction;
+        nearestTi = ti;
       }
     }
 
     if (nearestDir !== null) {
       const rawT = 1 - nearestDist / startDist;
-      const revealAmt = maxRevealWorld * _smoothstep(rawT);
+      const revealAmt = maxSafeRevealWorld * _smoothstep(rawT);
       if (nearestDir === 'left')       targetX = -revealAmt;
       else if (nearestDir === 'right') targetX =  revealAmt;
       else if (nearestDir === 'up')    targetY = -revealAmt;
       else                             targetY =  revealAmt;
+      activeTi = nearestTi;
     }
   }
 
@@ -214,6 +260,14 @@ export function updateTransitionReveal(
   const lerpT = Math.min(1.0, TRANSITION_REVEAL_EASE_SPEED * dtSec);
   state.currentRevealXWorld += (targetX - state.currentRevealXWorld) * lerpT;
   state.currentRevealYWorld += (targetY - state.currentRevealYWorld) * lerpT;
+
+  // ── Update derived fields ──────────────────────────────────────────────────
+  state.activeTransitionIndex = activeTi;
+  const revealMag = Math.max(
+    Math.abs(state.currentRevealXWorld),
+    Math.abs(state.currentRevealYWorld),
+  );
+  state.revealProgress = maxSafeRevealWorld > 0 ? revealMag / maxSafeRevealWorld : 0;
 }
 
 /**
