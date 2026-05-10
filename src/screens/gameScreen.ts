@@ -102,6 +102,11 @@ import {
   updateTransitionReveal,
   getTransitionRevealOffset,
 } from '../render/transitions/transitionCameraReveal';
+import {
+  createTransitionPreviewContext,
+  updateTransitionPreviewContext,
+  TransitionPreviewContext,
+} from '../render/transitions/transitionPreviewContext';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import { GameLoadingOverlay } from './gameLoadingOverlay';
 
@@ -256,6 +261,10 @@ export function startGameScreen(
   }
   function lambdaTeleportFlash(): void {
     teleportFlashAlpha = 1.0;
+    // Lambda anchor teleport is an in-room positional snap, not a room transition.
+    // Reset reveal state so any in-progress transition reveal doesn't persist
+    // after the player is teleported to a different part of the room.
+    notifyFreshRoomLoaded(transitionRevealState);
   }
 
   /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
@@ -580,6 +589,12 @@ export function startGameScreen(
   // a room transition.  No fade overlay is used — transitions feel like a
   // camera pan toward the room boundary.
   const transitionRevealState = createTransitionRevealState();
+
+  // ── Transition preview context ────────────────────────────────────────────
+  // Updated each frame from the reveal state.  Provides the connected room's
+  // 2-block facing-edge tiles for rendering, and is the attachment point for
+  // future dual-room rendering.  See transitionPreviewContext.ts.
+  const transitionPreviewCtx: TransitionPreviewContext = createTransitionPreviewContext();
 
   // ── Transition debug stats ────────────────────────────────────────────────
   // Populated each frame and forwarded to the render profiler debug panel.
@@ -1146,7 +1161,10 @@ export function startGameScreen(
       // Activate PostTransition reveal: camera shows the entry edge until the
       // player walks TRANSITION_REVEAL_DECAY_DIST_WORLD units into the room.
       const entryEdge = getOppositeTransitionDirection(dir);
-      notifyTransitionRoomEntered(transitionRevealState, entryEdge);
+      // Find the entry transition index in the NEW room so the preview context
+      // can resolve the connected room immediately on the first post-entry frame.
+      const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
+      notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
 
       // Preload sprites for rooms adjacent to the new room.
       preloadAdjacentRoomAssets(currentRoom);
@@ -1344,6 +1362,11 @@ export function startGameScreen(
       );
     }
 
+    // ── Update transition preview context ────────────────────────────────────
+    // Reads reveal state (updated above) to resolve the connected room and
+    // build/cache the 2-block facing-edge strip for the next-room renderer.
+    updateTransitionPreviewContext(transitionPreviewCtx, transitionRevealState, currentRoom);
+
     // ── Recompute camera offset after update ─────────────────────────────────
     // Apply the transition reveal offset on top of the normal clamped follow
     // offset so the camera can temporarily peek past the room boundary to show
@@ -1507,6 +1530,7 @@ export function startGameScreen(
       edgeExtensionCache,
       previewBubbles,
       previewBubbleCount,
+      transitionPreviewCtx,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.

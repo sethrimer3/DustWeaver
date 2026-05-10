@@ -76,6 +76,8 @@ import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCach
 import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer';
 import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import { renderPreviewBubbles } from '../render/transitions/previewBubbleRenderer';
+import type { TransitionPreviewContext } from '../render/transitions/transitionPreviewContext';
+import { renderNextRoomFacingEdge } from '../render/transitions/nextRoomEdgeRenderer';
 import { renderLambdaAnchors, renderTeleportFlash } from '../render/lambdaAnchorRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
 
@@ -297,6 +299,14 @@ export interface RenderFrameContext {
    * Number of valid entries in previewBubbles for this frame (0 = none active).
    */
   previewBubbleCount: number;
+
+  /**
+   * Current transition preview context.  Provides the connected room's 2-block
+   * facing-edge tile data for rendering just beyond the current room's boundary.
+   * Built each frame in gameScreen.ts from the reveal state.
+   * The attachment point for future dual-room rendering (see nextSteps.md).
+   */
+  transitionPreviewCtx: TransitionPreviewContext;
 }
 
 /**
@@ -434,6 +444,23 @@ export function renderFrame(r: RenderFrameContext): void {
       currentRoom.lightingEffect ?? 'Ambient',
     );
   }
+
+  // ── Next-room facing-edge layer (drawn BEFORE room clip) ─────────────────
+  // When a transition reveal is active, render the connected room's 2-block
+  // facing-edge strip just beyond the current room's boundary.  Combined with
+  // the current room's own extension tiles, this shows the player 4 columns/
+  // rows of tile continuity at each transition.  Only drawn when revealProgress
+  // exceeds a small threshold — invisible during normal room navigation.
+  renderNextRoomFacingEdge(
+    ctx,
+    r.transitionPreviewCtx,
+    ox,
+    oy,
+    zoom,
+    virtualWidthPx,
+    virtualHeightPx,
+    currentRoom.lightingEffect ?? 'Ambient',
+  );
 
   // Constrain all world-space rendering to the room rectangle so out-of-room
   // areas remain black even when camera framing shows beyond room extents.

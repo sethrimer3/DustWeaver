@@ -144,17 +144,73 @@ present in `sim/` for physics) could accelerate the screen-visible subset query.
   - **PostTransition**: Camera shows entry-edge extension tiles and eases back to neutral as the player walks deeper into the new room.
 - **New constants** in `transitionConfig.ts`: `TRANSITION_REVEAL_START_DIST_WORLD`, `TRANSITION_REVEAL_MAX_BLOCKS`, `TRANSITION_REVEAL_DECAY_DIST_WORLD`, `TRANSITION_REVEAL_EASE_SPEED`.
 
-### Known limitations / remaining work
+---
 
-1. **No dual-room rendering**: True seamless crossing would require pre-loading the adjacent room, rendering both rooms simultaneously, and sliding the camera across the boundary over ~0.3–0.5 seconds — a larger architectural change requiring a staging world state and two-room renderer.
+## BUILD 275 — Transition Preview Context + Next-Room Edge Preview
 
-2. **Next room's edge blocks not shown**: The spec requests 2 blocks of the *connected* room's edge visible. This is blocked by the same issue as (1); only the current room's edge extension is revealed.
+### What was implemented
 
-3. **Lambda-anchor teleport**: `notifyFreshRoomLoaded(transitionRevealState)` is not called after a lambda teleport. Add it to the lambda-anchor handler in `gameCommandProcessor.ts` to prevent stale reveal state after teleporting.
+1. **Removed unused fade constants** from `transitionConfig.ts`:
+   `TRANSITION_MAX_DURATION_MS`, `TRANSITION_MIN_DURATION_MS`, `TRANSITION_FADE_OUT_FRACTION`, `TRANSITION_SPRINT_SPEED_WORLD`, `TRANSITION_FAST_SPEED_WORLD`, and `TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS` are all removed. They were leftover from the old fade-overlay system.
 
-4. **Small rooms**: Reveal offset on rooms narrower than the viewport may push the view past the available extension tiles. Cap the reveal offset by the available room margin.
+2. **`TransitionRevealState` extended**:
+   - `activeTransitionIndex: number` — index into `currentRoom.transitions` for the transition driving the current reveal (−1 = none). Updated each frame by `updateTransitionReveal`.
+   - `revealProgress: number` — `[0, 1]` fraction of the maximum reveal currently active.
+   These fields are read by `updateTransitionPreviewContext` each frame.
 
-5. **`TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS`** in `transitionConfig.ts` is now unused — can be removed in a cleanup pass.
+3. **Small-room cap** in `updateTransitionReveal`: The reveal offset is now capped at
+   `(EDGE_EXTENSION_EXTRA_BLOCKS − 1) × BLOCK_SIZE_SMALL` so the camera can never be shifted
+   beyond the available extension tiles, regardless of room size.
+
+4. **Lambda-anchor teleport fix**: `lambdaTeleportFlash()` in `gameScreen.ts` now calls
+   `notifyFreshRoomLoaded(transitionRevealState)` to reset the reveal offset after an
+   in-room teleport. Stale reveal state no longer persists after a lambda-anchor jump.
+
+5. **`notifyTransitionRoomEntered` extended**: Now accepts an optional `entryTransitionIndex`
+   parameter and stores it in `activeTransitionIndex` so the preview context can resolve the
+   connected room immediately on the first post-entry frame.
+
+6. **`TransitionPreviewContext`** — new type and module `src/render/transitions/transitionPreviewContext.ts`:
+   - `isActive: boolean` — true when reveal progress exceeds a small threshold.
+   - `direction: TransitionDirection | null` — which side is being revealed.
+   - `connectedRoomId: string | null` — ID of the next room (from `transition.targetRoomId`).
+   - `revealProgress: number` — mirrors `TransitionRevealState.revealProgress`.
+   - `nextRoomFacingEdge: NextRoomFacingEdge | null` — the connected room's 2-block facing strip.
+
+   Updated each frame by `updateTransitionPreviewContext()`. Caches the `NextRoomFacingEdge`
+   until the active transition changes (key: `{roomId}:{direction}:{currentW}x{currentH}`).
+   This is the intended attachment point for future dual-room rendering — see below.
+
+7. **`NextRoomFacingEdge`** — computed from the connected room's wall definitions:
+   - For a `'right'` transition: connected room's leftmost 2 columns (cols 0 and 1).
+   - For a `'left'` transition: connected room's rightmost 2 columns (cols W−1 and W−2).
+   - For `'down'` / `'up'`: equivalent 2-row strip from the top/bottom.
+   - Origin expressed in current-room world space so the renderer can position the tiles
+     correctly with no additional coordinate math.
+
+8. **`renderNextRoomFacingEdge()`** — new renderer `src/render/transitions/nextRoomEdgeRenderer.ts`:
+   - Renders the `NextRoomFacingEdge` tiles before the room clip rect (same phase as the
+     current room's edge extension tiles).
+   - Tiles fade in proportionally to `revealProgress` — invisible during normal navigation,
+     gradually appearing as the player approaches a transition.
+   - Combines with the current room's own extension tiles to give 4 columns/rows of tile
+     continuity at each transition:
+       `[current-room ext col 2] [current-room ext col 1] | door | [next-room col 0] [next-room col 1]`
+   - Auto-tiling uses the 3-column/row occupancy set from `NextRoomFacingEdge`; neighbor
+     masks at the seam are best-effort (inner face is correct; outer edge is treated as open-air).
+   - No work is done during ordinary room navigation (`revealProgress < 0.05`).
+
+### Files changed in BUILD 275
+
+| File | Change |
+|------|--------|
+| `src/build-info.ts` | BUILD_NUMBER 274 → 275 |
+| `src/render/transitions/transitionConfig.ts` | Removed 6 unused fade/entry constants |
+| `src/render/transitions/transitionCameraReveal.ts` | Added `activeTransitionIndex`, `revealProgress`; small-room reveal cap; updated `notifyTransitionRoomEntered` signature; `notifyFreshRoomLoaded` doc update |
+| `src/render/transitions/transitionPreviewContext.ts` | **New**: `TransitionPreviewContext`, `NextRoomFacingEdge`, cache, `createTransitionPreviewContext`, `updateTransitionPreviewContext`, `_buildNextRoomFacingEdge` |
+| `src/render/transitions/nextRoomEdgeRenderer.ts` | **New**: `renderNextRoomFacingEdge` |
+| `src/screens/gameScreen.ts` | Import + create + update `transitionPreviewCtx`; pass to `renderFrame`; lambda-anchor fix; pass `entryTi` to `notifyTransitionRoomEntered` |
+| `src/screens/gameRender.ts` | Added `transitionPreviewCtx` to `RenderFrameContext`; call `renderNextRoomFacingEdge` before clip rect |
 
 ### Tuning guide
 
@@ -167,4 +223,33 @@ All reveal constants live in `src/render/transitions/transitionConfig.ts`:
 | `TRANSITION_REVEAL_DECAY_DIST_WORLD` | 48 | PostTransition fades over this walk distance |
 | `TRANSITION_REVEAL_EASE_SPEED` | 6.0 | Camera easing speed (higher = snappier) |
 
+### Known limitations / remaining work
+
+1. **No dual-room rendering** (the main remaining work):
+   True seamless crossing requires:
+   a. A staging `WorldState` for the connected room — pre-loaded asynchronously while the
+      player is in the current room.
+   b. A two-room `WorldSnapshot` snapshot boundary: both `WorldState` instances are ticked
+      and snapshotted independently.
+   c. A `StagingRoomRenderer` (or equivalent) that renders the connected room's snapshot
+      onto an offscreen canvas in the correct world-space offset.
+   d. The `TransitionPreviewContext.nextRoomFacingEdge` field is already the attachment
+      point: replace (or augment) it with the full staging snapshot when it becomes
+      available, and `renderNextRoomFacingEdge` can be updated to read from it.
+
+2. **Row/column alignment at transitions with non-matching openings**:
+   The current implementation assumes the connected room's rows/cols line up 1-to-1 with
+   the current room's rows/cols. For rooms where the transition opening is vertically or
+   horizontally offset (e.g., a 3-block opening at row 2 in the current room connecting to
+   a 3-block opening at row 5 in the next room), the next-room edge tiles will be rendered
+   at the "wrong" rows. Fix: store the Y-offset (for horizontal transitions) or X-offset
+   (for vertical) in `NextRoomFacingEdge.originYWorld`/`originXWorld` using the matched
+   transition's `yBlock`/`xBlock` difference.
+
+3. **Auto-tiling accuracy at the seam**:
+   The `NextRoomFacingEdge` occupancy set contains only 3 columns/rows from the connected
+   room. Tiles at the innermost face of the 2-block strip do not know their room-interior
+   neighbor, so the east/south/west/north open-air-side may be wrong for those tiles.
+   Fix: include a 4th column/row of reference data in the occupancy set, or fall back to
+   a fixed "interior wall" tile at the inner face.
 
