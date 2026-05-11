@@ -80,6 +80,10 @@ import type { TransitionPreviewContext } from '../render/transitions/transitionP
 import { renderNextRoomFacingEdge } from '../render/transitions/nextRoomEdgeRenderer';
 import { renderLambdaAnchors, renderTeleportFlash } from '../render/lambdaAnchorRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
+import {
+  ENABLE_EDGE_EXTENSION_RENDERING,
+  ENABLE_NEXT_ROOM_EDGE_PREVIEW,
+} from '../render/transitions/transitionConfig';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -307,6 +311,18 @@ export interface RenderFrameContext {
    * The attachment point for future dual-room rendering (see nextSteps.md).
    */
   transitionPreviewCtx: TransitionPreviewContext;
+
+  /**
+   * BUILD 279: When the two-room camera crossing is active, the clip rect is
+   * expanded to the union of both rooms.  All values are in world units.
+   * When `isCrossing` is false these fields are ignored and the renderer clips
+   * to the current room only.
+   */
+  isCrossing: boolean;
+  crossingUnionMinXWorld: number;
+  crossingUnionMinYWorld: number;
+  crossingUnionMaxXWorld: number;
+  crossingUnionMaxYWorld: number;
 }
 
 /**
@@ -422,7 +438,16 @@ export function renderFrame(r: RenderFrameContext): void {
     // Keep legacy room-local background tinting behavior when no WebGL layer
     // is active, while preserving black room margins via clipping below.
     ctx.fillStyle = bgColor;
-    ctx.fillRect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
+    if (r.isCrossing) {
+      // During crossing, fill the union rect so both rooms get a background.
+      const unionX = r.crossingUnionMinXWorld * zoom + ox;
+      const unionY = r.crossingUnionMinYWorld * zoom + oy;
+      const unionW = (r.crossingUnionMaxXWorld - r.crossingUnionMinXWorld) * zoom;
+      const unionH = (r.crossingUnionMaxYWorld - r.crossingUnionMinYWorld) * zoom;
+      ctx.fillRect(unionX, unionY, unionW, unionH);
+    } else {
+      ctx.fillRect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
+    }
   }
 
   // ── Edge extension layer (drawn BEFORE room clip) ────────────────────────
@@ -431,7 +456,8 @@ export function renderFrame(r: RenderFrameContext): void {
   // rather than a hard black cutout.  The tiles have no collision.
   // Must be called here (before ctx.clip()) so tiles outside the room rect
   // are visible.
-  if (r.edgeExtensionCache !== null) {
+  // BUILD 279: disabled when two-room crossing is enabled (ENABLE_EDGE_EXTENSION_RENDERING = false).
+  if (ENABLE_EDGE_EXTENSION_RENDERING && r.edgeExtensionCache !== null) {
     renderEdgeExtension(
       ctx,
       r.edgeExtensionCache,
@@ -449,7 +475,10 @@ export function renderFrame(r: RenderFrameContext): void {
   // Fills transition opening passages with the authored fade gradient so the
   // black void in the passage is replaced by a proper depth-darkness effect.
   // Drawn after edge extension tiles so the gradient composites over them.
-  renderTransitionPassageGradients(ctx, currentRoom, ox, oy, zoom);
+  // Skip during active crossing — both rooms are rendered in full.
+  if (!r.isCrossing) {
+    renderTransitionPassageGradients(ctx, currentRoom, ox, oy, zoom);
+  }
 
   // ── Next-room facing-edge layer (drawn BEFORE room clip) ─────────────────
   // When a transition reveal is active, render the connected room's 2-block
@@ -457,22 +486,49 @@ export function renderFrame(r: RenderFrameContext): void {
   // the current room's own extension tiles, this shows the player 4 columns/
   // rows of tile continuity at each transition.  Only drawn when revealProgress
   // exceeds a small threshold — invisible during normal room navigation.
-  renderNextRoomFacingEdge(
-    ctx,
-    r.transitionPreviewCtx,
-    ox,
-    oy,
-    zoom,
-    virtualWidthPx,
-    virtualHeightPx,
-    currentRoom.lightingEffect ?? 'Ambient',
-  );
+  // BUILD 279: disabled when two-room crossing is enabled (ENABLE_NEXT_ROOM_EDGE_PREVIEW = false).
+  if (ENABLE_NEXT_ROOM_EDGE_PREVIEW) {
+    renderNextRoomFacingEdge(
+      ctx,
+      r.transitionPreviewCtx,
+      ox,
+      oy,
+      zoom,
+      virtualWidthPx,
+      virtualHeightPx,
+      currentRoom.lightingEffect ?? 'Ambient',
+    );
+  }
 
-  // Constrain all world-space rendering to the room rectangle so out-of-room
+  // ── Clip rect: room bounds or crossing union bounds ───────────────────────
+  // During two-room crossing, expand the clip to the union of both rooms so
+  // the next room's walls (appended to world.walls) are drawn without being
+  // cut off at the current room's boundary.
+  let clipXWorld: number;
+  let clipYWorld: number;
+  let clipWWorld: number;
+  let clipHWorld: number;
+  if (r.isCrossing) {
+    clipXWorld = r.crossingUnionMinXWorld;
+    clipYWorld = r.crossingUnionMinYWorld;
+    clipWWorld = r.crossingUnionMaxXWorld - r.crossingUnionMinXWorld;
+    clipHWorld = r.crossingUnionMaxYWorld - r.crossingUnionMinYWorld;
+  } else {
+    clipXWorld = 0;
+    clipYWorld = 0;
+    clipWWorld = roomWidthWorld;
+    clipHWorld = roomHeightWorld;
+  }
+  const clipScreenXPx = clipXWorld * zoom + ox;
+  const clipScreenYPx = clipYWorld * zoom + oy;
+  const clipScreenWPx = clipWWorld * zoom;
+  const clipScreenHPx = clipHWorld * zoom;
+
+  // Constrain all world-space rendering to the clip rect so out-of-bounds
   // areas remain black even when camera framing shows beyond room extents.
   ctx.save();
   ctx.beginPath();
-  ctx.rect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
+  ctx.rect(clipScreenXPx, clipScreenYPx, clipScreenWPx, clipScreenHPx);
   ctx.clip();
 
   // ── World background with parallax ──────────────────────────────────────

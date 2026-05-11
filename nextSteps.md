@@ -1,9 +1,135 @@
 # DustWeaver — Next Steps
 
-## BUILD 272–273 — Sword Bug Fix + Performance Optimizations
+## BUILD 279 — Two-Room Smooth Camera Crossing
 
-This document summarises all work completed through BUILD 273 and any
-remaining open items.
+### What Was Implemented
+
+**Two-room smooth camera crossing system** (`src/screens/twoRoomCrossing.ts`):
+
+- When the player crosses a room transition, both rooms are placed side-by-side
+  in a shared "crossing world space" rather than immediately loading the new room.
+- The current room's walls stay at their normal positions. The next room's walls
+  are appended to `world.walls` at the correct adjacent origin offset, so player
+  physics (collision, gravity) work correctly in both rooms without any special
+  casing.
+- For left/up exits where the next room would be at negative coordinates, the
+  current room walls, player, and camera are shifted right/down so all coordinates
+  remain positive (required by the physics boundary system).
+- The camera clamps to the **union** of both room bounding boxes during crossing,
+  so it smoothly follows the player across the seam without hard clipping.
+- Once the player's centre is 2 blocks past the seam, crossing is finalised:
+  `loadRoom()` is called with `preserveCamera = true`, the camera is restored in
+  next-room local coords, and normal single-room rendering resumes.
+- Player velocity is preserved through the transition with no momentum loss.
+
+**Feature flags** (`src/render/transitions/transitionConfig.ts`):
+
+| Flag | Value | Effect |
+|------|-------|--------|
+| `ENABLE_TWO_ROOM_CAMERA_CROSSING` | `true` | Activates two-room crossing system |
+| `ENABLE_EDGE_EXTENSION_RENDERING` | `false` | Disables procedural edge-extension tiles |
+| `ENABLE_NEXT_ROOM_EDGE_PREVIEW` | `false` | Disables next-room facing-edge strip |
+
+**Camera API** (`src/render/camera.ts`):
+
+- Added `updateCameraWithBounds(camera, targetX, targetY, minX, minY, maxX, maxY, vpW, vpH, dt)`
+  to clamp the camera to arbitrary world-space bounds — used during crossing and
+  available for any future multi-room or boss-room scenarios.
+
+**Rendering** (`src/screens/gameRender.ts`):
+
+- New `RenderFrameContext` fields: `isCrossing`, `crossingUnionMin/MaxXWorld/YWorld`.
+- During crossing, the clip rect is expanded to the union bounds of both rooms,
+  so the next room's walls (added to `world.walls`) render correctly.
+- Edge-extension rendering and next-room facing-edge rendering are gated by flags.
+- Transition passage gradients are skipped during crossing (both rooms are rendered
+  in full; no artificial void fill needed).
+- Background fill expanded to union rect when crossing and WebGL is unavailable.
+
+**Transition API** (`src/screens/gameTransitions.ts`):
+
+- `checkRoomTransitions` callback now receives `transitionIndex` as 5th argument,
+  enabling `startCrossing` to look up the matched return transition for door-offset
+  alignment without a second search.
+
+**Door alignment** (reuses `computeConnectedRoomOrigin` / `computeTransitionOpeningOffset`
+from `src/render/transitions/transitionPreviewContext.ts`):
+
+- Offset door openings (where the current room's door is at a different row/column
+  than the connected room's door) are correctly aligned in crossing world space.
+- If no matching return transition is found, the origin offset defaults to 0 and
+  a console warning is emitted.
+
+---
+
+### What Is Intentionally Disabled for This Pass
+
+- **Edge-extension tiles** beyond room borders: hidden via `ENABLE_EDGE_EXTENSION_RENDERING = false`.
+- **Next-room facing-edge strip**: hidden via `ENABLE_NEXT_ROOM_EDGE_PREVIEW = false`.
+- **Transition reveal offset** (old camera-peek system): suppressed during crossing
+  (camera is already in crossing world space).
+
+---
+
+### Known Limitations and Remaining Work
+
+#### Camera
+
+- **Small rooms narrower/shorter than the viewport**: after crossing finalises,
+  `updateCamera` forces the camera to centre on the new room. This causes a brief
+  camera snap if the crossing camera position was off-centre. Fix: lerp toward
+  room-centre instead of snapping, or keep `updateCameraWithBounds` active for a
+  short settling window after finalisation.
+
+#### Rendering
+
+- **Wall sprite auto-tiling at the seam**: the chunk cache's occupancy set for
+  auto-tiling is built from all walls in `world.walls`. Both rooms' walls are
+  present, but they were added independently, so tiles at the seam boundary may
+  have incorrect neighbour masks (e.g. a wall tile touching the adjacent room's
+  floor tile may appear without the correct edge sprite). Fix: after appending
+  next-room walls, rebuild the seam columns/rows with cross-room occupancy data.
+- **Background rendering during crossing**: the parallax background is only drawn
+  for the current room's rectangle. The next room's area shows a solid `bgColor`
+  fill (or transparent when WebGL is active). Fix: call `renderWorldBackground`
+  twice with each room's origin offset, or extend the background renderer to
+  accept an arbitrary clip rect.
+- **Dark-room overlay during crossing**: the `DarkRoomOverlay` clips to the current
+  room's light holes only. Light sources from the next room are not included.
+  Fix: extend light collection to also scan the next room's `lightSources` array
+  during crossing, offsetting them by `nextRoomOriginXWorld/YWorld`.
+
+#### Gameplay staging in the next room
+
+- **Enemies**: enemies from the next room are not spawned during crossing. The
+  player physically enters the next room's geometry with no enemies present. Fix:
+  spawn next-room enemies into a second `WorldState` or add them at offset
+  positions to the current `WorldState`. Requires careful lifetime management
+  (the enemy clusters must be removed before `loadRoom` finalises).
+- **Hazards** (spikes, liquid, fireballs): not simulated in the next room during
+  crossing. The player can walk over them without damage. Fix: port hazard
+  activation to use world-space offsets, and stage them alongside the walls.
+- **Particles and motes**: particle emitters from the next room do not fire during
+  crossing. Fix: stage next-room particle zones at the offset origin.
+- **Falling blocks**: not triggered for the next room during crossing.
+
+#### Transition edge cases
+
+- **Player dies during crossing**: `loadRoom` (called by the death handler)
+  automatically resets `crossingState.phase = 'inactive'`, so recovery is clean.
+  Verify on death mid-seam.
+- **Very fast players (sub-tick tunneling)**: at very high velocity (e.g. during
+  a dash through a narrow opening), the player might skip past the 2-block settle
+  threshold in a single tick before `isCrossingComplete` is evaluated. Current
+  `SETTLE_INSET_WORLD = 2 * BLOCK_SIZE_MEDIUM`. If this causes missed finalization,
+  increase the settle inset or add sub-step detection.
+- **Multiple simultaneous transitions**: only one transition can be active at a
+  time (guarded by `crossingState.phase === 'inactive'` check). Attempting to
+  re-enter a transition during crossing is ignored (correct).
+
+---
+
+
 
 ---
 

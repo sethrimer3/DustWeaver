@@ -102,6 +102,51 @@ function clampCameraToRoom(
 }
 
 /**
+ * Smoothly move the camera toward the target using custom world-space clamp
+ * bounds.  Unlike updateCamera, the bounds are specified explicitly rather
+ * than derived from a single room's width/height.  This enables two-room
+ * crossing mode where the camera must roam the union of both room extents.
+ *
+ * Clamping behaves identically to clampCameraToRoom: when the bounds span is
+ * narrower than the viewport, the camera centers on the bounds.
+ */
+export function updateCameraWithBounds(
+  camera: CameraState,
+  targetXWorld: number,
+  targetYWorld: number,
+  minXWorld: number,
+  minYWorld: number,
+  maxXWorld: number,
+  maxYWorld: number,
+  viewportWidthPx: number,
+  viewportHeightPx: number,
+  dtSec: number,
+): void {
+  const t = Math.min(1.0, CAMERA_FOLLOW_SPEED * dtSec);
+  camera.centerXWorld += (targetXWorld - camera.centerXWorld) * t;
+  camera.centerYWorld += (targetYWorld - camera.centerYWorld) * t;
+
+  const halfViewW = viewportWidthPx  / (2 * camera.zoom);
+  const halfViewH = viewportHeightPx / (2 * camera.zoom);
+  const boundsW   = maxXWorld - minXWorld;
+  const boundsH   = maxYWorld - minYWorld;
+
+  if (boundsW <= halfViewW * 2) {
+    camera.centerXWorld = minXWorld + boundsW * 0.5;
+  } else {
+    if (camera.centerXWorld < minXWorld + halfViewW) camera.centerXWorld = minXWorld + halfViewW;
+    if (camera.centerXWorld > maxXWorld - halfViewW) camera.centerXWorld = maxXWorld - halfViewW;
+  }
+
+  if (boundsH <= halfViewH * 2) {
+    camera.centerYWorld = minYWorld + boundsH * 0.5;
+  } else {
+    if (camera.centerYWorld < minYWorld + halfViewH) camera.centerYWorld = minYWorld + halfViewH;
+    if (camera.centerYWorld > maxYWorld - halfViewH) camera.centerYWorld = maxYWorld - halfViewH;
+  }
+}
+
+/**
  * Compute the screen-space offset needed to position world origin on
  * the canvas given the current camera state.
  *

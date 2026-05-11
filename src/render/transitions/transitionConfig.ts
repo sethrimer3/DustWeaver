@@ -81,3 +81,33 @@ export const PREVIEW_INNER_STOP = 0.35;
  * Only the nearest transitions contribute when more are in range.
  */
 export const PREVIEW_MAX_BUBBLES = 2;
+
+// ── Two-room camera crossing feature flags ────────────────────────────────────
+
+/**
+ * When true, the two-room smooth camera crossing system is active:
+ * both rooms are rendered side-by-side and the camera slides naturally
+ * across the seam as the player crosses a transition.
+ *
+ * Introduced in BUILD 279.  Replaces the old edge-extension + reveal system
+ * for the transition crossing window.
+ */
+export const ENABLE_TWO_ROOM_CAMERA_CROSSING = true;
+
+/**
+ * When true, procedural edge-extension tiles (wall tiles rendered beyond
+ * the room boundary to fill the void) are drawn during normal gameplay.
+ *
+ * Disabled for BUILD 279 so only actual room geometry is visible when
+ * ENABLE_TWO_ROOM_CAMERA_CROSSING is active.
+ */
+export const ENABLE_EDGE_EXTENSION_RENDERING = false;
+
+/**
+ * When true, the 2-block next-room facing-edge strip is rendered just
+ * outside the current room's boundary during a transition reveal.
+ *
+ * Disabled for BUILD 279 — the two-room crossing system renders the
+ * full next room instead.
+ */
+export const ENABLE_NEXT_ROOM_EDGE_PREVIEW = false;
