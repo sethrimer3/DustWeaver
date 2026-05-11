@@ -162,7 +162,7 @@ export function renderTransitionPassageGradients(
   oy: number,
   zoom: number,
 ): void {
-  const BS = BLOCK_SIZE_MEDIUM; // == BLOCK_SIZE_SMALL (all block sizes currently equal)
+  const BS = BLOCK_SIZE_MEDIUM; // currently aliased to BLOCK_SIZE_SMALL in roomDef.ts
   const roomWidthWorld  = room.widthBlocks  * BS;
   const roomHeightWorld = room.heightBlocks * BS;
 
@@ -175,9 +175,9 @@ export function renderTransitionPassageGradients(
     // the room by drawTunnelDarkness).  For the outward passage gradient, treat
     // undefined the same as the legacy default so the passage visually matches.
     const DEFAULT_FADE_BLOCKS = 3;
-    const gw = t.gradientWidthBlocks ?? DEFAULT_FADE_BLOCKS;
-    if (gw <= 0) continue;
-    const gradDepthWorld = gw * BS;
+    const gradientWidthBlocks = t.gradientWidthBlocks ?? DEFAULT_FADE_BLOCKS;
+    if (gradientWidthBlocks <= 0) continue;
+    const gradientDepthWorld = gradientWidthBlocks * BS;
 
     const isHoriz = t.direction === 'left' || t.direction === 'right';
 
@@ -205,8 +205,8 @@ export function renderTransitionPassageGradients(
 
     if (t.direction === 'left') {
       // Passage extends leftward from x=0 into negative world-x.
-      const x0Px = 0 * zoom + ox;            // room left boundary (transparent end)
-      const x1Px = -gradDepthWorld * zoom + ox; // outer passage limit (opaque end)
+      const x0Px = 0 * zoom + ox;                       // room left boundary (transparent end)
+      const x1Px = -gradientDepthWorld * zoom + ox;     // outer passage limit (opaque end)
       const y0Px = openStartPerp * zoom + oy;
       const y1Px = openEndPerp   * zoom + oy;
       const grad = ctx.createLinearGradient(x0Px, 0, x1Px, 0);
@@ -217,8 +217,8 @@ export function renderTransitionPassageGradients(
 
     } else if (t.direction === 'right') {
       // Passage extends rightward from x=roomWidth into positive world-x.
-      const x0Px = roomWidthWorld * zoom + ox;              // room right boundary (transparent)
-      const x1Px = (roomWidthWorld + gradDepthWorld) * zoom + ox; // outer limit (opaque)
+      const x0Px = roomWidthWorld * zoom + ox;                              // room right boundary (transparent)
+      const x1Px = (roomWidthWorld + gradientDepthWorld) * zoom + ox;      // outer limit (opaque)
       const y0Px = openStartPerp * zoom + oy;
       const y1Px = openEndPerp   * zoom + oy;
       const grad = ctx.createLinearGradient(x0Px, 0, x1Px, 0);
@@ -230,7 +230,7 @@ export function renderTransitionPassageGradients(
     } else if (t.direction === 'up') {
       // Passage extends upward from y=0 into negative world-y.
       const y0Px = 0 * zoom + oy;
-      const y1Px = -gradDepthWorld * zoom + oy;
+      const y1Px = -gradientDepthWorld * zoom + oy;
       const x0Px = openStartPerp * zoom + ox;
       const x1Px = openEndPerp   * zoom + ox;
       const grad = ctx.createLinearGradient(0, y0Px, 0, y1Px);
@@ -242,7 +242,7 @@ export function renderTransitionPassageGradients(
     } else if (t.direction === 'down') {
       // Passage extends downward from y=roomHeight into positive world-y.
       const y0Px = roomHeightWorld * zoom + oy;
-      const y1Px = (roomHeightWorld + gradDepthWorld) * zoom + oy;
+      const y1Px = (roomHeightWorld + gradientDepthWorld) * zoom + oy;
       const x0Px = openStartPerp * zoom + ox;
       const x1Px = openEndPerp   * zoom + ox;
       const grad = ctx.createLinearGradient(0, y0Px, 0, y1Px);
