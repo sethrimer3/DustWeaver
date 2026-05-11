@@ -602,7 +602,7 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
 // ── Rendering/utility helpers re-exported from gameRoomHelpers.ts ─────────────
 // These were previously defined in this file but have been moved to keep
 // data-loading code separate from rendering and coordinate utilities.
-export { worldBgColor, drawTunnelDarkness, screenToWorld } from './gameRoomHelpers';
+export { worldBgColor, drawTunnelDarkness, renderTransitionPassageGradients, screenToWorld } from './gameRoomHelpers';
 
 
 // ── Spawn-block safety helpers ────────────────────────────────────────────────

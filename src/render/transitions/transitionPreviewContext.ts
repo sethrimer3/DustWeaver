@@ -30,6 +30,7 @@ import type { RoomDef, RoomTransitionDef, TransitionDirection } from '../../leve
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 import { ROOM_REGISTRY } from '../../levels/rooms';
 import type { TransitionRevealState } from './transitionCameraReveal';
+import { buildAmbientDepths } from '../walls/ambientLightDepths';
 
 // ── Next-room facing-edge types ───────────────────────────────────────────────
 
@@ -43,6 +44,13 @@ export interface FacingEdgeTile {
   isSolid: boolean;
   /** Per-wall theme override (null = use connected room default). */
   theme: string | null;
+  /**
+   * Per-tile ambient-light depth from a `buildAmbientDepths` solve on the
+   * connected room.  Used by `nextRoomEdgeRenderer` instead of a fixed tint
+   * so facing-edge shading is consistent with the current-room edge tiles.
+   * 0 = directly exposed to open air; higher = darker.
+   */
+  ambientDepth: number;
 }
 
 /**
@@ -531,6 +539,22 @@ function _buildNextRoomFacingEdge(
   const isSolidConn = (col: number, row: number): boolean => solidMap.has(`${col},${row}`);
   const themeAt     = (col: number, row: number): string | null => solidMap.get(`${col},${row}`) ?? null;
 
+  // ── Compute per-tile ambient depth for the connected room ─────────────────
+  // Run `buildAmbientDepths` on the full connected-room occupancy so facing-
+  // edge tiles shade consistently with the connected room's own wall shading.
+  // Transition opening cells are air (not in solidMap), so the passage area
+  // counts as open air and the walls around it shade correctly.
+  const connEffect = connectedRoom.lightingEffect ?? 'Ambient';
+  const connAmbientDir = connectedRoom.ambientLightDirection !== undefined
+    ? connectedRoom.ambientLightDirection
+    : connEffect === 'Above' ? 'down' : 'omni';
+  const connBlockers = new Set<string>();
+  for (const b of (connectedRoom.ambientLightBlockers ?? [])) connBlockers.add(`${b.xBlock},${b.yBlock}`);
+  const connDepths = buildAmbientDepths(new Set<string>(solidMap.keys()), connBlockers, connAmbientDir, CW, CH);
+  const connDepthFallback = Math.max(CW, CH);
+  const connDepthAt = (col: number, row: number): number =>
+    connDepths.get(`${col},${row}`) ?? connDepthFallback;
+
   // ── Build seam-face solid set from the current room's boundary edge ───────
   // These rows (horizontal) or cols (vertical) are solid in the current room
   // at the seam boundary.  We map them to connected-room coordinates and add
@@ -556,8 +580,8 @@ function _buildNextRoomFacingEdge(
       const s0 = isSolidConn(col0, row);
       const s1 = isSolidConn(col1, row);
 
-      tiles.push({ colBlock: col0, rowBlock: row, isSolid: s0, theme: s0 ? themeAt(col0, row) : null });
-      tiles.push({ colBlock: col1, rowBlock: row, isSolid: s1, theme: s1 ? themeAt(col1, row) : null });
+      tiles.push({ colBlock: col0, rowBlock: row, isSolid: s0, theme: s0 ? themeAt(col0, row) : null, ambientDepth: connDepthAt(col0, row) });
+      tiles.push({ colBlock: col1, rowBlock: row, isSolid: s1, theme: s1 ? themeAt(col1, row) : null, ambientDepth: connDepthAt(col1, row) });
 
       if (s0) occupancySet.add(`${col0},${row}`);
       if (s1) occupancySet.add(`${col1},${row}`);
@@ -594,8 +618,8 @@ function _buildNextRoomFacingEdge(
       const s0 = isSolidConn(col, row0);
       const s1 = isSolidConn(col, row1);
 
-      tiles.push({ colBlock: col, rowBlock: row0, isSolid: s0, theme: s0 ? themeAt(col, row0) : null });
-      tiles.push({ colBlock: col, rowBlock: row1, isSolid: s1, theme: s1 ? themeAt(col, row1) : null });
+      tiles.push({ colBlock: col, rowBlock: row0, isSolid: s0, theme: s0 ? themeAt(col, row0) : null, ambientDepth: connDepthAt(col, row0) });
+      tiles.push({ colBlock: col, rowBlock: row1, isSolid: s1, theme: s1 ? themeAt(col, row1) : null, ambientDepth: connDepthAt(col, row1) });
 
       if (s0) occupancySet.add(`${col},${row0}`);
       if (s1) occupancySet.add(`${col},${row1}`);

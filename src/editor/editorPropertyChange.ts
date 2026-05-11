@@ -123,7 +123,7 @@ export function applyPropertyToElement(
         trans.isSecretDoor = numVal === 1;
       }
       if (prop === 'transition.gradientWidthBlocks' && !isNaN(numVal)) {
-        trans.gradientWidthBlocks = Math.max(1, numVal);
+        trans.gradientWidthBlocks = Math.max(0, numVal);
       }
     }
   } else if (el.type === 'waterZone') {

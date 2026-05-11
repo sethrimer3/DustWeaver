@@ -140,6 +140,123 @@ export function drawTunnelDarkness(
 }
 
 /**
+ * Draws the authored room-transition gradient into the passage area beyond the
+ * room boundary (the edge-extension zone).
+ *
+ * Must be called BEFORE the room clip rect is applied so the gradient renders
+ * outside the room rectangle.  For each transition with `gradientWidthBlocks > 0`
+ * the gradient extends from the room boundary outward through the passage opening,
+ * replacing the pure-black void that would otherwise appear there.
+ *
+ * The gradient runs from transparent at the room edge to opaque (the transition's
+ * fadeColor or black) at the outer limit.  This mirrors the inward tunnel-darkness
+ * gradient that `drawTunnelDarkness` paints inside the room.
+ *
+ * If `gradientWidthBlocks` is 0 or omitted (defaulting to the legacy value), no
+ * outward gradient is drawn and the passage remains black.
+ */
+export function renderTransitionPassageGradients(
+  ctx: CanvasRenderingContext2D,
+  room: RoomDef,
+  ox: number,
+  oy: number,
+  zoom: number,
+): void {
+  const BS = BLOCK_SIZE_MEDIUM; // == BLOCK_SIZE_SMALL (all block sizes currently equal)
+  const roomWidthWorld  = room.widthBlocks  * BS;
+  const roomHeightWorld = room.heightBlocks * BS;
+
+  ctx.save();
+
+  for (let ti = 0; ti < room.transitions.length; ti++) {
+    const t = room.transitions[ti];
+
+    // Legacy rooms may omit gradientWidthBlocks (undefined → rendered as 3 inside
+    // the room by drawTunnelDarkness).  For the outward passage gradient, treat
+    // undefined the same as the legacy default so the passage visually matches.
+    const DEFAULT_FADE_BLOCKS = 3;
+    const gw = t.gradientWidthBlocks ?? DEFAULT_FADE_BLOCKS;
+    if (gw <= 0) continue;
+    const gradDepthWorld = gw * BS;
+
+    const isHoriz = t.direction === 'left' || t.direction === 'right';
+
+    // Opening span (perpendicular axis, in world units)
+    const openStartPerp = (isHoriz ? t.yBlock : t.xBlock) * BS;
+    const openEndPerp   = openStartPerp + t.openingSizeBlocks * BS;
+
+    // Resolve gradient colour from the transition's fadeColor.
+    let opaqueColor: string;
+    let transparentColor: string;
+    const fc = t.fadeColor;
+    if (fc && fc.length === 7 && fc[0] === '#' && fc !== '#000000') {
+      const r = parseInt(fc.slice(1, 3), 16);
+      const g = parseInt(fc.slice(3, 5), 16);
+      const b = parseInt(fc.slice(5, 7), 16);
+      if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+        opaqueColor     = `rgba(${r},${g},${b},1)`;
+        transparentColor = `rgba(${r},${g},${b},0)`;
+      } else {
+        opaqueColor = 'rgba(0,0,0,1)'; transparentColor = 'rgba(0,0,0,0)';
+      }
+    } else {
+      opaqueColor = 'rgba(0,0,0,1)'; transparentColor = 'rgba(0,0,0,0)';
+    }
+
+    if (t.direction === 'left') {
+      // Passage extends leftward from x=0 into negative world-x.
+      const x0Px = 0 * zoom + ox;            // room left boundary (transparent end)
+      const x1Px = -gradDepthWorld * zoom + ox; // outer passage limit (opaque end)
+      const y0Px = openStartPerp * zoom + oy;
+      const y1Px = openEndPerp   * zoom + oy;
+      const grad = ctx.createLinearGradient(x0Px, 0, x1Px, 0);
+      grad.addColorStop(0, transparentColor);
+      grad.addColorStop(1, opaqueColor);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x1Px, y0Px, x0Px - x1Px, y1Px - y0Px);
+
+    } else if (t.direction === 'right') {
+      // Passage extends rightward from x=roomWidth into positive world-x.
+      const x0Px = roomWidthWorld * zoom + ox;              // room right boundary (transparent)
+      const x1Px = (roomWidthWorld + gradDepthWorld) * zoom + ox; // outer limit (opaque)
+      const y0Px = openStartPerp * zoom + oy;
+      const y1Px = openEndPerp   * zoom + oy;
+      const grad = ctx.createLinearGradient(x0Px, 0, x1Px, 0);
+      grad.addColorStop(0, transparentColor);
+      grad.addColorStop(1, opaqueColor);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x0Px, y0Px, x1Px - x0Px, y1Px - y0Px);
+
+    } else if (t.direction === 'up') {
+      // Passage extends upward from y=0 into negative world-y.
+      const y0Px = 0 * zoom + oy;
+      const y1Px = -gradDepthWorld * zoom + oy;
+      const x0Px = openStartPerp * zoom + ox;
+      const x1Px = openEndPerp   * zoom + ox;
+      const grad = ctx.createLinearGradient(0, y0Px, 0, y1Px);
+      grad.addColorStop(0, transparentColor);
+      grad.addColorStop(1, opaqueColor);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x0Px, y1Px, x1Px - x0Px, y0Px - y1Px);
+
+    } else if (t.direction === 'down') {
+      // Passage extends downward from y=roomHeight into positive world-y.
+      const y0Px = roomHeightWorld * zoom + oy;
+      const y1Px = (roomHeightWorld + gradDepthWorld) * zoom + oy;
+      const x0Px = openStartPerp * zoom + ox;
+      const x1Px = openEndPerp   * zoom + ox;
+      const grad = ctx.createLinearGradient(0, y0Px, 0, y1Px);
+      grad.addColorStop(0, transparentColor);
+      grad.addColorStop(1, opaqueColor);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x0Px, y0Px, x1Px - x0Px, y1Px - y0Px);
+    }
+  }
+
+  ctx.restore();
+}
+
+/**
  * Converts a device-space aim position (mouse/touch in device pixels)
  * back to world coordinates given the current camera transform.
  * First maps device coords to virtual canvas space, then applies camera inverse.

@@ -31,6 +31,7 @@
 import type { TransitionPreviewContext } from './transitionPreviewContext';
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 import { renderSingleExtensionTile } from '../walls/blockSpriteRenderer';
+import { getDarknessAlphaFromAirDepth } from '../walls/ambientLightDepths';
 
 /** Minimum reveal progress before next-room tiles are drawn (avoids 1-pixel flicker). */
 const NEXT_ROOM_RENDER_THRESHOLD = 0.05;
@@ -93,10 +94,9 @@ export function renderNextRoomFacingEdge(
     if (screenX + tileSizePx < 0 || screenX > viewportWidthPx) continue;
     if (screenY + tileSizePx < 0 || screenY > viewportHeightPx) continue;
 
-    // Use a modest fixed darkness so next-room tiles appear slightly darker
-    // than the lit room interior, suggesting depth/distance.  In Ambient mode
-    // the ambient tint logic takes precedence when enabled.
-    const darknessAlpha = applyAmbientTint ? 0.25 : 0;
+    // Per-tile ambient depth from the connected room's BFS so facing-edge tiles
+    // shade consistently with the current-room extension tiles.
+    const darknessAlpha = applyAmbientTint ? getDarknessAlphaFromAirDepth(tile.ambientDepth) : 0;
 
     renderSingleExtensionTile(
       ctx,
