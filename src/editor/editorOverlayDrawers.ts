@@ -734,13 +734,14 @@ export function drawEditorBackgroundBlocks(
   for (const b of blocks) {
     const sel = isSelected('backgroundBlock', b.uid);
     const isLightBlocking = b.isLightBlockingFlag === 1;
-    const fillColor  = isLightBlocking ? (sel ? BG_BLOCK_LIGHT_SELECTED : BG_BLOCK_COLOR) : (sel ? BG_BLOCK_SELECTED : BG_BLOCK_COLOR);
-    const fillColorC = isLightBlocking ? (sel ? BG_BLOCK_LIGHT_SELECTED : BG_BLOCK_LIGHT_COLOR) : fillColor;
+    const effectiveFillColor = isLightBlocking
+      ? (sel ? BG_BLOCK_LIGHT_SELECTED : BG_BLOCK_LIGHT_COLOR)
+      : (sel ? BG_BLOCK_SELECTED       : BG_BLOCK_COLOR);
     drawBlockRect(
       ctx,
       b.xBlock, b.yBlock, b.wBlock, b.hBlock,
       offsetXPx, offsetYPx, zoom,
-      fillColorC,
+      effectiveFillColor,
       sel ? 2 : 1,
     );
     ctx.save();
