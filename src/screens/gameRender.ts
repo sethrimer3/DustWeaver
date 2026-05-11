@@ -63,6 +63,7 @@ import type { GraphicsQuality } from '../ui/renderSettings';
 import { getQualityConfig } from '../render/renderQualityConfig';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
 import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats } from '../render/walls/blockSpriteRenderer';
+import { renderBackgroundBlocks } from '../render/walls/backgroundBlockRenderer';
 import {
   drawGrappleBloom,
   drawParticleGlow,
@@ -533,6 +534,9 @@ export function renderFrame(r: RenderFrameContext): void {
     );
   }
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BACKGROUND);
+
+  // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
+  renderBackgroundBlocks(ctx, currentRoom, ox, oy, zoom);
 
   // ── Sunbeams (light shafts behind walls) ────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_SUNBEAMS);

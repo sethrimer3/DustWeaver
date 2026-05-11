@@ -294,6 +294,24 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       return;
     }
 
+    // ── Background blocks (visual-only, no collision) ────────────────────────
+    if (item.isBackgroundBlockItem === 1) {
+      const bgW = getPlacementWidth(item, state.placementRotationSteps);
+      const bgH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, bgW, bgH)) return;
+      if (!room.backgroundBlocks) room.backgroundBlocks = [];
+      room.backgroundBlocks.push({
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        wBlock: bgW,
+        hBlock: bgH,
+        blockTheme: state.selectedBlockTheme,
+        isLightBlockingFlag: item.isLightBlockingBackgroundBlockItem === 1 ? 1 : 0,
+      });
+      return;
+    }
+
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
     const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
     if (overlaps) return;

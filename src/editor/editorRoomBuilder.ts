@@ -318,6 +318,14 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       yBlock: fb.yBlock,
       variant: fb.variant,
     })),
+    backgroundBlocks: (data.backgroundBlocks ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+      wBlock: b.wBlock,
+      hBlock: b.hBlock,
+      blockTheme: b.blockTheme,
+      isLightBlockingFlag: b.isLightBlockingFlag,
+    })),
     dialogueTriggers: (data.dialogueTriggers ?? []).map(dt => ({
       xBlock: dt.xBlock,
       yBlock: dt.yBlock,

@@ -728,6 +728,24 @@ export interface RoomFallingBlockDef {
   variant: FallingBlockVariant;
 }
 
+// ── Background blocks ─────────────────────────────────────────────────────────
+
+/** A visual-only background block placed by the editor — no collision, drawn behind foreground walls. */
+export interface RoomBackgroundBlockDef {
+  /** Block column (X). */
+  xBlock: number;
+  /** Block row (Y). */
+  yBlock: number;
+  /** Width in blocks. */
+  wBlock: number;
+  /** Height in blocks. */
+  hBlock: number;
+  /** Override block theme for this specific block. Null = use room theme. */
+  blockTheme: string | null;
+  /** 1 if this background block should block ambient light. */
+  isLightBlockingFlag: 0 | 1;
+}
+
 /** A rectangular area where grasshopper critters spawn randomly. */
 export interface RoomGrasshopperAreaDef {
   /** Left edge X (block units). */
@@ -907,6 +925,8 @@ export interface RoomDef {
   decorations?: readonly RoomDecorationDef[];
   /** Falling block tiles — grouped into rigid falling units at load time. */
   fallingBlocks?: readonly RoomFallingBlockDef[];
+  /** Visual-only background blocks — no collision, drawn behind foreground walls. */
+  backgroundBlocks?: readonly RoomBackgroundBlockDef[];
   /** Dialogue trigger zones — start a conversation when the player enters. */
   dialogueTriggers?: readonly RoomDialogueTriggerDef[];
   /**

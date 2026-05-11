@@ -25,6 +25,7 @@ import {
   drawEditorEnvironmentItems,
   drawEditorRopes,
   drawEditorDialogueTriggers,
+  drawEditorBackgroundBlocks,
 } from './editorOverlayDrawers';
 import {
   drawPlacementPreview,
@@ -79,6 +80,7 @@ export function renderEditorOverlays(
   // ── Grid ─────────────────────────────────────────────────────────────────
   drawGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
 
+  drawEditorBackgroundBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorWalls(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorEnemies(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorTransitions(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);

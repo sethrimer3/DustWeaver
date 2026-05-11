@@ -399,6 +399,22 @@ export interface RoomJsonDef {
   dialogueTriggers?: RoomJsonDialogueTrigger[];
   /** Lambda Anchors — golden λ-glyph poles acting as temporary recall points. */
   lambdaAnchors?: RoomJsonLambdaAnchor[];
+  /** Visual-only background blocks — drawn behind foreground walls. */
+  backgroundBlocks?: RoomJsonBackgroundBlock[];
+}
+
+// ── Background blocks ────────────────────────────────────────────────────────
+
+/** A visual-only background block stored in the room JSON. */
+export interface RoomJsonBackgroundBlock {
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  /** Override block theme. Absent = use room theme. */
+  blockTheme?: BlockTheme;
+  /** When true, this background block blocks ambient-light propagation. */
+  isLightBlocking?: boolean;
 }
 
 // ── Validation result ────────────────────────────────────────────────────────
