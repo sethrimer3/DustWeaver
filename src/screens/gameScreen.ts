@@ -24,7 +24,17 @@ import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
-import { createCameraState, snapCamera, updateCamera, getCameraOffset } from '../render/camera';
+import { createCameraState, snapCamera, updateCamera, updateCameraWithBounds, getCameraOffset } from '../render/camera';
+import {
+  createTwoRoomCrossingState,
+  startCrossing,
+  isCrossingComplete,
+  getCrossingUnionBounds,
+  type TwoRoomCrossingState,
+} from './twoRoomCrossing';
+import {
+  ENABLE_TWO_ROOM_CAMERA_CROSSING,
+} from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
 import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
@@ -235,6 +245,9 @@ export function startGameScreen(
   let bgColor = worldBgColor(currentRoom.worldNumber);
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
   let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
+
+  /** BUILD 279: Two-room smooth camera crossing state. */
+  const crossingState: TwoRoomCrossingState = createTwoRoomCrossingState();
   const dustContainerSprite = new Image();
   dustContainerSprite.src = `${BASE}SPRITES/objects/collectables/dust_container_stub.svg`;
   let isDustContainerSpriteLoaded = false;
@@ -307,6 +320,12 @@ export function startGameScreen(
     bgColor = worldBgColor(room.worldNumber);
     roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
     roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
+
+    // BUILD 279: Always clear any in-progress two-room crossing on room load.
+    // This handles death recovery, save-load, and any other loadRoom call.
+    crossingState.phase       = 'inactive';
+    crossingState.nextRoom    = null;
+    crossingState.currentRoom = null;
 
     // Apply world-specific block sprites and background
     if (room.blockTheme) {
@@ -1138,37 +1157,46 @@ export function startGameScreen(
     }
 
     // ── Room transition check ──────────────────────────────────────────────
-    // When the player crosses a transition boundary, load the new room
-    // synchronously and activate the PostTransition camera reveal.
-    // No black-screen fade is used — the camera instead smoothly reveals
-    // edge-extension tiles as the player approaches and exits transitions.
+    // BUILD 279: When ENABLE_TWO_ROOM_CAMERA_CROSSING is true, a crossing is
+    // started instead of immediately loading the new room.  The two rooms are
+    // placed side-by-side in crossing world space so the camera can slide
+    // naturally across the seam.  The transition only fires when no crossing
+    // is already in progress.
     const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
     const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
-    checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY, dir) => {
-      // Record speed for debug overlay before the world state changes.
-      lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
+    if (crossingState.phase === 'inactive') {
+      checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY, dir, ti) => {
+        // Record speed for debug overlay before the world state changes.
+        lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
 
-      // Load the new room synchronously (30–80 ms stall, hidden by single-frame skip).
-      loadRoom(room, spawnX, spawnY);
+        if (ENABLE_TWO_ROOM_CAMERA_CROSSING) {
+          // Start smooth two-room crossing.
+          const started = startCrossing(crossingState, world, currentRoom, ti, dir, room, camera);
+          if (started) {
+            // Player retains their velocity — physics carries them through the passage.
+            return;
+          }
+          // If startCrossing failed (rare: missing transition def), fall through to legacy path.
+        }
 
-      // Restore pre-transition velocity so momentum feels continuous.
-      const newPlayer = world.clusters[0];
-      if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
-        newPlayer.velocityXWorld = preTransVX;
-        newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
-      }
+        // Legacy path: immediate synchronous room load.
+        loadRoom(room, spawnX, spawnY);
 
-      // Activate PostTransition reveal: camera shows the entry edge until the
-      // player walks TRANSITION_REVEAL_DECAY_DIST_WORLD units into the room.
-      const entryEdge = getOppositeTransitionDirection(dir);
-      // Find the entry transition index in the NEW room so the preview context
-      // can resolve the connected room immediately on the first post-entry frame.
-      const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
-      notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
+        // Restore pre-transition velocity so momentum feels continuous.
+        const newPlayer = world.clusters[0];
+        if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
+          newPlayer.velocityXWorld = preTransVX;
+          newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
+        }
 
-      // Preload sprites for rooms adjacent to the new room.
-      preloadAdjacentRoomAssets(currentRoom);
-    });
+        // Activate PostTransition reveal.
+        const entryEdge = getOppositeTransitionDirection(dir);
+        const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
+        notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
+
+        preloadAdjacentRoomAssets(currentRoom);
+      });
+    }
 
     // ── Dialogue trigger check ─────────────────────────────────────────────
     // Check if the player has entered any dialogue trigger zone.
@@ -1318,6 +1346,53 @@ export function startGameScreen(
       showPlayerDeathScreen();
     }
 
+    // ── Crossing finalization check ──────────────────────────────────────────
+    // BUILD 279: Once the player's centre is clearly inside the next room,
+    // finalize the crossing: convert the player to next-room local coords, call
+    // loadRoom, restore camera position, and return to normal single-room mode.
+    if (crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
+      const playerForCrossing = world.clusters[0];
+      if (playerForCrossing !== undefined && playerForCrossing.isAliveFlag === 1 &&
+          isCrossingComplete(crossingState, playerForCrossing.positionXWorld, playerForCrossing.positionYWorld)) {
+        // Convert player position to next-room local block coords.
+        const nextLocalX = playerForCrossing.positionXWorld - crossingState.nextRoomOriginXWorld;
+        const nextLocalY = playerForCrossing.positionYWorld - crossingState.nextRoomOriginYWorld;
+        const spawnXBlock = Math.max(0, Math.round(nextLocalX / BLOCK_SIZE_MEDIUM));
+        const spawnYBlock = Math.max(0, Math.round(nextLocalY / BLOCK_SIZE_MEDIUM));
+
+        // Save camera in next-room local coords so it is restored after loadRoom.
+        const savedCamX = camera.centerXWorld - crossingState.nextRoomOriginXWorld;
+        const savedCamY = camera.centerYWorld - crossingState.nextRoomOriginYWorld;
+        const savedVelX = playerForCrossing.velocityXWorld;
+        const savedVelY = playerForCrossing.velocityYWorld;
+
+        const nextRoom = crossingState.nextRoom!;
+
+        // Load the next room with preserveCamera=true so snapCamera is skipped.
+        loadRoom(nextRoom, spawnXBlock, spawnYBlock, /* preserveCamera */ true);
+
+        // Restore camera to next-room local position (prevents snap).
+        camera.centerXWorld = savedCamX;
+        camera.centerYWorld = savedCamY;
+
+        // Restore player velocity (loadRoom spawns the player via spawnBlock).
+        const newPlayer = world.clusters[0];
+        if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
+          newPlayer.velocityXWorld = savedVelX;
+          newPlayer.velocityYWorld = savedVelY;
+        }
+
+        // Clear crossing state.
+        crossingState.phase       = 'inactive';
+        crossingState.nextRoom    = null;
+        crossingState.currentRoom = null;
+
+        // Reset the reveal system (camera is already positioned correctly).
+        notifyFreshRoomLoaded(transitionRevealState);
+        preloadAdjacentRoomAssets(currentRoom);
+      }
+    }
+
     // ── Update skill tomb renderer ──────────────────────────────────────────
     const playerForTomb = world.clusters[0];
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
@@ -1336,16 +1411,34 @@ export function startGameScreen(
       // jitter relative to the sprite.
       const camTargetX = prevClusterPosX[0] + (playerForCamera.positionXWorld - prevClusterPosX[0]) * renderAlpha;
       const camTargetY = prevClusterPosY[0] + (playerForCamera.positionYWorld - prevClusterPosY[0]) * renderAlpha;
-      updateCamera(
-        camera,
-        camTargetX,
-        camTargetY,
-        roomWidthWorld,
-        roomHeightWorld,
-        virtualWidthPx,
-        virtualHeightPx,
-        elapsedMs / 1000,
-      );
+
+      if (crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
+        // During crossing, clamp the camera to the union of both rooms.
+        const bounds = getCrossingUnionBounds(crossingState);
+        updateCameraWithBounds(
+          camera,
+          camTargetX,
+          camTargetY,
+          bounds.minXWorld,
+          bounds.minYWorld,
+          bounds.maxXWorld,
+          bounds.maxYWorld,
+          virtualWidthPx,
+          virtualHeightPx,
+          elapsedMs / 1000,
+        );
+      } else {
+        updateCamera(
+          camera,
+          camTargetX,
+          camTargetY,
+          roomWidthWorld,
+          roomHeightWorld,
+          virtualWidthPx,
+          virtualHeightPx,
+          elapsedMs / 1000,
+        );
+      }
     }
 
     // ── Update camera transition reveal offset ──────────────────────────────
@@ -1368,13 +1461,17 @@ export function startGameScreen(
     updateTransitionPreviewContext(transitionPreviewCtx, transitionRevealState, currentRoom);
 
     // ── Recompute camera offset after update ─────────────────────────────────
-    // Apply the transition reveal offset on top of the normal clamped follow
-    // offset so the camera can temporarily peek past the room boundary to show
-    // edge-extension tiles.
+    // During two-room crossing the camera position already tracks the crossing
+    // world space correctly, so no reveal offset is applied.  In normal mode
+    // the reveal offset peeks past the room boundary to show edge-extension tiles.
     const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
-    const revealOff = getTransitionRevealOffset(transitionRevealState);
-    const ox = camOff.offsetXPx - revealOff.revealXWorld * camera.zoom;
-    const oy = camOff.offsetYPx - revealOff.revealYWorld * camera.zoom;
+    let ox = camOff.offsetXPx;
+    let oy = camOff.offsetYPx;
+    if (crossingState.phase === 'inactive') {
+      const revealOff = getTransitionRevealOffset(transitionRevealState);
+      ox -= revealOff.revealXWorld * camera.zoom;
+      oy -= revealOff.revealYWorld * camera.zoom;
+    }
 
     let aliveCount = 0;
     for (let i = 0; i < world.particleCount; i++) {
@@ -1531,6 +1628,12 @@ export function startGameScreen(
       previewBubbles,
       previewBubbleCount,
       transitionPreviewCtx,
+      // BUILD 279: two-room crossing clip rect
+      isCrossing: crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING,
+      crossingUnionMinXWorld: crossingState.phase === 'crossing' ? getCrossingUnionBounds(crossingState).minXWorld : 0,
+      crossingUnionMinYWorld: crossingState.phase === 'crossing' ? getCrossingUnionBounds(crossingState).minYWorld : 0,
+      crossingUnionMaxXWorld: crossingState.phase === 'crossing' ? getCrossingUnionBounds(crossingState).maxXWorld : roomWidthWorld,
+      crossingUnionMaxYWorld: crossingState.phase === 'crossing' ? getCrossingUnionBounds(crossingState).maxYWorld : roomHeightWorld,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.

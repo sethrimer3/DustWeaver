@@ -76,7 +76,7 @@ export function checkRoomTransitions(
   currentRoom: RoomDef,
   _roomWidthWorld: number,
   _roomHeightWorld: number,
-  onLoadRoom: (room: RoomDef, spawnX: number, spawnY: number, transitionDirection: TransitionDirection) => void,
+  onLoadRoom: (room: RoomDef, spawnX: number, spawnY: number, transitionDirection: TransitionDirection, transitionIndex: number) => void,
 ): boolean {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return false;
@@ -127,9 +127,9 @@ export function checkRoomTransitions(
 
         if (targetReturnTransition !== undefined) {
           const spawnBlock = computeSpawnBlockForTransition(targetRoom, targetReturnTransition);
-          onLoadRoom(targetRoom, spawnBlock[0], spawnBlock[1], t.direction);
+          onLoadRoom(targetRoom, spawnBlock[0], spawnBlock[1], t.direction, ti);
         } else {
-          onLoadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1], t.direction);
+          onLoadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1], t.direction, ti);
         }
         return true;
       }
