@@ -241,7 +241,7 @@ export function isCrossingComplete(
 
 /**
  * Returns the camera clamp bounds (crossing-world-space) that cover both rooms
- * during an active crossing.
+ * during an active crossing.  Throws if called while `phase !== 'crossing'`.
  */
 export function getCrossingUnionBounds(state: TwoRoomCrossingState): {
   minXWorld: number;
@@ -249,8 +249,11 @@ export function getCrossingUnionBounds(state: TwoRoomCrossingState): {
   maxXWorld: number;
   maxYWorld: number;
 } {
-  const currentRoom = state.currentRoom!;
-  const nextRoom    = state.nextRoom!;
+  if (state.phase !== 'crossing' || state.currentRoom === null || state.nextRoom === null) {
+    throw new Error('[twoRoomCrossing] getCrossingUnionBounds called outside of active crossing');
+  }
+  const currentRoom = state.currentRoom;
+  const nextRoom    = state.nextRoom;
   const BS = BLOCK_SIZE_MEDIUM;
 
   const curW = currentRoom.widthBlocks  * BS + state.shiftXWorld;

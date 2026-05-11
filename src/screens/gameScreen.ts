@@ -1357,8 +1357,8 @@ export function startGameScreen(
         // Convert player position to next-room local block coords.
         const nextLocalX = playerForCrossing.positionXWorld - crossingState.nextRoomOriginXWorld;
         const nextLocalY = playerForCrossing.positionYWorld - crossingState.nextRoomOriginYWorld;
-        const spawnXBlock = Math.max(0, Math.round(nextLocalX / BLOCK_SIZE_MEDIUM));
-        const spawnYBlock = Math.max(0, Math.round(nextLocalY / BLOCK_SIZE_MEDIUM));
+        const spawnXBlock = Math.max(0, Math.floor(nextLocalX / BLOCK_SIZE_MEDIUM));
+        const spawnYBlock = Math.max(0, Math.floor(nextLocalY / BLOCK_SIZE_MEDIUM));
 
         // Save camera in next-room local coords so it is restored after loadRoom.
         const savedCamX = camera.centerXWorld - crossingState.nextRoomOriginXWorld;
@@ -1403,6 +1403,11 @@ export function startGameScreen(
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
+    // BUILD 279: Compute crossing bounds here so they can be reused for both
+    // the camera update (below) and renderFrame (later).
+    const isCrossing = crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING;
+    const crossingBounds = isCrossing ? getCrossingUnionBounds(crossingState) : null;
+
     const playerForCamera = world.clusters[0];
     if (playerForCamera !== undefined && playerForCamera.isAliveFlag === 1) {
       // Use the render-interpolated player position so the camera tracks the
@@ -1412,17 +1417,16 @@ export function startGameScreen(
       const camTargetX = prevClusterPosX[0] + (playerForCamera.positionXWorld - prevClusterPosX[0]) * renderAlpha;
       const camTargetY = prevClusterPosY[0] + (playerForCamera.positionYWorld - prevClusterPosY[0]) * renderAlpha;
 
-      if (crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
+      if (isCrossing && crossingBounds !== null) {
         // During crossing, clamp the camera to the union of both rooms.
-        const bounds = getCrossingUnionBounds(crossingState);
         updateCameraWithBounds(
           camera,
           camTargetX,
           camTargetY,
-          bounds.minXWorld,
-          bounds.minYWorld,
-          bounds.maxXWorld,
-          bounds.maxYWorld,
+          crossingBounds.minXWorld,
+          crossingBounds.minYWorld,
+          crossingBounds.maxXWorld,
+          crossingBounds.maxYWorld,
           virtualWidthPx,
           virtualHeightPx,
           elapsedMs / 1000,
@@ -1629,11 +1633,11 @@ export function startGameScreen(
       previewBubbleCount,
       transitionPreviewCtx,
       // BUILD 279: two-room crossing clip rect
-      isCrossing: crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING,
-      crossingUnionMinXWorld: crossingState.phase === 'crossing' ? getCrossingUnionBounds(crossingState).minXWorld : 0,
-      crossingUnionMinYWorld: crossingState.phase === 'crossing' ? getCrossingUnionBounds(crossingState).minYWorld : 0,
-      crossingUnionMaxXWorld: crossingState.phase === 'crossing' ? getCrossingUnionBounds(crossingState).maxXWorld : roomWidthWorld,
-      crossingUnionMaxYWorld: crossingState.phase === 'crossing' ? getCrossingUnionBounds(crossingState).maxYWorld : roomHeightWorld,
+      isCrossing,
+      crossingUnionMinXWorld: crossingBounds?.minXWorld ?? 0,
+      crossingUnionMinYWorld: crossingBounds?.minYWorld ?? 0,
+      crossingUnionMaxXWorld: crossingBounds?.maxXWorld ?? roomWidthWorld,
+      crossingUnionMaxYWorld: crossingBounds?.maxYWorld ?? roomHeightWorld,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.
