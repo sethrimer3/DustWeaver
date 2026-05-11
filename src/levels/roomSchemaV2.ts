@@ -626,9 +626,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
 
   if (json.backgroundBlocks && json.backgroundBlocks.length > 0) {
     out.bgBlocks = json.backgroundBlocks.map(b => {
-      const entry: SavedBgBlock = { r: [b.x, b.y, b.w, b.h] };
-      if (b.theme) entry.theme = b.theme;
-      if (b.lightBlocking === 1) entry.lb = 1;
+      const entry: SavedBgBlock = { r: [b.xBlock, b.yBlock, b.wBlock, b.hBlock] };
+      if (b.blockTheme) entry.theme = blockThemeToId(b.blockTheme);
+      if (b.isLightBlocking) entry.lb = 1;
       return entry;
     });
   }
@@ -833,9 +833,12 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   }
   if (saved.bgBlocks && saved.bgBlocks.length > 0) {
     json.backgroundBlocks = saved.bgBlocks.map(b => {
-      const entry: RoomJsonBackgroundBlock = { x: b.r[0], y: b.r[1], w: b.r[2], h: b.r[3] };
-      if (b.theme) entry.theme = b.theme;
-      if (b.lb === 1) entry.lightBlocking = 1;
+      const entry: RoomJsonBackgroundBlock = { xBlock: b.r[0], yBlock: b.r[1], wBlock: b.r[2], hBlock: b.r[3] };
+      if (b.theme) {
+        const theme = blockThemeRefToTheme(b.theme);
+        if (theme) entry.blockTheme = theme;
+      }
+      if (b.lb === 1) entry.isLightBlocking = true;
       return entry;
     });
   }

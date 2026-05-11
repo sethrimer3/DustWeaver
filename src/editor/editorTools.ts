@@ -454,6 +454,7 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestZone({ xBlock: backgroundBlocks[i].xBlock, yBlock: backgroundBlocks[i].yBlock, wBlock: backgroundBlocks[i].wBlock, hBlock: backgroundBlocks[i].hBlock }, bx, by)) {
       const removedUid = backgroundBlocks[i].uid;
       backgroundBlocks.splice(i, 1);
+      room.backgroundBlocks = backgroundBlocks;
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }

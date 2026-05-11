@@ -444,12 +444,12 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
 
   const backgroundBlocks: EditorBackgroundBlock[] = (json.backgroundBlocks ?? []).map(b => ({
     uid: uid++,
-    xBlock: b.x,
-    yBlock: b.y,
-    wBlock: b.w,
-    hBlock: b.h,
-    blockTheme: b.theme ?? null,
-    isLightBlockingFlag: b.lightBlocking === 1 ? 1 : 0,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+    wBlock: b.wBlock,
+    hBlock: b.hBlock,
+    blockTheme: b.blockTheme ?? null,
+    isLightBlockingFlag: b.isLightBlocking ? 1 : 0,
   }));
 
   return {
@@ -794,13 +794,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if ((data.backgroundBlocks ?? []).length > 0) {
     json.backgroundBlocks = (data.backgroundBlocks ?? []).map(b => {
       const entry: import('./roomJsonSchema').RoomJsonBackgroundBlock = {
-        x: b.xBlock,
-        y: b.yBlock,
-        w: b.wBlock,
-        h: b.hBlock,
+        xBlock: b.xBlock,
+        yBlock: b.yBlock,
+        wBlock: b.wBlock,
+        hBlock: b.hBlock,
       };
-      if (b.blockTheme !== null) entry.theme = b.blockTheme;
-      if (b.isLightBlockingFlag === 1) entry.lightBlocking = 1;
+      if (b.blockTheme !== null && b.blockTheme !== undefined) entry.blockTheme = b.blockTheme as import('../levels/roomDef').BlockTheme;
+      if (b.isLightBlockingFlag === 1) entry.isLightBlocking = true;
       return entry;
     });
   }

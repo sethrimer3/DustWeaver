@@ -407,14 +407,14 @@ export interface RoomJsonDef {
 
 /** A visual-only background block stored in the room JSON. */
 export interface RoomJsonBackgroundBlock {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
   /** Override block theme. Absent = use room theme. */
-  theme?: string;
-  /** 1 if this block should block ambient light. */
-  lightBlocking?: 1;
+  blockTheme?: BlockTheme;
+  /** When true, this background block blocks ambient-light propagation. */
+  isLightBlocking?: boolean;
 }
 
 // ── Validation result ────────────────────────────────────────────────────────
