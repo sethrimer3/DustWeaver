@@ -1,9 +1,20 @@
 /**
- * nextRoomEdgeRenderer.ts — Renders the connected room's 2-block facing edge.
+ * nextRoomEdgeRenderer.ts — Staging renderer for the connected room's 2-block
+ * facing edge.
+ *
+ * This is the **StagingRoomRenderer** equivalent: it is the opt-in renderer
+ * path that only activates during a transition preview or crossing.  Normal
+ * room navigation (revealProgress < threshold) incurs zero draw calls.
  *
  * When a transition reveal is active (`TransitionPreviewContext.isActive`),
  * this renderer draws the 2-block-thick strip of wall tiles from the connected
  * room at the correct world-space position just beyond the current room's edge.
+ *
+ * As of BUILD 276 the tile positions are correctly aligned for offset door
+ * openings — the `originXWorld`/`originYWorld` in `NextRoomFacingEdge` now
+ * accounts for the difference between the two transitions' yBlock/xBlock
+ * positions.  The occupancySet also includes seam-face entries from the
+ * current room's edge data so auto-tiling at the boundary is more accurate.
  *
  * Combined with the current room's own edge extension tiles, this gives the
  * player 4 columns/rows of tile continuity at a transition:
@@ -12,14 +23,9 @@
  * Must be called BEFORE the room clip rect is set (before ctx.clip() in
  * gameRender.ts) so the tiles drawn outside the room rectangle are visible.
  *
- * Tiles are only rendered when `revealProgress` exceeds a small threshold, so
- * no work is done during ordinary room navigation.
- *
- * Rendering uses the same `renderSingleExtensionTile` sprite renderer as the
- * main edge extension system.  The occupancySet from `NextRoomFacingEdge`
- * provides neighbor masks for auto-tiling (partial — only 3 columns/rows of
- * connected-room data are available, so corner joins at the transition seam
- * may not be pixel-perfect).
+ * Future: when `TransitionPreviewContext.stagingSnapshot.nextRoomWorldSnapshot`
+ * is populated, this renderer can be extended to draw the full connected room
+ * (enemies, particles, all walls) in addition to the facing-edge strip.
  */
 
 import type { TransitionPreviewContext } from './transitionPreviewContext';
