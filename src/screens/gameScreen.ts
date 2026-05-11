@@ -351,6 +351,18 @@ export function startGameScreen(
         }
       }
     }
+    // Add light-blocking background blocks to the ambient blocker set.
+    if (room.backgroundBlocks) {
+      for (const b of room.backgroundBlocks) {
+        if (b.isLightBlockingFlag !== 1) continue;
+        if (!blockerKeys) blockerKeys = new Set<string>();
+        for (let dy = 0; dy < b.hBlock; dy++) {
+          for (let dx = 0; dx < b.wBlock; dx++) {
+            blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
+          }
+        }
+      }
+    }
     setActiveBlockLighting(
       room.lightingEffect ?? 'Ambient',
       room.widthBlocks,

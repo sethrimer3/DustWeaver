@@ -155,6 +155,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check background blocks
+  for (const b of (room.backgroundBlocks ?? [])) {
+    if (hitTestZone({ xBlock: b.xBlock, yBlock: b.yBlock, wBlock: b.wBlock, hBlock: b.hBlock }, bx, by)) {
+      return { type: 'backgroundBlock', uid: b.uid };
+    }
+  }
+
   // Check dialogue triggers
   for (const dt of (room.dialogueTriggers ?? [])) {
     if (hitTestZone({ xBlock: dt.xBlock, yBlock: dt.yBlock, wBlock: dt.wBlock, hBlock: dt.hBlock }, bx, by)) {
@@ -441,6 +448,17 @@ export function deleteAtCursor(state: EditorState): void {
     }
   }
 
+  // Check background blocks
+  const backgroundBlocks = room.backgroundBlocks ?? [];
+  for (let i = 0; i < backgroundBlocks.length; i++) {
+    if (hitTestZone({ xBlock: backgroundBlocks[i].xBlock, yBlock: backgroundBlocks[i].yBlock, wBlock: backgroundBlocks[i].wBlock, hBlock: backgroundBlocks[i].hBlock }, bx, by)) {
+      const removedUid = backgroundBlocks[i].uid;
+      backgroundBlocks.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
   // Check bounce pads
   const bouncePads = room.bouncePads ?? [];
   for (let i = 0; i < bouncePads.length; i++) {
@@ -608,6 +626,12 @@ export function getAllElementsInRect(
   for (const fb of (room.fallingBlocks ?? [])) {
     if (fb.xBlock >= minX && fb.xBlock <= maxX && fb.yBlock >= minY && fb.yBlock <= maxY) {
       results.push({ type: 'fallingBlock', uid: fb.uid });
+    }
+  }
+  for (const b of (room.backgroundBlocks ?? [])) {
+    if (b.xBlock + b.wBlock > minX && b.xBlock < maxX + 1 &&
+        b.yBlock + b.hBlock > minY && b.yBlock < maxY + 1) {
+      results.push({ type: 'backgroundBlock', uid: b.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&

@@ -20,7 +20,7 @@ import type {
   EditorRope, RopeDestructibility,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorLambdaAnchor,
-  EditorFallingBlock, EditorDialogueTrigger,
+  EditorFallingBlock, EditorDialogueTrigger, EditorBackgroundBlock,
   RoomSongId,
 } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
@@ -70,6 +70,7 @@ export type {
   RoomJsonDialogueTrigger,
   RoomJsonConversation,
   RoomJsonDialogueEntry,
+  RoomJsonBackgroundBlock,
 } from './roomJsonSchema';
 
 export function validateRoomJson(data: unknown): ValidationError[] {
@@ -441,6 +442,16 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     })),
   }));
 
+  const backgroundBlocks: EditorBackgroundBlock[] = (json.backgroundBlocks ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.x,
+    yBlock: b.y,
+    wBlock: b.w,
+    hBlock: b.h,
+    blockTheme: b.theme ?? null,
+    isLightBlockingFlag: b.lightBlocking === 1 ? 1 : 0,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -480,6 +491,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       sunbeams,
       fallingBlocks,
       dialogueTriggers,
+      backgroundBlocks,
     },
     nextUid: uid,
   };
@@ -776,6 +788,19 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (dt.conversationTitle && dt.conversationTitle.trim().length > 0) {
         entry.conversation.title = dt.conversationTitle;
       }
+      return entry;
+    });
+  }
+  if ((data.backgroundBlocks ?? []).length > 0) {
+    json.backgroundBlocks = (data.backgroundBlocks ?? []).map(b => {
+      const entry: import('./roomJsonSchema').RoomJsonBackgroundBlock = {
+        x: b.xBlock,
+        y: b.yBlock,
+        w: b.wBlock,
+        h: b.hBlock,
+      };
+      if (b.blockTheme !== null) entry.theme = b.blockTheme;
+      if (b.isLightBlockingFlag === 1) entry.lightBlocking = 1;
       return entry;
     });
   }

@@ -136,6 +136,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     rope:             'rope',
     fallingBlock:     'falling_block',
     dialogueTrigger:  'dialogue_trigger',
+    backgroundBlock:  'background_block',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;

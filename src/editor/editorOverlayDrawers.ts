@@ -708,3 +708,49 @@ export function drawEditorDialogueTriggers(
     ctx.restore();
   }
 }
+
+// ============================================================================
+// Background blocks (visual-only, no collision)
+// ============================================================================
+
+/** Teal fill for normal background blocks in the editor overlay. */
+const BG_BLOCK_COLOR          = 'rgba(0, 200, 190, 0.20)';
+const BG_BLOCK_SELECTED       = 'rgba(0, 240, 220, 0.35)';
+/** Amber tint for light-blocking background blocks. */
+const BG_BLOCK_LIGHT_COLOR    = 'rgba(210, 140, 0, 0.22)';
+const BG_BLOCK_LIGHT_SELECTED = 'rgba(255, 190, 0, 0.40)';
+
+export function drawEditorBackgroundBlocks(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  const blocks = room.backgroundBlocks ?? [];
+  if (blocks.length === 0) return;
+  const bs = BLOCK_SIZE_SMALL * zoom;
+  for (const b of blocks) {
+    const sel = isSelected('backgroundBlock', b.uid);
+    const isLightBlocking = b.isLightBlockingFlag === 1;
+    const fillColor  = isLightBlocking ? (sel ? BG_BLOCK_LIGHT_SELECTED : BG_BLOCK_COLOR) : (sel ? BG_BLOCK_SELECTED : BG_BLOCK_COLOR);
+    const fillColorC = isLightBlocking ? (sel ? BG_BLOCK_LIGHT_SELECTED : BG_BLOCK_LIGHT_COLOR) : fillColor;
+    drawBlockRect(
+      ctx,
+      b.xBlock, b.yBlock, b.wBlock, b.hBlock,
+      offsetXPx, offsetYPx, zoom,
+      fillColorC,
+      sel ? 2 : 1,
+    );
+    ctx.save();
+    ctx.strokeStyle = isLightBlocking
+      ? (sel ? 'rgba(255, 200, 40, 0.9)' : 'rgba(200, 130, 0, 0.55)')
+      : (sel ? 'rgba(0, 240, 220, 0.9)' : 'rgba(0, 190, 180, 0.55)');
+    ctx.lineWidth = sel ? 2 : 1;
+    ctx.setLineDash([3, 2]);
+    ctx.strokeRect(b.xBlock * bs + offsetXPx, b.yBlock * bs + offsetYPx, b.wBlock * bs, b.hBlock * bs);
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+}

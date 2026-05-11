@@ -62,6 +62,7 @@ import type {
   RoomJsonDialogueTrigger,
   RoomJsonCrumbleBlock,
   RoomJsonLambdaAnchor,
+  RoomJsonBackgroundBlock,
 } from '../editor/roomJson';
 import { createTileGrid, paintRect, extractLayerFromGrid } from './tileGridCompressor';
 import type { SavedRect, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
@@ -178,6 +179,16 @@ export interface SavedRoomRope {
   thick?: 0 | 1 | 2;
 }
 
+/** Compact background (visual-only) block entry. */
+export interface SavedBgBlock {
+  /** [x, y, w, h] */
+  r: SavedRect;
+  /** Block theme ID override (omit if using room default). */
+  theme?: string;
+  /** 1 if this block blocks ambient light. */
+  lb?: 1;
+}
+
 export interface SavedRoomV2 {
   v: 2;
   id: string;
@@ -254,6 +265,14 @@ export interface SavedRoomV2 {
   dialogueTriggers?: RoomJsonDialogueTrigger[];
   /** Dust container pieces (xBlock, yBlock). */
   dcPieces?: [number, number][];
+  /**
+   * Exact-sized uniform walls that bypass the tile-grid compressor.
+   * Used to preserve 1×1 and 2×2 block identity across save/load round-trips.
+   * These walls are NOT also encoded in `solids`.
+   */
+  exactWalls?: SavedSpecialWall[];
+  /** Visual-only background blocks — no collision, drawn behind walls. */
+  bgBlocks?: SavedBgBlock[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -421,17 +440,24 @@ export function isSavedRoomV2(data: unknown): data is SavedRoomV2 {
 export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   const defaultTheme: BlockTheme = blockThemeRefToTheme(json.blockThemeId) ?? json.blockTheme ?? 'blackRock';
 
-  // Partition walls: uniform vs. special.
-  const uniformWalls: RoomJsonWall[] = [];
+  // Partition walls: exact-size (1×1 and 2×2) go into exactWalls to preserve
+  // identity across round-trips; remaining uniform walls go through the compressor.
+  const uniformWallsBulk: RoomJsonWall[] = [];
+  const exactWallsRaw: RoomJsonWall[] = [];
   const specialWallsRaw: RoomJsonWall[] = [];
   for (const w of json.interiorWalls) {
     const wallTheme = blockThemeRefToTheme(w.blockThemeId);
     if (wallTheme && w.blockTheme === undefined) w.blockTheme = wallTheme;
-    if (isUniformSolidWall(w)) uniformWalls.push(w);
-    else specialWallsRaw.push(w);
+    if (!isUniformSolidWall(w)) {
+      specialWallsRaw.push(w);
+    } else if ((w.wBlock === 1 && w.hBlock === 1) || (w.wBlock === 2 && w.hBlock === 2)) {
+      exactWallsRaw.push(w);
+    } else {
+      uniformWallsBulk.push(w);
+    }
   }
 
-  const solids = dehydrateSolidsByTheme(uniformWalls, json.widthBlocks, json.heightBlocks, defaultTheme);
+  const solids = dehydrateSolidsByTheme(uniformWallsBulk, json.widthBlocks, json.heightBlocks, defaultTheme);
 
   const specialWalls: SavedSpecialWall[] = specialWallsRaw.map(w => {
     const sw: SavedSpecialWall = { r: [w.xBlock, w.yBlock, w.wBlock, w.hBlock] };
@@ -588,6 +614,25 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.dcPieces = json.dustContainerPieces.map(p => [p.xBlock, p.yBlock] as [number, number]);
   }
 
+  // exactWalls: 1×1 and 2×2 uniform walls stored verbatim to preserve identity.
+  if (exactWallsRaw.length > 0) {
+    out.exactWalls = exactWallsRaw.map(w => {
+      const sw: SavedSpecialWall = { r: [w.xBlock, w.yBlock, w.wBlock, w.hBlock] };
+      if (w.blockTheme && w.blockTheme !== defaultTheme) sw.theme = blockThemeToId(w.blockTheme);
+      return sw;
+    });
+    out.exactWalls.sort((a, b) => a.r[1] - b.r[1] || a.r[0] - b.r[0] || a.r[2] - b.r[2] || a.r[3] - b.r[3]);
+  }
+
+  if (json.backgroundBlocks && json.backgroundBlocks.length > 0) {
+    out.bgBlocks = json.backgroundBlocks.map(b => {
+      const entry: SavedBgBlock = { r: [b.x, b.y, b.w, b.h] };
+      if (b.theme) entry.theme = b.theme;
+      if (b.lightBlocking === 1) entry.lb = 1;
+      return entry;
+    });
+  }
+
   return out;
 }
 
@@ -628,6 +673,18 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   const [widthBlocks, heightBlocks] = saved.size;
 
   const uniformWalls = hydrateSolidsByTheme(saved.solids);
+
+  // exactWalls: 1×1 and 2×2 walls stored verbatim (bypass tile-grid compressor).
+  const exactWalls: RoomJsonWall[] = (saved.exactWalls ?? []).map(sw => {
+    const [x, y, w, h] = sw.r;
+    const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
+    if (sw.theme) {
+      const wallTheme = blockThemeRefToTheme(sw.theme);
+      if (wallTheme) wall.blockTheme = wallTheme;
+    }
+    return wall;
+  });
+
   const specialWalls: RoomJsonWall[] = (saved.specialWalls ?? []).map(sw => {
     const [x, y, w, h] = sw.r;
     const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
@@ -680,7 +737,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     widthBlocks,
     heightBlocks,
     playerSpawnBlock: [saved.spawn[0], saved.spawn[1]],
-    interiorWalls: [...uniformWalls, ...specialWalls],
+    interiorWalls: [...uniformWalls, ...exactWalls, ...specialWalls],
     enemies,
     transitions,
     skillTombs,
@@ -773,6 +830,14 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   }
   if (saved.dcPieces && saved.dcPieces.length > 0) {
     json.dustContainerPieces = saved.dcPieces.map(([x, y]) => ({ xBlock: x, yBlock: y }));
+  }
+  if (saved.bgBlocks && saved.bgBlocks.length > 0) {
+    json.backgroundBlocks = saved.bgBlocks.map(b => {
+      const entry: RoomJsonBackgroundBlock = { x: b.r[0], y: b.r[1], w: b.r[2], h: b.r[3] };
+      if (b.theme) entry.theme = b.theme;
+      if (b.lb === 1) entry.lightBlocking = 1;
+      return entry;
+    });
   }
 
   return json;

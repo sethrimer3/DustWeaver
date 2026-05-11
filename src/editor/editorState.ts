@@ -82,6 +82,10 @@ export interface PaletteItem {
   isFallingBlockItem?: 1;
   /** Which falling block variant this item places. Only meaningful when isFallingBlockItem === 1. */
   fallingBlockVariant?: import('../levels/roomDef').FallingBlockVariant;
+  /** 1 if this palette item places a visual-only background block (no collision). */
+  isBackgroundBlockItem?: 1;
+  /** 1 if this background block also blocks ambient light. Only meaningful when isBackgroundBlockItem === 1. */
+  isLightBlockingBackgroundBlockItem?: 1;
 }
 
 /** Options for the crumble-block weakness variant dropdown. */
@@ -210,6 +214,11 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'falling_block_tough',     label: 'Falling Block, Tough',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'tough' as const },
   { id: 'falling_block_sensitive', label: 'Falling Block, Sensitive', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'sensitive' as const },
   { id: 'falling_block_crumbling', label: 'Falling Block, Crumbling', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'crumbling' as const },
+  // ── Background blocks (visual-only, no collision) ────────────────────────
+  { id: 'bg_block_1x1',       label: 'BG Block 1×1',              category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBackgroundBlockItem: 1 as const },
+  { id: 'bg_block_2x2',       label: 'BG Block 2×2',              category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBackgroundBlockItem: 1 as const },
+  { id: 'bg_block_light_1x1', label: 'BG Block Light-Block 1×1',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBackgroundBlockItem: 1 as const, isLightBlockingBackgroundBlockItem: 1 as const },
+  { id: 'bg_block_light_2x2', label: 'BG Block Light-Block 2×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBackgroundBlockItem: 1 as const, isLightBlockingBackgroundBlockItem: 1 as const },
   { id: 'rope', label: 'Rope', category: 'ropes', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
 ];
 
@@ -598,6 +607,19 @@ export interface EditorFallingBlock {
   variant: import('../levels/roomDef').FallingBlockVariant;
 }
 
+/** A visual-only background block painted by the editor. */
+export interface EditorBackgroundBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  /** Override block theme for this block. Null = use room theme. */
+  blockTheme: string | null;
+  /** 1 if this block should block ambient light. */
+  isLightBlockingFlag: 0 | 1;
+}
+
 /** A dialogue trigger zone that starts a conversation when the player enters it. */
 export interface EditorDialogueEntry {
   text: string;
@@ -688,11 +710,13 @@ export interface EditorRoomData {
   fallingBlocks?: EditorFallingBlock[];
   /** Dialogue trigger zones placed in this room. */
   dialogueTriggers?: EditorDialogueTrigger[];
+  /** Visual-only background blocks — no collision, drawn behind foreground walls. */
+  backgroundBlocks?: EditorBackgroundBlock[];
 }
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock' | 'dialogueTrigger';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;
