@@ -119,6 +119,11 @@ import {
 } from '../render/transitions/transitionPreviewContext';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import { GameLoadingOverlay } from './gameLoadingOverlay';
+import {
+  createAdaptiveQualityState,
+  updateAdaptiveQuality,
+  type AdaptiveQualityState,
+} from './gameAdaptiveQuality';
 
 const FIXED_DT_MS = 16.666;
 
@@ -763,29 +768,10 @@ export function startGameScreen(
   let interactInputPulseMs = 0;
 
   // ── Adaptive quality state ───────────────────────────────────────────────
-  // Monitors rolling average frame time.  When the average exceeds the
-  // over-budget threshold for ADAPTIVE_TRIGGER_FRAMES consecutive frames,
-  // adaptive reduction kicks in (lower quality caps, profiler warning).
-  // When the average drops below the recovery threshold for
-  // ADAPTIVE_RECOVERY_FRAMES consecutive frames, normal quality is restored.
-  //
-  // Thresholds:
-  //   Over budget  : avg > 33 ms (~30 fps) for 90 consecutive frames (~1.5 s)
-  //   Recovery     : avg < 20 ms (~50 fps) for 180 consecutive frames (~3 s)
-  /** Target budget for one render frame (33 ms ≈ 30 fps minimum). */
-  const ADAPTIVE_OVER_BUDGET_MS = 33;
-  /** Recovery threshold: avg frame must drop below this to restore quality. */
-  const ADAPTIVE_RECOVERY_MS = 20;
-  /** Consecutive frames over budget before reducing quality. */
-  const ADAPTIVE_TRIGGER_FRAMES = 90;
-  /** Consecutive frames under recovery threshold before restoring quality. */
-  const ADAPTIVE_RECOVERY_FRAMES = 180;
-
-  let isAdaptiveReductionActive = false;
-  /** Consecutive frames the avg has been above the over-budget threshold. */
-  let adaptiveOverBudgetStreak = 0;
-  /** Consecutive frames the avg has been below the recovery threshold. */
-  let adaptiveRecoveryStreak = 0;
+  // Monitors rolling average frame time and toggles a quality-reduction mode
+  // when the average is persistently over budget.  Logic extracted to
+  // gameAdaptiveQuality.ts so the state machine can be reasoned about in isolation.
+  const aqState: AdaptiveQualityState = createAdaptiveQualityState();
 
   let isPaused = false;
   let pauseMenuCleanup: (() => void) | null = null;
@@ -966,36 +952,9 @@ export function startGameScreen(
     renderProfiler.recordFrameTime(elapsedMs);
 
     // ── Adaptive quality update ───────────────────────────────────────────
-    // Check the EMA average frame time (populated by the profiler) and toggle
-    // adaptive reduction when the average is persistently over/under budget.
-    // This runs every frame but reads only a single cached float from the
-    // profiler — no per-frame allocations.
-    {
-      const avgMs = renderProfiler.getAvgFrameMs();
-      if (avgMs > 0) {
-        if (avgMs > ADAPTIVE_OVER_BUDGET_MS) {
-          adaptiveOverBudgetStreak++;
-          adaptiveRecoveryStreak = 0;
-        } else if (avgMs < ADAPTIVE_RECOVERY_MS) {
-          adaptiveRecoveryStreak++;
-          adaptiveOverBudgetStreak = 0;
-        } else {
-          // Between thresholds: neither streak accumulates.
-          adaptiveOverBudgetStreak = 0;
-          adaptiveRecoveryStreak = 0;
-        }
-
-        if (!isAdaptiveReductionActive && adaptiveOverBudgetStreak >= ADAPTIVE_TRIGGER_FRAMES) {
-          isAdaptiveReductionActive = true;
-          adaptiveOverBudgetStreak = 0;
-          renderProfiler.setAdaptiveReduction(true);
-        } else if (isAdaptiveReductionActive && adaptiveRecoveryStreak >= ADAPTIVE_RECOVERY_FRAMES) {
-          isAdaptiveReductionActive = false;
-          adaptiveRecoveryStreak = 0;
-          renderProfiler.setAdaptiveReduction(false);
-        }
-      }
-    }
+    // Reads the profiler's EMA average frame time and adjusts quality caps
+    // when the average is persistently over/under budget.
+    updateAdaptiveQuality(aqState, renderProfiler);
 
     hudState.frameTimeMs = elapsedMs;
     fpsAccMs += elapsedMs;
@@ -1624,7 +1583,7 @@ export function startGameScreen(
       setTeleportFlashAlpha: (a: number) => { teleportFlashAlpha = a; },
       getPlayerDustCount,
       graphicsQuality: pauseMenuState.graphicsQuality,
-      isAdaptiveReductionActive,
+      isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,
       renderProfiler,
       renderAlpha,
       prevFallingBlockOffsetY,
