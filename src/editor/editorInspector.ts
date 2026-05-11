@@ -146,7 +146,7 @@ export function updateInspector(
         v => callbacks?.onPropertyChange('transition.yBlock', parseInt(v)));
       addField(div, 'Width (openingSizeBlocks)', String(trans.openingSizeBlocks),
         v => callbacks?.onPropertyChange('transition.openingSizeBlocks', parseInt(v)));
-      addNumberField(div, 'Gradient Width', trans.gradientWidthBlocks ?? 3, 1, 20,
+      addNumberField(div, 'Gradient Width', trans.gradientWidthBlocks ?? 3, 0, 20,
         v => callbacks?.onPropertyChange('transition.gradientWidthBlocks', v));
       addField(div, 'targetRoomId', trans.targetRoomId,
         v => callbacks?.onPropertyChange('transition.targetRoomId', v));

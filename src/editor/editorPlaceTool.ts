@@ -320,7 +320,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     const isHoriz = direction === 'left' || direction === 'right';
 
     const DEFAULT_WIDTH  = 6;
-    const DEFAULT_GRADIENT = 3;
+    const DEFAULT_GRADIENT = 0;
 
     const openingSizeBlocks = isHoriz
       ? Math.max(1, Math.min(DEFAULT_WIDTH, room.heightBlocks - 2))

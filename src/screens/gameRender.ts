@@ -59,6 +59,7 @@ import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import {
   drawTunnelDarkness,
+  renderTransitionPassageGradients,
   DUST_CONTAINER_SIZE_WORLD,
 } from './gameRoom';
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
@@ -75,7 +76,6 @@ import { renderGameHud } from './gameHudRenderer';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer';
 import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
-import { renderPreviewBubbles } from '../render/transitions/previewBubbleRenderer';
 import type { TransitionPreviewContext } from '../render/transitions/transitionPreviewContext';
 import { renderNextRoomFacingEdge } from '../render/transitions/nextRoomEdgeRenderer';
 import { renderLambdaAnchors, renderTeleportFlash } from '../render/lambdaAnchorRenderer';
@@ -445,6 +445,12 @@ export function renderFrame(r: RenderFrameContext): void {
     );
   }
 
+  // ── Transition passage gradients (drawn BEFORE room clip) ────────────────
+  // Fills transition opening passages with the authored fade gradient so the
+  // black void in the passage is replaced by a proper depth-darkness effect.
+  // Drawn after edge extension tiles so the gradient composites over them.
+  renderTransitionPassageGradients(ctx, currentRoom, ox, oy, zoom);
+
   // ── Next-room facing-edge layer (drawn BEFORE room clip) ─────────────────
   // When a transition reveal is active, render the connected room's 2-block
   // facing-edge strip just beyond the current room's boundary.  Combined with
@@ -601,14 +607,9 @@ export function renderFrame(r: RenderFrameContext): void {
   // Tunnel darkness overlays
   drawTunnelDarkness(ctx, currentRoom, ox, oy, zoom);
 
-  // ── Nearby-transition preview bubbles ────────────────────────────────────
-  // Glowing aperture cues rendered at each nearby room transition.  The
-  // bubble grows and brightens as the player approaches the opening.
-  // Drawn on top of tunnel darkness but below HUD elements so the glow
-  // integrates naturally with the room edge.
-  if (r.previewBubbleCount > 0) {
-    renderPreviewBubbles(ctx, r.previewBubbles, r.previewBubbleCount);
-  }
+  // (Preview bubble glow removed in BUILD 277 — the blue growing glow near
+  //  transitions was visually distracting and is replaced by proper ambient-
+  //  depth shading on edge and facing-edge tiles.)
 
   // ── Atmospheric effects (dust, debris) ──────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DUST);

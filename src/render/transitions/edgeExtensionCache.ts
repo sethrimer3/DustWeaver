@@ -36,21 +36,13 @@ export interface EdgeExtensionTile {
   /** Per-wall theme override (null = use room default). */
   theme: string | null;
   /**
-   * Distance in blocks from the room edge (1 = immediately adjacent to room,
-   * EDGE_EXTENSION_EXTRA_BLOCKS = outermost layer).
-   * Used to compute progressive ambient depth tinting.
+   * Per-tile ambient-light depth computed from a full BFS over an expanded
+   * occupancy grid that includes both in-room tiles and this extension tile.
+   * Transition openings count as open air, so solid tiles adjacent to an
+   * opening get depth 0 (fully exposed).  Drives `getDarknessAlphaFromAirDepth`
+   * in the renderer so shading matches the rest of the room seamlessly.
    */
-  extensionStep: number;
-  /**
-   * Ambient-light depth of the room boundary tile this extension tile was
-   * derived from.  Computed by the same BFS as the main wall renderer so
-   * extension tiles start from the same darkness level as their adjacent room
-   * edge tile and darken progressively outward (depth = edgeAmbientDepth +
-   * extensionStep).  This prevents jarring brightness mismatches where deep
-   * underground edge tiles (high depth → fully dark) meet step-1 extension
-   * tiles that would otherwise be drawn at a fixed, low depth.
-   */
-  edgeAmbientDepth: number;
+  ambientDepth: number;
 }
 
 /** Cached edge extension data for a single room. */
@@ -74,6 +66,99 @@ export interface EdgeExtensionCache {
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Build an expanded ambient-depth map for the edge extension zone.
+ *
+ * Constructs an occupancy grid that covers `[-N, W+N) × [-N, H+N)` (room
+ * coords), coordinates are shifted by N so all indices are non-negative.
+ * Solid tiles from the in-room occupancy map and from the mirrored extension
+ * zone are included; transition opening cells remain air throughout.
+ *
+ * Running `buildAmbientDepths` over this expanded grid means:
+ *  - In-room depths are consistent with the standard room BFS.
+ *  - Extension solid tiles adjacent to transition openings (air) receive depth 0.
+ *  - Extension solid tiles buried behind other solid extension tiles receive
+ *    progressively higher depth, giving a natural darkening effect.
+ *
+ * @returns Map keyed by expanded "col,row" (i.e. room col+N, room row+N).
+ */
+function _buildExpandedAmbientDepths(
+  occupied: Map<string, string | null>,
+  openings: Set<string>,
+  blockerKeys: Set<string>,
+  ambientDirection: AmbientLightDirection,
+  W: number,
+  H: number,
+  N: number,
+): Map<string, number> {
+  const EW = W + 2 * N;
+  const EH = H + 2 * N;
+
+  const isSolid = (col: number, row: number): boolean =>
+    occupied.has(`${col},${row}`) && !openings.has(`${col},${row}`);
+
+  // Build expanded occupancy with coordinates shifted by N.
+  const expandedOccupied = new Set<string>();
+
+  // In-room solid tiles
+  for (let row = 0; row < H; row++) {
+    for (let col = 0; col < W; col++) {
+      if (isSolid(col, row)) expandedOccupied.add(`${col + N},${row + N}`);
+    }
+  }
+
+  // Left extension: col -d (d=1..N) → expanded col N-d
+  for (let row = 0; row < H; row++) {
+    if (!isSolid(0, row)) continue;
+    for (let d = 1; d <= N; d++) expandedOccupied.add(`${N - d},${row + N}`);
+  }
+  // Right extension: col W+d-1 (d=1..N) → expanded col N+W+d-1
+  for (let row = 0; row < H; row++) {
+    if (!isSolid(W - 1, row)) continue;
+    for (let d = 0; d < N; d++) expandedOccupied.add(`${N + W + d},${row + N}`);
+  }
+  // Top extension: row -d (d=1..N) → expanded row N-d
+  for (let col = 0; col < W; col++) {
+    if (!isSolid(col, 0)) continue;
+    for (let d = 1; d <= N; d++) expandedOccupied.add(`${col + N},${N - d}`);
+  }
+  // Bottom extension: row H+d-1 (d=1..N) → expanded row N+H+d-1
+  for (let col = 0; col < W; col++) {
+    if (!isSolid(col, H - 1)) continue;
+    for (let d = 0; d < N; d++) expandedOccupied.add(`${col + N},${N + H + d}`);
+  }
+
+  // Corner extensions — each corner cell inherits solid status from its
+  // corresponding room-corner cell.
+  // Top-left corner: col -dc (dc=1..N), row -dr (dr=1..N)
+  if (isSolid(0, 0)) {
+    for (let dc = 1; dc <= N; dc++) for (let dr = 1; dr <= N; dr++) expandedOccupied.add(`${N - dc},${N - dr}`);
+  }
+  // Top-right corner
+  if (isSolid(W - 1, 0)) {
+    for (let dc = 0; dc < N; dc++) for (let dr = 1; dr <= N; dr++) expandedOccupied.add(`${N + W + dc},${N - dr}`);
+  }
+  // Bottom-left corner
+  if (isSolid(0, H - 1)) {
+    for (let dc = 1; dc <= N; dc++) for (let dr = 0; dr < N; dr++) expandedOccupied.add(`${N - dc},${N + H + dr}`);
+  }
+  // Bottom-right corner
+  if (isSolid(W - 1, H - 1)) {
+    for (let dc = 0; dc < N; dc++) for (let dr = 0; dr < N; dr++) expandedOccupied.add(`${N + W + dc},${N + H + dr}`);
+  }
+
+  // Shift blockers into expanded coords (extension zone has no blockers).
+  const expandedBlockers = new Set<string>();
+  for (const key of blockerKeys) {
+    const ci = key.indexOf(',');
+    const col = parseInt(key.slice(0, ci), 10);
+    const row = parseInt(key.slice(ci + 1), 10);
+    expandedBlockers.add(`${col + N},${row + N}`);
+  }
+
+  return buildAmbientDepths(expandedOccupied, expandedBlockers, ambientDirection, EW, EH);
+}
 
 /**
  * Build an occupancy map: "col,row" → theme-or-null.
@@ -150,9 +235,11 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
   const themeAt = (col: number, row: number): string | null =>
     occupied.get(`${col},${row}`) ?? null;
 
-  // ── Ambient-depth map ─────────────────────────────────────────────────────
-  // Build the same BFS depth map that the main wall renderer uses so that
-  // extension tiles match the darkness of adjacent room edge tiles.
+  // ── Expanded ambient-depth map ────────────────────────────────────────────
+  // Run a BFS over an expanded grid that includes the full extension zone so
+  // each extension tile gets a real per-tile depth (not just edgeDepth+step).
+  // Transition openings are air in the expanded grid, so solid tiles around
+  // passages shade correctly as if the passage is exposed to open air.
   const effect = room.lightingEffect ?? 'Ambient';
   const ambientDirection: AmbientLightDirection =
     room.ambientLightDirection !== undefined ? room.ambientLightDirection :
@@ -163,20 +250,15 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     blockerKeys.add(`${b.xBlock},${b.yBlock}`);
   }
 
-  const occupiedKeys = new Set<string>(occupied.keys());
-  const depths = buildAmbientDepths(occupiedKeys, blockerKeys, ambientDirection, W, H);
-  const depthFallback = Math.max(W, H);
+  // Expanded depth map; keys are in EXPANDED coordinates (room coord + N).
+  const expandedDepths = _buildExpandedAmbientDepths(
+    occupied, openings, blockerKeys, ambientDirection, W, H, N,
+  );
+  const expandedFallback = Math.max(W + 2 * N, H + 2 * N);
 
-  /**
-   * Returns the ambient depth of the nearest in-room tile to (col, row).
-   * Clamps out-of-bounds coordinates to the room boundary so extension and
-   * corner tiles all resolve against their closest room-edge source tile.
-   */
-  const edgeDepth = (col: number, row: number): number => {
-    const sc = Math.max(0, Math.min(W - 1, col));
-    const sr = Math.max(0, Math.min(H - 1, row));
-    return depths.get(`${sc},${sr}`) ?? depthFallback;
-  };
+  // Look up a depth using ROOM coordinates (handles in-room and extension tiles).
+  const depthAt = (col: number, row: number): number =>
+    expandedDepths.get(`${col + N},${row + N}`) ?? expandedFallback;
 
   const tiles: EdgeExtensionTile[] = [];
 
@@ -185,7 +267,7 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const solid = isSolid(0, row);
     const theme = solid ? themeAt(0, row) : null;
     for (let d = 1; d <= N; d++) {
-      tiles.push({ colBlock: -d, rowBlock: row, isSolid: solid, theme, extensionStep: d, edgeAmbientDepth: edgeDepth(0, row) });
+      tiles.push({ colBlock: -d, rowBlock: row, isSolid: solid, theme, ambientDepth: depthAt(-d, row) });
     }
   }
 
@@ -194,7 +276,7 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const solid = isSolid(W - 1, row);
     const theme = solid ? themeAt(W - 1, row) : null;
     for (let d = 0; d < N; d++) {
-      tiles.push({ colBlock: W + d, rowBlock: row, isSolid: solid, theme, extensionStep: d + 1, edgeAmbientDepth: edgeDepth(W - 1, row) });
+      tiles.push({ colBlock: W + d, rowBlock: row, isSolid: solid, theme, ambientDepth: depthAt(W + d, row) });
     }
   }
 
@@ -203,7 +285,7 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const solid = isSolid(col, 0);
     const theme = solid ? themeAt(col, 0) : null;
     for (let d = 1; d <= N; d++) {
-      tiles.push({ colBlock: col, rowBlock: -d, isSolid: solid, theme, extensionStep: d, edgeAmbientDepth: edgeDepth(col, 0) });
+      tiles.push({ colBlock: col, rowBlock: -d, isSolid: solid, theme, ambientDepth: depthAt(col, -d) });
     }
   }
 
@@ -212,21 +294,19 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
     const solid = isSolid(col, H - 1);
     const theme = solid ? themeAt(col, H - 1) : null;
     for (let d = 0; d < N; d++) {
-      tiles.push({ colBlock: col, rowBlock: H + d, isSolid: solid, theme, extensionStep: d + 1, edgeAmbientDepth: edgeDepth(col, H - 1) });
+      tiles.push({ colBlock: col, rowBlock: H + d, isSolid: solid, theme, ambientDepth: depthAt(col, H + d) });
     }
   }
 
   // ── Corner extensions ─────────────────────────────────────────────────────
   // Each corner cell borrows solid/theme from the nearest room corner cell.
-  // extensionStep for corners is the Chebyshev distance (max of dc, dr).
   // Top-left
   {
     const solid = isSolid(0, 0);
     const theme = solid ? themeAt(0, 0) : null;
-    const cornerDepth = edgeDepth(0, 0);
     for (let dc = 1; dc <= N; dc++) {
       for (let dr = 1; dr <= N; dr++) {
-        tiles.push({ colBlock: -dc, rowBlock: -dr, isSolid: solid, theme, extensionStep: Math.max(dc, dr), edgeAmbientDepth: cornerDepth });
+        tiles.push({ colBlock: -dc, rowBlock: -dr, isSolid: solid, theme, ambientDepth: depthAt(-dc, -dr) });
       }
     }
   }
@@ -234,10 +314,9 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
   {
     const solid = isSolid(W - 1, 0);
     const theme = solid ? themeAt(W - 1, 0) : null;
-    const cornerDepth = edgeDepth(W - 1, 0);
     for (let dc = 0; dc < N; dc++) {
       for (let dr = 1; dr <= N; dr++) {
-        tiles.push({ colBlock: W + dc, rowBlock: -dr, isSolid: solid, theme, extensionStep: Math.max(dc + 1, dr), edgeAmbientDepth: cornerDepth });
+        tiles.push({ colBlock: W + dc, rowBlock: -dr, isSolid: solid, theme, ambientDepth: depthAt(W + dc, -dr) });
       }
     }
   }
@@ -245,10 +324,9 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
   {
     const solid = isSolid(0, H - 1);
     const theme = solid ? themeAt(0, H - 1) : null;
-    const cornerDepth = edgeDepth(0, H - 1);
     for (let dc = 1; dc <= N; dc++) {
       for (let dr = 0; dr < N; dr++) {
-        tiles.push({ colBlock: -dc, rowBlock: H + dr, isSolid: solid, theme, extensionStep: Math.max(dc, dr + 1), edgeAmbientDepth: cornerDepth });
+        tiles.push({ colBlock: -dc, rowBlock: H + dr, isSolid: solid, theme, ambientDepth: depthAt(-dc, H + dr) });
       }
     }
   }
@@ -256,10 +334,9 @@ export function buildEdgeExtensionCache(room: RoomDef): EdgeExtensionCache {
   {
     const solid = isSolid(W - 1, H - 1);
     const theme = solid ? themeAt(W - 1, H - 1) : null;
-    const cornerDepth = edgeDepth(W - 1, H - 1);
     for (let dc = 0; dc < N; dc++) {
       for (let dr = 0; dr < N; dr++) {
-        tiles.push({ colBlock: W + dc, rowBlock: H + dr, isSolid: solid, theme, extensionStep: Math.max(dc + 1, dr + 1), edgeAmbientDepth: cornerDepth });
+        tiles.push({ colBlock: W + dc, rowBlock: H + dr, isSolid: solid, theme, ambientDepth: depthAt(W + dc, H + dr) });
       }
     }
   }

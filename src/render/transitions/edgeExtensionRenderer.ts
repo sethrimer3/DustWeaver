@@ -6,11 +6,10 @@
  *
  * Solid extension tiles are drawn using the same auto-tiling sprites as the
  * main wall renderer via {@link renderSingleExtensionTile} from
- * blockSpriteRenderer.ts.  Ambient depth tinting is applied using each tile's
- * pre-computed {@link EdgeExtensionTile.edgeAmbientDepth} — the ambient depth
- * of the room boundary tile it was derived from — plus its extensionStep, so
- * the darkness matches the adjacent room tiles exactly and then deepens
- * progressively away from the room.
+ * blockSpriteRenderer.ts.  Ambient depth tinting uses each tile's per-tile
+ * {@link EdgeExtensionTile.ambientDepth} computed from a full expanded-grid
+ * BFS, so shading matches room tiles exactly and openings around transition
+ * passages count as open air.
  *
  * Empty extension tiles are left black (the virtual canvas is pre-filled
  * with black at the start of every frame).  In FullyLit rooms the bg colour
@@ -68,10 +67,10 @@ export function renderEdgeExtension(
     if (screenY + tileSizePx < 0 || screenY > vpH) continue;
 
     if (tile.isSolid) {
-      // Darkness = room-edge depth + outward step, so extension tiles are at
-      // least as dark as the adjacent room tile and deepen progressively.
+      // Per-tile ambient depth from the expanded BFS — correctly accounts for
+      // transition openings as open air so passage-adjacent tiles shade naturally.
       const darknessAlpha = applyAmbientTint
-        ? getDarknessAlphaFromAirDepth(tile.edgeAmbientDepth + tile.extensionStep)
+        ? getDarknessAlphaFromAirDepth(tile.ambientDepth)
         : 0;
 
       renderSingleExtensionTile(
