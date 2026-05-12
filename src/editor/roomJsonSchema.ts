@@ -111,6 +111,11 @@ export interface RoomJsonTransition {
   xBlock?: number;
   /** Y block of the top-left corner of the zone (new primary field). */
   yBlock?: number;
+  /**
+   * When true, entering this transition uses the legacy teleport-style room load
+   * instead of seamless adjacent-room camera crossing.
+   */
+  longTransition?: boolean;
 }
 
 /** Save Tomb — where the player saves their progress. Uses "skillTombs" JSON key for backward compat. */

@@ -483,6 +483,13 @@ export interface RoomTransitionDef {
    * Depth of the fade gradient zone in the facing direction, in blocks (default: 3).
    */
   gradientWidthBlocks?: number;
+  /**
+   * When true, this transition uses the legacy teleport-style room load instead of
+   * the seamless adjacent-room crossing camera behaviour.  Entering it immediately
+   * loads the target room without smooth camera crossing or staged-room rendering.
+   * Default is false (seamless crossing).
+   */
+  longTransition?: boolean;
 }
 
 /** Direction a spike faces (the pointy end). */

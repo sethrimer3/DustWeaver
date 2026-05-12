@@ -380,6 +380,11 @@ export interface EditorTransition {
   /** Depth of the fade gradient zone in the facing direction, in blocks (default: 3). */
   gradientWidthBlocks?: number;
   /**
+   * When true, entering this transition uses the legacy teleport-style room load
+   * instead of seamless adjacent-room camera crossing.
+   */
+  longTransition?: boolean;
+  /**
    * @deprecated Legacy field — y-start (for left/right) or x-start (for up/down) of the
    * opening. Superseded by xBlock/yBlock. Kept for backward-compatible JSON round-trips.
    */

@@ -77,12 +77,15 @@ export function checkRoomTransitions(
   _roomWidthWorld: number,
   _roomHeightWorld: number,
   onLoadRoom: (room: RoomDef, spawnX: number, spawnY: number, transitionDirection: TransitionDirection, transitionIndex: number) => void,
+  playerOffsetXWorld = 0,
+  playerOffsetYWorld = 0,
 ): boolean {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return false;
 
-  const px = player.positionXWorld;
-  const py = player.positionYWorld;
+  // Adjust to room-local coordinates when the active room is offset in world space.
+  const px = player.positionXWorld - playerOffsetXWorld;
+  const py = player.positionYWorld - playerOffsetYWorld;
   const BS = BLOCK_SIZE_MEDIUM;
 
   for (let ti = 0; ti < currentRoom.transitions.length; ti++) {
@@ -125,6 +128,10 @@ export function checkRoomTransitions(
           && targetTransition.direction === oppositeDirection,
         );
 
+        if (targetReturnTransition === undefined) {
+          console.warn(`[Transition] Room "${currentRoom.id}" transition[${ti}] → "${t.targetRoomId}" has no matching return transition (direction=${t.direction}).`);
+        }
+
         if (targetReturnTransition !== undefined) {
           const spawnBlock = computeSpawnBlockForTransition(targetRoom, targetReturnTransition);
           onLoadRoom(targetRoom, spawnBlock[0], spawnBlock[1], t.direction, ti);
@@ -132,6 +139,8 @@ export function checkRoomTransitions(
           onLoadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1], t.direction, ti);
         }
         return true;
+      } else {
+        console.warn(`[Transition] Room "${currentRoom.id}" transition[${ti}] points to missing room "${t.targetRoomId}".`);
       }
     }
   }

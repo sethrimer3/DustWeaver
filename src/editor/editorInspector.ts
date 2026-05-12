@@ -164,6 +164,9 @@ export function updateInspector(
       addCheckbox(div, 'isSecretDoor', trans.isSecretDoor === true,
         v => callbacks?.onPropertyChange('transition.isSecretDoor', v ? 1 : 0));
 
+      addCheckbox(div, 'Long Transition', trans.longTransition === true,
+        v => callbacks?.onPropertyChange('transition.longTransition', v ? 1 : 0));
+
       // Link Transition button
       const linkBtn = makeBtn('🔗 Link Transition', () => callbacks?.onLinkTransition());
       linkBtn.style.width = '100%';

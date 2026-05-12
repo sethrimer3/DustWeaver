@@ -122,6 +122,9 @@ export function applyPropertyToElement(
       if (prop === 'transition.isSecretDoor') {
         trans.isSecretDoor = numVal === 1;
       }
+      if (prop === 'transition.longTransition') {
+        trans.longTransition = numVal === 1;
+      }
       if (prop === 'transition.gradientWidthBlocks' && !isNaN(numVal)) {
         trans.gradientWidthBlocks = Math.max(0, numVal);
       }

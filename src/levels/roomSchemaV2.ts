@@ -143,6 +143,8 @@ export interface SavedTransition {
   spawn: [number, number];
   fade?: string;
   depth?: number;
+  /** When true, this is a long/teleport-style transition (non-seamless). */
+  lt?: boolean;
 }
 
 /** Compact crumble block entry. */
@@ -661,6 +663,7 @@ function dehydrateTransition(t: RoomJsonTransition): SavedTransition {
   };
   if (t.fadeColor) out.fade = t.fadeColor;
   if (t.depthBlock !== undefined) out.depth = t.depthBlock;
+  if (t.longTransition) out.lt = true;
   return out;
 }
 
@@ -720,6 +723,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     };
     if (t.fade) jt.fadeColor = t.fade;
     if (t.depth !== undefined) jt.depthBlock = t.depth;
+    if (t.lt) jt.longTransition = true;
     return jt;
   });
 

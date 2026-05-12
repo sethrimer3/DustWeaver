@@ -280,8 +280,10 @@ export function getCrossingUnionBounds(state: TwoRoomCrossingState): {
  * finalisation).
  *
  * Stops appending when MAX_WALLS is reached.
+ *
+ * Exported as `appendRoomWallsAtOffset` for use in seamless room staging.
  */
-function _appendRoomWalls(
+export function appendRoomWallsAtOffset(
   world: WorldState,
   room: RoomDef,
   offsetXWorld: number,
@@ -315,3 +317,6 @@ function _appendRoomWalls(
     world.wallBouncePadSpeedFactorIndex[idx] = 0;
   }
 }
+
+/** @internal — alias kept for startCrossing which uses the private name. */
+const _appendRoomWalls = appendRoomWallsAtOffset;
