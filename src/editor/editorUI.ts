@@ -39,7 +39,7 @@ export interface EditorUI {
 // continue to work without change.
 export type { RoomEdge, EditorUICallbacks } from './editorState';
 
-export function createEditorUI(root: HTMLElement): EditorUI {
+export function createEditorUI(root: HTMLElement, campaignTitle?: string | null): EditorUI {
   let callbacks: EditorUICallbacks | null = null;
 
   const container = document.createElement('div');
@@ -54,7 +54,11 @@ export function createEditorUI(root: HTMLElement): EditorUI {
 
   // ── Title ────────────────────────────────────────────────────────────────
   const title = document.createElement('div');
-  title.textContent = '🛠 World Editor';
+  if (campaignTitle) {
+    title.innerHTML = `🛠 Custom Campaign Editor<br><span style="font-size:11px;color:#ffcc66;font-weight:normal;">${campaignTitle}</span>`;
+  } else {
+    title.textContent = '🛠 World Editor';
+  }
   title.style.cssText = `font-size: 15px; color: ${GREEN}; margin-bottom: 12px; font-weight: bold;`;
   container.appendChild(title);
 
@@ -77,8 +81,19 @@ export function createEditorUI(root: HTMLElement): EditorUI {
   confirmCancelBar.appendChild(cancelBtn);
   container.appendChild(confirmCancelBar);
 
+  // ── Export Campaign JSON button (custom campaign mode) ───────────────────
+  let exportCampaignBtn: HTMLButtonElement | null = null;
+  if (campaignTitle) {
+    exportCampaignBtn = makeBtn('📦 Export Campaign JSON', () => callbacks?.onExportCampaignJson?.());
+    exportCampaignBtn.style.cssText += `
+      width: 100%; padding: 8px; font-size: 12px; margin-bottom: 6px;
+      background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
+    `;
+    container.appendChild(exportCampaignBtn);
+  }
+
   // ── Export All Changes button ────────────────────────────────────────────
-  const exportAllBtn = makeBtn('📦 Export All Changes', () => callbacks?.onExportAllChanges());
+  const exportAllBtn = makeBtn('📁 Export All Changes', () => callbacks?.onExportAllChanges());
   exportAllBtn.style.cssText += `
     width: 100%; padding: 8px; font-size: 12px; margin-bottom: 10px;
     background: rgba(80,60,0,0.4); border-color: #ccaa00; color: #ccaa00;

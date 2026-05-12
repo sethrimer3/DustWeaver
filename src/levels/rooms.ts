@@ -17,6 +17,8 @@
 
 import { RoomDef } from './roomDef';
 import { loadRoomJsonFiles } from './roomJsonLoader';
+import type { SavedCampaignV1 } from './campaignSchema';
+import { hydrateSavedCampaignToRoomDefs } from './campaignSchema';
 
 // ── Room registry ────────────────────────────────────────────────────────────
 
@@ -142,4 +144,76 @@ export async function initRoomRegistry(): Promise<void> {
     worldNamesMap.set(room.worldNumber, worldNamesMap.get(room.worldNumber) ?? `World ${room.worldNumber}`);
   }
   console.log(`[rooms] Loaded ${registryMap.size} rooms from JSON`);
+}
+
+// ── Main-campaign snapshot (for restoring after custom-campaign sessions) ─────
+
+/** Saved snapshot of the main campaign registry state. */
+let mainCampaignSnapshot: Map<string, RoomDef> | null = null;
+let mainWorldNamesSnapshot: Map<number, string> | null = null;
+let mainWorldMapPositionsSnapshot: Map<string, { mapX: number; mapY: number }> | null = null;
+
+/**
+ * Captures a snapshot of the current ROOM_REGISTRY state so it can be
+ * restored after a custom-campaign session ends.
+ *
+ * Call this once after `initRoomRegistry()` succeeds (in main.ts).
+ */
+export function captureMainCampaignSnapshot(): void {
+  mainCampaignSnapshot = new Map(registryMap);
+  mainWorldNamesSnapshot = new Map(worldNamesMap);
+  mainWorldMapPositionsSnapshot = new Map(worldMapPositions);
+}
+
+/**
+ * Restores the ROOM_REGISTRY to the state captured by `captureMainCampaignSnapshot()`.
+ * Call this when returning from a custom-campaign session to the main menu.
+ *
+ * No-op if no snapshot has been captured.
+ */
+export function restoreMainCampaignSnapshot(): void {
+  if (!mainCampaignSnapshot || !mainWorldNamesSnapshot || !mainWorldMapPositionsSnapshot) return;
+  registryMap.clear();
+  worldNamesMap.clear();
+  worldMapPositions.clear();
+  roomNameOverridesMap.clear();
+  roomWorldOverridesMap.clear();
+  for (const [k, v] of mainCampaignSnapshot) registryMap.set(k, v);
+  for (const [k, v] of mainWorldNamesSnapshot) worldNamesMap.set(k, v);
+  for (const [k, v] of mainWorldMapPositionsSnapshot) worldMapPositions.set(k, v);
+}
+
+/**
+ * Replaces the current ROOM_REGISTRY with rooms from a packed campaign.
+ * World-map metadata (world names, map positions) is also replaced.
+ *
+ * Used when launching Play or Edit for a packed custom campaign.
+ * Call `restoreMainCampaignSnapshot()` to undo when returning to the main menu.
+ */
+export function registerRoomsFromPackedCampaign(campaign: SavedCampaignV1): void {
+  const rooms = hydrateSavedCampaignToRoomDefs(campaign);
+
+  registryMap.clear();
+  worldNamesMap.clear();
+  worldMapPositions.clear();
+  roomNameOverridesMap.clear();
+  roomWorldOverridesMap.clear();
+
+  for (const [id, room] of rooms) {
+    registryMap.set(id, room);
+    worldMapPositions.set(id, { mapX: room.mapX, mapY: room.mapY });
+  }
+
+  // Populate world names from the campaign's worldMap.
+  for (const world of campaign.worldMap.worlds) {
+    worldNamesMap.set(world.id, world.name);
+  }
+  // Fill gaps for any worlds referenced by rooms but missing from worldMap.worlds.
+  for (const [, room] of rooms) {
+    if (!worldNamesMap.has(room.worldNumber)) {
+      worldNamesMap.set(room.worldNumber, `World ${room.worldNumber}`);
+    }
+  }
+
+  console.log(`[rooms] Registered ${registryMap.size} rooms from packed campaign "${campaign.campaign.id}"`);
 }
