@@ -293,16 +293,16 @@ export function getAdjacentRoomMapPosition(
   const sourceRoom = ROOM_REGISTRY.get(sourceRoomId);
   if (!sourcePos || !sourceRoom) return null;
 
-  const GAP = 2;
+  const GAP_WORLD = 2; // world units between adjacent rooms on the visual map
   switch (direction) {
     case 'right':
-      return { mapX: sourcePos.mapX + sourceRoom.widthBlocks + GAP, mapY: sourcePos.mapY };
+      return { mapX: sourcePos.mapX + sourceRoom.widthBlocks + GAP_WORLD, mapY: sourcePos.mapY };
     case 'left':
-      return { mapX: sourcePos.mapX - newRoomWidthBlocks - GAP, mapY: sourcePos.mapY };
+      return { mapX: sourcePos.mapX - newRoomWidthBlocks - GAP_WORLD, mapY: sourcePos.mapY };
     case 'down':
-      return { mapX: sourcePos.mapX, mapY: sourcePos.mapY + sourceRoom.heightBlocks + GAP };
+      return { mapX: sourcePos.mapX, mapY: sourcePos.mapY + sourceRoom.heightBlocks + GAP_WORLD };
     case 'up':
-      return { mapX: sourcePos.mapX, mapY: sourcePos.mapY - newRoomHeightBlocks - GAP };
+      return { mapX: sourcePos.mapX, mapY: sourcePos.mapY - newRoomHeightBlocks - GAP_WORLD };
   }
 }
 
@@ -321,8 +321,8 @@ export function findNearestNonOverlappingRoomPlacement(
   newRoomWidthBlocks: number,
   newRoomHeightBlocks: number,
 ): { mapX: number; mapY: number } {
-  const STEP = 10; // world units per spiral step
-  const MAX_RADIUS = 6;
+  const STEP_WORLD = 10; // world units per spiral candidate step
+  const MAX_RADIUS_RINGS = 6; // number of concentric rings to search
 
   const overlaps = (mx: number, my: number): boolean => {
     const r1x1 = mx;
@@ -342,15 +342,15 @@ export function findNearestNonOverlappingRoomPlacement(
   if (!overlaps(idealPos.mapX, idealPos.mapY)) return idealPos;
 
   // Spiral outward in a grid pattern
-  for (let radius = 1; radius <= MAX_RADIUS; radius++) {
+  for (let radius = 1; radius <= MAX_RADIUS_RINGS; radius++) {
     const size = radius * 2 + 1;
     for (let di = 0; di < size * size; di++) {
       const col = (di % size) - radius;
       const row = Math.floor(di / size) - radius;
       // Only check the perimeter of each radius ring
       if (Math.abs(col) !== radius && Math.abs(row) !== radius) continue;
-      const cx = idealPos.mapX + col * STEP;
-      const cy = idealPos.mapY + row * STEP;
+      const cx = idealPos.mapX + col * STEP_WORLD;
+      const cy = idealPos.mapY + row * STEP_WORLD;
       if (!overlaps(cx, cy)) return { mapX: cx, mapY: cy };
     }
   }

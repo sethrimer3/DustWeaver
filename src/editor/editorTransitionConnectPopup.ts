@@ -66,7 +66,9 @@ function computeReciprocalTransitionPlacement(
   newRoomHeightBlocks: number,
 ): { direction: TransitionDirection; xBlock: number; yBlock: number; openingSizeBlocks: number } {
   const dir = getOppositeDirection(sourceTrans.direction);
-  const gw = sourceTrans.gradientWidthBlocks ?? 0;
+  // The reciprocal transition mirrors the source gradient width so that both
+  // sides of the doorway look visually identical.
+  const reciprocalGw = sourceTrans.gradientWidthBlocks ?? 0;
   const isNewHoriz = dir === 'left' || dir === 'right';
 
   const openingSize = Math.min(
@@ -83,7 +85,7 @@ function computeReciprocalTransitionPlacement(
       yBlock = Math.max(1, Math.min(sourceTrans.yBlock, newRoomHeightBlocks - openingSize - 1));
       break;
     case 'right':
-      xBlock = newRoomWidthBlocks - gw;  // for gw=0: widthBlocks; for gw>0: widthBlocks-gw
+      xBlock = newRoomWidthBlocks - reciprocalGw;  // gw=0 → widthBlocks; gw>0 → widthBlocks-gw
       yBlock = Math.max(1, Math.min(sourceTrans.yBlock, newRoomHeightBlocks - openingSize - 1));
       break;
     case 'up':
@@ -92,7 +94,7 @@ function computeReciprocalTransitionPlacement(
       break;
     case 'down':
       xBlock = Math.max(1, Math.min(sourceTrans.xBlock, newRoomWidthBlocks - openingSize - 1));
-      yBlock = newRoomHeightBlocks - gw;  // for gw=0: heightBlocks; for gw>0: heightBlocks-gw
+      yBlock = newRoomHeightBlocks - reciprocalGw;  // gw=0 → heightBlocks; gw>0 → heightBlocks-gw
       break;
   }
 
