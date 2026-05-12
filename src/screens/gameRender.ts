@@ -569,7 +569,6 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
-  renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRopes(ctx, snapshot, ox, oy, zoom);
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateChunkStats(getChunkCacheStats());

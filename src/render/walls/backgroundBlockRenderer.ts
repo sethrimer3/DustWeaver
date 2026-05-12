@@ -42,11 +42,8 @@ const FALLBACK_FILL = 'rgba(80, 80, 80, 0.35)';
 /** Chunk cache for background block canvases. */
 const _bgChunkCache = new RoomChunkCache();
 
-/**
- * The room reference used to detect room changes.
- * When it changes, all chunks are invalidated so they are rebuilt for the new room.
- */
-let _bgCacheRoomRef: unknown = null;
+/** The room ID used to detect room changes. */
+let _bgCacheRoomRef: string | null = null;
 
 /**
  * Invalidates all background-block chunk canvases.
@@ -112,10 +109,10 @@ export function renderBackgroundBlocks(
   const blocks = room.backgroundBlocks;
   if (!blocks || blocks.length === 0) return;
 
-  // Detect room changes and invalidate the cache when the room reference switches.
-  if (_bgCacheRoomRef !== (room as unknown)) {
+  // Detect room changes and invalidate the cache when the room ID switches.
+  if (_bgCacheRoomRef !== room.id) {
     _bgChunkCache.invalidateAll();
-    _bgCacheRoomRef = room as unknown;
+    _bgCacheRoomRef = room.id;
   }
 
   const seed = room.worldNumber ?? 0;
