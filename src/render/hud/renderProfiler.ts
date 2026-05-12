@@ -40,18 +40,26 @@ import type { LiquidDebugStats } from '../liquidBodyCache';
 
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
-export const STAGE_BACKGROUND  = 0;
-export const STAGE_WALLS       = 1;
-export const STAGE_ENTITIES    = 2;
-export const STAGE_PARTICLES   = 3;
-export const STAGE_DUST        = 4;
-export const STAGE_SUNBEAMS    = 5;
-export const STAGE_BLOOM       = 6;
-export const STAGE_LIGHTING    = 7;
-export const STAGE_HUD         = 8;
+export const STAGE_BACKGROUND   = 0;
+export const STAGE_WALLS        = 1;
+export const STAGE_ENTITIES     = 2;
+export const STAGE_PARTICLES    = 3;
+export const STAGE_DUST         = 4;
+export const STAGE_SUNBEAMS     = 5;
+export const STAGE_BLOOM        = 6;
+export const STAGE_LIGHTING     = 7;
+export const STAGE_HUD          = 8;
+/** Background block chunk rendering (BUILD 288). */
+export const STAGE_BG_BLOCKS    = 9;
+/** Wall decoration sprites (BUILD 288). */
+export const STAGE_DECORATIONS  = 10;
+/** Dark ambient blocker overlay (BUILD 288). */
+export const STAGE_DARK_BLOCKER = 11;
+/** Device-canvas upscale drawImage (BUILD 288). */
+export const STAGE_UPSCALE      = 12;
 /** Total render frame time (measured from beginFrame to endFrame). */
-export const STAGE_TOTAL       = 9;
-export const STAGE_COUNT       = 10;
+export const STAGE_TOTAL        = 13;
+export const STAGE_COUNT        = 14;
 
 const STAGE_LABELS: readonly string[] = [
   'BG   ',
@@ -63,6 +71,10 @@ const STAGE_LABELS: readonly string[] = [
   'Bloom',
   'Light',
   'HUD  ',
+  'BgBlk',
+  'Decor',
+  'DkBlk',
+  'Scale',
   'TOTAL',
 ];
 
@@ -73,6 +85,7 @@ const EMA_ALPHA = 0.1;
 // ── Pre-allocated overlay string buffer ─────────────────────────────────────
 // We keep a fixed-size string label array to avoid allocating new strings on
 // every draw call.  Values are formatted once per frame when debug is on.
+// Pre-allocated overlay string buffer (STAGE_COUNT entries, one per stage).
 const _lineBuffer: string[] = new Array(STAGE_COUNT).fill('') as string[];
 
 // ── RenderProfiler class ────────────────────────────────────────────────────
@@ -112,8 +125,11 @@ export class RenderProfiler {
   // Stores the 3 worst frame times found during the ring-buffer scan.
   private readonly _worstScratch = new Float32Array(3);
 
-  /** Latest chunk cache stats, set each frame when debug mode is active. */
+  /** Latest chunk cache stats (foreground walls), set each frame when debug mode is active. */
   private _chunkStats: ChunkCacheStats | null = null;
+
+  /** Latest background-block chunk stats, set each frame when debug mode is active. */
+  private _bgChunkStats: ChunkCacheStats | null = null;
 
   /** Latest transition debug stats, set each frame when debug mode is active. */
   private _transitionStats: TransitionDebugStats | null = null;
@@ -128,6 +144,15 @@ export class RenderProfiler {
    */
   updateChunkStats(stats: ChunkCacheStats): void {
     this._chunkStats = stats;
+  }
+
+  /**
+   * Store the latest background-block chunk-cache stats.
+   * Call this from gameRender.ts after the background-blocks render stage
+   * when debug mode is on.
+   */
+  updateBgChunkStats(stats: ChunkCacheStats): void {
+    this._bgChunkStats = stats;
   }
 
   /**
@@ -186,6 +211,17 @@ export class RenderProfiler {
    */
   setAdaptiveReduction(active: boolean): void {
     this._adaptiveReductionActive = active;
+  }
+
+  /** Current adaptive reduction tier shown in the overlay (0/1/2). */
+  private _adaptiveReductionTier: 0 | 1 | 2 = 0;
+
+  /**
+   * Signal the current adaptive reduction tier so the overlay can show the
+   * correct badge level (T1 = halve caps, T2 = also disable sunbeam/bloom).
+   */
+  setAdaptiveReductionTier(tier: 0 | 1 | 2): void {
+    this._adaptiveReductionTier = tier;
   }
 
   /**
@@ -328,8 +364,9 @@ export class RenderProfiler {
       ctx.fillText(fpsLines[i], padXPx, nextPanelY + fontSizePx + i * lineHeightPx);
     }
     if (this._adaptiveReductionActive) {
-      ctx.fillStyle = '#ff4040';
-      ctx.fillText('! ADAPTIVE QUALITY', padXPx, nextPanelY + fpsPanelH - 2);
+      const tierLabel = this._adaptiveReductionTier >= 2 ? '!! ADAPTIVE T2 (deep)' : '!  ADAPTIVE T1';
+      ctx.fillStyle = this._adaptiveReductionTier >= 2 ? '#ff2020' : '#ff6020';
+      ctx.fillText(tierLabel, padXPx, nextPanelY + fpsPanelH - 2);
     }
     nextPanelY += fpsPanelH + 4;
 
@@ -358,9 +395,9 @@ export class RenderProfiler {
     if (this._chunkStats !== null) {
       const cs = this._chunkStats;
       const chunkLines = [
-        `Chunks V=${cs.visibleChunkCount} T=${cs.totalChunkCount}`,
+        `FG Chunks V=${cs.visibleChunkCount} T=${cs.totalChunkCount}`,
         `Dirty=${cs.dirtyChunkCount} Built=${cs.rebuiltThisFrame}`,
-        `Mem~${cs.memoryEstimateKB}KB`,
+        `Mem~${cs.memoryEstimateKB}KB Evict=${cs.evictedTotal}`,
       ];
       const chunkPanelH = chunkLines.length * lineHeightPx + 8;
       ctx.save();
@@ -373,6 +410,27 @@ export class RenderProfiler {
       }
       ctx.restore();
       nextPanelY += chunkPanelH + 4;
+    }
+
+    // ── Background-block chunk cache stats panel ──────────────────────────────
+    if (this._bgChunkStats !== null) {
+      const bc = this._bgChunkStats;
+      const bgLines = [
+        `BG Chunks V=${bc.visibleChunkCount} T=${bc.totalChunkCount}`,
+        `Dirty=${bc.dirtyChunkCount} Built=${bc.rebuiltThisFrame}`,
+        `Mem~${bc.memoryEstimateKB}KB`,
+      ];
+      const bgPanelH = bgLines.length * lineHeightPx + 8;
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, bgPanelH);
+      ctx.fillStyle = '#a0d4a0';
+      for (let i = 0; i < bgLines.length; i++) {
+        ctx.fillText(bgLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+      nextPanelY += bgPanelH + 4;
     }
 
     // ── Transition debug panel ────────────────────────────────────────────────

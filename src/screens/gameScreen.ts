@@ -1624,6 +1624,7 @@ export function startGameScreen(
       getPlayerDustCount,
       graphicsQuality: pauseMenuState.graphicsQuality,
       isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,
+      isDeepReductionActive: aqState.isDeepReductionActive,
       renderProfiler,
       renderAlpha,
       prevFallingBlockOffsetY,

@@ -21,7 +21,7 @@ import { renderParticles } from '../render/particles/renderer';
 import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
-import { STAGE_BACKGROUND, STAGE_WALLS, STAGE_ENTITIES, STAGE_PARTICLES, STAGE_DUST, STAGE_SUNBEAMS, STAGE_BLOOM, STAGE_HUD } from '../render/hud/renderProfiler';
+import { STAGE_BACKGROUND, STAGE_WALLS, STAGE_ENTITIES, STAGE_PARTICLES, STAGE_DUST, STAGE_SUNBEAMS, STAGE_BLOOM, STAGE_HUD, STAGE_BG_BLOCKS, STAGE_DARK_BLOCKER, STAGE_UPSCALE } from '../render/hud/renderProfiler';
 import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
@@ -63,7 +63,7 @@ import type { GraphicsQuality } from '../ui/renderSettings';
 import { getQualityConfig } from '../render/renderQualityConfig';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
 import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats } from '../render/walls/blockSpriteRenderer';
-import { renderBackgroundBlocks } from '../render/walls/backgroundBlockRenderer';
+import { renderBackgroundBlocks, getBgChunkCacheStats } from '../render/walls/backgroundBlockRenderer';
 import {
   drawGrappleBloom,
   drawParticleGlow,
@@ -224,6 +224,12 @@ export interface RenderFrameContext {
    * Set by the adaptive quality monitor in gameScreen.ts.
    */
   isAdaptiveReductionActive: boolean;
+  /**
+   * When true (tier 2), adaptive quality has entered deep reduction mode:
+   * sunbeam rendering and bloom are also disabled in addition to tier-1 caps.
+   * Set by the adaptive quality monitor in gameScreen.ts.
+   */
+  isDeepReductionActive: boolean;
   /** Render-stage profiler.  When provided, timings are recorded when debug is on. */
   renderProfiler?: RenderProfiler;
   /**
@@ -330,6 +336,7 @@ export function renderFrame(r: RenderFrameContext): void {
     setTeleportFlashAlpha,
     graphicsQuality,
     isAdaptiveReductionActive,
+    isDeepReductionActive,
     renderProfiler,
   } = r;
 
@@ -343,12 +350,16 @@ export function renderFrame(r: RenderFrameContext): void {
   // Adaptive quality: when persistently over budget, halve expensive caps to
   // recover frame rate.  To avoid a per-frame object allocation (spread), the
   // pre-allocated module-level _adaptiveQcScratch is written in-place.
+  //
+  // Tier 1 (isAdaptiveReductionActive): halve dust/light/bloom caps.
+  // Tier 2 (isDeepReductionActive): additionally disable sunbeam and bloom.
   let qc: RenderQualityConfig;
   if (isAdaptiveReductionActive) {
-    _adaptiveQcScratch.isBloomEnabled           = qcBase.isBloomEnabled;
+    const disableExpensive = isDeepReductionActive;
+    _adaptiveQcScratch.isBloomEnabled           = disableExpensive ? false : qcBase.isBloomEnabled;
     _adaptiveQcScratch.bloomIntensity           = qcBase.bloomIntensity;
     _adaptiveQcScratch.bloomBlurRadiusPx        = qcBase.bloomBlurRadiusPx;
-    _adaptiveQcScratch.isSunbeamEnabled         = qcBase.isSunbeamEnabled;
+    _adaptiveQcScratch.isSunbeamEnabled         = disableExpensive ? false : qcBase.isSunbeamEnabled;
     _adaptiveQcScratch.maxDustMoteCount         = Math.max(32, qcBase.maxDustMoteCount       >> 1);
     _adaptiveQcScratch.maxDynamicLightCount     = Math.max(4,  qcBase.maxDynamicLightCount   >> 1);
     _adaptiveQcScratch.maxParticleLightCount    = Math.max(4,  qcBase.maxParticleLightCount  >> 1);
@@ -536,7 +547,12 @@ export function renderFrame(r: RenderFrameContext): void {
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BACKGROUND);
 
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
-  renderBackgroundBlocks(ctx, currentRoom, ox, oy, zoom);
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BG_BLOCKS);
+  renderBackgroundBlocks(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
+  if (renderProfiler !== undefined) {
+    renderProfiler.stageEnd(STAGE_BG_BLOCKS);
+    if (isDebugMode) renderProfiler.updateBgChunkStats(getBgChunkCacheStats());
+  }
 
   // ── Sunbeams (light shafts behind walls) ────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_SUNBEAMS);
@@ -549,7 +565,10 @@ export function renderFrame(r: RenderFrameContext): void {
   // invisible chunks correctly (virtualWidthPx can be > 480 on wider screens).
   setRenderViewportSize(virtualWidthPx, virtualHeightPx);
   // Walls before cluster indicators so clusters are drawn on top
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DARK_BLOCKER);
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
+  renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRopes(ctx, snapshot, ox, oy, zoom);
   if (renderProfiler !== undefined && isDebugMode) {
@@ -648,6 +667,11 @@ export function renderFrame(r: RenderFrameContext): void {
   if (isDustContainerSpriteLoaded) {
     const roomDustContainers = currentRoom.dustContainers ?? [];
     const bobOffsetWorld = Math.sin(nowMs * 0.0032) * 1.5;
+    // Viewport bounds in world space for culling.
+    const vpMinXWorld = -ox / zoom;
+    const vpMinYWorld = -oy / zoom;
+    const vpMaxXWorld = (virtualWidthPx - ox) / zoom;
+    const vpMaxYWorld = (virtualHeightPx - oy) / zoom;
     for (let i = 0; i < roomDustContainers.length; i++) {
       const pickupKey = `${currentRoom.id}:${i}`;
       if (collectedDustContainerKeySet.has(pickupKey)) continue;
@@ -655,6 +679,12 @@ export function renderFrame(r: RenderFrameContext): void {
       const dc = roomDustContainers[i];
       const dx = (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
       const dy = (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
+
+      // Cull containers fully outside the viewport (+ small margin).
+      const margin = DUST_CONTAINER_SIZE_WORLD;
+      if (dx < vpMinXWorld - margin || dx > vpMaxXWorld + margin) continue;
+      if (dy < vpMinYWorld - margin || dy > vpMaxYWorld + margin) continue;
+
       const drawSize = DUST_CONTAINER_SIZE_WORLD * zoom;
       ctx.drawImage(
         dustContainerSprite,
@@ -670,6 +700,12 @@ export function renderFrame(r: RenderFrameContext): void {
   {
     const roomDustSwarms = currentRoom.dustSwarms ?? [];
     const t = nowMs * 0.001;
+    // Viewport bounds in world space for culling (with margin for swarm radius).
+    const swarmMarginWorld = BLOCK_SIZE_MEDIUM * 2;
+    const vpMinXWorld = -ox / zoom - swarmMarginWorld;
+    const vpMinYWorld = -oy / zoom - swarmMarginWorld;
+    const vpMaxXWorld = (virtualWidthPx - ox) / zoom + swarmMarginWorld;
+    const vpMaxYWorld = (virtualHeightPx - oy) / zoom + swarmMarginWorld;
     ctx.save();
     for (let i = 0; i < roomDustSwarms.length; i++) {
       const swarmKey = `${currentRoom.id}:dustswarm:${i}`;
@@ -677,6 +713,10 @@ export function renderFrame(r: RenderFrameContext): void {
       const sw = roomDustSwarms[i];
       const cx = (sw.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
       const cy = (sw.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+
+      // Cull swarms fully outside viewport.
+      if (cx < vpMinXWorld || cx > vpMaxXWorld) continue;
+      if (cy < vpMinYWorld || cy > vpMaxYWorld) continue;
       // Draw a swirling cluster of ~12 small dots using deterministic time/index math.
       const particleCount = 12;
       for (let p = 0; p < particleCount; p++) {
@@ -739,13 +779,15 @@ export function renderFrame(r: RenderFrameContext): void {
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_HUD);
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
-  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BLOOM);
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_UPSCALE);
   deviceCtx.imageSmoothingEnabled = false;
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   // Composite WebGL particle canvas on top (also at virtual resolution)
   if (webglRenderer.isAvailable) {
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
   }
+  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_UPSCALE);
+  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BLOOM);
   bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BLOOM);
   drawOffensiveDustOutlineOverlay(deviceCtx, snapshot, canvas.width, canvas.height, ox, oy, zoom);

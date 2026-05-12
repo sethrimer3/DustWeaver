@@ -11,6 +11,7 @@
 import { WallSnapshot } from '../snapshot';
 import type { BlockTheme } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
+import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,30 @@ export interface CachedWallLayout {
    * Computed once per layout and reused across frames to avoid per-frame Map allocation.
    */
   solid2x2Map: Map<string, number>;
+
+  // ── Per-chunk buckets (BUILD 288) ───────────────────────────────────────────
+  // Pre-bucketed tile/wall lists keyed by chunk coordinates "${cx},${cy}"
+  // (where cx = Math.floor(col / CHUNK_SIZE_BLOCKS)).
+  //
+  // These allow each wall tile pass to iterate only the items that overlap a
+  // specific chunk, making chunk rebuilds O(items-in-chunk) instead of
+  // O(all-room-tiles).  Items that straddle a chunk boundary are included in
+  // every overlapping chunk's list.
+
+  /** 1×1 occupied tiles grouped by chunk key. */
+  occupiedByChunkKey: Map<string, CachedTileCoord[]>;
+  /** Platform tiles grouped by chunk key. */
+  platformByChunkKey: Map<string, CachedTileCoord[]>;
+  /** Ramp walls grouped by every chunk they overlap. */
+  rampByChunkKey: Map<string, RampWallInfo[]>;
+  /** Half-pillar walls grouped by every chunk they overlap. */
+  halfPillarByChunkKey: Map<string, HalfPillarWallInfo[]>;
+  /**
+   * 2×2 solid-wall top-left entries grouped by every chunk the 2×2 block
+   * overlaps (up to 4 chunks at a chunk-boundary corner).
+   * Each entry is [topLeftKey, wallThemeIndex].
+   */
+  solid2x2ByChunkKey: Map<string, Array<readonly [string, number]>>;
 }
 
 // ── Module-level layout cache ─────────────────────────────────────────────────
@@ -238,7 +263,110 @@ export function getWallLayoutCache(
     tileTheme,
     ambientDepthsByKey: new Map<string, Map<string, number>>(),
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),
+    occupiedByChunkKey:   new Map(),
+    platformByChunkKey:   new Map(),
+    rampByChunkKey:       new Map(),
+    halfPillarByChunkKey: new Map(),
+    solid2x2ByChunkKey:   new Map(),
   };
 
+  // Build per-chunk buckets AFTER all arrays are populated so the bucket maps
+  // reflect the final state and chunk rebuilds are O(items-in-chunk).
+  _buildChunkBuckets(_cachedWallLayout, walls);
+
   return _cachedWallLayout;
+}
+
+// ── Per-chunk bucket builder ───────────────────────────────────────────────────
+
+/**
+ * Populates the five `*ByChunkKey` bucket maps on `layout`.
+ *
+ * Called once per layout cache rebuild.  After this, each wall tile pass can
+ * look up pre-bucketed items by chunk key instead of scanning the full arrays.
+ *
+ * Items that straddle a chunk boundary are included in every overlapping
+ * chunk's list so every affected chunk renders them correctly.
+ */
+function _buildChunkBuckets(layout: CachedWallLayout, walls: WallSnapshot): void {
+  const BSZ = layout.blockSizePx;
+
+  // ── 1×1 occupied tiles: each tile belongs to exactly one chunk ─────────────
+  for (const tile of layout.occupiedTiles) {
+    const ck = `${Math.floor(tile.col / CHUNK_SIZE_BLOCKS)},${Math.floor(tile.row / CHUNK_SIZE_BLOCKS)}`;
+    let arr = layout.occupiedByChunkKey.get(ck);
+    if (arr === undefined) { arr = []; layout.occupiedByChunkKey.set(ck, arr); }
+    arr.push(tile);
+  }
+
+  // ── Platform tiles: same as occupied tiles ─────────────────────────────────
+  for (const tile of layout.platformTiles) {
+    const ck = `${Math.floor(tile.col / CHUNK_SIZE_BLOCKS)},${Math.floor(tile.row / CHUNK_SIZE_BLOCKS)}`;
+    let arr = layout.platformByChunkKey.get(ck);
+    if (arr === undefined) { arr = []; layout.platformByChunkKey.set(ck, arr); }
+    arr.push(tile);
+  }
+
+  // ── Ramp walls: may span multiple tile-columns/rows → multiple chunks ───────
+  for (const rampInfo of layout.rampWalls) {
+    const wi = rampInfo.wallIndex;
+    const colFirst = Math.floor(walls.xWorld[wi] / BSZ);
+    const rowFirst = Math.floor(walls.yWorld[wi] / BSZ);
+    const colLast  = Math.max(colFirst, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / BSZ) - 1);
+    const rowLast  = Math.max(rowFirst, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / BSZ) - 1);
+    const cxMin = Math.floor(colFirst / CHUNK_SIZE_BLOCKS);
+    const cxMax = Math.floor(colLast  / CHUNK_SIZE_BLOCKS);
+    const cyMin = Math.floor(rowFirst / CHUNK_SIZE_BLOCKS);
+    const cyMax = Math.floor(rowLast  / CHUNK_SIZE_BLOCKS);
+    for (let cy = cyMin; cy <= cyMax; cy++) {
+      for (let cx = cxMin; cx <= cxMax; cx++) {
+        const ck = `${cx},${cy}`;
+        let arr = layout.rampByChunkKey.get(ck);
+        if (arr === undefined) { arr = []; layout.rampByChunkKey.set(ck, arr); }
+        arr.push(rampInfo);
+      }
+    }
+  }
+
+  // ── Half-pillar walls: same multi-chunk logic as ramps ─────────────────────
+  for (const hpInfo of layout.halfPillarWalls) {
+    const wi = hpInfo.wallIndex;
+    const colFirst = Math.floor(walls.xWorld[wi] / BSZ);
+    const rowFirst = Math.floor(walls.yWorld[wi] / BSZ);
+    const colLast  = Math.max(colFirst, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / BSZ) - 1);
+    const rowLast  = Math.max(rowFirst, Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / BSZ) - 1);
+    const cxMin = Math.floor(colFirst / CHUNK_SIZE_BLOCKS);
+    const cxMax = Math.floor(colLast  / CHUNK_SIZE_BLOCKS);
+    const cyMin = Math.floor(rowFirst / CHUNK_SIZE_BLOCKS);
+    const cyMax = Math.floor(rowLast  / CHUNK_SIZE_BLOCKS);
+    for (let cy = cyMin; cy <= cyMax; cy++) {
+      for (let cx = cxMin; cx <= cxMax; cx++) {
+        const ck = `${cx},${cy}`;
+        let arr = layout.halfPillarByChunkKey.get(ck);
+        if (arr === undefined) { arr = []; layout.halfPillarByChunkKey.set(ck, arr); }
+        arr.push(hpInfo);
+      }
+    }
+  }
+
+  // ── 2×2 solid-wall blocks: top-left at (col, row) spans [col, col+1]×[row, row+1] ──
+  // A 2×2 block can overlap up to 4 chunks when its top-left sits at a chunk corner.
+  for (const [topLeftKey, themeIdx] of layout.solid2x2Map) {
+    const ci  = topLeftKey.indexOf(',');
+    const col = parseInt(topLeftKey.slice(0, ci), 10);
+    const row = parseInt(topLeftKey.slice(ci + 1), 10);
+    const cxMin = Math.floor( col      / CHUNK_SIZE_BLOCKS);
+    const cxMax = Math.floor((col + 1) / CHUNK_SIZE_BLOCKS);
+    const cyMin = Math.floor( row      / CHUNK_SIZE_BLOCKS);
+    const cyMax = Math.floor((row + 1) / CHUNK_SIZE_BLOCKS);
+    const entry = [topLeftKey, themeIdx] as const;
+    for (let cy = cyMin; cy <= cyMax; cy++) {
+      for (let cx = cxMin; cx <= cxMax; cx++) {
+        const ck = `${cx},${cy}`;
+        let arr = layout.solid2x2ByChunkKey.get(ck);
+        if (arr === undefined) { arr = []; layout.solid2x2ByChunkKey.set(ck, arr); }
+        arr.push(entry);
+      }
+    }
+  }
 }
