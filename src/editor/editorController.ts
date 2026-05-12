@@ -23,7 +23,7 @@ import {
   createEditorInputState,
   attachEditorInputListeners, clearEditorOneShots,
 } from './editorInput';
-import { selectAtCursor, deleteAtCursor, rotateSelectedElement, getAllElementsInRect } from './editorTools';
+import { selectAtCursor, deleteAtCursor, rotateSelectedElement, flipSelectedTransition, getAllElementsInRect } from './editorTools';
 import { placeAtCursor } from './editorPlaceTool';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
@@ -44,6 +44,11 @@ import { deepCloneRoomData, showSaveChangesDialog } from './editorSaveChangesDia
 import { applyRoomDimensionChange, applyEdgeResize } from './editorRoomResize';
 import { handlePropertyChange } from './editorPropertyChange';
 import type { EditableCampaignSession } from './editableCampaignSession';
+import {
+  isTransitionAtRoomEdge,
+  showTransitionConnectPopup,
+  showConnectedRoomCreationDialog,
+} from './editorTransitionConnectPopup';
 
 const BS = BLOCK_SIZE_MEDIUM;
 
@@ -155,6 +160,9 @@ export function createEditorController(
   // Passed to renderEditorOverlays so extension tiles are visible as blue ghost
   // tiles (30 % opacity) outside the room boundary.
   let editorEdgeExtensionCache: EdgeExtensionCache | null = null;
+
+  // Cleanup function for any currently-visible "Create connected room?" popup.
+  let dismissConnectPopup: (() => void) | null = null;
 
   function toggle(currentRoom: RoomDef): void {
     state.isActive = !state.isActive;
@@ -275,6 +283,7 @@ export function createEditorController(
     if (ui) { ui.destroy(); ui = null; }
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
     if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
+    if (dismissConnectPopup) { dismissConnectPopup(); dismissConnectPopup = null; }
     cancelTransitionLink(state);
     state.isActive = false;
     state.roomData = null;
@@ -580,10 +589,28 @@ export function createEditorController(
     if (inputState.isRotateRightPressed && state.activeTool === EditorTool.Place) {
       state.placementRotationSteps = (state.placementRotationSteps + 1) % 4;
     }
+    // Q/E in Select mode → rotate the selected transition
+    if (state.activeTool === EditorTool.Select && state.selectedElements.length > 0 && state.roomData) {
+      const selType = state.selectedElements[0]?.type;
+      if (selType === 'transition') {
+        if (inputState.isRotateRightPressed || inputState.isRotateLeftPressed) {
+          pushSnapshot(history, state.roomData);
+          rotateSelectedElement(state);
+          applyEdits();
+        }
+      }
+    }
 
-    // F key → flip placement horizontally
-    if (inputState.isFlipPressed && state.activeTool === EditorTool.Place) {
-      state.placementFlipH = !state.placementFlipH;
+    // F key → flip placement horizontally (Place mode) or flip selected transition (Select mode)
+    if (inputState.isFlipPressed) {
+      if (state.activeTool === EditorTool.Place) {
+        state.placementFlipH = !state.placementFlipH;
+      } else if (state.activeTool === EditorTool.Select && state.roomData &&
+                 state.selectedElements.length > 0 && state.selectedElements[0]?.type === 'transition') {
+        pushSnapshot(history, state.roomData);
+        flipSelectedTransition(state);
+        applyEdits();
+      }
     }
 
     // N key → world map list
@@ -700,6 +727,7 @@ export function createEditorController(
             state.brushRectStartBlockY = state.cursorBlockY;
           } else {
             pushSnapshot(history, state.roomData);
+            const transCountBefore = state.roomData.transitions.length;
             placeAtCursor(state);
             // Rect brush: clear drag start after placement.
             if (state.brushMode === 'rect') {
@@ -709,6 +737,35 @@ export function createEditorController(
             applyEdits();
             lastDragBlockX = state.cursorBlockX;
             lastDragBlockY = state.cursorBlockY;
+
+            // Show "Create connected room?" popup if a new unlinked transition
+            // was just placed on a room edge.
+            const newTrans = state.roomData.transitions.length > transCountBefore
+              ? state.roomData.transitions[state.roomData.transitions.length - 1]
+              : null;
+            if (newTrans && !newTrans.targetRoomId && isTransitionAtRoomEdge(newTrans, state.roomData)) {
+              if (dismissConnectPopup) { dismissConnectPopup(); dismissConnectPopup = null; }
+              const capturedTrans = newTrans;
+              const capturedRoom = state.roomData;
+              dismissConnectPopup = showTransitionConnectPopup(uiRoot, capturedTrans, () => {
+                dismissConnectPopup = null;
+                if (!capturedRoom || !capturedTrans) return;
+                showConnectedRoomCreationDialog(uiRoot, capturedTrans, capturedRoom, {
+                  onRoomCreated: (newRoomDef) => {
+                    // Save new room to pendingRoomEdits so it can be exported later.
+                    const { data: newRoomData, nextUid: newNextUid } = roomDefToEditorRoomData(newRoomDef, state.nextUid);
+                    state.nextUid = newNextUid;
+                    pendingRoomEdits.set(newRoomDef.id, newRoomData);
+                    isWorldMapDirty = true;
+                    isCurrentRoomDirty = true;
+                    // Rebuild the current room to reflect the updated source transition.
+                    applyEdits();
+                    showEditorToast(uiRoot, `Room "${newRoomDef.id}" created and linked.`);
+                  },
+                  onWorldMapDataChanged: () => { isWorldMapDirty = true; },
+                });
+              });
+            }
           }
         } else if (state.activeTool === EditorTool.Delete) {
           pushSnapshot(history, state.roomData);

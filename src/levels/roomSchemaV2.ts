@@ -145,6 +145,8 @@ export interface SavedTransition {
   depth?: number;
   /** When true, this is a long/teleport-style transition (non-seamless). */
   lt?: boolean;
+  /** gradientWidthBlocks — omitted when equal to the legacy default of 3. */
+  gw?: number;
 }
 
 /** Compact crumble block entry. */
@@ -664,6 +666,10 @@ function dehydrateTransition(t: RoomJsonTransition): SavedTransition {
   if (t.fadeColor) out.fade = t.fadeColor;
   if (t.depthBlock !== undefined) out.depth = t.depthBlock;
   if (t.longTransition) out.lt = true;
+  // Save gradientWidthBlocks whenever it differs from the legacy default of 3,
+  // so zero-gradient transitions survive a dehydrate→hydrate round-trip.
+  const gw = t.gradientWidthBlocks;
+  if (gw !== undefined && gw !== 3) out.gw = gw;
   return out;
 }
 
@@ -724,6 +730,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     if (t.fade) jt.fadeColor = t.fade;
     if (t.depth !== undefined) jt.depthBlock = t.depth;
     if (t.lt) jt.longTransition = true;
+    if (t.gw !== undefined) jt.gradientWidthBlocks = t.gw;
     return jt;
   });
 

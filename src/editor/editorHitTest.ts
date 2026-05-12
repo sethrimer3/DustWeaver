@@ -112,12 +112,13 @@ export function hitTestTransition(
   by: number,
   _roomData: EditorRoomData,
 ): boolean {
-  const gw = t.gradientWidthBlocks ?? 3;
-  const isHoriz = t.direction === 'left' || t.direction === 'right';
-  const zoneW = isHoriz ? gw : t.openingSizeBlocks;
-  const zoneH = isHoriz ? t.openingSizeBlocks : gw;
-  return bx >= t.xBlock && bx < t.xBlock + zoneW
-      && by >= t.yBlock && by < t.yBlock + zoneH;
+  const hb = getTransitionEditorHitbox(t);
+  if (hb.wBlock <= 0 || hb.hBlock <= 0) {
+    // Zero-size zone: extend cursor tolerance by 1 in each axis
+    return Math.abs(bx - hb.xBlock) <= 1 && Math.abs(by - hb.yBlock) <= 1;
+  }
+  return bx >= hb.xBlock && bx < hb.xBlock + hb.wBlock
+      && by >= hb.yBlock && by < hb.yBlock + hb.hBlock;
 }
 
 /** Returns true if two wall rectangles (in block coordinates) overlap. */
@@ -252,9 +253,48 @@ export function hitTestTransitionRect(
   t: EditorTransition, minX: number, minY: number, maxX: number, maxY: number,
   _room: EditorRoomData,
 ): boolean {
+  const hb = getTransitionEditorHitbox(t);
+  return hb.xBlock + hb.wBlock > minX && hb.xBlock < maxX + 1
+      && hb.yBlock + hb.hBlock > minY && hb.yBlock < maxY + 1;
+}
+
+// ── Editor hitbox for transitions ───────────────────────────────────────────
+
+/**
+ * Returns the editor-interaction bounding box for a transition.
+ *
+ * For transitions with gradientWidthBlocks > 0 this is the normal zone
+ * rectangle.  For zero-gradient transitions (gw === 0) the zone is a
+ * zero-width/height line that cannot be reliably grabbed, so the hitbox is
+ * expanded by 1 block *behind* the transition (away from its facing
+ * direction) to give the editor a usable click target.
+ *
+ * This expansion is purely an editor affordance — it has no effect on
+ * gameplay, rendering, collision, or the actual gradientWidthBlocks value.
+ */
+export function getTransitionEditorHitbox(t: EditorTransition): {
+  xBlock: number; yBlock: number; wBlock: number; hBlock: number;
+} {
   const gw = t.gradientWidthBlocks ?? 3;
   const isHoriz = t.direction === 'left' || t.direction === 'right';
-  const tw = isHoriz ? gw : t.openingSizeBlocks;
-  const th = isHoriz ? t.openingSizeBlocks : gw;
-  return t.xBlock + tw > minX && t.xBlock < maxX + 1 && t.yBlock + th > minY && t.yBlock < maxY + 1;
+  if (gw === 0) {
+    // Expand by 1 block behind the transition (away from facing direction).
+    switch (t.direction) {
+      case 'right':
+        // Trigger is at x = t.xBlock; behind (left) = [t.xBlock - 1, t.xBlock)
+        return { xBlock: t.xBlock - 1, yBlock: t.yBlock, wBlock: 1, hBlock: t.openingSizeBlocks };
+      case 'left':
+        // Trigger is at x = t.xBlock; behind (right) = [t.xBlock, t.xBlock + 1)
+        return { xBlock: t.xBlock, yBlock: t.yBlock, wBlock: 1, hBlock: t.openingSizeBlocks };
+      case 'down':
+        // Trigger is at y = t.yBlock; behind (up) = [t.yBlock - 1, t.yBlock)
+        return { xBlock: t.xBlock, yBlock: t.yBlock - 1, wBlock: t.openingSizeBlocks, hBlock: 1 };
+      case 'up':
+        // Trigger is at y = t.yBlock; behind (down) = [t.yBlock, t.yBlock + 1)
+        return { xBlock: t.xBlock, yBlock: t.yBlock, wBlock: t.openingSizeBlocks, hBlock: 1 };
+    }
+  }
+  const wBlock = isHoriz ? gw : t.openingSizeBlocks;
+  const hBlock = isHoriz ? t.openingSizeBlocks : gw;
+  return { xBlock: t.xBlock, yBlock: t.yBlock, wBlock, hBlock };
 }

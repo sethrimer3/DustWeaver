@@ -14,8 +14,6 @@ import {
   ROOM_WORLD_OVERRIDES,
 } from '../levels/rooms';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 export interface MapRoomPlacement {
   room: RoomDef;
   mapXWorld: number;
@@ -258,4 +256,104 @@ export function applyDoorSnap(
     };
   }
   return null;
+}
+
+// ── Direction / adjacency helpers ─────────────────────────────────────────────
+
+/**
+ * Returns the direction facing the opposite way.
+ * right ↔ left, up ↔ down.
+ */
+export function getOppositeDirection(dir: TransitionDirection): TransitionDirection {
+  switch (dir) {
+    case 'right': return 'left';
+    case 'left':  return 'right';
+    case 'up':    return 'down';
+    case 'down':  return 'up';
+  }
+}
+
+/**
+ * Computes the map-world position at which a newly created room should be
+ * placed so that it sits directly adjacent to `sourceRoomId` on the side
+ * indicated by `direction`.
+ *
+ * The gap between rooms defaults to 2 world units so the rooms appear
+ * visually touching on the visual map.
+ *
+ * Returns `null` when the source room has no registered map position.
+ */
+export function getAdjacentRoomMapPosition(
+  sourceRoomId: string,
+  direction: TransitionDirection,
+  newRoomWidthBlocks: number,
+  newRoomHeightBlocks: number,
+): { mapX: number; mapY: number } | null {
+  const sourcePos = WORLD_MAP_POSITIONS.get(sourceRoomId);
+  const sourceRoom = ROOM_REGISTRY.get(sourceRoomId);
+  if (!sourcePos || !sourceRoom) return null;
+
+  const GAP_WORLD = 2; // world units between adjacent rooms on the visual map
+  switch (direction) {
+    case 'right':
+      return { mapX: sourcePos.mapX + sourceRoom.widthBlocks + GAP_WORLD, mapY: sourcePos.mapY };
+    case 'left':
+      return { mapX: sourcePos.mapX - newRoomWidthBlocks - GAP_WORLD, mapY: sourcePos.mapY };
+    case 'down':
+      return { mapX: sourcePos.mapX, mapY: sourcePos.mapY + sourceRoom.heightBlocks + GAP_WORLD };
+    case 'up':
+      return { mapX: sourcePos.mapX, mapY: sourcePos.mapY - newRoomHeightBlocks - GAP_WORLD };
+  }
+}
+
+/**
+ * Searches for the nearest map-world position to `idealPos` that does not
+ * overlap any existing room in `placements`.  Searches in a small expanding
+ * grid spiral up to `maxRadius` steps.
+ *
+ * Returns `idealPos` if no overlap is found there, otherwise the nearest free
+ * position.  Falls back to `idealPos` if no free position is found within
+ * the search radius.
+ */
+export function findNearestNonOverlappingRoomPlacement(
+  idealPos: { mapX: number; mapY: number },
+  placements: ReadonlyMap<string, MapRoomPlacement>,
+  newRoomWidthBlocks: number,
+  newRoomHeightBlocks: number,
+): { mapX: number; mapY: number } {
+  const STEP_WORLD = 10; // world units per spiral candidate step
+  const MAX_RADIUS_RINGS = 6; // number of concentric rings to search
+
+  const overlaps = (mx: number, my: number): boolean => {
+    const r1x1 = mx;
+    const r1y1 = my;
+    const r1x2 = mx + newRoomWidthBlocks;
+    const r1y2 = my + newRoomHeightBlocks;
+    for (const [, p] of placements) {
+      const r2x1 = p.mapXWorld;
+      const r2y1 = p.mapYWorld;
+      const r2x2 = p.mapXWorld + p.room.widthBlocks;
+      const r2y2 = p.mapYWorld + p.room.heightBlocks;
+      if (r1x1 < r2x2 && r1x2 > r2x1 && r1y1 < r2y2 && r1y2 > r2y1) return true;
+    }
+    return false;
+  };
+
+  if (!overlaps(idealPos.mapX, idealPos.mapY)) return idealPos;
+
+  // Spiral outward in a grid pattern
+  for (let radius = 1; radius <= MAX_RADIUS_RINGS; radius++) {
+    const size = radius * 2 + 1;
+    for (let di = 0; di < size * size; di++) {
+      const col = (di % size) - radius;
+      const row = Math.floor(di / size) - radius;
+      // Only check the perimeter of each radius ring
+      if (Math.abs(col) !== radius && Math.abs(row) !== radius) continue;
+      const cx = idealPos.mapX + col * STEP_WORLD;
+      const cy = idealPos.mapY + row * STEP_WORLD;
+      if (!overlaps(cx, cy)) return { mapX: cx, mapY: cy };
+    }
+  }
+
+  return idealPos;
 }

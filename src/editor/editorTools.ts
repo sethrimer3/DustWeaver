@@ -6,8 +6,9 @@
  */
 
 import {
-  EditorState, EditorRoomData, SelectedElement,
+  EditorState, EditorRoomData, SelectedElement, EditorTransition,
 } from './editorState';
+import type { TransitionDirection } from '../levels/roomDef';
 import {
   hitTestZone,
   hitTestWall,
@@ -487,7 +488,10 @@ export function deleteAtCursor(state: EditorState): void {
 // ── Rotate selected element ──────────────────────────────────────────────────
 
 /**
- * Rotates the currently selected wall by 90° (swaps width and height).
+ * Rotates the currently selected element by 90° clockwise.
+ * - Walls: swap width and height.
+ * - Transitions: cycle direction right → down → left → up → right and
+ *   reposition to the nearest matching room edge.
  */
 export function rotateSelectedElement(state: EditorState): void {
   const sel = state.selectedElements[0] ?? null;
@@ -499,7 +503,101 @@ export function rotateSelectedElement(state: EditorState): void {
       wall.wBlock = wall.hBlock;
       wall.hBlock = tmp;
     }
+  } else if (sel.type === 'transition') {
+    const t = state.roomData.transitions.find(tr => tr.uid === sel.uid);
+    if (t) {
+      const DIRS: TransitionDirection[] = ['right', 'down', 'left', 'up'];
+      const idx = DIRS.indexOf(t.direction);
+      const newDir = DIRS[(idx + 1) % 4];
+      _repositionTransitionForNewDirection(t, newDir, state.roomData);
+    }
   }
+}
+
+/**
+ * Flips the selected room transition's facing direction horizontally
+ * (swaps left ↔ right) or vertically (swaps up ↔ down) depending on the
+ * transition's current direction.
+ *
+ * - Facing left or right: swaps the direction to the opposite horizontal side
+ *   and repositions against the opposite wall.
+ * - Facing up or down: swaps the direction to the opposite vertical side
+ *   and repositions against the opposite wall.
+ *
+ * No-op for walls and other element types.
+ */
+export function flipSelectedTransition(state: EditorState): void {
+  const sel = state.selectedElements[0] ?? null;
+  if (sel === null || sel.type !== 'transition' || state.roomData === null) return;
+  const t = state.roomData.transitions.find(tr => tr.uid === sel.uid);
+  if (!t) return;
+  let newDir: TransitionDirection;
+  switch (t.direction) {
+    case 'left':  newDir = 'right'; break;
+    case 'right': newDir = 'left';  break;
+    case 'up':    newDir = 'down';  break;
+    case 'down':  newDir = 'up';    break;
+  }
+  _repositionTransitionForNewDirection(t, newDir, state.roomData);
+}
+
+// ── Transition direction helpers ─────────────────────────────────────────────
+
+/** Cycles a transition's direction to `newDir` and snaps it to the nearest edge. */
+function _repositionTransitionForNewDirection(
+  t: EditorTransition,
+  newDir: TransitionDirection,
+  room: EditorRoomData,
+): void {
+  const gw = t.gradientWidthBlocks ?? 3;
+  const isOldHoriz = t.direction === 'left' || t.direction === 'right';
+  const isNewHoriz = newDir === 'left' || newDir === 'right';
+
+  // Preserve the opening centre along the current wall axis so the transition
+  // stays roughly aligned after a 90° rotation.
+  const openingCenter = isOldHoriz
+    ? t.yBlock + t.openingSizeBlocks / 2
+    : t.xBlock + t.openingSizeBlocks / 2;
+
+  t.direction = newDir;
+
+  // Clamp opening size to fit in the new direction.
+  const maxOpening = isNewHoriz
+    ? Math.max(1, room.heightBlocks - 2)
+    : Math.max(1, room.widthBlocks - 2);
+  t.openingSizeBlocks = Math.min(t.openingSizeBlocks, maxOpening);
+
+  const halfOpening = t.openingSizeBlocks / 2;
+
+  switch (newDir) {
+    case 'right':
+      t.xBlock = gw > 0 ? room.widthBlocks - gw : room.widthBlocks;
+      t.yBlock = Math.round(
+        Math.max(1, Math.min(openingCenter - halfOpening, room.heightBlocks - t.openingSizeBlocks - 1)),
+      );
+      break;
+    case 'left':
+      t.xBlock = 0;
+      t.yBlock = Math.round(
+        Math.max(1, Math.min(openingCenter - halfOpening, room.heightBlocks - t.openingSizeBlocks - 1)),
+      );
+      break;
+    case 'down':
+      t.xBlock = Math.round(
+        Math.max(1, Math.min(openingCenter - halfOpening, room.widthBlocks - t.openingSizeBlocks - 1)),
+      );
+      t.yBlock = gw > 0 ? room.heightBlocks - gw : room.heightBlocks;
+      break;
+    case 'up':
+      t.xBlock = Math.round(
+        Math.max(1, Math.min(openingCenter - halfOpening, room.widthBlocks - t.openingSizeBlocks - 1)),
+      );
+      t.yBlock = 0;
+      break;
+  }
+
+  // Keep legacy positionBlock in sync.
+  t.positionBlock = isNewHoriz ? t.yBlock : t.xBlock;
 }
 
 // ── Multi-selection helpers ──────────────────────────────────────────────────
