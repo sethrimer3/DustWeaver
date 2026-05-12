@@ -158,6 +158,8 @@ function createFallbackRoomDef(): RoomDef {
   };
 }
 
+import type { EditableCampaignSession } from '../editor/editableCampaignSession';
+
 export interface GameScreenCallbacks {
   onReturnToMenu: () => void;
   onSave?: () => void;
@@ -170,6 +172,8 @@ export function startGameScreen(
   startRoomId: string | null,
   callbacks: GameScreenCallbacks,
   progress?: PlayerProgress,
+  campaignSession?: EditableCampaignSession | null,
+  openEditorImmediately?: boolean,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
   const bloomSystem = new BloomSystem({ ...DEFAULT_BLOOM_CONFIG });
@@ -243,8 +247,10 @@ export function startGameScreen(
     console.error('[gameScreen] No rooms were loaded. Starting in fallback room.');
   }
   const campaignSpawnBlock: readonly [number, number] = campaignSpawnRoom.playerSpawnBlock;
-  const shouldOpenFailsafeEditor = (startRoomId !== null && ROOM_REGISTRY.get(startRoomId) === undefined)
-    || !ROOM_REGISTRY.has('lobby');
+  const shouldOpenFailsafeEditor = campaignSession != null
+    ? (openEditorImmediately === true)
+    : ((startRoomId !== null && ROOM_REGISTRY.get(startRoomId) === undefined)
+      || !ROOM_REGISTRY.has('lobby'));
 
   let currentRoom: RoomDef = initialRoom;
   let bgColor = worldBgColor(currentRoom.worldNumber);
@@ -725,7 +731,7 @@ export function startGameScreen(
       editorToggleBtn.style.borderColor = '#00c864';
       editorToggleBtn.style.color = '#00c864';
     }
-  });
+  }, campaignSession ?? null);
 
   // Failsafe: if campaign start wiring looks broken, force-open editor visual map.
   if (shouldOpenFailsafeEditor) {

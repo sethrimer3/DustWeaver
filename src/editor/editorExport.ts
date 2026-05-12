@@ -12,6 +12,9 @@ import { dehydrateRoom, validateRoomRoundtrip } from '../levels/roomSchemaV2';
 import {
   ROOM_REGISTRY,
 } from '../levels/rooms';
+import type { EditableCampaignSession } from './editableCampaignSession';
+import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCampaignSession';
+import { WORLD_NAMES } from '../levels/rooms';
 
 /**
  * Exports the given editor room data as a downloadable .json file using the
@@ -97,4 +100,46 @@ export function exportAllChanges(
   }
 
   return exportCount;
+}
+
+/**
+ * Exports the entire custom campaign as a single `.dwcampaign.json` file.
+ *
+ * Collects all rooms from ROOM_REGISTRY (the campaign rooms), merges pending
+ * room edits, and includes world-map metadata and campaign metadata from the
+ * session. The result is a valid SavedCampaignV1 for placement in
+ * ASSETS/CAMPAIGNS/CUSTOM/<campaign-id>.dwcampaign.json.
+ *
+ * @param session          The active campaign editing session.
+ * @param pendingRoomEdits  Rooms with unsaved edits (including the current room).
+ */
+export function exportCampaignJson(
+  session: EditableCampaignSession,
+  pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
+): void {
+  if (import.meta.env.DEV) {
+    // Validate round-trip for each pending room.
+    for (const [, data] of pendingRoomEdits) {
+      const verboseJson = editorRoomDataToJson(data);
+      const errors = validateRoomRoundtrip(verboseJson);
+      if (errors.length > 0) {
+        console.error(`[editorExport] Campaign round-trip validation failed for room "${data.id}":`, errors);
+      }
+    }
+  }
+
+  const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+  const exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
+
+  const text = JSON.stringify(exported, null, 2);
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${exported.campaign.id}.dwcampaign.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

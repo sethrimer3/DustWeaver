@@ -11,8 +11,7 @@ import type { CameraState } from '../render/camera';
 import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 
-import {
-  EditorState, createEditorState, EditorTool,
+import { EditorState, createEditorState, EditorTool,
   BackgroundId, LightingEffect, RoomSongId, AmbientLightDirection,
   BlockTheme,
   EditorTransition, EditorRoomData,
@@ -33,7 +32,7 @@ import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { transitionLinkWarningMessage } from './transitionValidation';
-import { exportRoomAsJson, exportAllChanges } from './editorExport';
+import { exportRoomAsJson, exportAllChanges, exportCampaignJson } from './editorExport';
 import { ROOM_REGISTRY, initRoomRegistry, registerRoom } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
@@ -44,6 +43,7 @@ import {
 import { deepCloneRoomData, showSaveChangesDialog } from './editorSaveChangesDialog';
 import { applyRoomDimensionChange, applyEdgeResize } from './editorRoomResize';
 import { handlePropertyChange } from './editorPropertyChange';
+import type { EditableCampaignSession } from './editableCampaignSession';
 
 const BS = BLOCK_SIZE_MEDIUM;
 
@@ -115,6 +115,7 @@ export function createEditorController(
   uiRoot: HTMLElement,
   onLoadRoom: (room: RoomDef, spawnXBlock: number, spawnYBlock: number, preserveCamera?: boolean) => void,
   onEditorClose?: () => void,
+  campaignSession?: EditableCampaignSession | null,
 ): EditorController {
   const state = createEditorState();
   const inputState = createEditorInputState();
@@ -173,7 +174,8 @@ export function createEditorController(
 
       inputCleanup = attachEditorInputListeners(canvas, inputState, state);
 
-      ui = createEditorUI(uiRoot);
+      const campaignTitle = campaignSession ? campaignSession.campaign.campaign.title : null;
+      ui = createEditorUI(uiRoot, campaignTitle);
       ui.setCallbacks({
         onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; },
         onCategoryChange: (cat) => { state.activeCategory = cat; },
@@ -234,6 +236,14 @@ export function createEditorController(
             window.alert('No changed rooms or world-map edits to export yet.');
           }
         },
+        onExportCampaignJson: campaignSession ? () => {
+          // Auto-save current room to pending before exporting so it's included.
+          if (state.roomData) {
+            pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            isCurrentRoomDirty = false;
+          }
+          exportCampaignJson(campaignSession, pendingRoomEdits);
+        } : undefined,
         onOpenVisualMap: () => openVisualMap(),
         onSkillTombWeaveChange: (weaveId: string) => {
           state.pendingSkillTombWeaveId = weaveId;

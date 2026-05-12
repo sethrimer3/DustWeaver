@@ -900,6 +900,8 @@ export interface EditorUICallbacks {
   onDustBoostJarCountChange: (dustCount: number) => void;
   /** Called when the user changes the brush mode. */
   onBrushModeChange: (mode: BrushMode) => void;
+  /** Called when the user clicks "Export Campaign JSON" while editing a custom campaign. */
+  onExportCampaignJson?: () => void;
 }
 
 /** Selects the placement block theme and updates the recent-theme strip. */
