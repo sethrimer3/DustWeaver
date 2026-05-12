@@ -1325,7 +1325,7 @@ export function startGameScreen(
       environmentalDust.update(world, FIXED_DT_MS);
       atmosphericLightDust.update(FIXED_DT_MS);
       skidDebris.update(world, FIXED_DT_MS);
-      weakWallJumpDebris.update(world, FIXED_DT_MS, performance.now());
+      weakWallJumpDebris.update(world, FIXED_DT_MS);
 
       // ── Crumble block debris events & ambient lighting rebuild ────────────
       for (let ci = 0; ci < world.crumbleBlockCount; ci++) {

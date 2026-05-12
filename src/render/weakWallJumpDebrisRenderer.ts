@@ -69,8 +69,11 @@ const MIN_DEBRIS_THUD_SPEED_WORLD = 30.0;
  */
 const THUD_RATE_LIMIT_COUNT = 4;
 
-/** Duration of the thud rate-limit window (ms). */
-const THUD_RATE_LIMIT_WINDOW_MS = 150;
+/**
+ * Size of the thud rate-limit window in ticks.
+ * At 60 fps, 9 ticks ≈ 150 ms — keeps audio non-spammy while feeling organic.
+ */
+const THUD_RATE_LIMIT_WINDOW_TICKS = 9;
 
 /** Earthy, gritty color palette for wall debris chips. */
 const COLORS = ['#8b7355', '#7a6448', '#6b5330', '#9a8465', '#c4a57b'];
@@ -90,6 +93,12 @@ function _playSoftDebrisThud(_opts: {
   // Stub: no audio system wired yet.  Replace with real synth/buffer playback.
 }
 
+/** Monotonically increasing instance counter used to seed PRNG so that each
+ * renderer instance produces a different visual pattern without using wall-clock
+ * time anywhere in the rendering or update path.
+ */
+let _instanceCounter = 0;
+
 // ── Main renderer class ───────────────────────────────────────────────────────
 
 export class WeakWallJumpDebrisRenderer {
@@ -106,12 +115,21 @@ export class WeakWallJumpDebrisRenderer {
   /** 1 if this particle is still eligible to play one impact sound. */
   private readonly canPlaySoundFlag = new Uint8Array(MAX_CASCADE_DEBRIS);
 
-  // Deterministic PRNG state for purely visual randomness.
-  private rngState = 1;
+  // PRNG state for purely visual randomness.
+  // Seeded from a module-level instance counter so different instances produce
+  // different patterns without using wall-clock time anywhere in the update path.
+  private rngState: number;
 
-  // Rate limiter for debris thud sounds.
+  // Rate limiter for debris thud sounds — tracked in simulation ticks so
+  // timing remains consistent regardless of frame rate.
   private thudCountInWindow = 0;
-  private thudWindowStartMs = 0;
+  private thudWindowStartTick = -1;
+
+  constructor() {
+    _instanceCounter++;
+    // Mix counter with a constant so seed(1) and seed(2) aren't trivially similar.
+    this.rngState = (_instanceCounter * 1664525 + 1013904223) >>> 0 || 1;
+  }
 
   /** Simple LCG PRNG — never affects simulation determinism. */
   private nextRandom(): number {
@@ -124,11 +142,10 @@ export class WeakWallJumpDebrisRenderer {
    * this tick.  Must be called every simulation tick (after tick()) with the
    * fixed simulation dt.
    *
-   * @param world   Current world state — read-only for visual signals.
+   * @param world   Current world state — read-only for visual signals and tick counter.
    * @param dtMs    Fixed simulation timestep in milliseconds.
-   * @param nowMs   Wall-clock time for rate-limiting audio (optional; use 0 to skip audio).
    */
-  update(world: WorldState, dtMs: number, nowMs: number = 0): void {
+  update(world: WorldState, dtMs: number): void {
     const dt = dtMs / 1000.0;
 
     // ── Spawn cascade if triggered ────────────────────────────────────────
@@ -215,17 +232,17 @@ export class WeakWallJumpDebrisRenderer {
       // ── Rate-limited debris thud sound ────────────────────────────────
       if (
         hitAWall &&
-        nowMs > 0 &&
         this.canPlaySoundFlag[i] === 1
       ) {
         const impactSpeed = Math.sqrt(
           this.vxWorld[i] * this.vxWorld[i] + this.vyWorld[i] * this.vyWorld[i],
         );
         if (impactSpeed > MIN_DEBRIS_THUD_SPEED_WORLD) {
-          // Reset rate-limit window if stale.
-          if (nowMs - this.thudWindowStartMs > THUD_RATE_LIMIT_WINDOW_MS) {
+          // Reset rate-limit window if it has expired (tick-based).
+          const currentTick = world.tick;
+          if (currentTick - this.thudWindowStartTick >= THUD_RATE_LIMIT_WINDOW_TICKS) {
             this.thudCountInWindow = 0;
-            this.thudWindowStartMs = nowMs;
+            this.thudWindowStartTick = currentTick;
           }
           if (this.thudCountInWindow < THUD_RATE_LIMIT_COUNT) {
             this.thudCountInWindow++;
