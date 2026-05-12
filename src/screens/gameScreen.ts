@@ -16,6 +16,7 @@ import { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
+import { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
 import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
@@ -568,6 +569,7 @@ export function startGameScreen(
   const atmosphericLightDust = new AtmosphericLightDust();
   const skidDebris = new SkidDebrisRenderer();
   const crumbleDebris = new CrumbleDebrisRenderer();
+  const weakWallJumpDebris = new WeakWallJumpDebrisRenderer();
   const skillTombRenderer = new SkillTombRenderer();
   const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();
@@ -1323,6 +1325,7 @@ export function startGameScreen(
       environmentalDust.update(world, FIXED_DT_MS);
       atmosphericLightDust.update(FIXED_DT_MS);
       skidDebris.update(world, FIXED_DT_MS);
+      weakWallJumpDebris.update(world, FIXED_DT_MS, performance.now());
 
       // ── Crumble block debris events & ambient lighting rebuild ────────────
       for (let ci = 0; ci < world.crumbleBlockCount; ci++) {
@@ -1503,6 +1506,7 @@ export function startGameScreen(
           isGrappleChainHiddenFlag: true,
           isGrappleZipActive:   world.isGrappleZipActiveFlag === 1,
           isGrappleStuck:       world.isGrappleStuckFlag === 1,
+          hasZipImpactedSurface: world.hasZipImpactedSurfaceFlag === 1,
           zipJumpWindowTicksLeft: world.isGrappleStuckFlag === 1
             ? Math.max(0, Math.round(ZIP_JUMP_WINDOW_SECONDS * 60) - world.grappleStuckStoppedTickCount)
             : 0,
@@ -1601,7 +1605,7 @@ export function startGameScreen(
 
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
-      webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+      webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       sunbeamRenderer, atmosphericLightDust, fallingBlockDust,
       world, currentRoom,

@@ -423,6 +423,15 @@ export function tickPlayerMovement(
           world.skidDebrisXWorld = cluster.positionXWorld;
           world.skidDebrisYWorld = cluster.positionYWorld + cluster.halfHeightWorld;
         }
+        // Spawn heavy debris cascade on the 3rd+ consecutive wall jump (weak/slippery).
+        if (cluster.wallJumpCountSinceReset > 2) {
+          world.weakWallJumpCascadeFlag = 1;
+          // Spawn at the wall contact edge (player side facing the wall)
+          world.weakWallJumpCascadeXWorld = cluster.positionXWorld
+            + wallDir * cluster.halfWidthWorld;
+          world.weakWallJumpCascadeYWorld = cluster.positionYWorld;
+          world.weakWallJumpCascadeWallSideX = wallDir;
+        }
         // Start variable jump sustain for wall jumps too.
         cluster.varJumpTimerTicks       = VAR_JUMP_TIME_TICKS;
         cluster.varJumpSpeedWorld       = -wallJumpY;

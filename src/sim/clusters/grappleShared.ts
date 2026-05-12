@@ -273,6 +273,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   world.grappleZipStickXWorld = 0.0;
   world.grappleZipStickYWorld = 0.0;
   world.hasZipImpactFxFiredFlag = 0;
+  world.hasZipImpactedSurfaceFlag = 0;
   world.grappleJumpHeldTickCount = 0;
   world.grappleRetractHeldTicks = 0;
   world.grapplePullInAmountWorld = 0.0;

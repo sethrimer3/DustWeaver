@@ -202,6 +202,24 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   playerLandingSkidSpeedFactor: number;
 
+  // ---- Weak wall jump cascade visual flags (read by renderer) ---------------
+  /**
+   * 1 for a single tick when a cascade of heavy debris particles should be spawned
+   * from the wall the player just jumped off.  Only set on the 3rd+ consecutive
+   * wall jump (wallJumpCountSinceReset > 2); reset at the start of each
+   * applyClusterMovement call.
+   */
+  weakWallJumpCascadeFlag: 0 | 1;
+  /** World-space X of the wall contact point for the cascade spawn origin. */
+  weakWallJumpCascadeXWorld: number;
+  /** World-space Y of the wall contact point for the cascade spawn origin. */
+  weakWallJumpCascadeYWorld: number;
+  /**
+   * +1 if the wall was to the right of the player (right wall jump), –1 if to
+   * the left (left wall jump).  Used by the renderer to orient the debris burst.
+   */
+  weakWallJumpCascadeWallSideX: number;
+
   // ── Arrow Weave loading state ──────────────────────────────────────────────
   /** 1 while the player is holding the arrow weave button and loading an arrow. */
   isArrowWeaveLoadingFlag: 0 | 1;
@@ -417,6 +435,10 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     skidDebrisYWorld: 0.0,
     wallJumpSkidDebrisBurstFlag: 0,
     playerLandingSkidSpeedFactor: 0.0,
+    weakWallJumpCascadeFlag: 0,
+    weakWallJumpCascadeXWorld: 0.0,
+    weakWallJumpCascadeYWorld: 0.0,
+    weakWallJumpCascadeWallSideX: 0,
     // ── Arrow Weave ───────────────────────────────────────────────────
     isArrowWeaveLoadingFlag:       0,
     arrowWeaveLoadStartTick:       -1,

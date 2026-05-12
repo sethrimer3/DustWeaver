@@ -26,6 +26,7 @@ import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import type { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
+import type { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
@@ -127,6 +128,8 @@ export interface RenderFrameContext {
   environmentalDust: EnvironmentalDustLayer;
   skidDebris: SkidDebrisRenderer;
   crumbleDebris: CrumbleDebrisRenderer;
+  /** Weak wall jump cascade debris — spawns on 3rd+ consecutive wall jump. */
+  weakWallJumpDebris: WeakWallJumpDebrisRenderer;
   skillTombRenderer: SkillTombRenderer;
   skillTombEffectRenderer: SkillTombEffectRenderer;
   bloomSystem: BloomSystem;
@@ -319,7 +322,7 @@ function getDustKindColor(dustKind: string): string {
 export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
-    webglRenderer, environmentalDust, skidDebris, crumbleDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+    webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
     sunbeamRenderer, atmosphericLightDust, fallingBlockDust,
     world, currentRoom, snapshot,
@@ -648,6 +651,7 @@ export function renderFrame(r: RenderFrameContext): void {
   atmosphericLightDust.render(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   skidDebris.render(ctx, ox, oy, zoom);
   crumbleDebris.render(ctx, ox, oy, zoom);
+  weakWallJumpDebris.render(ctx, ox, oy, zoom);
   // Falling block groups — tiles + dust effects
   if (world.fallingBlockGroups.length > 0) {
     renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust, isDebugMode, getActiveProceduralMaterial(), r.renderAlpha, r.prevFallingBlockOffsetY);
