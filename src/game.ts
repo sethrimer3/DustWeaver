@@ -6,7 +6,8 @@ import { createDefaultProgress, PlayerProgress } from './progression/playerProgr
 import { SaveSlotData, saveSaveSlot } from './progression/saveSlots';
 import type { CampaignSource } from './levels/campaignSource';
 import type { EditableCampaignSession } from './editor/editableCampaignSession';
-import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot } from './levels/rooms';
+import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry } from './levels/rooms';
+import { setActiveCampaignId } from './levels/campaigns';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -113,9 +114,9 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           registerRoomsFromPackedCampaign(campaign);
           startRoomId = campaign.campaign.initialRoomId;
         } else if (source.loadFolderCampaign !== undefined) {
-          const rooms = await source.loadFolderCampaign();
-          // Rooms are already loaded into the registry by loadFolderCampaign (via loadRoomJsonFiles).
-          void rooms;
+          // For folder-based campaigns, set the active campaign then reload the registry.
+          setActiveCampaignId(source.id);
+          await initRoomRegistry();
           startRoomId = source.initialRoomId;
         } else {
           console.error('[game] Campaign source has no loader:', source.id);

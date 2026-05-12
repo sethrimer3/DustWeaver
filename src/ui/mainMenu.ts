@@ -681,6 +681,16 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
         idInp.setSelectionRange(pos, pos);
       }
     });
+    // Auto-sanitize room ID while typing (same safe charset).
+    initRoomIdInp.addEventListener('input', () => {
+      const raw = initRoomIdInp.value;
+      const sanitized = sanitizeCampaignId(raw);
+      if (raw !== sanitized) {
+        const pos = initRoomIdInp.selectionStart ?? 0;
+        initRoomIdInp.value = sanitized;
+        initRoomIdInp.setSelectionRange(pos, pos);
+      }
+    });
 
     const btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;gap:0.6rem;margin-top:0.3rem;justify-content:flex-end;';
@@ -702,12 +712,14 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
       padding:0.45rem 1.4rem;font-family:'Cinzel',serif;font-size:0.85rem;cursor:pointer;
     `;
     confirmBtn.addEventListener('click', () => {
+      const rawId = idInp.value.trim();
+      const rawRoomId = initRoomIdInp.value.trim();
       const params = {
-        id: idInp.value.trim() || 'my_campaign',
+        id: sanitizeCampaignId(rawId || 'my_campaign'),
         title: titleInp.value.trim() || 'My Campaign',
         creator: creatorInp.value.trim(),
         description: descInp.value.trim(),
-        initialRoomId: initRoomIdInp.value.trim() || 'start',
+        initialRoomId: sanitizeCampaignId(rawRoomId || 'start'),
         initialRoomWidthBlocks: Math.max(8, parseInt(widthInp.value, 10) || 40),
         initialRoomHeightBlocks: Math.max(8, parseInt(heightInp.value, 10) || 30),
         worldName: worldNameInp.value.trim() || 'World 1',

@@ -171,7 +171,9 @@ export function validateSavedCampaign(data: unknown): string[] {
 
     // Validate spawn block is within room.
     const [sx, sy] = room.spawn;
-    if (sx < 0 || sy < 0 || sx >= w || sy >= h) {
+    if (!Number.isInteger(sx) || !Number.isInteger(sy)) {
+      errors.push(`rooms[${i}] ("${room.id}") spawn coordinates must be integers, got [${sx},${sy}]`);
+    } else if (sx < 0 || sy < 0 || sx >= w || sy >= h) {
       errors.push(`rooms[${i}] ("${room.id}") spawn [${sx},${sy}] is outside room bounds [${w}×${h}]`);
     }
 
