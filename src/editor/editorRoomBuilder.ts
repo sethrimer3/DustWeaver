@@ -185,6 +185,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     depthBlock: t.depthBlock,
     isSecretDoor: t.isSecretDoor,
     gradientWidthBlocks: t.gradientWidthBlocks,
+    longTransition: t.longTransition,
   }));
 
   return {
@@ -440,6 +441,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       depthBlock: t.depthBlock,
       isSecretDoor: t.isSecretDoor,
       gradientWidthBlocks: t.gradientWidthBlocks,
+      longTransition: t.longTransition,
       positionBlock: t.positionBlock,
     };
   });

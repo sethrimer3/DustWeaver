@@ -33,6 +33,8 @@ export function processRoomPickups(
   progress: PlayerProgress | undefined,
   player: ClusterState,
   levelRng: RngState,
+  roomOriginXWorld = 0,
+  roomOriginYWorld = 0,
 ): void {
   // ── Dust container pickups ─────────────────────────────────────────────────
   // Grants +1 dust container (+4 particle capacity) and spawns burst particles.
@@ -42,8 +44,9 @@ export function processRoomPickups(
     if (collectedKeySet.has(pickupKey)) continue;
 
     const dc = roomDustContainers[i];
-    const cx = (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    const cy = (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    // Container positions are in room-local coords; convert to world-space.
+    const cx = roomOriginXWorld + (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    const cy = roomOriginYWorld + (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
     const dx = player.positionXWorld - cx;
     const dy = player.positionYWorld - cy;
     if (dx * dx + dy * dy <= DUST_CONTAINER_PICKUP_RADIUS_WORLD * DUST_CONTAINER_PICKUP_RADIUS_WORLD) {

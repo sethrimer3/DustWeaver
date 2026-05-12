@@ -1,5 +1,103 @@
 # DustWeaver — Next Steps
 
+## BUILD 284 — Seamless Room Transitions + Long Transition Flag
+
+### What Was Implemented
+
+**Seamless adjacent-room crossing** (`src/screens/gameScreen.ts`):
+
+Normal (non-long) room transitions no longer snap/teleport when the active room
+swaps.  Instead, after the player crosses 2 blocks into the new room (the existing
+`isCrossingComplete` threshold), `_finalizeCrossingSeamless()` is called:
+
+1. `loadRoom()` re-initialises the new room (player spawn position, enemies,
+   hazards, physics, etc.) in the usual room-local coordinate space.
+2. For **right/down exits** (where the previous room would have negative coords in
+   the new space), the entire world is shifted right/down by the previous room's
+   width/height so all wall coordinates remain positive.
+3. The previous room's walls are re-appended to `world.walls[]` at the correct
+   world-space offset (`appendRoomWallsAtOffset`, now exported from
+   `twoRoomCrossing.ts`).
+4. The previous room is recorded in `stagedRooms[]` as a `StagedRoomInstance`
+   with its world-space origin.
+5. World bounds, camera, and render clip-rect are updated to cover the union of
+   the active room + staged rooms, exactly as during the active-crossing phase.
+6. `currentRoomOriginXWorld/Y` tracks where the active room begins in world space
+   so `checkRoomTransitions` can convert between world and room-local player
+   coords via the new optional `playerOffsetX/Y` parameters.
+7. Staged rooms are cleared automatically when `loadRoom()` is called for any
+   reason (death, save-load, long transition).
+8. When the player triggers the *next* transition, `_clearStagedRoomsAndNormalize()`
+   removes the staged walls and shifts the world back to `(0, 0)` before calling
+   `startCrossing()`, restoring the invariant that the active room begins at the
+   origin.
+
+**Long Transition flag** (`longTransition?: boolean`):
+
+Added to all transition data layers:
+- `RoomTransitionDef` (roomDef.ts)
+- `RoomJsonTransition` (roomJsonSchema.ts)
+- `EditorTransition` (editorState.ts)
+- `SavedTransition` — compact key `lt` (roomSchemaV2.ts)
+
+When a transition has `longTransition: true`:
+- `startCrossing()` is **not** called.
+- `loadRoom()` is called immediately (legacy teleport-style).
+- The `PostTransition` camera reveal is still applied.
+- Existing room files without the field load correctly (defaults to `false`).
+
+**Editor UI**:
+- Inspector panel for room transitions now includes a **"Long Transition"**
+  checkbox below "isSecretDoor".
+
+**Defensive warnings** (`gameTransitions.ts`):
+- Console warning when a transition points to a missing room.
+- Console warning when no matching return transition is found.
+
+### Reuse of Existing Infrastructure
+
+- `appendRoomWallsAtOffset` (was private `_appendRoomWalls` in `twoRoomCrossing.ts`):
+  reused verbatim, just exported.
+- `updateCameraWithBounds`: reused for both active-crossing and staging phases.
+- `getCrossingUnionBounds`: still used during the active crossing phase.
+- `isCrossingComplete` threshold unchanged — staging begins at the same point the
+  old hard teleport fired.
+
+### Known Limitations / Next Steps
+
+1. **Staged room background**: The background texture/parallax of the staged (previous)
+   room is not rendered at its world-space offset.  The active room's background
+   fills the entire expanded clip rect.  Visually this is only noticeable for rooms
+   with very different backgrounds.
+
+2. **Staged room hazards**: Water/lava/spike zones from the staged room are not
+   simulated while staged.  The player can walk through them without effect if they
+   re-enter the staged room portion.  A future pass should re-spawn or freeze-simulate
+   staged room hazards.
+
+3. **Staged room enemies**: Enemies from the staged room are despawned when `loadRoom`
+   is called.  They do not reappear during staging.  A future pass should keep enemy
+   clusters alive in the staged room's world-space positions.
+
+4. **Falling blocks, ropes, crumble blocks**: Similar to enemies — these belong to the
+   staged room but are not preserved.  Not marked as broken since the player cannot
+   easily return within the staging window without triggering a new crossing.
+
+5. **Recursive staging (A→B→C)**: When the player crosses from B into C, staged room A
+   is discarded (`_clearStagedRoomsAndNormalize`).  Only one ring of staged rooms is
+   maintained at a time (sufficient for the seamless feel requirement).
+
+6. **Ambient-depth shading seam**: Wall sprites at the seam may look slightly wrong
+   because the ambient-depth BFS is computed per-room and does not extend across the
+   boundary for staged walls.
+
+7. **Transition reveal (edge-extension preview)**: The reveal offset and
+   `transitionPreviewContext` are suppressed when staged rooms are present (same
+   behaviour as during active crossing).  This means no edge-extension preview tiles
+   appear on the far side of the new room while A is still staged.
+
+---
+
 ## BUILD 279 — Two-Room Smooth Camera Crossing
 
 ### What Was Implemented

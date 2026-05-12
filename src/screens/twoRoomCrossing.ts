@@ -186,7 +186,7 @@ export function startCrossing(
 
   // ── Append next room walls at adjusted origin ─────────────────────────────
   const savedWallCount = world.wallCount;
-  _appendRoomWalls(world, nextRoom, adjustedOriginX, adjustedOriginY);
+  appendRoomWallsAtOffset(world, nextRoom, adjustedOriginX, adjustedOriginY);
 
   // ── Expand world physics bounds to the union ──────────────────────────────
   const savedWorldWidth  = world.worldWidthWorld;
@@ -280,8 +280,10 @@ export function getCrossingUnionBounds(state: TwoRoomCrossingState): {
  * finalisation).
  *
  * Stops appending when MAX_WALLS is reached.
+ *
+ * Exported as `appendRoomWallsAtOffset` for use in seamless room staging.
  */
-function _appendRoomWalls(
+export function appendRoomWallsAtOffset(
   world: WorldState,
   room: RoomDef,
   offsetXWorld: number,
@@ -315,3 +317,5 @@ function _appendRoomWalls(
     world.wallBouncePadSpeedFactorIndex[idx] = 0;
   }
 }
+
+

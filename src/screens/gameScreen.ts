@@ -30,6 +30,7 @@ import {
   startCrossing,
   isCrossingComplete,
   getCrossingUnionBounds,
+  appendRoomWallsAtOffset,
   type TwoRoomCrossingState,
 } from './twoRoomCrossing';
 import {
@@ -259,6 +260,31 @@ export function startGameScreen(
 
   /** BUILD 279: Two-room smooth camera crossing state. */
   const crossingState: TwoRoomCrossingState = createTwoRoomCrossingState();
+
+  /**
+   * BUILD 284: Seamless room staging.
+   *
+   * After a seamless crossing finalises, the previous room's walls are kept in
+   * `world.walls[]` as a "staged" adjacent room.  `currentRoomOriginXWorld/Y`
+   * tracks where the active room starts in world-space (non-zero after a
+   * right/down crossing because we shift the world to keep coordinates
+   * positive).  These are reset to zero by any full `loadRoom` call.
+   */
+  interface StagedRoomInstance {
+    room: RoomDef;
+    /** Origin of this room in current world-space coordinates. */
+    originXWorld: number;
+    originYWorld: number;
+    /**
+     * First index in world.walls[] that belongs to this staged room.
+     * Removing it is as simple as setting world.wallCount = wallStartIndex.
+     */
+    wallStartIndex: number;
+  }
+
+  let currentRoomOriginXWorld = 0;
+  let currentRoomOriginYWorld = 0;
+  let stagedRooms: StagedRoomInstance[] = [];
   const dustContainerSprite = new Image();
   dustContainerSprite.src = `${BASE}SPRITES/objects/collectables/dust_container_stub.svg`;
   let isDustContainerSpriteLoaded = false;
@@ -337,6 +363,11 @@ export function startGameScreen(
     crossingState.phase       = 'inactive';
     crossingState.nextRoom    = null;
     crossingState.currentRoom = null;
+
+    // BUILD 284: Reset seamless-staging state on any full room load.
+    currentRoomOriginXWorld = 0;
+    currentRoomOriginYWorld = 0;
+    stagedRooms = [];
 
     // Apply world-specific block sprites and background
     if (room.blockTheme) {
@@ -891,7 +922,10 @@ export function startGameScreen(
       playerXWorld = player.positionXWorld;
       playerYWorld = player.positionYWorld;
 
-      const nearbyIndex = skillTombRenderer.getNearbyTombIndex(player.positionXWorld, player.positionYWorld);
+      const nearbyIndex = skillTombRenderer.getNearbyTombIndex(
+        player.positionXWorld - currentRoomOriginXWorld,
+        player.positionYWorld - currentRoomOriginYWorld,
+      );
       if (nearbyIndex >= 0) {
         const tombPos = skillTombRenderer.getTombPosition(nearbyIndex);
         if (tombPos) {
@@ -958,6 +992,169 @@ export function startGameScreen(
     resizeCanvas();
   }
   window.addEventListener('resize', onResize);
+
+  // ── BUILD 284: Seamless-staging helpers ─────────────────────────────────────
+
+  /**
+   * Shift every wall position, the player cluster, and the camera by
+   * (dxWorld, dyWorld).  Called after loadRoom to make room for the staged
+   * previous room when it would otherwise have negative coordinates (right/down
+   * exits where the old room is now "behind" the new room in world space).
+   */
+  function _shiftWorldCoords(dxWorld: number, dyWorld: number): void {
+    const player = world.clusters[0];
+    if (player !== undefined) {
+      player.positionXWorld += dxWorld;
+      player.positionYWorld += dyWorld;
+      // Also shift any accumulated previous-position for interpolation.
+      if (prevClusterPosX[0] !== undefined) prevClusterPosX[0] += dxWorld;
+      if (prevClusterPosY[0] !== undefined) prevClusterPosY[0] += dyWorld;
+    }
+    for (let i = 0; i < world.wallCount; i++) {
+      world.wallXWorld[i] += dxWorld;
+      world.wallYWorld[i] += dyWorld;
+    }
+    camera.centerXWorld += dxWorld;
+    camera.centerYWorld += dyWorld;
+  }
+
+  /**
+   * Remove staged room walls and normalise world coordinates so the active room
+   * starts at (0, 0).  Must be called before startCrossing() whenever staged
+   * rooms are present or currentRoomOriginXWorld/Y is non-zero, so that the
+   * crossing helpers see a clean world with the active room at the origin.
+   *
+   * Invariant: only ONE staged room is ever present at a time (one ring of
+   * adjacent rooms), so `stagedRooms[0].wallStartIndex` is always the first
+   * staged wall.  Multiple staged rooms in one pass are not supported.
+   */
+  function _clearStagedRoomsAndNormalize(): void {
+    // Remove staged walls (they are always appended at the end; only one
+    // staged room is maintained so stagedRooms[0] has the earliest index).
+    if (stagedRooms.length > 0) {
+      world.wallCount = stagedRooms[0].wallStartIndex;
+    }
+    stagedRooms = [];
+
+    // Shift world back so active room starts at (0, 0).
+    if (currentRoomOriginXWorld !== 0 || currentRoomOriginYWorld !== 0) {
+      _shiftWorldCoords(-currentRoomOriginXWorld, -currentRoomOriginYWorld);
+      currentRoomOriginXWorld = 0;
+      currentRoomOriginYWorld = 0;
+    }
+  }
+
+  /**
+   * Finalise a seamless crossing: calls loadRoom for the next room, then
+   * re-appends the previous room's walls at the correct offset so it remains
+   * visible (and collidable) behind the player.
+   *
+   * For right/down exits the world is shifted after loadRoom so the previous
+   * room occupies positive coordinates.
+   */
+  function _finalizeCrossingSeamless(): void {
+    const player = world.clusters[0];
+    if (player === undefined) return;
+
+    const BS = BLOCK_SIZE_MEDIUM;
+    const dir        = crossingState.exitDirection!;
+    const prevRoom   = crossingState.currentRoom!;
+    const nextRoom_  = crossingState.nextRoom!;
+    const nextOriginX = crossingState.nextRoomOriginXWorld;
+    const nextOriginY = crossingState.nextRoomOriginYWorld;
+
+    // Save velocity.
+    const savedVelX = player.velocityXWorld;
+    const savedVelY = player.velocityYWorld;
+
+    // Convert player to next-room local block coords.
+    const nextLocalX = player.positionXWorld - nextOriginX;
+    const nextLocalY = player.positionYWorld - nextOriginY;
+    const spawnXBlock = Math.max(0, Math.floor(nextLocalX / BS));
+    const spawnYBlock = Math.max(0, Math.floor(nextLocalY / BS));
+
+    // Save camera in next-room local coords.
+    const savedCamX = camera.centerXWorld - nextOriginX;
+    const savedCamY = camera.centerYWorld - nextOriginY;
+
+    // loadRoom resets world, spawns player at spawnBlock, clears crossingState
+    // and stagedRooms (via Phase A).
+    loadRoom(nextRoom_, spawnXBlock, spawnYBlock, /* preserveCamera */ true);
+
+    // Restore camera (prevents snap).
+    camera.centerXWorld = savedCamX;
+    camera.centerYWorld = savedCamY;
+
+    // Restore player velocity.
+    const newPlayer = world.clusters[0];
+    if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
+      newPlayer.velocityXWorld = savedVelX;
+      newPlayer.velocityYWorld = savedVelY;
+    }
+
+    // ── Post-loadRoom: place the prev room as a staged room ────────────────
+    // After loadRoom the active room is at [0, nextRoomW] × [0, nextRoomH].
+    // For right/down exits the previous room would be at negative coords, so
+    // we shift the entire world right/down first.
+
+    const prevRoomW = prevRoom.widthBlocks  * BS;
+    const prevRoomH = prevRoom.heightBlocks * BS;
+    const nextRoomW = nextRoom_.widthBlocks  * BS;
+    const nextRoomH = nextRoom_.heightBlocks * BS;
+
+    let prevOriginXWorld: number;
+    let prevOriginYWorld: number;
+
+    if (dir === 'right') {
+      // Shift world right by prevRoomW so active room occupies [prevW, prevW+nextW].
+      _shiftWorldCoords(prevRoomW, 0);
+      currentRoomOriginXWorld = prevRoomW;
+      currentRoomOriginYWorld = 0;
+      prevOriginXWorld = 0;
+      prevOriginYWorld = 0;
+    } else if (dir === 'down') {
+      // Shift world down by prevRoomH so active room occupies [0, nextW] × [prevH, prevH+nextH].
+      _shiftWorldCoords(0, prevRoomH);
+      currentRoomOriginXWorld = 0;
+      currentRoomOriginYWorld = prevRoomH;
+      prevOriginXWorld = 0;
+      prevOriginYWorld = 0;
+    } else if (dir === 'left') {
+      // No shift needed; active room at [0, nextW], prev room goes to the right.
+      currentRoomOriginXWorld = 0;
+      currentRoomOriginYWorld = 0;
+      prevOriginXWorld = nextRoomW;
+      prevOriginYWorld = 0;
+    } else { // 'up'
+      // No shift needed; active room at [0..nextH], prev room goes below.
+      currentRoomOriginXWorld = 0;
+      currentRoomOriginYWorld = 0;
+      prevOriginXWorld = 0;
+      prevOriginYWorld = nextRoomH;
+    }
+
+    // Append prev room walls at the computed offset.
+    const wallStartIndex = world.wallCount;
+    appendRoomWallsAtOffset(world, prevRoom, prevOriginXWorld, prevOriginYWorld);
+
+    // Expand world bounds to cover both rooms.
+    world.worldWidthWorld  = Math.max(
+      currentRoomOriginXWorld + nextRoomW,
+      prevOriginXWorld + prevRoomW,
+    );
+    world.worldHeightWorld = Math.max(
+      currentRoomOriginYWorld + nextRoomH,
+      prevOriginYWorld + prevRoomH,
+    );
+
+    // Record the staged room.
+    stagedRooms = [{
+      room: prevRoom,
+      originXWorld: prevOriginXWorld,
+      originYWorld: prevOriginYWorld,
+      wallStartIndex,
+    }];
+  }
 
   function frame(timestampMs: number): void {
     if (!isRunning) return;
@@ -1139,40 +1336,51 @@ export function startGameScreen(
     // placed side-by-side in crossing world space so the camera can slide
     // naturally across the seam.  The transition only fires when no crossing
     // is already in progress.
+    // BUILD 284: Normal transitions use the seamless crossing path; transitions
+    // with longTransition=true use the legacy teleport path.
     const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
     const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
     if (crossingState.phase === 'inactive') {
-      checkRoomTransitions(world, currentRoom, roomWidthWorld, roomHeightWorld, (room, spawnX, spawnY, dir, ti) => {
-        // Record speed for debug overlay before the world state changes.
-        lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
+      checkRoomTransitions(
+        world, currentRoom, roomWidthWorld, roomHeightWorld,
+        (room, spawnX, spawnY, dir, ti) => {
+          // Record speed for debug overlay before the world state changes.
+          lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
 
-        if (ENABLE_TWO_ROOM_CAMERA_CROSSING) {
-          // Start smooth two-room crossing.
-          const started = startCrossing(crossingState, world, currentRoom, ti, dir, room, camera);
-          if (started) {
-            // Player retains their velocity — physics carries them through the passage.
-            return;
+          const isLong = currentRoom.transitions[ti]?.longTransition === true;
+
+          if (!isLong && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
+            // Seamless crossing: normalise world coords if staged rooms are
+            // present, then start the two-room camera crossing.
+            _clearStagedRoomsAndNormalize();
+            const started = startCrossing(crossingState, world, currentRoom, ti, dir, room, camera);
+            if (started) {
+              // Player retains their velocity — physics carries them through the passage.
+              return;
+            }
+            // If startCrossing failed (rare: missing transition def), fall through to legacy path.
           }
-          // If startCrossing failed (rare: missing transition def), fall through to legacy path.
-        }
 
-        // Legacy path: immediate synchronous room load.
-        loadRoom(room, spawnX, spawnY);
+          // Long transition / legacy path: immediate synchronous room load.
+          loadRoom(room, spawnX, spawnY);
 
-        // Restore pre-transition velocity so momentum feels continuous.
-        const newPlayer = world.clusters[0];
-        if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
-          newPlayer.velocityXWorld = preTransVX;
-          newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
-        }
+          // Restore pre-transition velocity so momentum feels continuous.
+          const newPlayer = world.clusters[0];
+          if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
+            newPlayer.velocityXWorld = preTransVX;
+            newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
+          }
 
-        // Activate PostTransition reveal.
-        const entryEdge = getOppositeTransitionDirection(dir);
-        const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
-        notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
+          // Activate PostTransition reveal.
+          const entryEdge = getOppositeTransitionDirection(dir);
+          const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
+          notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
 
-        preloadAdjacentRoomAssets(currentRoom);
-      });
+          preloadAdjacentRoomAssets(currentRoom);
+        },
+        currentRoomOriginXWorld,
+        currentRoomOriginYWorld,
+      );
     }
 
     // ── Dialogue trigger check ─────────────────────────────────────────────
@@ -1182,8 +1390,9 @@ export function startGameScreen(
     // open to prevent repeated starts while standing still.
     if (!dialogueState.isDialogueActiveFlag) {
       const player = world.clusters[0];
-      const playerXBlock = player ? Math.floor(player.positionXWorld / BLOCK_SIZE_SMALL) : -1;
-      const playerYBlock = player ? Math.floor(player.positionYWorld / BLOCK_SIZE_SMALL) : -1;
+      // Convert to room-local block coords (triggers are defined in room space).
+      const playerXBlock = player ? Math.floor((player.positionXWorld - currentRoomOriginXWorld) / BLOCK_SIZE_SMALL) : -1;
+      const playerYBlock = player ? Math.floor((player.positionYWorld - currentRoomOriginYWorld) / BLOCK_SIZE_SMALL) : -1;
       const triggers = currentRoom.dialogueTriggers ?? [];
       for (let triggerIndex = 0; triggerIndex < triggers.length; triggerIndex++) {
         const trig = triggers[triggerIndex];
@@ -1325,46 +1534,14 @@ export function startGameScreen(
 
     // ── Crossing finalization check ──────────────────────────────────────────
     // BUILD 279: Once the player's centre is clearly inside the next room,
-    // finalize the crossing: convert the player to next-room local coords, call
-    // loadRoom, restore camera position, and return to normal single-room mode.
+    // finalise the crossing.
+    // BUILD 284: Normal crossings use _finalizeCrossingSeamless which keeps the
+    // previous room staged instead of immediately calling loadRoom + discard.
     if (crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
       const playerForCrossing = world.clusters[0];
       if (playerForCrossing !== undefined && playerForCrossing.isAliveFlag === 1 &&
           isCrossingComplete(crossingState, playerForCrossing.positionXWorld, playerForCrossing.positionYWorld)) {
-        // Convert player position to next-room local block coords.
-        const nextLocalX = playerForCrossing.positionXWorld - crossingState.nextRoomOriginXWorld;
-        const nextLocalY = playerForCrossing.positionYWorld - crossingState.nextRoomOriginYWorld;
-        const spawnXBlock = Math.max(0, Math.floor(nextLocalX / BLOCK_SIZE_MEDIUM));
-        const spawnYBlock = Math.max(0, Math.floor(nextLocalY / BLOCK_SIZE_MEDIUM));
-
-        // Save camera in next-room local coords so it is restored after loadRoom.
-        const savedCamX = camera.centerXWorld - crossingState.nextRoomOriginXWorld;
-        const savedCamY = camera.centerYWorld - crossingState.nextRoomOriginYWorld;
-        const savedVelX = playerForCrossing.velocityXWorld;
-        const savedVelY = playerForCrossing.velocityYWorld;
-
-        const nextRoom = crossingState.nextRoom!;
-
-        // Load the next room with preserveCamera=true so snapCamera is skipped.
-        loadRoom(nextRoom, spawnXBlock, spawnYBlock, /* preserveCamera */ true);
-
-        // Restore camera to next-room local position (prevents snap).
-        camera.centerXWorld = savedCamX;
-        camera.centerYWorld = savedCamY;
-
-        // Restore player velocity (loadRoom spawns the player via spawnBlock).
-        const newPlayer = world.clusters[0];
-        if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
-          newPlayer.velocityXWorld = savedVelX;
-          newPlayer.velocityYWorld = savedVelY;
-        }
-
-        // Clear crossing state.
-        crossingState.phase       = 'inactive';
-        crossingState.nextRoom    = null;
-        crossingState.currentRoom = null;
-
-        // Reset the reveal system (camera is already positioned correctly).
+        _finalizeCrossingSeamless();
         notifyFreshRoomLoaded(transitionRevealState);
         preloadAdjacentRoomAssets(currentRoom);
       }
@@ -1373,17 +1550,44 @@ export function startGameScreen(
     // ── Update skill tomb renderer ──────────────────────────────────────────
     const playerForTomb = world.clusters[0];
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
-      skillTombRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
-      skillTombEffectRenderer.update(playerForTomb.positionXWorld, playerForTomb.positionYWorld, elapsedMs / 1000);
+      // Convert to room-local coords since tomb positions are room-local.
+      const tombPx = playerForTomb.positionXWorld - currentRoomOriginXWorld;
+      const tombPy = playerForTomb.positionYWorld - currentRoomOriginYWorld;
+      skillTombRenderer.update(tombPx, tombPy, elapsedMs / 1000);
+      skillTombEffectRenderer.update(tombPx, tombPy, elapsedMs / 1000);
 
-      processRoomPickups(world, currentRoom, collectedDustContainerKeySet, progress, playerForTomb, levelRng);
+      processRoomPickups(world, currentRoom, collectedDustContainerKeySet, progress, playerForTomb, levelRng,
+        currentRoomOriginXWorld, currentRoomOriginYWorld);
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
     // BUILD 279: Compute crossing bounds here so they can be reused for both
     // the camera update (below) and renderFrame (later).
+    // BUILD 284: After seamless finalisation, stagedRooms provide the union bounds.
     const isCrossing = crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING;
     const crossingBounds = isCrossing ? getCrossingUnionBounds(crossingState) : null;
+
+    // Compute union bounds covering active room + any staged rooms (post-swap).
+    let stagingUnionBounds: { minXWorld: number; minYWorld: number; maxXWorld: number; maxYWorld: number } | null = null;
+    if (!isCrossing && stagedRooms.length > 0) {
+      const BS = BLOCK_SIZE_MEDIUM;
+      let minX = currentRoomOriginXWorld;
+      let minY = currentRoomOriginYWorld;
+      let maxX = currentRoomOriginXWorld + currentRoom.widthBlocks  * BS;
+      let maxY = currentRoomOriginYWorld + currentRoom.heightBlocks * BS;
+      for (const sr of stagedRooms) {
+        if (sr.originXWorld < minX) minX = sr.originXWorld;
+        if (sr.originYWorld < minY) minY = sr.originYWorld;
+        const srMaxX = sr.originXWorld + sr.room.widthBlocks  * BS;
+        const srMaxY = sr.originYWorld + sr.room.heightBlocks * BS;
+        if (srMaxX > maxX) maxX = srMaxX;
+        if (srMaxY > maxY) maxY = srMaxY;
+      }
+      stagingUnionBounds = { minXWorld: minX, minYWorld: minY, maxXWorld: maxX, maxYWorld: maxY };
+    }
+
+    // Effective bounds for camera and render clip.
+    const renderUnionBounds = isCrossing ? crossingBounds : stagingUnionBounds;
 
     const playerForCamera = world.clusters[0];
     if (playerForCamera !== undefined && playerForCamera.isAliveFlag === 1) {
@@ -1394,16 +1598,16 @@ export function startGameScreen(
       const camTargetX = prevClusterPosX[0] + (playerForCamera.positionXWorld - prevClusterPosX[0]) * renderAlpha;
       const camTargetY = prevClusterPosY[0] + (playerForCamera.positionYWorld - prevClusterPosY[0]) * renderAlpha;
 
-      if (isCrossing && crossingBounds !== null) {
-        // During crossing, clamp the camera to the union of both rooms.
+      if (renderUnionBounds !== null) {
+        // During crossing or staging, clamp the camera to the union of both rooms.
         updateCameraWithBounds(
           camera,
           camTargetX,
           camTargetY,
-          crossingBounds.minXWorld,
-          crossingBounds.minYWorld,
-          crossingBounds.maxXWorld,
-          crossingBounds.maxYWorld,
+          renderUnionBounds.minXWorld,
+          renderUnionBounds.minYWorld,
+          renderUnionBounds.maxXWorld,
+          renderUnionBounds.maxYWorld,
           virtualWidthPx,
           virtualHeightPx,
           elapsedMs / 1000,
@@ -1425,12 +1629,13 @@ export function startGameScreen(
     // ── Update camera transition reveal offset ──────────────────────────────
     // Compute the NearTransition and PostTransition reveal each frame and ease
     // the current offset smoothly toward the target.  Applied to ox/oy below.
+    // Use room-local coordinates (subtract currentRoomOriginXWorld/Y).
     const playerForReveal = world.clusters[0];
     if (playerForReveal !== undefined) {
       updateTransitionReveal(
         transitionRevealState,
-        playerForReveal.positionXWorld,
-        playerForReveal.positionYWorld,
+        playerForReveal.positionXWorld - currentRoomOriginXWorld,
+        playerForReveal.positionYWorld - currentRoomOriginYWorld,
         currentRoom,
         elapsedMs / 1000,
       );
@@ -1442,13 +1647,14 @@ export function startGameScreen(
     updateTransitionPreviewContext(transitionPreviewCtx, transitionRevealState, currentRoom);
 
     // ── Recompute camera offset after update ─────────────────────────────────
-    // During two-room crossing the camera position already tracks the crossing
-    // world space correctly, so no reveal offset is applied.  In normal mode
-    // the reveal offset peeks past the room boundary to show edge-extension tiles.
+    // During two-room crossing or staged-room mode the camera position already
+    // tracks world space correctly, so no reveal offset is applied.  In normal
+    // single-room mode the reveal offset peeks past the room boundary to show
+    // edge-extension tiles.
     const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
     let ox = camOff.offsetXPx;
     let oy = camOff.offsetYPx;
-    if (crossingState.phase === 'inactive') {
+    if (crossingState.phase === 'inactive' && stagedRooms.length === 0) {
       const revealOff = getTransitionRevealOffset(transitionRevealState);
       ox -= revealOff.revealXWorld * camera.zoom;
       oy -= revealOff.revealYWorld * camera.zoom;
@@ -1551,11 +1757,13 @@ export function startGameScreen(
 
     // ── Preview bubble computation ────────────────────────────────────────
     // Compute proximity-based preview bubble state for nearby transitions.
+    // Subtract currentRoomOriginXWorld/Y to convert to room-local coordinates,
+    // which is what computePreviewBubbles expects.
     const playerForBubbles = world.clusters[0];
     if (playerForBubbles !== undefined) {
       previewBubbleCount = computePreviewBubbles(
-        playerForBubbles.positionXWorld,
-        playerForBubbles.positionYWorld,
+        playerForBubbles.positionXWorld - currentRoomOriginXWorld,
+        playerForBubbles.positionYWorld - currentRoomOriginYWorld,
         currentRoom,
         ox, oy, zoom,
         previewBubbles,
@@ -1609,12 +1817,12 @@ export function startGameScreen(
       previewBubbles,
       previewBubbleCount,
       transitionPreviewCtx,
-      // BUILD 279: two-room crossing clip rect
-      isCrossing,
-      crossingUnionMinXWorld: crossingBounds?.minXWorld ?? 0,
-      crossingUnionMinYWorld: crossingBounds?.minYWorld ?? 0,
-      crossingUnionMaxXWorld: crossingBounds?.maxXWorld ?? roomWidthWorld,
-      crossingUnionMaxYWorld: crossingBounds?.maxYWorld ?? roomHeightWorld,
+      // BUILD 279/284: two-room crossing or staged-room clip rect
+      isCrossing: isCrossing || stagedRooms.length > 0,
+      crossingUnionMinXWorld: renderUnionBounds?.minXWorld ?? 0,
+      crossingUnionMinYWorld: renderUnionBounds?.minYWorld ?? 0,
+      crossingUnionMaxXWorld: renderUnionBounds?.maxXWorld ?? roomWidthWorld,
+      crossingUnionMaxYWorld: renderUnionBounds?.maxYWorld ?? roomHeightWorld,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.

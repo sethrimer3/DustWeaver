@@ -243,6 +243,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       fadeColor: t.fadeColor,
       isSecretDoor: t.isSecretDoor,
       gradientWidthBlocks: t.gradientWidthBlocks,
+      longTransition: t.longTransition,
       // Legacy backward-compat fields:
       positionBlock: t.positionBlock,
       depthBlock: t.depthBlock,
@@ -571,6 +572,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (!isAtEdge || legacyDepthBlock !== 0) jt.depthBlock = legacyDepthBlock;
       if (t.fadeColor) jt.fadeColor = t.fadeColor;
       if (t.isSecretDoor) jt.isSecretDoor = t.isSecretDoor;
+      if (t.longTransition) jt.longTransition = t.longTransition;
       if (gw !== 3 || t.gradientWidthBlocks !== undefined) jt.gradientWidthBlocks = gw;
       return jt;
     }),
