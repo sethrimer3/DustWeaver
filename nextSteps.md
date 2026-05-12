@@ -1,8 +1,75 @@
 # DustWeaver — Next Steps
 
-## BUILD 284 — Seamless Room Transitions + Long Transition Flag
+## BUILD 288 — Rendering Pipeline Optimization
 
-### What Was Implemented
+### What Was Implemented in BUILD 288
+
+See below for details. New remaining work also appended here.
+
+---
+
+## Remaining work (BUILD 288 pass — not done — too risky or too large)
+
+### 1. Environmental dust spatial partitioning
+**File:** `src/render/environmentalDust.ts`  
+**Issue:** The update path's wall-collision check may iterate all room walls for every active particle (`O(particles × walls)`). In large rooms with many walls this can be costly.  
+**Recommended fix:** Add a coarse grid (cell size ≈ 4× particle radius) keyed by cell position. Each frame, look up only the ~4 neighbouring cells instead of iterating all walls. Similar to `src/sim/spatial/`.  
+**Risk:** Behavioural change if grid boundary handling is wrong. Worth a separate PR.
+
+### 2. Decoration viewport culling in `renderDecorationSprites`
+**File:** `src/render/effects/wallDecorations.ts`  
+**Function:** `renderDecorationSprites`  
+**Issue:** Iterates `cachedDecorations` without a bounds check against the viewport. For rooms with hundreds of decorations this loops through all of them every frame.  
+**Recommended fix:** Add a world-space bounds check using `ox, oy, zoom, vpW, vpH` before calling `ctx.drawImage`.  
+**Risk:** Low — purely cosmetic, no gameplay.
+
+### 3. Rope viewport culling
+**File:** `src/render/ropes/ropeRenderer.ts`  
+**Issue:** All ropes rendered regardless of on-screen position.  
+**Recommended fix:** Add a simple AABB check per rope against the viewport.
+
+### 4. Hazard and liquid culling
+**File:** `src/render/hazards.ts`, `src/render/liquidRenderer.ts`  
+**Issue:** Liquid body merged-rects are rendered without per-rect viewport culling.  
+**Recommended fix:** Skip merged rects fully outside the viewport.
+
+### 5. Chunk cache memory cap — wire to quality settings
+**File:** `src/render/walls/chunkRenderCache.ts`, `src/screens/gameScreen.ts`  
+**Issue:** `RoomChunkCache.setMaxMemoryKB()` exists but is not called by default.  
+**Recommended fix:** Call `bgChunkCache.setMaxMemoryKB(8192)` (8 MB) on Medium quality and `16384` on High; call from `gameScreen.ts` when `graphicsQuality` changes.
+
+### 6. Grapple influence visual culling
+**File:** `src/render/grappleInfluenceRenderer.ts`  
+**Issue:** Draws edge-glow and circle regardless of whether the influence area intersects the viewport.  
+**Recommended fix:** Add a viewport intersection check before the arc draws.
+
+### 7. Save tomb / skill tomb effect culling
+**Files:** `src/render/skillTombRenderer.ts`, `src/render/skillTombEffectRenderer.ts`  
+**Issue:** All tombs and their particle effects are rendered regardless of camera position.  
+**Recommended fix:** Add a world-space distance check to skip tombs outside the viewport.
+
+### 8. Atmospheric light dust density with adaptive quality
+**File:** `src/render/effects/atmosphericLightDust.ts`  
+**Issue:** Tier-1 adaptive reduction halves `maxDustMoteCount` but does not reduce dust *density* per light (only the cap on total motes). In rooms with many light sources the per-source emission rate could be reduced.  
+**Recommended fix:** Pass a `densityMultiplier` (0.5 for tier-1) to `AtmosphericLightDust.render()`.
+
+### 9. Sunbeam density with adaptive quality tier-1
+**File:** `src/render/effects/sunbeamRenderer.ts`  
+**Issue:** Tier-1 only disables bloom, not sunbeam dust density. Tier-2 already disables sunbeams entirely; but tier-1 could reduce sunbeam particle density for a graceful intermediate step.  
+**Recommended fix:** `SunbeamRenderer.setDensityMultiplier(0.5)` for tier-1.
+
+### 10. Large-room stress-test room
+**Suggested:** Create a dedicated dev/test room (`rooms/dev_stress_large.json`) with:
+- 120×80 blocks of mixed wall types (black rock + sand + snow)
+- 200+ decorations
+- 30+ background block definitions covering 60% of the floor
+- 10+ dust containers, 5 dust swarms
+- 4 sunbeam emitters
+This room will make profiler readings comparable across builds and validate that chunk rebuild performance scales correctly.
+
+---
+
+
 
 **Seamless adjacent-room crossing** (`src/screens/gameScreen.ts`):
 

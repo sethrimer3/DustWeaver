@@ -46,6 +46,7 @@ import {
 } from './folderBlockThemes';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
+import type { CachedTileCoord, RampWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
 import {
   TILE_MASK_N,
   TILE_MASK_E,
@@ -61,6 +62,12 @@ import {
 
 // Dev-mode set of theme keys that have already triggered a missing-sprite warning.
 const _warnedMissingThemes: Set<string> = import.meta.env.DEV ? new Set() : (null as unknown as Set<string>);
+
+// Pre-allocated empty arrays used as fallbacks when a chunk has no items of a type.
+const _EMPTY_TILES: CachedTileCoord[]     = [];
+const _EMPTY_RAMPS: RampWallInfo[]         = [];
+const _EMPTY_PILLARS: HalfPillarWallInfo[] = [];
+const _EMPTY_2X2: ReadonlyArray<readonly [string, number]> = [];
 
 // ── Shared context ────────────────────────────────────────────────────────────
 
@@ -93,6 +100,12 @@ export interface WallTilePassContext {
   sprites: BlockSpriteSet;
   /** Keys covered by a 2×2 sprite (pre-populated by `_populateCoveredBy2x2Keys`). */
   coveredBy2x2Keys: ReadonlySet<string>;
+  /**
+   * Pre-bucketed chunk key for O(items-in-chunk) pass iteration.
+   * Set to "${cx},${cy}" when rendering via the chunk cache.
+   * null = scan the full arrays (fallback / non-chunk path).
+   */
+  chunkKey: string | null;
 }
 
 // ── Pass 1: 2×2 full-sprite blocks ───────────────────────────────────────────
@@ -110,11 +123,18 @@ export function render2x2Pass(
 
   const { wallLayout, offsetXPx, offsetYPx, scalePx, blockSizePx, roomTheme,
           activeWorldNumber, filterColMinBlocks, filterColMaxBlocks,
-          filterRowMinBlocks, filterRowMaxBlocks } = pctx;
+          filterRowMinBlocks, filterRowMaxBlocks, chunkKey } = pctx;
 
   const drawSize = pctx.tileSizeScreen * 2;
 
-  for (const [topLeftKey, wallThemeIdx] of wallLayout.solid2x2Map) {
+  // Use pre-bucketed entries when rendering a specific chunk, otherwise scan
+  // the full map.  The filter-bound checks below are still present as a safety
+  // guard but never trigger for bucketed items (they are already pre-filtered).
+  const entries: Iterable<readonly [string, number]> = chunkKey !== null
+    ? (wallLayout.solid2x2ByChunkKey.get(chunkKey) ?? _EMPTY_2X2)
+    : wallLayout.solid2x2Map;
+
+  for (const [topLeftKey, wallThemeIdx] of entries) {
     const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(wallThemeIdx)
       : roomTheme;
@@ -193,10 +213,17 @@ export function render1x1Pass(
   const { wallLayout, ambientDepths, offsetXPx, offsetYPx, scalePx, blockSizePx,
           roomTheme, isWorldMode, isBlockTintEnabled, activeWorldNumber,
           sprites, coveredBy2x2Keys, tileSizeScreen,
-          filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks } = pctx;
+          filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks,
+          chunkKey } = pctx;
 
-  for (let ti = 0; ti < wallLayout.occupiedTiles.length; ti++) {
-    const tile = wallLayout.occupiedTiles[ti];
+  // Use pre-bucketed tiles for the chunk path (O(tiles-in-chunk)); fall back to
+  // the full array for non-chunk calls.
+  const tiles: CachedTileCoord[] = chunkKey !== null
+    ? (wallLayout.occupiedByChunkKey.get(chunkKey) ?? _EMPTY_TILES)
+    : wallLayout.occupiedTiles;
+
+  for (let ti = 0; ti < tiles.length; ti++) {
+    const tile = tiles[ti];
     const key = tile.key;
     const col = tile.col;
     const row = tile.row;
@@ -353,10 +380,16 @@ export function renderPlatformPass(
 
   const { wallLayout, ambientDepths, offsetXPx, offsetYPx, scalePx, blockSizePx,
           roomTheme, isBlockTintEnabled, activeWorldNumber, tileSizeScreen,
-          filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks } = pctx;
+          filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks,
+          chunkKey } = pctx;
 
-  for (let ti = 0; ti < wallLayout.platformTiles.length; ti++) {
-    const tile = wallLayout.platformTiles[ti];
+  // Pre-bucketed path: only iterate platform tiles in this chunk.
+  const tiles: CachedTileCoord[] = chunkKey !== null
+    ? (wallLayout.platformByChunkKey.get(chunkKey) ?? _EMPTY_TILES)
+    : wallLayout.platformTiles;
+
+  for (let ti = 0; ti < tiles.length; ti++) {
+    const tile = tiles[ti];
     const key = tile.key;
     const col = tile.col;
     const row = tile.row;
@@ -436,10 +469,16 @@ export function renderRampPass(
 
   const { walls, wallLayout, offsetXPx, offsetYPx, scalePx, blockSizePx,
           roomTheme, activeWorldNumber,
-          filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks } = pctx;
+          filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks,
+          chunkKey } = pctx;
 
-  for (let ri = 0; ri < wallLayout.rampWalls.length; ri++) {
-    const wi = wallLayout.rampWalls[ri].wallIndex;
+  // Pre-bucketed path: only iterate ramps that overlap this chunk.
+  const rampList: RampWallInfo[] = chunkKey !== null
+    ? (wallLayout.rampByChunkKey.get(chunkKey) ?? _EMPTY_RAMPS)
+    : wallLayout.rampWalls;
+
+  for (let ri = 0; ri < rampList.length; ri++) {
+    const wi = rampList[ri].wallIndex;
     const ori = walls.rampOrientationIndex[wi];
     const wxPx = walls.xWorld[wi] * scalePx + offsetXPx;
     const wyPx = walls.yWorld[wi] * scalePx + offsetYPx;
@@ -530,10 +569,16 @@ export function renderHalfPillarPass(
 ): boolean {
   const { walls, wallLayout, offsetXPx, offsetYPx, scalePx, blockSizePx,
           roomTheme, activeWorldNumber,
-          filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks } = pctx;
+          filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks,
+          chunkKey } = pctx;
 
-  for (let pi = 0; pi < wallLayout.halfPillarWalls.length; pi++) {
-    const wi = wallLayout.halfPillarWalls[pi].wallIndex;
+  // Pre-bucketed path: only iterate pillars that overlap this chunk.
+  const pillarList: HalfPillarWallInfo[] = chunkKey !== null
+    ? (wallLayout.halfPillarByChunkKey.get(chunkKey) ?? _EMPTY_PILLARS)
+    : wallLayout.halfPillarWalls;
+
+  for (let pi = 0; pi < pillarList.length; pi++) {
+    const wi = pillarList[pi].wallIndex;
     const wxPx = walls.xWorld[wi] * scalePx + offsetXPx;
     const wyPx = walls.yWorld[wi] * scalePx + offsetYPx;
     const wwPx = walls.wWorld[wi] * scalePx;

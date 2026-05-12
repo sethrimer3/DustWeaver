@@ -56,6 +56,8 @@ export interface ChunkCacheStats {
   rebuiltThisFrame: number;
   /** Rough GPU/CPU memory estimate for all allocated canvases (4 bytes/px, RGBA). */
   memoryEstimateKB: number;
+  /** Cumulative chunk canvases evicted due to the memory cap (0 when no cap set). */
+  evictedTotal: number;
 }
 
 // ── Per-chunk data ─────────────────────────────────────────────────────────────
@@ -98,7 +100,38 @@ export class RoomChunkCache {
     dirtyChunkCount:   0,
     rebuiltThisFrame:  0,
     memoryEstimateKB:  0,
+    evictedTotal:      0,
   };
+
+  /**
+   * Maximum estimated canvas memory before eviction begins (KB).
+   * 0 = disabled (default).  A reasonable cap is 32 768 KB (32 MB).
+   */
+  private _maxMemoryKB = 0;
+
+  /**
+   * Monotonically increasing frame counter.  Incremented each call to
+   * renderVisibleChunks so we can track when each chunk was last visible.
+   */
+  private _frame = 0;
+
+  /**
+   * The frame at which each chunk was last drawn (visible).
+   * Used by the eviction pass to find the least-recently-visible chunks.
+   */
+  private readonly _lastVisibleFrame = new Map<string, number>();
+
+  /**
+   * Set the maximum total canvas memory (in KB) before stale chunks are
+   * evicted.  Pass 0 to disable eviction (default).
+   *
+   * Eviction removes chunks that have not been visible for at least
+   * ~10 seconds (600 frames at 60 fps).  Evicted chunks are rebuilt
+   * correctly when they become visible again.
+   */
+  setMaxMemoryKB(kb: number): void {
+    this._maxMemoryKB = kb;
+  }
 
   // ── Invalidation ──────────────────────────────────────────────────────────
 
@@ -293,6 +326,7 @@ export class RoomChunkCache {
           const screenY = Math.round(cy * chunkSizePx + offsetYPx);
           ctx.drawImage(chunk.canvas, screenX, screenY);
           visibleCount++;
+          this._lastVisibleFrame.set(key, this._frame);
         }
       }
     }
@@ -310,6 +344,46 @@ export class RoomChunkCache {
         * Math.ceil(chunkSizePx)
         * 4      // 4 bytes per RGBA pixel
         / 1024,
+    );
+
+    // Advance frame counter; run eviction when memory cap is set and exceeded.
+    this._frame++;
+    if (this._maxMemoryKB > 0 && this.stats.memoryEstimateKB > this._maxMemoryKB) {
+      this._evictStaleChunks();
+    }
+  }
+
+  // ── Eviction ──────────────────────────────────────────────────────────────
+
+  /**
+   * Evicts chunks that have not been visible for more than ~10 seconds
+   * (600 frames at 60 fps).  Runs only when the memory cap is set and
+   * exceeded.  Evicted chunks are rebuilt lazily when they become visible.
+   */
+  private _evictStaleChunks(): void {
+    const staleThreshold = this._frame - 600;
+    const toEvict: string[] = [];
+
+    for (const [key] of this._chunks) {
+      const lastSeen = this._lastVisibleFrame.get(key) ?? 0;
+      if (lastSeen < staleThreshold) {
+        toEvict.push(key);
+      }
+    }
+
+    for (const key of toEvict) {
+      this._chunks.delete(key);
+      this._dirtyKeys.delete(key);
+      this._lastVisibleFrame.delete(key);
+    }
+
+    this.stats.evictedTotal += toEvict.length;
+    this.stats.totalChunkCount = this._chunks.size;
+    this.stats.memoryEstimateKB = Math.round(
+      this._chunks.size
+        * Math.ceil(this._scalePx === 0 ? 1 : CHUNK_SIZE_BLOCKS * 8 * this._scalePx)
+        * Math.ceil(this._scalePx === 0 ? 1 : CHUNK_SIZE_BLOCKS * 8 * this._scalePx)
+        * 4 / 1024,
     );
   }
 }
