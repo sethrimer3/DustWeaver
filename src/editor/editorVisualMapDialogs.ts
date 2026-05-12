@@ -18,7 +18,11 @@ import {
 } from '../levels/rooms';
 import { roomJsonDefToRoomDef } from '../levels/roomJsonLoader';
 import type { MapRoomPlacement, VisualMapCallbacks } from './editorVisualMapHelpers';
-import { effectiveRoomName, worldDisplayName } from './editorVisualMapHelpers';
+import {
+  effectiveRoomName,
+  worldDisplayName,
+  findNearestNonOverlappingRoomPlacement,
+} from './editorVisualMapHelpers';
 
 // ── Shared constants ──────────────────────────────────────────────────────────
 
@@ -268,12 +272,15 @@ export function showAddRoomDialog(ctx: VisualMapDialogContext): void {
     const panXPx = ctx.getPanX();
     const panYPx = ctx.getPanY();
     const zoom = ctx.getZoom();
-    const canvasWCss = ctx.canvas.width / window.devicePixelRatio;
-    const canvasHCss = ctx.canvas.height / window.devicePixelRatio;
-    const centerWorldX = (canvasWCss / 2 - panXPx) / zoom;
-    const centerWorldY = (canvasHCss / 2 - panYPx) / zoom;
-    const mapX = centerWorldX + 10;
-    const mapY = centerWorldY + 10;
+    // Viewport centre in world coordinates.
+    // worldToScreen: screenX = canvasW/2 + panX + worldX * zoom
+    // Inverse at screen centre (screenX = canvasW/2): worldX = -panX / zoom
+    const centerWorldX = -panXPx / zoom;
+    const centerWorldY = -panYPx / zoom;
+    const idealPos = { mapX: centerWorldX, mapY: centerWorldY };
+    const placed = findNearestNonOverlappingRoomPlacement(idealPos, ctx.placements, w, h);
+    const mapX = placed.mapX;
+    const mapY = placed.mapY;
     ctx.placements.set(id, { room: roomDef, mapXWorld: mapX, mapYWorld: mapY });
     setRoomMapPosition(id, mapX, mapY);
 

@@ -10,6 +10,7 @@
 
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import type { CrumbleVariant, EditorRoomData, EditorTransition, EditorWall, SelectedElementType, AmbientLightDirection, EditorEnemy } from './editorState';
+import { getTransitionEditorHitbox } from './editorHitTest';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 
 // ── Color constants ──────────────────────────────────────────────────────────
@@ -533,6 +534,25 @@ export function drawTransitionZone(
   const hBlock = isHoriz ? t.openingSizeBlocks : gw;
 
   const bs = BLOCK_SIZE_SMALL;
+
+  // When gw === 0 and the transition is hovered or selected, draw the 1-block
+  // editor hitbox area so the user can see and interact with the transition.
+  if (gw === 0 && isHovered) {
+    const hb = getTransitionEditorHitbox(t);
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,200,100,0.18)';
+    ctx.strokeStyle = 'rgba(255,200,100,0.55)';
+    ctx.lineWidth = 1;
+    ctx.fillRect(
+      hb.xBlock * bs * zoom + ox, hb.yBlock * bs * zoom + oy,
+      Math.max(hb.wBlock, 0.2) * bs * zoom, Math.max(hb.hBlock, 0.2) * bs * zoom,
+    );
+    ctx.strokeRect(
+      hb.xBlock * bs * zoom + ox, hb.yBlock * bs * zoom + oy,
+      Math.max(hb.wBlock, 0.2) * bs * zoom, Math.max(hb.hBlock, 0.2) * bs * zoom,
+    );
+    ctx.restore();
+  }
 
   // Draw translucent zone rectangle
   drawBlockRect(ctx, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom, color, 2);
