@@ -128,14 +128,11 @@ export function checkRoomTransitions(
           && targetTransition.direction === oppositeDirection,
         );
 
-        if (targetReturnTransition === undefined) {
-          console.warn(`[Transition] Room "${currentRoom.id}" transition[${ti}] → "${t.targetRoomId}" has no matching return transition (direction=${t.direction}).`);
-        }
-
         if (targetReturnTransition !== undefined) {
           const spawnBlock = computeSpawnBlockForTransition(targetRoom, targetReturnTransition);
           onLoadRoom(targetRoom, spawnBlock[0], spawnBlock[1], t.direction, ti);
         } else {
+          console.warn(`[Transition] Room "${currentRoom.id}" transition[${ti}] → "${t.targetRoomId}" has no matching return transition (direction=${t.direction}). Falling back to targetSpawnBlock.`);
           onLoadRoom(targetRoom, t.targetSpawnBlock[0], t.targetSpawnBlock[1], t.direction, ti);
         }
         return true;

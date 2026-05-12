@@ -186,7 +186,7 @@ export function startCrossing(
 
   // ── Append next room walls at adjusted origin ─────────────────────────────
   const savedWallCount = world.wallCount;
-  _appendRoomWalls(world, nextRoom, adjustedOriginX, adjustedOriginY);
+  appendRoomWallsAtOffset(world, nextRoom, adjustedOriginX, adjustedOriginY);
 
   // ── Expand world physics bounds to the union ──────────────────────────────
   const savedWorldWidth  = world.worldWidthWorld;
@@ -318,5 +318,4 @@ export function appendRoomWallsAtOffset(
   }
 }
 
-/** @internal — alias kept for startCrossing which uses the private name. */
-const _appendRoomWalls = appendRoomWallsAtOffset;
+

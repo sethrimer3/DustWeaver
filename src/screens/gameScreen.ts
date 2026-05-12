@@ -1023,9 +1023,14 @@ export function startGameScreen(
    * starts at (0, 0).  Must be called before startCrossing() whenever staged
    * rooms are present or currentRoomOriginXWorld/Y is non-zero, so that the
    * crossing helpers see a clean world with the active room at the origin.
+   *
+   * Invariant: only ONE staged room is ever present at a time (one ring of
+   * adjacent rooms), so `stagedRooms[0].wallStartIndex` is always the first
+   * staged wall.  Multiple staged rooms in one pass are not supported.
    */
   function _clearStagedRoomsAndNormalize(): void {
-    // Remove staged walls (they are always appended at the end).
+    // Remove staged walls (they are always appended at the end; only one
+    // staged room is maintained so stagedRooms[0] has the earliest index).
     if (stagedRooms.length > 0) {
       world.wallCount = stagedRooms[0].wallStartIndex;
     }
