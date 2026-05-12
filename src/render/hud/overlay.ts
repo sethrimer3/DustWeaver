@@ -32,6 +32,8 @@ export interface HudDebugState {
   isGrappleZipActive: boolean;
   /** True while the player is stuck at the zip endpoint. */
   isGrappleStuck: boolean;
+  /** True if the player has physically reached the zip surface this zip session. */
+  hasZipImpactedSurface: boolean;
   /** Ticks remaining in the zip-jump window (0 = expired or not in window). */
   zipJumpWindowTicksLeft: number;
   /** Current grapple input mode: 0=Hold, 1=Toggle. */
@@ -85,7 +87,7 @@ export function renderHudOverlay(
       `Sprint:${d.isSprinting ? 'Y' : 'N'} Skid:${d.isSkidding ? 'Y' : 'N'} Sld:${d.isSliding ? 'Y' : 'N'}`,
       `Grapple:  ${d.isGrappleActive ? `len=${d.grappleLengthWorld.toFixed(0)} pull=${d.grapplePullInAmountWorld.toFixed(0)}` : 'off'}`,
       `GrpMiss:${d.isGrappleMissActive ? 'Y' : 'N'} pIdx=${d.grappleParticleStartIndex} chain=${d.isGrappleChainHiddenFlag ? 'hidden' : 'visible'}`,
-      `Zip:${d.isGrappleZipActive ? 'ZIPPING' : (d.isGrappleStuck ? `STUCK win=${d.zipJumpWindowTicksLeft}t` : 'off')} mode=${d.grappleInputMode === 0 ? 'Hold' : 'Toggle'}`,
+      `Zip:${d.isGrappleZipActive ? (d.hasZipImpactedSurface ? 'ZIPPING(impacted)' : 'ZIPPING') : (d.isGrappleStuck ? `STUCK win=${d.zipJumpWindowTicksLeft}t` : 'off')} mode=${d.grappleInputMode === 0 ? 'Hold' : 'Toggle'}`,
       `Input U/L/R/D/Sh: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}${d.inputShift ? 'S' : '-'}`,
       `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
       `Input Grap/Int: ${d.inputGrapple ? 'G' : '-'} / ${d.inputInteract ? 'I' : '-'}`,

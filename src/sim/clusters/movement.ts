@@ -85,6 +85,8 @@ export function applyClusterMovement(world: WorldState): void {
 
   // Reset per-tick landing skid factor (set again below if player just landed at high speed).
   world.playerLandingSkidSpeedFactor = 0.0;
+  // Reset per-tick weak wall jump cascade flag (set again below if a 3rd+ wall jump fires).
+  world.weakWallJumpCascadeFlag = 0;
 
   // ── Locate the player cluster position (needed by enemy AI) ───────────────
   let playerX = 0.0;

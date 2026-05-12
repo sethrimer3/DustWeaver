@@ -212,6 +212,19 @@ export interface GrappleWorldState {
   grappleAnchorNormalXWorld: number;
   grappleAnchorNormalYWorld: number;
 
+  // ── Zip impact tracking (for cancel-jump vs true zip-jump distinction) ───────
+  /**
+   * Set to 1 once the player has physically reached or collided with the zip
+   * destination surface during the current zip session (isGrappleStuckFlag has
+   * transitioned 0 → 1).  Used to distinguish a "zip cancel jump" (pressed jump
+   * during travel, before surface contact) from a "true zip jump" (pressed within
+   * the zip-jump window after real surface impact).
+   *
+   * Reset to 0 by releaseGrapple() and by zip activation (isGrappleZipTriggeredFlag
+   * consumed).  Set to 1 inside tickGrappleZip when isGrappleStuckFlag becomes 1.
+   */
+  hasZipImpactedSurfaceFlag: 0 | 1;
+
   // ── Zip stuck lock position ────────────────────────────────────────────────
   /**
    * World-space X position at which to lock the player during the stuck phase.
@@ -346,6 +359,7 @@ export function createGrappleWorldState(): GrappleWorldState {
     zipImpactFxNormalXWorld:               0.0,
     zipImpactFxNormalYWorld:               -1.0,
     hasZipImpactFxFiredFlag:               0,
+    hasZipImpactedSurfaceFlag:             0,
     playerDownTriggeredFlag:               0,
     grappleProximityBounceTicksLeft:       0,
     grappleProximityBounceRotationAngleRad: 0,

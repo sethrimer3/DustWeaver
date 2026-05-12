@@ -1,5 +1,34 @@
 # DustWeaver — Next Steps
 
+## BUILD 289 — Zip Cancel-Jump Fix & Weak Wall Jump Debris Cascade
+
+### What Was Implemented in BUILD 289
+
+1. **Zip cancel-jump vs true zip-jump distinction** (`grappleZip.ts`): pressing jump during zip travel now preserves zip velocity + adds an upward boost instead of bouncing away from the grapple point. True zip-jump (surface-normal super-launch) is gated to the stuck phase only.
+2. **Weak wall jump debris cascade** (`weakWallJumpDebrisRenderer.ts`, `playerMovement.ts`, `world.ts`): spawns ~15 heavy debris chips from the wall surface on the 3rd+ consecutive wall jump, with simplified AABB wall-bounce physics and a rate-limited audio stub.
+
+### Remaining work (BUILD 289 pass — not done)
+
+#### 1. Wire `_playSoftDebrisThud` to real audio
+**File:** `src/render/weakWallJumpDebrisRenderer.ts`, function `_playSoftDebrisThud`  
+**Issue:** The debris-impact thud sound is currently a no-op stub.  
+**Recommended fix:** Wire to the existing audio synthesis / SFX manager once a suitable short-impulse sound is available. The rate-limiter (≤ 4 thuds per 9-tick window) is already in place.  
+**Risk:** Low — stub is a drop-in; no behaviour changes needed.
+
+#### 2. Ramp surface interaction for cascade debris
+**File:** `src/render/weakWallJumpDebrisRenderer.ts`, wall-collision loop  
+**Issue:** The debris particle collision check skips ramp walls (`wallRampOrientationIndex[wi] !== 255`). Particles fly through ramp surfaces.  
+**Recommended fix:** Use the existing ramp-slope helpers from `movementCollision.ts` (or a simplified dot-product slope check) to slide debris down ramp surfaces instead of passing through.  
+**Risk:** Medium — ramp collision geometry differs from AABB; needs careful porting to render layer.
+
+#### 3. Persistent zip impact visual indicator (non-debug HUD)
+**File:** `src/screens/gameHudRenderer.ts` or similar  
+**Issue:** The `hasZipImpactedSurfaceFlag` is only visible in debug mode via the overlay.  
+**Recommended fix:** Consider a brief on-screen flash or icon to communicate "zip impact ready" vs "zipping" to the player without requiring debug mode.  
+**Risk:** Low — purely visual / HUD layer.
+
+---
+
 ## BUILD 288 — Rendering Pipeline Optimization
 
 ### What Was Implemented in BUILD 288

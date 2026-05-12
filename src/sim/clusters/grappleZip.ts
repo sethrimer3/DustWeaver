@@ -93,6 +93,30 @@ const ZIP_JUMP_INPUT_THRESHOLD = 0.5;
  */
 const MIN_LAUNCH_VECTOR_LENGTH = 0.001;
 
+// ── Zip cancel jump constants ──────────────────────────────────────────────
+
+/**
+ * Fraction of PLAYER_JUMP_SPEED_WORLD added as an upward velocity boost when
+ * the player presses jump during zip travel before reaching the surface.
+ * The boost is added on top of the existing zip velocity — it does not replace
+ * the travel direction.  Tune to taste: 0.6 gives a noticeable upward kick
+ * without overriding a fast downward zip.
+ */
+const ZIP_CANCEL_JUMP_Y_CONTRIBUTION = 0.6;
+
+/**
+ * Multiplier applied to the current zip X-velocity when the player performs
+ * a cancel jump during travel.  1.0 = fully preserve horizontal zip momentum.
+ */
+const ZIP_CANCEL_MOMENTUM_X_MULTIPLIER = 1.0;
+
+/**
+ * Multiplier applied to the current zip Y-velocity when the player performs
+ * a cancel jump during travel.  1.0 = fully preserve vertical zip momentum
+ * (the upward contribution is added separately via ZIP_CANCEL_JUMP_Y_CONTRIBUTION).
+ */
+const ZIP_CANCEL_MOMENTUM_Y_MULTIPLIER = 1.0;
+
 /**
  * Duration (ticks) of the zip impact shockwave + dust plume FX.
  * At 60 fps this is ~0.27 s — quick, readable, and not distracting.
@@ -208,8 +232,33 @@ export function tickGrappleZip(
 
   // ── Jump input while zipping / stuck ────────────────────────────────────
   if (jumpJustPressed || (world.playerJumpHeldFlag === 1 && world.isGrappleStuckFlag === 1)) {
-    const isInZipJumpWindow = world.isGrappleStuckFlag === 1 &&
-      world.grappleStuckStoppedTickCount > 0 &&
+    const isInTravelPhase = world.isGrappleStuckFlag === 0;
+
+    if (isInTravelPhase) {
+      // ── Zip cancel jump ────────────────────────────────────────────────────
+      // The player pressed jump before actually reaching the zip surface.
+      // Preserve current zip travel velocity and add an upward boost so the
+      // player continues in their current direction rather than being launched
+      // away from the grapple point using the surface-normal vector.
+      const preservedVx = player.velocityXWorld;
+      const preservedVy = player.velocityYWorld;
+      releaseGrapple(world, false);
+      player.velocityXWorld = preservedVx * ZIP_CANCEL_MOMENTUM_X_MULTIPLIER;
+      player.velocityYWorld = preservedVy * ZIP_CANCEL_MOMENTUM_Y_MULTIPLIER
+        - PLAYER_JUMP_SPEED_WORLD * ZIP_CANCEL_JUMP_Y_CONTRIBUTION;
+      player.isGroundedFlag = 0;
+      // Start variable jump sustain so holding jump continues to sustain the arc.
+      if (player.velocityYWorld < 0) {
+        player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
+        player.varJumpSpeedWorld = player.velocityYWorld;
+      }
+      return true;
+    }
+
+    // ── True zip jump (stuck phase only) ──────────────────────────────────
+    // The player has physically reached the zip surface and is now in the
+    // stuck / zip-jump-window phase.  Use the existing surface-normal launch.
+    const isInZipJumpWindow = world.grappleStuckStoppedTickCount > 0 &&
       world.grappleStuckStoppedTickCount <= GRAPPLE_ZIP_JUMP_WINDOW_TICKS;
     const jumpMultiplier = isInZipJumpWindow
       ? ov(debugSpeedOverrides.grappleSuperJumpMultiplier, GRAPPLE_SUPER_JUMP_MULTIPLIER)
@@ -343,6 +392,7 @@ export function tickGrappleZip(
           world.grappleZipStickXWorld       = player.positionXWorld;
           world.grappleZipStickYWorld       = player.positionYWorld;
           world.isGrappleStuckFlag          = 1;
+          world.hasZipImpactedSurfaceFlag   = 1;
           world.grappleStuckStoppedTickCount = 0;
           world.hasZipImpactFxFiredFlag      = 0;
           // Return here so the normal zip / arrival code does not run.
@@ -380,6 +430,7 @@ export function tickGrappleZip(
       world.grappleZipStickXWorld       = targetX;
       world.grappleZipStickYWorld       = targetY;
       world.isGrappleStuckFlag          = 1;
+      world.hasZipImpactedSurfaceFlag   = 1;
       world.grappleStuckStoppedTickCount = 0;
       world.hasZipImpactFxFiredFlag      = 0;
     } else {
