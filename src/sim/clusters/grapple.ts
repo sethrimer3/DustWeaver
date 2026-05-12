@@ -103,16 +103,17 @@ export { releaseGrapple } from './grappleShared';
 /**
  * Base speed at which the rope shortens while the down key is held (world units per second).
  * Applied at the start of a retraction hold before the ramp reaches full speed.
- * Intentionally equal to the old constant so the feel is identical at tick 0.
+ * Tuned slightly below the old 60 wu/s value so hold-down retraction has
+ * a little more readable wind-up.
  */
-const GRAPPLE_PULL_IN_SPEED_BASE_WORLD_PER_SEC = 60.0;
+const GRAPPLE_PULL_IN_SPEED_BASE_WORLD_PER_SEC = 54.0;
 
 /**
  * Full speed at which the rope shortens while the down key is held (world units per second).
  * Reached after GRAPPLE_PULL_IN_RAMP_TICKS ticks of continuous hold.
  * Shorter rope = tighter swing radius = faster rotation = bigger launch when released.
  */
-const GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC = 180.0;
+const GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC = 162.0;
 
 /**
  * Number of ticks over which the retraction speed ramps from the base speed
