@@ -172,3 +172,20 @@ export function setInfluenceHighlightWidth(width: number): void {
   setStoredFloat(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY, width, 0, 1);
 }
 
+// ── Always Center Camera ─────────────────────────────────────────────────────
+
+const ALWAYS_CENTER_CAMERA_STORAGE_KEY = 'dustweaver-always-center-camera';
+
+/**
+ * When true, the camera always centres on the player with no room-edge clamping.
+ * Areas outside the room show as black.  Persists in localStorage.
+ * Default: false.
+ */
+export function getAlwaysCenterCamera(): boolean {
+  return localStorage.getItem(ALWAYS_CENTER_CAMERA_STORAGE_KEY) === '1';
+}
+
+export function setAlwaysCenterCamera(enabled: boolean): void {
+  localStorage.setItem(ALWAYS_CENTER_CAMERA_STORAGE_KEY, enabled ? '1' : '0');
+}
+

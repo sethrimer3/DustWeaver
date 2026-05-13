@@ -25,7 +25,7 @@ import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
-import { createCameraState, snapCamera, updateCamera, updateCameraWithBounds, getCameraOffset } from '../render/camera';
+import { createCameraState, snapCamera, updateCameraWithBounds, updateCameraUnclamped, getCameraOffset } from '../render/camera';
 import {
   createTwoRoomCrossingState,
   startCrossing,
@@ -60,7 +60,7 @@ import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { ZIP_JUMP_WINDOW_SECONDS } from '../sim/clusters/grappleZip';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
-import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality } from '../ui/renderSettings';
+import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality, getAlwaysCenterCamera } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
@@ -193,6 +193,17 @@ export function startGameScreen(
   const playerSfx = new PlayerSfxManager();
   const playerSfxState = createPlayerSfxState();
 
+  // ── Audio unlock on first trusted user gesture ───────────────────────────
+  // Browsers suspend AudioContext until the user interacts with the page.
+  // Register one-time listeners for the three most common first-gesture events
+  // so audio starts playing as soon as possible without further intervention.
+  function _onAudioUnlockGesture(): void {
+    playerSfx.unlock();
+  }
+  window.addEventListener('pointerdown', _onAudioUnlockGesture, { once: true, passive: true });
+  window.addEventListener('keydown',     _onAudioUnlockGesture, { once: true, passive: true });
+  window.addEventListener('touchstart',  _onAudioUnlockGesture, { once: true, passive: true });
+
   // ── Weave loadout (replaces flat particle loadout for combat) ──────────
   // Initialize from progress if available, otherwise create default
   const playerWeaveLoadout: PlayerWeaveLoadout = progress?.weaveLoadout
@@ -269,6 +280,18 @@ export function startGameScreen(
   let bgColor = worldBgColor(currentRoom.worldNumber);
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
   let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
+
+  // ── Effective camera clamp bounds ──────────────────────────────────────────
+  // Smoothly transitions between union bounds (during/after seamless crossing)
+  // and single-room bounds.  When staging is cleared before a new crossing,
+  // these bounds are expanded to include the camera's current position so no
+  // hard snap occurs.  They then lerp toward the active room's bounds.
+  let cameraEffBoundsMinX = 0;
+  let cameraEffBoundsMinY = 0;
+  let cameraEffBoundsMaxX = roomWidthWorld;
+  let cameraEffBoundsMaxY = roomHeightWorld;
+  /** Lerp speed for camera bounds shrinkage from union to single-room (world/sec). */
+  const CAMERA_BOUNDS_LERP_SPEED = 4.0;
 
   /** BUILD 279: Two-room smooth camera crossing state. */
   const crossingState: TwoRoomCrossingState = createTwoRoomCrossingState();
@@ -556,6 +579,14 @@ export function startGameScreen(
       snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, virtualWidthPx, virtualHeightPx);
     }
 
+    // Reset effective camera clamp bounds to the new room's single-room bounds.
+    // If this load preserves the camera (seamless crossing), the next frame will
+    // snap these bounds to the staging union bounds when stagingState is updated.
+    cameraEffBoundsMinX = 0;
+    cameraEffBoundsMinY = 0;
+    cameraEffBoundsMaxX = roomWidthWorld;
+    cameraEffBoundsMaxY = roomHeightWorld;
+
     preloadRoomThemeSprites(room);
 
     // Must run after loadRoomWalls() (Phase D) so wall geometry is finalised.
@@ -828,6 +859,7 @@ export function startGameScreen(
     musicVolume: getMusicVolume(),
     sfxVolume: getSfxVolume(),
     graphicsQuality: getGraphicsQuality(),
+    alwaysCenterCamera: getAlwaysCenterCamera(),
   };
 
   function openPauseMenu(): void {
@@ -1189,7 +1221,29 @@ export function startGameScreen(
           if (!isLong && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
             // Seamless crossing: normalise world coords if staged rooms are
             // present, then start the two-room camera crossing.
+            //
+            // Save the coordinate shift so we can adjust effective camera
+            // clamp bounds by the same amount — this prevents a hard camera
+            // snap when the bounds change from union to single-room coords.
+            const normDxWorld = -stagingState.currentRoomOriginXWorld;
+            const normDyWorld = -stagingState.currentRoomOriginYWorld;
             clearStagedRoomsAndNormalize(stagingState, world, camera, prevClusterPosX, prevClusterPosY);
+            if (normDxWorld !== 0 || normDyWorld !== 0) {
+              // Apply the same world-coord shift to the effective camera bounds.
+              cameraEffBoundsMinX += normDxWorld;
+              cameraEffBoundsMinY += normDyWorld;
+              cameraEffBoundsMaxX += normDxWorld;
+              cameraEffBoundsMaxY += normDyWorld;
+              // Expand bounds to include the camera's current position so the
+              // camera is never hard-clamped on the very next updateCameraWithBounds
+              // call (which would produce a visible snap).
+              const halfViewW = virtualWidthPx / (2 * camera.zoom);
+              const halfViewH = virtualHeightPx / (2 * camera.zoom);
+              if (camera.centerXWorld - halfViewW < cameraEffBoundsMinX) cameraEffBoundsMinX = camera.centerXWorld - halfViewW;
+              if (camera.centerYWorld - halfViewH < cameraEffBoundsMinY) cameraEffBoundsMinY = camera.centerYWorld - halfViewH;
+              if (camera.centerXWorld + halfViewW > cameraEffBoundsMaxX) cameraEffBoundsMaxX = camera.centerXWorld + halfViewW;
+              if (camera.centerYWorld + halfViewH > cameraEffBoundsMaxY) cameraEffBoundsMaxY = camera.centerYWorld + halfViewH;
+            }
             const started = startCrossing(crossingState, world, currentRoom, ti, dir, room, camera);
             if (started) {
               // Player retains their velocity — physics carries them through the passage.
@@ -1423,27 +1477,38 @@ export function startGameScreen(
       const camTargetX = prevClusterPosX[0] + (playerForCamera.positionXWorld - prevClusterPosX[0]) * renderAlpha;
       const camTargetY = prevClusterPosY[0] + (playerForCamera.positionYWorld - prevClusterPosY[0]) * renderAlpha;
 
-      if (renderUnionBounds !== null) {
-        // During crossing or staging, clamp the camera to the union of both rooms.
+      if (pauseMenuState.alwaysCenterCamera) {
+        // Always-center mode: follow the player with no room-edge clamping.
+        // Areas outside the room show as black — clip rect is skipped in renderFrame.
+        updateCameraUnclamped(camera, camTargetX, camTargetY, elapsedMs / 1000);
+      } else {
+        // ── Update effective camera clamp bounds ────────────────────────────
+        // Smoothly transition from union bounds (during/after crossing) to
+        // single-room bounds to prevent an instant camera snap.
+        const dtSec = elapsedMs / 1000;
+        if (renderUnionBounds !== null) {
+          // Snap effective bounds to union immediately while union is active.
+          cameraEffBoundsMinX = renderUnionBounds.minXWorld;
+          cameraEffBoundsMinY = renderUnionBounds.minYWorld;
+          cameraEffBoundsMaxX = renderUnionBounds.maxXWorld;
+          cameraEffBoundsMaxY = renderUnionBounds.maxYWorld;
+        } else {
+          // Lerp effective bounds toward the active single-room bounds.
+          const bt = Math.min(1, CAMERA_BOUNDS_LERP_SPEED * dtSec);
+          cameraEffBoundsMinX += (0             - cameraEffBoundsMinX) * bt;
+          cameraEffBoundsMinY += (0             - cameraEffBoundsMinY) * bt;
+          cameraEffBoundsMaxX += (roomWidthWorld  - cameraEffBoundsMaxX) * bt;
+          cameraEffBoundsMaxY += (roomHeightWorld - cameraEffBoundsMaxY) * bt;
+        }
+
         updateCameraWithBounds(
           camera,
           camTargetX,
           camTargetY,
-          renderUnionBounds.minXWorld,
-          renderUnionBounds.minYWorld,
-          renderUnionBounds.maxXWorld,
-          renderUnionBounds.maxYWorld,
-          virtualWidthPx,
-          virtualHeightPx,
-          elapsedMs / 1000,
-        );
-      } else {
-        updateCamera(
-          camera,
-          camTargetX,
-          camTargetY,
-          roomWidthWorld,
-          roomHeightWorld,
+          cameraEffBoundsMinX,
+          cameraEffBoundsMinY,
+          cameraEffBoundsMaxX,
+          cameraEffBoundsMaxY,
           virtualWidthPx,
           virtualHeightPx,
           elapsedMs / 1000,
@@ -1650,6 +1715,7 @@ export function startGameScreen(
       crossingUnionMinYWorld: renderUnionBounds?.minYWorld ?? 0,
       crossingUnionMaxXWorld: renderUnionBounds?.maxXWorld ?? roomWidthWorld,
       crossingUnionMaxYWorld: renderUnionBounds?.maxYWorld ?? roomHeightWorld,
+      alwaysCenterCamera: pauseMenuState.alwaysCenterCamera,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.
@@ -1662,6 +1728,11 @@ export function startGameScreen(
 
   return () => {
     playerSfx.stop();
+    // Remove audio unlock listeners in case the user never interacted
+    // (they are registered with { once: true } so this is a no-op if they fired).
+    window.removeEventListener('pointerdown', _onAudioUnlockGesture);
+    window.removeEventListener('keydown',     _onAudioUnlockGesture);
+    window.removeEventListener('touchstart',  _onAudioUnlockGesture);
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
     if (pauseMenuCleanup !== null) pauseMenuCleanup();

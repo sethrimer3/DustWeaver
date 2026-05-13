@@ -17,6 +17,7 @@ import {
   getInfluenceHighlightWidth, setInfluenceHighlightWidth,
   setMusicVolume, setSfxVolume,
   setGraphicsQuality,
+  setAlwaysCenterCamera,
 } from './renderSettings';
 import { makeButton, makeSlider, makeTabButton, GOLD, PANEL_BORDER } from './helpers';
 
@@ -33,6 +34,8 @@ export interface PauseMenuState {
   musicVolume: number;
   sfxVolume: number;
   graphicsQuality: 'low' | 'med' | 'high';
+  /** Whether the always-center-camera mode is enabled. */
+  alwaysCenterCamera: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -237,6 +240,31 @@ export function showPauseMenu(
     },
   );
   mainButtons.appendChild(debugBtn);
+
+  // Always Center Camera — inline checkbox below Debug toggle
+  const alwaysCenterRow = document.createElement('div');
+  alwaysCenterRow.style.cssText = `
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin: 6px 0 10px 0;
+  `;
+  const alwaysCenterCheckbox = document.createElement('input');
+  alwaysCenterCheckbox.type = 'checkbox';
+  alwaysCenterCheckbox.id = 'pause-always-center-camera';
+  alwaysCenterCheckbox.checked = state.alwaysCenterCamera;
+  alwaysCenterCheckbox.style.cssText = `width: 16px; height: 16px; cursor: pointer; accent-color: ${GOLD};`;
+  const alwaysCenterLabel = document.createElement('label');
+  alwaysCenterLabel.htmlFor = 'pause-always-center-camera';
+  alwaysCenterLabel.textContent = 'Always Center Camera';
+  alwaysCenterLabel.style.cssText = `
+    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.88rem; cursor: pointer;
+  `;
+  alwaysCenterCheckbox.addEventListener('change', () => {
+    state.alwaysCenterCamera = alwaysCenterCheckbox.checked;
+    setAlwaysCenterCamera(alwaysCenterCheckbox.checked);
+  });
+  alwaysCenterRow.appendChild(alwaysCenterCheckbox);
+  alwaysCenterRow.appendChild(alwaysCenterLabel);
+  mainButtons.appendChild(alwaysCenterRow);
 
   // Exit to Main Menu (bottom) — requires a second click for confirmation
   let exitConfirmPending = false;
