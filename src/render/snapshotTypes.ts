@@ -193,6 +193,14 @@ export interface ClusterSnapshot {
   readonly beeSwarmState: number;
   /** Global orbit angle (radians) — used by the renderer for swarm animation. */
   readonly beeSwarmOrbitAngleRad: number;
+  /** 1 if this cluster is a web spider — swings via web lines toward the player. */
+  readonly isWebSpiderFlag: 0 | 1;
+  /** Current web spider AI state (0=seek, 1=swinging, 2=cooldown). */
+  readonly webSpiderState: number;
+  /** World X of the web anchor (only valid when webSpiderState === 1). */
+  readonly webSpiderAnchorXWorld: number;
+  /** World Y of the web anchor. */
+  readonly webSpiderAnchorYWorld: number;
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -452,4 +460,14 @@ export interface WorldSnapshot {
   readonly ropeSegPosXWorld: Float32Array;
   /** Verlet node Y positions (shared view). */
   readonly ropeSegPosYWorld: Float32Array;
+
+  // ── Web Spider fading web ring buffer ─────────────────────────────────────
+  readonly webSpiderFadingWebMaxCount: number;
+  readonly webSpiderFadingWebActiveCount: number;
+  readonly webSpiderFadingWebFromXWorld: Float32Array;
+  readonly webSpiderFadingWebFromYWorld: Float32Array;
+  readonly webSpiderFadingWebToXWorld: Float32Array;
+  readonly webSpiderFadingWebToYWorld: Float32Array;
+  readonly webSpiderFadingWebRemainingTicks: Float32Array;
+  readonly webSpiderFadingWebMaxTicks: Float32Array;
 }

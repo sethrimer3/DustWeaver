@@ -157,6 +157,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_golden_mimic', label: 'Golden Mimic', category: 'enemies' },
   { id: 'enemy_golden_mimic_xy', label: 'Golden Mimic (XY)', category: 'enemies' },
   { id: 'enemy_bee_swarm', label: 'Bee Swarm', category: 'enemies' },
+  { id: 'enemy_web_spider', label: 'Web Spider', category: 'enemies' },
   // Triggers (player-facing activators and room logic)
   { id: 'player_spawn',    label: 'Player Spawn',    category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
@@ -354,6 +355,7 @@ export interface EditorEnemy {
   isGoldenMimicFlag?: 0 | 1;
   isGoldenMimicYFlippedFlag?: 0 | 1;
   isBeeSwarmFlag?: 0 | 1;
+  isWebSpiderFlag?: 0 | 1;
 }
 
 export interface EditorTransition {

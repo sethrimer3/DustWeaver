@@ -228,6 +228,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isGoldenMimicFlag: (e.isGoldenMimic ?? false) ? 1 : 0,
     isGoldenMimicYFlippedFlag: (e.isGoldenMimicYFlipped ?? false) ? 1 : 0,
     isBeeSwarmFlag: (e.isBeeSwarm ?? false) ? 1 : 0,
+    isWebSpiderFlag: (e.isWebSpider ?? false) ? 1 : 0,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => {
@@ -549,6 +550,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isGoldenMimic: e.isGoldenMimicFlag === 1,
       isGoldenMimicYFlipped: e.isGoldenMimicYFlippedFlag === 1,
       isBeeSwarm: e.isBeeSwarmFlag === 1,
+      isWebSpider: e.isWebSpiderFlag === 1,
     })),
     transitions: data.transitions.map(t => {
       // Compute legacy positionBlock / depthBlock from xBlock/yBlock for backward compat.

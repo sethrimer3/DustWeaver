@@ -107,6 +107,7 @@ interface _ReusableBacking {
   isGrappleWrappingEnabled: 0 | 1;
   grappleWrapPointCount: number;
   ropeCount: number;
+  webSpiderFadingWebActiveCount: number;
   /** @internal Pre-allocated cluster objects — not part of the public API. */
   readonly _clusterPool: _MutableCluster[];
 }
@@ -207,6 +208,10 @@ function _makeEmptyCluster(): _MutableCluster {
     beeSwarmSlotIndex: -1,
     beeSwarmState: 0,
     beeSwarmOrbitAngleRad: 0,
+    isWebSpiderFlag: 0,
+    webSpiderState: 0,
+    webSpiderAnchorXWorld: 0,
+    webSpiderAnchorYWorld: 0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -283,6 +288,10 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.beeSwarmSlotIndex               = src.beeSwarmSlotIndex;
   dst.beeSwarmState                   = src.beeSwarmState;
   dst.beeSwarmOrbitAngleRad           = src.beeSwarmOrbitAngleRad;
+  dst.isWebSpiderFlag                 = src.isWebSpiderFlag;
+  dst.webSpiderState                  = src.webSpiderState;
+  dst.webSpiderAnchorXWorld           = src.webSpiderAnchorXWorld;
+  dst.webSpiderAnchorYWorld           = src.webSpiderAnchorYWorld;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
@@ -429,6 +438,15 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     ropeHalfThickWorld:  world.ropeHalfThickWorld,
     ropeSegPosXWorld:    world.ropeSegPosXWorld,
     ropeSegPosYWorld:    world.ropeSegPosYWorld,
+    // Web Spider fading web ring buffer — shared typed-array views
+    webSpiderFadingWebMaxCount:        world.webSpiderFadingWebMaxCount,
+    webSpiderFadingWebActiveCount:     world.webSpiderFadingWebActiveCount,
+    webSpiderFadingWebFromXWorld:      world.webSpiderFadingWebFromXWorld,
+    webSpiderFadingWebFromYWorld:      world.webSpiderFadingWebFromYWorld,
+    webSpiderFadingWebToXWorld:        world.webSpiderFadingWebToXWorld,
+    webSpiderFadingWebToYWorld:        world.webSpiderFadingWebToYWorld,
+    webSpiderFadingWebRemainingTicks:  world.webSpiderFadingWebRemainingTicks,
+    webSpiderFadingWebMaxTicks:        world.webSpiderFadingWebMaxTicks,
     _clusterPool:             clusterPool,
   };
 
@@ -532,6 +550,7 @@ export function updateSnapshotInPlace(
   b.isGrappleWrappingEnabled      = world.isGrappleWrappingEnabled;
   b.grappleWrapPointCount         = world.grappleWrapPointCount;
   b.ropeCount = world.ropeCount;
+  b.webSpiderFadingWebActiveCount = world.webSpiderFadingWebActiveCount;
 
   const clusterCount = world.clusters.length;
   const pool = b._clusterPool;
@@ -656,6 +675,10 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       beeSwarmSlotIndex:             c.beeSwarmSlotIndex,
       beeSwarmState:                 c.beeSwarmState,
       beeSwarmOrbitAngleRad:         c.beeSwarmOrbitAngleRad,
+      isWebSpiderFlag:               c.isWebSpiderFlag,
+      webSpiderState:                c.webSpiderState,
+      webSpiderAnchorXWorld:         c.webSpiderAnchorXWorld,
+      webSpiderAnchorYWorld:         c.webSpiderAnchorYWorld,
       renderPositionXWorld:          c.positionXWorld,
       renderPositionYWorld:          c.positionYWorld,
     });
@@ -783,5 +806,14 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     ropeHalfThickWorld:  world.ropeHalfThickWorld,
     ropeSegPosXWorld:    world.ropeSegPosXWorld,
     ropeSegPosYWorld:    world.ropeSegPosYWorld,
+    // Web Spider fading web ring buffer
+    webSpiderFadingWebMaxCount:        world.webSpiderFadingWebMaxCount,
+    webSpiderFadingWebActiveCount:     world.webSpiderFadingWebActiveCount,
+    webSpiderFadingWebFromXWorld:      world.webSpiderFadingWebFromXWorld,
+    webSpiderFadingWebFromYWorld:      world.webSpiderFadingWebFromYWorld,
+    webSpiderFadingWebToXWorld:        world.webSpiderFadingWebToXWorld,
+    webSpiderFadingWebToYWorld:        world.webSpiderFadingWebToYWorld,
+    webSpiderFadingWebRemainingTicks:  world.webSpiderFadingWebRemainingTicks,
+    webSpiderFadingWebMaxTicks:        world.webSpiderFadingWebMaxTicks,
   };
 }

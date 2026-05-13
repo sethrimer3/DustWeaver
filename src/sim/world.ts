@@ -16,6 +16,8 @@ export {
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
 export const MAX_WALLS = 2000;
+/** Maximum number of simultaneously fading web strands. */
+export const MAX_FADING_WEBS = 24;
 /** Maximum number of ropes per room. */
 export const MAX_ROPES = 16;
 /** Maximum number of Verlet segments per rope (includes anchors). */
@@ -367,6 +369,26 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * Used by the tough falling block trigger to detect hard landings.
    */
   playerPrevVelocityYWorld: number;
+
+  // ── Web Spider fading web ring buffer ─────────────────────────────────────
+  /** Total capacity of the fading-web ring buffer. */
+  webSpiderFadingWebMaxCount: number;
+  /** Write-head index for the ring buffer (wraps at webSpiderFadingWebMaxCount). */
+  webSpiderFadingWebWriteIndex: number;
+  /** Number of slots that contain live fading webs (≤ webSpiderFadingWebMaxCount). */
+  webSpiderFadingWebActiveCount: number;
+  /** Spider X position when it detached (start of the visible strand). */
+  webSpiderFadingWebFromXWorld: Float32Array;
+  /** Spider Y position when it detached. */
+  webSpiderFadingWebFromYWorld: Float32Array;
+  /** Anchor X (end of the visible strand). */
+  webSpiderFadingWebToXWorld: Float32Array;
+  /** Anchor Y. */
+  webSpiderFadingWebToYWorld: Float32Array;
+  /** Remaining ticks until the web fully fades (counts down to 0). */
+  webSpiderFadingWebRemainingTicks: Float32Array;
+  /** Max ticks for this web (for alpha computation: remaining/max). */
+  webSpiderFadingWebMaxTicks: Float32Array;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -483,6 +505,16 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     // ── Falling blocks ────────────────────────────────────────────────────
     fallingBlockGroups:            [],
     playerPrevVelocityYWorld:      0,
+    // ── Web Spider fading web ring buffer ────────────────────────────────
+    webSpiderFadingWebMaxCount:          MAX_FADING_WEBS,
+    webSpiderFadingWebWriteIndex:        0,
+    webSpiderFadingWebActiveCount:       0,
+    webSpiderFadingWebFromXWorld:        new Float32Array(MAX_FADING_WEBS),
+    webSpiderFadingWebFromYWorld:        new Float32Array(MAX_FADING_WEBS),
+    webSpiderFadingWebToXWorld:          new Float32Array(MAX_FADING_WEBS),
+    webSpiderFadingWebToYWorld:          new Float32Array(MAX_FADING_WEBS),
+    webSpiderFadingWebRemainingTicks:    new Float32Array(MAX_FADING_WEBS),
+    webSpiderFadingWebMaxTicks:          new Float32Array(MAX_FADING_WEBS),
     ...createGrappleWorldState(),
     ...createHazardWorldState(),
     ...createParticleBuffers(),

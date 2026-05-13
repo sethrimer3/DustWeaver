@@ -121,7 +121,8 @@ export type SavedEnemyType =
   | 'slime'
   | 'largeSlime'
   | 'wheel'
-  | 'beetle';
+  | 'beetle'
+  | 'webSpider';
 
 export interface SavedEnemy {
   type: SavedEnemyType;
@@ -294,6 +295,7 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isLargeSlime)     return 'largeSlime';
   if (e.isWheelEnemy)     return 'wheel';
   if (e.isBeetle)         return 'beetle';
+  if (e.isWebSpider)      return 'webSpider';
   return 'basic';
 }
 
@@ -318,6 +320,7 @@ export function enemyTypeToFlags(
     isLargeSlime:    type === 'largeSlime',
     isWheelEnemy:    type === 'wheel',
     isBeetle:        type === 'beetle',
+    isWebSpider:     type === 'webSpider',
   };
 }
 

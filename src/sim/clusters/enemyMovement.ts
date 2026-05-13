@@ -54,6 +54,10 @@ export function tickEnemyMovement(
   if (cluster.isBubbleEnemyFlag === 1) {
     return;
   }
+  // Web Spider has its own movement AI — handled in webSpiderAi.ts
+  if (cluster.isWebSpiderFlag === 1) {
+    return;
+  }
   // Golden Mimic has its own movement AI — velocity set in goldenMimicAi.ts
   if (cluster.isGoldenMimicFlag === 1) {
     return;

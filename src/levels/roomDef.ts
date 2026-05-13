@@ -385,6 +385,11 @@ export interface RoomEnemyDef {
    * Each bee is killed by 1 golden mote (1 Physical particle hit).
    */
   isBeeSwarmFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a Web Spider — fires white web lines to terrain anchors,
+   * swings toward the player via rope physics, detaches, and repeats.
+   */
+  isWebSpiderFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */
