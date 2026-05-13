@@ -123,9 +123,10 @@ export class PlayerSfxManager {
    */
   unlock(): void {
     if (this.isUnlocked) return;
-    const resume = (): Promise<void> =>
-      this.actx.state === 'suspended' ? this.actx.resume() : Promise.resolve();
-    resume()
+    const resume: Promise<void> = this.actx.state === 'suspended'
+      ? this.actx.resume()
+      : Promise.resolve();
+    resume
       .then(() => {
         this.isUnlocked = true;
         this._preloadAll();
@@ -136,8 +137,8 @@ export class PlayerSfxManager {
   }
 
   private _preloadAll(): void {
-    for (let i = 0; i < ALL_SFX_NAMES.length; i++) {
-      this._loadBuffer(ALL_SFX_NAMES[i]);
+    for (const name of ALL_SFX_NAMES) {
+      this._loadBuffer(name);
     }
   }
 
@@ -240,7 +241,7 @@ export class PlayerSfxManager {
         this.windSource = src;
       }
     } else if (this.windSource !== null && finalGain <= 0.001) {
-      try { this.windSource.stop(); } catch (_) { /* ignore if already ended */ }
+      try { this.windSource.stop(); } catch { /* ignore if already ended */ }
       this.windSource.disconnect();
       this.windSource = null;
     }
@@ -249,7 +250,7 @@ export class PlayerSfxManager {
   /** Stop all audio and reset wind state.  Call when leaving gameplay. */
   stop(): void {
     if (this.windSource !== null) {
-      try { this.windSource.stop(); } catch (_) { /* ignore */ }
+      try { this.windSource.stop(); } catch { /* ignore */ }
       this.windSource.disconnect();
       this.windSource = null;
     }

@@ -1237,12 +1237,12 @@ export function startGameScreen(
               // Expand bounds to include the camera's current position so the
               // camera is never hard-clamped on the very next updateCameraWithBounds
               // call (which would produce a visible snap).
-              const halfViewW = virtualWidthPx / (2 * camera.zoom);
-              const halfViewH = virtualHeightPx / (2 * camera.zoom);
-              if (camera.centerXWorld - halfViewW < cameraEffBoundsMinX) cameraEffBoundsMinX = camera.centerXWorld - halfViewW;
-              if (camera.centerYWorld - halfViewH < cameraEffBoundsMinY) cameraEffBoundsMinY = camera.centerYWorld - halfViewH;
-              if (camera.centerXWorld + halfViewW > cameraEffBoundsMaxX) cameraEffBoundsMaxX = camera.centerXWorld + halfViewW;
-              if (camera.centerYWorld + halfViewH > cameraEffBoundsMaxY) cameraEffBoundsMaxY = camera.centerYWorld + halfViewH;
+              const halfViewWidthWorld  = virtualWidthPx  / (2 * camera.zoom);
+              const halfViewHeightWorld = virtualHeightPx / (2 * camera.zoom);
+              if (camera.centerXWorld - halfViewWidthWorld  < cameraEffBoundsMinX) cameraEffBoundsMinX = camera.centerXWorld - halfViewWidthWorld;
+              if (camera.centerYWorld - halfViewHeightWorld < cameraEffBoundsMinY) cameraEffBoundsMinY = camera.centerYWorld - halfViewHeightWorld;
+              if (camera.centerXWorld + halfViewWidthWorld  > cameraEffBoundsMaxX) cameraEffBoundsMaxX = camera.centerXWorld + halfViewWidthWorld;
+              if (camera.centerYWorld + halfViewHeightWorld > cameraEffBoundsMaxY) cameraEffBoundsMaxY = camera.centerYWorld + halfViewHeightWorld;
             }
             const started = startCrossing(crossingState, world, currentRoom, ti, dir, room, camera);
             if (started) {
