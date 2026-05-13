@@ -79,8 +79,8 @@ This document lists the currently implemented movement techniques and their exac
   - Can attach to horizontal top surfaces.
   - **Corner rule:** if the hit is on a block corner, it is treated as a **vertical side hit**, not a top-surface hit.
 - **Top-Surface Zip**
-  - Zip speed: **472.5 units/sec**.
-  - Arrival threshold: **1.0 unit**.
+  - Zip speed: **210 units/sec**.
+  - Arrival threshold: **4.0 units**.
 - **Top-Surface Stick**
   - Velocity decay factor: **0.05/tick** while stuck.
   - Considered stopped below **1.0 units/sec**.

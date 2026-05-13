@@ -28,9 +28,9 @@ import { raycastWalls, releaseGrapple } from './grappleShared';
 // ============================================================================
 
 /**
- * Speed at which the player is zipped toward the grapple anchor — ~3× sprint speed.
+ * Speed at which the player is zipped toward the grapple anchor.
  */
-const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 420.0;
+const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 210.0;
 
 /**
  * Arrival distance (world units) — the player is snapped to the target when
@@ -309,7 +309,7 @@ export function tickGrappleZip(
     // ── Zip phase: move player toward anchor using swept AABB collision ────
     //
     // Why swept collision instead of direct position assignment:
-    //   GRAPPLE_ZIP_SPEED_WORLD_PER_SEC (~420 wu/s) moves ~7 wu per tick at
+    //   GRAPPLE_ZIP_SPEED_WORLD_PER_SEC (210 wu/s) moves ~3.5 wu per tick at
     //   60 fps.  Direct position assignment can carry the player through thin
     //   walls (BLOCK_SIZE_SMALL = 3 wu) or into floor tiles in a single step.
     //   resolveClusterSolidWallCollision uses the same axis-separated sweep
