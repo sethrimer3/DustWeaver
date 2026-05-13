@@ -14,10 +14,10 @@
 export const MAX_SPIKES = 32;
 /** Maximum number of springboards per room. */
 export const MAX_SPRINGBOARDS = 16;
-/** Maximum number of water zones per room (raised to 4000 to support large liquid pools). */
-export const MAX_WATER_ZONES = 4000;
-/** Maximum number of lava zones per room (raised to 4000 to support large liquid pools). */
-export const MAX_LAVA_ZONES = 4000;
+/** Maximum number of water zones per room (raised to 6000 to support large liquid pools). */
+export const MAX_WATER_ZONES = 6000;
+/** Maximum number of lava zones per room (raised to 6000 to support large liquid pools). */
+export const MAX_LAVA_ZONES = 6000;
 /** Maximum number of breakable blocks per room. */
 export const MAX_BREAKABLE_BLOCKS = 32;
 /** Maximum number of crumble blocks per room. */
@@ -207,6 +207,12 @@ export interface HazardWorldState {
 
   /** 1 while the player cluster is inside a water zone this tick. */
   isPlayerInWaterFlag: 0 | 1;
+  /** 1 if the player was in water on the previous tick (for entry-event detection). */
+  isPlayerWasInWaterLastTickFlag: 0 | 1;
+  /** Submersion ratio 0–1: 0 = just touching surface, 1 = fully submerged. */
+  playerWaterSubmersionRatio: number;
+  /** Speed magnitude (wu/s) the player had when they entered water this tick. 0 when not entering. */
+  playerWaterEntrySpeedWorld: number;
 
   // ── Dust piles ────────────────────────────────────────────────────────────
   /** Number of dust piles loaded in the current room. */
@@ -330,6 +336,9 @@ export function createHazardWorldState(): HazardWorldState {
     fireflyVelXWorld:              new Float32Array(MAX_FIREFLIES),
     fireflyVelYWorld:              new Float32Array(MAX_FIREFLIES),
     isPlayerInWaterFlag:           0,
+    isPlayerWasInWaterLastTickFlag: 0,
+    playerWaterSubmersionRatio:    0,
+    playerWaterEntrySpeedWorld:    0,
     dustPileCount:                 0,
     dustPileXWorld:                new Float32Array(MAX_DUST_PILES),
     dustPileYWorld:                new Float32Array(MAX_DUST_PILES),

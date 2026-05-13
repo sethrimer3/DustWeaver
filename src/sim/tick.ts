@@ -36,7 +36,7 @@ import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
 import { tickArrows } from './weaves/arrowWeave';
-import { applyHazards } from './hazards';
+import { applyHazards, computePlayerWaterState } from './hazards';
 import { tickGrasshoppers } from './critters/grasshopper';
 import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
 import { applyWheelEnemyAI } from './clusters/wheelEnemyAi';
@@ -70,6 +70,11 @@ export function tick(world: WorldState): void {
         ? player.velocityYWorld
         : 0;
   }
+
+  // -0.1. Pre-compute water state so playerMovement reads correct flag this tick.
+  //        (applyHazards runs after movement and re-applies physics, but the flag
+  //         must be set BEFORE movement so gravity reduction uses the current state.)
+  computePlayerWaterState(world);
 
   // 0. Cluster movement — smooth acceleration/deceleration for player and enemies
   applyClusterMovement(world);

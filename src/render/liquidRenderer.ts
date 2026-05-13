@@ -29,6 +29,15 @@ import {
   type LiquidBody,
   type LiquidBubble,
 } from './liquidBodyCache';
+import {
+  spawnWaterSplash,
+  tickWaterSplash,
+  getDisturbanceOffsetAt,
+} from './waterSplashSystem';
+import {
+  tickPlayerWaterBubbles,
+  drawPlayerWaterBubbles,
+} from './playerWaterBubbles';
 
 // ── Lava spark particles ──────────────────────────────────────────────────────
 
@@ -79,12 +88,40 @@ export function renderWaterZones(
   tick: number,
 ): void {
   tickLiquidBubbles(tick);
+  tickWaterSplash();
   const bodies = getLiquidBodies(world);
+
+  // Retrieve player cluster once for this frame
+  const player = world.clusters.length > 0 ? world.clusters[0] : undefined;
+  const playerAlive = player !== undefined && player.isAliveFlag === 1;
+
+  // Detect player water entry and spawn splash
+  if (
+    world.isPlayerWasInWaterLastTickFlag === 0
+    && world.isPlayerInWaterFlag === 1
+    && playerAlive
+  ) {
+    spawnWaterSplash(bodies, player!.positionXWorld, world.playerWaterEntrySpeedWorld);
+  }
+
+  // Tick and render player movement bubbles
+  {
+    const vx = playerAlive ? player!.velocityXWorld : 0;
+    const vy = playerAlive ? player!.velocityYWorld : 0;
+    const px = playerAlive ? player!.positionXWorld : 0;
+    const py = playerAlive ? player!.positionYWorld : 0;
+    tickPlayerWaterBubbles(px, py, vx, vy, world.isPlayerInWaterFlag);
+  }
 
   for (let bi = 0; bi < bodies.length; bi++) {
     const body = bodies[bi];
     if (body.kind !== 'water') continue;
     renderWaterBody(ctx, body, bi, offsetXPx, offsetYPx, zoom, tick);
+  }
+
+  // Draw player movement bubbles on top of water (cosmetic overlay)
+  if (world.isPlayerInWaterFlag === 1 && playerAlive) {
+    drawPlayerWaterBubbles(ctx, offsetXPx, offsetYPx, zoom);
   }
 }
 
@@ -164,6 +201,7 @@ function renderWaterBody(
   const wAmpPx = LIQUID_EDGE_WAVE_AMPLITUDE * zoom;
   const phaseBase  = tick * LIQUID_EDGE_WAVE_SPEED + bodyIndex * 1.7;
   const phaseBase2 = tick * LIQUID_EDGE_WAVE_SPEED * 0.7 + bodyIndex * 2.9 + 1.2;
+  const taperPx = WAVE_TAPER_WORLD * zoom;
 
   for (let ri = 0; ri < topEdgeRuns.length; ri++) {
     const run = topEdgeRuns[ri];
@@ -174,14 +212,14 @@ function renderWaterBody(
     // Wave fill: draw the wave polyline as a closed path with interior fill
     ctx.fillStyle = 'rgba(40,120,220,0.45)';
     ctx.beginPath();
-    drawWavePath(ctx, rx, ry, rw, phaseBase, phaseBase2, wAmpPx, WAVE_TAPER_WORLD * zoom);
+    drawWavePath(ctx, rx, ry, rw, phaseBase, phaseBase2, wAmpPx, taperPx, run.yWorld, zoom, offsetXPx);
     ctx.fill();
 
     // Foam line on top of the wave
     ctx.strokeStyle = 'rgba(200,240,255,0.55)';
     ctx.lineWidth = zoom * 0.8;
     ctx.beginPath();
-    drawWaveLine(ctx, rx, ry, rw, phaseBase, phaseBase2, wAmpPx, WAVE_TAPER_WORLD * zoom);
+    drawWaveLine(ctx, rx, ry, rw, phaseBase, phaseBase2, wAmpPx, taperPx, run.yWorld, zoom, offsetXPx);
     ctx.stroke();
 
     // Sub-surface line (static)
@@ -252,6 +290,7 @@ function renderLavaBody(
   const wAmpPx = LIQUID_EDGE_WAVE_AMPLITUDE * zoom * 0.7;
   const phaseBase  = tick * 0.10 + bodyIndex * 3.0;
   const phaseBase2 = tick * 0.07 + bodyIndex * 1.4 + 1.8;
+  const taperPx = WAVE_TAPER_WORLD * zoom;
 
   for (let ri = 0; ri < topEdgeRuns.length; ri++) {
     const run = topEdgeRuns[ri];
@@ -263,7 +302,7 @@ function renderLavaBody(
     ctx.strokeStyle = 'rgba(255,160,30,0.65)';
     ctx.lineWidth = zoom * 0.9;
     ctx.beginPath();
-    drawWaveLine(ctx, rx, ry, rw, phaseBase, phaseBase2, wAmpPx, WAVE_TAPER_WORLD * zoom);
+    drawWaveLine(ctx, rx, ry, rw, phaseBase, phaseBase2, wAmpPx, taperPx, run.yWorld, zoom, offsetXPx);
     ctx.stroke();
 
     // Crust line (static, sub-surface)
@@ -293,6 +332,7 @@ function renderLavaBody(
 /**
  * Draws a wave polyline (moveTo + lineTo steps) suitable for ctx.stroke().
  * The wave amplitude tapers to zero at both ends of the run.
+ * Adds WaterSurfaceDisturbance contribution on top of the base wave.
  */
 function drawWaveLine(
   ctx: CanvasRenderingContext2D,
@@ -300,6 +340,9 @@ function drawWaveLine(
   phase1: number, phase2: number,
   wAmpPx: number,
   taperWidthPx: number,
+  surfaceYWorld: number,
+  zoom: number,
+  offsetXPx: number,
 ): void {
   const steps = Math.max(2, Math.floor(rw / 2));
   for (let s = 0; s <= steps; s++) {
@@ -309,9 +352,12 @@ function drawWaveLine(
       Math.min(1, (t * rw) / (taperWidthPx + 0.001)),
       Math.min(1, ((1 - t) * rw) / (taperWidthPx + 0.001)),
     );
-    const wave = (Math.sin(phase1 + px * LIQUID_EDGE_WAVE_SPATIAL_FREQ) * 0.65
-                + Math.sin(phase2 + px * LIQUID_EDGE_WAVE_SPATIAL_FREQ * 0.6) * 0.35)
-               * wAmpPx * taper;
+    const baseWave = (Math.sin(phase1 + px * LIQUID_EDGE_WAVE_SPATIAL_FREQ) * 0.65
+                   + Math.sin(phase2 + px * LIQUID_EDGE_WAVE_SPATIAL_FREQ * 0.6) * 0.35)
+                   * wAmpPx * taper;
+    const surfaceXWorld = (px - offsetXPx) / zoom;
+    const disturbance = getDisturbanceOffsetAt(surfaceXWorld, surfaceYWorld) * zoom;
+    const wave = baseWave + disturbance;
     if (s === 0) ctx.moveTo(px, ry + wave);
     else         ctx.lineTo(px, ry + wave);
   }
@@ -328,6 +374,9 @@ function drawWavePath(
   phase1: number, phase2: number,
   wAmpPx: number,
   taperWidthPx: number,
+  surfaceYWorld: number,
+  zoom: number,
+  offsetXPx: number,
 ): void {
   const steps = Math.max(2, Math.floor(rw / 2));
   for (let s = 0; s <= steps; s++) {
@@ -337,9 +386,12 @@ function drawWavePath(
       Math.min(1, (t * rw) / (taperWidthPx + 0.001)),
       Math.min(1, ((1 - t) * rw) / (taperWidthPx + 0.001)),
     );
-    const wave = (Math.sin(phase1 + px * LIQUID_EDGE_WAVE_SPATIAL_FREQ) * 0.65
-                + Math.sin(phase2 + px * LIQUID_EDGE_WAVE_SPATIAL_FREQ * 0.6) * 0.35)
-               * wAmpPx * taper;
+    const baseWave = (Math.sin(phase1 + px * LIQUID_EDGE_WAVE_SPATIAL_FREQ) * 0.65
+                   + Math.sin(phase2 + px * LIQUID_EDGE_WAVE_SPATIAL_FREQ * 0.6) * 0.35)
+                   * wAmpPx * taper;
+    const surfaceXWorld = (px - offsetXPx) / zoom;
+    const disturbance = getDisturbanceOffsetAt(surfaceXWorld, surfaceYWorld) * zoom;
+    const wave = baseWave + disturbance;
     if (s === 0) ctx.moveTo(px, ry + wave);
     else         ctx.lineTo(px, ry + wave);
   }
@@ -363,8 +415,16 @@ function drawBubbles(
 
   for (let i = 0; i < bubbles.length; i++) {
     const bub = bubbles[i];
-    const life = 1 - bub.ageTicks / bub.maxAgeTicks; // 1→0
+    let life = 1 - bub.ageTicks / bub.maxAgeTicks; // 1→0 over lifetime
     if (life <= 0) continue;
+
+    // Fade out as bubble approaches its surface fade threshold
+    const distToFadeThreshold = bub.yWorld - (bub.surfaceYWorld + bub.fadeBelowSurfaceWorld);
+    if (distToFadeThreshold < bub.fadeBelowSurfaceWorld * 0.5) {
+      const fadeAlpha = Math.max(0, distToFadeThreshold / (bub.fadeBelowSurfaceWorld * 0.5 + 0.001));
+      life *= fadeAlpha;
+    }
+    if (life <= 0.01) continue;
 
     const px = bub.xWorld * zoom + offsetXPx;
     const py = bub.yWorld * zoom + offsetYPx;

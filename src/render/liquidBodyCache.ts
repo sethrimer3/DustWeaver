@@ -24,7 +24,7 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /** Maximum liquid tiles per room (water + lava combined). */
-export const MAX_LIQUID_TILES_PER_ROOM = 4000;
+export const MAX_LIQUID_TILES_PER_ROOM = 6000;
 
 /** Global cap on active bubbles across all liquid bodies. */
 export const LIQUID_BUBBLE_GLOBAL_CAP = 64;
@@ -55,6 +55,16 @@ export const LIQUID_EDGE_WAVE_SPATIAL_FREQ = 0.32;
 
 /** Maximum bubble lifetime in ticks. */
 const BUBBLE_MAX_AGE_TICKS = 600;
+
+/**
+ * Minimum blocks below the top surface at which a bubble fades out.
+ * Randomised per-bubble to prevent all bubbles dying at the same height.
+ * (1 block = one BLOCK_SIZE_MEDIUM distance unit)
+ */
+const BUBBLE_SURFACE_FADE_MIN_BLOCKS = 1;
+
+/** Maximum blocks below top surface at which a bubble fades out. */
+const BUBBLE_SURFACE_FADE_MAX_BLOCKS = 15;
 
 // ── Tile key encoding ─────────────────────────────────────────────────────────
 
@@ -94,12 +104,27 @@ export interface LiquidBubble {
   xWorld: number;
   /** Current Y position (world units). */
   yWorld: number;
+  /** X world coordinate where this bubble was originally spawned (drift anchor). */
+  originXWorld: number;
   /** Horizontal drift phase (radians, drives sinusoidal drift). */
   driftPhaseRad: number;
   /** Ticks since this bubble was spawned. */
   ageTicks: number;
   /** Bubble lifetime cap in ticks. */
   maxAgeTicks: number;
+  /** X grid column index where this bubble was spawned (used for surface lookup). */
+  originGridX: number;
+  /**
+   * Y world coordinate of the top surface in this bubble's column.
+   * Cached at spawn time so no per-tick upward scan is needed.
+   */
+  surfaceYWorld: number;
+  /**
+   * Distance below the surface (world units) at which this bubble fades out.
+   * Randomised at spawn (1–15 blocks) so bubbles disappear at natural depths
+   * rather than hard-popping at the exact tile surface.
+   */
+  fadeBelowSurfaceWorld: number;
 }
 
 /** A connected group of same-type liquid tiles. */
@@ -124,6 +149,12 @@ export interface LiquidBody {
    * Used for bubble spawn: maps from column gridX → bottom-tile world Y.
    */
   readonly bottomByColumn: Map<number, number>;
+  /**
+   * Y world coordinate of the top-surface tile top edge in each column.
+   * Maps column gridX → world Y of the tile's top edge at the exposed surface.
+   * Pre-cached during body construction so bubble spawn is O(1) (no upward scan).
+   */
+  readonly topByColumn: Map<number, number>;
   /** Active bubbles for this body. */
   readonly bubbles: LiquidBubble[];
   /** Ticks until the next bubble spawn attempt. */
@@ -212,7 +243,7 @@ export function tickLiquidBubbles(tick: number): void {
   }
 
   for (const body of _bodies) {
-    const { bubbles, tileSet, bottomByColumn } = body;
+    const { bubbles, tileSet, bottomByColumn, topByColumn } = body;
     const B = BLOCK_SIZE_MEDIUM;
 
     // ── Tick existing bubbles ──────────────────────────────────────────────
@@ -221,8 +252,10 @@ export function tickLiquidBubbles(tick: number): void {
       bub.ageTicks++;
       // Rise upward
       bub.yWorld -= LIQUID_BUBBLE_RISE_SPEED;
-      // Sinusoidal horizontal drift
-      bub.xWorld += Math.sin(bub.driftPhaseRad + bub.ageTicks * 0.04) * (LIQUID_BUBBLE_DRIFT_AMOUNT * 0.02);
+      // Stable origin-based sinusoidal horizontal drift.
+      // xWorld is always offset from originXWorld — drift never accumulates.
+      bub.xWorld = bub.originXWorld
+        + Math.sin(bub.driftPhaseRad + bub.ageTicks * 0.04) * LIQUID_BUBBLE_DRIFT_AMOUNT;
 
       // Despawn: exceeded lifetime
       if (bub.ageTicks >= bub.maxAgeTicks) {
@@ -232,11 +265,19 @@ export function tickLiquidBubbles(tick: number): void {
         continue;
       }
 
-      // Despawn: bubble reached an exposed top edge (no same-type tile above it)
+      // Despawn: bubble has risen within fadeBelowSurfaceWorld of the top surface.
+      // Using the pre-cached surfaceYWorld avoids a per-tick tile scan.
+      if (bub.yWorld <= bub.surfaceYWorld + bub.fadeBelowSurfaceWorld) {
+        bubbles[i] = bubbles[bubbles.length - 1];
+        bubbles.pop();
+        globalBubbleCount--;
+        continue;
+      }
+
+      // Safety despawn: bubble left the liquid body (e.g., body was reshaped)
       const gx = Math.floor(bub.xWorld / B);
       const gy = Math.floor(bub.yWorld / B);
-      const aboveKey = encodeKey(gx, gy - 1);
-      if (!tileSet.has(encodeKey(gx, gy)) || !tileSet.has(aboveKey)) {
+      if (!tileSet.has(encodeKey(gx, gy))) {
         bubbles[i] = bubbles[bubbles.length - 1];
         bubbles.pop();
         globalBubbleCount--;
@@ -263,12 +304,22 @@ export function tickLiquidBubbles(tick: number): void {
       const spawnGX = Math.floor(spawnX / B);
       const spawnGY = Math.floor(spawnY / B);
       if (tileSet.has(encodeKey(spawnGX, spawnGY))) {
+        // Retrieve pre-cached surface Y for this column (O(1), no scan needed).
+        const surfaceYWorld = topByColumn.get(col) ?? spawnY;
+        const fadeBelowSurfaceWorld =
+          (BUBBLE_SURFACE_FADE_MIN_BLOCKS +
+            Math.random() * (BUBBLE_SURFACE_FADE_MAX_BLOCKS - BUBBLE_SURFACE_FADE_MIN_BLOCKS)) * B;
+
         bubbles.push({
           xWorld: spawnX,
           yWorld: spawnY,
+          originXWorld: spawnX,
           driftPhaseRad: Math.random() * Math.PI * 2,
           ageTicks: 0,
           maxAgeTicks: Math.floor(BUBBLE_MAX_AGE_TICKS * (0.5 + Math.random() * 0.5)),
+          originGridX: col,
+          surfaceYWorld,
+          fadeBelowSurfaceWorld,
         });
         globalBubbleCount++;
       }
@@ -427,26 +478,36 @@ function buildBody(
   // Exposed top-edge runs
   const topEdgeRuns = extractTopEdgeRuns(bodySet, minGX, maxGX, minGY, maxGY, B);
 
-  // Per-column bottom-most tile Y (in world units: top of the bottom tile)
+  // Per-column bottom-most and top-surface tile Y (world units).
+  // bottomByColumn: gridX → world Y of the bottom edge of the deepest tile.
+  // topByColumn:    gridX → world Y of the top edge of the shallowest (surface) tile.
   const bottomByColumn = new Map<number, number>();
+  const topByColumn    = new Map<number, number>();
   for (const k of keys) {
     const gx = decodeGX(k);
     const gy = decodeGY(k);
-    const tileTopY = (gy + 1) * B; // world Y of bottom edge of this tile
-    const existing = bottomByColumn.get(gx);
-    if (existing === undefined || tileTopY > existing) {
-      bottomByColumn.set(gx, tileTopY);
+    // Bottom edge (deepest = largest Y)
+    const tileBottomY = (gy + 1) * B;
+    const existingBottom = bottomByColumn.get(gx);
+    if (existingBottom === undefined || tileBottomY > existingBottom) {
+      bottomByColumn.set(gx, tileBottomY);
+    }
+    // Top edge (shallowest = smallest Y)
+    const tileTopEdgeY = gy * B;
+    const existingTop = topByColumn.get(gx);
+    if (existingTop === undefined || tileTopEdgeY < existingTop) {
+      topByColumn.set(gx, tileTopEdgeY);
     }
   }
 
-  // Prune columns that have no upward path (i.e. they ARE the top — no tile above).
-  // Bubbles spawned in single-tile-deep spots would immediately despawn, so skip them.
-  for (const [col, _] of Array.from(bottomByColumn.entries())) {
-    const topGY = minGY;
-    // If the column's bottom IS also the top, skip (single-cell column)
+  // Prune columns that have no upward path (single-tile-deep spots would
+  // immediately despawn any bubble, so skip them).
+  for (const [col] of Array.from(bottomByColumn.entries())) {
     const bottomGY = Math.round(bottomByColumn.get(col)! / B) - 1;
-    if (bottomGY <= topGY) {
+    const colTopGY = Math.round((topByColumn.get(col) ?? 0) / B);
+    if (bottomGY <= colTopGY) {
       bottomByColumn.delete(col);
+      topByColumn.delete(col);
     }
   }
 
@@ -467,6 +528,7 @@ function buildBody(
     mergedRects,
     topEdgeRuns,
     bottomByColumn,
+    topByColumn,
     bubbles: [],
     bubbleCap,
     nextBubbleSpawnTicks: Math.floor(
