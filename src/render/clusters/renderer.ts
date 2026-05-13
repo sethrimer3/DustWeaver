@@ -35,6 +35,8 @@ import {
   renderWaterBubbleBody,
   renderIceBubbleBody,
   renderBeeSwarm,
+  renderWebSpider,
+  renderWebSpiderFadingWebs,
 } from './enemyRenderers';
 
 /**
@@ -97,6 +99,8 @@ export function renderClusters(
   isDebugCloak = false,
 ): void {
   ctx.save();
+  // Fading webs render below clusters (behind everything else in this pass)
+  renderWebSpiderFadingWebs(ctx, snapshot, scalePx, offsetXPx, offsetYPx);
   // Pixel-art safety: simulation/camera may be subpixel, but sprite draws
   // should land on integer screen pixels to avoid texture interpolation blur.
   ctx.imageSmoothingEnabled = false;
@@ -451,6 +455,9 @@ export function renderClusters(
     } else if (cluster.isBeeSwarmFlag === 1) {
       // ── Bee Swarm: individual bees rendered as 4×2 pixel sprites ─────────
       renderBeeSwarm(ctx, cluster, snapshot, scalePx, offsetXPx, offsetYPx);
+    } else if (cluster.isWebSpiderFlag === 1) {
+      // ── Web Spider: dark square body + optional web strand to anchor ──────
+      renderWebSpider(ctx, cluster, scalePx, offsetXPx, offsetYPx);
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';

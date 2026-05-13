@@ -13,6 +13,7 @@ import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../si
 import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAIL_UPDATE_INTERVAL_TICKS } from '../sim/clusters/squareStampedeAi';
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
 import { BEE_HALF_WIDTH_WORLD, BEE_HALF_HEIGHT_WORLD } from '../sim/clusters/beeSwarmAi';
+import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
 import { FLYING_EYE_HALF_SIZE_WORLD } from './gameRoom';
 
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
@@ -446,6 +447,19 @@ export function spawnEnemyClusters(
           world.beeSwarmBeeVelYWorld[base + bi] = 0;
         }
       }
+    } else if (enemyDef.isWebSpiderFlag === 1) {
+      enemyCluster.isWebSpiderFlag            = 1;
+      enemyCluster.halfWidthWorld             = WEB_SPIDER_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld            = WEB_SPIDER_HALF_SIZE_WORLD;
+      enemyCluster.healthPoints               = 4;
+      enemyCluster.maxHealthPoints            = 4;
+      enemyCluster.webSpiderState             = 0;
+      enemyCluster.webSpiderStateTicks        = 0;
+      enemyCluster.webSpiderAnchorXWorld      = 0;
+      enemyCluster.webSpiderAnchorYWorld      = 0;
+      enemyCluster.webSpiderRopeLengthWorld   = 0;
+      enemyCluster.webSpiderCooldownTicks     = 0;
+      enemyCluster.webSpiderAnchorSearchTicks = 0;
     }
 
     world.clusters.push(enemyCluster);

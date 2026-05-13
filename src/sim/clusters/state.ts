@@ -461,6 +461,32 @@ export interface ClusterState {
   beeSwarmPrevHealthPoints: number;
   /** Global orbit angle (radians) incremented each tick to animate the swarm path. */
   beeSwarmOrbitAngleRad: number;
+
+  // ---- Web Spider (populated only when isWebSpiderFlag === 1) ----------------
+  /**
+   * 1 if this cluster is a web spider — fires white web lines to terrain,
+   * swings toward the player, detaches, and repeats.
+   */
+  isWebSpiderFlag: 0 | 1;
+  /**
+   * Current web spider AI state:
+   *   0 = seek     — falling/drifting, searching for a wall anchor
+   *   1 = swinging — attached to anchor, swinging on rope constraint
+   *   2 = cooldown — brief pause after detaching before next web attempt
+   */
+  webSpiderState: number;
+  /** Ticks elapsed in the current web spider state. */
+  webSpiderStateTicks: number;
+  /** World X of the current web anchor (only valid when webSpiderState === 1). */
+  webSpiderAnchorXWorld: number;
+  /** World Y of the current web anchor. */
+  webSpiderAnchorYWorld: number;
+  /** Distance from spider to anchor when it first attached (rope length, world units). */
+  webSpiderRopeLengthWorld: number;
+  /** Countdown ticks after detaching before spider may fire next web. */
+  webSpiderCooldownTicks: number;
+  /** Countdown ticks until next anchor search attempt (decremented in SEEK state). */
+  webSpiderAnchorSearchTicks: number;
 }
 
 export function createClusterState(
@@ -596,5 +622,13 @@ export function createClusterState(
     beeSwarmSpawnYWorld: positionYWorld,
     beeSwarmPrevHealthPoints: maxHealthPoints,
     beeSwarmOrbitAngleRad: 0,
+    isWebSpiderFlag: 0,
+    webSpiderState: 0,
+    webSpiderStateTicks: 0,
+    webSpiderAnchorXWorld: 0,
+    webSpiderAnchorYWorld: 0,
+    webSpiderRopeLengthWorld: 0,
+    webSpiderCooldownTicks: 0,
+    webSpiderAnchorSearchTicks: 0,
   };
 }
