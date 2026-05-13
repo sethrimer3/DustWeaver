@@ -168,7 +168,6 @@ export function finalizeCrossingSeamless(
   if (player === undefined) return;
 
   const BS = BLOCK_SIZE_MEDIUM;
-  const dir        = crossingState.exitDirection!;
   const prevRoom   = crossingState.currentRoom!;
   const nextRoom_  = crossingState.nextRoom!;
   const nextOriginX = crossingState.nextRoomOriginXWorld;
@@ -204,51 +203,57 @@ export function finalizeCrossingSeamless(
   }
 
   // ── Post-loadRoom: place the prev room as a staged room ────────────────
-  // After loadRoom the active room is at [0, nextRoomW] × [0, nextRoomH].
-  // For right/down exits the previous room would be at negative coords, so
-  // we shift the entire world right/down first.
+  // After loadRoom the active (next) room is at local [0, nextW] × [0, nextH].
+  // We derive the previous room's origin from the crossing-state geometry so
+  // offset door openings remain aligned — the direction-only approach used
+  // before this fix ignored the row/column delta between the two transition
+  // openings, causing visual misalignment.
+  //
+  // In crossing-world-space:
+  //   prev room origin  = (shiftXWorld, shiftYWorld)
+  //   next room origin  = (nextRoomOriginXWorld, nextRoomOriginYWorld)
+  //
+  // After loadRoom, "crossing-world-space" maps to next-room-local-space as:
+  //   localX = crossingX - nextRoomOriginXWorld
+  //   localY = crossingY - nextRoomOriginYWorld
+  //
+  // So the prev room origin in next-room-local space is:
+  const prevOriginNextLocalX =
+    crossingState.shiftXWorld - crossingState.nextRoomOriginXWorld;
+  const prevOriginNextLocalY =
+    crossingState.shiftYWorld - crossingState.nextRoomOriginYWorld;
+
+  // Normalise so no room has negative world coordinates (physics invariant).
+  const normalizeShiftX = Math.max(0, -prevOriginNextLocalX);
+  const normalizeShiftY = Math.max(0, -prevOriginNextLocalY);
+
+  if (normalizeShiftX !== 0 || normalizeShiftY !== 0) {
+    shiftWorldCoords(
+      world,
+      camera,
+      prevClusterPosX,
+      prevClusterPosY,
+      normalizeShiftX,
+      normalizeShiftY,
+    );
+  }
+
+  state.currentRoomOriginXWorld = normalizeShiftX;
+  state.currentRoomOriginYWorld = normalizeShiftY;
+
+  const prevOriginXWorld = prevOriginNextLocalX + normalizeShiftX;
+  const prevOriginYWorld = prevOriginNextLocalY + normalizeShiftY;
 
   const prevRoomW = prevRoom.widthBlocks  * BS;
   const prevRoomH = prevRoom.heightBlocks * BS;
   const nextRoomW = nextRoom_.widthBlocks  * BS;
   const nextRoomH = nextRoom_.heightBlocks * BS;
 
-  let prevOriginXWorld: number;
-  let prevOriginYWorld: number;
-
-  if (dir === 'right') {
-    // Shift world right by prevRoomW so active room occupies [prevW, prevW+nextW].
-    shiftWorldCoords(world, camera, prevClusterPosX, prevClusterPosY, prevRoomW, 0);
-    state.currentRoomOriginXWorld = prevRoomW;
-    state.currentRoomOriginYWorld = 0;
-    prevOriginXWorld = 0;
-    prevOriginYWorld = 0;
-  } else if (dir === 'down') {
-    // Shift world down by prevRoomH so active room occupies [0, nextW] × [prevH, prevH+nextH].
-    shiftWorldCoords(world, camera, prevClusterPosX, prevClusterPosY, 0, prevRoomH);
-    state.currentRoomOriginXWorld = 0;
-    state.currentRoomOriginYWorld = prevRoomH;
-    prevOriginXWorld = 0;
-    prevOriginYWorld = 0;
-  } else if (dir === 'left') {
-    // No shift needed; active room at [0, nextW], prev room goes to the right.
-    state.currentRoomOriginXWorld = 0;
-    state.currentRoomOriginYWorld = 0;
-    prevOriginXWorld = nextRoomW;
-    prevOriginYWorld = 0;
-  } else { // 'up'
-    // No shift needed; active room at [0..nextH], prev room goes below.
-    state.currentRoomOriginXWorld = 0;
-    state.currentRoomOriginYWorld = 0;
-    prevOriginXWorld = 0;
-    prevOriginYWorld = nextRoomH;
-  }
-
   // Append prev room walls at the computed offset.
   const wallStartIndex = world.wallCount;
   appendRoomWallsAtOffset(world, prevRoom, prevOriginXWorld, prevOriginYWorld);
 
-  // Expand world bounds to cover both rooms.
+  // Expand world bounds to the AABB union of both rooms.
   world.worldWidthWorld  = Math.max(
     state.currentRoomOriginXWorld + nextRoomW,
     prevOriginXWorld + prevRoomW,
