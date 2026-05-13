@@ -223,7 +223,7 @@ export function finalizeCrossingSeamless(
   const prevOriginNextLocalY =
     crossingState.shiftYWorld - crossingState.nextRoomOriginYWorld;
 
-  // Normalise so no room has negative world coordinates (physics invariant).
+  // Normalize so no room has negative world coordinates (physics invariant).
   const normalizeShiftX = Math.max(0, -prevOriginNextLocalX);
   const normalizeShiftY = Math.max(0, -prevOriginNextLocalY);
 
