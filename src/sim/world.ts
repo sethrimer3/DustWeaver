@@ -63,6 +63,8 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   wallPlatformEdge: Uint8Array;
   /** Per-wall theme index: 0=blackRock, 1=brownRock, 2=dirt.  255=use room default. */
   wallThemeIndex: Uint8Array;
+  /** Per-wall sound hardness index: 0=soft, 1=normal, 2=hard. */
+  wallSoundHardnessIndex: Uint8Array;
   /** 1 if the corresponding wall is invisible (collision-only boundary, not rendered). */
   wallIsInvisibleFlag: Uint8Array;
   /**
@@ -408,6 +410,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsPlatformFlag: new Uint8Array(MAX_WALLS),
     wallPlatformEdge: new Uint8Array(MAX_WALLS),
     wallThemeIndex: new Uint8Array(MAX_WALLS),
+    wallSoundHardnessIndex: new Uint8Array(MAX_WALLS),
     wallIsInvisibleFlag: new Uint8Array(MAX_WALLS),
     wallRampOrientationIndex: new Uint8Array(MAX_WALLS).fill(255),
     wallIsPillarHalfWidthFlag: new Uint8Array(MAX_WALLS),

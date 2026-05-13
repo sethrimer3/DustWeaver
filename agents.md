@@ -37,6 +37,14 @@ The particle simulation must be consistent and reproducible. Given the same init
 - HTML Canvas (`<canvas>`) is the rendering target.
 - WebGL may be used for particle rendering if Canvas 2D performance is insufficient — document this decision in `DECISIONS.md`.
 
+### Player SFX Materials
+
+- New block themes must define or inherit player SFX `soundHardness`: `hard`, `normal`, or `soft`.
+- Hard is for stone-like themes such as obsidian, blackstone, marble, basalt, granite, and other dense rock.
+- Normal is for wood, mossy stone, sandstone, limestone, and other softer or dampened hard surfaces.
+- Soft is for dirt, overgrowth, sand, mud, grass, and loose organic ground.
+- If a theme needs different footstep or landing behavior from its name-based default, set `soundHardness` explicitly on the room or wall data.
+
 ### Build & Tooling
 
 - Use a standard bundler (e.g., Vite or esbuild). Document the choice in `DECISIONS.md`.

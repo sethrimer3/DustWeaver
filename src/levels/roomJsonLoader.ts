@@ -179,6 +179,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     isPlatformFlag: w.isPlatform ? (1 as const) : (0 as const),
     platformEdge: w.platformEdge,
     blockTheme: blockThemeRefToTheme(w.blockThemeId) ?? w.blockTheme,
+    soundHardness: w.soundHardness,
     rampOrientation: w.rampOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? (1 as const) : (0 as const),
   }));
@@ -319,6 +320,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   // Propagate optional theme/background fields
   const roomBlockTheme = blockThemeRefToTheme(json.blockThemeId) ?? json.blockTheme;
   if (roomBlockTheme) room.blockTheme = roomBlockTheme;
+  if (json.soundHardness) room.soundHardness = json.soundHardness;
   if (json.backgroundId) room.backgroundId = json.backgroundId;
   if (json.lightingEffect) room.lightingEffect = json.lightingEffect;
   const resolvedSongId = parseSongId(json.songId);

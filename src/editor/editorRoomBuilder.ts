@@ -136,6 +136,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     isPlatformFlag: w.isPlatformFlag,
     platformEdge: w.platformEdge,
     blockTheme: w.blockTheme,
+    soundHardness: w.soundHardness,
     rampOrientation: w.rampOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
   }));

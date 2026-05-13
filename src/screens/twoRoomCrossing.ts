@@ -38,6 +38,8 @@ import type { RoomDef, TransitionDirection } from '../levels/roomDef';
 import {
   BLOCK_SIZE_MEDIUM,
   blockThemeToIndex,
+  blockSoundHardnessToIndex,
+  blockThemeToSoundHardness,
   WALL_THEME_DEFAULT_INDEX,
 } from '../levels/roomDef';
 import type { CameraState } from '../render/camera';
@@ -308,6 +310,9 @@ export function appendRoomWallsAtOffset(
     world.wallThemeIndex[idx]            = def.blockTheme !== undefined
       ? blockThemeToIndex(def.blockTheme)
       : WALL_THEME_DEFAULT_INDEX;
+    world.wallSoundHardnessIndex[idx]    = blockSoundHardnessToIndex(
+      def.soundHardness ?? room.soundHardness ?? blockThemeToSoundHardness(def.blockTheme ?? room.blockTheme),
+    );
     world.wallIsInvisibleFlag[idx]       = def.isInvisibleFlag === 1 ? 1 : 0;
     world.wallRampOrientationIndex[idx]  = def.rampOrientation !== undefined
       ? def.rampOrientation

@@ -201,6 +201,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isPlatformFlag: w.isPlatform ? 1 : 0,
     platformEdge: w.platformEdge ?? 0,
     blockTheme: resolveJsonBlockTheme(w.blockTheme, w.blockThemeId),
+    soundHardness: w.soundHardness,
     rampOrientation: w.rampOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? 1 : 0,
   }));
@@ -524,6 +525,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       }
       if (w.blockTheme !== undefined) wall.blockTheme = w.blockTheme;
       if (w.blockTheme !== undefined) wall.blockThemeId = blockThemeToId(w.blockTheme);
+      if (w.soundHardness !== undefined) wall.soundHardness = w.soundHardness;
       if (w.rampOrientation !== undefined) wall.rampOrientation = w.rampOrientation;
       if (w.isPillarHalfWidthFlag === 1) wall.isPillarHalfWidth = true;
       return wall;

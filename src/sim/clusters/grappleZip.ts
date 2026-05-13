@@ -30,7 +30,7 @@ import { raycastWalls, releaseGrapple } from './grappleShared';
 /**
  * Speed at which the player is zipped toward the grapple anchor.
  */
-const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 210.0;
+export const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 210.0;
 
 /**
  * Arrival distance (world units) — the player is snapped to the target when

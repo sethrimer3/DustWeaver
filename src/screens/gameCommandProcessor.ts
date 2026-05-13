@@ -79,6 +79,8 @@ export interface GameCommandResult {
   interactTriggered: boolean;
   /** True when the interact command fired (caller should start the interact pulse timer). */
   interactInputPulseTrigger: boolean;
+  /** True when a grapple fire command was accepted for the player this frame. */
+  grappleFireTriggered: boolean;
 }
 
 /**
@@ -106,6 +108,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
   let jumpTriggered = false;
   let interactTriggered = false;
   let interactInputPulseTrigger = false;
+  let grappleFireTriggered = false;
 
   for (let ci = 0; ci < commands.length; ci++) {
     const cmd = commands[ci];
@@ -215,6 +218,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
         } else {
           const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
           fireGrapple(world, aim.xWorld, aim.yWorld);
+          grappleFireTriggered = true;
           // If RMB is held while firing, trigger an instant zip toward the new anchor.
           if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0
               && ctx.inputState.isRightMouseDownFlag === 1) {
@@ -344,5 +348,5 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
     }
   }
 
-  return { moveDx, jumpTriggered, openPause, interactTriggered, interactInputPulseTrigger };
+  return { moveDx, jumpTriggered, openPause, interactTriggered, interactInputPulseTrigger, grappleFireTriggered };
 }

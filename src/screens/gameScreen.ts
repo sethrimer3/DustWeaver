@@ -62,6 +62,7 @@ import { ZIP_JUMP_WINDOW_SECONDS } from '../sim/clusters/grappleZip';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
+import { PlayerSfxManager } from '../audio/playerSfx';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { BloomSystem } from '../render/effects/bloomSystem';
 import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
@@ -99,6 +100,7 @@ import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { MAX_FALLING_BLOCK_GROUPS } from '../sim/fallingBlocks/fallingBlockTypes';
 import { processPlayerCommands } from './gameCommandProcessor';
+import { createPlayerSfxState, updatePlayerSfx } from './gamePlayerSfx';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
 import { checkRoomTransitions, getOppositeTransitionDirection } from './gameTransitions';
@@ -188,6 +190,8 @@ export function startGameScreen(
   const bloomSystem = new BloomSystem({ ...DEFAULT_BLOOM_CONFIG });
   const darkRoomOverlay = new DarkRoomOverlay();
   const renderProfiler = new RenderProfiler();
+  const playerSfx = new PlayerSfxManager();
+  const playerSfxState = createPlayerSfxState();
 
   // ── Weave loadout (replaces flat particle loadout for combat) ──────────
   // Initialize from progress if available, otherwise create default
@@ -1100,7 +1104,7 @@ export function startGameScreen(
     // ── Dialogue advance input (capture before collectCommands drains the flag)
     const dialogueAdvanceRequested = inputState.isDialogueAdvanceTriggeredFlag;
 
-    const { moveDx, jumpTriggered, openPause, interactTriggered, interactInputPulseTrigger } =
+    const { moveDx, jumpTriggered, openPause, interactTriggered, interactInputPulseTrigger, grappleFireTriggered } =
       processPlayerCommands({
         inputState, world, canvas,
         offsetXPx, offsetYPx, zoom,
@@ -1119,6 +1123,8 @@ export function startGameScreen(
         clearLambdaAnchorLink,
         lambdaTeleportFlash,
       });
+
+    let pendingGrappleFireSfx = grappleFireTriggered;
 
     // ── Dialogue advance ───────────────────────────────────────────────────
     // When dialogue is active, advance (or close) the overlay and suppress
@@ -1326,6 +1332,8 @@ export function startGameScreen(
       atmosphericLightDust.update(FIXED_DT_MS);
       skidDebris.update(world, FIXED_DT_MS);
       weakWallJumpDebris.update(world, FIXED_DT_MS);
+      updatePlayerSfx(playerSfx, playerSfxState, world, pendingGrappleFireSfx, FIXED_DT_MS / 1000);
+      pendingGrappleFireSfx = false;
 
       // ── Crumble block debris events & ambient lighting rebuild ────────────
       for (let ci = 0; ci < world.crumbleBlockCount; ci++) {
@@ -1653,6 +1661,7 @@ export function startGameScreen(
   rafHandle = requestAnimationFrame(frame);
 
   return () => {
+    playerSfx.stop();
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
     if (pauseMenuCleanup !== null) pauseMenuCleanup();

@@ -6,6 +6,8 @@ import {
   BLOCK_SIZE_MEDIUM,
   BLOCK_SIZE_SMALL,
   blockThemeToIndex,
+  blockSoundHardnessToIndex,
+  blockThemeToSoundHardness,
   WALL_THEME_DEFAULT_INDEX,
   PLAYER_HALF_WIDTH_WORLD,
   PLAYER_HALF_HEIGHT_WORLD,
@@ -46,6 +48,12 @@ export const DUST_CONTAINER_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
 export const DUST_CONTAINER_DUST_GAIN = 4;
 /** Epsilon used when deciding whether wall edges are contiguous during merge. */
 const WALL_MERGE_EPSILON_WORLD = 0.001;
+
+function resolveWallSoundHardnessIndex(room: RoomDef, wallTheme: string | undefined, explicitHardness: RoomDef['soundHardness']): number {
+  if (explicitHardness !== undefined) return blockSoundHardnessToIndex(explicitHardness);
+  if (room.soundHardness !== undefined) return blockSoundHardnessToIndex(room.soundHardness);
+  return blockSoundHardnessToIndex(blockThemeToSoundHardness(wallTheme ?? room.blockTheme));
+}
 
 /**
  * Maps a `CrumbleVariant` string to a packed integer stored in `crumbleBlockVariant[]`.
@@ -98,6 +106,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
   const fs: number[] = []; // isPlatformFlag (0 or 1)
   const pe: number[] = []; // platformEdge (0=top,1=bottom,2=left,3=right)
   const ts: number[] = []; // themeIndex
+  const sh: number[] = []; // soundHardnessIndex
   const iv: number[] = []; // isInvisibleFlag (0 or 1)
   const ro: number[] = []; // rampOrientationIndex (255 = not a ramp)
   const ph: number[] = []; // isPillarHalfWidthFlag (0 or 1)
@@ -117,6 +126,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     fs.push(def.isPlatformFlag === 1 ? 1 : 0);
     pe.push(def.platformEdge ?? 0);
     ts.push(def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX);
+    sh.push(resolveWallSoundHardnessIndex(room, def.blockTheme, def.soundHardness));
     iv.push(def.isInvisibleFlag === 1 ? 1 : 0);
     ro.push(def.rampOrientation !== undefined ? def.rampOrientation : 255);
     ph.push(isHalfWidthPillar ? 1 : 0);
@@ -134,6 +144,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
         // Only merge walls of the same type (both solid or both platform) and same theme
         if (fs[i] !== fs[j]) continue;
         if (ts[i] !== ts[j]) continue;
+        if (sh[i] !== sh[j]) continue;
         if (iv[i] !== iv[j]) continue;
         // Never merge ramps or half-width pillars
         if (ro[i] !== 255 || ro[j] !== 255) continue;
@@ -158,7 +169,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             ys[i] = ys[i] < ys[j] ? ys[i] : ys[j];
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
-            fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
             ro.splice(j, 1); ph.splice(j, 1);
             merged = true;
             break;
@@ -184,7 +195,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
             xs[i] = xs[i] < xs[j] ? xs[i] : xs[j];
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
-            fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); iv.splice(j, 1);
+            fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
             ro.splice(j, 1); ph.splice(j, 1);
             merged = true;
             break;
@@ -206,6 +217,7 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     world.wallIsPlatformFlag[wi] = fs[wi];
     world.wallPlatformEdge[wi] = pe[wi];
     world.wallThemeIndex[wi] = ts[wi];
+    world.wallSoundHardnessIndex[wi] = sh[wi];
     world.wallIsInvisibleFlag[wi] = iv[wi];
     world.wallRampOrientationIndex[wi] = ro[wi];
     world.wallIsPillarHalfWidthFlag[wi] = ph[wi];
@@ -303,6 +315,15 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
       world.wallWWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
+      world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined, undefined);
+      world.wallIsInvisibleFlag[wallIdx] = 0;
+      world.wallIsPlatformFlag[wallIdx] = 0;
+      world.wallPlatformEdge[wallIdx] = 0;
+      world.wallRampOrientationIndex[wallIdx] = 255;
+      world.wallIsPillarHalfWidthFlag[wallIdx] = 0;
+      world.wallIsBouncePadFlag[wallIdx] = 0;
+      world.wallBouncePadSpeedFactorIndex[wallIdx] = 0;
     }
 
     const bi = world.breakableBlockCount++;
@@ -332,6 +353,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallThemeIndex[wallIdx] = b.blockTheme !== undefined
         ? blockThemeToIndex(b.blockTheme)
         : WALL_THEME_DEFAULT_INDEX;
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, b.blockTheme, undefined);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
       world.wallRampOrientationIndex[wallIdx] = 255;
@@ -368,6 +390,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
       world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined, undefined);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
       world.wallPlatformEdge[wallIdx] = 0;
@@ -532,6 +555,7 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
       world.wallIsPlatformFlag[wallIndex]      = 0;
       world.wallPlatformEdge[wallIndex]        = 0;
       world.wallThemeIndex[wallIndex]          = WALL_THEME_DEFAULT_INDEX;
+      world.wallSoundHardnessIndex[wallIndex]  = resolveWallSoundHardnessIndex(room, undefined, undefined);
       // Falling block groups render through renderFallingBlocks(). This wall
       // slot exists only for broad collision/movement integration and must
       // stay invisible or the group's bounding box will be drawn as terrain.

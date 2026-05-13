@@ -43,6 +43,55 @@ export type BlockTheme = string;
  */
 export type BlockThemeId = string;
 
+/** Footstep and impact material hardness used by player sound effects. */
+export type BlockSoundHardness = 'soft' | 'normal' | 'hard';
+
+export const BLOCK_SOUND_HARDNESS_SOFT = 0;
+export const BLOCK_SOUND_HARDNESS_NORMAL = 1;
+export const BLOCK_SOUND_HARDNESS_HARD = 2;
+
+function normalizedThemeToken(theme: string): string {
+  return theme.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+export function blockThemeToSoundHardness(theme: string | undefined): BlockSoundHardness {
+  if (theme === undefined) return 'hard';
+  const t = normalizedThemeToken(theme);
+  if (
+    t.includes('dirt') ||
+    t.includes('sand') ||
+    t.includes('overgrowth') ||
+    t.includes('grass') ||
+    t.includes('mud') ||
+    t.includes('soil')
+  ) return 'soft';
+  if (
+    t.includes('wood') ||
+    t.includes('moss') ||
+    t.includes('sandstone') ||
+    t.includes('limestone') ||
+    t.includes('chalk') ||
+    t.includes('clay')
+  ) return 'normal';
+  return 'hard';
+}
+
+export function blockSoundHardnessToIndex(hardness: BlockSoundHardness): number {
+  switch (hardness) {
+    case 'soft': return BLOCK_SOUND_HARDNESS_SOFT;
+    case 'normal': return BLOCK_SOUND_HARDNESS_NORMAL;
+    case 'hard': return BLOCK_SOUND_HARDNESS_HARD;
+  }
+}
+
+export function blockSoundHardnessIndexToName(index: number): BlockSoundHardness {
+  switch (index) {
+    case BLOCK_SOUND_HARDNESS_SOFT: return 'soft';
+    case BLOCK_SOUND_HARDNESS_NORMAL: return 'normal';
+    default: return 'hard';
+  }
+}
+
 /** Maps a BlockTheme string to its compact JSON ID. */
 export function blockThemeToId(theme: string): string {
   switch (theme) {
@@ -412,6 +461,8 @@ export interface RoomWallDef {
   /** Per-wall block theme override.  When set, this wall renders with the
    *  specified theme instead of the room-level default. */
   blockTheme?: BlockTheme;
+  /** Per-wall player SFX material hardness. Defaults from blockTheme/room theme. */
+  soundHardness?: BlockSoundHardness;
   /** 1 if this wall is an invisible collision boundary (not rendered). */
   isInvisibleFlag?: 0 | 1;
   /**
@@ -841,6 +892,8 @@ export interface RoomDef {
    * sprite selection.  Falls back to worldNumber if not set.
    */
   blockTheme?: BlockTheme;
+  /** Default player SFX material hardness for walls in this room. */
+  soundHardness?: BlockSoundHardness;
   /**
    * Background visual ID.  When set, overrides the worldNumber-based background
    * image.  Falls back to worldNumber if not set.

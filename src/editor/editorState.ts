@@ -6,14 +6,14 @@
  * which can be exported to JSON and later rebuilt into a RoomDef.
  */
 
-import type { TransitionDirection, BlockTheme, BlockThemeId, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
 import { FOLDER_BLOCK_THEMES, folderThemeShortId } from '../render/walls/folderBlockThemes';
 
 // Re-export for convenience in editor modules
-export type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+export type { BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 export type { RoomSongId } from '../audio/musicManager';
 
 /** Options shown in the "Room Song" editor dropdown, in display order. */
@@ -322,6 +322,8 @@ export interface EditorWall {
   platformEdge: 0 | 1 | 2 | 3;
   /** Per-wall block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
+  /** Per-wall player SFX material hardness. Defaults from wall/room theme. */
+  soundHardness?: BlockSoundHardness;
   /**
    * Ramp orientation (0-3). Undefined or -1 = not a ramp.
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
