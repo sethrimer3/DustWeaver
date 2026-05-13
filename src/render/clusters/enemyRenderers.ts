@@ -661,10 +661,10 @@ export function renderWebSpider(
   ctx.fillRect(cx - halfPx, cy - halfPx, halfPx * 2, halfPx * 2);
 
   ctx.fillStyle = '#cccccc';
-  const dotR = Math.max(1, scalePx * 1.2);
+  const eyeDotRadiusPx = Math.max(1, scalePx * 1.2);
   ctx.beginPath();
-  ctx.arc(cx - dotR * 1.5, cy - dotR * 0.5, dotR, 0, Math.PI * 2);
-  ctx.arc(cx + dotR * 1.5, cy - dotR * 0.5, dotR, 0, Math.PI * 2);
+  ctx.arc(cx - eyeDotRadiusPx * 1.5, cy - eyeDotRadiusPx * 0.5, eyeDotRadiusPx, 0, Math.PI * 2);
+  ctx.arc(cx + eyeDotRadiusPx * 1.5, cy - eyeDotRadiusPx * 0.5, eyeDotRadiusPx, 0, Math.PI * 2);
   ctx.fill();
 
   if (cluster.webSpiderState === 1) {

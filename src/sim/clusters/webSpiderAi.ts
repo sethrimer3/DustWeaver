@@ -79,14 +79,14 @@ export const WEB_SPIDER_STATE_COOLDOWN = 2;
 function findWebAnchor(
   world: WorldState,
   spider: ClusterState,
-  playerXWorld: number,
-  playerYWorld: number,
+  playerPosXWorld: number,
+  playerPosYWorld: number,
   outAnchor: { x: number; y: number },
 ): boolean {
   const sx = spider.positionXWorld;
   const sy = spider.positionYWorld;
-  const dxToPlayer = playerXWorld - sx;
-  const dyToPlayer = playerYWorld - sy;
+  const dxToPlayer = playerPosXWorld - sx;
+  const dyToPlayer = playerPosYWorld - sy;
 
   let bestScore = -Infinity;
   let bestX = 0;
@@ -106,16 +106,16 @@ function findWebAnchor(
 
     // Sample up to 6 candidate anchor points on the wall surface edges:
     // top-center, bottom-center, left-center, right-center, top-left-quarter, top-right-quarter
-    const candidates: Array<[number, number]> = [
-      [wx + ww * 0.5,  wy],                  // top edge center
-      [wx + ww * 0.5,  wy + wh],             // bottom edge center
-      [wx,             wy + wh * 0.5],       // left edge center
-      [wx + ww,        wy + wh * 0.5],       // right edge center
-      [wx + ww * 0.25, wy],                  // top edge, left quarter
-      [wx + ww * 0.75, wy],                  // top edge, right quarter
-    ];
+    _candidateAnchors[0][0] = wx + ww * 0.5;  _candidateAnchors[0][1] = wy;
+    _candidateAnchors[1][0] = wx + ww * 0.5;  _candidateAnchors[1][1] = wy + wh;
+    _candidateAnchors[2][0] = wx;              _candidateAnchors[2][1] = wy + wh * 0.5;
+    _candidateAnchors[3][0] = wx + ww;         _candidateAnchors[3][1] = wy + wh * 0.5;
+    _candidateAnchors[4][0] = wx + ww * 0.25;  _candidateAnchors[4][1] = wy;
+    _candidateAnchors[5][0] = wx + ww * 0.75;  _candidateAnchors[5][1] = wy;
 
-    for (const [cx, cy] of candidates) {
+    for (let ci = 0; ci < _candidateAnchors.length; ci++) {
+      const cx = _candidateAnchors[ci][0];
+      const cy = _candidateAnchors[ci][1];
       const dx = cx - sx;
       const dy = cy - sy;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -209,14 +209,19 @@ function applyRopeConstraint(spider: ClusterState, anchorX: number, anchorY: num
 
 // ── Main per-spider tick ──────────────────────────────────────────────────────
 
-const _anchorOut = { x: 0, y: 0 };
+/** Pre-allocated candidate anchor points (6 × [x, y]) to avoid hot-path allocation. */
+const _candidateAnchors: Array<[number, number]> = [
+  [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0],
+];
+
+const scratchAnchorOut = { x: 0, y: 0 };
 
 function tickSingleWebSpider(
   world: WorldState,
   spider: ClusterState,
   dtSec: number,
-  playerXWorld: number,
-  playerYWorld: number,
+  playerPosXWorld: number,
+  playerPosYWorld: number,
 ): void {
   spider.webSpiderStateTicks++;
 
@@ -239,7 +244,7 @@ function tickSingleWebSpider(
     // ── SEEK: drift toward player, periodically search for an anchor ──────────
 
     // Horizontal drift toward player
-    const dxToPlayer = playerXWorld - spider.positionXWorld;
+    const dxToPlayer = playerPosXWorld - spider.positionXWorld;
     const absDx = dxToPlayer < 0 ? -dxToPlayer : dxToPlayer;
     const targetVelX = absDx > 6.0
       ? (dxToPlayer > 0 ? 1 : -1) * WEB_SPIDER_SEEK_DRIFT_SPEED_WORLD_PER_SEC
@@ -251,12 +256,12 @@ function tickSingleWebSpider(
     spider.webSpiderAnchorSearchTicks--;
     if (spider.webSpiderAnchorSearchTicks <= 0) {
       spider.webSpiderAnchorSearchTicks = WEB_SPIDER_ANCHOR_SEARCH_INTERVAL_TICKS;
-      if (findWebAnchor(world, spider, playerXWorld, playerYWorld, _anchorOut)) {
+      if (findWebAnchor(world, spider, playerPosXWorld, playerPosYWorld, scratchAnchorOut)) {
         // Attach!
-        spider.webSpiderAnchorXWorld = _anchorOut.x;
-        spider.webSpiderAnchorYWorld = _anchorOut.y;
-        const dx = spider.positionXWorld - _anchorOut.x;
-        const dy = spider.positionYWorld - _anchorOut.y;
+        spider.webSpiderAnchorXWorld = scratchAnchorOut.x;
+        spider.webSpiderAnchorYWorld = scratchAnchorOut.y;
+        const dx = spider.positionXWorld - scratchAnchorOut.x;
+        const dy = spider.positionYWorld - scratchAnchorOut.y;
         spider.webSpiderRopeLengthWorld = Math.sqrt(dx * dx + dy * dy);
         spider.webSpiderState = WEB_SPIDER_STATE_SWINGING;
         spider.webSpiderStateTicks = 0;
@@ -280,8 +285,8 @@ function tickSingleWebSpider(
       const nx = dx / dist;
       const ny = dy / dist;
       // Project player direction onto tangent plane (perpendicular to rope normal)
-      const dxToPlayer = playerXWorld - spider.positionXWorld;
-      const dyToPlayer = playerYWorld - spider.positionYWorld;
+      const dxToPlayer = playerPosXWorld - spider.positionXWorld;
+      const dyToPlayer = playerPosYWorld - spider.positionYWorld;
       const dot = dxToPlayer * nx + dyToPlayer * ny;
       const tangX = dxToPlayer - dot * nx;
       const tangY = dyToPlayer - dot * ny;
@@ -298,8 +303,8 @@ function tickSingleWebSpider(
     applyRopeConstraint(spider, ax, ay, spider.webSpiderRopeLengthWorld);
 
     // Detach conditions
-    const dxToPlayer2 = playerXWorld - spider.positionXWorld;
-    const dyToPlayer2 = playerYWorld - spider.positionYWorld;
+    const dxToPlayer2 = playerPosXWorld - spider.positionXWorld;
+    const dyToPlayer2 = playerPosYWorld - spider.positionYWorld;
     const distToPlayer = Math.sqrt(dxToPlayer2 * dxToPlayer2 + dyToPlayer2 * dyToPlayer2);
     const tooLong = spider.webSpiderStateTicks >= WEB_SPIDER_MAX_SWING_TICKS;
     const closeToPlayer = distToPlayer < 12.0;
@@ -372,14 +377,14 @@ function tickFadingWebs(world: WorldState): void {
  */
 export function applyWebSpiderAI(world: WorldState): void {
   // Find player
-  let playerXWorld = 0;
-  let playerYWorld = 0;
+  let playerPosXWorld = 0;
+  let playerPosYWorld = 0;
   let hasPlayer = false;
   for (let ci = 0; ci < world.clusters.length; ci++) {
     const c = world.clusters[ci];
     if (c.isPlayerFlag === 1 && c.isAliveFlag === 1) {
-      playerXWorld = c.positionXWorld;
-      playerYWorld = c.positionYWorld;
+      playerPosXWorld = c.positionXWorld;
+      playerPosYWorld = c.positionYWorld;
       hasPlayer = true;
       break;
     }
@@ -395,8 +400,8 @@ export function applyWebSpiderAI(world: WorldState): void {
     if (!hasPlayer) continue;
 
     // Only activate when player is within detection radius
-    const dxToPlayer = playerXWorld - spider.positionXWorld;
-    const dyToPlayer = playerYWorld - spider.positionYWorld;
+    const dxToPlayer = playerPosXWorld - spider.positionXWorld;
+    const dyToPlayer = playerPosYWorld - spider.positionYWorld;
     const distSq = dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer;
     const detectionSq = WEB_SPIDER_DETECTION_RADIUS_WORLD * WEB_SPIDER_DETECTION_RADIUS_WORLD;
     if (distSq > detectionSq) {
@@ -414,7 +419,7 @@ export function applyWebSpiderAI(world: WorldState): void {
       continue;
     }
 
-    tickSingleWebSpider(world, spider, dtSec, playerXWorld, playerYWorld);
+    tickSingleWebSpider(world, spider, dtSec, playerPosXWorld, playerPosYWorld);
   }
 
   tickFadingWebs(world);
