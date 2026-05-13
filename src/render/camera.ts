@@ -147,6 +147,26 @@ export function updateCameraWithBounds(
 }
 
 /**
+ * Smoothly move the camera toward the target without clamping to any bounds.
+ *
+ * Used in "Always Center Camera" mode: the player stays centred on screen and
+ * areas outside the room show as black void.  Caller is responsible for not
+ * passing a clip rect that would cut off out-of-room content.
+ *
+ * @param dtSec - frame delta time in seconds.
+ */
+export function updateCameraUnclamped(
+  camera: CameraState,
+  targetXWorld: number,
+  targetYWorld: number,
+  dtSec: number,
+): void {
+  const t = Math.min(1.0, CAMERA_FOLLOW_SPEED * dtSec);
+  camera.centerXWorld += (targetXWorld - camera.centerXWorld) * t;
+  camera.centerYWorld += (targetYWorld - camera.centerYWorld) * t;
+}
+
+/**
  * Compute the screen-space offset needed to position world origin on
  * the canvas given the current camera state.
  *

@@ -286,6 +286,13 @@ export interface RenderFrameContext {
   crossingUnionMinYWorld: number;
   crossingUnionMaxXWorld: number;
   crossingUnionMaxYWorld: number;
+  /**
+   * When true, the camera is not clamped to room bounds — the player stays
+   * centred on screen and areas outside the room render as black void.
+   * In this mode the room clip rect is removed so out-of-room content is
+   * visible without being cut off.
+   */
+  alwaysCenterCamera: boolean;
 }
 
 /**
@@ -494,10 +501,14 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // Constrain all world-space rendering to the clip rect so out-of-bounds
   // areas remain black even when camera framing shows beyond room extents.
+  // In always-center camera mode the clip is skipped — black void outside the
+  // room is shown intentionally, so we must not cut off room content at edges.
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(clipScreenXPx, clipScreenYPx, clipScreenWPx, clipScreenHPx);
-  ctx.clip();
+  if (!r.alwaysCenterCamera) {
+    ctx.beginPath();
+    ctx.rect(clipScreenXPx, clipScreenYPx, clipScreenWPx, clipScreenHPx);
+    ctx.clip();
+  }
 
   // ── World background with parallax ──────────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BACKGROUND);
