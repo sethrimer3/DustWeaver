@@ -642,8 +642,12 @@ export function renderBeeSwarm(
 
 // ── Web Spider ────────────────────────────────────────────────────────────────
 
+/** Shared web strand visual constants — used by both active and fading web renderers. */
+const WEB_LINE_WIDTH_PX   = 0.8;
+const WEB_DASH_PATTERN    = [3, 3];
+
 /**
- * Renders a single web spider cluster. The body is an 8×8 dark-grey square
+ * Renders a single web spider cluster. The body is an 8×8 dark square (near-black)
  * with a white web-strand line from the body to the anchor when attached.
  */
 export function renderWebSpider(
@@ -673,8 +677,8 @@ export function renderWebSpider(
     ctx.save();
     ctx.globalAlpha = 0.9;
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 0.8;
-    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = WEB_LINE_WIDTH_PX;
+    ctx.setLineDash(WEB_DASH_PATTERN);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(ax, ay);
@@ -708,8 +712,8 @@ export function renderWebSpiderFadingWebs(
 
   ctx.save();
   ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 0.8;
-  ctx.setLineDash([3, 3]);
+  ctx.lineWidth = WEB_LINE_WIDTH_PX;
+  ctx.setLineDash(WEB_DASH_PATTERN);
 
   for (let i = 0; i < max; i++) {
     if (rem[i] <= 0) continue;

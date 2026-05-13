@@ -130,7 +130,7 @@ function findWebAnchor(
       if (hit.wallIndex !== wi) continue; // a different wall blocked the path
 
       // Score: prefer anchors that are above/to-the-side and move toward player
-      // Higher Y = lower on screen (Y-down coordinate system), so cy < sy means ABOVE
+      // Lower Y value = higher on screen (Y-down coordinate system), so cy < sy means visually ABOVE
       const aboveBonus    = cy < sy ? 30.0 : 0.0;
       const sideBonus     = Math.abs(cx - sx) > 8.0 ? 15.0 : 0.0;
       const playerDotScore = (dx * dxToPlayer + dy * dyToPlayer) / (dist + 1.0);
@@ -164,7 +164,9 @@ function addFadingWeb(
 ): void {
   const maxWebs = world.webSpiderFadingWebMaxCount;
   if (maxWebs === 0) return;
-  const slot = world.webSpiderFadingWebWriteIndex % maxWebs;
+  // writeIndex is always kept in-bounds by the wrapping assignment below;
+  // no additional modulo needed here.
+  const slot = world.webSpiderFadingWebWriteIndex;
   world.webSpiderFadingWebFromXWorld[slot] = fromX;
   world.webSpiderFadingWebFromYWorld[slot] = fromY;
   world.webSpiderFadingWebToXWorld[slot] = toX;
@@ -232,12 +234,12 @@ function tickSingleWebSpider(
   const prevY = spider.positionYWorld;
   const wasGrounded = spider.isGroundedFlag === 1;
 
-  // ── Gravity always applies (except when swinging at anchor, handled below) ──
-  if (state !== WEB_SPIDER_STATE_SWINGING) {
-    spider.velocityYWorld += WEB_SPIDER_GRAVITY_WORLD_PER_SEC2 * dtSec;
-    if (spider.velocityYWorld > WEB_SPIDER_FALL_CAP_WORLD_PER_SEC) {
-      spider.velocityYWorld = WEB_SPIDER_FALL_CAP_WORLD_PER_SEC;
-    }
+  // ── Gravity — applied in all states; rope constraint removes outward component ──
+  spider.velocityYWorld += WEB_SPIDER_GRAVITY_WORLD_PER_SEC2 * dtSec;
+  // Cap downward speed only in non-swinging states; the rope constrains
+  // effective motion while swinging, so an uncapped value is harmless there.
+  if (state !== WEB_SPIDER_STATE_SWINGING && spider.velocityYWorld > WEB_SPIDER_FALL_CAP_WORLD_PER_SEC) {
+    spider.velocityYWorld = WEB_SPIDER_FALL_CAP_WORLD_PER_SEC;
   }
 
   if (state === WEB_SPIDER_STATE_SEEK) {
@@ -249,8 +251,9 @@ function tickSingleWebSpider(
     const targetVelX = absDx > 6.0
       ? (dxToPlayer > 0 ? 1 : -1) * WEB_SPIDER_SEEK_DRIFT_SPEED_WORLD_PER_SEC
       : 0.0;
-    const accelAlpha = Math.min(1.0, WEB_SPIDER_SEEK_ACCEL_WORLD_PER_SEC2 * dtSec / WEB_SPIDER_SEEK_DRIFT_SPEED_WORLD_PER_SEC);
-    spider.velocityXWorld += (targetVelX - spider.velocityXWorld) * accelAlpha;
+    // Lerp factor: fraction of the speed-gap to close this tick
+    const velocityBlendFactor = Math.min(1.0, WEB_SPIDER_SEEK_ACCEL_WORLD_PER_SEC2 * dtSec / WEB_SPIDER_SEEK_DRIFT_SPEED_WORLD_PER_SEC);
+    spider.velocityXWorld += (targetVelX - spider.velocityXWorld) * velocityBlendFactor;
 
     // Periodically search for a web anchor
     spider.webSpiderAnchorSearchTicks--;
@@ -269,13 +272,11 @@ function tickSingleWebSpider(
     }
 
   } else if (state === WEB_SPIDER_STATE_SWINGING) {
-    // ── SWINGING: rope constraint + gravity + pull toward player ──────────────
+    // ── SWINGING: rope constraint + pull toward player ────────────────────────
+    // (gravity was applied above; rope constraint removes outward radial component)
 
     const ax = spider.webSpiderAnchorXWorld;
     const ay = spider.webSpiderAnchorYWorld;
-
-    // Gravity
-    spider.velocityYWorld += WEB_SPIDER_GRAVITY_WORLD_PER_SEC2 * dtSec;
 
     // Tangential pull toward player: compute tangent direction, add impulse
     const dx = spider.positionXWorld - ax;
