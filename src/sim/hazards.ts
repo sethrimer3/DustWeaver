@@ -35,14 +35,51 @@ const SPRINGBOARD_LAUNCH_SPEED_WORLD = 420.0;
 /** Animation duration for springboard bounce (ticks). */
 const SPRINGBOARD_ANIM_TICKS = 12;
 
-/** Gravity multiplier when inside a water zone (fraction of normal gravity). */
-export const WATER_GRAVITY_MULTIPLIER = 0.30;
-/** Maximum fall speed inside water (world units/s). */
-export const WATER_MAX_FALL_SPEED_WORLD = 40.0;
-/** Maximum horizontal speed inside water (world units/s). */
-export const WATER_MAX_HORIZONTAL_SPEED_WORLD = 60.0;
-/** Upward buoyancy force when below the water surface (world units/s²). */
-export const WATER_BUOYANCY_FORCE_WORLD = 280.0;
+// ── Water physics tuning ─────────────────────────────────────────────────────
+
+/**
+ * Gravity multiplier when inside a water zone.
+ * At 0.12, gravity is very weak — buoyancy force dominates for a strongly
+ * floaty feel. Fast divers bleed speed via per-tick drag instead of a hard cap.
+ */
+export const WATER_GRAVITY_MULTIPLIER = 0.12;
+
+/**
+ * Strong upward buoyancy force (world units/s²), scaled by submersion ratio.
+ * Full force when fully submerged; partial when only partly in water.
+ * High value ensures slow-entry players quickly bob upward.
+ */
+export const WATER_BUOYANCY_FORCE_WORLD = 520.0;
+
+/**
+ * Horizontal drag multiplier applied per tick in water (0–1).
+ * 1.0 = no drag; lower = more resistance per tick.
+ */
+export const WATER_HORIZONTAL_DRAG_FACTOR = 0.90;
+
+/**
+ * Vertical drag multiplier applied per tick in water (0–1).
+ * Applied AFTER buoyancy so fast dives naturally bleed momentum.
+ */
+export const WATER_VERTICAL_DRAG_FACTOR = 0.88;
+
+/**
+ * Maximum upward float speed in water (negative = upward, wu/s).
+ * Prevents the player from rocketing to the surface indefinitely.
+ */
+export const WATER_MAX_FLOAT_SPEED_WORLD = -80.0;
+
+/**
+ * Maximum fall/dive speed in water (wu/s). Set high so fast dives are not
+ * capped — rely on WATER_VERTICAL_DRAG_FACTOR instead for natural slow-down.
+ */
+export const WATER_MAX_FALL_SPEED_WORLD = 400.0;
+
+/**
+ * Horizontal speed safety clamp in water (wu/s, extreme edge case only).
+ * Normal resistance comes from WATER_HORIZONTAL_DRAG_FACTOR.
+ */
+export const WATER_MAX_HORIZONTAL_SPEED_WORLD = 80.0;
 
 /** Damage dealt by lava per contact (with invulnerability cooldown). */
 const LAVA_ZONE_DAMAGE = 1;
@@ -96,6 +133,56 @@ function bounceAxis(
   if (pos < min) return { pos: min, vel: Math.abs(vel) };
   if (pos > max) return { pos: max, vel: -Math.abs(vel) };
   return { pos, vel };
+}
+
+/**
+ * Pre-computes player water state (AABB overlap + submersion ratio) before
+ * applyClusterMovement so that playerMovement reads the correct flag for this tick.
+ * applyHazards() re-runs the same detection to apply buoyancy/drag physics.
+ *
+ * Uses AABB overlap instead of center-point: entry fires when the player's
+ * feet first break the water surface.
+ */
+export function computePlayerWaterState(world: WorldState): void {
+  const player = world.clusters[0];
+  if (player === undefined || player.isAliveFlag === 0) {
+    world.isPlayerInWaterFlag = 0;
+    world.playerWaterSubmersionRatio = 0;
+    return;
+  }
+
+  const px  = player.positionXWorld;
+  const py  = player.positionYWorld;
+  const phw = player.halfWidthWorld;
+  const phh = player.halfHeightWorld;
+
+  world.isPlayerInWaterFlag = 0;
+  world.playerWaterSubmersionRatio = 0;
+
+  for (let i = 0; i < world.waterZoneCount; i++) {
+    const wLeft   = world.waterZoneXWorld[i];
+    const wTop    = world.waterZoneYWorld[i];
+    const wRight  = wLeft + world.waterZoneWWorld[i];
+    const wBottom = wTop  + world.waterZoneHWorld[i];
+
+    const pLeft   = px - phw;
+    const pRight  = px + phw;
+    const pTop    = py - phh;
+    const pBottom = py + phh;
+
+    if (pRight <= wLeft || pLeft >= wRight || pBottom <= wTop || pTop >= wBottom) continue;
+
+    // Compute vertical submersion ratio (0 = foot just touching, 1 = fully under)
+    const overlapTop    = Math.max(pTop, wTop);
+    const overlapBottom = Math.min(pBottom, wBottom);
+    const overlapH      = Math.max(0, overlapBottom - overlapTop);
+    const playerH       = phh * 2.0;
+    const submersion    = playerH > 0.1 ? Math.min(1.0, overlapH / playerH) : 0;
+
+    world.isPlayerInWaterFlag = 1;
+    world.playerWaterSubmersionRatio = submersion;
+    break;
+  }
 }
 
 /**
@@ -170,33 +257,70 @@ export function applyHazards(world: WorldState): void {
   }
 
   // ── Water zones ──────────────────────────────────────────────────────────
-  // Check if player center is inside any water zone.
+  // isPlayerInWaterFlag + playerWaterSubmersionRatio were pre-computed by
+  // computePlayerWaterState() before applyClusterMovement this tick.
+  // Re-run AABB detection here to apply buoyancy/drag physics and track entry.
+  const wasInWaterLastTick = world.isPlayerWasInWaterLastTickFlag;
+
   world.isPlayerInWaterFlag = 0;
+  world.playerWaterSubmersionRatio = 0;
+
   for (let i = 0; i < world.waterZoneCount; i++) {
-    const wLeft = world.waterZoneXWorld[i];
-    const wTop = world.waterZoneYWorld[i];
-    const wRight = wLeft + world.waterZoneWWorld[i];
-    const wBottom = wTop + world.waterZoneHWorld[i];
+    const wLeft   = world.waterZoneXWorld[i];
+    const wTop    = world.waterZoneYWorld[i];
+    const wRight  = wLeft + world.waterZoneWWorld[i];
+    const wBottom = wTop  + world.waterZoneHWorld[i];
 
-    if (px >= wLeft && px <= wRight && py >= wTop && py <= wBottom) {
-      world.isPlayerInWaterFlag = 1;
+    const pLeft   = px - phw;
+    const pRight  = px + phw;
+    const pTop    = py - phh;
+    const pBottom = py + phh;
 
-      // Buoyancy: push player up when below the surface
-      if (py > wTop + phh) {
-        player.velocityYWorld -= WATER_BUOYANCY_FORCE_WORLD * dtSec;
-      }
+    if (pRight <= wLeft || pLeft >= wRight || pBottom <= wTop || pTop >= wBottom) continue;
 
-      // Clamp speeds in water
-      if (player.velocityYWorld > WATER_MAX_FALL_SPEED_WORLD) {
-        player.velocityYWorld = WATER_MAX_FALL_SPEED_WORLD;
-      }
-      if (player.velocityXWorld > WATER_MAX_HORIZONTAL_SPEED_WORLD) {
-        player.velocityXWorld = WATER_MAX_HORIZONTAL_SPEED_WORLD;
-      } else if (player.velocityXWorld < -WATER_MAX_HORIZONTAL_SPEED_WORLD) {
-        player.velocityXWorld = -WATER_MAX_HORIZONTAL_SPEED_WORLD;
-      }
-      break; // one water zone check per tick
+    const overlapTop    = Math.max(pTop, wTop);
+    const overlapBottom = Math.min(pBottom, wBottom);
+    const overlapH      = Math.max(0, overlapBottom - overlapTop);
+    const playerH       = phh * 2.0;
+    const submersion    = playerH > 0.1 ? Math.min(1.0, overlapH / playerH) : 0;
+
+    world.isPlayerInWaterFlag = 1;
+    world.playerWaterSubmersionRatio = submersion;
+
+    // Buoyancy: upward force scaled by submersion ratio.
+    // Only apply when player center is below the water top (actually submerged).
+    if (py > wTop) {
+      player.velocityYWorld -= WATER_BUOYANCY_FORCE_WORLD * submersion * dtSec;
     }
+
+    // Clamp upward float speed (prevent rocketing to surface)
+    if (player.velocityYWorld < WATER_MAX_FLOAT_SPEED_WORLD) {
+      player.velocityYWorld = WATER_MAX_FLOAT_SPEED_WORLD;
+    }
+
+    // Per-tick drag — bleeds off both downward dive momentum and upward excess
+    player.velocityYWorld *= WATER_VERTICAL_DRAG_FACTOR;
+    player.velocityXWorld *= WATER_HORIZONTAL_DRAG_FACTOR;
+
+    // Extreme safety clamp horizontal (drag handles normal range)
+    if (player.velocityXWorld > WATER_MAX_HORIZONTAL_SPEED_WORLD) {
+      player.velocityXWorld = WATER_MAX_HORIZONTAL_SPEED_WORLD;
+    } else if (player.velocityXWorld < -WATER_MAX_HORIZONTAL_SPEED_WORLD) {
+      player.velocityXWorld = -WATER_MAX_HORIZONTAL_SPEED_WORLD;
+    }
+
+    break; // one water zone per tick
+  }
+
+  // Update previous-tick flag and record entry speed for splash detection
+  world.isPlayerWasInWaterLastTickFlag = world.isPlayerInWaterFlag;
+  if (wasInWaterLastTick === 0 && world.isPlayerInWaterFlag === 1) {
+    world.playerWaterEntrySpeedWorld = Math.sqrt(
+      player.velocityXWorld * player.velocityXWorld +
+      player.velocityYWorld * player.velocityYWorld,
+    );
+  } else if (world.isPlayerInWaterFlag === 0) {
+    world.playerWaterEntrySpeedWorld = 0;
   }
 
   // ── Lava zones ───────────────────────────────────────────────────────────

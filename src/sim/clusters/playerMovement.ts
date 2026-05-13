@@ -221,7 +221,11 @@ export function tickPlayerMovement(
   // (step 0.25) handles the actual swing physics.
   const baseGrav = ov(debugSpeedOverrides.gravityWorld, NORMAL_GRAVITY_WORLD_PER_SEC2);
   // Water buoyancy reduces effective gravity when the player is submerged.
-  const waterMult = world.isPlayerInWaterFlag === 1 ? WATER_GRAVITY_MULTIPLIER : 1.0;
+  // Scale gravity by submersion ratio for a smooth entry feel (not a hard switch).
+  const submersion = world.playerWaterSubmersionRatio;
+  const waterMult = world.isPlayerInWaterFlag === 1
+    ? WATER_GRAVITY_MULTIPLIER + (1.0 - WATER_GRAVITY_MULTIPLIER) * (1.0 - submersion)
+    : 1.0;
   let grav: number;
   if (world.isGrappleActiveFlag === 1) {
     // Consistent gravity for pendulum swing.
@@ -309,7 +313,6 @@ export function tickPlayerMovement(
     const isBraking = cluster.isFastFallModeFlag === 1
         && world.playerJumpHeldFlag === 1
         && cluster.velocityYWorld > normalFallCap;
-    const vyBeforeBrake = cluster.velocityYWorld;
     if (isBraking) {
       const upwardBrake = ov(debugSpeedOverrides.upwardBrakeStrengthWorld, UPWARD_BRAKE_STRENGTH_PER_SEC2);
       cluster.velocityYWorld -= (upwardBrake + grav * waterMult) * dtSec;
@@ -319,19 +322,7 @@ export function tickPlayerMovement(
       }
     }
 
-    // DEBUG: fast-fall brake diagnostics (temporary — remove once brake is verified)
-    if (cluster.isFastFallModeFlag === 1 || isBraking) {
-      console.log(
-        `[FF] tick=${world.tick}` +
-        ` isFastFallMode=${cluster.isFastFallModeFlag}` +
-        ` jumpHeld=${world.playerJumpHeldFlag}` +
-        ` vy_before=${vyBeforeBrake.toFixed(2)}` +
-        ` vy_after=${cluster.velocityYWorld.toFixed(2)}` +
-        ` normalCap=${normalFallCap.toFixed(2)}` +
-        ` fastCap=${fastFallCap.toFixed(2)}` +
-        ` brakeRan=${isBraking}`,
-      );
-    }
+    // DEBUG: fast-fall brake diagnostics removed (verified correct)
   }
 
 
