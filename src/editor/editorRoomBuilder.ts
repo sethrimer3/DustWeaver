@@ -406,7 +406,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
   const interiorWalls: EditorWall[] = [];
   for (const w of extractInteriorWalls(room)) {
     const shouldExpand =
-      (w.rampOrientation === undefined || w.rampOrientation === null) &&
+      w.rampOrientation == null &&
       (w.isPillarHalfWidthFlag ?? 0) === 0 &&
       (w.isPlatformFlag ?? 0) === 0 &&
       (w.wBlock > 1 || w.hBlock > 1);
