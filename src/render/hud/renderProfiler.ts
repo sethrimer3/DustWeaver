@@ -438,9 +438,12 @@ export class RenderProfiler {
       const ts = this._transitionStats;
       const transLines = [
         `Room: ${ts.currentRoomId.slice(0, 14)}`,
-        `Trans: ${ts.isTransitioning ? 'YES' : 'no'}`,
+        `Dest: ${ts.destinationRoomId.slice(0, 14) || '—'}`,
+        `Trans: ${ts.isCameraTransitioning ? `${(ts.cameraTransProgress * 100).toFixed(0)}%` : 'no'}`,
         `Spd@X: ${ts.lastPlayerSpeedWorld.toFixed(0)}wu/s`,
-        `Dur:   ${ts.lastDurationMs.toFixed(0)}ms`,
+        `CamS: ${ts.cameraTransStartXWorld.toFixed(0)},${ts.cameraTransStartYWorld.toFixed(0)}`,
+        `CamT: ${ts.cameraTransTargetXWorld.toFixed(0)},${ts.cameraTransTargetYWorld.toFixed(0)}`,
+        `AdjRm: ${ts.isAdjacentRoomRenderingDisabled ? 'OFF' : 'on'}`,
         `Bubbs: ${ts.activeBubbleCount}`,
         `Edge$: ${ts.edgeCacheFilled ? 'OK' : '--'}`,
       ];
