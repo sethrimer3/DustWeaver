@@ -52,4 +52,23 @@ export interface TransitionDebugStats {
   activeBubbleCount: number;
   /** Whether the edge extension cache is populated for the current room. */
   edgeCacheFilled: boolean;
+  /** Whether the smooth camera transition is currently interpolating. */
+  isCameraTransitioning: boolean;
+  /** Camera transition progress [0, 1]. */
+  cameraTransProgress: number;
+  /** Camera start X world unit (at the moment of room switch). */
+  cameraTransStartXWorld: number;
+  /** Camera start Y world unit (at the moment of room switch). */
+  cameraTransStartYWorld: number;
+  /** Camera target X world unit (clamped position in the new room). */
+  cameraTransTargetXWorld: number;
+  /** Camera target Y world unit (clamped position in the new room). */
+  cameraTransTargetYWorld: number;
+  /** Room ID of the destination during or after the last transition. */
+  destinationRoomId: string;
+  /**
+   * True when adjacent-room gameplay rendering is disabled.
+   * Always true in BUILD 297+; preserved as an explicit flag for debugging.
+   */
+  isAdjacentRoomRenderingDisabled: boolean;
 }

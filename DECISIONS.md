@@ -958,3 +958,54 @@ and are read-only from the renderer; they have no physics effect.
 - Room loading now sets `selectedBlockTheme` directly without calling
   `selectBlockTheme()`, so loading a room with `blockTheme: 'blackRock'` no longer
   pushes blackRock into the recent-theme list.
+
+## Room Transition System (BUILD 297)
+
+### Single-Room Switch with Smooth Camera Interpolation
+
+In BUILD 279–296 room transitions used a "seamless crossing" system that placed
+both the source and destination rooms side-by-side in world space during the
+crossing window, rendering two rooms simultaneously.  This caused visual
+misalignment artefacts where rooms appeared offset, then snap-aligned, then
+offset again, because the two-room coordinate shift did not always match the
+authored transition opening positions exactly.
+
+**BUILD 297 removes dual-room rendering entirely for normal gameplay transitions.**
+
+#### New transition flow
+
+1. Player enters a transition trigger zone.
+2. `checkRoomTransitions` fires the callback.
+3. The camera position in the old room is recorded (`oldCamX`, `oldCamY`).
+4. `loadRoom(destinationRoom, spawnX, spawnY)` runs synchronously:
+   - Previous room is discarded; only the destination room is active.
+   - Camera is snapped to the spawn-clamped position by `snapCamera()`.
+5. The snapped position is saved as `camTransTargetXWorld/Y`.
+6. Camera is restored to `oldCamX/Y` (old room position) so interpolation
+   starts from where the player was looking.
+7. A 0.35-second smoothstep ease-out interpolation runs (`_camTransEase`):
+   - Overrides `updateCameraWithBounds` and `updateCameraUnclamped` for
+     the duration.
+   - Camera pans from old position to new room's correct clamped position.
+8. After the interpolation completes, normal camera follow-and-clamp resumes.
+
+A 400ms transition cooldown (`TRANSITION_COOLDOWN_MS`) prevents the return
+transition from re-triggering immediately when the player spawns near it.
+
+#### Feature flags
+
+- `ENABLE_TWO_ROOM_CAMERA_CROSSING = false` — disabled in BUILD 297.
+  All dual-room rendering, seamless staging, and union-bounds camera logic
+  is inactive.  The flag is preserved so the system can be re-evaluated later.
+- `ENABLE_EDGE_EXTENSION_RENDERING = false` — unchanged; still off.
+- `ENABLE_NEXT_ROOM_EDGE_PREVIEW = false` — unchanged; still off.
+
+#### What is preserved
+
+- The editor visual map still shows all rooms side-by-side (not affected).
+- Editor connection previews and the `transitionPreviewCtx` / facing-edge strip
+  system are unchanged.
+- The `TransitionRevealState` (NearTransition / PostTransition edge-extension
+  camera reveal) still runs during normal gameplay for the small edge-extension
+  reveal effect, but is now only relevant when `ENABLE_EDGE_EXTENSION_RENDERING`
+  or `ENABLE_NEXT_ROOM_EDGE_PREVIEW` is re-enabled.

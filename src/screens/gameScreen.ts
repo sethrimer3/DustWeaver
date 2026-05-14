@@ -26,9 +26,11 @@ import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef'
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, updateCameraWithBounds, updateCameraUnclamped, getCameraOffset } from '../render/camera';
+// BUILD 297: ENABLE_TWO_ROOM_CAMERA_CROSSING is false, so isCrossingComplete /
+// getCrossingUnionBounds are only reachable via the preserved dead-code guard
+// block that allows easy re-enablement of the crossing system in the future.
 import {
   createTwoRoomCrossingState,
-  startCrossing,
   isCrossingComplete,
   getCrossingUnionBounds,
   type TwoRoomCrossingState,
@@ -37,7 +39,9 @@ import {
   type SeamlessStagingState,
   createSeamlessStagingState,
   resetSeamlessStagingState,
-  clearStagedRoomsAndNormalize,
+  // finalizeCrossingSeamless is only reached when ENABLE_TWO_ROOM_CAMERA_CROSSING
+  // is true.  Preserved so the crossing system can be re-enabled without
+  // additional import surgery.
   finalizeCrossingSeamless,
   computeStagingUnionBounds,
 } from './gameSeamlessStaging';
@@ -146,6 +150,14 @@ const FIXED_VIRTUAL_HEIGHT_PX = 270;
 const BASE = import.meta.env.BASE_URL;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+/**
+ * Smoothstep ease-out curve for camera transition interpolation.
+ * Returns a value in [0, 1] for input t in [0, 1].
+ */
+function _camTransEase(t: number): number {
+  return t * t * (3 - 2 * t);
+}
 
 function createFallbackRoomDef(): RoomDef {
   return {
@@ -388,6 +400,12 @@ export function startGameScreen(
 
     // BUILD 284: Reset seamless-staging state on any full room load.
     resetSeamlessStagingState(stagingState);
+
+    // BUILD 297: Cancel any in-progress camera transition so non-transition
+    // room loads (death respawn, editor reload, lambda teleport) do not
+    // inherit the interpolation.  The transition callback sets it true AFTER
+    // loadRoom returns, so clearing it here is always safe.
+    camTransIsActive = false;
 
     // Apply world-specific block sprites and background
     if (room.blockTheme) {
@@ -698,9 +716,32 @@ export function startGameScreen(
   // future dual-room rendering.  See transitionPreviewContext.ts.
   const transitionPreviewCtx: TransitionPreviewContext = createTransitionPreviewContext();
 
+  // ── Camera transition state ───────────────────────────────────────────────
+  // BUILD 297: After every room switch the camera smoothly interpolates from
+  // its world-space position in the old room to the clamped target position in
+  // the new room.  Only one room is ever rendered (no staged adjacent rooms).
+  // `camTransIsActive` is set to false at the top of _makeLoadRoomPhases so
+  // non-transition loads (death respawn, editor reload) never trigger it.
+  let camTransIsActive = false;
+  let camTransStartXWorld = 0;
+  let camTransStartYWorld = 0;
+  let camTransTargetXWorld = 0;
+  let camTransTargetYWorld = 0;
+  let camTransElapsedSec = 0;
+  /** Duration of the post-switch camera interpolation in seconds. */
+  const CAM_TRANS_DURATION_SEC = 0.35;
+
+  // ── Transition cooldown ───────────────────────────────────────────────────
+  // After a room switch, block checkRoomTransitions for this many milliseconds
+  // so the spawn point's proximity to the return transition does not
+  // immediately fire another room switch (double-trigger bug).
+  let transitionCooldownMs = 0;
+  const TRANSITION_COOLDOWN_MS = 400;
+
   // ── Transition debug stats ────────────────────────────────────────────────
   // Populated each frame and forwarded to the render profiler debug panel.
   let lastTransitionPlayerSpeedWorld = 0;
+  let lastTransitionDestRoomId = '';
 
   // ── Initial loading overlay ───────────────────────────────────────────────
   // Shown when gameplay first starts (or when a room's sprites are not yet
@@ -1200,69 +1241,66 @@ export function startGameScreen(
     }
 
     // ── Room transition check ──────────────────────────────────────────────
-    // BUILD 279: When ENABLE_TWO_ROOM_CAMERA_CROSSING is true, a crossing is
-    // started instead of immediately loading the new room.  The two rooms are
-    // placed side-by-side in crossing world space so the camera can slide
-    // naturally across the seam.  The transition only fires when no crossing
-    // is already in progress.
-    // BUILD 284: Normal transitions use the seamless crossing path; transitions
-    // with longTransition=true use the legacy teleport path.
+    // BUILD 297: Single-room switch with smooth camera interpolation.
+    // When the player triggers a transition, the destination room is loaded
+    // immediately (no adjacent-room rendering), and the camera smoothly
+    // interpolates from its current position to the correct clamped position
+    // in the new room over CAM_TRANS_DURATION_SEC seconds.
+    //
+    // A cooldown (TRANSITION_COOLDOWN_MS) prevents the return-transition from
+    // firing immediately after the player spawns inside the destination room.
     const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
     const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
-    if (crossingState.phase === 'inactive') {
+
+    // Decrement transition cooldown.
+    if (transitionCooldownMs > 0) {
+      transitionCooldownMs = Math.max(0, transitionCooldownMs - elapsedMs);
+    }
+
+    if (crossingState.phase === 'inactive' && transitionCooldownMs <= 0) {
       checkRoomTransitions(
         world, currentRoom, roomWidthWorld, roomHeightWorld,
-        (room, spawnX, spawnY, dir, ti) => {
-          // Record speed for debug overlay before the world state changes.
+        (room, spawnX, spawnY, dir, _ti) => {
+          // Record speed for debug overlay before world state changes.
           lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
 
-          const isLong = currentRoom.transitions[ti]?.longTransition === true;
+          // 1. Save camera position in the current (old) room's world space.
+          const oldCamX = camera.centerXWorld;
+          const oldCamY = camera.centerYWorld;
 
-          if (!isLong && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
-            // Seamless crossing: normalise world coords if staged rooms are
-            // present, then start the two-room camera crossing.
-            //
-            // Save the coordinate shift so we can adjust effective camera
-            // clamp bounds by the same amount — this prevents a hard camera
-            // snap when the bounds change from union to single-room coords.
-            const normDxWorld = -stagingState.currentRoomOriginXWorld;
-            const normDyWorld = -stagingState.currentRoomOriginYWorld;
-            clearStagedRoomsAndNormalize(stagingState, world, camera, prevClusterPosX, prevClusterPosY);
-            if (normDxWorld !== 0 || normDyWorld !== 0) {
-              // Apply the same world-coord shift to the effective camera bounds.
-              cameraEffBoundsMinX += normDxWorld;
-              cameraEffBoundsMinY += normDyWorld;
-              cameraEffBoundsMaxX += normDxWorld;
-              cameraEffBoundsMaxY += normDyWorld;
-              // Expand bounds to include the camera's current position so the
-              // camera is never hard-clamped on the very next updateCameraWithBounds
-              // call (which would produce a visible snap).
-              const halfViewWidthWorld  = virtualWidthPx  / (2 * camera.zoom);
-              const halfViewHeightWorld = virtualHeightPx / (2 * camera.zoom);
-              if (camera.centerXWorld - halfViewWidthWorld  < cameraEffBoundsMinX) cameraEffBoundsMinX = camera.centerXWorld - halfViewWidthWorld;
-              if (camera.centerYWorld - halfViewHeightWorld < cameraEffBoundsMinY) cameraEffBoundsMinY = camera.centerYWorld - halfViewHeightWorld;
-              if (camera.centerXWorld + halfViewWidthWorld  > cameraEffBoundsMaxX) cameraEffBoundsMaxX = camera.centerXWorld + halfViewWidthWorld;
-              if (camera.centerYWorld + halfViewHeightWorld > cameraEffBoundsMaxY) cameraEffBoundsMaxY = camera.centerYWorld + halfViewHeightWorld;
-            }
-            const started = startCrossing(crossingState, world, currentRoom, ti, dir, room, camera);
-            if (started) {
-              // Player retains their velocity — physics carries them through the passage.
-              return;
-            }
-            // If startCrossing failed (rare: missing transition def), fall through to legacy path.
-          }
-
-          // Long transition / legacy path: immediate synchronous room load.
+          // 2. Load the destination room. This snaps the camera to the spawn
+          //    position via snapCamera() inside _makeLoadRoomPhases Phase F,
+          //    and resets camTransIsActive = false (Phase A).
           loadRoom(room, spawnX, spawnY);
 
-          // Restore pre-transition velocity so momentum feels continuous.
+          // 3. Capture the snapped target and restore the old position so the
+          //    interpolation starts from where the camera was before.
+          const targetCamX = camera.centerXWorld;
+          const targetCamY = camera.centerYWorld;
+          camera.centerXWorld = oldCamX;
+          camera.centerYWorld = oldCamY;
+
+          // 4. Start the smooth camera interpolation.
+          camTransIsActive      = true;
+          camTransStartXWorld   = oldCamX;
+          camTransStartYWorld   = oldCamY;
+          camTransTargetXWorld  = targetCamX;
+          camTransTargetYWorld  = targetCamY;
+          camTransElapsedSec    = 0;
+          lastTransitionDestRoomId = room.id;
+
+          // 5. Arm cooldown so the adjacent return-transition is not triggered
+          //    while the player is still near it in the new room.
+          transitionCooldownMs = TRANSITION_COOLDOWN_MS;
+
+          // 6. Restore pre-transition velocity for momentum continuity.
           const newPlayer = world.clusters[0];
           if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
             newPlayer.velocityXWorld = preTransVX;
             newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
           }
 
-          // Activate PostTransition reveal.
+          // 7. Notify the reveal state of the entry edge (edge-extension reveal).
           const entryEdge = getOppositeTransitionDirection(dir);
           const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
           notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
@@ -1427,10 +1465,8 @@ export function startGameScreen(
     }
 
     // ── Crossing finalization check ──────────────────────────────────────────
-    // BUILD 279: Once the player's centre is clearly inside the next room,
-    // finalise the crossing.
-    // BUILD 284: Normal crossings use finalizeCrossingSeamless which keeps the
-    // previous room staged instead of immediately calling loadRoom + discard.
+    // BUILD 297: ENABLE_TWO_ROOM_CAMERA_CROSSING is false, so this block is
+    // never entered.  Kept as a guard so re-enabling the flag would still work.
     if (crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
       const playerForCrossing = world.clusters[0];
       if (playerForCrossing !== undefined && playerForCrossing.isAliveFlag === 1 &&
@@ -1455,17 +1491,11 @@ export function startGameScreen(
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
-    // BUILD 279: Compute crossing bounds here so they can be reused for both
-    // the camera update (below) and renderFrame (later).
-    // BUILD 284: After seamless finalisation, stagingState.stagedRooms provide the union bounds.
+    // BUILD 297: isCrossing is always false (ENABLE_TWO_ROOM_CAMERA_CROSSING=false),
+    // renderUnionBounds is always null, effective bounds are single-room bounds.
     const isCrossing = crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING;
     const crossingBounds = isCrossing ? getCrossingUnionBounds(crossingState) : null;
-
-    // Compute union bounds covering active room + any staged rooms (post-swap).
-    // BUILD 286: Delegated to computeStagingUnionBounds in gameSeamlessStaging.ts.
     const stagingUnionBounds = isCrossing ? null : computeStagingUnionBounds(stagingState, currentRoom);
-
-    // Effective bounds for camera and render clip.
     const renderUnionBounds = isCrossing ? crossingBounds : stagingUnionBounds;
 
     const playerForCamera = world.clusters[0];
@@ -1477,7 +1507,25 @@ export function startGameScreen(
       const camTargetX = prevClusterPosX[0] + (playerForCamera.positionXWorld - prevClusterPosX[0]) * renderAlpha;
       const camTargetY = prevClusterPosY[0] + (playerForCamera.positionYWorld - prevClusterPosY[0]) * renderAlpha;
 
-      if (pauseMenuState.alwaysCenterCamera) {
+      if (camTransIsActive) {
+        // ── Camera transition interpolation (BUILD 297) ──────────────────────
+        // Smoothly pan from the camera position in the old room to the correct
+        // clamped position in the new room.  Normal follow-and-clamp is
+        // suppressed for the duration so room bounds do not force a hard snap.
+        const dtSec = elapsedMs / 1000;
+        camTransElapsedSec += dtSec;
+        const t    = Math.min(1.0, camTransElapsedSec / CAM_TRANS_DURATION_SEC);
+        const ease = _camTransEase(t);
+        camera.centerXWorld = camTransStartXWorld + (camTransTargetXWorld - camTransStartXWorld) * ease;
+        camera.centerYWorld = camTransStartYWorld + (camTransTargetYWorld - camTransStartYWorld) * ease;
+        if (t >= 1.0) {
+          // Snap to exact target on completion and return control to normal path.
+          camTransIsActive    = false;
+          camera.centerXWorld = camTransTargetXWorld;
+          camera.centerYWorld = camTransTargetYWorld;
+        }
+        // Effective bounds are irrelevant while the camera position is overridden.
+      } else if (pauseMenuState.alwaysCenterCamera) {
         // Always-center mode: follow the player with no room-edge clamping.
         // Areas outside the room show as black — clip rect is skipped in renderFrame.
         updateCameraUnclamped(camera, camTargetX, camTargetY, elapsedMs / 1000);
@@ -1665,13 +1713,22 @@ export function startGameScreen(
 
     // ── Transition debug stats ────────────────────────────────────────────
     if (isDebugMode && renderProfiler !== undefined) {
+      const camTransProgress = camTransIsActive ? Math.min(1, camTransElapsedSec / CAM_TRANS_DURATION_SEC) : 0;
       const debugStats: TransitionDebugStats = {
         currentRoomId: currentRoom.id,
-        isTransitioning: false,
-        lastDurationMs: 0,
+        isTransitioning: camTransIsActive,
+        lastDurationMs: Math.round(CAM_TRANS_DURATION_SEC * 1000),
         lastPlayerSpeedWorld: lastTransitionPlayerSpeedWorld,
         activeBubbleCount: previewBubbleCount,
         edgeCacheFilled: edgeExtensionCache !== null,
+        isCameraTransitioning: camTransIsActive,
+        cameraTransProgress: camTransProgress,
+        cameraTransStartXWorld: camTransStartXWorld,
+        cameraTransStartYWorld: camTransStartYWorld,
+        cameraTransTargetXWorld: camTransTargetXWorld,
+        cameraTransTargetYWorld: camTransTargetYWorld,
+        destinationRoomId: lastTransitionDestRoomId,
+        isAdjacentRoomRenderingDisabled: !ENABLE_TWO_ROOM_CAMERA_CROSSING,
       };
       renderProfiler.updateTransitionStats(debugStats);
     }

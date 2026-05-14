@@ -89,10 +89,12 @@ export const PREVIEW_MAX_BUBBLES = 2;
  * both rooms are rendered side-by-side and the camera slides naturally
  * across the seam as the player crosses a transition.
  *
- * Introduced in BUILD 279.  Replaces the old edge-extension + reveal system
- * for the transition crossing window.
+ * Introduced in BUILD 279.  Replaced in BUILD 297 by the single-room
+ * switch with smooth camera interpolation (see gameScreen.ts
+ * camTransIsActive).  This flag must remain false so only the active
+ * room is ever rendered during gameplay transitions.
  */
-export const ENABLE_TWO_ROOM_CAMERA_CROSSING = true;
+export const ENABLE_TWO_ROOM_CAMERA_CROSSING = false;
 
 /**
  * When true, procedural edge-extension tiles (wall tiles rendered beyond
