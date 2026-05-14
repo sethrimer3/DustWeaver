@@ -288,8 +288,12 @@ export function applyHazards(world: WorldState): void {
     world.playerWaterSubmersionRatio = submersion;
 
     // Buoyancy: upward force scaled by submersion ratio.
-    // Only apply when player center is below the water top (actually submerged).
-    if (py > wTop) {
+    // Apply whenever the player overlaps the water zone (submersion > 0), regardless
+    // of whether their CENTER is above or below the water surface.  The old guard
+    // `if (py > wTop)` prevented buoyancy from activating during partial entry
+    // (when the player's feet are in water but their center is still above the surface),
+    // which made them sink instead of float.  Using submersion > 0 fixes this.
+    if (submersion > 0) {
       player.velocityYWorld -= WATER_BUOYANCY_FORCE_WORLD * submersion * dtSec;
     }
 

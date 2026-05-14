@@ -326,6 +326,10 @@ export interface WorldSnapshot {
   readonly isPlayerBlockingFlag: 0 | 1;
   /** 1 when the player has a grapple charge available (grapple hook is equipped). */
   readonly hasGrappleChargeFlag: 0 | 1;
+  /** Ticks remaining for the golden recharge-ring VFX (> 0 = ring is active). */
+  readonly grappleRechargeRingTicksLeft: number;
+  /** Total duration of the recharge-ring VFX in ticks. */
+  readonly grappleRechargeRingTotalTicks: number;
   /** 1 while the player has any sustained Weave active (primary or secondary). */
   readonly isPlayerWeaveActiveFlag: 0 | 1;
   /** Selected character identifier ('knight', 'demonFox', 'princess', or 'outcast'). */

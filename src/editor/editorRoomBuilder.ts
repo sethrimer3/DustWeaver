@@ -393,18 +393,57 @@ function extractInteriorWalls(room: RoomDef): RoomWallDef[] {
 export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data: EditorRoomData; nextUid: number } {
   let uid = startUid;
 
-  const interiorWalls: EditorWall[] = extractInteriorWalls(room).map(w => ({
-    uid: uid++,
-    xBlock: w.xBlock,
-    yBlock: w.yBlock,
-    wBlock: w.wBlock,
-    hBlock: w.hBlock,
-    isPlatformFlag: (w.isPlatformFlag ?? 0) as 0 | 1,
-    platformEdge: (w.platformEdge ?? 0) as 0 | 1 | 2 | 3,
-    blockTheme: w.blockTheme,
-    rampOrientation: w.rampOrientation,
-    isPillarHalfWidthFlag: (w.isPillarHalfWidthFlag ?? 0) as 0 | 1,
-  }));
+  // Split every interior wall rectangle into individual 1×1 block tiles.
+  // This ensures that rooms loaded from compact/dehydrated storage (where walls
+  // are stored as large merged rectangles) appear in the editor as individually
+  // editable tiles.  When the room is exported/saved, editorRoomDataToRoomDef
+  // re-assembles them into compact wall rects via the normal serialisation path.
+  //
+  // Special cases that should NOT be split into 1×1 tiles:
+  //   • Ramps (rampOrientation set) — they represent a triangle block, not a rect.
+  //   • Half-width pillars (isPillarHalfWidthFlag) — single-column elements.
+  //   • Platforms (isPlatformFlag) — keep their original width for natural editing.
+  const interiorWalls: EditorWall[] = [];
+  for (const w of extractInteriorWalls(room)) {
+    const shouldExpand =
+      (w.rampOrientation === undefined || w.rampOrientation === null) &&
+      (w.isPillarHalfWidthFlag ?? 0) === 0 &&
+      (w.isPlatformFlag ?? 0) === 0 &&
+      (w.wBlock > 1 || w.hBlock > 1);
+
+    if (shouldExpand) {
+      // Expand the rectangle into individual 1×1 tiles.
+      for (let dy = 0; dy < w.hBlock; dy++) {
+        for (let dx = 0; dx < w.wBlock; dx++) {
+          interiorWalls.push({
+            uid: uid++,
+            xBlock: w.xBlock + dx,
+            yBlock: w.yBlock + dy,
+            wBlock: 1,
+            hBlock: 1,
+            isPlatformFlag: 0,
+            platformEdge: (w.platformEdge ?? 0) as 0 | 1 | 2 | 3,
+            blockTheme: w.blockTheme,
+            rampOrientation: undefined,
+            isPillarHalfWidthFlag: 0,
+          });
+        }
+      }
+    } else {
+      interiorWalls.push({
+        uid: uid++,
+        xBlock: w.xBlock,
+        yBlock: w.yBlock,
+        wBlock: w.wBlock,
+        hBlock: w.hBlock,
+        isPlatformFlag: (w.isPlatformFlag ?? 0) as 0 | 1,
+        platformEdge: (w.platformEdge ?? 0) as 0 | 1 | 2 | 3,
+        blockTheme: w.blockTheme,
+        rampOrientation: w.rampOrientation,
+        isPillarHalfWidthFlag: (w.isPillarHalfWidthFlag ?? 0) as 0 | 1,
+      });
+    }
+  }
 
   const enemies: EditorEnemy[] = room.enemies.map(e => ({
     uid: uid++,

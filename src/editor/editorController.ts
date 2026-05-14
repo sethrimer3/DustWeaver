@@ -50,6 +50,8 @@ import {
   showConnectedRoomCreationDialog,
 } from './editorTransitionConnectPopup';
 
+import { invalidateRoomContour } from '../ui/mapSketchRenderer';
+
 const BS = BLOCK_SIZE_MEDIUM;
 
 /** Width of the editor UI panel in CSS pixels. */
@@ -300,17 +302,24 @@ export function createEditorController(
   }
 
   function confirmEdits(): void {
-    // Build a RoomDef from the current editor data and load it
+    // Apply the current editor changes: register the updated RoomDef so the
+    // rest of the game (ROOM_REGISTRY, visual map) sees the new geometry/transitions.
+    // Then save to pending edits so the changes are preserved across editor sessions.
+    //
+    // Crucially, this does NOT call onLoadRoom — Confirm must NOT start gameplay,
+    // respawn the player, or close the editor unexpectedly.  Use a dedicated
+    // Play/Test action to enter gameplay.
     if (state.roomData) {
       const newRoomDef = editorRoomDataToRoomDef(state.roomData);
       registerRoom(newRoomDef); // update ROOM_REGISTRY so visual map sees new transitions
-      const sx = state.roomData.playerSpawnBlock[0];
-      const sy = state.roomData.playerSpawnBlock[1];
-      closeEditor();
-      onLoadRoom(newRoomDef, sx, sy);
-    } else {
-      closeEditor();
+      pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+      isCurrentRoomDirty = false;
+      // Invalidate the world-map sketch contour cache for this room so the
+      // updated wall geometry is reflected the next time the map is opened.
+      invalidateRoomContour(newRoomDef.id);
     }
+    // Stay in the editor — just close any transient UI that was open.
+    if (dismissConnectPopup) { dismissConnectPopup(); dismissConnectPopup = null; }
   }
 
   function cancelEdits(): void {

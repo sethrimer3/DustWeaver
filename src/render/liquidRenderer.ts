@@ -176,10 +176,13 @@ function renderWaterBody(
 
   for (let ri = 0; ri < mergedRects.length; ri++) {
     const rect = mergedRects[ri];
-    const sx = rect.xWorld * zoom + offsetXPx;
-    const sy = rect.yWorld * zoom + offsetYPx;
-    const sw = rect.wWorld * zoom;
-    const sh = rect.hWorld * zoom;
+    // Pixel-snap the draw region to avoid sub-pixel gaps between adjacent rects
+    // as the camera moves. We snap the top-left corner down and expand to the
+    // nearest pixel on the bottom-right to ensure continuous coverage.
+    const sx = Math.floor(rect.xWorld * zoom + offsetXPx);
+    const sy = Math.floor(rect.yWorld * zoom + offsetYPx);
+    const sw = Math.ceil((rect.xWorld + rect.wWorld) * zoom + offsetXPx) - sx;
+    const sh = Math.ceil((rect.yWorld + rect.hWorld) * zoom + offsetYPx) - sy;
     ctx.fillRect(sx, sy, sw, sh);
   }
 
@@ -262,10 +265,11 @@ function renderLavaBody(
 
   for (let ri = 0; ri < mergedRects.length; ri++) {
     const rect = mergedRects[ri];
-    const sx = rect.xWorld * zoom + offsetXPx;
-    const sy = rect.yWorld * zoom + offsetYPx;
-    const sw = rect.wWorld * zoom;
-    const sh = rect.hWorld * zoom;
+    // Pixel-snap to prevent seam gaps (same technique as water interior fill).
+    const sx = Math.floor(rect.xWorld * zoom + offsetXPx);
+    const sy = Math.floor(rect.yWorld * zoom + offsetYPx);
+    const sw = Math.ceil((rect.xWorld + rect.wWorld) * zoom + offsetXPx) - sx;
+    const sh = Math.ceil((rect.yWorld + rect.hWorld) * zoom + offsetYPx) - sy;
     ctx.fillRect(sx, sy, sw, sh);
   }
 
