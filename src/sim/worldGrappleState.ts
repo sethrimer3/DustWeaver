@@ -274,6 +274,14 @@ export interface GrappleWorldState {
    */
   hasZipImpactFxFiredFlag: 0 | 1;
 
+  /**
+   * 1 while the zip-jump timing window is open (the player can still earn the
+   * high-velocity zip-jump bonus).  Set to 1 when the player first fully stops
+   * in the stuck phase; cleared when the window expires or by releaseGrapple.
+   * Used by the renderer to stop the starburst animation once the window closes.
+   */
+  isZipJumpWindowOpenFlag: 0 | 1;
+
   // ── Debug: grapple collision visualization ──────────────────────────────────
   /**
    * Stores the last grapple sweep segment (from/to) and raw hit point so the
@@ -359,6 +367,7 @@ export function createGrappleWorldState(): GrappleWorldState {
     zipImpactFxNormalXWorld:               0.0,
     zipImpactFxNormalYWorld:               -1.0,
     hasZipImpactFxFiredFlag:               0,
+    isZipJumpWindowOpenFlag:               0,
     hasZipImpactedSurfaceFlag:             0,
     playerDownTriggeredFlag:               0,
     grappleProximityBounceTicksLeft:       0,

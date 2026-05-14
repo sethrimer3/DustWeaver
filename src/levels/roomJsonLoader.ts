@@ -54,18 +54,8 @@ function discoverRoomFilenames(campaignFolderNames: readonly string[]): string[]
   return [...new Set(filenames)].sort((a, b) => a.localeCompare(b));
 }
 
-function mergeManifestAndDiscoveredRooms(manifest: readonly string[] | null, discoveredFilenames: readonly string[]): string[] {
-  const merged: string[] = [];
-  const seen = new Set<string>();
-  const add = (filename: string): void => {
-    if (seen.has(filename)) return;
-    seen.add(filename);
-    merged.push(filename);
-  };
-  for (const filename of manifest ?? []) add(filename);
-  for (const filename of discoveredFilenames) add(filename);
-  return merged;
-}
+
+// ── Async loader — fetches room JSON files at startup ────────────────────────
 
 function buildBoundaryWalls(
   widthBlocks: number,
@@ -403,68 +393,35 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
 // ── Async loader — fetches room JSON files at startup ────────────────────────
 
 /**
- * Fetches the room manifest plus any discovered JSON room files from CAMPAIGNS/<CAMPAIGN_ID>/ROOMS/.
+ * Fetches room JSON files for the active campaign from auto-discovered paths.
+ * Rooms are populated from files found by the build-time Vite glob
+ * without fetching a manifest.
  * Returns a Map of room ID → RoomDef.
  *
- * The manifest is an ordering hint rather than an exclusive list. Files found
- * by the Vite room glob are appended when they are missing from manifest.json.
  * If any room file fails to load, the error is logged and that room is skipped.
  */
 export async function loadRoomJsonFiles(): Promise<Map<string, RoomDef>> {
   const rooms = new Map<string, RoomDef>();
 
   const activeCampaignId = getActiveCampaignId();
-  const basePathCandidates: string[] = [];
-  const preferredBasePath = getCampaignRoomsBasePath(activeCampaignId);
-  basePathCandidates.push(preferredBasePath);
-  // Fallback for environments where BASE_URL differs from deployment root.
-  basePathCandidates.push(`CAMPAIGNS/${activeCampaignId}/ROOMS`);
-  basePathCandidates.push(`/CAMPAIGNS/${activeCampaignId}/ROOMS`);
-
   const meta = await getCampaignById(activeCampaignId);
-  if (meta) {
-    basePathCandidates.push(getCampaignRoomsBasePath(meta.folderName));
-    basePathCandidates.push(`CAMPAIGNS/${meta.folderName}/ROOMS`);
-    basePathCandidates.push(`/CAMPAIGNS/${meta.folderName}/ROOMS`);
-  }
 
-  const uniqueBasePaths = [...new Set(basePathCandidates)];
   const campaignFolderNames = meta
     ? [...new Set([activeCampaignId, meta.folderName])]
     : [activeCampaignId];
   const discoveredFilenames = discoverRoomFilenames(campaignFolderNames);
 
-  let manifest: string[] | null = null;
-  let roomsBasePath = preferredBasePath;
-  for (const candidate of uniqueBasePaths) {
-    try {
-      const resp = await fetch(`${candidate}/manifest.json`);
-      if (!resp.ok) continue;
-      const data = await resp.json() as unknown;
-      if (!Array.isArray(data)) continue;
-      manifest = data
-        .filter((entry): entry is string => typeof entry === 'string')
-        .map(entry => entry.replace(/\\/g, '/').replace(/^\/+/, ''));
-      roomsBasePath = candidate;
-      break;
-    } catch {
-      // Try next candidate.
-    }
+  if (discoveredFilenames.length === 0) {
+    console.error('[roomJsonLoader] No room files discovered for campaign:', campaignFolderNames);
+    return rooms;
   }
 
-  if (manifest === null) {
-    if (discoveredFilenames.length === 0) {
-      console.error('[roomJsonLoader] Failed to fetch rooms manifest and no room files were discovered for campaign paths:', uniqueBasePaths);
-      return rooms;
-    }
-    roomsBasePath = meta ? getCampaignRoomsBasePath(meta.folderName) : preferredBasePath;
-    console.warn('[roomJsonLoader] Failed to fetch rooms manifest; using discovered room files:', discoveredFilenames);
-  }
-
-  const roomFilenames = mergeManifestAndDiscoveredRooms(manifest, discoveredFilenames);
+  const roomsBasePath = meta
+    ? getCampaignRoomsBasePath(meta.folderName)
+    : getCampaignRoomsBasePath(activeCampaignId);
 
   // Fetch all room files in parallel
-  const fetches = roomFilenames.map(async (filename) => {
+  const fetches = discoveredFilenames.map(async (filename) => {
     try {
       const resp = await fetch(`${roomsBasePath}/${filename}`);
       if (!resp.ok) {

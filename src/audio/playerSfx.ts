@@ -1,7 +1,7 @@
 import { getSfxVolume } from '../ui/renderSettings';
 
 const BASE = import.meta.env.BASE_URL;
-const PLAYER_SFX_BASE = `${BASE}ASSETS/sfx/PLAYER/`;
+const PLAYER_SFX_BASE = `${BASE}sfx/PLAYER/`;
 const WIND_FADE_PER_SEC = 2.8;
 const WIND_MAX_VOLUME_SCALE = 0.55;
 

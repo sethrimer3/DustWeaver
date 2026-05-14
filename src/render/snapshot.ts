@@ -71,6 +71,7 @@ interface _ReusableBacking {
   zipImpactFxScale: number;
   zipImpactFxNormalXWorld: number;
   zipImpactFxNormalYWorld: number;
+  isZipJumpWindowOpenFlag: 0 | 1;
   isPlayerBlockingFlag: 0 | 1;
   hasGrappleChargeFlag: 0 | 1;
   isPlayerWeaveActiveFlag: 0 | 1;
@@ -382,6 +383,7 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     zipImpactFxScale:               world.zipImpactFxScale,
     zipImpactFxNormalXWorld:        world.zipImpactFxNormalXWorld,
     zipImpactFxNormalYWorld:        world.zipImpactFxNormalYWorld,
+    isZipJumpWindowOpenFlag:        world.isZipJumpWindowOpenFlag,
     isPlayerBlockingFlag:     world.isPlayerBlockingFlag,
     hasGrappleChargeFlag:     world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag:  (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
@@ -519,6 +521,7 @@ export function updateSnapshotInPlace(
   b.zipImpactFxScale               = world.zipImpactFxScale;
   b.zipImpactFxNormalXWorld        = world.zipImpactFxNormalXWorld;
   b.zipImpactFxNormalYWorld        = world.zipImpactFxNormalYWorld;
+  b.isZipJumpWindowOpenFlag        = world.isZipJumpWindowOpenFlag;
   b.isPlayerBlockingFlag      = world.isPlayerBlockingFlag;
   b.hasGrappleChargeFlag      = world.hasGrappleChargeFlag;
   b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
@@ -752,6 +755,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     zipImpactFxScale:               world.zipImpactFxScale,
     zipImpactFxNormalXWorld:        world.zipImpactFxNormalXWorld,
     zipImpactFxNormalYWorld:        world.zipImpactFxNormalYWorld,
+    isZipJumpWindowOpenFlag:        world.isZipJumpWindowOpenFlag,
     isPlayerBlockingFlag: world.isPlayerBlockingFlag,
     hasGrappleChargeFlag: world.hasGrappleChargeFlag,
     isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,

@@ -270,6 +270,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   world.isGrappleZipTriggeredFlag = 0; // cancel any pending zip request
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
+  world.isZipJumpWindowOpenFlag = 0;
   world.grappleZipStickXWorld = 0.0;
   world.grappleZipStickYWorld = 0.0;
   world.hasZipImpactFxFiredFlag = 0;
