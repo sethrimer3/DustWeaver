@@ -26,6 +26,9 @@ import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef'
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, updateCameraWithBounds, updateCameraUnclamped, getCameraOffset } from '../render/camera';
+// BUILD 297: ENABLE_TWO_ROOM_CAMERA_CROSSING is false, so isCrossingComplete /
+// getCrossingUnionBounds are only reachable via the preserved dead-code guard
+// block that allows easy re-enablement of the crossing system in the future.
 import {
   createTwoRoomCrossingState,
   isCrossingComplete,
@@ -36,6 +39,9 @@ import {
   type SeamlessStagingState,
   createSeamlessStagingState,
   resetSeamlessStagingState,
+  // finalizeCrossingSeamless is only reached when ENABLE_TWO_ROOM_CAMERA_CROSSING
+  // is true.  Preserved so the crossing system can be re-enabled without
+  // additional import surgery.
   finalizeCrossingSeamless,
   computeStagingUnionBounds,
 } from './gameSeamlessStaging';

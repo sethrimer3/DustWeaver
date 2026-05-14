@@ -88,6 +88,9 @@ const EMA_ALPHA = 0.1;
 // Pre-allocated overlay string buffer (STAGE_COUNT entries, one per stage).
 const _lineBuffer: string[] = new Array(STAGE_COUNT).fill('') as string[];
 
+/** Max characters shown for room IDs in the transition debug panel. */
+const MAX_ROOM_ID_DISPLAY_LENGTH = 14;
+
 // ── RenderProfiler class ────────────────────────────────────────────────────
 
 export class RenderProfiler {
@@ -437,8 +440,8 @@ export class RenderProfiler {
     if (this._transitionStats !== null) {
       const ts = this._transitionStats;
       const transLines = [
-        `Room: ${ts.currentRoomId.slice(0, 14)}`,
-        `Dest: ${ts.destinationRoomId.slice(0, 14) || '—'}`,
+        `Room: ${ts.currentRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)}`,
+        `Dest: ${ts.destinationRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH) || '—'}`,
         `Trans: ${ts.isCameraTransitioning ? `${(ts.cameraTransProgress * 100).toFixed(0)}%` : 'no'}`,
         `Spd@X: ${ts.lastPlayerSpeedWorld.toFixed(0)}wu/s`,
         `CamS: ${ts.cameraTransStartXWorld.toFixed(0)},${ts.cameraTransStartYWorld.toFixed(0)}`,
