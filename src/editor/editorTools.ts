@@ -9,6 +9,7 @@ import {
   EditorState, EditorRoomData, SelectedElement, EditorTransition,
 } from './editorState';
 import type { TransitionDirection } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import {
   hitTestZone,
   hitTestWall,
@@ -125,6 +126,15 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const sb of (room.sunbeams ?? [])) {
     if (hitTestPoint(sb.xBlock, sb.yBlock, bx, by)) {
       return { type: 'sunbeam', uid: sb.uid };
+    }
+  }
+
+  // Check scene lights (point selection at world position converted to block coords).
+  for (const sl of (room.sceneLights ?? [])) {
+    const slBx = sl.xWorld / BLOCK_SIZE_MEDIUM;
+    const slBy = sl.yWorld / BLOCK_SIZE_MEDIUM;
+    if (hitTestPoint(slBx, slBy, bx, by)) {
+      return { type: 'sceneLight', uid: sl.uid };
     }
   }
 
@@ -384,6 +394,19 @@ export function deleteAtCursor(state: EditorState): void {
     if (hitTestPoint(sunbeams[i].xBlock, sunbeams[i].yBlock, bx, by)) {
       const removedUid = sunbeams[i].uid;
       sunbeams.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check scene lights.
+  const sceneLights = room.sceneLights ?? [];
+  for (let i = 0; i < sceneLights.length; i++) {
+    const slBx = sceneLights[i].xWorld / BLOCK_SIZE_MEDIUM;
+    const slBy = sceneLights[i].yWorld / BLOCK_SIZE_MEDIUM;
+    if (hitTestPoint(slBx, slBy, bx, by)) {
+      const removedUid = sceneLights[i].uid;
+      sceneLights.splice(i, 1);
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       return;
     }

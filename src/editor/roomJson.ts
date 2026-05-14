@@ -20,13 +20,14 @@ import type {
   EditorRope, RopeDestructibility,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorLambdaAnchor,
-  EditorFallingBlock, EditorDialogueTrigger, EditorBackgroundBlock,
+  EditorFallingBlock, EditorDialogueTrigger, EditorBackgroundBlock, EditorSceneLight,
   RoomSongId,
 } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
 import {
   stringToParticleKind,
 } from './roomJsonSchema';
+import { savedToLightDef, lightDefToSaved } from '../levels/lightingSchema';
 import type {
   RoomJsonDef,
   RoomJsonWall,
@@ -374,6 +375,11 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     intensityPct: s.intensityPct,
   }));
 
+  const sceneLights: EditorSceneLight[] = (json.sceneLights ?? []).map(s => ({
+    uid: uid++,
+    ...savedToLightDef(s),
+  }));
+
   const fallingBlocks: EditorFallingBlock[] = (json.fallingBlocks ?? []).map(fb => ({
     uid: uid++,
     xBlock: fb.xBlock,
@@ -492,6 +498,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       bouncePads,
       ropes,
       sunbeams,
+      sceneLights,
       fallingBlocks,
       dialogueTriggers,
       backgroundBlocks,
@@ -809,6 +816,9 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (b.isLightBlockingFlag === 1) entry.isLightBlocking = true;
       return entry;
     });
+  }
+  if ((data.sceneLights ?? []).length > 0) {
+    json.sceneLights = (data.sceneLights ?? []).map(s => lightDefToSaved({ ...s }));
   }
   return json;
 }

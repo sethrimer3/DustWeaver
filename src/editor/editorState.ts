@@ -7,6 +7,7 @@
  */
 
 import type { TransitionDirection, BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+import type { LightType, LightBlendMode } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
@@ -14,6 +15,7 @@ import { FOLDER_BLOCK_THEMES, folderThemeShortId } from '../render/walls/folderB
 
 // Re-export for convenience in editor modules
 export type { BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+export type { LightType, LightBlendMode } from '../levels/lightingSchema';
 export type { RoomSongId } from '../audio/musicManager';
 
 /** Options shown in the "Room Song" editor dropdown, in display order. */
@@ -86,6 +88,8 @@ export interface PaletteItem {
   isBackgroundBlockItem?: 1;
   /** 1 if this background block also blocks ambient light. Only meaningful when isBackgroundBlockItem === 1. */
   isLightBlockingBackgroundBlockItem?: 1;
+  /** 1 if this palette item places a scene light (visibility-polygon shadow system). */
+  isSceneLightItem?: 1;
 }
 
 /** Options for the crumble-block weakness variant dropdown. */
@@ -99,6 +103,14 @@ export const CRUMBLE_VARIANT_OPTIONS: readonly { id: CrumbleVariant; label: stri
   { id: 'poison',    label: 'Poison'    },
   { id: 'shadow',    label: 'Shadow'    },
   { id: 'nature',    label: 'Nature'    },
+];
+
+/** Options for the scene-light kind dropdown. */
+export const SCENE_LIGHT_TYPE_OPTIONS: readonly { id: LightType; label: string }[] = [
+  { id: 'softGlow',   label: 'Soft Glow'   },
+  { id: 'spotlight',  label: 'Spotlight'   },
+  { id: 'floodlight', label: 'Floodlight'  },
+  { id: 'backlight',  label: 'Backlight'   },
 ];
 
 /** Canonical list of ParticleKind string values available for editor dropdowns. */
@@ -132,6 +144,27 @@ export interface EditorRope {
   destructibility: RopeDestructibility;
   /** Visual and collision thickness index: 0=8 px, 1=16 px, 2=24 px. */
   thicknessIndex: 0 | 1 | 2;
+}
+
+/** Editor representation of a scene light (adds `uid` to the runtime LightDef). */
+export interface EditorSceneLight {
+  uid: number;
+  xWorld: number;
+  yWorld: number;
+  kind: LightType;
+  radiusWorld: number;
+  colorR: number;
+  colorG: number;
+  colorB: number;
+  intensityPct: number;
+  blendMode: LightBlendMode;
+  castsShadowsFlag: 0 | 1;
+  coneAngleRad?: number;
+  rotationRad?: number;
+  shadowSoftness?: number;
+  isPulsingFlag?: 0 | 1;
+  pulseSpeedHz?: number;
+  pulseAmplitude?: number;
 }
 
 /** Built-in palette items available in the editor. */
@@ -189,6 +222,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'dark_ambient_light_blocker', label: 'Dark Blocker',    category: 'lighting', isAmbientLightBlockerItem: 1, isDarkAmbientLightBlockerItem: 1 },
   { id: 'light_source',          label: 'Light Source',    category: 'lighting', isLightSourceItem: 1 },
   { id: 'sunbeam',               label: 'Sunbeam',         category: 'lighting', isSunbeamItem: 1 },
+  { id: 'scene_light',           label: 'Scene Light',     category: 'lighting', isSceneLightItem: 1 },
   // ── Liquids layer ───────────────────────────────────────────────────────
   { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLiquidZoneItem: 1 },
   { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLiquidZoneItem: 1 },
@@ -715,6 +749,8 @@ export interface EditorRoomData {
   ropes?: EditorRope[];
   /** Sunbeams placed in this room. */
   sunbeams?: EditorSunbeam[];
+  /** Scene lights (visibility-polygon shadow system) placed in this room. */
+  sceneLights?: EditorSceneLight[];
   /** Falling block tiles placed in this room. */
   fallingBlocks?: EditorFallingBlock[];
   /** Dialogue trigger zones placed in this room. */
@@ -725,7 +761,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;
@@ -811,6 +847,10 @@ export interface EditorState {
   pendingRopeAnchorXBlock: number | null;
   pendingRopeAnchorYBlock: number | null;
   /**
+   * Which LightType a newly placed scene light will use.
+   */
+  pendingSceneLightType: LightType;
+  /**
    * The element the mouse is currently hovering over (Select tool only).
    * Null when no element is under the cursor or when not using the Select tool.
    */
@@ -859,6 +899,7 @@ export function createEditorState(): EditorState {
     pendingDustSwarmCount: 5,
     pendingRopeAnchorXBlock: null,
     pendingRopeAnchorYBlock: null,
+    pendingSceneLightType: 'softGlow',
     hoverElement: null,
     brushMode: 'single',
     brushRectStartBlockX: null,

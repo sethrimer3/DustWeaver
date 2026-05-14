@@ -411,6 +411,8 @@ export interface RoomJsonDef {
   lambdaAnchors?: RoomJsonLambdaAnchor[];
   /** Visual-only background blocks — drawn behind foreground walls. */
   backgroundBlocks?: RoomJsonBackgroundBlock[];
+  /** Designer-placed scene lights (visibility-polygon shadow system). */
+  sceneLights?: import('../levels/lightingSchema').SavedSceneLight[];
 }
 
 // ── Background blocks ────────────────────────────────────────────────────────

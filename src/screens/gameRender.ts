@@ -72,6 +72,7 @@ import {
 } from './gameRenderHelpers';
 import { renderGameHud } from './gameHudRenderer';
 import { renderDarkRoomLighting } from './gameDarkRoomLighting';
+import { initLightingSystem, markOccludersDirty, renderLightingPass } from '../render/lighting/lightingSystem';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer';
 import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
@@ -94,6 +95,9 @@ const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
 const JOYSTICK_INNER_RADIUS_PX = 22;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+/** Tracks the last room ID to detect room changes for occluder dirty marking. */
+let _lastLightingRoomId: string | null = null;
 
 /**
  * Pre-allocated mutable quality config scratch object used when adaptive
@@ -782,6 +786,28 @@ export function renderFrame(r: RenderFrameContext): void {
   // Light collection and overlay rendering extracted to gameDarkRoomLighting.ts.
   if (isDarkRoom) {
     renderDarkRoomLighting(r, qc);
+  }
+
+  // ── Scene-light visibility-polygon lighting pass ─────────────────────────
+  // Renders designer-placed scene lights (softGlow / spotlight / floodlight /
+  // backlight) with optional raytraced shadow polygons.  Only active when the
+  // room has at least one scene light.  The lighting system maintains its own
+  // offscreen canvas and is initialised lazily on first use.
+  if (currentRoom.sceneLights && currentRoom.sceneLights.length > 0) {
+    initLightingSystem(virtualWidthPx, virtualHeightPx);
+    if (_lastLightingRoomId !== currentRoom.id) {
+      _lastLightingRoomId = currentRoom.id;
+      markOccludersDirty(
+        currentRoom.walls.map(w => ({
+          xWorld: w.xBlock * BLOCK_SIZE_MEDIUM,
+          yWorld: w.yBlock * BLOCK_SIZE_MEDIUM,
+          wWorld: w.wBlock * BLOCK_SIZE_MEDIUM,
+          hWorld: w.hBlock * BLOCK_SIZE_MEDIUM,
+          isPlatformFlag: w.isPlatformFlag,
+        })),
+      );
+    }
+    renderLightingPass(ctx, currentRoom.sceneLights, ox, oy, zoom, virtualWidthPx, virtualHeightPx, nowMs);
   }
 
   // End room clip before any HUD/screen-space overlays are drawn.

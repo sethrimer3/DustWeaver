@@ -924,6 +924,8 @@ export interface RoomDef {
   lightSources?: readonly RoomLightSourceDef[];
   /** Designer-placed sunbeams (see {@link RoomSunbeamDef}). */
   sunbeams?: readonly RoomSunbeamDef[];
+  /** Designer-placed scene lights (visibility-polygon shadow system). */
+  sceneLights?: readonly import('./lightingSchema').LightDef[];
   /** Room width in blocks. */
   widthBlocks: number;
   /** Room height in blocks. */

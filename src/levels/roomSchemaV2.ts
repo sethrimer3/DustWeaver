@@ -67,6 +67,7 @@ import type {
 import { createTileGrid, paintRect, extractLayerFromGrid } from './tileGridCompressor';
 import type { SavedRect, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
 export type { SavedRect, SavedRun, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
+import type { SavedSceneLight } from './lightingSchema';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA VERSIONING
@@ -258,6 +259,8 @@ export interface SavedRoomV2 {
   lightSourcesExt?: RoomJsonLightSource[];
   /** Designer-placed sunbeams. Stored as full objects (small count). */
   sunbeams?: RoomJsonSunbeam[];
+  /** Designer-placed scene lights (visibility-polygon shadow system). */
+  sceneLights?: SavedSceneLight[];
   /** Editor-painted falling block tiles. Stored as compact tuples [x, y, variant_char]. */
   fallingBlocks?: [number, number, string][];
   /** Crumble blocks. */
@@ -640,6 +643,10 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     });
   }
 
+  if (json.sceneLights && json.sceneLights.length > 0) {
+    out.sceneLights = json.sceneLights;
+  }
+
   return out;
 }
 
@@ -855,6 +862,10 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       if (b.lb === 1) entry.isLightBlocking = true;
       return entry;
     });
+  }
+
+  if (saved.sceneLights && saved.sceneLights.length > 0) {
+    json.sceneLights = saved.sceneLights;
   }
 
   return json;

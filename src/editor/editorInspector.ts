@@ -16,6 +16,7 @@ import {
   ROPE_DESTRUCTIBILITY_OPTIONS,
   ROPE_THICKNESS_OPTIONS,
   DUST_KIND_OPTIONS,
+  SCENE_LIGHT_TYPE_OPTIONS,
 } from './editorState';
 import {
   addField,
@@ -395,6 +396,85 @@ export function updateInspector(
         sb.colorB = b;
         callbacks?.onPropertyChange('sunbeam.color', 0);
       });
+    }
+  } else if (el.type === 'sceneLight') {
+    const sl = (room.sceneLights ?? []).find(s => s.uid === el.uid);
+    if (sl) {
+      addNumberField(div, 'xWorld', sl.xWorld, 0, 99999, v => {
+        sl.xWorld = v;
+        callbacks?.onPropertyChange('sceneLight.xWorld', v);
+      });
+      addNumberField(div, 'yWorld', sl.yWorld, 0, 99999, v => {
+        sl.yWorld = v;
+        callbacks?.onPropertyChange('sceneLight.yWorld', v);
+      });
+      addSelect(div, 'kind',
+        SCENE_LIGHT_TYPE_OPTIONS.map(t => ({ label: t.label, value: t.id })),
+        sl.kind,
+        v => {
+          sl.kind = v as typeof sl.kind;
+          callbacks?.onPropertyChange('sceneLight.kind', v);
+        },
+      );
+      addNumberField(div, 'radiusWorld', sl.radiusWorld, 1, 2048, v => {
+        sl.radiusWorld = v;
+        callbacks?.onPropertyChange('sceneLight.radiusWorld', v);
+      });
+      addSliderField(div, 'intensityPct', sl.intensityPct, 0, 100, v => {
+        sl.intensityPct = v;
+        callbacks?.onPropertyChange('sceneLight.intensityPct', v);
+      });
+      addColorSliders(div, 'color', sl.colorR, sl.colorG, sl.colorB, (r, g, b) => {
+        sl.colorR = r;
+        sl.colorG = g;
+        sl.colorB = b;
+        callbacks?.onPropertyChange('sceneLight.color', 0);
+      });
+      addSelect(div, 'blendMode',
+        [
+          { label: 'Add', value: 'add' },
+          { label: 'Screen', value: 'screen' },
+          { label: 'Multiply', value: 'multiply' },
+          { label: 'Normal', value: 'normal' },
+        ],
+        sl.blendMode,
+        v => {
+          sl.blendMode = v as typeof sl.blendMode;
+          callbacks?.onPropertyChange('sceneLight.blendMode', v);
+        },
+      );
+      addCheckbox(div, 'castsShadows', sl.castsShadowsFlag === 1, v => {
+        sl.castsShadowsFlag = v ? 1 : 0;
+        callbacks?.onPropertyChange('sceneLight.castsShadowsFlag', sl.castsShadowsFlag);
+      });
+      if (sl.kind === 'spotlight') {
+        addNumberField(div, 'coneAngleRad', sl.coneAngleRad ?? Math.PI / 4, 0.1, Math.PI, v => {
+          sl.coneAngleRad = v;
+          callbacks?.onPropertyChange('sceneLight.coneAngleRad', v);
+        });
+        addNumberField(div, 'rotationRad', sl.rotationRad ?? 0, -Math.PI, Math.PI, v => {
+          sl.rotationRad = v;
+          callbacks?.onPropertyChange('sceneLight.rotationRad', v);
+        });
+      }
+      addSliderField(div, 'shadowSoftness', (sl.shadowSoftness ?? 0) * 100, 0, 100, v => {
+        sl.shadowSoftness = v / 100;
+        callbacks?.onPropertyChange('sceneLight.shadowSoftness', v);
+      });
+      addCheckbox(div, 'isPulsing', sl.isPulsingFlag === 1, v => {
+        sl.isPulsingFlag = v ? 1 : 0;
+        callbacks?.onPropertyChange('sceneLight.isPulsingFlag', sl.isPulsingFlag);
+      });
+      if (sl.isPulsingFlag === 1) {
+        addNumberField(div, 'pulseSpeedHz', sl.pulseSpeedHz ?? 1, 0.1, 10, v => {
+          sl.pulseSpeedHz = v;
+          callbacks?.onPropertyChange('sceneLight.pulseSpeedHz', v);
+        });
+        addSliderField(div, 'pulseAmplitude%', (sl.pulseAmplitude ?? 0.2) * 100, 0, 100, v => {
+          sl.pulseAmplitude = v / 100;
+          callbacks?.onPropertyChange('sceneLight.pulseAmplitude', v);
+        });
+      }
     }
   } else if (el.type === 'waterZone') {
     const zone = (room.waterZones ?? []).find(z => z.uid === el.uid);

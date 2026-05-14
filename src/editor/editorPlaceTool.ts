@@ -13,9 +13,10 @@ import {
   PaletteItem, DecorationKind, EditorBouncePad, EditorSunbeam, EditorFallingBlock,
   EditorDialogueTrigger,
 } from './editorState';
+import { createDefaultLight } from '../render/lighting/lightingTypes';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
 import { MAX_ROPE_SEGMENTS } from '../sim/world';
-import { MIN_ROPE_LENGTH_BLOCKS } from '../levels/roomDef';
+import { MIN_ROPE_LENGTH_BLOCKS, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import {
   wallsOverlap,
   isInsideRoom,
@@ -162,6 +163,16 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         colorB: 200,
         intensityPct: 50,
       } as EditorSunbeam);
+      return;
+    }
+    if (item.isSceneLightItem === 1) {
+      if (!room.sceneLights) room.sceneLights = [];
+      const lightDef = createDefaultLight(
+        state.pendingSceneLightType,
+        xFloor * BLOCK_SIZE_MEDIUM,
+        yFloor * BLOCK_SIZE_MEDIUM,
+      );
+      room.sceneLights.push({ uid: allocateUid(state), ...lightDef });
       return;
     }
   }

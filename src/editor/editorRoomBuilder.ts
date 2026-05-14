@@ -22,7 +22,7 @@ import type {
   EditorRope,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorLambdaAnchor,
-  EditorFallingBlock, EditorDialogueTrigger,
+  EditorFallingBlock, EditorDialogueTrigger, EditorSceneLight,
 } from './editorState';
 import { particleKindToString, stringToParticleKind } from './roomJsonSchema';
 
@@ -343,6 +343,10 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
         })),
       },
     })),
+    sceneLights: (data.sceneLights ?? []).map(s => {
+      const { uid: _uid, ...lightDef } = s;
+      return lightDef as import('../levels/lightingSchema').LightDef;
+    }),
   };
 }
 
@@ -560,6 +564,11 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     intensityPct: s.intensityPct,
   }));
 
+  const sceneLights: EditorSceneLight[] = (room.sceneLights ?? []).map(l => ({
+    uid: uid++,
+    ...l,
+  }));
+
   const waterZones: EditorWaterZone[] = (room.waterZones ?? []).map(z => ({
     uid: uid++,
     xBlock: z.xBlock,
@@ -657,6 +666,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       crumbleBlocks,
       ropes,
       sunbeams,
+      sceneLights,
       fallingBlocks,
       dialogueTriggers,
     },
