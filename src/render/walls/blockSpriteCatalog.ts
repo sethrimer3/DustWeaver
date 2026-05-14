@@ -1,66 +1,10 @@
 /**
  * Block sprite catalog.
  *
- * Enumerates available sprite variations by probing a fixed set of sequential
- * URLs at the known naming convention.  Failed probes (404s) are silently
- * ignored — only successfully loaded images are included in variation pools.
- *
- * This means new sprite variations can be added to the asset folders without
- * touching this file, provided the filenames follow the convention:
- *   <prefix> (N).png   where N = 1, 2, 3, …
- *
- * Template URLs are fixed (one file per shape) and do not need probing.
+ * Template URLs for block shape masks used by the procedural sprite system.
+ * Block theme sprites are discovered automatically at build time via
+ * folderBlockThemes.ts (import.meta.glob) — no probe URLs are needed.
  */
-
-// ── Probe helpers ─────────────────────────────────────────────────────────────
-
-/**
- * Maximum number of sequential file indices to probe per folder.
- *
- * Any probe URL that fails to load (404) is simply ignored, so raising this
- * value is safe.  The current largest pool is blackRock 2×2 at 20 variations;
- * 50 gives generous headroom.  If the actual sprite count ever exceeds 50,
- * raise this constant — no other code changes are needed.
- */
-const _MAX_PROBE_COUNT = 50;
-
-/**
- * Builds a list of probe URLs for a folder following the "(N)" naming convention.
- * Every URL is attempted; only those that successfully load contribute to pools.
- */
-function _buildProbeUrls(dirPath: string, filePrefix: string): readonly string[] {
-  const urls: string[] = [];
-  for (let i = 1; i <= _MAX_PROBE_COUNT; i++) {
-    urls.push(`${dirPath}/${filePrefix} (${i}).png`);
-  }
-  return urls;
-}
-
-// ── Base sprite probe pools ───────────────────────────────────────────────────
-
-/**
- * Probe URLs for the blackRock 1×1 base sprites.
- * Shapes that use this pool: 1×1 block, 1×1 platform, 1×1 ramp.
- *
- * Source files live at ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (N).png
- * (served as SPRITES/BLOCKS/blackRock/blackRockBlock (N).png via Vite publicDir).
- */
-export const BLACKROCK_1X1_PROBE_URLS: readonly string[] = _buildProbeUrls(
-  'SPRITES/BLOCKS/blackRock',
-  'blackRockBlock',
-);
-
-/**
- * Probe URLs for the blackRock 2×2 base sprites.
- * Shapes that use this pool: 2×2 block, 2×2 platform, 2×2 ramp, 1×2 ramp.
- *
- * The same blackRock folder is used for both pool tiers; the sprite system
- * scales the chosen image to the appropriate pixel dimensions at generation time.
- */
-export const BLACKROCK_2X2_PROBE_URLS: readonly string[] = _buildProbeUrls(
-  'SPRITES/BLOCKS/blackRock',
-  'blackRockBlock',
-);
 
 // ── Template URLs ─────────────────────────────────────────────────────────────
 
@@ -87,15 +31,9 @@ export type BlockShapeName = keyof typeof TEMPLATE_URLS;
 
 /**
  * Returns the probe URL array for a given material name and base-size tier.
- *
- * @param material   Block material name, e.g. `'blackRock'`.
- * @param use2x2Pool True when the shape uses the 2×2 base pool.
- *                   False for shapes that use the 1×1 base pool.
- * @returns          An array of probe URLs, or an empty array for unsupported materials.
+ * All block themes now use the folder-based discovery system (folderBlockThemes.ts)
+ * so this always returns an empty array.
  */
-export function getBaseSpriteProbePool(material: string, use2x2Pool: boolean): readonly string[] {
-  if (material === 'blackRock') {
-    return use2x2Pool ? BLACKROCK_2X2_PROBE_URLS : BLACKROCK_1X1_PROBE_URLS;
-  }
+export function getBaseSpriteProbePool(_material: string, _use2x2Pool: boolean): readonly string[] {
   return [];
 }

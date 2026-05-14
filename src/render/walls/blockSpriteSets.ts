@@ -124,7 +124,7 @@ export function getFullSpriteFor2x2(theme: BlockTheme | null, blockSizePx: numbe
 /** Returns true if the active theme supports 2×2 full-sprite rendering. */
 export function themeSupports2x2(theme: BlockTheme | null, blockSizePx: number): boolean {
   if (blockSizePx !== 8) return false;
-  return theme === 'brownRock' || theme === 'dirt' || theme === 'blackRock' || isFolderBasedTheme(theme);
+  return theme === 'brownRock' || theme === 'dirt' || isFolderBasedTheme(theme);
 }
 
 /**
@@ -150,8 +150,6 @@ export function getSpriteForLegacyTheme(
  * Maps a BlockTheme to the material name string used by the procedural sprite
  * system.  Returns null when the theme is not supported by that system.
  */
-export function themeToProceduralMaterial(theme: BlockTheme | null, legacyWorldNumber: number): string | null {
-  if (theme === 'blackRock') return 'blackRock';
-  if (theme === null && legacyWorldNumber === 0) return 'blackRock';
+export function themeToProceduralMaterial(_theme: BlockTheme | null, _legacyWorldNumber: number): string | null {
   return null;
 }

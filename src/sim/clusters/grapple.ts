@@ -369,16 +369,6 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
     return;
   }
 
-  const hitDist = Math.sqrt((hit.x - player.positionXWorld) ** 2 + (hit.y - player.positionYWorld) ** 2);
-
-  // Don't attach when the wall is closer than the minimum rope length — doing
-  // so would place the anchor inside the block geometry, which causes the
-  // visible dot to appear embedded in the tile and produces erratic physics.
-  if (hitDist < GRAPPLE_MIN_LENGTH_WORLD) {
-    triggerGrappleFailBeam(world, dirX, dirY, maxCastDist);
-    return;
-  }
-
   // Confirmed wall hit — cancel any active miss/retract before attaching.
   clearLegacyGrappleMissState(world);
   clearGrappleFailureFx(world);

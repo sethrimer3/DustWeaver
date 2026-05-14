@@ -496,6 +496,11 @@ export function tickGrappleZip(
       player.velocityYWorld = 0;
       world.grappleStuckStoppedTickCount++;
 
+      // Open the zip-jump window on the first stopped tick.
+      if (world.grappleStuckStoppedTickCount === 1) {
+        world.isZipJumpWindowOpenFlag = 1;
+      }
+
       // Fire the zip impact FX exactly once on the first fully-stopped tick.
       // hasZipImpactFxFiredFlag prevents re-triggering during the zip-jump window.
       if (world.hasZipImpactFxFiredFlag === 0) {
@@ -510,22 +515,22 @@ export function tickGrappleZip(
         );
       }
 
-      // Zip-jump window expired: release grapple quietly without any impulse.
-      // The player remains in place until gravity or their own movement takes over.
-      // (Jump within the window is handled in the jump-input block above.)
+      // Zip-jump window expired: close the visual window.
+      // For floor zips (surface normal points upward, normalY < 0) the grapple
+      // stays active so the player can jump off naturally.  For wall and ceiling
+      // zips the grapple releases quietly without any impulse.
       if (world.grappleStuckStoppedTickCount > GRAPPLE_ZIP_JUMP_WINDOW_TICKS) {
-        releaseGrapple(world, true); // grant coyote time for a natural follow-up jump
-        return true;
+        world.isZipJumpWindowOpenFlag = 0;
+        const isFloorSurface = world.grappleZipNormalYWorld < 0;
+        if (!isFloorSurface) {
+          releaseGrapple(world, true); // grant coyote time for a natural follow-up jump
+          return true;
+        }
       }
     } else {
       // Still decelerating — heavy friction to stop quickly
       player.velocityXWorld *= GRAPPLE_STUCK_DECEL_FACTOR;
       player.velocityYWorld *= GRAPPLE_STUCK_DECEL_FACTOR;
-
-      // Spawn skid debris while decelerating for dramatic effect
-      world.isPlayerSkiddingFlag = 1;
-      world.skidDebrisXWorld = player.positionXWorld;
-      world.skidDebrisYWorld = player.positionYWorld + player.halfHeightWorld;
     }
   }
 

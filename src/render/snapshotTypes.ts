@@ -315,6 +315,12 @@ export interface WorldSnapshot {
   readonly zipImpactFxNormalXWorld: number;
   /** Surface normal Y at the impact point. */
   readonly zipImpactFxNormalYWorld: number;
+  /**
+   * 1 while the zip-jump timing window is open (player can still earn the
+   * high-velocity zip-jump bonus).  Used by the renderer to drive the starburst
+   * animation only while the window is active.
+   */
+  readonly isZipJumpWindowOpenFlag: 0 | 1;
 
   /** 1 while the player is holding block or a sustained weave — used to drive player sprite rotation speed. */
   readonly isPlayerBlockingFlag: 0 | 1;
