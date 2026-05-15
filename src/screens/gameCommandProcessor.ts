@@ -18,7 +18,7 @@ import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerProgress } from '../progression/playerProgress';
 import type { CombatTextSystem } from '../render/hud/combatText';
-import { unlockActiveWeave } from '../progression/unlocks';
+import { unlockActiveWeave, unlockDustType } from '../progression/unlocks';
 import { getWeaveDefinition } from '../sim/weaves/weaveDefinition';
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
@@ -289,6 +289,10 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
             collectedDustSwarmKeySet.add(swarmKey);
             const rawKind = stringToParticleKind(sw.dustKind);
             const dustKind = rawKind !== null ? rawKind : ParticleKind.Physical;
+            // Permanently unlock this dust type in the player's progression.
+            if (progress) {
+              unlockDustType(progress, dustKind);
+            }
             spawnClusterParticles(
               world,
               playerForInteract.entityId,
