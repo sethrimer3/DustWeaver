@@ -217,13 +217,13 @@ export function updateCameraFollow(
 
       if (camState.camSettlingFramesLeft > 0) {
         // Frame-count lerp from settlingStart toward single-room bounds.
-        // t goes from 0 (first settling frame) to 1 (last).
+        // Decrement first so t reaches 1.0 on the last settling frame.
+        camState.camSettlingFramesLeft--;
         const t = 1.0 - camState.camSettlingFramesLeft / CAM_SETTLING_FRAMES;
         camState.effBoundsMinX = camState.settlingMinX + (0              - camState.settlingMinX) * t;
         camState.effBoundsMinY = camState.settlingMinY + (0              - camState.settlingMinY) * t;
         camState.effBoundsMaxX = camState.settlingMaxX + (roomWidthWorld  - camState.settlingMaxX) * t;
         camState.effBoundsMaxY = camState.settlingMaxY + (roomHeightWorld - camState.settlingMaxY) * t;
-        camState.camSettlingFramesLeft--;
       } else {
         // Post-settling: lerp effective bounds toward the active single-room bounds.
         const dtSec = elapsedMs / 1000;

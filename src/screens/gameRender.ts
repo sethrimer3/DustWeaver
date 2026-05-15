@@ -521,8 +521,8 @@ export function renderFrame(r: RenderFrameContext): void {
   if (r.stagedRoom !== null) {
     // Two-room mode: clip each room's background to its own screen rect so
     // rooms with different background images don't bleed into each other.
-    const stagedW = r.stagedRoom.room.widthBlocks * BLOCK_SIZE_SMALL;
-    const stagedH = r.stagedRoom.room.heightBlocks * BLOCK_SIZE_SMALL;
+    const stagedW = r.stagedRoom.room.widthBlocks * BLOCK_SIZE_MEDIUM;
+    const stagedH = r.stagedRoom.room.heightBlocks * BLOCK_SIZE_MEDIUM;
     const stagedOx = ox + r.stagedRoom.originXWorld * zoom;
     const stagedOy = oy + r.stagedRoom.originYWorld * zoom;
 

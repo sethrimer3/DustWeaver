@@ -229,6 +229,6 @@ export function buildPlayerShadowOccluders(
     poolObj.tipBx  = playerXPx + dirX * shadowLengthPx - perpX * tipRPx;
     poolObj.tipBy  = playerYPx + dirY * shadowLengthPx - perpY * tipRPx;
     poolObj.alpha  = SHADOW_CORE_ALPHA;
-    out[out.length] = poolObj;
+    out.push(poolObj);
   }
 }
