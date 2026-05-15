@@ -1,5 +1,53 @@
 # DustWeaver — Next Steps
 
+## BUILD 319 — Performance & Seamless Crossing Improvements
+
+### What Was Completed in BUILD 319
+
+1. **Shadow occluder allocation reduction** (`src/render/effects/shadowCaster.ts`):
+   - Removed `readonly` from `ShadowCasterOccluderPx` fields to allow in-place mutation.
+   - Added module-level pool of 4 mutable occluder objects (`_shadowPool`).
+   - `buildPlayerShadowOccluders` fills pool objects in-place instead of calling `out.push({...})`.
+   - Up to 4 object-literal allocations per frame eliminated in DarkRoom mode.
+
+2. **Decoration bloom allocation reduction** (`src/render/effects/glowPass.ts`,
+   `src/render/effects/wallDecorations.ts`):
+   - Added `GlowPass.drawCircleDirect(x, y, radius, intensity, color)` that accepts flat arguments.
+   - `addDecorationBloom` now calls `drawCircleDirect` instead of `drawCircle({...})`, eliminating
+     nested `{ x, y, radius, glow: { enabled, intensity, color } }` object literals per bloom call.
+
+3. **Environmental dust wall spatial partitioning** (`src/render/environmentalDust.ts`):
+   - Added `_wallColumnGrid: Map<number, number[]>` (cell width = 32 world units).
+   - `_buildWallGrid(world)` called once per room load: registers each wall index in every
+     column cell it spans.
+   - `resolveWorldCollisions` now looks up only the column bucket for the particle's X position
+     for both the AABB collision pass and the surface-anchor pass, reducing worst-case cost from
+     O(particles × walls) to O(particles × walls-in-column).
+
+4. **Staged room background rendering** (`src/screens/gameRender.ts`, `src/screens/gameScreen.ts`):
+   - Added `StagedRoomBgInfo` interface and `stagedRoom: StagedRoomBgInfo | null` field to
+     `RenderFrameContext`.
+   - When `stagedRoom` is non-null, `renderFrame` clips each room's background to its own
+     screen-space rect using nested `ctx.save()/clip()/restore()`, then calls
+     `renderWorldBackground` for the staged room first (with adjusted camera offset
+     `ox + originXWorld * zoom`) and then for the active room.
+   - Eliminates the visual discontinuity where the active room's background filled the full
+     union clip rect when rooms had different backgrounds.
+   - `gameScreen.ts` populates `stagedRoom` from `stagingState.stagedRooms[0]`.
+
+5. **Camera settling after seamless crossing finalization** (`src/screens/gameCameraState.ts`):
+   - Added `camSettlingFramesLeft`, `settlingMinX/Y/MaxX/Y`, `prevHadUnionBounds` to
+     `GameCameraState` and `CAM_SETTLING_FRAMES = 21` constant.
+   - When `renderUnionBounds` transitions from non-null → null, the settling window starts:
+     effective bounds lerp frame-by-frame from the captured union bounds toward the new
+     single-room bounds over 21 frames (~0.35 s at 60 fps), preventing the camera snap on
+     rooms narrower or shorter than 480×270 px.
+   - After settling expires, the existing `CAMERA_BOUNDS_LERP_SPEED` lerp resumes as before.
+   - This path is currently dormant (`ENABLE_TWO_ROOM_CAMERA_CROSSING = false`) but is in place
+     for when seamless crossings are re-enabled.
+
+---
+
 ## BUILD 318 — Campaign Spawn Trigger & Fade From Black
 
 ### What Was Completed in BUILD 318
@@ -69,107 +117,62 @@
 
 ---
 
-## All Pending / Deferred Work
+## Remaining / Deferred Work
 
-Items are grouped by risk and origin. The letter tags (A–C) and numbered task tags
-reference the build where the item was first documented.
-
----
-
-### Campaign & File System (Low Risk)
-
-#### 1. ~~Dynamic `STARTING_ROOM_ID`~~ — **Superseded by Campaign Spawn (BUILD 318)**
-**File:** `src/levels/rooms.ts`  
-~~**Issue:** `STARTING_ROOM_ID = 'lobby'` is a hard-coded fallback. Callers that use
-`campaign.initialRoomId` are already correct, but code that reads `STARTING_ROOM_ID`
-directly may silently break if the campaign's initial room changes.~~  
-**Resolution (BUILD 318):** The Campaign Spawn system (`campaignSpawn` field in
-`SavedCampaignMetadata`) is now the authoritative source for the starting room and
-block position. `game.ts` reads `getLoadedOfficialCampaignSpawn()` and `campaign.campaignSpawn`
-instead of hard-coded `STARTING_ROOM_ID`. The `STARTING_ROOM_ID = 'lobby'` constant is
-retained as a last-resort fallback but is no longer the primary mechanism.
+Items are grouped by risk and origin.
 
 ---
 
-### Rendering — Seamless Crossing (Medium Risk)
+### Campaign & File System
 
-#### 2. Staged room background rendering (Task 7)
-**Files:** `src/screens/gameScreen.ts`, `src/screens/gameRender.ts`, background renderer files  
-**Issue:** When a previous room is staged after seamless crossing, its background is not drawn.
-The active room background fills the expanded clip rect, producing visual discontinuity
-between rooms with different backgrounds.  
-**Proposed fix:** Detect `stagingState.stagedRooms.length > 0` in `renderFrame()`, call
-the background render pass a second time at the staged room's world-space origin offset
-(`stagedRoom.originXWorld`, `stagedRoom.originYWorld`). The background renderer API may
-need an `originOffsetWorld` parameter.  
-**Risk:** Medium — need to verify the background renderer handles world-space offsets
-correctly without bleed. Do not re-enable edge-extension preview in the same pass.
-
-#### 3. Camera settling after small-room crossing finalization (Task 8)
-**Files:** `src/render/camera.ts`, `src/screens/gameScreen.ts`, `src/screens/twoRoomCrossing.ts`  
-**Issue:** Rooms narrower or shorter than 480×270 px snap the camera to room center when
-`_finalizeCrossingSeamless()` replaces the union camera bounds with the new room's bounds.  
-**Proposed fix:** After finalization, keep a `camSettlingFramesLeft` counter (e.g. 21 frames
-= 0.35 s at 60 fps). While > 0, lerp the effective camera bounds toward the new room bounds
-each frame instead of snapping. `updateCameraWithBounds` already smooths; only the bounds
-swap needs the settling window.  
-**Risk:** Low — isolated to the finalization path; `preserveCamera`, `loadRoom`, and
-long-transition paths are unaffected.
+#### ~~1. Dynamic `STARTING_ROOM_ID`~~ — **Superseded by Campaign Spawn (BUILD 318)**
+**Resolution (BUILD 318):** The Campaign Spawn system is now the authoritative source for the
+starting room and block position. `STARTING_ROOM_ID = 'lobby'` is retained as a last-resort fallback.
 
 ---
 
-### Rendering — Performance (Low–Medium Risk)
+### Rendering — Seamless Crossing (Deferred — requires ENABLE_TWO_ROOM_CAMERA_CROSSING)
 
-#### 4. Environmental dust spatial partitioning
-**File:** `src/render/environmentalDust.ts`  
-**Issue:** The update path's wall-collision check may iterate all room walls for every
-active particle (`O(particles × walls)`). In large rooms with many walls this can be costly.  
-**Proposed fix:** Add a coarse grid (cell size ≈ 4× particle radius) keyed by cell position.
-Each frame, look up only the ~4 neighbouring cells instead of iterating all walls. Similar to
-`src/sim/spatial/`.  
-**Risk:** Behavioural change if grid boundary handling is wrong. Worth a separate PR.
-
-#### 5. Shadow occluder object allocations (Item A)
-**File:** `src/render/effects/darkRoomOverlay.ts`, `buildPlayerShadowOccluders()`  
-**Issue:** Up to 4 `{ baseAx, baseAy, … }` objects are pushed per frame in DarkRoom mode.  
-**Fix:** Pre-allocate a pool of 4 mutable occluder objects; fill them in place instead of
-calling `push` with object literals.  
-**Risk:** Low — contained within a single function.
-
-#### 6. Decoration bloom: per-frame object literals in BloomSystem (Item B)
-**File:** `src/render/effects/wallDecorations.ts`, `BloomSystem`  
-**Issue:** `addDecorationBloom()` creates `{ x, y, radius, glow: { … } }` descriptor
-objects each frame, adding GC pressure.  
-**Fix:** Pool the descriptor objects or replace with a flat typed-array draw queue.  
-**Risk:** Low–Medium — requires updating all BloomSystem call sites.
-
-#### 7. Spatial partitioning for DarkRoom particle-light loop (Item C)
-**File:** `src/render/effects/darkRoomOverlay.ts`  
-**Issue:** The particle-light loop scans all particles linearly (O(n)). With thousands of
-particles this is costly.  
-**Fix:** Use the spatial grid already present in `sim/spatial/` to query only
-screen-visible particles for the light-contribution pass.  
-**Risk:** Medium — cross-layer query (render reads from sim spatial index); needs a
-read-only snapshot interface.
-
-#### 8. Large-room stress-test room (Task 9)
-**File:** New file in `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/` or editor export  
-**Issue:** No dedicated profiler test room exists with high decoration, background block,
-and liquid/hazard coverage to measure chunk-rebuild performance across builds.  
-**Proposed path:** Use the room editor to author a ~120×80 room with 200+ decorations,
-30+ background block defs, 10+ dust containers, 4 sunbeam emitters, and representative
-liquid/hazard coverage; export and commit as a dev-only room.  
-**Risk:** Low — does not affect existing rooms or room schema.
-
----
-
-### Simulation — Seamless Crossing (High Risk, Deferred)
-
-#### 9. Staged room hazards / enemies / ropes (Task 7 follow-up)
+#### 1. Staged room hazards / enemies / ropes
 **Files:** `src/screens/gameSeamlessStaging.ts`, `src/sim/world.ts`, enemy AI files  
 **Issue:** Hazards (water/lava/spikes), enemies, falling blocks, and ropes from the staged
 room are not preserved after `loadRoom()`. Players can walk through them without interaction.  
 **Proposed path:** Before `loadRoom()` in `_finalizeCrossingSeamless`, snapshot the staged
 room's hazard arrays and enemy clusters; after `loadRoom()`, re-append them at the staged
 room's world-space offset. Enemy AI requires sim-layer awareness of the offset.  
+**Blocker:** `ENABLE_TWO_ROOM_CAMERA_CROSSING = false` in `src/render/transitions/transitionConfig.ts`.
+Re-enable crossing first, then address this sim-layer change.  
 **Risk:** High — requires non-trivial sim-layer changes; defer to a dedicated pass.
+
+---
+
+### Rendering — Performance
+
+#### 2. Spatial partitioning for DarkRoom particle-light loop
+**File:** `src/render/effects/darkRoomOverlay.ts`, `src/screens/gameDarkRoomLighting.ts`  
+**Issue:** The particle-light contribution loop in `renderDarkRoomLighting` scans all
+particles linearly (O(n)). With thousands of particles this can be costly even though
+viewport culling and `maxParticleLightCount` limit how many lights are emitted.  
+**Proposed fix options:**
+- Add a compact alive-Physical index list to `WorldSnapshot` (one sweep per frame, maintained
+  during `updateSnapshotInPlace`), letting the render loop skip dead/non-Physical particles.
+  Requires snapshot schema change but no cross-layer spatial coupling.
+- Or: build a per-frame volatile spatial index from snapshot particle positions for the
+  lighting pass only. Acceptable since it's render-only.  
+**Blocker:** Any approach requires either snapshot schema changes or a per-frame allocation.
+  The existing viewport-cull + quality-cap already limits practical cost to tens of particles
+  per frame in most rooms.  
+**Risk:** Medium — cross-layer or snapshot interface changes needed.
+
+#### 3. Large-room stress-test room
+**File:** New file in `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/` or editor export  
+**Issue:** No dedicated profiler test room exists with high decoration, background block,
+and liquid/hazard coverage to measure chunk-rebuild performance across builds.  
+**Required steps (editor-only, cannot be hand-authored safely):**
+  1. Open editor, create a new room ~120×80 blocks.
+  2. Add 200+ decorations, 30+ background block defs, 10+ dust containers, 4 sunbeam emitters,
+     representative liquid zones and spike hazards.
+  3. Export room JSON to `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/dev_stress_test.json`.
+  4. Add to the room registry (`src/levels/rooms.ts`) behind a dev flag so it is accessible
+     from the editor visual map without appearing in the campaign path.  
+**Risk:** Low — does not affect existing rooms. Must be done via editor, not hand-written JSON.

@@ -426,16 +426,7 @@ export function addDecorationBloom(
       const glowR     = 5 * scalePx;
       if (!isScreenCircleVisible(centerXPx, centerYPx, glowR, vpW, vpH)) continue;
       const pulse     = 0.8 + 0.2 * Math.sin(nowMs * 0.0011 + d.seed * 0.013);
-      bloomSystem.glowPass.drawCircle({
-        x:    centerXPx,
-        y:    centerYPx,
-        radius: glowR,
-        glow: {
-          enabled:   true,
-          intensity: 0.22 * pulse,
-          color:     '#22aa44',
-        },
-      });
+      bloomSystem.glowPass.drawCircleDirect(centerXPx, centerYPx, glowR, 0.22 * pulse, '#22aa44');
       submitted++;
     } else if (d.kind === 'mushroom') {
       const h2       = _hash(d.seed, 0, 0xf00dface);
@@ -450,16 +441,7 @@ export function addDecorationBloom(
       const isBlue   = ((h2 >> 4) & 1) === 0;
       const glowColor = isBlue ? '#8860e0' : '#44cc88';
       const pulse     = 0.75 + 0.25 * Math.sin(nowMs * 0.0009 + d.seed * 0.017);
-      bloomSystem.glowPass.drawCircle({
-        x:    capCX,
-        y:    capCY,
-        radius: glowR,
-        glow: {
-          enabled:   true,
-          intensity: 0.55 * pulse,
-          color:     glowColor,
-        },
-      });
+      bloomSystem.glowPass.drawCircleDirect(capCX, capCY, glowR, 0.55 * pulse, glowColor);
       submitted++;
     } else {
       // Vine: glow at the tip (bottom) of the longest strand
@@ -473,16 +455,7 @@ export function addDecorationBloom(
       const glowR = 5 * scalePx;
       if (!isScreenCircleVisible(tipCX, tipCY, glowR, vpW, vpH)) continue;
       const pulse = 0.8 + 0.2 * Math.sin(nowMs * 0.0013 + d.seed * 0.019);
-      bloomSystem.glowPass.drawCircle({
-        x:    tipCX,
-        y:    tipCY,
-        radius: glowR,
-        glow: {
-          enabled:   true,
-          intensity: 0.30 * pulse,
-          color:     '#2ad46a',
-        },
-      });
+      bloomSystem.glowPass.drawCircleDirect(tipCX, tipCY, glowR, 0.30 * pulse, '#2ad46a');
       submitted++;
     }
   }
