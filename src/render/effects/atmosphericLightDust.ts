@@ -46,11 +46,26 @@ export class AtmosphericLightDust {
   private spawnZoneIndex = 0;
   /** Effective mote cap for the current quality tier.  Defaults to MAX_MOTES. */
   private _maxMotes = MAX_MOTES;
+  /**
+   * Density multiplier (0–1).  At 0.5 the render pass skips every other mote
+   * (stride 2), providing immediate visual density reduction without waiting
+   * for motes to age out.  Defaults to 1.0 (all motes drawn).
+   */
+  private _densityMultiplier = 1.0;
 
   /** Update the maximum live mote count.  New motes won't spawn above this cap;
    *  existing motes above it fade out naturally over their lifetime. */
   setMaxMotes(n: number): void {
     this._maxMotes = Math.max(0, Math.min(n, MAX_MOTES));
+  }
+
+  /**
+   * Set a render-pass density multiplier.  Use 0.5 for adaptive quality tier 1
+   * to immediately halve visible mote count.  1.0 = full density (default).
+   * Only affects rendering; does not change the live mote pool.
+   */
+  setDensityMultiplier(m: number): void {
+    this._densityMultiplier = Math.max(0, Math.min(1, m));
   }
 
   initFromRoom(room: RoomDef): void {
@@ -133,8 +148,11 @@ export class AtmosphericLightDust {
 
     // Motes are 2×2 px; add 2 px margin so partially-visible motes are drawn.
     const cullMarginPx = 2;
+    // Density multiplier: stride > 1 skips motes for immediate density reduction.
+    // stride 1 = full density, stride 2 = 50%, etc.
+    const stride = this._densityMultiplier >= 0.75 ? 1 : 2;
 
-    for (let i = 0; i < this.moteCount; i++) {
+    for (let i = 0; i < this.moteCount; i += stride) {
       const px = this.moteX[i] * zoom + offsetXPx;
       const py = this.moteY[i] * zoom + offsetYPx;
 

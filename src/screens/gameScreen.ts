@@ -623,6 +623,11 @@ export function startGameScreen(
   const skidDebris = new SkidDebrisRenderer();
   const crumbleDebris = new CrumbleDebrisRenderer();
   const weakWallJumpDebris = new WeakWallJumpDebrisRenderer();
+  // Wire real audio for debris thud impacts. The callback uses jump_impact_soft
+  // at the per-particle volume so thuds are subtle and not spammy.
+  weakWallJumpDebris.setThudCallback((opts) => {
+    try { playerSfx.play('jump_impact_soft', opts.volumeLinear); } catch { /* guard */ }
+  });
   const skillTombRenderer = new SkillTombRenderer();
   const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();

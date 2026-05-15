@@ -31,12 +31,16 @@ const ROPE_OUTLINE_EXTRA_PX = 2.0;
 const _scratchXsPx = new Float32Array(MAX_ROPE_SEGMENTS);
 const _scratchYsPx = new Float32Array(MAX_ROPE_SEGMENTS);
 
+import { isScreenRectVisible } from '../viewportCull';
+
 export function renderRopes(
   ctx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  vpW = 480,
+  vpH = 270,
 ): void {
   if (snapshot.ropeCount === 0) return;
 
@@ -54,10 +58,26 @@ export function renderRopes(
     const bodyWidth = Math.max(1.0, halfThick * 2.0 * zoom);
 
     // Precompute pixel positions into pre-allocated scratch buffers
+    // and compute AABB for viewport culling in the same pass.
+    let minXPx = Infinity, minYPx = Infinity, maxXPx = -Infinity, maxYPx = -Infinity;
     for (let s = 0; s < segCount; s++) {
-      _scratchXsPx[s] = snapshot.ropeSegPosXWorld[base + s] * zoom + offsetXPx;
-      _scratchYsPx[s] = snapshot.ropeSegPosYWorld[base + s] * zoom + offsetYPx;
+      const xPx = snapshot.ropeSegPosXWorld[base + s] * zoom + offsetXPx;
+      const yPx = snapshot.ropeSegPosYWorld[base + s] * zoom + offsetYPx;
+      _scratchXsPx[s] = xPx;
+      _scratchYsPx[s] = yPx;
+      if (xPx < minXPx) minXPx = xPx;
+      if (yPx < minYPx) minYPx = yPx;
+      if (xPx > maxXPx) maxXPx = xPx;
+      if (yPx > maxYPx) maxYPx = yPx;
     }
+
+    // Skip ropes whose AABB (plus margin for outline + anchor cap) is offscreen.
+    const margin = bodyWidth + ROPE_OUTLINE_EXTRA_PX + ROPE_ANCHOR_RADIUS_PX + 1;
+    if (!isScreenRectVisible(
+      minXPx - margin, minYPx - margin,
+      maxXPx - minXPx + margin * 2, maxYPx - minYPx + margin * 2,
+      vpW, vpH,
+    )) continue;
 
     // ── Shadow / outline pass ──────────────────────────────────────────
     ctx.strokeStyle = ROPE_OUTLINE;

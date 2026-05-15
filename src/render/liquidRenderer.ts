@@ -86,6 +86,8 @@ export function renderWaterZones(
   offsetYPx: number,
   zoom: number,
   tick: number,
+  vpW = 480,
+  vpH = 270,
 ): void {
   tickLiquidBubbles(tick);
   tickWaterSplash();
@@ -116,6 +118,15 @@ export function renderWaterZones(
   for (let bi = 0; bi < bodies.length; bi++) {
     const body = bodies[bi];
     if (body.kind !== 'water') continue;
+    // Cull bodies whose world-space AABB is fully outside the viewport.
+    const bodyLeftPx  = body.minXWorld * zoom + offsetXPx;
+    const bodyWidthPx = (body.maxXWorld - body.minXWorld) * zoom;
+    const bodyTopPx   = body.minYWorld * zoom + offsetYPx;
+    const bodyHeightPx = (body.maxYWorld - body.minYWorld) * zoom;
+    // Add a small margin for wave amplitude overshoot.
+    const waveMarginPx = LIQUID_EDGE_WAVE_AMPLITUDE * zoom + 4;
+    if (bodyLeftPx + bodyWidthPx + waveMarginPx < 0 || bodyLeftPx - waveMarginPx > vpW) continue;
+    if (bodyTopPx + bodyHeightPx + waveMarginPx < 0 || bodyTopPx - waveMarginPx > vpH) continue;
     renderWaterBody(ctx, body, bi, offsetXPx, offsetYPx, zoom, tick);
   }
 
@@ -136,6 +147,8 @@ export function renderLavaZones(
   offsetYPx: number,
   zoom: number,
   tick: number,
+  vpW = 480,
+  vpH = 270,
 ): void {
   tickLavaSparks(tick);
   const bodies = getLiquidBodies(world);
@@ -143,6 +156,14 @@ export function renderLavaZones(
   for (let bi = 0; bi < bodies.length; bi++) {
     const body = bodies[bi];
     if (body.kind !== 'lava') continue;
+    // Cull bodies fully outside the viewport (generous margin for sparks).
+    const bodyLeftPx   = body.minXWorld * zoom + offsetXPx;
+    const bodyWidthPx  = (body.maxXWorld - body.minXWorld) * zoom;
+    const bodyTopPx    = body.minYWorld * zoom + offsetYPx;
+    const bodyHeightPx = (body.maxYWorld - body.minYWorld) * zoom;
+    const sparkMarginPx = SPARK_SPEED_MAX * SPARK_LIFETIME_TICKS * zoom + 8;
+    if (bodyLeftPx + bodyWidthPx + sparkMarginPx < 0 || bodyLeftPx - sparkMarginPx > vpW) continue;
+    if (bodyTopPx + bodyHeightPx + sparkMarginPx < 0 || bodyTopPx - sparkMarginPx > vpH) continue;
     renderLavaBody(ctx, body, bi, offsetXPx, offsetYPx, zoom, tick);
   }
 

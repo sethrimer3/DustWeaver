@@ -57,6 +57,17 @@ export class SunbeamRenderer {
     this._isEnabled = enabled;
   }
 
+  /**
+   * Set a density multiplier for beam intensity (0–1).
+   * At 0.5 (adaptive tier 1), beam alpha is scaled down so beams are subtler
+   * without disabling them entirely.  1.0 = full intensity (default).
+   * Tier 2 should call setEnabled(false) instead.
+   */
+  private _densityMultiplier = 1.0;
+  setDensityMultiplier(m: number): void {
+    this._densityMultiplier = Math.max(0, Math.min(1, m));
+  }
+
   render(
     ctx: CanvasRenderingContext2D,
     offsetXPx: number,
@@ -123,7 +134,7 @@ export class SunbeamRenderer {
     // Beam shaft: trapezoid — wide at origin, narrows to a point at tip.
     // Subtle shimmer so the beam appears to breathe.
     const shimmer = 0.85 + 0.15 * Math.sin(nowMs * 0.0009 + beamIndex * 1.3);
-    const alpha = (beam.intensityPct / 100) * shimmer;
+    const alpha = (beam.intensityPct / 100) * shimmer * this._densityMultiplier;
 
     ctx.beginPath();
     ctx.moveTo(bx0, by0);
