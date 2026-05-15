@@ -33,7 +33,12 @@ export interface SavedSolids {
   byTheme: Record<string, SavedSolidLayer>;
 }
 
-/** A compact wall entry: theme, platform/ramp/pillar flags, and position. */
+/**
+ * A "special" wall entry that cannot participate in the uniform tile-grid
+ * cover used by `SavedSolids` — i.e. one-way platforms, ramps, and
+ * half-width pillars.  These travel in `specialWalls` and bypass the
+ * tile-grid compressor entirely.
+ */
 export interface SavedSpecialWall {
   /** [x, y, w, h] */
   r: SavedRect;
