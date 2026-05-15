@@ -15,6 +15,16 @@ import {
 import type { EditableCampaignSession } from './editableCampaignSession';
 import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCampaignSession';
 import { WORLD_NAMES } from '../levels/rooms';
+import { BUILD_NUMBER } from '../build-info';
+
+// ── Main campaign constants ───────────────────────────────────────────────────
+const MAIN_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN';
+const MAIN_CAMPAIGN_TITLE = 'DustWeaver';
+const MAIN_CAMPAIGN_CREATOR = 'GravyThyme';
+const MAIN_CAMPAIGN_DESCRIPTION =
+  'The main DustWeaver campaign. This is the core single-player game experience ' +
+  'with the canonical world map, progression, and story path.';
+const MAIN_CAMPAIGN_INITIAL_ROOM_ID = 'lobby';
 
 /**
  * Exports the given editor room data as a downloadable .json file using the
@@ -137,6 +147,91 @@ export function exportCampaignJson(
 
   // Wall-clock time is intentionally used here: the date is purely a human-
   // readable suffix on a download filename, not simulation or game state.
+  const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dustweaver-campaign-${exported.campaign.id}-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/**
+ * Exports the main DustWeaver campaign as a single `.json` file.
+ *
+ * Builds a synthetic EditableCampaignSession from the current ROOM_REGISTRY
+ * (dehydrating every room) and merges any pending room edits on top before
+ * assembling the final SavedCampaignV1 payload.
+ *
+ * This is the handler for the "Export Campaign" button when editing the main
+ * DustWeaver campaign (not a custom campaign session).
+ *
+ * @param pendingRoomEdits  Rooms with unsaved edits from the current session.
+ */
+export function exportMainCampaignJson(
+  pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
+): void {
+  if (import.meta.env.DEV) {
+    for (const [, data] of pendingRoomEdits) {
+      const verboseJson = editorRoomDataToJson(data);
+      const errors = validateRoomRoundtrip(verboseJson);
+      if (errors.length > 0) {
+        console.error(
+          `[editorExport] Main campaign round-trip validation failed for room "${data.id}":`,
+          errors,
+        );
+      }
+    }
+  }
+
+  // Dehydrate every room in the registry to SavedRoomV2 as the baseline.
+  // assembleExportCampaign will override with pending edits when present.
+  const baselineRooms: ReturnType<typeof dehydrateRoom>[] = [];
+  for (const [, roomDef] of ROOM_REGISTRY) {
+    const { data } = roomDefToEditorRoomData(roomDef, 1);
+    const jsonDef = editorRoomDataToJson(data);
+    baselineRooms.push(dehydrateRoom(jsonDef));
+  }
+
+  const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+
+  // Synthetic session carrying the main campaign metadata and baseline rooms.
+  const syntheticSession: EditableCampaignSession = {
+    source: 'main',
+    campaign: {
+      v: 1,
+      kind: 'DustWeaverCampaign',
+      campaign: {
+        id: MAIN_CAMPAIGN_ID,
+        title: MAIN_CAMPAIGN_TITLE,
+        creator: MAIN_CAMPAIGN_CREATOR,
+        description: MAIN_CAMPAIGN_DESCRIPTION,
+        initialRoomId: MAIN_CAMPAIGN_INITIAL_ROOM_ID,
+        initialRoomImagePath: null,
+      },
+      worldMap,
+      rooms: baselineRooms,
+      editor: {
+        createdWithBuild: String(BUILD_NUMBER),
+        lastEditedIso: new Date().toISOString(),
+      },
+    },
+  };
+
+  const exported = assembleExportCampaign(
+    syntheticSession,
+    pendingRoomEdits,
+    ROOM_REGISTRY,
+    worldMap,
+  );
+
+  const text = JSON.stringify(exported, null, 2);
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  // Wall-clock time is intentionally used here: the date is a human-readable
+  // suffix on the download filename, not simulation or game state.
   const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const a = document.createElement('a');
   a.href = url;

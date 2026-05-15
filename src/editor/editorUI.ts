@@ -81,25 +81,14 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   confirmCancelBar.appendChild(cancelBtn);
   container.appendChild(confirmCancelBar);
 
-  // ── Export Campaign / Export All Changes button ──────────────────────────
-  // In campaign mode: shows "Export Campaign" which exports the full campaign
-  // as a single .json file.  The separate "Export Campaign JSON" button is
-  // intentionally omitted — this single button covers both use-cases.
-  // In plain-world-editor mode: shows "Export All Changes" for per-room exports.
-  let exportAllBtn: HTMLButtonElement;
-  if (campaignTitle) {
-    exportAllBtn = makeBtn('📦 Export Campaign', () => callbacks?.onExportCampaignJson?.());
-    exportAllBtn.style.cssText += `
-      width: 100%; padding: 8px; font-size: 12px; margin-bottom: 10px;
-      background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
-    `;
-  } else {
-    exportAllBtn = makeBtn('📁 Export All Changes', () => callbacks?.onExportAllChanges());
-    exportAllBtn.style.cssText += `
-      width: 100%; padding: 8px; font-size: 12px; margin-bottom: 10px;
-      background: rgba(80,60,0,0.4); border-color: #ccaa00; color: #ccaa00;
-    `;
-  }
+  // ── Export Campaign button ───────────────────────────────────────────────
+  // Always shows "Export Campaign" regardless of whether this is a custom
+  // campaign session or the main DustWeaver campaign.
+  const exportAllBtn = makeBtn('📦 Export Campaign', () => callbacks?.onExportCampaignJson?.());
+  exportAllBtn.style.cssText += `
+    width: 100%; padding: 8px; font-size: 12px; margin-bottom: 10px;
+    background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
+  `;
   container.appendChild(exportAllBtn);
 
   // ── Tool buttons ─────────────────────────────────────────────────────────

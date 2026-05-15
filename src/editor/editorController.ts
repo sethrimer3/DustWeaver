@@ -32,7 +32,7 @@ import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { transitionLinkWarningMessage } from './transitionValidation';
-import { exportRoomAsJson, exportAllChanges, exportCampaignJson } from './editorExport';
+import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
 import { ROOM_REGISTRY, initRoomRegistry, registerRoom } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
@@ -246,14 +246,18 @@ export function createEditorController(
             window.alert('No changed rooms or world-map edits to export yet.');
           }
         },
-        onExportCampaignJson: campaignSession ? () => {
+        onExportCampaignJson: () => {
           // Auto-save current room to pending before exporting so it's included.
           if (state.roomData) {
             pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
             isCurrentRoomDirty = false;
           }
-          exportCampaignJson(campaignSession, pendingRoomEdits);
-        } : undefined,
+          if (campaignSession) {
+            exportCampaignJson(campaignSession, pendingRoomEdits);
+          } else {
+            exportMainCampaignJson(pendingRoomEdits);
+          }
+        },
         onOpenVisualMap: () => openVisualMap(),
         onSkillTombWeaveChange: (weaveId: string) => {
           state.pendingSkillTombWeaveId = weaveId;
