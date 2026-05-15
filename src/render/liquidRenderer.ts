@@ -174,6 +174,7 @@ function renderWaterBody(
   grad.addColorStop(1.0, 'rgba(10,60,160,0.60)');
   ctx.fillStyle = grad;
 
+  ctx.beginPath();
   for (let ri = 0; ri < mergedRects.length; ri++) {
     const rect = mergedRects[ri];
     // Pixel-snap the draw region to avoid sub-pixel gaps between adjacent rects
@@ -183,8 +184,9 @@ function renderWaterBody(
     const sy = Math.floor(rect.yWorld * zoom + offsetYPx);
     const sw = Math.ceil((rect.xWorld + rect.wWorld) * zoom + offsetXPx) - sx;
     const sh = Math.ceil((rect.yWorld + rect.hWorld) * zoom + offsetYPx) - sy;
-    ctx.fillRect(sx, sy, sw, sh);
+    ctx.rect(sx, sy, sw, sh);
   }
+  ctx.fill();
 
   // ── Caustic shimmer dots (one lightweight pass across the body area) ──────
   if (bodyHeightPx > 0) {
@@ -223,14 +225,6 @@ function renderWaterBody(
     ctx.lineWidth = zoom * 0.8;
     ctx.beginPath();
     drawWaveLine(ctx, rx, ry, rw, phaseBase, phaseBase2, wAmpPx, taperPx, run.yWorld, zoom, offsetXPx);
-    ctx.stroke();
-
-    // Sub-surface line (static)
-    ctx.strokeStyle = 'rgba(80,160,255,0.30)';
-    ctx.lineWidth = zoom * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(rx, ry + 2 * zoom);
-    ctx.lineTo(rx + rw, ry + 2 * zoom);
     ctx.stroke();
   }
 
