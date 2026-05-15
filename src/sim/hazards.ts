@@ -310,8 +310,8 @@ export function applyHazards(world: WorldState): void {
     if (submersion > 0) {
       const depthFactor = submersion;
       world.playerBuoyancyDepthFactor = depthFactor;
-      const buoyancyAccelWorld = WATER_BUOYANCY_FORCE_WORLD * submersion * depthFactor;
-      player.velocityYWorld -= buoyancyAccelWorld * dtSec;
+      const buoyancyAccelWorldPerSec2 = WATER_BUOYANCY_FORCE_WORLD * submersion * depthFactor;
+      player.velocityYWorld -= buoyancyAccelWorldPerSec2 * dtSec;
     }
 
     // Clamp upward float speed (prevent rocketing to surface)

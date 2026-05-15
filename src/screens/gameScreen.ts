@@ -1655,7 +1655,7 @@ export function startGameScreen(
           submergedFraction:    world.playerWaterSubmersionRatio,
           liquidSurfaceYWorld:  world.playerBuoyancySurfaceYWorld,
           depthFactor:          world.playerBuoyancyDepthFactor,
-          buoyancyAccelWorld:   WATER_BUOYANCY_FORCE_WORLD
+          buoyancyAccelWorldPerSec2: WATER_BUOYANCY_FORCE_WORLD
             * world.playerWaterSubmersionRatio
             * world.playerBuoyancyDepthFactor,
           gravityScale:         world.isPlayerInWaterFlag === 1

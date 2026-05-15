@@ -56,7 +56,7 @@ export interface HudDebugState {
   liquidSurfaceYWorld: number;
   depthFactor: number;
   /** Buoyancy acceleration applied this tick (wu/s²). */
-  buoyancyAccelWorld: number;
+  buoyancyAccelWorldPerSec2: number;
   /** Effective gravity scale applied in water this tick (fraction of normal gravity). */
   gravityScale: number;
   /** Player vertical velocity (wu/s); negative = upward. */
@@ -104,7 +104,7 @@ export function renderHudOverlay(
       `Input Grap/Int: ${d.inputGrapple ? 'G' : '-'} / ${d.inputInteract ? 'I' : '-'}`,
       // Water / buoyancy
       `Water: ${d.isInLiquid ? 'IN' : 'OUT'} sub=${d.submergedFraction.toFixed(2)} df=${d.depthFactor.toFixed(2)}`,
-      `Buoy: ${d.buoyancyAccelWorld.toFixed(1)}wu/s² gScale=${d.gravityScale.toFixed(2)} velY=${d.playerVelocityYWorld.toFixed(1)}`,
+      `Buoy: ${d.buoyancyAccelWorldPerSec2.toFixed(1)}wu/s² gScale=${d.gravityScale.toFixed(2)} velY=${d.playerVelocityYWorld.toFixed(1)}`,
       `LiqSurf: ${d.liquidSurfaceYWorld.toFixed(1)}`,
     ];
   }
