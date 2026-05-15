@@ -166,8 +166,14 @@ export interface SnapIndicator {
 }
 
 /**
- * Returns the door's centre in map-world coordinates given its containing
+ * Returns the door's logical anchor in map-world coordinates given its containing
  * room's current placement.
+ *
+ * The anchor is placed exactly on the relevant room edge (left=cx, right=cx+roomW,
+ * top=cy, bottom=cy+roomH) so that when two rooms snap together via opposite doors
+ * the result is flush wall-to-wall placement with zero overlap and zero gap.
+ *
+ * The perpendicular coordinate is the centre of the opening along that edge.
  */
 export function getDoorCenterWorld(
   trans: RoomTransitionDef,
@@ -175,13 +181,20 @@ export function getDoorCenterWorld(
 ): [number, number] {
   const cx = placement.mapXWorld;
   const cy = placement.mapYWorld;
-  const gw = trans.gradientWidthBlocks ?? 3;
+  const rw = placement.room.widthBlocks;
+  const rh = placement.room.heightBlocks;
   const isHoriz = trans.direction === 'left' || trans.direction === 'right';
   const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
   const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
-  const zoneW = isHoriz ? gw : trans.openingSizeBlocks;
-  const zoneH = isHoriz ? trans.openingSizeBlocks : gw;
-  return [cx + xB + zoneW / 2, cy + yB + zoneH / 2];
+
+  switch (trans.direction) {
+    // Horizontal transitions: anchor is on the left or right room edge.
+    case 'right': return [cx + rw, cy + yB + trans.openingSizeBlocks / 2];
+    case 'left':  return [cx,      cy + yB + trans.openingSizeBlocks / 2];
+    // Vertical transitions: anchor is on the top or bottom room edge.
+    case 'down':  return [cx + xB + trans.openingSizeBlocks / 2, cy + rh];
+    case 'up':    return [cx + xB + trans.openingSizeBlocks / 2, cy];
+  }
 }
 
 /** True when direction `a` and `b` face each other (and can be aligned). */

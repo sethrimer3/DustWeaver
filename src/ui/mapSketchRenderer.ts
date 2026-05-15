@@ -126,8 +126,18 @@ interface ContourData {
   readonly contours: readonly Float32Array[];
 }
 
-/** Per-room contour cache — rooms are static, so this never needs invalidation. */
+/** Per-room contour cache — rooms are static, so this rarely needs invalidation. */
 const contourCache = new Map<string, ContourData>();
+
+/** Clears the contour cache so all rooms are re-contoured on next draw. */
+export function clearContourCache(): void {
+  contourCache.clear();
+}
+
+/** Invalidates the cached contour for a single room (e.g. after an editor change). */
+export function invalidateRoomContour(roomId: string): void {
+  contourCache.delete(roomId);
+}
 
 /**
  * Builds and caches silhouette contours for a room.
@@ -209,17 +219,19 @@ function buildRoomContour(room: RoomDef): ContourData {
   for (let gy = 0; gy < h; gy++) {
     for (let gx = 0; gx < w; gx++) {
       if (solid[gy * w + gx] !== 1) continue;
-      // Top edge: emit if top neighbor is empty or out of bounds
-      if (gy === 0 || solid[(gy - 1) * w + gx] === 0)
+      // Top edge: emit only when the top neighbor tile is an in-bounds air tile.
+      // We deliberately do NOT emit for out-of-bounds neighbors — those edges lie
+      // on the outer room boundary rectangle and must not appear on the world map.
+      if (gy > 0 && solid[(gy - 1) * w + gx] === 0)
         addEdge(gx, gy, gx + 1, gy);
-      // Right edge: emit if right neighbor is empty or out of bounds
-      if (gx === w - 1 || solid[gy * w + (gx + 1)] === 0)
+      // Right edge: emit only when the right neighbor is an in-bounds air tile.
+      if (gx < w - 1 && solid[gy * w + (gx + 1)] === 0)
         addEdge(gx + 1, gy, gx + 1, gy + 1);
-      // Bottom edge: emit if bottom neighbor is empty or out of bounds
-      if (gy === h - 1 || solid[(gy + 1) * w + gx] === 0)
+      // Bottom edge: emit only when the bottom neighbor is an in-bounds air tile.
+      if (gy < h - 1 && solid[(gy + 1) * w + gx] === 0)
         addEdge(gx + 1, gy + 1, gx, gy + 1);
-      // Left edge: emit if left neighbor is empty or out of bounds
-      if (gx === 0 || solid[gy * w + (gx - 1)] === 0)
+      // Left edge: emit only when the left neighbor is an in-bounds air tile.
+      if (gx > 0 && solid[gy * w + (gx - 1)] === 0)
         addEdge(gx, gy + 1, gx, gy);
     }
   }

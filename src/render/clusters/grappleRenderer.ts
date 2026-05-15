@@ -202,18 +202,72 @@ function renderZipImpactFx(
   ctx.restore();
 }
 
+/**
+ * Renders the golden recharge-ring VFX that appears when the grapple charge
+ * is restored (player touches ground after spending a grapple).
+ *
+ * Visual: a ring that starts wide around the player body, quickly shrinks
+ * toward the player centre, and fades from 0 to ~50 % opacity.  The warm
+ * gold colour (#f5c84b) signals "ready" at a glance without being noisy.
+ */
+function renderGrappleRechargeRing(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  if (snapshot.grappleRechargeRingTicksLeft <= 0) return;
+
+  let playerCluster: (typeof snapshot.clusters)[0] | undefined;
+  for (let ci = 0; ci < snapshot.clusters.length; ci++) {
+    if (snapshot.clusters[ci].isPlayerFlag === 1 && snapshot.clusters[ci].isAliveFlag === 1) {
+      playerCluster = snapshot.clusters[ci];
+      break;
+    }
+  }
+  if (playerCluster === undefined) return;
+
+  const total = Math.max(1, snapshot.grappleRechargeRingTotalTicks);
+  const elapsed = total - snapshot.grappleRechargeRingTicksLeft;
+  // t goes 0→1 over the effect lifetime
+  const t = Math.min(1, elapsed / total);
+
+  // Radius shrinks from 1.2× player half-width down to 0.2× (toward centre)
+  const halfW = playerCluster.halfWidthWorld * scalePx;
+  const radiusPx = halfW * (1.2 - t * 1.0);
+
+  // Alpha ramps 0 → 0.5 then back to 0 (bell-shaped)
+  const alpha = Math.sin(t * Math.PI) * 0.5;
+
+  const cx = playerCluster.positionXWorld * scalePx + offsetXPx;
+  const cy = playerCluster.positionYWorld * scalePx + offsetYPx;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = '#f5c84b';
+  ctx.lineWidth = Math.max(1, scalePx * 0.6);
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(1, radiusPx), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
   const hasActiveGrapple = snapshot.isGrappleActiveFlag === 1;
   const hasFailFx =
     snapshot.grappleFailBeamTicksLeft > 0 ||
     snapshot.grappleEmptyFxTicksLeft > 0;
   const hasZipImpactFx = snapshot.zipImpactFxTicksLeft > 0;
+  const hasRechargeFx = snapshot.grappleRechargeRingTicksLeft > 0;
 
-  if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0 && !hasFailFx && !hasZipImpactFx) return;
+  if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0 && !hasFailFx && !hasZipImpactFx && !hasRechargeFx) return;
 
   renderGrappleFailBeam(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderGrappleEmptyFx(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderZipImpactFx(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+  // Golden ring: rendered before the rope so it appears under the chain.
+  renderGrappleRechargeRing(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
 
   let playerCluster: (typeof snapshot.clusters)[0] | undefined;
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {

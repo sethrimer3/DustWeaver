@@ -311,6 +311,22 @@ export interface GrappleWorldState {
    */
   grappleRetractHeldTicks: number;
 
+  // ── Grapple recharge ring VFX ──────────────────────────────────────────────
+  /**
+   * Ticks remaining for the golden recharge-ring effect.
+   * > 0 while the ring is visible, counts down to 0 (inactive).
+   * Set to grappleRechargeRingTotalTicks when hasGrappleChargeFlag transitions
+   * from 0 → 1 (grapple becomes available again after touching the ground).
+   */
+  grappleRechargeRingTicksLeft: number;
+  /** Total duration of the recharge ring effect in ticks (~16 ticks = ~0.27 s). */
+  grappleRechargeRingTotalTicks: number;
+  /**
+   * Previous-tick value of hasGrappleChargeFlag.  Stored so the sim can detect
+   * the 0 → 1 transition without relying on the renderer or any external state.
+   */
+  prevHasGrappleChargeFlag: 0 | 1;
+
   // ── Grapple geometric wrapping (Phase 2) ──────────────────────────────────
   /**
    * Debug/feature flag.  1 = geometric corner wrapping is active; 0 = disabled.
@@ -399,6 +415,9 @@ export function createGrappleWorldState(): GrappleWorldState {
     grappleDebugRawHitYWorld:              0.0,
     isGrappleDebugActiveFlag:              0,
     grappleRetractHeldTicks:               0,
+    grappleRechargeRingTicksLeft:          0,
+    grappleRechargeRingTotalTicks:         16,
+    prevHasGrappleChargeFlag:              1, // starts charged; no ring on first tick
     isGrappleWrappingEnabled:              0,
     grappleWrapPointCount:                 0,
     grappleWrapPointXWorld:                new Float32Array(MAX_GRAPPLE_WRAP_POINTS),

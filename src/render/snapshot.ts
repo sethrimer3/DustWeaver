@@ -74,6 +74,10 @@ interface _ReusableBacking {
   isZipJumpWindowOpenFlag: 0 | 1;
   isPlayerBlockingFlag: 0 | 1;
   hasGrappleChargeFlag: 0 | 1;
+  /** Ticks remaining for the golden recharge-ring VFX (> 0 = ring active). */
+  grappleRechargeRingTicksLeft: number;
+  /** Total duration of the recharge-ring VFX in ticks. */
+  grappleRechargeRingTotalTicks: number;
   isPlayerWeaveActiveFlag: 0 | 1;
   characterId: string;
   grasshopperCount: number;
@@ -386,6 +390,8 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     isZipJumpWindowOpenFlag:        world.isZipJumpWindowOpenFlag,
     isPlayerBlockingFlag:     world.isPlayerBlockingFlag,
     hasGrappleChargeFlag:     world.hasGrappleChargeFlag,
+    grappleRechargeRingTicksLeft:   world.grappleRechargeRingTicksLeft,
+    grappleRechargeRingTotalTicks:  world.grappleRechargeRingTotalTicks,
     isPlayerWeaveActiveFlag:  (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
     characterId:              world.characterId,
     grasshopperCount:         world.grasshopperCount,
@@ -524,6 +530,8 @@ export function updateSnapshotInPlace(
   b.isZipJumpWindowOpenFlag        = world.isZipJumpWindowOpenFlag;
   b.isPlayerBlockingFlag      = world.isPlayerBlockingFlag;
   b.hasGrappleChargeFlag      = world.hasGrappleChargeFlag;
+  b.grappleRechargeRingTicksLeft  = world.grappleRechargeRingTicksLeft;
+  b.grappleRechargeRingTotalTicks = world.grappleRechargeRingTotalTicks;
   b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
   b.grasshopperCount          = world.grasshopperCount;
 
@@ -758,6 +766,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     isZipJumpWindowOpenFlag:        world.isZipJumpWindowOpenFlag,
     isPlayerBlockingFlag: world.isPlayerBlockingFlag,
     hasGrappleChargeFlag: world.hasGrappleChargeFlag,
+    grappleRechargeRingTicksLeft:  world.grappleRechargeRingTicksLeft,
+    grappleRechargeRingTotalTicks: world.grappleRechargeRingTotalTicks,
     isPlayerWeaveActiveFlag: (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
     characterId: world.characterId,
     grasshopperCount:       world.grasshopperCount,
