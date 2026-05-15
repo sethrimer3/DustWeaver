@@ -282,8 +282,8 @@ export function startGameScreen(
     ?? configuredSpawnRoom;
   const fallbackRoom = createFallbackRoomDef();
   // campaignSpawnRoom: room to respawn into after death (no save). When a campaign spawn
-  // override is present its room matches requestedStartRoom; otherwise fall back to lobby.
-  const campaignSpawnRoom: RoomDef = (startRoomId !== null && campaignSpawnBlockOverride != null
+  // override is present its room is requestedStartRoom; otherwise fall back to lobby.
+  const campaignSpawnRoom: RoomDef = (campaignSpawnBlockOverride != null
     ? requestedStartRoom
     : configuredSpawnRoom) ?? fallbackRoom;
   const initialRoom: RoomDef = requestedStartRoom ?? campaignSpawnRoom;
@@ -789,7 +789,10 @@ export function startGameScreen(
   // always show it on the initial campaign load to produce the fade-from-black effect.
   // areRoomSpritesReady returns true instantly for rooms with no folder-based
   // themes (legacy sprites load at module init), so the overlay won't flash.
-  if (!areRoomSpritesReady(currentRoom) || isInitialCampaignLoad) {
+  // Capture the flag value before calling showLoadingOverlay() (which resets it)
+  // so the intent is explicit regardless of future call ordering.
+  const isCampaignStart = isInitialCampaignLoad;
+  if (!areRoomSpritesReady(currentRoom) || isCampaignStart) {
     showLoadingOverlay();
   }
 

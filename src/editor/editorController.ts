@@ -205,15 +205,19 @@ export function createEditorController(
         onPropertyChange: (prop: string, value: string | number) => {
           if (prop.startsWith('campaignSpawn.')) {
             // Campaign spawn properties are not stored in room data — update state + session directly.
-            if (state.campaignSpawnBlock !== null && campaignSession?.campaign.campaign.campaignSpawn) {
+            if (state.campaignSpawnBlock !== null && campaignSession?.campaign?.campaign != null) {
               const numVal = typeof value === 'number' ? value : parseInt(String(value));
               if (!isNaN(numVal)) {
                 if (prop === 'campaignSpawn.xBlock') {
                   state.campaignSpawnBlock = [numVal, state.campaignSpawnBlock[1]];
-                  campaignSession.campaign.campaign.campaignSpawn.xBlock = numVal;
+                  if (campaignSession.campaign.campaign.campaignSpawn) {
+                    campaignSession.campaign.campaign.campaignSpawn.xBlock = numVal;
+                  }
                 } else if (prop === 'campaignSpawn.yBlock') {
                   state.campaignSpawnBlock = [state.campaignSpawnBlock[0], numVal];
-                  campaignSession.campaign.campaign.campaignSpawn.yBlock = numVal;
+                  if (campaignSession.campaign.campaign.campaignSpawn) {
+                    campaignSession.campaign.campaign.campaignSpawn.yBlock = numVal;
+                  }
                 }
               }
             }
@@ -399,11 +403,14 @@ export function createEditorController(
   /**
    * After a delete action, syncs state.campaignSpawnBlock = null back to the
    * campaign session (clears campaignSpawn if it was in the current room).
+   * Note: `campaign.initialRoomId` is intentionally NOT reset on deletion —
+   * it serves as a fallback room when no campaignSpawn is present, so it should
+   * continue pointing at the last known spawn room for backward-compat exports.
    */
   function syncCampaignSpawnToSessionAfterDelete(): void {
     if (!campaignSession || !state.roomData) return;
     const spawn = campaignSession.campaign.campaign.campaignSpawn;
-    if (spawn && spawn.roomId === state.roomData.id && state.campaignSpawnBlock === null) {
+    if (spawn && spawn.roomId === state.roomData?.id && state.campaignSpawnBlock === null) {
       delete campaignSession.campaign.campaign.campaignSpawn;
     }
   }
