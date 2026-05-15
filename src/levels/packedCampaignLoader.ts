@@ -23,8 +23,7 @@ const BASE = import.meta.env.BASE_URL;
  * Stable canonical file path for the official DustWeaver campaign.
  *
  * Runtime loading uses this path directly (no folder scanning). The editor
- * exports a dated backup such as `DustweaverCampaign-YYYY-MM-DD.dwcampaign.json`
- * which must then be renamed to this stable name before being committed.
+ * exports directly as `DustweaverCampaign.dwcampaign.json` — no renaming needed.
  *
  * Served URL: `${BASE}CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json`
  */

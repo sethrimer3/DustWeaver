@@ -214,6 +214,13 @@ export function assembleExportCampaign(
   return {
     v: 1,
     kind: 'DustWeaverCampaign',
+    metadata: {
+      version: (() => {
+        const prev = session.campaign.metadata?.version;
+        return (typeof prev === 'number' && Number.isInteger(prev) && prev >= 1) ? prev + 1 : 1;
+      })(),
+      lastEditedAt: new Date().toISOString(),
+    },
     campaign: {
       ...session.campaign.campaign,
     },
