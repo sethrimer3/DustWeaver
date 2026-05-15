@@ -15,9 +15,9 @@
  */
 
 import { ROOM_REGISTRY, setRoomMapPosition, setRoomNameOverride } from '../levels/rooms';
-import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
 import { exportWorldMapJson } from './editorExport';
 import { createSubstrateEffect } from '../render/effects/substrateEffect';
+import { GREEN } from './editorStyles';
 import {
   MapRoomPlacement,
   SnapIndicator,
@@ -25,10 +25,17 @@ import {
   effectiveRoomName,
   effectiveWorldId,
   worldDisplayName,
-  hexToRgba,
   computeAutoLayout,
   applyDoorSnap,
 } from './editorVisualMapHelpers';
+import {
+  type VisualMapDrawCtx,
+  DOOR_SNAP_COLOR,
+  drawRoom,
+  drawConnectionLines,
+  drawActiveLinkLine,
+  drawSnapIndicator,
+} from './editorVisualMapRenderer';
 import {
   VisualMapDialogContext,
   makeHeaderBtn,
@@ -50,25 +57,9 @@ import {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const PANEL_BG = '#0a0a0f';
-const ROOM_FILL = 'rgba(30,40,55,0.9)';
-const ROOM_STROKE = 'rgba(0,200,100,0.6)';
-const ROOM_CURRENT_FILL = 'rgba(0,80,40,0.5)';
-const ROOM_CURRENT_STROKE = '#00c864';
-const ROOM_SELECTED_STROKE = '#ffffff';
-const DOOR_SIZE = 8;
-const DOOR_FILL_LINKED = '#44aaff';
-const DOOR_FILL_UNLINKED = '#ff8844';
-const DOOR_FILL_HOVER = '#ffff44';
-const LINK_LINE_COLOR = 'rgba(100,200,255,0.6)';
-const LINK_LINE_ACTIVE = 'rgba(255,255,100,0.8)';
-const TEXT_COLOR = '#c0ffd0';
-const GREEN = '#00c864';
 
 /** Screen-pixel distance within which two facing doorways snap together. */
 const SNAP_THRESHOLD_PX = 40;
-/** Highlight color for doorways that are about to snap together or have been linked. */
-const DOOR_SNAP_COLOR = '#ffe840';
-
 
 /** Scale factor: screen pixels per map world unit at default zoom. */
 const DEFAULT_ZOOM_SCALE = 4;
@@ -274,18 +265,32 @@ export function showVisualWorldMap(
 
     doorHitAreas = [];
 
-    drawConnectionLines(ctx, placements);
+    const canvasRect = canvas.getBoundingClientRect();
+    const drawCtx: VisualMapDrawCtx = {
+      worldToScreen,
+      zoom,
+      roomColorOverrides,
+      hoveredDoor,
+      linkSourceRoomId,
+      linkSourceTransIndex,
+      doorHitAreas,
+      snapIndicator,
+      adjustedMouseXPx: lastMouseXPx - canvasRect.left,
+      adjustedMouseYPx: lastMouseYPx - canvasRect.top,
+    };
+
+    drawConnectionLines(ctx, drawCtx, placements);
 
     for (const [roomId, placement] of placements) {
-      drawRoom(ctx, placement, roomId === currentRoomId, roomId === selectedRoomId);
+      drawRoom(ctx, drawCtx, placement, roomId === currentRoomId, roomId === selectedRoomId);
     }
 
     if (snapIndicator) {
-      drawSnapIndicator(ctx);
+      drawSnapIndicator(ctx, drawCtx);
     }
 
     if (linkSourceRoomId && linkSourceTransIndex >= 0) {
-      drawActiveLinkLine(ctx);
+      drawActiveLinkLine(ctx, drawCtx);
     }
   }
 
@@ -296,265 +301,6 @@ export function showVisualWorldMap(
       canvasWCss / 2 + panXPx + xWorld * zoom,
       canvasHCss / 2 + panYPx + yWorld * zoom,
     ];
-  }
-
-  function drawRoom(
-    ctx2d: CanvasRenderingContext2D,
-    placement: MapRoomPlacement,
-    isCurrent: boolean,
-    isSelected: boolean,
-  ): void {
-    const room = placement.room;
-    const [sx, sy] = worldToScreen(placement.mapXWorld, placement.mapYWorld);
-    const rw = room.widthBlocks * zoom;
-    const rh = room.heightBlocks * zoom;
-
-    const customColor = roomColorOverrides.get(room.id);
-
-    // Selection highlight (behind room fill)
-    if (isSelected) {
-      ctx2d.strokeStyle = customColor ?? ROOM_SELECTED_STROKE;
-      ctx2d.lineWidth = 3;
-      ctx2d.strokeRect(sx - 3, sy - 3, rw + 6, rh + 6);
-    }
-
-    // Room rectangle
-    if (customColor) {
-      // Parse hex into rgba for fill (semi-transparent) and stroke (solid)
-      ctx2d.fillStyle = hexToRgba(customColor, isCurrent ? 0.55 : 0.35);
-      ctx2d.strokeStyle = customColor;
-    } else {
-      ctx2d.fillStyle = isCurrent ? ROOM_CURRENT_FILL : ROOM_FILL;
-      ctx2d.strokeStyle = isCurrent ? ROOM_CURRENT_STROKE : ROOM_STROKE;
-    }
-    ctx2d.fillRect(sx, sy, rw, rh);
-    ctx2d.lineWidth = isCurrent ? 2 : 1;
-    ctx2d.strokeRect(sx, sy, rw, rh);
-
-    // Room name
-    const fontSize = Math.max(8, Math.min(12, zoom * 2));
-    ctx2d.fillStyle = TEXT_COLOR;
-    ctx2d.font = `${fontSize}px monospace`;
-    ctx2d.textAlign = 'center';
-    ctx2d.textBaseline = 'middle';
-    const label = effectiveRoomName(room.id);
-    ctx2d.fillText(label, sx + rw / 2, sy + rh / 2 - fontSize * 0.9, rw - 4);
-
-    // Room ID
-    ctx2d.fillStyle = 'rgba(200,255,200,0.35)';
-    ctx2d.font = `${Math.max(7, fontSize - 2)}px monospace`;
-    ctx2d.fillText(room.id, sx + rw / 2, sy + rh / 2 + fontSize * 0.1, rw - 4);
-
-    // World label
-    const wId = effectiveWorldId(room.id);
-    ctx2d.fillStyle = 'rgba(150,200,255,0.4)';
-    ctx2d.font = `${Math.max(6, fontSize - 3)}px monospace`;
-    ctx2d.fillText(worldDisplayName(wId), sx + rw / 2, sy + rh / 2 + fontSize * 0.9, rw - 4);
-
-    // Draw doors (transitions)
-    for (let i = 0; i < room.transitions.length; i++) {
-      drawDoor(ctx2d, room, i, sx, sy, rw, rh);
-    }
-  }
-
-  function drawDoor(
-    ctx2d: CanvasRenderingContext2D,
-    room: RoomDef,
-    transIndex: number,
-    roomSx: number,
-    roomSy: number,
-    _roomW: number,
-    _roomH: number,
-  ): void {
-    const trans = room.transitions[transIndex];
-    const ds = Math.max(4, Math.min(DOOR_SIZE, zoom * 1.5));
-    const gw = trans.gradientWidthBlocks ?? 3;
-    const isHoriz = trans.direction === 'left' || trans.direction === 'right';
-
-    // Use xBlock/yBlock for zone center; fall back to positionBlock for old data.
-    const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
-    const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
-    const zoneW = isHoriz ? gw : trans.openingSizeBlocks;
-    const zoneH = isHoriz ? trans.openingSizeBlocks : gw;
-    const zoneCxPx = (xB + zoneW / 2) * zoom;
-    const zoneCyPx = (yB + zoneH / 2) * zoom;
-
-    const dx = roomSx + zoneCxPx - ds / 2;
-    const dy = roomSy + zoneCyPx - ds / 2;
-
-    const isHovered = hoveredDoor?.roomId === room.id && hoveredDoor?.transitionIndex === transIndex;
-    const isLinkSource = linkSourceRoomId === room.id && linkSourceTransIndex === transIndex;
-    const hasTarget = trans.targetRoomId !== '';
-
-    let fill: string;
-    if (isLinkSource) fill = LINK_LINE_ACTIVE;
-    else if (isHovered) fill = DOOR_FILL_HOVER;
-    else if (hasTarget) fill = DOOR_FILL_LINKED;
-    else fill = DOOR_FILL_UNLINKED;
-
-    ctx2d.fillStyle = fill;
-    ctx2d.fillRect(dx, dy, ds, ds);
-    ctx2d.strokeStyle = '#fff';
-    ctx2d.lineWidth = 1;
-    ctx2d.strokeRect(dx, dy, ds, ds);
-
-    const numSize = Math.max(6, ds - 1);
-    ctx2d.fillStyle = '#000';
-    ctx2d.font = `bold ${numSize}px monospace`;
-    ctx2d.textAlign = 'center';
-    ctx2d.textBaseline = 'middle';
-    ctx2d.fillText(String(transIndex + 1), dx + ds / 2, dy + ds / 2);
-
-    doorHitAreas.push({
-      roomId: room.id,
-      transitionIndex: transIndex,
-      xPx: dx,
-      yPx: dy,
-      wPx: ds,
-      hPx: ds,
-    });
-  }
-
-  function drawConnectionLines(
-    ctx2d: CanvasRenderingContext2D,
-    allPlacements: Map<string, MapRoomPlacement>,
-  ): void {
-    ctx2d.strokeStyle = LINK_LINE_COLOR;
-    ctx2d.lineWidth = 1.5;
-    ctx2d.setLineDash([4, 4]);
-
-    const drawn = new Set<string>();
-
-    for (const [roomId, placement] of allPlacements) {
-      const room = placement.room;
-      for (let i = 0; i < room.transitions.length; i++) {
-        const trans = room.transitions[i];
-        if (!trans.targetRoomId) continue;
-
-        const targetPlacement = allPlacements.get(trans.targetRoomId);
-        if (!targetPlacement) continue;
-
-        const pairKey = [roomId, trans.targetRoomId].sort().join('|');
-        if (drawn.has(pairKey)) continue;
-        drawn.add(pairKey);
-
-        const [sx, sy] = worldToScreen(placement.mapXWorld, placement.mapYWorld);
-        const rw = room.widthBlocks * zoom;
-        const rh = room.heightBlocks * zoom;
-        const srcPos = getDoorCenter(trans, sx, sy, rw, rh);
-
-        const targetRoom = targetPlacement.room;
-        const reverseTrans = targetRoom.transitions.find(t => t.targetRoomId === roomId);
-        const [tsx, tsy] = worldToScreen(targetPlacement.mapXWorld, targetPlacement.mapYWorld);
-        const trw = targetRoom.widthBlocks * zoom;
-        const trh = targetRoom.heightBlocks * zoom;
-
-        let tgtPos: [number, number];
-        if (reverseTrans) {
-          tgtPos = getDoorCenter(reverseTrans, tsx, tsy, trw, trh);
-        } else {
-          tgtPos = [tsx + trw / 2, tsy + trh / 2];
-        }
-
-        ctx2d.beginPath();
-        ctx2d.moveTo(srcPos[0], srcPos[1]);
-        ctx2d.lineTo(tgtPos[0], tgtPos[1]);
-        ctx2d.stroke();
-      }
-    }
-
-    ctx2d.setLineDash([]);
-  }
-
-  function getDoorCenter(
-    trans: RoomTransitionDef,
-    roomSx: number,
-    roomSy: number,
-    _roomW: number,
-    _roomH: number,
-  ): [number, number] {
-    const gw = trans.gradientWidthBlocks ?? 3;
-    const isHoriz = trans.direction === 'left' || trans.direction === 'right';
-    const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
-    const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
-    const zoneW = isHoriz ? gw : trans.openingSizeBlocks;
-    const zoneH = isHoriz ? trans.openingSizeBlocks : gw;
-    return [roomSx + (xB + zoneW / 2) * zoom, roomSy + (yB + zoneH / 2) * zoom];
-  }
-
-  function drawActiveLinkLine(ctx2d: CanvasRenderingContext2D): void {
-    const sourceDoor = findDoorHitArea(linkSourceRoomId, linkSourceTransIndex);
-    if (!sourceDoor) return;
-
-    const srcCx = sourceDoor.xPx + sourceDoor.wPx / 2;
-    const srcCy = sourceDoor.yPx + sourceDoor.hPx / 2;
-
-    const rect = canvas.getBoundingClientRect();
-    const mx = lastMouseXPx - rect.left;
-    const my = lastMouseYPx - rect.top;
-
-    ctx2d.strokeStyle = LINK_LINE_ACTIVE;
-    ctx2d.lineWidth = 2;
-    ctx2d.setLineDash([6, 3]);
-    ctx2d.beginPath();
-    ctx2d.moveTo(srcCx, srcCy);
-    ctx2d.lineTo(mx, my);
-    ctx2d.stroke();
-    ctx2d.setLineDash([]);
-  }
-
-  function findDoorHitArea(roomId: string, transIndex: number): DoorHitArea | null {
-    for (const d of doorHitAreas) {
-      if (d.roomId === roomId && d.transitionIndex === transIndex) return d;
-    }
-    return null;
-  }
-
-  /** Draws a visual snap indicator for the two doorways about to be aligned. */
-  function drawSnapIndicator(ctx2d: CanvasRenderingContext2D): void {
-    if (!snapIndicator) return;
-
-    const srcDoor = findDoorHitArea(snapIndicator.srcRoomId, snapIndicator.srcTransIdx);
-    const tgtDoor = findDoorHitArea(snapIndicator.tgtRoomId, snapIndicator.tgtTransIdx);
-    if (!srcDoor || !tgtDoor) return;
-
-    const srcCx = srcDoor.xPx + srcDoor.wPx / 2;
-    const srcCy = srcDoor.yPx + srcDoor.hPx / 2;
-    const tgtCx = tgtDoor.xPx + tgtDoor.wPx / 2;
-    const tgtCy = tgtDoor.yPx + tgtDoor.hPx / 2;
-
-    // Highlight glow around both snapping doors
-    for (const door of [srcDoor, tgtDoor]) {
-      const glowW = door.wPx + 6;
-      const glowH = door.hPx + 6;
-      ctx2d.save();
-      ctx2d.globalAlpha = 0.55;
-      ctx2d.fillStyle = DOOR_SNAP_COLOR;
-      ctx2d.fillRect(door.xPx - 3, door.yPx - 3, glowW, glowH);
-      ctx2d.restore();
-    }
-
-    // Solid snap-line between the two door centers
-    ctx2d.save();
-    ctx2d.strokeStyle = DOOR_SNAP_COLOR;
-    ctx2d.lineWidth = 2;
-    ctx2d.setLineDash([]);
-    ctx2d.beginPath();
-    ctx2d.moveTo(srcCx, srcCy);
-    ctx2d.lineTo(tgtCx, tgtCy);
-    ctx2d.stroke();
-    ctx2d.restore();
-
-    // "SNAP" label at midpoint
-    const midX = (srcCx + tgtCx) / 2;
-    const midY = (srcCy + tgtCy) / 2;
-    ctx2d.save();
-    ctx2d.fillStyle = DOOR_SNAP_COLOR;
-    ctx2d.font = 'bold 9px monospace';
-    ctx2d.textAlign = 'center';
-    ctx2d.textBaseline = 'middle';
-    ctx2d.fillText('SNAP', midX, midY - 8);
-    ctx2d.restore();
   }
 
   // ── Center view on a room ──────────────────────────────────────────────
