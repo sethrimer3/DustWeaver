@@ -34,6 +34,8 @@ export const TRANSITION_LINK_SOURCE = 'rgba(255,255,0,0.7)';
 export const TRANSITION_LINK_CANDIDATE = 'rgba(0,255,200,0.5)';
 export const SPAWN_COLOR = 'rgba(255,220,50,0.5)';
 export const SPAWN_SELECTED = 'rgba(255,220,50,0.9)';
+export const CAMPAIGN_SPAWN_COLOR = 'rgba(255,200,30,0.75)';
+export const CAMPAIGN_SPAWN_SELECTED = 'rgba(255,220,60,1.0)';
 export const TOMB_COLOR = 'rgba(212,168,75,0.5)';
 export const TOMB_SELECTED = 'rgba(212,168,75,0.9)';
 export const SKILL_TOMB_COLOR = 'rgba(120,80,220,0.55)';
@@ -127,6 +129,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     fireflyArea:      'firefly_area',
     decoration:       'decoration',
     playerSpawn:      'player_spawn',
+    campaignSpawn:    'campaign_spawn',
     ambientLightBlocker: 'ambient_blocker',
     lightSource:      'light_source',
     sunbeam:          'sunbeam',
@@ -190,7 +193,8 @@ export function buildElementTypeName(
     dustPile:           'Dust Pile',
     grasshopperArea:    'Grasshopper Area',
     fireflyArea:        'Firefly Area',
-    playerSpawn:        'Player Spawn',
+    playerSpawn:        'Player Spawn (Room)',
+    campaignSpawn:      'Campaign Spawn',
     ambientLightBlocker:'Ambient Blocker',
     lightSource:        'Light Source',
     sunbeam:            'Sunbeam',

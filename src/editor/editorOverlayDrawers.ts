@@ -36,6 +36,7 @@ import {
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
   DUST_SWARM_COLOR, DUST_SWARM_SELECTED,
   DIALOGUE_TRIGGER_COLOR, DIALOGUE_TRIGGER_SELECTED,
+  CAMPAIGN_SPAWN_COLOR, CAMPAIGN_SPAWN_SELECTED,
   drawBlockRect, drawRampTriangle,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   getEnemyFootprintBlocks, drawTransitionZone,
@@ -150,7 +151,31 @@ export function drawEditorSpawnAndTombs(
   offsetYPx: number,
   zoom: number,
 ): void {
-  // Player spawn marker
+  // Campaign spawn marker — drawn first so room spawn overlaps it slightly (clear priority)
+  if (state.campaignSpawnBlock !== null) {
+    const [csx, csy] = state.campaignSpawnBlock;
+    const sel = isSelected('campaignSpawn', 0);
+    const color = sel ? CAMPAIGN_SPAWN_SELECTED : CAMPAIGN_SPAWN_COLOR;
+    // Draw a slightly larger footprint to distinguish from room spawn
+    drawObjectFootprint(ctx, csx, csy, 1, 1, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
+    drawMarker(ctx, csx, csy, offsetXPx, offsetYPx, zoom, color, '⭐');
+    // Label "CSPAWN" below the star when selected or hovered
+    const isHovered = state.hoverElement !== null && state.hoverElement.type === 'campaignSpawn';
+    if (sel || isHovered) {
+      const bs = BLOCK_SIZE_SMALL;
+      const px = Math.round(csx * bs * zoom + offsetXPx + bs * zoom * 0.5);
+      const py = Math.round((csy + 1) * bs * zoom + offsetYPx + 2);
+      ctx.save();
+      ctx.font = `bold ${Math.max(7, Math.round(7 * zoom))}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = CAMPAIGN_SPAWN_SELECTED;
+      ctx.fillText('CAMPAIGN SPAWN', px, py);
+      ctx.restore();
+    }
+  }
+
+  // Player spawn marker (room-local fallback)
   {
     const sel = isSelected('playerSpawn', 0);
     drawMarker(ctx, room.playerSpawnBlock[0], room.playerSpawnBlock[1], offsetXPx, offsetYPx, zoom,

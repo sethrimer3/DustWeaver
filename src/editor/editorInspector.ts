@@ -176,6 +176,14 @@ export function updateInspector(
       linkBtn.style.borderColor = 'rgba(0,150,255,0.5)';
       div.appendChild(linkBtn);
     }
+  } else if (el.type === 'campaignSpawn') {
+    const spawnBlock = state.campaignSpawnBlock;
+    if (spawnBlock !== null) {
+      addField(div, 'xBlock', String(spawnBlock[0]),
+        v => callbacks?.onPropertyChange('campaignSpawn.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(spawnBlock[1]),
+        v => callbacks?.onPropertyChange('campaignSpawn.yBlock', parseInt(v)));
+    }
   } else if (el.type === 'playerSpawn') {
     addField(div, 'xBlock', String(room.playerSpawnBlock[0]),
       v => callbacks?.onPropertyChange('playerSpawn.xBlock', parseInt(v)));

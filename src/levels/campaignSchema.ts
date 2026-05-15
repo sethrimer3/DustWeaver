@@ -40,6 +40,21 @@ export const SAVED_CAMPAIGN_KIND = 'DustWeaverCampaign' as const;
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Campaign-level spawn point — the single location where the player starts the
+ * campaign (as opposed to room-local playerSpawnBlock which is a per-room fallback).
+ * Optional; absent in older campaigns and in campaigns that have not had a
+ * Campaign Spawn marker placed yet.
+ */
+export interface CampaignSpawnData {
+  /** ID of the room in which the campaign starts. */
+  roomId: string;
+  /** Block X coordinate within that room. */
+  xBlock: number;
+  /** Block Y coordinate within that room. */
+  yBlock: number;
+}
+
 export interface SavedCampaignMetadata {
   id: string;
   title: string;
@@ -47,6 +62,13 @@ export interface SavedCampaignMetadata {
   description: string;
   initialRoomId: string;
   initialRoomImagePath: string | null;
+  /**
+   * Campaign-level singleton spawn point placed in the editor.
+   * When present, takes precedence over initialRoomId + room playerSpawnBlock.
+   * Optional for backward compatibility — older campaigns without it fall back
+   * to initialRoomId + that room's playerSpawnBlock.
+   */
+  campaignSpawn?: CampaignSpawnData;
 }
 
 export interface SavedCampaignEditorInfo {

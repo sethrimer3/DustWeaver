@@ -491,7 +491,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ───────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;
@@ -530,6 +530,13 @@ export interface EditorState {
   linkSourceTransitionUid: number;
   /** Room data being edited (mutable authored content). */
   roomData: EditorRoomData | null;
+  /**
+   * If the currently-open room contains the campaign spawn, this holds its
+   * [xBlock, yBlock] position.  Null when the campaign spawn is in a different
+   * room (or when no campaign spawn has been placed yet).
+   * Managed by the editor controller — not stored in room JSON.
+   */
+  campaignSpawnBlock: [number, number] | null;
   /** Next unique ID for placed elements. */
   nextUid: number;
   /** Whether the user is dragging selected elements. */
@@ -613,6 +620,7 @@ export function createEditorState(): EditorState {
     isLinkingTransition: false,
     linkSourceTransitionUid: -1,
     roomData: null,
+    campaignSpawnBlock: null,
     nextUid: 1,
     isDragging: false,
     dragStartBlockX: 0,
