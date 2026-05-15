@@ -1,8 +1,65 @@
 # DustWeaver — Next Steps
 
-## BUILD 302 — Technical Cleanup & Polish Pass
+## BUILD 315 — Official Campaign File-Based Loading
 
-### What Was Completed in BUILD 302
+### What Was Completed in BUILD 315
+
+1. **Official campaign file renamed** (`ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/`):
+   - Canonical runtime file: `DustweaverCampaign.dwcampaign.json`
+   - Old dated file `dustweaver-campaign-DUSTWEAVER_CAMPAIGN-2026-05-15.json` is preserved
+     for backward compatibility but is no longer loaded by the game.
+
+2. **Campaign ID regex relaxed** (`src/levels/campaignSchema.ts`):
+   - `CAMPAIGN_ID_SAFE_RE` updated to `/^[a-zA-Z0-9_-]+$/` (was lowercase-only).
+   - Required because the official campaign id `DUSTWEAVER_CAMPAIGN` uses uppercase.
+
+3. **Official campaign loader added** (`src/levels/packedCampaignLoader.ts`):
+   - `fetchOfficialPackedCampaign()` fetches and validates the canonical file at
+     `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json`.
+   - Returns `null` (with a clear console message) if the file is missing or invalid.
+   - No folder scanning; uses a hardcoded stable path.
+
+4. **`initRoomRegistry()` updated** (`src/levels/rooms.ts`):
+   - Primary path: loads all rooms from the packed campaign file. World names and
+     map positions come from the campaign `worldMap` section.
+   - Fallback: if the packed file is unavailable, falls back to individual room
+     JSON files in `CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/` (same as before BUILD 315).
+   - Both paths populate `ROOM_REGISTRY`, `WORLD_NAMES`, and `WORLD_MAP_POSITIONS`.
+
+5. **Export filenames normalized** (`src/editor/editorExport.ts`):
+   - Custom campaign exports: `<campaignId>.dwcampaign.json`
+   - Main campaign dated backup exports: `DustweaverCampaign-YYYY-MM-DD.dwcampaign.json`
+   - Both use the `.dwcampaign.json` suffix (no longer just `.json`).
+
+### Manual Action Required
+
+After exporting from the editor, rename the dated backup to the canonical name and
+commit it to the repository:
+
+```
+ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json
+```
+
+The file is already present (copied from the 2026-05-15 export). If you make further
+room edits in the editor and export again, you will get
+`DustweaverCampaign-YYYY-MM-DD.dwcampaign.json` — rename that to
+`DustweaverCampaign.dwcampaign.json` and overwrite the existing file.
+
+### Remaining / Deferred Work
+
+- **Old dated file cleanup**: `dustweaver-campaign-DUSTWEAVER_CAMPAIGN-2026-05-15.json`
+  can be deleted once the canonical `DustweaverCampaign.dwcampaign.json` is verified
+  in production. Kept for now as a reference.
+- **`STARTING_ROOM_ID` constant**: `rooms.ts` still exports `STARTING_ROOM_ID = 'lobby'`
+  as a hard-coded fallback. Callers that use `campaign.initialRoomId` are already correct,
+  but a future task could make `STARTING_ROOM_ID` dynamically reflect the loaded campaign's
+  initial room.
+- **Campaign import file picker**: `mainMenuCustomCampaigns.ts` already accepts both
+  `.json` and `.dwcampaign.json`. No change needed, but consider removing bare `.json`
+  acceptance in a future cleanup pass to reduce confusion.
+
+---
+
 
 1. **Debris thud audio wired** (`weakWallJumpDebrisRenderer.ts`, `gameScreen.ts`):
    `_playSoftDebrisThud` stub replaced with a `setThudCallback` injection point.

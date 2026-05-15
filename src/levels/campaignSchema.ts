@@ -77,8 +77,8 @@ export function isSavedCampaignV1(data: unknown): data is SavedCampaignV1 {
 // VALIDATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Regex for safe campaign IDs: lowercase letters, digits, underscores, hyphens. */
-export const CAMPAIGN_ID_SAFE_RE = /^[a-z0-9_-]+$/;
+/** Regex for safe campaign IDs: letters (upper or lower), digits, underscores, hyphens. */
+export const CAMPAIGN_ID_SAFE_RE = /^[a-zA-Z0-9_-]+$/;
 
 /**
  * Validates a parsed JSON object against the SavedCampaignV1 schema.

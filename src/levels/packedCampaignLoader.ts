@@ -17,6 +17,22 @@ import { validateSavedCampaign, isSavedCampaignV1 } from './campaignSchema';
 
 const BASE = import.meta.env.BASE_URL;
 
+// ── Official campaign constants ───────────────────────────────────────────────
+
+/**
+ * Stable canonical file path for the official DustWeaver campaign.
+ *
+ * Runtime loading uses this path directly (no folder scanning). The editor
+ * exports a dated backup such as `DustweaverCampaign-YYYY-MM-DD.dwcampaign.json`
+ * which must then be renamed to this stable name before being committed.
+ *
+ * Served URL: `${BASE}CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json`
+ */
+const OFFICIAL_CAMPAIGN_FILE_PATH =
+  '/ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json';
+
+const OFFICIAL_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN' as const;
+
 // ── Build-time glob: discovers committed .dwcampaign.json files ──────────────
 
 /**
@@ -152,4 +168,66 @@ export function parsePackedCampaignFromJson(
     return { campaign: null, errors: ['Unexpected schema shape after validation'] };
   }
   return { campaign: data, errors: [] };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OFFICIAL CAMPAIGN LOADER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetches the official DustWeaver campaign from its stable canonical path:
+ * `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json`
+ *
+ * Validates structure and required fields. Returns null (with a console error)
+ * if the file is missing, unreachable, or fails validation. Does NOT throw.
+ *
+ * The campaign id `DUSTWEAVER_CAMPAIGN` intentionally uses uppercase, which is
+ * valid in the schema (see `CAMPAIGN_ID_SAFE_RE`).
+ */
+export async function fetchOfficialPackedCampaign(): Promise<SavedCampaignV1 | null> {
+  const servePath = OFFICIAL_CAMPAIGN_FILE_PATH.replace(/^\/ASSETS\//, '');
+  const url = `${BASE}${servePath}`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.warn(
+          `[packedCampaignLoader] Official campaign file not found at "${url}". ` +
+          'Export the campaign from the editor and place it at ' +
+          'ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json'
+        );
+      } else {
+        console.error(
+          `[packedCampaignLoader] Failed to fetch official campaign from "${url}": ` +
+          `${response.status} ${response.statusText}`
+        );
+      }
+      return null;
+    }
+    const data: unknown = await response.json();
+    const validationErrors = validateSavedCampaign(data);
+    if (validationErrors.length > 0) {
+      console.error(
+        `[packedCampaignLoader] Official campaign file at "${url}" failed validation:`,
+        validationErrors,
+      );
+      return null;
+    }
+    if (!isSavedCampaignV1(data)) {
+      console.error(
+        `[packedCampaignLoader] Official campaign file at "${url}" has unexpected schema shape after validation.`
+      );
+      return null;
+    }
+    if (data.campaign.id !== OFFICIAL_CAMPAIGN_ID) {
+      console.warn(
+        `[packedCampaignLoader] Official campaign file has unexpected id ` +
+        `"${data.campaign.id}" (expected "${OFFICIAL_CAMPAIGN_ID}"). Loading anyway.`
+      );
+    }
+    return data;
+  } catch (e) {
+    console.error(`[packedCampaignLoader] Error loading official campaign from "${url}":`, e);
+    return null;
+  }
 }
