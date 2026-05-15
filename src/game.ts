@@ -6,7 +6,7 @@ import { createDefaultProgress, PlayerProgress } from './progression/playerProgr
 import { SaveSlotData, saveSaveSlot } from './progression/saveSlots';
 import type { CampaignSource } from './levels/campaignSource';
 import type { EditableCampaignSession } from './editor/editableCampaignSession';
-import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry } from './levels/rooms';
+import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn } from './levels/rooms';
 import { setActiveCampaignId } from './levels/campaigns';
 
 
@@ -93,7 +93,12 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       });
     } else if (to === 'gameplay') {
       const activeLoadout = loadout ?? progress.loadout;
-      const startRoomId = progress.lastSaveRoomId ?? null;
+      const savedRoomId = progress.lastSaveRoomId ?? null;
+      // If the player has no saved room, start at the campaign spawn if one is defined.
+      const officialSpawn = savedRoomId === null ? getLoadedOfficialCampaignSpawn() : null;
+      const startRoomId = savedRoomId ?? officialSpawn?.roomId ?? null;
+      const campaignSpawnOverride: readonly [number, number] | null =
+        officialSpawn !== null ? [officialSpawn.xBlock, officialSpawn.yBlock] : null;
       cleanup = startGameScreen(canvas, uiRoot, activeLoadout, startRoomId, {
         onReturnToMenu: () => {
           persistSaveSlot();
@@ -102,17 +107,24 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         onSave: () => {
           persistSaveSlot();
         },
-      }, progress);
+      }, progress, undefined, undefined, campaignSpawnOverride);
     } else if (to === 'customCampaignPlay') {
       // Play a custom campaign: load rooms into ROOM_REGISTRY, then start gameplay.
       // Save data is not used — custom campaign games start fresh.
       const source = customCampaignSource!;
       const doPlay = async (): Promise<void> => {
         let startRoomId: string;
+        let customSpawnOverride: readonly [number, number] | null = null;
         if (source.loadPackedCampaign !== undefined) {
           const campaign = await source.loadPackedCampaign();
           registerRoomsFromPackedCampaign(campaign);
-          startRoomId = campaign.campaign.initialRoomId;
+          const cSpawn = campaign.campaign.campaignSpawn;
+          if (cSpawn !== undefined) {
+            startRoomId = cSpawn.roomId;
+            customSpawnOverride = [cSpawn.xBlock, cSpawn.yBlock];
+          } else {
+            startRoomId = campaign.campaign.initialRoomId;
+          }
         } else if (source.loadFolderCampaign !== undefined) {
           // For folder-based campaigns, set the active campaign then reload the registry.
           setActiveCampaignId(source.id);
@@ -127,7 +139,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         if (cleanup !== null) { cleanup(); cleanup = null; }
         cleanup = startGameScreen(canvas, uiRoot, [], startRoomId, {
           onReturnToMenu: () => navigate('mainMenu'),
-        }, undefined, null, false);
+        }, undefined, null, false, customSpawnOverride);
       };
       void doPlay().catch(e => {
         console.error('[game] Failed to load custom campaign for play:', e);
@@ -138,7 +150,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       const session = customCampaignSession!;
       const doEdit = async (): Promise<void> => {
         registerRoomsFromPackedCampaign(session.campaign);
-        const startRoomId = session.campaign.campaign.initialRoomId;
+        const cSpawn = session.campaign.campaign.campaignSpawn;
+        const startRoomId = cSpawn?.roomId ?? session.campaign.campaign.initialRoomId;
 
         if (cleanup !== null) { cleanup(); cleanup = null; }
         cleanup = startGameScreen(canvas, uiRoot, [], startRoomId, {

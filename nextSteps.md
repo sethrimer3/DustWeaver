@@ -1,38 +1,71 @@
 # DustWeaver — Next Steps
 
-## BUILD 317 — Campaign Export Metadata & Import Picker Cleanup
+## BUILD 318 — Campaign Spawn Trigger & Fade From Black
 
-### What Was Completed in BUILD 317
+### What Was Completed in BUILD 318
 
-1. **Campaign revision metadata added** (`src/levels/campaignSchema.ts`):
-   - New `SavedCampaignRevisionMetadata` interface: `{ version: number; lastEditedAt: string }`.
-   - `SavedCampaignV1` now includes an optional `metadata` field, placed immediately after
-     `kind` in the exported JSON.
-   - Older `.dwcampaign.json` files without `metadata` continue to load without error
-     (backward compatible).
+1. **Campaign Spawn data model** (`src/levels/campaignSchema.ts`):
+   - New `CampaignSpawnData` interface: `{ roomId: string; xBlock: number; yBlock: number }`.
+   - `SavedCampaignMetadata` gains optional `campaignSpawn?: CampaignSpawnData`.
+   - Backward compatible — older campaigns without `campaignSpawn` continue to load.
 
-2. **Version bumping on export** (`src/editor/editableCampaignSession.ts`):
-   - `assembleExportCampaign()` now always writes `metadata.version` and `metadata.lastEditedAt`.
-   - `version` = previous campaign version + 1 (or 1 if metadata was absent or invalid).
-   - `lastEditedAt` = `new Date().toISOString()` at export time.
-   - Exporting twice increments the version twice — this is the intended export-revision
-     behavior; version tracks the number of packed exports produced, not room edits.
+2. **Official campaign spawn loaded from registry** (`src/levels/rooms.ts`):
+   - `initRoomRegistry()` stores `campaignSpawn` from the packed campaign in `loadedOfficialCampaignSpawn`.
+   - New `getLoadedOfficialCampaignSpawn()` getter exposed for `game.ts`.
+   - `loadedOfficialCampaignRevisionMetadata` and `loadedOfficialCampaignSpawn` are reset on `initRoomRegistry()`.
 
-3. **Main campaign export preserves existing metadata** (`src/editor/editorExport.ts`):
-   - `exportMainCampaignJson()` reads the loaded canonical campaign's revision metadata via
-     `getLoadedOfficialCampaignRevisionMetadata()` from `rooms.ts`.
-   - If metadata is available, the synthetic session carries it forward so `assembleExportCampaign()`
-     increments the version rather than resetting to 1.
-   - `rooms.ts` now exposes `getLoadedOfficialCampaignRevisionMetadata()` and stores the metadata
-     from the packed campaign on successful load.
+3. **Editor palette** (`src/editor/editorDropdownData.ts`):
+   - Added `campaign_spawn` item (label: `Campaign Spawn`, category: `triggers`).
+   - Renamed existing `player_spawn` item label from `Player Spawn` to `Room Spawn (Fallback)`.
 
-4. **Official campaign export filename** (`src/editor/editorExport.ts`):
-   - Official campaign exports directly download as `DustweaverCampaign.dwcampaign.json`.
-   - No dated suffix, no manual rename required.
+4. **Editor state** (`src/editor/editorState.ts`):
+   - Added `'campaignSpawn'` to `SelectedElementType`.
+   - Added `campaignSpawnBlock: [number, number] | null` to `EditorState`; initialized to `null`.
 
-5. **Campaign import picker restricted** (`src/ui/mainMenuCustomCampaigns.ts`):
-   - `input.accept` changed from `.json,.dwcampaign.json` to `.dwcampaign.json`.
-   - Button label updated to `📥 Import Campaign (.dwcampaign.json)`.
+5. **Editor tools** (`src/editor/editorTools.ts`, `src/editor/editorDeleteTool.ts`):
+   - `selectAtCursor` hit-tests `state.campaignSpawnBlock` — returns `{ type: 'campaignSpawn', uid: 0 }`.
+   - `deleteAtCursor` clears `state.campaignSpawnBlock = null` when cursor hits campaign spawn.
+   - Controller calls `syncCampaignSpawnToSessionAfterDelete()` after every delete to update session.
+
+6. **Editor rendering** (`src/editor/editorOverlayDrawers.ts`, `src/editor/editorRendererHelpers.ts`):
+   - Campaign spawn drawn as ⭐ with a gold footprint outline.
+   - "CAMPAIGN SPAWN" label rendered below marker when selected or hovered.
+   - New color constants `CAMPAIGN_SPAWN_COLOR` and `CAMPAIGN_SPAWN_SELECTED`.
+   - Tooltip/name maps updated to include `campaignSpawn`.
+
+7. **Editor controller** (`src/editor/editorController.ts`):
+   - `loadRoomForEditing` syncs `state.campaignSpawnBlock` from session on room load.
+   - New helpers: `syncCampaignSpawnBlockFromSession`, `syncCampaignSpawnToSessionAfterDelete`,
+     `showCampaignSpawnReplaceModal`, `placeCampaignSpawn`.
+   - Singleton enforcement: placing `campaign_spawn` when another exists in a different room shows
+     a modal: **"This will remove the current campaign spawn, proceed?"** with Yes/No.
+   - Choosing Yes removes old spawn and places new one; updates session `campaignSpawn` and `initialRoomId`.
+   - Campaign spawn property changes handled directly in the controller's `onPropertyChange` hook
+     (bypasses room-data path since campaign spawn is not stored in room JSON).
+
+8. **Inspector** (`src/editor/editorInspector.ts`):
+   - `campaignSpawn` element shows xBlock/yBlock fields, editable via property change.
+
+9. **New campaign sessions** (`src/editor/editableCampaignSession.ts`):
+   - `createNewCampaignSession` pre-populates `campaignSpawn` at the starter room's spawn position.
+   - `assembleExportCampaign` automatically includes `campaignSpawn` via `...session.campaign.campaign`.
+   - `initialRoomId` is kept synchronized with `campaignSpawn.roomId` when a spawn is placed.
+
+10. **Runtime start logic** (`src/game.ts`, `src/screens/gameScreen.ts`):
+    - Main campaign: uses `getLoadedOfficialCampaignSpawn()` to set start room and position when
+      the player has no save slot.
+    - Custom campaign play: extracts `campaignSpawn` from packed campaign; passes room and block
+      position as `startRoomId` and `campaignSpawnBlockOverride` to `startGameScreen`.
+    - `startGameScreen` accepts new optional `campaignSpawnBlockOverride?` parameter.
+    - `desiredSpawnBlock` uses `campaignSpawnBlockOverride` instead of `currentRoom.playerSpawnBlock`
+      when available (save data still takes priority).
+    - Death-respawn uses campaign spawn room and block when no save exists.
+
+11. **Fade from black** (`src/screens/gameLoadingOverlay.ts`, `src/screens/gameScreen.ts`):
+    - `GameLoadingOverlay.show(isCampaignInitialLoad?)` — when true, uses 700 ms fade (vs 300 ms).
+    - `gameScreen.ts` calls `showLoadingOverlay()` on every initial game start (even when sprites
+      are already cached), ensuring a deliberate fade-from-black at campaign start.
+    - Subsequent room-load overlays (mid-session sprite cache misses) use the standard 300 ms fade.
 
 ---
 
@@ -45,14 +78,16 @@ reference the build where the item was first documented.
 
 ### Campaign & File System (Low Risk)
 
-#### 1. Dynamic `STARTING_ROOM_ID`
+#### 1. ~~Dynamic `STARTING_ROOM_ID`~~ — **Superseded by Campaign Spawn (BUILD 318)**
 **File:** `src/levels/rooms.ts`  
-**Issue:** `STARTING_ROOM_ID = 'lobby'` is a hard-coded fallback. Callers that use
+~~**Issue:** `STARTING_ROOM_ID = 'lobby'` is a hard-coded fallback. Callers that use
 `campaign.initialRoomId` are already correct, but code that reads `STARTING_ROOM_ID`
-directly may silently break if the campaign's initial room changes.  
-**Fix:** After `initRoomRegistry()` loads the campaign, update `STARTING_ROOM_ID` to
-reflect `campaign.initialRoomId`.  
-**Risk:** Low — purely a data-propagation change; no physics or render impact.
+directly may silently break if the campaign's initial room changes.~~  
+**Resolution (BUILD 318):** The Campaign Spawn system (`campaignSpawn` field in
+`SavedCampaignMetadata`) is now the authoritative source for the starting room and
+block position. `game.ts` reads `getLoadedOfficialCampaignSpawn()` and `campaign.campaignSpawn`
+instead of hard-coded `STARTING_ROOM_ID`. The `STARTING_ROOM_ID = 'lobby'` constant is
+retained as a last-resort fallback but is no longer the primary mechanism.
 
 ---
 

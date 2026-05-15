@@ -195,6 +195,12 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check campaign spawn (campaign-level singleton; if present in this room)
+  if (state.campaignSpawnBlock !== null &&
+      hitTestPoint(state.campaignSpawnBlock[0], state.campaignSpawnBlock[1], bx, by)) {
+    return { type: 'campaignSpawn', uid: 0 };
+  }
+
   // Check player spawn
   if (hitTestPoint(room.playerSpawnBlock[0], room.playerSpawnBlock[1], bx, by)) {
     return { type: 'playerSpawn', uid: 0 };

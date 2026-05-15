@@ -146,7 +146,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_bee_swarm', label: 'Bee Swarm', category: 'enemies' },
   { id: 'enemy_web_spider', label: 'Web Spider', category: 'enemies' },
   // Triggers (player-facing activators and room logic)
-  { id: 'player_spawn',    label: 'Player Spawn',    category: 'triggers' },
+  { id: 'campaign_spawn',  label: 'Campaign Spawn',          category: 'triggers' },
+  { id: 'player_spawn',    label: 'Room Spawn (Fallback)',   category: 'triggers' },
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
   { id: 'save_tomb',       label: 'Save Tomb',       category: 'triggers' },
   { id: 'dialogue_trigger', label: 'Dialogue Trigger', category: 'triggers' },

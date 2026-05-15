@@ -200,6 +200,7 @@ export function startGameScreen(
   progress?: PlayerProgress,
   campaignSession?: EditableCampaignSession | null,
   openEditorImmediately?: boolean,
+  campaignSpawnBlockOverride?: readonly [number, number] | null,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
   const bloomSystem = new BloomSystem({ ...DEFAULT_BLOOM_CONFIG });
@@ -280,12 +281,19 @@ export function startGameScreen(
     ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)
     ?? configuredSpawnRoom;
   const fallbackRoom = createFallbackRoomDef();
-  const campaignSpawnRoom: RoomDef = configuredSpawnRoom ?? fallbackRoom;
+  // campaignSpawnRoom: room to respawn into after death (no save). When a campaign spawn
+  // override is present its room matches requestedStartRoom; otherwise fall back to lobby.
+  const campaignSpawnRoom: RoomDef = (startRoomId !== null && campaignSpawnBlockOverride != null
+    ? requestedStartRoom
+    : configuredSpawnRoom) ?? fallbackRoom;
   const initialRoom: RoomDef = requestedStartRoom ?? campaignSpawnRoom;
   if (requestedStartRoom === null || configuredSpawnRoom === null) {
     console.error('[gameScreen] No rooms were loaded. Starting in fallback room.');
   }
-  const campaignSpawnBlock: readonly [number, number] = campaignSpawnRoom.playerSpawnBlock;
+  // campaignSpawnBlock: block to respawn at after death (no save). When a campaign spawn
+  // override is provided, use it; otherwise use the room's own playerSpawnBlock.
+  const campaignSpawnBlock: readonly [number, number] =
+    campaignSpawnBlockOverride ?? campaignSpawnRoom.playerSpawnBlock;
   const shouldOpenFailsafeEditor = campaignSession != null
     ? (openEditorImmediately === true)
     : ((startRoomId !== null && ROOM_REGISTRY.get(startRoomId) === undefined)
@@ -730,9 +738,13 @@ export function startGameScreen(
   // Shown when gameplay first starts (or when a room's sprites are not yet
   // loaded).  Polled each frame and dismissed once areRoomSpritesReady().
   const loadingOverlay = new GameLoadingOverlay(uiRoot);
+  // Flag to track whether this is the very first room load (campaign start).
+  // Used to trigger the longer "fade from black" effect on initial campaign load.
+  let isInitialCampaignLoad = true;
 
   function showLoadingOverlay(): void {
-    loadingOverlay.show();
+    loadingOverlay.show(isInitialCampaignLoad);
+    isInitialCampaignLoad = false; // subsequent room loads use the standard fade
   }
 
   /** Hides the overlay once sprites are ready and the minimum show time has passed. */
@@ -760,23 +772,24 @@ export function startGameScreen(
   }
 
   // Initial room load — use saved spawn point if returning to a save.
-  // Prefer the room's own playerSpawnBlock as the fallback so the player is
-  // placed at a sensible room-specific position rather than the lobby coordinates.
+  // If a campaign spawn override was provided (from campaignSpawn in the packed campaign)
+  // and no save data overrides, use the campaign spawn position.
   // resolveSpawnBlock clamps to bounds and finds an open spot if the position
   // is inside a solid wall (handles out-of-bounds saves, new rooms, etc.).
   const desiredSpawnBlock = (progress && progress.lastSaveSpawnBlock && progress.lastSaveRoomId === currentRoom.id)
     ? progress.lastSaveSpawnBlock
-    : currentRoom.playerSpawnBlock;
+    : (campaignSpawnBlockOverride ?? currentRoom.playerSpawnBlock);
   const initialSpawnBlock = resolveSpawnBlock(currentRoom, desiredSpawnBlock[0], desiredSpawnBlock[1]);
   loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
 
   // Preload sprites for adjacent rooms in the background.
   preloadAdjacentRoomAssets(currentRoom);
 
-  // Show the loading overlay if the spawn room's sprites aren't ready yet.
+  // Show the loading overlay if the spawn room's sprites aren't ready yet, OR
+  // always show it on the initial campaign load to produce the fade-from-black effect.
   // areRoomSpritesReady returns true instantly for rooms with no folder-based
   // themes (legacy sprites load at module init), so the overlay won't flash.
-  if (!areRoomSpritesReady(currentRoom)) {
+  if (!areRoomSpritesReady(currentRoom) || isInitialCampaignLoad) {
     showLoadingOverlay();
   }
 

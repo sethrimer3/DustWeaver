@@ -110,6 +110,13 @@ export function createNewCampaignSession(params: CreateNewCampaignParams): Edita
     description: params.description,
     initialRoomId: params.initialRoomId,
     initialRoomImagePath: null,
+    // Pre-place the campaign spawn at the same position as the starter room's
+    // player spawn so new campaigns export correctly without needing a manual placement.
+    campaignSpawn: {
+      roomId: params.initialRoomId,
+      xBlock: spawnX,
+      yBlock: spawnY,
+    },
   };
 
   const campaign: SavedCampaignV1 = {
