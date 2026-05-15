@@ -53,11 +53,9 @@ import {
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { renderRopes } from '../render/ropes/ropeRenderer';
 import type { InputState } from '../input/handler';
-import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
 import {
   drawTunnelDarkness,
   renderTransitionPassageGradients,
-  DUST_CONTAINER_SIZE_WORLD,
 } from './gameRoom';
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import type { GraphicsQuality } from '../ui/renderSettings';
@@ -78,23 +76,19 @@ import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer
 import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import type { TransitionPreviewContext } from '../render/transitions/transitionPreviewContext';
 import { renderNextRoomFacingEdge } from '../render/transitions/nextRoomEdgeRenderer';
-import { renderLambdaAnchors, renderTeleportFlash } from '../render/lambdaAnchorRenderer';
+import { renderTeleportFlash } from '../render/lambdaAnchorRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
 import {
   ENABLE_EDGE_EXTENSION_RENDERING,
   ENABLE_NEXT_ROOM_EDGE_PREVIEW,
 } from '../render/transitions/transitionConfig';
+import { renderRoomCollectibles } from './gameRenderCollectibles';
+import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
 /** Fixed simulation timestep for tick-to-ms conversion. */
 const FIXED_DT_MS = 16.666;
-
-/** Touch joystick outer radius matches the max drag radius from handler.ts. */
-const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
-const JOYSTICK_INNER_RADIUS_PX = 22;
-
-const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 /** Tracks the last room ID to detect room changes for occluder dirty marking. */
 let _lastLightingRoomId: string | null = null;
@@ -302,32 +296,6 @@ export interface RenderFrameContext {
 }
 
 /**
- * Returns a CSS colour string for a given dust kind name.
- * Used to tint dust swarm particles cosmetically.
- */
-function getDustKindColor(dustKind: string): string {
-  switch (dustKind) {
-    case 'Fire':      return '#ff6020';
-    case 'Ice':       return '#60c8ff';
-    case 'Lightning': return '#ffe040';
-    case 'Poison':    return '#60ff40';
-    case 'Arcane':    return '#c060ff';
-    case 'Wind':      return '#c0f0ff';
-    case 'Holy':      return '#ffffa0';
-    case 'Shadow':    return '#8040a0';
-    case 'Metal':     return '#b0b8c8';
-    case 'Earth':     return '#a07040';
-    case 'Nature':    return '#40c840';
-    case 'Crystal':   return '#80ffe0';
-    case 'Void':      return '#4020a0';
-    case 'Water':     return '#2080ff';
-    case 'Lava':      return '#ff4010';
-    case 'Stone':     return '#909090';
-    default:          return '#d0c080'; // Physical / unknown
-  }
-}
-
-/**
  * Render a single frame to the virtual canvas and upscale to the device
  * canvas.  Handles every rendering layer: world background, geometry,
  * particles, HUD, touch-joystick overlay.
@@ -342,12 +310,6 @@ export function renderFrame(r: RenderFrameContext): void {
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
     bgColor, isDebugMode, inputState,
-    collectedDustContainerKeySet,
-    isDustContainerSpriteLoaded,
-    dustContainerSprite,
-    collectedDustSwarmKeySet,
-    linkedAnchorIndex,
-    linkedAnchorRoomId,
     teleportFlashAlpha,
     setTeleportFlashAlpha,
     graphicsQuality,
@@ -700,93 +662,8 @@ export function renderFrame(r: RenderFrameContext): void {
   skillTombEffectRenderer.renderSprite(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   skillTombEffectRenderer.renderFront(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
 
-  // Dust containers (collectibles)
-  if (isDustContainerSpriteLoaded) {
-    const roomDustContainers = currentRoom.dustContainers ?? [];
-    const bobOffsetWorld = Math.sin(nowMs * 0.0032) * 1.5;
-    // Viewport bounds in world space for culling.
-    const vpMinXWorld = -ox / zoom;
-    const vpMinYWorld = -oy / zoom;
-    const vpMaxXWorld = (virtualWidthPx - ox) / zoom;
-    const vpMaxYWorld = (virtualHeightPx - oy) / zoom;
-    for (let i = 0; i < roomDustContainers.length; i++) {
-      const pickupKey = `${currentRoom.id}:${i}`;
-      if (collectedDustContainerKeySet.has(pickupKey)) continue;
-
-      const dc = roomDustContainers[i];
-      const dx = (dc.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-      const dy = (dc.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
-
-      // Cull containers fully outside the viewport (+ small margin).
-      const margin = DUST_CONTAINER_SIZE_WORLD;
-      if (dx < vpMinXWorld - margin || dx > vpMaxXWorld + margin) continue;
-      if (dy < vpMinYWorld - margin || dy > vpMaxYWorld + margin) continue;
-
-      const drawSize = DUST_CONTAINER_SIZE_WORLD * zoom;
-      ctx.drawImage(
-        dustContainerSprite,
-        dx * zoom + ox - drawSize * 0.5,
-        dy * zoom + oy - drawSize * 0.5,
-        drawSize,
-        drawSize,
-      );
-    }
-  }
-
-  // Dust swarms (collectibles — press F to collect)
-  {
-    const roomDustSwarms = currentRoom.dustSwarms ?? [];
-    const t = nowMs * 0.001;
-    // Viewport bounds in world space for culling (with margin for swarm radius).
-    const swarmMarginWorld = BLOCK_SIZE_MEDIUM * 2;
-    const vpMinXWorld = -ox / zoom - swarmMarginWorld;
-    const vpMinYWorld = -oy / zoom - swarmMarginWorld;
-    const vpMaxXWorld = (virtualWidthPx - ox) / zoom + swarmMarginWorld;
-    const vpMaxYWorld = (virtualHeightPx - oy) / zoom + swarmMarginWorld;
-    ctx.save();
-    for (let i = 0; i < roomDustSwarms.length; i++) {
-      const swarmKey = `${currentRoom.id}:dustswarm:${i}`;
-      if (collectedDustSwarmKeySet.has(swarmKey)) continue;
-      const sw = roomDustSwarms[i];
-      const cx = (sw.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-      const cy = (sw.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-
-      // Cull swarms fully outside viewport.
-      if (cx < vpMinXWorld || cx > vpMaxXWorld) continue;
-      if (cy < vpMinYWorld || cy > vpMaxYWorld) continue;
-      // Draw a swirling cluster of ~12 small dots using deterministic time/index math.
-      const particleCount = 12;
-      for (let p = 0; p < particleCount; p++) {
-        const angle = (p / particleCount) * Math.PI * 2 + t * (1.4 + (p % 3) * 0.3);
-        const wobble = Math.sin(t * 2.0 + p * 1.1) * 0.5;
-        const radius = (3.5 + (p % 4) * 1.2 + wobble) * BLOCK_SIZE_MEDIUM * 0.12;
-        const px = cx + Math.cos(angle) * radius;
-        const py = cy + Math.sin(angle) * radius * 0.6 + Math.sin(t * 1.7 + p) * 1.0;
-        const alpha = 0.55 + Math.sin(t * 2.5 + p * 0.9) * 0.25;
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = getDustKindColor(sw.dustKind);
-        const size = (1.2 + (p % 3) * 0.4) * zoom;
-        ctx.fillRect(
-          Math.round((px * zoom + ox) - size * 0.5),
-          Math.round((py * zoom + oy) - size * 0.5),
-          Math.ceil(size), Math.ceil(size),
-        );
-      }
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  // Lambda Anchors (recall points — press F to link, press F again to teleport)
-  renderLambdaAnchors(
-    ctx,
-    currentRoom.lambdaAnchors ?? [],
-    linkedAnchorRoomId === currentRoom.id ? linkedAnchorIndex : -1,
-    ox,
-    oy,
-    zoom,
-    nowMs,
-  );
+  // ── Collectibles (dust containers, dust swarms, lambda anchors) ──────────
+  renderRoomCollectibles(r, ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx);
 
   // ── Particles ─────────────────────────────────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_PARTICLES);
@@ -851,55 +728,8 @@ export function renderFrame(r: RenderFrameContext): void {
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BLOOM);
   drawOffensiveDustOutlineOverlay(deviceCtx, snapshot, canvas.width, canvas.height, ox, oy, zoom);
 
-  // ── Touch joystick (drawn on device canvas in screen space) ───────────
-  if (inputState.isTouchJoystickActiveFlag === 1) {
-    const bx = inputState.touchJoystickBaseXPx;
-    const by = inputState.touchJoystickBaseYPx;
-    const joystickCurrentXPx = inputState.touchJoystickCurrentXPx;
-    const joystickCurrentYPx = inputState.touchJoystickCurrentYPx;
-
-    // Scale radii from virtual pixels to device canvas pixels so the joystick
-    // appears at the correct physical size regardless of device resolution.
-    const joystickScale = canvas.height / virtualCanvas.height;
-    const outerRadiusPx = JOYSTICK_OUTER_RADIUS_PX * joystickScale;
-    const innerRadiusPx = JOYSTICK_INNER_RADIUS_PX * joystickScale;
-
-    deviceCtx.save();
-    deviceCtx.beginPath();
-    deviceCtx.arc(bx, by, outerRadiusPx, 0, Math.PI * 2);
-    deviceCtx.strokeStyle = 'rgba(0,207,255,0.35)';
-    deviceCtx.lineWidth = 2 * joystickScale;
-    deviceCtx.stroke();
-    deviceCtx.fillStyle = 'rgba(0,207,255,0.08)';
-    deviceCtx.fill();
-
-    const joystickDx = joystickCurrentXPx - bx;
-    const joystickDy = joystickCurrentYPx - by;
-    const dist = Math.sqrt(joystickDx * joystickDx + joystickDy * joystickDy);
-    let thumbXPx = joystickCurrentXPx;
-    let thumbYPx = joystickCurrentYPx;
-    if (dist > outerRadiusPx) {
-      thumbXPx = bx + (joystickDx / dist) * outerRadiusPx;
-      thumbYPx = by + (joystickDy / dist) * outerRadiusPx;
-    }
-
-    deviceCtx.beginPath();
-    deviceCtx.arc(thumbXPx, thumbYPx, innerRadiusPx, 0, Math.PI * 2);
-    deviceCtx.fillStyle = 'rgba(0,207,255,0.45)';
-    deviceCtx.fill();
-    deviceCtx.restore();
-  }
-
-  // ── Control hints (debug only, drawn on device canvas) ──────────────────
-  if (isDebugMode) {
-    const controlHintText = IS_TOUCH_DEVICE
-      ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
-      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=sprint  |  Click=attack  |  Hold=block  |  Hold Left Click=grapple  |  ESC=menu';
-    deviceCtx.fillStyle = 'rgba(255,255,255,0.3)';
-    deviceCtx.font = '12px monospace';
-    const hintWidthPx = deviceCtx.measureText(controlHintText).width;
-    deviceCtx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
-  }
+  // ── Device-canvas overlays (touch joystick, debug control hints) ─────────
+  renderDeviceOverlay(r);
 
   // ── Teleport flash overlay ───────────────────────────────────────────────
   // Golden flash when the player teleports back to a Lambda Anchor.

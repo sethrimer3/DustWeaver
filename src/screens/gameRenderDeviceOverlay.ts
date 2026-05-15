@@ -1,0 +1,96 @@
+/**
+ * gameRenderDeviceOverlay.ts — Device-canvas overlay rendering for the game frame.
+ *
+ * Handles rendering of UI elements drawn directly on the device canvas (not
+ * the virtual 480×270 canvas) after the upscale step:
+ *   • Touch joystick (thumb stick and outer ring)
+ *   • Debug control hints banner
+ *
+ * Extracted from gameRender.ts to keep the main render orchestrator leaner.
+ * Follows the same context-interface pattern as gameHudRenderer.ts.
+ */
+
+import type { InputState } from '../input/handler';
+import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
+
+// ── Constants ───────────────────────────────────────────────────────────────
+
+/** Touch joystick outer ring radius (virtual pixels). */
+const JOYSTICK_OUTER_RADIUS_PX = JOYSTICK_MAX_RADIUS_PX;
+/** Touch joystick thumb indicator radius (virtual pixels). */
+const JOYSTICK_INNER_RADIUS_PX = 22;
+
+const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+// ── Device overlay context ──────────────────────────────────────────────────
+
+/** Subset of RenderFrameContext fields needed by renderDeviceOverlay(). */
+export interface DeviceOverlayContext {
+  deviceCtx: CanvasRenderingContext2D;
+  canvas: HTMLCanvasElement;
+  virtualCanvas: HTMLCanvasElement;
+  inputState: InputState;
+  isDebugMode: boolean;
+}
+
+// ── Public render function ──────────────────────────────────────────────────
+
+/**
+ * Renders device-canvas overlays after the virtual canvas has been upscaled.
+ * All coordinates are in physical device pixels (canvas.width × canvas.height).
+ *
+ * @param r  Device overlay context (subset of RenderFrameContext).
+ */
+export function renderDeviceOverlay(r: DeviceOverlayContext): void {
+  const { deviceCtx, canvas, virtualCanvas, inputState, isDebugMode } = r;
+
+  // ── Touch joystick ────────────────────────────────────────────────────────
+  if (inputState.isTouchJoystickActiveFlag === 1) {
+    const bx = inputState.touchJoystickBaseXPx;
+    const by = inputState.touchJoystickBaseYPx;
+    const joystickCurrentXPx = inputState.touchJoystickCurrentXPx;
+    const joystickCurrentYPx = inputState.touchJoystickCurrentYPx;
+
+    // Scale radii from virtual pixels to device canvas pixels so the joystick
+    // appears at the correct physical size regardless of device resolution.
+    const joystickScale = canvas.height / virtualCanvas.height;
+    const outerRadiusPx = JOYSTICK_OUTER_RADIUS_PX * joystickScale;
+    const innerRadiusPx = JOYSTICK_INNER_RADIUS_PX * joystickScale;
+
+    deviceCtx.save();
+    deviceCtx.beginPath();
+    deviceCtx.arc(bx, by, outerRadiusPx, 0, Math.PI * 2);
+    deviceCtx.strokeStyle = 'rgba(0,207,255,0.35)';
+    deviceCtx.lineWidth = 2 * joystickScale;
+    deviceCtx.stroke();
+    deviceCtx.fillStyle = 'rgba(0,207,255,0.08)';
+    deviceCtx.fill();
+
+    const joystickDx = joystickCurrentXPx - bx;
+    const joystickDy = joystickCurrentYPx - by;
+    const dist = Math.sqrt(joystickDx * joystickDx + joystickDy * joystickDy);
+    let thumbXPx = joystickCurrentXPx;
+    let thumbYPx = joystickCurrentYPx;
+    if (dist > outerRadiusPx) {
+      thumbXPx = bx + (joystickDx / dist) * outerRadiusPx;
+      thumbYPx = by + (joystickDy / dist) * outerRadiusPx;
+    }
+
+    deviceCtx.beginPath();
+    deviceCtx.arc(thumbXPx, thumbYPx, innerRadiusPx, 0, Math.PI * 2);
+    deviceCtx.fillStyle = 'rgba(0,207,255,0.45)';
+    deviceCtx.fill();
+    deviceCtx.restore();
+  }
+
+  // ── Control hints ─────────────────────────────────────────────────────────
+  if (isDebugMode) {
+    const controlHintText = IS_TOUCH_DEVICE
+      ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
+      : 'A/D=walk  |  W/Space/↑=jump  |  Shift=sprint  |  Click=attack  |  Hold=block  |  Hold Left Click=grapple  |  ESC=menu';
+    deviceCtx.fillStyle = 'rgba(255,255,255,0.3)';
+    deviceCtx.font = '12px monospace';
+    const hintWidthPx = deviceCtx.measureText(controlHintText).width;
+    deviceCtx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
+  }
+}
