@@ -63,6 +63,7 @@ import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { ZIP_JUMP_WINDOW_SECONDS } from '../sim/clusters/grappleZip';
+import { WATER_GRAVITY_MULTIPLIER, WATER_BUOYANCY_FORCE_WORLD } from '../sim/hazards';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality, getAlwaysCenterCamera } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
@@ -1649,6 +1650,18 @@ export function startGameScreen(
           inputRightClick: inputState.isRightMouseDownFlag === 1,
           inputGrapple: inputState.isGrappleHeldFlag === 1,
           inputInteract: interactInputPulseMs > 0,
+          // Water / buoyancy debug
+          isInLiquid:           world.isPlayerInWaterFlag === 1,
+          submergedFraction:    world.playerWaterSubmersionRatio,
+          liquidSurfaceYWorld:  world.playerBuoyancySurfaceYWorld,
+          depthFactor:          world.playerBuoyancyDepthFactor,
+          buoyancyAccelWorld:   WATER_BUOYANCY_FORCE_WORLD
+            * world.playerWaterSubmersionRatio
+            * world.playerBuoyancyDepthFactor,
+          gravityScale:         world.isPlayerInWaterFlag === 1
+            ? WATER_GRAVITY_MULTIPLIER
+            : 1.0,
+          playerVelocityYWorld: playerClusterForHud.velocityYWorld,
         };
         hudState.debug = dbg;
       }

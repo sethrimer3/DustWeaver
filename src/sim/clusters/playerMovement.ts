@@ -220,11 +220,15 @@ export function tickPlayerMovement(
   // apex modifier) for a natural pendulum feel.  The grapple constraint
   // (step 0.25) handles the actual swing physics.
   const baseGrav = ov(debugSpeedOverrides.gravityWorld, NORMAL_GRAVITY_WORLD_PER_SEC2);
-  // Water buoyancy reduces effective gravity when the player is submerged.
-  // Scale gravity by submersion ratio for a smooth entry feel (not a hard switch).
-  const submersion = world.playerWaterSubmersionRatio;
+  // Water buoyancy: reduce gravity to a constant low fraction whenever any part
+  // of the player overlaps a water zone.  The old submersion-lerp formula
+  // (0.12 + 0.88*(1−s)) left gravity at ~56% of normal when half-submerged,
+  // meaning buoyancy (520*0.5 = 260 wu/s²) could never overcome it
+  // (504 wu/s²) — the player always sank.  Using a constant multiplier (0.12)
+  // keeps effective gravity at only 108 wu/s² regardless of submersion, so
+  // buoyancy wins whenever the player is meaningfully submerged (>~21%).
   const waterMult = world.isPlayerInWaterFlag === 1
-    ? WATER_GRAVITY_MULTIPLIER + (1.0 - WATER_GRAVITY_MULTIPLIER) * (1.0 - submersion)
+    ? WATER_GRAVITY_MULTIPLIER
     : 1.0;
   let grav: number;
   if (world.isGrappleActiveFlag === 1) {
