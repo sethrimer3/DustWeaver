@@ -259,9 +259,12 @@ function buildRoomContour(room: RoomDef): ContourData {
   //
   // A cursor Map (vertex → next unread edge index) is used instead of
   // Array.shift() to keep each edge access O(1).
-  const rawContours: number[][] = [];
-  /** Parallel to rawContours: true when the corresponding chain closed back to its start vertex. */
-  const rawIsClosedFlags: boolean[] = [];
+  //
+  // `isClosed` is tracked per-contour: a chain that returns to its startVertex
+  // is closed; one that hits a dead-end (boundary-suppressed edge) is open.
+  // Open chains must NOT be drawn with closePath — see drawContour.
+  interface RawContour { pts: number[]; isClosed: boolean; }
+  const rawContours: RawContour[] = [];
   // edgeCursor tracks the index of the next unconsumed outgoing edge per vertex.
   const edgeCursor = new Map<number, number>();
 
@@ -288,8 +291,7 @@ function buildRoomContour(room: RoomDef): ContourData {
       }
 
       if (points.length >= 6) {
-        rawContours.push(points);
-        rawIsClosedFlags.push(isClosed);
+        rawContours.push({ pts: points, isClosed });
       }
 
       startCursor = edgeCursor.get(startVertex) ?? 0;
@@ -314,7 +316,13 @@ function buildRoomContour(room: RoomDef): ContourData {
   //   - Keeps point counts small (a 20-block horizontal wall → 2 vertices).
   //   - Gives the jitter a natural "per-corner" feel rather than ticking
   //     along every block boundary.
-  const simplifiedContours: Float32Array[] = rawContours.map((pts) => {
+  //
+  // Simplification uses Array.map() which preserves array length, so
+  // simplifiedContours[i] and isClosedFlags[i] always correspond to the
+  // same original raw contour.  Degenerate contours that collapse below
+  // 3 vertices are stored as empty Float32Arrays; the ptCount < 3 guard
+  // in drawRoomSketch skips them cleanly without disturbing array indices.
+  const simplifiedContours: Float32Array[] = rawContours.map(({ pts }) => {
     const n = pts.length / 2;
     if (n < 4) return new Float32Array(pts);
     const kept: number[] = [];
@@ -329,13 +337,13 @@ function buildRoomContour(room: RoomDef): ContourData {
         kept.push(cx, cy);
       }
     }
-    // If simplification collapses the contour below 3 vertices (a degenerate
-    // case that cannot arise for valid closed tile polygons), return an empty
-    // array so the ptCount < 3 guard in drawRoomSketch skips it cleanly.
     return new Float32Array(kept.length >= 6 ? kept : []);
   });
 
-  const result: ContourData = { contours: simplifiedContours, isClosedFlags: rawIsClosedFlags };
+  const result: ContourData = {
+    contours: simplifiedContours,
+    isClosedFlags: rawContours.map(({ isClosed }) => isClosed),
+  };
   contourCache.set(room.id, result);
   return result;
 }

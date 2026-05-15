@@ -135,6 +135,8 @@ export function exportCampaignJson(
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
+  // Wall-clock time is intentionally used here: the date is purely a human-
+  // readable suffix on a download filename, not simulation or game state.
   const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const a = document.createElement('a');
   a.href = url;
