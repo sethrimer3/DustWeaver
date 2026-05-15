@@ -12,6 +12,7 @@ import { dehydrateRoom, validateRoomRoundtrip } from '../levels/roomSchemaV2';
 import {
   ROOM_REGISTRY,
 } from '../levels/rooms';
+import { getLoadedOfficialCampaignRevisionMetadata } from '../levels/rooms';
 import type { EditableCampaignSession } from './editableCampaignSession';
 import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCampaignSession';
 import { WORLD_NAMES } from '../levels/rooms';
@@ -200,11 +201,15 @@ export function exportMainCampaignJson(
   const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
 
   // Synthetic session carrying the main campaign metadata and baseline rooms.
+  // Propagate the existing revision metadata from the loaded canonical campaign
+  // so that re-exporting increments the version counter rather than resetting to 1.
+  const loadedRevMeta = getLoadedOfficialCampaignRevisionMetadata();
   const syntheticSession: EditableCampaignSession = {
     source: 'main',
     campaign: {
       v: 1,
       kind: 'DustWeaverCampaign',
+      ...(loadedRevMeta !== null ? { metadata: loadedRevMeta } : {}),
       campaign: {
         id: MAIN_CAMPAIGN_ID,
         title: MAIN_CAMPAIGN_TITLE,
