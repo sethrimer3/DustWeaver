@@ -52,6 +52,11 @@ export class AtmosphericLightDust {
    * for motes to age out.  Defaults to 1.0 (all motes drawn).
    */
   private _densityMultiplier = 1.0;
+  /**
+   * Threshold below which stride-2 rendering activates.  Values in [0, threshold)
+   * use stride 2 (50% density); values ≥ threshold use stride 1 (full density).
+   */
+  private static readonly DENSITY_STRIDE_THRESHOLD = 0.75;
 
   /** Update the maximum live mote count.  New motes won't spawn above this cap;
    *  existing motes above it fade out naturally over their lifetime. */
@@ -149,8 +154,8 @@ export class AtmosphericLightDust {
     // Motes are 2×2 px; add 2 px margin so partially-visible motes are drawn.
     const cullMarginPx = 2;
     // Density multiplier: stride > 1 skips motes for immediate density reduction.
-    // stride 1 = full density, stride 2 = 50%, etc.
-    const stride = this._densityMultiplier >= 0.75 ? 1 : 2;
+    // stride 1 = full density, stride 2 = 50% (when multiplier < DENSITY_STRIDE_THRESHOLD).
+    const stride = this._densityMultiplier >= AtmosphericLightDust.DENSITY_STRIDE_THRESHOLD ? 1 : 2;
 
     for (let i = 0; i < this.moteCount; i += stride) {
       const px = this.moteX[i] * zoom + offsetXPx;

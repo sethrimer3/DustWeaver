@@ -33,6 +33,12 @@ export class SunbeamRenderer {
   private beams: readonly RoomSunbeamDef[] = [];
   /** Whether sunbeams are enabled (wired to the quality config). */
   private _isEnabled = true;
+  /**
+   * Beam intensity multiplier (0–1).  At 0.5 (adaptive tier 1), beam alpha is
+   * scaled down so beams are subtler without disabling them entirely.
+   * 1.0 = full intensity (default).  Tier 2 should call setEnabled(false).
+   */
+  private _densityMultiplier = 1.0;
 
   // ── Per-beam gradient cache ──────────────────────────────────────────────
   // Pre-allocated arrays: null entries mean no gradient cached for that beam slot.
@@ -57,13 +63,7 @@ export class SunbeamRenderer {
     this._isEnabled = enabled;
   }
 
-  /**
-   * Set a density multiplier for beam intensity (0–1).
-   * At 0.5 (adaptive tier 1), beam alpha is scaled down so beams are subtler
-   * without disabling them entirely.  1.0 = full intensity (default).
-   * Tier 2 should call setEnabled(false) instead.
-   */
-  private _densityMultiplier = 1.0;
+  /** Set beam intensity multiplier; see `_densityMultiplier` for details. */
   setDensityMultiplier(m: number): void {
     this._densityMultiplier = Math.max(0, Math.min(1, m));
   }

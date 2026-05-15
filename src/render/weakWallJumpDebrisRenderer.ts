@@ -201,10 +201,10 @@ export class WeakWallJumpDebrisRenderer {
 
         const wl = world.wallXWorld[wi];
         const wt = world.wallYWorld[wi];
-        const ww2 = world.wallWWorld[wi];
-        const wh2 = world.wallHWorld[wi];
-        const wr = wl + ww2;
-        const wb = wt + wh2;
+        const wallWidthWorld  = world.wallWWorld[wi];
+        const wallHeightWorld = world.wallHWorld[wi];
+        const wr = wl + wallWidthWorld;
+        const wb = wt + wallHeightWorld;
 
         const ori = world.wallRampOrientationIndex[wi];
 
@@ -217,12 +217,12 @@ export class WeakWallJumpDebrisRenderer {
           if (resolvedX <= wl || resolvedX >= wr || resolvedY <= wt || resolvedY >= wb) continue;
 
           // Sample ramp surface height at the particle's X position.
-          // t = 0 at left edge, 1 at right edge.
-          const t2 = ww2 > 0 ? (resolvedX - wl) / ww2 : 0;
+          // rampProgressFraction = 0 at left edge, 1 at right edge.
+          const rampProgressFraction = wallWidthWorld > 0 ? (resolvedX - wl) / wallWidthWorld : 0;
           // ori 0: surface rises going right; ori 1: surface falls going right.
           const surfaceY = (ori === 0)
-            ? wb - t2 * wh2   // wallBottom − t×wallHeight
-            : wt + t2 * wh2;  // wallTop    + t×wallHeight
+            ? wb - rampProgressFraction * wallHeightWorld   // wallBottom − t×wallHeight
+            : wt + rampProgressFraction * wallHeightWorld;  // wallTop    + t×wallHeight
 
           if (resolvedY >= surfaceY) {
             // Particle penetrated the ramp floor surface — push it above.

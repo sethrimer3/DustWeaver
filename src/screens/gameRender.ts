@@ -406,10 +406,10 @@ export function renderFrame(r: RenderFrameContext): void {
   if (_lastChunkCacheQuality !== chunkCacheQualityKey) {
     _lastChunkCacheQuality = chunkCacheQualityKey;
     // Wall chunk cache
-    const wallMemKB = graphicsQuality === 'high' ? 16384 : graphicsQuality === 'medium' ? 8192 : 4096;
+    const wallMemKB = graphicsQuality === 'high' ? 16384 : graphicsQuality === 'med' ? 8192 : 4096;
     setWallChunkCacheMemoryKB(wallMemKB);
     // Background chunk cache (about half of the wall cache budget)
-    const bgMemKB = graphicsQuality === 'high' ? 8192 : graphicsQuality === 'medium' ? 4096 : 2048;
+    const bgMemKB = graphicsQuality === 'high' ? 8192 : graphicsQuality === 'med' ? 4096 : 2048;
     setBgChunkCacheMemoryKB(bgMemKB);
   }
 
