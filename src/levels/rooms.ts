@@ -17,7 +17,7 @@
 
 import { RoomDef } from './roomDef';
 import { loadRoomJsonFiles } from './roomJsonLoader';
-import type { SavedCampaignV1 } from './campaignSchema';
+import type { SavedCampaignV1, SavedCampaignRevisionMetadata } from './campaignSchema';
 import { hydrateSavedCampaignToRoomDefs } from './campaignSchema';
 import { fetchOfficialPackedCampaign } from './packedCampaignLoader';
 
@@ -31,6 +31,18 @@ export const ROOM_REGISTRY: ReadonlyMap<string, RoomDef> = registryMap;
 
 /** The room the player starts in. */
 export const STARTING_ROOM_ID = 'lobby';
+
+/** Revision metadata from the last successfully loaded official campaign file. Null before init. */
+let loadedOfficialCampaignRevisionMetadata: SavedCampaignRevisionMetadata | null = null;
+
+/**
+ * Returns the revision metadata from the loaded official packed campaign, or null
+ * if the campaign was not loaded from a packed file or has no metadata.
+ * Used by the editor to propagate the existing version number on re-export.
+ */
+export function getLoadedOfficialCampaignRevisionMetadata(): SavedCampaignRevisionMetadata | null {
+  return loadedOfficialCampaignRevisionMetadata;
+}
 
 // ── World-map metadata stores ─────────────────────────────────────────────────
 
@@ -163,6 +175,7 @@ export async function initRoomRegistry(): Promise<void> {
         worldNamesMap.set(room.worldNumber, `World ${room.worldNumber}`);
       }
     }
+    loadedOfficialCampaignRevisionMetadata = packedCampaign.metadata ?? null;
     console.log(
       `[rooms] Loaded ${registryMap.size} rooms from packed campaign ` +
       `"${packedCampaign.campaign.id}" (initialRoom: ${packedCampaign.campaign.initialRoomId})`

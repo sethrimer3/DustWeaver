@@ -12,6 +12,7 @@ import { dehydrateRoom, validateRoomRoundtrip } from '../levels/roomSchemaV2';
 import {
   ROOM_REGISTRY,
 } from '../levels/rooms';
+import { getLoadedOfficialCampaignRevisionMetadata } from '../levels/rooms';
 import type { EditableCampaignSession } from './editableCampaignSession';
 import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCampaignSession';
 import { WORLD_NAMES } from '../levels/rooms';
@@ -163,10 +164,9 @@ export function exportCampaignJson(
  * (dehydrating every room) and merges any pending room edits on top before
  * assembling the final SavedCampaignV1 payload.
  *
- * The exported file is named `DustweaverCampaign-YYYY-MM-DD.dwcampaign.json`
- * (date-stamped backup). To deploy it as the official runtime campaign, rename
- * it to `DustweaverCampaign.dwcampaign.json` and commit it under
- * `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/`.
+ * The exported file is named `DustweaverCampaign.dwcampaign.json` — the
+ * canonical runtime filename. Place it under
+ * `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/` to deploy it.
  *
  * This is the handler for the "Export Campaign" button when editing the main
  * DustWeaver campaign (not a custom campaign session).
@@ -201,11 +201,15 @@ export function exportMainCampaignJson(
   const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
 
   // Synthetic session carrying the main campaign metadata and baseline rooms.
+  // Propagate the existing revision metadata from the loaded canonical campaign
+  // so that re-exporting increments the version counter rather than resetting to 1.
+  const loadedRevMeta = getLoadedOfficialCampaignRevisionMetadata();
   const syntheticSession: EditableCampaignSession = {
     source: 'main',
     campaign: {
       v: 1,
       kind: 'DustWeaverCampaign',
+      ...(loadedRevMeta !== null ? { metadata: loadedRevMeta } : {}),
       campaign: {
         id: MAIN_CAMPAIGN_ID,
         title: MAIN_CAMPAIGN_TITLE,
@@ -234,15 +238,9 @@ export function exportMainCampaignJson(
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
-  // Wall-clock time is intentionally used here: the date is a human-readable
-  // suffix on the download filename, not simulation or game state.
-  // The downloaded file is a dated backup. To use it as the runtime official
-  // campaign, rename it to DustweaverCampaign.dwcampaign.json and place it at
-  // ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json.
-  const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const a = document.createElement('a');
   a.href = url;
-  a.download = `DustweaverCampaign-${dateStr}.dwcampaign.json`;
+  a.download = 'DustweaverCampaign.dwcampaign.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

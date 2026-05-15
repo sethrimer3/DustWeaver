@@ -9,11 +9,15 @@
  * {
  *   "v": 1,
  *   "kind": "DustWeaverCampaign",
+ *   "metadata": { "version": 1, "lastEditedAt": "2026-05-15T21:42:00.000Z" },
  *   "campaign": { id, title, creator, description, initialRoomId, ... },
  *   "worldMap": { worlds: [...], rooms: [...] },
  *   "rooms": [ SavedRoomV2, ... ],
  *   "editor": { createdWithBuild, lastEditedIso }
  * }
+ *
+ * The `metadata` field is optional for backward compatibility — older
+ * .dwcampaign.json files without it will still load successfully.
  *
  * Rooms are stored in the compact SavedRoomV2 format reusing the existing
  * dehydrate/hydrate pipeline. No second room format is introduced.
@@ -52,10 +56,26 @@ export interface SavedCampaignEditorInfo {
   lastEditedIso: string;
 }
 
+/**
+ * Export revision metadata written by the editor on every packed campaign export.
+ * `version` increments each time the campaign is exported; `lastEditedAt` is an
+ * ISO 8601 UTC timestamp of the export moment.
+ *
+ * This field is optional — older campaigns without it will still load.
+ */
+export interface SavedCampaignRevisionMetadata {
+  /** Monotonically increasing export revision counter. Starts at 1. */
+  version: number;
+  /** ISO 8601 UTC timestamp of when this export was produced. */
+  lastEditedAt: string;
+}
+
 /** Single-file packed custom campaign, v1. */
 export interface SavedCampaignV1 {
   v: 1;
   kind: 'DustWeaverCampaign';
+  /** Optional export revision metadata. Absent in campaigns exported before BUILD 317. */
+  metadata?: SavedCampaignRevisionMetadata;
   campaign: SavedCampaignMetadata;
   worldMap: WorldMapJsonDef;
   rooms: SavedRoomV2[];
@@ -103,6 +123,22 @@ export function validateSavedCampaign(data: unknown): string[] {
 
   if (d['kind'] !== SAVED_CAMPAIGN_KIND) {
     errors.push(`Expected kind "${SAVED_CAMPAIGN_KIND}", got "${String(d['kind'])}"`);
+  }
+
+  // ── revision metadata (optional — absent in older exports) ─────────────
+  const revMeta = d['metadata'];
+  if (revMeta !== undefined) {
+    if (typeof revMeta !== 'object' || revMeta === null) {
+      errors.push('"metadata" field must be a non-null object when present');
+    } else {
+      const rm = revMeta as Record<string, unknown>;
+      if (typeof rm['version'] !== 'number' || !Number.isInteger(rm['version']) || rm['version'] < 1) {
+        errors.push('metadata.version must be a positive integer when present');
+      }
+      if (typeof rm['lastEditedAt'] !== 'string') {
+        errors.push('metadata.lastEditedAt must be a string when present');
+      }
+    }
   }
 
   // ── campaign metadata ───────────────────────────────────────────────────

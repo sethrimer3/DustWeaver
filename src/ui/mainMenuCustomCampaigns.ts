@@ -55,9 +55,9 @@ export async function buildCustomCampaignsUI(
   createNewBtn.addEventListener('click', () => showCreateNewCampaignDialog(container, callbacks));
   container.appendChild(createNewBtn);
 
-  // ── Import Campaign JSON button ──────────────────────────────────────────
+  // ── Import Campaign button ───────────────────────────────────────────────
   const importBtn = document.createElement('button');
-  importBtn.textContent = '📥 Import Campaign JSON';
+  importBtn.textContent = '📥 Import Campaign (.dwcampaign.json)';
   importBtn.style.cssText = `
     background: rgba(20,60,120,0.5); border: 1px solid #3388cc;
     color: #66aaff; padding: 0.55rem 1.5rem; font-size: 0.88rem;
@@ -67,7 +67,7 @@ export async function buildCustomCampaignsUI(
   importBtn.addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.dwcampaign.json';
+    input.accept = '.dwcampaign.json';
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (!file) return;
