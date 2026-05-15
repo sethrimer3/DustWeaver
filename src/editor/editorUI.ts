@@ -81,22 +81,13 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   confirmCancelBar.appendChild(cancelBtn);
   container.appendChild(confirmCancelBar);
 
-  // ── Export Campaign JSON button (custom campaign mode) ───────────────────
-  let exportCampaignBtn: HTMLButtonElement | null = null;
-  if (campaignTitle) {
-    exportCampaignBtn = makeBtn('📦 Export Campaign JSON', () => callbacks?.onExportCampaignJson?.());
-    exportCampaignBtn.style.cssText += `
-      width: 100%; padding: 8px; font-size: 12px; margin-bottom: 6px;
-      background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
-    `;
-    container.appendChild(exportCampaignBtn);
-  }
-
-  // ── Export All Changes button ────────────────────────────────────────────
-  const exportAllBtn = makeBtn('📁 Export All Changes', () => callbacks?.onExportAllChanges());
+  // ── Export Campaign button ───────────────────────────────────────────────
+  // Always shows "Export Campaign" regardless of whether this is a custom
+  // campaign session or the main DustWeaver campaign.
+  const exportAllBtn = makeBtn('📦 Export Campaign', () => callbacks?.onExportCampaignJson?.());
   exportAllBtn.style.cssText += `
     width: 100%; padding: 8px; font-size: 12px; margin-bottom: 10px;
-    background: rgba(80,60,0,0.4); border-color: #ccaa00; color: #ccaa00;
+    background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
   `;
   container.appendChild(exportAllBtn);
 
@@ -265,7 +256,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   container.appendChild(catBar);
 
-  // ── Lighting dropdown (shown only when "blocks" category is active) ─────
+  // ── Lighting dropdown (shown only when "lighting" category is active) ──
   const lightingDiv = document.createElement('div');
   lightingDiv.style.cssText = `margin-bottom: 8px;`;
   const lightingLabel = document.createElement('div');
@@ -597,10 +588,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         }
         paletteDiv.appendChild(themeSection);
 
-        // ── Lighting dropdown ───────────────────────────────────────────────
-        lightingSelect.value = currentLighting;
-        paletteDiv.appendChild(lightingDiv);
-
         // ── Block type preview grid ─────────────────────────────────────────
         const gridTitle = document.createElement('div');
         gridTitle.textContent = 'Block Types';
@@ -623,6 +610,13 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
       } else {
         // Non-blocks categories: simple text button list
+        if (state.activeCategory === 'lighting') {
+          // ── Lighting dropdown (room-level setting, top of lighting palette) ──
+          lightingSelect.value = currentLighting;
+          ambientDirSelect.value = state.roomData?.ambientLightDirection ?? '';
+          lastRenderedLightingEffect = currentLighting;
+          paletteDiv.appendChild(lightingDiv);
+        }
         const items = PALETTE_ITEMS.filter(i => i.category === state.activeCategory);
         for (const item of items) {
           const btn = makeBtn(item.label, () => callbacks?.onPaletteItemSelect(item));
@@ -633,7 +627,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           paletteDiv.appendChild(btn);
         }
       }
-    } else if (state.activeCategory === 'blocks') {
+    } else if (state.activeCategory === 'lighting') {
       // Lighting and ambient direction may change independently; update selects in-place
       if (currentLighting !== lastRenderedLightingEffect && document.activeElement !== lightingSelect) {
         lastRenderedLightingEffect = currentLighting;

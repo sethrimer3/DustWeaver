@@ -1,6 +1,118 @@
 # DustWeaver — Next Steps
 
-## BUILD 289 — Zip Cancel-Jump Fix & Weak Wall Jump Debris Cascade
+## BUILD 302 — Technical Cleanup & Polish Pass
+
+### What Was Completed in BUILD 302
+
+1. **Debris thud audio wired** (`weakWallJumpDebrisRenderer.ts`, `gameScreen.ts`):
+   `_playSoftDebrisThud` stub replaced with a `setThudCallback` injection point.
+   `gameScreen.ts` now injects `playerSfx.play('jump_impact_soft', ...)` at startup.
+   The existing ≤4 thuds/9-tick rate limiter is preserved. Try/catch guards ensure
+   audio errors never crash gameplay.
+
+2. **Ramp surface collision for debris** (`weakWallJumpDebrisRenderer.ts`):
+   The wall-collision loop now handles ramp orientations 0 and 1 (floor ramps).
+   Debris slides along the ramp surface, bounces vertically with WALL_RESTITUTION,
+   and applies WALL_FRICTION to horizontal velocity. Ramp orientations 2 and 3
+   (ceiling ramps) are skipped as debris does not realistically reach them.
+   AABB collision for non-ramp walls is unchanged.
+
+3. **Non-debug zip-jump-ready ring** (`grappleRenderer.ts`):
+   `renderZipJumpReadyRing()` draws a pulsing golden/white double-ring around the
+   player when `isZipJumpWindowOpenFlag === 1`. Visible without debug mode.
+   Early-exit guard added so the ring only renders when the flag is set.
+   `renderGrapple()` now checks `hasZipJumpReady` in its early-return guard.
+
+4. **Viewport culling additions** (BUILD 288 remaining work):
+   - `renderDecorationSprites` — block-level X/Y viewport skip with `1.5×blockSize` margin.
+   - `renderRopes` — AABB computed during the pixel-position loop, rope skipped if AABB offscreen.
+   - `renderHazards` — culling for breakable/crumble blocks, bounce pads, springboards,
+     spikes, dust-boost jars, firefly jars, and fireflies.
+   - `renderWaterZones` / `renderLavaZones` — per-body AABB culling with margin for wave
+     overshoot and spark travel distance.
+   - `renderGrappleInfluenceVisuals` — fast reject when player + influence radius is offscreen.
+   - `skillTombRenderer.render()` — per-tomb AABB cull with 2-block margin for orbiting dust.
+   - `skillTombEffectRenderer.renderBehind/renderSprite/renderFront/renderLayer/renderPrompts`
+     — per-tomb cull propagated through all render layers.
+
+5. **Chunk cache memory caps** (`blockSpriteRenderer.ts`, `backgroundBlockRenderer.ts`, `gameRender.ts`):
+   `setWallChunkCacheMemoryKB()` and `setBgChunkCacheMemoryKB()` exported.
+   `gameRender.ts` applies caps once per quality-change event:
+   - Wall: Low 4096 KB, Med 8192 KB, High 16384 KB.
+   - BG: Low 2048 KB, Med 4096 KB, High 8192 KB.
+
+6. **Adaptive density multipliers** (`atmosphericLightDust.ts`, `sunbeamRenderer.ts`, `gameRender.ts`):
+   `AtmosphericLightDust.setDensityMultiplier(0.5)` strides the render loop by 2 during
+   adaptive tier 1, immediately halving visible motes without waiting for age-out.
+   `SunbeamRenderer.setDensityMultiplier(0.5)` scales beam alpha for tier-1; tier-2
+   already calls `setEnabled(false)`.
+
+### Deferred / Remaining Work
+
+#### 1. Staged room background rendering (Task 7)
+**Files:** `src/screens/gameScreen.ts`, `src/screens/gameRender.ts`, background renderer files  
+**Issue:** When a previous room is staged after seamless crossing, its background is not drawn.
+The active room background fills the expanded clip rect, producing visual discontinuity
+between rooms with different backgrounds.  
+**Proposed fix:** Detect `stagingState.stagedRooms.length > 0` in `renderFrame()`, call
+the background render pass a second time at the staged room's world-space origin offset
+(stagedRoom.originXWorld, stagedRoom.originYWorld). The background renderer API may need
+an `originOffsetWorld` parameter.  
+**Risk:** Medium — need to verify the background renderer handles world-space offsets
+correctly without bleed. Do not re-enable edge-extension preview in the same pass.  
+**Remaining limitations also deferred:** staged hazards, staged enemies, staged falling
+blocks, staged ropes, staged crumble blocks, ambient-depth seam shading.
+
+#### 2. Camera settling after small-room crossing finalization (Task 8)
+**Files:** `src/render/camera.ts`, `src/screens/gameScreen.ts`, `src/screens/twoRoomCrossing.ts`  
+**Issue:** Rooms narrower or shorter than 480×270 px snap the camera to room center when
+`_finalizeCrossingSeamless()` replaces the union camera bounds with the new room's bounds.  
+**Proposed fix:** After finalization, keep a `camSettlingFramesLeft` counter (e.g. 21 frames
+= 0.35 s at 60 fps). While > 0, lerp the effective camera bounds toward the new room bounds
+each frame instead of snapping. `updateCameraWithBounds` already smooths; only the bounds
+swap needs the settling window.  
+**Risk:** Low — isolated to the finalization path; `preserveCamera`, `loadRoom`, and
+long-transition paths are unaffected.
+
+#### 3. Large-room stress-test room (Task 9)
+**File:** `rooms/dev_stress_large.json` (or equivalent discovered room-directory path)  
+**Issue:** No dedicated profiler test room exists. Manually authoring a 120×80 room with
+200+ decorations, 30+ background block defs, 10+ dust containers, 4 sunbeams, 5 swarms,
+and representative liquid/hazard coverage requires exact schema knowledge to avoid
+load-time validation errors.  
+**Proposed path:** Either (a) use the existing room editor to build the room and export it
+as a dev-only JSON, or (b) write a small generator script in `/tmp` that produces a
+conformant JSON using `roomSchemaV2.ts` types and copy the output to `ASSETS/ROOMS/`.
+Neither path risks any existing room schema regression.  
+**Risk:** Low for generator approach, Medium for manual authoring.
+
+#### 4. Staged room hazards / enemies / ropes (Task 7 follow-up)
+**Files:** `src/screens/gameSeamlessStaging.ts`, `src/sim/world.ts`, enemy AI files  
+**Issue:** Hazards (water/lava/spikes), enemies, falling blocks, and ropes from the staged
+room are not preserved after `loadRoom()`. Players can walk through them without interaction.  
+**Proposed path:** Before `loadRoom()` in `_finalizeCrossingSeamless`, snapshot the
+staged room's hazard arrays and enemy clusters; after `loadRoom()`, re-append them at the
+staged room's world-space offset. Enemy AI requires sim-layer awareness of the offset.  
+**Risk:** High — requires non-trivial sim-layer changes; defer to a dedicated pass.
+
+### Manual Testing Checklist (BUILD 302)
+
+1. Zip cancel-jump still preserves zip velocity + jump boost.
+2. True zip-jump only happens after surface impact (not mid-air).
+3. 3rd+ consecutive wall jump spawns debris chips.
+4. Debris collides with flat walls and bounces/slides on ramp surfaces.
+5. Debris thud is audible but subtle (< 4 sounds per 9 ticks).
+6. Zip impact ready ring (gold pulse) appears outside debug mode when surface struck.
+7. Large rooms: fewer draw calls for offscreen decorations, ropes, hazards, tombs.
+8. Liquid/hazard culling does not produce visible pop-in near screen edges (try panning).
+9. Seamless room crossing still works end-to-end.
+10. Small-room crossing does not camera-snap (deferred — may still snap in BUILD 302).
+11. Long transitions still use legacy teleport-style loading.
+12. Existing room save/load and editor transition data still load correctly.
+
+---
+
+
 
 ### What Was Implemented in BUILD 289
 
@@ -450,232 +562,3 @@ for the BloomSystem draw queue would reduce GC pressure.
 The DarkRoom particle-light loop scans all particles linearly (`particleCount`
 iterations).  With thousands of particles this is O(n); a spatial grid (already
 present in `sim/` for physics) could accelerate the screen-visible subset query.
-
----
-
-## BUILD 274 — Smooth Camera Transition Reveal (no fade)
-
-### What was implemented
-
-- **Removed black-screen fade**: The fade-out/fade-in overlay (`transitionFadeAlpha`, `transitionFadeDir`, `pendingRoomTransition`, `pendingAsyncLoad`) is removed. Transitions no longer black out the screen.
-- **Synchronous transition loading**: `checkRoomTransitions` now calls `loadRoom()` synchronously in its callback. The ~30–80 ms stall replaces the multi-frame black fade.
-- **Camera reveal system**: New module `src/render/transitions/transitionCameraReveal.ts`:
-  - **NearTransition**: Camera eases outward as player approaches a room exit.
-  - **PostTransition**: Camera shows entry-edge extension tiles and eases back to neutral as the player walks deeper into the new room.
-- **New constants** in `transitionConfig.ts`: `TRANSITION_REVEAL_START_DIST_WORLD`, `TRANSITION_REVEAL_MAX_BLOCKS`, `TRANSITION_REVEAL_DECAY_DIST_WORLD`, `TRANSITION_REVEAL_EASE_SPEED`.
-
----
-
-## BUILD 275 — Transition Preview Context + Next-Room Edge Preview
-
-### What was implemented
-
-1. **Removed unused fade constants** from `transitionConfig.ts`:
-   `TRANSITION_MAX_DURATION_MS`, `TRANSITION_MIN_DURATION_MS`, `TRANSITION_FADE_OUT_FRACTION`, `TRANSITION_SPRINT_SPEED_WORLD`, `TRANSITION_FAST_SPEED_WORLD`, and `TRANSITION_CAMERA_ENTRY_OFFSET_BLOCKS` are all removed. They were leftover from the old fade-overlay system.
-
-2. **`TransitionRevealState` extended**:
-   - `activeTransitionIndex: number` — index into `currentRoom.transitions` for the transition driving the current reveal (−1 = none). Updated each frame by `updateTransitionReveal`.
-   - `revealProgress: number` — `[0, 1]` fraction of the maximum reveal currently active.
-   These fields are read by `updateTransitionPreviewContext` each frame.
-
-3. **Small-room cap** in `updateTransitionReveal`: The reveal offset is now capped at
-   `(EDGE_EXTENSION_EXTRA_BLOCKS − 1) × BLOCK_SIZE_SMALL` so the camera can never be shifted
-   beyond the available extension tiles, regardless of room size.
-
-4. **Lambda-anchor teleport fix**: `lambdaTeleportFlash()` in `gameScreen.ts` now calls
-   `notifyFreshRoomLoaded(transitionRevealState)` to reset the reveal offset after an
-   in-room teleport. Stale reveal state no longer persists after a lambda-anchor jump.
-
-5. **`notifyTransitionRoomEntered` extended**: Now accepts an optional `entryTransitionIndex`
-   parameter and stores it in `activeTransitionIndex` so the preview context can resolve the
-   connected room immediately on the first post-entry frame.
-
-6. **`TransitionPreviewContext`** — new type and module `src/render/transitions/transitionPreviewContext.ts`:
-   - `isActive: boolean` — true when reveal progress exceeds a small threshold.
-   - `direction: TransitionDirection | null` — which side is being revealed.
-   - `connectedRoomId: string | null` — ID of the next room (from `transition.targetRoomId`).
-   - `revealProgress: number` — mirrors `TransitionRevealState.revealProgress`.
-   - `nextRoomFacingEdge: NextRoomFacingEdge | null` — the connected room's 2-block facing strip.
-
-   Updated each frame by `updateTransitionPreviewContext()`. Caches the `NextRoomFacingEdge`
-   until the active transition changes (key: `{roomId}:{direction}:{currentW}x{currentH}`).
-   This is the intended attachment point for future dual-room rendering — see below.
-
-7. **`NextRoomFacingEdge`** — computed from the connected room's wall definitions:
-   - For a `'right'` transition: connected room's leftmost 2 columns (cols 0 and 1).
-   - For a `'left'` transition: connected room's rightmost 2 columns (cols W−1 and W−2).
-   - For `'down'` / `'up'`: equivalent 2-row strip from the top/bottom.
-   - Origin expressed in current-room world space so the renderer can position the tiles
-     correctly with no additional coordinate math.
-
-8. **`renderNextRoomFacingEdge()`** — new renderer `src/render/transitions/nextRoomEdgeRenderer.ts`:
-   - Renders the `NextRoomFacingEdge` tiles before the room clip rect (same phase as the
-     current room's edge extension tiles).
-   - Tiles fade in proportionally to `revealProgress` — invisible during normal navigation,
-     gradually appearing as the player approaches a transition.
-   - Combines with the current room's own extension tiles to give 4 columns/rows of tile
-     continuity at each transition:
-       `[current-room ext col 2] [current-room ext col 1] | door | [next-room col 0] [next-room col 1]`
-   - Auto-tiling uses the 3-column/row occupancy set from `NextRoomFacingEdge`; neighbor
-     masks at the seam are best-effort (inner face is correct; outer edge is treated as open-air).
-   - No work is done during ordinary room navigation (`revealProgress < 0.05`).
-
-### Files changed in BUILD 275
-
-| File | Change |
-|------|--------|
-| `src/build-info.ts` | BUILD_NUMBER 274 → 275 |
-| `src/render/transitions/transitionConfig.ts` | Removed 6 unused fade/entry constants |
-| `src/render/transitions/transitionCameraReveal.ts` | Added `activeTransitionIndex`, `revealProgress`; small-room reveal cap; updated `notifyTransitionRoomEntered` signature; `notifyFreshRoomLoaded` doc update |
-| `src/render/transitions/transitionPreviewContext.ts` | **New**: `TransitionPreviewContext`, `NextRoomFacingEdge`, cache, `createTransitionPreviewContext`, `updateTransitionPreviewContext`, `_buildNextRoomFacingEdge` |
-| `src/render/transitions/nextRoomEdgeRenderer.ts` | **New**: `renderNextRoomFacingEdge` |
-| `src/screens/gameScreen.ts` | Import + create + update `transitionPreviewCtx`; pass to `renderFrame`; lambda-anchor fix; pass `entryTi` to `notifyTransitionRoomEntered` |
-| `src/screens/gameRender.ts` | Added `transitionPreviewCtx` to `RenderFrameContext`; call `renderNextRoomFacingEdge` before clip rect |
-
-### Tuning guide
-
-All reveal constants live in `src/render/transitions/transitionConfig.ts`:
-
-| Constant | Default | Effect |
-|---|---|---|
-| `TRANSITION_REVEAL_START_DIST_WORLD` | 48 | Reveal begins this many world units from the exit |
-| `TRANSITION_REVEAL_MAX_BLOCKS` | 2 | Max extension blocks revealed by camera shift |
-| `TRANSITION_REVEAL_DECAY_DIST_WORLD` | 48 | PostTransition fades over this walk distance |
-| `TRANSITION_REVEAL_EASE_SPEED` | 6.0 | Camera easing speed (higher = snappier) |
-
----
-
-## BUILD 276 — Transition Origin Alignment + Seam Auto-tiling + Staging Snapshot
-
-### What was implemented
-
-#### 1. Connected-room origin alignment using matched transition positions ✅
-
-Previously `NextRoomFacingEdge.originXWorld`/`originYWorld` were hardcoded to 0
-for the non-primary axis (e.g., `originYWorld = 0` for all horizontal transitions).
-This caused offset door openings to misalign — the next-room tiles rendered at the
-wrong row/column when the two transitions' `yBlock`/`xBlock` differed.
-
-**Fix**: `_buildNextRoomFacingEdge` now finds the matched transition in the
-connected room (same logic as `checkRoomTransitions`) and computes:
-- `seamDeltaRowBlocks = currentTrans.yBlock − connectedTrans.yBlock` (horizontal)
-- `seamDeltaColBlocks = currentTrans.xBlock − connectedTrans.xBlock` (vertical)
-
-The connected-room origin is then placed so the two openings align at the seam:
-- `'right'`: `originYWorld = seamDeltaRowBlocks × BLOCK_SIZE_SMALL`
-- `'left'`:  same, `originXWorld = -connectedW × BS`
-- `'down'`:  `originXWorld = seamDeltaColBlocks × BS`
-- `'up'`:    same, `originYWorld = -connectedH × BS`
-
-If no matching transition is found, origin defaults to 0 and a console warning
-is emitted.
-
-#### 2. Seam auto-tiling improvements ✅
-
-Two improvements to `occupancySet` in `NextRoomFacingEdge`:
-
-**4th reference column/row**: Added `refCol2`/`refRow2` (one step deeper than
-the existing 3rd reference) so the inner-face tile (`col1`/`row1`) has a correct
-east/south neighbor mask for the block immediately behind it, rather than
-treating it as open air.
-
-**Seam-face entries from current room**: `_buildCurrentRoomSeamSolid()` builds
-a set of rows/cols where the current room's boundary edge is solid. These are
-mapped into connected-room coordinates and added to `occupancySet` at
-`seamCol`/`seamRow` (one step outside `col0`/`row0`). The facing tile therefore
-sees its neighbor toward the current room as solid when the current-room wall
-continues to the edge — eliminating the "exposed outer face" artifact on
-connected seam tiles.
-
-#### 3. `TwoRoomTransitionSnapshot` staging data structure ✅
-
-New exported type in `transitionPreviewContext.ts`. Provides:
-- `activeTransitionIndex`, `exitDirection`, `currentRoomId`, `connectedRoomId`
-- `currentRoomOriginXWorld/Y` (always 0 — current room IS the reference frame)
-- `nextRoomOriginXWorld/Y` — correctly aligned origin from matched transitions
-- `nextRoomFacingEdge: NextRoomFacingEdge | null` — the facing-edge strip
-- `revealProgress: number` — updated in-place each frame (no per-frame allocation)
-
-Reserved fields documented for future dual-room rendering:
-- `nextRoomWorldSnapshot` — full WorldSnapshot for the connected room
-- `nextRoomEdgeExtensionCache` — edge tiles for the connected room
-- `isNextRoomStaged` — true once staging is ready
-
-#### 4. `stagingSnapshot` field on `TransitionPreviewContext` ✅
-
-`TransitionPreviewContext` gains a `stagingSnapshot: TwoRoomTransitionSnapshot | null`
-field. The existing `nextRoomFacingEdge` field is retained as a backward-compatible
-alias pointing to `stagingSnapshot.nextRoomFacingEdge`.
-
-The cache key now includes the current room ID and transition index (not just the
-target room ID + direction) so two different transitions in the same room with
-different `yBlock`/`xBlock` values are cached separately.
-
-#### 5. Exported helper functions ✅
-
-- `computeTransitionOpeningOffset(currentTrans, connectedTrans, exitDir)` — returns
-  the signed delta in blocks between the two opening positions.
-- `computeConnectedRoomOrigin(exitDir, currentW, currentH, connectedW, connectedH,
-  seamDeltaRowBlocks, seamDeltaColBlocks)` — returns the connected room's `originXWorld`
-  / `originYWorld` in current-room world space.  Pure, side-effect-free, usable by
-  future staging code.
-
-#### 6. `renderNextRoomFacingEdge` documented as staging renderer ✅
-
-`nextRoomEdgeRenderer.ts` is documented as the **StagingRoomRenderer** equivalent:
-the opt-in renderer path that activates only during transition preview or crossing.
-
-### Files changed in BUILD 276
-
-| File | Change |
-|------|--------|
-| `src/build-info.ts` | BUILD_NUMBER 275 → 276 |
-| `src/render/transitions/transitionPreviewContext.ts` | Added `TwoRoomTransitionSnapshot`; added `stagingSnapshot` to context; added `computeTransitionOpeningOffset`, `computeConnectedRoomOrigin` helpers; fixed origin offset; improved seam auto-tiling (4th ref + seam face); updated cache key; improved failure warning |
-| `src/render/transitions/nextRoomEdgeRenderer.ts` | Updated module comment to document it as the StagingRoomRenderer equivalent; documents BUILD 276 alignment fix |
-| `nextSteps.md` | Updated to reflect BUILD 276 completions and remaining work |
-
-### Known limitations / remaining work
-
-1. **No full dual-room rendering** (primary remaining work):
-   True seamless crossing requires:
-   a. A staging `WorldState` for the connected room — pre-loaded asynchronously
-      while the player is in the current room.
-   b. A two-room snapshot tick: both rooms' `WorldState` instances are ticked and
-      snapshotted; the connected room's snapshot is stored in
-      `TwoRoomTransitionSnapshot.nextRoomWorldSnapshot`.
-   c. `renderNextRoomFacingEdge` (or a new `renderStagingRoom` function that reads
-      the full `stagingSnapshot`) renders the connected room's enemies, particles,
-      and all walls at `nextRoomOriginXWorld`/`Y` offset.
-   d. Camera bounds: during crossing, clamp the camera to the union of both room
-      bounds; after the active-room swap, restore normal single-room clamping.
-
-2. **Active room swap timing** (existing behavior is correct):
-   The active room swaps the moment the player crosses the trigger boundary in
-   `checkRoomTransitions`. The staging snapshot is cleared immediately after swap
-   by `notifyFreshRoomLoaded`. No change needed here unless full dual-room rendering
-   requires a later swap point.
-
-3. **Seam auto-tiling edge cases**:
-   - Corner tiles near the seam (where a horizontal wall meets a vertical wall
-     at the transition opening corner) may still show incorrect diagonal auto-tiling
-     because only 4 reference columns/rows of connected-room data are available.
-   - Transitions with very small rooms (< 4 blocks in the exit direction) may have
-     fewer reference columns/rows available; `refCol2`/`refRow2` bounds checks handle
-     this gracefully (skipped when out of bounds).
-   - The `_buildCurrentRoomSeamSolid` function captures wall-level solidity only;
-     crumble blocks and falling blocks at the boundary edge are not included. This
-     is acceptable for the current use case.
-
-4. **Editor compatibility**:
-   The cache key now includes the current room ID and transition index. If the
-   editor modifies a transition's `yBlock`/`xBlock` without triggering a full
-   room reload, the cache will be stale. This is acceptable because the editor
-   calls `notifyFreshRoomLoaded` (via the editor load callback) which resets
-   `activeTransitionIndex = -1` and effectively clears the preview context.
-
-5. **Performance note**:
-   `_buildCurrentRoomSeamSolid` iterates all walls in the current room each time
-   the cache key changes (not every frame — only on transition/room change).
-   For rooms with very large wall counts this is still fast (O(walls), not O(n²)).
-
-

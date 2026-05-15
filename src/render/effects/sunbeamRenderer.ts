@@ -33,6 +33,12 @@ export class SunbeamRenderer {
   private beams: readonly RoomSunbeamDef[] = [];
   /** Whether sunbeams are enabled (wired to the quality config). */
   private _isEnabled = true;
+  /**
+   * Beam intensity multiplier (0–1).  At 0.5 (adaptive tier 1), beam alpha is
+   * scaled down so beams are subtler without disabling them entirely.
+   * 1.0 = full intensity (default).  Tier 2 should call setEnabled(false).
+   */
+  private _densityMultiplier = 1.0;
 
   // ── Per-beam gradient cache ──────────────────────────────────────────────
   // Pre-allocated arrays: null entries mean no gradient cached for that beam slot.
@@ -55,6 +61,11 @@ export class SunbeamRenderer {
   /** Toggle sunbeam rendering on/off based on graphics quality tier. */
   setEnabled(enabled: boolean): void {
     this._isEnabled = enabled;
+  }
+
+  /** Set beam intensity multiplier; see `_densityMultiplier` for details. */
+  setDensityMultiplier(m: number): void {
+    this._densityMultiplier = Math.max(0, Math.min(1, m));
   }
 
   render(
@@ -123,7 +134,7 @@ export class SunbeamRenderer {
     // Beam shaft: trapezoid — wide at origin, narrows to a point at tip.
     // Subtle shimmer so the beam appears to breathe.
     const shimmer = 0.85 + 0.15 * Math.sin(nowMs * 0.0009 + beamIndex * 1.3);
-    const alpha = (beam.intensityPct / 100) * shimmer;
+    const alpha = (beam.intensityPct / 100) * shimmer * this._densityMultiplier;
 
     ctx.beginPath();
     ctx.moveTo(bx0, by0);

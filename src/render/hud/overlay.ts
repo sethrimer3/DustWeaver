@@ -50,6 +50,17 @@ export interface HudDebugState {
   inputRightClick: boolean;
   inputGrapple: boolean;
   inputInteract: boolean;
+  // ── Water / buoyancy debug ────────────────────────────────────────────────
+  isInLiquid: boolean;
+  submergedFraction: number;
+  liquidSurfaceYWorld: number;
+  depthFactor: number;
+  /** Buoyancy acceleration applied this tick (wu/s²). */
+  buoyancyAccelWorldPerSec2: number;
+  /** Effective gravity scale applied in water this tick (fraction of normal gravity). */
+  gravityScale: number;
+  /** Player vertical velocity (wu/s); negative = upward. */
+  playerVelocityYWorld: number;
 }
 
 export interface HudState {
@@ -91,6 +102,10 @@ export function renderHudOverlay(
       `Input U/L/R/D/Sh: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}${d.inputShift ? 'S' : '-'}`,
       `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
       `Input Grap/Int: ${d.inputGrapple ? 'G' : '-'} / ${d.inputInteract ? 'I' : '-'}`,
+      // Water / buoyancy
+      `Water: ${d.isInLiquid ? 'IN' : 'OUT'} sub=${d.submergedFraction.toFixed(2)} df=${d.depthFactor.toFixed(2)}`,
+      `Buoy: ${d.buoyancyAccelWorldPerSec2.toFixed(1)}wu/s² gScale=${d.gravityScale.toFixed(2)} velY=${d.playerVelocityYWorld.toFixed(1)}`,
+      `LiqSurf: ${d.liquidSurfaceYWorld.toFixed(1)}`,
     ];
   }
 

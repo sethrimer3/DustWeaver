@@ -63,6 +63,7 @@ import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { ZIP_JUMP_WINDOW_SECONDS } from '../sim/clusters/grappleZip';
+import { WATER_GRAVITY_MULTIPLIER, WATER_BUOYANCY_FORCE_WORLD } from '../sim/hazards';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality, getAlwaysCenterCamera } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
@@ -623,6 +624,11 @@ export function startGameScreen(
   const skidDebris = new SkidDebrisRenderer();
   const crumbleDebris = new CrumbleDebrisRenderer();
   const weakWallJumpDebris = new WeakWallJumpDebrisRenderer();
+  // Wire real audio for debris thud impacts. The callback uses jump_impact_soft
+  // at the per-particle volume so thuds are subtle and not spammy.
+  weakWallJumpDebris.setThudCallback((opts) => {
+    try { playerSfx.play('jump_impact_soft', opts.volumeLinear); } catch { /* guard */ }
+  });
   const skillTombRenderer = new SkillTombRenderer();
   const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();
@@ -1644,6 +1650,18 @@ export function startGameScreen(
           inputRightClick: inputState.isRightMouseDownFlag === 1,
           inputGrapple: inputState.isGrappleHeldFlag === 1,
           inputInteract: interactInputPulseMs > 0,
+          // Water / buoyancy debug
+          isInLiquid:           world.isPlayerInWaterFlag === 1,
+          submergedFraction:    world.playerWaterSubmersionRatio,
+          liquidSurfaceYWorld:  world.playerBuoyancySurfaceYWorld,
+          depthFactor:          world.playerBuoyancyDepthFactor,
+          buoyancyAccelWorldPerSec2: WATER_BUOYANCY_FORCE_WORLD
+            * world.playerWaterSubmersionRatio
+            * world.playerBuoyancyDepthFactor,
+          gravityScale:         world.isPlayerInWaterFlag === 1
+            ? WATER_GRAVITY_MULTIPLIER
+            : 1.0,
+          playerVelocityYWorld: playerClusterForHud.velocityYWorld,
         };
         hudState.debug = dbg;
       }
