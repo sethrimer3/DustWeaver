@@ -80,18 +80,12 @@ const COLORS = ['#8b7355', '#7a6448', '#6b5330', '#9a8465', '#c4a57b'];
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/**
- * Plays a soft debris thud at the given relative volume / pitch.
- * Currently a stub — wire to real audio synthesis when the audio system is ready.
- * Calling this function must never throw or produce audible output in the stub.
- */
-function _playSoftDebrisThud(_opts: {
+/** Signature for the audio callback injected via setThudCallback(). */
+type DebrisThudCallback = (opts: {
   volumeLinear: number;
   pitchFactor: number;
   durationMs: number;
-}): void {
-  // Stub: no audio system wired yet.  Replace with real synth/buffer playback.
-}
+}) => void;
 
 /** Monotonically increasing instance counter used to seed PRNG so that each
  * renderer instance produces a different visual pattern without using wall-clock
@@ -119,6 +113,22 @@ export class WeakWallJumpDebrisRenderer {
   // Seeded from a module-level instance counter so different instances produce
   // different patterns without using wall-clock time anywhere in the update path.
   private rngState: number;
+
+  /**
+   * Optional audio callback for debris thud sounds.  Injected via
+   * setThudCallback() so this renderer has no compile-time dependency on
+   * the audio system.  Guarded with try/catch so audio failures never crash
+   * gameplay.
+   */
+  private _thudCallback: DebrisThudCallback | null = null;
+
+  /**
+   * Wire a thud-sound callback.  Call once at startup (e.g., in gameScreen.ts)
+   * after the SFX manager is created.  Pass `null` to remove the callback.
+   */
+  setThudCallback(cb: DebrisThudCallback | null): void {
+    this._thudCallback = cb;
+  }
 
   // Rate limiter for debris thud sounds — tracked in simulation ticks so
   // timing remains consistent regardless of frame rate.
@@ -177,52 +187,87 @@ export class WeakWallJumpDebrisRenderer {
       // Check whether the particle overlaps any solid wall AABB.  We treat the
       // particle as a point for the overlap test; resolution pushes it to the
       // nearest face and reflects the appropriate velocity component.
+      //
+      // Ramp orientations (0/1 = floor ramps, 2/3 = ceiling ramps):
+      //   0: rises going right (/), surfaceY = wallBottom − t×wallHeight
+      //   1: rises going left  (\), surfaceY = wallTop   + t×wallHeight
+      //   2/3: ceiling ramps — debris falling down rarely reaches these; skip.
       let resolvedX = newX;
       let resolvedY = newY;
       let hitAWall = false;
 
       for (let wi = 0; wi < world.wallCount; wi++) {
         if (world.wallIsPlatformFlag[wi] === 1) continue; // pass through one-ways
-        if (world.wallRampOrientationIndex[wi] !== 255) continue; // skip ramps (approx)
 
         const wl = world.wallXWorld[wi];
         const wt = world.wallYWorld[wi];
-        const wr = wl + world.wallWWorld[wi];
-        const wb = wt + world.wallHWorld[wi];
+        const wallWidthWorld  = world.wallWWorld[wi];
+        const wallHeightWorld = world.wallHWorld[wi];
+        const wr = wl + wallWidthWorld;
+        const wb = wt + wallHeightWorld;
 
-        if (resolvedX > wl && resolvedX < wr && resolvedY > wt && resolvedY < wb) {
-          // Particle is inside wall — resolve by the smallest penetration axis.
-          const overlapL = resolvedX - wl;
-          const overlapR = wr - resolvedX;
-          const overlapT = resolvedY - wt;
-          const overlapB = wb - resolvedY;
-          const minX = overlapL < overlapR ? overlapL : overlapR;
-          const minY = overlapT < overlapB ? overlapT : overlapB;
+        const ori = world.wallRampOrientationIndex[wi];
 
-          if (minX < minY) {
-            // Push out horizontally
-            if (overlapL < overlapR) {
-              resolvedX = wl;
-            } else {
-              resolvedX = wr;
-            }
-            // Bounce X, friction Y
-            this.vxWorld[i] *= -WALL_RESTITUTION;
-            this.vyWorld[i] *= WALL_FRICTION;
-          } else {
-            // Push out vertically
-            if (overlapT < overlapB) {
-              resolvedY = wt;
-            } else {
-              resolvedY = wb;
-            }
-            // Bounce Y, friction X
+        if (ori !== 255) {
+          // ── Ramp wall ───────────────────────────────────────────────────
+          // Only handle floor ramps (ori 0 and 1); ceiling ramps are skipped.
+          if (ori === 2 || ori === 3) continue;
+
+          // Skip if particle is clearly outside the ramp's AABB.
+          if (resolvedX <= wl || resolvedX >= wr || resolvedY <= wt || resolvedY >= wb) continue;
+
+          // Sample ramp surface height at the particle's X position.
+          // rampProgressFraction = 0 at left edge, 1 at right edge.
+          const rampProgressFraction = wallWidthWorld > 0 ? (resolvedX - wl) / wallWidthWorld : 0;
+          // ori 0: surface rises going right; ori 1: surface falls going right.
+          const surfaceY = (ori === 0)
+            ? wb - rampProgressFraction * wallHeightWorld   // wallBottom − t×wallHeight
+            : wt + rampProgressFraction * wallHeightWorld;  // wallTop    + t×wallHeight
+
+          if (resolvedY >= surfaceY) {
+            // Particle penetrated the ramp floor surface — push it above.
+            resolvedY = surfaceY;
+            // Bounce vertical component; apply friction to horizontal.
             this.vyWorld[i] *= -WALL_RESTITUTION;
             this.vxWorld[i] *= WALL_FRICTION;
+            hitAWall = true;
           }
+        } else {
+          // ── Solid rectangular wall ──────────────────────────────────────
+          if (resolvedX > wl && resolvedX < wr && resolvedY > wt && resolvedY < wb) {
+            // Particle is inside wall — resolve by the smallest penetration axis.
+            const overlapL = resolvedX - wl;
+            const overlapR = wr - resolvedX;
+            const overlapT = resolvedY - wt;
+            const overlapB = wb - resolvedY;
+            const minX = overlapL < overlapR ? overlapL : overlapR;
+            const minY = overlapT < overlapB ? overlapT : overlapB;
 
-          hitAWall = true;
-          break; // one-collision-per-tick is sufficient for small debris
+            if (minX < minY) {
+              // Push out horizontally
+              if (overlapL < overlapR) {
+                resolvedX = wl;
+              } else {
+                resolvedX = wr;
+              }
+              // Bounce X, friction Y
+              this.vxWorld[i] *= -WALL_RESTITUTION;
+              this.vyWorld[i] *= WALL_FRICTION;
+            } else {
+              // Push out vertically
+              if (overlapT < overlapB) {
+                resolvedY = wt;
+              } else {
+                resolvedY = wb;
+              }
+              // Bounce Y, friction X
+              this.vyWorld[i] *= -WALL_RESTITUTION;
+              this.vxWorld[i] *= WALL_FRICTION;
+            }
+
+            hitAWall = true;
+            break; // one-collision-per-tick is sufficient for small debris
+          }
         }
       }
 
@@ -246,11 +291,17 @@ export class WeakWallJumpDebrisRenderer {
           }
           if (this.thudCountInWindow < THUD_RATE_LIMIT_COUNT) {
             this.thudCountInWindow++;
-            _playSoftDebrisThud({
-              volumeLinear: 0.025 + this.nextRandom() * 0.045,
-              pitchFactor:  0.85  + this.nextRandom() * 0.35,
-              durationMs:   25    + this.nextRandom() * 30,
-            });
+            if (this._thudCallback !== null) {
+              try {
+                this._thudCallback({
+                  volumeLinear: 0.025 + this.nextRandom() * 0.045,
+                  pitchFactor:  0.85  + this.nextRandom() * 0.35,
+                  durationMs:   25    + this.nextRandom() * 30,
+                });
+              } catch {
+                // Guard: audio errors must never crash gameplay.
+              }
+            }
           }
         }
         // Each particle can trigger at most one sound impact per lifetime.

@@ -253,6 +253,68 @@ function renderGrappleRechargeRing(
   ctx.restore();
 }
 
+/**
+ * Renders a pulsing golden ring around the player when zip has impacted a
+ * surface and a true zip-jump is available (`isZipJumpWindowOpenFlag === 1`).
+ *
+ * The ring oscillates in size to distinguish it from the impact-shockwave FX
+ * and the recharge ring.  Visible outside debug mode so players can read the
+ * window without enabling overlays.
+ *
+ * Kept allocation-free: only primitive math and a single ctx.arc call.
+ */
+function renderZipJumpReadyRing(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  if (snapshot.isZipJumpWindowOpenFlag !== 1) return;
+
+  let playerCluster: (typeof snapshot.clusters)[0] | undefined;
+  for (let ci = 0; ci < snapshot.clusters.length; ci++) {
+    if (snapshot.clusters[ci].isPlayerFlag === 1 && snapshot.clusters[ci].isAliveFlag === 1) {
+      playerCluster = snapshot.clusters[ci];
+      break;
+    }
+  }
+  if (playerCluster === undefined) return;
+
+  const cx = playerCluster.positionXWorld * scalePx + offsetXPx;
+  const cy = playerCluster.positionYWorld * scalePx + offsetYPx;
+  const halfW = playerCluster.halfWidthWorld * scalePx;
+
+  // Gentle pulse: ring oscillates between 1.1× and 1.4× player half-width.
+  // Uses a pre-computed fraction of the current zip window tick instead of
+  // performance.now() so it remains deterministic within the render pass.
+  // We accept a small dependency on performance.now() here because this is
+  // purely a visual indicator and rendering is exempt from sim-determinism rules.
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.015);
+  const radiusPx = halfW * (1.1 + pulse * 0.3);
+
+  // Two concentric rings: bright inner + softer outer for a "charged" look.
+  ctx.save();
+
+  // Outer soft halo
+  ctx.globalAlpha = 0.25 + pulse * 0.15;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth   = Math.max(1, scalePx * 1.2);
+  ctx.beginPath();
+  ctx.arc(Math.round(cx), Math.round(cy), radiusPx + scalePx, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Inner gold ring — main readability layer
+  ctx.globalAlpha = 0.6 + pulse * 0.35;
+  ctx.strokeStyle = '#f5d860';
+  ctx.lineWidth   = Math.max(1, scalePx * 0.7);
+  ctx.beginPath();
+  ctx.arc(Math.round(cx), Math.round(cy), radiusPx, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number, isDebugMode = false): void {
   const hasActiveGrapple = snapshot.isGrappleActiveFlag === 1;
   const hasFailFx =
@@ -260,14 +322,17 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
     snapshot.grappleEmptyFxTicksLeft > 0;
   const hasZipImpactFx = snapshot.zipImpactFxTicksLeft > 0;
   const hasRechargeFx = snapshot.grappleRechargeRingTicksLeft > 0;
+  const hasZipJumpReady = snapshot.isZipJumpWindowOpenFlag === 1;
 
-  if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0 && !hasFailFx && !hasZipImpactFx && !hasRechargeFx) return;
+  if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0 && !hasFailFx && !hasZipImpactFx && !hasRechargeFx && !hasZipJumpReady) return;
 
   renderGrappleFailBeam(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderGrappleEmptyFx(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderZipImpactFx(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   // Golden ring: rendered before the rope so it appears under the chain.
   renderGrappleRechargeRing(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+  // Zip-jump ready ring: visible outside debug mode so players can read the window.
+  renderZipJumpReadyRing(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
 
   let playerCluster: (typeof snapshot.clusters)[0] | undefined;
   for (let ci = 0; ci < snapshot.clusters.length; ci++) {

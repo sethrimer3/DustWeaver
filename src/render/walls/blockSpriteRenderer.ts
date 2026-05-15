@@ -392,6 +392,19 @@ export function getChunkCacheStats(): import('./chunkRenderCache').ChunkCacheSta
 }
 
 /**
+ * Set the maximum memory budget for the wall chunk render cache.
+ * Call this when graphics quality changes to cap GPU/CPU canvas memory usage.
+ *
+ * Suggested values:
+ *   Low:    4096 KB
+ *   Medium: 8192 KB
+ *   High:  16384 KB
+ */
+export function setWallChunkCacheMemoryKB(kb: number): void {
+  _chunkCache.setMaxMemoryKB(kb);
+}
+
+/**
  * Marks every chunk overlapping the given tile rectangle dirty so only those
  * chunks are rebuilt the next time they are visible.
  * Useful for targeted invalidation when the editor changes a small tile region.

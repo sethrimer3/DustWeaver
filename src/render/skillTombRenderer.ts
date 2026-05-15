@@ -522,12 +522,22 @@ export class SkillTombRenderer {
     offsetXPx: number,
     offsetYPx: number,
     zoom: number,
+    vpW = 480,
+    vpH = 270,
   ): void {
     for (let t = 0; t < this.tombStates.length; t++) {
       const tomb = this.tombStates[t];
 
       const screenX = tomb.xWorld * zoom + offsetXPx;
       const screenY = tomb.yWorld * zoom + offsetYPx;
+
+      // Cull tombs well outside the viewport — add margin for dust particles
+      // orbiting beyond the sprite bounds.
+      const halfW = TOMB_SPRITE_WIDTH_WORLD * zoom * 0.5;
+      const halfH = TOMB_SPRITE_HEIGHT_WORLD * zoom * 0.5;
+      const margin = BLOCK_SIZE_MEDIUM * zoom * 2;
+      if (screenX + halfW + margin < 0 || screenX - halfW - margin > vpW) continue;
+      if (screenY + halfH + margin < 0 || screenY - halfH - margin > vpH) continue;
 
       // Draw sprite (saveTomb.png)
       const spriteW = TOMB_SPRITE_WIDTH_WORLD * zoom;

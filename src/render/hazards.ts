@@ -18,6 +18,7 @@ import {
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
 import { renderWaterZones, renderLavaZones } from './liquidRenderer';
+import { isScreenRectVisible } from './viewportCull';
 
 const BLOCK_HALF = BLOCK_SIZE_MEDIUM * 0.5;
 
@@ -31,14 +32,16 @@ export function renderHazards(
   offsetYPx: number,
   zoom: number,
   tick: number,
+  vpW = 480,
+  vpH = 270,
 ): void {
   ctx.save();
 
   // ── Water zones (neighbor-aware rounded corners + wave surface) ──────────
-  renderWaterZones(ctx, world, offsetXPx, offsetYPx, zoom, tick);
+  renderWaterZones(ctx, world, offsetXPx, offsetYPx, zoom, tick, vpW, vpH);
 
   // ── Lava zones (neighbor-aware rounded corners + wave + spark particles) ─
-  renderLavaZones(ctx, world, offsetXPx, offsetYPx, zoom, tick);
+  renderLavaZones(ctx, world, offsetXPx, offsetYPx, zoom, tick, vpW, vpH);
 
   // ── Breakable blocks (cracked appearance) ──────────────────────────────
   for (let i = 0; i < world.breakableBlockCount; i++) {
@@ -49,6 +52,8 @@ export function renderHazards(
     const sx = (bx - BLOCK_HALF) * zoom + offsetXPx;
     const sy = (by - BLOCK_HALF) * zoom + offsetYPx;
     const sz = BLOCK_SIZE_MEDIUM * zoom;
+
+    if (!isScreenRectVisible(sx, sy, sz, sz, vpW, vpH)) continue;
 
     // Block fill — slightly different shade to indicate breakability
     ctx.fillStyle = 'rgba(140,110,70,0.7)';
@@ -86,6 +91,8 @@ export function renderHazards(
     const sx = (bx - BLOCK_HALF) * zoom + offsetXPx;
     const sy = (by - BLOCK_HALF) * zoom + offsetYPx;
     const sz = BLOCK_SIZE_MEDIUM * zoom;
+
+    if (!isScreenRectVisible(sx, sy, sz, sz, vpW, vpH)) continue;
 
     const isCracked = world.crumbleBlockHitsRemaining[i] <= 1;
 
@@ -136,6 +143,8 @@ export function renderHazards(
     const py = bpY * zoom + offsetYPx;
     const pw = bpW * zoom;
     const ph = bpH * zoom;
+
+    if (!isScreenRectVisible(px, py, pw, ph, vpW, vpH)) continue;
 
     // ── Draw block body / ramp shape ─────────────────────────────────────
     ctx.fillStyle = sfIdx === 1 ? 'rgba(80,40,10,0.85)' : 'rgba(60,30,8,0.80)';
@@ -224,28 +233,31 @@ export function renderHazards(
     const sbHalfW = BLOCK_HALF;
     const sbHalfH = BLOCK_SIZE_MEDIUM * 0.25;
 
+    const sx = (sbx - sbHalfW) * zoom + offsetXPx;
+    const sy = (sby - sbHalfH) * zoom + offsetYPx;
+    const sw = BLOCK_SIZE_MEDIUM * zoom;
+    const sh = BLOCK_SIZE_MEDIUM * 0.5 * zoom;
+    if (!isScreenRectVisible(sx - 2, sy - 2, sw + 4, sh + 4, vpW, vpH)) continue;
+
     // Animation: compress when just triggered
     const animProgress = world.springboardAnimTicks[i] / 12;
     const compressY = animProgress * 2.0 * zoom;
-
-    const sx = (sbx - sbHalfW) * zoom + offsetXPx;
-    const sy = (sby - sbHalfH) * zoom + offsetYPx + compressY;
-    const sw = BLOCK_SIZE_MEDIUM * zoom;
-    const sh = BLOCK_SIZE_MEDIUM * 0.5 * zoom - compressY;
+    const drawSy = sy + compressY;
+    const drawSh = sh - compressY;
 
     // Platform top
     ctx.fillStyle = '#cc8800';
-    ctx.fillRect(sx, sy, sw, Math.max(1, sh * 0.4));
+    ctx.fillRect(sx, drawSy, sw, Math.max(1, drawSh * 0.4));
 
     // Spring coil body
     ctx.fillStyle = '#886600';
-    ctx.fillRect(sx + sw * 0.3, sy + sh * 0.4, sw * 0.4, Math.max(1, sh * 0.6));
+    ctx.fillRect(sx + sw * 0.3, drawSy + drawSh * 0.4, sw * 0.4, Math.max(1, drawSh * 0.6));
 
     // Coil lines
     ctx.strokeStyle = '#ffaa00';
     ctx.lineWidth = 0.7;
-    const coilTop = sy + sh * 0.4;
-    const coilBot = sy + sh;
+    const coilTop = drawSy + drawSh * 0.4;
+    const coilBot = drawSy + drawSh;
     const coilH = coilBot - coilTop;
     for (let c = 0; c < 3; c++) {
       const cy2 = coilTop + (c + 0.5) * coilH / 3;
@@ -265,6 +277,8 @@ export function renderHazards(
 
     const cx = spx * zoom + offsetXPx;
     const cy = spy * zoom + offsetYPx;
+
+    if (!isScreenRectVisible(cx - half - 1, cy - half - 1, half * 2 + 2, half * 2 + 2, vpW, vpH)) continue;
 
     ctx.fillStyle = '#888888';
     ctx.beginPath();
@@ -306,6 +320,8 @@ export function renderHazards(
     const jarW = 6 * zoom;
     const jarH = 8 * zoom;
 
+    if (!isScreenRectVisible(jx - jarW, jy - jarH, jarW * 2, jarH * 1.5, vpW, vpH)) continue;
+
     // Jar body
     ctx.fillStyle = 'rgba(180,140,80,0.8)';
     ctx.fillRect(jx - jarW * 0.5, jy - jarH * 0.3, jarW, jarH * 0.6);
@@ -333,6 +349,8 @@ export function renderHazards(
     const jarW = 6 * zoom;
     const jarH = 8 * zoom;
 
+    if (!isScreenRectVisible(jx - jarW, jy - jarH, jarW * 2, jarH * 1.5, vpW, vpH)) continue;
+
     // Jar body (glass-like)
     ctx.fillStyle = 'rgba(100,160,180,0.4)';
     ctx.fillRect(jx - jarW * 0.5, jy - jarH * 0.3, jarW, jarH * 0.6);
@@ -355,6 +373,8 @@ export function renderHazards(
   for (let i = 0; i < world.fireflyCount; i++) {
     const fx = world.fireflyXWorld[i] * zoom + offsetXPx;
     const fy = world.fireflyYWorld[i] * zoom + offsetYPx;
+
+    if (!isScreenRectVisible(fx - 4 * zoom, fy - 4 * zoom, 8 * zoom, 8 * zoom, vpW, vpH)) continue;
 
     // Glow halo
     const glowAlpha = 0.2 + Math.sin(tick * 0.12 + i * 5) * 0.1;

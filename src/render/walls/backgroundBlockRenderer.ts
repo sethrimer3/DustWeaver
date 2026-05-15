@@ -81,6 +81,19 @@ export function getBgChunkCacheStats() {
   return _bgChunkCache.stats;
 }
 
+/**
+ * Set the maximum memory budget for the background block chunk render cache.
+ * Call this when graphics quality changes.
+ *
+ * Suggested values:
+ *   Low:    2048 KB
+ *   Medium: 4096 KB
+ *   High:   8192 KB
+ */
+export function setBgChunkCacheMemoryKB(kb: number): void {
+  _bgChunkCache.setMaxMemoryKB(kb);
+}
+
 // ── Public render function ────────────────────────────────────────────────────
 
 /**

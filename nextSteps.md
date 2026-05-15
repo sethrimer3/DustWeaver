@@ -1,6 +1,118 @@
 # DustWeaver — Next Steps
 
-## BUILD 289 — Zip Cancel-Jump Fix & Weak Wall Jump Debris Cascade
+## BUILD 302 — Technical Cleanup & Polish Pass
+
+### What Was Completed in BUILD 302
+
+1. **Debris thud audio wired** (`weakWallJumpDebrisRenderer.ts`, `gameScreen.ts`):
+   `_playSoftDebrisThud` stub replaced with a `setThudCallback` injection point.
+   `gameScreen.ts` now injects `playerSfx.play('jump_impact_soft', ...)` at startup.
+   The existing ≤4 thuds/9-tick rate limiter is preserved. Try/catch guards ensure
+   audio errors never crash gameplay.
+
+2. **Ramp surface collision for debris** (`weakWallJumpDebrisRenderer.ts`):
+   The wall-collision loop now handles ramp orientations 0 and 1 (floor ramps).
+   Debris slides along the ramp surface, bounces vertically with WALL_RESTITUTION,
+   and applies WALL_FRICTION to horizontal velocity. Ramp orientations 2 and 3
+   (ceiling ramps) are skipped as debris does not realistically reach them.
+   AABB collision for non-ramp walls is unchanged.
+
+3. **Non-debug zip-jump-ready ring** (`grappleRenderer.ts`):
+   `renderZipJumpReadyRing()` draws a pulsing golden/white double-ring around the
+   player when `isZipJumpWindowOpenFlag === 1`. Visible without debug mode.
+   Early-exit guard added so the ring only renders when the flag is set.
+   `renderGrapple()` now checks `hasZipJumpReady` in its early-return guard.
+
+4. **Viewport culling additions** (BUILD 288 remaining work):
+   - `renderDecorationSprites` — block-level X/Y viewport skip with `1.5×blockSize` margin.
+   - `renderRopes` — AABB computed during the pixel-position loop, rope skipped if AABB offscreen.
+   - `renderHazards` — culling for breakable/crumble blocks, bounce pads, springboards,
+     spikes, dust-boost jars, firefly jars, and fireflies.
+   - `renderWaterZones` / `renderLavaZones` — per-body AABB culling with margin for wave
+     overshoot and spark travel distance.
+   - `renderGrappleInfluenceVisuals` — fast reject when player + influence radius is offscreen.
+   - `skillTombRenderer.render()` — per-tomb AABB cull with 2-block margin for orbiting dust.
+   - `skillTombEffectRenderer.renderBehind/renderSprite/renderFront/renderLayer/renderPrompts`
+     — per-tomb cull propagated through all render layers.
+
+5. **Chunk cache memory caps** (`blockSpriteRenderer.ts`, `backgroundBlockRenderer.ts`, `gameRender.ts`):
+   `setWallChunkCacheMemoryKB()` and `setBgChunkCacheMemoryKB()` exported.
+   `gameRender.ts` applies caps once per quality-change event:
+   - Wall: Low 4096 KB, Med 8192 KB, High 16384 KB.
+   - BG: Low 2048 KB, Med 4096 KB, High 8192 KB.
+
+6. **Adaptive density multipliers** (`atmosphericLightDust.ts`, `sunbeamRenderer.ts`, `gameRender.ts`):
+   `AtmosphericLightDust.setDensityMultiplier(0.5)` strides the render loop by 2 during
+   adaptive tier 1, immediately halving visible motes without waiting for age-out.
+   `SunbeamRenderer.setDensityMultiplier(0.5)` scales beam alpha for tier-1; tier-2
+   already calls `setEnabled(false)`.
+
+### Deferred / Remaining Work
+
+#### 1. Staged room background rendering (Task 7)
+**Files:** `src/screens/gameScreen.ts`, `src/screens/gameRender.ts`, background renderer files  
+**Issue:** When a previous room is staged after seamless crossing, its background is not drawn.
+The active room background fills the expanded clip rect, producing visual discontinuity
+between rooms with different backgrounds.  
+**Proposed fix:** Detect `stagingState.stagedRooms.length > 0` in `renderFrame()`, call
+the background render pass a second time at the staged room's world-space origin offset
+(stagedRoom.originXWorld, stagedRoom.originYWorld). The background renderer API may need
+an `originOffsetWorld` parameter.  
+**Risk:** Medium — need to verify the background renderer handles world-space offsets
+correctly without bleed. Do not re-enable edge-extension preview in the same pass.  
+**Remaining limitations also deferred:** staged hazards, staged enemies, staged falling
+blocks, staged ropes, staged crumble blocks, ambient-depth seam shading.
+
+#### 2. Camera settling after small-room crossing finalization (Task 8)
+**Files:** `src/render/camera.ts`, `src/screens/gameScreen.ts`, `src/screens/twoRoomCrossing.ts`  
+**Issue:** Rooms narrower or shorter than 480×270 px snap the camera to room center when
+`_finalizeCrossingSeamless()` replaces the union camera bounds with the new room's bounds.  
+**Proposed fix:** After finalization, keep a `camSettlingFramesLeft` counter (e.g. 21 frames
+= 0.35 s at 60 fps). While > 0, lerp the effective camera bounds toward the new room bounds
+each frame instead of snapping. `updateCameraWithBounds` already smooths; only the bounds
+swap needs the settling window.  
+**Risk:** Low — isolated to the finalization path; `preserveCamera`, `loadRoom`, and
+long-transition paths are unaffected.
+
+#### 3. Large-room stress-test room (Task 9)
+**File:** `rooms/dev_stress_large.json` (or equivalent discovered room-directory path)  
+**Issue:** No dedicated profiler test room exists. Manually authoring a 120×80 room with
+200+ decorations, 30+ background block defs, 10+ dust containers, 4 sunbeams, 5 swarms,
+and representative liquid/hazard coverage requires exact schema knowledge to avoid
+load-time validation errors.  
+**Proposed path:** Either (a) use the existing room editor to build the room and export it
+as a dev-only JSON, or (b) write a small generator script in `/tmp` that produces a
+conformant JSON using `roomSchemaV2.ts` types and copy the output to `ASSETS/ROOMS/`.
+Neither path risks any existing room schema regression.  
+**Risk:** Low for generator approach, Medium for manual authoring.
+
+#### 4. Staged room hazards / enemies / ropes (Task 7 follow-up)
+**Files:** `src/screens/gameSeamlessStaging.ts`, `src/sim/world.ts`, enemy AI files  
+**Issue:** Hazards (water/lava/spikes), enemies, falling blocks, and ropes from the staged
+room are not preserved after `loadRoom()`. Players can walk through them without interaction.  
+**Proposed path:** Before `loadRoom()` in `_finalizeCrossingSeamless`, snapshot the
+staged room's hazard arrays and enemy clusters; after `loadRoom()`, re-append them at the
+staged room's world-space offset. Enemy AI requires sim-layer awareness of the offset.  
+**Risk:** High — requires non-trivial sim-layer changes; defer to a dedicated pass.
+
+### Manual Testing Checklist (BUILD 302)
+
+1. Zip cancel-jump still preserves zip velocity + jump boost.
+2. True zip-jump only happens after surface impact (not mid-air).
+3. 3rd+ consecutive wall jump spawns debris chips.
+4. Debris collides with flat walls and bounces/slides on ramp surfaces.
+5. Debris thud is audible but subtle (< 4 sounds per 9 ticks).
+6. Zip impact ready ring (gold pulse) appears outside debug mode when surface struck.
+7. Large rooms: fewer draw calls for offscreen decorations, ropes, hazards, tombs.
+8. Liquid/hazard culling does not produce visible pop-in near screen edges (try panning).
+9. Seamless room crossing still works end-to-end.
+10. Small-room crossing does not camera-snap (deferred — may still snap in BUILD 302).
+11. Long transitions still use legacy teleport-style loading.
+12. Existing room save/load and editor transition data still load correctly.
+
+---
+
+
 
 ### What Was Implemented in BUILD 289
 

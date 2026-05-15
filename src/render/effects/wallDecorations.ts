@@ -343,6 +343,9 @@ function _drawVine(
  * Renders all decoration sprites onto `ctx`.
  * Call this BEFORE `addDecorationBloom` and BEFORE the dark room overlay.
  *
+ * @param vpW / vpH   Virtual viewport dimensions for screen-space culling.
+ *                    Decorations whose block column falls entirely outside the
+ *                    viewport (plus a margin equal to the block size) are skipped.
  * @param waveState  Optional pre-updated wave state driving per-decoration sway.
  *                   When provided, decorations lean in the direction of nearby
  *                   entity motion (higher speed = more lean, springs back).
@@ -355,11 +358,21 @@ export function renderDecorationSprites(
   scalePx: number,
   blockSizePx: number,
   waveState?: DecorationWaveState,
+  vpW = 480,
+  vpH = 270,
 ): void {
+  // Margin in screen pixels: enough to avoid popping for the tallest glow-grass
+  // or mushroom (approximately blockSizePx in height).
+  const marginPx = blockSizePx * scalePx * 1.5;
+
   for (let i = 0; i < decorations.length; i++) {
     const d  = decorations[i];
     const sx = Math.round(d.worldLeftPx    * scalePx + offsetXPx);
     const sy = Math.round(d.worldAnchorYPx * scalePx + offsetYPx);
+
+    // Viewport cull: skip decorations well outside the visible area.
+    if (sx + blockSizePx * scalePx + marginPx < 0 || sx - marginPx > vpW) continue;
+    if (sy + marginPx < 0 || sy - marginPx > vpH) continue;
 
     // Sway: angle (rad) → pixel offset at the tip.
     // A stem of approximately half-a-block height at typical scale leans by round(angle * height).

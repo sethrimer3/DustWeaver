@@ -63,8 +63,8 @@ import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHig
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { getQualityConfig } from '../render/renderQualityConfig';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
-import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats } from '../render/walls/blockSpriteRenderer';
-import { renderBackgroundBlocks, getBgChunkCacheStats } from '../render/walls/backgroundBlockRenderer';
+import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats, setWallChunkCacheMemoryKB } from '../render/walls/blockSpriteRenderer';
+import { renderBackgroundBlocks, getBgChunkCacheStats, setBgChunkCacheMemoryKB } from '../render/walls/backgroundBlockRenderer';
 import {
   drawGrappleBloom,
   drawParticleGlow,
@@ -98,6 +98,8 @@ const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0
 
 /** Tracks the last room ID to detect room changes for occluder dirty marking. */
 let _lastLightingRoomId: string | null = null;
+/** Last quality string for which chunk-cache memory caps were applied. */
+let _lastChunkCacheQuality: string = '';
 
 /**
  * Pre-allocated mutable quality config scratch object used when adaptive
@@ -391,8 +393,25 @@ export function renderFrame(r: RenderFrameContext): void {
   // Propagate sunbeam enable/disable to the renderer.
   sunbeamRenderer.setEnabled(qc.isSunbeamEnabled);
 
-  // Propagate mote cap to the atmospheric dust system.
+  // Propagate mote cap and density multiplier to the atmospheric dust system.
   atmosphericLightDust.setMaxMotes(qc.maxDustMoteCount);
+  // Tier 1 adaptive: halve rendered density immediately (without waiting for motes to age out).
+  atmosphericLightDust.setDensityMultiplier(isAdaptiveReductionActive ? 0.5 : 1.0);
+
+  // Adaptive density for sunbeams: tier 1 reduces alpha, tier 2 disables entirely.
+  sunbeamRenderer.setDensityMultiplier(isAdaptiveReductionActive && !isDeepReductionActive ? 0.5 : 1.0);
+
+  // Apply chunk-cache memory caps based on graphics quality (once per quality change).
+  const chunkCacheQualityKey = `${graphicsQuality}:${isAdaptiveReductionActive ? 1 : 0}`;
+  if (_lastChunkCacheQuality !== chunkCacheQualityKey) {
+    _lastChunkCacheQuality = chunkCacheQualityKey;
+    // Wall chunk cache
+    const wallMemKB = graphicsQuality === 'high' ? 16384 : graphicsQuality === 'med' ? 8192 : 4096;
+    setWallChunkCacheMemoryKB(wallMemKB);
+    // Background chunk cache (about half of the wall cache budget)
+    const bgMemKB = graphicsQuality === 'high' ? 8192 : graphicsQuality === 'med' ? 4096 : 2048;
+    setBgChunkCacheMemoryKB(bgMemKB);
+  }
 
   // Start the render profiler for this frame.
   if (renderProfiler !== undefined) renderProfiler.beginFrame(isDebugMode);
@@ -587,7 +606,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
-  renderRopes(ctx, snapshot, ox, oy, zoom);
+  renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateChunkStats(getChunkCacheStats());
   }
@@ -606,7 +625,7 @@ export function renderFrame(r: RenderFrameContext): void {
     cachedDecorationCenterY,
   );
 
-  renderDecorationSprites(ctx, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, decorationWaveState);
+  renderDecorationSprites(ctx, cachedDecorations, ox, oy, zoom, BLOCK_SIZE_SMALL, decorationWaveState, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_WALLS);
 
   // ── Entities and grapple ─────────────────────────────────────────────────
@@ -625,7 +644,7 @@ export function renderFrame(r: RenderFrameContext): void {
   );
 
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
-  renderHazards(ctx, world, ox, oy, zoom, world.tick);
+  renderHazards(ctx, world, ox, oy, zoom, world.tick, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateLiquidStats(getLiquidDebugStats());
   }
@@ -674,12 +693,12 @@ export function renderFrame(r: RenderFrameContext): void {
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
   // Save tombs (sprite + swirling/falling dust particles)
-  skillTombRenderer.render(ctx, ox, oy, zoom);
+  skillTombRenderer.render(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
 
   // Skill tombs — background particles (behind sprite), sprite, then foreground particles
-  skillTombEffectRenderer.renderBehind(ctx, ox, oy, zoom);
-  skillTombEffectRenderer.renderSprite(ctx, ox, oy, zoom);
-  skillTombEffectRenderer.renderFront(ctx, ox, oy, zoom);
+  skillTombEffectRenderer.renderBehind(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
+  skillTombEffectRenderer.renderSprite(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
+  skillTombEffectRenderer.renderFront(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
 
   // Dust containers (collectibles)
   if (isDustContainerSpriteLoaded) {

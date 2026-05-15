@@ -443,6 +443,16 @@ export function renderGrappleInfluenceVisuals(
   }
   if (!hasPlayer) return;
 
+  // Player position in virtual-canvas screen coordinates
+  const playerScreenXPx = playerXWorld * scalePx + offsetXPx;
+  const playerScreenYPx = playerYWorld * scalePx + offsetYPx;
+
+  // Fast reject: skip all influence visuals when the player is completely offscreen
+  // (margin = influence radius so edge glows on nearby walls remain visible).
+  const influenceRadiusPx = snapshot.moteGrappleDisplayRadiusWorld * scalePx;
+  if (playerScreenXPx + influenceRadiusPx < 0 || playerScreenXPx - influenceRadiusPx > virtualWidthPx) return;
+  if (playerScreenYPx + influenceRadiusPx < 0 || playerScreenYPx - influenceRadiusPx > virtualHeightPx) return;
+
   // Convert device-pixel mouse position to virtual canvas pixels, then to world
   const virtualMouseXPx = (mouseXPx / canvasWidthPx) * virtualWidthPx;
   const virtualMouseYPx = (mouseYPx / canvasHeightPx) * virtualHeightPx;
@@ -451,10 +461,6 @@ export function renderGrappleInfluenceVisuals(
 
   // Angle from player to mouse in world space
   const mouseAngleRad = Math.atan2(mouseYWorld - playerYWorld, mouseXWorld - playerXWorld);
-
-  // Player position in virtual-canvas screen coordinates
-  const playerScreenXPx = playerXWorld * scalePx + offsetXPx;
-  const playerScreenYPx = playerYWorld * scalePx + offsetYPx;
 
   ctx.save();
 
