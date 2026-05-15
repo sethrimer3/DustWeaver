@@ -33,6 +33,14 @@ export const TRANSITION_COOLDOWN_MS = 400;
  */
 export const CAMERA_BOUNDS_LERP_SPEED = 4.0;
 
+/**
+ * Number of frames to smoothly settle the effective camera bounds after
+ * seamless crossing finalization.  Prevents a hard snap when the union
+ * bounds shrink to a narrow room's single-room bounds.
+ * ~21 frames ≈ 0.35 s at 60 fps.
+ */
+export const CAM_SETTLING_FRAMES = 21;
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 export interface GameCameraState {
@@ -52,6 +60,21 @@ export interface GameCameraState {
   /** Smoothly-lerped effective camera clamp bounds (right/bottom edge, world). */
   effBoundsMaxX: number;
   effBoundsMaxY: number;
+
+  // ── Camera settling after seamless crossing finalization ──────────────────
+  /**
+   * Frames remaining in the settling window.  While > 0, the effective
+   * bounds lerp from settlingStart* toward the new room's single-room bounds
+   * using a frame-count-based t so the camera never snaps on a narrow room.
+   */
+  camSettlingFramesLeft: number;
+  /** Effective-bounds values captured when the union bounds were last active. */
+  settlingMinX: number;
+  settlingMinY: number;
+  settlingMaxX: number;
+  settlingMaxY: number;
+  /** True on the frame where renderUnionBounds was non-null. */
+  prevHadUnionBounds: boolean;
 }
 
 export function createGameCameraState(roomWidthWorld: number, roomHeightWorld: number): GameCameraState {
@@ -67,6 +90,12 @@ export function createGameCameraState(roomWidthWorld: number, roomHeightWorld: n
     effBoundsMinY: 0,
     effBoundsMaxX: roomWidthWorld,
     effBoundsMaxY: roomHeightWorld,
+    camSettlingFramesLeft: 0,
+    settlingMinX: 0,
+    settlingMinY: 0,
+    settlingMaxX: roomWidthWorld,
+    settlingMaxY: roomHeightWorld,
+    prevHadUnionBounds: false,
   };
 }
 
@@ -167,20 +196,43 @@ export function updateCameraFollow(
     // ── Update effective camera clamp bounds ───────────────────────────────
     // Smoothly transition from union bounds (during/after crossing) to
     // single-room bounds to prevent an instant camera snap.
-    const dtSec = elapsedMs / 1000;
     if (renderUnionBounds !== null) {
       // Snap effective bounds to union immediately while union is active.
       camState.effBoundsMinX = renderUnionBounds.minXWorld;
       camState.effBoundsMinY = renderUnionBounds.minYWorld;
       camState.effBoundsMaxX = renderUnionBounds.maxXWorld;
       camState.effBoundsMaxY = renderUnionBounds.maxYWorld;
+      // Capture settling start in case the union expires next frame.
+      camState.settlingMinX = camState.effBoundsMinX;
+      camState.settlingMinY = camState.effBoundsMinY;
+      camState.settlingMaxX = camState.effBoundsMaxX;
+      camState.settlingMaxY = camState.effBoundsMaxY;
+      camState.prevHadUnionBounds = true;
     } else {
-      // Lerp effective bounds toward the active single-room bounds.
-      const bt = Math.min(1, CAMERA_BOUNDS_LERP_SPEED * dtSec);
-      camState.effBoundsMinX += (0              - camState.effBoundsMinX) * bt;
-      camState.effBoundsMinY += (0              - camState.effBoundsMinY) * bt;
-      camState.effBoundsMaxX += (roomWidthWorld  - camState.effBoundsMaxX) * bt;
-      camState.effBoundsMaxY += (roomHeightWorld - camState.effBoundsMaxY) * bt;
+      // Union bounds just expired → start settling window.
+      if (camState.prevHadUnionBounds) {
+        camState.camSettlingFramesLeft = CAM_SETTLING_FRAMES;
+        camState.prevHadUnionBounds = false;
+      }
+
+      if (camState.camSettlingFramesLeft > 0) {
+        // Frame-count lerp from settlingStart toward single-room bounds.
+        // t goes from 0 (first settling frame) to 1 (last).
+        const t = 1.0 - camState.camSettlingFramesLeft / CAM_SETTLING_FRAMES;
+        camState.effBoundsMinX = camState.settlingMinX + (0              - camState.settlingMinX) * t;
+        camState.effBoundsMinY = camState.settlingMinY + (0              - camState.settlingMinY) * t;
+        camState.effBoundsMaxX = camState.settlingMaxX + (roomWidthWorld  - camState.settlingMaxX) * t;
+        camState.effBoundsMaxY = camState.settlingMaxY + (roomHeightWorld - camState.settlingMaxY) * t;
+        camState.camSettlingFramesLeft--;
+      } else {
+        // Post-settling: lerp effective bounds toward the active single-room bounds.
+        const dtSec = elapsedMs / 1000;
+        const bt = Math.min(1, CAMERA_BOUNDS_LERP_SPEED * dtSec);
+        camState.effBoundsMinX += (0              - camState.effBoundsMinX) * bt;
+        camState.effBoundsMinY += (0              - camState.effBoundsMinY) * bt;
+        camState.effBoundsMaxX += (roomWidthWorld  - camState.effBoundsMaxX) * bt;
+        camState.effBoundsMaxY += (roomHeightWorld - camState.effBoundsMaxY) * bt;
+      }
     }
 
     updateCameraWithBounds(

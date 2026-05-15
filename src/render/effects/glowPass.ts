@@ -63,6 +63,25 @@ export class GlowPass {
     this.ctx.fill();
     this.ctx.restore();
   }
+
+  /**
+   * Draws a glow circle without requiring a GlowCircleParams object.
+   * Avoids per-call object allocation in hot paths such as addDecorationBloom.
+   *
+   * @param intensity  Pre-computed glow intensity (0–1).  Skipped when ≤ threshold.
+   * @param color      CSS colour string, or undefined for white.
+   */
+  drawCircleDirect(x: number, y: number, radius: number, intensity: number, color: string | undefined): void {
+    if (intensity <= this.config.threshold) return;
+
+    this.ctx.save();
+    this.ctx.globalAlpha = intensity;
+    this.ctx.fillStyle = color ?? '#ffffff';
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.restore();
+  }
 }
 
 function resolveGlowStyle(glow: GlowStyle | undefined, threshold: number): { intensity: number; color?: string } | null {

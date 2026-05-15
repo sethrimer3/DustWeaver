@@ -52,8 +52,16 @@ export class EnvironmentalDustLayer {
   private readonly brownDustSprite = loadDustSprite(BROWN_DUST_SPRITE_SRC);
   private activeDustSprite: HTMLImageElement | null = null;
 
+  // ── Spatial wall grid for O(walls-in-column) collision queries ─────────────
+  // Built once per room load in initFromWorld() and reused every tick.
+  // Cell width = WALL_GRID_CELL_WORLD world units.  Each cell stores the
+  // indices of all walls whose X range overlaps that column bucket.
+  private readonly _wallColumnGrid = new Map<number, number[]>();
+  private static readonly WALL_GRID_CELL_WORLD = 32;
+
   initFromWorld(world: WorldState, worldNumber: number): void {
     this.buildSurfaceSegments(world);
+    this._buildWallGrid(world);
     this.activeDustSprite = worldNumber === LOBBY_WORLD_NUMBER ? this.goldenDustSprite : this.brownDustSprite;
 
     // All dust is now placed explicitly via editor dust piles — skip procedural generation.
@@ -186,6 +194,30 @@ export class EnvironmentalDustLayer {
     }
   }
 
+  /**
+   * Builds a spatial column grid for wall collision queries.
+   * Each cell stores wall indices whose X range overlaps that column bucket.
+   * Called once per room load; reused every tick.
+   */
+  private _buildWallGrid(world: WorldState): void {
+    this._wallColumnGrid.clear();
+    const cs = EnvironmentalDustLayer.WALL_GRID_CELL_WORLD;
+    for (let wi = 0; wi < world.wallCount; wi++) {
+      const wx = world.wallXWorld[wi];
+      const ww = world.wallWWorld[wi];
+      const c0 = Math.floor(wx / cs);
+      const c1 = Math.floor((wx + ww) / cs);
+      for (let c = c0; c <= c1; c++) {
+        let cell = this._wallColumnGrid.get(c);
+        if (cell === undefined) {
+          cell = [];
+          this._wallColumnGrid.set(c, cell);
+        }
+        cell.push(wi);
+      }
+    }
+  }
+
   private applyClusterDisturbance(
     cluster: ClusterState,
     speed: number,
@@ -239,50 +271,64 @@ export class EnvironmentalDustLayer {
       this.vyWorld[particleIndex] *= -0.25;
     }
 
+    const px = this.xWorld[particleIndex];
+    const py = this.yWorld[particleIndex];
+    const cs = EnvironmentalDustLayer.WALL_GRID_CELL_WORLD;
+    const cellC = Math.floor(px / cs);
+
     // Interact with level walls and top surfaces.
-    for (let wi = 0; wi < world.wallCount; wi++) {
-      const wx = world.wallXWorld[wi];
-      const wy = world.wallYWorld[wi];
-      const ww = world.wallWWorld[wi];
-      const wh = world.wallHWorld[wi];
-      const right = wx + ww;
-      const bottom = wy + wh;
+    // Use the column grid to limit candidates to walls whose X range includes px.
+    const wallCandidates = this._wallColumnGrid.get(cellC);
+    if (wallCandidates !== undefined) {
+      for (let ci = 0; ci < wallCandidates.length; ci++) {
+        const wi = wallCandidates[ci];
+        const wx = world.wallXWorld[wi];
+        const wy = world.wallYWorld[wi];
+        const ww = world.wallWWorld[wi];
+        const wh = world.wallHWorld[wi];
+        const right = wx + ww;
+        const bottom = wy + wh;
 
-      const px = this.xWorld[particleIndex];
-      const py = this.yWorld[particleIndex];
-      if (px < wx || px > right || py < wy || py > bottom) continue;
+        if (px < wx || px > right || py < wy || py > bottom) continue;
 
-      const distLeft = Math.abs(px - wx);
-      const distRight = Math.abs(right - px);
-      const distTop = Math.abs(py - wy);
-      const distBottom = Math.abs(bottom - py);
+        const distLeft = Math.abs(px - wx);
+        const distRight = Math.abs(right - px);
+        const distTop = Math.abs(py - wy);
+        const distBottom = Math.abs(bottom - py);
 
-      if (distTop <= distLeft && distTop <= distRight && distTop <= distBottom) {
-        this.yWorld[particleIndex] = wy - 0.5;
-        this.vyWorld[particleIndex] = Math.min(0, this.vyWorld[particleIndex]);
-        const mound = this.moundHeightPx[particleIndex];
-        this.restYWorld[particleIndex] = wy - mound;
-      } else if (distLeft < distRight) {
-        this.xWorld[particleIndex] = wx - 0.5;
-        this.vxWorld[particleIndex] *= -0.2;
-      } else {
-        this.xWorld[particleIndex] = right + 0.5;
-        this.vxWorld[particleIndex] *= -0.2;
+        if (distTop <= distLeft && distTop <= distRight && distTop <= distBottom) {
+          this.yWorld[particleIndex] = wy - 0.5;
+          this.vyWorld[particleIndex] = Math.min(0, this.vyWorld[particleIndex]);
+          const mound = this.moundHeightPx[particleIndex];
+          this.restYWorld[particleIndex] = wy - mound;
+        } else if (distLeft < distRight) {
+          this.xWorld[particleIndex] = wx - 0.5;
+          this.vxWorld[particleIndex] *= -0.2;
+        } else {
+          this.xWorld[particleIndex] = right + 0.5;
+          this.vxWorld[particleIndex] *= -0.2;
+        }
       }
     }
 
     // Re-anchor to nearest supporting surface under current x to keep the
     // "resting layer" behavior stable while still allowing disturbances.
+    // Query the same column bucket for surface candidates.
     let bestSurfaceY = world.worldHeightWorld - 1;
-    const px = this.xWorld[particleIndex];
+    const pxNow = this.xWorld[particleIndex];
     const pyWorld = this.yWorld[particleIndex];
-    for (let wi = 0; wi < world.wallCount; wi++) {
-      const wx = world.wallXWorld[wi];
-      const ww = world.wallWWorld[wi];
-      const wy = world.wallYWorld[wi];
-      // Find the nearest surface at or above the particle (largest wy <= pyWorld), not the globally topmost one.
-      if (px >= wx && px <= wx + ww && wy <= pyWorld && wy > bestSurfaceY) {
-        bestSurfaceY = wy;
+    const cellCNow = Math.floor(pxNow / cs);
+    const surfaceCandidates = this._wallColumnGrid.get(cellCNow);
+    if (surfaceCandidates !== undefined) {
+      for (let ci = 0; ci < surfaceCandidates.length; ci++) {
+        const wi = surfaceCandidates[ci];
+        const wx = world.wallXWorld[wi];
+        const ww = world.wallWWorld[wi];
+        const wy = world.wallYWorld[wi];
+        // Find the nearest surface at or above the particle (largest wy <= pyWorld), not the globally topmost one.
+        if (pxNow >= wx && pxNow <= wx + ww && wy <= pyWorld && wy > bestSurfaceY) {
+          bestSurfaceY = wy;
+        }
       }
     }
 

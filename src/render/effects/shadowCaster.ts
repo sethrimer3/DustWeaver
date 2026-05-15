@@ -33,22 +33,22 @@ import { BLOCK_SIZE_SMALL, type RoomLightSourceDef } from '../../levels/roomDef'
  */
 export interface ShadowCasterOccluderPx {
   /** Left base vertex (virtual canvas pixels). */
-  readonly baseAx: number;
-  readonly baseAy: number;
+  baseAx: number;
+  baseAy: number;
   /** Right base vertex (virtual canvas pixels). */
-  readonly baseBx: number;
-  readonly baseBy: number;
+  baseBx: number;
+  baseBy: number;
   /** Left tip vertex (virtual canvas pixels). */
-  readonly tipAx: number;
-  readonly tipAy: number;
+  tipAx: number;
+  tipAy: number;
   /** Right tip vertex (virtual canvas pixels). */
-  readonly tipBx: number;
-  readonly tipBy: number;
+  tipBx: number;
+  tipBy: number;
   /**
    * Core fill opacity (0-1).  The penumbra is drawn at `alpha * 0.38`.
    * Defaults to SHADOW_CORE_ALPHA if omitted.
    */
-  readonly alpha?: number;
+  alpha?: number;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -83,6 +83,13 @@ const SHADOW_TIP_TAPER = 0.22;
 // indices and their sort scores.  They are reset at the start of every call.
 const _candIdx   = new Int32Array(MAX_SHADOW_CASTER_LIGHTS);
 const _candScore = new Float32Array(MAX_SHADOW_CASTER_LIGHTS);
+
+// Pre-allocated pool of mutable occluder objects — filled in-place each frame
+// instead of creating new object literals per call.
+const _shadowPool: ShadowCasterOccluderPx[] = Array.from(
+  { length: MAX_SHADOW_CASTER_LIGHTS },
+  () => ({ baseAx: 0, baseAy: 0, baseBx: 0, baseBy: 0, tipAx: 0, tipAy: 0, tipBx: 0, tipBy: 0, alpha: 0 }),
+);
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -212,16 +219,16 @@ export function buildPlayerShadowOccluders(
     // ── Shadow tip half-width (tapered) ──────────────────────────────────
     const tipRPx = bodyRPx * SHADOW_TIP_TAPER;
 
-    out.push({
-      baseAx: playerXPx + perpX * bodyRPx,
-      baseAy: playerYPx + perpY * bodyRPx,
-      baseBx: playerXPx - perpX * bodyRPx,
-      baseBy: playerYPx - perpY * bodyRPx,
-      tipAx:  playerXPx + dirX * shadowLengthPx + perpX * tipRPx,
-      tipAy:  playerYPx + dirY * shadowLengthPx + perpY * tipRPx,
-      tipBx:  playerXPx + dirX * shadowLengthPx - perpX * tipRPx,
-      tipBy:  playerYPx + dirY * shadowLengthPx - perpY * tipRPx,
-      alpha:  SHADOW_CORE_ALPHA,
-    });
+    const poolObj = _shadowPool[out.length];
+    poolObj.baseAx = playerXPx + perpX * bodyRPx;
+    poolObj.baseAy = playerYPx + perpY * bodyRPx;
+    poolObj.baseBx = playerXPx - perpX * bodyRPx;
+    poolObj.baseBy = playerYPx - perpY * bodyRPx;
+    poolObj.tipAx  = playerXPx + dirX * shadowLengthPx + perpX * tipRPx;
+    poolObj.tipAy  = playerYPx + dirY * shadowLengthPx + perpY * tipRPx;
+    poolObj.tipBx  = playerXPx + dirX * shadowLengthPx - perpX * tipRPx;
+    poolObj.tipBy  = playerYPx + dirY * shadowLengthPx - perpY * tipRPx;
+    poolObj.alpha  = SHADOW_CORE_ALPHA;
+    out[out.length] = poolObj;
   }
 }

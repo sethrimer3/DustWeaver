@@ -1659,6 +1659,8 @@ export function startGameScreen(
       crossingUnionMaxXWorld: renderUnionBounds?.maxXWorld ?? roomWidthWorld,
       crossingUnionMaxYWorld: renderUnionBounds?.maxYWorld ?? roomHeightWorld,
       alwaysCenterCamera: pauseMenuState.alwaysCenterCamera,
+      // Staged room background info for seamless crossing rendering.
+      stagedRoom: stagingState.stagedRooms.length > 0 ? stagingState.stagedRooms[0] : null,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.
