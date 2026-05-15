@@ -213,6 +213,17 @@ export interface HazardWorldState {
   playerWaterSubmersionRatio: number;
   /** Speed magnitude (wu/s) the player had when they entered water this tick. 0 when not entering. */
   playerWaterEntrySpeedWorld: number;
+  /**
+   * Y coordinate (world units) of the liquid surface the player is currently in.
+   * 0 when not in water. Used for debug display and depth factor computation.
+   */
+  playerBuoyancySurfaceYWorld: number;
+  /**
+   * Depth factor applied to buoyancy this tick [0–1].
+   * Equals the submersion ratio — 0 near the surface, 1 when fully submerged.
+   * 0 when not in water.
+   */
+  playerBuoyancyDepthFactor: number;
 
   // ── Dust piles ────────────────────────────────────────────────────────────
   /** Number of dust piles loaded in the current room. */
@@ -339,6 +350,8 @@ export function createHazardWorldState(): HazardWorldState {
     isPlayerWasInWaterLastTickFlag: 0,
     playerWaterSubmersionRatio:    0,
     playerWaterEntrySpeedWorld:    0,
+    playerBuoyancySurfaceYWorld:   0,
+    playerBuoyancyDepthFactor:     0,
     dustPileCount:                 0,
     dustPileXWorld:                new Float32Array(MAX_DUST_PILES),
     dustPileYWorld:                new Float32Array(MAX_DUST_PILES),

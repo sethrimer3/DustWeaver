@@ -264,6 +264,8 @@ export function applyHazards(world: WorldState): void {
 
   world.isPlayerInWaterFlag = 0;
   world.playerWaterSubmersionRatio = 0;
+  world.playerBuoyancySurfaceYWorld = 0;
+  world.playerBuoyancyDepthFactor = 0;
 
   for (let i = 0; i < world.waterZoneCount; i++) {
     const wLeft   = world.waterZoneXWorld[i];
@@ -286,15 +288,30 @@ export function applyHazards(world: WorldState): void {
 
     world.isPlayerInWaterFlag = 1;
     world.playerWaterSubmersionRatio = submersion;
+    world.playerBuoyancySurfaceYWorld = wTop;
 
-    // Buoyancy: upward force scaled by submersion ratio.
-    // Apply whenever the player overlaps the water zone (submersion > 0), regardless
-    // of whether their CENTER is above or below the water surface.  The old guard
-    // `if (py > wTop)` prevented buoyancy from activating during partial entry
-    // (when the player's feet are in water but their center is still above the surface),
-    // which made them sink instead of float.  Using submersion > 0 fixes this.
+    // ── Buoyancy ──────────────────────────────────────────────────────────
+    // Two-factor upward force: `submersion` (how much body is in water) ×
+    // `depthFactor` (how deep the player is relative to the surface).
+    //
+    // depthFactor is derived from the player's top edge relative to the water
+    // surface — mathematically it equals `submersion`, so the net formula is
+    // effectively BUOYANCY × submersion².  This naturally tapers to near-zero
+    // at the surface (small submersion → small depth → minimal lift) while
+    // providing strong upward force deep underwater (large submersion → large
+    // depth → full lift).  Combined with the fixed constant waterMult (0.12x
+    // gravity) in playerMovement.ts, equilibrium settles at ~46% submersion
+    // (player floating with upper body out of water).
+    //
+    // Formula derivation:
+    //   depthFactor = clamp(1 + (pTop - wTop) / playerH, 0, 1)
+    //               = clamp(overlapH / playerH, 0, 1)   (when pBottom ≥ wTop)
+    //               = submersion      (same as overlapH/playerH, clamped 0→1)
     if (submersion > 0) {
-      player.velocityYWorld -= WATER_BUOYANCY_FORCE_WORLD * submersion * dtSec;
+      const depthFactor = submersion;
+      world.playerBuoyancyDepthFactor = depthFactor;
+      const buoyancyAccelWorldPerSec2 = WATER_BUOYANCY_FORCE_WORLD * submersion * depthFactor;
+      player.velocityYWorld -= buoyancyAccelWorldPerSec2 * dtSec;
     }
 
     // Clamp upward float speed (prevent rocketing to surface)
