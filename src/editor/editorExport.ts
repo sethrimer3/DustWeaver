@@ -147,10 +147,9 @@ export function exportCampaignJson(
 
   // Wall-clock time is intentionally used here: the date is purely a human-
   // readable suffix on a download filename, not simulation or game state.
-  const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const a = document.createElement('a');
   a.href = url;
-  a.download = `dustweaver-campaign-${exported.campaign.id}-${dateStr}.json`;
+  a.download = `${exported.campaign.id}.dwcampaign.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -158,11 +157,16 @@ export function exportCampaignJson(
 }
 
 /**
- * Exports the main DustWeaver campaign as a single `.json` file.
+ * Exports the main DustWeaver campaign as a single `.dwcampaign.json` file.
  *
  * Builds a synthetic EditableCampaignSession from the current ROOM_REGISTRY
  * (dehydrating every room) and merges any pending room edits on top before
  * assembling the final SavedCampaignV1 payload.
+ *
+ * The exported file is named `DustweaverCampaign-YYYY-MM-DD.dwcampaign.json`
+ * (date-stamped backup). To deploy it as the official runtime campaign, rename
+ * it to `DustweaverCampaign.dwcampaign.json` and commit it under
+ * `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/`.
  *
  * This is the handler for the "Export Campaign" button when editing the main
  * DustWeaver campaign (not a custom campaign session).
@@ -232,10 +236,13 @@ export function exportMainCampaignJson(
 
   // Wall-clock time is intentionally used here: the date is a human-readable
   // suffix on the download filename, not simulation or game state.
+  // The downloaded file is a dated backup. To use it as the runtime official
+  // campaign, rename it to DustweaverCampaign.dwcampaign.json and place it at
+  // ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json.
   const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const a = document.createElement('a');
   a.href = url;
-  a.download = `dustweaver-campaign-${exported.campaign.id}-${dateStr}.json`;
+  a.download = `DustweaverCampaign-${dateStr}.dwcampaign.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

@@ -19,6 +19,7 @@ import { RoomDef } from './roomDef';
 import { loadRoomJsonFiles } from './roomJsonLoader';
 import type { SavedCampaignV1 } from './campaignSchema';
 import { hydrateSavedCampaignToRoomDefs } from './campaignSchema';
+import { fetchOfficialPackedCampaign } from './packedCampaignLoader';
 
 // ── Room registry ────────────────────────────────────────────────────────────
 
@@ -128,22 +129,60 @@ export function registerRoom(room: RoomDef): void {
 }
 
 /**
- * Loads all room JSON files from CAMPAIGNS/<CAMPAIGN_ID>/ROOMS/ and populates ROOM_REGISTRY.
+ * Loads the official campaign and populates ROOM_REGISTRY.
+ *
+ * Primary path: loads from the canonical packed campaign file
+ * `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json`.
+ * World-map metadata (world names, map positions) is read from the campaign file.
+ *
+ * Fallback: if the packed file is unavailable or invalid, falls back to loading
+ * individual room JSON files from `CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/`.
+ *
  * Must be called (and awaited) before the game starts.
  */
 export async function initRoomRegistry(): Promise<void> {
-  const rooms = await loadRoomJsonFiles();
   registryMap.clear();
   worldNamesMap.clear();
   worldMapPositions.clear();
   roomNameOverridesMap.clear();
   roomWorldOverridesMap.clear();
+
+  // ── Primary: load from packed campaign file ────────────────────────────────
+  const packedCampaign = await fetchOfficialPackedCampaign();
+  if (packedCampaign !== null) {
+    const rooms = hydrateSavedCampaignToRoomDefs(packedCampaign);
+    for (const [id, room] of rooms) {
+      registryMap.set(id, room);
+      worldMapPositions.set(id, { mapX: room.mapX, mapY: room.mapY });
+    }
+    for (const world of packedCampaign.worldMap.worlds) {
+      worldNamesMap.set(world.id, world.name);
+    }
+    for (const [, room] of rooms) {
+      if (!worldNamesMap.has(room.worldNumber)) {
+        worldNamesMap.set(room.worldNumber, `World ${room.worldNumber}`);
+      }
+    }
+    console.log(
+      `[rooms] Loaded ${registryMap.size} rooms from packed campaign ` +
+      `"${packedCampaign.campaign.id}" (initialRoom: ${packedCampaign.campaign.initialRoomId})`
+    );
+    return;
+  }
+
+  // ── Fallback: load individual room JSON files ──────────────────────────────
+  console.warn(
+    '[rooms] Official packed campaign file unavailable — falling back to individual room JSON files. ' +
+    'Export the campaign from the editor and place it at ' +
+    'ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/DustweaverCampaign.dwcampaign.json'
+  );
+  const rooms = await loadRoomJsonFiles();
   for (const [id, room] of rooms) {
     registryMap.set(id, room);
     worldMapPositions.set(id, { mapX: room.mapX, mapY: room.mapY });
     worldNamesMap.set(room.worldNumber, worldNamesMap.get(room.worldNumber) ?? `World ${room.worldNumber}`);
   }
-  console.log(`[rooms] Loaded ${registryMap.size} rooms from JSON`);
+  console.log(`[rooms] Loaded ${registryMap.size} rooms from individual JSON files (fallback)`);
 }
 
 // ── Main-campaign snapshot (for restoring after custom-campaign sessions) ─────
