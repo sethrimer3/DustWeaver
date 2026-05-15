@@ -114,7 +114,14 @@ export function checkRoomTransitions(
     } else if (t.direction === 'left') {
       isTriggered = px <= zoneLeft + BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
     } else if (t.direction === 'down') {
-      isTriggered = py >= zoneBottom - BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
+      // Use the player's bottom edge rather than center.  The world-floor clamp
+      // in resolveClusterFloorCollision stops the player's CENTER at
+      // (worldHeightWorld - halfHeightWorld), which is further from the zone
+      // bottom than TRIGGER_EDGE_THRESHOLD_BLOCKS * BS would allow — so the
+      // center-based check can never fire.  Using the bottom edge means the
+      // transition triggers as soon as the player's feet reach the zone bottom.
+      const playerBottom = py + player.halfHeightWorld;
+      isTriggered = playerBottom >= zoneBottom - BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
     } else {
       isTriggered = py <= zoneTop + BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
     }
