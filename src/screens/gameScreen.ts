@@ -10,7 +10,7 @@ import { renderClusters, renderWalls } from '../render/clusters/renderer';
 import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
-import { renderHudOverlay, HudState, HudDebugState } from '../render/hud/overlay';
+import { renderHudOverlay, HudState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
@@ -62,8 +62,6 @@ import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/pla
 import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
-import { ZIP_JUMP_WINDOW_SECONDS } from '../sim/clusters/grappleZip';
-import { WATER_GRAVITY_MULTIPLIER, WATER_BUOYANCY_FORCE_WORLD } from '../sim/hazards';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality, getAlwaysCenterCamera } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
@@ -111,8 +109,10 @@ import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
 import { checkRoomTransitions, getOppositeTransitionDirection } from './gameTransitions';
 import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
-import { startDialogue, advanceDialogue, closeDialogue } from '../dialogue/dialogueRuntime';
+import { closeDialogue } from '../dialogue/dialogueRuntime';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
+import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
+import { buildHudDebugState } from './gameHudDebugState';
 import type { Conversation } from '../dialogue/dialogueTypes';
 import {
   preloadRoomThemeSprites,
@@ -1185,16 +1185,7 @@ export function startGameScreen(
     // ── Dialogue advance ───────────────────────────────────────────────────
     // When dialogue is active, advance (or close) the overlay and suppress
     // normal gameplay logic for this frame (player movement is blocked below).
-    if (dialogueAdvanceRequested && dialogueState.isDialogueActiveFlag) {
-      advanceDialogue(dialogueState);
-      if (dialogueState.isDialogueActiveFlag && dialogueState.activeConversation !== null) {
-        const entry = dialogueState.activeConversation.entries[dialogueState.activeEntryIndex];
-        const isLast = dialogueState.activeEntryIndex === dialogueState.activeConversation.entries.length - 1;
-        dialogueRenderer.show(entry, dialogueState.activeConversation.title, isLast);
-      } else {
-        dialogueRenderer.hide();
-      }
-    }
+    handleDialogueAdvance(dialogueAdvanceRequested, dialogueState, dialogueRenderer);
 
     if (interactInputPulseTrigger) {
       interactInputPulseMs = 150;
@@ -1291,36 +1282,19 @@ export function startGameScreen(
     }
 
     // ── Dialogue trigger check ─────────────────────────────────────────────
-    // Check if the player has entered any dialogue trigger zone.
     // Each trigger fires once per room visit (firedDialogueTriggerUids is
     // reset on room load). A trigger fires only when dialogue is not already
     // open to prevent repeated starts while standing still.
-    if (!dialogueState.isDialogueActiveFlag) {
+    {
       const player = world.clusters[0];
       // Convert to room-local block coords (triggers are defined in room space).
       const playerXBlock = player ? Math.floor((player.positionXWorld - stagingState.currentRoomOriginXWorld) / BLOCK_SIZE_SMALL) : -1;
       const playerYBlock = player ? Math.floor((player.positionYWorld - stagingState.currentRoomOriginYWorld) / BLOCK_SIZE_SMALL) : -1;
-      const triggers = currentRoom.dialogueTriggers ?? [];
-      for (let triggerIndex = 0; triggerIndex < triggers.length; triggerIndex++) {
-        const trig = triggers[triggerIndex];
-        // Use the array index as a stable per-room-visit key.
-        // (RoomDialogueTriggerDef has no uid — index is stable per room load.)
-        if (firedDialogueTriggerUids.has(triggerIndex)) continue;
-        const inZone = playerXBlock >= trig.xBlock && playerXBlock < trig.xBlock + trig.wBlock &&
-                       playerYBlock >= trig.yBlock && playerYBlock < trig.yBlock + trig.hBlock;
-        if (inZone) {
-          firedDialogueTriggerUids.add(triggerIndex);
-          // Use the pre-converted runtime Conversation (no allocation in hot path).
-          const conv = cachedRoomConversations[triggerIndex];
-          if (conv && conv.entries.length > 0) {
-            startDialogue(dialogueState, conv);
-            const firstEntry = conv.entries[0];
-            const isLast = conv.entries.length === 1;
-            dialogueRenderer.show(firstEntry, conv.title, isLast);
-          }
-          break;
-        }
-      }
+      checkDialogueTriggers(
+        playerXBlock, playerYBlock,
+        currentRoom, firedDialogueTriggerUids, cachedRoomConversations,
+        dialogueState, dialogueRenderer,
+      );
     }
 
     // During active dialogue, freeze player movement (suppress moveDx/jump inputs).
@@ -1542,59 +1516,7 @@ export function startGameScreen(
 
     // ── Populate movement debug state from the player cluster ─────────────────
     if (isDebugMode) {
-      const playerClusterForHud = world.clusters[0];
-      if (playerClusterForHud !== undefined && playerClusterForHud.isAliveFlag === 1) {
-        const isStandingOnSurface =
-          playerClusterForHud.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1;
-        const dbg: HudDebugState = {
-          isGrounded:           playerClusterForHud.isGroundedFlag === 1,
-          isStandingOnSurface,
-          coyoteTimeTicks:      playerClusterForHud.coyoteTimeTicks,
-          jumpBufferTicks:      playerClusterForHud.jumpBufferTicks,
-          isWallSlidingFlag:    playerClusterForHud.isWallSlidingFlag === 1,
-          isTouchingWallLeft:   playerClusterForHud.isTouchingWallLeftFlag === 1,
-          isTouchingWallRight:  playerClusterForHud.isTouchingWallRightFlag === 1,
-          wallJumpLockoutTicks: playerClusterForHud.wallJumpLockoutTicks,
-          isGrappleActive:      world.isGrappleActiveFlag === 1,
-          grappleLengthWorld:   world.grappleLengthWorld,
-          grapplePullInAmountWorld: world.grapplePullInAmountWorld,
-          isGrappleMissActive:  world.isGrappleMissActiveFlag === 1,
-          grappleParticleStartIndex: world.grappleParticleStartIndex,
-          isGrappleChainHiddenFlag: true,
-          isGrappleZipActive:   world.isGrappleZipActiveFlag === 1,
-          isGrappleStuck:       world.isGrappleStuckFlag === 1,
-          hasZipImpactedSurface: world.hasZipImpactedSurfaceFlag === 1,
-          zipJumpWindowTicksLeft: world.isGrappleStuckFlag === 1
-            ? Math.max(0, Math.round(ZIP_JUMP_WINDOW_SECONDS * 60) - world.grappleStuckStoppedTickCount)
-            : 0,
-          grappleInputMode:     world.grappleInputMode,
-          isSkidding:           playerClusterForHud.isSkiddingFlag === 1,
-          isSliding:            playerClusterForHud.isSlidingFlag === 1,
-          isSprinting:          playerClusterForHud.isSprintingFlag === 1,
-          inputUp: inputState.isJumpHeldFlag || inputState.isJumpTriggeredFlag,
-          inputLeft: inputState.isKeyA,
-          inputRight: inputState.isKeyD,
-          inputDown: inputState.isKeyS,
-          inputShift: inputState.isSprintHeldFlag,
-          inputLeftClick: inputState.isMouseDownFlag === 1,
-          inputRightClick: inputState.isRightMouseDownFlag === 1,
-          inputGrapple: inputState.isGrappleHeldFlag === 1,
-          inputInteract: interactInputPulseMs > 0,
-          // Water / buoyancy debug
-          isInLiquid:           world.isPlayerInWaterFlag === 1,
-          submergedFraction:    world.playerWaterSubmersionRatio,
-          liquidSurfaceYWorld:  world.playerBuoyancySurfaceYWorld,
-          depthFactor:          world.playerBuoyancyDepthFactor,
-          buoyancyAccelWorldPerSec2: WATER_BUOYANCY_FORCE_WORLD
-            * world.playerWaterSubmersionRatio
-            * world.playerBuoyancyDepthFactor,
-          gravityScale:         world.isPlayerInWaterFlag === 1
-            ? WATER_GRAVITY_MULTIPLIER
-            : 1.0,
-          playerVelocityYWorld: playerClusterForHud.velocityYWorld,
-        };
-        hudState.debug = dbg;
-      }
+      hudState.debug = buildHudDebugState(world, inputState, interactInputPulseMs);
     } else {
       hudState.debug = undefined;
     }
