@@ -111,19 +111,32 @@ function deterministicNoise(seed: number, pointIndex: number, channel: number): 
 /**
  * Immutable contours for a single room, cached after first build.
  *
- * Each contour is one closed polyline tracing the boundary between solid and
- * empty tiles.  The sketch outline is generated from exposed solid-tile
- * boundaries, not from a top/bottom scanline envelope, so interior platforms,
- * islands, and holes each contribute their own outline loop.
+ * Each contour is one polyline tracing the boundary between solid and
+ * empty tiles.  Most contours are closed loops (interior platforms, islands,
+ * holes); contours that touch the room boundary may be open chains because
+ * boundary-facing edges are deliberately not emitted (to avoid showing the
+ * outer room rectangle).
+ *
+ * Open contours MUST NOT be drawn with ctx.closePath() — doing so would
+ * connect the last point back to the first with a spurious diagonal line.
+ * Use `isClosedFlags[i]` to determine how each contour should be drawn.
  */
 interface ContourData {
   /**
-   * Each element is one closed contour loop.
+   * Each element is one contour polyline.
    * Stored as interleaved [x, y] pairs in room-local block (vertex) units.
    * Vertices lie on tile corners (integer positions 0..widthBlocks / heightBlocks)
    * after collinear simplification to corner-only points.
    */
   readonly contours: readonly Float32Array[];
+  /**
+   * Parallel array: `isClosedFlags[i]` is true when contour `i` forms a
+   * closed loop (last traced edge returned to the start vertex).
+   * It is false for open chains produced when boundary-facing edges are
+   * suppressed.  Open chains must be drawn as open strokes — never filled,
+   * never closed with closePath.
+   */
+  readonly isClosedFlags: readonly boolean[];
 }
 
 /** Per-room contour cache — rooms are static, so this rarely needs invalidation. */
@@ -247,6 +260,8 @@ function buildRoomContour(room: RoomDef): ContourData {
   // A cursor Map (vertex → next unread edge index) is used instead of
   // Array.shift() to keep each edge access O(1).
   const rawContours: number[][] = [];
+  /** Parallel to rawContours: true when the corresponding chain closed back to its start vertex. */
+  const rawIsClosedFlags: boolean[] = [];
   // edgeCursor tracks the index of the next unconsumed outgoing edge per vertex.
   const edgeCursor = new Map<number, number>();
 
@@ -255,6 +270,7 @@ function buildRoomContour(room: RoomDef): ContourData {
     while (startCursor < outEdges.length) {
       const points: number[] = [];
       let cur = startVertex;
+      let isClosed = false;
 
       for (;;) {
         const outs = adjacency.get(cur);
@@ -268,11 +284,12 @@ function buildRoomContour(room: RoomDef): ContourData {
         const vy = Math.floor(cur / vertexStride);
         points.push(vx, vy);
         cur = next;
-        if (cur === startVertex) break; // closed the loop
+        if (cur === startVertex) { isClosed = true; break; } // closed the loop
       }
 
       if (points.length >= 6) {
         rawContours.push(points);
+        rawIsClosedFlags.push(isClosed);
       }
 
       startCursor = edgeCursor.get(startVertex) ?? 0;
@@ -284,7 +301,7 @@ function buildRoomContour(room: RoomDef): ContourData {
   // implies no solid tiles exist in the room (any solid tile touching the room
   // boundary or an empty neighbor would emit at least one edge).
   if (rawContours.length === 0) {
-    const result: ContourData = { contours: [] };
+    const result: ContourData = { contours: [], isClosedFlags: [] };
     contourCache.set(room.id, result);
     return result;
   }
@@ -318,7 +335,7 @@ function buildRoomContour(room: RoomDef): ContourData {
     return new Float32Array(kept.length >= 6 ? kept : []);
   });
 
-  const result: ContourData = { contours: simplifiedContours };
+  const result: ContourData = { contours: simplifiedContours, isClosedFlags: rawIsClosedFlags };
   contourCache.set(room.id, result);
   return result;
 }
@@ -365,25 +382,31 @@ function drawContour(
   alpha: number,
   strokeRgb: string,
   fillRgb: string,
+  isClosed: boolean,
 ): void {
   // Interior fill — drawn first, beneath strokes.
-  ctx.save();
-  ctx.globalAlpha = alpha * SKETCH_FILL_ALPHA;
-  ctx.fillStyle = `rgb(${fillRgb})`;
-  ctx.beginPath();
-  for (let i = 0; i < ptCount; i++) {
-    const bx = pts[i * 2];
-    const by = pts[i * 2 + 1];
-    const jx = deterministicNoise(contourSeed, i, 0) * JITTER_PX;
-    const jy = deterministicNoise(contourSeed, i, 1) * JITTER_PX;
-    const sx = centerX + (mapXBlock + bx) * cellSizePx + jx;
-    const sy = centerY + (mapYBlock + by) * cellSizePx + jy;
-    if (i === 0) ctx.moveTo(sx, sy);
-    else ctx.lineTo(sx, sy);
+  // Only filled for closed contours; open chains must NOT use closePath or
+  // fill, as that would connect the last point to the first with a spurious
+  // diagonal line across unrelated parts of the map.
+  if (isClosed) {
+    ctx.save();
+    ctx.globalAlpha = alpha * SKETCH_FILL_ALPHA;
+    ctx.fillStyle = `rgb(${fillRgb})`;
+    ctx.beginPath();
+    for (let i = 0; i < ptCount; i++) {
+      const bx = pts[i * 2];
+      const by = pts[i * 2 + 1];
+      const jx = deterministicNoise(contourSeed, i, 0) * JITTER_PX;
+      const jy = deterministicNoise(contourSeed, i, 1) * JITTER_PX;
+      const sx = centerX + (mapXBlock + bx) * cellSizePx + jx;
+      const sy = centerY + (mapYBlock + by) * cellSizePx + jy;
+      if (i === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
 
   // Multi-stroke sketch outline — layered passes for a pencil-like look.
   for (let strokeIndex = 0; strokeIndex < STROKE_COUNT; strokeIndex++) {
@@ -413,7 +436,10 @@ function drawContour(
       if (i === 0) ctx.moveTo(sx, sy);
       else ctx.lineTo(sx, sy);
     }
-    ctx.closePath();
+    // Only close the path for truly closed contours.  Open chains must not
+    // be closed here — doing so would draw a diagonal line from the chain's
+    // last point back to its first point, creating the broken-map artifacts.
+    if (isClosed) ctx.closePath();
     ctx.stroke();
     ctx.restore();
   }
@@ -477,6 +503,7 @@ export function drawRoomSketch(
       ctx, pts, ptCount, contourSeed,
       mapXBlock, mapYBlock, centerX, centerY,
       cellSizePx, alpha, strokeRgb, fillRgb,
+      data.isClosedFlags[contourIndex],
     );
   }
 }

@@ -135,9 +135,10 @@ export function exportCampaignJson(
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
+  const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${exported.campaign.id}.dwcampaign.json`;
+  a.download = `dustweaver-campaign-${exported.campaign.id}-${dateStr}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
