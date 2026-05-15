@@ -1288,10 +1288,10 @@ export function startGameScreen(
     {
       const player = world.clusters[0];
       // Convert to room-local block coords (triggers are defined in room space).
-      const _playerXBlock = player ? Math.floor((player.positionXWorld - stagingState.currentRoomOriginXWorld) / BLOCK_SIZE_SMALL) : -1;
-      const _playerYBlock = player ? Math.floor((player.positionYWorld - stagingState.currentRoomOriginYWorld) / BLOCK_SIZE_SMALL) : -1;
+      const playerXBlock = player ? Math.floor((player.positionXWorld - stagingState.currentRoomOriginXWorld) / BLOCK_SIZE_SMALL) : -1;
+      const playerYBlock = player ? Math.floor((player.positionYWorld - stagingState.currentRoomOriginYWorld) / BLOCK_SIZE_SMALL) : -1;
       checkDialogueTriggers(
-        _playerXBlock, _playerYBlock,
+        playerXBlock, playerYBlock,
         currentRoom, firedDialogueTriggerUids, cachedRoomConversations,
         dialogueState, dialogueRenderer,
       );
