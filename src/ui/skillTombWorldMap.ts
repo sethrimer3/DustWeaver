@@ -13,6 +13,13 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { GOLD } from './skillTombShared';
 import { drawRoomSketch, smoothstep, ZOOM_SKETCH_FULL, ZOOM_DETAIL_FULL } from './mapSketchRenderer';
 
+/**
+ * Set to true to draw a debug overlay on the world map showing each room's
+ * computed map bounds (blue), padded sketch bounds (orange), and tile
+ * dimensions (label).  Disable before shipping.
+ */
+const shouldDebugMapBounds = false;
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface RoomPlacement {
@@ -214,6 +221,50 @@ export function buildMapTab(
         mapCtx.restore();
       }
     });
+
+    // ── Debug overlay: map bounds per room ────────────────────────────────
+    // Enable by setting DEBUG_MAP_BOUNDS = true at the top of this file.
+    if (shouldDebugMapBounds) {
+      // Max sketch jitter in canvas pixels (mirrors JITTER_PX in mapSketchRenderer).
+      const SKETCH_JITTER_CANVAS_PX = 3.5;
+      placements.forEach(({ room, mapXBlock, mapYBlock }) => {
+        // Map bounds: the tight tile-grid rectangle for this room.
+        const mapLeft   = centerX + mapXBlock * cellSize;
+        const mapTop    = centerY + mapYBlock * cellSize;
+        const mapRight  = mapLeft  + room.widthBlocks  * cellSize;
+        const mapBottom = mapTop   + room.heightBlocks * cellSize;
+
+        // Padded sketch bounds: map bounds expanded by max jitter.
+        const padPx     = SKETCH_JITTER_CANVAS_PX;
+        const padLeft   = mapLeft   - padPx;
+        const padTop    = mapTop    - padPx;
+        const padRight  = mapRight  + padPx;
+        const padBottom = mapBottom + padPx;
+
+        // Draw padded bounds in orange (dashed).
+        mapCtx.save();
+        mapCtx.strokeStyle = 'rgba(255,140,0,0.7)';
+        mapCtx.lineWidth = 1;
+        mapCtx.setLineDash([4, 3]);
+        mapCtx.strokeRect(padLeft, padTop, padRight - padLeft, padBottom - padTop);
+
+        // Draw tight map bounds in blue (solid).
+        mapCtx.strokeStyle = 'rgba(80,160,255,0.8)';
+        mapCtx.setLineDash([]);
+        mapCtx.strokeRect(mapLeft, mapTop, mapRight - mapLeft, mapBottom - mapTop);
+
+        // Label: room id + block dimensions.
+        mapCtx.fillStyle = 'rgba(80,200,255,0.9)';
+        mapCtx.font = '9px monospace';
+        mapCtx.textAlign = 'left';
+        mapCtx.fillText(
+          `${room.id} ${room.widthBlocks}×${room.heightBlocks}`,
+          mapLeft + 2,
+          mapTop + 10,
+        );
+        mapCtx.restore();
+      });
+    }
 
     // Legend
     mapCtx.textAlign = 'left';

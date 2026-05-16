@@ -10,10 +10,11 @@
  *  - Contours are computed once per room and cached; they never regenerate
  *    per frame.
  *  - Sketch outlines are generated from exposed solid-tile boundaries:
- *    for every solid tile, each neighbor that is empty or out-of-bounds
- *    contributes an edge segment.  These segments are chained into closed
- *    polylines, so interior islands, platforms, and holes all produce their
- *    own outline — not just the crude outer cave envelope.
+ *    for every solid tile, each neighbor that is empty OR out-of-bounds
+ *    contributes an edge segment.  Out-of-bounds neighbors are treated as
+ *    air so that the outer room boundary is fully visible on the map.
+ *    These segments are chained into closed polylines, so interior islands,
+ *    platforms, and holes all produce their own outline.
  *  - Multiple contours per room are fully supported; the single-contour
  *    scanline-envelope approach has been replaced.
  *  - All jitter is deterministic: derived from the room ID hash, contour
@@ -158,10 +159,11 @@ export function invalidateRoomContour(roomId: string): void {
  * Algorithm:
  * 1. Rasterize all non-invisible walls into a boolean solid grid.
  * 2. For each solid tile, inspect its four axis-aligned neighbors.
- *    If a neighbor is out of bounds or empty, emit the corresponding tile edge
- *    as a directed segment.  This produces outlines around all exposed wall
- *    boundaries, including interior platforms, islands, and holes — not just
- *    a crude outer cave envelope.
+ *    If a neighbor is out of bounds (treated as air) or empty, emit the
+ *    corresponding tile edge as a directed segment.  This produces outlines
+ *    around all exposed wall boundaries — including the outer room perimeter,
+ *    interior platforms, islands, and holes — giving the complete room
+ *    silhouette on the world map.
  * 3. Chain directed segments into closed polylines via a directed adjacency
  *    graph.  Multiple disjoint contours per room are fully supported.
  * 4. Remove collinear intermediate vertices (consecutive points sharing the
@@ -232,19 +234,28 @@ function buildRoomContour(room: RoomDef): ContourData {
   for (let gy = 0; gy < h; gy++) {
     for (let gx = 0; gx < w; gx++) {
       if (solid[gy * w + gx] !== 1) continue;
-      // Top edge: emit only when the top neighbor tile is an in-bounds air tile.
-      // We deliberately do NOT emit for out-of-bounds neighbors — those edges lie
-      // on the outer room boundary rectangle and must not appear on the world map.
-      if (gy > 0 && solid[(gy - 1) * w + gx] === 0)
+      // Emit an edge for each face of this solid tile that borders either:
+      //   (a) an in-bounds empty tile, or
+      //   (b) the room boundary (out-of-bounds — treated as air).
+      // Out-of-bounds neighbors must be treated as air so that the outer
+      // boundary of the room silhouette is fully visible on the world map.
+      // Suppressing boundary-facing edges (the previous approach) was
+      // intended to avoid a plain outer rectangle, but it caused the top
+      // and right edges of rooms to be systematically invisible, which is
+      // the top-right clipping bug.
+      //
+      // Edge direction convention (Y-down screen space, solid tile on left):
+      //   Top    (gx,gy)   → (gx+1, gy)
+      //   Right  (gx+1,gy) → (gx+1, gy+1)
+      //   Bottom (gx+1,gy+1) → (gx, gy+1)
+      //   Left   (gx,gy+1) → (gx, gy)
+      if (gy === 0 || solid[(gy - 1) * w + gx] === 0)
         addEdge(gx, gy, gx + 1, gy);
-      // Right edge: emit only when the right neighbor is an in-bounds air tile.
-      if (gx < w - 1 && solid[gy * w + (gx + 1)] === 0)
+      if (gx === w - 1 || solid[gy * w + (gx + 1)] === 0)
         addEdge(gx + 1, gy, gx + 1, gy + 1);
-      // Bottom edge: emit only when the bottom neighbor is an in-bounds air tile.
-      if (gy < h - 1 && solid[(gy + 1) * w + gx] === 0)
+      if (gy === h - 1 || solid[(gy + 1) * w + gx] === 0)
         addEdge(gx + 1, gy + 1, gx, gy + 1);
-      // Left edge: emit only when the left neighbor is an in-bounds air tile.
-      if (gx > 0 && solid[gy * w + (gx - 1)] === 0)
+      if (gx === 0 || solid[gy * w + (gx - 1)] === 0)
         addEdge(gx, gy + 1, gx, gy);
     }
   }
