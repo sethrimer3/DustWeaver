@@ -8,6 +8,7 @@
  *  - Only exposed top edges receive the wave-surface animation.
  *  - Sparse rising bubbles are emitted per body (not per tile).
  *  - Lava sparks emit only from exposed edges, not from interior tiles.
+ *    Spark pool, tick, draw, and emit logic live in lavaSparkSystem.ts.
  *
  * Coordinate note: WorldState positions are in world units (1 wu = 1 virtual
  * pixel at zoom 1.0). All drawing uses (world × zoom + offset) transform.
@@ -38,19 +39,14 @@ import {
   tickPlayerWaterBubbles,
   drawPlayerWaterBubbles,
 } from './playerWaterBubbles';
-
-// ── Lava spark particles ──────────────────────────────────────────────────────
-
-/** Maximum active lava sparks. */
-const MAX_SPARKS = 256;
-/** Spark gravity (world units per tick²). */
-const SPARK_GRAVITY = 0.10;
-/** Spark lifetime in ticks. */
-const SPARK_LIFETIME_TICKS = 28;
-/** Emission probability per exposed-edge-block per tick. */
-const SPARK_EMIT_PROB = 0.055;
-/** Maximum initial spark speed (world units per tick). */
-const SPARK_SPEED_MAX = 1.4;
+import {
+  SPARK_SPEED_MAX,
+  SPARK_LIFETIME_TICKS,
+  tickLavaSparks,
+  drawLavaSparks,
+  emitLavaSparksFromRun,
+  emitLavaEdgeSparks,
+} from './lavaSparkSystem';
 
 // ── Wave rendering constants ──────────────────────────────────────────────────
 
@@ -59,18 +55,6 @@ const SPARK_SPEED_MAX = 1.4;
  * wave amplitude fades to zero. Prevents wave "spikes" at run endpoints.
  */
 const WAVE_TAPER_WORLD = BLOCK_SIZE_MEDIUM * 0.8;
-
-// ── Lava spark pool ───────────────────────────────────────────────────────────
-
-interface LavaSpark {
-  xWorld: number;
-  yWorld: number;
-  vxWorld: number;
-  vyWorld: number;
-  ageTicks: number;
-}
-
-const _sparks: LavaSpark[] = [];
 
 // ── Main render functions ─────────────────────────────────────────────────────
 
@@ -463,126 +447,3 @@ function drawBubbles(
   }
 }
 
-// ── Lava spark emitters ───────────────────────────────────────────────────────
-
-/**
- * Emit sparks from a single top-edge run of a lava body.
- */
-function emitLavaSparksFromRun(
-  rxWorld: number,
-  ryWorld: number,
-  rwWorld: number,
-): void {
-  const blockW = BLOCK_SIZE_MEDIUM;
-  const cells = Math.max(1, Math.round(rwWorld / blockW));
-  for (let c = 0; c < cells; c++) {
-    if (Math.random() > SPARK_EMIT_PROB) continue;
-    if (_sparks.length >= MAX_SPARKS) return;
-    const t = (c + Math.random()) / cells;
-    const px = rxWorld + t * rwWorld;
-    const speed = 0.3 + Math.random() * (SPARK_SPEED_MAX - 0.3);
-    _sparks.push({
-      xWorld: px,
-      yWorld: ryWorld,
-      vxWorld: (Math.random() - 0.5) * speed * 0.6,
-      vyWorld: -speed * (0.5 + Math.random() * 0.5),
-      ageTicks: 0,
-    });
-  }
-}
-
-/**
- * Emits sparks from exposed left/right/bottom edges of a lava body.
- * Checks each tile to see if its sides are exposed.
- */
-function emitLavaEdgeSparks(body: LiquidBody, B: number): void {
-  if (_sparks.length >= MAX_SPARKS) return;
-  const { tileSet, minXWorld, maxXWorld, minYWorld, maxYWorld } = body;
-  const minGX = Math.round(minXWorld / B);
-  const maxGX = Math.round(maxXWorld / B) - 1;
-  const minGY = Math.round(minYWorld / B);
-  const maxGY = Math.round(maxYWorld / B) - 1;
-
-  // Only check border tiles for performance
-  // Left edge
-  for (let gy = minGY; gy <= maxGY; gy++) {
-    const k = encodeKeyLocal(minGX, gy);
-    if (!tileSet.has(k)) continue;
-    if (!tileSet.has(encodeKeyLocal(minGX - 1, gy)) && Math.random() < SPARK_EMIT_PROB * 0.3) {
-      if (_sparks.length >= MAX_SPARKS) return;
-      emitSideSparkAt(minGX * B, (gy + 0.5) * B, -1, 0);
-    }
-  }
-  // Right edge
-  for (let gy = minGY; gy <= maxGY; gy++) {
-    const k = encodeKeyLocal(maxGX, gy);
-    if (!tileSet.has(k)) continue;
-    if (!tileSet.has(encodeKeyLocal(maxGX + 1, gy)) && Math.random() < SPARK_EMIT_PROB * 0.3) {
-      if (_sparks.length >= MAX_SPARKS) return;
-      emitSideSparkAt((maxGX + 1) * B, (gy + 0.5) * B, 1, 0);
-    }
-  }
-}
-
-function emitSideSparkAt(xWorld: number, yWorld: number, dirX: number, dirY: number): void {
-  const speed = 0.3 + Math.random() * (SPARK_SPEED_MAX - 0.3);
-  _sparks.push({
-    xWorld,
-    yWorld,
-    vxWorld: dirX * speed * (0.5 + Math.random() * 0.5) + (Math.random() - 0.5) * speed * 0.3,
-    vyWorld: dirY * speed + (Math.random() - 0.5) * speed * 0.5,
-    ageTicks: 0,
-  });
-}
-
-// ── Spark tick + draw ─────────────────────────────────────────────────────────
-
-function tickLavaSparks(_tick: number): void {
-  for (let i = _sparks.length - 1; i >= 0; i--) {
-    const s = _sparks[i];
-    s.ageTicks++;
-    if (s.ageTicks >= SPARK_LIFETIME_TICKS) {
-      _sparks[i] = _sparks[_sparks.length - 1];
-      _sparks.pop();
-      continue;
-    }
-    s.xWorld  += s.vxWorld;
-    s.yWorld  += s.vyWorld;
-    s.vyWorld += SPARK_GRAVITY;
-    s.vxWorld *= 0.97;
-  }
-}
-
-function drawLavaSparks(
-  ctx: CanvasRenderingContext2D,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  for (let i = 0; i < _sparks.length; i++) {
-    const s    = _sparks[i];
-    const life = 1 - s.ageTicks / SPARK_LIFETIME_TICKS;
-    const r    = 255;
-    const g    = Math.round(life * life * 200 + 30);
-    const b    = Math.round(life * life * 100);
-    const alpha = life * 0.9;
-    const sz   = (0.8 + life * 1.2) * zoom;
-    const px   = s.xWorld * zoom + offsetXPx;
-    const py   = s.yWorld * zoom + offsetYPx;
-
-    ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
-    ctx.fillRect(px - sz * 0.5, py - sz * 0.5, sz, sz);
-
-    if (life > 0.4) {
-      const glowAlpha = life * 0.25;
-      ctx.fillStyle = `rgba(${r},${g},${b},${glowAlpha.toFixed(2)})`;
-      ctx.fillRect(px - sz, py - sz, sz * 2, sz * 2);
-    }
-  }
-}
-
-// ── Local key encoder (matches liquidBodyCache.ts encoding) ───────────────────
-
-function encodeKeyLocal(gx: number, gy: number): number {
-  return (gx + 4096) * 8192 + (gy + 4096);
-}
