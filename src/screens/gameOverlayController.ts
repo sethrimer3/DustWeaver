@@ -134,8 +134,8 @@ export function createGameOverlayController(
       }
 
       player.healthPoints = player.maxHealthPoints;
-      playerHealthPoints = player.healthPoints;
       playerMaxHealthPoints = player.maxHealthPoints;
+      playerHealthPoints = playerMaxHealthPoints;
       for (let particleIndex = 0; particleIndex < world.particleCount; particleIndex++) {
         if (world.ownerEntityId[particleIndex] !== player.entityId) continue;
         if (world.isTransientFlag[particleIndex] === 1) continue;
