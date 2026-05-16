@@ -52,8 +52,6 @@ import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLig
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
 import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
 import { renderWorldBackground } from '../render/backgroundRenderer';
-import { showDeathScreen } from '../ui/deathScreen';
-import { showSkillTombMenu, showMapOnlyModal } from '../ui/skillTombMenu';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
@@ -72,7 +70,6 @@ import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { RenderProfiler } from '../render/hud/renderProfiler';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
-import { getElementProfile } from '../sim/particles/elementProfiles';
 import {
   spawnClusterParticles,
   spawnWeaveLoadoutParticles,
@@ -151,6 +148,7 @@ import {
   TRANSITION_COOLDOWN_MS,
   CAM_TRANS_DURATION_SEC,
 } from './gameCameraState';
+import { createGameOverlayController } from './gameOverlayController';
 
 const FIXED_DT_MS = 16.666;
 
@@ -874,8 +872,32 @@ export function startGameScreen(
     alwaysCenterCamera: getAlwaysCenterCamera(),
   };
 
+  const gameOverlayController = createGameOverlayController({
+    uiRoot,
+    world,
+    roomRegistry: ROOM_REGISTRY,
+    progress,
+    campaignSpawnRoom,
+    campaignSpawnBlock,
+    skillTombRenderer,
+    getCurrentRoom: () => currentRoom,
+    getCurrentRoomOrigin: () => [stagingState.currentRoomOriginXWorld, stagingState.currentRoomOriginYWorld],
+    loadRoom,
+    onResetTransitionReveal: () => { notifyFreshRoomLoaded(transitionRevealState); },
+    onResetFrameClock: () => { lastTimestampMs = 0; },
+    onExitToMainMenu: () => {
+      isRunning = false;
+      detachInput();
+      callbacks.onReturnToMenu();
+    },
+    onSave: callbacks.onSave,
+  });
+
   function openPauseMenu(): void {
-    if (isPaused || isPlayerDead || isSkillTombMenuOpen || isMapOnlyOpen) return;
+    if (isPaused
+      || gameOverlayController.state.isPlayerDead
+      || gameOverlayController.state.isSkillTombMenuOpen
+      || gameOverlayController.state.isMapOnlyOpen) return;
     isPaused = true;
     pauseMenuCleanup = showPauseMenu(uiRoot, pauseMenuState, {
       onResume: () => {
@@ -897,137 +919,6 @@ export function startGameScreen(
         if (isDebugMode) { ensureEditorButton(); } else { removeEditorButton(); }
       },
     });
-  }
-
-  // ── Death screen state ───────────────────────────────────────────────────
-  let isPlayerDead = false;
-  let deathScreenCleanup: (() => void) | null = null;
-
-  function showPlayerDeathScreen(): void {
-    if (isPlayerDead) return;
-    isPlayerDead = true;
-    deathScreenCleanup = showDeathScreen(uiRoot, {
-      onReturnToLastSave: () => {
-        isPlayerDead = false;
-        deathScreenCleanup = null;
-        // Reload from last save point or campaign spawn
-        if (progress && progress.lastSaveRoomId) {
-          const saveRoom = ROOM_REGISTRY.get(progress.lastSaveRoomId);
-          if (saveRoom && progress.lastSaveSpawnBlock) {
-            loadRoom(saveRoom, progress.lastSaveSpawnBlock[0], progress.lastSaveSpawnBlock[1]);
-          } else {
-            loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
-          }
-        } else {
-          loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
-        }
-        // Death respawn is not a transition — reset reveal to neutral.
-        notifyFreshRoomLoaded(transitionRevealState);
-        lastTimestampMs = 0;
-      },
-      onReturnToMainMenu: () => {
-        isPlayerDead = false;
-        deathScreenCleanup = null;
-        isRunning = false;
-        detachInput();
-        callbacks.onReturnToMenu();
-      },
-    });
-  }
-
-  // ── Skill tomb menu state ───────────────────────────────────────────────
-  let isSkillTombMenuOpen = false;
-  let skillTombMenuCleanup: (() => void) | null = null;
-
-  // ── Map-only modal state ────────────────────────────────────────────────
-  let isMapOnlyOpen = false;
-  let mapOnlyCleanup: (() => void) | null = null;
-
-  function openSkillTombMenu(): void {
-    if (isSkillTombMenuOpen || !progress) return;
-    // Close the map-only modal if it's open before opening the full menu.
-    if (mapOnlyCleanup !== null) {
-      mapOnlyCleanup();
-      isMapOnlyOpen = false;
-      mapOnlyCleanup = null;
-    }
-    isSkillTombMenuOpen = true;
-
-    // Save progress
-    if (callbacks.onSave) callbacks.onSave();
-
-    // Record save point
-    const player = world.clusters[0];
-    let playerXWorld = 0;
-    let playerYWorld = 0;
-    if (player) {
-      playerXWorld = player.positionXWorld;
-      playerYWorld = player.positionYWorld;
-
-      const nearbyIndex = skillTombRenderer.getNearbyTombIndex(
-        player.positionXWorld - stagingState.currentRoomOriginXWorld,
-        player.positionYWorld - stagingState.currentRoomOriginYWorld,
-      );
-      if (nearbyIndex >= 0) {
-        const tombPos = skillTombRenderer.getTombPosition(nearbyIndex);
-        if (tombPos) {
-          progress.lastSaveRoomId = currentRoom.id;
-          progress.lastSaveSpawnBlock = [
-            Math.round(tombPos.xWorld / BLOCK_SIZE_MEDIUM),
-            Math.round(tombPos.yWorld / BLOCK_SIZE_MEDIUM),
-          ];
-        }
-      }
-
-      // Heal player to full and restore all dust motes.
-      player.healthPoints = player.maxHealthPoints;
-      for (let i = 0; i < world.particleCount; i++) {
-        if (world.ownerEntityId[i] !== player.entityId) continue;
-        if (world.isTransientFlag[i] === 1) continue;
-        if (world.isAliveFlag[i] === 0 && world.respawnDelayTicks[i] > 0) {
-          // Instant respawn: set delay to 1 so the next tick's lifetime update
-          // will decrement it to 0 and trigger the respawn logic.
-          world.respawnDelayTicks[i] = 1;
-        }
-        if (world.isAliveFlag[i] === 1) {
-          // Restore durability to the particle's maximum toughness.
-          world.particleDurability[i] = getElementProfile(world.kindBuffer[i]).toughness;
-        }
-      }
-    }
-
-    skillTombMenuCleanup = showSkillTombMenu(uiRoot, progress, currentRoom.id, playerXWorld, playerYWorld, player.healthPoints, player.maxHealthPoints, {
-      onClose: (updatedLoadout, updatedWeaveLoadout) => {
-        isSkillTombMenuOpen = false;
-        skillTombMenuCleanup = null;
-        progress.loadout = updatedLoadout;
-        progress.weaveLoadout = updatedWeaveLoadout;
-        lastTimestampMs = 0;
-        // Save after closing
-        if (callbacks.onSave) callbacks.onSave();
-      },
-    });
-  }
-
-  function openMapOnly(): void {
-    if (isMapOnlyOpen || isSkillTombMenuOpen || !progress) return;
-    const player = world.clusters[0];
-    if (!player) return;
-    isMapOnlyOpen = true;
-    mapOnlyCleanup = showMapOnlyModal(
-      uiRoot,
-      progress,
-      currentRoom.id,
-      player.positionXWorld,
-      player.positionYWorld,
-      {
-        onClose: () => {
-          isMapOnlyOpen = false;
-          mapOnlyCleanup = null;
-          lastTimestampMs = 0;
-        },
-      },
-    );
   }
 
   function onResize(): void {
@@ -1156,7 +1047,7 @@ export function startGameScreen(
         skillTombRenderer, skillTombEffectRenderer,
         progress, consumedSkillTombKeySet, combatText,
         currentRoomId: currentRoom.id,
-        openMapOnly,
+        openMapOnly: gameOverlayController.openMapOnly,
         currentRoom,
         collectedDustSwarmKeySet,
         levelRng,
@@ -1184,20 +1075,22 @@ export function startGameScreen(
     }
 
     if (interactTriggered && progress) {
-      openSkillTombMenu();
+      gameOverlayController.openSkillTombMenu();
     }
 
     // Update music volume from pause menu settings
     musicManager.setVolume(pauseMenuState.musicVolume);
 
     // While paused or in a menu, still render the frozen scene but skip sim and transitions
-    if (isPaused || isSkillTombMenuOpen || isMapOnlyOpen) {
+    if (isPaused
+      || gameOverlayController.state.isSkillTombMenuOpen
+      || gameOverlayController.state.isMapOnlyOpen) {
       rafHandle = requestAnimationFrame(frame);
       return;
     }
 
     // While dead, still render the frozen scene but skip sim
-    if (isPlayerDead) {
+    if (gameOverlayController.state.isPlayerDead) {
       rafHandle = requestAnimationFrame(frame);
       return;
     }
@@ -1400,8 +1293,10 @@ export function startGameScreen(
 
     // ── Check for player death ───────────────────────────────────────────────
     const playerForDeath = world.clusters[0];
-    if (playerForDeath !== undefined && playerForDeath.isAliveFlag === 0 && !isPlayerDead) {
-      showPlayerDeathScreen();
+    if (playerForDeath !== undefined
+      && playerForDeath.isAliveFlag === 0
+      && !gameOverlayController.state.isPlayerDead) {
+      gameOverlayController.showPlayerDeathScreen();
     }
 
     // ── Crossing finalization check ──────────────────────────────────────────
@@ -1653,9 +1548,7 @@ export function startGameScreen(
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
     if (pauseMenuCleanup !== null) pauseMenuCleanup();
-    if (deathScreenCleanup !== null) deathScreenCleanup();
-    if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
-    if (mapOnlyCleanup !== null) mapOnlyCleanup();
+    gameOverlayController.destroy();
     // Stop background music and release resources
     musicManager.dispose();
     editorController.destroy();
