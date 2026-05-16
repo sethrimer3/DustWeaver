@@ -63,6 +63,8 @@ const BS = BLOCK_SIZE_MEDIUM;
 
 /** Width of the editor UI panel in CSS pixels. */
 const EDITOR_PANEL_WIDTH_CSS_PX = 260;
+/** Minimum interval between expensive room reloads during continuous drag paint/delete. */
+const MIN_DRAG_RELOAD_INTERVAL_MS = 66;
 
 export interface EditorController {
   state: EditorState;
@@ -172,6 +174,9 @@ export function createEditorController(
 
   // Cleanup function for any currently-visible "Create connected room?" popup.
   let dismissConnectPopup: (() => void) | null = null;
+  // Coalesced room reload scheduling for continuous drag paint/delete.
+  let pendingDeferredRoomReload = false;
+  let lastDeferredRoomReloadAtMs = 0;
 
   // Shared context for campaign spawn helpers (avoids repeating state/session/uiRoot).
   const campaignSpawnCtx: CampaignSpawnContext = { state, campaignSession, uiRoot };
@@ -189,6 +194,15 @@ export function createEditorController(
       return;
     }
     pendingRoomEdits.set(roomData.id, deepCloneRoomData(roomData));
+  }
+
+  function reloadRoomFromCurrentEditorData(preserveCamera = true): void {
+    if (!state.roomData) return;
+    const roomDef = editorRoomDataToRoomDef(state.roomData);
+    const sx = state.roomData.playerSpawnBlock[0];
+    const sy = state.roomData.playerSpawnBlock[1];
+    onLoadRoom(roomDef, sx, sy, preserveCamera);
+    lastDeferredRoomReloadAtMs = performance.now();
   }
 
   function discardCurrentRoomSessionChanges(roomData: EditorRoomData | null): void {
@@ -351,6 +365,7 @@ export function createEditorController(
     initialRoomIds = new Set();
     isWorldMapDirty = false;
     isCurrentRoomDirty = false;
+    pendingDeferredRoomReload = false;
     clearHistory(history);
     onEditorClose?.();
   }
@@ -407,7 +422,7 @@ export function createEditorController(
    * immediately visible.  The editor stays active; time remains frozen;
    * player and enemies revert to their spawn positions.
    */
-  function applyEdits(): void {
+  function applyEdits(reloadMode: 'immediate' | 'defer' = 'immediate'): void {
     if (!state.roomData) return;
     isCurrentRoomDirty = true;
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
@@ -416,9 +431,15 @@ export function createEditorController(
     }
     const roomDef = editorRoomDataToRoomDef(state.roomData);
     registerRoom(roomDef); // keep ROOM_REGISTRY in sync while editing
-    const sx = state.roomData.playerSpawnBlock[0];
-    const sy = state.roomData.playerSpawnBlock[1];
-    onLoadRoom(roomDef, sx, sy, true); // preserve camera while in editor
+    if (reloadMode === 'immediate') {
+      const sx = state.roomData.playerSpawnBlock[0];
+      const sy = state.roomData.playerSpawnBlock[1];
+      onLoadRoom(roomDef, sx, sy, true); // preserve camera while in editor
+      lastDeferredRoomReloadAtMs = performance.now();
+      pendingDeferredRoomReload = false;
+    } else {
+      pendingDeferredRoomReload = true;
+    }
   }
 
   // Campaign spawn management (syncCampaignSpawnBlockFromSession,
@@ -883,18 +904,29 @@ export function createEditorController(
         if (state.activeTool === EditorTool.Place) {
           const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
           placeAtCursor(state);
-          applyEdits();
+          applyEdits('defer');
           if (import.meta.env.DEV) {
             logEditorPerf('editor placement mutation', placementStartMs);
           }
         } else if (state.activeTool === EditorTool.Delete) {
           const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
           deleteAtCursor(state);
-          applyEdits();
+          applyEdits('defer');
           if (import.meta.env.DEV) {
             logEditorPerf('editor placement mutation', placementStartMs);
           }
         }
+      }
+    }
+
+    if (pendingDeferredRoomReload) {
+      const nowMs = performance.now();
+      if (
+        !inputState.isMouseDown ||
+        (nowMs - lastDeferredRoomReloadAtMs) >= MIN_DRAG_RELOAD_INTERVAL_MS
+      ) {
+        pendingDeferredRoomReload = false;
+        reloadRoomFromCurrentEditorData(true);
       }
     }
 
