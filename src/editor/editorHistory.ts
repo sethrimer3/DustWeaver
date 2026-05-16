@@ -17,7 +17,19 @@ export function createEditorHistory(): EditorHistory {
 }
 
 export function pushSnapshot(history: EditorHistory, data: EditorRoomData): void {
+  const t0 = import.meta.env.DEV ? performance.now() : 0;
   history.undoStack.push(JSON.stringify(data));
+  if (import.meta.env.DEV) {
+    const elapsedMs = performance.now() - t0;
+    const wallCount = data.interiorWalls.length;
+    if (elapsedMs > 50) {
+      console.error(`[editor-perf] ⛔ pushSnapshot: ${elapsedMs.toFixed(2)}ms (>50ms blocking!) walls=${wallCount}`);
+    } else if (elapsedMs > 16) {
+      console.warn(`[editor-perf] ⚠️ pushSnapshot: ${elapsedMs.toFixed(2)}ms (>16ms slow) walls=${wallCount}`);
+    } else {
+      console.log(`[editor-perf] pushSnapshot: ${elapsedMs.toFixed(2)}ms walls=${wallCount}`);
+    }
+  }
   if (history.undoStack.length > MAX_HISTORY_SIZE) {
     history.undoStack.shift();
   }
