@@ -49,11 +49,7 @@ import {
   ENABLE_TWO_ROOM_CAMERA_CROSSING,
 } from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
-import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
-import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
 import { renderWorldBackground } from '../render/backgroundRenderer';
-import { showDeathScreen } from '../ui/deathScreen';
-import { showSkillTombMenu, showMapOnlyModal } from '../ui/skillTombMenu';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
@@ -63,7 +59,7 @@ import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
-import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality, getAlwaysCenterCamera } from '../ui/renderSettings';
+import { getMusicVolume, getSelectedRenderSize } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
@@ -72,7 +68,6 @@ import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { RenderProfiler } from '../render/hud/renderProfiler';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
-import { getElementProfile } from '../sim/particles/elementProfiles';
 import {
   spawnClusterParticles,
   spawnWeaveLoadoutParticles,
@@ -151,6 +146,9 @@ import {
   TRANSITION_COOLDOWN_MS,
   CAM_TRANS_DURATION_SEC,
 } from './gameCameraState';
+import { createGameOverlayController } from './gameOverlayController';
+import { createGameEditorDebugControls } from './gameEditorDebugControls';
+import { createGamePauseController } from './gamePauseController';
 
 const FIXED_DT_MS = 16.666;
 
@@ -788,6 +786,7 @@ export function startGameScreen(
   }
 
   // ── World Editor ────────────────────────────────────────────────────────
+  let editorDebugControls: ReturnType<typeof createGameEditorDebugControls> | null = null;
   const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY, preserveCamera) => {
     // When playing from the editor the room's playerSpawnBlock may be inside a
     // wall (e.g. in a newly-created room or after heavy edits).  Always resolve
@@ -798,53 +797,19 @@ export function startGameScreen(
     notifyFreshRoomLoaded(transitionRevealState);
   }, () => {
     // Called when editor closes (confirm or cancel)
-    if (editorToggleBtn) {
-      editorToggleBtn.textContent = 'World Editor';
-      editorToggleBtn.style.borderColor = '#00c864';
-      editorToggleBtn.style.color = '#00c864';
-    }
+    editorDebugControls?.handleEditorClosed();
   }, campaignSession ?? null);
+
+  editorDebugControls = createGameEditorDebugControls({
+    uiRoot,
+    editorController,
+    getCurrentRoom: () => currentRoom,
+  });
 
   // Failsafe: if campaign start wiring looks broken, force-open editor visual map.
   if (shouldOpenFailsafeEditor) {
     editorController.toggle(currentRoom);
     editorController.openVisualMap();
-  }
-
-  // "World Editor" toggle button — shown when debug mode is on
-  let editorToggleBtn: HTMLButtonElement | null = null;
-  let debugPanel: DebugPanel | null = null;
-  function ensureEditorButton(): void {
-    if (editorToggleBtn !== null) return;
-    editorToggleBtn = document.createElement('button');
-    editorToggleBtn.style.cssText = `
-      position: absolute; top: 38px; right: 16px;
-      background: rgba(0,0,0,0.6); border: 2px solid #00c864; color: #00c864;
-      padding: 6px 14px; font-size: 0.85rem; font-family: 'Cinzel', serif;
-      cursor: pointer; border-radius: 6px; z-index: 800;
-    `;
-    editorToggleBtn.textContent = 'World Editor';
-    editorToggleBtn.addEventListener('click', () => {
-      editorController.toggle(currentRoom);
-      editorToggleBtn!.textContent = editorController.state.isActive ? 'Exit Editor' : 'World Editor';
-      editorToggleBtn!.style.borderColor = editorController.state.isActive ? '#ff6644' : '#00c864';
-      editorToggleBtn!.style.color = editorController.state.isActive ? '#ff6644' : '#00c864';
-    });
-    uiRoot.appendChild(editorToggleBtn);
-    // Show debug speed panel alongside editor button
-    if (debugPanel === null) {
-      debugPanel = createDebugPanel(uiRoot);
-    }
-  }
-  function removeEditorButton(): void {
-    if (editorToggleBtn !== null && editorToggleBtn.parentElement) {
-      editorToggleBtn.parentElement.removeChild(editorToggleBtn);
-      editorToggleBtn = null;
-    }
-    if (debugPanel !== null) {
-      debugPanel.destroy();
-      debugPanel = null;
-    }
   }
 
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
@@ -863,172 +828,48 @@ export function startGameScreen(
   // gameAdaptiveQuality.ts so the state machine can be reasoned about in isolation.
   const aqState: AdaptiveQualityState = createAdaptiveQualityState();
 
-  let isPaused = false;
-  let pauseMenuCleanup: (() => void) | null = null;
-  let isDebugMode = false;
-  const pauseMenuState: PauseMenuState = {
-    isDebugOn: false,
-    musicVolume: getMusicVolume(),
-    sfxVolume: getSfxVolume(),
-    graphicsQuality: getGraphicsQuality(),
-    alwaysCenterCamera: getAlwaysCenterCamera(),
-  };
+  const gameOverlayController = createGameOverlayController({
+    uiRoot,
+    world,
+    roomRegistry: ROOM_REGISTRY,
+    progress,
+    campaignSpawnRoom,
+    campaignSpawnBlock,
+    skillTombRenderer,
+    getCurrentRoom: () => currentRoom,
+    getCurrentRoomOrigin: () => [stagingState.currentRoomOriginXWorld, stagingState.currentRoomOriginYWorld],
+    loadRoom,
+    onResetTransitionReveal: () => { notifyFreshRoomLoaded(transitionRevealState); },
+    onResetFrameClock: () => { lastTimestampMs = 0; },
+    onExitToMainMenu: () => {
+      isRunning = false;
+      detachInput();
+      callbacks.onReturnToMenu();
+    },
+    onSave: callbacks.onSave,
+  });
 
-  function openPauseMenu(): void {
-    if (isPaused || isPlayerDead || isSkillTombMenuOpen || isMapOnlyOpen) return;
-    isPaused = true;
-    pauseMenuCleanup = showPauseMenu(uiRoot, pauseMenuState, {
-      onResume: () => {
-        isPaused = false;
-        pauseMenuCleanup = null;
-        // Reset timestamp so elapsed doesn't include paused time
-        lastTimestampMs = 0;
-      },
-      onExitToMainMenu: () => {
-        isPaused = false;
-        pauseMenuCleanup = null;
-        isRunning = false;
-        detachInput();
-        callbacks.onReturnToMenu();
-      },
-      onToggleDebug: () => {
-        isDebugMode = !isDebugMode;
-        pauseMenuState.isDebugOn = isDebugMode;
-        if (isDebugMode) { ensureEditorButton(); } else { removeEditorButton(); }
-      },
-    });
-  }
-
-  // ── Death screen state ───────────────────────────────────────────────────
-  let isPlayerDead = false;
-  let deathScreenCleanup: (() => void) | null = null;
-
-  function showPlayerDeathScreen(): void {
-    if (isPlayerDead) return;
-    isPlayerDead = true;
-    deathScreenCleanup = showDeathScreen(uiRoot, {
-      onReturnToLastSave: () => {
-        isPlayerDead = false;
-        deathScreenCleanup = null;
-        // Reload from last save point or campaign spawn
-        if (progress && progress.lastSaveRoomId) {
-          const saveRoom = ROOM_REGISTRY.get(progress.lastSaveRoomId);
-          if (saveRoom && progress.lastSaveSpawnBlock) {
-            loadRoom(saveRoom, progress.lastSaveSpawnBlock[0], progress.lastSaveSpawnBlock[1]);
-          } else {
-            loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
-          }
-        } else {
-          loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
-        }
-        // Death respawn is not a transition — reset reveal to neutral.
-        notifyFreshRoomLoaded(transitionRevealState);
-        lastTimestampMs = 0;
-      },
-      onReturnToMainMenu: () => {
-        isPlayerDead = false;
-        deathScreenCleanup = null;
-        isRunning = false;
-        detachInput();
-        callbacks.onReturnToMenu();
-      },
-    });
-  }
-
-  // ── Skill tomb menu state ───────────────────────────────────────────────
-  let isSkillTombMenuOpen = false;
-  let skillTombMenuCleanup: (() => void) | null = null;
-
-  // ── Map-only modal state ────────────────────────────────────────────────
-  let isMapOnlyOpen = false;
-  let mapOnlyCleanup: (() => void) | null = null;
-
-  function openSkillTombMenu(): void {
-    if (isSkillTombMenuOpen || !progress) return;
-    // Close the map-only modal if it's open before opening the full menu.
-    if (mapOnlyCleanup !== null) {
-      mapOnlyCleanup();
-      isMapOnlyOpen = false;
-      mapOnlyCleanup = null;
-    }
-    isSkillTombMenuOpen = true;
-
-    // Save progress
-    if (callbacks.onSave) callbacks.onSave();
-
-    // Record save point
-    const player = world.clusters[0];
-    let playerXWorld = 0;
-    let playerYWorld = 0;
-    if (player) {
-      playerXWorld = player.positionXWorld;
-      playerYWorld = player.positionYWorld;
-
-      const nearbyIndex = skillTombRenderer.getNearbyTombIndex(
-        player.positionXWorld - stagingState.currentRoomOriginXWorld,
-        player.positionYWorld - stagingState.currentRoomOriginYWorld,
-      );
-      if (nearbyIndex >= 0) {
-        const tombPos = skillTombRenderer.getTombPosition(nearbyIndex);
-        if (tombPos) {
-          progress.lastSaveRoomId = currentRoom.id;
-          progress.lastSaveSpawnBlock = [
-            Math.round(tombPos.xWorld / BLOCK_SIZE_MEDIUM),
-            Math.round(tombPos.yWorld / BLOCK_SIZE_MEDIUM),
-          ];
-        }
+  const pauseController = createGamePauseController({
+    uiRoot,
+    canOpenPauseMenu: () => !gameOverlayController.state.isPlayerDead
+      && !gameOverlayController.state.isSkillTombMenuOpen
+      && !gameOverlayController.state.isMapOnlyOpen,
+    onResetFrameClock: () => {
+      lastTimestampMs = 0;
+    },
+    onExitToMainMenu: () => {
+      isRunning = false;
+      detachInput();
+      callbacks.onReturnToMenu();
+    },
+    onDebugModeChanged: (isDebugMode) => {
+      if (isDebugMode) {
+        editorDebugControls?.ensureEditorButton();
+      } else {
+        editorDebugControls?.removeEditorButton();
       }
-
-      // Heal player to full and restore all dust motes.
-      player.healthPoints = player.maxHealthPoints;
-      for (let i = 0; i < world.particleCount; i++) {
-        if (world.ownerEntityId[i] !== player.entityId) continue;
-        if (world.isTransientFlag[i] === 1) continue;
-        if (world.isAliveFlag[i] === 0 && world.respawnDelayTicks[i] > 0) {
-          // Instant respawn: set delay to 1 so the next tick's lifetime update
-          // will decrement it to 0 and trigger the respawn logic.
-          world.respawnDelayTicks[i] = 1;
-        }
-        if (world.isAliveFlag[i] === 1) {
-          // Restore durability to the particle's maximum toughness.
-          world.particleDurability[i] = getElementProfile(world.kindBuffer[i]).toughness;
-        }
-      }
-    }
-
-    skillTombMenuCleanup = showSkillTombMenu(uiRoot, progress, currentRoom.id, playerXWorld, playerYWorld, player.healthPoints, player.maxHealthPoints, {
-      onClose: (updatedLoadout, updatedWeaveLoadout) => {
-        isSkillTombMenuOpen = false;
-        skillTombMenuCleanup = null;
-        progress.loadout = updatedLoadout;
-        progress.weaveLoadout = updatedWeaveLoadout;
-        lastTimestampMs = 0;
-        // Save after closing
-        if (callbacks.onSave) callbacks.onSave();
-      },
-    });
-  }
-
-  function openMapOnly(): void {
-    if (isMapOnlyOpen || isSkillTombMenuOpen || !progress) return;
-    const player = world.clusters[0];
-    if (!player) return;
-    isMapOnlyOpen = true;
-    mapOnlyCleanup = showMapOnlyModal(
-      uiRoot,
-      progress,
-      currentRoom.id,
-      player.positionXWorld,
-      player.positionYWorld,
-      {
-        onClose: () => {
-          isMapOnlyOpen = false;
-          mapOnlyCleanup = null;
-          lastTimestampMs = 0;
-        },
-      },
-    );
-  }
+    },
+  });
 
   function onResize(): void {
     resizeCanvas();
@@ -1128,7 +969,7 @@ export function startGameScreen(
         // Draw editor overlays on top
         editorController.render(ctx, eox, eoy, zoom, virtualWidthPx, virtualHeightPx);
 
-        if (isDebugMode) {
+        if (pauseController.state.isDebugMode) {
           renderHudOverlay(ctx, hudState);
         }
 
@@ -1156,7 +997,7 @@ export function startGameScreen(
         skillTombRenderer, skillTombEffectRenderer,
         progress, consumedSkillTombKeySet, combatText,
         currentRoomId: currentRoom.id,
-        openMapOnly,
+        openMapOnly: gameOverlayController.openMapOnly,
         currentRoom,
         collectedDustSwarmKeySet,
         levelRng,
@@ -1180,24 +1021,26 @@ export function startGameScreen(
     }
 
     if (openPause) {
-      openPauseMenu();
+      pauseController.openPauseMenu();
     }
 
     if (interactTriggered && progress) {
-      openSkillTombMenu();
+      gameOverlayController.openSkillTombMenu();
     }
 
     // Update music volume from pause menu settings
-    musicManager.setVolume(pauseMenuState.musicVolume);
+    musicManager.setVolume(pauseController.state.pauseMenuState.musicVolume);
 
     // While paused or in a menu, still render the frozen scene but skip sim and transitions
-    if (isPaused || isSkillTombMenuOpen || isMapOnlyOpen) {
+    if (pauseController.state.isPaused
+      || gameOverlayController.state.isSkillTombMenuOpen
+      || gameOverlayController.state.isMapOnlyOpen) {
       rafHandle = requestAnimationFrame(frame);
       return;
     }
 
     // While dead, still render the frozen scene but skip sim
-    if (isPlayerDead) {
+    if (gameOverlayController.state.isPlayerDead) {
       rafHandle = requestAnimationFrame(frame);
       return;
     }
@@ -1400,8 +1243,10 @@ export function startGameScreen(
 
     // ── Check for player death ───────────────────────────────────────────────
     const playerForDeath = world.clusters[0];
-    if (playerForDeath !== undefined && playerForDeath.isAliveFlag === 0 && !isPlayerDead) {
-      showPlayerDeathScreen();
+    if (playerForDeath !== undefined
+      && playerForDeath.isAliveFlag === 0
+      && !gameOverlayController.state.isPlayerDead) {
+      gameOverlayController.showPlayerDeathScreen();
     }
 
     // ── Crossing finalization check ──────────────────────────────────────────
@@ -1458,7 +1303,7 @@ export function startGameScreen(
         virtualWidthPx,
         virtualHeightPx,
         elapsedMs,
-        pauseMenuState.alwaysCenterCamera,
+        pauseController.state.pauseMenuState.alwaysCenterCamera,
       );
     }
 
@@ -1503,7 +1348,7 @@ export function startGameScreen(
     hudState.particleCount = aliveCount;
 
     // ── Populate movement debug state from the player cluster ─────────────────
-    if (isDebugMode) {
+    if (pauseController.state.isDebugMode) {
       hudState.debug = buildHudDebugState(world, inputState, interactInputPulseMs);
     } else {
       hudState.debug = undefined;
@@ -1570,7 +1415,7 @@ export function startGameScreen(
     }
 
     // ── Transition debug stats ────────────────────────────────────────────
-    if (isDebugMode && renderProfiler !== undefined) {
+    if (pauseController.state.isDebugMode && renderProfiler !== undefined) {
       const camTransProgress = camState.isTransitionActive ? Math.min(1, camState.transitionElapsedSec / CAM_TRANS_DURATION_SEC) : 0;
       const debugStats: TransitionDebugStats = {
         currentRoomId: currentRoom.id,
@@ -1602,7 +1447,7 @@ export function startGameScreen(
       cachedDecorationCenterX,
       cachedDecorationCenterY,
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,
-      bgColor, isDebugMode, hudState, inputState,
+      bgColor, isDebugMode: pauseController.state.isDebugMode, hudState, inputState,
       prevHealthMap, healthBarDisplayUntilTick,
       combatText, prevLastPlayerBlockedTick,
       collectedDustContainerKeySet,
@@ -1614,7 +1459,7 @@ export function startGameScreen(
       teleportFlashAlpha,
       setTeleportFlashAlpha: (a: number) => { teleportFlashAlpha = a; },
       getPlayerDustCount,
-      graphicsQuality: pauseMenuState.graphicsQuality,
+      graphicsQuality: pauseController.state.pauseMenuState.graphicsQuality,
       isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,
       isDeepReductionActive: aqState.isDeepReductionActive,
       renderProfiler,
@@ -1630,7 +1475,7 @@ export function startGameScreen(
       crossingUnionMinYWorld: renderUnionBounds?.minYWorld ?? 0,
       crossingUnionMaxXWorld: renderUnionBounds?.maxXWorld ?? roomWidthWorld,
       crossingUnionMaxYWorld: renderUnionBounds?.maxYWorld ?? roomHeightWorld,
-      alwaysCenterCamera: pauseMenuState.alwaysCenterCamera,
+      alwaysCenterCamera: pauseController.state.pauseMenuState.alwaysCenterCamera,
       // Staged room background info for seamless crossing rendering.
       stagedRoom: stagingState.stagedRooms.length > 0 ? stagingState.stagedRooms[0] : null,
     });
@@ -1652,14 +1497,12 @@ export function startGameScreen(
     window.removeEventListener('touchstart',  _onAudioUnlockGesture);
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
-    if (pauseMenuCleanup !== null) pauseMenuCleanup();
-    if (deathScreenCleanup !== null) deathScreenCleanup();
-    if (skillTombMenuCleanup !== null) skillTombMenuCleanup();
-    if (mapOnlyCleanup !== null) mapOnlyCleanup();
+    pauseController.destroy();
+    gameOverlayController.destroy();
     // Stop background music and release resources
     musicManager.dispose();
     editorController.destroy();
-    removeEditorButton();
+    editorDebugControls?.destroy();
     detachInput();
     webglRenderer.dispose();
     dialogueRenderer.destroy();
