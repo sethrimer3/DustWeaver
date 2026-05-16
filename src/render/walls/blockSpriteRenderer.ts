@@ -69,6 +69,9 @@ import {
   renderHalfPillarPass,
 } from './wallTilePassRenderers';
 
+// Re-export dark-blocker helpers so existing call-sites keep their import path.
+export { setActiveDarkAmbientBlockers, renderDarkAmbientBlockerOverlay } from './darkBlockerOverlay';
+
 /** Active sprite set for world-number mode. */
 let _sprites: BlockSpriteSet = getBlockSpriteSet(0);
 let _activeWorldNumber = 0;
@@ -94,14 +97,6 @@ let _activeAmbientBlockerKeys: ReadonlySet<string> = new Set();
  * when rebuilding the wall-layout cache. Set to `''` when the set is empty.
  */
 let _activeAmbientBlockerSig = '';
-
-/**
- * Dark ambient-light blocker tile keys (`"col,row"`).
- * These cells draw a solid black overlay over the room background,
- * hiding secret areas from view.  They also participate in the normal
- * ambient-light propagation block (same as clear blockers).
- */
-let _activeDarkBlockerKeys: ReadonlySet<string> = new Set();
 
 /**
  * Set the active world number for block sprite rendering.
@@ -187,117 +182,6 @@ export function setActiveBlockLighting(
   }
 
   _invalidateBakedWallCanvas();
-}
-
-/**
- * Sets the active set of dark ambient-light blocker tile keys.
- * Dark blockers are rendered as solid black overlays over the room background
- * before the wall sprites are drawn.  Call this when entering a room (same
- * timing as {@link setActiveBlockLighting}).
- *
- * @param darkBlockerKeys  Set of `"col,row"` tile keys for dark blockers.
- *                         Pass `undefined` or an empty set to clear.
- */
-export function setActiveDarkAmbientBlockers(darkBlockerKeys?: ReadonlySet<string>): void {
-  _activeDarkBlockerKeys = darkBlockerKeys ?? new Set();
-  // Rebuild merged spans lazily on next renderDarkAmbientBlockerOverlay call.
-  _darkBlockerSpansDirty = true;
-}
-
-// ── Dark-blocker merged-span cache ────────────────────────────────────────────
-//
-// Pre-merges adjacent cells in the same row into horizontal spans so the
-// overlay render loop issues far fewer fillRect calls (and skips string
-// parsing entirely after the initial build).  Rebuilt once when the blocker
-// set changes (typically once per room load).
-//
-// Each span is stored as three consecutive entries in _darkBlockerSpans:
-//   [col, row, width]  (all in tile-grid units)
-
-/** Packed [col, row, width] triplets for the merged horizontal spans. */
-let _darkBlockerSpans = new Float32Array(0);
-/** Number of valid [col, row, width] triplet entries in _darkBlockerSpans. */
-let _darkBlockerSpanCount = 0;
-/** True when _activeDarkBlockerKeys has changed and spans need rebuilding. */
-let _darkBlockerSpansDirty = true;
-
-function _rebuildDarkBlockerSpans(): void {
-  _darkBlockerSpansDirty = false;
-  const keys = _activeDarkBlockerKeys;
-  if (keys.size === 0) {
-    _darkBlockerSpanCount = 0;
-    return;
-  }
-
-  // Group cells by row.
-  const byRow = new Map<number, number[]>();
-  for (const key of keys) {
-    const ci  = key.indexOf(',');
-    const col = parseInt(key.slice(0, ci), 10);
-    const row = parseInt(key.slice(ci + 1), 10);
-    let arr = byRow.get(row);
-    if (arr === undefined) { arr = []; byRow.set(row, arr); }
-    arr.push(col);
-  }
-
-  // For each row, sort columns and merge adjacent cells into horizontal spans.
-  const spans: number[] = [];
-  for (const [row, cols] of byRow) {
-    cols.sort((a, b) => a - b);
-    let start = cols[0];
-    let len   = 1;
-    for (let i = 1; i < cols.length; i++) {
-      if (cols[i] === start + len) {
-        len++;
-      } else {
-        spans.push(start, row, len);
-        start = cols[i];
-        len   = 1;
-      }
-    }
-    spans.push(start, row, len);
-  }
-
-  // Pack into a pre-allocated typed array (grow if needed).
-  const needed = spans.length;
-  if (needed > _darkBlockerSpans.length) {
-    _darkBlockerSpans = new Float32Array(needed + 64);
-  }
-  for (let i = 0; i < needed; i++) _darkBlockerSpans[i] = spans[i];
-  _darkBlockerSpanCount = (needed / 3) | 0;
-}
-
-/**
- * Draws a solid black rectangle over every dark ambient-light blocker cell.
- * Uses pre-merged horizontal spans for efficiency and viewport-culls spans
- * that are fully outside the current camera view.
- */
-export function renderDarkAmbientBlockerOverlay(
-  ctx: CanvasRenderingContext2D,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-  blockSizePx: number,
-): void {
-  if (_activeDarkBlockerKeys.size === 0) return;
-  if (_darkBlockerSpansDirty) _rebuildDarkBlockerSpans();
-  if (_darkBlockerSpanCount === 0) return;
-
-  const tileSizePx = blockSizePx * zoom;
-  ctx.fillStyle = '#000000';
-
-  for (let i = 0; i < _darkBlockerSpanCount; i++) {
-    const col   = _darkBlockerSpans[i * 3];
-    const row   = _darkBlockerSpans[i * 3 + 1];
-    const width = _darkBlockerSpans[i * 3 + 2];
-    const sx = Math.round(col   * tileSizePx + offsetXPx);
-    const sy = Math.round(row   * tileSizePx + offsetYPx);
-    const sw = Math.ceil(width  * tileSizePx);
-    const sh = Math.ceil(tileSizePx);
-    // Viewport cull: skip spans entirely off-screen.
-    if (sx + sw <= 0 || sy + sh <= 0 || sx >= _vpWPx || sy >= _vpHPx) continue;
-    ctx.fillRect(sx, sy, sw, sh);
-  }
 }
 
 // ── Per-frame reusable collections (pre-allocated to avoid GC pressure) ───────
