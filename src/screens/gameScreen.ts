@@ -50,7 +50,6 @@ import {
 } from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
 import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
-import { createDebugPanel, DebugPanel } from '../ui/debugPanel';
 import { renderWorldBackground } from '../render/backgroundRenderer';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
@@ -149,6 +148,7 @@ import {
   CAM_TRANS_DURATION_SEC,
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
+import { createGameEditorDebugControls } from './gameEditorDebugControls';
 
 const FIXED_DT_MS = 16.666;
 
@@ -786,6 +786,7 @@ export function startGameScreen(
   }
 
   // ── World Editor ────────────────────────────────────────────────────────
+  let editorDebugControls: ReturnType<typeof createGameEditorDebugControls> | null = null;
   const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY, preserveCamera) => {
     // When playing from the editor the room's playerSpawnBlock may be inside a
     // wall (e.g. in a newly-created room or after heavy edits).  Always resolve
@@ -796,53 +797,19 @@ export function startGameScreen(
     notifyFreshRoomLoaded(transitionRevealState);
   }, () => {
     // Called when editor closes (confirm or cancel)
-    if (editorToggleBtn) {
-      editorToggleBtn.textContent = 'World Editor';
-      editorToggleBtn.style.borderColor = '#00c864';
-      editorToggleBtn.style.color = '#00c864';
-    }
+    editorDebugControls?.handleEditorClosed();
   }, campaignSession ?? null);
+
+  editorDebugControls = createGameEditorDebugControls({
+    uiRoot,
+    editorController,
+    getCurrentRoom: () => currentRoom,
+  });
 
   // Failsafe: if campaign start wiring looks broken, force-open editor visual map.
   if (shouldOpenFailsafeEditor) {
     editorController.toggle(currentRoom);
     editorController.openVisualMap();
-  }
-
-  // "World Editor" toggle button — shown when debug mode is on
-  let editorToggleBtn: HTMLButtonElement | null = null;
-  let debugPanel: DebugPanel | null = null;
-  function ensureEditorButton(): void {
-    if (editorToggleBtn !== null) return;
-    editorToggleBtn = document.createElement('button');
-    editorToggleBtn.style.cssText = `
-      position: absolute; top: 38px; right: 16px;
-      background: rgba(0,0,0,0.6); border: 2px solid #00c864; color: #00c864;
-      padding: 6px 14px; font-size: 0.85rem; font-family: 'Cinzel', serif;
-      cursor: pointer; border-radius: 6px; z-index: 800;
-    `;
-    editorToggleBtn.textContent = 'World Editor';
-    editorToggleBtn.addEventListener('click', () => {
-      editorController.toggle(currentRoom);
-      editorToggleBtn!.textContent = editorController.state.isActive ? 'Exit Editor' : 'World Editor';
-      editorToggleBtn!.style.borderColor = editorController.state.isActive ? '#ff6644' : '#00c864';
-      editorToggleBtn!.style.color = editorController.state.isActive ? '#ff6644' : '#00c864';
-    });
-    uiRoot.appendChild(editorToggleBtn);
-    // Show debug speed panel alongside editor button
-    if (debugPanel === null) {
-      debugPanel = createDebugPanel(uiRoot);
-    }
-  }
-  function removeEditorButton(): void {
-    if (editorToggleBtn !== null && editorToggleBtn.parentElement) {
-      editorToggleBtn.parentElement.removeChild(editorToggleBtn);
-      editorToggleBtn = null;
-    }
-    if (debugPanel !== null) {
-      debugPanel.destroy();
-      debugPanel = null;
-    }
   }
 
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
@@ -916,7 +883,7 @@ export function startGameScreen(
       onToggleDebug: () => {
         isDebugMode = !isDebugMode;
         pauseMenuState.isDebugOn = isDebugMode;
-        if (isDebugMode) { ensureEditorButton(); } else { removeEditorButton(); }
+        if (isDebugMode) { editorDebugControls?.ensureEditorButton(); } else { editorDebugControls?.removeEditorButton(); }
       },
     });
   }
@@ -1552,7 +1519,7 @@ export function startGameScreen(
     // Stop background music and release resources
     musicManager.dispose();
     editorController.destroy();
-    removeEditorButton();
+    editorDebugControls?.destroy();
     detachInput();
     webglRenderer.dispose();
     dialogueRenderer.destroy();
