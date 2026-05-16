@@ -381,14 +381,14 @@ export function updateTombDust(
         const particleA = tomb.dustParticles[particleIndexA];
         for (let particleIndexB = particleIndexA + 1; particleIndexB < tomb.dustParticles.length; particleIndexB++) {
           const particleB = tomb.dustParticles[particleIndexB];
-          const particleDx = particleB.xWorld - particleA.xWorld;
-          const particleDy = particleB.yWorld - particleA.yWorld;
-          const particleDistSq = particleDx * particleDx + particleDy * particleDy;
-          if (particleDistSq >= contactDistSq || particleDistSq < 0.0001) continue;
-          const dist = Math.sqrt(particleDistSq);
+          const dx = particleB.xWorld - particleA.xWorld;
+          const dy = particleB.yWorld - particleA.yWorld;
+          const distSq = dx * dx + dy * dy;
+          if (distSq >= contactDistSq || distSq < 0.0001) continue;
+          const dist = Math.sqrt(distSq);
           const overlap = contactDist - dist;
-          const nx = particleDx / dist;
-          const ny = particleDy / dist;
+          const nx = dx / dist;
+          const ny = dy / dist;
 
           if (particleA.isGroundedFlag && particleB.isGroundedFlag) {
             // Both grounded: push apart horizontally only

@@ -166,7 +166,9 @@ export function drawLavaSparks(
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/** Local tile key encoder — matches the encoding used in liquidBodyCache.ts. */
+/** Local tile key encoder — matches the encoding used in liquidBodyCache.ts.
+ * Maps grid coordinates in the range [-4096, 4095] to unique integer keys:
+ * (gx + 4096) shifts gx to [0, 8191]; multiplying by 8192 leaves room for gy. */
 function _encodeKeyLocal(gx: number, gy: number): number {
   return (gx + 4096) * 8192 + (gy + 4096);
 }
