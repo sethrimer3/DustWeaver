@@ -26,40 +26,20 @@ export type { ChunkCacheStats } from './chunkRenderCache';
 import type { BlockTheme, LightingEffect, AmbientLightDirection } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 import {
-  getBlockSprite1x1,
-  OPEN_AIR_SIDE_N,
-  OPEN_AIR_SIDE_E,
-  OPEN_AIR_SIDE_S,
-  OPEN_AIR_SIDE_W,
-} from './proceduralBlockSprite';
-import {
   buildAmbientDepths,
 } from './ambientLightDepths';
 import {
-  isSpriteReady,
   BlockSpriteSet,
   getBlockSpriteSet,
   themeSupports2x2,
-  getSpriteForLegacyTheme,
   themeToProceduralMaterial,
 } from './blockSpriteSets';
-import {
-  isFolderBasedTheme,
-  getTheme1x1SpriteShaded,
-} from './folderBlockThemes';
 import {
   CachedWallLayout,
   wallTileKey,
   getWallLayoutCache,
 } from './blockWallLayoutCache';
-import {
-  drawFallbackTile,
-  TILE_MASK_N,
-  TILE_MASK_E,
-  TILE_MASK_S,
-  TILE_MASK_W,
-  TILE_TABLE,
-} from './wallTileDrawHelpers';
+import { renderSingleExtensionTileWithState } from './extensionTileRenderer';
 import {
   type WallTilePassContext,
   render2x2Pass,
@@ -68,6 +48,9 @@ import {
   renderRampPass,
   renderHalfPillarPass,
 } from './wallTilePassRenderers';
+
+// Re-export dark-blocker helpers so existing call-sites keep their import path.
+export { setActiveDarkAmbientBlockers, renderDarkAmbientBlockerOverlay } from './darkBlockerOverlay';
 
 /** Active sprite set for world-number mode. */
 let _sprites: BlockSpriteSet = getBlockSpriteSet(0);
@@ -94,14 +77,6 @@ let _activeAmbientBlockerKeys: ReadonlySet<string> = new Set();
  * when rebuilding the wall-layout cache. Set to `''` when the set is empty.
  */
 let _activeAmbientBlockerSig = '';
-
-/**
- * Dark ambient-light blocker tile keys (`"col,row"`).
- * These cells draw a solid black overlay over the room background,
- * hiding secret areas from view.  They also participate in the normal
- * ambient-light propagation block (same as clear blockers).
- */
-let _activeDarkBlockerKeys: ReadonlySet<string> = new Set();
 
 /**
  * Set the active world number for block sprite rendering.
@@ -187,117 +162,6 @@ export function setActiveBlockLighting(
   }
 
   _invalidateBakedWallCanvas();
-}
-
-/**
- * Sets the active set of dark ambient-light blocker tile keys.
- * Dark blockers are rendered as solid black overlays over the room background
- * before the wall sprites are drawn.  Call this when entering a room (same
- * timing as {@link setActiveBlockLighting}).
- *
- * @param darkBlockerKeys  Set of `"col,row"` tile keys for dark blockers.
- *                         Pass `undefined` or an empty set to clear.
- */
-export function setActiveDarkAmbientBlockers(darkBlockerKeys?: ReadonlySet<string>): void {
-  _activeDarkBlockerKeys = darkBlockerKeys ?? new Set();
-  // Rebuild merged spans lazily on next renderDarkAmbientBlockerOverlay call.
-  _darkBlockerSpansDirty = true;
-}
-
-// ── Dark-blocker merged-span cache ────────────────────────────────────────────
-//
-// Pre-merges adjacent cells in the same row into horizontal spans so the
-// overlay render loop issues far fewer fillRect calls (and skips string
-// parsing entirely after the initial build).  Rebuilt once when the blocker
-// set changes (typically once per room load).
-//
-// Each span is stored as three consecutive entries in _darkBlockerSpans:
-//   [col, row, width]  (all in tile-grid units)
-
-/** Packed [col, row, width] triplets for the merged horizontal spans. */
-let _darkBlockerSpans = new Float32Array(0);
-/** Number of valid [col, row, width] triplet entries in _darkBlockerSpans. */
-let _darkBlockerSpanCount = 0;
-/** True when _activeDarkBlockerKeys has changed and spans need rebuilding. */
-let _darkBlockerSpansDirty = true;
-
-function _rebuildDarkBlockerSpans(): void {
-  _darkBlockerSpansDirty = false;
-  const keys = _activeDarkBlockerKeys;
-  if (keys.size === 0) {
-    _darkBlockerSpanCount = 0;
-    return;
-  }
-
-  // Group cells by row.
-  const byRow = new Map<number, number[]>();
-  for (const key of keys) {
-    const ci  = key.indexOf(',');
-    const col = parseInt(key.slice(0, ci), 10);
-    const row = parseInt(key.slice(ci + 1), 10);
-    let arr = byRow.get(row);
-    if (arr === undefined) { arr = []; byRow.set(row, arr); }
-    arr.push(col);
-  }
-
-  // For each row, sort columns and merge adjacent cells into horizontal spans.
-  const spans: number[] = [];
-  for (const [row, cols] of byRow) {
-    cols.sort((a, b) => a - b);
-    let start = cols[0];
-    let len   = 1;
-    for (let i = 1; i < cols.length; i++) {
-      if (cols[i] === start + len) {
-        len++;
-      } else {
-        spans.push(start, row, len);
-        start = cols[i];
-        len   = 1;
-      }
-    }
-    spans.push(start, row, len);
-  }
-
-  // Pack into a pre-allocated typed array (grow if needed).
-  const needed = spans.length;
-  if (needed > _darkBlockerSpans.length) {
-    _darkBlockerSpans = new Float32Array(needed + 64);
-  }
-  for (let i = 0; i < needed; i++) _darkBlockerSpans[i] = spans[i];
-  _darkBlockerSpanCount = (needed / 3) | 0;
-}
-
-/**
- * Draws a solid black rectangle over every dark ambient-light blocker cell.
- * Uses pre-merged horizontal spans for efficiency and viewport-culls spans
- * that are fully outside the current camera view.
- */
-export function renderDarkAmbientBlockerOverlay(
-  ctx: CanvasRenderingContext2D,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-  blockSizePx: number,
-): void {
-  if (_activeDarkBlockerKeys.size === 0) return;
-  if (_darkBlockerSpansDirty) _rebuildDarkBlockerSpans();
-  if (_darkBlockerSpanCount === 0) return;
-
-  const tileSizePx = blockSizePx * zoom;
-  ctx.fillStyle = '#000000';
-
-  for (let i = 0; i < _darkBlockerSpanCount; i++) {
-    const col   = _darkBlockerSpans[i * 3];
-    const row   = _darkBlockerSpans[i * 3 + 1];
-    const width = _darkBlockerSpans[i * 3 + 2];
-    const sx = Math.round(col   * tileSizePx + offsetXPx);
-    const sy = Math.round(row   * tileSizePx + offsetYPx);
-    const sw = Math.ceil(width  * tileSizePx);
-    const sh = Math.ceil(tileSizePx);
-    // Viewport cull: skip spans entirely off-screen.
-    if (sx + sw <= 0 || sy + sh <= 0 || sx >= _vpWPx || sy >= _vpHPx) continue;
-    ctx.fillRect(sx, sy, sw, sh);
-  }
 }
 
 // ── Per-frame reusable collections (pre-allocated to avoid GC pressure) ───────
@@ -605,98 +469,19 @@ export function renderSingleExtensionTile(
   blockSizePx:  number,
   darknessAlpha: number,
 ): void {
-  const tileSizePx = blockSizePx * scale;
-  const tileX = Math.round(col * blockSizePx * scale + ox);
-  const tileY = Math.round(row * blockSizePx * scale + oy);
-
-  // Resolve effective tile theme: use override, then room default.
-  const tileTheme: import('../../levels/roomDef').BlockTheme | null =
-    (theme as import('../../levels/roomDef').BlockTheme | null) ?? _activeBlockTheme;
-
-  // Compute 4-neighbour occupancy mask from the supplied set.
-  const northSolid = occupancy.has(`${col},${row - 1}`);
-  const eastSolid  = occupancy.has(`${col + 1},${row}`);
-  const southSolid = occupancy.has(`${col},${row + 1}`);
-  const westSolid  = occupancy.has(`${col - 1},${row}`);
-
-  const mask =
-    (northSolid ? TILE_MASK_N : 0) |
-    (eastSolid  ? TILE_MASK_E : 0) |
-    (southSolid ? TILE_MASK_S : 0) |
-    (westSolid  ? TILE_MASK_W : 0);
-  const spec = TILE_TABLE[mask];
-
-  // Open-air-sides mask for edge-shading (opposite of solid-neighbours).
-  const openAirSidesMask =
-    (northSolid ? 0 : OPEN_AIR_SIDE_N) |
-    (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
-    (southSolid ? 0 : OPEN_AIR_SIDE_S) |
-    (westSolid  ? 0 : OPEN_AIR_SIDE_W);
-
-  ctx.save();
-  ctx.imageSmoothingEnabled = false;
-
-  const material = themeToProceduralMaterial(tileTheme, _activeWorldNumber);
-
-  if (material !== null) {
-    // Procedural path (e.g. blackRock): base sprite cut with 1×1 block template.
-    const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, _activeWorldNumber, openAirSidesMask);
-    if (procSprite !== null) {
-      ctx.drawImage(procSprite, tileX, tileY, tileSizePx, tileSizePx);
-    } else {
-      drawFallbackTile(ctx, tileX, tileY, tileSizePx);
-    }
-  } else if (isFolderBasedTheme(tileTheme)) {
-    // Folder-based theme: use edge-shaded 8×8 canvas for 1×1 tiles.
-    const folderSprite = getTheme1x1SpriteShaded(tileTheme, col, row, _activeWorldNumber, openAirSidesMask, blockSizePx);
-    if (folderSprite !== null) {
-      ctx.drawImage(folderSprite, tileX, tileY, tileSizePx, tileSizePx);
-    } else {
-      drawFallbackTile(ctx, tileX, tileY, tileSizePx);
-    }
-  } else if (tileTheme !== null) {
-    // Legacy flat-sprite path (brownRock, dirt).
-    const img = getSpriteForLegacyTheme(tileTheme, spec.variant, blockSizePx);
-    if (isSpriteReady(img)) {
-      if (tileTheme === 'brownRock' || spec.rotationRad === 0) {
-        ctx.drawImage(img, tileX, tileY, tileSizePx, tileSizePx);
-      } else {
-        const halfSz = Math.round(tileSizePx * 0.5);
-        const cx = Math.round(tileX + tileSizePx * 0.5);
-        const cy = Math.round(tileY + tileSizePx * 0.5);
-        ctx.translate(cx, cy);
-        ctx.rotate(spec.rotationRad);
-        ctx.drawImage(img, -halfSz, -halfSz, tileSizePx, tileSizePx);
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-      }
-    } else {
-      drawFallbackTile(ctx, tileX, tileY, tileSizePx);
-    }
-  } else {
-    // World-number legacy path (world 0 = blackRock via legacy set, world 1+ = world sprites).
-    const img = _sprites[spec.variant];
-    if (isSpriteReady(img)) {
-      if (spec.rotationRad === 0) {
-        ctx.drawImage(img, tileX, tileY, tileSizePx, tileSizePx);
-      } else {
-        const halfSz = Math.round(tileSizePx * 0.5);
-        const cx = Math.round(tileX + tileSizePx * 0.5);
-        const cy = Math.round(tileY + tileSizePx * 0.5);
-        ctx.translate(cx, cy);
-        ctx.rotate(spec.rotationRad);
-        ctx.drawImage(img, -halfSz, -halfSz, tileSizePx, tileSizePx);
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-      }
-    } else {
-      drawFallbackTile(ctx, tileX, tileY, tileSizePx);
-    }
-  }
-
-  // Apply darkness tint overlay.
-  if (darknessAlpha > 0) {
-    ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
-    ctx.fillRect(tileX, tileY, tileSizePx, tileSizePx);
-  }
-
-  ctx.restore();
+  renderSingleExtensionTileWithState(
+    ctx,
+    _activeBlockTheme,
+    _activeWorldNumber,
+    _sprites,
+    col,
+    row,
+    theme,
+    occupancy,
+    ox,
+    oy,
+    scale,
+    blockSizePx,
+    darknessAlpha,
+  );
 }

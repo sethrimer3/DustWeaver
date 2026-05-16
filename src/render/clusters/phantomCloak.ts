@@ -13,6 +13,7 @@
  *   • Rendered behind the main back cloak for a ghostly extension effect.
  *
  * All physics constants are tunable in the configuration section below.
+ * Dissipation particle pool lives in phantomCloakParticles.ts.
  */
 
 import {
@@ -31,6 +32,7 @@ import {
   CLOAK_BACK_WIDTH_ROOT_WORLD,
   CLOAK_BACK_WIDTH_TIP_WORLD,
 } from './cloakConstants';
+import { PhantomDissipationParticles } from './phantomCloakParticles';
 
 // ============================================================================
 // Phantom cloak configuration — all tunable constants in one place.
@@ -87,14 +89,11 @@ const PHANTOM_OUTLINE_ALPHA = 0.70;
 /** Opacity of the secondary wider glow halo pass (softer outer ring). */
 const PHANTOM_GLOW_HALO_ALPHA = 0.25;
 
-/** Golden fill colour (warm, luminous). */
-const PHANTOM_FILL_COLOR = '#c89600';
-
-/** Lighter golden colour used for bright particle variation. */
-const PHANTOM_FILL_COLOR_BRIGHT = '#f0c830';
-
 /** Bright luminous gold for the glowing outline. */
 const PHANTOM_OUTLINE_COLOR = '#ffe066';
+
+/** Golden fill colour for the polygon body fill pass. */
+const PHANTOM_FILL_COLOR = '#c89600';
 
 /** Phantom outline width (world units) — slightly thicker for the glow effect. */
 const PHANTOM_OUTLINE_WIDTH_WORLD = 1.0;
@@ -107,35 +106,6 @@ const PHANTOM_GLOW_HALO_WIDTH_WORLD = 2.5;
  * ghostly extension rather than a full-width duplicate (1.0 = same width).
  */
 const PHANTOM_WIDTH_SCALE = 0.92;
-
-// ── Dissipation particles ────────────────────────────────────────────────────
-
-/** Particle count emitted per dissolved phantom segment. */
-const PARTICLE_COUNT_PER_SEGMENT = 3;
-
-/**
- * Pre-allocated particle pool size.
- * Calculated to accommodate multiple dissolve bursts without resizing.
- */
-const MAX_PARTICLES = PHANTOM_SEGMENT_COUNT * PARTICLE_COUNT_PER_SEGMENT * 5;
-
-/** How long each particle lives (seconds). */
-const PARTICLE_LIFETIME_SEC = 0.70;
-
-/** Base outward speed of newly spawned particles (world units / second). */
-const PARTICLE_SPEED_WORLD = 16;
-
-/** Slight upward bias on particle spawn (world units / second). */
-const PARTICLE_UPWARD_BIAS_WORLD = 8;
-
-/** Downward gravity on dissipation particles (world units / second²). */
-const PARTICLE_GRAVITY_WORLD_PER_SEC2 = 28;
-
-/** Fade rate multiplier on normalised age. Higher = faster fade. */
-const PARTICLE_FADE_RATE = 1.4;
-
-/** Scale of particle at end of life, as a fraction of initial size. */
-const PARTICLE_MIN_SCALE = 0.25;
 
 // ── Debug ─────────────────────────────────────────────────────────────────────
 
@@ -226,29 +196,8 @@ export class PhantomCloakExtension {
   private readonly _scratchPerp: [number, number] = [0, 0];
 
   // ── Dissipation particle pool (pre-allocated, allocation-free per frame) ─────
-  private readonly particlePosX: Float32Array = new Float32Array(MAX_PARTICLES);
-  private readonly particlePosY: Float32Array = new Float32Array(MAX_PARTICLES);
-  private readonly particleVelX: Float32Array = new Float32Array(MAX_PARTICLES);
-  private readonly particleVelY: Float32Array = new Float32Array(MAX_PARTICLES);
-  private readonly particleAgeSec: Float32Array = new Float32Array(MAX_PARTICLES);
-  private readonly particleLifetimeSec: Float32Array = new Float32Array(MAX_PARTICLES);
-  private readonly particleIsAliveFlag: Uint8Array = new Uint8Array(MAX_PARTICLES);
-  /** Ring-buffer write index for the particle pool (wraps at MAX_PARTICLES). */
-  private particleWriteIndex: number = 0;
-
-  // ── Deterministic micro-RNG (render-side pseudo-random, no Math.random) ──────
-  // Xorshift32 seeded from a fixed constant.  Used only for particle aesthetics;
-  // does not affect simulation determinism.
-  private _rngState: number = 0xdeadbeef;
-
-  private _nextFloat(): number {
-    let x = this._rngState;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    this._rngState = x;
-    return (x >>> 0) / 0xffffffff;
-  }
+  private readonly _particles: PhantomDissipationParticles =
+    new PhantomDissipationParticles(PHANTOM_SEGMENT_COUNT);
 
   // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -318,7 +267,8 @@ export class PhantomCloakExtension {
       const prevFloor = Math.floor(prevGrowth);
       const currFloor = Math.floor(this.growthProgress);
       for (let s = currFloor; s < prevFloor; s++) {
-        this._emitDissipationParticles(s);
+        const chainIdx = Math.min(PHANTOM_POINT_COUNT - 1, s);
+        this._particles.emit(this.posXWorld[chainIdx], this.posYWorld[chainIdx]);
       }
 
       // Fully dissolved — return to inactive state.
@@ -383,17 +333,7 @@ export class PhantomCloakExtension {
     }
 
     // ── 6. Advance dissipation particles ─────────────────────────────────────
-    for (let pi = 0; pi < MAX_PARTICLES; pi++) {
-      if (this.particleIsAliveFlag[pi] === 0) continue;
-      this.particleAgeSec[pi] += dt;
-      if (this.particleAgeSec[pi] >= this.particleLifetimeSec[pi]) {
-        this.particleIsAliveFlag[pi] = 0;
-        continue;
-      }
-      this.particleVelY[pi] += PARTICLE_GRAVITY_WORLD_PER_SEC2 * dt;
-      this.particlePosX[pi] += this.particleVelX[pi] * dt;
-      this.particlePosY[pi] += this.particleVelY[pi] * dt;
-    }
+    this._particles.tick(dt);
   }
 
   /**
@@ -464,33 +404,7 @@ export class PhantomCloakExtension {
     offsetYPx: number,
     scalePx: number,
   ): void {
-    for (let pi = 0; pi < MAX_PARTICLES; pi++) {
-      if (this.particleIsAliveFlag[pi] === 0) continue;
-
-      const age           = this.particleAgeSec[pi];
-      const lifetime      = this.particleLifetimeSec[pi];
-      const normAge       = age / lifetime;
-      const alpha         = Math.max(0, 1 - normAge * PARTICLE_FADE_RATE) * 0.9;
-      if (alpha < 0.01) continue;
-
-      const scale  = 1.0 - normAge * (1 - PARTICLE_MIN_SCALE);
-      const sizePx = Math.max(1, scale * 2 * scalePx);
-
-      const sx = this.particlePosX[pi] * scalePx + offsetXPx;
-      const sy = this.particlePosY[pi] * scalePx + offsetYPx;
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      // Alternate colour for a sparkling variation between adjacent particles.
-      ctx.fillStyle = (pi & 1) === 0 ? PHANTOM_FILL_COLOR_BRIGHT : PHANTOM_FILL_COLOR;
-      ctx.fillRect(
-        Math.round(sx - sizePx * 0.5),
-        Math.round(sy - sizePx * 0.5),
-        Math.ceil(sizePx),
-        Math.ceil(sizePx),
-      );
-      ctx.restore();
-    }
+    this._particles.render(ctx, offsetXPx, offsetYPx, scalePx);
   }
 
   /**
@@ -556,8 +470,7 @@ export class PhantomCloakExtension {
     this.posYWorld.fill(0);
     this.velXWorld.fill(0);
     this.velYWorld.fill(0);
-    this.particleIsAliveFlag.fill(0);
-    this.particleWriteIndex = 0;
+    this._particles.reset();
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────────
@@ -629,32 +542,5 @@ export class PhantomCloakExtension {
       this._scratchPerp[1] = 0;
     }
     return this._scratchPerp;
-  }
-
-  /**
-   * Spawn PARTICLE_COUNT_PER_SEGMENT particles at chain point `segmentIndex`
-   * using the internal deterministic micro-RNG.
-   */
-  private _emitDissipationParticles(segmentIndex: number): void {
-    const chainIdx = Math.min(PHANTOM_POINT_COUNT - 1, segmentIndex);
-    const spawnX   = this.posXWorld[chainIdx];
-    const spawnY   = this.posYWorld[chainIdx];
-
-    for (let p = 0; p < PARTICLE_COUNT_PER_SEGMENT; p++) {
-      const slot = this.particleWriteIndex % MAX_PARTICLES;
-      this.particleWriteIndex++;
-
-      // Scatter in a random direction with gentle speed variation.
-      const angle = this._nextFloat() * Math.PI * 2;
-      const speed = PARTICLE_SPEED_WORLD * (0.5 + this._nextFloat() * 0.5);
-
-      this.particlePosX[slot]        = spawnX;
-      this.particlePosY[slot]        = spawnY;
-      this.particleVelX[slot]        = Math.cos(angle) * speed;
-      this.particleVelY[slot]        = Math.sin(angle) * speed - PARTICLE_UPWARD_BIAS_WORLD;
-      this.particleAgeSec[slot]      = 0;
-      this.particleLifetimeSec[slot] = PARTICLE_LIFETIME_SEC * (0.7 + this._nextFloat() * 0.3);
-      this.particleIsAliveFlag[slot] = 1;
-    }
   }
 }

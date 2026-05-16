@@ -13,7 +13,7 @@
 
 import type { CampaignMeta } from './campaigns';
 import type { SavedCampaignV1 } from './campaignSchema';
-import { validateSavedCampaign, isSavedCampaignV1 } from './campaignSchema';
+import { validateSavedCampaignTopLevel, isSavedCampaignV1 } from './campaignSchema';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -88,8 +88,16 @@ export async function fetchPackedCampaignFromPath(filePath: string): Promise<Sav
       console.error(`[packedCampaignLoader] Failed to fetch "${url}": ${response.status} ${response.statusText}`);
       return null;
     }
+    const parseStartMs = import.meta.env.DEV ? performance.now() : 0;
     const data: unknown = await response.json();
-    const validationErrors = validateSavedCampaign(data);
+    if (import.meta.env.DEV) {
+      console.log(`[campaignPerf] campaign JSON parse (${filePath}): ${(performance.now() - parseStartMs).toFixed(2)}ms`);
+    }
+    const validationStartMs = import.meta.env.DEV ? performance.now() : 0;
+    const validationErrors = validateSavedCampaignTopLevel(data);
+    if (import.meta.env.DEV) {
+      console.log(`[campaignPerf] campaign validation (${filePath}): ${(performance.now() - validationStartMs).toFixed(2)}ms`);
+    }
     if (validationErrors.length > 0) {
       console.error(`[packedCampaignLoader] Campaign at "${url}" failed validation:`, validationErrors);
       return null;
@@ -155,11 +163,19 @@ export function parsePackedCampaignFromJson(
 ): { campaign: SavedCampaignV1; errors: string[] } | { campaign: null; errors: string[] } {
   let data: unknown;
   try {
+    const parseStartMs = import.meta.env.DEV ? performance.now() : 0;
     data = JSON.parse(jsonText) as unknown;
+    if (import.meta.env.DEV) {
+      console.log(`[campaignPerf] campaign JSON parse (browser import): ${(performance.now() - parseStartMs).toFixed(2)}ms`);
+    }
   } catch (e) {
     return { campaign: null, errors: [`JSON parse error: ${e instanceof Error ? e.message : String(e)}`] };
   }
-  const errors = validateSavedCampaign(data);
+  const validationStartMs = import.meta.env.DEV ? performance.now() : 0;
+  const errors = validateSavedCampaignTopLevel(data);
+  if (import.meta.env.DEV) {
+    console.log(`[campaignPerf] campaign validation (browser import): ${(performance.now() - validationStartMs).toFixed(2)}ms`);
+  }
   if (errors.length > 0) {
     return { campaign: null, errors };
   }
@@ -203,8 +219,16 @@ export async function fetchOfficialPackedCampaign(): Promise<SavedCampaignV1 | n
       }
       return null;
     }
+    const parseStartMs = import.meta.env.DEV ? performance.now() : 0;
     const data: unknown = await response.json();
-    const validationErrors = validateSavedCampaign(data);
+    if (import.meta.env.DEV) {
+      console.log(`[campaignPerf] campaign JSON parse (official): ${(performance.now() - parseStartMs).toFixed(2)}ms`);
+    }
+    const validationStartMs = import.meta.env.DEV ? performance.now() : 0;
+    const validationErrors = validateSavedCampaignTopLevel(data);
+    if (import.meta.env.DEV) {
+      console.log(`[campaignPerf] campaign validation (official): ${(performance.now() - validationStartMs).toFixed(2)}ms`);
+    }
     if (validationErrors.length > 0) {
       console.error(
         `[packedCampaignLoader] Official campaign file at "${url}" failed validation:`,

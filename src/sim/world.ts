@@ -15,7 +15,7 @@ export {
 } from './worldHazardState';
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
-export const MAX_WALLS = 2000;
+export const MAX_WALLS = 6000;
 /** Maximum number of simultaneously fading web strands. */
 export const MAX_FADING_WEBS = 24;
 /** Maximum number of ropes per room. */

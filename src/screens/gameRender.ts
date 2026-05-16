@@ -293,6 +293,26 @@ export interface RenderFrameContext {
    * visible without being cut off.
    */
   alwaysCenterCamera: boolean;
+
+  /**
+   * When a previous room is staged after a seamless crossing, provides the
+   * minimal metadata needed to render its background layer clipped to its
+   * screen-space rect.  Null when no staging is active.
+   */
+  stagedRoom: StagedRoomBgInfo | null;
+}
+
+/**
+ * Minimal metadata for the staged (previous) room's background rendering.
+ * Used only when seamless room crossing staging is active.
+ */
+export interface StagedRoomBgInfo {
+  /** RoomDef of the staged room — used for worldNumber and backgroundId. */
+  room: RoomDef;
+  /** World-space X origin of the staged room. */
+  originXWorld: number;
+  /** World-space Y origin of the staged room. */
+  originYWorld: number;
 }
 
 /**
@@ -497,18 +517,66 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── World background with parallax ──────────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BACKGROUND);
-  renderWorldBackground(
-    ctx,
-    currentRoom.worldNumber,
-    virtualWidthPx,
-    virtualHeightPx,
-    ox,
-    oy,
-    roomWidthWorld,
-    roomHeightWorld,
-    zoom,
-    currentRoom.backgroundId,
-  );
+
+  if (r.stagedRoom !== null) {
+    // Two-room mode: clip each room's background to its own screen rect so
+    // rooms with different background images don't bleed into each other.
+    const stagedW = r.stagedRoom.room.widthBlocks * BLOCK_SIZE_MEDIUM;
+    const stagedH = r.stagedRoom.room.heightBlocks * BLOCK_SIZE_MEDIUM;
+    const stagedOx = ox + r.stagedRoom.originXWorld * zoom;
+    const stagedOy = oy + r.stagedRoom.originYWorld * zoom;
+
+    // Staged room background — clipped to staged room's screen rect.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(stagedOx, stagedOy, stagedW * zoom, stagedH * zoom);
+    ctx.clip();
+    renderWorldBackground(
+      ctx,
+      r.stagedRoom.room.worldNumber,
+      virtualWidthPx,
+      virtualHeightPx,
+      stagedOx,
+      stagedOy,
+      stagedW,
+      stagedH,
+      zoom,
+      r.stagedRoom.room.backgroundId,
+    );
+    ctx.restore();
+
+    // Active room background — clipped to active room's screen rect.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox, oy, roomWidthWorld * zoom, roomHeightWorld * zoom);
+    ctx.clip();
+    renderWorldBackground(
+      ctx,
+      currentRoom.worldNumber,
+      virtualWidthPx,
+      virtualHeightPx,
+      ox,
+      oy,
+      roomWidthWorld,
+      roomHeightWorld,
+      zoom,
+      currentRoom.backgroundId,
+    );
+    ctx.restore();
+  } else {
+    renderWorldBackground(
+      ctx,
+      currentRoom.worldNumber,
+      virtualWidthPx,
+      virtualHeightPx,
+      ox,
+      oy,
+      roomWidthWorld,
+      roomHeightWorld,
+      zoom,
+      currentRoom.backgroundId,
+    );
+  }
 
   // Relative camera offset (from room centre) used for procedural background parallax.
   // When the camera is centred on the room this is 0; it grows as the camera pans.
@@ -565,7 +633,7 @@ export function renderFrame(r: RenderFrameContext): void {
   setRenderViewportSize(virtualWidthPx, virtualHeightPx);
   // Walls before cluster indicators so clusters are drawn on top
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DARK_BLOCKER);
-  renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
+  renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);

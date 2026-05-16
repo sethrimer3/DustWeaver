@@ -20,6 +20,8 @@ import type { EditorRoomData } from './editorState';
 import { editorRoomDataToJson } from './roomJson';
 import { dehydrateRoom } from '../levels/roomSchemaV2';
 import { BUILD_NUMBER } from '../build-info';
+import type { CampaignStore } from './campaignStore';
+import { createCampaignStore } from './campaignStore';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -41,6 +43,8 @@ export interface EditableCampaignSession {
   source: CampaignSessionSource;
   /** The full packed campaign as it was when the session started (or was just created). */
   campaign: SavedCampaignV1;
+  /** Indexed/cached mutable campaign editing store for fast room-local edits. */
+  campaignStore?: CampaignStore;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,6 +114,13 @@ export function createNewCampaignSession(params: CreateNewCampaignParams): Edita
     description: params.description,
     initialRoomId: params.initialRoomId,
     initialRoomImagePath: null,
+    // Pre-place the campaign spawn at the same position as the starter room's
+    // player spawn so new campaigns export correctly without needing a manual placement.
+    campaignSpawn: {
+      roomId: params.initialRoomId,
+      xBlock: spawnX,
+      yBlock: spawnY,
+    },
   };
 
   const campaign: SavedCampaignV1 = {
@@ -124,7 +135,7 @@ export function createNewCampaignSession(params: CreateNewCampaignParams): Edita
     },
   };
 
-  return { source: 'new-draft', campaign };
+  return { source: 'new-draft', campaign, campaignStore: createCampaignStore(campaign) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,7 +147,7 @@ export function createSessionFromPackedCampaign(
   campaign: SavedCampaignV1,
   source: CampaignSessionSource,
 ): EditableCampaignSession {
-  return { source, campaign };
+  return { source, campaign, campaignStore: createCampaignStore(campaign) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

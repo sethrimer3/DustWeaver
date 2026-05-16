@@ -140,6 +140,7 @@ import {
   updateAdaptiveQuality,
   type AdaptiveQualityState,
 } from './gameAdaptiveQuality';
+import { resolveGameStartRoomSelection } from './gameStartRoom';
 import {
   type GameCameraState,
   createGameCameraState,
@@ -162,28 +163,6 @@ const BASE = import.meta.env.BASE_URL;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-function createFallbackRoomDef(): RoomDef {
-  return {
-    id: 'fallback_boot_room',
-    name: 'Fallback Room',
-    worldNumber: 1,
-    mapX: 0,
-    mapY: 0,
-    widthBlocks: 80,
-    heightBlocks: 45,
-    walls: [
-      { xBlock: 0, yBlock: 44, wBlock: 80, hBlock: 1 }, // floor
-      { xBlock: 0, yBlock: 0, wBlock: 1, hBlock: 45 }, // left wall
-      { xBlock: 79, yBlock: 0, wBlock: 1, hBlock: 45 }, // right wall
-    ],
-    enemies: [],
-    playerSpawnBlock: [40, 40],
-    transitions: [],
-    saveTombs: [],
-    skillTombs: [],
-  };
-}
-
 import type { EditableCampaignSession } from '../editor/editableCampaignSession';
 
 export interface GameScreenCallbacks {
@@ -200,6 +179,7 @@ export function startGameScreen(
   progress?: PlayerProgress,
   campaignSession?: EditableCampaignSession | null,
   openEditorImmediately?: boolean,
+  campaignSpawnBlockOverride?: readonly [number, number] | null,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
   const bloomSystem = new BloomSystem({ ...DEFAULT_BLOOM_CONFIG });
@@ -272,24 +252,24 @@ export function startGameScreen(
   musicManager.setVolume(getMusicVolume());
 
   // ── Room state ────────────────────────────────────────────────────────────
-  const firstAvailableRoom: RoomDef | null = ROOM_REGISTRY.values().next().value ?? null;
-  const configuredSpawnRoom: RoomDef | null = ROOM_REGISTRY.get('lobby')
-    ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)
-    ?? firstAvailableRoom;
-  const requestedStartRoom: RoomDef | null = (startRoomId !== null ? ROOM_REGISTRY.get(startRoomId) : undefined)
-    ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)
-    ?? configuredSpawnRoom;
-  const fallbackRoom = createFallbackRoomDef();
-  const campaignSpawnRoom: RoomDef = configuredSpawnRoom ?? fallbackRoom;
-  const initialRoom: RoomDef = requestedStartRoom ?? campaignSpawnRoom;
+  const {
+    configuredSpawnRoom,
+    requestedStartRoom,
+    campaignSpawnRoom,
+    initialRoom,
+    campaignSpawnBlock,
+    shouldOpenFailsafeEditor,
+  } = resolveGameStartRoomSelection({
+    roomRegistry: ROOM_REGISTRY,
+    startingRoomId: STARTING_ROOM_ID,
+    startRoomId,
+    hasCampaignSession: campaignSession != null,
+    openEditorImmediately,
+    campaignSpawnBlockOverride,
+  });
   if (requestedStartRoom === null || configuredSpawnRoom === null) {
     console.error('[gameScreen] No rooms were loaded. Starting in fallback room.');
   }
-  const campaignSpawnBlock: readonly [number, number] = campaignSpawnRoom.playerSpawnBlock;
-  const shouldOpenFailsafeEditor = campaignSession != null
-    ? (openEditorImmediately === true)
-    : ((startRoomId !== null && ROOM_REGISTRY.get(startRoomId) === undefined)
-      || !ROOM_REGISTRY.has('lobby'));
 
   let currentRoom: RoomDef = initialRoom;
   let bgColor = worldBgColor(currentRoom.worldNumber);
@@ -730,9 +710,13 @@ export function startGameScreen(
   // Shown when gameplay first starts (or when a room's sprites are not yet
   // loaded).  Polled each frame and dismissed once areRoomSpritesReady().
   const loadingOverlay = new GameLoadingOverlay(uiRoot);
+  // Flag to track whether this is the very first room load (campaign start).
+  // Used to trigger the longer "fade from black" effect on initial campaign load.
+  let isInitialCampaignLoad = true;
 
   function showLoadingOverlay(): void {
-    loadingOverlay.show();
+    loadingOverlay.show(isInitialCampaignLoad);
+    isInitialCampaignLoad = false; // subsequent room loads use the standard fade
   }
 
   /** Hides the overlay once sprites are ready and the minimum show time has passed. */
@@ -760,23 +744,27 @@ export function startGameScreen(
   }
 
   // Initial room load — use saved spawn point if returning to a save.
-  // Prefer the room's own playerSpawnBlock as the fallback so the player is
-  // placed at a sensible room-specific position rather than the lobby coordinates.
+  // If a campaign spawn override was provided (from campaignSpawn in the packed campaign)
+  // and no save data overrides, use the campaign spawn position.
   // resolveSpawnBlock clamps to bounds and finds an open spot if the position
   // is inside a solid wall (handles out-of-bounds saves, new rooms, etc.).
   const desiredSpawnBlock = (progress && progress.lastSaveSpawnBlock && progress.lastSaveRoomId === currentRoom.id)
     ? progress.lastSaveSpawnBlock
-    : currentRoom.playerSpawnBlock;
+    : (campaignSpawnBlockOverride ?? currentRoom.playerSpawnBlock);
   const initialSpawnBlock = resolveSpawnBlock(currentRoom, desiredSpawnBlock[0], desiredSpawnBlock[1]);
   loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
 
   // Preload sprites for adjacent rooms in the background.
   preloadAdjacentRoomAssets(currentRoom);
 
-  // Show the loading overlay if the spawn room's sprites aren't ready yet.
+  // Show the loading overlay if the spawn room's sprites aren't ready yet, OR
+  // always show it on the initial campaign load to produce the fade-from-black effect.
   // areRoomSpritesReady returns true instantly for rooms with no folder-based
   // themes (legacy sprites load at module init), so the overlay won't flash.
-  if (!areRoomSpritesReady(currentRoom)) {
+  // Capture the flag value before calling showLoadingOverlay() (which resets it)
+  // so the intent is explicit regardless of future call ordering.
+  const isCampaignStart = isInitialCampaignLoad;
+  if (!areRoomSpritesReady(currentRoom) || isCampaignStart) {
     showLoadingOverlay();
   }
 
@@ -1643,6 +1631,8 @@ export function startGameScreen(
       crossingUnionMaxXWorld: renderUnionBounds?.maxXWorld ?? roomWidthWorld,
       crossingUnionMaxYWorld: renderUnionBounds?.maxYWorld ?? roomHeightWorld,
       alwaysCenterCamera: pauseMenuState.alwaysCenterCamera,
+      // Staged room background info for seamless crossing rendering.
+      stagedRoom: stagingState.stagedRooms.length > 0 ? stagingState.stagedRooms[0] : null,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.

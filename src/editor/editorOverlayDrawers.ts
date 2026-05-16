@@ -7,12 +7,11 @@
  * Functions that don't need every parameter simply omit those they don't use.
  *
  * Called by renderEditorOverlays in editorRenderer.ts.
+ * Zone/environment draw functions live in editorZoneDrawers.ts.
  */
 
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import type { EditorState, EditorRoomData } from './editorState';
-import { EditorTool } from './editorState';
-import { ropeLineCrossesWall } from './editorHitTest';
 import {
   WALL_HIGHLIGHT, WALL_SELECTED,
   PLATFORM_HIGHLIGHT, PLATFORM_SELECTED,
@@ -27,22 +26,31 @@ import {
   SKILL_TOMB_COLOR, SKILL_TOMB_SELECTED,
   GRASSHOPPER_COLOR, GRASSHOPPER_SELECTED,
   FIREFLY_COLOR, FIREFLY_SELECTED,
-  ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR, ROPE_INVALID_COLOR,
-  CRUMBLE_VARIANT_CRACK_COLOR,
   SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
   SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
   DUST_CONTAINER_COLOR, DUST_CONTAINER_SELECTED,
   DUST_CONTAINER_PIECE_COLOR, DUST_CONTAINER_PIECE_SELECTED,
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
   DUST_SWARM_COLOR, DUST_SWARM_SELECTED,
-  DIALOGUE_TRIGGER_COLOR, DIALOGUE_TRIGGER_SELECTED,
+  CAMPAIGN_SPAWN_COLOR, CAMPAIGN_SPAWN_SELECTED,
   drawBlockRect, drawRampTriangle,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   getEnemyFootprintBlocks, drawTransitionZone,
 } from './editorRendererHelpers';
+import type { IsElementSelected } from './editorZoneDrawers';
 
-/** Helper type: function that returns whether a room element is selected. */
-export type IsElementSelected = (type: string, uid: number) => boolean;
+// Re-export zone/environment draw helpers and the shared IsElementSelected type
+// so callers can import everything from this single file.
+export type { IsElementSelected } from './editorZoneDrawers';
+export {
+  drawEditorLiquidZones,
+  drawEditorCrumbleBlocks,
+  drawEditorBouncePads,
+  drawEditorEnvironmentItems,
+  drawEditorRopes,
+  drawEditorDialogueTriggers,
+  drawEditorBackgroundBlocks,
+} from './editorZoneDrawers';
 
 // ============================================================================
 // Interior walls (solid, platform, ramp, half-pillar)
@@ -150,7 +158,31 @@ export function drawEditorSpawnAndTombs(
   offsetYPx: number,
   zoom: number,
 ): void {
-  // Player spawn marker
+  // Campaign spawn marker — drawn first so room spawn overlaps it slightly (clear priority)
+  if (state.campaignSpawnBlock !== null) {
+    const [csx, csy] = state.campaignSpawnBlock;
+    const sel = isSelected('campaignSpawn', 0);
+    const color = sel ? CAMPAIGN_SPAWN_SELECTED : CAMPAIGN_SPAWN_COLOR;
+    // Draw a slightly larger footprint to distinguish from room spawn
+    drawObjectFootprint(ctx, csx, csy, 1, 1, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
+    drawMarker(ctx, csx, csy, offsetXPx, offsetYPx, zoom, color, '⭐');
+    // Label "CSPAWN" below the star when selected or hovered
+    const isHovered = state.hoverElement !== null && state.hoverElement.type === 'campaignSpawn';
+    if (sel || isHovered) {
+      const bs = BLOCK_SIZE_SMALL;
+      const px = Math.round(csx * bs * zoom + offsetXPx + bs * zoom * 0.5);
+      const py = Math.round((csy + 1) * bs * zoom + offsetYPx + 2);
+      ctx.save();
+      ctx.font = `bold ${Math.max(7, Math.round(7 * zoom))}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = CAMPAIGN_SPAWN_SELECTED;
+      ctx.fillText('CAMPAIGN SPAWN', px, py);
+      ctx.restore();
+    }
+  }
+
+  // Player spawn marker (room-local fallback)
   {
     const sel = isSelected('playerSpawn', 0);
     drawMarker(ctx, room.playerSpawnBlock[0], room.playerSpawnBlock[1], offsetXPx, offsetYPx, zoom,
@@ -366,392 +398,7 @@ export function drawEditorLightingOverlays(
   }
 }
 
-// ============================================================================
-// Liquid zones: water and lava
-// ============================================================================
+// (Liquid zones, crumble blocks, bounce pads, decorations/falling blocks,
+//  ropes, dialogue triggers, and background blocks are in editorZoneDrawers.ts
+//  and re-exported above.)
 
-export function drawEditorLiquidZones(
-  ctx: CanvasRenderingContext2D,
-  room: EditorRoomData,
-  isSelected: IsElementSelected,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  // Water zones
-  for (const z of (room.waterZones ?? [])) {
-    const sel = isSelected('waterZone', z.uid);
-    const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
-    const hPx = z.hBlock * BLOCK_SIZE_SMALL * zoom;
-    ctx.fillStyle = sel ? 'rgba(80,160,255,0.30)' : 'rgba(60,120,220,0.18)';
-    ctx.fillRect(xPx, yPx, wPx, hPx);
-    ctx.strokeStyle = sel ? 'rgba(80,180,255,0.85)' : 'rgba(80,160,255,0.50)';
-    ctx.lineWidth = sel ? 2 : 1;
-    ctx.strokeRect(xPx, yPx, wPx, hPx);
-    ctx.fillStyle = 'rgba(160,210,255,0.75)';
-    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('💧', xPx + wPx * 0.5, yPx + hPx * 0.5);
-  }
-
-  // Lava zones
-  for (const z of (room.lavaZones ?? [])) {
-    const sel = isSelected('lavaZone', z.uid);
-    const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
-    const hPx = z.hBlock * BLOCK_SIZE_SMALL * zoom;
-    ctx.fillStyle = sel ? 'rgba(255,100,20,0.30)' : 'rgba(220,60,10,0.18)';
-    ctx.fillRect(xPx, yPx, wPx, hPx);
-    ctx.strokeStyle = sel ? 'rgba(255,120,30,0.85)' : 'rgba(220,90,20,0.50)';
-    ctx.lineWidth = sel ? 2 : 1;
-    ctx.strokeRect(xPx, yPx, wPx, hPx);
-    ctx.fillStyle = 'rgba(255,180,60,0.75)';
-    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🔥', xPx + wPx * 0.5, yPx + hPx * 0.5);
-  }
-}
-
-// ============================================================================
-// Crumble blocks
-// ============================================================================
-
-export function drawEditorCrumbleBlocks(
-  ctx: CanvasRenderingContext2D,
-  room: EditorRoomData,
-  isSelected: IsElementSelected,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  for (const b of (room.crumbleBlocks ?? [])) {
-    const sel = isSelected('crumbleBlock', b.uid);
-    const wBlocks = b.wBlock ?? 1;
-    const hBlocks = b.hBlock ?? 1;
-    const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const wPx = wBlocks * BLOCK_SIZE_SMALL * zoom;
-    const hPx = hBlocks * BLOCK_SIZE_SMALL * zoom;
-
-    // Block fill
-    ctx.fillStyle = sel ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
-    if (b.rampOrientation !== undefined) {
-      // Ramp triangle shape
-      ctx.beginPath();
-      switch (b.rampOrientation) {
-        case 0: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx); break;
-        case 1: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx, yPx); break;
-        case 2: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx + wPx, yPx + hPx); break;
-        case 3: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx, yPx + hPx); break;
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = sel ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
-      ctx.lineWidth = sel ? 2 : 1;
-      ctx.stroke();
-    } else {
-      ctx.fillRect(xPx, yPx, wPx, hPx);
-      ctx.strokeStyle = sel ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
-      ctx.lineWidth = sel ? 2 : 1;
-      ctx.strokeRect(xPx, yPx, wPx, hPx);
-    }
-
-    // Crack overlay — zigzag geometry, color indicates elemental weakness
-    const crackColor = CRUMBLE_VARIANT_CRACK_COLOR[b.variant ?? 'normal'];
-    ctx.strokeStyle = crackColor;
-    ctx.lineWidth = Math.max(1, zoom * 0.7);
-    ctx.beginPath();
-    const cx = xPx + wPx * 0.5;
-    const cy = yPx + hPx * 0.5;
-    ctx.moveTo(cx - wPx * 0.15, yPx + hPx * 0.1);
-    ctx.lineTo(cx + wPx * 0.05, cy - hPx * 0.1);
-    ctx.lineTo(cx - wPx * 0.05, cy + hPx * 0.1);
-    ctx.lineTo(cx + wPx * 0.15, yPx + hPx * 0.9);
-    ctx.moveTo(cx + wPx * 0.05, cy - hPx * 0.1);
-    ctx.lineTo(cx + wPx * 0.25, cy - hPx * 0.25);
-    ctx.stroke();
-  }
-}
-
-// ============================================================================
-// Bounce pads
-// ============================================================================
-
-export function drawEditorBouncePads(
-  ctx: CanvasRenderingContext2D,
-  room: EditorRoomData,
-  isSelected: IsElementSelected,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  for (const b of (room.bouncePads ?? [])) {
-    const sel = isSelected('bouncePad', b.uid);
-    const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const wPx = b.wBlock * BLOCK_SIZE_SMALL * zoom;
-    const hPx = b.hBlock * BLOCK_SIZE_SMALL * zoom;
-
-    const fillAlpha = sel ? 0.45 : 0.25;
-    const strokeAlpha = sel ? 1.0 : 0.65;
-    const fillColor = b.speedFactorIndex === 1
-      ? `rgba(200,80,10,${fillAlpha})`
-      : `rgba(140,50,5,${fillAlpha})`;
-    const strokeColor = b.speedFactorIndex === 1
-      ? `rgba(255,140,30,${strokeAlpha})`
-      : `rgba(220,90,15,${strokeAlpha})`;
-
-    ctx.fillStyle = fillColor;
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = sel ? 2 : 1;
-
-    if (b.rampOrientation !== undefined) {
-      ctx.beginPath();
-      switch (b.rampOrientation) {
-        case 0: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx); break;
-        case 1: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx, yPx); break;
-        case 2: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx + wPx, yPx + hPx); break;
-        case 3: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx, yPx + hPx); break;
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      ctx.fillRect(xPx, yPx, wPx, hPx);
-      ctx.strokeRect(xPx, yPx, wPx, hPx);
-    }
-
-    // Speed indicator dot
-    const dotR = (b.speedFactorIndex === 1 ? 3 : 2) * zoom;
-    const dotX = xPx + wPx * 0.5;
-    const dotY = yPx + hPx * 0.5;
-    ctx.fillStyle = b.speedFactorIndex === 1 ? 'rgba(255,200,50,0.90)' : 'rgba(255,110,20,0.75)';
-    ctx.fillRect(dotX - dotR * 0.5, dotY - dotR * 0.5, dotR, dotR);
-    ctx.fillStyle = 'rgba(255,180,60,0.85)';
-    ctx.font = `bold ${Math.max(7, zoom * 3.5)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.fillText(b.speedFactorIndex === 1 ? '⟳100%' : '⟳50%', dotX, dotY + dotR + zoom * 3);
-  }
-}
-
-// ============================================================================
-// Decorations, falling blocks
-// ============================================================================
-
-export function drawEditorEnvironmentItems(
-  ctx: CanvasRenderingContext2D,
-  room: EditorRoomData,
-  isSelected: IsElementSelected,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  // Decorations (mushroom, glowGrass, vine)
-  for (const d of (room.decorations ?? [])) {
-    const sel = isSelected('decoration', d.uid);
-    const emoji = d.kind === 'mushroom' ? '🍄' : d.kind === 'glowGrass' ? '🌿' : '🌱';
-    const color = sel ? 'rgba(80,220,130,0.9)' : 'rgba(60,170,90,0.55)';
-    drawMarker(ctx, d.xBlock, d.yBlock, offsetXPx, offsetYPx, zoom, color, emoji);
-  }
-
-  // Falling block tiles (standard, tough, sensitive)
-  for (const fb of (room.fallingBlocks ?? [])) {
-    const sel = isSelected('fallingBlock', fb.uid);
-    const xPx = fb.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const yPx = fb.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const szPx = BLOCK_SIZE_SMALL * zoom;
-
-    const fillColor =
-      fb.variant === 'tough'     ? (sel ? 'rgba(60,100,200,0.55)' : 'rgba(50,90,180,0.30)') :
-      fb.variant === 'sensitive' ? (sel ? 'rgba(210,60,40,0.55)'  : 'rgba(190,50,30,0.30)') :
-                                   (sel ? 'rgba(200,170,20,0.55)' : 'rgba(180,150,15,0.30)');
-    const strokeColor =
-      fb.variant === 'tough'     ? (sel ? 'rgba(100,160,255,0.95)' : 'rgba(80,140,240,0.65)') :
-      fb.variant === 'sensitive' ? (sel ? 'rgba(255,80,60,0.95)'   : 'rgba(220,60,40,0.65)') :
-                                   (sel ? 'rgba(255,210,30,0.95)'  : 'rgba(220,190,20,0.65)');
-    ctx.fillStyle = fillColor;
-    ctx.fillRect(xPx, yPx, szPx, szPx);
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = sel ? 2 : 1;
-    ctx.strokeRect(xPx, yPx, szPx, szPx);
-
-    // Downward arrow indicator with variant suffix
-    const cx = xPx + szPx * 0.5;
-    const cy = yPx + szPx * 0.5;
-    ctx.fillStyle = strokeColor;
-    ctx.font = `bold ${Math.max(6, szPx * 0.55)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(fb.variant === 'tough' ? '▼T' : fb.variant === 'sensitive' ? '▼S' : '▼C', cx, cy);
-  }
-}
-
-// ============================================================================
-// Ropes (placed segments + placement preview)
-// ============================================================================
-
-export function drawEditorRopes(
-  ctx: CanvasRenderingContext2D,
-  room: EditorRoomData,
-  state: EditorState,
-  isSelected: IsElementSelected,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  // Placed ropes
-  for (const r of (room.ropes ?? [])) {
-    const sel = isSelected('rope', r.uid);
-    const lineColor = sel ? ROPE_SELECTED : ROPE_COLOR;
-    const ax = r.anchorAXBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const ay = r.anchorAYBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const bx = r.anchorBXBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const by = r.anchorBYBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    ctx.save();
-    ctx.strokeStyle = lineColor;
-    ctx.lineWidth = sel ? 2.5 : 1.5;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = ROPE_ANCHOR_COLOR;
-    ctx.beginPath(); ctx.arc(ax, ay, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(bx, by, 3, 0, Math.PI * 2); ctx.fill();
-    if (r.isAnchorBFixedFlag === 0) {
-      ctx.strokeStyle = 'rgba(255,180,60,0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI * 2); ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // Rope placement preview: first anchor already placed, second follows cursor
-  if (
-    state.activeTool === EditorTool.Place &&
-    state.selectedPaletteItem?.category === 'ropes' &&
-    state.pendingRopeAnchorXBlock !== null
-  ) {
-    const ax = state.pendingRopeAnchorXBlock! * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const ay = state.pendingRopeAnchorYBlock! * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const bx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const by = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const isBlocked = ropeLineCrossesWall(
-      room,
-      state.pendingRopeAnchorXBlock!,
-      state.pendingRopeAnchorYBlock!,
-      state.cursorBlockX,
-      state.cursorBlockY,
-    );
-    const previewStroke = isBlocked ? ROPE_INVALID_COLOR : ROPE_PREVIEW_COLOR;
-    const previewAnchor = isBlocked ? 'rgba(255, 100, 100, 0.7)' : ROPE_ANCHOR_COLOR;
-    ctx.save();
-    ctx.strokeStyle = previewStroke;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = previewAnchor;
-    ctx.globalAlpha = 0.7;
-    ctx.beginPath(); ctx.arc(ax, ay, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-}
-
-// ============================================================================
-// Placement preview and UI overlays are in editorPlacementPreviewDrawer.ts
-// ============================================================================
-
-// ============================================================================
-// Dialogue triggers
-// ============================================================================
-
-export function drawEditorDialogueTriggers(
-  ctx: CanvasRenderingContext2D,
-  room: EditorRoomData,
-  isSelected: IsElementSelected,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  const triggers = room.dialogueTriggers ?? [];
-  if (triggers.length === 0) return;
-  const bs = BLOCK_SIZE_SMALL * zoom;
-  for (const dt of triggers) {
-    const sel = isSelected('dialogueTrigger', dt.uid);
-    const color = sel ? DIALOGUE_TRIGGER_SELECTED : DIALOGUE_TRIGGER_COLOR;
-    const x = dt.xBlock * bs + offsetXPx;
-    const y = dt.yBlock * bs + offsetYPx;
-    const w = dt.wBlock * bs;
-    const h = dt.hBlock * bs;
-    ctx.save();
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = sel ? 'rgba(80, 220, 255, 0.9)' : 'rgba(80, 200, 255, 0.5)';
-    ctx.lineWidth = sel ? 2 : 1;
-    ctx.setLineDash([4, 3]);
-    ctx.strokeRect(x, y, w, h);
-    ctx.setLineDash([]);
-    // Label
-    ctx.fillStyle = sel ? 'rgba(200, 240, 255, 0.95)' : 'rgba(140, 210, 255, 0.7)';
-    ctx.font = `${Math.max(8, Math.round(8 * zoom))}px monospace`;
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'left';
-    const label = dt.entries.length > 0 ? `💬 ${dt.entries.length}` : '💬 Dialogue';
-    ctx.fillText(label, x + 3, y + 3);
-    ctx.restore();
-  }
-}
-
-// ============================================================================
-// Background blocks (visual-only, no collision)
-// ============================================================================
-
-/** Teal fill for normal background blocks in the editor overlay. */
-const BG_BLOCK_COLOR          = 'rgba(0, 200, 190, 0.20)';
-const BG_BLOCK_SELECTED       = 'rgba(0, 240, 220, 0.35)';
-/** Amber tint for light-blocking background blocks. */
-const BG_BLOCK_LIGHT_COLOR    = 'rgba(210, 140, 0, 0.22)';
-const BG_BLOCK_LIGHT_SELECTED = 'rgba(255, 190, 0, 0.40)';
-
-export function drawEditorBackgroundBlocks(
-  ctx: CanvasRenderingContext2D,
-  room: EditorRoomData,
-  isSelected: IsElementSelected,
-  offsetXPx: number,
-  offsetYPx: number,
-  zoom: number,
-): void {
-  const blocks = room.backgroundBlocks ?? [];
-  if (blocks.length === 0) return;
-  const bs = BLOCK_SIZE_SMALL * zoom;
-  for (const b of blocks) {
-    const sel = isSelected('backgroundBlock', b.uid);
-    const isLightBlocking = b.isLightBlockingFlag === 1;
-    const effectiveFillColor = isLightBlocking
-      ? (sel ? BG_BLOCK_LIGHT_SELECTED : BG_BLOCK_LIGHT_COLOR)
-      : (sel ? BG_BLOCK_SELECTED       : BG_BLOCK_COLOR);
-    drawBlockRect(
-      ctx,
-      b.xBlock, b.yBlock, b.wBlock, b.hBlock,
-      offsetXPx, offsetYPx, zoom,
-      effectiveFillColor,
-      sel ? 2 : 1,
-    );
-    ctx.save();
-    ctx.strokeStyle = isLightBlocking
-      ? (sel ? 'rgba(255, 200, 40, 0.9)' : 'rgba(200, 130, 0, 0.55)')
-      : (sel ? 'rgba(0, 240, 220, 0.9)' : 'rgba(0, 190, 180, 0.55)');
-    ctx.lineWidth = sel ? 2 : 1;
-    ctx.setLineDash([3, 2]);
-    ctx.strokeRect(b.xBlock * bs + offsetXPx, b.yBlock * bs + offsetYPx, b.wBlock * bs, b.hBlock * bs);
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-}

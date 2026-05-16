@@ -17,7 +17,7 @@
 
 import { RoomDef } from './roomDef';
 import { loadRoomJsonFiles } from './roomJsonLoader';
-import type { SavedCampaignV1, SavedCampaignRevisionMetadata } from './campaignSchema';
+import type { SavedCampaignV1, SavedCampaignRevisionMetadata, CampaignSpawnData } from './campaignSchema';
 import { hydrateSavedCampaignToRoomDefs } from './campaignSchema';
 import { fetchOfficialPackedCampaign } from './packedCampaignLoader';
 
@@ -35,6 +35,9 @@ export const STARTING_ROOM_ID = 'lobby';
 /** Revision metadata from the last successfully loaded official campaign file. Null before init. */
 let loadedOfficialCampaignRevisionMetadata: SavedCampaignRevisionMetadata | null = null;
 
+/** Campaign spawn from the last successfully loaded official campaign file. Null before init or if absent. */
+let loadedOfficialCampaignSpawn: CampaignSpawnData | null = null;
+
 /**
  * Returns the revision metadata from the loaded official packed campaign, or null
  * if the campaign was not loaded from a packed file or has no metadata.
@@ -42,6 +45,15 @@ let loadedOfficialCampaignRevisionMetadata: SavedCampaignRevisionMetadata | null
  */
 export function getLoadedOfficialCampaignRevisionMetadata(): SavedCampaignRevisionMetadata | null {
   return loadedOfficialCampaignRevisionMetadata;
+}
+
+/**
+ * Returns the campaign spawn from the loaded official packed campaign, or null
+ * if the campaign was not loaded from a packed file or has no campaignSpawn.
+ * Used by game.ts to determine the initial room and spawn position.
+ */
+export function getLoadedOfficialCampaignSpawn(): CampaignSpawnData | null {
+  return loadedOfficialCampaignSpawn;
 }
 
 // ── World-map metadata stores ─────────────────────────────────────────────────
@@ -158,6 +170,8 @@ export async function initRoomRegistry(): Promise<void> {
   worldMapPositions.clear();
   roomNameOverridesMap.clear();
   roomWorldOverridesMap.clear();
+  loadedOfficialCampaignRevisionMetadata = null;
+  loadedOfficialCampaignSpawn = null;
 
   // ── Primary: load from packed campaign file ────────────────────────────────
   const packedCampaign = await fetchOfficialPackedCampaign();
@@ -176,6 +190,7 @@ export async function initRoomRegistry(): Promise<void> {
       }
     }
     loadedOfficialCampaignRevisionMetadata = packedCampaign.metadata ?? null;
+    loadedOfficialCampaignSpawn = packedCampaign.campaign.campaignSpawn ?? null;
     console.log(
       `[rooms] Loaded ${registryMap.size} rooms from packed campaign ` +
       `"${packedCampaign.campaign.id}" (initialRoom: ${packedCampaign.campaign.initialRoomId})`

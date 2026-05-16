@@ -25,6 +25,14 @@ export function deleteAtCursor(state: EditorState): void {
   const bx = state.cursorBlockX;
   const by = state.cursorBlockY;
 
+  // Check campaign spawn first (campaign-level singleton marker)
+  if (state.campaignSpawnBlock !== null &&
+      hitTestPoint(state.campaignSpawnBlock[0], state.campaignSpawnBlock[1], bx, by)) {
+    state.campaignSpawnBlock = null;
+    state.selectedElements = state.selectedElements.filter(e => e.type !== 'campaignSpawn');
+    return;
+  }
+
   // Check transitions first
   for (let i = 0; i < room.transitions.length; i++) {
     if (hitTestTransition(room.transitions[i], bx, by, room)) {

@@ -1,140 +1,205 @@
 # DustWeaver — Next Steps
 
-## BUILD 317 — Campaign Export Metadata & Import Picker Cleanup
+## BUILD 319 — Performance & Seamless Crossing Improvements
 
-### What Was Completed in BUILD 317
+### What Was Completed in BUILD 319
 
-1. **Campaign revision metadata added** (`src/levels/campaignSchema.ts`):
-   - New `SavedCampaignRevisionMetadata` interface: `{ version: number; lastEditedAt: string }`.
-   - `SavedCampaignV1` now includes an optional `metadata` field, placed immediately after
-     `kind` in the exported JSON.
-   - Older `.dwcampaign.json` files without `metadata` continue to load without error
-     (backward compatible).
+1. **Shadow occluder allocation reduction** (`src/render/effects/shadowCaster.ts`):
+   - Removed `readonly` from `ShadowCasterOccluderPx` fields to allow in-place mutation.
+   - Added module-level pool of 4 mutable occluder objects (`_shadowPool`).
+   - `buildPlayerShadowOccluders` fills pool objects in-place instead of calling `out.push({...})`.
+   - Up to 4 object-literal allocations per frame eliminated in DarkRoom mode.
 
-2. **Version bumping on export** (`src/editor/editableCampaignSession.ts`):
-   - `assembleExportCampaign()` now always writes `metadata.version` and `metadata.lastEditedAt`.
-   - `version` = previous campaign version + 1 (or 1 if metadata was absent or invalid).
-   - `lastEditedAt` = `new Date().toISOString()` at export time.
-   - Exporting twice increments the version twice — this is the intended export-revision
-     behavior; version tracks the number of packed exports produced, not room edits.
+2. **Decoration bloom allocation reduction** (`src/render/effects/glowPass.ts`,
+   `src/render/effects/wallDecorations.ts`):
+   - Added `GlowPass.drawCircleDirect(x, y, radius, intensity, color)` that accepts flat arguments.
+   - `addDecorationBloom` now calls `drawCircleDirect` instead of `drawCircle({...})`, eliminating
+     nested `{ x, y, radius, glow: { enabled, intensity, color } }` object literals per bloom call.
 
-3. **Main campaign export preserves existing metadata** (`src/editor/editorExport.ts`):
-   - `exportMainCampaignJson()` reads the loaded canonical campaign's revision metadata via
-     `getLoadedOfficialCampaignRevisionMetadata()` from `rooms.ts`.
-   - If metadata is available, the synthetic session carries it forward so `assembleExportCampaign()`
-     increments the version rather than resetting to 1.
-   - `rooms.ts` now exposes `getLoadedOfficialCampaignRevisionMetadata()` and stores the metadata
-     from the packed campaign on successful load.
+3. **Environmental dust wall spatial partitioning** (`src/render/environmentalDust.ts`):
+   - Added `_wallColumnGrid: Map<number, number[]>` (cell width = 32 world units).
+   - `_buildWallGrid(world)` called once per room load: registers each wall index in every
+     column cell it spans.
+   - `resolveWorldCollisions` now looks up only the column bucket for the particle's X position
+     for both the AABB collision pass and the surface-anchor pass, reducing worst-case cost from
+     O(particles × walls) to O(particles × walls-in-column).
 
-4. **Official campaign export filename** (`src/editor/editorExport.ts`):
-   - Official campaign exports directly download as `DustweaverCampaign.dwcampaign.json`.
-   - No dated suffix, no manual rename required.
+4. **Staged room background rendering** (`src/screens/gameRender.ts`, `src/screens/gameScreen.ts`):
+   - Added `StagedRoomBgInfo` interface and `stagedRoom: StagedRoomBgInfo | null` field to
+     `RenderFrameContext`.
+   - When `stagedRoom` is non-null, `renderFrame` clips each room's background to its own
+     screen-space rect using nested `ctx.save()/clip()/restore()`, then calls
+     `renderWorldBackground` for the staged room first (with adjusted camera offset
+     `ox + originXWorld * zoom`) and then for the active room.
+   - Eliminates the visual discontinuity where the active room's background filled the full
+     union clip rect when rooms had different backgrounds.
+   - `gameScreen.ts` populates `stagedRoom` from `stagingState.stagedRooms[0]`.
 
-5. **Campaign import picker restricted** (`src/ui/mainMenuCustomCampaigns.ts`):
-   - `input.accept` changed from `.json,.dwcampaign.json` to `.dwcampaign.json`.
-   - Button label updated to `📥 Import Campaign (.dwcampaign.json)`.
-
----
-
-## All Pending / Deferred Work
-
-Items are grouped by risk and origin. The letter tags (A–C) and numbered task tags
-reference the build where the item was first documented.
-
----
-
-### Campaign & File System (Low Risk)
-
-#### 1. Dynamic `STARTING_ROOM_ID`
-**File:** `src/levels/rooms.ts`  
-**Issue:** `STARTING_ROOM_ID = 'lobby'` is a hard-coded fallback. Callers that use
-`campaign.initialRoomId` are already correct, but code that reads `STARTING_ROOM_ID`
-directly may silently break if the campaign's initial room changes.  
-**Fix:** After `initRoomRegistry()` loads the campaign, update `STARTING_ROOM_ID` to
-reflect `campaign.initialRoomId`.  
-**Risk:** Low — purely a data-propagation change; no physics or render impact.
+5. **Camera settling after seamless crossing finalization** (`src/screens/gameCameraState.ts`):
+   - Added `camSettlingFramesLeft`, `settlingMinX/Y/MaxX/Y`, `prevHadUnionBounds` to
+     `GameCameraState` and `CAM_SETTLING_FRAMES = 21` constant.
+   - When `renderUnionBounds` transitions from non-null → null, the settling window starts:
+     effective bounds lerp frame-by-frame from the captured union bounds toward the new
+     single-room bounds over 21 frames (~0.35 s at 60 fps), preventing the camera snap on
+     rooms narrower or shorter than 480×270 px.
+   - After settling expires, the existing `CAMERA_BOUNDS_LERP_SPEED` lerp resumes as before.
+   - This path is currently dormant (`ENABLE_TWO_ROOM_CAMERA_CROSSING = false`) but is in place
+     for when seamless crossings are re-enabled.
 
 ---
 
-### Rendering — Seamless Crossing (Medium Risk)
+## BUILD 318 — Campaign Spawn Trigger & Fade From Black
 
-#### 2. Staged room background rendering (Task 7)
-**Files:** `src/screens/gameScreen.ts`, `src/screens/gameRender.ts`, background renderer files  
-**Issue:** When a previous room is staged after seamless crossing, its background is not drawn.
-The active room background fills the expanded clip rect, producing visual discontinuity
-between rooms with different backgrounds.  
-**Proposed fix:** Detect `stagingState.stagedRooms.length > 0` in `renderFrame()`, call
-the background render pass a second time at the staged room's world-space origin offset
-(`stagedRoom.originXWorld`, `stagedRoom.originYWorld`). The background renderer API may
-need an `originOffsetWorld` parameter.  
-**Risk:** Medium — need to verify the background renderer handles world-space offsets
-correctly without bleed. Do not re-enable edge-extension preview in the same pass.
+### What Was Completed in BUILD 318
 
-#### 3. Camera settling after small-room crossing finalization (Task 8)
-**Files:** `src/render/camera.ts`, `src/screens/gameScreen.ts`, `src/screens/twoRoomCrossing.ts`  
-**Issue:** Rooms narrower or shorter than 480×270 px snap the camera to room center when
-`_finalizeCrossingSeamless()` replaces the union camera bounds with the new room's bounds.  
-**Proposed fix:** After finalization, keep a `camSettlingFramesLeft` counter (e.g. 21 frames
-= 0.35 s at 60 fps). While > 0, lerp the effective camera bounds toward the new room bounds
-each frame instead of snapping. `updateCameraWithBounds` already smooths; only the bounds
-swap needs the settling window.  
-**Risk:** Low — isolated to the finalization path; `preserveCamera`, `loadRoom`, and
-long-transition paths are unaffected.
+1. **Campaign Spawn data model** (`src/levels/campaignSchema.ts`):
+   - New `CampaignSpawnData` interface: `{ roomId: string; xBlock: number; yBlock: number }`.
+   - `SavedCampaignMetadata` gains optional `campaignSpawn?: CampaignSpawnData`.
+   - Backward compatible — older campaigns without `campaignSpawn` continue to load.
 
----
+2. **Official campaign spawn loaded from registry** (`src/levels/rooms.ts`):
+   - `initRoomRegistry()` stores `campaignSpawn` from the packed campaign in `loadedOfficialCampaignSpawn`.
+   - New `getLoadedOfficialCampaignSpawn()` getter exposed for `game.ts`.
+   - `loadedOfficialCampaignRevisionMetadata` and `loadedOfficialCampaignSpawn` are reset on `initRoomRegistry()`.
 
-### Rendering — Performance (Low–Medium Risk)
+3. **Editor palette** (`src/editor/editorDropdownData.ts`):
+   - Added `campaign_spawn` item (label: `Campaign Spawn`, category: `triggers`).
+   - Renamed existing `player_spawn` item label from `Player Spawn` to `Room Spawn (Fallback)`.
 
-#### 4. Environmental dust spatial partitioning
-**File:** `src/render/environmentalDust.ts`  
-**Issue:** The update path's wall-collision check may iterate all room walls for every
-active particle (`O(particles × walls)`). In large rooms with many walls this can be costly.  
-**Proposed fix:** Add a coarse grid (cell size ≈ 4× particle radius) keyed by cell position.
-Each frame, look up only the ~4 neighbouring cells instead of iterating all walls. Similar to
-`src/sim/spatial/`.  
-**Risk:** Behavioural change if grid boundary handling is wrong. Worth a separate PR.
+4. **Editor state** (`src/editor/editorState.ts`):
+   - Added `'campaignSpawn'` to `SelectedElementType`.
+   - Added `campaignSpawnBlock: [number, number] | null` to `EditorState`; initialized to `null`.
 
-#### 5. Shadow occluder object allocations (Item A)
-**File:** `src/render/effects/darkRoomOverlay.ts`, `buildPlayerShadowOccluders()`  
-**Issue:** Up to 4 `{ baseAx, baseAy, … }` objects are pushed per frame in DarkRoom mode.  
-**Fix:** Pre-allocate a pool of 4 mutable occluder objects; fill them in place instead of
-calling `push` with object literals.  
-**Risk:** Low — contained within a single function.
+5. **Editor tools** (`src/editor/editorTools.ts`, `src/editor/editorDeleteTool.ts`):
+   - `selectAtCursor` hit-tests `state.campaignSpawnBlock` — returns `{ type: 'campaignSpawn', uid: 0 }`.
+   - `deleteAtCursor` clears `state.campaignSpawnBlock = null` when cursor hits campaign spawn.
+   - Controller calls `syncCampaignSpawnToSessionAfterDelete()` after every delete to update session.
 
-#### 6. Decoration bloom: per-frame object literals in BloomSystem (Item B)
-**File:** `src/render/effects/wallDecorations.ts`, `BloomSystem`  
-**Issue:** `addDecorationBloom()` creates `{ x, y, radius, glow: { … } }` descriptor
-objects each frame, adding GC pressure.  
-**Fix:** Pool the descriptor objects or replace with a flat typed-array draw queue.  
-**Risk:** Low–Medium — requires updating all BloomSystem call sites.
+6. **Editor rendering** (`src/editor/editorOverlayDrawers.ts`, `src/editor/editorRendererHelpers.ts`):
+   - Campaign spawn drawn as ⭐ with a gold footprint outline.
+   - "CAMPAIGN SPAWN" label rendered below marker when selected or hovered.
+   - New color constants `CAMPAIGN_SPAWN_COLOR` and `CAMPAIGN_SPAWN_SELECTED`.
+   - Tooltip/name maps updated to include `campaignSpawn`.
 
-#### 7. Spatial partitioning for DarkRoom particle-light loop (Item C)
-**File:** `src/render/effects/darkRoomOverlay.ts`  
-**Issue:** The particle-light loop scans all particles linearly (O(n)). With thousands of
-particles this is costly.  
-**Fix:** Use the spatial grid already present in `sim/spatial/` to query only
-screen-visible particles for the light-contribution pass.  
-**Risk:** Medium — cross-layer query (render reads from sim spatial index); needs a
-read-only snapshot interface.
+7. **Editor controller** (`src/editor/editorController.ts`):
+   - `loadRoomForEditing` syncs `state.campaignSpawnBlock` from session on room load.
+   - New helpers: `syncCampaignSpawnBlockFromSession`, `syncCampaignSpawnToSessionAfterDelete`,
+     `showCampaignSpawnReplaceModal`, `placeCampaignSpawn`.
+   - Singleton enforcement: placing `campaign_spawn` when another exists in a different room shows
+     a modal: **"This will remove the current campaign spawn, proceed?"** with Yes/No.
+   - Choosing Yes removes old spawn and places new one; updates session `campaignSpawn` and `initialRoomId`.
+   - Campaign spawn property changes handled directly in the controller's `onPropertyChange` hook
+     (bypasses room-data path since campaign spawn is not stored in room JSON).
 
-#### 8. Large-room stress-test room (Task 9)
-**File:** New file in `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/` or editor export  
-**Issue:** No dedicated profiler test room exists with high decoration, background block,
-and liquid/hazard coverage to measure chunk-rebuild performance across builds.  
-**Proposed path:** Use the room editor to author a ~120×80 room with 200+ decorations,
-30+ background block defs, 10+ dust containers, 4 sunbeam emitters, and representative
-liquid/hazard coverage; export and commit as a dev-only room.  
-**Risk:** Low — does not affect existing rooms or room schema.
+8. **Inspector** (`src/editor/editorInspector.ts`):
+   - `campaignSpawn` element shows xBlock/yBlock fields, editable via property change.
+
+9. **New campaign sessions** (`src/editor/editableCampaignSession.ts`):
+   - `createNewCampaignSession` pre-populates `campaignSpawn` at the starter room's spawn position.
+   - `assembleExportCampaign` automatically includes `campaignSpawn` via `...session.campaign.campaign`.
+   - `initialRoomId` is kept synchronized with `campaignSpawn.roomId` when a spawn is placed.
+
+10. **Runtime start logic** (`src/game.ts`, `src/screens/gameScreen.ts`):
+    - Main campaign: uses `getLoadedOfficialCampaignSpawn()` to set start room and position when
+      the player has no save slot.
+    - Custom campaign play: extracts `campaignSpawn` from packed campaign; passes room and block
+      position as `startRoomId` and `campaignSpawnBlockOverride` to `startGameScreen`.
+    - `startGameScreen` accepts new optional `campaignSpawnBlockOverride?` parameter.
+    - `desiredSpawnBlock` uses `campaignSpawnBlockOverride` instead of `currentRoom.playerSpawnBlock`
+      when available (save data still takes priority).
+    - Death-respawn uses campaign spawn room and block when no save exists.
+
+11. **Fade from black** (`src/screens/gameLoadingOverlay.ts`, `src/screens/gameScreen.ts`):
+    - `GameLoadingOverlay.show(isCampaignInitialLoad?)` — when true, uses 700 ms fade (vs 300 ms).
+    - `gameScreen.ts` calls `showLoadingOverlay()` on every initial game start (even when sprites
+      are already cached), ensuring a deliberate fade-from-black at campaign start.
+    - Subsequent room-load overlays (mid-session sprite cache misses) use the standard 300 ms fade.
 
 ---
 
-### Simulation — Seamless Crossing (High Risk, Deferred)
+## Remaining / Deferred Work
 
-#### 9. Staged room hazards / enemies / ropes (Task 7 follow-up)
+Items are grouped by risk and origin.
+
+---
+
+### Campaign & File System
+
+#### ~~1. Dynamic `STARTING_ROOM_ID`~~ — **Superseded by Campaign Spawn (BUILD 318)**
+**Resolution (BUILD 318):** The Campaign Spawn system is now the authoritative source for the
+starting room and block position. `STARTING_ROOM_ID = 'lobby'` is retained as a last-resort fallback.
+
+---
+
+### Rendering — Seamless Crossing (Deferred — requires ENABLE_TWO_ROOM_CAMERA_CROSSING)
+
+#### 1. Staged room hazards / enemies / ropes
 **Files:** `src/screens/gameSeamlessStaging.ts`, `src/sim/world.ts`, enemy AI files  
 **Issue:** Hazards (water/lava/spikes), enemies, falling blocks, and ropes from the staged
 room are not preserved after `loadRoom()`. Players can walk through them without interaction.  
 **Proposed path:** Before `loadRoom()` in `_finalizeCrossingSeamless`, snapshot the staged
 room's hazard arrays and enemy clusters; after `loadRoom()`, re-append them at the staged
 room's world-space offset. Enemy AI requires sim-layer awareness of the offset.  
+**Blocker:** `ENABLE_TWO_ROOM_CAMERA_CROSSING = false` in `src/render/transitions/transitionConfig.ts`.
+Re-enable crossing first, then address this sim-layer change.  
 **Risk:** High — requires non-trivial sim-layer changes; defer to a dedicated pass.
+
+---
+
+### Rendering — Performance
+
+#### 2. Spatial partitioning for DarkRoom particle-light loop
+**File:** `src/render/effects/darkRoomOverlay.ts`, `src/screens/gameDarkRoomLighting.ts`  
+**Issue:** The particle-light contribution loop in `renderDarkRoomLighting` scans all
+particles linearly (O(n)). With thousands of particles this can be costly even though
+viewport culling and `maxParticleLightCount` limit how many lights are emitted.  
+**Proposed fix options:**
+- Add a compact alive-Physical index list to `WorldSnapshot` (one sweep per frame, maintained
+  during `updateSnapshotInPlace`), letting the render loop skip dead/non-Physical particles.
+  Requires snapshot schema change but no cross-layer spatial coupling.
+- Or: build a per-frame volatile spatial index from snapshot particle positions for the
+  lighting pass only. Acceptable since it's render-only.  
+**Blocker:** Any approach requires either snapshot schema changes or a per-frame allocation.
+  The existing viewport-cull + quality-cap already limits practical cost to tens of particles
+  per frame in most rooms.  
+**Risk:** Medium — cross-layer or snapshot interface changes needed.
+
+#### 3. Large-room stress-test room
+**File:** New file in `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/` or editor export  
+**Issue:** No dedicated profiler test room exists with high decoration, background block,
+and liquid/hazard coverage to measure chunk-rebuild performance across builds.  
+**Required steps (editor-only, cannot be hand-authored safely):**
+  1. Open editor, create a new room ~120×80 blocks.
+  2. Add 200+ decorations, 30+ background block defs, 10+ dust containers, 4 sunbeam emitters,
+     representative liquid zones and spike hazards.
+  3. Export room JSON to `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/dev_stress_test.json`.
+  4. Add to the room registry (`src/levels/rooms.ts`) behind a dev flag so it is accessible
+     from the editor visual map without appearing in the campaign path.  
+**Risk:** Low — does not affect existing rooms. Must be done via editor, not hand-written JSON.
+
+---
+
+### Editor — Placement Performance
+
+#### 4. Editor placement freeze — active-room-only edits (BUILD 340)
+**Files:** `src/editor/editorController.ts`, `src/editor/editorHistory.ts`
+
+**What was fixed in BUILD 340:**
+- Placement/delete hot path now mutates only active room state and no longer calls `onLoadRoom` per placement.
+- `applyEdits` now has `placement` vs `metadata` modes; placement mode marks dirty state only and skips room rebuild/reload.
+- Added explicit boundary commit flow: `commitActiveRoomToCampaign(reason)` used for room switch, playtest/confirm, export, and manual save.
+- Added richer placement perf log output:
+  `[editor-perf] placeBlock total=... touchedCampaign=false committedRoom=false stringified=false localStorage=false dehydrated=false campaignValidated=false allRoomsLooped=false cacheInvalidation=local`
+- Undo/redo snapshots switched from JSON stringify/parse to `structuredClone`, removing JSON serialization from placement hot path.
+
+**Remaining work not completed in BUILD 340:**
+1. Undo/redo is still full-room snapshot-based (now clone-based), not delta-based transactions by tile/tool.
+2. No new measured timing capture has been recorded yet after BUILD 340 in a large-room stress run.
+
+**Manual verification still needed:**
+- Paint 100+ blocks in a large room and confirm no 1–2s freeze and immediate overlay response.
+- Verify room switch + save/discard keeps/rolls back edits correctly with campaign sessions.
+- Verify playtest and export include latest active-room edits without per-placement campaign commit.
+
+**Compatibility risk to monitor:**
+- Any future feature that relies on ROOM_REGISTRY being updated every placement may now need an explicit metadata sync point (currently done on metadata edits and map-open paths).
