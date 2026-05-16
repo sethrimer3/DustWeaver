@@ -12,6 +12,16 @@
 
 import type { InputState } from '../input/handler';
 import { JOYSTICK_MAX_RADIUS_PX } from '../input/handler';
+import type { WorldState } from '../sim/world';
+import { renderHudOverlay } from '../render/hud/overlay';
+import type { HudState } from '../render/hud/overlay';
+import type { RenderProfiler } from '../render/hud/renderProfiler';
+import {
+  getTotalMoteSlotCount,
+  getAvailableMoteSlotCount,
+  getEffectiveGrappleRangeWorld,
+  MOTE_STATE_DEPLETED,
+} from '../sim/motes/orderedMoteQueue';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -31,6 +41,80 @@ export interface DeviceOverlayContext {
   virtualCanvas: HTMLCanvasElement;
   inputState: InputState;
   isDebugMode: boolean;
+  world: WorldState;
+  currentRoom: { name: string };
+  hudState: HudState;
+  renderProfiler?: RenderProfiler;
+}
+
+export interface HighResolutionDebugOverlayContext {
+  deviceCtx: CanvasRenderingContext2D;
+  canvas: HTMLCanvasElement;
+  virtualCanvas: HTMLCanvasElement;
+  isDebugMode: boolean;
+  world: WorldState;
+  currentRoom: { name: string };
+  hudState: HudState;
+  renderProfiler?: RenderProfiler;
+}
+
+/**
+ * Renders debug/stat text panels directly on the device canvas so they remain
+ * sharp at native display resolution.
+ */
+export function renderHighResolutionDebugOverlay(r: HighResolutionDebugOverlayContext): void {
+  const { deviceCtx, canvas, virtualCanvas, isDebugMode, world, currentRoom, hudState, renderProfiler } = r;
+  if (!isDebugMode) return;
+
+  const scaleXPx = canvas.width / virtualCanvas.width;
+  const scaleYPx = canvas.height / virtualCanvas.height;
+
+  deviceCtx.save();
+  deviceCtx.scale(scaleXPx, scaleYPx);
+
+  renderHudOverlay(deviceCtx, hudState, renderProfiler, virtualCanvas.width, true);
+
+  deviceCtx.fillStyle = 'rgba(255,255,255,0.45)';
+  deviceCtx.font = '7px monospace';
+  const roomLabel = currentRoom.name;
+  const labelWidthPx = deviceCtx.measureText(roomLabel).width;
+  deviceCtx.fillText(roomLabel, (virtualCanvas.width - labelWidthPx) * 0.5, 22);
+
+  const totalSlots = getTotalMoteSlotCount(world);
+  const availableSlots = getAvailableMoteSlotCount(world);
+  const depletedSlots = totalSlots - availableSlots;
+  const ratio = totalSlots > 0 ? availableSlots / totalSlots : 1.0;
+  const effectiveRangeWorld = getEffectiveGrappleRangeWorld(world);
+  const displayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
+
+  let slotBar = '';
+  for (let i = 0; i < world.moteSlotCount; i++) {
+    slotBar += world.moteSlotState[i] === MOTE_STATE_DEPLETED ? '○' : '●';
+  }
+
+  const moteLines = [
+    `Motes: ${availableSlots}/${totalSlots} (${(ratio * 100).toFixed(0)}%)`,
+    `Depleted: ${depletedSlots}`,
+    `Range eff: ${effectiveRangeWorld.toFixed(1)}  disp: ${displayRadiusWorld.toFixed(1)}`,
+    slotBar || '(no motes)',
+  ];
+
+  const lineHeightPx = 9;
+  const padXPx = 4;
+  const padYPx = 4;
+  const panelWidthPx = 150;
+  const panelHeightPx = moteLines.length * lineHeightPx + padYPx * 2;
+  const panelXPx = virtualCanvas.width - panelWidthPx - padXPx;
+  const panelYPx = padYPx;
+
+  deviceCtx.fillStyle = 'rgba(0,0,0,0.50)';
+  deviceCtx.fillRect(panelXPx, panelYPx, panelWidthPx, panelHeightPx);
+  deviceCtx.fillStyle = '#b0f080';
+  for (let li = 0; li < moteLines.length; li++) {
+    deviceCtx.fillText(moteLines[li], panelXPx + padXPx, panelYPx + padYPx + (li + 1) * lineHeightPx - 2);
+  }
+
+  deviceCtx.restore();
 }
 
 // ── Public render function ──────────────────────────────────────────────────
@@ -43,6 +127,8 @@ export interface DeviceOverlayContext {
  */
 export function renderDeviceOverlay(r: DeviceOverlayContext): void {
   const { deviceCtx, canvas, virtualCanvas, inputState, isDebugMode } = r;
+
+  renderHighResolutionDebugOverlay(r);
 
   // ── Touch joystick ────────────────────────────────────────────────────────
   if (inputState.isTouchJoystickActiveFlag === 1) {

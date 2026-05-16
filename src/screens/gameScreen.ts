@@ -10,7 +10,7 @@ import { renderClusters, renderWalls } from '../render/clusters/renderer';
 import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
-import { renderHudOverlay, HudState } from '../render/hud/overlay';
+import type { HudState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
@@ -149,6 +149,7 @@ import {
 import { createGameOverlayController } from './gameOverlayController';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
 import { createGamePauseController } from './gamePauseController';
+import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
 
 const FIXED_DT_MS = 16.666;
 
@@ -969,10 +970,6 @@ export function startGameScreen(
         // Draw editor overlays on top
         editorController.render(ctx, eox, eoy, zoom, virtualWidthPx, virtualHeightPx);
 
-        if (pauseController.state.isDebugMode) {
-          renderHudOverlay(ctx, hudState);
-        }
-
         // ── Upscale virtual canvas to device canvas ──────────────────────
         deviceCtx.imageSmoothingEnabled = false;
         deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
@@ -980,6 +977,16 @@ export function startGameScreen(
           deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
         }
         bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
+        renderHighResolutionDebugOverlay({
+          deviceCtx,
+          canvas,
+          virtualCanvas,
+          isDebugMode: pauseController.state.isDebugMode,
+          world,
+          currentRoom,
+          hudState,
+          renderProfiler,
+        });
 
         rafHandle = requestAnimationFrame(frame);
         return;
