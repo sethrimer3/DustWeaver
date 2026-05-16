@@ -63,7 +63,11 @@ const BS = BLOCK_SIZE_MEDIUM;
 
 /** Width of the editor UI panel in CSS pixels. */
 const EDITOR_PANEL_WIDTH_CSS_PX = 260;
-/** Minimum interval between expensive room reloads during continuous drag paint/delete. */
+/**
+ * Minimum interval between expensive room reloads during continuous drag paint/delete.
+ * 66ms ~= 15Hz, which keeps brush strokes visually responsive while avoiding
+ * per-block full room reload spikes on heavy rooms.
+ */
 const MIN_DRAG_RELOAD_INTERVAL_MS = 66;
 
 export interface EditorController {
@@ -202,7 +206,6 @@ export function createEditorController(
     const sx = state.roomData.playerSpawnBlock[0];
     const sy = state.roomData.playerSpawnBlock[1];
     onLoadRoom(roomDef, sx, sy, preserveCamera);
-    lastDeferredRoomReloadAtMs = performance.now();
   }
 
   function discardCurrentRoomSessionChanges(roomData: EditorRoomData | null): void {
@@ -927,6 +930,7 @@ export function createEditorController(
       ) {
         pendingDeferredRoomReload = false;
         reloadRoomFromCurrentEditorData(true);
+        lastDeferredRoomReloadAtMs = nowMs;
       }
     }
 

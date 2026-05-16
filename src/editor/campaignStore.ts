@@ -44,7 +44,7 @@ function buildWorldMapRoomIndex(worldMap: WorldMapJsonDef): Map<string, WorldMap
   return index;
 }
 
-function computeNextUid(roomData: EditorRoomData, startUid: number): number {
+function computeMaxUidPlusOne(roomData: EditorRoomData, startUid: number): number {
   let nextUid = startUid;
   const track = (uid: number): void => {
     if (uid + 1 > nextUid) nextUid = uid + 1;
@@ -109,6 +109,7 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
   }
 
   const hydratedRoomsById = new Map<string, EditorRoomData>();
+  const hydratedNextUidById = new Map<string, number>();
   const dirtyRoomIds = new Set<string>();
   let activeRoomId: string | null = null;
   let worldMap = campaign.worldMap;
@@ -128,7 +129,13 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
   function getRoom(roomId: string, startUid: number): { roomData: EditorRoomData; nextUid: number } {
     const cached = hydratedRoomsById.get(roomId);
     if (cached !== undefined) {
-      return { roomData: cached, nextUid: computeNextUid(cached, startUid) };
+      const cachedNextUid = hydratedNextUidById.get(roomId);
+      if (cachedNextUid !== undefined) {
+        return { roomData: cached, nextUid: cachedNextUid };
+      }
+      const computedNextUid = computeMaxUidPlusOne(cached, startUid);
+      hydratedNextUidById.set(roomId, computedNextUid);
+      return { roomData: cached, nextUid: computedNextUid };
     }
     const raw = rawRoomsById.get(roomId);
     if (raw === undefined) {
@@ -145,6 +152,7 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
     }
     const hydrated = jsonToEditorRoomData(jsonDef, startUid);
     hydratedRoomsById.set(roomId, hydrated.data);
+    hydratedNextUidById.set(roomId, hydrated.nextUid);
     if (isDev()) {
       logTiming('hydrate room', hydrateStartMs, `(roomId=${roomId})`);
     }
@@ -153,11 +161,13 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
 
   function markRoomDirty(roomId: string, roomData: EditorRoomData): void {
     hydratedRoomsById.set(roomId, roomData);
+    hydratedNextUidById.delete(roomId);
     dirtyRoomIds.add(roomId);
   }
 
   function discardRoomChanges(roomId: string): void {
     hydratedRoomsById.delete(roomId);
+    hydratedNextUidById.delete(roomId);
     dirtyRoomIds.delete(roomId);
     if (activeRoomId === roomId) activeRoomId = null;
   }
@@ -169,6 +179,7 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
     const adjusted = applyWorldMapRoomMetadata(saved, worldMapRoomById.get(roomId));
     rawRoomsById.set(roomId, adjusted);
     hydratedRoomsById.set(roomId, roomData);
+    hydratedNextUidById.delete(roomId);
     dirtyRoomIds.delete(roomId);
     if (isDev()) {
       logTiming('dehydrate room', dehydrateStartMs, `(roomId=${roomId})`);
