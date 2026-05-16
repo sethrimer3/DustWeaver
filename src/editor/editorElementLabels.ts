@@ -6,7 +6,7 @@
  * from geometry drawing primitives.
  */
 
-import type { SelectedElementType, EditorRoomData, EditorEnemy } from './editorState';
+import type { SelectedElementType, EditorRoomData } from './editorState';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 
 /** Returns a unique display ID string for the given element (e.g. "skill_tomb_12"). */
@@ -55,7 +55,7 @@ export function buildElementTypeName(
   room: EditorRoomData,
 ): string {
   if (type === 'enemy') {
-    const e = room.enemies.find((x: EditorEnemy) => x.uid === uid);
+    const e = room.enemies.find(x => x.uid === uid);
     if (e) {
       if (e.isFlyingEyeFlag === 1)    return 'Flying Eye';
       if (e.isRollingEnemyFlag === 1) return 'Rolling Enemy';
@@ -66,7 +66,7 @@ export function buildElementTypeName(
     }
   }
   if (type === 'decoration') {
-    const d = (room.decorations ?? []).find((x: { uid: number; kind: string }) => x.uid === uid);
+    const d = (room.decorations ?? []).find(x => x.uid === uid);
     if (d) {
       if (d.kind === 'mushroom')  return 'Glow Mushroom';
       if (d.kind === 'glowGrass') return 'Glow Grass';
@@ -75,7 +75,7 @@ export function buildElementTypeName(
     return 'Decoration';
   }
   if (type === 'skillTomb') {
-    const s = room.skillTombs.find((x: { uid: number; weaveId: string }) => x.uid === uid);
+    const s = room.skillTombs.find(x => x.uid === uid);
     if (s) {
       const displayName = WEAVE_REGISTRY.get(s.weaveId)?.displayName ?? '(unknown weave)';
       return `Skill Tomb [${displayName}]`;
@@ -101,17 +101,17 @@ export function buildElementTypeName(
     rope:               'Rope',
   };
   if (type === 'dustBoostJar') {
-    const j = (room.dustBoostJars ?? []).find((x: { uid: number; dustKind: string; dustCount: number }) => x.uid === uid);
+    const j = (room.dustBoostJars ?? []).find(x => x.uid === uid);
     if (j) return `Dust Jar [${j.dustKind} ×${j.dustCount}]`;
     return 'Dust Jar';
   }
   if (type === 'dustSwarm') {
-    const s = (room.dustSwarms ?? []).find((x: { uid: number; dustKind: string; dustCount: number }) => x.uid === uid);
+    const s = (room.dustSwarms ?? []).find(x => x.uid === uid);
     if (s) return `Dust Swarm [${s.dustKind} ×${s.dustCount}]`;
     return 'Dust Swarm';
   }
   if (type === 'crumbleBlock') {
-    const b = (room.crumbleBlocks ?? []).find((x: { uid: number; variant?: string; wBlock?: number; hBlock?: number }) => x.uid === uid);
+    const b = (room.crumbleBlocks ?? []).find(x => x.uid === uid);
     if (b) {
       const variantLabel = b.variant && b.variant !== 'normal' ? ` [${b.variant}]` : '';
       const sizeLabel = (b.wBlock ?? 1) > 1 || (b.hBlock ?? 1) > 1
@@ -121,7 +121,7 @@ export function buildElementTypeName(
     return 'Crumble Block';
   }
   if (type === 'bouncePad') {
-    const b = (room.bouncePads ?? []).find((x: { uid: number; speedFactorIndex?: number; wBlock: number; hBlock: number; rampOrientation?: number }) => x.uid === uid);
+    const b = (room.bouncePads ?? []).find(x => x.uid === uid);
     if (b) {
       const sfLabel = b.speedFactorIndex === 1 ? '100%' : '50%';
       const sizeLabel = b.wBlock > 1 || b.hBlock > 1 ? ` ${b.wBlock}×${b.hBlock}` : '';
@@ -131,7 +131,7 @@ export function buildElementTypeName(
     return 'Bounce Pad';
   }
   if (type === 'fallingBlock') {
-    const fb = (room.fallingBlocks ?? []).find((x: { uid: number; variant?: string }) => x.uid === uid);
+    const fb = (room.fallingBlocks ?? []).find(x => x.uid === uid);
     if (fb) {
       const varLabel = fb.variant === 'tough' ? 'Tough' : fb.variant === 'sensitive' ? 'Sensitive' : 'Crumbling';
       return `Falling Block [${varLabel}]`;
@@ -139,7 +139,7 @@ export function buildElementTypeName(
     return 'Falling Block';
   }
   if (type === 'ambientLightBlocker') {
-    const b = (room.ambientLightBlockers ?? []).find((x: { uid: number; isDarkFlag?: number }) => x.uid === uid);
+    const b = (room.ambientLightBlockers ?? []).find(x => x.uid === uid);
     if (b) return b.isDarkFlag === 1 ? 'Dark Blocker' : 'Ambient Blocker';
   }
   return names[type] ?? type;
