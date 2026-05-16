@@ -37,15 +37,20 @@ export function createGamePauseController(
     onDebugModeChanged,
   } = params;
 
+  const initialMusicVolume = getMusicVolume();
+  const initialSfxVolume = getSfxVolume();
+  const initialGraphicsQuality = getGraphicsQuality();
+  const initialAlwaysCenterCamera = getAlwaysCenterCamera();
+
   const state: GamePauseControllerState = {
     isPaused: false,
     isDebugMode: false,
     pauseMenuState: {
       isDebugOn: false,
-      musicVolume: getMusicVolume(),
-      sfxVolume: getSfxVolume(),
-      graphicsQuality: getGraphicsQuality(),
-      alwaysCenterCamera: getAlwaysCenterCamera(),
+      musicVolume: initialMusicVolume,
+      sfxVolume: initialSfxVolume,
+      graphicsQuality: initialGraphicsQuality,
+      alwaysCenterCamera: initialAlwaysCenterCamera,
     },
   };
 
@@ -79,6 +84,12 @@ export function createGamePauseController(
       pauseMenuCleanup = null;
     }
     state.isPaused = false;
+    state.isDebugMode = false;
+    state.pauseMenuState.isDebugOn = false;
+    state.pauseMenuState.musicVolume = initialMusicVolume;
+    state.pauseMenuState.sfxVolume = initialSfxVolume;
+    state.pauseMenuState.graphicsQuality = initialGraphicsQuality;
+    state.pauseMenuState.alwaysCenterCamera = initialAlwaysCenterCamera;
   }
 
   return {
