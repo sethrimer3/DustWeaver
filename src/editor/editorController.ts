@@ -181,6 +181,13 @@ export function createEditorController(
   // Coalesced room reload scheduling for continuous drag paint/delete.
   let pendingDeferredRoomReload = false;
   let lastDeferredRoomReloadAtMs = 0;
+  /**
+   * Set to `true` whenever `applyEdits('defer')` is called within an `update()` frame.
+   * The deferred reload check at the end of `update()` skips while this is `true`, then
+   * it is cleared at the **start** of the next `update()` call so the reload can fire
+   * one frame later.  This guarantees placement never blocks the current frame.
+   */
+  let blockDeferredReloadThisFrame = false;
 
   // Shared context for campaign spawn helpers (avoids repeating state/session/uiRoot).
   const campaignSpawnCtx: CampaignSpawnContext = { state, campaignSession, uiRoot };
@@ -189,6 +196,23 @@ export function createEditorController(
   function logEditorPerf(label: string, startMs: number): void {
     if (!import.meta.env.DEV) return;
     console.log(`[campaignPerf] ${label}: ${(performance.now() - startMs).toFixed(2)}ms`);
+  }
+
+  /**
+   * Dev-only: logs elapsed time for a placement-path operation with threshold warnings.
+   * >16 ms → warn; >50 ms → error (blocking).
+   */
+  function logEditorPerfWarned(label: string, startMs: number, roomId?: string): void {
+    if (!import.meta.env.DEV) return;
+    const elapsedMs = performance.now() - startMs;
+    const roomPart = roomId != null ? ` room=${roomId}` : '';
+    if (elapsedMs > 50) {
+      console.error(`[editor-perf] ⛔ ${label}: ${elapsedMs.toFixed(2)}ms (>50ms blocking!)${roomPart}`);
+    } else if (elapsedMs > 16) {
+      console.warn(`[editor-perf] ⚠️ ${label}: ${elapsedMs.toFixed(2)}ms (>16ms slow)${roomPart}`);
+    } else {
+      console.log(`[editor-perf] ${label}: ${elapsedMs.toFixed(2)}ms${roomPart}`);
+    }
   }
 
   function commitCurrentRoomToSessionCache(roomData: EditorRoomData): void {
@@ -202,10 +226,14 @@ export function createEditorController(
 
   function reloadRoomFromCurrentEditorData(preserveCamera = true): void {
     if (!state.roomData) return;
+    const reloadStartMs = import.meta.env.DEV ? performance.now() : 0;
     const roomDef = editorRoomDataToRoomDef(state.roomData);
     const sx = state.roomData.playerSpawnBlock[0];
     const sy = state.roomData.playerSpawnBlock[1];
     onLoadRoom(roomDef, sx, sy, preserveCamera);
+    if (import.meta.env.DEV) {
+      logEditorPerfWarned('reloadRoomFromCurrentEditorData (onLoadRoom)', reloadStartMs, state.roomData.id);
+    }
   }
 
   function discardCurrentRoomSessionChanges(roomData: EditorRoomData | null): void {
@@ -432,16 +460,29 @@ export function createEditorController(
       campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
       campaignSession.campaignStore.markRoomDirty(state.roomData.id, state.roomData);
     }
+    const toRoomDefStartMs = import.meta.env.DEV ? performance.now() : 0;
     const roomDef = editorRoomDataToRoomDef(state.roomData);
     registerRoom(roomDef); // keep ROOM_REGISTRY in sync while editing
+    if (import.meta.env.DEV) {
+      logEditorPerfWarned('editorRoomDataToRoomDef', toRoomDefStartMs, state.roomData.id);
+    }
     if (reloadMode === 'immediate') {
+      const reloadStartMs = import.meta.env.DEV ? performance.now() : 0;
       const sx = state.roomData.playerSpawnBlock[0];
       const sy = state.roomData.playerSpawnBlock[1];
       onLoadRoom(roomDef, sx, sy, true); // preserve camera while in editor
       lastDeferredRoomReloadAtMs = performance.now();
       pendingDeferredRoomReload = false;
+      if (import.meta.env.DEV) {
+        logEditorPerfWarned('onLoadRoom (applyEdits immediate)', reloadStartMs, state.roomData.id);
+      }
     } else {
       pendingDeferredRoomReload = true;
+      // Block the deferred reload from firing in the same update() call that
+      // triggered this edit.  It fires on the next frame instead, keeping
+      // the current frame non-blocking while the editor overlay provides
+      // immediate visual feedback from state.roomData.
+      blockDeferredReloadThisFrame = true;
     }
   }
 
@@ -655,6 +696,9 @@ export function createEditorController(
     if (!state.isActive) return false;
     if (state.isWorldMapOpen || state.isVisualMapOpen) return true;
 
+    // Allow any deferred room reload that was blocked last frame to fire this frame.
+    blockDeferredReloadThisFrame = false;
+
     // Camera movement (shift doubles speed)
     const camInput: EditorCameraInput = {
       isUp: inputState.isCamUp,
@@ -761,18 +805,36 @@ export function createEditorController(
               }
             }
           } else {
+            const totalPlacementStartMs = import.meta.env.DEV ? performance.now() : 0;
+            // Measure pushSnapshot cost separately — JSON.stringify of room data can be slow for large rooms.
+            const snapshotStartMs = import.meta.env.DEV ? performance.now() : 0;
             pushSnapshot(history, state.roomData);
+            if (import.meta.env.DEV) {
+              logEditorPerfWarned('pushSnapshot (undo)', snapshotStartMs, state.roomData.id);
+            }
             const transCountBefore = state.roomData.transitions.length;
-            const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
+            const placementMutationStartMs = import.meta.env.DEV ? performance.now() : 0;
             placeAtCursor(state);
+            if (import.meta.env.DEV) {
+              logEditorPerfWarned('placeAtCursor mutation', placementMutationStartMs, state.roomData.id);
+            }
             // Rect brush: clear drag start after placement.
             if (state.brushMode === 'rect') {
               state.brushRectStartBlockX = null;
               state.brushRectStartBlockY = null;
             }
-            applyEdits();
+            // Defer the expensive onLoadRoom to the next frame so single-click placement
+            // is instant.  The editor overlay reads state.roomData directly and provides
+            // immediate visual feedback without needing a full game-sim reload this frame.
+            applyEdits('defer');
             if (import.meta.env.DEV) {
-              logEditorPerf('editor placement mutation', placementStartMs);
+              const totalElapsedMs = performance.now() - totalPlacementStartMs;
+              console.log(
+                `[editor-perf] placeBlock total=${totalElapsedMs.toFixed(2)}ms room=${state.roomData.id} touchedRooms=1 serialized=false dehydrated=false autosaved=scheduled`,
+              );
+              if (totalElapsedMs > 16) {
+                console.warn(`[editor-perf] ⚠️ placeBlock total=${totalElapsedMs.toFixed(2)}ms — see timings above`);
+              }
             }
             lastDragBlockX = state.cursorBlockX;
             lastDragBlockY = state.cursorBlockY;
@@ -815,7 +877,7 @@ export function createEditorController(
           pushSnapshot(history, state.roomData);
           deleteAtCursor(state);
           syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
-          applyEdits();
+          applyEdits('defer');
           lastDragBlockX = state.cursorBlockX;
           lastDragBlockY = state.cursorBlockY;
         }
@@ -828,7 +890,7 @@ export function createEditorController(
         pushSnapshot(history, state.roomData);
         deleteAtCursor(state);
         syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
-        applyEdits();
+        applyEdits('defer');
       }
     }
 
@@ -922,15 +984,19 @@ export function createEditorController(
       }
     }
 
-    if (pendingDeferredRoomReload) {
+    if (pendingDeferredRoomReload && !blockDeferredReloadThisFrame) {
       const nowMs = performance.now();
       if (
         !inputState.isMouseDown ||
         (nowMs - lastDeferredRoomReloadAtMs) >= MIN_DRAG_RELOAD_INTERVAL_MS
       ) {
         pendingDeferredRoomReload = false;
+        const deferredReloadStartMs = import.meta.env.DEV ? performance.now() : 0;
         reloadRoomFromCurrentEditorData(true);
         lastDeferredRoomReloadAtMs = nowMs;
+        if (import.meta.env.DEV) {
+          logEditorPerfWarned('deferred room reload total', deferredReloadStartMs, state.roomData?.id);
+        }
       }
     }
 
