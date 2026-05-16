@@ -17,7 +17,6 @@ import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
 import { HEALTH_BAR_DISPLAY_MS } from './gameRoom';
 import {
   MOTE_STATE_AVAILABLE,
-  MOTE_STATE_DEPLETED,
   BASE_MOTE_REGENERATION_TICKS,
   MOTE_REGEN_FLASH_TICKS,
 } from '../sim/motes/orderedMoteQueue';
