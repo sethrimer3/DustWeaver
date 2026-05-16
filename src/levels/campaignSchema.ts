@@ -279,6 +279,70 @@ export function validateSavedCampaign(data: unknown): string[] {
   return errors;
 }
 
+/**
+ * Fast top-level validation for campaign import/load paths.
+ * This intentionally avoids full per-room hydration/transition validation so
+ * large campaigns can be indexed and edited without blocking.
+ */
+export function validateSavedCampaignTopLevel(data: unknown): string[] {
+  const errors: string[] = [];
+  if (typeof data !== 'object' || data === null) {
+    return ['Root value must be a non-null object'];
+  }
+  const d = data as Record<string, unknown>;
+
+  if (d['kind'] !== SAVED_CAMPAIGN_KIND) {
+    errors.push(`Expected kind "${SAVED_CAMPAIGN_KIND}", got "${String(d['kind'])}"`);
+  }
+  if (d['v'] !== 1) {
+    errors.push(`Unsupported schema version ${String(d['v'])} — expected 1.`);
+  }
+
+  const campaign = d['campaign'];
+  const initialRoomId = (
+    typeof campaign === 'object' &&
+    campaign !== null &&
+    typeof (campaign as Record<string, unknown>)['initialRoomId'] === 'string'
+  )
+    ? ((campaign as Record<string, unknown>)['initialRoomId'] as string).trim()
+    : '';
+
+  if (initialRoomId.length === 0) {
+    errors.push('campaign.initialRoomId must be a non-empty string');
+  }
+
+  const rooms = d['rooms'];
+  if (!Array.isArray(rooms)) {
+    errors.push('"rooms" field must be an array');
+    return errors;
+  }
+
+  const roomIds = new Set<string>();
+  for (let i = 0; i < rooms.length; i++) {
+    const room = rooms[i];
+    if (typeof room !== 'object' || room === null) {
+      errors.push(`rooms[${i}] must be an object`);
+      continue;
+    }
+    const id = (room as Record<string, unknown>)['id'];
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      errors.push(`rooms[${i}].id must be a non-empty string`);
+      continue;
+    }
+    if (roomIds.has(id)) {
+      errors.push(`Duplicate room id "${id}" at index ${i}`);
+      continue;
+    }
+    roomIds.add(id);
+  }
+
+  if (initialRoomId.length > 0 && !roomIds.has(initialRoomId)) {
+    errors.push(`campaign.initialRoomId "${initialRoomId}" does not exist in rooms[]`);
+  }
+
+  return errors;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HYDRATION
 // ─────────────────────────────────────────────────────────────────────────────
