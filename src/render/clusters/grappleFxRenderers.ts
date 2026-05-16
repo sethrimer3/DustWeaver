@@ -219,11 +219,11 @@ export function renderGrappleRechargeRing(
   const t = Math.min(1, elapsed / total);
 
   // Start as a small ring around the player and shrink rapidly toward center.
-  const halfW = playerCluster.halfWidthWorld * scalePx;
-  const startRadiusPx = halfW * 0.95;
-  const endRadiusPx = halfW * 0.2;
-  const shrinkT = 1 - (1 - t) * (1 - t); // ease-out: fast early shrink
-  const radiusPx = startRadiusPx + (endRadiusPx - startRadiusPx) * shrinkT;
+  const halfWidthPx = playerCluster.halfWidthWorld * scalePx;
+  const startRadiusPx = halfWidthPx * 0.95;
+  const endRadiusPx = halfWidthPx * 0.2;
+  const shrinkProgress = 1 - (1 - t) * (1 - t); // ease-out: fast early shrink
+  const radiusPx = startRadiusPx + (endRadiusPx - startRadiusPx) * shrinkProgress;
 
   // Opacity ramps from 0% to 50% over the effect.
   const alpha = t * 0.5;
