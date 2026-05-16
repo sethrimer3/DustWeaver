@@ -49,7 +49,6 @@ import {
   ENABLE_TWO_ROOM_CAMERA_CROSSING,
 } from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
-import { showPauseMenu, PauseMenuState } from '../ui/pauseMenu';
 import { renderWorldBackground } from '../render/backgroundRenderer';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
@@ -60,7 +59,7 @@ import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
-import { getSelectedRenderSize, getMusicVolume, getSfxVolume, getGraphicsQuality, getAlwaysCenterCamera } from '../ui/renderSettings';
+import { getMusicVolume, getSelectedRenderSize } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
@@ -149,6 +148,7 @@ import {
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
+import { createGamePauseController } from './gamePauseController';
 
 const FIXED_DT_MS = 16.666;
 
@@ -828,17 +828,6 @@ export function startGameScreen(
   // gameAdaptiveQuality.ts so the state machine can be reasoned about in isolation.
   const aqState: AdaptiveQualityState = createAdaptiveQualityState();
 
-  let isPaused = false;
-  let pauseMenuCleanup: (() => void) | null = null;
-  let isDebugMode = false;
-  const pauseMenuState: PauseMenuState = {
-    isDebugOn: false,
-    musicVolume: getMusicVolume(),
-    sfxVolume: getSfxVolume(),
-    graphicsQuality: getGraphicsQuality(),
-    alwaysCenterCamera: getAlwaysCenterCamera(),
-  };
-
   const gameOverlayController = createGameOverlayController({
     uiRoot,
     world,
@@ -860,33 +849,27 @@ export function startGameScreen(
     onSave: callbacks.onSave,
   });
 
-  function openPauseMenu(): void {
-    if (isPaused
-      || gameOverlayController.state.isPlayerDead
-      || gameOverlayController.state.isSkillTombMenuOpen
-      || gameOverlayController.state.isMapOnlyOpen) return;
-    isPaused = true;
-    pauseMenuCleanup = showPauseMenu(uiRoot, pauseMenuState, {
-      onResume: () => {
-        isPaused = false;
-        pauseMenuCleanup = null;
-        // Reset timestamp so elapsed doesn't include paused time
-        lastTimestampMs = 0;
-      },
-      onExitToMainMenu: () => {
-        isPaused = false;
-        pauseMenuCleanup = null;
-        isRunning = false;
-        detachInput();
-        callbacks.onReturnToMenu();
-      },
-      onToggleDebug: () => {
-        isDebugMode = !isDebugMode;
-        pauseMenuState.isDebugOn = isDebugMode;
-        if (isDebugMode) { editorDebugControls?.ensureEditorButton(); } else { editorDebugControls?.removeEditorButton(); }
-      },
-    });
-  }
+  const pauseController = createGamePauseController({
+    uiRoot,
+    canOpenPauseMenu: () => !gameOverlayController.state.isPlayerDead
+      && !gameOverlayController.state.isSkillTombMenuOpen
+      && !gameOverlayController.state.isMapOnlyOpen,
+    onResetFrameClock: () => {
+      lastTimestampMs = 0;
+    },
+    onExitToMainMenu: () => {
+      isRunning = false;
+      detachInput();
+      callbacks.onReturnToMenu();
+    },
+    onDebugModeChanged: (isDebugMode) => {
+      if (isDebugMode) {
+        editorDebugControls?.ensureEditorButton();
+      } else {
+        editorDebugControls?.removeEditorButton();
+      }
+    },
+  });
 
   function onResize(): void {
     resizeCanvas();
@@ -986,7 +969,7 @@ export function startGameScreen(
         // Draw editor overlays on top
         editorController.render(ctx, eox, eoy, zoom, virtualWidthPx, virtualHeightPx);
 
-        if (isDebugMode) {
+        if (pauseController.state.isDebugMode) {
           renderHudOverlay(ctx, hudState);
         }
 
@@ -1038,7 +1021,7 @@ export function startGameScreen(
     }
 
     if (openPause) {
-      openPauseMenu();
+      pauseController.openPauseMenu();
     }
 
     if (interactTriggered && progress) {
@@ -1046,10 +1029,10 @@ export function startGameScreen(
     }
 
     // Update music volume from pause menu settings
-    musicManager.setVolume(pauseMenuState.musicVolume);
+    musicManager.setVolume(pauseController.state.pauseMenuState.musicVolume);
 
     // While paused or in a menu, still render the frozen scene but skip sim and transitions
-    if (isPaused
+    if (pauseController.state.isPaused
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
       rafHandle = requestAnimationFrame(frame);
@@ -1320,7 +1303,7 @@ export function startGameScreen(
         virtualWidthPx,
         virtualHeightPx,
         elapsedMs,
-        pauseMenuState.alwaysCenterCamera,
+        pauseController.state.pauseMenuState.alwaysCenterCamera,
       );
     }
 
@@ -1365,7 +1348,7 @@ export function startGameScreen(
     hudState.particleCount = aliveCount;
 
     // ── Populate movement debug state from the player cluster ─────────────────
-    if (isDebugMode) {
+    if (pauseController.state.isDebugMode) {
       hudState.debug = buildHudDebugState(world, inputState, interactInputPulseMs);
     } else {
       hudState.debug = undefined;
@@ -1432,7 +1415,7 @@ export function startGameScreen(
     }
 
     // ── Transition debug stats ────────────────────────────────────────────
-    if (isDebugMode && renderProfiler !== undefined) {
+    if (pauseController.state.isDebugMode && renderProfiler !== undefined) {
       const camTransProgress = camState.isTransitionActive ? Math.min(1, camState.transitionElapsedSec / CAM_TRANS_DURATION_SEC) : 0;
       const debugStats: TransitionDebugStats = {
         currentRoomId: currentRoom.id,
@@ -1464,7 +1447,7 @@ export function startGameScreen(
       cachedDecorationCenterX,
       cachedDecorationCenterY,
       ox, oy, zoom, virtualWidthPx, virtualHeightPx,
-      bgColor, isDebugMode, hudState, inputState,
+      bgColor, isDebugMode: pauseController.state.isDebugMode, hudState, inputState,
       prevHealthMap, healthBarDisplayUntilTick,
       combatText, prevLastPlayerBlockedTick,
       collectedDustContainerKeySet,
@@ -1476,7 +1459,7 @@ export function startGameScreen(
       teleportFlashAlpha,
       setTeleportFlashAlpha: (a: number) => { teleportFlashAlpha = a; },
       getPlayerDustCount,
-      graphicsQuality: pauseMenuState.graphicsQuality,
+      graphicsQuality: pauseController.state.pauseMenuState.graphicsQuality,
       isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,
       isDeepReductionActive: aqState.isDeepReductionActive,
       renderProfiler,
@@ -1492,7 +1475,7 @@ export function startGameScreen(
       crossingUnionMinYWorld: renderUnionBounds?.minYWorld ?? 0,
       crossingUnionMaxXWorld: renderUnionBounds?.maxXWorld ?? roomWidthWorld,
       crossingUnionMaxYWorld: renderUnionBounds?.maxYWorld ?? roomHeightWorld,
-      alwaysCenterCamera: pauseMenuState.alwaysCenterCamera,
+      alwaysCenterCamera: pauseController.state.pauseMenuState.alwaysCenterCamera,
       // Staged room background info for seamless crossing rendering.
       stagedRoom: stagingState.stagedRooms.length > 0 ? stagingState.stagedRooms[0] : null,
     });
@@ -1514,7 +1497,7 @@ export function startGameScreen(
     window.removeEventListener('touchstart',  _onAudioUnlockGesture);
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
-    if (pauseMenuCleanup !== null) pauseMenuCleanup();
+    pauseController.destroy();
     gameOverlayController.destroy();
     // Stop background music and release resources
     musicManager.dispose();
