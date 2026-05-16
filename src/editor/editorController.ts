@@ -23,7 +23,7 @@ import {
   createEditorInputState,
   attachEditorInputListeners, clearEditorOneShots,
 } from './editorInput';
-import { selectAtCursor, deleteAtCursor, rotateSelectedElement, flipSelectedTransition, getAllElementsInRect } from './editorTools';
+import { selectAtCursor, deleteAtCursor, getAllElementsInRect } from './editorTools';
 import { placeAtCursor } from './editorPlaceTool';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
@@ -34,11 +34,10 @@ import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } fro
 import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
 import { ROOM_REGISTRY, initRoomRegistry, registerRoom } from '../levels/rooms';
-import { createEditorHistory, pushSnapshot, undo, redo, clearHistory } from './editorHistory';
+import { createEditorHistory, pushSnapshot, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 import {
   storeDragStartPositions, moveSelectedElements,
-  serializeSelectedElements, pasteFromClipboard,
 } from './editorDragCopyPaste';
 import { deepCloneRoomData, showSaveChangesDialog } from './editorSaveChangesDialog';
 import { applyRoomDimensionChange, applyEdgeResize } from './editorRoomResize';
@@ -57,6 +56,7 @@ import {
   showCampaignSpawnReplaceModal,
 } from './editorCampaignSpawn';
 
+import { handleEditorKeyboardShortcuts } from './editorKeyboardShortcuts';
 import { invalidateRoomContour } from '../ui/mapSketchRenderer';
 
 const BS = BLOCK_SIZE_MEDIUM;
@@ -617,102 +617,8 @@ export function createEditorController(
     state.cursorBlockX = Math.floor(worldX / BS);
     state.cursorBlockY = Math.floor(worldY / BS);
 
-    // Tool key shortcuts
-    if (inputState.toolKeyPressed === 1) state.activeTool = EditorTool.Select;
-    if (inputState.toolKeyPressed === 2) state.activeTool = EditorTool.Place;
-    if (inputState.toolKeyPressed === 3) state.activeTool = EditorTool.Delete;
-
-    // Mouse wheel → rotation
-    if (inputState.wheelDelta !== 0) {
-      if (state.activeTool === EditorTool.Place) {
-        state.placementRotationSteps = (state.placementRotationSteps + (inputState.wheelDelta > 0 ? 1 : 3)) % 4;
-      } else if (state.activeTool === EditorTool.Select && state.selectedElements.length > 0) {
-        rotateSelectedElement(state);
-      }
-    }
-
-    // Q/E keys → rotate placement (Q = counter-clockwise, E = clockwise)
-    if (inputState.isRotateLeftPressed && state.activeTool === EditorTool.Place) {
-      state.placementRotationSteps = (state.placementRotationSteps + 3) % 4;
-    }
-    if (inputState.isRotateRightPressed && state.activeTool === EditorTool.Place) {
-      state.placementRotationSteps = (state.placementRotationSteps + 1) % 4;
-    }
-    // Q/E in Select mode → rotate the selected transition
-    if (state.activeTool === EditorTool.Select && state.selectedElements.length > 0 && state.roomData) {
-      const selType = state.selectedElements[0]?.type;
-      if (selType === 'transition') {
-        if (inputState.isRotateRightPressed || inputState.isRotateLeftPressed) {
-          pushSnapshot(history, state.roomData);
-          rotateSelectedElement(state);
-          applyEdits();
-        }
-      }
-    }
-
-    // F key → flip placement horizontally (Place mode) or flip selected transition (Select mode)
-    if (inputState.isFlipPressed) {
-      if (state.activeTool === EditorTool.Place) {
-        state.placementFlipH = !state.placementFlipH;
-      } else if (state.activeTool === EditorTool.Select && state.roomData &&
-                 state.selectedElements.length > 0 && state.selectedElements[0]?.type === 'transition') {
-        pushSnapshot(history, state.roomData);
-        flipSelectedTransition(state);
-        applyEdits();
-      }
-    }
-
-    // N key → world map list
-    if (inputState.isMapToggled) {
-      openWorldMap();
-    }
-
-    // M key → visual world map editor
-    if (inputState.isVisualMapToggled) {
-      openVisualMap();
-    }
-
-    // ESC → cancel linking or deselect
-    if (inputState.isEscapePressed) {
-      if (state.isLinkingTransition) {
-        cancelTransitionLink(state);
-      } else {
-        state.selectedElements = [];
-        state.brushRectStartBlockX = null;
-        state.brushRectStartBlockY = null;
-      }
-    }
-
-    // Undo/Redo
-    if (inputState.isUndoPressed && state.roomData) {
-      const restored = undo(history, state.roomData);
-      if (restored) {
-        state.roomData = restored;
-        state.selectedElements = [];
-        applyEdits();
-      }
-    }
-    if (inputState.isRedoPressed && state.roomData) {
-      const restored = redo(history, state.roomData);
-      if (restored) {
-        state.roomData = restored;
-        state.selectedElements = [];
-        applyEdits();
-      }
-    }
-
-    // Copy (Ctrl+C)
-    if (inputState.isCopyPressed && state.roomData && state.selectedElements.length > 0) {
-      const clipData = serializeSelectedElements(state.roomData, state.selectedElements);
-      state.clipboard = clipData;
-    }
-
-    // Paste (Ctrl+V)
-    if (inputState.isPastePressed && state.roomData && state.clipboard) {
-      pushSnapshot(history, state.roomData);
-      pasteFromClipboard(state);
-      applyEdits();
-    }
+    // Keyboard shortcuts (tool keys, rotation/flip, map toggles, ESC, undo/redo, copy/paste)
+    handleEditorKeyboardShortcuts(state, inputState, history, openWorldMap, openVisualMap, applyEdits);
 
     // Click handling (one-shot on press)
     if (inputState.isClickFired && state.roomData !== null) {
