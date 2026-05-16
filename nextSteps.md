@@ -181,42 +181,25 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 ### Editor — Placement Performance
 
-#### 4. Editor placement freeze — deferred reload still runs O(n²) wall merge on next frame
-**Files:** `src/editor/editorController.ts`, `src/screens/gameRoomWalls.ts`
+#### 4. Editor placement freeze — active-room-only edits (BUILD 340)
+**Files:** `src/editor/editorController.ts`, `src/editor/editorHistory.ts`
 
-**What was fixed in BUILD 339:**
-Single-click placement no longer calls `onLoadRoom` synchronously.  The key changes:
-- `applyEdits()` on single-click and delete was changed to `applyEdits('defer')`.
-- Added `blockDeferredReloadThisFrame` flag: when `applyEdits('defer')` is called inside
-  an `update()` frame, the deferred-reload check at the end of that same frame is suppressed.
-  The reload fires on the **next** frame instead, so the current frame returns immediately.
-- `logEditorPerfWarned` added: dev-only logs with `>16ms` warn / `>50ms` error thresholds
-  around `pushSnapshot`, `editorRoomDataToRoomDef`, `onLoadRoom`, and full `placeBlock` round-trip.
-- Summary log after every placement:
-  `[editor-perf] placeBlock total=Xms room=Y touchedRooms=1 serialized=false dehydrated=false autosaved=scheduled`
+**What was fixed in BUILD 340:**
+- Placement/delete hot path now mutates only active room state and no longer calls `onLoadRoom` per placement.
+- `applyEdits` now has `placement` vs `metadata` modes; placement mode marks dirty state only and skips room rebuild/reload.
+- Added explicit boundary commit flow: `commitActiveRoomToCampaign(reason)` used for room switch, playtest/confirm, export, and manual save.
+- Added richer placement perf log output:
+  `[editor-perf] placeBlock total=... touchedCampaign=false committedRoom=false stringified=false localStorage=false dehydrated=false campaignValidated=false allRoomsLooped=false cacheInvalidation=local`
+- Undo/redo snapshots switched from JSON stringify/parse to `structuredClone`, removing JSON serialization from placement hot path.
 
-**Remaining bottleneck (measured with DEV logs):**
-The deferred `reloadRoomFromCurrentEditorData` that fires one frame after each placement still
-calls `onLoadRoom`, which runs:
-1. `loadRoomWalls` — **O(n²) iterative wall-merge** in `src/screens/gameRoomWalls.ts`.
-   For a room with N interior walls the merge loop is O(N²) iterations and splices arrays.
-   With 500+ walls this is 50–200 ms; with 1000+ walls it can exceed 500 ms per load.
-   Watch for `[editor-perf] ⚠️ reloadRoomFromCurrentEditorData` in the DEV console on large rooms.
-2. `spawnEnemyClusters` — respawns all enemy particles every reload.  On complex rooms
-   this adds another 10–100 ms per reload.
-3. Full rendering init (Phase F) — `buildRoomDecorations`, `buildEdgeExtensionCache`, etc.
+**Remaining work not completed in BUILD 340:**
+1. Undo/redo is still full-room snapshot-based (now clone-based), not delta-based transactions by tile/tool.
+2. No new measured timing capture has been recorded yet after BUILD 340 in a large-room stress run.
 
-**The single-frame stall after editing is still noticeable on heavy rooms.**
+**Manual verification still needed:**
+- Paint 100+ blocks in a large room and confirm no 1–2s freeze and immediate overlay response.
+- Verify room switch + save/discard keeps/rolls back edits correctly with campaign sessions.
+- Verify playtest and export include latest active-room edits without per-placement campaign commit.
 
-**Proposed next optimization — skip `onLoadRoom` during editing (medium risk):**
-The editor overlay renders from `state.roomData` directly and provides full visual feedback.
-Only call `onLoadRoom` on Confirm/Playtest, room switch, and after a 500 ms idle debounce.
-This would eliminate all per-placement stalls entirely.
-
-**Proposed wall-merge fix (low risk, high impact):**
-Replace the O(n²) iterative merge in `loadRoomWalls` (`src/screens/gameRoomWalls.ts`) with
-a sort-then-sweep O(n log n) algorithm.  Group walls by
-(isPlatformFlag, themeIndex, soundHardnessIndex, isInvisibleFlag, rampOrientation, isPillarHalfWidthFlag)
-key, sort each group by X (horizontal pass) and Y (vertical pass), then sweep once.
-This would reduce wall-merge cost from 200–500 ms to < 1 ms for large rooms.
-
+**Compatibility risk to monitor:**
+- Any future feature that relies on ROOM_REGISTRY being updated every placement may now need an explicit metadata sync point (currently done on metadata edits and map-open paths).
