@@ -63,6 +63,12 @@ const BS = BLOCK_SIZE_MEDIUM;
 
 /** Width of the editor UI panel in CSS pixels. */
 const EDITOR_PANEL_WIDTH_CSS_PX = 260;
+/**
+ * Minimum interval between expensive room reloads during continuous drag paint/delete.
+ * 66ms ~= 15Hz, which keeps brush strokes visually responsive while avoiding
+ * per-block full room reload spikes on heavy rooms.
+ */
+const MIN_DRAG_RELOAD_INTERVAL_MS = 66;
 
 export interface EditorController {
   state: EditorState;
@@ -172,9 +178,40 @@ export function createEditorController(
 
   // Cleanup function for any currently-visible "Create connected room?" popup.
   let dismissConnectPopup: (() => void) | null = null;
+  // Coalesced room reload scheduling for continuous drag paint/delete.
+  let pendingDeferredRoomReload = false;
+  let lastDeferredRoomReloadAtMs = 0;
 
   // Shared context for campaign spawn helpers (avoids repeating state/session/uiRoot).
   const campaignSpawnCtx: CampaignSpawnContext = { state, campaignSession, uiRoot };
+  const usesCampaignStore = campaignSession?.campaignStore !== undefined;
+
+  function logEditorPerf(label: string, startMs: number): void {
+    if (!import.meta.env.DEV) return;
+    console.log(`[campaignPerf] ${label}: ${(performance.now() - startMs).toFixed(2)}ms`);
+  }
+
+  function commitCurrentRoomToSessionCache(roomData: EditorRoomData): void {
+    if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
+      campaignSession.campaignStore.setActiveRoomId(roomData.id);
+      campaignSession.campaignStore.commitActiveRoom(roomData);
+      return;
+    }
+    pendingRoomEdits.set(roomData.id, deepCloneRoomData(roomData));
+  }
+
+  function reloadRoomFromCurrentEditorData(preserveCamera = true): void {
+    if (!state.roomData) return;
+    const roomDef = editorRoomDataToRoomDef(state.roomData);
+    const sx = state.roomData.playerSpawnBlock[0];
+    const sy = state.roomData.playerSpawnBlock[1];
+    onLoadRoom(roomDef, sx, sy, preserveCamera);
+  }
+
+  function discardCurrentRoomSessionChanges(roomData: EditorRoomData | null): void {
+    if (!usesCampaignStore || campaignSession?.campaignStore === undefined || roomData === null) return;
+    campaignSession.campaignStore.discardRoomChanges(roomData.id);
+  }
 
   function toggle(currentRoom: RoomDef): void {
     state.isActive = !state.isActive;
@@ -268,7 +305,7 @@ export function createEditorController(
         onExportAllChanges: () => {
           // Auto-save current room to pending before exporting so it's included.
           if (isCurrentRoomDirty && state.roomData) {
-            pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            commitCurrentRoomToSessionCache(state.roomData);
             isCurrentRoomDirty = false;
           }
           const exportedFileCount = exportAllChanges(pendingRoomEdits, initialRoomIds, isWorldMapDirty);
@@ -279,11 +316,11 @@ export function createEditorController(
         onExportCampaignJson: () => {
           // Auto-save current room to pending before exporting so it's included.
           if (state.roomData) {
-            pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+            commitCurrentRoomToSessionCache(state.roomData);
             isCurrentRoomDirty = false;
           }
           if (campaignSession) {
-            exportCampaignJson(campaignSession, pendingRoomEdits);
+            exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData);
           } else {
             exportMainCampaignJson(pendingRoomEdits);
           }
@@ -331,29 +368,29 @@ export function createEditorController(
     initialRoomIds = new Set();
     isWorldMapDirty = false;
     isCurrentRoomDirty = false;
+    pendingDeferredRoomReload = false;
     clearHistory(history);
     onEditorClose?.();
   }
 
   function confirmEdits(): void {
-    // Apply the current editor changes: register the updated RoomDef so the
-    // rest of the game (ROOM_REGISTRY, visual map) sees the new geometry/transitions.
-    // Then save to pending edits so the changes are preserved across editor sessions.
-    //
-    // Crucially, this does NOT call onLoadRoom — Confirm must NOT start gameplay,
-    // respawn the player, or close the editor unexpectedly.  Use a dedicated
-    // Play/Test action to enter gameplay.
+    const confirmStartMs = import.meta.env.DEV ? performance.now() : 0;
     if (state.roomData) {
       const newRoomDef = editorRoomDataToRoomDef(state.roomData);
-      registerRoom(newRoomDef); // update ROOM_REGISTRY so visual map sees new transitions
-      pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+      registerRoom(newRoomDef);
+      commitCurrentRoomToSessionCache(state.roomData);
       isCurrentRoomDirty = false;
-      // Invalidate the world-map sketch contour cache for this room so the
-      // updated wall geometry is reflected the next time the map is opened.
       invalidateRoomContour(newRoomDef.id);
+      const sx = state.roomData.playerSpawnBlock[0];
+      const sy = state.roomData.playerSpawnBlock[1];
+      closeEditor();
+      onLoadRoom(newRoomDef, sx, sy, true);
+    } else {
+      closeEditor();
     }
-    // Stay in the editor — just close any transient UI that was open.
-    if (dismissConnectPopup) { dismissConnectPopup(); dismissConnectPopup = null; }
+    if (import.meta.env.DEV) {
+      logEditorPerf('confirm/playtest startup', confirmStartMs);
+    }
   }
 
   function cancelEdits(): void {
@@ -362,7 +399,7 @@ export function createEditorController(
       showSaveChangesDialog(uiRoot, () => {
         // YES — save to pending, then exit
         if (state.roomData) {
-          pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+          commitCurrentRoomToSessionCache(state.roomData);
         }
         isCurrentRoomDirty = false;
         const saved = originalRoomDef;
@@ -370,6 +407,7 @@ export function createEditorController(
         if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
       }, () => {
         // NO — exit without saving
+        discardCurrentRoomSessionChanges(state.roomData);
         const saved = originalRoomDef;
         closeEditor();
         if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
@@ -387,14 +425,24 @@ export function createEditorController(
    * immediately visible.  The editor stays active; time remains frozen;
    * player and enemies revert to their spawn positions.
    */
-  function applyEdits(): void {
+  function applyEdits(reloadMode: 'immediate' | 'defer' = 'immediate'): void {
     if (!state.roomData) return;
     isCurrentRoomDirty = true;
+    if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
+      campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
+      campaignSession.campaignStore.markRoomDirty(state.roomData.id, state.roomData);
+    }
     const roomDef = editorRoomDataToRoomDef(state.roomData);
     registerRoom(roomDef); // keep ROOM_REGISTRY in sync while editing
-    const sx = state.roomData.playerSpawnBlock[0];
-    const sy = state.roomData.playerSpawnBlock[1];
-    onLoadRoom(roomDef, sx, sy, true); // preserve camera while in editor
+    if (reloadMode === 'immediate') {
+      const sx = state.roomData.playerSpawnBlock[0];
+      const sy = state.roomData.playerSpawnBlock[1];
+      onLoadRoom(roomDef, sx, sy, true); // preserve camera while in editor
+      lastDeferredRoomReloadAtMs = performance.now();
+      pendingDeferredRoomReload = false;
+    } else {
+      pendingDeferredRoomReload = true;
+    }
   }
 
   // Campaign spawn management (syncCampaignSpawnBlockFromSession,
@@ -402,6 +450,18 @@ export function createEditorController(
   // showCampaignSpawnReplaceModal) have been extracted to editorCampaignSpawn.ts.
 
   function loadRoomForEditing(room: RoomDef): void {
+    if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
+      const loaded = campaignSession.campaignStore.getRoom(room.id, state.nextUid);
+      state.roomData = loaded.roomData;
+      state.nextUid = loaded.nextUid;
+      campaignSession.campaignStore.setActiveRoomId(room.id);
+      state.selectedElements = [];
+      state.selectedBlockTheme = state.roomData?.blockTheme ?? 'blackRock';
+      isCurrentRoomDirty = false;
+      syncCampaignSpawnBlockFromSession(campaignSpawnCtx);
+      editorEdgeExtensionCache = buildEdgeExtensionCache(room);
+      return;
+    }
     const pending = pendingRoomEdits.get(room.id);
     if (pending) {
       // Restore previously-saved edits for this room.
@@ -455,11 +515,12 @@ export function createEditorController(
         if (isCurrentRoomDirty && state.roomData) {
           showSaveChangesDialog(uiRoot, () => {
             if (state.roomData) {
-              pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+              commitCurrentRoomToSessionCache(state.roomData);
             }
             isCurrentRoomDirty = false;
             doSwitch();
           }, () => {
+            discardCurrentRoomSessionChanges(state.roomData);
             isCurrentRoomDirty = false;
             doSwitch();
           });
@@ -559,11 +620,12 @@ export function createEditorController(
         if (isCurrentRoomDirty && state.roomData) {
           showSaveChangesDialog(uiRoot, () => {
             if (state.roomData) {
-              pendingRoomEdits.set(state.roomData.id, deepCloneRoomData(state.roomData));
+              commitCurrentRoomToSessionCache(state.roomData);
             }
             isCurrentRoomDirty = false;
             doSwitch();
           }, () => {
+            discardCurrentRoomSessionChanges(state.roomData);
             isCurrentRoomDirty = false;
             doSwitch();
           });
@@ -701,6 +763,7 @@ export function createEditorController(
           } else {
             pushSnapshot(history, state.roomData);
             const transCountBefore = state.roomData.transitions.length;
+            const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
             placeAtCursor(state);
             // Rect brush: clear drag start after placement.
             if (state.brushMode === 'rect') {
@@ -708,6 +771,9 @@ export function createEditorController(
               state.brushRectStartBlockY = null;
             }
             applyEdits();
+            if (import.meta.env.DEV) {
+              logEditorPerf('editor placement mutation', placementStartMs);
+            }
             lastDragBlockX = state.cursorBlockX;
             lastDragBlockY = state.cursorBlockY;
 
@@ -728,7 +794,12 @@ export function createEditorController(
                     // Save new room to pendingRoomEdits so it can be exported later.
                     const { data: newRoomData, nextUid: newNextUid } = roomDefToEditorRoomData(newRoomDef, state.nextUid);
                     state.nextUid = newNextUid;
-                    pendingRoomEdits.set(newRoomDef.id, newRoomData);
+                    if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
+                      campaignSession.campaignStore.markRoomDirty(newRoomDef.id, newRoomData);
+                      campaignSession.campaignStore.commitRoom(newRoomDef.id, newRoomData);
+                    } else {
+                      pendingRoomEdits.set(newRoomDef.id, newRoomData);
+                    }
                     isWorldMapDirty = true;
                     isCurrentRoomDirty = true;
                     // Rebuild the current room to reflect the updated source transition.
@@ -834,12 +905,32 @@ export function createEditorController(
         lastDragBlockX = state.cursorBlockX;
         lastDragBlockY = state.cursorBlockY;
         if (state.activeTool === EditorTool.Place) {
+          const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
           placeAtCursor(state);
-          applyEdits();
+          applyEdits('defer');
+          if (import.meta.env.DEV) {
+            logEditorPerf('editor placement mutation', placementStartMs);
+          }
         } else if (state.activeTool === EditorTool.Delete) {
+          const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
           deleteAtCursor(state);
-          applyEdits();
+          applyEdits('defer');
+          if (import.meta.env.DEV) {
+            logEditorPerf('editor placement mutation', placementStartMs);
+          }
         }
+      }
+    }
+
+    if (pendingDeferredRoomReload) {
+      const nowMs = performance.now();
+      if (
+        !inputState.isMouseDown ||
+        (nowMs - lastDeferredRoomReloadAtMs) >= MIN_DRAG_RELOAD_INTERVAL_MS
+      ) {
+        pendingDeferredRoomReload = false;
+        reloadRoomFromCurrentEditorData(true);
+        lastDeferredRoomReloadAtMs = nowMs;
       }
     }
 

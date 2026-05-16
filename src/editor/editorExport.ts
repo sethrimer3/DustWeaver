@@ -127,22 +127,44 @@ export function exportAllChanges(
 export function exportCampaignJson(
   session: EditableCampaignSession,
   pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
+  activeRoomData?: EditorRoomData | null,
 ): void {
-  if (import.meta.env.DEV) {
-    // Validate round-trip for each pending room.
-    for (const [, data] of pendingRoomEdits) {
-      const verboseJson = editorRoomDataToJson(data);
-      const errors = validateRoomRoundtrip(verboseJson);
-      if (errors.length > 0) {
-        console.error(`[editorExport] Campaign round-trip validation failed for room "${data.id}":`, errors);
+  let exported: ReturnType<typeof assembleExportCampaign>;
+  if (session.campaignStore !== undefined) {
+    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+    session.campaignStore.updateWorldMap(worldMap);
+    if (activeRoomData !== undefined && activeRoomData !== null) {
+      session.campaignStore.setActiveRoomId(activeRoomData.id);
+      session.campaignStore.commitActiveRoom(activeRoomData);
+      if (import.meta.env.DEV) {
+        const verboseJson = editorRoomDataToJson(activeRoomData);
+        const errors = validateRoomRoundtrip(verboseJson);
+        if (errors.length > 0) {
+          console.error(`[editorExport] Campaign round-trip validation failed for room "${activeRoomData.id}":`, errors);
+        }
       }
     }
+    exported = session.campaignStore.buildExportCampaign(session.campaign);
+  } else {
+    if (import.meta.env.DEV) {
+      // Validate round-trip for each pending room.
+      for (const [, data] of pendingRoomEdits) {
+        const verboseJson = editorRoomDataToJson(data);
+        const errors = validateRoomRoundtrip(verboseJson);
+        if (errors.length > 0) {
+          console.error(`[editorExport] Campaign round-trip validation failed for room "${data.id}":`, errors);
+        }
+      }
+    }
+    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+    exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
   }
 
-  const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
-  const exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
-
+  const stringifyStartMs = import.meta.env.DEV ? performance.now() : 0;
   const text = JSON.stringify(exported, null, 2);
+  if (import.meta.env.DEV) {
+    console.log(`[campaignPerf] export stringify: ${(performance.now() - stringifyStartMs).toFixed(2)}ms`);
+  }
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
@@ -234,7 +256,11 @@ export function exportMainCampaignJson(
     worldMap,
   );
 
+  const stringifyStartMs = import.meta.env.DEV ? performance.now() : 0;
   const text = JSON.stringify(exported, null, 2);
+  if (import.meta.env.DEV) {
+    console.log(`[campaignPerf] export stringify: ${(performance.now() - stringifyStartMs).toFixed(2)}ms`);
+  }
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
