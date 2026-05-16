@@ -633,7 +633,7 @@ export function renderFrame(r: RenderFrameContext): void {
   setRenderViewportSize(virtualWidthPx, virtualHeightPx);
   // Walls before cluster indicators so clusters are drawn on top
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DARK_BLOCKER);
-  renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL);
+  renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
