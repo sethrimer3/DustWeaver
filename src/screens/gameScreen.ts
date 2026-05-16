@@ -140,6 +140,7 @@ import {
   updateAdaptiveQuality,
   type AdaptiveQualityState,
 } from './gameAdaptiveQuality';
+import { resolveGameStartRoomSelection } from './gameStartRoom';
 import {
   type GameCameraState,
   createGameCameraState,
@@ -161,28 +162,6 @@ const FIXED_VIRTUAL_HEIGHT_PX = 270;
 const BASE = import.meta.env.BASE_URL;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-function createFallbackRoomDef(): RoomDef {
-  return {
-    id: 'fallback_boot_room',
-    name: 'Fallback Room',
-    worldNumber: 1,
-    mapX: 0,
-    mapY: 0,
-    widthBlocks: 80,
-    heightBlocks: 45,
-    walls: [
-      { xBlock: 0, yBlock: 44, wBlock: 80, hBlock: 1 }, // floor
-      { xBlock: 0, yBlock: 0, wBlock: 1, hBlock: 45 }, // left wall
-      { xBlock: 79, yBlock: 0, wBlock: 1, hBlock: 45 }, // right wall
-    ],
-    enemies: [],
-    playerSpawnBlock: [40, 40],
-    transitions: [],
-    saveTombs: [],
-    skillTombs: [],
-  };
-}
 
 import type { EditableCampaignSession } from '../editor/editableCampaignSession';
 
@@ -273,31 +252,24 @@ export function startGameScreen(
   musicManager.setVolume(getMusicVolume());
 
   // ── Room state ────────────────────────────────────────────────────────────
-  const firstAvailableRoom: RoomDef | null = ROOM_REGISTRY.values().next().value ?? null;
-  const configuredSpawnRoom: RoomDef | null = ROOM_REGISTRY.get('lobby')
-    ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)
-    ?? firstAvailableRoom;
-  const requestedStartRoom: RoomDef | null = (startRoomId !== null ? ROOM_REGISTRY.get(startRoomId) : undefined)
-    ?? ROOM_REGISTRY.get(STARTING_ROOM_ID)
-    ?? configuredSpawnRoom;
-  const fallbackRoom = createFallbackRoomDef();
-  // campaignSpawnRoom: room to respawn into after death (no save). When a campaign spawn
-  // override is present its room is requestedStartRoom; otherwise fall back to lobby.
-  const campaignSpawnRoom: RoomDef = (campaignSpawnBlockOverride != null
-    ? requestedStartRoom
-    : configuredSpawnRoom) ?? fallbackRoom;
-  const initialRoom: RoomDef = requestedStartRoom ?? campaignSpawnRoom;
+  const {
+    configuredSpawnRoom,
+    requestedStartRoom,
+    campaignSpawnRoom,
+    initialRoom,
+    campaignSpawnBlock,
+    shouldOpenFailsafeEditor,
+  } = resolveGameStartRoomSelection({
+    roomRegistry: ROOM_REGISTRY,
+    startingRoomId: STARTING_ROOM_ID,
+    startRoomId,
+    hasCampaignSession: campaignSession != null,
+    openEditorImmediately,
+    campaignSpawnBlockOverride,
+  });
   if (requestedStartRoom === null || configuredSpawnRoom === null) {
     console.error('[gameScreen] No rooms were loaded. Starting in fallback room.');
   }
-  // campaignSpawnBlock: block to respawn at after death (no save). When a campaign spawn
-  // override is provided, use it; otherwise use the room's own playerSpawnBlock.
-  const campaignSpawnBlock: readonly [number, number] =
-    campaignSpawnBlockOverride ?? campaignSpawnRoom.playerSpawnBlock;
-  const shouldOpenFailsafeEditor = campaignSession != null
-    ? (openEditorImmediately === true)
-    : ((startRoomId !== null && ROOM_REGISTRY.get(startRoomId) === undefined)
-      || !ROOM_REGISTRY.has('lobby'));
 
   let currentRoom: RoomDef = initialRoom;
   let bgColor = worldBgColor(currentRoom.worldNumber);
