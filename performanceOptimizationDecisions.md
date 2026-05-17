@@ -33,3 +33,29 @@
 1. Did **not** alter render ordering, blend/composite sequence, or clip behavior, since that could change visual output.
 2. Did **not** change snapshot shapes, save/campaign schemas, or editor serialization paths.
 3. Did **not** introduce new caching/pooling structures in hot paths beyond existing patterns, to avoid subtle behavior or invalidation bugs.
+
+## BUILD 351 — gameScreen editor-backdrop extraction
+
+### Performance-related changes made
+
+1. **Extracted editor-consumption render path into a dedicated module without changing draw order**
+   - **System:** `src/screens/gameScreen.ts` → `src/screens/gameScreenEditorBackdrop.ts`
+   - **What changed:** Moved the editor-mode backdrop render block (world background, walls/hazards/entities, tomb effects, particle fallback, upscale, and debug overlay) into `renderEditorBackdrop`.
+   - **Why safe:** The same render functions are called in the same sequence with the same inputs and debug flags; only call location changed.
+   - **Category:** Improves maintainability while preserving rendering efficiency.
+
+2. **Preserved zero-extra-pass behavior in editor mode**
+   - **System:** editor mode render branch in gameplay frame loop
+   - **What changed:** Kept single backdrop pass + single upscale + optional WebGL overlay + bloom composite exactly as before.
+   - **Why safe:** No new intermediate passes or repeated composites were introduced.
+   - **Category:** Prevents unnecessary repeated work.
+
+### Performance opportunities noticed but not implemented
+
+1. `renderEditorBackdrop` still invokes `performance.now()` separately for procedural background effects in editor mode; this is low impact and was left untouched for behavior parity.
+2. `gameScreen.ts` still contains a very large frame/update loop and room-load generator; additional extraction opportunities remain.
+
+### Risky optimizations intentionally avoided
+
+1. Did **not** merge or reorder editor backdrop draw calls, to avoid visual/debug parity regressions.
+2. Did **not** alter editor update gating or input consumption semantics.

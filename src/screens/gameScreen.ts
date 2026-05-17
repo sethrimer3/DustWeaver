@@ -5,9 +5,6 @@ import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng } from '../sim/rng';
 import { createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
-import { renderParticles } from '../render/particles/renderer';
-import { renderClusters, renderWalls } from '../render/clusters/renderer';
-import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { HudState } from '../render/hud/overlay';
@@ -24,7 +21,6 @@ import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
-import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, getCameraOffset } from '../render/camera';
 // BUILD 297: ENABLE_TWO_ROOM_CAMERA_CROSSING is false, so isCrossingComplete /
 // getCrossingUnionBounds are only reachable via the preserved dead-code guard
@@ -51,7 +47,6 @@ import {
   ENABLE_TRANSITION_CAMERA_REVEAL,
 } from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
-import { renderWorldBackground } from '../render/backgroundRenderer';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
@@ -60,11 +55,9 @@ import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/pla
 import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
-import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getMusicVolume, getSelectedRenderSize } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
-import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { BloomSystem } from '../render/effects/bloomSystem';
 import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
@@ -87,7 +80,6 @@ import {
   loadRoomFallingBlocks,
   loadRoomGrasshoppers,
   worldBgColor,
-  drawTunnelDarkness,
   resolveSpawnBlock,
 } from './gameRoom';
 import { renderFrame } from './gameRender';
@@ -95,7 +87,6 @@ import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
-import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
 import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { MAX_FALLING_BLOCK_GROUPS } from '../sim/fallingBlocks/fallingBlockTypes';
@@ -150,8 +141,8 @@ import {
 import { createGameOverlayController } from './gameOverlayController';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
 import { createGamePauseController } from './gamePauseController';
-import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
 import { createGameLambdaAnchorState } from './gameLambdaAnchorState';
+import { renderEditorBackdrop } from './gameScreenEditorBackdrop';
 
 const FIXED_DT_MS = 16.666;
 
@@ -899,76 +890,34 @@ export function startGameScreen(
 
       if (isEditorConsuming) {
         // Still render the game world (walls, particles, etc.) as backdrop
-        bloomSystem.beginFrame();
         const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
         updateSnapshotInPlace(reusableSnapshot, world, 1.0, prevClusterPosX, prevClusterPosY);
-        const snapshot = reusableSnapshot;
-
-        if (webglRenderer.isAvailable) {
-          webglRenderer.render(snapshot, eox, eoy, zoom);
-          ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
-        } else {
-          ctx.fillStyle = bgColor;
-          ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
-        }
-
-        renderWorldBackground(
+        renderEditorBackdrop(
           ctx,
-          currentRoom.worldNumber,
-          virtualWidthPx,
-          virtualHeightPx,
+          deviceCtx,
+          virtualCanvas,
+          canvas,
+          webglRenderer,
+          bloomSystem,
+          world,
+          reusableSnapshot,
+          currentRoom,
+          bgColor,
           eox,
           eoy,
-          currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
-          currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
           zoom,
-          currentRoom.backgroundId,
-        );
-        if (isTheroShowcaseRoom(currentRoom.id)) {
-          renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
-        }
-        if (currentRoom.backgroundId === 'crystallineCracks') {
-          renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
-        }
-        renderWalls(ctx, snapshot, eox, eoy, zoom, true);
-        renderHazards(ctx, world, eox, eoy, zoom, world.tick);
-        renderClusters(ctx, snapshot, eox, eoy, zoom, true);
-        renderGrasshoppers(ctx, snapshot, eox, eoy, zoom);
-        renderRadiantTether(ctx, snapshot, eox, eoy, zoom, true);
-        renderGrapple(ctx, snapshot, eox, eoy, zoom);
-        drawTunnelDarkness(ctx, currentRoom, eox, eoy, zoom);
-        environmentalDust.render(ctx, eox, eoy, zoom, true);
-        skillTombRenderer.render(ctx, eox, eoy, zoom);
-        skillTombEffectRenderer.renderBehind(ctx, eox, eoy, zoom);
-        skillTombEffectRenderer.renderSprite(ctx, eox, eoy, zoom);
-        skillTombEffectRenderer.renderFront(ctx, eox, eoy, zoom);
-
-        if (!webglRenderer.isAvailable) {
-          renderParticles(ctx, snapshot, eox, eoy, zoom);
-        }
-
-        // Draw editor overlays on top
-        editorController.render(ctx, eox, eoy, zoom, virtualWidthPx, virtualHeightPx);
-
-        // ── Upscale virtual canvas to device canvas ──────────────────────
-        deviceCtx.imageSmoothingEnabled = false;
-        deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
-        if (webglRenderer.isAvailable) {
-          deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
-        }
-        bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
-        renderHighResolutionDebugOverlay({
-          deviceCtx,
-          canvas,
-          virtualCanvas,
-          isDebugMode: pauseController.state.isDebugMode,
-          world,
-          currentRoom,
+          virtualWidthPx,
+          virtualHeightPx,
+          environmentalDust,
+          skillTombRenderer,
+          skillTombEffectRenderer,
+          editorController,
           hudState,
           renderProfiler,
-        });
+          pauseController.state.isDebugMode,
+        );
 
         rafHandle = requestAnimationFrame(frame);
         return;

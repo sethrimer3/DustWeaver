@@ -235,3 +235,19 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 1. `npm run build`
 2. `npm run lint` (pre-existing lint errors may still appear in unrelated files)
+
+---
+
+## BUILD 351 — Additional Monolith Refactor Follow-up
+
+### What was completed in BUILD 351
+
+1. **Extracted editor backdrop renderer from `gameScreen.ts`**
+   - Added `src/screens/gameScreenEditorBackdrop.ts`.
+   - Moved the editor-consuming render branch into `renderEditorBackdrop(...)`.
+   - Kept rendering behavior and pass ordering unchanged while reducing `gameScreen.ts` size/complexity.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` still contains large room-loading and frame-update control flow that can be split further (e.g., load phases, transition/sim tick orchestration), but this was deferred to avoid risky control-flow regressions.
+2. `editorController.ts` remains a large candidate for future low-risk extraction.
