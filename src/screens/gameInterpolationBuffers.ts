@@ -35,7 +35,8 @@ export function captureFallingBlockInterpolationState(
   buffers: GameInterpolationBuffers,
 ): void {
   const fallingBlockGroupCount = Math.min(world.fallingBlockGroups.length, MAX_FALLING_BLOCK_GROUPS);
-  for (let groupIndex = 0; groupIndex < fallingBlockGroupCount; groupIndex++) {
-    buffers.prevFallingBlockOffsetY[groupIndex] = world.fallingBlockGroups[groupIndex].offsetYWorld;
+  for (let fallingBlockGroupIndex = 0; fallingBlockGroupIndex < fallingBlockGroupCount; fallingBlockGroupIndex++) {
+    buffers.prevFallingBlockOffsetY[fallingBlockGroupIndex]
+      = world.fallingBlockGroups[fallingBlockGroupIndex].offsetYWorld;
   }
 }
