@@ -36,12 +36,6 @@ import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
-import {
-  isTheroShowcaseRoom,
-  renderTheroShowcaseEffect,
-  renderTheroBackgroundEffect,
-  renderCrystallineCracksBackground,
-} from '../render/effects/theroEffectManager';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import {
