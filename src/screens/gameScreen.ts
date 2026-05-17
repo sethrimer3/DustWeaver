@@ -100,6 +100,7 @@ import { createDialogueState } from '../dialogue/dialogueState';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 import { handleDialogueAdvance, checkDialogueTriggers, prepareRoomDialogueVisitState } from './gameDialogueHandler';
 import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
+import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
 import { buildHudDebugState } from './gameHudDebugState';
 import type { Conversation } from '../dialogue/dialogueTypes';
 import {
@@ -1141,29 +1142,7 @@ export function startGameScreen(
       pendingGrappleFireSfx = false;
 
       // ── Crumble block debris events & ambient lighting rebuild ────────────
-      for (let ci = 0; ci < world.crumbleBlockCount; ci++) {
-        const nowActive = world.isCrumbleBlockActiveFlag[ci];
-        const nowHits   = world.crumbleBlockHitsRemaining[ci];
-        const wasActive = prevCrumbleActive[ci];
-        const wasHits   = prevCrumbleHits[ci];
-
-        if (wasActive === 1) {
-          if (nowActive === 0) {
-            // Block fully destroyed this tick.
-            // The wall sprite renderer detects the changed wall-layout signature
-            // automatically and rebuilds ambient lighting on the next frame.
-            crumbleDebris.notifyBlockHit(world.crumbleBlockXWorld[ci], world.crumbleBlockYWorld[ci], true);
-          } else if (nowHits < wasHits) {
-            // Block cracked (first hit) this tick
-            crumbleDebris.notifyBlockHit(world.crumbleBlockXWorld[ci], world.crumbleBlockYWorld[ci], false);
-          }
-        }
-
-        prevCrumbleActive[ci] = nowActive;
-        prevCrumbleHits[ci]   = nowHits;
-      }
-
-      crumbleDebris.update(FIXED_DT_MS);
+      tickCrumbleDebrisEvents(world, crumbleDebris, prevCrumbleActive, prevCrumbleHits, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
     }
 

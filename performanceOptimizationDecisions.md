@@ -111,3 +111,21 @@
 
 1. Did **not** change the render-interpolation formula.
 2. Did **not** alter the guard condition (alive + player flag) for the update.
+
+## BUILD 354 — Crumble debris event tick extraction
+
+### Performance-related changes made
+
+1. **Moved per-tick crumble event scan into a dedicated helper module**
+   - **System:** `src/screens/gameScreen.ts` → `src/screens/gameCrumbleDebrisEvents.ts`
+   - **What changed:** Extracted `tickCrumbleDebrisEvents(...)` that scans crumble-block state and drives `CrumbleDebrisRenderer` each tick.
+   - **Why safe:** Pure move — same scan loop, same `update(dtMs)` call, same state mutation via the same pre-allocated arrays. No allocation added.
+   - **Category:** Maintainability refactor — zero change to per-tick allocation profile.
+
+2. **Preserved pre-allocated Uint8Array prev-state pattern**
+   - `prevCrumbleActive` and `prevCrumbleHits` remain `Uint8Array` allocated once at game start, passed by reference, mutated in-place per tick.
+   - **Category:** Correctness preservation — no performance delta.
+
+### Performance opportunities noticed but not implemented
+
+1. The fixed-step accumulator loop still captures cluster prev-positions and falling-block prev-offsets inline; these may be extracted in a future maintainability pass.

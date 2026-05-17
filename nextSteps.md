@@ -279,3 +279,18 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 1. `gameScreen.ts` still contains the crumble-block debris event scan inside the physics tick loop — a small but coherent chunk that could be extracted in a future pass.
 2. `gameScreen.ts` transition + sim-tick orchestration blocks remain good candidates for future decomposition.
+
+---
+
+## BUILD 354 — Crumble debris event extraction follow-up
+
+### What was completed in BUILD 354
+
+1. Extracted the per-tick crumble-block debris event scan from the physics accumulator loop in `gameScreen.ts` into `src/screens/gameCrumbleDebrisEvents.ts` via `tickCrumbleDebrisEvents(...)`.
+2. The function compares `prevCrumbleActive`/`prevCrumbleHits` snapshots against the post-tick world state, fires `notifyBlockHit` on the `CrumbleDebrisRenderer`, updates the prev-state arrays, and calls `crumbleDebris.update(dtMs)` — all originally done inline.
+3. No behavioral change; the pair `[scan → update]` was preserved and is still called once per fixed timestep.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` physics accumulator loop still owns: cluster prev-position capture, falling-block prev-offset capture, and player-input forwarding. These could be extracted in a subsequent pass.
+2. Post-loop camera, transition-reveal, and HUD update blocks also remain as future extraction candidates.
