@@ -294,3 +294,18 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 1. `gameScreen.ts` physics accumulator loop still owns: cluster prev-position capture, falling-block prev-offset capture, and player-input forwarding. These could be extracted in a subsequent pass.
 2. Post-loop camera, transition-reveal, and HUD update blocks also remain as future extraction candidates.
+
+---
+
+## BUILD 355 — Interpolation buffer capture extraction follow-up
+
+### What was completed in BUILD 355
+
+1. Extracted render-interpolation buffer management from `gameScreen.ts` into `src/screens/gameInterpolationBuffers.ts`.
+2. Added `createGameInterpolationBuffers()`, `captureClusterInterpolationState(...)`, and `captureFallingBlockInterpolationState(...)`.
+3. `gameScreen.ts` now delegates both room-load cluster snapshot capture and per-fixed-tick interpolation-state capture through the helper without changing timing or data flow.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` fixed-tick loop still owns player-input forwarding, slime split handling, and per-system post-tick updates.
+2. Post-loop camera, transition-reveal, and HUD update blocks remain future extraction candidates.

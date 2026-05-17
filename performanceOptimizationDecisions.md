@@ -129,3 +129,21 @@
 ### Performance opportunities noticed but not implemented
 
 1. The fixed-step accumulator loop still captures cluster prev-positions and falling-block prev-offsets inline; these may be extracted in a future maintainability pass.
+
+## BUILD 355 — Interpolation buffer capture extraction
+
+### Performance-related changes made
+
+1. **Moved interpolation-buffer capture into a dedicated helper module**
+   - **System:** `src/screens/gameScreen.ts` → `src/screens/gameInterpolationBuffers.ts`
+   - **What changed:** Extracted one-time buffer creation plus cluster-position and falling-block-offset capture helpers.
+   - **Why safe:** The same `Float32Array` buffers are still reused, resized with the same `clusterCount * 2` rule, and filled with the same pre-tick values in the same order.
+   - **Category:** Maintainability refactor — preserves the existing allocation profile.
+
+2. **Preserved pre-allocated falling-block interpolation buffer**
+   - `prevFallingBlockOffsetY` remains a single `Float32Array(MAX_FALLING_BLOCK_GROUPS)` allocated once and updated in place each tick.
+   - **Category:** Correctness preservation — no performance delta.
+
+### Performance opportunities noticed but not implemented
+
+1. The fixed-step loop still performs player-input forwarding and several post-tick orchestration updates inline.

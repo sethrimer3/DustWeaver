@@ -89,7 +89,6 @@ import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wal
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
-import { MAX_FALLING_BLOCK_GROUPS } from '../sim/fallingBlocks/fallingBlockTypes';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { createPlayerSfxState, updatePlayerSfx } from './gamePlayerSfx';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
@@ -101,6 +100,11 @@ import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 import { handleDialogueAdvance, checkDialogueTriggers, prepareRoomDialogueVisitState } from './gameDialogueHandler';
 import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
 import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
+import {
+  createGameInterpolationBuffers,
+  captureClusterInterpolationState,
+  captureFallingBlockInterpolationState,
+} from './gameInterpolationBuffers';
 import { buildHudDebugState } from './gameHudDebugState';
 import type { Conversation } from '../dialogue/dialogueTypes';
 import {
@@ -497,14 +501,7 @@ export function startGameScreen(
 
     resetReusableSnapshot(reusableSnapshot, world);
 
-    if (prevClusterPosX.length < world.clusters.length) {
-      prevClusterPosX = new Float32Array(world.clusters.length * 2);
-      prevClusterPosY = new Float32Array(world.clusters.length * 2);
-    }
-    for (let ci = 0; ci < world.clusters.length; ci++) {
-      prevClusterPosX[ci] = world.clusters[ci].positionXWorld;
-      prevClusterPosY[ci] = world.clusters[ci].positionYWorld;
-    }
+    captureClusterInterpolationState(world, interpolationBuffers);
 
     skillTombRenderer.init(room.saveTombs, room.walls);
     skillTombEffectRenderer.init(room.skillTombs);
@@ -596,19 +593,7 @@ export function startGameScreen(
   const prevCrumbleHits   = new Uint8Array(MAX_CRUMBLE_BLOCKS);
 
   // ── Render-interpolation buffers ─────────────────────────────────────────
-  // Cluster positions captured immediately before the physics tick loop each
-  // frame.  The renderer blends between these and the post-tick positions using
-  // the remaining accumulator fraction (renderAlpha) so sprites advance
-  // continuously rather than snapping once per physics tick.
-  // Sized to match MAX_REUSABLE_CLUSTERS; grows lazily if needed.
-  let prevClusterPosX = new Float32Array(64);
-  let prevClusterPosY = new Float32Array(64);
-
-  // ── Falling block render-interpolation buffers ───────────────────────────
-  // Stores offsetYWorld before each physics tick so renderFallingBlocks can
-  // blend between the pre-tick and post-tick positions using renderAlpha.
-  // Pre-allocated to MAX_FALLING_BLOCK_GROUPS to avoid per-frame allocation.
-  const prevFallingBlockOffsetY = new Float32Array(MAX_FALLING_BLOCK_GROUPS);
+  const interpolationBuffers = createGameInterpolationBuffers();
 
   // ── Health bar state ─────────────────────────────────────────────────────
   /** Map of entityId -> tick when health bar should hide. */
@@ -880,7 +865,13 @@ export function startGameScreen(
         const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
-        updateSnapshotInPlace(reusableSnapshot, world, 1.0, prevClusterPosX, prevClusterPosY);
+        updateSnapshotInPlace(
+          reusableSnapshot,
+          world,
+          1.0,
+          interpolationBuffers.prevClusterPosX,
+          interpolationBuffers.prevClusterPosY,
+        );
         renderEditorBackdrop(
           ctx,
           deviceCtx,
@@ -1094,23 +1085,12 @@ export function startGameScreen(
       // 0 toward 1 between ticks, producing continuous motion with no lurching.
       // Capturing before ALL ticks (the old approach) caused the sprite to freeze
       // at currentPos on no-tick frames then snap back when a tick finally fired.
-      const clusterCountForTick = world.clusters.length;
-      if (prevClusterPosX.length < clusterCountForTick) {
-        prevClusterPosX = new Float32Array(clusterCountForTick * 2);
-        prevClusterPosY = new Float32Array(clusterCountForTick * 2);
-      }
-      for (let clusterIndex = 0; clusterIndex < clusterCountForTick; clusterIndex++) {
-        prevClusterPosX[clusterIndex] = world.clusters[clusterIndex].positionXWorld;
-        prevClusterPosY[clusterIndex] = world.clusters[clusterIndex].positionYWorld;
-      }
+      captureClusterInterpolationState(world, interpolationBuffers);
 
       // Capture falling block Y offsets before this tick so the renderer can
       // smoothly interpolate tile positions between physics steps.
       // Cap at MAX_FALLING_BLOCK_GROUPS — the buffer is pre-allocated to that size.
-      const fbGroupCount = Math.min(world.fallingBlockGroups.length, MAX_FALLING_BLOCK_GROUPS);
-      for (let gi = 0; gi < fbGroupCount; gi++) {
-        prevFallingBlockOffsetY[gi] = world.fallingBlockGroups[gi].offsetYWorld;
-      }
+      captureFallingBlockInterpolationState(world, interpolationBuffers);
 
       const player = world.clusters[0];
       if (player !== undefined) {
@@ -1165,7 +1145,15 @@ export function startGameScreen(
       const playerForCrossing = world.clusters[0];
       if (playerForCrossing !== undefined && playerForCrossing.isAliveFlag === 1 &&
           isCrossingComplete(crossingState, playerForCrossing.positionXWorld, playerForCrossing.positionYWorld)) {
-        finalizeCrossingSeamless(stagingState, world, camera, prevClusterPosX, prevClusterPosY, crossingState, loadRoom);
+        finalizeCrossingSeamless(
+          stagingState,
+          world,
+          camera,
+          interpolationBuffers.prevClusterPosX,
+          interpolationBuffers.prevClusterPosY,
+          crossingState,
+          loadRoom,
+        );
         notifyFreshRoomLoaded(transitionRevealState);
         preloadAdjacentRoomAssets(currentRoom);
       }
@@ -1198,8 +1186,10 @@ export function startGameScreen(
       // same sub-tick position that the sprite will be drawn at.  This keeps
       // the player visually centred and prevents background/wall parallax
       // jitter relative to the sprite.
-      const camTargetX = prevClusterPosX[0] + (playerForCamera.positionXWorld - prevClusterPosX[0]) * renderAlpha;
-      const camTargetY = prevClusterPosY[0] + (playerForCamera.positionYWorld - prevClusterPosY[0]) * renderAlpha;
+      const camTargetX = interpolationBuffers.prevClusterPosX[0]
+        + (playerForCamera.positionXWorld - interpolationBuffers.prevClusterPosX[0]) * renderAlpha;
+      const camTargetY = interpolationBuffers.prevClusterPosY[0]
+        + (playerForCamera.positionYWorld - interpolationBuffers.prevClusterPosY[0]) * renderAlpha;
 
       updateCameraFollow(
         camState,
@@ -1268,10 +1258,24 @@ export function startGameScreen(
     }
 
     // ── Update procedural cloak (per-frame visual, not per-tick sim) ──────
-    updatePlayerCloaks(playerCloak, phantomCloak, world, prevClusterPosX, prevClusterPosY, renderAlpha, elapsedMs);
+    updatePlayerCloaks(
+      playerCloak,
+      phantomCloak,
+      world,
+      interpolationBuffers.prevClusterPosX,
+      interpolationBuffers.prevClusterPosY,
+      renderAlpha,
+      elapsedMs,
+    );
 
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
-    updateSnapshotInPlace(reusableSnapshot, world, renderAlpha, prevClusterPosX, prevClusterPosY);
+    updateSnapshotInPlace(
+      reusableSnapshot,
+      world,
+      renderAlpha,
+      interpolationBuffers.prevClusterPosX,
+      interpolationBuffers.prevClusterPosY,
+    );
 
     // ── Preview bubble computation ────────────────────────────────────────
     // Compute proximity-based preview bubble state for nearby transitions.
@@ -1340,7 +1344,7 @@ export function startGameScreen(
       isDeepReductionActive: aqState.isDeepReductionActive,
       renderProfiler,
       renderAlpha,
-      prevFallingBlockOffsetY,
+      prevFallingBlockOffsetY: interpolationBuffers.prevFallingBlockOffsetY,
       edgeExtensionCache,
       previewBubbles,
       previewBubbleCount,
