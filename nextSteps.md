@@ -309,3 +309,29 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 1. `gameScreen.ts` fixed-tick loop still owns player-input forwarding, slime split handling, and per-system post-tick updates.
 2. Post-loop camera, transition-reveal, and HUD update blocks remain future extraction candidates.
+
+---
+
+## BUILD 356 — Transition orchestration extraction follow-up
+
+### What was completed in BUILD 356
+
+1. Added `src/screens/gameRoomTransitionOrchestrator.ts` and moved the per-frame room-transition orchestration block out of `gameScreen.ts`.
+2. `orchestrateRoomTransitions(...)` now owns cooldown decrement, transition trigger processing, camera-transition setup, velocity carry-over, transition reveal notifications, and transition debug-state updates.
+3. `gameScreen.ts` now delegates this transition block while preserving existing room-load/preload and reveal-reset behavior.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` still has a large fixed-step simulation loop containing input forwarding + per-system post-tick orchestration; this remains a high-value next extraction target.
+2. Dialogue trigger checks and nearby camera/reveal orchestration are still inline in `gameScreen.ts` and can be extracted in a future low-risk pass.
+3. `src/editor/editorController.ts` remains monolithic and is still a major candidate for decomposition.
+
+### Validation follow-up
+
+1. Re-run:
+   - `npm run build`
+   - `npm run lint`
+2. Expectation: lint still reports only the known pre-existing issues in:
+   - `src/editor/editorRoomBuilder.ts`
+   - `src/screens/gameRoomFallingBlocks.ts`
+   - `src/screens/gameTransitions.ts`

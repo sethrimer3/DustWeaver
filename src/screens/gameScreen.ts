@@ -113,7 +113,6 @@ import { buildEdgeExtensionCache, EdgeExtensionCache } from '../render/transitio
 import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import {
   createTransitionRevealState,
-  notifyTransitionRoomEntered,
   notifyFreshRoomLoaded,
   updateTransitionReveal,
   getTransitionRevealOffset,
