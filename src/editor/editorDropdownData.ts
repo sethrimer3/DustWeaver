@@ -101,6 +101,7 @@ export const SCENE_LIGHT_TYPE_OPTIONS: readonly { id: LightType; label: string }
   { id: 'spotlight',  label: 'Spotlight'   },
   { id: 'floodlight', label: 'Floodlight'  },
   { id: 'backlight',  label: 'Backlight'   },
+  { id: 'sunray',     label: 'Volumetric Sunray' },
 ];
 
 /** Canonical list of ParticleKind string values available for editor dropdowns. */

@@ -9,7 +9,7 @@
 // ── Light type and blend mode ─────────────────────────────────────────────────
 
 /** Visual style of the light. */
-export type LightType = 'softGlow' | 'spotlight' | 'floodlight' | 'backlight';
+export type LightType = 'softGlow' | 'spotlight' | 'floodlight' | 'backlight' | 'sunray';
 
 /** How the light composites onto the scene. */
 export type LightBlendMode = 'add' | 'screen' | 'multiply' | 'normal';
@@ -50,6 +50,34 @@ export interface LightDef {
   pulseSpeedHz?: number;
   /** Pulse amplitude as a fraction of intensityPct (0–1). */
   pulseAmplitude?: number;
+  /** Sunray: beam direction in radians. */
+  angleRad?: number;
+  /** Sunray: beam length in world units. */
+  lengthWorld?: number;
+  /** Sunray: beam width at source in world units. */
+  widthStartWorld?: number;
+  /** Sunray: beam width at end in world units. */
+  widthEndWorld?: number;
+  /** Sunray: edge feathering strength in 0–1. */
+  softness?: number;
+  /** Sunray: number of layered strands to draw. */
+  strandCount?: number;
+  /** Sunray: base opacity multiplier in 0–1. */
+  opacity?: number;
+  /** Sunray: subtle per-sample noise strength in 0–1. */
+  noiseStrength?: number;
+  /** Sunray: optional subtle flicker strength in 0–1. */
+  flickerStrength?: number;
+  /** Sunray: 1 enables dust motes in-beam, 0 disables. */
+  dustEnabledFlag?: 0 | 1;
+  /** Sunray: density scalar used to derive dust mote count. */
+  dustDensity?: number;
+  /** Sunray: dust drift speed multiplier. */
+  dustSpeed?: number;
+  /** Sunray: dust mote minimum size in world units. */
+  dustSizeMinWorld?: number;
+  /** Sunray: dust mote maximum size in world units. */
+  dustSizeMaxWorld?: number;
 }
 
 // ── Compact saved form ────────────────────────────────────────────────────────
@@ -91,6 +119,34 @@ export interface SavedSceneLight {
   ps?: number;
   /** pulseAmplitude */
   pa?: number;
+  /** angleRad */
+  ar?: number;
+  /** lengthWorld */
+  lw?: number;
+  /** widthStartWorld */
+  ws?: number;
+  /** widthEndWorld */
+  we?: number;
+  /** softness */
+  sf?: number;
+  /** strandCount */
+  sc?: number;
+  /** opacity */
+  op?: number;
+  /** noiseStrength */
+  ns?: number;
+  /** flickerStrength */
+  fs?: number;
+  /** dustEnabledFlag */
+  de?: 0 | 1;
+  /** dustDensity */
+  dd?: number;
+  /** dustSpeed */
+  ds?: number;
+  /** dustSizeMinWorld */
+  dmn?: number;
+  /** dustSizeMaxWorld */
+  dmx?: number;
 }
 
 // ── Serialisation helpers ─────────────────────────────────────────────────────
@@ -115,6 +171,20 @@ export function lightDefToSaved(d: LightDef): SavedSceneLight {
   if (d.isPulsingFlag)               out.pu = d.isPulsingFlag;
   if (d.pulseSpeedHz !== undefined)  out.ps = d.pulseSpeedHz;
   if (d.pulseAmplitude !== undefined) out.pa = d.pulseAmplitude;
+  if (d.angleRad !== undefined)      out.ar = d.angleRad;
+  if (d.lengthWorld !== undefined)   out.lw = d.lengthWorld;
+  if (d.widthStartWorld !== undefined) out.ws = d.widthStartWorld;
+  if (d.widthEndWorld !== undefined) out.we = d.widthEndWorld;
+  if (d.softness !== undefined)      out.sf = d.softness;
+  if (d.strandCount !== undefined)   out.sc = d.strandCount;
+  if (d.opacity !== undefined)       out.op = d.opacity;
+  if (d.noiseStrength !== undefined) out.ns = d.noiseStrength;
+  if (d.flickerStrength !== undefined) out.fs = d.flickerStrength;
+  if (d.dustEnabledFlag !== undefined) out.de = d.dustEnabledFlag;
+  if (d.dustDensity !== undefined)   out.dd = d.dustDensity;
+  if (d.dustSpeed !== undefined)     out.ds = d.dustSpeed;
+  if (d.dustSizeMinWorld !== undefined) out.dmn = d.dustSizeMinWorld;
+  if (d.dustSizeMaxWorld !== undefined) out.dmx = d.dustSizeMaxWorld;
   return out;
 }
 
@@ -138,12 +208,26 @@ export function savedToLightDef(s: SavedSceneLight): LightDef {
   if (s.pu !== undefined) d.isPulsingFlag = s.pu;
   if (s.ps !== undefined) d.pulseSpeedHz = s.ps;
   if (s.pa !== undefined) d.pulseAmplitude = s.pa;
+  if (s.ar !== undefined) d.angleRad = s.ar;
+  if (s.lw !== undefined) d.lengthWorld = s.lw;
+  if (s.ws !== undefined) d.widthStartWorld = s.ws;
+  if (s.we !== undefined) d.widthEndWorld = s.we;
+  if (s.sf !== undefined) d.softness = s.sf;
+  if (s.sc !== undefined) d.strandCount = s.sc;
+  if (s.op !== undefined) d.opacity = s.op;
+  if (s.ns !== undefined) d.noiseStrength = s.ns;
+  if (s.fs !== undefined) d.flickerStrength = s.fs;
+  if (s.de !== undefined) d.dustEnabledFlag = s.de;
+  if (s.dd !== undefined) d.dustDensity = s.dd;
+  if (s.ds !== undefined) d.dustSpeed = s.ds;
+  if (s.dmn !== undefined) d.dustSizeMinWorld = s.dmn;
+  if (s.dmx !== undefined) d.dustSizeMaxWorld = s.dmx;
   return d;
 }
 
 // ── Validator ─────────────────────────────────────────────────────────────────
 
-const VALID_KINDS: ReadonlySet<string> = new Set<LightType>(['softGlow', 'spotlight', 'floodlight', 'backlight']);
+const VALID_KINDS: ReadonlySet<string> = new Set<LightType>(['softGlow', 'spotlight', 'floodlight', 'backlight', 'sunray']);
 const VALID_BLEND_MODES: ReadonlySet<string> = new Set<LightBlendMode>(['add', 'screen', 'multiply', 'normal']);
 
 export function isValidSavedSceneLight(v: unknown): v is SavedSceneLight {

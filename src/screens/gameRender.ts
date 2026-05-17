@@ -754,7 +754,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Scene-light visibility-polygon lighting pass ─────────────────────────
   // Renders designer-placed scene lights (softGlow / spotlight / floodlight /
-  // backlight) with optional raytraced shadow polygons.  Only active when the
+  // backlight / sunray) with optional raytraced shadow polygons.  Only active when the
   // room has at least one scene light.  The lighting system maintains its own
   // offscreen canvas and is initialised lazily on first use.
   if (currentRoom.sceneLights && currentRoom.sceneLights.length > 0) {
