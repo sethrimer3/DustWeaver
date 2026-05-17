@@ -150,6 +150,7 @@ import { createGameOverlayController } from './gameOverlayController';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
 import { createGamePauseController } from './gamePauseController';
 import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
+import { createGameLambdaAnchorState } from './gameLambdaAnchorState';
 
 const FIXED_DT_MS = 16.666;
 
@@ -297,29 +298,6 @@ export function startGameScreen(
   const collectedDustContainerKeySet: Set<string> = new Set();
   /** Keys in the format `${roomId}:dustswarm:${index}` for already-collected dust swarms. */
   const collectedDustSwarmKeySet: Set<string> = new Set();
-
-  /** Index (0-based) into `currentRoom.lambdaAnchors[]` for the linked anchor, or -1. */
-  let linkedAnchorIndex = -1;
-  /** Room ID of the room where the linked anchor lives, or '' if none. */
-  let linkedAnchorRoomId = '';
-  /** Alpha for the teleport flash overlay; decays to 0 over time in renderFrame. */
-  let teleportFlashAlpha = 0;
-
-  function setLambdaAnchorLink(index: number, roomId: string): void {
-    linkedAnchorIndex = index;
-    linkedAnchorRoomId = roomId;
-  }
-  function clearLambdaAnchorLink(): void {
-    linkedAnchorIndex = -1;
-    linkedAnchorRoomId = '';
-  }
-  function lambdaTeleportFlash(): void {
-    teleportFlashAlpha = 1.0;
-    // Lambda anchor teleport is an in-room positional snap, not a room transition.
-    // Reset reveal state so any in-progress transition reveal doesn't persist
-    // after the player is teleported to a different part of the room.
-    notifyFreshRoomLoaded(transitionRevealState);
-  }
 
   /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
   const consumedSkillTombKeySet: Set<string> = new Set();
@@ -681,6 +659,9 @@ export function startGameScreen(
   // a room transition.  No fade overlay is used — transitions feel like a
   // camera pan toward the room boundary.
   const transitionRevealState = createTransitionRevealState();
+  const lambdaAnchorState = createGameLambdaAnchorState(() => {
+    notifyFreshRoomLoaded(transitionRevealState);
+  });
 
   // ── Transition preview context ────────────────────────────────────────────
   // Updated each frame from the reveal state.  Provides the connected room's
@@ -1009,11 +990,11 @@ export function startGameScreen(
         collectedDustSwarmKeySet,
         levelRng,
         nowMs: timestampMs,
-        linkedAnchorIndex,
-        linkedAnchorRoomId,
-        setLambdaAnchorLink,
-        clearLambdaAnchorLink,
-        lambdaTeleportFlash,
+        linkedAnchorIndex: lambdaAnchorState.linkedAnchorIndex,
+        linkedAnchorRoomId: lambdaAnchorState.linkedAnchorRoomId,
+        setLambdaAnchorLink: lambdaAnchorState.setLambdaAnchorLink,
+        clearLambdaAnchorLink: lambdaAnchorState.clearLambdaAnchorLink,
+        lambdaTeleportFlash: lambdaAnchorState.lambdaTeleportFlash,
       });
 
     let pendingGrappleFireSfx = grappleFireTriggered;
@@ -1461,10 +1442,10 @@ export function startGameScreen(
       isDustContainerSpriteLoaded,
       dustContainerSprite,
       collectedDustSwarmKeySet,
-      linkedAnchorIndex,
-      linkedAnchorRoomId,
-      teleportFlashAlpha,
-      setTeleportFlashAlpha: (a: number) => { teleportFlashAlpha = a; },
+      linkedAnchorIndex: lambdaAnchorState.linkedAnchorIndex,
+      linkedAnchorRoomId: lambdaAnchorState.linkedAnchorRoomId,
+      teleportFlashAlpha: lambdaAnchorState.teleportFlashAlpha,
+      setTeleportFlashAlpha: lambdaAnchorState.setTeleportFlashAlpha,
       getPlayerDustCount,
       graphicsQuality: pauseController.state.pauseMenuState.graphicsQuality,
       isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,
