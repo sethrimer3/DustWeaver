@@ -97,9 +97,8 @@ import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
 import { checkRoomTransitions, getOppositeTransitionDirection } from './gameTransitions';
 import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
-import { closeDialogue } from '../dialogue/dialogueRuntime';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
-import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
+import { handleDialogueAdvance, checkDialogueTriggers, prepareRoomDialogueVisitState } from './gameDialogueHandler';
 import { buildHudDebugState } from './gameHudDebugState';
 import type { Conversation } from '../dialogue/dialogueTypes';
 import {
@@ -469,23 +468,9 @@ export function startGameScreen(
     loadRoomFallingBlocks(world, room);
     loadRoomGrasshoppers(world, room);
 
-    closeDialogue(dialogueState);
-    dialogueRenderer.hide();
-    firedDialogueTriggerUids = new Set<number>();
-    const roomTriggers = room.dialogueTriggers ?? [];
-    cachedRoomConversations = new Array<Conversation>(roomTriggers.length);
-    for (let _ti = 0; _ti < roomTriggers.length; _ti++) {
-      const _src = roomTriggers[_ti].conversation;
-      cachedRoomConversations[_ti] = {
-        id: _src.id,
-        title: _src.title,
-        entries: _src.entries.map(e => ({
-          text: e.text,
-          portraitId: e.portraitId,
-          portraitSide: e.portraitSide,
-        })),
-      };
-    }
+    const dialogueVisitState = prepareRoomDialogueVisitState(room, dialogueState, dialogueRenderer);
+    firedDialogueTriggerUids = dialogueVisitState.firedDialogueTriggerUids;
+    cachedRoomConversations = dialogueVisitState.cachedRoomConversations;
 
     spawnAllDustPiles(world);
 

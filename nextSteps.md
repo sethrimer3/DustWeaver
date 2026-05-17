@@ -251,3 +251,17 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 1. `gameScreen.ts` still contains large room-loading and frame-update control flow that can be split further (e.g., load phases, transition/sim tick orchestration), but this was deferred to avoid risky control-flow regressions.
 2. `editorController.ts` remains a large candidate for future low-risk extraction.
+
+---
+
+## BUILD 352 — Dialogue setup extraction follow-up
+
+### What was completed in BUILD 352
+
+1. Extracted room-load dialogue visit initialization from `gameScreen.ts` into `prepareRoomDialogueVisitState(...)` in `src/screens/gameDialogueHandler.ts`.
+2. Kept `checkDialogueTriggers(...)` hot-path contract intact by continuing to feed pre-converted cached conversations.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` still contains a large transition + fixed-tick orchestration branch that can be split further.
+2. `editorController.ts` remains a large module suitable for additional low-risk decomposition.

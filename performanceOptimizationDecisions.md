@@ -59,3 +59,29 @@
 
 1. Did **not** merge or reorder editor backdrop draw calls, to avoid visual/debug parity regressions.
 2. Did **not** alter editor update gating or input consumption semantics.
+
+## BUILD 352 — gameScreen dialogue-setup extraction
+
+### Performance-related changes made
+
+1. **Moved room-load dialogue visit setup into shared dialogue handler module**
+   - **System:** `src/screens/gameScreen.ts` → `src/screens/gameDialogueHandler.ts`
+   - **What changed:** Extracted Phase E dialogue reset + trigger-conversation pre-conversion into `prepareRoomDialogueVisitState(...)`.
+   - **Why safe:** The same operations execute during room load with the same data shape; only orchestration location changed.
+   - **Category:** Maintainability refactor while preserving hot-path allocation strategy.
+
+2. **Preserved no-allocation trigger checks in frame loop**
+   - **System:** dialogue trigger detection in `checkDialogueTriggers(...)`
+   - **What changed:** Kept pre-converted `cachedRoomConversations` as the frame-loop input; conversion still occurs only on room load.
+   - **Why safe:** Per-frame trigger checks still read cached objects and do not allocate in the hot path.
+   - **Category:** Prevents unnecessary per-frame allocations.
+
+### Performance opportunities noticed but not implemented
+
+1. Conversation cloning during room load still allocates nested entry arrays by design for runtime isolation; this remains acceptable because it is outside the frame hot path.
+2. `gameScreen.ts` still contains large transition and tick orchestration blocks that can be extracted in future low-risk passes.
+
+### Risky optimizations intentionally avoided
+
+1. Did **not** alter trigger-fire semantics (once-per-visit behavior, room-load reset timing).
+2. Did **not** change dialogue renderer timing or active-conversation lifecycle.

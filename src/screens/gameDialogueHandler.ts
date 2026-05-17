@@ -20,7 +20,7 @@
 import type { RoomDef } from '../levels/roomDef';
 import type { Conversation } from '../dialogue/dialogueTypes';
 import type { DialogueState } from '../dialogue/dialogueState';
-import { startDialogue, advanceDialogue } from '../dialogue/dialogueRuntime';
+import { closeDialogue, startDialogue, advanceDialogue } from '../dialogue/dialogueRuntime';
 import type { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 
 /**
@@ -99,4 +99,35 @@ export function checkDialogueTriggers(
     }
     break;
   }
+}
+
+/**
+ * Resets per-room dialogue visit state and pre-converts trigger conversations.
+ *
+ * Called during room load (not per-frame) so trigger checks can reuse immutable
+ * runtime Conversation data without allocations in the frame hot path.
+ */
+export function prepareRoomDialogueVisitState(
+  room: RoomDef,
+  dialogueState: DialogueState,
+  dialogueRenderer: DialogueOverlayRenderer,
+): { firedDialogueTriggerUids: Set<number>; cachedRoomConversations: Conversation[] } {
+  closeDialogue(dialogueState);
+  dialogueRenderer.hide();
+  const firedDialogueTriggerUids = new Set<number>();
+  const roomTriggers = room.dialogueTriggers ?? [];
+  const cachedRoomConversations = new Array<Conversation>(roomTriggers.length);
+  for (let triggerIndex = 0; triggerIndex < roomTriggers.length; triggerIndex++) {
+    const sourceConversation = roomTriggers[triggerIndex].conversation;
+    cachedRoomConversations[triggerIndex] = {
+      id: sourceConversation.id,
+      title: sourceConversation.title,
+      entries: sourceConversation.entries.map(entry => ({
+        text: entry.text,
+        portraitId: entry.portraitId,
+        portraitSide: entry.portraitSide,
+      })),
+    };
+  }
+  return { firedDialogueTriggerUids, cachedRoomConversations };
 }
