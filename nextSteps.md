@@ -265,3 +265,17 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 1. `gameScreen.ts` still contains a large transition + fixed-tick orchestration branch that can be split further.
 2. `editorController.ts` remains a large module suitable for additional low-risk decomposition.
+
+---
+
+## BUILD 353 — Cloak update extraction follow-up
+
+### What was completed in BUILD 353
+
+1. Extracted per-frame procedural cloak animation from `gameScreen.ts` into `src/screens/gamePlayerCloakUpdate.ts` via `updatePlayerCloaks(...)`.
+2. Both `PlayerCloak` and `PhantomCloakExtension` continue to receive the render-interpolated player position; behavior is unchanged.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` still contains the crumble-block debris event scan inside the physics tick loop — a small but coherent chunk that could be extracted in a future pass.
+2. `gameScreen.ts` transition + sim-tick orchestration blocks remain good candidates for future decomposition.

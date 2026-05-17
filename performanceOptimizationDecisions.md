@@ -85,3 +85,29 @@
 
 1. Did **not** alter trigger-fire semantics (once-per-visit behavior, room-load reset timing).
 2. Did **not** change dialogue renderer timing or active-conversation lifecycle.
+
+## BUILD 353 — gameScreen cloak-update extraction
+
+### Performance-related changes made
+
+1. **Moved per-frame cloak update into a dedicated helper module**
+   - **System:** `src/screens/gameScreen.ts` → `src/screens/gamePlayerCloakUpdate.ts`
+   - **What changed:** Extracted the `updatePlayerCloaks(...)` function that drives `PlayerCloak` and `PhantomCloakExtension` each render frame using render-interpolated player position.
+   - **Why safe:** The function has no return value and mutates only the two renderer objects; interpolation logic and guard conditions are preserved identically.
+   - **Category:** Maintainability refactor — zero change to per-frame allocation profile or render output.
+
+2. **Preserved render-interpolated position usage**
+   - **System:** cloak animation in `gamePlayerCloakUpdate.ts`
+   - **What changed:** `cloakInterpXWorld`/`cloakInterpYWorld` are still computed as the blend between `prevClusterPosX[0]`/`prevClusterPosY[0]` and the post-tick position using `renderAlpha`.
+   - **Why safe:** This blend avoids the one-tick visual lead that causes cloak jitter at >60 Hz refresh rates.
+   - **Category:** Correctness preservation — no performance delta.
+
+### Performance opportunities noticed but not implemented
+
+1. `gameScreen.ts` still contains the fixed-tick physics loop with per-tick crumble-block debris event scanning that could be extracted in a future low-risk pass.
+2. `editorController.ts` update() function is closure-heavy and difficult to decompose without threading many parameters.
+
+### Risky optimizations intentionally avoided
+
+1. Did **not** change the render-interpolation formula.
+2. Did **not** alter the guard condition (alive + player flag) for the update.
