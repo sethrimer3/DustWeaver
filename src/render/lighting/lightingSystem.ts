@@ -24,6 +24,35 @@ import { drawLight } from './lightRenderer';
 // ── Pre-allocated scratch buffers ─────────────────────────────────────────────
 
 const MAX_LIGHTS = 64;
+const MIN_SUNRAY_LENGTH_WORLD = 1;
+
+function isSunrayVisible(
+  light: LightDef,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+  viewportW: number,
+  viewportH: number,
+): boolean {
+  const angleRad = light.angleRad ?? light.rotationRad ?? 0;
+  const lengthWorld = Math.max(light.lengthWorld ?? light.radiusWorld, MIN_SUNRAY_LENGTH_WORLD);
+  const widthStartWorld = Math.max(light.widthStartWorld ?? 1, 1);
+  const widthEndWorld = Math.max(light.widthEndWorld ?? widthStartWorld, widthStartWorld);
+  const maxHalfWidthWorld = Math.max(widthStartWorld, widthEndWorld) * 0.5;
+
+  const sx = light.xWorld * zoom + offsetXPx;
+  const sy = light.yWorld * zoom + offsetYPx;
+  const ex = (light.xWorld + Math.cos(angleRad) * lengthWorld) * zoom + offsetXPx;
+  const ey = (light.yWorld + Math.sin(angleRad) * lengthWorld) * zoom + offsetYPx;
+  const pad = maxHalfWidthWorld * zoom + 6;
+  const minX = Math.min(sx, ex) - pad;
+  const maxX = Math.max(sx, ex) + pad;
+  const minY = Math.min(sy, ey) - pad;
+  const maxY = Math.max(sy, ey) + pad;
+  if (maxX < 0 || minX > viewportW) return false;
+  if (maxY < 0 || minY > viewportH) return false;
+  return true;
+}
 
 /** Pre-allocated occluder segment pool (one per room-load). */
 const _wallOccluders: OccluderSegment[] = Array.from({ length: 2048 }, () => ({
@@ -123,12 +152,16 @@ export function renderLightingPass(
   _culledLightCount = 0;
   for (let i = 0; i < lights.length && _culledLightCount < MAX_LIGHTS; i++) {
     const l = lights[i];
-    // Light screen centre
-    const screenX = l.xWorld * zoom + offsetXPx;
-    const screenY = l.yWorld * zoom + offsetYPx;
-    const screenR = l.radiusWorld * zoom;
-    if (screenX + screenR < 0 || screenX - screenR > viewportW) continue;
-    if (screenY + screenR < 0 || screenY - screenR > viewportH) continue;
+    if (l.kind === 'sunray') {
+      if (!isSunrayVisible(l, offsetXPx, offsetYPx, zoom, viewportW, viewportH)) continue;
+    } else {
+      // Light screen centre
+      const screenX = l.xWorld * zoom + offsetXPx;
+      const screenY = l.yWorld * zoom + offsetYPx;
+      const screenR = l.radiusWorld * zoom;
+      if (screenX + screenR < 0 || screenX - screenR > viewportW) continue;
+      if (screenY + screenR < 0 || screenY - screenR > viewportH) continue;
+    }
     _culledLights[_culledLightCount++] = l;
   }
   if (_culledLightCount === 0) return;
@@ -147,10 +180,13 @@ export function renderLightingPass(
     let visResult = null;
 
     if (light.castsShadowsFlag === 1 && _wallOccluderCount > 0) {
+      const visRadiusWorld = light.kind === 'sunray'
+        ? Math.max(light.radiusWorld, light.lengthWorld ?? light.radiusWorld)
+        : light.radiusWorld;
       // Build per-light occluders culled to light radius.
       // Reuse a slice of _wallOccluders (the build already caps at MAX_SEGS).
       visResult = computeVisibilityPolygon(
-        light.xWorld, light.yWorld, light.radiusWorld,
+        light.xWorld, light.yWorld, visRadiusWorld,
         _wallOccluders, _wallOccluderCount,
       );
     }

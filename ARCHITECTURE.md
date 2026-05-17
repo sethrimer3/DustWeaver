@@ -23,7 +23,8 @@ The render call order each frame:
 6. `environmentalDust.render(ctx, offsetX, offsetY, zoom)` — environmental dust layer (2D)
 7. `renderHudOverlay(ctx, hud)` — FPS / frame-time / particle-count (2D)
 8. Room name banner, control hints, touch joystick (2D)
-9. **Transition fade overlay** — black full-screen rect at `transitionFadeAlpha` (0–1), drawn
+9. `renderLightingPass(...)` (when room has scene lights) — visibility-polygon lights including volumetric `sunray` strands + in-beam dust (2D offscreen composited additively)
+10. **Transition fade overlay** — black full-screen rect at `transitionFadeAlpha` (0–1), drawn
    on the device canvas after all compositing.  Covers WebGL particles and bloom.
 
 Camera (`render/camera.ts`) follows the player cluster position with a smooth

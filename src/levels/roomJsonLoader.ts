@@ -30,6 +30,7 @@ import {
 import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
 import { isSavedRoomV2, hydrateV2Room } from './roomSchemaV2';
 import { getActiveCampaignId, getCampaignById, getCampaignRoomsBasePath } from './campaigns';
+import { savedToLightDef } from './lightingSchema';
 
 // ── Boundary wall generation (mirrors roomBuilders.ts) ───────────────────────
 
@@ -385,6 +386,22 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       colorB: l.colorB,
       brightnessPct: l.brightnessPct,
     }));
+  }
+  if (json.sunbeams && json.sunbeams.length > 0) {
+    room.sunbeams = json.sunbeams.map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+      angleRad: s.angleRad,
+      widthBlocks: s.widthBlocks,
+      lengthBlocks: s.lengthBlocks,
+      colorR: s.colorR,
+      colorG: s.colorG,
+      colorB: s.colorB,
+      intensityPct: s.intensityPct,
+    }));
+  }
+  if (json.sceneLights && json.sceneLights.length > 0) {
+    room.sceneLights = json.sceneLights.map(savedToLightDef);
   }
 
   return room;

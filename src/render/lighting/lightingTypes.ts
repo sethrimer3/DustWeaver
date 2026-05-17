@@ -39,6 +39,25 @@ export function createDefaultLight(kind: LightType, xWorld: number, yWorld: numb
     base.colorR = 100;
     base.colorG = 140;
     base.colorB = 255;
+  } else if (kind === 'sunray') {
+    base.blendMode = 'screen';
+    base.intensityPct = 70;
+    base.radiusWorld = BLOCK_SIZE_MEDIUM * 16;
+    base.castsShadowsFlag = 0;
+    base.angleRad = Math.PI / 2;
+    base.lengthWorld = BLOCK_SIZE_MEDIUM * 20;
+    base.widthStartWorld = BLOCK_SIZE_MEDIUM * 1.4;
+    base.widthEndWorld = BLOCK_SIZE_MEDIUM * 7;
+    base.softness = 0.9;
+    base.strandCount = 6;
+    base.opacity = 0.6;
+    base.noiseStrength = 0.15;
+    base.flickerStrength = 0.03;
+    base.dustEnabledFlag = 1;
+    base.dustDensity = 1;
+    base.dustSpeed = 1;
+    base.dustSizeMinWorld = 0.35;
+    base.dustSizeMaxWorld = 1.2;
   }
   return base;
 }

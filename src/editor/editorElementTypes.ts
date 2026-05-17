@@ -52,6 +52,20 @@ export interface EditorSceneLight {
   isPulsingFlag?: 0 | 1;
   pulseSpeedHz?: number;
   pulseAmplitude?: number;
+  angleRad?: number;
+  lengthWorld?: number;
+  widthStartWorld?: number;
+  widthEndWorld?: number;
+  softness?: number;
+  strandCount?: number;
+  opacity?: number;
+  noiseStrength?: number;
+  flickerStrength?: number;
+  dustEnabledFlag?: 0 | 1;
+  dustDensity?: number;
+  dustSpeed?: number;
+  dustSizeMinWorld?: number;
+  dustSizeMaxWorld?: number;
 }
 
 // ── Walls ─────────────────────────────────────────────────────────────────────

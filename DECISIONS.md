@@ -55,6 +55,12 @@
 - HTML Canvas 2D for initial implementation.
 - WebGL upgrade path available if Canvas 2D performance is insufficient.
 
+### Volumetric Sunray Scene Light (BUILD 347)
+- Added a dedicated `LightType = 'sunray'` to the scene-light system (not a separate pipeline).
+- Sunrays render into the existing lighting offscreen accumulation buffer using layered tapered strands plus blur/filter softening, then composite with the light's blend mode.
+- Beam intensity is sampled by a reusable `sampleSunrayIntensity(light, xWorld, yWorld, nowMs)` helper (longitudinal fade, lateral fade, optional noise), and the same helper drives in-beam dust mote visibility.
+- Sunray dust is deterministic per-light/per-index via hash-based pseudo-random sampling (no frame-to-frame popping) and aggressively capped for performance.
+
 ## WebGL Particle Shaders
 - Particle rendering upgraded to WebGL (WebGL1 + `experimental-webgl` fallback).
 - Approach: single `gl.drawArrays(gl.POINTS, N)` call per frame — all alive

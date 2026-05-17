@@ -464,6 +464,63 @@ export function updateInspector(
           sl.rotationRad = v;
           callbacks?.onPropertyChange('sceneLight.rotationRad', v);
         });
+      } else if (sl.kind === 'sunray') {
+        addNumberField(div, 'angleRad', sl.angleRad ?? (Math.PI / 2), -Math.PI, Math.PI, v => {
+          sl.angleRad = v;
+          callbacks?.onPropertyChange('sceneLight.angleRad', v);
+        });
+        addNumberField(div, 'lengthWorld', sl.lengthWorld ?? sl.radiusWorld, 4, 4096, v => {
+          sl.lengthWorld = v;
+          callbacks?.onPropertyChange('sceneLight.lengthWorld', v);
+        });
+        addNumberField(div, 'widthStartWorld', sl.widthStartWorld ?? 2, 0.25, 1024, v => {
+          sl.widthStartWorld = v;
+          callbacks?.onPropertyChange('sceneLight.widthStartWorld', v);
+        });
+        addNumberField(div, 'widthEndWorld', sl.widthEndWorld ?? 32, 0.25, 2048, v => {
+          sl.widthEndWorld = v;
+          callbacks?.onPropertyChange('sceneLight.widthEndWorld', v);
+        });
+        addSliderField(div, 'opacity%', Math.round((sl.opacity ?? 0.6) * 100), 0, 100, v => {
+          sl.opacity = v / 100;
+          callbacks?.onPropertyChange('sceneLight.opacity', v);
+        });
+        addSliderField(div, 'softness%', Math.round((sl.softness ?? 0.85) * 100), 0, 100, v => {
+          sl.softness = v / 100;
+          callbacks?.onPropertyChange('sceneLight.softness', v);
+        });
+        addNumberField(div, 'strandCount', sl.strandCount ?? 6, 1, 16, v => {
+          sl.strandCount = Math.round(v);
+          callbacks?.onPropertyChange('sceneLight.strandCount', v);
+        });
+        addSliderField(div, 'noiseStrength%', Math.round((sl.noiseStrength ?? 0.15) * 100), 0, 100, v => {
+          sl.noiseStrength = v / 100;
+          callbacks?.onPropertyChange('sceneLight.noiseStrength', v);
+        });
+        addSliderField(div, 'flickerStrength%', Math.round((sl.flickerStrength ?? 0.03) * 100), 0, 100, v => {
+          sl.flickerStrength = v / 100;
+          callbacks?.onPropertyChange('sceneLight.flickerStrength', v);
+        });
+        addCheckbox(div, 'dustEnabled', (sl.dustEnabledFlag ?? 1) === 1, v => {
+          sl.dustEnabledFlag = v ? 1 : 0;
+          callbacks?.onPropertyChange('sceneLight.dustEnabledFlag', sl.dustEnabledFlag);
+        });
+        addNumberField(div, 'dustDensity', sl.dustDensity ?? 1, 0, 5, v => {
+          sl.dustDensity = v;
+          callbacks?.onPropertyChange('sceneLight.dustDensity', v);
+        });
+        addNumberField(div, 'dustSpeed', sl.dustSpeed ?? 1, 0.05, 4, v => {
+          sl.dustSpeed = v;
+          callbacks?.onPropertyChange('sceneLight.dustSpeed', v);
+        });
+        addNumberField(div, 'dustSizeMinWorld', sl.dustSizeMinWorld ?? 0.35, 0.1, 6, v => {
+          sl.dustSizeMinWorld = v;
+          callbacks?.onPropertyChange('sceneLight.dustSizeMinWorld', v);
+        });
+        addNumberField(div, 'dustSizeMaxWorld', sl.dustSizeMaxWorld ?? 1.2, 0.1, 8, v => {
+          sl.dustSizeMaxWorld = v;
+          callbacks?.onPropertyChange('sceneLight.dustSizeMaxWorld', v);
+        });
       }
       addSliderField(div, 'shadowSoftness', (sl.shadowSoftness ?? 0) * 100, 0, 100, v => {
         sl.shadowSoftness = v / 100;
