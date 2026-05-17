@@ -47,9 +47,9 @@ export const WATER_GRAVITY_MULTIPLIER = 0.12;
 /**
  * Strong upward buoyancy force (world units/s²), scaled by submersion ratio.
  * Full force when fully submerged; partial when only partly in water.
- * High value ensures slow-entry players quickly bob upward.
+ * Tuned higher so medium/deep submersion consistently pushes the player up.
  */
-export const WATER_BUOYANCY_FORCE_WORLD = 520.0;
+export const WATER_BUOYANCY_FORCE_WORLD = 700.0;
 
 /**
  * Horizontal drag multiplier applied per tick in water (0–1).
@@ -300,7 +300,7 @@ export function applyHazards(world: WorldState): void {
     // at the surface (small submersion → small depth → minimal lift) while
     // providing strong upward force deep underwater (large submersion → large
     // depth → full lift).  Combined with the fixed constant waterMult (0.12x
-    // gravity) in playerMovement.ts, equilibrium settles at ~46% submersion
+    // gravity) in playerMovement.ts, equilibrium settles at ~39% submersion
     // (player floating with upper body out of water).
     //
     // Formula derivation:
