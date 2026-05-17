@@ -11,8 +11,7 @@
 
 import type { WorldSnapshot } from '../render/snapshot';
 import type { WorldState } from '../sim/world';
-import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
-import { renderWorldBackground } from '../render/backgroundRenderer';
+import { BLOCK_SIZE_SMALL, type RoomDef } from '../levels/roomDef';
 import { renderWalls, renderClusters } from '../render/clusters/renderer';
 import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
@@ -21,7 +20,7 @@ import { renderParticles } from '../render/particles/renderer';
 import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
-import { STAGE_BACKGROUND, STAGE_WALLS, STAGE_ENTITIES, STAGE_PARTICLES, STAGE_DUST, STAGE_SUNBEAMS, STAGE_BLOOM, STAGE_HUD, STAGE_BG_BLOCKS, STAGE_DARK_BLOCKER, STAGE_UPSCALE } from '../render/hud/renderProfiler';
+import { STAGE_WALLS, STAGE_ENTITIES, STAGE_PARTICLES, STAGE_DUST, STAGE_SUNBEAMS, STAGE_BLOOM, STAGE_HUD, STAGE_BG_BLOCKS, STAGE_DARK_BLOCKER, STAGE_UPSCALE } from '../render/hud/renderProfiler';
 import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
@@ -37,12 +36,6 @@ import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
-import {
-  isTheroShowcaseRoom,
-  renderTheroShowcaseEffect,
-  renderTheroBackgroundEffect,
-  renderCrystallineCracksBackground,
-} from '../render/effects/theroEffectManager';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import {
@@ -59,10 +52,9 @@ import {
 } from './gameRoom';
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import type { GraphicsQuality } from '../ui/renderSettings';
-import { getQualityConfig } from '../render/renderQualityConfig';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
-import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats, setWallChunkCacheMemoryKB } from '../render/walls/blockSpriteRenderer';
-import { renderBackgroundBlocks, getBgChunkCacheStats, setBgChunkCacheMemoryKB } from '../render/walls/backgroundBlockRenderer';
+import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats } from '../render/walls/blockSpriteRenderer';
+import { renderBackgroundBlocks, getBgChunkCacheStats } from '../render/walls/backgroundBlockRenderer';
 import {
   drawGrappleBloom,
   drawParticleGlow,
@@ -70,7 +62,9 @@ import {
 } from './gameRenderHelpers';
 import { renderGameHud } from './gameHudRenderer';
 import { renderDarkRoomLighting } from './gameDarkRoomLighting';
-import { initLightingSystem, markOccludersDirty, renderLightingPass } from '../render/lighting/lightingSystem';
+import { applyRenderQualitySettings } from './gameRenderQuality';
+import { renderBackgroundPass, type StagedRoomBgInfo } from './gameRenderBackgroundPass';
+import { renderSceneLightingPass } from './gameRenderSceneLighting';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer';
 import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
@@ -89,29 +83,6 @@ import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
 
 /** Fixed simulation timestep for tick-to-ms conversion. */
 const FIXED_DT_MS = 16.666;
-
-/** Tracks the last room ID to detect room changes for occluder dirty marking. */
-let _lastLightingRoomId: string | null = null;
-/** Last quality string for which chunk-cache memory caps were applied. */
-let _lastChunkCacheQuality: string = '';
-
-/**
- * Pre-allocated mutable quality config scratch object used when adaptive
- * reduction is active.  Written each frame by renderFrame() from qcBase to
- * avoid creating a new object via spread (`{ ...qcBase, ... }`) on every frame.
- * Import type only — mutated in-place inside renderFrame().
- */
-import { type RenderQualityConfig } from '../render/renderQualityConfig';
-const _adaptiveQcScratch: RenderQualityConfig = {
-  isBloomEnabled:           false,
-  bloomIntensity:           0,
-  bloomBlurRadiusPx:        0,
-  maxDecorationBloomCount:  0,
-  maxDustMoteCount:         0,
-  maxDynamicLightCount:     0,
-  maxParticleLightCount:    0,
-  isSunbeamEnabled:         false,
-};
 
 // ── Public interface ───────────────────────────────────────────────────────
 
@@ -303,19 +274,6 @@ export interface RenderFrameContext {
 }
 
 /**
- * Minimal metadata for the staged (previous) room's background rendering.
- * Used only when seamless room crossing staging is active.
- */
-export interface StagedRoomBgInfo {
-  /** RoomDef of the staged room — used for worldNumber and backgroundId. */
-  room: RoomDef;
-  /** World-space X origin of the staged room. */
-  originXWorld: number;
-  /** World-space Y origin of the staged room. */
-  originYWorld: number;
-}
-
-/**
  * Render a single frame to the virtual canvas and upscale to the device
  * canvas.  Handles every rendering layer: world background, geometry,
  * particles, HUD, touch-joystick overlay.
@@ -340,60 +298,14 @@ export function renderFrame(r: RenderFrameContext): void {
 
   const nowMs = performance.now();
 
-  // ── Quality tier config ────────────────────────────────────────────────────
-  // Derive all rendering cost parameters from the current quality tier.  This
-  // object is a small immutable constant reference — no allocation per frame.
-  const qcBase = getQualityConfig(graphicsQuality);
-
-  // Adaptive quality: when persistently over budget, halve expensive caps to
-  // recover frame rate.  To avoid a per-frame object allocation (spread), the
-  // pre-allocated module-level _adaptiveQcScratch is written in-place.
-  //
-  // Tier 1 (isAdaptiveReductionActive): halve dust/light/bloom caps.
-  // Tier 2 (isDeepReductionActive): additionally disable sunbeam and bloom.
-  let qc: RenderQualityConfig;
-  if (isAdaptiveReductionActive) {
-    const disableExpensive = isDeepReductionActive;
-    _adaptiveQcScratch.isBloomEnabled           = disableExpensive ? false : qcBase.isBloomEnabled;
-    _adaptiveQcScratch.bloomIntensity           = qcBase.bloomIntensity;
-    _adaptiveQcScratch.bloomBlurRadiusPx        = qcBase.bloomBlurRadiusPx;
-    _adaptiveQcScratch.isSunbeamEnabled         = disableExpensive ? false : qcBase.isSunbeamEnabled;
-    _adaptiveQcScratch.maxDustMoteCount         = Math.max(32, qcBase.maxDustMoteCount       >> 1);
-    _adaptiveQcScratch.maxDynamicLightCount     = Math.max(4,  qcBase.maxDynamicLightCount   >> 1);
-    _adaptiveQcScratch.maxParticleLightCount    = Math.max(4,  qcBase.maxParticleLightCount  >> 1);
-    _adaptiveQcScratch.maxDecorationBloomCount  = Math.max(16, qcBase.maxDecorationBloomCount >> 1);
-    qc = _adaptiveQcScratch;
-  } else {
-    qc = qcBase;
-  }
-
-  // Apply quality-dependent bloom parameters.  Mutates the BloomSystem's
-  // internal config object in place — no resize needed since glowTargetScale
-  // is left unchanged (all tiers share the same 0.5× downscale canvas).
-  bloomSystem.setQualityParams(qc.isBloomEnabled, qc.bloomIntensity, qc.bloomBlurRadiusPx);
-
-  // Propagate sunbeam enable/disable to the renderer.
-  sunbeamRenderer.setEnabled(qc.isSunbeamEnabled);
-
-  // Propagate mote cap and density multiplier to the atmospheric dust system.
-  atmosphericLightDust.setMaxMotes(qc.maxDustMoteCount);
-  // Tier 1 adaptive: halve rendered density immediately (without waiting for motes to age out).
-  atmosphericLightDust.setDensityMultiplier(isAdaptiveReductionActive ? 0.5 : 1.0);
-
-  // Adaptive density for sunbeams: tier 1 reduces alpha, tier 2 disables entirely.
-  sunbeamRenderer.setDensityMultiplier(isAdaptiveReductionActive && !isDeepReductionActive ? 0.5 : 1.0);
-
-  // Apply chunk-cache memory caps based on graphics quality (once per quality change).
-  const chunkCacheQualityKey = `${graphicsQuality}:${isAdaptiveReductionActive ? 1 : 0}`;
-  if (_lastChunkCacheQuality !== chunkCacheQualityKey) {
-    _lastChunkCacheQuality = chunkCacheQualityKey;
-    // Wall chunk cache
-    const wallMemKB = graphicsQuality === 'high' ? 16384 : graphicsQuality === 'med' ? 8192 : 4096;
-    setWallChunkCacheMemoryKB(wallMemKB);
-    // Background chunk cache (about half of the wall cache budget)
-    const bgMemKB = graphicsQuality === 'high' ? 8192 : graphicsQuality === 'med' ? 4096 : 2048;
-    setBgChunkCacheMemoryKB(bgMemKB);
-  }
+  const qc = applyRenderQualitySettings({
+    graphicsQuality,
+    isAdaptiveReductionActive,
+    isDeepReductionActive,
+    bloomSystem,
+    sunbeamRenderer,
+    atmosphericLightDust,
+  });
 
   // Start the render profiler for this frame.
   if (renderProfiler !== undefined) renderProfiler.beginFrame(isDebugMode);
@@ -516,102 +428,20 @@ export function renderFrame(r: RenderFrameContext): void {
   }
 
   // ── World background with parallax ──────────────────────────────────────
-  if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BACKGROUND);
-
-  if (r.stagedRoom !== null) {
-    // Two-room mode: clip each room's background to its own screen rect so
-    // rooms with different background images don't bleed into each other.
-    const stagedW = r.stagedRoom.room.widthBlocks * BLOCK_SIZE_MEDIUM;
-    const stagedH = r.stagedRoom.room.heightBlocks * BLOCK_SIZE_MEDIUM;
-    const stagedOx = ox + r.stagedRoom.originXWorld * zoom;
-    const stagedOy = oy + r.stagedRoom.originYWorld * zoom;
-
-    // Staged room background — clipped to staged room's screen rect.
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(stagedOx, stagedOy, stagedW * zoom, stagedH * zoom);
-    ctx.clip();
-    renderWorldBackground(
-      ctx,
-      r.stagedRoom.room.worldNumber,
-      virtualWidthPx,
-      virtualHeightPx,
-      stagedOx,
-      stagedOy,
-      stagedW,
-      stagedH,
-      zoom,
-      r.stagedRoom.room.backgroundId,
-    );
-    ctx.restore();
-
-    // Active room background — clipped to active room's screen rect.
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(ox, oy, roomWidthWorld * zoom, roomHeightWorld * zoom);
-    ctx.clip();
-    renderWorldBackground(
-      ctx,
-      currentRoom.worldNumber,
-      virtualWidthPx,
-      virtualHeightPx,
-      ox,
-      oy,
-      roomWidthWorld,
-      roomHeightWorld,
-      zoom,
-      currentRoom.backgroundId,
-    );
-    ctx.restore();
-  } else {
-    renderWorldBackground(
-      ctx,
-      currentRoom.worldNumber,
-      virtualWidthPx,
-      virtualHeightPx,
-      ox,
-      oy,
-      roomWidthWorld,
-      roomHeightWorld,
-      zoom,
-      currentRoom.backgroundId,
-    );
-  }
-
-  // Relative camera offset (from room centre) used for procedural background parallax.
-  // When the camera is centred on the room this is 0; it grows as the camera pans.
-  const roomCenterOffsetXPx = virtualWidthPx * 0.5 - (roomWidthWorld * 0.5 * zoom);
-  const roomCenterOffsetYPx = virtualHeightPx * 0.5 - (roomHeightWorld * 0.5 * zoom);
-  const relCameraOffsetXPx = ox - roomCenterOffsetXPx;
-  const relCameraOffsetYPx = oy - roomCenterOffsetYPx;
-
-  // ── Thero effect procedural overlays ─────────────────────────────────────
-  const renderedTheroBackground = renderTheroBackgroundEffect(
+  renderBackgroundPass({
     ctx,
-    currentRoom.backgroundId,
+    currentRoom,
+    stagedRoom: r.stagedRoom,
+    ox,
+    oy,
+    zoom,
     virtualWidthPx,
     virtualHeightPx,
+    roomWidthWorld,
+    roomHeightWorld,
     nowMs,
-    relCameraOffsetXPx,
-    relCameraOffsetYPx,
-  );
-  // Legacy showcase rooms still use room-id dispatch when no explicit
-  // thero_* background override is present.
-  if (!renderedTheroBackground && isTheroShowcaseRoom(currentRoom.id)) {
-    renderTheroShowcaseEffect(
-      ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, nowMs,
-      relCameraOffsetXPx, relCameraOffsetYPx,
-    );
-  }
-
-  // ── Crystalline Cracks procedural background effect ──────────────────────
-  if (currentRoom.backgroundId === 'crystallineCracks') {
-    renderCrystallineCracksBackground(
-      ctx, virtualWidthPx, virtualHeightPx, nowMs,
-      relCameraOffsetXPx, relCameraOffsetYPx,
-    );
-  }
-  if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BACKGROUND);
+    renderProfiler,
+  });
 
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BG_BLOCKS);
@@ -754,25 +584,8 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Scene-light visibility-polygon lighting pass ─────────────────────────
   // Renders designer-placed scene lights (softGlow / spotlight / floodlight /
-  // backlight / sunray) with optional raytraced shadow polygons.  Only active when the
-  // room has at least one scene light.  The lighting system maintains its own
-  // offscreen canvas and is initialised lazily on first use.
-  if (currentRoom.sceneLights && currentRoom.sceneLights.length > 0) {
-    initLightingSystem(virtualWidthPx, virtualHeightPx);
-    if (_lastLightingRoomId !== currentRoom.id) {
-      _lastLightingRoomId = currentRoom.id;
-      markOccludersDirty(
-        currentRoom.walls.map(w => ({
-          xWorld: w.xBlock * BLOCK_SIZE_MEDIUM,
-          yWorld: w.yBlock * BLOCK_SIZE_MEDIUM,
-          wWorld: w.wBlock * BLOCK_SIZE_MEDIUM,
-          hWorld: w.hBlock * BLOCK_SIZE_MEDIUM,
-          isPlatformFlag: w.isPlatformFlag,
-        })),
-      );
-    }
-    renderLightingPass(ctx, currentRoom.sceneLights, ox, oy, zoom, virtualWidthPx, virtualHeightPx, nowMs);
-  }
+  // backlight / sunray) with optional raytraced shadow polygons.
+  renderSceneLightingPass(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx, nowMs);
 
   // End room clip before any HUD/screen-space overlays are drawn.
   ctx.restore();

@@ -203,3 +203,109 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 **Compatibility risk to monitor:**
 - Any future feature that relies on ROOM_REGISTRY being updated every placement may now need an explicit metadata sync point (currently done on metadata edits and map-open paths).
+
+---
+
+## BUILD 350 — Monolith Refactor Follow-up
+
+### What was completed in BUILD 350
+
+1. **Extracted render quality orchestration**
+   - Added `src/screens/gameRenderQuality.ts`.
+   - Moved adaptive quality config + renderer/system propagation + chunk-cache cap updates out of `gameRender.ts`.
+
+2. **Extracted background/effect orchestration**
+   - Added `src/screens/gameRenderBackgroundPass.ts`.
+   - Moved staged/active room background draw flow and procedural background effects (Thero + Crystalline Cracks) out of `gameRender.ts`.
+
+3. **Extracted scene-light pass orchestration**
+   - Added `src/screens/gameRenderSceneLighting.ts`.
+   - Moved scene-light initialization, room-change occluder dirty marking, and pass rendering out of `gameRender.ts`.
+
+4. **Updated game renderer wiring only**
+   - `src/screens/gameRender.ts` now delegates to the extracted modules without changing public interfaces or runtime feature set.
+
+### Remaining / deferred from this pass
+
+1. `src/screens/gameRender.ts` is still sizable and can be further split (for example clip-region and world-entity pass orchestration), but this was deferred to avoid high-risk render-order regressions.
+2. `src/screens/gameScreen.ts` and `src/editor/editorController.ts` remain monolithic and are good candidates for future low-risk extraction passes.
+3. Keep monitoring large-room and crossing scenarios manually to confirm no visual ordering regressions after additional renderer extractions.
+
+### Validation to run/confirm for this build
+
+1. `npm run build`
+2. `npm run lint` (pre-existing lint errors may still appear in unrelated files)
+
+---
+
+## BUILD 351 — Additional Monolith Refactor Follow-up
+
+### What was completed in BUILD 351
+
+1. **Extracted editor backdrop renderer from `gameScreen.ts`**
+   - Added `src/screens/gameScreenEditorBackdrop.ts`.
+   - Moved the editor-consuming render branch into `renderEditorBackdrop(...)`.
+   - Kept rendering behavior and pass ordering unchanged while reducing `gameScreen.ts` size/complexity.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` still contains large room-loading and frame-update control flow that can be split further (e.g., load phases, transition/sim tick orchestration), but this was deferred to avoid risky control-flow regressions.
+2. `editorController.ts` remains a large candidate for future low-risk extraction.
+
+---
+
+## BUILD 352 — Dialogue setup extraction follow-up
+
+### What was completed in BUILD 352
+
+1. Extracted room-load dialogue visit initialization from `gameScreen.ts` into `prepareRoomDialogueVisitState(...)` in `src/screens/gameDialogueHandler.ts`.
+2. Kept `checkDialogueTriggers(...)` hot-path contract intact by continuing to feed pre-converted cached conversations.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` still contains a large transition + fixed-tick orchestration branch that can be split further.
+2. `editorController.ts` remains a large module suitable for additional low-risk decomposition.
+
+---
+
+## BUILD 353 — Cloak update extraction follow-up
+
+### What was completed in BUILD 353
+
+1. Extracted per-frame procedural cloak animation from `gameScreen.ts` into `src/screens/gamePlayerCloakUpdate.ts` via `updatePlayerCloaks(...)`.
+2. Both `PlayerCloak` and `PhantomCloakExtension` continue to receive the render-interpolated player position; behavior is unchanged.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` still contains the crumble-block debris event scan inside the physics tick loop — a small but coherent chunk that could be extracted in a future pass.
+2. `gameScreen.ts` transition + sim-tick orchestration blocks remain good candidates for future decomposition.
+
+---
+
+## BUILD 354 — Crumble debris event extraction follow-up
+
+### What was completed in BUILD 354
+
+1. Extracted the per-tick crumble-block debris event scan from the physics accumulator loop in `gameScreen.ts` into `src/screens/gameCrumbleDebrisEvents.ts` via `tickCrumbleDebrisEvents(...)`.
+2. The function compares `prevCrumbleActive`/`prevCrumbleHits` snapshots against the post-tick world state, fires `notifyBlockHit` on the `CrumbleDebrisRenderer`, updates the prev-state arrays, and calls `crumbleDebris.update(dtMs)` — all originally done inline.
+3. No behavioral change; the pair `[scan → update]` was preserved and is still called once per fixed timestep.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` physics accumulator loop still owns: cluster prev-position capture, falling-block prev-offset capture, and player-input forwarding. These could be extracted in a subsequent pass.
+2. Post-loop camera, transition-reveal, and HUD update blocks also remain as future extraction candidates.
+
+---
+
+## BUILD 355 — Interpolation buffer capture extraction follow-up
+
+### What was completed in BUILD 355
+
+1. Extracted render-interpolation buffer management from `gameScreen.ts` into `src/screens/gameInterpolationBuffers.ts`.
+2. Added `createGameInterpolationBuffers()`, `captureClusterInterpolationState(...)`, and `captureFallingBlockInterpolationState(...)`.
+3. `gameScreen.ts` now delegates both room-load cluster snapshot capture and per-fixed-tick interpolation-state capture through the helper without changing timing or data flow.
+
+### Remaining / deferred from this pass
+
+1. `gameScreen.ts` fixed-tick loop still owns player-input forwarding, slime split handling, and per-system post-tick updates.
+2. Post-loop camera, transition-reveal, and HUD update blocks remain future extraction candidates.

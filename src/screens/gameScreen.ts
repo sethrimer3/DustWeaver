@@ -5,9 +5,6 @@ import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng } from '../sim/rng';
 import { createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
-import { renderParticles } from '../render/particles/renderer';
-import { renderClusters, renderWalls } from '../render/clusters/renderer';
-import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { HudState } from '../render/hud/overlay';
@@ -24,7 +21,6 @@ import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
-import { renderHazards } from '../render/hazards';
 import { createCameraState, snapCamera, getCameraOffset } from '../render/camera';
 // BUILD 297: ENABLE_TWO_ROOM_CAMERA_CROSSING is false, so isCrossingComplete /
 // getCrossingUnionBounds are only reachable via the preserved dead-code guard
@@ -51,7 +47,6 @@ import {
   ENABLE_TRANSITION_CAMERA_REVEAL,
 } from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
-import { renderWorldBackground } from '../render/backgroundRenderer';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
@@ -60,11 +55,9 @@ import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/pla
 import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
-import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { getMusicVolume, getSelectedRenderSize } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
-import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { BloomSystem } from '../render/effects/bloomSystem';
 import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
@@ -87,7 +80,6 @@ import {
   loadRoomFallingBlocks,
   loadRoomGrasshoppers,
   worldBgColor,
-  drawTunnelDarkness,
   resolveSpawnBlock,
 } from './gameRoom';
 import { renderFrame } from './gameRender';
@@ -95,10 +87,8 @@ import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
-import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
 import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
-import { MAX_FALLING_BLOCK_GROUPS } from '../sim/fallingBlocks/fallingBlockTypes';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { createPlayerSfxState, updatePlayerSfx } from './gamePlayerSfx';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
@@ -106,9 +96,15 @@ import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
 import { checkRoomTransitions, getOppositeTransitionDirection } from './gameTransitions';
 import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
-import { closeDialogue } from '../dialogue/dialogueRuntime';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
-import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
+import { handleDialogueAdvance, checkDialogueTriggers, prepareRoomDialogueVisitState } from './gameDialogueHandler';
+import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
+import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
+import {
+  createGameInterpolationBuffers,
+  captureClusterInterpolationState,
+  captureFallingBlockInterpolationState,
+} from './gameInterpolationBuffers';
 import { buildHudDebugState } from './gameHudDebugState';
 import type { Conversation } from '../dialogue/dialogueTypes';
 import {
@@ -150,8 +146,8 @@ import {
 import { createGameOverlayController } from './gameOverlayController';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
 import { createGamePauseController } from './gamePauseController';
-import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
 import { createGameLambdaAnchorState } from './gameLambdaAnchorState';
+import { renderEditorBackdrop } from './gameScreenEditorBackdrop';
 
 const FIXED_DT_MS = 16.666;
 
@@ -478,23 +474,9 @@ export function startGameScreen(
     loadRoomFallingBlocks(world, room);
     loadRoomGrasshoppers(world, room);
 
-    closeDialogue(dialogueState);
-    dialogueRenderer.hide();
-    firedDialogueTriggerUids = new Set<number>();
-    const roomTriggers = room.dialogueTriggers ?? [];
-    cachedRoomConversations = new Array<Conversation>(roomTriggers.length);
-    for (let _ti = 0; _ti < roomTriggers.length; _ti++) {
-      const _src = roomTriggers[_ti].conversation;
-      cachedRoomConversations[_ti] = {
-        id: _src.id,
-        title: _src.title,
-        entries: _src.entries.map(e => ({
-          text: e.text,
-          portraitId: e.portraitId,
-          portraitSide: e.portraitSide,
-        })),
-      };
-    }
+    const dialogueVisitState = prepareRoomDialogueVisitState(room, dialogueState, dialogueRenderer);
+    firedDialogueTriggerUids = dialogueVisitState.firedDialogueTriggerUids;
+    cachedRoomConversations = dialogueVisitState.cachedRoomConversations;
 
     spawnAllDustPiles(world);
 
@@ -519,14 +501,7 @@ export function startGameScreen(
 
     resetReusableSnapshot(reusableSnapshot, world);
 
-    if (prevClusterPosX.length < world.clusters.length) {
-      prevClusterPosX = new Float32Array(world.clusters.length * 2);
-      prevClusterPosY = new Float32Array(world.clusters.length * 2);
-    }
-    for (let ci = 0; ci < world.clusters.length; ci++) {
-      prevClusterPosX[ci] = world.clusters[ci].positionXWorld;
-      prevClusterPosY[ci] = world.clusters[ci].positionYWorld;
-    }
+    captureClusterInterpolationState(world, interpolationBuffers);
 
     skillTombRenderer.init(room.saveTombs, room.walls);
     skillTombEffectRenderer.init(room.skillTombs);
@@ -618,19 +593,7 @@ export function startGameScreen(
   const prevCrumbleHits   = new Uint8Array(MAX_CRUMBLE_BLOCKS);
 
   // ── Render-interpolation buffers ─────────────────────────────────────────
-  // Cluster positions captured immediately before the physics tick loop each
-  // frame.  The renderer blends between these and the post-tick positions using
-  // the remaining accumulator fraction (renderAlpha) so sprites advance
-  // continuously rather than snapping once per physics tick.
-  // Sized to match MAX_REUSABLE_CLUSTERS; grows lazily if needed.
-  let prevClusterPosX = new Float32Array(64);
-  let prevClusterPosY = new Float32Array(64);
-
-  // ── Falling block render-interpolation buffers ───────────────────────────
-  // Stores offsetYWorld before each physics tick so renderFallingBlocks can
-  // blend between the pre-tick and post-tick positions using renderAlpha.
-  // Pre-allocated to MAX_FALLING_BLOCK_GROUPS to avoid per-frame allocation.
-  const prevFallingBlockOffsetY = new Float32Array(MAX_FALLING_BLOCK_GROUPS);
+  const interpolationBuffers = createGameInterpolationBuffers();
 
   // ── Health bar state ─────────────────────────────────────────────────────
   /** Map of entityId -> tick when health bar should hide. */
@@ -899,76 +862,40 @@ export function startGameScreen(
 
       if (isEditorConsuming) {
         // Still render the game world (walls, particles, etc.) as backdrop
-        bloomSystem.beginFrame();
         const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
-        updateSnapshotInPlace(reusableSnapshot, world, 1.0, prevClusterPosX, prevClusterPosY);
-        const snapshot = reusableSnapshot;
-
-        if (webglRenderer.isAvailable) {
-          webglRenderer.render(snapshot, eox, eoy, zoom);
-          ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
-        } else {
-          ctx.fillStyle = bgColor;
-          ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
-        }
-
-        renderWorldBackground(
+        updateSnapshotInPlace(
+          reusableSnapshot,
+          world,
+          1.0,
+          interpolationBuffers.prevClusterPosX,
+          interpolationBuffers.prevClusterPosY,
+        );
+        renderEditorBackdrop(
           ctx,
-          currentRoom.worldNumber,
-          virtualWidthPx,
-          virtualHeightPx,
+          deviceCtx,
+          virtualCanvas,
+          canvas,
+          webglRenderer,
+          bloomSystem,
+          world,
+          reusableSnapshot,
+          currentRoom,
+          bgColor,
           eox,
           eoy,
-          currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
-          currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
           zoom,
-          currentRoom.backgroundId,
-        );
-        if (isTheroShowcaseRoom(currentRoom.id)) {
-          renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
-        }
-        if (currentRoom.backgroundId === 'crystallineCracks') {
-          renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
-        }
-        renderWalls(ctx, snapshot, eox, eoy, zoom, true);
-        renderHazards(ctx, world, eox, eoy, zoom, world.tick);
-        renderClusters(ctx, snapshot, eox, eoy, zoom, true);
-        renderGrasshoppers(ctx, snapshot, eox, eoy, zoom);
-        renderRadiantTether(ctx, snapshot, eox, eoy, zoom, true);
-        renderGrapple(ctx, snapshot, eox, eoy, zoom);
-        drawTunnelDarkness(ctx, currentRoom, eox, eoy, zoom);
-        environmentalDust.render(ctx, eox, eoy, zoom, true);
-        skillTombRenderer.render(ctx, eox, eoy, zoom);
-        skillTombEffectRenderer.renderBehind(ctx, eox, eoy, zoom);
-        skillTombEffectRenderer.renderSprite(ctx, eox, eoy, zoom);
-        skillTombEffectRenderer.renderFront(ctx, eox, eoy, zoom);
-
-        if (!webglRenderer.isAvailable) {
-          renderParticles(ctx, snapshot, eox, eoy, zoom);
-        }
-
-        // Draw editor overlays on top
-        editorController.render(ctx, eox, eoy, zoom, virtualWidthPx, virtualHeightPx);
-
-        // ── Upscale virtual canvas to device canvas ──────────────────────
-        deviceCtx.imageSmoothingEnabled = false;
-        deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
-        if (webglRenderer.isAvailable) {
-          deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
-        }
-        bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
-        renderHighResolutionDebugOverlay({
-          deviceCtx,
-          canvas,
-          virtualCanvas,
-          isDebugMode: pauseController.state.isDebugMode,
-          world,
-          currentRoom,
+          virtualWidthPx,
+          virtualHeightPx,
+          environmentalDust,
+          skillTombRenderer,
+          skillTombEffectRenderer,
+          editorController,
           hudState,
           renderProfiler,
-        });
+          pauseController.state.isDebugMode,
+        );
 
         rafHandle = requestAnimationFrame(frame);
         return;
@@ -1158,23 +1085,12 @@ export function startGameScreen(
       // 0 toward 1 between ticks, producing continuous motion with no lurching.
       // Capturing before ALL ticks (the old approach) caused the sprite to freeze
       // at currentPos on no-tick frames then snap back when a tick finally fired.
-      const clusterCountForTick = world.clusters.length;
-      if (prevClusterPosX.length < clusterCountForTick) {
-        prevClusterPosX = new Float32Array(clusterCountForTick * 2);
-        prevClusterPosY = new Float32Array(clusterCountForTick * 2);
-      }
-      for (let clusterIndex = 0; clusterIndex < clusterCountForTick; clusterIndex++) {
-        prevClusterPosX[clusterIndex] = world.clusters[clusterIndex].positionXWorld;
-        prevClusterPosY[clusterIndex] = world.clusters[clusterIndex].positionYWorld;
-      }
+      captureClusterInterpolationState(world, interpolationBuffers);
 
       // Capture falling block Y offsets before this tick so the renderer can
       // smoothly interpolate tile positions between physics steps.
       // Cap at MAX_FALLING_BLOCK_GROUPS — the buffer is pre-allocated to that size.
-      const fbGroupCount = Math.min(world.fallingBlockGroups.length, MAX_FALLING_BLOCK_GROUPS);
-      for (let gi = 0; gi < fbGroupCount; gi++) {
-        prevFallingBlockOffsetY[gi] = world.fallingBlockGroups[gi].offsetYWorld;
-      }
+      captureFallingBlockInterpolationState(world, interpolationBuffers);
 
       const player = world.clusters[0];
       if (player !== undefined) {
@@ -1206,29 +1122,7 @@ export function startGameScreen(
       pendingGrappleFireSfx = false;
 
       // ── Crumble block debris events & ambient lighting rebuild ────────────
-      for (let ci = 0; ci < world.crumbleBlockCount; ci++) {
-        const nowActive = world.isCrumbleBlockActiveFlag[ci];
-        const nowHits   = world.crumbleBlockHitsRemaining[ci];
-        const wasActive = prevCrumbleActive[ci];
-        const wasHits   = prevCrumbleHits[ci];
-
-        if (wasActive === 1) {
-          if (nowActive === 0) {
-            // Block fully destroyed this tick.
-            // The wall sprite renderer detects the changed wall-layout signature
-            // automatically and rebuilds ambient lighting on the next frame.
-            crumbleDebris.notifyBlockHit(world.crumbleBlockXWorld[ci], world.crumbleBlockYWorld[ci], true);
-          } else if (nowHits < wasHits) {
-            // Block cracked (first hit) this tick
-            crumbleDebris.notifyBlockHit(world.crumbleBlockXWorld[ci], world.crumbleBlockYWorld[ci], false);
-          }
-        }
-
-        prevCrumbleActive[ci] = nowActive;
-        prevCrumbleHits[ci]   = nowHits;
-      }
-
-      crumbleDebris.update(FIXED_DT_MS);
+      tickCrumbleDebrisEvents(world, crumbleDebris, prevCrumbleActive, prevCrumbleHits, FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
     }
 
@@ -1251,7 +1145,15 @@ export function startGameScreen(
       const playerForCrossing = world.clusters[0];
       if (playerForCrossing !== undefined && playerForCrossing.isAliveFlag === 1 &&
           isCrossingComplete(crossingState, playerForCrossing.positionXWorld, playerForCrossing.positionYWorld)) {
-        finalizeCrossingSeamless(stagingState, world, camera, prevClusterPosX, prevClusterPosY, crossingState, loadRoom);
+        finalizeCrossingSeamless(
+          stagingState,
+          world,
+          camera,
+          interpolationBuffers.prevClusterPosX,
+          interpolationBuffers.prevClusterPosY,
+          crossingState,
+          loadRoom,
+        );
         notifyFreshRoomLoaded(transitionRevealState);
         preloadAdjacentRoomAssets(currentRoom);
       }
@@ -1284,8 +1186,10 @@ export function startGameScreen(
       // same sub-tick position that the sprite will be drawn at.  This keeps
       // the player visually centred and prevents background/wall parallax
       // jitter relative to the sprite.
-      const camTargetX = prevClusterPosX[0] + (playerForCamera.positionXWorld - prevClusterPosX[0]) * renderAlpha;
-      const camTargetY = prevClusterPosY[0] + (playerForCamera.positionYWorld - prevClusterPosY[0]) * renderAlpha;
+      const camTargetX = interpolationBuffers.prevClusterPosX[0]
+        + (playerForCamera.positionXWorld - interpolationBuffers.prevClusterPosX[0]) * renderAlpha;
+      const camTargetY = interpolationBuffers.prevClusterPosY[0]
+        + (playerForCamera.positionYWorld - interpolationBuffers.prevClusterPosY[0]) * renderAlpha;
 
       updateCameraFollow(
         camState,
@@ -1354,43 +1258,24 @@ export function startGameScreen(
     }
 
     // ── Update procedural cloak (per-frame visual, not per-tick sim) ──────
-    const cloakPlayer = world.clusters[0];
-    if (cloakPlayer !== undefined && cloakPlayer.isAliveFlag === 1 && cloakPlayer.isPlayerFlag === 1) {
-      // Use the render-interpolated player position so the cloak chain anchor
-      // matches the pixel position where the player sprite will be drawn.
-      // Using raw physics positionXWorld instead causes the cloak root to sit
-      // one-tick ahead of the sprite at non-60 Hz refresh rates, making the
-      // cloak appear to detach and jitter relative to the player body.
-      const cloakInterpXWorld = prevClusterPosX[0] + (cloakPlayer.positionXWorld - prevClusterPosX[0]) * renderAlpha;
-      const cloakInterpYWorld = prevClusterPosY[0] + (cloakPlayer.positionYWorld - prevClusterPosY[0]) * renderAlpha;
-      playerCloak.update(elapsedMs / 1000, {
-        positionXWorld: cloakInterpXWorld,
-        positionYWorld: cloakInterpYWorld,
-        velocityXWorld: cloakPlayer.velocityXWorld,
-        velocityYWorld: cloakPlayer.velocityYWorld,
-        isFacingLeftFlag: cloakPlayer.isFacingLeftFlag,
-        isGroundedFlag: cloakPlayer.isGroundedFlag,
-        isSprintingFlag: cloakPlayer.isSprintingFlag,
-        isCrouchingFlag: cloakPlayer.isCrouchingFlag,
-        isWallSlidingFlag: cloakPlayer.isWallSlidingFlag,
-        halfWidthWorld: cloakPlayer.halfWidthWorld,
-        halfHeightWorld: cloakPlayer.halfHeightWorld,
-      });
-      // Update phantom cloak extension — roots at the main cloak's tip.
-      phantomCloak.update(elapsedMs / 1000, {
-        positionXWorld:    cloakInterpXWorld,
-        positionYWorld:    cloakInterpYWorld,
-        velocityXWorld:    cloakPlayer.velocityXWorld,
-        velocityYWorld:    cloakPlayer.velocityYWorld,
-        isFacingLeftFlag:  cloakPlayer.isFacingLeftFlag,
-        isGrappleActiveFlag: world.isGrappleActiveFlag,
-        rootXWorld:        playerCloak.getTipXWorld(),
-        rootYWorld:        playerCloak.getTipYWorld(),
-      });
-    }
+    updatePlayerCloaks(
+      playerCloak,
+      phantomCloak,
+      world,
+      interpolationBuffers.prevClusterPosX,
+      interpolationBuffers.prevClusterPosY,
+      renderAlpha,
+      elapsedMs,
+    );
 
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
-    updateSnapshotInPlace(reusableSnapshot, world, renderAlpha, prevClusterPosX, prevClusterPosY);
+    updateSnapshotInPlace(
+      reusableSnapshot,
+      world,
+      renderAlpha,
+      interpolationBuffers.prevClusterPosX,
+      interpolationBuffers.prevClusterPosY,
+    );
 
     // ── Preview bubble computation ────────────────────────────────────────
     // Compute proximity-based preview bubble state for nearby transitions.
@@ -1459,7 +1344,7 @@ export function startGameScreen(
       isDeepReductionActive: aqState.isDeepReductionActive,
       renderProfiler,
       renderAlpha,
-      prevFallingBlockOffsetY,
+      prevFallingBlockOffsetY: interpolationBuffers.prevFallingBlockOffsetY,
       edgeExtensionCache,
       previewBubbles,
       previewBubbleCount,
