@@ -203,3 +203,35 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
 
 **Compatibility risk to monitor:**
 - Any future feature that relies on ROOM_REGISTRY being updated every placement may now need an explicit metadata sync point (currently done on metadata edits and map-open paths).
+
+---
+
+## BUILD 350 — Monolith Refactor Follow-up
+
+### What was completed in BUILD 350
+
+1. **Extracted render quality orchestration**
+   - Added `src/screens/gameRenderQuality.ts`.
+   - Moved adaptive quality config + renderer/system propagation + chunk-cache cap updates out of `gameRender.ts`.
+
+2. **Extracted background/effect orchestration**
+   - Added `src/screens/gameRenderBackgroundPass.ts`.
+   - Moved staged/active room background draw flow and procedural background effects (Thero + Crystalline Cracks) out of `gameRender.ts`.
+
+3. **Extracted scene-light pass orchestration**
+   - Added `src/screens/gameRenderSceneLighting.ts`.
+   - Moved scene-light initialization, room-change occluder dirty marking, and pass rendering out of `gameRender.ts`.
+
+4. **Updated game renderer wiring only**
+   - `src/screens/gameRender.ts` now delegates to the extracted modules without changing public interfaces or runtime feature set.
+
+### Remaining / deferred from this pass
+
+1. `src/screens/gameRender.ts` is still sizable and can be further split (for example clip-region and world-entity pass orchestration), but this was deferred to avoid high-risk render-order regressions.
+2. `src/screens/gameScreen.ts` and `src/editor/editorController.ts` remain monolithic and are good candidates for future low-risk extraction passes.
+3. Keep monitoring large-room and crossing scenarios manually to confirm no visual ordering regressions after additional renderer extractions.
+
+### Validation to run/confirm for this build
+
+1. `npm run build`
+2. `npm run lint` (pre-existing lint errors may still appear in unrelated files)
