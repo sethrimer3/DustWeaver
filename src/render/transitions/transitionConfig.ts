@@ -82,6 +82,25 @@ export const PREVIEW_INNER_STOP = 0.35;
  */
 export const PREVIEW_MAX_BUBBLES = 2;
 
+// Temporary simple room-transition mode.
+
+/**
+ * When true, gameplay room transitions use the original teleport-style flow:
+ * load the destination room immediately, snap the camera to the destination
+ * spawn, and do not run post-load camera interpolation.
+ *
+ * Kept as a feature flag so the newer cinematic transition path can be
+ * re-enabled later without rebuilding the transition infrastructure.
+ */
+export const ENABLE_SIMPLE_ROOM_TRANSITIONS = true;
+
+/**
+ * When true, the transition reveal system may offset the camera near room
+ * edges and after room entry. Disabled with ENABLE_SIMPLE_ROOM_TRANSITIONS
+ * so crossing a doorway never pans, slides, or eases the camera.
+ */
+export const ENABLE_TRANSITION_CAMERA_REVEAL = false;
+
 // ── Two-room camera crossing feature flags ────────────────────────────────────
 
 /**

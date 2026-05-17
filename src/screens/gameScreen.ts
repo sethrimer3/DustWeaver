@@ -47,6 +47,8 @@ import {
 } from './gameSeamlessStaging';
 import {
   ENABLE_TWO_ROOM_CAMERA_CROSSING,
+  ENABLE_SIMPLE_ROOM_TRANSITIONS,
+  ENABLE_TRANSITION_CAMERA_REVEAL,
 } from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
 import { renderWorldBackground } from '../render/backgroundRenderer';
@@ -140,7 +142,6 @@ import {
   type GameCameraState,
   createGameCameraState,
   cancelCameraTransition,
-  beginCameraTransition,
   resetCameraEffBoundsForRoom,
   updateCameraFollow,
   TRANSITION_COOLDOWN_MS,
@@ -1034,11 +1035,12 @@ export function startGameScreen(
     }
 
     // ── Room transition check ──────────────────────────────────────────────
-    // BUILD 297: Single-room switch with smooth camera interpolation.
+    // BUILD 349: Simple room transitions are temporarily restored.
     // When the player triggers a transition, the destination room is loaded
-    // immediately (no adjacent-room rendering), and the camera smoothly
-    // interpolates from its current position to the correct clamped position
-    // in the new room over CAM_TRANS_DURATION_SEC seconds.
+    // immediately (no adjacent-room rendering), the spawn block is resolved
+    // against solid walls, and the camera keeps the snap performed by
+    // loadRoom(). The BUILD 297 smooth interpolation path remains behind
+    // ENABLE_SIMPLE_ROOM_TRANSITIONS for later re-enablement.
     //
     // A cooldown (TRANSITION_COOLDOWN_MS) prevents the return-transition from
     // firing immediately after the player spawns inside the destination room.
@@ -1056,42 +1058,47 @@ export function startGameScreen(
         (room, spawnX, spawnY, dir, _ti) => {
           // Record speed for debug overlay before world state changes.
           lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
+          const [validSpawnX, validSpawnY] = resolveSpawnBlock(room, spawnX, spawnY);
 
-          // 1. Save camera position in the current (old) room's world space.
-          const oldCamX = camera.centerXWorld;
-          const oldCamY = camera.centerYWorld;
-
-          // 2. Load the destination room. This snaps the camera to the spawn
-          //    position via snapCamera() inside _makeLoadRoomPhases Phase F,
-          //    and cancels any active camera transition (Phase A).
-          loadRoom(room, spawnX, spawnY);
-
-          // 3. Capture the snapped target and restore the old position so the
-          //    interpolation starts from where the camera was before.
-          const targetCamX = camera.centerXWorld;
-          const targetCamY = camera.centerYWorld;
-          camera.centerXWorld = oldCamX;
-          camera.centerYWorld = oldCamY;
-
-          // 4. Start the smooth camera interpolation.
-          beginCameraTransition(camState, oldCamX, oldCamY, targetCamX, targetCamY);
+          if (ENABLE_SIMPLE_ROOM_TRANSITIONS) {
+            loadRoom(room, validSpawnX, validSpawnY);
+          } else {
+            // Preserved cinematic path: loadRoom snaps first, then the camera
+            // is rewound to the old room and interpolated to the snapped target.
+            const oldCamX = camera.centerXWorld;
+            const oldCamY = camera.centerYWorld;
+            loadRoom(room, validSpawnX, validSpawnY);
+            const targetCamX = camera.centerXWorld;
+            const targetCamY = camera.centerYWorld;
+            camera.centerXWorld = oldCamX;
+            camera.centerYWorld = oldCamY;
+            camState.isTransitionActive = true;
+            camState.transitionStartXWorld = oldCamX;
+            camState.transitionStartYWorld = oldCamY;
+            camState.transitionTargetXWorld = targetCamX;
+            camState.transitionTargetYWorld = targetCamY;
+            camState.transitionElapsedSec = 0;
+          }
           lastTransitionDestRoomId = room.id;
 
-          // 5. Arm cooldown so the adjacent return-transition is not triggered
+          // Arm cooldown so the adjacent return-transition is not triggered
           //    while the player is still near it in the new room.
           camState.transitionCooldownMs = TRANSITION_COOLDOWN_MS;
 
-          // 6. Restore pre-transition velocity for momentum continuity.
+          // Restore pre-transition velocity for momentum continuity.
           const newPlayer = world.clusters[0];
           if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
             newPlayer.velocityXWorld = preTransVX;
             newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
           }
 
-          // 7. Notify the reveal state of the entry edge (edge-extension reveal).
-          const entryEdge = getOppositeTransitionDirection(dir);
-          const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
-          notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
+          if (ENABLE_TRANSITION_CAMERA_REVEAL) {
+            const entryEdge = getOppositeTransitionDirection(dir);
+            const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
+            notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
+          } else {
+            notifyFreshRoomLoaded(transitionRevealState);
+          }
 
           preloadAdjacentRoomAssets(currentRoom);
         },
@@ -1300,7 +1307,7 @@ export function startGameScreen(
     // the current offset smoothly toward the target.  Applied to ox/oy below.
     // Use room-local coordinates (subtract stagingState.currentRoomOriginXWorld/Y).
     const playerForReveal = world.clusters[0];
-    if (playerForReveal !== undefined) {
+    if (ENABLE_TRANSITION_CAMERA_REVEAL && playerForReveal !== undefined) {
       updateTransitionReveal(
         transitionRevealState,
         playerForReveal.positionXWorld - stagingState.currentRoomOriginXWorld,
@@ -1323,7 +1330,7 @@ export function startGameScreen(
     const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
     let ox = camOff.offsetXPx;
     let oy = camOff.offsetYPx;
-    if (crossingState.phase === 'inactive' && stagingState.stagedRooms.length === 0) {
+    if (ENABLE_TRANSITION_CAMERA_REVEAL && crossingState.phase === 'inactive' && stagingState.stagedRooms.length === 0) {
       const revealOff = getTransitionRevealOffset(transitionRevealState);
       ox -= revealOff.revealXWorld * camera.zoom;
       oy -= revealOff.revealYWorld * camera.zoom;

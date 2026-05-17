@@ -980,25 +980,36 @@ authored transition opening positions exactly.
 
 #### New transition flow
 
+**BUILD 349 temporarily restores simple room transitions.** Runtime doorway
+crossing now loads the destination room immediately, resolves the destination
+spawn block against solid walls, keeps the camera snap performed by `loadRoom`,
+and clears the transition reveal offset. The cinematic BUILD 297 camera
+interpolation and edge reveal infrastructure remains in place behind
+`ENABLE_SIMPLE_ROOM_TRANSITIONS` / `ENABLE_TRANSITION_CAMERA_REVEAL` in
+`src/render/transitions/transitionConfig.ts` for later re-enablement.
+
 1. Player enters a transition trigger zone.
 2. `checkRoomTransitions` fires the callback.
-3. The camera position in the old room is recorded (`oldCamX`, `oldCamY`).
-4. `loadRoom(destinationRoom, spawnX, spawnY)` runs synchronously:
+3. The destination spawn is passed through `resolveSpawnBlock(...)` so linked
+   doorway data cannot place the player inside a solid wall.
+4. `loadRoom(destinationRoom, validSpawnX, validSpawnY)` runs synchronously:
    - Previous room is discarded; only the destination room is active.
    - Camera is snapped to the spawn-clamped position by `snapCamera()`.
-5. The snapped position is saved as `camTransTargetXWorld/Y`.
-6. Camera is restored to `oldCamX/Y` (old room position) so interpolation
-   starts from where the player was looking.
-7. A 0.35-second smoothstep ease-out interpolation runs (`_camTransEase`):
-   - Overrides `updateCameraWithBounds` and `updateCameraUnclamped` for
-     the duration.
-   - Camera pans from old position to new room's correct clamped position.
-8. After the interpolation completes, normal camera follow-and-clamp resumes.
+5. The transition reveal state is reset to neutral so no entry-edge camera
+   offset is applied.
+6. The transition cooldown is armed and the player's pre-transition velocity is
+   restored.
+7. Normal camera follow-and-clamp resumes from the snapped destination position.
 
 A 400ms transition cooldown (`TRANSITION_COOLDOWN_MS`) prevents the return
 transition from re-triggering immediately when the player spawns near it.
 
 #### Feature flags
+
+- `ENABLE_SIMPLE_ROOM_TRANSITIONS = true` - current BUILD 349 gameplay mode.
+  This keeps room switching immediate and disables post-load interpolation.
+- `ENABLE_TRANSITION_CAMERA_REVEAL = false` - disables near-door and
+  post-entry camera offsets while simple transitions are active.
 
 - `ENABLE_TWO_ROOM_CAMERA_CROSSING = false` — disabled in BUILD 297.
   All dual-room rendering, seamless staging, and union-bounds camera logic
