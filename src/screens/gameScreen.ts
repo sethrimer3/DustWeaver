@@ -479,8 +479,7 @@ export function startGameScreen(
       }
       // Store in cache so subsequent visits to this room are fast.
       // Edge extension will be filled in Phase F and then the full entry is updated.
-      // (We use a placeholder here; Phase F replaces it with the complete entry.)
-      roomRuntimeCache.set(room.id, { wallTemplate, edgeExtension: null! });
+      roomRuntimeCache.set(room.id, { wallTemplate, edgeExtension: null });
     }
 
     yield; // ── Phase D complete ─────────────────────────────────────────────

@@ -25,8 +25,12 @@ import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCach
 export interface RoomRuntimeEntry {
   /** Merged wall geometry snapshot — apply with `applyRoomWallTemplate`. */
   wallTemplate: RoomWallTemplate;
-  /** Edge-extension tile strip — used directly by the renderer. */
-  edgeExtension: EdgeExtensionCache;
+  /**
+   * Edge-extension tile strip — used directly by the renderer.
+   * May be `null` if the entry was created in Phase D before Phase F ran
+   * (the cache will be updated with the built value in Phase F).
+   */
+  edgeExtension: EdgeExtensionCache | null;
 }
 
 // ── RoomRuntimeCache ──────────────────────────────────────────────────────────

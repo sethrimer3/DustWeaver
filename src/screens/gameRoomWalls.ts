@@ -204,28 +204,28 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
   const finalCount = Math.min(xs.length, MAX_WALLS);
   const template: RoomWallTemplate = {
     wallCount: finalCount,
-    xWorld:               new Float32Array(finalCount),
-    yWorld:               new Float32Array(finalCount),
-    wWorld:               new Float32Array(finalCount),
-    hWorld:               new Float32Array(finalCount),
-    isPlatformFlag:       new Uint8Array(finalCount),
-    platformEdge:         new Uint8Array(finalCount),
-    themeIndex:           new Uint8Array(finalCount),
-    soundHardnessIndex:   new Uint8Array(finalCount),
-    isInvisibleFlag:      new Uint8Array(finalCount),
+    xWorld: new Float32Array(finalCount),
+    yWorld: new Float32Array(finalCount),
+    wWorld: new Float32Array(finalCount),
+    hWorld: new Float32Array(finalCount),
+    isPlatformFlag: new Uint8Array(finalCount),
+    platformEdge: new Uint8Array(finalCount),
+    themeIndex: new Uint8Array(finalCount),
+    soundHardnessIndex: new Uint8Array(finalCount),
+    isInvisibleFlag: new Uint8Array(finalCount),
     rampOrientationIndex: new Uint8Array(finalCount),
     isPillarHalfWidthFlag: new Uint8Array(finalCount),
   };
   for (let wi = 0; wi < finalCount; wi++) {
-    template.xWorld[wi]               = xs[wi];
-    template.yWorld[wi]               = ys[wi];
-    template.wWorld[wi]               = ws[wi];
-    template.hWorld[wi]               = hs[wi];
-    template.isPlatformFlag[wi]       = fs[wi];
-    template.platformEdge[wi]         = pe[wi];
-    template.themeIndex[wi]           = ts[wi];
-    template.soundHardnessIndex[wi]   = sh[wi];
-    template.isInvisibleFlag[wi]      = iv[wi];
+    template.xWorld[wi] = xs[wi];
+    template.yWorld[wi] = ys[wi];
+    template.wWorld[wi] = ws[wi];
+    template.hWorld[wi] = hs[wi];
+    template.isPlatformFlag[wi] = fs[wi];
+    template.platformEdge[wi] = pe[wi];
+    template.themeIndex[wi] = ts[wi];
+    template.soundHardnessIndex[wi] = sh[wi];
+    template.isInvisibleFlag[wi] = iv[wi];
     template.rampOrientationIndex[wi] = ro[wi];
     template.isPillarHalfWidthFlag[wi] = ph[wi];
   }
@@ -246,18 +246,18 @@ export function applyRoomWallTemplate(world: WorldState, template: RoomWallTempl
   const n = template.wallCount;
   world.wallCount = n;
   for (let wi = 0; wi < n; wi++) {
-    world.wallXWorld[wi]               = template.xWorld[wi];
-    world.wallYWorld[wi]               = template.yWorld[wi];
-    world.wallWWorld[wi]               = template.wWorld[wi];
-    world.wallHWorld[wi]               = template.hWorld[wi];
-    world.wallIsPlatformFlag[wi]       = template.isPlatformFlag[wi];
-    world.wallPlatformEdge[wi]         = template.platformEdge[wi];
-    world.wallThemeIndex[wi]           = template.themeIndex[wi];
-    world.wallSoundHardnessIndex[wi]   = template.soundHardnessIndex[wi];
-    world.wallIsInvisibleFlag[wi]      = template.isInvisibleFlag[wi];
+    world.wallXWorld[wi] = template.xWorld[wi];
+    world.wallYWorld[wi] = template.yWorld[wi];
+    world.wallWWorld[wi] = template.wWorld[wi];
+    world.wallHWorld[wi] = template.hWorld[wi];
+    world.wallIsPlatformFlag[wi] = template.isPlatformFlag[wi];
+    world.wallPlatformEdge[wi] = template.platformEdge[wi];
+    world.wallThemeIndex[wi] = template.themeIndex[wi];
+    world.wallSoundHardnessIndex[wi] = template.soundHardnessIndex[wi];
+    world.wallIsInvisibleFlag[wi] = template.isInvisibleFlag[wi];
     world.wallRampOrientationIndex[wi] = template.rampOrientationIndex[wi];
     world.wallIsPillarHalfWidthFlag[wi] = template.isPillarHalfWidthFlag[wi];
-    world.wallIsBouncePadFlag[wi]      = 0;
+    world.wallIsBouncePadFlag[wi] = 0;
     world.wallBouncePadSpeedFactorIndex[wi] = 0;
   }
 }
