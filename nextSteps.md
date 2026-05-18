@@ -1,6 +1,88 @@
 # DustWeaver — Next Steps
 
-## BUILD 356 — Simple Room Transitions: Verification & Defensive Hardening
+## BUILD 357 — Room Transition Preloading + Runtime Cache
+
+### What Was Implemented
+
+1. **`RoomWallTemplate` + split of `loadRoomWalls`** (`src/screens/gameRoomWalls.ts`):
+   - `buildRoomWallTemplate(room)` runs the expensive O(n²) iterative merge pass and
+     returns a compact `RoomWallTemplate` (typed arrays sized to actual post-merge wall
+     count, not `MAX_WALLS`).
+   - `applyRoomWallTemplate(world, template)` is a fast O(n) copy into `WorldState`.
+   - `loadRoomWalls` is kept as a compatibility wrapper for any callers outside the
+     main load path.
+
+2. **`RoomRuntimeCache`** (`src/screens/roomRuntimeCache.ts`):
+   - LRU-evicting Map-based cache keyed by room ID.
+   - Stores `RoomWallTemplate` + `EdgeExtensionCache` per room.
+   - Default capacity: 10 rooms (current room + 2-hop radius + headroom).
+   - `invalidate(roomId)` called by the editor reload callback so edits take effect.
+
+3. **`roomPreloadScheduler.ts`** (`src/screens/roomPreloadScheduler.ts`):
+   - `scheduleRoomPreloads(currentRoom, registry, cache)` BFS-traverses 2 hops.
+   - Radius-1 rooms are enqueued first (urgent); radius-2 rooms second (background).
+   - Each idle callback processes one room and re-schedules using `requestIdleCallback`
+     (with `setTimeout(0)` fallback for Safari/Firefox).
+   - Idempotent: skips rooms already in cache.
+   - Returns a handle; previous handle is cancelled on each new room load.
+
+4. **`gameScreen.ts` integration**:
+   - Phase D: uses `roomRuntimeCache.get(room.id)` before calling `buildRoomWallTemplate`.
+     Cache HIT → `applyRoomWallTemplate` only.  Cache MISS → build + store + apply.
+   - Phase F: uses cached `EdgeExtensionCache` when available.  On miss: builds, stores,
+     and falls back gracefully.
+   - Editor reload callback calls `roomRuntimeCache.invalidate(roomDef.id)` before
+     `loadRoom()` so stale geometry is never used after an editor change.
+   - Teardown cancels the active preload schedule handle.
+   - Dev-mode (`import.meta.env.DEV`) console logs show cache HIT/MISS + timing.
+
+5. **`roomAssetPreloader.ts`**:
+   - Added `preloadNearbyRoomAssets(room, radius)` for BFS-based radius-N sprite
+     preloading used by the preload scheduler.
+
+### Remaining Work — Async Load Path (Not Yet Implemented)
+
+The `_makeLoadRoomPhases()` generator already yields between each phase, but
+`loadRoom()` still drains it synchronously in one frame.  Making transitions
+non-blocking requires the following additional work:
+
+#### `startAsyncLoadRoom()` in `src/screens/gameScreen.ts`
+- File: `src/screens/gameScreen.ts`
+- Status: **not started**
+- Approach:
+  1. When a room transition fires, start the generator (`_makeLoadRoomPhases`)
+     but do NOT drain it — store the generator reference.
+  2. Show the existing loading/fade overlay (call `showLoadingOverlay()`).
+  3. Each `frame()` call: if a load is in progress, advance the generator by
+     one phase (or until the frame budget is exhausted) and render only the
+     overlay.  When the generator is done, clear the overlay.
+  4. Player momentum (`preTransVX`, `preTransVY`) must be captured before the
+     transition fires and restored after Phase B completes.
+  5. Transition cooldown should still be set at the moment the transition fires
+     (not when the load completes) to prevent double-trigger.
+- Recommended steps:
+  1. Add `type AsyncLoadState = { gen: Generator<void>; room: RoomDef; ... } | null`
+     state variable.
+  2. Replace `loadRoom(room, ...)` in `orchestrateRoomTransitions` callback with
+     `startAsyncLoadRoom(room, ...)`.
+  3. In `frame()`, before the sim tick block, check `asyncLoadState !== null` and
+     advance one phase per frame.
+  4. Show `loadingOverlay` for the first frame of the async load, hide it after
+     Phase F completes (same condition as initial load: `areRoomSpritesReady`).
+  5. Fast path: if `roomRuntimeCache.has(room.id)` already has both `wallTemplate`
+     and `edgeExtension`, apply them synchronously and skip the generator entirely.
+
+#### Outstanding known performance issue (O(n²) merge pass)
+- File: `src/screens/gameRoomWalls.ts`, `buildRoomWallTemplate()`
+- The iterative merge pass is still O(n²) in the worst case.  With the cache,
+  this only runs once per room per session (or after editor edits), but large
+  rooms (200+ wall tiles) can still cause a ~40–80 ms spike on cache miss
+  (e.g. first campaign load or first visit to a large room).
+- Recommended fix: replace the double-loop with a sort-and-sweep merge similar
+  to the sweep-line algorithm used in 2D geometry processing.
+- Status: deferred; the cache eliminates the problem for all subsequent visits.
+
+---
 
 ### Background
 
