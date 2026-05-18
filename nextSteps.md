@@ -1,5 +1,62 @@
 # DustWeaver — Next Steps
 
+## BUILD 356 — Simple Room Transitions: Verification & Defensive Hardening
+
+### Background
+
+BUILD 349 temporarily restored simple (instant) room transitions by setting
+`ENABLE_SIMPLE_ROOM_TRANSITIONS = true` in
+`src/render/transitions/transitionConfig.ts`.  The fancy seamless-crossing and
+camera-interpolation systems introduced in BUILDs 279–297 were left intact
+behind feature flags so they can be re-enabled when they are stable.
+
+### What Was Verified in BUILD 356
+
+1. **Simple-transition path confirmed correct** (`src/screens/gameScreen.ts`,
+   `src/render/transitions/transitionConfig.ts`):
+   - `ENABLE_SIMPLE_ROOM_TRANSITIONS = true` — room transitions call
+     `loadRoom(room, validSpawnX, validSpawnY)` immediately with no camera
+     rewind, no interpolation, and no camera restore.
+   - `ENABLE_TWO_ROOM_CAMERA_CROSSING = false` — two-room side-by-side
+     rendering is disabled; `crossingState.phase` never leaves `'inactive'`.
+   - `ENABLE_TRANSITION_CAMERA_REVEAL = false` — no near-transition or
+     post-transition camera reveal offsets are applied.
+   - Camera snaps to the destination spawn via `snapCamera()` in Phase F.
+   - `resolveSpawnBlock()` prevents spawning inside a solid wall (falls back to
+     `findOpenSpawnBlock()` and logs a warning).
+   - Transition cooldown (`TRANSITION_COOLDOWN_MS = 400 ms`) prevents the
+     adjacent return-transition from double-firing immediately after spawn.
+   - All four crossing directions (left, right, up, down) go through the same
+     code path and are confirmed correct by code analysis.
+
+2. **Defensive hardening of `cancelCameraTransition`**
+   (`src/screens/gameCameraState.ts`):
+   - `cancelCameraTransition` now also clears `prevHadUnionBounds` and
+     `camSettlingFramesLeft` so that even if the seamless-crossing system is
+     partially re-enabled in a future build, a room load via the simple path
+     will not inherit stale union-bounds settling state.
+   - Under the current flag configuration these fields are never mutated, so
+     this is a purely defensive change with no runtime effect.
+
+### How to Re-Enable Fancy Transitions Later
+
+To restore the BUILD 279–319 seamless-crossing behaviour, set the following
+flags in `src/render/transitions/transitionConfig.ts`:
+
+```typescript
+ENABLE_TWO_ROOM_CAMERA_CROSSING   = true   // re-enable side-by-side rendering
+ENABLE_TRANSITION_CAMERA_REVEAL   = true   // optional: camera peek near exits
+```
+
+Before re-enabling, address the known issues listed in the BUILD 319 entry
+below (staged enemy/hazard simulation, wall auto-tile seam artefacts, narrow-
+room camera snap on finalization).  The settling-window code in
+`gameCameraState.ts` (`camSettlingFramesLeft`, `prevHadUnionBounds`) and the
+`finalizeCrossingSeamless` path in `gameSeamlessStaging.ts` remain intact for
+this purpose.
+
+---
+
 ## BUILD 319 — Performance & Seamless Crossing Improvements
 
 ### What Was Completed in BUILD 319
