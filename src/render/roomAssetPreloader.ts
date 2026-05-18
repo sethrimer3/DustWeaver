@@ -101,6 +101,37 @@ export function preloadAdjacentRoomAssets(room: RoomDef): void {
 }
 
 /**
+ * Triggers sprite loading for all rooms within `radius` hops of `room`.
+ *
+ * Performs a BFS through `RoomDef.transitions` so that image assets for
+ * rooms 1–2 hops away are in the browser's image cache before the player
+ * reaches them.  All `loadImg()` calls are idempotent and near-zero cost for
+ * URLs already in the cache.
+ *
+ * BUILD 357: Replaces the direct-adjacent-only `preloadAdjacentRoomAssets`
+ * for multi-room preloading in the preload scheduler.
+ */
+export function preloadNearbyRoomAssets(room: RoomDef, radius: number): void {
+  const visited = new Set<string>([room.id]);
+  const queue: Array<[RoomDef, number]> = [[room, 0]];
+
+  while (queue.length > 0) {
+    const [current, depth] = queue.shift()!;
+    if (depth >= radius) continue;
+    for (let ti = 0; ti < current.transitions.length; ti++) {
+      const targetId = current.transitions[ti].targetRoomId;
+      if (visited.has(targetId)) continue;
+      visited.add(targetId);
+      const neighbor = ROOM_REGISTRY.get(targetId);
+      if (neighbor !== undefined) {
+        preloadRoomThemeSprites(neighbor);
+        queue.push([neighbor, depth + 1]);
+      }
+    }
+  }
+}
+
+/**
  * Returns true when every folder-based block-theme sprite required by `room`
  * has fully loaded (img.complete && img.naturalWidth > 0).
  *

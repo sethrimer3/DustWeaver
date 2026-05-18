@@ -7,6 +7,11 @@
  * hazard and falling-block loaders.
  *
  * Extracted from gameRoom.ts to keep each loading concern in its own module.
+ *
+ * BUILD 357: Added `RoomWallTemplate`, `buildRoomWallTemplate`, and
+ * `applyRoomWallTemplate` to support caching the expensive merge-pass result.
+ * `loadRoomWalls` is retained as a compatibility wrapper that builds and
+ * immediately applies a fresh template.
  */
 
 import type { WorldState } from '../sim/world';
@@ -19,6 +24,29 @@ import {
   blockThemeToSoundHardness,
   WALL_THEME_DEFAULT_INDEX,
 } from '../levels/roomDef';
+
+// ── RoomWallTemplate ──────────────────────────────────────────────────────────
+
+/**
+ * Immutable snapshot of the merged wall geometry for a single room.
+ * Produced by `buildRoomWallTemplate()` and consumed by `applyRoomWallTemplate()`.
+ * Arrays are sized to `wallCount` (the actual post-merge count), not MAX_WALLS,
+ * so cached templates are memory-efficient even for large rooms.
+ */
+export interface RoomWallTemplate {
+  readonly wallCount: number;
+  readonly xWorld: Float32Array;
+  readonly yWorld: Float32Array;
+  readonly wWorld: Float32Array;
+  readonly hWorld: Float32Array;
+  readonly isPlatformFlag: Uint8Array;
+  readonly platformEdge: Uint8Array;
+  readonly themeIndex: Uint8Array;
+  readonly soundHardnessIndex: Uint8Array;
+  readonly isInvisibleFlag: Uint8Array;
+  readonly rampOrientationIndex: Uint8Array;
+  readonly isPillarHalfWidthFlag: Uint8Array;
+}
 
 /** Epsilon used when deciding whether wall edges are contiguous during merge. */
 const WALL_MERGE_EPSILON_WORLD = 0.001;
@@ -38,10 +66,8 @@ export function resolveWallSoundHardnessIndex(
 }
 
 /**
- * Loads wall definitions from a RoomDef into the WorldState wall buffers.
- * After converting block units to world units, runs an iterative merge pass
- * that combines axis-aligned, contiguous wall rectangles into larger AABBs.
- * This eliminates internal seam edges that cause ghost collisions.
+ * Builds a `RoomWallTemplate` by running the full conversion + iterative merge
+ * pass on `room`.  The result is immutable and safe to cache across frames.
  *
  * COLLISION AUTHORITY:
  *   The merged rectangles produced here are the AUTHORITATIVE source of solid
@@ -59,12 +85,14 @@ export function resolveWallSoundHardnessIndex(
  *   grid is when two tiles of DIFFERENT themes share a face (they are not
  *   merged); in that case the shared face is an exact integer boundary so
  *   raycasts still return the correct normal.
+ *
+ * Call once per room (or once per editor edit) and cache the result.
+ * Use `applyRoomWallTemplate()` to copy the cached data into `WorldState`.
  */
-export function loadRoomWalls(world: WorldState, room: RoomDef): void {
+export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
   const rawCount = Math.min(room.walls.length, MAX_WALLS);
 
-  // Pre-allocated merge workspace (avoid per-call allocation)
-  // We use simple arrays here because this runs only at room load, not per-tick.
+  // Merge workspace — plain arrays; this runs once per cache miss, not per tick.
   const xs: number[] = [];
   const ys: number[] = [];
   const ws: number[] = [];
@@ -172,22 +200,73 @@ export function loadRoomWalls(world: WorldState, room: RoomDef): void {
     }
   }
 
-  // Write merged rectangles into wall buffers
+  // Pack into compact typed arrays sized to the actual merged count.
   const finalCount = Math.min(xs.length, MAX_WALLS);
-  world.wallCount = finalCount;
+  const template: RoomWallTemplate = {
+    wallCount: finalCount,
+    xWorld:               new Float32Array(finalCount),
+    yWorld:               new Float32Array(finalCount),
+    wWorld:               new Float32Array(finalCount),
+    hWorld:               new Float32Array(finalCount),
+    isPlatformFlag:       new Uint8Array(finalCount),
+    platformEdge:         new Uint8Array(finalCount),
+    themeIndex:           new Uint8Array(finalCount),
+    soundHardnessIndex:   new Uint8Array(finalCount),
+    isInvisibleFlag:      new Uint8Array(finalCount),
+    rampOrientationIndex: new Uint8Array(finalCount),
+    isPillarHalfWidthFlag: new Uint8Array(finalCount),
+  };
   for (let wi = 0; wi < finalCount; wi++) {
-    world.wallXWorld[wi] = xs[wi];
-    world.wallYWorld[wi] = ys[wi];
-    world.wallWWorld[wi] = ws[wi];
-    world.wallHWorld[wi] = hs[wi];
-    world.wallIsPlatformFlag[wi] = fs[wi];
-    world.wallPlatformEdge[wi] = pe[wi];
-    world.wallThemeIndex[wi] = ts[wi];
-    world.wallSoundHardnessIndex[wi] = sh[wi];
-    world.wallIsInvisibleFlag[wi] = iv[wi];
-    world.wallRampOrientationIndex[wi] = ro[wi];
-    world.wallIsPillarHalfWidthFlag[wi] = ph[wi];
-    world.wallIsBouncePadFlag[wi] = 0;
+    template.xWorld[wi]               = xs[wi];
+    template.yWorld[wi]               = ys[wi];
+    template.wWorld[wi]               = ws[wi];
+    template.hWorld[wi]               = hs[wi];
+    template.isPlatformFlag[wi]       = fs[wi];
+    template.platformEdge[wi]         = pe[wi];
+    template.themeIndex[wi]           = ts[wi];
+    template.soundHardnessIndex[wi]   = sh[wi];
+    template.isInvisibleFlag[wi]      = iv[wi];
+    template.rampOrientationIndex[wi] = ro[wi];
+    template.isPillarHalfWidthFlag[wi] = ph[wi];
+  }
+  return template;
+}
+
+/**
+ * Copies a pre-built `RoomWallTemplate` into the `WorldState` wall buffers.
+ *
+ * This is a fast O(n) copy — no merge pass runs here.  Call after retrieving
+ * a cached template from `RoomRuntimeCache`.
+ *
+ * `wallIsBouncePadFlag` and `wallBouncePadSpeedFactorIndex` are reset to 0
+ * for all copied walls; `loadRoomHazards` (Phase E) will overwrite specific
+ * indices for any bounce-pad hazards in the room.
+ */
+export function applyRoomWallTemplate(world: WorldState, template: RoomWallTemplate): void {
+  const n = template.wallCount;
+  world.wallCount = n;
+  for (let wi = 0; wi < n; wi++) {
+    world.wallXWorld[wi]               = template.xWorld[wi];
+    world.wallYWorld[wi]               = template.yWorld[wi];
+    world.wallWWorld[wi]               = template.wWorld[wi];
+    world.wallHWorld[wi]               = template.hWorld[wi];
+    world.wallIsPlatformFlag[wi]       = template.isPlatformFlag[wi];
+    world.wallPlatformEdge[wi]         = template.platformEdge[wi];
+    world.wallThemeIndex[wi]           = template.themeIndex[wi];
+    world.wallSoundHardnessIndex[wi]   = template.soundHardnessIndex[wi];
+    world.wallIsInvisibleFlag[wi]      = template.isInvisibleFlag[wi];
+    world.wallRampOrientationIndex[wi] = template.rampOrientationIndex[wi];
+    world.wallIsPillarHalfWidthFlag[wi] = template.isPillarHalfWidthFlag[wi];
+    world.wallIsBouncePadFlag[wi]      = 0;
     world.wallBouncePadSpeedFactorIndex[wi] = 0;
   }
+}
+
+/**
+ * Loads wall definitions from a RoomDef into the WorldState wall buffers.
+ * Compatibility wrapper around `buildRoomWallTemplate` + `applyRoomWallTemplate`.
+ * Prefer `buildRoomWallTemplate` when you want to cache the result.
+ */
+export function loadRoomWalls(world: WorldState, room: RoomDef): void {
+  applyRoomWallTemplate(world, buildRoomWallTemplate(room));
 }

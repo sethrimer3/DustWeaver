@@ -73,7 +73,6 @@ import {
   PLAYER_INITIAL_HEALTH,
 } from './gameSpawn';
 import {
-  loadRoomWalls,
   loadRoomHazards,
   loadRoomRopes,
   loadRoomFallingBlocks,
@@ -110,6 +109,9 @@ import {
   areRoomSpritesReady,
 } from '../render/roomAssetPreloader';
 import { buildEdgeExtensionCache, EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
+import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
+import { RoomRuntimeCache } from './roomRuntimeCache';
+import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
 import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import {
   createTransitionRevealState,
@@ -460,7 +462,26 @@ export function startGameScreen(
       }
     }
 
-    loadRoomWalls(world, room);
+    // Use cached wall template if available (avoids O(n²) merge pass).
+    const _wallCacheEntry = roomRuntimeCache.get(room.id);
+    const _wallT0 = import.meta.env.DEV ? performance.now() : 0;
+    if (_wallCacheEntry !== undefined) {
+      applyRoomWallTemplate(world, _wallCacheEntry.wallTemplate);
+      if (import.meta.env.DEV) {
+        console.log(`[loadRoom] ${room.id} walls: cache HIT (apply ${(performance.now() - _wallT0).toFixed(1)}ms)`);
+      }
+    } else {
+      const wallTemplate = buildRoomWallTemplate(room);
+      const _buildMs = import.meta.env.DEV ? performance.now() - _wallT0 : 0;
+      applyRoomWallTemplate(world, wallTemplate);
+      if (import.meta.env.DEV) {
+        console.log(`[loadRoom] ${room.id} walls: cache MISS (build ${_buildMs.toFixed(1)}ms)`);
+      }
+      // Store in cache so subsequent visits to this room are fast.
+      // Edge extension will be filled in Phase F and then the full entry is updated.
+      // (We use a placeholder here; Phase F replaces it with the complete entry.)
+      roomRuntimeCache.set(room.id, { wallTemplate, edgeExtension: null! });
+    }
 
     yield; // ── Phase D complete ─────────────────────────────────────────────
 
@@ -524,8 +545,40 @@ export function startGameScreen(
 
     preloadRoomThemeSprites(room);
 
-    // Must run after loadRoomWalls() (Phase D) so wall geometry is finalised.
-    edgeExtensionCache = buildEdgeExtensionCache(room);
+    // Use cached edge extension if available; build and store otherwise.
+    // Must run after walls are applied (Phase D) so wall geometry is finalised.
+    const _cachedEntry = roomRuntimeCache.get(room.id);
+    if (_cachedEntry !== undefined && _cachedEntry.edgeExtension !== null) {
+      edgeExtensionCache = _cachedEntry.edgeExtension;
+      if (import.meta.env.DEV) {
+        console.log(`[loadRoom] ${room.id} edge: cache HIT`);
+      }
+    } else {
+      const _edgeT0 = import.meta.env.DEV ? performance.now() : 0;
+      const built = buildEdgeExtensionCache(room);
+      if (import.meta.env.DEV) {
+        console.log(`[loadRoom] ${room.id} edge: cache MISS (build ${(performance.now() - _edgeT0).toFixed(1)}ms)`);
+      }
+      edgeExtensionCache = built;
+      // Update the cache entry (or create a new one if Phase D somehow cleared it).
+      const wallEntry = roomRuntimeCache.get(room.id);
+      if (wallEntry !== undefined) {
+        wallEntry.edgeExtension = built;
+      } else {
+        // Should not normally happen; build the wall template too.
+        roomRuntimeCache.set(room.id, { wallTemplate: buildRoomWallTemplate(room), edgeExtension: built });
+      }
+    }
+
+    // Cancel any in-flight preload schedule from the previous room and start
+    // a new one for the rooms adjacent to the newly loaded room.
+    _preloadScheduleHandle?.cancel();
+    _preloadScheduleHandle = scheduleRoomPreloads(
+      room,
+      ROOM_REGISTRY,
+      roomRuntimeCache,
+      import.meta.env.DEV,
+    );
 
     // Generator complete — Phase F has no trailing yield.
   }
@@ -606,6 +659,16 @@ export function startGameScreen(
   // Built once per loadRoom() call.  Rendered as visual tiles beyond the
   // room edge boundary to prevent a hard black cutoff at room walls.
   let edgeExtensionCache: EdgeExtensionCache | null = null;
+
+  // ── Room runtime cache (wall templates + edge extensions) ─────────────────
+  // Precomputed static room data keyed by room ID.  Allows _makeLoadRoomPhases
+  // to skip the expensive merge pass when a room has already been preloaded.
+  // Bounded LRU with 10 slots (current room + 2-hop radius + headroom).
+  const roomRuntimeCache = new RoomRuntimeCache(10);
+
+  // Handle for the current idle preload schedule so it can be cancelled when
+  // the player switches rooms before the previous schedule completes.
+  let _preloadScheduleHandle: PreloadScheduleHandle | null = null;
 
   // ── Preview bubble state ──────────────────────────────────────────────────
   // Pre-allocated array of per-bubble state, updated each frame via
@@ -740,6 +803,8 @@ export function startGameScreen(
     // wall (e.g. in a newly-created room or after heavy edits).  Always resolve
     // to an open position so the player isn't stuck on entry.
     const [validX, validY] = resolveSpawnBlock(roomDef, spawnX, spawnY);
+    // Invalidate this room's cached runtime data so edits take effect immediately.
+    roomRuntimeCache.invalidate(roomDef.id);
     loadRoom(roomDef, validX, validY, preserveCamera);
     // Editor loads are not transitions — reset reveal to neutral.
     notifyFreshRoomLoaded(transitionRevealState);
@@ -1330,6 +1395,8 @@ export function startGameScreen(
     window.removeEventListener('touchstart',  _onAudioUnlockGesture);
     isRunning = false;
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
+    _preloadScheduleHandle?.cancel();
+    _preloadScheduleHandle = null;
     pauseController.destroy();
     gameOverlayController.destroy();
     // Stop background music and release resources
