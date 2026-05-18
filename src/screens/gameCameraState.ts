@@ -121,12 +121,22 @@ export function beginCameraTransition(
 }
 
 /**
- * Cancels any in-progress camera transition.
+ * Cancels any in-progress camera transition and clears all seamless-crossing
+ * camera state so a room load via the simple-transition path fully resets the
+ * camera regardless of any prior crossing activity.
+ *
  * Called from _makeLoadRoomPhases Phase A so non-transition loads (death
  * respawn, editor reload, lambda teleport) never inherit the interpolation.
+ * Also clears the union-bounds settling window (prevHadUnionBounds /
+ * camSettlingFramesLeft) that would otherwise cause stale settling behaviour
+ * if the seamless crossing system is ever partially re-enabled.
  */
 export function cancelCameraTransition(state: GameCameraState): void {
   state.isTransitionActive = false;
+  // Clear union-bounds settling state so no leftover seamless-crossing data
+  // bleeds into the next room's camera follow (defensive guard, BUILD 356).
+  state.prevHadUnionBounds = false;
+  state.camSettlingFramesLeft = 0;
 }
 
 /**
