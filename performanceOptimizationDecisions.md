@@ -147,3 +147,30 @@
 ### Performance opportunities noticed but not implemented
 
 1. The fixed-step loop still performs player-input forwarding and several post-tick orchestration updates inline.
+
+## BUILD 356 — Transition orchestration extraction
+
+### Performance-related changes made
+
+1. **Moved per-frame room-transition orchestration out of `gameScreen.ts`**
+   - **System:** `src/screens/gameScreen.ts` → `src/screens/gameRoomTransitionOrchestrator.ts`
+   - **What changed:** Extracted cooldown decrement, transition trigger handling, camera-transition setup, momentum carry-over, reveal-state notification, and debug-stat updates into `orchestrateRoomTransitions(...)`.
+   - **Why safe:** Logic order, branch conditions, and all side effects were preserved exactly; the helper still uses the same world/camera state and transition utilities.
+   - **Category:** Maintainability refactor while preserving runtime cost and behavior.
+
+2. **Preserved per-frame allocation profile for transition checks**
+   - **System:** transition check path in gameplay frame loop
+   - **What changed:** Avoided introducing new per-frame arrays/maps/strings; transition debug values now mutate a single pre-allocated `TransitionDebugState` object.
+   - **Why safe:** Equivalent data flow with unchanged values and no extra hot-path container churn.
+   - **Category:** Reduces allocations / preserves hot-path characteristics.
+
+### Performance opportunities noticed but not implemented
+
+1. `gameScreen.ts` still contains a large fixed-timestep orchestration block (input forwarding, sim post-tick updates, and accumulator control) that can be extracted in a later low-risk pass.
+2. Dialogue trigger checks and nearby camera/reveal orchestration remain inline and are possible next extraction candidates.
+
+### Risky optimizations intentionally avoided
+
+1. Did **not** alter transition trigger thresholds, spawn resolution rules, or transition cooldown timing.
+2. Did **not** change camera transition interpolation constants or momentum carry-over semantics.
+3. Did **not** introduce new caching layers around transition lookup to avoid invalidation bugs.

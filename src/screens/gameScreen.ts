@@ -43,7 +43,6 @@ import {
 } from './gameSeamlessStaging';
 import {
   ENABLE_TWO_ROOM_CAMERA_CROSSING,
-  ENABLE_SIMPLE_ROOM_TRANSITIONS,
   ENABLE_TRANSITION_CAMERA_REVEAL,
 } from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
@@ -88,12 +87,10 @@ import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
-import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { createPlayerSfxState, updatePlayerSfx } from './gamePlayerSfx';
 import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
-import { checkRoomTransitions, getOppositeTransitionDirection } from './gameTransitions';
 import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
@@ -116,7 +113,6 @@ import { buildEdgeExtensionCache, EdgeExtensionCache } from '../render/transitio
 import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import {
   createTransitionRevealState,
-  notifyTransitionRoomEntered,
   notifyFreshRoomLoaded,
   updateTransitionReveal,
   getTransitionRevealOffset,
@@ -140,7 +136,6 @@ import {
   cancelCameraTransition,
   resetCameraEffBoundsForRoom,
   updateCameraFollow,
-  TRANSITION_COOLDOWN_MS,
   CAM_TRANS_DURATION_SEC,
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
@@ -148,6 +143,7 @@ import { createGameEditorDebugControls } from './gameEditorDebugControls';
 import { createGamePauseController } from './gamePauseController';
 import { createGameLambdaAnchorState } from './gameLambdaAnchorState';
 import { renderEditorBackdrop } from './gameScreenEditorBackdrop';
+import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoomTransitionOrchestrator';
 
 const FIXED_DT_MS = 16.666;
 
@@ -647,8 +643,10 @@ export function startGameScreen(
 
   // ── Transition debug stats ────────────────────────────────────────────────
   // Populated each frame and forwarded to the render profiler debug panel.
-  let lastTransitionPlayerSpeedWorld = 0;
-  let lastTransitionDestRoomId = '';
+  const transitionDebugState: TransitionDebugState = {
+    lastTransitionPlayerSpeedWorld: 0,
+    lastTransitionDestRoomId: '',
+  };
 
   // ── Initial loading overlay ───────────────────────────────────────────────
   // Shown when gameplay first starts (or when a room's sprites are not yet
@@ -714,6 +712,10 @@ export function startGameScreen(
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
+
+  function preloadAdjacentCurrentRoomAssets(): void {
+    preloadAdjacentRoomAssets(currentRoom);
+  }
 
   let menuButton: HTMLButtonElement | null = null;
   if (IS_TOUCH_DEVICE) {
@@ -962,77 +964,28 @@ export function startGameScreen(
     }
 
     // ── Room transition check ──────────────────────────────────────────────
-    // BUILD 349: Simple room transitions are temporarily restored.
-    // When the player triggers a transition, the destination room is loaded
-    // immediately (no adjacent-room rendering), the spawn block is resolved
-    // against solid walls, and the camera keeps the snap performed by
-    // loadRoom(). The BUILD 297 smooth interpolation path remains behind
-    // ENABLE_SIMPLE_ROOM_TRANSITIONS for later re-enablement.
-    //
-    // A cooldown (TRANSITION_COOLDOWN_MS) prevents the return-transition from
-    // firing immediately after the player spawns inside the destination room.
     const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
     const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
 
-    // Decrement transition cooldown.
-    if (camState.transitionCooldownMs > 0) {
-      camState.transitionCooldownMs = Math.max(0, camState.transitionCooldownMs - elapsedMs);
-    }
-
-    if (crossingState.phase === 'inactive' && camState.transitionCooldownMs <= 0) {
-      checkRoomTransitions(
-        world, currentRoom, roomWidthWorld, roomHeightWorld,
-        (room, spawnX, spawnY, dir, _ti) => {
-          // Record speed for debug overlay before world state changes.
-          lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
-          const [validSpawnX, validSpawnY] = resolveSpawnBlock(room, spawnX, spawnY);
-
-          if (ENABLE_SIMPLE_ROOM_TRANSITIONS) {
-            loadRoom(room, validSpawnX, validSpawnY);
-          } else {
-            // Preserved cinematic path: loadRoom snaps first, then the camera
-            // is rewound to the old room and interpolated to the snapped target.
-            const oldCamX = camera.centerXWorld;
-            const oldCamY = camera.centerYWorld;
-            loadRoom(room, validSpawnX, validSpawnY);
-            const targetCamX = camera.centerXWorld;
-            const targetCamY = camera.centerYWorld;
-            camera.centerXWorld = oldCamX;
-            camera.centerYWorld = oldCamY;
-            camState.isTransitionActive = true;
-            camState.transitionStartXWorld = oldCamX;
-            camState.transitionStartYWorld = oldCamY;
-            camState.transitionTargetXWorld = targetCamX;
-            camState.transitionTargetYWorld = targetCamY;
-            camState.transitionElapsedSec = 0;
-          }
-          lastTransitionDestRoomId = room.id;
-
-          // Arm cooldown so the adjacent return-transition is not triggered
-          //    while the player is still near it in the new room.
-          camState.transitionCooldownMs = TRANSITION_COOLDOWN_MS;
-
-          // Restore pre-transition velocity for momentum continuity.
-          const newPlayer = world.clusters[0];
-          if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
-            newPlayer.velocityXWorld = preTransVX;
-            newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
-          }
-
-          if (ENABLE_TRANSITION_CAMERA_REVEAL) {
-            const entryEdge = getOppositeTransitionDirection(dir);
-            const entryTi = room.transitions.findIndex(t => t.direction === entryEdge);
-            notifyTransitionRoomEntered(transitionRevealState, entryEdge, entryTi);
-          } else {
-            notifyFreshRoomLoaded(transitionRevealState);
-          }
-
-          preloadAdjacentRoomAssets(currentRoom);
-        },
-        stagingState.currentRoomOriginXWorld,
-        stagingState.currentRoomOriginYWorld,
-      );
-    }
+    orchestrateRoomTransitions(
+      world,
+      currentRoom,
+      roomWidthWorld,
+      roomHeightWorld,
+      camState,
+      elapsedMs,
+      crossingState.phase === 'inactive',
+      preTransVX,
+      preTransVY,
+      loadRoom,
+      resolveSpawnBlock,
+      camera,
+      transitionRevealState,
+      stagingState.currentRoomOriginXWorld,
+      stagingState.currentRoomOriginYWorld,
+      preloadAdjacentCurrentRoomAssets,
+      transitionDebugState,
+    );
 
     // ── Dialogue trigger check ─────────────────────────────────────────────
     // Each trigger fires once per room visit (firedDialogueTriggerUids is
@@ -1301,7 +1254,7 @@ export function startGameScreen(
         currentRoomId: currentRoom.id,
         isTransitioning: camState.isTransitionActive,
         lastDurationMs: Math.round(CAM_TRANS_DURATION_SEC * 1000),
-        lastPlayerSpeedWorld: lastTransitionPlayerSpeedWorld,
+        lastPlayerSpeedWorld: transitionDebugState.lastTransitionPlayerSpeedWorld,
         activeBubbleCount: previewBubbleCount,
         edgeCacheFilled: edgeExtensionCache !== null,
         isCameraTransitioning: camState.isTransitionActive,
@@ -1310,7 +1263,7 @@ export function startGameScreen(
         cameraTransStartYWorld: camState.transitionStartYWorld,
         cameraTransTargetXWorld: camState.transitionTargetXWorld,
         cameraTransTargetYWorld: camState.transitionTargetYWorld,
-        destinationRoomId: lastTransitionDestRoomId,
+        destinationRoomId: transitionDebugState.lastTransitionDestRoomId,
         isAdjacentRoomRenderingDisabled: !ENABLE_TWO_ROOM_CAMERA_CROSSING,
       };
       renderProfiler.updateTransitionStats(debugStats);
