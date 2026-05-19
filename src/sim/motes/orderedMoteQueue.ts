@@ -223,6 +223,41 @@ export function hasStormWeaveUnlocked(world: WorldState): boolean {
 // ── Mote lifecycle helpers ─────────────────────────────────────────────────────
 
 /**
+ * Depletes the mote slot at the given index with the specified cooldown.
+ *
+ * This is the central single-slot depletion helper.  Prefer this over
+ * directly mutating the slot arrays so callers remain readable and the
+ * logic stays in one place.
+ *
+ * No-op when:
+ *   - `slotIndex` is out of bounds, or
+ *   - the slot is already depleted.
+ *
+ * Also extends the linked physical particle's respawn delay to match the
+ * mote cooldown, so the particle stays dead until the mote regenerates
+ * (rather than respawning early and appearing as an available mote while
+ * the logical slot is still depleted).
+ */
+export function depleteMoteSlot(
+  world: WorldState,
+  slotIndex: number,
+  cooldownTicks = BASE_MOTE_REGENERATION_TICKS,
+): void {
+  if (slotIndex < 0 || slotIndex >= world.moteSlotCount) return;
+  if (world.moteSlotState[slotIndex] === MOTE_STATE_DEPLETED) return;
+  world.moteSlotState[slotIndex]             = MOTE_STATE_DEPLETED;
+  world.moteSlotCooldownTicksLeft[slotIndex] = cooldownTicks;
+  // Keep the physical particle dead for the full mote cooldown so the
+  // visual/logical states do not diverge.
+  const pidx = world.moteSlotParticleIndex[slotIndex];
+  if (pidx >= 0 && pidx < world.particleCount && world.isAliveFlag[pidx] === 0) {
+    if (world.respawnDelayTicks[pidx] < cooldownTicks) {
+      world.respawnDelayTicks[pidx] = cooldownTicks;
+    }
+  }
+}
+
+/**
  * Marks the mote slot linked to `particleIndex` as depleted and starts its
  * regeneration cooldown.
  *
@@ -293,6 +328,13 @@ export function syncMoteQueueWithParticles(world: WorldState): void {
     if (world.isAliveFlag[pidx] === 0) {
       world.moteSlotState[i]             = MOTE_STATE_DEPLETED;
       world.moteSlotCooldownTicksLeft[i] = BASE_MOTE_REGENERATION_TICKS;
+      // Invariant: extend the physical particle's respawn delay to at least
+      // the mote cooldown so it does not orbit as an available mote while the
+      // logical slot is still depleted.  The particle will be scheduled to
+      // respawn by tickMoteSlotRegeneration when the cooldown expires.
+      if (world.respawnDelayTicks[pidx] < BASE_MOTE_REGENERATION_TICKS) {
+        world.respawnDelayTicks[pidx] = BASE_MOTE_REGENERATION_TICKS;
+      }
     }
   }
 }
@@ -344,6 +386,19 @@ export function tickMoteSlotRegeneration(world: WorldState): void {
       // Cooldown reached zero last tick — restore the slot and start flash.
       world.moteSlotState[i]              = MOTE_STATE_AVAILABLE;
       world.moteRegenFlashTicksLeft[i]    = MOTE_REGEN_FLASH_TICKS;
+      // Invariant: if the physical particle is still dead (e.g., its respawn
+      // delay was extended by syncMoteQueueWithParticles), schedule it to
+      // respawn on the next lifetime tick.  This keeps the physical particle
+      // in sync with the logical slot so it orbits again as soon as the mote
+      // is logically available.
+      // Note: while the player is airborne, updateParticleLifetimes freezes
+      // the countdown for player-owned particles, so the particle may not
+      // actually respawn until the player lands.  This is a known, documented
+      // exception (see combatDustPolishDecisions.md).
+      const pidx = world.moteSlotParticleIndex[i];
+      if (pidx >= 0 && pidx < world.particleCount && world.isAliveFlag[pidx] === 0) {
+        world.respawnDelayTicks[pidx] = 1;  // respawn on next lifetime tick
+      }
     }
   }
 }
