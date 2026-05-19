@@ -46,6 +46,9 @@ const _SPECIAL_BLOCKS_GLOB = import.meta.glob(
 );
 
 /** Subset of specialBLOCKS folders that are also valid wall themes. */
+// Only folders representing static wall textures are valid wall themes.
+// Folders like 'kineticBlock' and 'fallingBlockOverlay' are dynamic overlays
+// drawn by the hazard renderer, not by the wall texture system.
 const _SPECIAL_WALL_THEMES = new Set(['iceBlock']);
 
 // ── Folder name filter ────────────────────────────────────────────────────────

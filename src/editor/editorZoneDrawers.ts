@@ -10,7 +10,7 @@
  * Called by renderEditorOverlays via re-exports in editorOverlayDrawers.ts.
  */
 
-import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { BLOCK_SIZE_SMALL, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { EditorState, EditorRoomData } from './editorState';
 import { EditorTool } from './editorState';
 import { ropeLineCrossesWall } from './editorHitTest';
@@ -207,10 +207,10 @@ export function drawEditorKineticBlocks(
 ): void {
   for (const kb of (room.kineticBlocks ?? [])) {
     const sel = isSelected('kineticBlock', kb.uid);
-    const xPx = kb.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
-    const yPx = kb.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
-    const wPx = kb.wBlock * BLOCK_SIZE_SMALL * zoom;
-    const hPx = kb.hBlock * BLOCK_SIZE_SMALL * zoom;
+    const xPx = kb.xBlock * BLOCK_SIZE_MEDIUM * zoom + offsetXPx;
+    const yPx = kb.yBlock * BLOCK_SIZE_MEDIUM * zoom + offsetYPx;
+    const wPx = kb.wBlock * BLOCK_SIZE_MEDIUM * zoom;
+    const hPx = kb.hBlock * BLOCK_SIZE_MEDIUM * zoom;
 
     const fillAlpha = sel ? 0.45 : 0.25;
     const strokeAlpha = sel ? 1.0 : 0.65;

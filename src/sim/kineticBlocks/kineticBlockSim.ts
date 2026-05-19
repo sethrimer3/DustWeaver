@@ -4,14 +4,15 @@
  */
 
 import type { WorldState } from '../world';
+import { KINETIC_BLOCK_ANIM_SPEED_PER_TICK } from './kineticBlockTypes';
 
 /**
  * Advances kinetic block animation state by one tick.
- * Each block's animPhase increments by 3, wrapping at 256.
+ * Each block's animPhase increments, wrapping at 256.
  */
 export function tickKineticBlocks(world: WorldState): void {
   const count = world.kineticBlockCount;
   for (let i = 0; i < count; i++) {
-    world.kineticBlockAnimPhase[i] = (world.kineticBlockAnimPhase[i] + 3) & 255;
+    world.kineticBlockAnimPhase[i] = (world.kineticBlockAnimPhase[i] + KINETIC_BLOCK_ANIM_SPEED_PER_TICK) & 255;
   }
 }
