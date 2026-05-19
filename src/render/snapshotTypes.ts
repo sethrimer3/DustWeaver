@@ -31,6 +31,15 @@ export interface ParticleSnapshot {
    * Used by the renderer to keep offensive particles at their full 4×4 size.
    */
   readonly behaviorMode:      Uint8Array;
+  /**
+   * Per-particle mote slot state: 0 = available (normal render), 1 = depleted.
+   * Non-zero for player mote particles whose logical slot is currently depleted.
+   * Zero for all non-mote and non-player particles.
+   * Renderers apply a reduced alpha (0.25×) to depleted-slot particles as a
+   * "spent" visual cue.  Populated each frame by scanning world.moteSlotParticleIndex
+   * and world.moteSlotState — O(MAX_MOTE_SLOTS) per frame.
+   */
+  readonly particleMoteSlotState: Uint8Array;
   readonly particleCount:     number;
 }
 

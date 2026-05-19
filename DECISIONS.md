@@ -134,6 +134,24 @@ The `kind` drives element colour selection in the GLSL fragment shader.
 `normalizedAge` (ageTicks / lifetimeTicks) drives alpha fade and point-size
 shrink in the vertex shader — particles visually decay as they age out.
 
+### WebGL Vertex Format — Current (BUILD 367)
+`[x, y, kind, normalizedAge, disturbanceFactor, isOffensive, isSpent]` (7 floats)
+
+- `x, y` — screen-space position in virtual pixels.
+- `kind` — `ParticleKind` enum value; drives colour and shape in the fragment shader.
+- `normalizedAge` — `ageTicks / lifetimeTicks` in [0, 1]; drives alpha fade and
+  point-size shrink.
+- `disturbanceFactor` — [0, 1]; non-zero only for Fluid particles; drives alpha.
+- `isOffensive` — 1.0 when `behaviorMode === 1` (attack mode); keeps particle at
+  full size throughout its lifetime.
+- `isSpent` — 1.0 when the particle's logical mote slot is currently depleted
+  (`particleMoteSlotState !== 0`).  Fragment shader applies `alpha *= 0.25` to
+  give a faded "spent" look for depleted mote particles.
+
+`particleMoteSlotState` is populated each frame in `updateSnapshotInPlace`
+by scanning `world.moteSlotParticleIndex` + `world.moteSlotState` (O(MAX_MOTE_SLOTS));
+pre-allocated `Uint8Array(MAX_PARTICLES)` in the reusable snapshot; no per-frame alloc.
+
 ## Renderer Performance (BUILD 156 — Eliminate rAF Violation Warnings)
 
 ### Reusable WorldSnapshot

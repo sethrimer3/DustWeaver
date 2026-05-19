@@ -74,7 +74,7 @@ export function orchestrateRoomTransitions(
       const newPlayer = world.clusters[0];
       if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
         newPlayer.velocityXWorld = preTransVX;
-        newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
+        newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD * 0.5 : preTransVY;
       }
 
       if (ENABLE_TRANSITION_CAMERA_REVEAL) {

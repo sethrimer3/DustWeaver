@@ -1,8 +1,8 @@
 /**
  * GLSL shader sources for WebGL particle rendering.
  *
- * Vertex format (per particle): [x, y, kind, normalizedAge, disturbanceFactor, isOffensive]
- *                                (6 floats)
+ * Vertex format (per particle): [x, y, kind, normalizedAge, disturbanceFactor, isOffensive, isSpent]
+ *                                (7 floats)
  *
  * Design goals:
  *  - Single draw call for all particles via gl.POINTS / point sprites.
@@ -14,6 +14,8 @@
  *  - Additive blending (SRC_ALPHA, ONE) produces natural bloom.
  *  - Fluid particles (kind 14) are normally transparent; disturbanceFactor
  *    drives their alpha so they appear only when disturbed by nearby movement.
+ *  - isSpent (a_isSpent == 1.0): particle's mote slot is currently depleted;
+ *    alpha reduced to 25% as a "spent" visual cue.
  *  - GLSL ES 1.00 for maximum device compatibility.
  */
 
@@ -24,6 +26,7 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
   attribute float a_normalizedAge;
   attribute float a_disturbanceFactor;
   attribute float a_isOffensive;
+  attribute float a_isSpent;
 
   uniform vec2  u_resolution;
   uniform float u_pointSizePx;
@@ -31,6 +34,7 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
   varying float v_kind;
   varying float v_normalizedAge;
   varying float v_disturbanceFactor;
+  varying float v_isSpent;
 
   void main() {
     vec2 clip = (a_positionScreen / u_resolution) * 2.0 - 1.0;
@@ -50,6 +54,7 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
     v_kind              = a_kind;
     v_normalizedAge     = a_normalizedAge;
     v_disturbanceFactor = a_disturbanceFactor;
+    v_isSpent           = a_isSpent;
   }
 `.trim();
 
@@ -70,6 +75,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
   varying float v_kind;
   varying float v_normalizedAge;
   varying float v_disturbanceFactor;
+  varying float v_isSpent;
 
   const float PI = 3.14159265;
 
@@ -245,7 +251,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
       alpha = (0.7 + innerGlow * 0.3) * ageFade;
     }
 
-    gl_FragColor = vec4(color, alpha);
+    gl_FragColor = vec4(color, alpha * (v_isSpent > 0.5 ? 0.25 : 1.0));
   }
 `.trim();
 

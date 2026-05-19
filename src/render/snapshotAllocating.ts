@@ -14,6 +14,7 @@ import { WorldState } from '../sim/world';
 import { ClusterState } from '../sim/clusters/state';
 import { INFLUENCE_RADIUS_WORLD } from '../sim/clusters/binding';
 import { DASH_COOLDOWN_TICKS } from '../sim/clusters/dashConstants';
+import { MAX_PARTICLES } from '../sim/particles/state';
 import type { WorldSnapshot, ClusterSnapshot } from './snapshotTypes';
 
 /**
@@ -118,6 +119,14 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       lifetimeTicks:     world.lifetimeTicks,
       disturbanceFactor: world.disturbanceFactor,
       behaviorMode:      world.behaviorMode,
+      particleMoteSlotState: (() => {
+        const arr = new Uint8Array(MAX_PARTICLES);
+        for (let s = 0; s < world.moteSlotCount; s++) {
+          const pidx = world.moteSlotParticleIndex[s];
+          if (pidx >= 0 && world.moteSlotState[s] !== 0) arr[pidx] = 1;
+        }
+        return arr;
+      })(),
       particleCount:     world.particleCount,
     },
     clusters: clusterSnapshots,
