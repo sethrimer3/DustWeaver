@@ -612,5 +612,41 @@ To surface these in the debug HUD, pass the result from `getWallJumpCandidate` t
 ### Remaining / deferred
 
 1. The `dbgLeft`/`dbgRight` strings are not yet wired to the on-screen debug overlay. This is a render-layer task.
-2. `getNearbyWallForWallJump` in `movementAxisResolvers.ts` is now unused by the main player-movement path. It can be removed or repurposed in a future cleanup pass.
+2. ~~`getNearbyWallForWallJump` in `movementAxisResolvers.ts` is now unused by the main player-movement path. It can be removed or repurposed in a future cleanup pass.~~ **Done in BUILD 366.**
 3. Tuning values above should be validated against the full room set before merging to main.
+
+---
+
+## BUILD 366 — Upward transition velocity note + cleanup
+
+### What Was Completed in BUILD 366
+
+1. **Removed unused `getNearbyWallForWallJump`** (BUILD 360 cleanup item):
+   - Deleted the function from `src/sim/clusters/movementAxisResolvers.ts`.
+   - Removed the corresponding re-export from `src/sim/clusters/movementCollision.ts`.
+   - Removed the now-unused `WALL_JUMP_PROXIMITY_PIXELS` import from `movementAxisResolvers.ts`
+     (the constant is still exported from `movementConstants.ts` and used in `playerWallJump.ts`).
+
+### Remaining / deferred
+
+#### Reduce upward room-transition velocity boost to 50 %
+
+**File:** `src/screens/gameRoomTransitionOrchestrator.ts` (line 77)
+
+**Issue:** When the player exits upward through a room transition, the code adds a full
+`PLAYER_JUMP_SPEED_WORLD` (255 wu/s) of upward velocity on top of the player's
+pre-transition velocity.  Play-testing shows this makes the player jump too high in
+the new room.
+
+**Fix:** Change the multiplier from `1.0` to `0.5`:
+
+```typescript
+// Before
+newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
+
+// After
+newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD * 0.5 : preTransVY;
+```
+
+**Risk:** Low — affects only the upward-transition code path; no other movement is changed.
+

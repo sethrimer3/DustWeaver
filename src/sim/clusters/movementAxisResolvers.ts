@@ -19,7 +19,6 @@ import {
   COLLISION_EPSILON,
   BLOCK_POP_MAX_PIXELS,
   JUMP_CORNER_CORRECTION_PIXELS,
-  WALL_JUMP_PROXIMITY_PIXELS,
   debugSpeedOverrides,
   ov,
 } from './movementConstants';
@@ -99,60 +98,6 @@ export function hasWallOverlapAtPosition(
     return true;
   }
   return false;
-}
-
-/**
- * Returns the gap distance (world units) between the player AABB and the nearest
- * solid wall on each side, clamped to WALL_JUMP_PROXIMITY_PIXELS.
- * Returns Infinity when no wall is within proximity on a given side.
- *
- * Used to implement the wide wall-jump window: the player can initiate a wall
- * jump even when slightly away from a wall face.
- */
-export function getNearbyWallForWallJump(
-  cluster: ClusterState,
-  world: WorldState,
-): { nearLeftDistWorld: number; nearRightDistWorld: number } {
-  const hw = cluster.halfWidthWorld;
-  const hh = cluster.halfHeightWorld;
-  const posX = cluster.positionXWorld;
-  const posY = cluster.positionYWorld;
-  const proximity = ov(debugSpeedOverrides.wallJumpProximityPixels, WALL_JUMP_PROXIMITY_PIXELS);
-
-  const top    = posY - hh;
-  const bottom = posY + hh;
-  const playerLeft  = posX - hw;
-  const playerRight = posX + hw;
-
-  let nearLeftDistWorld  = Infinity;
-  let nearRightDistWorld = Infinity;
-
-  for (let wi = 0; wi < world.wallCount; wi++) {
-    if (world.wallIsPlatformFlag[wi] === 1) continue;
-    if (world.wallRampOrientationIndex[wi] !== 255) continue;
-
-    const wallLeft   = world.wallXWorld[wi];
-    const wallTop    = world.wallYWorld[wi];
-    const wallRight  = wallLeft + world.wallWWorld[wi];
-    const wallBottom = wallTop + world.wallHWorld[wi];
-
-    // Require vertical overlap with the player box.
-    if (bottom <= wallTop || top >= wallBottom) continue;
-
-    // Left side: wall face is to the player's left and within proximity.
-    const leftGap = playerLeft - wallRight;
-    if (leftGap >= 0 && leftGap <= proximity) {
-      nearLeftDistWorld = Math.min(nearLeftDistWorld, leftGap);
-    }
-
-    // Right side: wall face is to the player's right and within proximity.
-    const rightGap = wallLeft - playerRight;
-    if (rightGap >= 0 && rightGap <= proximity) {
-      nearRightDistWorld = Math.min(nearRightDistWorld, rightGap);
-    }
-  }
-
-  return { nearLeftDistWorld, nearRightDistWorld };
 }
 
 /**
