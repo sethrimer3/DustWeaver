@@ -253,7 +253,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
       world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
       world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined, undefined);
-      world.wallIsInvisibleFlag[wallIdx] = 0;
+      world.wallIsInvisibleFlag[wallIdx] = 1;  // kinetic block renders itself in hazards.ts
       world.wallIsPlatformFlag[wallIdx] = 0;
       world.wallPlatformEdge[wallIdx] = 0;
       world.wallRampOrientationIndex[wallIdx] = 255;
