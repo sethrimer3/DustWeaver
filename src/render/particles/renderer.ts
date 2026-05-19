@@ -136,7 +136,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     particleCount, isAliveFlag,
     positionXWorld, positionYWorld,
     kindBuffer, ageTicks, lifetimeTicks,
-    disturbanceFactor, behaviorMode,
+    disturbanceFactor, behaviorMode, particleMoteSlotState,
   } = particles;
 
   // Radius in screen pixels: world-unit radius scaled by zoom.
@@ -159,9 +159,12 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     const ageFade = 1.0 - normAge;
 
     // Fluid background particles are only visible when disturbed
-    const alpha = kind === ParticleKind.Fluid
+    let alpha = kind === ParticleKind.Fluid
       ? disturbanceFactor[i] * ageFade * 0.55
       : ageFade;
+
+    // Depleted mote slot: render at 25% alpha as a "spent" visual cue.
+    if (particleMoteSlotState[i] !== 0) alpha *= 0.25;
 
     if (alpha <= MIN_VISIBLE_ALPHA) continue;
 

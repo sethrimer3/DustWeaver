@@ -617,36 +617,38 @@ To surface these in the debug HUD, pass the result from `getWallJumpCandidate` t
 
 ---
 
-## BUILD 366 — Upward transition velocity note + cleanup
+## BUILD 367 — Upward transition velocity fix + depleted mote spent-state visual
 
-### What Was Completed in BUILD 366
+### What Was Completed in BUILD 367
 
-1. **Removed unused `getNearbyWallForWallJump`** (BUILD 360 cleanup item):
-   - Deleted the function from `src/sim/clusters/movementAxisResolvers.ts`.
-   - Removed the corresponding re-export from `src/sim/clusters/movementCollision.ts`.
-   - Removed the now-unused `WALL_JUMP_PROXIMITY_PIXELS` import from `movementAxisResolvers.ts`
-     (the constant is still exported from `movementConstants.ts` and used in `playerWallJump.ts`).
+1. **Reduced upward room-transition velocity boost to 50 %**
+   (`src/screens/gameRoomTransitionOrchestrator.ts`):
+   - Changed multiplier from `1.0` to `0.5` for the upward-transition velocity carry-over.
+   - `newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD * 0.5 : preTransVY;`
+   - Resolves the over-boosted launch into the new room reported during play-testing.
+
+2. **Depleted mote particle "spent" visual** (BUILD 359 remaining item):
+   - Added `particleMoteSlotState: Uint8Array` to `ParticleSnapshot` in
+     `src/render/snapshotTypes.ts` — per-particle flag: 0 = available, 1 = depleted.
+   - Populated each frame in `updateSnapshotInPlace` (`src/render/snapshot.ts`) by
+     scanning `world.moteSlotParticleIndex` and `world.moteSlotState` — O(MAX_MOTE_SLOTS)
+     per frame, no allocation.
+   - Also populated in `createSnapshot` (`src/render/snapshotAllocating.ts`) for the
+     editor preview path.
+   - Canvas 2D renderer (`src/render/particles/renderer.ts`): applies `alpha *= 0.25`
+     for particles with `particleMoteSlotState[i] !== 0`.
+   - WebGL renderer (`src/render/particles/webglRenderer.ts` + `shaders.ts`):
+     - Added 7th float attribute `a_isSpent` to vertex format (`FLOATS_PER_VERTEX` 6 → 7).
+     - Fragment shader multiplies `alpha` by `0.25` when `v_isSpent > 0.5`.
+   - As documented in BUILD 359, the physical/logical invariant means the particle is
+     usually dead during the depletion period; the spent visual mainly covers the ~1-tick
+     window after airborne landing.
 
 ### Remaining / deferred
 
-#### Reduce upward room-transition velocity boost to 50 %
+1. Mote kind colors for sword blade segments (`swordWeaveRenderer.ts`) — requires adding
+   `particleMoteSlotKind: Uint8Array` to `ParticleSnapshot` following the same pattern.
+2. Tuning values from BUILD 360 (`WALL_JUMP_MIN_AIRBORNE_TICKS`, etc.) should be
+   validated against the full room set before merging to main.
 
-**File:** `src/screens/gameRoomTransitionOrchestrator.ts` (line 77)
-
-**Issue:** When the player exits upward through a room transition, the code adds a full
-`PLAYER_JUMP_SPEED_WORLD` (255 wu/s) of upward velocity on top of the player's
-pre-transition velocity.  Play-testing shows this makes the player jump too high in
-the new room.
-
-**Fix:** Change the multiplier from `1.0` to `0.5`:
-
-```typescript
-// Before
-newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD : preTransVY;
-
-// After
-newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD * 0.5 : preTransVY;
-```
-
-**Risk:** Low — affects only the upward-transition code path; no other movement is changed.
 

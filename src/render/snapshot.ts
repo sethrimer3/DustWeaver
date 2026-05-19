@@ -2,6 +2,7 @@ import { WorldState } from '../sim/world';
 import { ClusterState } from '../sim/clusters/state';
 import { INFLUENCE_RADIUS_WORLD } from '../sim/clusters/binding';
 import { DASH_COOLDOWN_TICKS } from '../sim/clusters/dashConstants';
+import { MAX_PARTICLES } from '../sim/particles/state';
 
 // Re-export public snapshot interfaces from their dedicated types module so
 // that all existing `import { ... } from './snapshot'` callers continue to
@@ -27,7 +28,7 @@ type _MutableCluster = { -readonly [K in keyof ClusterSnapshot]: ClusterSnapshot
 interface _ReusableBacking {
   tick: number;
   /** Sub-object whose typed-array fields are fixed references; only particleCount changes. */
-  readonly particles: { particleCount: number };
+  readonly particles: { particleCount: number; particleMoteSlotState: Uint8Array };
   clusters: _MutableCluster[];
   /** Sub-object whose typed-array fields are fixed references; only count changes. */
   readonly walls: { count: number };
@@ -339,6 +340,7 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
       lifetimeTicks:     world.lifetimeTicks,
       disturbanceFactor: world.disturbanceFactor,
       behaviorMode:      world.behaviorMode,
+      particleMoteSlotState: new Uint8Array(MAX_PARTICLES),
       particleCount:     world.particleCount,
     },
     clusters,
@@ -500,6 +502,19 @@ export function updateSnapshotInPlace(
   b.tick = world.tick;
   b.particles.particleCount = world.particleCount;
   b.walls.count             = world.wallCount;
+
+  // Populate per-particle mote slot state from the logical mote queue.
+  // O(MAX_MOTE_SLOTS): zero-fill then mark each slot's linked particle.
+  b.particles.particleMoteSlotState.fill(0);
+  const slotCount           = world.moteSlotCount;
+  const moteSlotPIdx        = world.moteSlotParticleIndex;
+  const moteSlotState       = world.moteSlotState;
+  for (let s = 0; s < slotCount; s++) {
+    const pidx = moteSlotPIdx[s];
+    if (pidx >= 0 && moteSlotState[s] !== 0) {
+      b.particles.particleMoteSlotState[pidx] = 1;
+    }
+  }
 
   b.isGrappleActiveFlag       = world.isGrappleActiveFlag;
   b.isGrappleMissActiveFlag   = world.isGrappleMissActiveFlag;
