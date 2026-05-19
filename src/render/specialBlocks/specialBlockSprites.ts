@@ -37,6 +37,10 @@ function _buildKineticBlockUrls(): void {
 /**
  * Returns an HTMLImageElement for the kinetic block sprite at variation index `varIdx`.
  * Returns null if no sprites are available or the image is still loading.
+ *
+ * Reserved for future sprite-based rendering. Kinetic blocks currently use
+ * procedural ice-blue drawing in hazards.ts; call this here if you want to
+ * overlay a custom sprite instead.
  */
 export function getKineticBlockSprite(varIdx: number): HTMLImageElement | null {
   _buildKineticBlockUrls();

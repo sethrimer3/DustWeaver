@@ -324,6 +324,7 @@ export function resolveWallsX(
 
     // Determine push direction from previous position
     if (prevRight <= wallLeft + COLLISION_EPSILON) {
+      // Step-up is disabled for kinetic blocks so the boost always fires rather than silently stepping.
       if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallTop, 1, wasGrounded)) continue;
       // Was to the left of wall — push out left
       cluster.positionXWorld = wallLeft - hw;

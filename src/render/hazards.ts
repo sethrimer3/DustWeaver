@@ -251,7 +251,7 @@ export function renderHazards(
     ctx.lineWidth = zoom;
     ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
 
-    // Arrow indicator showing launch direction (upward by default)
+    // Decorative upward arrow — purely visual, actual launch direction depends on contact face
     const cx = bx + bw * 0.5;
     const cy = by + bh * 0.5;
     const arrowLen = Math.min(bw, bh) * 0.35;
