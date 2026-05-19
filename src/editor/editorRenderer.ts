@@ -22,6 +22,7 @@ import {
   drawEditorLiquidZones,
   drawEditorCrumbleBlocks,
   drawEditorBouncePads,
+  drawEditorKineticBlocks,
   drawEditorEnvironmentItems,
   drawEditorRopes,
   drawEditorDialogueTriggers,
@@ -91,6 +92,7 @@ export function renderEditorOverlays(
   drawEditorLiquidZones(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorEnvironmentItems(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorRopes(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorDialogueTriggers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);

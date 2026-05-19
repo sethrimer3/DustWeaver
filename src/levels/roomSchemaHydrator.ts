@@ -284,6 +284,17 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       return entry;
     });
   }
+  if (saved.kineticBlocks && saved.kineticBlocks.length > 0) {
+    json.kineticBlocks = saved.kineticBlocks.map(kb => {
+      const entry: { xBlock: number; yBlock: number; wBlock?: number; hBlock?: number } = {
+        xBlock: kb.r[0],
+        yBlock: kb.r[1],
+      };
+      if (kb.r[2] !== 1) entry.wBlock = kb.r[2];
+      if (kb.r[3] !== 1) entry.hBlock = kb.r[3];
+      return entry;
+    });
+  }
   if (saved.ropes && saved.ropes.length > 0) {
     // `fixed` defaults to true (both ends pinned); only `false` is stored.
     json.ropes = saved.ropes.map(r => ({ ...r, fixed: r.fixed === false ? false : undefined }));

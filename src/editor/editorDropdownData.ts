@@ -49,6 +49,8 @@ export interface PaletteItem {
   isBouncePadItem?: 1;
   /** Speed-factor index for the placed bounce pad: 0=50%, 1=100%. */
   bouncePadSpeedFactorIndex?: 0 | 1;
+  /** 1 if this palette item places a kinetic block (fixed-velocity boost on contact). */
+  isKineticBlockItem?: 1;
   /** 1 if this palette item places a collectible dust container (grants +4 max capacity). */
   isDustContainerItem?: 1;
   /** 1 if this palette item places a collectible dust container piece. */
@@ -201,6 +203,9 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'bounce_pad_ramp_1x1_bright', label: 'Bounce Ramp 1×1 (100%)', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
   { id: 'bounce_pad_ramp_1x2_bright', label: 'Bounce Ramp 1×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
   { id: 'bounce_pad_ramp_2x2_bright', label: 'Bounce Ramp 2×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
+  // ── Kinetic blocks (impart fixed directional velocity boost on contact) ───
+  { id: 'kinetic_block_1x1', label: 'Kinetic Block 1×1', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isKineticBlockItem: 1 },
+  { id: 'kinetic_block_2x2', label: 'Kinetic Block 2×2', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isKineticBlockItem: 1 },
   // ── Falling blocks (triggers as rigid group when disturbed) ──────────────
   { id: 'falling_block_tough',     label: 'Falling Block, Tough',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'tough' as const },
   { id: 'falling_block_sensitive', label: 'Falling Block, Sensitive', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'sensitive' as const },

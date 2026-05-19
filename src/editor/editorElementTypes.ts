@@ -230,6 +230,17 @@ export interface EditorBouncePad {
   speedFactorIndex: 0 | 1;
 }
 
+/** A kinetic block — imparts a fixed directional velocity boost to the player on contact. */
+export interface EditorKineticBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock: number;
+  /** Height in blocks (default 1). */
+  hBlock: number;
+}
+
 // ── Tombs ─────────────────────────────────────────────────────────────────────
 
 /** Save Tomb — where the player saves their progress. */
@@ -502,6 +513,7 @@ export interface EditorRoomData {
   crumbleBlocks?: EditorCrumbleBlock[];
   /** Bounce pads placed in this room (reflect player velocity on contact). */
   bouncePads?: EditorBouncePad[];
+  kineticBlocks?: EditorKineticBlock[];
   /** Ropes placed in this room. */
   ropes?: EditorRope[];
   /** Sunbeams placed in this room. */
@@ -518,7 +530,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'kineticBlock' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

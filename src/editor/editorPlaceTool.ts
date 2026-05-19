@@ -10,7 +10,7 @@ const ROPE_SEGMENTS_PER_BLOCK = 1.5;
 
 import {
   EditorState, EditorTool, allocateUid,
-  PaletteItem, DecorationKind, EditorBouncePad, EditorSunbeam, EditorFallingBlock,
+  PaletteItem, DecorationKind, EditorBouncePad, EditorKineticBlock, EditorSunbeam, EditorFallingBlock,
   EditorDialogueTrigger,
 } from './editorState';
 import { createDefaultLight } from '../render/lighting/lightingTypes';
@@ -249,6 +249,29 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         speedFactorIndex: item.bouncePadSpeedFactorIndex ?? 0,
       };
       room.bouncePads.push(bp);
+      return;
+    }
+
+    if (item.isKineticBlockItem === 1) {
+      const kbW = getPlacementWidth(item, state.placementRotationSteps);
+      const kbH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, kbW, kbH)) return;
+      const existingKineticBlocks = room.kineticBlocks ?? [];
+      const overlapsKinetic = existingKineticBlocks.some(kb =>
+        bx < kb.xBlock + kb.wBlock && bx + kbW > kb.xBlock &&
+        by < kb.yBlock + kb.hBlock && by + kbH > kb.yBlock,
+      );
+      if (overlapsKinetic) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, kbW, kbH)) return;
+      if (!room.kineticBlocks) room.kineticBlocks = [];
+      const kb: EditorKineticBlock = {
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        wBlock: kbW,
+        hBlock: kbH,
+      };
+      room.kineticBlocks.push(kb);
       return;
     }
 

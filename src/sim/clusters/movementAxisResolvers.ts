@@ -23,6 +23,7 @@ import {
   debugSpeedOverrides,
   ov,
 } from './movementConstants';
+import { KINETIC_BLOCK_BOOST_SPEED_WORLD } from '../kineticBlocks/kineticBlockTypes';
 
 /** Set to true to log bounce pad events to the console for debugging. */
 const DEBUG_BOUNCE_PADS = false;
@@ -316,16 +317,20 @@ export function resolveWallsX(
     const prevRight = prevXWorld + hw;
     const prevLeft  = prevXWorld - hw;
 
-    const isBounce = world.wallIsBouncePadFlag[wi] === 1;
+    const isBounce  = world.wallIsBouncePadFlag[wi] === 1;
+    const isKinetic = world.wallIsKineticBlockFlag[wi] === 1;
     // Speed factor for bounce: index 0 → 50 %, index 1 → 100 %
     const bounceSf = isBounce ? (world.wallBouncePadSpeedFactorIndex[wi] === 1 ? 1.0 : 0.5) : 0.0;
 
     // Determine push direction from previous position
     if (prevRight <= wallLeft + COLLISION_EPSILON) {
-      if (!isBounce && tryStepUpSingleBlock(cluster, world, wallTop, 1, wasGrounded)) continue;
+      // Step-up is disabled for kinetic blocks so the boost always fires rather than silently stepping.
+      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallTop, 1, wasGrounded)) continue;
       // Was to the left of wall — push out left
       cluster.positionXWorld = wallLeft - hw;
-      if (isBounce) {
+      if (isKinetic) {
+        cluster.velocityXWorld = -KINETIC_BLOCK_BOOST_SPEED_WORLD;
+      } else if (isBounce) {
         if (cluster.velocityXWorld > 0) {
           const inVX = cluster.velocityXWorld;
           cluster.velocityXWorld = -inVX * bounceSf;
@@ -338,10 +343,12 @@ export function resolveWallsX(
         if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
       }
     } else if (prevLeft >= wallRight - COLLISION_EPSILON) {
-      if (!isBounce && tryStepUpSingleBlock(cluster, world, wallTop, -1, wasGrounded)) continue;
+      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallTop, -1, wasGrounded)) continue;
       // Was to the right of wall — push out right
       cluster.positionXWorld = wallRight + hw;
-      if (isBounce) {
+      if (isKinetic) {
+        cluster.velocityXWorld = +KINETIC_BLOCK_BOOST_SPEED_WORLD;
+      } else if (isBounce) {
         if (cluster.velocityXWorld < 0) {
           const inVX = cluster.velocityXWorld;
           cluster.velocityXWorld = -inVX * bounceSf;
@@ -360,7 +367,9 @@ export function resolveWallsX(
       const penRight = wallRight - left;
       if (penLeft < penRight) {
         cluster.positionXWorld = wallLeft - hw;
-        if (isBounce) {
+        if (isKinetic) {
+          cluster.velocityXWorld = -KINETIC_BLOCK_BOOST_SPEED_WORLD;
+        } else if (isBounce) {
           if (cluster.velocityXWorld > 0) {
             const inVX = cluster.velocityXWorld;
             cluster.velocityXWorld = -inVX * bounceSf;
@@ -374,7 +383,9 @@ export function resolveWallsX(
         }
       } else {
         cluster.positionXWorld = wallRight + hw;
-        if (isBounce) {
+        if (isKinetic) {
+          cluster.velocityXWorld = +KINETIC_BLOCK_BOOST_SPEED_WORLD;
+        } else if (isBounce) {
           if (cluster.velocityXWorld < 0) {
             const inVX = cluster.velocityXWorld;
             cluster.velocityXWorld = -inVX * bounceSf;
@@ -457,7 +468,8 @@ export function resolveWallsY(
 
     const prevTop    = prevYWorld - hh;
 
-    const isBounce = world.wallIsBouncePadFlag[wi] === 1;
+    const isBounce  = world.wallIsBouncePadFlag[wi] === 1;
+    const isKinetic = world.wallIsKineticBlockFlag[wi] === 1;
     const bounceSf = isBounce ? (world.wallBouncePadSpeedFactorIndex[wi] === 1 ? 1.0 : 0.5) : 0.0;
     const isIce = world.wallIsIceFlag[wi] === 1;
 
@@ -465,7 +477,10 @@ export function resolveWallsY(
     if (prevBottom <= wallTop + COLLISION_EPSILON && cluster.velocityYWorld >= 0) {
       // Was above wall — land on top
       cluster.positionYWorld = wallTop - hh;
-      if (isBounce) {
+      if (isKinetic) {
+        cluster.velocityYWorld = -KINETIC_BLOCK_BOOST_SPEED_WORLD;
+        // Do NOT set isGroundedFlag — kinetic block launches the player upward
+      } else if (isBounce) {
         const inVY = cluster.velocityYWorld;
         cluster.velocityYWorld = -inVY * bounceSf;
         // Do NOT set isGroundedFlag — player cannot ground-jump off a bounce pad
@@ -481,13 +496,15 @@ export function resolveWallsY(
     } else if (prevTop >= wallBottom - COLLISION_EPSILON && cluster.velocityYWorld <= 0) {
       // Was below wall — bonked ceiling moving upward.
       // Attempt jump corner correction before committing to the ceiling response.
-      if (!isBounce && tryJumpCornerCorrection(cluster, world, wi)) {
+      if (!isBounce && !isKinetic && tryJumpCornerCorrection(cluster, world, wi)) {
         // Corner was cleared — skip velocity zeroing for this wall and continue.
         continue;
       }
       // Normal ceiling response.
       cluster.positionYWorld = wallBottom + hh;
-      if (isBounce) {
+      if (isKinetic) {
+        cluster.velocityYWorld = +KINETIC_BLOCK_BOOST_SPEED_WORLD;
+      } else if (isBounce) {
         if (cluster.velocityYWorld < 0) {
           const inVY = cluster.velocityYWorld;
           cluster.velocityYWorld = -inVY * bounceSf;
@@ -505,7 +522,9 @@ export function resolveWallsY(
       const penBottom = wallBottom - top;
       if (penTop < penBottom) {
         cluster.positionYWorld = wallTop - hh;
-        if (isBounce) {
+        if (isKinetic) {
+          cluster.velocityYWorld = -KINETIC_BLOCK_BOOST_SPEED_WORLD;
+        } else if (isBounce) {
           const inVY = cluster.velocityYWorld;
           cluster.velocityYWorld = -inVY * bounceSf;
           bounceScratch.bouncedY = true;
@@ -519,7 +538,9 @@ export function resolveWallsY(
         }
       } else {
         cluster.positionYWorld = wallBottom + hh;
-        if (isBounce) {
+        if (isKinetic) {
+          cluster.velocityYWorld = +KINETIC_BLOCK_BOOST_SPEED_WORLD;
+        } else if (isBounce) {
           if (cluster.velocityYWorld < 0) {
             const inVY = cluster.velocityYWorld;
             cluster.velocityYWorld = -inVY * bounceSf;

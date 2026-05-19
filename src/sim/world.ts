@@ -12,6 +12,7 @@ export {
   MAX_DUST_BOOST_JARS, MAX_FIREFLY_JARS, MAX_FIREFLIES, FIREFLIES_PER_JAR,
   MAX_DUST_PILES, MAX_GRASSHOPPERS, GRASSHOPPER_INITIAL_TIMER_MAX_TICKS,
   MAX_SQUARE_STAMPEDE, SQUARE_STAMPEDE_TRAIL_COUNT, MAX_BEE_SWARMS, BEES_PER_SWARM,
+  MAX_KINETIC_BLOCKS,
 } from './worldHazardState';
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
@@ -96,6 +97,18 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * to flag ice landings and by the grapple system to reject attachment.
    */
   wallIsIceFlag: Uint8Array;
+
+  /**
+   * 1 if the corresponding wall is a kinetic block (gives the player a
+   * directional velocity boost on contact, rather than reflecting like a
+   * bounce pad).
+   */
+  wallIsKineticBlockFlag: Uint8Array;
+  /**
+   * Index into the kinetic block arrays in HazardWorldState for this wall.
+   * -1 if this wall is not a kinetic block.
+   */
+  wallKineticBlockIndex: Int16Array;
 
   // ── Ropes ──────────────────────────────────────────────────────────────────
   /** Number of ropes in the current room. */
@@ -424,6 +437,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsBouncePadFlag: new Uint8Array(MAX_WALLS),
     wallBouncePadSpeedFactorIndex: new Uint8Array(MAX_WALLS),
     wallIsIceFlag: new Uint8Array(MAX_WALLS),
+    wallIsKineticBlockFlag:           new Uint8Array(MAX_WALLS),
+    wallKineticBlockIndex:            new Int16Array(MAX_WALLS).fill(-1),
     ropeCount: 0,
     ropeSegmentCount:       new Uint8Array(MAX_ROPES),
     ropeAnchorAXWorld:      new Float32Array(MAX_ROPES),

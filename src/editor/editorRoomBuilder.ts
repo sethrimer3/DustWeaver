@@ -298,6 +298,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       rampOrientation: b.rampOrientation,
       speedFactorIndex: b.speedFactorIndex !== 0 ? b.speedFactorIndex : undefined,
     })),
+    kineticBlocks: (data.kineticBlocks ?? []).map(kb => ({
+      xBlock: kb.xBlock,
+      yBlock: kb.yBlock,
+      wBlock: kb.wBlock !== 1 ? kb.wBlock : undefined,
+      hBlock: kb.hBlock !== 1 ? kb.hBlock : undefined,
+    })),
     ropes: (data.ropes ?? []).map(r => ({
       anchorAXBlock: r.anchorAXBlock,
       anchorAYBlock: r.anchorAYBlock,

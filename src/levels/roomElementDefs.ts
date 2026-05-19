@@ -110,6 +110,21 @@ export interface RoomBouncePadDef {
   speedFactorIndex?: 0 | 1;
 }
 
+/**
+ * A kinetic block: imparts a fixed directional velocity boost of
+ * KINETIC_BLOCK_BOOST_SPEED_WORLD to the player on contact.
+ * Unlike bounce pads, kinetic blocks set an absolute velocity rather
+ * than reflecting the incoming velocity.
+ */
+export interface RoomKineticBlockDef {
+  xBlock: number;
+  yBlock: number;
+  /** Width in blocks (default 1). */
+  wBlock?: number;
+  /** Height in blocks (default 1). */
+  hBlock?: number;
+}
+
 // ── Rope types ────────────────────────────────────────────────────────────────
 
 /**

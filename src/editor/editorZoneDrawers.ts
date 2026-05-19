@@ -10,7 +10,7 @@
  * Called by renderEditorOverlays via re-exports in editorOverlayDrawers.ts.
  */
 
-import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { BLOCK_SIZE_SMALL, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { EditorState, EditorRoomData } from './editorState';
 import { EditorTool } from './editorState';
 import { ropeLineCrossesWall } from './editorHitTest';
@@ -197,9 +197,40 @@ export function drawEditorBouncePads(
   }
 }
 
-// ============================================================================
-// Decorations, falling blocks
-// ============================================================================
+export function drawEditorKineticBlocks(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  for (const kb of (room.kineticBlocks ?? [])) {
+    const sel = isSelected('kineticBlock', kb.uid);
+    const xPx = kb.xBlock * BLOCK_SIZE_MEDIUM * zoom + offsetXPx;
+    const yPx = kb.yBlock * BLOCK_SIZE_MEDIUM * zoom + offsetYPx;
+    const wPx = kb.wBlock * BLOCK_SIZE_MEDIUM * zoom;
+    const hPx = kb.hBlock * BLOCK_SIZE_MEDIUM * zoom;
+
+    const fillAlpha = sel ? 0.45 : 0.25;
+    const strokeAlpha = sel ? 1.0 : 0.65;
+
+    ctx.fillStyle = `rgba(30,80,200,${fillAlpha})`;
+    ctx.strokeStyle = `rgba(80,160,255,${strokeAlpha})`;
+    ctx.lineWidth = sel ? 2 : 1;
+
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+
+    // Upward arrow label
+    const cx = xPx + wPx * 0.5;
+    const cy = yPx + hPx * 0.5;
+    ctx.fillStyle = `rgba(150,210,255,${strokeAlpha})`;
+    ctx.font = `bold ${Math.max(7, zoom * 3.5)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('↑KB', cx, cy + zoom * 3);
+  }
+}
 
 export function drawEditorEnvironmentItems(
   ctx: CanvasRenderingContext2D,

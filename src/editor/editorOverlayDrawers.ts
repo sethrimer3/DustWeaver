@@ -48,6 +48,7 @@ export {
   drawEditorLiquidZones,
   drawEditorCrumbleBlocks,
   drawEditorBouncePads,
+  drawEditorKineticBlocks,
   drawEditorEnvironmentItems,
   drawEditorRopes,
   drawEditorDialogueTriggers,

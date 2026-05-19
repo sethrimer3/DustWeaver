@@ -40,6 +40,17 @@ const _BLOCKS_GLOB = import.meta.glob(
   { query: '?url', import: 'default' },
 );
 
+const _SPECIAL_BLOCKS_GLOB = import.meta.glob(
+  '/ASSETS/SPRITES/specialBLOCKS/**/*.{png,webp,jpg,jpeg}',
+  { query: '?url', import: 'default' },
+);
+
+/** Subset of specialBLOCKS folders that are also valid wall themes. */
+// Only folders representing static wall textures are valid wall themes.
+// Folders like 'kineticBlock' and 'fallingBlockOverlay' are dynamic overlays
+// drawn by the hazard renderer, not by the wall texture system.
+const _SPECIAL_WALL_THEMES = new Set(['iceBlock']);
+
 // ── Folder name filter ────────────────────────────────────────────────────────
 
 /**
@@ -112,6 +123,7 @@ function _folderToShortId(name: string): string {
  * Deeply nested paths (1 - OLD, block_templates/2x2 block/, etc.) are skipped.
  */
 const _DEPTH1_RE = /^\/ASSETS\/SPRITES\/BLOCKS\/([^/]+)\/[^/]+$/;
+const _SPECIAL_DEPTH1_RE = /^\/ASSETS\/SPRITES\/specialBLOCKS\/([^/]+)\/[^/]+$/;
 
 function _buildFolderThemes(): FolderThemeData[] {
   const byFolder = new Map<string, string[]>();
@@ -131,6 +143,23 @@ function _buildFolderThemes(): FolderThemeData[] {
     // Strip '/ASSETS/' prefix to get the public (runtime) URL
     const publicUrl = fullPath.slice('/ASSETS/'.length);
 
+    const existing = byFolder.get(folder);
+    if (existing !== undefined) {
+      existing.push(publicUrl);
+    } else {
+      byFolder.set(folder, [publicUrl]);
+    }
+  }
+
+  // Also discover special block themes (e.g. iceBlock) from specialBLOCKS/
+  for (const fullPath of Object.keys(_SPECIAL_BLOCKS_GLOB)) {
+    const m = _SPECIAL_DEPTH1_RE.exec(fullPath);
+    if (m === null) continue;
+
+    const folder = m[1];
+    if (!_SPECIAL_WALL_THEMES.has(folder)) continue;
+
+    const publicUrl = fullPath.slice('/ASSETS/'.length);
     const existing = byFolder.get(folder);
     if (existing !== undefined) {
       existing.push(publicUrl);

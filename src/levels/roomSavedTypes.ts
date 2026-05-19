@@ -119,6 +119,12 @@ export interface SavedBounce {
   spd?: 0 | 1;
 }
 
+/** A kinetic block stored in the compact V2 save format. */
+export interface SavedKineticBlock {
+  /** [x, y, w, h] in block units. */
+  r: SavedRect;
+}
+
 /** Compact rope entry matching RoomJsonRope shape for simplicity. */
 export interface SavedRoomRope {
   aax: number;
@@ -213,6 +219,8 @@ export interface SavedRoomV2 {
   crumbles?: SavedCrumble[];
   /** Bounce pads. */
   bounces?: SavedBounce[];
+  /** Kinetic blocks. */
+  kineticBlocks?: SavedKineticBlock[];
   /** Ropes. */
   ropes?: SavedRoomRope[];
   /** Dialogue triggers. */
