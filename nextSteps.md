@@ -1,6 +1,89 @@
 # DustWeaver — Next Steps
 
-## BUILD 357 — Room Transition Preloading + Runtime Cache
+## BUILD 359 — Combat/Dust Integration Polish
+
+### What Was Implemented
+
+1. **Storm Weave gating** (`src/sim/weaves/weaveCombat.ts`):
+   - `applyStormAttraction` now only fires when `world.playerPrimaryWeaveId === WEAVE_STORM`.
+   - Previously it ran unconditionally, breaking the `isMoteSourceOrbitFlag` distinction.
+
+2. **Mote/particle sync invariant** (`src/sim/motes/orderedMoteQueue.ts`):
+   - New `depleteMoteSlot(world, slotIndex, cooldownTicks?)` central helper.
+   - `syncMoteQueueWithParticles` now extends `respawnDelayTicks` on killed mote
+     particles to `BASE_MOTE_REGENERATION_TICKS`, preventing them from respawning
+     while their logical slot is still depleted.
+   - `tickMoteSlotRegeneration` now sets `respawnDelayTicks[pidx] = 1` when a slot
+     restores, triggering physical particle respawn on the next lifetime tick.
+
+3. **Hot-path allocation fix** (`src/sim/particles/forces.ts`):
+   - Three `new Map` allocations per tick in `applyInterParticleForces` replaced with
+     module-level Maps cleared with `.clear()` each tick.
+
+4. **Legacy combat path documentation** (`src/sim/particles/combat.ts`):
+   - Added a clear architecture note explaining that `triggerAttackLaunch` and
+     `applyBlockForces` are vestigial no-ops (flags never set by input), while
+     `tickAttackMode` is still required for enemy AI.
+
+5. **`combatDustPolishDecisions.md`** (new): full audit of the combat/dust
+   architecture and all decisions from this pass.
+
+### Remaining Work — Not Finished in BUILD 359
+
+#### Mote kind colors for sword blade and arrows
+- File: `src/render/effects/swordWeaveRenderer.ts`, `src/render/effects/arrowWeaveRenderer.ts`
+- Data already in: `world.moteSlotKind[]` (Uint8Array, one per slot)
+- Work needed:
+  1. Add `particleMoteSlotState: Uint8Array` (and optionally `particleMoteSlotKind: Uint8Array`)
+     to `ParticleSnapshot` in `src/render/snapshotTypes.ts`.
+  2. Populate in `updateSnapshotInPlace` (`src/render/snapshot.ts`) by scanning
+     `world.moteSlotParticleIndex` and `world.moteSlotState` — O(MAX_MOTE_SLOTS) per frame.
+  3. Update `src/render/snapshotAllocating.ts` (`createSnapshot`) similarly.
+  4. Use `particleMoteSlotState` in the Canvas2D arc renderer and WebGL renderer to
+     reduce alpha (e.g., 0.25×) for depleted-slot particles (visual "spent state").
+  5. Use `particleMoteSlotKind` in `swordWeaveRenderer.ts` to tint blade segments.
+- Risk: low; renderer-only change.
+
+#### Visual spent-state for depleted mote particles
+- Linked to the above: once `particleMoteSlotState` is in the snapshot, depleted-slot
+  particles can be rendered with reduced alpha (fade-out "spent" look).
+- The physical/logical invariant is already enforced in BUILD 359 so the particle will
+  be dead (not visible) during most of the depletion period.  The visual change mainly
+  covers the ~1-tick window after airborne landing.
+
+#### Remove vestigial player attack/block input paths
+- File: `src/sim/particles/playerCombat.ts`, `src/sim/particles/combat.ts`
+- `triggerAttackLaunch` and `applyBlockForces` are never reached in normal gameplay.
+- To clean up: either gate behind `ENABLE_LEGACY_PLAYER_COMBAT = false` flag or
+  remove entirely if no future feature requires them.
+- Low risk, but requires auditing that no test or editor tool sets the flags.
+
+#### Armor based on logical mote count
+- File: `src/sim/particles/forces.ts` (`applyInterParticleForces`)
+- Current: `playerArmor = Math.floor(physicalDustCount / DUST_PARTICLES_PER_ARMOR)`
+- In BUILD 359 the physical count and logical available count are closely aligned.
+- Future: if a new weave depletes motes without killing particles, switch to
+  `Math.floor(getAvailableMoteSlotCount(world) / DUST_PARTICLES_PER_ARMOR)`.
+- No balance change yet — document the intent here.
+
+#### Airborne respawn-freeze and mote regeneration
+- When the player is airborne, `updateParticleLifetimes` freezes countdown for
+  player-owned particles, but mote cooldowns still decrement.
+- After `tickMoteSlotRegeneration` sets `respawnDelayTicks[pidx] = 1`, the particle
+  will not actually respawn until the player lands.
+- The 1-tick window where the HUD shows the mote as AVAILABLE but the particle is
+  still dead is a known documented exception (see `combatDustPolishDecisions.md §2`).
+- Future fix: defer slot restoration until the particle is confirmed alive, or add a
+  "pending restore" state to the mote FSM.
+
+#### Debug test room / debug overlay for combat
+- A dedicated test room or debug panel (gated with `import.meta.env.DEV`) would make
+  it easy to verify: arrow spend depletes motes, sword length scales, shield density
+  scales, grapple range shrinks/restores, motes flash on regen.
+- Not implemented in BUILD 359.
+
+---
+
 
 ### What Was Implemented
 

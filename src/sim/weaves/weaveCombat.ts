@@ -9,7 +9,7 @@
 import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
-import { WEAVE_ARROW, WEAVE_SHIELD_SWORD } from './weaveDefinition';
+import { WEAVE_ARROW, WEAVE_SHIELD_SWORD, WEAVE_STORM } from './weaveDefinition';
 import {
   startArrowLoading,
   updateArrowLoading,
@@ -218,8 +218,14 @@ function applyShieldCrescent(
  *   2. Shield Weave — crescent formation when primary/secondary is held
  */
 export function applyPlayerWeaveCombat(world: WorldState): void {
-  // ── Storm Weave (always active) ─────────────────────────────────────────
-  applyStormAttraction(world);
+  // ── Storm Weave — only active when Storm is the equipped primary weave ────
+  // Storm passively attracts nearby unowned Gold Dust to orbit the player.
+  // When another primary weave is equipped, dust materializes from inventory
+  // space instead and Storm attraction should not fire.
+  // isMoteSourceOrbitFlag mirrors this distinction for renderers.
+  if (world.playerPrimaryWeaveId === WEAVE_STORM) {
+    applyStormAttraction(world);
+  }
 
   // ── Shield Weave (mouse-button driven) ─────────────────────────────────
   const player = findPlayerCluster(world);

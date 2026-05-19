@@ -100,6 +100,14 @@ const _chainLightningKillerOwner = new Int32Array(32);
 const _chainLightningVictimOwner = new Int32Array(32);
 let _chainLightningCount = 0;
 
+// Pre-allocated module-level maps for cluster lookups — cleared and rebuilt
+// each tick inside applyInterParticleForces to avoid per-tick heap allocation.
+// Using Map rather than typed arrays because entity IDs are opaque and not
+// guaranteed to be small consecutive integers.
+const _ownerIsPlayerMap          = new Map<number, boolean>();
+const _ownerIsRadiantTetherMap   = new Map<number, boolean>();
+const _ownerHasTakenDamageMap    = new Map<number, boolean>();
+
 // ---- Main export --------------------------------------------------------
 
 export function applyInterParticleForces(world: WorldState): void {
@@ -445,15 +453,16 @@ export function applyInterParticleForces(world: WorldState): void {
   const ENEMY_MAX_DAMAGE = 4;
   const DUST_PARTICLES_PER_ARMOR = 4;
 
-  // Pre-compute cluster lookups to avoid O(n²) within particle loop
-  const ownerIsPlayerMap = new Map<number, boolean>();
-  const ownerIsRadiantTetherMap = new Map<number, boolean>();
-  const ownerHasTakenDamageMap = new Map<number, boolean>();
+  // Pre-compute cluster lookups to avoid O(n²) within particle loop.
+  // Module-level Maps are cleared and refilled each tick — no per-tick heap allocation.
+  _ownerIsPlayerMap.clear();
+  _ownerIsRadiantTetherMap.clear();
+  _ownerHasTakenDamageMap.clear();
   for (let ci = 0; ci < clusters.length; ci++) {
     const cluster = clusters[ci];
-    ownerIsPlayerMap.set(cluster.entityId, cluster.isPlayerFlag === 1);
-    ownerIsRadiantTetherMap.set(cluster.entityId, cluster.isRadiantTetherFlag === 1);
-    ownerHasTakenDamageMap.set(cluster.entityId, cluster.healthPoints < cluster.maxHealthPoints);
+    _ownerIsPlayerMap.set(cluster.entityId, cluster.isPlayerFlag === 1);
+    _ownerIsRadiantTetherMap.set(cluster.entityId, cluster.isRadiantTetherFlag === 1);
+    _ownerHasTakenDamageMap.set(cluster.entityId, cluster.healthPoints < cluster.maxHealthPoints);
   }
 
   // Pre-compute player's dust count for armor calculation (only once per tick)
@@ -474,9 +483,9 @@ export function applyInterParticleForces(world: WorldState): void {
     if (ownerI === -1) continue; // unowned (Fluid)
 
     // Fast lookup for attacker's player status
-    const attackerIsPlayer = ownerIsPlayerMap.get(ownerI) ?? false;
-    const attackerIsRadiantTether = ownerIsRadiantTetherMap.get(ownerI) ?? false;
-    const attackerHasTakenDamage = ownerHasTakenDamageMap.get(ownerI) ?? false;
+    const attackerIsPlayer = _ownerIsPlayerMap.get(ownerI) ?? false;
+    const attackerIsRadiantTether = _ownerIsRadiantTetherMap.get(ownerI) ?? false;
+    const attackerHasTakenDamage = _ownerHasTakenDamageMap.get(ownerI) ?? false;
 
     for (let ci = 0; ci < clusters.length; ci++) {
       const cluster = clusters[ci];
