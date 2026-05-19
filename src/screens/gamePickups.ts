@@ -13,7 +13,12 @@ import type { PlayerProgress } from '../progression/playerProgress';
 import type { RngState } from '../sim/rng';
 import { ParticleKind } from '../sim/particles/kinds';
 import { spawnClusterParticles } from './gameSpawn';
-import { DUST_CONTAINER_PICKUP_RADIUS_WORLD, DUST_CONTAINER_DUST_GAIN } from './gameRoom';
+import {
+  DUST_CONTAINER_PICKUP_RADIUS_WORLD,
+  DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD,
+  DUST_CONTAINER_SHARDS_PER_CONTAINER,
+  DUST_CONTAINER_DUST_GAIN,
+} from './gameRoom';
 
 /**
  * Checks dust containers and dust boost jars for proximity pickup by the
@@ -40,7 +45,7 @@ export function processRoomPickups(
   // Grants +1 dust container (+4 particle capacity) and spawns burst particles.
   const roomDustContainers = currentRoom.dustContainers ?? [];
   for (let i = 0; i < roomDustContainers.length; i++) {
-    const pickupKey = `${currentRoom.id}:${i}`;
+    const pickupKey = `${currentRoom.id}:container:${i}`;
     if (collectedKeySet.has(pickupKey)) continue;
 
     const dc = roomDustContainers[i];
@@ -63,6 +68,30 @@ export function processRoomPickups(
         DUST_CONTAINER_DUST_GAIN,
         levelRng,
       );
+    }
+  }
+
+  // Grants one shard; every four shards forge into one permanent container.
+  const roomDustContainerPieces = currentRoom.dustContainerPieces ?? [];
+  for (let i = 0; i < roomDustContainerPieces.length; i++) {
+    const pickupKey = `${currentRoom.id}:containerShard:${i}`;
+    if (collectedKeySet.has(pickupKey)) continue;
+
+    const piece = roomDustContainerPieces[i];
+    const cx = roomOriginXWorld + (piece.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    const cy = roomOriginYWorld + (piece.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    const dx = player.positionXWorld - cx;
+    const dy = player.positionYWorld - cy;
+    if (dx * dx + dy * dy <= DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD * DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD) {
+      collectedKeySet.add(pickupKey);
+      if (progress) {
+        progress.dustContainerPieces += 1;
+        if (progress.dustContainerPieces >= DUST_CONTAINER_SHARDS_PER_CONTAINER) {
+          const forgedContainerCount = Math.floor(progress.dustContainerPieces / DUST_CONTAINER_SHARDS_PER_CONTAINER);
+          progress.dustContainerCount += forgedContainerCount;
+          progress.dustContainerPieces %= DUST_CONTAINER_SHARDS_PER_CONTAINER;
+        }
+      }
     }
   }
 

@@ -13,7 +13,7 @@
  */
 
 import { BLOCK_SIZE_MEDIUM, type RoomDef } from '../levels/roomDef';
-import { DUST_CONTAINER_SIZE_WORLD } from './gameRoom';
+import { DUST_CONTAINER_SHARD_SIZE_WORLD, DUST_CONTAINER_SIZE_WORLD } from './gameRoom';
 import { renderLambdaAnchors } from '../render/lambdaAnchorRenderer';
 
 // ── Collectibles render context ─────────────────────────────────────────────
@@ -24,6 +24,8 @@ export interface CollectiblesRenderContext {
   collectedDustContainerKeySet: Set<string>;
   isDustContainerSpriteLoaded: boolean;
   dustContainerSprite: HTMLImageElement;
+  isDustContainerShardSpriteLoaded: boolean;
+  dustContainerShardSprite: HTMLImageElement;
   collectedDustSwarmKeySet: Set<string>;
   linkedAnchorIndex: number;
   linkedAnchorRoomId: string;
@@ -90,6 +92,8 @@ export function renderRoomCollectibles(
     collectedDustContainerKeySet,
     isDustContainerSpriteLoaded,
     dustContainerSprite,
+    isDustContainerShardSpriteLoaded,
+    dustContainerShardSprite,
     collectedDustSwarmKeySet,
     linkedAnchorIndex,
     linkedAnchorRoomId,
@@ -105,7 +109,7 @@ export function renderRoomCollectibles(
     const vpMaxXWorld = (virtualWidthPx - ox) / zoom;
     const vpMaxYWorld = (virtualHeightPx - oy) / zoom;
     for (let i = 0; i < roomDustContainers.length; i++) {
-      const pickupKey = `${currentRoom.id}:${i}`;
+      const pickupKey = `${currentRoom.id}:container:${i}`;
       if (collectedDustContainerKeySet.has(pickupKey)) continue;
 
       const dc = roomDustContainers[i];
@@ -120,6 +124,36 @@ export function renderRoomCollectibles(
       const drawSize = DUST_CONTAINER_SIZE_WORLD * zoom;
       ctx.drawImage(
         dustContainerSprite,
+        dx * zoom + ox - drawSize * 0.5,
+        dy * zoom + oy - drawSize * 0.5,
+        drawSize,
+        drawSize,
+      );
+    }
+  }
+
+  if (isDustContainerShardSpriteLoaded) {
+    const roomDustContainerPieces = currentRoom.dustContainerPieces ?? [];
+    const bobOffsetWorld = Math.sin(nowMs * 0.0032 + 1.8) * 1.1;
+    const vpMinXWorld = -ox / zoom;
+    const vpMinYWorld = -oy / zoom;
+    const vpMaxXWorld = (virtualWidthPx - ox) / zoom;
+    const vpMaxYWorld = (virtualHeightPx - oy) / zoom;
+    for (let i = 0; i < roomDustContainerPieces.length; i++) {
+      const pickupKey = `${currentRoom.id}:containerShard:${i}`;
+      if (collectedDustContainerKeySet.has(pickupKey)) continue;
+
+      const piece = roomDustContainerPieces[i];
+      const dx = (piece.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+      const dy = (piece.yBlock + 0.5) * BLOCK_SIZE_MEDIUM + bobOffsetWorld;
+
+      const margin = DUST_CONTAINER_SHARD_SIZE_WORLD;
+      if (dx < vpMinXWorld - margin || dx > vpMaxXWorld + margin) continue;
+      if (dy < vpMinYWorld - margin || dy > vpMaxYWorld + margin) continue;
+
+      const drawSize = DUST_CONTAINER_SHARD_SIZE_WORLD * zoom;
+      ctx.drawImage(
+        dustContainerShardSprite,
         dx * zoom + ox - drawSize * 0.5,
         dy * zoom + oy - drawSize * 0.5,
         drawSize,

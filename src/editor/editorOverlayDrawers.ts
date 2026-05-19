@@ -28,6 +28,8 @@ import {
   FIREFLY_COLOR, FIREFLY_SELECTED,
   SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
   SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
+  DUST_CONTAINER_FOOTPRINT_W_BLOCKS, DUST_CONTAINER_FOOTPRINT_H_BLOCKS,
+  DUST_CONTAINER_SHARD_FOOTPRINT_W_BLOCKS, DUST_CONTAINER_SHARD_FOOTPRINT_H_BLOCKS,
   DUST_CONTAINER_COLOR, DUST_CONTAINER_SELECTED,
   DUST_CONTAINER_PIECE_COLOR, DUST_CONTAINER_PIECE_SELECTED,
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
@@ -233,7 +235,8 @@ export function drawEditorCollectibles(
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustContainer' && state.hoverElement.uid === c.uid;
     const color = sel ? DUST_CONTAINER_SELECTED : DUST_CONTAINER_COLOR;
-    drawObjectFootprint(ctx, c.xBlock, c.yBlock, 1, 1,
+    drawObjectFootprint(ctx, c.xBlock, c.yBlock,
+      DUST_CONTAINER_FOOTPRINT_W_BLOCKS, DUST_CONTAINER_FOOTPRINT_H_BLOCKS,
       offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
     drawMarker(ctx, c.xBlock, c.yBlock, offsetXPx, offsetYPx, zoom, color, '◈');
   }
@@ -244,7 +247,8 @@ export function drawEditorCollectibles(
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustContainerPiece' && state.hoverElement.uid === c.uid;
     const color = sel ? DUST_CONTAINER_PIECE_SELECTED : DUST_CONTAINER_PIECE_COLOR;
-    drawObjectFootprint(ctx, c.xBlock, c.yBlock, 1, 1,
+    drawObjectFootprint(ctx, c.xBlock, c.yBlock,
+      DUST_CONTAINER_SHARD_FOOTPRINT_W_BLOCKS, DUST_CONTAINER_SHARD_FOOTPRINT_H_BLOCKS,
       offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
     drawMarker(ctx, c.xBlock, c.yBlock, offsetXPx, offsetYPx, zoom, color, '◇');
   }

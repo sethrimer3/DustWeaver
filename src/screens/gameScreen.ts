@@ -286,9 +286,13 @@ export function startGameScreen(
    */
   const stagingState: SeamlessStagingState = createSeamlessStagingState();
   const dustContainerSprite = new Image();
-  dustContainerSprite.src = `${BASE}SPRITES/objects/collectables/dust_container_stub.svg`;
+  dustContainerSprite.src = `${BASE}SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/dustContainer.png`;
   let isDustContainerSpriteLoaded = false;
   dustContainerSprite.onload = () => { isDustContainerSpriteLoaded = true; };
+  const dustContainerShardSprite = new Image();
+  dustContainerShardSprite.src = `${BASE}SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/dustContainerShard.png`;
+  let isDustContainerShardSpriteLoaded = false;
+  dustContainerShardSprite.onload = () => { isDustContainerShardSpriteLoaded = true; };
   /** Keys in the format `${roomId}:${containerIndex}` for already-collected dust containers. */
   const collectedDustContainerKeySet: Set<string> = new Set();
   /** Keys in the format `${roomId}:dustswarm:${index}` for already-collected dust swarms. */
@@ -1350,6 +1354,8 @@ export function startGameScreen(
       collectedDustContainerKeySet,
       isDustContainerSpriteLoaded,
       dustContainerSprite,
+      isDustContainerShardSpriteLoaded,
+      dustContainerShardSprite,
       collectedDustSwarmKeySet,
       linkedAnchorIndex: lambdaAnchorState.linkedAnchorIndex,
       linkedAnchorRoomId: lambdaAnchorState.linkedAnchorRoomId,

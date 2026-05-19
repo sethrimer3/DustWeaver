@@ -95,6 +95,12 @@ export const SAVE_TOMB_FOOTPRINT_H_BLOCKS = 3;
 /** Footprint size of a skill tomb in block units (sprite is 2 wide × 2 tall, centered). */
 export const SKILL_TOMB_FOOTPRINT_W_BLOCKS = 2;
 export const SKILL_TOMB_FOOTPRINT_H_BLOCKS = 2;
+/** Footprint size of a full dust container collectible. */
+export const DUST_CONTAINER_FOOTPRINT_W_BLOCKS = 3;
+export const DUST_CONTAINER_FOOTPRINT_H_BLOCKS = 3;
+/** Footprint size of a dust container shard collectible. */
+export const DUST_CONTAINER_SHARD_FOOTPRINT_W_BLOCKS = 2;
+export const DUST_CONTAINER_SHARD_FOOTPRINT_H_BLOCKS = 2;
 
 // ── Direction helper ─────────────────────────────────────────────────────────
 

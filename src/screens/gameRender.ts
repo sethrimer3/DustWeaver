@@ -176,6 +176,8 @@ export interface RenderFrameContext {
   collectedDustContainerKeySet: Set<string>;
   isDustContainerSpriteLoaded: boolean;
   dustContainerSprite: HTMLImageElement;
+  isDustContainerShardSpriteLoaded: boolean;
+  dustContainerShardSprite: HTMLImageElement;
   /** Keys for already-collected dust swarms (passed from gameScreen). */
   collectedDustSwarmKeySet: Set<string>;
   /** Index of the linked lambda anchor in currentRoom.lambdaAnchors, or -1 if not linked. */

@@ -25,10 +25,16 @@ export const SKILLBOOK_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
 export const SKILLBOOK_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
 /** Dust container sprite size in world units (24×24 px). */
 export const DUST_CONTAINER_SIZE_WORLD = 3 * BLOCK_SIZE_MEDIUM;
+/** Dust container shard sprite size in world units. */
+export const DUST_CONTAINER_SHARD_SIZE_WORLD = 2 * BLOCK_SIZE_MEDIUM;
 /** Pickup radius for dust container collection. */
 export const DUST_CONTAINER_PICKUP_RADIUS_WORLD = 2.2 * BLOCK_SIZE_MEDIUM;
+/** Pickup radius for dust container shard collection. */
+export const DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD = 1.7 * BLOCK_SIZE_MEDIUM;
 /** Dust particles granted by one Dust Container collectible. */
 export const DUST_CONTAINER_DUST_GAIN = 4;
+/** Shards needed to forge one full dust container. */
+export const DUST_CONTAINER_SHARDS_PER_CONTAINER = 4;
 
 // loadRoomWalls and resolveWallSoundHardnessIndex extracted to gameRoomWalls.ts.
 export { loadRoomWalls, resolveWallSoundHardnessIndex } from './gameRoomWalls';
