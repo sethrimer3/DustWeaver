@@ -297,6 +297,17 @@ export function deleteAtCursor(state: EditorState): void {
     }
   }
 
+  // Check kinetic blocks
+  const kineticBlocks = room.kineticBlocks ?? [];
+  for (let i = 0; i < kineticBlocks.length; i++) {
+    if (hitTestZone({ xBlock: kineticBlocks[i].xBlock, yBlock: kineticBlocks[i].yBlock, wBlock: kineticBlocks[i].wBlock, hBlock: kineticBlocks[i].hBlock }, bx, by)) {
+      const removedUid = kineticBlocks[i].uid;
+      kineticBlocks.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
   // Check dialogue triggers
   const dialogueTriggers = room.dialogueTriggers ?? [];
   for (let i = 0; i < dialogueTriggers.length; i++) {

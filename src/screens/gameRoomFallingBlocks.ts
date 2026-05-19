@@ -110,6 +110,8 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
       world.wallIsPillarHalfWidthFlag[wallIndex]   = 0;
       world.wallIsBouncePadFlag[wallIndex]         = 0;
       world.wallBouncePadSpeedFactorIndex[wallIndex] = 0;
+      world.wallIsKineticBlockFlag[wallIndex] = 0;
+      world.wallKineticBlockIndex[wallIndex]  = -1;
     }
 
     // Clamp to hard cap (editor/importer should enforce this, but be safe)

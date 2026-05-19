@@ -18,7 +18,7 @@ import type {
   EditorSaveTomb, EditorSkillTomb, EditorDustPile,
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,
   EditorAmbientLightBlocker, EditorLightSource, EditorSunbeam,
-  EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
+  EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad, EditorKineticBlock,
   EditorRope, RopeDestructibility,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorLambdaAnchor,
@@ -423,6 +423,14 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     speedFactorIndex: (b.speedFactorIndex ?? 0) as 0 | 1,
   }));
 
+  const kineticBlocks: EditorKineticBlock[] = (json.kineticBlocks ?? []).map(kb => ({
+    uid: uid++,
+    xBlock: kb.xBlock,
+    yBlock: kb.yBlock,
+    wBlock: kb.wBlock ?? 1,
+    hBlock: kb.hBlock ?? 1,
+  }));
+
   const ropes: EditorRope[] = (json.ropes ?? []).map(r => ({
     uid: uid++,
     anchorAXBlock: r.aax,
@@ -495,6 +503,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       lavaZones,
       crumbleBlocks,
       bouncePads,
+      kineticBlocks,
       ropes,
       sunbeams,
       sceneLights,

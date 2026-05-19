@@ -284,6 +284,13 @@ export interface RoomJsonBouncePad {
   speedFactorIndex?: 0 | 1;
 }
 
+export interface RoomJsonKineticBlock {
+  xBlock: number;
+  yBlock: number;
+  wBlock?: number;
+  hBlock?: number;
+}
+
 export interface RoomJsonRope {
   aax: number;
   aay: number;
@@ -394,6 +401,7 @@ export interface RoomJsonDef {
   breakableBlocks?: RoomJsonBreakableBlock[];
   crumbleBlocks?: RoomJsonCrumbleBlock[];
   bouncePads?: RoomJsonBouncePad[];
+  kineticBlocks?: RoomJsonKineticBlock[];
   ropes?: RoomJsonRope[];
   dustBoostJars?: RoomJsonDustBoostJar[];
   dustSwarms?: RoomJsonDustSwarm[];

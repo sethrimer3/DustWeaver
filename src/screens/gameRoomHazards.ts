@@ -14,6 +14,7 @@ import {
   MAX_DUST_PILES,
   MAX_FIREFLIES,
   MAX_BOUNCE_PADS,
+  MAX_KINETIC_BLOCKS,
 } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
@@ -66,6 +67,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.breakableBlockCount = 0;
   world.crumbleBlockCount = 0;
   world.bouncePadCount = 0;
+  world.kineticBlockCount = 0;
   world.dustBoostJarCount = 0;
   world.fireflyJarCount = 0;
   world.fireflyCount = 0;
@@ -221,6 +223,8 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallIsPillarHalfWidthFlag[wallIdx] = 0;
       world.wallIsBouncePadFlag[wallIdx] = 1;
       world.wallBouncePadSpeedFactorIndex[wallIdx] = sfIndex;
+      world.wallIsKineticBlockFlag[wallIdx] = 0;
+      world.wallKineticBlockIndex[wallIdx] = -1;
     }
 
     const pi = world.bouncePadCount++;
@@ -233,7 +237,42 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     void wallIdx;
   }
 
-  // ── Dust boost jars ───────────────────────────────────────────────────────
+  // ── Kinetic blocks ────────────────────────────────────────────────────────
+  const kineticBlockDefs = room.kineticBlocks ?? [];
+  for (let i = 0; i < kineticBlockDefs.length && world.kineticBlockCount < MAX_KINETIC_BLOCKS; i++) {
+    const kb = kineticBlockDefs[i];
+    const wBlocks = kb.wBlock ?? 1;
+    const hBlocks = kb.hBlock ?? 1;
+
+    let wallIdx = -1;
+    if (world.wallCount < MAX_WALLS) {
+      wallIdx = world.wallCount++;
+      world.wallXWorld[wallIdx] = kb.xBlock * BLOCK_SIZE_MEDIUM;
+      world.wallYWorld[wallIdx] = kb.yBlock * BLOCK_SIZE_MEDIUM;
+      world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined, undefined);
+      world.wallIsInvisibleFlag[wallIdx] = 0;
+      world.wallIsPlatformFlag[wallIdx] = 0;
+      world.wallPlatformEdge[wallIdx] = 0;
+      world.wallRampOrientationIndex[wallIdx] = 255;
+      world.wallIsPillarHalfWidthFlag[wallIdx] = 0;
+      world.wallIsBouncePadFlag[wallIdx] = 0;
+      world.wallBouncePadSpeedFactorIndex[wallIdx] = 0;
+      world.wallIsIceFlag[wallIdx] = 0;
+      world.wallIsKineticBlockFlag[wallIdx] = 1;
+      world.wallKineticBlockIndex[wallIdx] = world.kineticBlockCount;
+    }
+
+    const ki = world.kineticBlockCount++;
+    world.kineticBlockXWorld[ki] = kb.xBlock * BLOCK_SIZE_MEDIUM;
+    world.kineticBlockYWorld[ki] = kb.yBlock * BLOCK_SIZE_MEDIUM;
+    world.kineticBlockWWorld[ki] = wBlocks * BLOCK_SIZE_MEDIUM;
+    world.kineticBlockHWorld[ki] = hBlocks * BLOCK_SIZE_MEDIUM;
+    world.kineticBlockAnimPhase[ki] = 0;
+    void wallIdx;
+  }
   const dustJarDefs = room.dustBoostJars ?? [];
   for (let i = 0; i < dustJarDefs.length && world.dustBoostJarCount < world.dustBoostJarXWorld.length; i++) {
     const j = dustJarDefs[i];

@@ -35,6 +35,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     lavaZone:         'lava_zone',
     crumbleBlock:     'crumble_block',
     bouncePad:        'bounce_pad',
+    kineticBlock:     'kinetic_block',
     rope:             'rope',
     fallingBlock:     'falling_block',
     dialogueTrigger:  'dialogue_trigger',

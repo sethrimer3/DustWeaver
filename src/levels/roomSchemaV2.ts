@@ -67,6 +67,7 @@ export type {
   SavedTransition,
   SavedCrumble,
   SavedBounce,
+  SavedKineticBlock,
   SavedRoomRope,
   SavedBgBlock,
   SavedRoomV2,
@@ -94,6 +95,7 @@ import type {
   SavedTransition,
   SavedCrumble,
   SavedBounce,
+  SavedKineticBlock,
   SavedRoomRope,
   SavedBgBlock,
   SavedRoomV2,
@@ -342,6 +344,12 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       const entry: SavedBounce = { r: [b.xBlock, b.yBlock, b.wBlock ?? 1, b.hBlock ?? 1] };
       if (b.rampOrientation !== undefined) entry.ramp = b.rampOrientation as 0 | 1 | 2 | 3;
       if (b.speedFactorIndex !== undefined && b.speedFactorIndex !== 0) entry.spd = b.speedFactorIndex as 0 | 1;
+      return entry;
+    });
+  }
+  if (json.kineticBlocks && json.kineticBlocks.length > 0) {
+    out.kineticBlocks = json.kineticBlocks.map(kb => {
+      const entry: SavedKineticBlock = { r: [kb.xBlock, kb.yBlock, kb.wBlock ?? 1, kb.hBlock ?? 1] };
       return entry;
     });
   }

@@ -31,6 +31,7 @@ import type {
   RoomBreakableBlockDef,
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
+  RoomKineticBlockDef,
   RoomRopeDef,
   RoomDustBoostJarDef,
   RoomFireflyJarDef,
@@ -440,6 +441,7 @@ export type {
   CrumbleVariant,
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
+  RoomKineticBlockDef,
   RopeDestructibility,
   RoomRopeDef,
   RoomDustBoostJarDef,
@@ -565,6 +567,7 @@ export interface RoomDef {
   crumbleBlocks?: readonly RoomCrumbleBlockDef[];
   /** Bounce pad blocks that reflect the player's velocity on contact. */
   bouncePads?: readonly RoomBouncePadDef[];
+  kineticBlocks?: readonly RoomKineticBlockDef[];
   /** Ropes hanging between anchor points in the room. */
   ropes?: readonly RoomRopeDef[];
   /** Jars that grant temporary dust particles when broken by the player. */

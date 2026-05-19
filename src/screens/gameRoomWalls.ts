@@ -272,6 +272,8 @@ export function applyRoomWallTemplate(world: WorldState, template: RoomWallTempl
     world.wallIsBouncePadFlag[wi] = 0;
     world.wallBouncePadSpeedFactorIndex[wi] = 0;
     world.wallIsIceFlag[wi] = template.isIceFlag[wi];
+    world.wallIsKineticBlockFlag[wi] = 0;
+    world.wallKineticBlockIndex[wi] = -1;
   }
 }
 

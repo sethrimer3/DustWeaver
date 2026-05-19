@@ -182,6 +182,11 @@ export function rectOverlapsSolidEditorObject(
     xBlock < b.xBlock + b.wBlock && xBlock + wBlock > b.xBlock &&
     yBlock < b.yBlock + b.hBlock && yBlock + hBlock > b.yBlock,
   )) return true;
+  // Kinetic blocks
+  if ((room.kineticBlocks ?? []).some(kb =>
+    xBlock < kb.xBlock + kb.wBlock && xBlock + wBlock > kb.xBlock &&
+    yBlock < kb.yBlock + kb.hBlock && yBlock + hBlock > kb.yBlock,
+  )) return true;
   return false;
 }
 

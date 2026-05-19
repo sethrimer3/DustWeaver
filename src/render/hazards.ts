@@ -226,6 +226,46 @@ export function renderHazards(
     }
   }
 
+  // ── Kinetic blocks (pulsing blue glow) ────────────────────────────────────
+  for (let i = 0; i < world.kineticBlockCount; i++) {
+    const kx = world.kineticBlockXWorld[i];
+    const ky = world.kineticBlockYWorld[i];
+    const kw = world.kineticBlockWWorld[i];
+    const kh = world.kineticBlockHWorld[i];
+    const phase = world.kineticBlockAnimPhase[i];
+    const t = (phase / 255) * Math.PI * 2;
+    const pulse = 0.5 + 0.5 * Math.sin(t);
+
+    const bx = kx * zoom + offsetXPx;
+    const by = ky * zoom + offsetYPx;
+    const bw = kw * zoom;
+    const bh = kh * zoom;
+
+    // Block body: deep blue
+    ctx.fillStyle = '#1a1a5e';
+    ctx.fillRect(bx, by, bw, bh);
+
+    // Pulsing blue border
+    const glowAlpha = (0.5 + 0.5 * pulse).toFixed(2);
+    ctx.strokeStyle = `rgba(80,140,255,${glowAlpha})`;
+    ctx.lineWidth = zoom;
+    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+
+    // Arrow indicator showing launch direction (upward by default)
+    const cx = bx + bw * 0.5;
+    const cy = by + bh * 0.5;
+    const arrowLen = Math.min(bw, bh) * 0.35;
+    ctx.strokeStyle = `rgba(150,200,255,${glowAlpha})`;
+    ctx.lineWidth = zoom;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + arrowLen);
+    ctx.lineTo(cx, cy - arrowLen);
+    ctx.lineTo(cx - arrowLen * 0.4, cy - arrowLen * 0.5);
+    ctx.moveTo(cx, cy - arrowLen);
+    ctx.lineTo(cx + arrowLen * 0.4, cy - arrowLen * 0.5);
+    ctx.stroke();
+  }
+
   // ── Springboards (metallic platform with spring coil) ──────────────────
   for (let i = 0; i < world.springboardCount; i++) {
     const sbx = world.springboardXWorld[i];

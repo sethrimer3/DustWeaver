@@ -24,6 +24,9 @@ export const MAX_BREAKABLE_BLOCKS = 32;
 export const MAX_CRUMBLE_BLOCKS = 32;
 /** Maximum number of bounce pads per room. */
 export const MAX_BOUNCE_PADS = 64;
+
+import { MAX_KINETIC_BLOCKS } from './kineticBlocks/kineticBlockTypes';
+export { MAX_KINETIC_BLOCKS } from './kineticBlocks/kineticBlockTypes';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -168,6 +171,20 @@ export interface HazardWorldState {
   bouncePadSpeedFactorIndex: Uint8Array;
   /** Ramp orientation: 255=not a ramp, 0-3=ramp. */
   bouncePadRampOrientationIndex: Uint8Array;
+
+  // ── Kinetic blocks ─────────────────────────────────────────────────────────
+  /** Number of kinetic blocks loaded in the current room. */
+  kineticBlockCount: number;
+  /** Left edge X of each kinetic block (world units). */
+  kineticBlockXWorld: Float32Array;
+  /** Top edge Y of each kinetic block (world units). */
+  kineticBlockYWorld: Float32Array;
+  /** Width of each kinetic block (world units). */
+  kineticBlockWWorld: Float32Array;
+  /** Height of each kinetic block (world units). */
+  kineticBlockHWorld: Float32Array;
+  /** Per-block animation phase [0..255], advanced each tick by tickKineticBlocks. */
+  kineticBlockAnimPhase: Uint8Array;
 
   // ── Dust boost jars ────────────────────────────────────────────────────────
   /** Number of dust boost jars (active + broken). */
@@ -331,6 +348,12 @@ export function createHazardWorldState(): HazardWorldState {
     bouncePadHWorld:               new Float32Array(MAX_BOUNCE_PADS),
     bouncePadSpeedFactorIndex:     new Uint8Array(MAX_BOUNCE_PADS),
     bouncePadRampOrientationIndex: new Uint8Array(MAX_BOUNCE_PADS).fill(255),
+    kineticBlockCount:     0,
+    kineticBlockXWorld:    new Float32Array(MAX_KINETIC_BLOCKS),
+    kineticBlockYWorld:    new Float32Array(MAX_KINETIC_BLOCKS),
+    kineticBlockWWorld:    new Float32Array(MAX_KINETIC_BLOCKS),
+    kineticBlockHWorld:    new Float32Array(MAX_KINETIC_BLOCKS),
+    kineticBlockAnimPhase: new Uint8Array(MAX_KINETIC_BLOCKS),
     dustBoostJarCount:             0,
     dustBoostJarXWorld:            new Float32Array(MAX_DUST_BOOST_JARS),
     dustBoostJarYWorld:            new Float32Array(MAX_DUST_BOOST_JARS),
