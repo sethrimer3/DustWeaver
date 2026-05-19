@@ -60,6 +60,12 @@ interface _ReusableBacking {
   grappleFailBeamStartYWorld: number;
   grappleFailBeamEndXWorld: number;
   grappleFailBeamEndYWorld: number;
+  grappleIceBounceTicksLeft: number;
+  grappleIceBounceTicksTotal: number;
+  grappleIceBounceStartXWorld: number;
+  grappleIceBounceStartYWorld: number;
+  grappleIceBounceEndXWorld: number;
+  grappleIceBounceEndYWorld: number;
   grappleEmptyFxTicksLeft: number;
   grappleEmptyFxTotalTicks: number;
   grappleEmptyFxXWorld: number;
@@ -376,6 +382,12 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     grappleFailBeamStartYWorld:     world.grappleFailBeamStartYWorld,
     grappleFailBeamEndXWorld:       world.grappleFailBeamEndXWorld,
     grappleFailBeamEndYWorld:       world.grappleFailBeamEndYWorld,
+    grappleIceBounceTicksLeft:      world.grappleIceBounceTicksLeft,
+    grappleIceBounceTicksTotal:     world.grappleIceBounceTicksTotal,
+    grappleIceBounceStartXWorld:    world.grappleIceBounceStartXWorld,
+    grappleIceBounceStartYWorld:    world.grappleIceBounceStartYWorld,
+    grappleIceBounceEndXWorld:      world.grappleIceBounceEndXWorld,
+    grappleIceBounceEndYWorld:      world.grappleIceBounceEndYWorld,
     grappleEmptyFxTicksLeft:        world.grappleEmptyFxTicksLeft,
     grappleEmptyFxTotalTicks:       world.grappleEmptyFxTotalTicks,
     grappleEmptyFxXWorld:           world.grappleEmptyFxXWorld,
@@ -516,6 +528,12 @@ export function updateSnapshotInPlace(
   b.grappleFailBeamStartYWorld     = world.grappleFailBeamStartYWorld;
   b.grappleFailBeamEndXWorld       = world.grappleFailBeamEndXWorld;
   b.grappleFailBeamEndYWorld       = world.grappleFailBeamEndYWorld;
+  b.grappleIceBounceTicksLeft      = world.grappleIceBounceTicksLeft;
+  b.grappleIceBounceTicksTotal     = world.grappleIceBounceTicksTotal;
+  b.grappleIceBounceStartXWorld    = world.grappleIceBounceStartXWorld;
+  b.grappleIceBounceStartYWorld    = world.grappleIceBounceStartYWorld;
+  b.grappleIceBounceEndXWorld      = world.grappleIceBounceEndXWorld;
+  b.grappleIceBounceEndYWorld      = world.grappleIceBounceEndYWorld;
   b.grappleEmptyFxTicksLeft        = world.grappleEmptyFxTicksLeft;
   b.grappleEmptyFxTotalTicks       = world.grappleEmptyFxTotalTicks;
   b.grappleEmptyFxXWorld           = world.grappleEmptyFxXWorld;

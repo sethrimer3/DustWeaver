@@ -158,6 +158,24 @@ export interface GrappleWorldState {
   grappleFailBeamEndXWorld: number;
   grappleFailBeamEndYWorld: number;
 
+  // ── Ice grapple bounce FX ─────────────────────────────────────────────────
+  /**
+   * Ticks remaining for the ice-bounce reflected-ray effect.
+   * > 0 while visible; counts down to 0 (inactive).  Set when the grapple hits
+   * an ice surface; shows a short reflected segment in cyan to signal the bounce.
+   */
+  grappleIceBounceTicksLeft: number;
+  /** Total ticks for the ice bounce effect (constant; used for alpha calculation). */
+  grappleIceBounceTicksTotal: number;
+  /** World-space X of the ice surface hit point (start of the reflected segment). */
+  grappleIceBounceStartXWorld: number;
+  /** World-space Y of the ice surface hit point. */
+  grappleIceBounceStartYWorld: number;
+  /** World-space X of the end of the reflected segment. */
+  grappleIceBounceEndXWorld: number;
+  /** World-space Y of the end of the reflected segment. */
+  grappleIceBounceEndYWorld: number;
+
   grappleEmptyFxTicksLeft: number;
   grappleEmptyFxTotalTicks: number;
   grappleEmptyFxXWorld: number;
@@ -394,6 +412,12 @@ export function createGrappleWorldState(): GrappleWorldState {
     grappleFailBeamStartYWorld:            0.0,
     grappleFailBeamEndXWorld:              0.0,
     grappleFailBeamEndYWorld:              0.0,
+    grappleIceBounceTicksLeft:             0,
+    grappleIceBounceTicksTotal:            14,
+    grappleIceBounceStartXWorld:           0.0,
+    grappleIceBounceStartYWorld:           0.0,
+    grappleIceBounceEndXWorld:             0.0,
+    grappleIceBounceEndYWorld:             0.0,
     grappleEmptyFxTicksLeft:               0,
     grappleEmptyFxTotalTicks:              12,
     grappleEmptyFxXWorld:                  0.0,

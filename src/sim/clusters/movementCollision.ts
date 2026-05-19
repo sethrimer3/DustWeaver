@@ -87,6 +87,7 @@ export function resolveClusterFloorCollision(cluster: ClusterState, world: World
 /** Clears grounded state before collision passes rebuild it for this tick. */
 export function resetClusterGroundedFlag(cluster: ClusterState): void {
   cluster.isGroundedFlag = 0;
+  cluster.isGroundedOnIceFlag = 0;
 }
 
 /**

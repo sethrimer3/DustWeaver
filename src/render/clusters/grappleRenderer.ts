@@ -18,6 +18,7 @@ import { MAX_GRAPPLE_WRAP_POINTS } from '../../sim/world';
 import { loadImg, isSpriteReady } from '../imageCache';
 import {
   renderGrappleFailBeam,
+  renderGrappleIceBounce,
   renderGrappleEmptyFx,
   renderZipImpactFx,
   renderGrappleRechargeRing,
@@ -42,7 +43,8 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
   const hasActiveGrapple = snapshot.isGrappleActiveFlag === 1;
   const hasFailFx =
     snapshot.grappleFailBeamTicksLeft > 0 ||
-    snapshot.grappleEmptyFxTicksLeft > 0;
+    snapshot.grappleEmptyFxTicksLeft > 0 ||
+    snapshot.grappleIceBounceTicksLeft > 0;
   const hasZipImpactFx = snapshot.zipImpactFxTicksLeft > 0;
   const hasRechargeFx = snapshot.grappleRechargeRingTicksLeft > 0;
   const hasZipJumpReady = snapshot.isZipJumpWindowOpenFlag === 1;
@@ -50,6 +52,7 @@ export function renderGrapple(ctx: CanvasRenderingContext2D, snapshot: WorldSnap
   if (!hasActiveGrapple && snapshot.grappleAttachFxTicks <= 0 && !hasFailFx && !hasZipImpactFx && !hasRechargeFx && !hasZipJumpReady) return;
 
   renderGrappleFailBeam(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+  renderGrappleIceBounce(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderGrappleEmptyFx(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderZipImpactFx(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   // Golden ring: rendered before the rope so it appears under the chain.

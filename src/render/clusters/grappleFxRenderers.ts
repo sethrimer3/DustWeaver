@@ -61,6 +61,63 @@ export function renderGrappleFailBeam(
   ctx.restore();
 }
 
+/**
+ * Renders the ice-grapple-bounce reflected ray.
+ *
+ * When the grapple hits an ice surface, it cannot attach.  A short dashed ray
+ * in cyan is drawn from the ice hit point in the reflected direction to signal
+ * the bounce visually.  The beam extends over the first few ticks then fades.
+ */
+export function renderGrappleIceBounce(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  if (snapshot.grappleIceBounceTicksLeft <= 0) return;
+
+  const totalTicks = Math.max(1, snapshot.grappleIceBounceTicksTotal);
+  const elapsedTicks = totalTicks - snapshot.grappleIceBounceTicksLeft;
+  const extendTicks = 5;
+  const hoverTicks  = 3;
+  const extendT = Math.min(1, elapsedTicks / extendTicks);
+
+  let alpha = 1;
+  if (elapsedTicks > extendTicks + hoverTicks) {
+    const fadeT = (elapsedTicks - extendTicks - hoverTicks) / Math.max(1, totalTicks - extendTicks - hoverTicks);
+    alpha = Math.max(0, 1 - fadeT);
+  }
+
+  const sx = snapshot.grappleIceBounceStartXWorld * scalePx + offsetXPx;
+  const sy = snapshot.grappleIceBounceStartYWorld * scalePx + offsetYPx;
+  const exFull = snapshot.grappleIceBounceEndXWorld * scalePx + offsetXPx;
+  const eyFull = snapshot.grappleIceBounceEndYWorld * scalePx + offsetYPx;
+  const ex = sx + (exFull - sx) * extendT;
+  const ey = sy + (eyFull - sy) * extendT;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = false;
+
+  // Distinctive cyan/light-blue colour to contrast with normal gold fail beam.
+  ctx.strokeStyle = 'rgba(140, 230, 255, 0.90)';
+  ctx.lineWidth = Math.max(1, scalePx * 0.75);
+  ctx.setLineDash([2 * scalePx, 2 * scalePx]);
+  ctx.beginPath();
+  ctx.moveTo(Math.round(sx), Math.round(sy));
+  ctx.lineTo(Math.round(ex), Math.round(ey));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Bright endpoint dot.
+  ctx.fillStyle = 'rgba(180, 245, 255, 0.95)';
+  const r = Math.max(1, scalePx);
+  ctx.fillRect(Math.round(ex) - r, Math.round(ey) - r, r * 2, r * 2);
+
+  ctx.restore();
+}
+
 export function renderGrappleEmptyFx(
   ctx: CanvasRenderingContext2D,
   snapshot: WorldSnapshot,
