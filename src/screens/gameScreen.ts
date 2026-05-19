@@ -396,7 +396,12 @@ export function startGameScreen(
     musicManager.notifyRoomEntered(room.songId ?? '_continue');
 
     let carryHealthPoints = PLAYER_INITIAL_HEALTH;
-    if (world.clusters.length > 0 && world.clusters[0].isPlayerFlag === 1) {
+    if (
+      world.clusters.length > 0 &&
+      world.clusters[0].isPlayerFlag === 1 &&
+      world.clusters[0].isAliveFlag === 1 &&
+      world.clusters[0].healthPoints > 0
+    ) {
       carryHealthPoints = world.clusters[0].healthPoints;
     }
 
