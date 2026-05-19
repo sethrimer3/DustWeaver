@@ -157,6 +157,24 @@ export const GROUND_ACCELERATION_PER_SEC2 = 800.0;
 /** Ground deceleration: how quickly the player stops on the ground when no input (px/s²). */
 export const GROUND_DECELERATION_PER_SEC2 = 800.0;
 
+// ── Ice surface movement ─────────────────────────────────────────────────────
+// Ice is effectively frictionless.  Acceleration and deceleration are both
+// dramatically reduced relative to normal ground movement, giving the player
+// limited traction and preserving horizontal momentum.
+
+/**
+ * Ground acceleration while standing on an ice surface (px/s²).
+ * ~10× slower than normal ground accel — player can steer but cannot rapidly
+ * build speed.
+ */
+export const ICE_GROUND_ACCELERATION_PER_SEC2 = 80.0;
+
+/**
+ * Ground deceleration while standing on an ice surface with no input (px/s²).
+ * Near-zero friction — player continues sliding at nearly the same speed.
+ */
+export const ICE_GROUND_DECELERATION_PER_SEC2 = 35.0;
+
 /** Air acceleration: slightly reduced control while airborne (px/s²). */
 export const AIR_ACCELERATION_PER_SEC2 = 520.0;
 

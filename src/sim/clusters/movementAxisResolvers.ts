@@ -459,6 +459,7 @@ export function resolveWallsY(
 
     const isBounce = world.wallIsBouncePadFlag[wi] === 1;
     const bounceSf = isBounce ? (world.wallBouncePadSpeedFactorIndex[wi] === 1 ? 1.0 : 0.5) : 0.0;
+    const isIce = world.wallIsIceFlag[wi] === 1;
 
     // Determine push direction from previous position
     if (prevBottom <= wallTop + COLLISION_EPSILON && cluster.velocityYWorld >= 0) {
@@ -474,6 +475,7 @@ export function resolveWallsY(
       } else {
         cluster.velocityYWorld = 0;
         cluster.isGroundedFlag = 1;
+        if (isIce) cluster.isGroundedOnIceFlag = 1;
         landed = true;
       }
     } else if (prevTop >= wallBottom - COLLISION_EPSILON && cluster.velocityYWorld <= 0) {
@@ -512,6 +514,7 @@ export function resolveWallsY(
         } else {
           cluster.velocityYWorld = 0;
           cluster.isGroundedFlag = 1;
+          if (isIce) cluster.isGroundedOnIceFlag = 1;
           landed = true;
         }
       } else {

@@ -33,6 +33,8 @@ import {
   AIR_BRAKING_PER_SEC2,
   MOMENTUM_DECAY_PER_SEC2,
   HIGH_SPEED_STEERING_FACTOR,
+  ICE_GROUND_ACCELERATION_PER_SEC2,
+  ICE_GROUND_DECELERATION_PER_SEC2,
 } from './movementConstants';
 
 /**
@@ -67,13 +69,14 @@ export function applyPlayerHorizontalMovement(
   // ── Skid detection ─────────────────────────────────────────────────
   // Skid when sprint is held, grounded, moving, and velocity is opposite
   // to the facing direction (changing direction while sprinting).
+  // Ice surfaces suppress skidding — there is no traction to skid on.
   {
     const isFacingLeft = cluster.isFacingLeftFlag === 1;
     const isMovingRight = cluster.velocityXWorld > SKID_VELOCITY_THRESHOLD_WORLD;
     const isMovingLeft = cluster.velocityXWorld < -SKID_VELOCITY_THRESHOLD_WORLD;
     const isTravelingOppositeToFacing =
       (isFacingLeft && isMovingRight) || (!isFacingLeft && isMovingLeft);
-    if (world.playerSprintHeldFlag === 1 && isGrounded && isTravelingOppositeToFacing) {
+    if (world.playerSprintHeldFlag === 1 && isGrounded && isTravelingOppositeToFacing && cluster.isGroundedOnIceFlag === 0) {
       cluster.isSkiddingFlag = 1;
     } else {
       cluster.isSkiddingFlag = 0;
@@ -106,10 +109,16 @@ export function applyPlayerHorizontalMovement(
     if (cluster.wallJumpForceTimeTicks <= 0 && inputDx !== 0) {
       if (isGrounded) {
         // ── Grounded: turn acceleration / ground acceleration + speed cap ──
-        const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
-                          (inputDx < 0 && cluster.velocityXWorld >  1.0);
-        const accel = isTurning ? TURN_ACCELERATION_PER_SEC2 : baseGroundAccel;
-        cluster.velocityXWorld += inputDx * accel * dtSec;
+        const isOnIce = cluster.isGroundedOnIceFlag === 1;
+        if (isOnIce) {
+          // Ice traction: no turn boost, slow acceleration regardless of direction.
+          cluster.velocityXWorld += inputDx * ICE_GROUND_ACCELERATION_PER_SEC2 * dtSec;
+        } else {
+          const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
+                            (inputDx < 0 && cluster.velocityXWorld >  1.0);
+          const accel = isTurning ? TURN_ACCELERATION_PER_SEC2 : baseGroundAccel;
+          cluster.velocityXWorld += inputDx * accel * dtSec;
+        }
         const maxSpeed = cluster.isSprintingFlag === 1
           ? baseRunSpeed * sprintMult
           : baseRunSpeed;
@@ -168,12 +177,15 @@ export function applyPlayerHorizontalMovement(
     } else if (cluster.wallJumpForceTimeTicks <= 0) {
       // No horizontal input and not in force-time — decelerate toward zero.
       if (isGrounded) {
-        // ── Grounded: friction with skid and sprint modifiers ────────────
-        let decel = baseGroundDecel;
-        if (cluster.isSkiddingFlag === 1) {
-          decel *= SKID_FRICTION_MULTIPLIER;
-        } else if (world.playerSprintHeldFlag === 1) {
-          decel *= SPRINT_FRICTION_MULTIPLIER;
+        // ── Grounded: friction with skid, sprint, and ice surface modifiers ────────────
+        const isOnIce = cluster.isGroundedOnIceFlag === 1;
+        let decel = isOnIce ? ICE_GROUND_DECELERATION_PER_SEC2 : baseGroundDecel;
+        if (!isOnIce) {
+          if (cluster.isSkiddingFlag === 1) {
+            decel *= SKID_FRICTION_MULTIPLIER;
+          } else if (world.playerSprintHeldFlag === 1) {
+            decel *= SPRINT_FRICTION_MULTIPLIER;
+          }
         }
         const dv = decel * dtSec;
         if (cluster.velocityXWorld > 0) {

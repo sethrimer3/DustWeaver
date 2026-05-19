@@ -90,6 +90,13 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   wallBouncePadSpeedFactorIndex: Uint8Array;
 
+  /**
+   * 1 if the corresponding wall uses the 'ice' block theme.
+   * Set at room load time from wallThemeIndex; used by the collision resolver
+   * to flag ice landings and by the grapple system to reject attachment.
+   */
+  wallIsIceFlag: Uint8Array;
+
   // ── Ropes ──────────────────────────────────────────────────────────────────
   /** Number of ropes in the current room. */
   ropeCount: number;
@@ -416,6 +423,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsPillarHalfWidthFlag: new Uint8Array(MAX_WALLS),
     wallIsBouncePadFlag: new Uint8Array(MAX_WALLS),
     wallBouncePadSpeedFactorIndex: new Uint8Array(MAX_WALLS),
+    wallIsIceFlag: new Uint8Array(MAX_WALLS),
     ropeCount: 0,
     ropeSegmentCount:       new Uint8Array(MAX_ROPES),
     ropeAnchorAXWorld:      new Float32Array(MAX_ROPES),

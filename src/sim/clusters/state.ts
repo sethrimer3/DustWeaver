@@ -14,6 +14,13 @@ export interface ClusterState {
   // ---- Platformer physics -------------------------------------------------
   /** 1 when the cluster is resting on a surface (floor or platform top). */
   isGroundedFlag: 0 | 1;
+  /**
+   * 1 when the cluster is grounded on an ice surface (wallIsIceFlag[wi] === 1).
+   * Cleared each tick alongside isGroundedFlag; set by resolveWallsY when
+   * the landing wall is an ice block.  Used by playerHorizontalMovement to
+   * suppress normal friction and apply reduced ice traction instead.
+   */
+  isGroundedOnIceFlag: 0 | 1;
   /** Half-width of the cluster box in world units (used for rendering and collision). */
   halfWidthWorld: number;
   /** Half-height of the cluster box in world units (used for rendering and collision). */
@@ -507,6 +514,7 @@ export function createClusterState(
     healthPoints: maxHealthPoints,
     maxHealthPoints,
     isGroundedFlag: 0,
+    isGroundedOnIceFlag: 0,
     halfWidthWorld: PLAYER_HALF_WIDTH_WORLD,
     halfHeightWorld: PLAYER_HALF_HEIGHT_WORLD,
     coyoteTimeTicks: 0,

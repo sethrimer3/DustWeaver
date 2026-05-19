@@ -293,6 +293,20 @@ export interface WorldSnapshot {
   readonly grappleFailBeamEndXWorld: number;
   readonly grappleFailBeamEndYWorld: number;
 
+  // ── Ice grapple bounce FX ─────────────────────────────────────────────────
+  /** Ticks remaining for the ice-bounce reflected-ray effect. 0 = inactive. */
+  readonly grappleIceBounceTicksLeft: number;
+  /** Total ticks for the ice bounce effect. */
+  readonly grappleIceBounceTicksTotal: number;
+  /** World-space X of the ice surface hit point. */
+  readonly grappleIceBounceStartXWorld: number;
+  /** World-space Y of the ice surface hit point. */
+  readonly grappleIceBounceStartYWorld: number;
+  /** World-space X of the end of the reflected ray. */
+  readonly grappleIceBounceEndXWorld: number;
+  /** World-space Y of the end of the reflected ray. */
+  readonly grappleIceBounceEndYWorld: number;
+
   readonly grappleEmptyFxTicksLeft: number;
   readonly grappleEmptyFxTotalTicks: number;
   readonly grappleEmptyFxXWorld: number;

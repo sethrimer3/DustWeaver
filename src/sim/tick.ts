@@ -61,6 +61,7 @@ export function tick(world: WorldState): void {
   if (world.grappleEmptyFxTicksLeft > 0) world.grappleEmptyFxTicksLeft -= 1;
   if (world.zipImpactFxTicksLeft > 0) world.zipImpactFxTicksLeft -= 1;
   if (world.grappleRechargeRingTicksLeft > 0) world.grappleRechargeRingTicksLeft -= 1;
+  if (world.grappleIceBounceTicksLeft > 0) world.grappleIceBounceTicksLeft -= 1;
 
   // Capture the player's downward velocity BEFORE movement/collision zeroes it
   // on landing.  The tough falling block trigger reads this to detect hard landings.

@@ -23,6 +23,7 @@ import {
   blockSoundHardnessToIndex,
   blockThemeToSoundHardness,
   WALL_THEME_DEFAULT_INDEX,
+  indexToBlockTheme,
 } from '../levels/roomDef';
 
 // ── RoomWallTemplate ──────────────────────────────────────────────────────────
@@ -46,6 +47,8 @@ export interface RoomWallTemplate {
   readonly isInvisibleFlag: Uint8Array;
   readonly rampOrientationIndex: Uint8Array;
   readonly isPillarHalfWidthFlag: Uint8Array;
+  /** 1 for walls whose theme is 'ice' — used for ice-surface physics and grapple rejection. */
+  readonly isIceFlag: Uint8Array;
 }
 
 /** Epsilon used when deciding whether wall edges are contiguous during merge. */
@@ -104,6 +107,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
   const iv: number[] = []; // isInvisibleFlag (0 or 1)
   const ro: number[] = []; // rampOrientationIndex (255 = not a ramp)
   const ph: number[] = []; // isPillarHalfWidthFlag (0 or 1)
+  const ic: number[] = []; // isIceFlag (0 or 1)
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -119,11 +123,17 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     hs.push(Math.max(BLOCK_SIZE_MEDIUM, def.hBlock * BLOCK_SIZE_MEDIUM));
     fs.push(def.isPlatformFlag === 1 ? 1 : 0);
     pe.push(def.platformEdge ?? 0);
-    ts.push(def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX);
+    const themeIdx = def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX;
+    ts.push(themeIdx);
     sh.push(resolveWallSoundHardnessIndex(room, def.blockTheme, def.soundHardness));
     iv.push(def.isInvisibleFlag === 1 ? 1 : 0);
     ro.push(def.rampOrientation !== undefined ? def.rampOrientation : 255);
     ph.push(isHalfWidthPillar ? 1 : 0);
+    // Derive ice flag from theme: wall is ice if its resolved theme is 'ice'.
+    const resolvedTheme = themeIdx === WALL_THEME_DEFAULT_INDEX
+      ? room.blockTheme ?? ''
+      : indexToBlockTheme(themeIdx);
+    ic.push(resolvedTheme === 'ice' ? 1 : 0);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
@@ -164,7 +174,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
             fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
-            ro.splice(j, 1); ph.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1);
             merged = true;
             break;
           }
@@ -190,7 +200,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
             fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
-            ro.splice(j, 1); ph.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1);
             merged = true;
             break;
           }
@@ -215,6 +225,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     isInvisibleFlag: new Uint8Array(finalCount),
     rampOrientationIndex: new Uint8Array(finalCount),
     isPillarHalfWidthFlag: new Uint8Array(finalCount),
+    isIceFlag: new Uint8Array(finalCount),
   };
   for (let wi = 0; wi < finalCount; wi++) {
     template.xWorld[wi] = xs[wi];
@@ -228,6 +239,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     template.isInvisibleFlag[wi] = iv[wi];
     template.rampOrientationIndex[wi] = ro[wi];
     template.isPillarHalfWidthFlag[wi] = ph[wi];
+    template.isIceFlag[wi] = ic[wi];
   }
   return template;
 }
@@ -259,6 +271,7 @@ export function applyRoomWallTemplate(world: WorldState, template: RoomWallTempl
     world.wallIsPillarHalfWidthFlag[wi] = template.isPillarHalfWidthFlag[wi];
     world.wallIsBouncePadFlag[wi] = 0;
     world.wallBouncePadSpeedFactorIndex[wi] = 0;
+    world.wallIsIceFlag[wi] = template.isIceFlag[wi];
   }
 }
 

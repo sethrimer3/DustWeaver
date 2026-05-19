@@ -99,6 +99,12 @@ export const GRAPPLE_FAIL_BEAM_HOVER_TICKS = 3;
 export const GRAPPLE_EMPTY_FX_TOTAL_TICKS = 12;
 
 /**
+ * Damping factor applied to the remaining grapple distance when it bounces off
+ * an ice surface.  0.6 = 60% of the remaining reach is shown as the reflected ray.
+ */
+const ICE_GRAPPLE_BOUNCE_DAMPING = 0.6;
+
+/**
  * Initialises the GRAPPLE_SEGMENT_COUNT chain particle slots starting at
  * world.particleCount.  Records the start index in world.grappleParticleStartIndex
  * and advances world.particleCount.  Called once by the game screen at startup.
@@ -148,6 +154,7 @@ function getPlayerGrappleOriginWorld(player: ClusterState): { x: number; y: numb
 function clearGrappleFailureFx(world: WorldState): void {
   world.grappleFailBeamTicksLeft = 0;
   world.grappleEmptyFxTicksLeft = 0;
+  world.grappleIceBounceTicksLeft = 0;
 }
 
 function triggerGrappleFailBeam(world: WorldState, dirXWorld: number, dirYWorld: number, maxDistWorld: number): void {
@@ -281,6 +288,26 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   if (hit.wallIndex >= 0 && world.wallIsBouncePadFlag[hit.wallIndex] === 1) {
     clearLegacyGrappleMissState(world);
     triggerGrappleFailBeam(world, dirX, dirY, maxCastDist);
+    return;
+  }
+
+  // Ice walls cannot be grappled — the grapple head bounces off the surface.
+  if (hit.wallIndex >= 0 && world.wallIsIceFlag[hit.wallIndex] === 1) {
+    clearLegacyGrappleMissState(world);
+    // Show the normal approach beam from the player to the ice surface.
+    triggerGrappleFailBeam(world, dirX, dirY, hit.t);
+    // Compute reflected direction for the ice-bounce visual.
+    // The reflected direction is: d - 2*(d·n)*n (vector reflection).
+    const dot = dirX * hit.normalX + dirY * hit.normalY;
+    const reflDirX = dirX - 2.0 * dot * hit.normalX;
+    const reflDirY = dirY - 2.0 * dot * hit.normalY;
+    const remainingDist = (maxCastDist - hit.t) * ICE_GRAPPLE_BOUNCE_DAMPING;
+    world.grappleIceBounceTicksLeft = GRAPPLE_FAIL_BEAM_TOTAL_TICKS;
+    world.grappleIceBounceTicksTotal = GRAPPLE_FAIL_BEAM_TOTAL_TICKS;
+    world.grappleIceBounceStartXWorld = hit.x;
+    world.grappleIceBounceStartYWorld = hit.y;
+    world.grappleIceBounceEndXWorld = hit.x + reflDirX * remainingDist;
+    world.grappleIceBounceEndYWorld = hit.y + reflDirY * remainingDist;
     return;
   }
 
