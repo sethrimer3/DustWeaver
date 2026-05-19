@@ -65,6 +65,15 @@ export interface ClusterState {
    */
   isFastFallModeFlag: 0 | 1;
 
+  // ---- Airborne tracking --------------------------------------------------
+  /**
+   * Number of consecutive ticks the player has been airborne (not grounded).
+   * Reset to 0 each tick the player is grounded; incremented while airborne.
+   * Used by the wall-jump intent filter to distinguish quick post-ground clips
+   * from deliberate mid-air wall interactions.
+   */
+  airborneTicks: number;
+
   // ---- Wall interaction ---------------------------------------------------
   /** 1 when the player's left side is pressed against a solid wall this tick. */
   isTouchingWallLeftFlag: 0 | 1;
@@ -523,6 +532,7 @@ export function createClusterState(
     varJumpTimerTicks: 0,
     varJumpSpeedWorld: 0,
     isFastFallModeFlag: 0,
+    airborneTicks: 0,
     isTouchingWallLeftFlag: 0,
     isTouchingWallRightFlag: 0,
     isWallSlidingFlag: 0,

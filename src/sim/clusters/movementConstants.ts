@@ -337,8 +337,49 @@ export const WALL_JUMP_GRACE_MS = 100;
 export const WALL_JUMP_GRACE_TICKS = Math.round(WALL_JUMP_GRACE_MS / 1000.0 * 60);
 
 // ============================================================================
-// Jump corner correction
+// Wall-jump intent filtering (Celeste-like deliberate wall jump)
 // ============================================================================
+
+/**
+ * Master toggle for wall-jump intent filtering.
+ * When true, wall jumps require at least one deliberate intent signal to fire.
+ * Set to false to revert to the old any-touch/grace/proximity behavior.
+ */
+export const WALL_JUMP_REQUIRE_INTENT = true;
+
+/**
+ * Minimum consecutive airborne ticks before a direct-touch or grace-timer wall
+ * jump is allowed without an away-from-wall input.
+ * Prevents wall jumps immediately after hopping over a small stair step or
+ * ledge (where airborneTicks would still be low).
+ * At 60 fps, 4 ticks ≈ 67 ms.
+ */
+export const WALL_JUMP_MIN_AIRBORNE_TICKS = 4;
+
+/**
+ * Minimum vertical overlap (world units) between the player AABB and a wall
+ * face required for the wall to count as a valid wall-jump surface.
+ * Rejects tiny ledge blocks and stair steps whose side barely overlaps the player.
+ * BLOCK_SIZE_SMALL = 3, BLOCK_SIZE_MEDIUM = 6 — both fail this threshold.
+ * Multi-block merged walls (height ≥ 12) can comfortably reach 8+ units.
+ */
+export const WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD = 8;
+
+/**
+ * Ledge suppression range (world units).
+ * A wall whose top edge is within this distance ABOVE the player's feet is
+ * treated as a ledge lip, not a jumpable wall face.
+ * Prevents wall jumps off stair-step tops and block edges near foot level.
+ */
+export const WALL_JUMP_LEDGE_SUPPRESS_WORLD = 4;
+
+/**
+ * When true, proximity-only wall jumps (not touching, no grace timer) require
+ * the player to be pressing away from the wall OR actively wall-sliding.
+ * Direct touch and grace timer jumps use a looser intent check.
+ */
+export const WALL_JUMP_PROXIMITY_REQUIRES_AWAY_INPUT = true;
+
 
 /**
  * Maximum horizontal nudge (world units) applied when the player bonks the

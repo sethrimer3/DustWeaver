@@ -10,7 +10,7 @@
 import { WorldState } from '../world';
 import { ClusterState } from './state';
 import { WATER_GRAVITY_MULTIPLIER } from '../hazards';
-import { getNearbyWallForWallJump } from './movementCollision';
+import { getWallJumpCandidate } from './playerWallJump';
 import {
   debugSpeedOverrides,
   ov,
@@ -28,7 +28,6 @@ import {
   WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD,
   WALL_JUMP_FORCE_TIME_TICKS,
   WALL_JUMP_LOCKOUT_TICKS,
-  WALL_JUMP_PROXIMITY_PIXELS,
   UPWARD_BRAKE_STRENGTH_PER_SEC2,
   WALL_JUMP_SECOND_Y_MULTIPLIER,
   WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER,
@@ -184,30 +183,22 @@ export function applyPlayerGravityAndJump(
       cluster.varJumpTimerTicks   = VAR_JUMP_TIME_TICKS;
       cluster.varJumpSpeedWorld   = -jumpSpeed;
     } else {
-      // ── Wall jump (uses wall-touch flags, grace timers, and proximity) ───
-      // Grace timers extend the window after leaving a wall (wall coyote time).
-      // Proximity check allows wall jump when slightly away from a wall face.
-      const { nearLeftDistWorld, nearRightDistWorld } = getNearbyWallForWallJump(cluster, world);
-      const proximityPx = ov(debugSpeedOverrides.wallJumpProximityPixels, WALL_JUMP_PROXIMITY_PIXELS);
-      const nearLeft  = nearLeftDistWorld  <= proximityPx;
-      const nearRight = nearRightDistWorld <= proximityPx;
-
-      let canJumpFromLeft  = (cluster.isTouchingWallLeftFlag  === 1
-                           || cluster.wallJumpGraceLeftTicks  > 0
-                           || nearLeft)
-                           && cluster.wallJumpLockoutTicks === 0;
-      let canJumpFromRight = (cluster.isTouchingWallRightFlag === 1
-                           || cluster.wallJumpGraceRightTicks > 0
-                           || nearRight)
-                           && cluster.wallJumpLockoutTicks === 0;
+      // ── Wall jump (intent-filtered — see playerWallJump.ts) ───────────────
+      // getWallJumpCandidate applies wall-face quality filtering (vertical overlap
+      // + ledge suppression) and intent checks (wall slide, away input, airborne
+      // ticks) before allowing a wall jump.  This prevents accidental launches off
+      // small ledges, stair steps, or block corners.
+      const wjCandidate = getWallJumpCandidate(cluster, world);
+      let canJumpFromLeft  = wjCandidate.canJumpFromLeft;
+      let canJumpFromRight = wjCandidate.canJumpFromRight;
 
       // When both sides are eligible, prefer the nearer wall.
       // If equidistant (e.g., touching both walls simultaneously), prefer the
       // wall on the side the player is facing / moving toward so the launch
       // direction feels intentional rather than always favouring the left wall.
       if (canJumpFromLeft && canJumpFromRight) {
-        const leftDist  = cluster.isTouchingWallLeftFlag  === 1 ? 0 : nearLeftDistWorld;
-        const rightDist = cluster.isTouchingWallRightFlag === 1 ? 0 : nearRightDistWorld;
+        const leftDist  = wjCandidate.leftDistWorld;
+        const rightDist = wjCandidate.rightDistWorld;
         if (leftDist < rightDist) {
           canJumpFromRight = false;
         } else if (rightDist < leftDist) {

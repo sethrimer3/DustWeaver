@@ -36,6 +36,14 @@ export function tickPlayerMovement(
   dtSec: number,
 ): void {
   // ── Tick down all cooldown / buffer timers ──────────────────────────
+  // Track consecutive airborne ticks for wall-jump intent filtering.
+  // isGroundedFlag here reflects LAST tick's grounded state (collision pass
+  // runs after tickPlayerMovement), which is the correct value.
+  if (cluster.isGroundedFlag === 1) {
+    cluster.airborneTicks = 0;
+  } else {
+    cluster.airborneTicks += 1;
+  }
   if (cluster.dashCooldownTicks > 0) {
     cluster.dashCooldownTicks -= 1;
     if (cluster.dashCooldownTicks === 0) {
