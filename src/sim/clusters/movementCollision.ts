@@ -48,9 +48,6 @@ import {
 // Re-export so that existing callers importing resolveRampSurfaces from this
 // module continue to work without modification.
 export { resolveRampSurfaces } from './movementRampCollision';
-// Re-export so playerMovement.ts can continue to import from this module.
-export { getNearbyWallForWallJump } from './movementAxisResolvers';
-
 /**
  * Module-private scratch object used to propagate bounce information through the
  * collision pass without per-tick heap allocation.
