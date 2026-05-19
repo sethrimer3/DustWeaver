@@ -557,3 +557,60 @@ and liquid/hazard coverage to measure chunk-rebuild performance across builds.
    - `src/editor/editorRoomBuilder.ts`
    - `src/screens/gameRoomFallingBlocks.ts`
    - `src/screens/gameTransitions.ts`
+
+---
+
+## BUILD 360 — Celeste-like wall-jump intent filtering
+
+### What was completed in BUILD 360
+
+1. Added `src/sim/clusters/playerWallJump.ts` — new module containing the wall-jump candidate helper with quality and intent checks:
+   - `isValidWallJumpFace(playerTop, playerBottom, wallTop, wallBottom)` — rejects walls with insufficient vertical overlap (`WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD = 8 wu`) or whose top edge is within ledge-suppression range of the player's feet (`WALL_JUMP_LEDGE_SUPPRESS_WORLD = 4 wu`).
+   - `hasWallJumpIntent(cluster, world, wallSideDir, usedProximity)` — requires at least one intent signal: wall sliding, away-from-wall input, or (direct-touch / grace only) falling with `airborneTicks >= WALL_JUMP_MIN_AIRBORNE_TICKS = 4`.
+   - `getWallJumpCandidate(cluster, world)` — single public entry point; scans walls, applies quality + intent filters, returns `WallJumpCandidateResult` with per-side `canJumpFrom*`, distance for tie-breaking, and `dbgLeft`/`dbgRight` rejection reason strings.
+
+2. Added new constants to `movementConstants.ts`:
+   - `WALL_JUMP_REQUIRE_INTENT = true` — master toggle.
+   - `WALL_JUMP_MIN_AIRBORNE_TICKS = 4` — minimum consecutive airborne ticks before a touch/grace wall jump is allowed without explicit away input.
+   - `WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD = 8` — rejects single-small-block (3 wu) and single-medium-block (6 wu) side faces, requiring merged/tall walls.
+   - `WALL_JUMP_LEDGE_SUPPRESS_WORLD = 4` — suppresses wall jumps off block tops near foot level.
+   - `WALL_JUMP_PROXIMITY_REQUIRES_AWAY_INPUT = true` — proximity-only wall jumps need away-from-wall input or active wall slide.
+
+3. Added `airborneTicks: number` to `ClusterState`; tracked at the top of `tickPlayerMovement` — increments while airborne, resets to 0 when grounded.
+
+4. Updated `playerVerticalMovement.ts` to call `getWallJumpCandidate` instead of the old raw proximity scan + touch-flag check. The actual wall-jump application logic (velocity, force-time, lockout, etc.) is unchanged.
+
+5. Removed the stale `getNearbyWallForWallJump` import from `playerVerticalMovement.ts` (now unused there; the function remains in `movementAxisResolvers.ts` for any other callers).
+
+### Acceptance test notes
+
+The following scenarios should be verified in-game:
+
+| Scenario | Expected result |
+|---|---|
+| Running and jumping up a staircase of medium blocks | Ground jump fires each step; no accidental backward launch |
+| Brushing the side of a 1-block ledge while jumping upward | Jump continues as ground/coyote jump; wall jump suppressed |
+| Sliding down a tall wall, pressing jump | Strong wall jump fires (wall sliding = intent) |
+| Airborne, pressing away from a tall wall, pressing jump | Wall jump fires (away input = intent) |
+| Near a tall wall with `airborneTicks >= 4`, falling, pressing jump | Wall jump fires (airborne + falling = intent) |
+| Wall-jump chains (skilled play) | Still possible; each jump builds airborneTicks before reaching next wall |
+| Proximity wall jump near a ledge | Suppressed by quality filter + proximity intent check |
+
+### Tuning recommendations (follow-up playtesting)
+
+- **`WALL_JUMP_MIN_AIRBORNE_TICKS`** (currently 4): If players report that running up to a tall wall and jumping feels delayed, lower to 3. If stair clips still occasionally fire, raise to 5.
+- **`WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD`** (currently 8): If any intentional wall-jump scenario against a short wall (height < 12 wu) fails, lower to 6. The 8 wu threshold intentionally blocks single-medium-block (6 wu) walls.
+- **`WALL_JUMP_LEDGE_SUPPRESS_WORLD`** (currently 4): If ledge transitions feel sticky or jumps are blocked near block edges, lower to 3 or 2.
+- **`WALL_JUMP_PROXIMITY_REQUIRES_AWAY_INPUT`** (currently true): If proximity wall jumps feel inaccessible in narrow corridors where the player faces into the wall, consider a separate narrow-passage exception.
+
+### Debug visibility
+
+The `WallJumpCandidateResult.dbgLeft` / `dbgRight` strings are ready to display in a movement debug overlay. Possible rejection values: `'lockout'`, `'no-wall-in-range'`, `'grace/touch+no-quality-wall'`, `'touch/grace+no-intent'`, `'proximity+no-intent'`. Acceptance values: `'touch+intent'`, `'grace+intent'`, `'proximity+intent'`.
+
+To surface these in the debug HUD, pass the result from `getWallJumpCandidate` to the overlay renderer (render layer, read-only snapshot required).
+
+### Remaining / deferred
+
+1. The `dbgLeft`/`dbgRight` strings are not yet wired to the on-screen debug overlay. This is a render-layer task.
+2. `getNearbyWallForWallJump` in `movementAxisResolvers.ts` is now unused by the main player-movement path. It can be removed or repurposed in a future cleanup pass.
+3. Tuning values above should be validated against the full room set before merging to main.
