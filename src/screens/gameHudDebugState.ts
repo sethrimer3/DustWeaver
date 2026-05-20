@@ -12,6 +12,14 @@ import type { InputState } from '../input/handler';
 import type { HudDebugState } from '../render/hud/overlay';
 import { ZIP_JUMP_WINDOW_SECONDS } from '../sim/clusters/grappleZip';
 import { WATER_GRAVITY_MULTIPLIER, WATER_BUOYANCY_FORCE_WORLD } from '../sim/hazards';
+import {
+  computeLogicalWallSurface,
+  computeGroundConnectedExclusion,
+  isContactInsideGroundExclusion,
+  canWallJumpFromSurface,
+  canWallSlideOnSurface,
+  MIN_WALL_SLIDE_SURFACE_HEIGHT_WORLD,
+} from '../sim/clusters/playerWallSurface';
 
 /**
  * Builds a `HudDebugState` object from current world and input state.
@@ -34,6 +42,61 @@ export function buildHudDebugState(
 
   const isStandingOnSurface =
     player.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1;
+
+  // ── Wall eligibility diagnostics ─────────────────────────────────────────
+  // Compute logical wall surface and exclusion zone for whichever side the
+  // player is currently touching (prefer left; fall back to right; else none).
+  let wallDbgSide: 'left' | 'right' | 'none' = 'none';
+  let wallDbgRawPartHeightWorld       = 0;
+  let wallDbgLogicalWallHeightWorld   = 0;
+  let wallDbgContactYWorld            = 0;
+  let wallDbgGroundFloor              = false;
+  let wallDbgExclusionMinY            = 0;
+  let wallDbgExclusionMaxY            = 0;
+  let wallDbgContactInExclusion       = false;
+  let wallDbgJumpAllowed              = false;
+  let wallDbgSlideAllowed             = false;
+  let wallDbgSlideSuppressedShort     = false;
+  let wallDbgActionSuppressedExclusion = false;
+
+  const isTouchLeft  = player.isTouchingWallLeftFlag  === 1;
+  const isTouchRight = player.isTouchingWallRightFlag === 1;
+
+  if (isTouchLeft || isTouchRight) {
+    wallDbgSide = isTouchLeft ? 'left' : 'right';
+    const side   = wallDbgSide;
+    const hw     = player.halfWidthWorld;
+    const hh     = player.halfHeightWorld;
+    const posX   = player.positionXWorld;
+    const posY   = player.positionYWorld;
+    const faceX  = side === 'left'
+      ? posX - hw   // wall to the left: its right face = player's left edge
+      : posX + hw;  // wall to the right: its left face = player's right edge
+    const playerTop    = posY - hh;
+    const playerBottom = posY + hh;
+
+    const surface   = computeLogicalWallSurface(faceX, side, playerTop, playerBottom, world);
+    const exclusion = computeGroundConnectedExclusion(surface, side, world);
+    const contactY  = playerBottom;
+    const inExcl    = isContactInsideGroundExclusion(contactY, exclusion);
+    const jumpOk    = player.wallJumpLockoutTicks === 0
+      ? canWallJumpFromSurface(surface, exclusion, contactY)
+      : false;
+    const slideOk   = canWallSlideOnSurface(surface, exclusion, contactY);
+
+    wallDbgRawPartHeightWorld        = surface.rawPartitionHeightWorld;
+    wallDbgLogicalWallHeightWorld    = surface.height;
+    wallDbgContactYWorld             = contactY;
+    wallDbgGroundFloor               = exclusion.hasGroundConnectedFloor;
+    wallDbgExclusionMinY             = exclusion.exclusionMinY;
+    wallDbgExclusionMaxY             = exclusion.exclusionMaxY;
+    wallDbgContactInExclusion        = inExcl;
+    wallDbgJumpAllowed               = jumpOk;
+    wallDbgSlideAllowed              = slideOk;
+    wallDbgSlideSuppressedShort      = !slideOk && !inExcl &&
+      surface.height < MIN_WALL_SLIDE_SURFACE_HEIGHT_WORLD;
+    wallDbgActionSuppressedExclusion = inExcl;
+  }
 
   return {
     isGrounded:           player.isGroundedFlag === 1,
@@ -81,5 +144,18 @@ export function buildHudDebugState(
       ? WATER_GRAVITY_MULTIPLIER
       : 1.0,
     playerVelocityYWorld: player.velocityYWorld,
+    // Wall eligibility diagnostics
+    wallDbgSide,
+    wallDbgRawPartHeightWorld,
+    wallDbgLogicalWallHeightWorld,
+    wallDbgContactYWorld,
+    wallDbgGroundFloor,
+    wallDbgExclusionMinY,
+    wallDbgExclusionMaxY,
+    wallDbgContactInExclusion,
+    wallDbgJumpAllowed,
+    wallDbgSlideAllowed,
+    wallDbgSlideSuppressedShort,
+    wallDbgActionSuppressedExclusion,
   };
 }

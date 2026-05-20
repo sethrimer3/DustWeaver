@@ -26,11 +26,17 @@ import {
   WALL_JUMP_MIN_AIRBORNE_TICKS,
   WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD,
   WALL_JUMP_LEDGE_SUPPRESS_WORLD,
-  WALL_JUMP_MIN_FACE_HEIGHT_WORLD,
   WALL_JUMP_PROXIMITY_REQUIRES_AWAY_INPUT,
   debugSpeedOverrides,
   ov,
 } from './movementConstants';
+import {
+  type LogicalWallSurface,
+  type GroundConnectedExclusion,
+  computeLogicalWallSurface,
+  computeGroundConnectedExclusion,
+  canWallJumpFromSurface,
+} from './playerWallSurface';
 
 // ── Public result type ────────────────────────────────────────────────────────
 
@@ -44,6 +50,9 @@ import {
  *
  * The `dbgLeft` / `dbgRight` strings are lightweight rejection / acceptance
  * descriptions for display in a movement debug overlay.
+ *
+ * The `logicalSurface*` and `exclusion*` fields expose the computed wall
+ * surface analysis for the movement debug panel.
  */
 export interface WallJumpCandidateResult {
   /** A wall jump can fire from the left wall. */
@@ -58,20 +67,30 @@ export interface WallJumpCandidateResult {
   dbgLeft: string;
   /** Human-readable reason the right side was accepted or rejected (debug). */
   dbgRight: string;
+  /** Logical wall surface computed for the active (or best) side, for debug overlay. */
+  dbgLogicalSurface: LogicalWallSurface | null;
+  /** Ground-connected exclusion for the active side, for debug overlay. */
+  dbgExclusion: GroundConnectedExclusion | null;
+  /** Which side the debug surface/exclusion refers to ('left' | 'right' | 'none'). */
+  dbgActiveSide: 'left' | 'right' | 'none';
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 /**
  * Returns true when the wall face has sufficient vertical extent relative to
- * the player AABB to be considered a real jumpable wall (not a tiny ledge/step).
+ * the player AABB to be considered a jumpable wall face (not a tiny ledge/step).
  *
  * Checks:
- *   1. Face height          — rejects walls shorter than WALL_JUMP_MIN_FACE_HEIGHT_WORLD
- *      (4 small blocks / 32 wu).  1–3-block rises feel like floor terrain, not walls.
- *   2. Minimum vertical overlap — rejects blocks whose side barely grazes the player.
- *   3. Ledge suppression     — rejects walls whose top is near the player's feet,
+ *   1. Minimum vertical overlap — rejects walls whose side barely grazes the player.
+ *   2. Ledge suppression        — rejects walls whose top is near the player's feet,
  *      indicating the player is at (or just above) the top of a step or ledge.
+ *
+ * Note: the old per-partition minimum height check (4 blocks) has been removed.
+ * Wall-jump eligibility is now gated on the aggregated *logical* wall surface
+ * height via `canWallJumpFromSurface` in `playerWallSurface.ts`.  This allows
+ * wall-jumping from a single block of valid vertical surface as required, while
+ * still preventing hops off tiny stair steps via the overlap and ledge checks.
  */
 function isValidWallJumpFace(
   playerTop: number,
@@ -79,11 +98,6 @@ function isValidWallJumpFace(
   wallTop: number,
   wallBottom: number,
 ): boolean {
-  // Face height: wall must be at least 4 small blocks tall regardless of
-  // how much the player AABB overlaps it.  Prevents 1–3 block rises from
-  // triggering a wall jump when the player clips their corner against them.
-  if (wallBottom - wallTop < WALL_JUMP_MIN_FACE_HEIGHT_WORLD) return false;
-
   const overlap = Math.min(playerBottom, wallBottom) - Math.max(playerTop, wallTop);
   if (overlap < WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD) return false;
 
@@ -150,7 +164,9 @@ function hasWallJumpIntent(
  *   1. Platform / ramp exclusion.
  *   2. Wall face quality filtering (vertical overlap + ledge suppression).
  *   3. Proximity / touch / grace-timer detection.
- *   4. Intent filtering.
+ *   4. Logical wall surface aggregation (to handle horizontally-sliced partitions).
+ *   5. Ground-connected bottom-4-block exclusion zone check.
+ *   6. Intent filtering.
  *
  * The caller is responsible for:
  *   - Only calling this when ground jump and coyote jump have already been
@@ -162,12 +178,15 @@ export function getWallJumpCandidate(
   cluster: ClusterState,
   world: WorldState,
 ): WallJumpCandidateResult {
+  const noResult: WallJumpCandidateResult = {
+    canJumpFromLeft: false, canJumpFromRight: false,
+    leftDistWorld: Infinity, rightDistWorld: Infinity,
+    dbgLeft: 'lockout', dbgRight: 'lockout',
+    dbgLogicalSurface: null, dbgExclusion: null, dbgActiveSide: 'none',
+  };
+
   if (cluster.wallJumpLockoutTicks > 0) {
-    return {
-      canJumpFromLeft: false, canJumpFromRight: false,
-      leftDistWorld: Infinity, rightDistWorld: Infinity,
-      dbgLeft: 'lockout', dbgRight: 'lockout',
-    };
+    return noResult;
   }
 
   const hw = cluster.halfWidthWorld;
@@ -183,6 +202,9 @@ export function getWallJumpCandidate(
   // Best (minimum) gap to a quality wall on each side within proximity range.
   let leftMinDist  = Infinity;
   let rightMinDist = Infinity;
+  // Face X of the wall that achieved the minimum gap on each side.
+  let leftFaceX  = playerLeft;
+  let rightFaceX = playerRight;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
     if (world.wallIsPlatformFlag[wi] === 1) continue;
@@ -193,19 +215,26 @@ export function getWallJumpCandidate(
     const wallRight  = wallLeft + world.wallWWorld[wi];
     const wallBottom = wallTop  + world.wallHWorld[wi];
 
-    // Quality check: must be a real wall face, not a ledge or tiny block.
+    // Quality check: must have sufficient vertical overlap and not be a ledge edge.
+    // (Minimum height check removed — logical surface aggregation handles that.)
     if (!isValidWallJumpFace(playerTop, playerBottom, wallTop, wallBottom)) continue;
 
     // Left side: wall's right face is to the player's left.
     const leftGap = playerLeft - wallRight;
     if (leftGap >= 0 && leftGap <= proximity) {
-      if (leftGap < leftMinDist) leftMinDist = leftGap;
+      if (leftGap < leftMinDist) {
+        leftMinDist = leftGap;
+        leftFaceX   = wallRight;
+      }
     }
 
     // Right side: wall's left face is to the player's right.
     const rightGap = wallLeft - playerRight;
     if (rightGap >= 0 && rightGap <= proximity) {
-      if (rightGap < rightMinDist) rightMinDist = rightGap;
+      if (rightGap < rightMinDist) {
+        rightMinDist = rightGap;
+        rightFaceX   = wallLeft;
+      }
     }
   }
 
@@ -223,6 +252,22 @@ export function getWallJumpCandidate(
   const leftProximityOnly  = !leftHasTouchOrGrace  && leftMinDist  > 0 && leftMinDist  <= proximity;
   const rightProximityOnly = !rightHasTouchOrGrace && rightMinDist > 0 && rightMinDist <= proximity;
 
+  // ── Compute logical wall surfaces and exclusion zones ─────────────────────
+  // Only compute for sides that have a candidate wall in range.
+  let leftSurface:  LogicalWallSurface | null = null;
+  let leftExclusion: GroundConnectedExclusion | null = null;
+  let rightSurface:  LogicalWallSurface | null = null;
+  let rightExclusion: GroundConnectedExclusion | null = null;
+
+  if (leftMinDist <= proximity) {
+    leftSurface   = computeLogicalWallSurface(leftFaceX, 'left', playerTop, playerBottom, world);
+    leftExclusion = computeGroundConnectedExclusion(leftSurface, 'left', world);
+  }
+  if (rightMinDist <= proximity) {
+    rightSurface   = computeLogicalWallSurface(rightFaceX, 'right', playerTop, playerBottom, world);
+    rightExclusion = computeGroundConnectedExclusion(rightSurface, 'right', world);
+  }
+
   // Evaluate left side.
   let canJumpFromLeft  = false;
   let dbgLeft = leftMinDist === Infinity
@@ -230,14 +275,25 @@ export function getWallJumpCandidate(
     : 'eval';
 
   if (leftTouchOrGraceOk) {
-    if (hasWallJumpIntent(cluster, world, -1, false)) {
+    // Surface eligibility: ground-connected exclusion zone check.
+    const surfaceOk = leftSurface !== null && leftExclusion !== null
+      ? canWallJumpFromSurface(leftSurface, leftExclusion, playerBottom)
+      : true;
+    if (!surfaceOk) {
+      dbgLeft = 'ground-exclusion';
+    } else if (hasWallJumpIntent(cluster, world, -1, false)) {
       canJumpFromLeft = true;
       dbgLeft = cluster.isTouchingWallLeftFlag === 1 ? 'touch+intent' : 'grace+intent';
     } else {
       dbgLeft = 'touch/grace+no-intent';
     }
   } else if (leftProximityOnly) {
-    if (hasWallJumpIntent(cluster, world, -1, true)) {
+    const surfaceOk = leftSurface !== null && leftExclusion !== null
+      ? canWallJumpFromSurface(leftSurface, leftExclusion, playerBottom)
+      : true;
+    if (!surfaceOk) {
+      dbgLeft = 'ground-exclusion';
+    } else if (hasWallJumpIntent(cluster, world, -1, true)) {
       canJumpFromLeft = true;
       dbgLeft = 'proximity+intent';
     } else {
@@ -252,19 +308,43 @@ export function getWallJumpCandidate(
     : 'eval';
 
   if (rightTouchOrGraceOk) {
-    if (hasWallJumpIntent(cluster, world, 1, false)) {
+    const surfaceOk = rightSurface !== null && rightExclusion !== null
+      ? canWallJumpFromSurface(rightSurface, rightExclusion, playerBottom)
+      : true;
+    if (!surfaceOk) {
+      dbgRight = 'ground-exclusion';
+    } else if (hasWallJumpIntent(cluster, world, 1, false)) {
       canJumpFromRight = true;
       dbgRight = cluster.isTouchingWallRightFlag === 1 ? 'touch+intent' : 'grace+intent';
     } else {
       dbgRight = 'touch/grace+no-intent';
     }
   } else if (rightProximityOnly) {
-    if (hasWallJumpIntent(cluster, world, 1, true)) {
+    const surfaceOk = rightSurface !== null && rightExclusion !== null
+      ? canWallJumpFromSurface(rightSurface, rightExclusion, playerBottom)
+      : true;
+    if (!surfaceOk) {
+      dbgRight = 'ground-exclusion';
+    } else if (hasWallJumpIntent(cluster, world, 1, true)) {
       canJumpFromRight = true;
       dbgRight = 'proximity+intent';
     } else {
       dbgRight = 'proximity+no-intent';
     }
+  }
+
+  // Pick the active side for debug display (prefer the side with a candidate wall).
+  let dbgActiveSide: 'left' | 'right' | 'none' = 'none';
+  let dbgLogicalSurface: LogicalWallSurface | null = null;
+  let dbgExclusion: GroundConnectedExclusion | null = null;
+  if (leftMinDist <= proximity && (leftMinDist <= rightMinDist || rightMinDist === Infinity)) {
+    dbgActiveSide     = 'left';
+    dbgLogicalSurface = leftSurface;
+    dbgExclusion      = leftExclusion;
+  } else if (rightMinDist <= proximity) {
+    dbgActiveSide     = 'right';
+    dbgLogicalSurface = rightSurface;
+    dbgExclusion      = rightExclusion;
   }
 
   return {
@@ -274,5 +354,8 @@ export function getWallJumpCandidate(
     rightDistWorld: rightMinDist,
     dbgLeft,
     dbgRight,
+    dbgLogicalSurface,
+    dbgExclusion,
+    dbgActiveSide,
   };
 }
