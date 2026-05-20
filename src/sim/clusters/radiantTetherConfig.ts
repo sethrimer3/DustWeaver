@@ -107,7 +107,7 @@ export const RT_MAIN_BEAM_PUFF_RADIUS_WORLD = 6.0;
 
 // ── Rope decay chains ───────────────────────────────────────────────────────
 
-/** Ticks before a decaying rope fully fades (world units). */
+/** Ticks before a decaying rope fully fades. */
 export const RT_BRANCH_ROPE_LIFETIME_TICKS = 180;
 
 /** Gravity on the free end of a decaying rope (world units/tick²). */

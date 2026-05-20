@@ -295,7 +295,6 @@ function renderRope(
       const t = s / RT_BRANCH_ROPE_SEGMENTS;
       const sx = anchorX + dx * t;
       const sy = anchorY + dy * t + sagAmount * 4 * t * (1 - t);
-      if (s === 1) ctx.moveTo(anchorX, anchorY);
       ctx.lineTo(sx, sy);
     }
     ctx.stroke();

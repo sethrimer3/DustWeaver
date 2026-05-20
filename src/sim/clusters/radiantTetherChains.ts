@@ -898,7 +898,7 @@ export function startEnergizePhase(cs: RadiantTetherChainState): void {
 
   // Deactivate main beams — they disappear with a puff in the renderer
   for (let i = 0; i < RT_MAIN_BEAM_COUNT; i++) {
-    cs.mainBeams[i].puffProgress = cs.attackPhaseTicks > 0 ? 1.0 : 0.0;
+    cs.mainBeams[i].puffProgress = 1.0;
     cs.mainBeams[i].isActiveFlag = 0;
   }
 
