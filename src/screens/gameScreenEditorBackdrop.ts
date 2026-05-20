@@ -13,6 +13,7 @@ import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer'
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
+import { renderRadiantWeb } from '../render/clusters/radiantWebRenderer';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
 import { drawTunnelDarkness } from './gameRoom';
 import type { EditorController } from '../editor/editorController';
@@ -81,6 +82,7 @@ export function renderEditorBackdrop(
   renderClusters(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
   renderGrasshoppers(ctx, snapshot, offsetXPx, offsetYPx, zoom);
   renderRadiantTether(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
+  renderRadiantWeb(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
   renderGrapple(ctx, snapshot, offsetXPx, offsetYPx, zoom);
   drawTunnelDarkness(ctx, currentRoom, offsetXPx, offsetYPx, zoom);
   environmentalDust.render(ctx, offsetXPx, offsetYPx, zoom, true);

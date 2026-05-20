@@ -105,8 +105,6 @@ let _chainLightningCount = 0;
 // Using Map rather than typed arrays because entity IDs are opaque and not
 // guaranteed to be small consecutive integers.
 const _ownerIsPlayerMap          = new Map<number, boolean>();
-const _ownerIsRadiantTetherMap   = new Map<number, boolean>();
-const _ownerHasTakenDamageMap    = new Map<number, boolean>();
 
 // ---- Main export --------------------------------------------------------
 
@@ -456,13 +454,9 @@ export function applyInterParticleForces(world: WorldState): void {
   // Pre-compute cluster lookups to avoid O(n²) within particle loop.
   // Module-level Maps are cleared and refilled each tick — no per-tick heap allocation.
   _ownerIsPlayerMap.clear();
-  _ownerIsRadiantTetherMap.clear();
-  _ownerHasTakenDamageMap.clear();
   for (let ci = 0; ci < clusters.length; ci++) {
     const cluster = clusters[ci];
     _ownerIsPlayerMap.set(cluster.entityId, cluster.isPlayerFlag === 1);
-    _ownerIsRadiantTetherMap.set(cluster.entityId, cluster.isRadiantTetherFlag === 1);
-    _ownerHasTakenDamageMap.set(cluster.entityId, cluster.healthPoints < cluster.maxHealthPoints);
   }
 
   // Pre-compute player's dust count for armor calculation (only once per tick)
@@ -484,8 +478,6 @@ export function applyInterParticleForces(world: WorldState): void {
 
     // Fast lookup for attacker's player status
     const attackerIsPlayer = _ownerIsPlayerMap.get(ownerI) ?? false;
-    const attackerIsRadiantTether = _ownerIsRadiantTetherMap.get(ownerI) ?? false;
-    const attackerHasTakenDamage = _ownerHasTakenDamageMap.get(ownerI) ?? false;
 
     for (let ci = 0; ci < clusters.length; ci++) {
       const cluster = clusters[ci];
@@ -495,14 +487,6 @@ export function applyInterParticleForces(world: WorldState): void {
       const dxc = positionXWorld[i] - cluster.positionXWorld;
       const dyc = positionYWorld[i] - cluster.positionYWorld;
       if (dxc * dxc + dyc * dyc < CORE_RADIUS_WORLD * CORE_RADIUS_WORLD) {
-        if (
-          attackerIsRadiantTether &&
-          !attackerHasTakenDamage &&
-          cluster.isPlayerFlag === 1
-        ) {
-          // Radiant Tether dust remains non-offensive until the boss is damaged.
-          break;
-        }
         const profile = getElementProfile(kindBuffer[i]);
         if (cluster.healthPoints > 0) {
           let damage: number;

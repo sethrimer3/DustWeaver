@@ -114,6 +114,7 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isRollingEnemy)   return 'rolling';
   if (e.isRockElemental)  return 'rockElemental';
   if (e.isRadiantTether)  return 'radiantTether';
+  if (e.isRadiantWeb)     return 'radiantWeb';
   if (e.isGrappleHunter)  return 'grappleHunter';
   if (e.isSlime)          return 'slime';
   if (e.isLargeSlime)     return 'largeSlime';

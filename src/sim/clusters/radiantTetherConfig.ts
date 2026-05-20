@@ -1,9 +1,8 @@
 /**
  * Radiant Tether — tunable configuration for the first boss.
  *
- * A floating spherical entity made of light that uses rotating laser
- * telegraphs followed by chains of light anchored to walls.  The boss
- * moves by changing chain lengths (winch behavior) and gains more
+ * A floating spherical entity that uses chains of light anchored to walls.
+ * The boss moves by changing chain lengths (winch behavior) and gains more
  * simultaneous chains as health drops.
  *
  * All timing values are in ticks (60 ticks/sec) unless noted.
@@ -29,6 +28,9 @@ export const RT_RESET_DURATION_TICKS = 30; // 0.5 s
 // RT_TELEGRAPH_LINE_WIDTH_PX removed.
 // RT_TELEGRAPH_MAX_RANGE_WORLD removed.
 
+/** Distance at which the boss activates (world units). */
+export const RT_ACTIVATION_RANGE_WORLD = 250.0;
+
 // ── Wall repulsion ──────────────────────────────────────────────────────────
 
 /** Distance at which wall repulsion begins (world units). */
@@ -39,96 +41,6 @@ export const RT_WALL_REPEL_ACCEL_WORLD = 0.15;
 
 /** Maximum repulsion-induced speed (world units/tick). */
 export const RT_WALL_REPEL_MAX_SPEED_WORLD = 4.0;
-
-// ── Main beams (attack) ─────────────────────────────────────────────────────
-
-/** Number of simultaneously active main attack beams. */
-export const RT_MAIN_BEAM_COUNT = 3;
-
-/** World units per tick that a main beam grows. */
-export const RT_MAIN_BEAM_GROW_SPEED_WORLD = 3.5;
-
-/** Alpha of main beams while growing. */
-export const RT_MAIN_BEAM_ALPHA = 0.25;
-
-/** Visual width of main beams (screen px). */
-export const RT_MAIN_BEAM_WIDTH_PX = 2.5;
-
-/** Maximum raycast range for main beams (world units). */
-export const RT_MAIN_BEAM_MAX_RANGE_WORLD = 350.0;
-
-// ── Branch beams ────────────────────────────────────────────────────────────
-
-/** Number of branch beams per main beam. */
-export const RT_BRANCH_BEAMS_PER_MAIN = 2;
-
-/** Angle offset from wall normal for each branch (radians). */
-export const RT_BRANCH_BEAM_ANGLE_OFFSET_RAD = Math.PI / 4;
-
-/** World units per tick that a branch beam grows. */
-export const RT_BRANCH_BEAM_GROW_SPEED_WORLD = 2.5;
-
-/** Visual width of branch beams (screen px). */
-export const RT_BRANCH_BEAM_WIDTH_PX = 1.5;
-
-/** Maximum raycast range for branch beams (world units). */
-export const RT_BRANCH_BEAM_MAX_RANGE_WORLD = 200.0;
-
-// ── Energized damage phase ──────────────────────────────────────────────────
-
-/** Ticks branch beams charge up before they can deal damage. */
-export const RT_BRANCH_ENERGIZE_DELAY_TICKS = 20;
-
-/** Ticks branch beams stay energized and deal damage. */
-export const RT_BRANCH_DAMAGE_TICKS = 90;
-
-/** Damage dealt per hit by an energized or rope branch beam. */
-export const RT_BRANCH_DAMAGE = 1;
-
-/** Hitbox half-width of branch beams for player collision (world units). */
-export const RT_BRANCH_HITBOX_HALF_WIDTH_WORLD = 3.5;
-
-/** Invulnerability ticks granted after a branch beam hit. */
-export const RT_BRANCH_IFRAMES_TICKS = 60;
-
-// ── Dust puffs ──────────────────────────────────────────────────────────────
-
-/** Number of dust puffs at main beam impact points. */
-export const RT_MAIN_BEAM_PUFF_COUNT = 5;
-
-/** Lifetime of each dust puff (ticks). */
-export const RT_MAIN_BEAM_PUFF_LIFETIME_TICKS = 30;
-
-/** Alpha of dust puffs. */
-export const RT_MAIN_BEAM_PUFF_ALPHA = 0.6;
-
-/** Radius of each dust puff (world units). */
-export const RT_MAIN_BEAM_PUFF_RADIUS_WORLD = 6.0;
-
-// ── Rope decay chains ───────────────────────────────────────────────────────
-
-/** Ticks before a decaying rope fully fades. */
-export const RT_BRANCH_ROPE_LIFETIME_TICKS = 180;
-
-/** Gravity on the free end of a decaying rope (world units/tick²). */
-export const RT_BRANCH_ROPE_GRAVITY_WORLD = 0.22;
-
-/** Drag on the free-end velocity of a decaying rope (per tick). */
-export const RT_BRANCH_ROPE_DRAG = 0.985;
-
-/** Visual segments for rope rendering (integer). */
-export const RT_BRANCH_ROPE_SEGMENTS = 12;
-
-// ── Beam launch angles ───────────────────────────────────────────────────────
-
-/** Max random jitter for the first beam direction (radians = ±15°). */
-export const RT_BEAM_JITTER_RAD = Math.PI / 6;
-
-/** Angular spacing between the three beams (radians = 120°). */
-export const RT_BEAM_ANGLE_SPACING_RAD = (Math.PI * 2) / 3;
-
-/** Extra per-beam jitter applied to beams 1 and 2 (radians). */
-export const RT_SECONDARY_BEAM_JITTER_RAD = 0.3;
 
 // ── Chain anchoring ─────────────────────────────────────────────────────────
 

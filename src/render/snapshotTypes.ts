@@ -106,14 +106,20 @@ export interface ClusterSnapshot {
   readonly rockElementalDustCount: number;
   /** 1 if this cluster is the Radiant Tether boss. */
   readonly isRadiantTetherFlag: 0 | 1;
-  /** Current Radiant Tether state (0-6). */
+  /** Current Radiant Tether state (0-3). */
   readonly radiantTetherState: number;
   /** Ticks elapsed in the current Radiant Tether state. */
   readonly radiantTetherStateTicks: number;
-  /** Base angle (radians) for evenly-spaced chain/telegraph directions. */
+  /** Base angle (radians) for evenly-spaced chain directions. */
   readonly radiantTetherBaseAngleRad: number;
   /** Current number of active chains. */
   readonly radiantTetherChainCount: number;
+  /** 1 if this cluster is the Radiant Web boss. */
+  readonly isRadiantWebFlag: 0 | 1;
+  /** Current Radiant Web state (0-6). */
+  readonly radiantWebState: number;
+  /** Ticks elapsed in the current Radiant Web state. */
+  readonly radiantWebStateTicks: number;
   /** 1 if this cluster is a grapple hunter. */
   readonly isGrappleHunterFlag: 0 | 1;
   /** Current grapple hunter state (0-4). */

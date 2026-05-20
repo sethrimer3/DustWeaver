@@ -188,6 +188,9 @@ function _makeEmptyCluster(): _MutableCluster {
     radiantTetherStateTicks: 0,
     radiantTetherBaseAngleRad: 0,
     radiantTetherChainCount: 0,
+    isRadiantWebFlag: 0,
+    radiantWebState: 0,
+    radiantWebStateTicks: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterChainStartIndex: -1,
@@ -268,6 +271,9 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.radiantTetherStateTicks         = src.radiantTetherStateTicks;
   dst.radiantTetherBaseAngleRad       = src.radiantTetherBaseAngleRad;
   dst.radiantTetherChainCount         = src.radiantTetherChainCount;
+  dst.isRadiantWebFlag                = src.isRadiantWebFlag;
+  dst.radiantWebState                 = src.radiantWebState;
+  dst.radiantWebStateTicks            = src.radiantWebStateTicks;
   dst.isGrappleHunterFlag             = src.isGrappleHunterFlag;
   dst.grappleHunterState              = src.grappleHunterState;
   dst.grappleHunterChainStartIndex    = src.grappleHunterChainStartIndex;

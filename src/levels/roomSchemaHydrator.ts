@@ -61,6 +61,7 @@ export function enemyTypeToFlags(
     rollingEnemySpriteIndex: type === 'rolling' ? (base.spriteIndex ?? 1) : undefined,
     isRockElemental: type === 'rockElemental',
     isRadiantTether: type === 'radiantTether',
+    isRadiantWeb:    type === 'radiantWeb',
     isGrappleHunter: type === 'grappleHunter',
     isSlime:         type === 'slime',
     isLargeSlime:    type === 'largeSlime',

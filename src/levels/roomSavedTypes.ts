@@ -64,6 +64,7 @@ export type SavedEnemyType =
   | 'rolling'
   | 'rockElemental'
   | 'radiantTether'
+  | 'radiantWeb'
   | 'grappleHunter'
   | 'slime'
   | 'largeSlime'

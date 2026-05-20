@@ -15,6 +15,7 @@ import { BLOCK_SIZE_SMALL, type RoomDef } from '../levels/roomDef';
 import { renderWalls, renderClusters } from '../render/clusters/renderer';
 import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
+import { renderRadiantWeb } from '../render/clusters/radiantWebRenderer';
 import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
 import type { HudState } from '../render/hud/overlay';
@@ -513,6 +514,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderRadiantWeb(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
 
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows

@@ -181,6 +181,30 @@ export function applyClusterMovement(world: WorldState): void {
         cluster.positionYWorld = world.worldHeightWorld - margin - hh;
         cluster.radiantTetherVelYWorld *= -0.3;
       }
+    } else if (cluster.isRadiantWebFlag === 1) {
+      // ── Radiant Web boss: integrate + clamp to room bounds ───────────────
+      cluster.positionXWorld += cluster.velocityXWorld * dtSec;
+      cluster.positionYWorld += cluster.velocityYWorld * dtSec;
+
+      const hw2 = cluster.halfWidthWorld;
+      const hh2 = cluster.halfHeightWorld;
+      const margin2 = 20.0;
+      if (cluster.positionXWorld < minX + margin2 + hw2) {
+        cluster.positionXWorld = minX + margin2 + hw2;
+        cluster.velocityXWorld = 0;
+      }
+      if (cluster.positionXWorld > maxX - margin2 - hw2) {
+        cluster.positionXWorld = maxX - margin2 - hw2;
+        cluster.velocityXWorld = 0;
+      }
+      if (cluster.positionYWorld < margin2 + hh2) {
+        cluster.positionYWorld = margin2 + hh2;
+        cluster.velocityYWorld = 0;
+      }
+      if (cluster.positionYWorld > world.worldHeightWorld - margin2 - hh2) {
+        cluster.positionYWorld = world.worldHeightWorld - margin2 - hh2;
+        cluster.velocityYWorld = 0;
+      }
     } else if (cluster.isBubbleEnemyFlag === 1) {
       // ── Bubble enemy: 2D drift + world-bounds clamp (no wall collision) ─────
       cluster.positionXWorld += cluster.velocityXWorld * dtSec;

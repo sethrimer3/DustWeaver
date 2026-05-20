@@ -53,6 +53,7 @@ import { createEditorController, EditorController } from '../editor/editorContro
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
 import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
+import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { getMusicVolume, getSelectedRenderSize } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
@@ -462,6 +463,7 @@ export function startGameScreen(
     world.grappleParticleStartIndex = -1;
 
     resetRadiantTetherState();
+    resetRadiantWebState();
 
     yield; // ── Phase A complete ─────────────────────────────────────────────
 

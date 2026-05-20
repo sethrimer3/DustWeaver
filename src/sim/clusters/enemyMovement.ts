@@ -147,6 +147,10 @@ export function tickEnemyMovement(
     // Movement is handled by the chain winching system in radiantTetherAi.ts
     // No gravity, no enemy walk logic — boss moves purely via chain tension.
 
+  } else if (cluster.isRadiantWebFlag === 1) {
+    // ── Radiant Web boss: fully floating, no gravity ─────────────────────
+    // Movement is handled by radiantWebAi.ts drift logic.
+
   } else if (cluster.isGrappleHunterFlag === 1) {
     // ── Grapple Hunter: ground-based with gravity ───────────────────────
     // Gravity always applies.

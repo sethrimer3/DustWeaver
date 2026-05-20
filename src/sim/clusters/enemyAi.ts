@@ -45,6 +45,7 @@ export function applyEnemyAI(world: WorldState): void {
     if (cluster.isPlayerFlag === 1 || cluster.isAliveFlag === 0) continue;
     // Skip specialized enemies that have their own AI modules
     if (cluster.isRadiantTetherFlag === 1) continue;
+    if (cluster.isRadiantWebFlag === 1) continue;
     if (cluster.isGrappleHunterFlag === 1) continue;
     if (cluster.isBubbleEnemyFlag === 1) continue;
 
