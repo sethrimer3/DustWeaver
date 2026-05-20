@@ -6,9 +6,8 @@ import {
   type TransitionRevealState,
 } from '../render/transitions/transitionCameraReveal';
 import type { RoomDef } from '../levels/roomDef';
-import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import type { WorldState } from '../sim/world';
-import { checkRoomTransitions, getOppositeTransitionDirection } from './gameTransitions';
+import { checkRoomTransitions, getOppositeTransitionDirection, type TransitionDirection } from './gameTransitions';
 import { TRANSITION_COOLDOWN_MS, type GameCameraState } from './gameCameraState';
 
 export interface TransitionDebugState {
@@ -26,7 +25,13 @@ export function orchestrateRoomTransitions(
   isCrossingInactive: boolean,
   preTransVX: number,
   preTransVY: number,
-  loadRoom: (room: RoomDef, spawnXBlock: number, spawnYBlock: number) => void,
+  /**
+   * Called when a transition fires.  Responsible for loading the target room
+   * and applying the pre-transition velocity to the new player cluster.
+   * The async load path defers velocity application until the generator
+   * completes; the sync (cache-hit) path applies it immediately.
+   */
+  loadRoom: (room: RoomDef, spawnXBlock: number, spawnYBlock: number, vx: number, vy: number, dir: TransitionDirection) => void,
   resolveSpawnBlock: (room: RoomDef, spawnXBlock: number, spawnYBlock: number) => readonly [number, number],
   camera: CameraState,
   transitionRevealState: TransitionRevealState,
@@ -51,11 +56,13 @@ export function orchestrateRoomTransitions(
       const [validSpawnX, validSpawnY] = resolveSpawnBlock(room, spawnX, spawnY);
 
       if (ENABLE_SIMPLE_ROOM_TRANSITIONS) {
-        loadRoom(room, validSpawnX, validSpawnY);
+        // Velocity application is delegated to the loadRoom callback so that
+        // async loads can defer it until the generator completes.
+        loadRoom(room, validSpawnX, validSpawnY, preTransVX, preTransVY, dir);
       } else {
         const oldCamX = camera.centerXWorld;
         const oldCamY = camera.centerYWorld;
-        loadRoom(room, validSpawnX, validSpawnY);
+        loadRoom(room, validSpawnX, validSpawnY, preTransVX, preTransVY, dir);
         const targetCamX = camera.centerXWorld;
         const targetCamY = camera.centerYWorld;
         camera.centerXWorld = oldCamX;
@@ -70,12 +77,6 @@ export function orchestrateRoomTransitions(
 
       debugState.lastTransitionDestRoomId = room.id;
       camState.transitionCooldownMs = TRANSITION_COOLDOWN_MS;
-
-      const newPlayer = world.clusters[0];
-      if (newPlayer !== undefined && newPlayer.isPlayerFlag === 1) {
-        newPlayer.velocityXWorld = preTransVX;
-        newPlayer.velocityYWorld = dir === 'up' ? preTransVY - PLAYER_JUMP_SPEED_WORLD * 0.5 : preTransVY;
-      }
 
       if (ENABLE_TRANSITION_CAMERA_REVEAL) {
         const entryEdge = getOppositeTransitionDirection(dir);

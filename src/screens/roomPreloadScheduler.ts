@@ -24,10 +24,10 @@
  */
 
 import type { RoomDef } from '../levels/roomDef';
-import { buildRoomWallTemplate } from './gameRoomWalls';
-import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
+import { buildPreparedRoomRuntime } from './preparedRoomRuntime';
 import { preloadRoomThemeSprites } from '../render/roomAssetPreloader';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
+import { isEntryFullyPrepared } from './roomRuntimeCache';
 
 // ── Idle scheduling shim ──────────────────────────────────────────────────────
 
@@ -137,29 +137,32 @@ export function scheduleRoomPreloads(
   function processNext(): void {
     if (isCancelled) return;
 
-    // Skip rooms already cached.
-    while (workQueue.length > 0 && cache.has(workQueue[0])) {
-      workQueue.shift();
+    // Skip rooms already fully cached.
+    while (workQueue.length > 0) {
+      const frontEntry = cache.has(workQueue[0]) ? cache.get(workQueue[0]) : undefined;
+      if (frontEntry !== undefined && isEntryFullyPrepared(frontEntry)) {
+        workQueue.shift();
+      } else {
+        break;
+      }
     }
     if (workQueue.length === 0) return;
 
     const roomId = workQueue.shift()!;
     const room = roomRegistry.get(roomId);
-    if (room !== undefined && !cache.has(roomId)) {
+    // Skip if already fully prepared.
+    const existingEntry = cache.has(roomId) ? cache.get(roomId) : undefined;
+    if (room !== undefined && (existingEntry === undefined || !isEntryFullyPrepared(existingEntry))) {
       const t0 = performance.now();
-      const wallTemplate = buildRoomWallTemplate(room);
-      const wallMs = performance.now() - t0;
+      const prepared = buildPreparedRoomRuntime(room);
+      const totalMs = performance.now() - t0;
 
-      const t1 = performance.now();
-      const edgeExtension = buildEdgeExtensionCache(room);
-      const edgeMs = performance.now() - t1;
-
-      cache.set(roomId, { wallTemplate, edgeExtension });
+      cache.set(roomId, prepared);
 
       if (isDebugMode) {
         console.log(
-          `[preload] ${roomId} wallTemplate=${wallMs.toFixed(1)}ms` +
-          ` edge=${edgeMs.toFixed(1)}ms (cache size=${cache.size})`,
+          `[preload] ${roomId} prepared in ${totalMs.toFixed(1)}ms` +
+          ` (wall+edge+blockers+decor, cache size=${cache.size})`,
         );
       }
     }
