@@ -260,18 +260,53 @@ export function createEditorController(
           if (prop.startsWith('campaignSpawn.')) {
             // Campaign spawn properties are not stored in room data — update state + session directly.
             if (state.campaignSpawnBlock !== null && campaignSession?.campaign?.campaign != null) {
+              const spawn = campaignSession.campaign.campaign.campaignSpawn;
               const numVal = typeof value === 'number' ? value : parseInt(String(value));
-              if (!isNaN(numVal)) {
-                if (prop === 'campaignSpawn.xBlock') {
-                  state.campaignSpawnBlock = [numVal, state.campaignSpawnBlock[1]];
-                  if (campaignSession.campaign.campaign.campaignSpawn) {
-                    campaignSession.campaign.campaign.campaignSpawn.xBlock = numVal;
-                  }
-                } else if (prop === 'campaignSpawn.yBlock') {
-                  state.campaignSpawnBlock = [state.campaignSpawnBlock[0], numVal];
-                  if (campaignSession.campaign.campaign.campaignSpawn) {
-                    campaignSession.campaign.campaign.campaignSpawn.yBlock = numVal;
-                  }
+              if (prop === 'campaignSpawn.xBlock' && !isNaN(numVal)) {
+                state.campaignSpawnBlock = [numVal, state.campaignSpawnBlock[1]];
+                if (spawn) spawn.xBlock = numVal;
+              } else if (prop === 'campaignSpawn.yBlock' && !isNaN(numVal)) {
+                state.campaignSpawnBlock = [state.campaignSpawnBlock[0], numVal];
+                if (spawn) spawn.yBlock = numVal;
+              } else if (prop === 'campaignSpawn.startingHealth' && spawn) {
+                if (!isNaN(numVal) && numVal >= 1) {
+                  spawn.startingHealth = numVal;
+                } else {
+                  delete spawn.startingHealth;
+                }
+                if (state.campaignSpawnStartingOptions) {
+                  state.campaignSpawnStartingOptions.startingHealth = spawn.startingHealth;
+                }
+              } else if (prop === 'campaignSpawn.startingDustContainerCount' && spawn) {
+                if (!isNaN(numVal) && numVal >= 0) {
+                  spawn.startingDustContainerCount = numVal;
+                } else {
+                  delete spawn.startingDustContainerCount;
+                }
+                if (state.campaignSpawnStartingOptions) {
+                  state.campaignSpawnStartingOptions.startingDustContainerCount = spawn.startingDustContainerCount;
+                }
+              } else if (prop === 'campaignSpawn.startingDustTypes' && spawn) {
+                const strVal = String(value);
+                try {
+                  const parsed = JSON.parse(strVal);
+                  spawn.startingDustTypes = Array.isArray(parsed) ? parsed : undefined;
+                } catch {
+                  spawn.startingDustTypes = undefined;
+                }
+                if (state.campaignSpawnStartingOptions) {
+                  state.campaignSpawnStartingOptions.startingDustTypes = spawn.startingDustTypes;
+                }
+              } else if (prop === 'campaignSpawn.startingWeaves' && spawn) {
+                const strVal = String(value);
+                try {
+                  const parsed = JSON.parse(strVal);
+                  spawn.startingWeaves = Array.isArray(parsed) ? parsed : undefined;
+                } catch {
+                  spawn.startingWeaves = undefined;
+                }
+                if (state.campaignSpawnStartingOptions) {
+                  state.campaignSpawnStartingOptions.startingWeaves = spawn.startingWeaves;
                 }
               }
             }

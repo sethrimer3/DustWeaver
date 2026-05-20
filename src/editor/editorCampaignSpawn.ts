@@ -20,16 +20,23 @@ export interface CampaignSpawnContext {
 
 /**
  * Reads campaign.campaignSpawn from the session and sets
- * state.campaignSpawnBlock if the current room is the campaign spawn room,
- * otherwise sets it to null.
+ * state.campaignSpawnBlock and state.campaignSpawnStartingOptions if the
+ * current room is the campaign spawn room, otherwise sets both to null.
  */
 export function syncCampaignSpawnBlockFromSession(ctx: CampaignSpawnContext): void {
   const { state, campaignSession } = ctx;
   const spawn = campaignSession?.campaign.campaign.campaignSpawn ?? null;
   if (spawn !== null && state.roomData !== null && spawn.roomId === state.roomData.id) {
     state.campaignSpawnBlock = [spawn.xBlock, spawn.yBlock];
+    state.campaignSpawnStartingOptions = {
+      startingHealth: spawn.startingHealth,
+      startingDustContainerCount: spawn.startingDustContainerCount,
+      startingDustTypes: spawn.startingDustTypes,
+      startingWeaves: spawn.startingWeaves,
+    };
   } else {
     state.campaignSpawnBlock = null;
+    state.campaignSpawnStartingOptions = null;
   }
 }
 
@@ -46,20 +53,42 @@ export function syncCampaignSpawnToSessionAfterDelete(ctx: CampaignSpawnContext)
   const spawn = campaignSession.campaign.campaign.campaignSpawn;
   if (spawn && spawn.roomId === state.roomData?.id && state.campaignSpawnBlock === null) {
     delete campaignSession.campaign.campaign.campaignSpawn;
+    state.campaignSpawnStartingOptions = null;
   }
 }
 
 /**
  * Places the campaign spawn at (newXBlock, newYBlock) in the current room,
  * clearing any old campaign spawn from other rooms, and updates the session.
+ * Preserves any existing starting options (startingHealth, startingDustContainerCount,
+ * startingDustTypes, startingWeaves) from a previously placed spawn.
  * Does NOT push a history snapshot (the caller's Place tool branch does that).
  */
 export function placeCampaignSpawn(ctx: CampaignSpawnContext, newXBlock: number, newYBlock: number): void {
   const { state, campaignSession } = ctx;
   if (!state.roomData || !campaignSession) return;
   const roomId = state.roomData.id;
+  // Preserve existing starting options when moving or replacing the spawn.
+  const prevSpawn = campaignSession.campaign.campaign.campaignSpawn;
+  const prevOptions = prevSpawn !== undefined ? {
+    startingHealth: prevSpawn.startingHealth,
+    startingDustContainerCount: prevSpawn.startingDustContainerCount,
+    startingDustTypes: prevSpawn.startingDustTypes,
+    startingWeaves: prevSpawn.startingWeaves,
+  } : {};
   state.campaignSpawnBlock = [newXBlock, newYBlock];
-  campaignSession.campaign.campaign.campaignSpawn = { roomId, xBlock: newXBlock, yBlock: newYBlock };
+  state.campaignSpawnStartingOptions = {
+    startingHealth: prevOptions.startingHealth,
+    startingDustContainerCount: prevOptions.startingDustContainerCount,
+    startingDustTypes: prevOptions.startingDustTypes,
+    startingWeaves: prevOptions.startingWeaves,
+  };
+  campaignSession.campaign.campaign.campaignSpawn = {
+    roomId,
+    xBlock: newXBlock,
+    yBlock: newYBlock,
+    ...prevOptions,
+  };
   // Keep initialRoomId in sync with the campaign spawn room.
   campaignSession.campaign.campaign.initialRoomId = roomId;
 }

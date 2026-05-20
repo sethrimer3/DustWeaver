@@ -88,6 +88,17 @@ export interface EditorState {
    * Managed by the editor controller — not stored in room JSON.
    */
   campaignSpawnBlock: [number, number] | null;
+  /**
+   * Starting options for the campaign spawn (non-null when campaignSpawnBlock is not null).
+   * Mirrors the optional starting configuration fields from CampaignSpawnData.
+   * Managed by the editor controller — not stored in room JSON.
+   */
+  campaignSpawnStartingOptions: {
+    startingHealth?: number;
+    startingDustContainerCount?: number;
+    startingDustTypes?: string[];
+    startingWeaves?: string[];
+  } | null;
   /** Next unique ID for placed elements. */
   nextUid: number;
   /** Whether the user is dragging selected elements. */
@@ -172,6 +183,7 @@ export function createEditorState(): EditorState {
     linkSourceTransitionUid: -1,
     roomData: null,
     campaignSpawnBlock: null,
+    campaignSpawnStartingOptions: null,
     nextUid: 1,
     isDragging: false,
     dragStartBlockX: 0,

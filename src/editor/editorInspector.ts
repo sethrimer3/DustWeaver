@@ -27,7 +27,7 @@ import {
   addColorSliders,
 } from './editorFormWidgets';
 import { makeBtn } from './editorUIHelpers';
-import { GREEN } from './editorStyles';
+import { GREEN, PANEL_BORDER, TEXT_COLOR } from './editorStyles';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { buildDialogueTriggerInspector } from './editorDialogueTriggerInspector';
 
@@ -178,11 +178,100 @@ export function updateInspector(
     }
   } else if (el.type === 'campaignSpawn') {
     const spawnBlock = state.campaignSpawnBlock;
+    const opts = state.campaignSpawnStartingOptions;
     if (spawnBlock !== null) {
       addField(div, 'xBlock', String(spawnBlock[0]),
         v => callbacks?.onPropertyChange('campaignSpawn.xBlock', parseInt(v)));
       addField(div, 'yBlock', String(spawnBlock[1]),
         v => callbacks?.onPropertyChange('campaignSpawn.yBlock', parseInt(v)));
+
+      // ── Starting options section ────────────────────────────────────────
+      const sectionLabel = document.createElement('div');
+      sectionLabel.textContent = 'Starting Options';
+      sectionLabel.style.cssText = `font-size: 11px; color: ${GREEN}; margin-top: 8px; margin-bottom: 4px; font-weight: bold;`;
+      div.appendChild(sectionLabel);
+
+      addNumberField(div, 'Health', opts?.startingHealth ?? 10, 1, 10,
+        v => callbacks?.onPropertyChange('campaignSpawn.startingHealth', v));
+      addNumberField(div, 'Containers', opts?.startingDustContainerCount ?? 0, 0, 20,
+        v => callbacks?.onPropertyChange('campaignSpawn.startingDustContainerCount', v));
+
+      // Starting Dust Types — checkbox list
+      const dustLabel = document.createElement('div');
+      dustLabel.textContent = 'Starting Dust Types';
+      dustLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 3px;`;
+      div.appendChild(dustLabel);
+
+      const currentDustTypes = new Set<string>(opts?.startingDustTypes ?? []);
+      const dustGrid = document.createElement('div');
+      dustGrid.style.cssText = `display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px;`;
+      for (const kindName of DUST_KIND_OPTIONS) {
+        const isKindChecked = currentDustTypes.has(kindName);
+        const chip = document.createElement('label');
+        chip.style.cssText = `
+          display: flex; align-items: center; gap: 3px;
+          background: rgba(0,0,0,0.3); border: 1px solid ${isKindChecked ? GREEN : PANEL_BORDER};
+          border-radius: 3px; padding: 2px 5px; cursor: pointer;
+          font-size: 10px; color: ${isKindChecked ? GREEN : TEXT_COLOR};
+        `;
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = isKindChecked;
+        cb.style.cssText = `accent-color: ${GREEN}; width: 10px; height: 10px;`;
+        cb.addEventListener('click', e => e.stopPropagation());
+        cb.addEventListener('change', () => {
+          if (cb.checked) { currentDustTypes.add(kindName); } else { currentDustTypes.delete(kindName); }
+          chip.style.borderColor = cb.checked ? GREEN : PANEL_BORDER;
+          chip.style.color = cb.checked ? GREEN : TEXT_COLOR;
+          callbacks?.onPropertyChange('campaignSpawn.startingDustTypes', JSON.stringify([...currentDustTypes]));
+        });
+        chip.appendChild(cb);
+        chip.appendChild(document.createTextNode(kindName));
+        dustGrid.appendChild(chip);
+      }
+      div.appendChild(dustGrid);
+
+      // Starting Weaves — checkbox list
+      const weavesLabel = document.createElement('div');
+      weavesLabel.textContent = 'Starting Weaves';
+      weavesLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 3px;`;
+      div.appendChild(weavesLabel);
+
+      const currentWeaves = new Set<string>(opts?.startingWeaves ?? []);
+      const weavesGrid = document.createElement('div');
+      weavesGrid.style.cssText = `display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px;`;
+      for (const weaveId of WEAVE_LIST) {
+        const weaveDef = WEAVE_REGISTRY.get(weaveId);
+        const weaveName = weaveDef?.displayName ?? weaveId;
+        const isWeaveChecked = currentWeaves.has(weaveId);
+
+        const chip = document.createElement('label');
+        chip.style.cssText = `
+          display: flex; align-items: center; gap: 3px;
+          background: rgba(0,0,0,0.3); border: 1px solid ${isWeaveChecked ? GREEN : PANEL_BORDER};
+          border-radius: 3px; padding: 2px 5px; cursor: pointer;
+          font-size: 10px; color: ${isWeaveChecked ? GREEN : TEXT_COLOR};
+        `;
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = isWeaveChecked;
+        cb.style.cssText = `accent-color: ${GREEN}; width: 10px; height: 10px;`;
+        cb.addEventListener('click', e => e.stopPropagation());
+        cb.addEventListener('change', () => {
+          if (cb.checked) {
+            currentWeaves.add(weaveId);
+          } else {
+            currentWeaves.delete(weaveId);
+          }
+          chip.style.borderColor = cb.checked ? GREEN : PANEL_BORDER;
+          chip.style.color = cb.checked ? GREEN : TEXT_COLOR;
+          callbacks?.onPropertyChange('campaignSpawn.startingWeaves', JSON.stringify([...currentWeaves]));
+        });
+        chip.appendChild(cb);
+        chip.appendChild(document.createTextNode(weaveName));
+        weavesGrid.appendChild(chip);
+      }
+      div.appendChild(weavesGrid);
     }
   } else if (el.type === 'playerSpawn') {
     addField(div, 'xBlock', String(room.playerSpawnBlock[0]),

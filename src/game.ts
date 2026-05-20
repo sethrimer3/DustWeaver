@@ -8,6 +8,10 @@ import type { CampaignSource } from './levels/campaignSource';
 import type { EditableCampaignSession } from './editor/editableCampaignSession';
 import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn } from './levels/rooms';
 import { setActiveCampaignId } from './levels/campaigns';
+import { stringToParticleKind } from './editor/roomJsonSchema';
+import { unlockDustType, unlockActiveWeave } from './progression/unlocks';
+import { WEAVE_REGISTRY } from './sim/weaves/weaveDefinition';
+import { PLAYER_INITIAL_HEALTH } from './screens/gameSpawn';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -115,6 +119,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
       const doPlay = async (): Promise<void> => {
         let startRoomId: string;
         let customSpawnOverride: readonly [number, number] | null = null;
+        let campaignStartProgress: PlayerProgress | undefined;
         if (source.loadPackedCampaign !== undefined) {
           const campaign = await source.loadPackedCampaign();
           registerRoomsFromPackedCampaign(campaign);
@@ -122,6 +127,29 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           if (cSpawn !== undefined) {
             startRoomId = cSpawn.roomId;
             customSpawnOverride = [cSpawn.xBlock, cSpawn.yBlock];
+            // Apply campaign spawn starting options to a fresh progress.
+            campaignStartProgress = createDefaultProgress();
+            if (cSpawn.startingHealth !== undefined) {
+              campaignStartProgress.startingHealth = Math.max(1, Math.min(cSpawn.startingHealth, PLAYER_INITIAL_HEALTH));
+            }
+            if (cSpawn.startingDustContainerCount !== undefined) {
+              campaignStartProgress.dustContainerCount = Math.max(0, Math.floor(cSpawn.startingDustContainerCount));
+            }
+            if (Array.isArray(cSpawn.startingDustTypes)) {
+              for (const name of cSpawn.startingDustTypes) {
+                const kind = stringToParticleKind(name);
+                if (kind !== null) {
+                  unlockDustType(campaignStartProgress, kind);
+                }
+              }
+            }
+            if (Array.isArray(cSpawn.startingWeaves)) {
+              for (const weaveId of cSpawn.startingWeaves) {
+                if (WEAVE_REGISTRY.has(weaveId)) {
+                  unlockActiveWeave(campaignStartProgress, weaveId);
+                }
+              }
+            }
           } else {
             startRoomId = campaign.campaign.initialRoomId;
           }
@@ -139,7 +167,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         if (cleanup !== null) { cleanup(); cleanup = null; }
         cleanup = startGameScreen(canvas, uiRoot, [], startRoomId, {
           onReturnToMenu: () => navigate('mainMenu'),
-        }, undefined, null, false, customSpawnOverride);
+        }, campaignStartProgress, null, false, customSpawnOverride);
       };
       void doPlay().catch(e => {
         console.error('[game] Failed to load custom campaign for play:', e);

@@ -53,6 +53,30 @@ export interface CampaignSpawnData {
   xBlock: number;
   /** Block Y coordinate within that room. */
   yBlock: number;
+  /**
+   * Optional starting health for the player at campaign start.
+   * Applied only on the very first room load (not on subsequent respawns).
+   * Should be clamped to [1, PLAYER_INITIAL_HEALTH] when applied.
+   */
+  startingHealth?: number;
+  /**
+   * Optional starting number of dust containers.
+   * Each container adds 4 capacity for dust particles. Clamped to >= 0.
+   */
+  startingDustContainerCount?: number;
+  /**
+   * Optional list of collectible dust type names the player starts with.
+   * Names must match the string keys in the ParticleKind name map
+   * (e.g., "Physical", "Fire", "Ice", "Void").
+   * Unknown names are silently ignored.
+   */
+  startingDustTypes?: string[];
+  /**
+   * Optional list of weave IDs unlocked at campaign start
+   * (e.g., "storm", "shield", "arrow").
+   * Unknown IDs are silently ignored.
+   */
+  startingWeaves?: string[];
 }
 
 export interface SavedCampaignMetadata {

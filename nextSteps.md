@@ -1,5 +1,55 @@
 # DustWeaver — Next Steps
 
+## BUILD 375 — Collectible Dust Types + Campaign Spawn Starting Options
+
+### What Was Implemented
+
+1. **All 17 dust types are now collectible and equippable** (`src/sim/particles/kinds.ts`, `src/sim/weaves/dustDefinition.ts`):
+   - `EQUIPPABLE_KINDS` expanded from 1 (Physical only) to all 17 elemental/material dust types.
+   - `DUST_DEFINITIONS` expanded with display names, colors, descriptions, and slot costs for all 17 types.
+   - Fluid (background particle), Gold (grapple chain), and Light (boss chains) remain non-collectible.
+
+2. **Persistent dust swarm collection** (`src/progression/playerProgress.ts`, `src/progression/saveSlots.ts`, `src/screens/gameCommandProcessor.ts`, `src/screens/gameScreen.ts`):
+   - Added `collectedDustSwarmKeys: string[]` to `PlayerProgress`.
+   - When a dust swarm is collected, the key is persisted to `progress.collectedDustSwarmKeys`.
+   - On session start, `collectedDustSwarmKeySet` is initialized from `progress.collectedDustSwarmKeys`.
+   - Migration added so older saves without this field load cleanly.
+
+3. **Campaign Spawn starting options** (`src/levels/campaignSchema.ts`):
+   - `CampaignSpawnData` extended with optional `startingHealth`, `startingDustContainerCount`, `startingDustTypes`, `startingWeaves` fields.
+   - Fully backward-compatible — older campaigns without these fields behave as before.
+
+4. **Editor inspector UI for campaign spawn starting options** (`src/editor/editorInspector.ts`, `src/editor/editorCampaignSpawn.ts`, `src/editor/editorState.ts`, `src/editor/editorController.ts`):
+   - Campaign spawn inspector now shows Starting Health (number), Starting Containers (number), Starting Dust Types (checkbox grid), Starting Weaves (checkbox grid).
+   - `state.campaignSpawnStartingOptions` mirrors the spawn data's optional starting fields.
+   - Moving/replacing a campaign spawn preserves its existing starting options.
+
+5. **Applying campaign spawn options at play start** (`src/game.ts`):
+   - When playing a packed custom campaign, `startingHealth`, `startingDustContainerCount`, `startingDustTypes`, and `startingWeaves` are applied to a fresh `PlayerProgress` before the first room loads.
+   - `startingHealth` is clamped to `[1, PLAYER_INITIAL_HEALTH]`.
+   - `startingDustContainerCount` is clamped to `>= 0`.
+   - Invalid/unknown dust type names and weave IDs are silently skipped.
+
+### Known Limitations / Remaining Work
+
+1. **Multi-dust spawn on first room load** (`src/screens/gameScreen.ts`, Phase B ~line 483):
+   - When a campaign grants multiple starting dust types (`startingDustTypes: ["Fire", "Ice"]`), only the first type (`unlockedDustKinds[0]`) is spawned as initial particles. The player sees the correct types in the loadout/save tomb UI, but only one type orbits them until they configure the weave loadout at a save tomb.
+   - **Recommended fix**: In Phase B, iterate all `unlockedDustKinds` and distribute capacity evenly across all unlocked types, spawning each into the cluster. Consider using `spawnWeaveLoadoutParticles` with a synthesized loadout, or extend the existing `spawnClusterParticles` loop.
+
+2. **Folder-based campaign starting options not applied** (`src/game.ts` ~line 130):
+   - When playing a campaign loaded via `source.loadFolderCampaign` (file-system campaigns), the campaign spawn starting options are not applied (those campaigns don't have a `SavedCampaignV1` in memory at that point).
+   - **Recommended fix**: After `initRoomRegistry()`, call `getLoadedOfficialCampaignSpawn()` and apply its starting options the same way as packed campaigns.
+
+3. **Official (non-custom) campaign starting options** (`src/game.ts` ~line 99):
+   - The official campaign's spawn options are applied as a `campaignSpawnOverride` (position only). The `startingHealth` etc. from `getLoadedOfficialCampaignSpawn()` are not yet applied to the official-campaign `PlayerProgress`.
+   - **Recommended fix**: After retrieving `officialSpawn`, create/modify the progress with the spawn's starting options, similar to the custom campaign flow.
+
+4. **Campaign spawn validation** (`src/levels/campaignSchema.ts`, `validateSavedCampaign`):
+   - The `validateSavedCampaign` function does not yet validate the optional new fields in `CampaignSpawnData` (startingHealth range, startingDustTypes names, startingWeaves IDs). Invalid values are silently ignored at apply time, which is safe but not explicit.
+   - **Recommended fix**: Add optional validation for `campaign.campaignSpawn.startingDustTypes` (check each is a valid `DUST_KIND_OPTIONS` entry) and `campaign.campaignSpawn.startingHealth` range.
+
+5. **`startingHealth` for official play**: the `startingHealth` field is only consumed for custom campaign play (`customCampaignPlay` branch). For the main game (`gameplay` branch), `PLAYER_INITIAL_HEALTH` is always used as the fallback.
+
 ## BUILD 359 — Combat/Dust Integration Polish
 
 ### What Was Implemented
