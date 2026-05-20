@@ -95,7 +95,8 @@ export interface PlayerProgress {
    * Optional starting health override applied only on the very first room load
    * of a new campaign session (when no existing player cluster exists).
    * Campaigns may set this via CampaignSpawnData.startingHealth.
-   * Undefined means use the default PLAYER_INITIAL_HEALTH.
+   * Valid range: [1, PLAYER_INITIAL_HEALTH]. Undefined means use the default
+   * PLAYER_INITIAL_HEALTH. Values outside the range are clamped when applied.
    */
   startingHealth?: number;
 }
