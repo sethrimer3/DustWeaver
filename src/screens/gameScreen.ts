@@ -110,8 +110,9 @@ import {
 } from '../render/roomAssetPreloader';
 import { buildEdgeExtensionCache, EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
-import { RoomRuntimeCache } from './roomRuntimeCache';
+import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
 import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
+import { ensureRoomPrepared } from './preparedRoomRuntime';
 import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import {
   createTransitionRevealState,
@@ -146,6 +147,8 @@ import { createGamePauseController } from './gamePauseController';
 import { createGameLambdaAnchorState } from './gameLambdaAnchorState';
 import { renderEditorBackdrop } from './gameScreenEditorBackdrop';
 import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoomTransitionOrchestrator';
+import type { TransitionDirection } from './gameTransitions';
+import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 
 const FIXED_DT_MS = 16.666;
 
@@ -157,6 +160,20 @@ const FIXED_VIRTUAL_HEIGHT_PX = 270;
 const BASE = import.meta.env.BASE_URL;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+/**
+ * Fraction of `PLAYER_JUMP_SPEED_WORLD` subtracted from upward-transition
+ * vertical velocity to prevent over-boosted launch into the next room above.
+ * (BUILD 367: reduced from 1.0 to 0.5.)
+ */
+const UPWARD_TRANSITION_VY_REDUCTION = 0.5;
+
+/**
+ * Number of medium blocks from a room boundary at which the urgent preloader
+ * kicks in for unprepared transition targets.  Chosen to give ~166ms lead time
+ * at a brisk walk speed (~1 block/10ms) before the transition can fire.
+ */
+const URGENT_PRELOAD_PROXIMITY_BLOCKS = 10;
 
 import type { EditableCampaignSession } from '../editor/editableCampaignSession';
 
@@ -360,29 +377,53 @@ export function startGameScreen(
     } else {
       setActiveBlockSpriteWorld(room.worldNumber);
     }
+
+    // Use cached blocker keys if the entry has already been prepared (avoids
+    // re-allocating Sets on every room visit after the first preload).
+    const _phaseAEntry = roomRuntimeCache.get(room.id);
     let blockerKeys: Set<string> | undefined;
     let darkBlockerKeys: Set<string> | undefined;
-    if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
-      blockerKeys = new Set<string>();
-      for (const b of room.ambientLightBlockers) {
-        const key = `${b.xBlock},${b.yBlock}`;
-        blockerKeys.add(key);
-        if (b.isDark) {
-          if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
-          darkBlockerKeys.add(key);
-        }
+    if (_phaseAEntry !== undefined && _phaseAEntry.blockerKeys !== null) {
+      // null = not computed; undefined = no blockers (valid); Set = populated.
+      blockerKeys     = _phaseAEntry.blockerKeys;
+      darkBlockerKeys = _phaseAEntry.darkBlockerKeys ?? undefined;
+      if (import.meta.env.DEV) {
+        console.log(`[loadRoom] ${room.id} blockerKeys: cache HIT`);
       }
-    }
-    // Add light-blocking background blocks to the ambient blocker set.
-    if (room.backgroundBlocks) {
-      for (const b of room.backgroundBlocks) {
-        if (b.isLightBlockingFlag !== 1) continue;
-        if (!blockerKeys) blockerKeys = new Set<string>();
-        for (let dy = 0; dy < b.hBlock; dy++) {
-          for (let dx = 0; dx < b.wBlock; dx++) {
-            blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
+    } else {
+      // Build from scratch and store back into the cache entry if one exists.
+      const _blockerT0 = import.meta.env.DEV ? performance.now() : 0;
+      if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
+        blockerKeys = new Set<string>();
+        for (const b of room.ambientLightBlockers) {
+          const key = `${b.xBlock},${b.yBlock}`;
+          blockerKeys.add(key);
+          if (b.isDark) {
+            if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
+            darkBlockerKeys.add(key);
           }
         }
+      }
+      // Add light-blocking background blocks to the ambient blocker set.
+      if (room.backgroundBlocks) {
+        for (const b of room.backgroundBlocks) {
+          if (b.isLightBlockingFlag !== 1) continue;
+          if (!blockerKeys) blockerKeys = new Set<string>();
+          for (let dy = 0; dy < b.hBlock; dy++) {
+            for (let dx = 0; dx < b.wBlock; dx++) {
+              blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
+            }
+          }
+        }
+      }
+      if (_phaseAEntry !== undefined) {
+        // Store `undefined` (not `null`) so `isEntryFullyPrepared` can see these
+        // fields are computed.  `null` is the "not yet computed" sentinel.
+        _phaseAEntry.blockerKeys     = blockerKeys;
+        _phaseAEntry.darkBlockerKeys = darkBlockerKeys;
+      }
+      if (import.meta.env.DEV) {
+        console.log(`[loadRoom] ${room.id} blockerKeys: cache MISS (build ${(performance.now() - _blockerT0).toFixed(1)}ms)`);
       }
     }
     setActiveBlockLighting(
@@ -487,8 +528,16 @@ export function startGameScreen(
         console.log(`[loadRoom] ${room.id} walls: cache MISS (build ${_buildMs.toFixed(1)}ms)`);
       }
       // Store in cache so subsequent visits to this room are fast.
-      // Edge extension will be filled in Phase F and then the full entry is updated.
-      roomRuntimeCache.set(room.id, { wallTemplate, edgeExtension: null });
+      // Remaining fields (edgeExtension, wallDecorations) are filled in Phase F.
+      // blockerKeys and darkBlockerKeys were computed in Phase A of this same generator
+      // run and are in scope; storing them here avoids a second rebuild on next visit.
+      roomRuntimeCache.set(room.id, {
+        wallTemplate,
+        edgeExtension: null,
+        blockerKeys,
+        darkBlockerKeys,
+        wallDecorations: null,
+      });
     }
 
     yield; // ── Phase D complete ─────────────────────────────────────────────
@@ -517,7 +566,23 @@ export function startGameScreen(
 
     decorationWaveState.reset(room.decorations?.length ?? 0);
 
-    cachedWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+    // Use cached wall decorations if available (pure geometry, no mutable state).
+    const _decorEntry = roomRuntimeCache.get(room.id);
+    if (_decorEntry !== undefined && _decorEntry.wallDecorations !== null) {
+      cachedWallDecorations = _decorEntry.wallDecorations;
+      if (import.meta.env.DEV) {
+        console.log(`[loadRoom] ${room.id} decorations: cache HIT`);
+      }
+    } else {
+      const _decorT0 = import.meta.env.DEV ? performance.now() : 0;
+      cachedWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+      if (_decorEntry !== undefined) {
+        _decorEntry.wallDecorations = cachedWallDecorations;
+      }
+      if (import.meta.env.DEV) {
+        console.log(`[loadRoom] ${room.id} decorations: cache MISS (build ${(performance.now() - _decorT0).toFixed(1)}ms)`);
+      }
+    }
     for (let _di = 0; _di < cachedWallDecorations.length; _di++) {
       const _d = cachedWallDecorations[_di];
       cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
@@ -573,8 +638,14 @@ export function startGameScreen(
       if (wallEntry !== undefined) {
         wallEntry.edgeExtension = built;
       } else {
-        // Should not normally happen; build the wall template too.
-        roomRuntimeCache.set(room.id, { wallTemplate: buildRoomWallTemplate(room), edgeExtension: built });
+        // Should not normally happen; build missing fields too.
+        roomRuntimeCache.set(room.id, {
+          wallTemplate: buildRoomWallTemplate(room),
+          edgeExtension: built,
+          blockerKeys: null,
+          darkBlockerKeys: null,
+          wallDecorations: null,
+        });
       }
     }
 
@@ -678,6 +749,29 @@ export function startGameScreen(
   // the player switches rooms before the previous schedule completes.
   let _preloadScheduleHandle: PreloadScheduleHandle | null = null;
 
+  // ── Async room load state ─────────────────────────────────────────────────
+  // When a room transition fires and the target is not in the prepared cache,
+  // the load is spread across multiple RAF frames (one generator phase per
+  // frame) while the loading overlay is shown.  This prevents a single large
+  // blocking spike during transitions to cold rooms.
+  //
+  // The player velocity captured before the transition is stored here and
+  // applied once the generator completes and the new player cluster exists.
+  interface AsyncRoomLoadState {
+    isActive: boolean;
+    gen: Generator<void, void, void> | null;
+    preTransVX: number;
+    preTransVY: number;
+    transitionDir: TransitionDirection | null;
+  }
+  const asyncLoadState: AsyncRoomLoadState = {
+    isActive: false,
+    gen: null,
+    preTransVX: 0,
+    preTransVY: 0,
+    transitionDir: null,
+  };
+
   // ── Preview bubble state ──────────────────────────────────────────────────
   // Pre-allocated array of per-bubble state, updated each frame via
   // computePreviewBubbles().  Only entries [0, previewBubbleCount) are valid.
@@ -732,9 +826,10 @@ export function startGameScreen(
     isInitialCampaignLoad = false; // subsequent room loads use the standard fade
   }
 
-  /** Hides the overlay once sprites are ready and the minimum show time has passed. */
+  /** Hides the overlay once sprites are ready, the minimum show time has passed,
+   *  and no async room load is in progress. */
   function tickLoadingOverlay(): void {
-    loadingOverlay.tick(() => areRoomSpritesReady(currentRoom));
+    loadingOverlay.tick(() => !asyncLoadState.isActive && areRoomSpritesReady(currentRoom));
   }
 
   // ── Dust container state (armor system) ─────────────────────────────────
@@ -749,6 +844,65 @@ export function startGameScreen(
       }
     }
     return count;
+  }
+
+  /**
+   * Called by `orchestrateRoomTransitions` when a room transition fires.
+   *
+   * Fast path (cache hit): calls `loadRoom()` synchronously (the target room is
+   * fully prepared so all phases finish in < 1ms) and applies player velocity
+   * immediately.
+   *
+   * Async path (cache miss): spreads the six load phases across six RAF frames,
+   * shows the loading overlay while in progress, and defers velocity application
+   * until the generator completes.
+   */
+  function startTransitionLoad(
+    room: RoomDef,
+    spawnXBlock: number,
+    spawnYBlock: number,
+    vx: number,
+    vy: number,
+    dir: TransitionDirection,
+  ): void {
+    const t0 = import.meta.env.DEV ? performance.now() : 0;
+    const cacheEntry = roomRuntimeCache.get(room.id);
+    const isPrepared = cacheEntry !== undefined && isEntryFullyPrepared(cacheEntry);
+
+    if (isPrepared) {
+      // ── Instant path (fully prepared cache hit) ───────────────────────────
+      if (import.meta.env.DEV) {
+        console.log(`[transition] ${room.id}: prepared cache HIT — instant load`);
+      }
+      loadRoom(room, spawnXBlock, spawnYBlock);
+      const player = world.clusters[0];
+      if (player !== undefined && player.isPlayerFlag === 1) {
+        player.velocityXWorld = vx;
+        player.velocityYWorld = dir === 'up' ? vy - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION : vy;
+      }
+      if (import.meta.env.DEV) {
+        console.log(
+          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms`,
+        );
+      }
+    } else {
+      // ── Async path (cache miss — spread over RAF frames) ──────────────────
+      if (import.meta.env.DEV) {
+        const status = cacheEntry === undefined ? 'cold' : 'partial';
+        console.warn(`[transition] ${room.id}: cache MISS (${status}) — async load`);
+      }
+      asyncLoadState.preTransVX    = vx;
+      asyncLoadState.preTransVY    = vy;
+      asyncLoadState.transitionDir = dir;
+      asyncLoadState.gen           = _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, false);
+      asyncLoadState.isActive      = true;
+      showLoadingOverlay();
+      // Advance Phase A immediately (room metadata + world reset, < 1ms).
+      // This sets `currentRoom = room` so `onRoomBecameActive()` — called by
+      // the orchestrator right after this function returns — will trigger sprite
+      // preloads for the NEW room, not the stale one.
+      asyncLoadState.gen.next();
+    }
   }
 
   // Track explored rooms
@@ -977,6 +1131,34 @@ export function startGameScreen(
       }
     }
 
+    // ── Async room load advancement ──────────────────────────────────────────
+    // When a room transition fired but the target was not in the prepared cache,
+    // the generator is advanced one phase per RAF frame while the loading overlay
+    // is displayed.  Gameplay is frozen until loading completes.
+    if (asyncLoadState.isActive) {
+      const _asyncResult = asyncLoadState.gen!.next();
+      if (_asyncResult.done) {
+        asyncLoadState.isActive = false;
+        asyncLoadState.gen = null;
+        // Apply the deferred player velocity now that the new cluster exists.
+        const _playerAfterLoad = world.clusters[0];
+        if (_playerAfterLoad !== undefined && _playerAfterLoad.isPlayerFlag === 1) {
+          _playerAfterLoad.velocityXWorld = asyncLoadState.preTransVX;
+          _playerAfterLoad.velocityYWorld =
+            asyncLoadState.transitionDir === 'up'
+              ? asyncLoadState.preTransVY - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION
+              : asyncLoadState.preTransVY;
+        }
+        if (import.meta.env.DEV) {
+          console.log('[transition] async load complete — velocity applied, resuming gameplay');
+        }
+      }
+      // Keep the overlay visible and skip gameplay sim/render this frame.
+      tickLoadingOverlay();
+      rafHandle = requestAnimationFrame(frame);
+      return;
+    }
+
     // ── Dialogue advance input (capture before collectCommands drains the flag)
     const dialogueAdvanceRequested = inputState.isDialogueAdvanceTriggeredFlag;
 
@@ -1050,7 +1232,7 @@ export function startGameScreen(
       crossingState.phase === 'inactive',
       preTransVX,
       preTransVY,
-      loadRoom,
+      startTransitionLoad,
       resolveSpawnBlock,
       camera,
       transitionRevealState,
@@ -1059,6 +1241,37 @@ export function startGameScreen(
       preloadAdjacentCurrentRoomAssets,
       transitionDebugState,
     );
+
+    // ── Proximity-based urgent preload ──────────────────────────────────────
+    // If the player is within URGENT_PRELOAD_PROXIMITY_BLOCKS of a room boundary
+    // that has an unprepared transition target, build that room's runtime
+    // immediately (at most one room per frame) to reduce the chance of a cache
+    // miss when the transition fires.
+    {
+      const _proxPlayer = world.clusters[0];
+      if (_proxPlayer !== undefined && _proxPlayer.isAliveFlag === 1) {
+        const _px = _proxPlayer.positionXWorld - stagingState.currentRoomOriginXWorld;
+        const _py = _proxPlayer.positionYWorld - stagingState.currentRoomOriginYWorld;
+        for (let _ti = 0; _ti < currentRoom.transitions.length; _ti++) {
+          const _t = currentRoom.transitions[_ti];
+          const _tId = _t.targetRoomId;
+          const _tEntry = roomRuntimeCache.get(_tId);
+          if (_tEntry !== undefined && isEntryFullyPrepared(_tEntry)) continue;
+
+          let _isNear = false;
+          switch (_t.direction) {
+            case 'right': _isNear = _px >= (currentRoom.widthBlocks - URGENT_PRELOAD_PROXIMITY_BLOCKS) * BLOCK_SIZE_MEDIUM; break;
+            case 'left':  _isNear = _px <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
+            case 'down':  _isNear = _py >= (currentRoom.heightBlocks - URGENT_PRELOAD_PROXIMITY_BLOCKS) * BLOCK_SIZE_MEDIUM; break;
+            case 'up':    _isNear = _py <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
+          }
+          if (_isNear) {
+            ensureRoomPrepared(_tId, roomRuntimeCache, import.meta.env.DEV);
+            break; // one urgent build per frame to avoid stutter
+          }
+        }
+      }
+    }
 
     // ── Dialogue trigger check ─────────────────────────────────────────────
     // Each trigger fires once per room visit (firedDialogueTriggerUids is

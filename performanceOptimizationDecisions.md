@@ -34,6 +34,54 @@
 2. Did **not** change snapshot shapes, save/campaign schemas, or editor serialization paths.
 3. Did **not** introduce new caching/pooling structures in hot paths beyond existing patterns, to avoid subtle behavior or invalidation bugs.
 
+## BUILD 368 — PreparedRoomRuntime cache + async room-transition fallback
+
+### What was cached
+
+A `RoomRuntimeEntry` now holds five precomputed fields, all safe to cache because they are pure functions of the static `RoomDef`:
+
+| Field | Expensive operation avoided |
+|---|---|
+| `wallTemplate` | O(n²) wall-rectangle merge pass |
+| `edgeExtension` | BFS grid scan for edge-strip tiles |
+| `blockerKeys` | `new Set<string>()` allocation + iteration over `ambientLightBlockers` + `backgroundBlocks` |
+| `darkBlockerKeys` | Same scan, dark-only subset |
+| `wallDecorations` | `buildRoomDecorations()` geometry build from `RoomDecorationDef[]` |
+
+The new `buildPreparedRoomRuntime()` in `preparedRoomRuntime.ts` builds all five fields in one call and is used by both the idle preload scheduler and the urgent proximity preload path.
+
+### What was intentionally NOT cached (mutable state)
+
+The following are reset every room visit and must never be shared across visits:
+
+- **Enemy clusters** (`world.clusters[1..]`) — health, position, AI state
+- **Hazard state** (`world.hazardState`) — spikes, liquids, lava triggers
+- **Falling block groups** — offset, state, active flags
+- **Rope physics** (`world.ropes`) — segment positions and velocities
+- **Particle buffers** — position/velocity/lifetime for sim particles
+- **Crumble block hit counts** — per-visit damage accumulation
+- **Dust piles** — collected state varies per visit
+
+### Async fallback mechanism
+
+`startTransitionLoad()` (called by `orchestrateRoomTransitions` on every transition) follows one of two paths:
+
+1. **Instant path (cache hit)**: `isEntryFullyPrepared(entry)` is true → calls `loadRoom()` synchronously (all six generator phases complete in < 1ms because all expensive builds are skipped). Player velocity is applied immediately after.
+
+2. **Async path (cache miss)**: Creates the `_makeLoadRoomPhases()` generator without draining it. Advances Phase A immediately (sets `currentRoom`, clears world, < 1ms) so `onRoomBecameActive()` starts sprite preloads for the new room. The `asyncLoadState.isActive` flag causes the frame loop to advance one generator phase per RAF frame (~6 frames, ~100ms at 60fps) while showing the loading overlay. Velocity is applied once the generator returns `done = true`.
+
+### Proximity-based urgent preload
+
+Each frame, if the player is within `URGENT_PROXIMITY_BLOCKS = 10` medium blocks of a room-boundary transition, `ensureRoomPrepared()` is called for that target room (at most one per frame to avoid stutter). This is a safety net for cases where the idle-callback preloader has not yet processed a room.
+
+### Remaining risks and follow-up items
+
+1. **Cold-start stutter on first visit**: If the player enters a room before both the idle preloader AND the proximity check have had a chance to prepare it, the async fallback still fires. The overlay is shown for ~100ms, which is visible but not a freeze.
+2. **LRU eviction**: `RoomRuntimeCache` is capped at 10 entries. If the player is in a hub connected to >10 rooms, some rooms may be evicted and rebuilt on re-entry. Increasing the cap or adding a size-based eviction policy may be needed for large campaigns.
+3. **Per-phase budget**: Each generator phase is advanced fully in one RAF frame. If a single phase is heavy (e.g. Phase C with many enemy clusters), the async path may still produce a brief per-phase stutter. Sub-phase budgeting within a single phase is a possible follow-up.
+4. **`ENABLE_SIMPLE_ROOM_TRANSITIONS = true` assumed**: The async path is only exercised in the simple-transitions code path. If the two-room camera crossing is re-enabled, the async path will still trigger `startTransitionLoad` but the camera-capture logic in the orchestrator will read the post-Phase-A (empty) camera, so camera transitions in that mode may require additional work.
+5. **Editor invalidation**: `editorController` already calls `roomRuntimeCache.invalidate(roomDef.id)` on playtest, correctly forcing a rebuild of the modified room's entry on next visit.
+
 ## BUILD 351 — gameScreen editor-backdrop extraction
 
 ### Performance-related changes made

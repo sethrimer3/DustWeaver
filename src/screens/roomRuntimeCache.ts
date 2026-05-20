@@ -19,6 +19,7 @@
 
 import type { RoomWallTemplate } from './gameRoomWalls';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
+import type { WallDecoration } from '../render/effects/wallDecorations';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,10 +28,43 @@ export interface RoomRuntimeEntry {
   wallTemplate: RoomWallTemplate;
   /**
    * Edge-extension tile strip — used directly by the renderer.
-   * May be `null` if the entry was created in Phase D before Phase F ran
-   * (the cache will be updated with the built value in Phase F).
+   * `null` = not yet built; non-null = ready.
    */
   edgeExtension: EdgeExtensionCache | null;
+  /**
+   * Precomputed ambient-light blocker key set.
+   *  - `null`      = not yet built (computed inline during Phase A on cache miss).
+   *  - `undefined` = built; this room has no ambient light blockers.
+   *  - `Set`       = built and populated.
+   */
+  blockerKeys: Set<string> | null | undefined;
+  /**
+   * Precomputed dark-ambient (shadow) blocker key set.
+   * Same `null` / `undefined` / `Set` sentinel semantics as `blockerKeys`.
+   */
+  darkBlockerKeys: Set<string> | null | undefined;
+  /**
+   * Precomputed wall decorations (pure geometry, no mutable state).
+   *  - `null`  = not yet built.
+   *  - array   = built (may be empty for rooms without decorations).
+   */
+  wallDecorations: WallDecoration[] | null;
+}
+
+// ── isEntryFullyPrepared ──────────────────────────────────────────────────────
+
+/**
+ * Returns `true` when all static fields in the entry have been computed.
+ * A "fully prepared" entry can be applied instantly during a room transition
+ * without any build passes.
+ */
+export function isEntryFullyPrepared(entry: RoomRuntimeEntry): boolean {
+  return (
+    entry.edgeExtension !== null &&
+    entry.blockerKeys !== null &&
+    entry.darkBlockerKeys !== null &&
+    entry.wallDecorations !== null
+  );
 }
 
 // ── RoomRuntimeCache ──────────────────────────────────────────────────────────
