@@ -6,6 +6,12 @@
 
 import { debugSpeedOverrides } from '../sim/clusters/movement';
 import { debugCloakOverrides } from '../render/clusters/cloakConstants';
+import {
+  type DebugPanelId,
+  debugPanelVisibility,
+  toggleDebugPanel,
+  hideAllDebugPanels,
+} from './debugPanelManager';
 
 const PANEL_BG = 'rgba(15,15,20,0.92)';
 const PANEL_BORDER = 'rgba(0,200,100,0.4)';
@@ -80,6 +86,22 @@ const CLOAK_FIELDS: readonly CloakFieldDef[] = [
   { key: 'backCollisionStrength', label: 'Back Col Str', defaultValue: 0.85 },
   { key: 'backCollisionDamping', label: 'Back Col Damp', defaultValue: 0.6 },
   { key: 'backCompressionAmount', label: 'Back Compress', defaultValue: 0.5 },
+];
+
+/** Debug panel toggle button definitions (shown below Cloak Tuning). */
+interface DebugPanelDef {
+  readonly id: DebugPanelId;
+  readonly label: string;
+}
+
+const DEBUG_PANEL_DEFS: readonly DebugPanelDef[] = [
+  { id: 'movement',    label: 'Movement Debug' },
+  { id: 'grapple',     label: 'Grapple / Zip Debug' },
+  { id: 'water',       label: 'Water / Liquid Debug' },
+  { id: 'performance', label: 'Performance Debug' },
+  { id: 'chunks',      label: 'Rendering / Chunks Debug' },
+  { id: 'particles',   label: 'Particles / Dust Debug' },
+  { id: 'room',        label: 'Room / Editor Debug' },
 ];
 
 export interface DebugPanel {
@@ -278,6 +300,65 @@ export function createDebugPanel(root: HTMLElement): DebugPanel {
   container.appendChild(cloakBody);
   refreshToggleText();
   refreshCloakToggleText();
+
+  // ── Debug Panel toggle buttons (below Cloak Tuning) ──────────────────────
+
+  const panelSeparator = document.createElement('div');
+  panelSeparator.style.cssText = `
+    margin: 8px 0 4px; border-top: 1px solid ${PANEL_BORDER};
+    font-size: 9px; color: ${LABEL_COLOR}; text-align: center; padding-top: 4px;
+  `;
+  panelSeparator.textContent = '── Debug Panels ──';
+  container.appendChild(panelSeparator);
+
+  const panelButtonCss = `
+    width: 100%; margin-bottom: 2px; padding: 4px 8px; font-size: 9px;
+    background: rgba(0,0,0,0.35); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; font-family: monospace; cursor: pointer;
+    border-radius: 3px; text-align: left; box-sizing: border-box;
+  `;
+
+  // Keep update callbacks so "Hide All" can refresh all buttons at once.
+  const updatePanelBtnFns: Array<() => void> = [];
+
+  for (const def of DEBUG_PANEL_DEFS) {
+    const panelBtn = document.createElement('button');
+    panelBtn.type = 'button';
+    panelBtn.style.cssText = panelButtonCss;
+
+    const updatePanelBtn = (): void => {
+      const isOpen = debugPanelVisibility[def.id];
+      panelBtn.textContent = isOpen ? `▾ ${def.label}` : `▸ ${def.label}`;
+      panelBtn.style.borderColor = isOpen ? GREEN : PANEL_BORDER;
+      panelBtn.style.color = isOpen ? GREEN : TEXT_COLOR;
+    };
+    panelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDebugPanel(def.id);
+      updatePanelBtn();
+    });
+    updatePanelBtn();
+    updatePanelBtnFns.push(updatePanelBtn);
+    container.appendChild(panelBtn);
+  }
+
+  // "Hide All Debug Panels" convenience button
+  const hideAllBtn = document.createElement('button');
+  hideAllBtn.type = 'button';
+  hideAllBtn.textContent = '✕ Hide All Debug Panels';
+  hideAllBtn.style.cssText = `
+    width: 100%; margin-top: 4px; padding: 4px 8px; font-size: 9px;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,80,60,0.5);
+    color: rgba(255,150,130,0.9); font-family: monospace; cursor: pointer;
+    border-radius: 3px; box-sizing: border-box;
+  `;
+  hideAllBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideAllDebugPanels();
+    for (const fn of updatePanelBtnFns) fn();
+  });
+  container.appendChild(hideAllBtn);
+
   root.appendChild(container);
 
   return {
