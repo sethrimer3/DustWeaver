@@ -62,6 +62,7 @@ export function isEntryFullyPrepared(entry: RoomRuntimeEntry): boolean {
   return (
     entry.edgeExtension !== null &&
     entry.blockerKeys !== null &&
+    entry.darkBlockerKeys !== null &&
     entry.wallDecorations !== null
   );
 }

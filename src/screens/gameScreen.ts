@@ -161,6 +161,20 @@ const BASE = import.meta.env.BASE_URL;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
+/**
+ * Fraction of `PLAYER_JUMP_SPEED_WORLD` subtracted from upward-transition
+ * vertical velocity to prevent over-boosted launch into the next room above.
+ * (BUILD 367: reduced from 1.0 to 0.5.)
+ */
+const UPWARD_TRANSITION_VY_REDUCTION = 0.5;
+
+/**
+ * Number of medium blocks from a room boundary at which the urgent preloader
+ * kicks in for unprepared transition targets.  Chosen to give ~166ms lead time
+ * at a brisk walk speed (~1 block/10ms) before the transition can fire.
+ */
+const URGENT_PRELOAD_PROXIMITY_BLOCKS = 10;
+
 import type { EditableCampaignSession } from '../editor/editableCampaignSession';
 
 export interface GameScreenCallbacks {
@@ -514,13 +528,14 @@ export function startGameScreen(
         console.log(`[loadRoom] ${room.id} walls: cache MISS (build ${_buildMs.toFixed(1)}ms)`);
       }
       // Store in cache so subsequent visits to this room are fast.
-      // Remaining fields (edgeExtension, blockerKeys, wallDecorations) are filled
-      // in Phase A and Phase F respectively; set null sentinels here.
+      // Remaining fields (edgeExtension, wallDecorations) are filled in Phase F.
+      // blockerKeys and darkBlockerKeys were computed in Phase A of this same generator
+      // run and are in scope; storing them here avoids a second rebuild on next visit.
       roomRuntimeCache.set(room.id, {
         wallTemplate,
         edgeExtension: null,
-        blockerKeys: null,
-        darkBlockerKeys: null,
+        blockerKeys,
+        darkBlockerKeys,
         wallDecorations: null,
       });
     }
@@ -863,7 +878,7 @@ export function startGameScreen(
       const player = world.clusters[0];
       if (player !== undefined && player.isPlayerFlag === 1) {
         player.velocityXWorld = vx;
-        player.velocityYWorld = dir === 'up' ? vy - PLAYER_JUMP_SPEED_WORLD * 0.5 : vy;
+        player.velocityYWorld = dir === 'up' ? vy - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION : vy;
       }
       if (import.meta.env.DEV) {
         console.log(
@@ -1131,7 +1146,7 @@ export function startGameScreen(
           _playerAfterLoad.velocityXWorld = asyncLoadState.preTransVX;
           _playerAfterLoad.velocityYWorld =
             asyncLoadState.transitionDir === 'up'
-              ? asyncLoadState.preTransVY - PLAYER_JUMP_SPEED_WORLD * 0.5
+              ? asyncLoadState.preTransVY - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION
               : asyncLoadState.preTransVY;
         }
         if (import.meta.env.DEV) {
@@ -1228,12 +1243,11 @@ export function startGameScreen(
     );
 
     // ── Proximity-based urgent preload ──────────────────────────────────────
-    // If the player is within URGENT_PROXIMITY_BLOCKS of a room boundary that
-    // has an unprepared transition target, build that room's runtime immediately
-    // (at most one room per frame) to reduce the chance of a cache miss when the
-    // transition fires.
+    // If the player is within URGENT_PRELOAD_PROXIMITY_BLOCKS of a room boundary
+    // that has an unprepared transition target, build that room's runtime
+    // immediately (at most one room per frame) to reduce the chance of a cache
+    // miss when the transition fires.
     {
-      const URGENT_PROXIMITY_BLOCKS = 10;
       const _proxPlayer = world.clusters[0];
       if (_proxPlayer !== undefined && _proxPlayer.isAliveFlag === 1) {
         const _px = _proxPlayer.positionXWorld - stagingState.currentRoomOriginXWorld;
@@ -1246,10 +1260,10 @@ export function startGameScreen(
 
           let _isNear = false;
           switch (_t.direction) {
-            case 'right': _isNear = _px >= (currentRoom.widthBlocks - URGENT_PROXIMITY_BLOCKS) * BLOCK_SIZE_MEDIUM; break;
-            case 'left':  _isNear = _px <= URGENT_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
-            case 'down':  _isNear = _py >= (currentRoom.heightBlocks - URGENT_PROXIMITY_BLOCKS) * BLOCK_SIZE_MEDIUM; break;
-            case 'up':    _isNear = _py <= URGENT_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
+            case 'right': _isNear = _px >= (currentRoom.widthBlocks - URGENT_PRELOAD_PROXIMITY_BLOCKS) * BLOCK_SIZE_MEDIUM; break;
+            case 'left':  _isNear = _px <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
+            case 'down':  _isNear = _py >= (currentRoom.heightBlocks - URGENT_PRELOAD_PROXIMITY_BLOCKS) * BLOCK_SIZE_MEDIUM; break;
+            case 'up':    _isNear = _py <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
           }
           if (_isNear) {
             ensureRoomPrepared(_tId, roomRuntimeCache, import.meta.env.DEV);
