@@ -63,6 +63,31 @@ export interface HudDebugState {
   gravityScale: number;
   /** Player vertical velocity (wu/s); negative = upward. */
   playerVelocityYWorld: number;
+  // ── Wall jump / slide diagnostic (movement panel) ─────────────────────────
+  /** Which wall side is being reported: 'left', 'right', or 'none'. */
+  wallDbgSide: 'left' | 'right' | 'none';
+  /** Height of the individual wall partition the player is contacting (world units). */
+  wallDbgRawPartHeightWorld: number;
+  /** Height of the aggregated logical wall surface (world units). */
+  wallDbgLogicalWallHeightWorld: number;
+  /** Player feet Y used as the wall contact point (world units). */
+  wallDbgContactYWorld: number;
+  /** True when a ground-connected floor was found at the base of the wall. */
+  wallDbgGroundFloor: boolean;
+  /** Top Y of the bottom exclusion zone (world units; 0 when no floor). */
+  wallDbgExclusionMinY: number;
+  /** Bottom Y of the bottom exclusion zone = floor top (world units; 0 when no floor). */
+  wallDbgExclusionMaxY: number;
+  /** True when the player contact Y is inside the ground-connected exclusion zone. */
+  wallDbgContactInExclusion: boolean;
+  /** True when a wall jump is currently allowed from the checked side. */
+  wallDbgJumpAllowed: boolean;
+  /** True when wall sliding is currently allowed from the checked side. */
+  wallDbgSlideAllowed: boolean;
+  /** True when wall slide is suppressed specifically because the surface is too short (< 3 blocks). */
+  wallDbgSlideSuppressedShort: boolean;
+  /** True when wall jump or slide is suppressed because the contact is inside the bottom exclusion zone. */
+  wallDbgActionSuppressedExclusion: boolean;
 }
 
 export interface HudState {
@@ -116,6 +141,12 @@ export function renderHudOverlay(
         `Sprint:${d.isSprinting ? 'Y' : 'N'} Skid:${d.isSkidding ? 'Y' : 'N'} Sld:${d.isSliding ? 'Y' : 'N'}`,
         `Input U/L/R/D/Sh: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}${d.inputShift ? 'S' : '-'}`,
         `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
+        // ── Wall eligibility diagnostics ─────────────────────────────────
+        `WallSide: ${d.wallDbgSide}  RawH:${d.wallDbgRawPartHeightWorld.toFixed(0)}wu`,
+        `LogicalH:${d.wallDbgLogicalWallHeightWorld.toFixed(0)}wu  ContactY:${d.wallDbgContactYWorld.toFixed(0)}`,
+        `GndFloor:${d.wallDbgGroundFloor ? 'Y' : 'N'}  ExclY:[${d.wallDbgExclusionMinY.toFixed(0)},${d.wallDbgExclusionMaxY.toFixed(0)}]`,
+        `InExcl:${d.wallDbgContactInExclusion ? 'Y' : 'N'}  Jump:${d.wallDbgJumpAllowed ? 'OK' : 'NO'}  Slide:${d.wallDbgSlideAllowed ? 'OK' : 'NO'}`,
+        `SlideShort:${d.wallDbgSlideSuppressedShort ? 'Y' : 'N'}  ExclSuppr:${d.wallDbgActionSuppressedExclusion ? 'Y' : 'N'}`,
       );
     }
 

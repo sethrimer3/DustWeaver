@@ -73,6 +73,11 @@ import {
   resolveRampSurfaces,
 } from './movementCollision';
 import { resolvePlayerRopeCollisions } from '../ropes/ropeCollision';
+import {
+  computeLogicalWallSurface,
+  computeGroundConnectedExclusion,
+  canWallSlideOnSurface,
+} from './playerWallSurface';
 
 export { debugSpeedOverrides, PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER };
 
@@ -229,8 +234,9 @@ export function applyClusterMovement(world: WorldState): void {
 
       if (cluster.isPlayerFlag === 1) {
         // ── Wall slide: cap downward velocity when pressing into a wall ─────
-        // Only active when airborne, falling, lockout is clear, and the player
-        // is actively pushing toward the wall (intentional interaction).
+        // Requires: airborne, falling, lockout clear, pressing toward wall,
+        // and the logical wall surface must be ≥ 3 blocks tall (to avoid
+        // sticky slides on small ledges, stairs, or ground-level corners).
         if (
           cluster.isGroundedFlag === 0 &&
           cluster.velocityYWorld > 0 &&
@@ -241,9 +247,23 @@ export function applyClusterMovement(world: WorldState): void {
             (cluster.isTouchingWallRightFlag === 1 && inputDx > 0) ||
             (cluster.isTouchingWallLeftFlag  === 1 && inputDx < 0);
           if (pressingIntoWall) {
-            cluster.isWallSlidingFlag = 1;
-            if (cluster.velocityYWorld > WALL_SLIDE_MAX_FALL_SPEED) {
-              cluster.velocityYWorld = WALL_SLIDE_MAX_FALL_SPEED;
+            // Determine the wall face X from the player's current position
+            // (after collision push-out the player edge is exactly on the face).
+            const side   = (cluster.isTouchingWallRightFlag === 1 && inputDx > 0) ? 'right' : 'left';
+            const faceX  = side === 'right'
+              ? cluster.positionXWorld + cluster.halfWidthWorld
+              : cluster.positionXWorld - cluster.halfWidthWorld;
+            const playerTop    = cluster.positionYWorld - cluster.halfHeightWorld;
+            const playerBottom = cluster.positionYWorld + cluster.halfHeightWorld;
+
+            const surface   = computeLogicalWallSurface(faceX, side, playerTop, playerBottom, world);
+            const exclusion = computeGroundConnectedExclusion(surface, side, world);
+
+            if (canWallSlideOnSurface(surface, exclusion, playerBottom)) {
+              cluster.isWallSlidingFlag = 1;
+              if (cluster.velocityYWorld > WALL_SLIDE_MAX_FALL_SPEED) {
+                cluster.velocityYWorld = WALL_SLIDE_MAX_FALL_SPEED;
+              }
             }
           }
         }
