@@ -37,6 +37,8 @@
 import type { ChunkCacheStats } from '../walls/chunkRenderCache';
 import type { TransitionDebugStats } from '../transitions/transitionState';
 import type { LiquidDebugStats } from '../liquidBodyCache';
+import type { DebugPanelVisibility } from '../../ui/debugPanelManager';
+import { isPanelVisible } from '../../ui/debugPanelManager';
 
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
@@ -318,13 +320,24 @@ export class RenderProfiler {
    * Must be called while in a region where screen-space HUD drawing is safe
    * (i.e. after the room clip is closed).
    * When `isDebugMode` is false, returns immediately without drawing anything.
+   * When `panelVisibility` is provided each section is shown only when its
+   * flag is true; pass undefined to show all (legacy / backward-compat).
    */
   drawOverlay(
     ctx: CanvasRenderingContext2D,
     virtualWidthPx: number,
     isDebugMode: boolean,
+    panelVisibility?: DebugPanelVisibility,
   ): void {
     if (!isDebugMode) return;
+
+    const showPerf   = isPanelVisible('performance', panelVisibility);
+    const showChunks = isPanelVisible('chunks',      panelVisibility);
+    const showRoom   = isPanelVisible('room',        panelVisibility);
+    const showWater  = isPanelVisible('water',       panelVisibility);
+
+    // Nothing to render — bail early to avoid drawing an empty frame.
+    if (!showPerf && !showChunks && !showRoom && !showWater) return;
 
     const lineHeightPx = 9;
     const fontSizePx   = 7;
@@ -332,70 +345,72 @@ export class RenderProfiler {
     const padXPx       = virtualWidthPx - panelWidth - 4;
     let   nextPanelY   = 8;
 
-    ctx.save();
-    ctx.font = `${fontSizePx}px monospace`;
+    // ── FPS / frame-time panel + per-stage timing (performance) ──────────────
+    if (showPerf) {
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
 
-    // ── FPS / frame-time panel (BUILD 271) ────────────────────────────────────
-    const ringCount = this._ringCount;
-    const lastFrameMs = ringCount > 0
-      ? this._frameTimes[(this._ringHead - 1 + RenderProfiler.RING_SIZE) % RenderProfiler.RING_SIZE]
-      : 0;
-    const avgFrameMs   = this._smoothedMs[STAGE_TOTAL];
-    const avgFps       = avgFrameMs > 0  ? 1000 / avgFrameMs  : 0;
-    const currentFps   = lastFrameMs > 0 ? 1000 / lastFrameMs : 0;
-    const onePercentLow = this._getOnePercentLow();
-    const worstFrameMs  = this._getWorstFrameMs();
+      const ringCount = this._ringCount;
+      const lastFrameMs = ringCount > 0
+        ? this._frameTimes[(this._ringHead - 1 + RenderProfiler.RING_SIZE) % RenderProfiler.RING_SIZE]
+        : 0;
+      const avgFrameMs   = this._smoothedMs[STAGE_TOTAL];
+      const avgFps       = avgFrameMs > 0  ? 1000 / avgFrameMs  : 0;
+      const currentFps   = lastFrameMs > 0 ? 1000 / lastFrameMs : 0;
+      const onePercentLow = this._getOnePercentLow();
+      const worstFrameMs  = this._getWorstFrameMs();
 
-    const fpsLines: readonly string[] = [
-      `FPS cur:${currentFps.toFixed(0)} avg:${avgFps.toFixed(0)} 1%:${onePercentLow.toFixed(0)}`,
-      `Frame now:${lastFrameMs.toFixed(1)}ms wrst:${worstFrameMs.toFixed(1)}ms`,
-      `>20ms:${this._longFrames20ms} >33:${this._longFrames33ms} >50:${this._longFrames50ms}`,
-    ];
-    const fpsPanelH = fpsLines.length * lineHeightPx + 8;
-    ctx.fillStyle = 'rgba(0,0,0,0.60)';
-    ctx.fillRect(padXPx - 4, nextPanelY - 4, panelWidth + 8, fpsPanelH);
-    for (let i = 0; i < fpsLines.length; i++) {
-      let lineColor: string;
-      if (i === 0) {
-        lineColor = '#ffff60';
-      } else if (i === 2 && this._longFrames50ms > 0) {
-        lineColor = '#ff6060'; // warn red when there are >50 ms frames
-      } else {
-        lineColor = '#e0e080';
+      const fpsLines: readonly string[] = [
+        `FPS cur:${currentFps.toFixed(0)} avg:${avgFps.toFixed(0)} 1%:${onePercentLow.toFixed(0)}`,
+        `Frame now:${lastFrameMs.toFixed(1)}ms wrst:${worstFrameMs.toFixed(1)}ms`,
+        `>20ms:${this._longFrames20ms} >33:${this._longFrames33ms} >50:${this._longFrames50ms}`,
+      ];
+      const fpsPanelH = fpsLines.length * lineHeightPx + 8;
+      ctx.fillStyle = 'rgba(0,0,0,0.60)';
+      ctx.fillRect(padXPx - 4, nextPanelY - 4, panelWidth + 8, fpsPanelH);
+      for (let i = 0; i < fpsLines.length; i++) {
+        let lineColor: string;
+        if (i === 0) {
+          lineColor = '#ffff60';
+        } else if (i === 2 && this._longFrames50ms > 0) {
+          lineColor = '#ff6060'; // warn red when there are >50 ms frames
+        } else {
+          lineColor = '#e0e080';
+        }
+        ctx.fillStyle = lineColor;
+        ctx.fillText(fpsLines[i], padXPx, nextPanelY + fontSizePx + i * lineHeightPx);
       }
-      ctx.fillStyle = lineColor;
-      ctx.fillText(fpsLines[i], padXPx, nextPanelY + fontSizePx + i * lineHeightPx);
+      if (this._adaptiveReductionActive) {
+        const tierLabel = this._adaptiveReductionTier >= 2 ? '!! ADAPTIVE T2 (deep)' : '!  ADAPTIVE T1';
+        ctx.fillStyle = this._adaptiveReductionTier >= 2 ? '#ff2020' : '#ff6020';
+        ctx.fillText(tierLabel, padXPx, nextPanelY + fpsPanelH - 2);
+      }
+      nextPanelY += fpsPanelH + 4;
+
+      // ── Per-stage timing panel ──────────────────────────────────────────────
+      const panelHeight  = STAGE_COUNT * lineHeightPx + 8;
+
+      // Build label strings (reuses _lineBuffer — no per-call allocation)
+      for (let i = 0; i < STAGE_COUNT; i++) {
+        _lineBuffer[i] = `${STAGE_LABELS[i]} ${this._smoothedMs[i].toFixed(2)}ms`;
+      }
+
+      // Background panel
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(padXPx - 4, nextPanelY - 4, panelWidth + 8, panelHeight);
+
+      // Render stage lines in cyan; total line in yellow
+      for (let i = 0; i < STAGE_COUNT; i++) {
+        ctx.fillStyle = i === STAGE_TOTAL ? '#ffd23c' : '#00e5ff';
+        ctx.fillText(_lineBuffer[i], padXPx, nextPanelY + fontSizePx + i * lineHeightPx);
+      }
+
+      nextPanelY += panelHeight + 4;
+      ctx.restore();
     }
-    if (this._adaptiveReductionActive) {
-      const tierLabel = this._adaptiveReductionTier >= 2 ? '!! ADAPTIVE T2 (deep)' : '!  ADAPTIVE T1';
-      ctx.fillStyle = this._adaptiveReductionTier >= 2 ? '#ff2020' : '#ff6020';
-      ctx.fillText(tierLabel, padXPx, nextPanelY + fpsPanelH - 2);
-    }
-    nextPanelY += fpsPanelH + 4;
-
-    // ── Per-stage timing panel ────────────────────────────────────────────────
-    const panelHeight  = STAGE_COUNT * lineHeightPx + 8;
-
-    // Build label strings (reuses _lineBuffer — no per-call allocation)
-    for (let i = 0; i < STAGE_COUNT; i++) {
-      _lineBuffer[i] = `${STAGE_LABELS[i]} ${this._smoothedMs[i].toFixed(2)}ms`;
-    }
-
-    // Background panel
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(padXPx - 4, nextPanelY - 4, panelWidth + 8, panelHeight);
-
-    // Render stage lines in cyan; total line in yellow
-    for (let i = 0; i < STAGE_COUNT; i++) {
-      ctx.fillStyle = i === STAGE_TOTAL ? '#ffd23c' : '#00e5ff';
-      ctx.fillText(_lineBuffer[i], padXPx, nextPanelY + fontSizePx + i * lineHeightPx);
-    }
-
-    nextPanelY += panelHeight + 4;
-    ctx.restore();
 
     // ── Chunk cache stats panel ───────────────────────────────────────────────
-    if (this._chunkStats !== null) {
+    if (showChunks && this._chunkStats !== null) {
       const cs = this._chunkStats;
       const chunkLines = [
         `FG Chunks V=${cs.visibleChunkCount} T=${cs.totalChunkCount}`,
@@ -416,7 +431,7 @@ export class RenderProfiler {
     }
 
     // ── Background-block chunk cache stats panel ──────────────────────────────
-    if (this._bgChunkStats !== null) {
+    if (showChunks && this._bgChunkStats !== null) {
       const bc = this._bgChunkStats;
       const bgLines = [
         `BG Chunks V=${bc.visibleChunkCount} T=${bc.totalChunkCount}`,
@@ -437,7 +452,7 @@ export class RenderProfiler {
     }
 
     // ── Transition debug panel ────────────────────────────────────────────────
-    if (this._transitionStats !== null) {
+    if (showRoom && this._transitionStats !== null) {
       const ts = this._transitionStats;
       const transLines = [
         `Room: ${ts.currentRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)}`,
@@ -464,7 +479,7 @@ export class RenderProfiler {
     }
 
     // ── Liquid body debug panel ───────────────────────────────────────────────
-    if (this._liquidStats !== null) {
+    if (showWater && this._liquidStats !== null) {
       const ls = this._liquidStats;
       const liquidLines  = [
         `Liq tiles: ${ls.liquidTileCount}`,

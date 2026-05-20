@@ -11,6 +11,8 @@
  */
 
 import type { RenderProfiler } from './renderProfiler';
+import type { DebugPanelVisibility } from '../../ui/debugPanelManager';
+import { isPanelVisible } from '../../ui/debugPanelManager';
 
 /** Optional per-tick player movement debug data shown in the debug panel. */
 export interface HudDebugState {
@@ -77,36 +79,62 @@ export function renderHudOverlay(
   renderProfiler?: RenderProfiler,
   virtualWidthPx?: number,
   isDebugMode?: boolean,
+  panelVisibility?: DebugPanelVisibility,
 ): void {
-  const perfLines = [
-    `FPS: ${hud.fps.toFixed(1)}`,
-    `Frame: ${hud.frameTimeMs.toFixed(2)}ms`,
-    `Particles: ${hud.particleCount}`,
-  ];
+  // When panelVisibility is provided, each section is shown only when its
+  // flag is true.  When undefined (e.g. legacy callers), all sections show.
+  const showPerf       = isPanelVisible('performance', panelVisibility);
+  const showParticles  = isPanelVisible('particles',   panelVisibility);
+  const showMovement   = isPanelVisible('movement',    panelVisibility);
+  const showGrapple    = isPanelVisible('grapple',     panelVisibility);
+  const showWater      = isPanelVisible('water',       panelVisibility);
 
-  let debugLines: string[] = [];
+  // ── Top "green" lines: performance counters ──────────────────────────────
+  const perfLines: string[] = [];
+  if (showPerf) {
+    perfLines.push(`FPS: ${hud.fps.toFixed(1)}`);
+    perfLines.push(`Frame: ${hud.frameTimeMs.toFixed(2)}ms`);
+  }
+  if (showParticles) {
+    perfLines.push(`Particles: ${hud.particleCount}`);
+  }
+
+  // ── Debug lines (yellow) split by panel ──────────────────────────────────
+  const debugLines: string[] = [];
   if (hud.debug !== undefined) {
     const d = hud.debug;
-    debugLines = [
-      `Grounded: ${d.isGrounded ? 'Y' : 'N'}`,
-      `OnSurface: ${d.isStandingOnSurface ? 'Y' : 'N'}`,
-      `Coyote:   ${d.coyoteTimeTicks}t`,
-      `JumpBuf:  ${d.jumpBufferTicks}t`,
-      `WallL/R:  ${d.isTouchingWallLeft ? 'L' : '-'}${d.isTouchingWallRight ? 'R' : '-'}` +
-        `  Slide:${d.isWallSlidingFlag ? 'Y' : 'N'}`,
-      `WallLock: ${d.wallJumpLockoutTicks}t`,
-      `Sprint:${d.isSprinting ? 'Y' : 'N'} Skid:${d.isSkidding ? 'Y' : 'N'} Sld:${d.isSliding ? 'Y' : 'N'}`,
-      `Grapple:  ${d.isGrappleActive ? `len=${d.grappleLengthWorld.toFixed(0)} pull=${d.grapplePullInAmountWorld.toFixed(0)}` : 'off'}`,
-      `GrpMiss:${d.isGrappleMissActive ? 'Y' : 'N'} pIdx=${d.grappleParticleStartIndex} chain=${d.isGrappleChainHiddenFlag ? 'hidden' : 'visible'}`,
-      `Zip:${d.isGrappleZipActive ? (d.hasZipImpactedSurface ? 'ZIPPING(impacted)' : 'ZIPPING') : (d.isGrappleStuck ? `STUCK win=${d.zipJumpWindowTicksLeft}t` : 'off')} mode=${d.grappleInputMode === 0 ? 'Hold' : 'Toggle'}`,
-      `Input U/L/R/D/Sh: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}${d.inputShift ? 'S' : '-'}`,
-      `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
-      `Input Grap/Int: ${d.inputGrapple ? 'G' : '-'} / ${d.inputInteract ? 'I' : '-'}`,
-      // Water / buoyancy
-      `Water: ${d.isInLiquid ? 'IN' : 'OUT'} sub=${d.submergedFraction.toFixed(2)} df=${d.depthFactor.toFixed(2)}`,
-      `Buoy: ${d.buoyancyAccelWorldPerSec2.toFixed(1)}wu/s² gScale=${d.gravityScale.toFixed(2)} velY=${d.playerVelocityYWorld.toFixed(1)}`,
-      `LiqSurf: ${d.liquidSurfaceYWorld.toFixed(1)}`,
-    ];
+
+    if (showMovement) {
+      debugLines.push(
+        `Grounded: ${d.isGrounded ? 'Y' : 'N'}`,
+        `OnSurface: ${d.isStandingOnSurface ? 'Y' : 'N'}`,
+        `Coyote:   ${d.coyoteTimeTicks}t`,
+        `JumpBuf:  ${d.jumpBufferTicks}t`,
+        `WallL/R:  ${d.isTouchingWallLeft ? 'L' : '-'}${d.isTouchingWallRight ? 'R' : '-'}` +
+          `  Slide:${d.isWallSlidingFlag ? 'Y' : 'N'}`,
+        `WallLock: ${d.wallJumpLockoutTicks}t`,
+        `Sprint:${d.isSprinting ? 'Y' : 'N'} Skid:${d.isSkidding ? 'Y' : 'N'} Sld:${d.isSliding ? 'Y' : 'N'}`,
+        `Input U/L/R/D/Sh: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}${d.inputShift ? 'S' : '-'}`,
+        `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
+      );
+    }
+
+    if (showGrapple) {
+      debugLines.push(
+        `Grapple:  ${d.isGrappleActive ? `len=${d.grappleLengthWorld.toFixed(0)} pull=${d.grapplePullInAmountWorld.toFixed(0)}` : 'off'}`,
+        `GrpMiss:${d.isGrappleMissActive ? 'Y' : 'N'} pIdx=${d.grappleParticleStartIndex} chain=${d.isGrappleChainHiddenFlag ? 'hidden' : 'visible'}`,
+        `Zip:${d.isGrappleZipActive ? (d.hasZipImpactedSurface ? 'ZIPPING(impacted)' : 'ZIPPING') : (d.isGrappleStuck ? `STUCK win=${d.zipJumpWindowTicksLeft}t` : 'off')} mode=${d.grappleInputMode === 0 ? 'Hold' : 'Toggle'}`,
+        `Input Grap/Int: ${d.inputGrapple ? 'G' : '-'} / ${d.inputInteract ? 'I' : '-'}`,
+      );
+    }
+
+    if (showWater) {
+      debugLines.push(
+        `Water: ${d.isInLiquid ? 'IN' : 'OUT'} sub=${d.submergedFraction.toFixed(2)} df=${d.depthFactor.toFixed(2)}`,
+        `Buoy: ${d.buoyancyAccelWorldPerSec2.toFixed(1)}wu/s² gScale=${d.gravityScale.toFixed(2)} velY=${d.playerVelocityYWorld.toFixed(1)}`,
+        `LiqSurf: ${d.liquidSurfaceYWorld.toFixed(1)}`,
+      );
+    }
   }
 
   const allLines = [...perfLines, ...debugLines];
@@ -120,22 +148,24 @@ export function renderHudOverlay(
   ctx.save();
   ctx.font = `${fontSizePx}px monospace`;
 
-  // Background panel
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(padXPx - 4, padYPx - 4, panelWidth, allLines.length * lineHeightPx + 8);
+  if (allLines.length > 0) {
+    // Background panel
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(padXPx - 4, padYPx - 4, panelWidth, allLines.length * lineHeightPx + 8);
 
-  // Performance lines in green
-  ctx.fillStyle = '#00ff99';
-  for (let i = 0; i < perfLines.length; i++) {
-    ctx.fillText(perfLines[i], padXPx, padYPx + fontSizePx + i * lineHeightPx);
-  }
+    // Performance / particle lines in green
+    ctx.fillStyle = '#00ff99';
+    for (let i = 0; i < perfLines.length; i++) {
+      ctx.fillText(perfLines[i], padXPx, padYPx + fontSizePx + i * lineHeightPx);
+    }
 
-  // Debug lines in yellow (visually distinct from perf counters)
-  if (debugLines.length > 0) {
-    ctx.fillStyle = '#ffd23c';
-    for (let i = 0; i < debugLines.length; i++) {
-      const y = padYPx + fontSizePx + (perfLines.length + i) * lineHeightPx;
-      ctx.fillText(debugLines[i], padXPx, y);
+    // Debug lines in yellow (visually distinct from perf counters)
+    if (debugLines.length > 0) {
+      ctx.fillStyle = '#ffd23c';
+      for (let i = 0; i < debugLines.length; i++) {
+        const y = padYPx + fontSizePx + (perfLines.length + i) * lineHeightPx;
+        ctx.fillText(debugLines[i], padXPx, y);
+      }
     }
   }
 
@@ -143,7 +173,7 @@ export function renderHudOverlay(
 
   // Render-stage profiler panel (top-right corner, debug only).
   if (renderProfiler !== undefined && virtualWidthPx !== undefined && isDebugMode === true) {
-    renderProfiler.drawOverlay(ctx, virtualWidthPx, true);
+    renderProfiler.drawOverlay(ctx, virtualWidthPx, true, panelVisibility);
   }
 }
 

@@ -22,6 +22,7 @@ import {
   getEffectiveGrappleRangeWorld,
   MOTE_STATE_DEPLETED,
 } from '../sim/motes/orderedMoteQueue';
+import { debugPanelVisibility } from '../ui/debugPanelManager';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -72,46 +73,54 @@ export function renderHighResolutionDebugOverlay(r: HighResolutionDebugOverlayCo
   deviceCtx.save();
   deviceCtx.scale(scaleXPx, scaleYPx);
 
-  renderHudOverlay(deviceCtx, hudState, renderProfiler, virtualCanvas.width, true);
+  // Pass per-panel visibility so only toggled sections are drawn.
+  renderHudOverlay(deviceCtx, hudState, renderProfiler, virtualCanvas.width, true, debugPanelVisibility);
 
-  deviceCtx.fillStyle = 'rgba(255,255,255,0.45)';
-  deviceCtx.font = '7px monospace';
-  const roomLabel = currentRoom.name;
-  const labelWidthPx = deviceCtx.measureText(roomLabel).width;
-  deviceCtx.fillText(roomLabel, (virtualCanvas.width - labelWidthPx) * 0.5, 22);
-
-  const totalSlots = getTotalMoteSlotCount(world);
-  const availableSlots = getAvailableMoteSlotCount(world);
-  const depletedSlots = totalSlots - availableSlots;
-  const ratio = totalSlots > 0 ? availableSlots / totalSlots : 1.0;
-  const effectiveRangeWorld = getEffectiveGrappleRangeWorld(world);
-  const displayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
-
-  let slotBar = '';
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    slotBar += world.moteSlotState[i] === MOTE_STATE_DEPLETED ? '○' : '●';
+  // ── Room name label (gated behind "room" panel) ──────────────────────────
+  if (debugPanelVisibility.room) {
+    deviceCtx.fillStyle = 'rgba(255,255,255,0.45)';
+    deviceCtx.font = '7px monospace';
+    const roomLabel = currentRoom.name;
+    const labelWidthPx = deviceCtx.measureText(roomLabel).width;
+    deviceCtx.fillText(roomLabel, (virtualCanvas.width - labelWidthPx) * 0.5, 22);
   }
 
-  const moteLines = [
-    `Motes: ${availableSlots}/${totalSlots} (${(ratio * 100).toFixed(0)}%)`,
-    `Depleted: ${depletedSlots}`,
-    `Range eff: ${effectiveRangeWorld.toFixed(1)}  disp: ${displayRadiusWorld.toFixed(1)}`,
-    slotBar || '(no motes)',
-  ];
+  // ── Mote / particle stats (gated behind "particles" panel) ───────────────
+  if (debugPanelVisibility.particles) {
+    const totalSlots = getTotalMoteSlotCount(world);
+    const availableSlots = getAvailableMoteSlotCount(world);
+    const depletedSlots = totalSlots - availableSlots;
+    const ratio = totalSlots > 0 ? availableSlots / totalSlots : 1.0;
+    const effectiveRangeWorld = getEffectiveGrappleRangeWorld(world);
+    const displayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
 
-  const lineHeightPx = 9;
-  const padXPx = 4;
-  const padYPx = 4;
-  const panelWidthPx = 150;
-  const panelHeightPx = moteLines.length * lineHeightPx + padYPx * 2;
-  const panelXPx = virtualCanvas.width - panelWidthPx - padXPx;
-  const panelYPx = padYPx;
+    let slotBar = '';
+    for (let i = 0; i < world.moteSlotCount; i++) {
+      slotBar += world.moteSlotState[i] === MOTE_STATE_DEPLETED ? '○' : '●';
+    }
 
-  deviceCtx.fillStyle = 'rgba(0,0,0,0.50)';
-  deviceCtx.fillRect(panelXPx, panelYPx, panelWidthPx, panelHeightPx);
-  deviceCtx.fillStyle = '#b0f080';
-  for (let li = 0; li < moteLines.length; li++) {
-    deviceCtx.fillText(moteLines[li], panelXPx + padXPx, panelYPx + padYPx + (li + 1) * lineHeightPx - 2);
+    const moteLines = [
+      `Motes: ${availableSlots}/${totalSlots} (${(ratio * 100).toFixed(0)}%)`,
+      `Depleted: ${depletedSlots}`,
+      `Range eff: ${effectiveRangeWorld.toFixed(1)}  disp: ${displayRadiusWorld.toFixed(1)}`,
+      slotBar || '(no motes)',
+    ];
+
+    const lineHeightPx = 9;
+    const padXPx = 4;
+    const padYPx = 4;
+    const panelWidthPx = 150;
+    const panelHeightPx = moteLines.length * lineHeightPx + padYPx * 2;
+    const panelXPx = virtualCanvas.width - panelWidthPx - padXPx;
+    const panelYPx = padYPx;
+
+    deviceCtx.font = '7px monospace';
+    deviceCtx.fillStyle = 'rgba(0,0,0,0.50)';
+    deviceCtx.fillRect(panelXPx, panelYPx, panelWidthPx, panelHeightPx);
+    deviceCtx.fillStyle = '#b0f080';
+    for (let li = 0; li < moteLines.length; li++) {
+      deviceCtx.fillText(moteLines[li], panelXPx + padXPx, panelYPx + padYPx + (li + 1) * lineHeightPx - 2);
+    }
   }
 
   deviceCtx.restore();
