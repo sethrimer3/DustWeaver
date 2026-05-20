@@ -144,11 +144,12 @@ export function raycastToWallWithNormal(
       const ww = world.wallWWorld[wi];
       const wh = world.wallHWorld[wi];
       if (x >= wx && x <= wx + ww && y >= wy && y <= wy + wh) {
-        // Select the outward face normal that most opposes the ray direction
-        // (i.e., the face the ray is entering from). For each face normal n,
-        // we want the one maximising -rayDir·n, equivalently face_normal·(-rayDir).
-        // Left n=(-1,0): score = -(-dirX) = dirX; Right n=(+1,0): score = -(dirX) = -dirX
-        // Top n=(0,-1):  score = -(-dirY) = dirY; Bottom n=(0,+1): score = -(dirY) = -dirY
+        // Select the outward face normal that most aligns with the ray direction
+        // (i.e., the face the ray is entering from). Score each face normal n by rayDir·n.
+        // Left n=(-1,0): score = dirX·(-1) + dirY·0 =  dirXWorld
+        // Right n=(+1,0): score = dirX·(+1)           = -dirXWorld  (stored as -dirX)
+        // Top n=(0,-1): score = dirY·(-1)             =  dirYWorld
+        // Bottom n=(0,+1): score = dirY·(+1)          = -dirYWorld
         const dotLeft   =  dirXWorld;
         const dotRight  = -dirXWorld;
         const dotTop    =  dirYWorld;
