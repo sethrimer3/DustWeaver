@@ -6,6 +6,8 @@
  * inside movement.ts — names, values, and doc-comments are preserved verbatim.
  */
 
+import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
+
 // ============================================================================
 // Debug overrides — mutable values that can be live-tuned from the debug panel.
 // When a value is NaN, the default constant is used. When set to a finite
@@ -360,8 +362,8 @@ export const WALL_JUMP_MIN_AIRBORNE_TICKS = 4;
  * Minimum vertical overlap (world units) between the player AABB and a wall
  * face required for the wall to count as a valid wall-jump surface.
  * Rejects tiny ledge blocks and stair steps whose side barely overlaps the player.
- * BLOCK_SIZE_SMALL = 3, BLOCK_SIZE_MEDIUM = 6 — both fail this threshold.
- * Multi-block merged walls (height ≥ 12) can comfortably reach 8+ units.
+ * BLOCK_SIZE_SMALL = 8 wu — a single block fails this threshold (overlap ≤ 8).
+ * Multi-block merged walls can comfortably reach 8+ units of overlap.
  */
 export const WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD = 8;
 
@@ -372,6 +374,25 @@ export const WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD = 8;
  * Prevents wall jumps off stair-step tops and block edges near foot level.
  */
 export const WALL_JUMP_LEDGE_SUPPRESS_WORLD = 4;
+
+/**
+ * Minimum wall face height (in small blocks) required for a side face to be
+ * considered a real jumpable wall.
+ * 1-3 block rises feel like floor terrain to the player, not intentional walls.
+ * At 4 blocks (32 world units) the wall is tall enough to register as a distinct
+ * vertical surface.
+ */
+export const WALL_JUMP_MIN_FACE_HEIGHT_BLOCKS = 4;
+
+/**
+ * Minimum wall face height in world units.
+ * Derived from WALL_JUMP_MIN_FACE_HEIGHT_BLOCKS * BLOCK_SIZE_SMALL (8 wu each).
+ * A wall rectangle whose total height is less than this value cannot trigger a
+ * wall jump, regardless of how much the player's AABB overlaps it.
+ * Prevents accidental backwards launches when the player clips a 1–3-block
+ * step, rise, or ledge while running or jumping forward.
+ */
+export const WALL_JUMP_MIN_FACE_HEIGHT_WORLD = WALL_JUMP_MIN_FACE_HEIGHT_BLOCKS * BLOCK_SIZE_SMALL;
 
 /**
  * When true, proximity-only wall jumps (not touching, no grace timer) require

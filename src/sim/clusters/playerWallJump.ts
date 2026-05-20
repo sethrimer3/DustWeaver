@@ -26,6 +26,7 @@ import {
   WALL_JUMP_MIN_AIRBORNE_TICKS,
   WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD,
   WALL_JUMP_LEDGE_SUPPRESS_WORLD,
+  WALL_JUMP_MIN_FACE_HEIGHT_WORLD,
   WALL_JUMP_PROXIMITY_REQUIRES_AWAY_INPUT,
   debugSpeedOverrides,
   ov,
@@ -66,8 +67,10 @@ export interface WallJumpCandidateResult {
  * the player AABB to be considered a real jumpable wall (not a tiny ledge/step).
  *
  * Checks:
- *   1. Minimum vertical overlap — rejects blocks whose side barely grazes the player.
- *   2. Ledge suppression     — rejects walls whose top is near the player's feet,
+ *   1. Face height          — rejects walls shorter than WALL_JUMP_MIN_FACE_HEIGHT_WORLD
+ *      (4 small blocks / 32 wu).  1–3-block rises feel like floor terrain, not walls.
+ *   2. Minimum vertical overlap — rejects blocks whose side barely grazes the player.
+ *   3. Ledge suppression     — rejects walls whose top is near the player's feet,
  *      indicating the player is at (or just above) the top of a step or ledge.
  */
 function isValidWallJumpFace(
@@ -76,6 +79,11 @@ function isValidWallJumpFace(
   wallTop: number,
   wallBottom: number,
 ): boolean {
+  // Face height: wall must be at least 4 small blocks tall regardless of
+  // how much the player AABB overlaps it.  Prevents 1–3 block rises from
+  // triggering a wall jump when the player clips their corner against them.
+  if (wallBottom - wallTop < WALL_JUMP_MIN_FACE_HEIGHT_WORLD) return false;
+
   const overlap = Math.min(playerBottom, wallBottom) - Math.max(playerTop, wallTop);
   if (overlap < WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD) return false;
 
