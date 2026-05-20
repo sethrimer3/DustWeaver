@@ -83,6 +83,22 @@ export function resetRadiantTetherState(): void {
   _chainState = null;
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Fires movement chains and starts a beam attack — shared by INACTIVE and RESET transitions. */
+function beginBeamAttackCycle(
+  world: WorldState,
+  cs: RadiantTetherChainState,
+  bossXWorld: number, bossYWorld: number,
+  chainCount: number,
+  baseAngleRad: number,
+  playerXWorld: number, playerYWorld: number,
+): void {
+  fireChains(world, cs, bossXWorld, bossYWorld, baseAngleRad, chainCount);
+  assignReelDirections(cs, world.rng);
+  startBeamAttack(cs, world, bossXWorld, bossYWorld, playerXWorld, playerYWorld);
+}
+
 // ── Main AI update ──────────────────────────────────────────────────────────
 
 export function applyRadiantTetherAI(world: WorldState): void {
@@ -151,11 +167,9 @@ export function applyRadiantTetherAI(world: WorldState): void {
           cluster.radiantTetherState = RT_STATE_BEAM_GROW;
           cluster.radiantTetherStateTicks = 0;
           cluster.radiantTetherBaseAngleRad = Math.atan2(dyToPlayer, dxToPlayer);
-          // Fire movement chains and launch first beam attack
-          fireChains(world, cs, cluster.positionXWorld, cluster.positionYWorld, cluster.radiantTetherBaseAngleRad, chainCount);
-          assignReelDirections(cs, world.rng);
-          startBeamAttack(cs, world, cluster.positionXWorld, cluster.positionYWorld, playerX, playerY);
           cluster.radiantTetherChainCount = chainCount;
+          // Fire movement chains and launch first beam attack
+          beginBeamAttackCycle(world, cs, cluster.positionXWorld, cluster.positionYWorld, chainCount, cluster.radiantTetherBaseAngleRad, playerX, playerY);
         }
         break;
 
@@ -179,7 +193,7 @@ export function applyRadiantTetherAI(world: WorldState): void {
 
         const allHit = tickBeamGrow(cs, cluster.positionXWorld, cluster.positionYWorld);
         if (allHit) {
-          startBranchGrow(cs, world, cluster.positionXWorld, cluster.positionYWorld);
+          startBranchGrow(cs, world);
           cluster.radiantTetherState = RT_STATE_BRANCH_GROW;
           cluster.radiantTetherStateTicks = 0;
         }
@@ -278,9 +292,7 @@ export function applyRadiantTetherAI(world: WorldState): void {
           cluster.radiantTetherBaseAngleRad += 0.7 + nextFloat(world.rng) * 0.6;
           cluster.radiantTetherChainCount = chainCount;
           if (playerFound) {
-            fireChains(world, cs, cluster.positionXWorld, cluster.positionYWorld, cluster.radiantTetherBaseAngleRad, chainCount);
-            assignReelDirections(cs, world.rng);
-            startBeamAttack(cs, world, cluster.positionXWorld, cluster.positionYWorld, playerX, playerY);
+            beginBeamAttackCycle(world, cs, cluster.positionXWorld, cluster.positionYWorld, chainCount, cluster.radiantTetherBaseAngleRad, playerX, playerY);
           }
         }
         break;

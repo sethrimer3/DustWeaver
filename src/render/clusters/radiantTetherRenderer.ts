@@ -111,7 +111,7 @@ export function renderRadiantTether(
         if (mb.isActiveFlag === 0) continue;
         const endX = (cluster.positionXWorld + mb.dirXWorld * mb.currentLengthWorld) * scalePx + offsetXPx;
         const endY = (cluster.positionYWorld + mb.dirYWorld * mb.currentLengthWorld) * scalePx + offsetYPx;
-        renderMainBeam(ctx, screenX, screenY, endX, endY, scalePx);
+        renderMainBeam(ctx, screenX, screenY, endX, endY);
       }
     }
 
@@ -176,7 +176,6 @@ function renderMainBeam(
   ctx: CanvasRenderingContext2D,
   fromX: number, fromY: number,
   toX: number, toY: number,
-  _scalePx: number,
 ): void {
   ctx.save();
   // Outer soft glow
@@ -269,10 +268,9 @@ function renderRope(
   freeEndX: number, freeEndY: number,
   lifeFrac: number,
 ): void {
-  // As lifetime decreases, only render from anchor partway to free end
-  const visibleFrac = lifeFrac;
-  const midX = anchorX + (freeEndX - anchorX) * visibleFrac;
-  const midY = anchorY + (freeEndY - anchorY) * visibleFrac;
+  // Shorten the visible end as lifetime decreases
+  const midX = anchorX + (freeEndX - anchorX) * lifeFrac;
+  const midY = anchorY + (freeEndY - anchorY) * lifeFrac;
 
   const dx = midX - anchorX;
   const dy = midY - anchorY;

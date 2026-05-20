@@ -306,8 +306,8 @@ export function raycastToWall(
 
 /**
  * Same as raycastToWall but also returns the outward wall normal at the impact
- * point, determined by minimum-penetration depth on each face.
- * Returns the hit position at the wall surface (not embedded).
+ * point, determined by the face whose normal most opposes the ray direction.
+ * Returns the last position just before wall penetration as the hit point.
  */
 export function raycastToWallWithNormal(
   world: WorldState,
@@ -476,25 +476,25 @@ export function tickChains(
     const ww = world.wallWWorld[wi];
     const wh = world.wallHWorld[wi];
 
-    const dLeft = bossXWorld - wx;
-    if (dLeft >= 0 && dLeft < RT_WALL_REPEL_DIST_WORLD &&
+    const distToLeftWallEdgeWorld = bossXWorld - wx;
+    if (distToLeftWallEdgeWorld >= 0 && distToLeftWallEdgeWorld < RT_WALL_REPEL_DIST_WORLD &&
         bossYWorld >= wy - bossHalf && bossYWorld <= wy + wh + bossHalf) {
-      vx -= RT_WALL_REPEL_ACCEL_WORLD * (1.0 - dLeft / RT_WALL_REPEL_DIST_WORLD);
+      vx -= RT_WALL_REPEL_ACCEL_WORLD * (1.0 - distToLeftWallEdgeWorld / RT_WALL_REPEL_DIST_WORLD);
     }
-    const dRight = wx + ww - bossXWorld;
-    if (dRight >= 0 && dRight < RT_WALL_REPEL_DIST_WORLD &&
+    const distToRightWallEdgeWorld = wx + ww - bossXWorld;
+    if (distToRightWallEdgeWorld >= 0 && distToRightWallEdgeWorld < RT_WALL_REPEL_DIST_WORLD &&
         bossYWorld >= wy - bossHalf && bossYWorld <= wy + wh + bossHalf) {
-      vx += RT_WALL_REPEL_ACCEL_WORLD * (1.0 - dRight / RT_WALL_REPEL_DIST_WORLD);
+      vx += RT_WALL_REPEL_ACCEL_WORLD * (1.0 - distToRightWallEdgeWorld / RT_WALL_REPEL_DIST_WORLD);
     }
-    const dTop = bossYWorld - wy;
-    if (dTop >= 0 && dTop < RT_WALL_REPEL_DIST_WORLD &&
+    const distToTopWallEdgeWorld = bossYWorld - wy;
+    if (distToTopWallEdgeWorld >= 0 && distToTopWallEdgeWorld < RT_WALL_REPEL_DIST_WORLD &&
         bossXWorld >= wx - bossHalf && bossXWorld <= wx + ww + bossHalf) {
-      vy -= RT_WALL_REPEL_ACCEL_WORLD * (1.0 - dTop / RT_WALL_REPEL_DIST_WORLD);
+      vy -= RT_WALL_REPEL_ACCEL_WORLD * (1.0 - distToTopWallEdgeWorld / RT_WALL_REPEL_DIST_WORLD);
     }
-    const dBottom = wy + wh - bossYWorld;
-    if (dBottom >= 0 && dBottom < RT_WALL_REPEL_DIST_WORLD &&
+    const distToBottomWallEdgeWorld = wy + wh - bossYWorld;
+    if (distToBottomWallEdgeWorld >= 0 && distToBottomWallEdgeWorld < RT_WALL_REPEL_DIST_WORLD &&
         bossXWorld >= wx - bossHalf && bossXWorld <= wx + ww + bossHalf) {
-      vy += RT_WALL_REPEL_ACCEL_WORLD * (1.0 - dBottom / RT_WALL_REPEL_DIST_WORLD);
+      vy += RT_WALL_REPEL_ACCEL_WORLD * (1.0 - distToBottomWallEdgeWorld / RT_WALL_REPEL_DIST_WORLD);
     }
   }
 
@@ -802,7 +802,7 @@ export function tickBeamGrow(
       if (mb.currentLengthWorld >= mb.maxLengthWorld) {
         mb.currentLengthWorld = mb.maxLengthWorld;
         mb.hasHitWall = 1;
-        // Update actual hit point in case the boss drifted
+        // Lock hit point at wall surface using stored direction and max range
         mb.hitXWorld = bossXWorld + mb.dirXWorld * mb.maxLengthWorld;
         mb.hitYWorld = bossYWorld + mb.dirYWorld * mb.maxLengthWorld;
       } else {
@@ -820,7 +820,6 @@ export function tickBeamGrow(
 export function startBranchGrow(
   cs: RadiantTetherChainState,
   world: WorldState,
-  bossXWorld: number, bossYWorld: number,
 ): void {
   cs.attackPhaseTicks = 0;
   cs.attackPhase = 1;
@@ -829,8 +828,8 @@ export function startBranchGrow(
     const mb = cs.mainBeams[i];
     if (mb.isActiveFlag === 0 || mb.hasHitWall === 0) continue;
 
-    const hitX = bossXWorld + mb.dirXWorld * mb.maxLengthWorld;
-    const hitY = bossYWorld + mb.dirYWorld * mb.maxLengthWorld;
+    const hitX = mb.hitXWorld;
+    const hitY = mb.hitYWorld;
     const nx = mb.normalXWorld;
     const ny = mb.normalYWorld;
 
@@ -1078,6 +1077,8 @@ function applyBranchDamage(
   sourceXWorld: number,
   sourceYWorld: number,
 ): void {
+  // Count non-transient player dust particles to determine armor.
+  // O(n) over all particles — acceptable because damage hits are infrequent.
   let playerDustCount = 0;
   for (let i = 0; i < world.particleCount; i++) {
     if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1 && world.isTransientFlag[i] === 0) {
