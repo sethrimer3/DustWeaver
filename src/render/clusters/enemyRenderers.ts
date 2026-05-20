@@ -13,9 +13,9 @@ export { renderWebSpider, renderWebSpiderFadingWebs } from './webSpiderEnemyRend
 export { renderWaterBubbleBody, renderIceBubbleBody, renderBeeSwarm } from './enemyBubbleBeeRenderers';
 import { loadImg, isSpriteReady } from '../imageCache';
 import {
-  RT_STATE_TELEGRAPH,
-  RT_STATE_LOCK,
-  RT_STATE_FIRING,
+  RT_STATE_BEAM_GROW,
+  RT_STATE_BRANCH_GROW,
+  RT_STATE_ENERGIZED,
 } from '../../sim/clusters/radiantTetherAi';
 import {
   getCharacterSprites,
@@ -449,7 +449,7 @@ export function renderBeetleFlying(
 }
 
 export function getRadiantTetherBodySprite(state: number): HTMLImageElement {
-  if (state === RT_STATE_TELEGRAPH || state === RT_STATE_LOCK || state === RT_STATE_FIRING) {
+  if (state === RT_STATE_BEAM_GROW || state === RT_STATE_BRANCH_GROW || state === RT_STATE_ENERGIZED) {
     return _radiantTetherAttackingSprite;
   }
   return _radiantTetherFlyingSprite;

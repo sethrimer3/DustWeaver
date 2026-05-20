@@ -12,11 +12,8 @@
 
 // ── Attack-loop phase durations ─────────────────────────────────────────────
 
-/** Ticks the telegraph laser lines rotate before locking. */
-export const RT_TELEGRAPH_DURATION_TICKS = 90; // 1.5 s
-
-/** Ticks the lasers stay fixed so the player can react. */
-export const RT_LOCK_DURATION_TICKS = 30; // 0.5 s
+// RT_TELEGRAPH_DURATION_TICKS removed — replaced by beam-grow attack system.
+// RT_LOCK_DURATION_TICKS removed — replaced by branch-grow phase.
 
 /** Ticks it takes for chains to reach their anchor after firing. */
 export const RT_FIRE_DURATION_TICKS = 6; // ~0.1 s (near-instant)
@@ -24,19 +21,103 @@ export const RT_FIRE_DURATION_TICKS = 6; // ~0.1 s (near-instant)
 /** Ticks the boss moves via chain winching before retracting. */
 export const RT_MOVEMENT_DURATION_TICKS = 300; // 5 s
 
-/** Ticks of pause between movement end and the next telegraph cycle. */
+/** Ticks of pause between movement end and the next beam attack cycle. */
 export const RT_RESET_DURATION_TICKS = 30; // 0.5 s
 
-// ── Telegraph / laser rotation ──────────────────────────────────────────────
+// ── Telegraph / laser rotation — REMOVED ──────────────────────────────────
+// RT_TELEGRAPH_ROTATION_SPEED_RAD removed.
+// RT_TELEGRAPH_LINE_WIDTH_PX removed.
+// RT_TELEGRAPH_MAX_RANGE_WORLD removed.
 
-/** Angular speed of telegraph lasers (radians/tick). */
-export const RT_TELEGRAPH_ROTATION_SPEED_RAD = 0.035;
+// ── Wall repulsion ──────────────────────────────────────────────────────────
 
-/** Visual width of telegraph laser line (screen px). */
-export const RT_TELEGRAPH_LINE_WIDTH_PX = 1.5;
+/** Distance at which wall repulsion begins (world units). */
+export const RT_WALL_REPEL_DIST_WORLD = 35.0;
 
-/** Maximum draw length of telegraph laser (world units). */
-export const RT_TELEGRAPH_MAX_RANGE_WORLD = 400.0;
+/** Per-tick impulse strength at zero distance (world units/tick). */
+export const RT_WALL_REPEL_ACCEL_WORLD = 0.15;
+
+/** Maximum repulsion-induced speed (world units/tick). */
+export const RT_WALL_REPEL_MAX_SPEED_WORLD = 4.0;
+
+// ── Main beams (attack) ─────────────────────────────────────────────────────
+
+/** Number of simultaneously active main attack beams. */
+export const RT_MAIN_BEAM_COUNT = 3;
+
+/** World units per tick that a main beam grows. */
+export const RT_MAIN_BEAM_GROW_SPEED_WORLD = 3.5;
+
+/** Alpha of main beams while growing. */
+export const RT_MAIN_BEAM_ALPHA = 0.25;
+
+/** Visual width of main beams (screen px). */
+export const RT_MAIN_BEAM_WIDTH_PX = 2.5;
+
+/** Maximum raycast range for main beams (world units). */
+export const RT_MAIN_BEAM_MAX_RANGE_WORLD = 350.0;
+
+// ── Branch beams ────────────────────────────────────────────────────────────
+
+/** Number of branch beams per main beam. */
+export const RT_BRANCH_BEAMS_PER_MAIN = 2;
+
+/** Angle offset from wall normal for each branch (radians). */
+export const RT_BRANCH_BEAM_ANGLE_OFFSET_RAD = Math.PI / 4;
+
+/** World units per tick that a branch beam grows. */
+export const RT_BRANCH_BEAM_GROW_SPEED_WORLD = 2.5;
+
+/** Visual width of branch beams (screen px). */
+export const RT_BRANCH_BEAM_WIDTH_PX = 1.5;
+
+/** Maximum raycast range for branch beams (world units). */
+export const RT_BRANCH_BEAM_MAX_RANGE_WORLD = 200.0;
+
+// ── Energized damage phase ──────────────────────────────────────────────────
+
+/** Ticks branch beams charge up before they can deal damage. */
+export const RT_BRANCH_ENERGIZE_DELAY_TICKS = 20;
+
+/** Ticks branch beams stay energized and deal damage. */
+export const RT_BRANCH_DAMAGE_TICKS = 90;
+
+/** Damage dealt per hit by an energized or rope branch beam. */
+export const RT_BRANCH_DAMAGE = 1;
+
+/** Hitbox half-width of branch beams for player collision (world units). */
+export const RT_BRANCH_HITBOX_HALF_WIDTH_WORLD = 3.5;
+
+/** Invulnerability ticks granted after a branch beam hit. */
+export const RT_BRANCH_IFRAMES_TICKS = 60;
+
+// ── Dust puffs ──────────────────────────────────────────────────────────────
+
+/** Number of dust puffs at main beam impact points. */
+export const RT_MAIN_BEAM_PUFF_COUNT = 5;
+
+/** Lifetime of each dust puff (ticks). */
+export const RT_MAIN_BEAM_PUFF_LIFETIME_TICKS = 30;
+
+/** Alpha of dust puffs. */
+export const RT_MAIN_BEAM_PUFF_ALPHA = 0.6;
+
+/** Radius of each dust puff (world units). */
+export const RT_MAIN_BEAM_PUFF_RADIUS_WORLD = 6.0;
+
+// ── Rope decay chains ───────────────────────────────────────────────────────
+
+/** Ticks before a decaying rope fully fades (world units). */
+export const RT_BRANCH_ROPE_LIFETIME_TICKS = 180;
+
+/** Gravity on the free end of a decaying rope (world units/tick²). */
+export const RT_BRANCH_ROPE_GRAVITY_WORLD = 0.22;
+
+/** Drag on the free-end velocity of a decaying rope (per tick). */
+export const RT_BRANCH_ROPE_DRAG = 0.985;
+
+/** Visual segments for rope rendering (integer). */
+export const RT_BRANCH_ROPE_SEGMENTS = 12;
 
 // ── Chain anchoring ─────────────────────────────────────────────────────────
 
