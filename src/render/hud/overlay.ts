@@ -12,6 +12,7 @@
 
 import type { RenderProfiler } from './renderProfiler';
 import type { DebugPanelVisibility } from '../../ui/debugPanelManager';
+import { isPanelVisible } from '../../ui/debugPanelManager';
 
 /** Optional per-tick player movement debug data shown in the debug panel. */
 export interface HudDebugState {
@@ -82,11 +83,11 @@ export function renderHudOverlay(
 ): void {
   // When panelVisibility is provided, each section is shown only when its
   // flag is true.  When undefined (e.g. legacy callers), all sections show.
-  const showPerf       = panelVisibility === undefined || panelVisibility.performance;
-  const showParticles  = panelVisibility === undefined || panelVisibility.particles;
-  const showMovement   = panelVisibility === undefined || panelVisibility.movement;
-  const showGrapple    = panelVisibility === undefined || panelVisibility.grapple;
-  const showWater      = panelVisibility === undefined || panelVisibility.water;
+  const showPerf       = isPanelVisible('performance', panelVisibility);
+  const showParticles  = isPanelVisible('particles',   panelVisibility);
+  const showMovement   = isPanelVisible('movement',    panelVisibility);
+  const showGrapple    = isPanelVisible('grapple',     panelVisibility);
+  const showWater      = isPanelVisible('water',       panelVisibility);
 
   // ── Top "green" lines: performance counters ──────────────────────────────
   const perfLines: string[] = [];

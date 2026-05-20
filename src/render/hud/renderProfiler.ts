@@ -38,6 +38,7 @@ import type { ChunkCacheStats } from '../walls/chunkRenderCache';
 import type { TransitionDebugStats } from '../transitions/transitionState';
 import type { LiquidDebugStats } from '../liquidBodyCache';
 import type { DebugPanelVisibility } from '../../ui/debugPanelManager';
+import { isPanelVisible } from '../../ui/debugPanelManager';
 
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
@@ -330,10 +331,10 @@ export class RenderProfiler {
   ): void {
     if (!isDebugMode) return;
 
-    const showPerf   = panelVisibility === undefined || panelVisibility.performance;
-    const showChunks = panelVisibility === undefined || panelVisibility.chunks;
-    const showRoom   = panelVisibility === undefined || panelVisibility.room;
-    const showWater  = panelVisibility === undefined || panelVisibility.water;
+    const showPerf   = isPanelVisible('performance', panelVisibility);
+    const showChunks = isPanelVisible('chunks',      panelVisibility);
+    const showRoom   = isPanelVisible('room',        panelVisibility);
+    const showWater  = isPanelVisible('water',       panelVisibility);
 
     // Nothing to render — bail early to avoid drawing an empty frame.
     if (!showPerf && !showChunks && !showRoom && !showWater) return;

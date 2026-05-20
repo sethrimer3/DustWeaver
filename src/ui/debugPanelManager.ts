@@ -48,7 +48,15 @@ function loadFromStorage(): DebugPanelVisibility {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw === null) return defaults;
-    return { ...defaults, ...(JSON.parse(raw) as Partial<DebugPanelVisibility>) };
+    const parsed: unknown = JSON.parse(raw);
+    // Accept only plain objects; validate each key/value individually.
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return defaults;
+    const result = { ...defaults };
+    for (const key of Object.keys(defaults) as DebugPanelId[]) {
+      const val = (parsed as Record<string, unknown>)[key];
+      if (typeof val === 'boolean') result[key] = val;
+    }
+    return result;
   } catch {
     return defaults;
   }
@@ -77,4 +85,15 @@ export function hideAllDebugPanels(): void {
     debugPanelVisibility[key] = false;
   });
   saveToStorage();
+}
+
+/**
+ * Returns true when a given debug panel should be rendered.
+ *
+ * When `visibility` is undefined (legacy / no caller preference), the panel
+ * is treated as visible for backward-compatibility.  When provided, the
+ * panel is visible only if its flag is true.
+ */
+export function isPanelVisible(id: DebugPanelId, visibility?: DebugPanelVisibility): boolean {
+  return visibility === undefined || visibility[id];
 }
