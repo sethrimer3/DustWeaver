@@ -113,7 +113,6 @@ import { buildEdgeExtensionCache, EdgeExtensionCache } from '../render/transitio
 import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
 import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
 import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
-import { ensureRoomPrepared } from './preparedRoomRuntime';
 import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import {
   createTransitionRevealState,
@@ -927,7 +926,16 @@ export function startGameScreen(
     ? progress.lastSaveSpawnBlock
     : (campaignSpawnBlockOverride ?? currentRoom.playerSpawnBlock);
   const initialSpawnBlock = resolveSpawnBlock(currentRoom, desiredSpawnBlock[0], desiredSpawnBlock[1]);
-  loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
+  if (import.meta.env.DEV) {
+    const _initLoadT0 = performance.now();
+    loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
+    console.log(
+      `[startup] initial loadRoom(${currentRoom.id}) done in ` +
+      `${(performance.now() - _initLoadT0).toFixed(1)}ms`,
+    );
+  } else {
+    loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
+  }
 
   // Preload sprites for adjacent rooms in the background.
   preloadAdjacentRoomAssets(currentRoom);
@@ -1062,6 +1070,9 @@ export function startGameScreen(
   function frame(timestampMs: number): void {
     if (!isRunning) return;
 
+    // DEV: record frame start for long-frame detection.
+    const _devFrameT0 = import.meta.env.DEV ? performance.now() : 0;
+
     const elapsedMs = lastTimestampMs === 0 ? FIXED_DT_MS : timestampMs - lastTimestampMs;
     lastTimestampMs = timestampMs;
 
@@ -1144,7 +1155,14 @@ export function startGameScreen(
     // the generator is advanced one phase per RAF frame while the loading overlay
     // is displayed.  Gameplay is frozen until loading completes.
     if (asyncLoadState.isActive) {
+      const _asyncPhaseT0 = import.meta.env.DEV ? performance.now() : 0;
       const _asyncResult = asyncLoadState.gen!.next();
+      if (import.meta.env.DEV && _asyncPhaseT0 > 0) {
+        const _asyncPhaseMs = performance.now() - _asyncPhaseT0;
+        if (_asyncPhaseMs > 16) {
+          console.warn(`[perf] async load phase took ${_asyncPhaseMs.toFixed(1)}ms`);
+        }
+      }
       if (_asyncResult.done) {
         asyncLoadState.isActive = false;
         asyncLoadState.gen = null;
@@ -1250,11 +1268,12 @@ export function startGameScreen(
       transitionDebugState,
     );
 
-    // ── Proximity-based urgent preload ──────────────────────────────────────
-    // If the player is within URGENT_PRELOAD_PROXIMITY_BLOCKS of a room boundary
-    // that has an unprepared transition target, build that room's runtime
-    // immediately (at most one room per frame) to reduce the chance of a cache
-    // miss when the transition fires.
+    // ── Proximity-based priority preload ───────────────────────────────────
+    // When the player is within URGENT_PRELOAD_PROXIMITY_BLOCKS of a room
+    // boundary that has an unprepared transition target, move that room to the
+    // front of the async preload queue.  We never block the gameplay frame here
+    // — if the player crosses before preparation finishes the async overlay path
+    // will handle it.
     {
       const _proxPlayer = world.clusters[0];
       if (_proxPlayer !== undefined && _proxPlayer.isAliveFlag === 1) {
@@ -1274,8 +1293,9 @@ export function startGameScreen(
             case 'up':    _isNear = _py <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
           }
           if (_isNear) {
-            ensureRoomPrepared(_tId, roomRuntimeCache, import.meta.env.DEV);
-            break; // one urgent build per frame to avoid stutter
+            // Boost priority in the async queue — never block the frame.
+            _preloadScheduleHandle?.prioritize(_tId);
+            break; // one priority boost per frame is sufficient
           }
         }
       }
@@ -1611,6 +1631,13 @@ export function startGameScreen(
 
     // Tick the loading overlay — hides it once sprites are ready.
     tickLoadingOverlay();
+
+    if (import.meta.env.DEV && _devFrameT0 > 0) {
+      const _frameMs = performance.now() - _devFrameT0;
+      if (_frameMs > 50) {
+        console.warn(`[perf] LONG FRAME (gameplay): ${_frameMs.toFixed(1)}ms`);
+      }
+    }
 
     rafHandle = requestAnimationFrame(frame);
   }
