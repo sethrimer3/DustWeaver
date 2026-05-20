@@ -5,6 +5,10 @@
  * storing per-chain state, detecting opposing-chain snaps, and producing
  * broken-chain segments that swing from walls.
  *
+ * Also owns the new beam-attack system: main beams (3 rays), branch beams
+ * (2 per main, splitting from wall impact), energize phase (damage window),
+ * and rope decay (branch beams become physics ropes).
+ *
  * Chain data lives outside of ClusterState to keep the struct flat.
  * The boss AI module owns a RadiantTetherChainState instance and passes
  * it through the tick and render pipelines via the world state.
@@ -35,6 +39,27 @@ import {
   RT_CHAIN_DAMAGE,
   RT_CHAIN_HITBOX_HALF_WIDTH_WORLD,
   RT_CHAIN_IFRAMES_TICKS,
+  RT_WALL_REPEL_DIST_WORLD,
+  RT_WALL_REPEL_ACCEL_WORLD,
+  RT_WALL_REPEL_MAX_SPEED_WORLD,
+  RT_MAIN_BEAM_COUNT,
+  RT_MAIN_BEAM_GROW_SPEED_WORLD,
+  RT_MAIN_BEAM_MAX_RANGE_WORLD,
+  RT_BRANCH_BEAMS_PER_MAIN,
+  RT_BRANCH_BEAM_ANGLE_OFFSET_RAD,
+  RT_BRANCH_BEAM_GROW_SPEED_WORLD,
+  RT_BRANCH_BEAM_MAX_RANGE_WORLD,
+  RT_BRANCH_ENERGIZE_DELAY_TICKS,
+  RT_BRANCH_DAMAGE,
+  RT_BRANCH_HITBOX_HALF_WIDTH_WORLD,
+  RT_BRANCH_IFRAMES_TICKS,
+  RT_BRANCH_ROPE_LIFETIME_TICKS,
+  RT_BRANCH_ROPE_GRAVITY_WORLD,
+  RT_BRANCH_ROPE_DRAG,
+  RT_BEAM_JITTER_RAD,
+  RT_BEAM_ANGLE_SPACING_RAD,
+  RT_SECONDARY_BEAM_JITTER_RAD,
+  RT_BODY_RADIUS_WORLD,
 } from './radiantTetherConfig';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
 import { closestPointOnSegment } from '../physics/collision';
@@ -79,6 +104,61 @@ export interface BrokenChain {
   isActiveFlag: 0 | 1;
 }
 
+/** A single main attack beam growing from the boss toward a wall. */
+export interface MainBeam {
+  dirXWorld: number;
+  dirYWorld: number;
+  /** Current visible length (grows from 0 to maxLengthWorld). */
+  currentLengthWorld: number;
+  /** Maximum length — wall distance or RT_MAIN_BEAM_MAX_RANGE_WORLD. */
+  maxLengthWorld: number;
+  /** Wall surface impact point (set when beam first reaches the wall). */
+  hitXWorld: number;
+  hitYWorld: number;
+  /** Outward wall normal at the impact point. */
+  normalXWorld: number;
+  normalYWorld: number;
+  hasHitWall: 0 | 1;
+  isActiveFlag: 0 | 1;
+  /** 0..1 lifetime fraction when puff was triggered (for short-lived ring VFX). */
+  puffProgress: number;
+}
+
+/** A branch beam emanating from a main-beam wall-impact point. */
+export interface BranchBeam {
+  /** Branch origin = main beam hit position. */
+  startXWorld: number;
+  startYWorld: number;
+  dirXWorld: number;
+  dirYWorld: number;
+  /** Current visible length (grows from 0 to maxLengthWorld). */
+  currentLengthWorld: number;
+  maxLengthWorld: number;
+  hasHitWall: 0 | 1;
+  isActiveFlag: 0 | 1;
+  /** 1 after startEnergizePhase is called. */
+  isEnergizedFlag: 0 | 1;
+  /** Counts down from RT_BRANCH_ENERGIZE_DELAY_TICKS to 0 before damage starts. */
+  energizeTicks: number;
+  /** 1 after this beam has been converted to a rope. */
+  isRopeFlag: 0 | 1;
+  /** Rope anchor = startXY (branch split point on main-beam wall). */
+  ropeAnchorXWorld: number;
+  ropeAnchorYWorld: number;
+  /** Physics free-end position. */
+  ropeFreeEndXWorld: number;
+  ropeFreeEndYWorld: number;
+  /** Physics free-end velocity. */
+  ropeFreeEndVelXWorld: number;
+  ropeFreeEndVelYWorld: number;
+  /** Rope length (held constant by pendulum constraint). */
+  ropeLengthWorld: number;
+  /** Remaining lifetime ticks for this rope. */
+  ropeLifetimeTicks: number;
+  /** Total lifetime ticks (used to compute fade fraction). */
+  ropeTotalLifetimeTicks: number;
+}
+
 /** Full chain state managed outside ClusterState. */
 export interface RadiantTetherChainState {
   /** Pre-allocated active chain slots. */
@@ -93,6 +173,18 @@ export interface RadiantTetherChainState {
   bossLastHealthPoints: number;
   /** Set once the boss has taken damage and should release attack spores. */
   hasBossTakenDamageFlag: 0 | 1;
+
+  // ── Beam attack system ──────────────────────────────────────────────────
+  /** Pre-allocated main beam slots (RT_MAIN_BEAM_COUNT). */
+  mainBeams: MainBeam[];
+  /** Pre-allocated branch beam slots (RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN). */
+  branchBeams: BranchBeam[];
+  /** General tick counter within the current beam attack sub-phase. */
+  attackPhaseTicks: number;
+  /** Sub-phase index within the beam attack states. */
+  attackPhase: number;
+  /** Invulnerability ticks remaining from branch beam / rope damage. */
+  branchPlayerIframeTicks: number;
 }
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -106,6 +198,17 @@ export function createRadiantTetherChainState(): RadiantTetherChainState {
   for (let i = 0; i < RT_MAX_BROKEN_CHAINS; i++) {
     brokenChains.push(createInactiveBrokenChain());
   }
+
+  const mainBeams: MainBeam[] = [];
+  for (let i = 0; i < RT_MAIN_BEAM_COUNT; i++) {
+    mainBeams.push(createInactiveMainBeam());
+  }
+  const branchBeams: BranchBeam[] = [];
+  const branchBeamCount = RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN;
+  for (let i = 0; i < branchBeamCount; i++) {
+    branchBeams.push(createInactiveBranchBeam());
+  }
+
   return {
     chains,
     brokenChains,
@@ -113,6 +216,11 @@ export function createRadiantTetherChainState(): RadiantTetherChainState {
     bossEntityId: -1,
     bossLastHealthPoints: 0,
     hasBossTakenDamageFlag: 0,
+    mainBeams,
+    branchBeams,
+    attackPhaseTicks: 0,
+    attackPhase: 0,
+    branchPlayerIframeTicks: 0,
   };
 }
 
@@ -130,6 +238,32 @@ function createInactiveBrokenChain(): BrokenChain {
     freeEndXWorld: 0, freeEndYWorld: 0,
     freeEndVelXWorld: 0, freeEndVelYWorld: 0,
     lengthWorld: 0, lifetimeTicks: 0, isActiveFlag: 0,
+  };
+}
+
+function createInactiveMainBeam(): MainBeam {
+  return {
+    dirXWorld: 0, dirYWorld: 0,
+    currentLengthWorld: 0, maxLengthWorld: 0,
+    hitXWorld: 0, hitYWorld: 0,
+    normalXWorld: 0, normalYWorld: 0,
+    hasHitWall: 0, isActiveFlag: 0, puffProgress: 0,
+  };
+}
+
+function createInactiveBranchBeam(): BranchBeam {
+  return {
+    startXWorld: 0, startYWorld: 0,
+    dirXWorld: 0, dirYWorld: 0,
+    currentLengthWorld: 0, maxLengthWorld: 0,
+    hasHitWall: 0, isActiveFlag: 0, isEnergizedFlag: 0,
+    energizeTicks: 0,
+    isRopeFlag: 0,
+    ropeAnchorXWorld: 0, ropeAnchorYWorld: 0,
+    ropeFreeEndXWorld: 0, ropeFreeEndYWorld: 0,
+    ropeFreeEndVelXWorld: 0, ropeFreeEndVelYWorld: 0,
+    ropeLengthWorld: 0,
+    ropeLifetimeTicks: 0, ropeTotalLifetimeTicks: 0,
   };
 }
 
@@ -164,6 +298,59 @@ export function raycastToWall(
           xWorld: x + dirXWorld * RT_ANCHOR_EMBED_WORLD,
           yWorld: y + dirYWorld * RT_ANCHOR_EMBED_WORLD,
         };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Same as raycastToWall but also returns the outward wall normal at the impact
+ * point, determined by the face whose normal most opposes the ray direction.
+ * Returns the last position just before wall penetration as the hit point.
+ */
+export function raycastToWallWithNormal(
+  world: WorldState,
+  startXWorld: number, startYWorld: number,
+  dirXWorld: number, dirYWorld: number,
+  maxRangeWorld: number,
+): { xWorld: number; yWorld: number; normalXWorld: number; normalYWorld: number } | null {
+  const step = RT_CHAIN_RAYCAST_STEP_WORLD;
+  const steps = Math.ceil(maxRangeWorld / step);
+  let prevX = startXWorld;
+  let prevY = startYWorld;
+  let x = startXWorld;
+  let y = startYWorld;
+  for (let s = 0; s < steps; s++) {
+    prevX = x;
+    prevY = y;
+    x += dirXWorld * step;
+    y += dirYWorld * step;
+    for (let wi = 0; wi < world.wallCount; wi++) {
+      const wx = world.wallXWorld[wi];
+      const wy = world.wallYWorld[wi];
+      const ww = world.wallWWorld[wi];
+      const wh = world.wallHWorld[wi];
+      if (x >= wx && x <= wx + ww && y >= wy && y <= wy + wh) {
+        // Determine outward normal: pick the face whose normal most opposes
+        // the ray direction (highest dot product with -rayDir). This correctly
+        // handles corners where min-penetration would pick the wrong face.
+        const negDirX = -dirXWorld;
+        const negDirY = -dirYWorld;
+        // Dot products: left(-1,0), right(+1,0), top(0,-1), bottom(0,+1)
+        const dotLeft   =  negDirX; // (-1,0)·(-dx,-dy)
+        const dotRight  = -negDirX; // (+1,0)·(-dx,-dy)
+        const dotTop    =  negDirY; // (0,-1)·(-dx,-dy)
+        const dotBottom = -negDirY; // (0,+1)·(-dx,-dy)
+        let normalXWorld = 0;
+        let normalYWorld = 0;
+        const best = Math.max(dotLeft, dotRight, dotTop, dotBottom);
+        if (best === dotLeft)        { normalXWorld = -1; normalYWorld =  0; }
+        else if (best === dotRight)  { normalXWorld =  1; normalYWorld =  0; }
+        else if (best === dotTop)    { normalXWorld =  0; normalYWorld = -1; }
+        else                         { normalXWorld =  0; normalYWorld =  1; }
+        // Return the last un-embedded position (just at the wall surface)
+        return { xWorld: prevX, yWorld: prevY, normalXWorld, normalYWorld };
       }
     }
   }
@@ -240,6 +427,7 @@ export function assignReelDirections(cs: RadiantTetherChainState, rng: RngState)
 
 export function tickChains(
   cs: RadiantTetherChainState,
+  world: WorldState,
   bossXWorld: number, bossYWorld: number,
   bossVelXWorld: number, bossVelYWorld: number,
 ): { newVelX: number; newVelY: number; newPosX: number; newPosY: number } {
@@ -276,8 +464,48 @@ export function tickChains(
     }
   }
 
-  const vx = (bossVelXWorld + forceX) * RT_BOSS_DRAG;
-  const vy = (bossVelYWorld + forceY) * RT_BOSS_DRAG;
+  let vx = (bossVelXWorld + forceX) * RT_BOSS_DRAG;
+  let vy = (bossVelYWorld + forceY) * RT_BOSS_DRAG;
+
+  // Wall repulsion — applied as direct velocity impulses after drag to avoid
+  // drag dampening, giving a smooth magnetic repel feel.
+  const bossHalf = RT_BODY_RADIUS_WORLD;
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const wx = world.wallXWorld[wi];
+    const wy = world.wallYWorld[wi];
+    const ww = world.wallWWorld[wi];
+    const wh = world.wallHWorld[wi];
+
+    const distToLeftWallEdgeWorld = bossXWorld - wx;
+    if (distToLeftWallEdgeWorld >= 0 && distToLeftWallEdgeWorld < RT_WALL_REPEL_DIST_WORLD &&
+        bossYWorld >= wy - bossHalf && bossYWorld <= wy + wh + bossHalf) {
+      vx -= RT_WALL_REPEL_ACCEL_WORLD * (1.0 - distToLeftWallEdgeWorld / RT_WALL_REPEL_DIST_WORLD);
+    }
+    const distToRightWallEdgeWorld = wx + ww - bossXWorld;
+    if (distToRightWallEdgeWorld >= 0 && distToRightWallEdgeWorld < RT_WALL_REPEL_DIST_WORLD &&
+        bossYWorld >= wy - bossHalf && bossYWorld <= wy + wh + bossHalf) {
+      vx += RT_WALL_REPEL_ACCEL_WORLD * (1.0 - distToRightWallEdgeWorld / RT_WALL_REPEL_DIST_WORLD);
+    }
+    const distToTopWallEdgeWorld = bossYWorld - wy;
+    if (distToTopWallEdgeWorld >= 0 && distToTopWallEdgeWorld < RT_WALL_REPEL_DIST_WORLD &&
+        bossXWorld >= wx - bossHalf && bossXWorld <= wx + ww + bossHalf) {
+      vy -= RT_WALL_REPEL_ACCEL_WORLD * (1.0 - distToTopWallEdgeWorld / RT_WALL_REPEL_DIST_WORLD);
+    }
+    const distToBottomWallEdgeWorld = wy + wh - bossYWorld;
+    if (distToBottomWallEdgeWorld >= 0 && distToBottomWallEdgeWorld < RT_WALL_REPEL_DIST_WORLD &&
+        bossXWorld >= wx - bossHalf && bossXWorld <= wx + ww + bossHalf) {
+      vy += RT_WALL_REPEL_ACCEL_WORLD * (1.0 - distToBottomWallEdgeWorld / RT_WALL_REPEL_DIST_WORLD);
+    }
+  }
+
+  // Clamp speed to wall-repel max
+  const speed = Math.sqrt(vx * vx + vy * vy);
+  if (speed > RT_WALL_REPEL_MAX_SPEED_WORLD && speed > 0) {
+    const scale = RT_WALL_REPEL_MAX_SPEED_WORLD / speed;
+    vx *= scale;
+    vy *= scale;
+  }
+
   const px = bossXWorld + vx;
   const py = bossYWorld + vy;
 
@@ -490,6 +718,402 @@ function applyChainDamage(
   const damage = Math.max(1, RT_CHAIN_DAMAGE - armor);
   applyPlayerDamageWithKnockback(player, damage, sourceXWorld, sourceYWorld);
   cs.playerChainIframeTicks = RT_CHAIN_IFRAMES_TICKS;
+}
+
+// ── Beam attack system ──────────────────────────────────────────────────────
+
+/**
+ * Begins a new beam attack cycle from the boss toward the player.
+ * Picks 3 directions spaced ~120° apart, one aimed near the player.
+ * Raycasts each beam to find max length and wall impact data.
+ */
+export function startBeamAttack(
+  cs: RadiantTetherChainState,
+  world: WorldState,
+  bossXWorld: number, bossYWorld: number,
+  playerXWorld: number, playerYWorld: number,
+): void {
+  cs.attackPhaseTicks = 0;
+  cs.attackPhase = 0;
+
+  const dxP = playerXWorld - bossXWorld;
+  const dyP = playerYWorld - bossYWorld;
+  // Base direction toward player with small random offset (±15°) for fairness
+  const baseAngleRad = Math.atan2(dyP, dxP);
+  const jitter = (nextFloat(world.rng) - 0.5) * RT_BEAM_JITTER_RAD;
+  const beam0Angle = baseAngleRad + jitter;
+
+  const angles = [
+    beam0Angle,
+    beam0Angle + RT_BEAM_ANGLE_SPACING_RAD + (nextFloat(world.rng) - 0.5) * RT_SECONDARY_BEAM_JITTER_RAD,
+    beam0Angle - RT_BEAM_ANGLE_SPACING_RAD + (nextFloat(world.rng) - 0.5) * RT_SECONDARY_BEAM_JITTER_RAD,
+  ];
+
+  for (let i = 0; i < RT_MAIN_BEAM_COUNT; i++) {
+    const mb = cs.mainBeams[i];
+    const a = angles[i];
+    const dirX = Math.cos(a);
+    const dirY = Math.sin(a);
+
+    mb.dirXWorld = dirX;
+    mb.dirYWorld = dirY;
+    mb.currentLengthWorld = 0;
+    mb.hasHitWall = 0;
+    mb.isActiveFlag = 1;
+    mb.puffProgress = 0;
+
+    const hit = raycastToWallWithNormal(
+      world, bossXWorld, bossYWorld, dirX, dirY, RT_MAIN_BEAM_MAX_RANGE_WORLD,
+    );
+    if (hit !== null) {
+      mb.maxLengthWorld = Math.sqrt(
+        (hit.xWorld - bossXWorld) * (hit.xWorld - bossXWorld) +
+        (hit.yWorld - bossYWorld) * (hit.yWorld - bossYWorld),
+      );
+      mb.hitXWorld = hit.xWorld;
+      mb.hitYWorld = hit.yWorld;
+      mb.normalXWorld = hit.normalXWorld;
+      mb.normalYWorld = hit.normalYWorld;
+    } else {
+      mb.maxLengthWorld = RT_MAIN_BEAM_MAX_RANGE_WORLD;
+      mb.hitXWorld = bossXWorld + dirX * RT_MAIN_BEAM_MAX_RANGE_WORLD;
+      mb.hitYWorld = bossYWorld + dirY * RT_MAIN_BEAM_MAX_RANGE_WORLD;
+      mb.normalXWorld = -dirX;
+      mb.normalYWorld = -dirY;
+    }
+  }
+}
+
+/**
+ * Grows main beams by RT_MAIN_BEAM_GROW_SPEED_WORLD per tick.
+ * Returns true when all active beams have reached their walls.
+ */
+export function tickBeamGrow(
+  cs: RadiantTetherChainState,
+  bossXWorld: number, bossYWorld: number,
+): boolean {
+  cs.attackPhaseTicks++;
+  let allHit = true;
+  for (let i = 0; i < RT_MAIN_BEAM_COUNT; i++) {
+    const mb = cs.mainBeams[i];
+    if (mb.isActiveFlag === 0) continue;
+    if (mb.hasHitWall === 0) {
+      mb.currentLengthWorld += RT_MAIN_BEAM_GROW_SPEED_WORLD;
+      if (mb.currentLengthWorld >= mb.maxLengthWorld) {
+        mb.currentLengthWorld = mb.maxLengthWorld;
+        mb.hasHitWall = 1;
+        // Lock hit point at wall surface using stored direction and max range
+        mb.hitXWorld = bossXWorld + mb.dirXWorld * mb.maxLengthWorld;
+        mb.hitYWorld = bossYWorld + mb.dirYWorld * mb.maxLengthWorld;
+      } else {
+        allHit = false;
+      }
+    }
+  }
+  return allHit;
+}
+
+/**
+ * Launches branch beams from the wall-impact points of all completed main beams.
+ * Two branches per main beam, rotated ±RT_BRANCH_BEAM_ANGLE_OFFSET_RAD from the wall normal.
+ */
+export function startBranchGrow(
+  cs: RadiantTetherChainState,
+  world: WorldState,
+): void {
+  cs.attackPhaseTicks = 0;
+  cs.attackPhase = 1;
+
+  for (let i = 0; i < RT_MAIN_BEAM_COUNT; i++) {
+    const mb = cs.mainBeams[i];
+    if (mb.isActiveFlag === 0 || mb.hasHitWall === 0) continue;
+
+    const hitX = mb.hitXWorld;
+    const hitY = mb.hitYWorld;
+    const nx = mb.normalXWorld;
+    const ny = mb.normalYWorld;
+
+    for (let b = 0; b < RT_BRANCH_BEAMS_PER_MAIN; b++) {
+      const angle = b === 0
+        ? -RT_BRANCH_BEAM_ANGLE_OFFSET_RAD
+        : RT_BRANCH_BEAM_ANGLE_OFFSET_RAD;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const dirX = nx * cosA - ny * sinA;
+      const dirY = nx * sinA + ny * cosA;
+
+      const slotIndex = i * RT_BRANCH_BEAMS_PER_MAIN + b;
+      const bb = cs.branchBeams[slotIndex];
+      bb.startXWorld = hitX;
+      bb.startYWorld = hitY;
+      bb.dirXWorld = dirX;
+      bb.dirYWorld = dirY;
+      bb.currentLengthWorld = 0;
+      bb.hasHitWall = 0;
+      bb.isActiveFlag = 1;
+      bb.isEnergizedFlag = 0;
+      bb.energizeTicks = 0;
+      bb.isRopeFlag = 0;
+
+      const hit = raycastToWallWithNormal(
+        world, hitX, hitY, dirX, dirY, RT_BRANCH_BEAM_MAX_RANGE_WORLD,
+      );
+      if (hit !== null) {
+        bb.maxLengthWorld = Math.sqrt(
+          (hit.xWorld - hitX) * (hit.xWorld - hitX) +
+          (hit.yWorld - hitY) * (hit.yWorld - hitY),
+        );
+      } else {
+        bb.maxLengthWorld = RT_BRANCH_BEAM_MAX_RANGE_WORLD;
+      }
+    }
+  }
+}
+
+/**
+ * Grows branch beams by RT_BRANCH_BEAM_GROW_SPEED_WORLD per tick.
+ * Returns true when all active branch beams have completed.
+ */
+export function tickBranchGrow(cs: RadiantTetherChainState): boolean {
+  cs.attackPhaseTicks++;
+  let allDone = true;
+  const count = RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN;
+  for (let i = 0; i < count; i++) {
+    const bb = cs.branchBeams[i];
+    if (bb.isActiveFlag === 0) continue;
+    if (bb.hasHitWall === 0) {
+      bb.currentLengthWorld += RT_BRANCH_BEAM_GROW_SPEED_WORLD;
+      if (bb.currentLengthWorld >= bb.maxLengthWorld) {
+        bb.currentLengthWorld = bb.maxLengthWorld;
+        bb.hasHitWall = 1;
+      } else {
+        allDone = false;
+      }
+    }
+  }
+  return allDone;
+}
+
+/**
+ * Marks all branch beams as energized and begins their charge-up countdown.
+ * Deactivates all main beams (they flash off in puffs).
+ */
+export function startEnergizePhase(cs: RadiantTetherChainState): void {
+  cs.attackPhaseTicks = 0;
+  cs.attackPhase = 2;
+
+  // Deactivate main beams — they disappear with a puff in the renderer
+  for (let i = 0; i < RT_MAIN_BEAM_COUNT; i++) {
+    cs.mainBeams[i].puffProgress = 1.0;
+    cs.mainBeams[i].isActiveFlag = 0;
+  }
+
+  const count = RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN;
+  for (let i = 0; i < count; i++) {
+    const bb = cs.branchBeams[i];
+    if (bb.isActiveFlag === 0) continue;
+    bb.isEnergizedFlag = 1;
+    bb.energizeTicks = RT_BRANCH_ENERGIZE_DELAY_TICKS;
+  }
+}
+
+/**
+ * Ticks the energize charge-down on each branch beam.
+ * Once energizeTicks reaches 0 the beam is fully charged and damage is live.
+ */
+export function tickEnergizePhase(cs: RadiantTetherChainState): void {
+  cs.attackPhaseTicks++;
+  const count = RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN;
+  for (let i = 0; i < count; i++) {
+    const bb = cs.branchBeams[i];
+    if (bb.isActiveFlag === 0 || bb.isEnergizedFlag === 0) continue;
+    if (bb.energizeTicks > 0) bb.energizeTicks--;
+  }
+}
+
+/**
+ * Converts all energized branch beams into physics ropes.
+ * Each rope is anchored at the branch origin (startXY) with the free end
+ * at the beam's current tip position.
+ */
+export function startRopeDecay(cs: RadiantTetherChainState): void {
+  cs.attackPhaseTicks = 0;
+  cs.attackPhase = 3;
+
+  const count = RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN;
+  for (let i = 0; i < count; i++) {
+    const bb = cs.branchBeams[i];
+    if (bb.isActiveFlag === 0 || bb.isEnergizedFlag === 0) continue;
+    bb.isRopeFlag = 1;
+    bb.isEnergizedFlag = 0;
+    bb.ropeAnchorXWorld = bb.startXWorld;
+    bb.ropeAnchorYWorld = bb.startYWorld;
+    bb.ropeFreeEndXWorld = bb.startXWorld + bb.dirXWorld * bb.currentLengthWorld;
+    bb.ropeFreeEndYWorld = bb.startYWorld + bb.dirYWorld * bb.currentLengthWorld;
+    bb.ropeFreeEndVelXWorld = 0;
+    bb.ropeFreeEndVelYWorld = 0;
+    bb.ropeLengthWorld = bb.currentLengthWorld;
+    bb.ropeLifetimeTicks = RT_BRANCH_ROPE_LIFETIME_TICKS;
+    bb.ropeTotalLifetimeTicks = RT_BRANCH_ROPE_LIFETIME_TICKS;
+  }
+}
+
+/**
+ * Ticks all rope-mode branch beams: gravity, drag, length constraint, lifetime.
+ * Returns true when all ropes have expired.
+ */
+export function tickRopeDecay(cs: RadiantTetherChainState): boolean {
+  cs.attackPhaseTicks++;
+  let anyAlive = false;
+  const count = RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN;
+  for (let i = 0; i < count; i++) {
+    const bb = cs.branchBeams[i];
+    if (bb.isActiveFlag === 0 || bb.isRopeFlag === 0) continue;
+
+    bb.ropeLifetimeTicks--;
+    if (bb.ropeLifetimeTicks <= 0) {
+      bb.isActiveFlag = 0;
+      bb.isRopeFlag = 0;
+      continue;
+    }
+    anyAlive = true;
+
+    // Gravity and drag on free end
+    bb.ropeFreeEndVelYWorld += RT_BRANCH_ROPE_GRAVITY_WORLD;
+    bb.ropeFreeEndVelXWorld *= RT_BRANCH_ROPE_DRAG;
+    bb.ropeFreeEndVelYWorld *= RT_BRANCH_ROPE_DRAG;
+
+    bb.ropeFreeEndXWorld += bb.ropeFreeEndVelXWorld;
+    bb.ropeFreeEndYWorld += bb.ropeFreeEndVelYWorld;
+
+    // Pendulum length constraint from anchor
+    const dx = bb.ropeFreeEndXWorld - bb.ropeAnchorXWorld;
+    const dy = bb.ropeFreeEndYWorld - bb.ropeAnchorYWorld;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > bb.ropeLengthWorld && dist > 0.01) {
+      const scale = bb.ropeLengthWorld / dist;
+      bb.ropeFreeEndXWorld = bb.ropeAnchorXWorld + dx * scale;
+      bb.ropeFreeEndYWorld = bb.ropeAnchorYWorld + dy * scale;
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const dot = bb.ropeFreeEndVelXWorld * nx + bb.ropeFreeEndVelYWorld * ny;
+      if (dot > 0) {
+        bb.ropeFreeEndVelXWorld -= dot * nx;
+        bb.ropeFreeEndVelYWorld -= dot * ny;
+      }
+    }
+  }
+  return !anyAlive;
+}
+
+/**
+ * Checks player collision against energized branch beams (after energize delay)
+ * and rope-mode branch beams.  Deals RT_BRANCH_DAMAGE with RT_BRANCH_IFRAMES_TICKS.
+ */
+export function tickBranchPlayerCollision(
+  cs: RadiantTetherChainState,
+  world: WorldState,
+): void {
+  if (cs.branchPlayerIframeTicks > 0) {
+    cs.branchPlayerIframeTicks--;
+    return;
+  }
+
+  let player = world.clusters[0];
+  if (player === undefined || player.isAliveFlag === 0 || player.isPlayerFlag !== 1) {
+    for (let i = 0; i < world.clusters.length; i++) {
+      const candidate = world.clusters[i];
+      if (candidate.isPlayerFlag === 1 && candidate.isAliveFlag === 1) {
+        player = candidate;
+        break;
+      }
+    }
+  }
+  if (player === undefined || player.isAliveFlag === 0 || player.isPlayerFlag !== 1) return;
+
+  const px = player.positionXWorld;
+  const py = player.positionYWorld;
+  const playerRadius = Math.max(player.halfWidthWorld, player.halfHeightWorld);
+  const hitRadius = RT_BRANCH_HITBOX_HALF_WIDTH_WORLD + playerRadius;
+  const hitRadiusSq = hitRadius * hitRadius;
+
+  const count = RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN;
+
+  // Check energized beams (non-rope)
+  for (let i = 0; i < count; i++) {
+    const bb = cs.branchBeams[i];
+    if (bb.isActiveFlag === 0 || bb.isEnergizedFlag === 0 || bb.isRopeFlag === 1) continue;
+    if (bb.energizeTicks > 0) continue; // Still charging up
+
+    const endX = bb.startXWorld + bb.dirXWorld * bb.currentLengthWorld;
+    const endY = bb.startYWorld + bb.dirYWorld * bb.currentLengthWorld;
+    const closest = closestPointOnSegment(px, py, bb.startXWorld, bb.startYWorld, endX, endY);
+    if (closest.distSq <= hitRadiusSq) {
+      applyBranchDamage(player, cs, world, closest.xWorld, closest.yWorld);
+      return;
+    }
+  }
+
+  // Check rope beams
+  for (let i = 0; i < count; i++) {
+    const bb = cs.branchBeams[i];
+    if (bb.isActiveFlag === 0 || bb.isRopeFlag === 0) continue;
+
+    const closest = closestPointOnSegment(
+      px, py, bb.ropeAnchorXWorld, bb.ropeAnchorYWorld,
+      bb.ropeFreeEndXWorld, bb.ropeFreeEndYWorld,
+    );
+    if (closest.distSq <= hitRadiusSq) {
+      applyBranchDamage(player, cs, world, closest.xWorld, closest.yWorld);
+      return;
+    }
+  }
+}
+
+function applyBranchDamage(
+  player: { healthPoints: number; isAliveFlag: 0 | 1; entityId: number; positionXWorld: number; positionYWorld: number; velocityXWorld: number; velocityYWorld: number; isGroundedFlag: 0 | 1; invulnerabilityTicks: number; hurtTicks: number },
+  cs: RadiantTetherChainState,
+  world: WorldState,
+  sourceXWorld: number,
+  sourceYWorld: number,
+): void {
+  // Count non-transient player dust particles to determine armor.
+  // O(n) over all particles — acceptable because damage hits are infrequent.
+  let playerDustCount = 0;
+  for (let i = 0; i < world.particleCount; i++) {
+    if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1 && world.isTransientFlag[i] === 0) {
+      playerDustCount++;
+    }
+  }
+  const armor = Math.floor(playerDustCount / 4);
+  const damage = Math.max(1, RT_BRANCH_DAMAGE - armor);
+  applyPlayerDamageWithKnockback(player, damage, sourceXWorld, sourceYWorld);
+  cs.branchPlayerIframeTicks = RT_BRANCH_IFRAMES_TICKS;
+}
+
+/** Resets all beam and branch beam state for the next attack cycle. */
+export function resetAttackState(cs: RadiantTetherChainState): void {
+  for (let i = 0; i < RT_MAIN_BEAM_COUNT; i++) {
+    const mb = cs.mainBeams[i];
+    mb.isActiveFlag = 0;
+    mb.hasHitWall = 0;
+    mb.currentLengthWorld = 0;
+    mb.puffProgress = 0;
+  }
+  const count = RT_MAIN_BEAM_COUNT * RT_BRANCH_BEAMS_PER_MAIN;
+  for (let i = 0; i < count; i++) {
+    const bb = cs.branchBeams[i];
+    bb.isActiveFlag = 0;
+    bb.isEnergizedFlag = 0;
+    bb.isRopeFlag = 0;
+    bb.hasHitWall = 0;
+    bb.currentLengthWorld = 0;
+    bb.energizeTicks = 0;
+    bb.ropeLifetimeTicks = 0;
+  }
+  cs.attackPhaseTicks = 0;
+  cs.attackPhase = 0;
+  cs.branchPlayerIframeTicks = 0;
 }
 
 // ── Chain count from health ─────────────────────────────────────────────────

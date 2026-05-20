@@ -2,13 +2,17 @@
  * Radiant Tether — AI state machine and per-tick behavior.
  *
  * States:
- *   0 = inactive       — dormant, awaiting player proximity
- *   1 = telegraph      — laser lines rotate around the boss
- *   2 = lock           — lasers stop rotating for player reaction window
- *   3 = firing         — chains shoot to anchors
- *   4 = movement       — boss moves via chain winching
- *   5 = reset          — old chains retract, prepare next cycle
+ *   0 = inactive      — dormant, awaiting player proximity
+ *   1 = beam_grow     — 3 main beams grow from boss toward walls
+ *   2 = branch_grow   — 2 branch beams grow from each main beam's wall impact
+ *   3 = energized     — branch beams glow and deal damage for a window
+ *   4 = rope_decay    — branch beams become physics ropes that sag and fade
+ *   5 = reset         — chains retract, attack state clears, cycle restarts
  *   6 = dead
+ *
+ * The boss also fires movement chains on entering beam_grow and moves via
+ * chain winching throughout states 1–4.  The beam attack and chain movement
+ * run in parallel.
  *
  * Called from tick.ts after applyRockElementalAI (step 0.5d).
  */
@@ -17,12 +21,8 @@ import { WorldState } from '../world';
 import { nextFloat } from '../rng';
 import { dist } from '../../utils/math';
 import {
-  RT_TELEGRAPH_DURATION_TICKS,
-  RT_LOCK_DURATION_TICKS,
-  RT_FIRE_DURATION_TICKS,
-  RT_MOVEMENT_DURATION_TICKS,
   RT_RESET_DURATION_TICKS,
-  RT_TELEGRAPH_ROTATION_SPEED_RAD,
+  RT_BRANCH_DAMAGE_TICKS,
   RT_CHAIN_COUNT_THRESHOLDS,
   RT_CHAIN_COUNT_MIN,
   RT_CHAIN_COUNT_MAX,
@@ -38,17 +38,27 @@ import {
   retractAllChains,
   checkChainPlayerCollision,
   getChainCountForHealth,
+  startBeamAttack,
+  tickBeamGrow,
+  startBranchGrow,
+  tickBranchGrow,
+  startEnergizePhase,
+  tickEnergizePhase,
+  startRopeDecay,
+  tickRopeDecay,
+  tickBranchPlayerCollision,
+  resetAttackState,
 } from './radiantTetherChains';
 
 // ── State enum ──────────────────────────────────────────────────────────────
 
-export const RT_STATE_INACTIVE  = 0;
-export const RT_STATE_TELEGRAPH = 1;
-export const RT_STATE_LOCK      = 2;
-export const RT_STATE_FIRING    = 3;
-export const RT_STATE_MOVEMENT  = 4;
-export const RT_STATE_RESET     = 5;
-export const RT_STATE_DEAD      = 6;
+export const RT_STATE_INACTIVE    = 0;
+export const RT_STATE_BEAM_GROW   = 1;
+export const RT_STATE_BRANCH_GROW = 2;
+export const RT_STATE_ENERGIZED   = 3;
+export const RT_STATE_ROPE_DECAY  = 4;
+export const RT_STATE_RESET       = 5;
+export const RT_STATE_DEAD        = 6;
 
 /** Distance at which the boss activates (world units). */
 const RT_ACTIVATION_RANGE_WORLD = 250.0;
@@ -71,6 +81,22 @@ export function getRadiantTetherChainState(): RadiantTetherChainState | null {
 /** Resets chain state when loading a new room. */
 export function resetRadiantTetherState(): void {
   _chainState = null;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Fires movement chains and starts a beam attack — shared by INACTIVE and RESET transitions. */
+function beginBeamAttackCycle(
+  world: WorldState,
+  cs: RadiantTetherChainState,
+  bossXWorld: number, bossYWorld: number,
+  chainCount: number,
+  baseAngleRad: number,
+  playerXWorld: number, playerYWorld: number,
+): void {
+  fireChains(world, cs, bossXWorld, bossYWorld, baseAngleRad, chainCount);
+  assignReelDirections(cs, world.rng);
+  startBeamAttack(cs, world, bossXWorld, bossYWorld, playerXWorld, playerYWorld);
 }
 
 // ── Main AI update ──────────────────────────────────────────────────────────
@@ -96,7 +122,9 @@ export function applyRadiantTetherAI(world: WorldState): void {
     if (cluster.isRadiantTetherFlag !== 1) continue;
     if (cluster.isAliveFlag === 0) {
       cluster.radiantTetherState = RT_STATE_DEAD;
-      retractAllChains(ensureChainState());
+      const cs = ensureChainState();
+      retractAllChains(cs);
+      resetAttackState(cs);
       continue;
     }
 
@@ -120,12 +148,10 @@ export function applyRadiantTetherAI(world: WorldState): void {
     const state = cluster.radiantTetherState;
     cluster.radiantTetherStateTicks += 1;
 
-    // Distance to player
     const dxToPlayer = playerFound ? playerX - cluster.positionXWorld : 0;
     const dyToPlayer = playerFound ? playerY - cluster.positionYWorld : 0;
     const distToPlayer = playerFound ? dist(cluster.positionXWorld, cluster.positionYWorld, playerX, playerY) : 0;
 
-    // Chain count based on current health
     const chainCount = getChainCountForHealth(
       cluster.healthPoints,
       cluster.maxHealthPoints,
@@ -138,107 +164,153 @@ export function applyRadiantTetherAI(world: WorldState): void {
       // ── INACTIVE ────────────────────────────────────────────────────────
       case RT_STATE_INACTIVE:
         if (playerFound && distToPlayer <= RT_ACTIVATION_RANGE_WORLD) {
-          cluster.radiantTetherState = RT_STATE_TELEGRAPH;
+          cluster.radiantTetherState = RT_STATE_BEAM_GROW;
           cluster.radiantTetherStateTicks = 0;
-          // Pick initial base angle pointing toward player
           cluster.radiantTetherBaseAngleRad = Math.atan2(dyToPlayer, dxToPlayer);
+          cluster.radiantTetherChainCount = chainCount;
+          // Fire movement chains and launch first beam attack
+          beginBeamAttackCycle(world, cs, cluster.positionXWorld, cluster.positionYWorld, chainCount, cluster.radiantTetherBaseAngleRad, playerX, playerY);
         }
         break;
 
-      // ── TELEGRAPH — rotating laser previews ─────────────────────────────
-      case RT_STATE_TELEGRAPH:
-        // Rotate base angle
-        cluster.radiantTetherBaseAngleRad += RT_TELEGRAPH_ROTATION_SPEED_RAD;
-        if (cluster.radiantTetherBaseAngleRad > Math.PI * 2) {
-          cluster.radiantTetherBaseAngleRad -= Math.PI * 2;
-        }
-        cluster.radiantTetherChainCount = chainCount;
-
-        if (cluster.radiantTetherStateTicks >= RT_TELEGRAPH_DURATION_TICKS) {
-          cluster.radiantTetherState = RT_STATE_LOCK;
-          cluster.radiantTetherStateTicks = 0;
-        }
-        break;
-
-      // ── LOCK — lasers fixed for reaction window ─────────────────────────
-      case RT_STATE_LOCK:
-        // Base angle stays fixed (no rotation)
-        if (cluster.radiantTetherStateTicks >= RT_LOCK_DURATION_TICKS) {
-          cluster.radiantTetherState = RT_STATE_FIRING;
-          cluster.radiantTetherStateTicks = 0;
-          // Fire chains!
-          fireChains(
-            world, cs,
-            cluster.positionXWorld, cluster.positionYWorld,
-            cluster.radiantTetherBaseAngleRad,
-            chainCount,
-          );
-        }
-        break;
-
-      // ── FIRING — chains extending to anchors ────────────────────────────
-      case RT_STATE_FIRING:
-        if (cluster.radiantTetherStateTicks >= RT_FIRE_DURATION_TICKS) {
-          cluster.radiantTetherState = RT_STATE_MOVEMENT;
-          cluster.radiantTetherStateTicks = 0;
-          // Assign random tighten/loosen
-          assignReelDirections(cs, world.rng);
-        }
-        break;
-
-      // ── MOVEMENT — boss moves via chain winching ────────────────────────
-      case RT_STATE_MOVEMENT: {
-        // Re-assign reel directions every 60 ticks for variety
+      // ── BEAM_GROW — main beams extend toward walls ───────────────────────
+      case RT_STATE_BEAM_GROW: {
+        // Re-assign reel directions periodically for natural movement
         if (cluster.radiantTetherStateTicks > 0 && cluster.radiantTetherStateTicks % 60 === 0) {
           assignReelDirections(cs, world.rng);
         }
 
-        const result = tickChains(
-          cs,
+        const moveResult = tickChains(
+          cs, world,
           cluster.positionXWorld, cluster.positionYWorld,
           cluster.radiantTetherVelXWorld, cluster.radiantTetherVelYWorld,
         );
-        cluster.radiantTetherVelXWorld = result.newVelX;
-        cluster.radiantTetherVelYWorld = result.newVelY;
-        cluster.positionXWorld = result.newPosX;
-        cluster.positionYWorld = result.newPosY;
-
-        // Detect opposing-chain snaps
+        cluster.radiantTetherVelXWorld = moveResult.newVelX;
+        cluster.radiantTetherVelYWorld = moveResult.newVelY;
+        cluster.positionXWorld = moveResult.newPosX;
+        cluster.positionYWorld = moveResult.newPosY;
         detectAndSnapChains(cs, cluster.positionXWorld, cluster.positionYWorld);
 
-        if (cluster.radiantTetherStateTicks >= RT_MOVEMENT_DURATION_TICKS) {
+        const allHit = tickBeamGrow(cs, cluster.positionXWorld, cluster.positionYWorld);
+        if (allHit) {
+          startBranchGrow(cs, world);
+          cluster.radiantTetherState = RT_STATE_BRANCH_GROW;
+          cluster.radiantTetherStateTicks = 0;
+        }
+        break;
+      }
+
+      // ── BRANCH_GROW — branch beams extend from main-beam wall impacts ────
+      case RT_STATE_BRANCH_GROW: {
+        if (cluster.radiantTetherStateTicks > 0 && cluster.radiantTetherStateTicks % 60 === 0) {
+          assignReelDirections(cs, world.rng);
+        }
+
+        const moveResult = tickChains(
+          cs, world,
+          cluster.positionXWorld, cluster.positionYWorld,
+          cluster.radiantTetherVelXWorld, cluster.radiantTetherVelYWorld,
+        );
+        cluster.radiantTetherVelXWorld = moveResult.newVelX;
+        cluster.radiantTetherVelYWorld = moveResult.newVelY;
+        cluster.positionXWorld = moveResult.newPosX;
+        cluster.positionYWorld = moveResult.newPosY;
+        detectAndSnapChains(cs, cluster.positionXWorld, cluster.positionYWorld);
+
+        const allDone = tickBranchGrow(cs);
+        if (allDone) {
+          startEnergizePhase(cs);
+          cluster.radiantTetherState = RT_STATE_ENERGIZED;
+          cluster.radiantTetherStateTicks = 0;
+        }
+        break;
+      }
+
+      // ── ENERGIZED — branch beams deal damage ────────────────────────────
+      case RT_STATE_ENERGIZED: {
+        if (cluster.radiantTetherStateTicks > 0 && cluster.radiantTetherStateTicks % 60 === 0) {
+          assignReelDirections(cs, world.rng);
+        }
+
+        const moveResult = tickChains(
+          cs, world,
+          cluster.positionXWorld, cluster.positionYWorld,
+          cluster.radiantTetherVelXWorld, cluster.radiantTetherVelYWorld,
+        );
+        cluster.radiantTetherVelXWorld = moveResult.newVelX;
+        cluster.radiantTetherVelYWorld = moveResult.newVelY;
+        cluster.positionXWorld = moveResult.newPosX;
+        cluster.positionYWorld = moveResult.newPosY;
+        detectAndSnapChains(cs, cluster.positionXWorld, cluster.positionYWorld);
+
+        tickEnergizePhase(cs);
+        tickBranchPlayerCollision(cs, world);
+
+        if (cluster.radiantTetherStateTicks >= RT_BRANCH_DAMAGE_TICKS) {
+          startRopeDecay(cs);
+          cluster.radiantTetherState = RT_STATE_ROPE_DECAY;
+          cluster.radiantTetherStateTicks = 0;
+        }
+        break;
+      }
+
+      // ── ROPE_DECAY — ropes sag under gravity and dissolve ────────────────
+      case RT_STATE_ROPE_DECAY: {
+        if (cluster.radiantTetherStateTicks > 0 && cluster.radiantTetherStateTicks % 60 === 0) {
+          assignReelDirections(cs, world.rng);
+        }
+
+        const moveResult = tickChains(
+          cs, world,
+          cluster.positionXWorld, cluster.positionYWorld,
+          cluster.radiantTetherVelXWorld, cluster.radiantTetherVelYWorld,
+        );
+        cluster.radiantTetherVelXWorld = moveResult.newVelX;
+        cluster.radiantTetherVelYWorld = moveResult.newVelY;
+        cluster.positionXWorld = moveResult.newPosX;
+        cluster.positionYWorld = moveResult.newPosY;
+        detectAndSnapChains(cs, cluster.positionXWorld, cluster.positionYWorld);
+
+        const ropesGone = tickRopeDecay(cs);
+        tickBranchPlayerCollision(cs, world);
+
+        if (ropesGone) {
           cluster.radiantTetherState = RT_STATE_RESET;
           cluster.radiantTetherStateTicks = 0;
         }
         break;
       }
 
-      // ── RESET — retract chains, prepare next cycle ──────────────────────
+      // ── RESET — retract chains, clear attack, restart ───────────────────
       case RT_STATE_RESET:
         retractAllChains(cs);
         if (cluster.radiantTetherStateTicks >= RT_RESET_DURATION_TICKS) {
-          cluster.radiantTetherState = RT_STATE_TELEGRAPH;
+          resetAttackState(cs);
+          cluster.radiantTetherState = RT_STATE_BEAM_GROW;
           cluster.radiantTetherStateTicks = 0;
-          // Rotate starting angle for variety
+          // Rotate base angle for variety and re-fire chains + beams
           cluster.radiantTetherBaseAngleRad += 0.7 + nextFloat(world.rng) * 0.6;
+          cluster.radiantTetherChainCount = chainCount;
+          if (playerFound) {
+            beginBeamAttackCycle(world, cs, cluster.positionXWorld, cluster.positionYWorld, chainCount, cluster.radiantTetherBaseAngleRad, playerX, playerY);
+          }
         }
         break;
 
       // ── DEAD ────────────────────────────────────────────────────────────
       case RT_STATE_DEAD:
         retractAllChains(cs);
+        resetAttackState(cs);
         break;
     }
 
-    // Tick broken chains (always, regardless of phase)
+    // Tick broken chains always
     tickBrokenChains(cs);
 
-    // Chain-player collision check (active during movement, firing, and reset)
-    // checkChainPlayerCollision also checks broken chains and ticks iframes.
-    if (state >= RT_STATE_FIRING && state <= RT_STATE_RESET) {
+    // Chain-player collision check during active movement phases
+    if (state >= RT_STATE_BEAM_GROW && state <= RT_STATE_RESET) {
       checkChainPlayerCollision(cs, world, cluster.positionXWorld, cluster.positionYWorld);
     } else if (cs.playerChainIframeTicks > 0) {
-      // Tick down iframes even when boss is not in collision-active phases
       cs.playerChainIframeTicks--;
     }
   }
