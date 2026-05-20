@@ -1,6 +1,104 @@
 # DustWeaver — Next Steps
 
-## BUILD 375 — Collectible Dust Types + Campaign Spawn Starting Options
+## BUILD 376 — Non-blocking Room Preloading Pass 1
+
+### What Was Implemented
+
+1. **Removed synchronous `ensureRoomPrepared()` from the gameplay frame**
+   (`src/screens/gameScreen.ts`, proximity preload section):
+   - The old "urgent preload" path called `ensureRoomPrepared(_tId, ...)`, which
+     synchronously invoked `buildPreparedRoomRuntime()` (wall merge O(n²), BFS edge
+     extension, decoration build) on the main thread and could freeze gameplay for
+     seconds when the player approached a transition boundary.
+   - Replaced with `_preloadScheduleHandle?.prioritize(_tId)`, which moves the room
+     to the front of the async idle-callback queue.  The main thread is never blocked.
+   - If the player crosses before preparation finishes, the existing async overlay
+     path (`startTransitionLoad` → `_makeLoadRoomPhases` generator) handles it.
+
+2. **Idle-callback deadline time-budgeting** (`src/screens/roomPreloadScheduler.ts`):
+   - `requestIdleCallback` timeout raised from 500 ms → 4000 ms (`IDLE_TIMEOUT_MS`).
+     This greatly reduces the chance of a forced callback running inside an active
+     animation frame during normal gameplay.
+   - Each callback now checks `deadline.timeRemaining() < MIN_IDLE_BUDGET_MS (20 ms)`
+     before starting a room build.  If the idle slot is too short and not timed out,
+     the callback reschedules rather than blocking.
+   - `setTimeout` fallback (Safari/Firefox) passes a fake deadline with 50 ms budget,
+     consistent with behaviour in those engines' idle-like task scheduling.
+
+3. **`prioritize(roomId)` method on `PreloadScheduleHandle`**:
+   - Moves a room to the front of the preload work queue so the next available idle
+     slot processes the highest-priority room first.
+   - Also handles the case where the room was never added to the queue (adds to front
+     and kicks off scheduling if the queue was idle).
+
+4. **Dev-mode diagnostics**:
+   - `[startup]` log: initial `loadRoom` duration printed on campaign start.
+   - `[preload] SLOW MAIN-THREAD TASK`: `console.warn` whenever a single idle-callback
+     room build exceeds `LONG_TASK_WARN_MS` (16 ms).
+   - `[preload] idle callback forced`: `console.warn` when `deadline.didTimeout` is
+     true, indicating the browser forced the callback into a busy frame.
+   - `[perf] LONG FRAME (gameplay)`: `console.warn` when the main gameplay frame loop
+     exceeds 50 ms total.
+   - `[perf] async load phase took Xms`: `console.warn` when a single async-load
+     generator phase exceeds 16 ms.
+
+### Remaining Work (Pass 2)
+
+The following issues are NOT yet fixed by this pass.  They require more invasive
+changes and are deferred to a follow-up build.
+
+#### A. Idle-callback builds can still block > 16 ms
+
+`buildPreparedRoomRuntime` is a single synchronous call that may take 20–100+ ms
+for large rooms (wall merge is O(n²) in block count; edge-extension BFS visits a
+large grid).  Even with deadline checking, once a build starts it runs to
+completion on the main thread.  The deadline check only prevents *starting* a build
+in a tight idle slot; it cannot interrupt a build already in progress.
+
+**Recommended fix**: Web Worker approach:
+- Create `src/screens/roomPreparationWorker.ts`.
+- Worker input: serializable `RoomDef` subset (no DOM, no classes, Sets → arrays).
+- Worker output: serializable `PreparedRoomRuntime` (Sets reconstructed on main thread).
+- Main thread posts work to the worker; on `message`, calls `cache.set(roomId, entry)`.
+- `_makeLoadRoomPhases` Phase D and F check the cache first, then fall back to
+  synchronous build only if the worker result has not yet arrived (rare cold miss).
+
+Alternatively: **cooperative frame-budgeted job system**:
+- Break `buildRoomWallTemplate` and `buildEdgeExtensionCache` into resumable
+  iterators that process a fixed number of blocks per `requestIdleCallback` slice.
+- Each callback processes up to `deadline.timeRemaining()` ms of work, then suspends.
+- Requires significant refactoring of the two build functions.
+
+#### B. `_makeLoadRoomPhases` phases are still individually synchronous
+
+Each of the 6 generator phases can take 5–15 ms:
+- **Phase C** `spawnEnemyClusters`: 5–15 ms on complex rooms.
+- **Phase D** `spawnBackgroundFluidParticles` + wall template application.
+- **Phase E** `loadRoomHazards` / `loadRoomRopes` / `loadRoomFallingBlocks` / `loadRoomGrasshoppers`.
+
+These keep the overlay visible for many frames but do not freeze gameplay (the
+overlay hides input and renders black).  If individual phases still exceed 16 ms,
+further sub-phase splitting or async preparation of enemies/hazards is needed.
+Use the `[perf] async load phase` console warnings from this build to identify
+which phases are slow.
+
+#### C. `environmentalDust.initFromWorld`, `sunbeamRenderer.initFromRoom`, `atmosphericLightDust.initFromRoom` (Phase F)
+
+These are called synchronously in Phase F.  Profiling may show they are fast (<1 ms)
+but they are not instrumented individually yet.  If they are slow, they can be moved
+to their own yield-able phase or pre-computed from `RoomDef` in the worker.
+
+#### D. Loading overlay readiness condition
+
+Currently the overlay hides when `areRoomSpritesReady(currentRoom)` is true and no
+async load is active.  A stronger condition would also wait for radius-1 neighbors to
+be either prepared or at least queued, preventing a situation where the overlay hides
+right as the first idle callback fires a large room build.
+
+**Recommended fix**: expose a `isRadius1QueuedOrPrepared(): boolean` predicate from
+`PreloadScheduleHandle` and include it in the overlay readiness check.
+
+
 
 ### What Was Implemented
 
