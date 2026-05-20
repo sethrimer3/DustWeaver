@@ -56,6 +56,9 @@ import {
   RT_BRANCH_ROPE_LIFETIME_TICKS,
   RT_BRANCH_ROPE_GRAVITY_WORLD,
   RT_BRANCH_ROPE_DRAG,
+  RT_BEAM_JITTER_RAD,
+  RT_BEAM_ANGLE_SPACING_RAD,
+  RT_SECONDARY_BEAM_JITTER_RAD,
   RT_BODY_RADIUS_WORLD,
 } from './radiantTetherConfig';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
@@ -329,18 +332,23 @@ export function raycastToWallWithNormal(
       const ww = world.wallWWorld[wi];
       const wh = world.wallHWorld[wi];
       if (x >= wx && x <= wx + ww && y >= wy && y <= wy + wh) {
-        // Determine outward normal via minimum penetration depth
-        const leftPen = x - wx;
-        const rightPen = wx + ww - x;
-        const topPen = y - wy;
-        const bottomPen = wy + wh - y;
-        const minPen = Math.min(leftPen, rightPen, topPen, bottomPen);
+        // Determine outward normal: pick the face whose normal most opposes
+        // the ray direction (highest dot product with -rayDir). This correctly
+        // handles corners where min-penetration would pick the wrong face.
+        const negDirX = -dirXWorld;
+        const negDirY = -dirYWorld;
+        // Dot products: left(-1,0), right(+1,0), top(0,-1), bottom(0,+1)
+        const dotLeft   =  negDirX; // (-1,0)·(-dx,-dy)
+        const dotRight  = -negDirX; // (+1,0)·(-dx,-dy)
+        const dotTop    =  negDirY; // (0,-1)·(-dx,-dy)
+        const dotBottom = -negDirY; // (0,+1)·(-dx,-dy)
         let normalXWorld = 0;
         let normalYWorld = 0;
-        if (minPen === leftPen)        { normalXWorld = -1; normalYWorld =  0; }
-        else if (minPen === rightPen)  { normalXWorld =  1; normalYWorld =  0; }
-        else if (minPen === topPen)    { normalXWorld =  0; normalYWorld = -1; }
-        else                           { normalXWorld =  0; normalYWorld =  1; }
+        const best = Math.max(dotLeft, dotRight, dotTop, dotBottom);
+        if (best === dotLeft)        { normalXWorld = -1; normalYWorld =  0; }
+        else if (best === dotRight)  { normalXWorld =  1; normalYWorld =  0; }
+        else if (best === dotTop)    { normalXWorld =  0; normalYWorld = -1; }
+        else                         { normalXWorld =  0; normalYWorld =  1; }
         // Return the last un-embedded position (just at the wall surface)
         return { xWorld: prevX, yWorld: prevY, normalXWorld, normalYWorld };
       }
@@ -732,14 +740,13 @@ export function startBeamAttack(
   const dyP = playerYWorld - bossYWorld;
   // Base direction toward player with small random offset (±15°) for fairness
   const baseAngleRad = Math.atan2(dyP, dxP);
-  const jitter = (nextFloat(world.rng) - 0.5) * (Math.PI / 6);
+  const jitter = (nextFloat(world.rng) - 0.5) * RT_BEAM_JITTER_RAD;
   const beam0Angle = baseAngleRad + jitter;
-  const twoThirdsPi = (Math.PI * 2) / 3;
 
   const angles = [
     beam0Angle,
-    beam0Angle + twoThirdsPi + (nextFloat(world.rng) - 0.5) * 0.3,
-    beam0Angle - twoThirdsPi + (nextFloat(world.rng) - 0.5) * 0.3,
+    beam0Angle + RT_BEAM_ANGLE_SPACING_RAD + (nextFloat(world.rng) - 0.5) * RT_SECONDARY_BEAM_JITTER_RAD,
+    beam0Angle - RT_BEAM_ANGLE_SPACING_RAD + (nextFloat(world.rng) - 0.5) * RT_SECONDARY_BEAM_JITTER_RAD,
   ];
 
   for (let i = 0; i < RT_MAIN_BEAM_COUNT; i++) {

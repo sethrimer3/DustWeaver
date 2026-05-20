@@ -291,8 +291,9 @@ function renderRope(
     ctx.lineWidth = RT_BRANCH_BEAM_WIDTH_PX + 0.5;
     ctx.beginPath();
     ctx.moveTo(anchorX, anchorY);
+    const invSegments = 1.0 / RT_BRANCH_ROPE_SEGMENTS;
     for (let s = 1; s <= RT_BRANCH_ROPE_SEGMENTS; s++) {
-      const t = s / RT_BRANCH_ROPE_SEGMENTS;
+      const t = s * invSegments;
       const sx = anchorX + dx * t;
       const sy = anchorY + dy * t + sagAmount * 4 * t * (1 - t);
       ctx.lineTo(sx, sy);

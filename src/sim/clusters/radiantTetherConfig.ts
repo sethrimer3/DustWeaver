@@ -119,6 +119,17 @@ export const RT_BRANCH_ROPE_DRAG = 0.985;
 /** Visual segments for rope rendering (integer). */
 export const RT_BRANCH_ROPE_SEGMENTS = 12;
 
+// ── Beam launch angles ───────────────────────────────────────────────────────
+
+/** Max random jitter for the first beam direction (radians = ±15°). */
+export const RT_BEAM_JITTER_RAD = Math.PI / 6;
+
+/** Angular spacing between the three beams (radians = 120°). */
+export const RT_BEAM_ANGLE_SPACING_RAD = (Math.PI * 2) / 3;
+
+/** Extra per-beam jitter applied to beams 1 and 2 (radians). */
+export const RT_SECONDARY_BEAM_JITTER_RAD = 0.3;
+
 // ── Chain anchoring ─────────────────────────────────────────────────────────
 
 /** Maximum raycast range when searching for anchor terrain (world units). */
