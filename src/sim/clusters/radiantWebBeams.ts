@@ -6,7 +6,7 @@ import { WorldState } from '../world';
 import { nextFloat } from '../rng';
 import {
   RW_RAYCAST_STEP_WORLD,
-  RW_BRANCH_RAYCAST_EPSILON_WORLD,
+  RW_BRANCH_START_OFFSET_WORLD,
   RW_MAIN_BEAM_COUNT,
   RW_MAIN_BEAM_GROW_SPEED_WORLD,
   RW_MAIN_BEAM_MAX_RANGE_WORLD,
@@ -144,8 +144,11 @@ export function raycastToWallWithNormal(
       const ww = world.wallWWorld[wi];
       const wh = world.wallHWorld[wi];
       if (x >= wx && x <= wx + ww && y >= wy && y <= wy + wh) {
-        // Outward face normal: pick face whose normal most opposes the ray direction.
-        // face_normal · rayDir: left(-1,0)=+dirX, right(+1,0)=-dirX, top(0,-1)=+dirY, bottom(0,+1)=-dirY
+        // Select the outward face normal that most opposes the ray direction
+        // (i.e., the face the ray is entering from). For each face normal n,
+        // we want the one maximising -rayDir·n, equivalently face_normal·(-rayDir).
+        // Left n=(-1,0): score = -(-dirX) = dirX; Right n=(+1,0): score = -(dirX) = -dirX
+        // Top n=(0,-1):  score = -(-dirY) = dirY; Bottom n=(0,+1): score = -(dirY) = -dirY
         const dotLeft   =  dirXWorld;
         const dotRight  = -dirXWorld;
         const dotTop    =  dirYWorld;
@@ -283,8 +286,8 @@ export function startBranchGrow(bs: RadiantWebBeamState, world: WorldState): voi
       const slotIndex = i * RW_BRANCH_BEAMS_PER_MAIN + b;
       const bb = bs.branchBeams[slotIndex];
 
-      const startX = hitX + dirX * RW_BRANCH_RAYCAST_EPSILON_WORLD;
-      const startY = hitY + dirY * RW_BRANCH_RAYCAST_EPSILON_WORLD;
+      const startX = hitX + dirX * RW_BRANCH_START_OFFSET_WORLD;
+      const startY = hitY + dirY * RW_BRANCH_START_OFFSET_WORLD;
 
       let branchHit: { xWorld: number; yWorld: number; normalXWorld: number; normalYWorld: number } | null = null;
       let chosenDirX = dirX;
@@ -320,7 +323,7 @@ export function startBranchGrow(bs: RadiantWebBeamState, world: WorldState): voi
       bb.maxLengthWorld = Math.sqrt(
         (branchHit.xWorld - startX) * (branchHit.xWorld - startX) +
         (branchHit.yWorld - startY) * (branchHit.yWorld - startY),
-      ) + RW_BRANCH_RAYCAST_EPSILON_WORLD;
+      ) + RW_BRANCH_START_OFFSET_WORLD;
       bb.hasHitWall = 0;
       bb.isActiveFlag = 1;
       bb.isEnergizedFlag = 0;

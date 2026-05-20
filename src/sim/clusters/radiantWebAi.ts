@@ -18,6 +18,8 @@ import {
   RW_RESET_DURATION_TICKS,
   RW_BRANCH_DAMAGE_TICKS,
   RW_ACTIVATION_RANGE_WORLD,
+  RW_DRIFT_SPEED_MIN_WORLD,
+  RW_DRIFT_SPEED_VARIANCE_WORLD,
 } from './radiantWebConfig';
 import {
   RadiantWebBeamState,
@@ -146,7 +148,7 @@ export function applyRadiantWebAI(world: WorldState): void {
             const dyP = playerY - cluster.positionYWorld;
             const dP = Math.sqrt(dxP * dxP + dyP * dyP);
             if (dP > 0.1) {
-              const driftSpeed = 0.3 + nextFloat(world.rng) * 0.2;
+              const driftSpeed = RW_DRIFT_SPEED_MIN_WORLD + nextFloat(world.rng) * RW_DRIFT_SPEED_VARIANCE_WORLD;
               cluster.velocityXWorld = (dxP / dP) * driftSpeed;
               cluster.velocityYWorld = (dyP / dP) * driftSpeed;
             }

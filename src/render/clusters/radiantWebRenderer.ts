@@ -79,6 +79,8 @@ export function renderRadiantWeb(
       }
     }
 
+    // Puffs render for the first RW_MAIN_BEAM_PUFF_LIFETIME_TICKS of BRANCH_GROW —
+    // stateTicks resets to 0 at state entry, so puffs fade as branches begin growing.
     if (beamState !== null && state === RW_STATE_BRANCH_GROW && stateTicks < RW_MAIN_BEAM_PUFF_LIFETIME_TICKS) {
       const puffProgress = stateTicks / RW_MAIN_BEAM_PUFF_LIFETIME_TICKS;
       for (let i = 0; i < beamState.mainBeams.length; i++) {

@@ -3,7 +3,12 @@
  */
 
 export const RW_RAYCAST_STEP_WORLD = 2.0;
-export const RW_BRANCH_RAYCAST_EPSILON_WORLD = 3.0;
+/** Offset applied along branch direction before raycasting to clear the wall surface. */
+export const RW_BRANCH_START_OFFSET_WORLD = 3.0;
+/** Minimum drift speed toward player during beam fire (world units/tick). */
+export const RW_DRIFT_SPEED_MIN_WORLD = 0.3;
+/** Additional random component added to drift speed (world units/tick). */
+export const RW_DRIFT_SPEED_VARIANCE_WORLD = 0.2;
 export const RW_RESET_DURATION_TICKS = 60;
 export const RW_MAIN_BEAM_COUNT = 3;
 export const RW_MAIN_BEAM_GROW_SPEED_WORLD = 3.5;
