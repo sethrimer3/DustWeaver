@@ -144,12 +144,13 @@ export function raycastToWallWithNormal(
       const ww = world.wallWWorld[wi];
       const wh = world.wallHWorld[wi];
       if (x >= wx && x <= wx + ww && y >= wy && y <= wy + wh) {
-        // Select the outward face normal that most aligns with the ray direction
-        // (i.e., the face the ray is entering from). Score each face normal n by rayDir·n.
-        // Left n=(-1,0): score = dirX·(-1) + dirY·0 =  dirXWorld
-        // Right n=(+1,0): score = dirX·(+1)           = -dirXWorld  (stored as -dirX)
-        // Top n=(0,-1): score = dirY·(-1)             =  dirYWorld
-        // Bottom n=(0,+1): score = dirY·(+1)          = -dirYWorld
+        // Pick the wall face normal that points OUT of the wall toward the incoming
+        // ray's origin — i.e. the face normal n where (n · rayDir) is most negative
+        // (most opposing the ray).  Equivalently, maximise (n · (-rayDir)):
+        //   left  n=(-1,0): (-1)*(-dirX) = dirX    → dotLeft  = +dirXWorld
+        //   right n=(+1,0): (+1)*(-dirX) = -dirX   → dotRight = -dirXWorld
+        //   top   n=(0,-1): (-1)*(-dirY) = dirY    → dotTop   = +dirYWorld
+        //   bot   n=(0,+1): (+1)*(-dirY) = -dirY   → dotBottom= -dirYWorld
         const dotLeft   =  dirXWorld;
         const dotRight  = -dirXWorld;
         const dotTop    =  dirYWorld;
@@ -214,10 +215,12 @@ export function startBeamAttack(
       }
     }
 
-    if (hit === null) continue;
+    if (hit === null) continue; // No wall found even after retries — skip beam
 
     const dX = Math.cos(chosenAngle);
     const dY = Math.sin(chosenAngle);
+    // Store origin at fire time — rendering always uses this fixed point so beams
+    // do not drift if the boss moves while they are growing.
     mb.originXWorld = bossXWorld;
     mb.originYWorld = bossYWorld;
     mb.dirXWorld = dX;

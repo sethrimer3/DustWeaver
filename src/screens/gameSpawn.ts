@@ -469,7 +469,14 @@ export function spawnEnemyClusters(
 
     world.clusters.push(enemyCluster);
     const particleStartIdx = world.particleCount;
-    spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
+    // Radiant Tether and Radiant Web manage their own visuals — do not spawn a
+    // particle loadout for them.  Their HP is still derived from particleCount.
+    const skipParticleSpawn =
+      enemyCluster.isRadiantTetherFlag === 1 ||
+      enemyCluster.isRadiantWebFlag    === 1;
+    if (!skipParticleSpawn) {
+      spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
+    }
 
     // Post-spawn: mark golden mimic particles as non-regenerating (isTransientFlag=1)
     // and record initial particle count for half-dead threshold detection.
