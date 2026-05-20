@@ -148,6 +148,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_golden_mimic_xy', label: 'Golden Mimic (XY)', category: 'enemies' },
   { id: 'enemy_bee_swarm', label: 'Bee Swarm', category: 'enemies' },
   { id: 'enemy_web_spider', label: 'Web Spider', category: 'enemies' },
+  { id: 'enemy_radiant_tether', label: 'Radiant Tether (Boss)', category: 'enemies' },
+  { id: 'enemy_radiant_web', label: 'Radiant Web (Boss)', category: 'enemies' },
   // Triggers (player-facing activators and room logic)
   { id: 'campaign_spawn',  label: 'Campaign Spawn',          category: 'triggers' },
   { id: 'player_spawn',    label: 'Room Spawn (Fallback)',   category: 'triggers' },

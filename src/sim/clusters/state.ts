@@ -256,23 +256,20 @@ export interface ClusterState {
   // ---- Radiant Tether boss (populated only when isRadiantTetherFlag === 1) --
   /**
    * 1 if this cluster is the Radiant Tether boss — a floating sphere of light
-   * that uses rotating laser telegraphs and anchored chains of light.
+   * that uses anchored chains of light to move.
    */
   isRadiantTetherFlag: 0 | 1;
   /**
    * Current Radiant Tether state:
    *  0 = inactive (dormant, awaiting player proximity)
-   *  1 = telegraph (rotating laser preview lines)
-   *  2 = lock (lasers fixed for reaction window)
-   *  3 = firing (chains extending to anchors)
-   *  4 = movement (boss moves via chain winching)
-   *  5 = reset (retracting chains, preparing next cycle)
-   *  6 = dead
+   *  1 = active (chains fired, boss moves via chain winching)
+   *  2 = reset (retracting chains, brief pause)
+   *  3 = dead
    */
   radiantTetherState: number;
   /** Ticks elapsed in the current state. */
   radiantTetherStateTicks: number;
-  /** Base angle (radians) for evenly-spaced telegraph / chain directions. */
+  /** Base angle (radians) for evenly-spaced chain directions. */
   radiantTetherBaseAngleRad: number;
   /** Current number of active chains (determined by health thresholds). */
   radiantTetherChainCount: number;
@@ -280,6 +277,23 @@ export interface ClusterState {
   radiantTetherVelXWorld: number;
   /** Boss vertical velocity (world units/tick). */
   radiantTetherVelYWorld: number;
+
+  // ---- Radiant Web boss (populated only when isRadiantWebFlag === 1) --------
+  /** 1 if this cluster is the Radiant Web boss — a web-beam attack specialist. */
+  isRadiantWebFlag: 0 | 1;
+  /**
+   * Current Radiant Web state:
+   *  0 = inactive
+   *  1 = beam_grow
+   *  2 = branch_grow
+   *  3 = energized
+   *  4 = rope_decay
+   *  5 = reset
+   *  6 = dead
+   */
+  radiantWebState: number;
+  /** Ticks elapsed in the current Radiant Web state. */
+  radiantWebStateTicks: number;
 
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
@@ -578,6 +592,9 @@ export function createClusterState(
     radiantTetherChainCount: 3,
     radiantTetherVelXWorld: 0,
     radiantTetherVelYWorld: 0,
+    isRadiantWebFlag: 0,
+    radiantWebState: 0,
+    radiantWebStateTicks: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterStateTicks: 0,

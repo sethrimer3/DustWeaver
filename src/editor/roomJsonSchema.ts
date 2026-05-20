@@ -57,6 +57,7 @@ export interface RoomJsonEnemy {
   rollingEnemySpriteIndex?: number;
   isRockElemental: boolean;
   isRadiantTether: boolean;
+  isRadiantWeb?: boolean;
   isGrappleHunter: boolean;
   isSlime?: boolean;
   isLargeSlime?: boolean;

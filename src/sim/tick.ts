@@ -24,6 +24,7 @@ import { applyGrappleClusterConstraint, updateGrappleChainParticles, updateGrapp
 import { applyEnemyAI } from './clusters/enemyAi';
 import { applyRockElementalAI } from './clusters/rockElementalAi';
 import { applyRadiantTetherAI } from './clusters/radiantTetherAi';
+import { applyRadiantWebAI } from './clusters/radiantWebAi';
 import { applyGrappleHunterAI } from './clusters/grappleHunterAi';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
@@ -111,6 +112,9 @@ export function tick(world: WorldState): void {
 
   // 0.5d. Radiant Tether AI — light-chain boss state machine
   applyRadiantTetherAI(world);
+
+  // 0.5d2. Radiant Web AI — web-beam boss state machine
+  applyRadiantWebAI(world);
 
   // 0.5e. Grapple Hunter AI — grapple attack state machine
   applyGrappleHunterAI(world);

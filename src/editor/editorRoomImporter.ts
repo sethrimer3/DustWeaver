@@ -149,6 +149,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     rollingEnemySpriteIndex: e.rollingEnemySpriteIndex ?? 1,
     isRockElementalFlag: (e.isRockElementalFlag ?? 0) as 0 | 1,
     isRadiantTetherFlag: (e.isRadiantTetherFlag ?? 0) as 0 | 1,
+    isRadiantWebFlag: (e.isRadiantWebFlag ?? 0) as 0 | 1,
     isGrappleHunterFlag: (e.isGrappleHunterFlag ?? 0) as 0 | 1,
     isSlimeFlag: (e.isSlimeFlag ?? 0) as 0 | 1,
     isLargeSlimeFlag: (e.isLargeSlimeFlag ?? 0) as 0 | 1,

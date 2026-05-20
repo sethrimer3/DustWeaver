@@ -325,6 +325,11 @@ export function spawnEnemyClusters(
       enemyCluster.radiantTetherState  = 0;
       enemyCluster.halfWidthWorld  = 6.0;
       enemyCluster.halfHeightWorld = 6.0;
+    } else if (enemyDef.isRadiantWebFlag === 1) {
+      enemyCluster.isRadiantWebFlag = 1;
+      enemyCluster.radiantWebState  = 0;
+      enemyCluster.halfWidthWorld   = 6.0;
+      enemyCluster.halfHeightWorld  = 6.0;
     } else if (enemyDef.isGrappleHunterFlag === 1) {
       enemyCluster.isGrappleHunterFlag  = 1;
       enemyCluster.grappleHunterState   = 0;

@@ -376,6 +376,9 @@ export function renderClusters(
     } else if (cluster.isRadiantTetherFlag === 1) {
       // Radiant Tether boss body is rendered by radiantTetherRenderer.ts
       // Skip default cluster rendering; health bar drawn below.
+    } else if (cluster.isRadiantWebFlag === 1) {
+      // Radiant Web boss body is rendered by radiantWebRenderer.ts
+      // Skip default cluster rendering; health bar drawn below.
 
     } else if (cluster.isGrappleHunterFlag === 1) {
       // ── Grapple Hunter: dark purple box with hook accent ────────────────
@@ -515,6 +518,8 @@ export function renderClusters(
       barColor = '#8b6914'; // brown/amber for rock elemental
     } else if (cluster.isRadiantTetherFlag === 1) {
       barColor = '#fffde0'; // radiant white-gold for light boss
+    } else if (cluster.isRadiantWebFlag === 1) {
+      barColor = '#aaffdd'; // teal-green for web boss
     } else if (cluster.isGrappleHunterFlag === 1) {
       barColor = '#aa55ee'; // purple for grapple hunter
     } else if (cluster.isSlimeFlag === 1) {
