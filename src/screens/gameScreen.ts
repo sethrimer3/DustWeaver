@@ -313,8 +313,11 @@ export function startGameScreen(
   dustContainerShardSprite.onload = () => { isDustContainerShardSpriteLoaded = true; };
   /** Keys in the format `${roomId}:${containerIndex}` for already-collected dust containers. */
   const collectedDustContainerKeySet: Set<string> = new Set();
-  /** Keys in the format `${roomId}:dustswarm:${index}` for already-collected dust swarms. */
-  const collectedDustSwarmKeySet: Set<string> = new Set();
+  /** Keys in the format `${roomId}:dustswarm:${index}` for already-collected dust swarms.
+   * Initialized from progress.collectedDustSwarmKeys so swarms stay collected after save/load. */
+  const collectedDustSwarmKeySet: Set<string> = progress?.collectedDustSwarmKeys
+    ? new Set(progress.collectedDustSwarmKeys)
+    : new Set();
 
   /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
   const consumedSkillTombKeySet: Set<string> = new Set();
@@ -445,6 +448,9 @@ export function startGameScreen(
       world.clusters[0].healthPoints > 0
     ) {
       carryHealthPoints = world.clusters[0].healthPoints;
+    } else if (world.clusters.length === 0 && progress?.startingHealth !== undefined) {
+      // First room load of a new campaign session — use campaign spawn's starting health.
+      carryHealthPoints = Math.max(1, Math.min(progress.startingHealth, PLAYER_INITIAL_HEALTH));
     }
 
     world.tick = 0;

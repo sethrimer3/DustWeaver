@@ -51,6 +51,7 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     // Explicit fallbacks for array/optional fields added after initial release.
     if (parsed.progress.dustContainerPieces === undefined) parsed.progress.dustContainerPieces = 0;
     if (!Array.isArray(parsed.progress.disabledPassiveWeaves)) parsed.progress.disabledPassiveWeaves = [];
+    if (!Array.isArray(parsed.progress.collectedDustSwarmKeys)) parsed.progress.collectedDustSwarmKeys = [];
     return parsed;
   } catch {
     return null;

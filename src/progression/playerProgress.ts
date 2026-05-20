@@ -85,6 +85,20 @@ export interface PlayerProgress {
    * This flag prevents re-triggering the auto-assignment on subsequent loads.
    */
   hasCompletedEarlyAutoAssignment: boolean;
+  /**
+   * Keys of dust swarms the player has permanently collected, in the format
+   * `${roomId}:dustswarm:${index}`. Persisted so swarms do not reappear after
+   * save/load or game restart.
+   */
+  collectedDustSwarmKeys: string[];
+  /**
+   * Optional starting health override applied only on the very first room load
+   * of a new campaign session (when no existing player cluster exists).
+   * Campaigns may set this via CampaignSpawnData.startingHealth.
+   * Valid range: [1, PLAYER_INITIAL_HEALTH]. Undefined means use the default
+   * PLAYER_INITIAL_HEALTH. Values outside the range are clamped when applied.
+   */
+  startingHealth?: number;
 }
 
 // ---- Factory / helpers ---------------------------------------------------
@@ -125,6 +139,7 @@ export function createDefaultProgress(): PlayerProgress {
     dustContainerPieces: 0,
     disabledPassiveWeaves: [],
     hasCompletedEarlyAutoAssignment: false,
+    collectedDustSwarmKeys: [],
   };
 }
 

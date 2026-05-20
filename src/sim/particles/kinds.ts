@@ -1,42 +1,25 @@
 /** Each kind has a distinct motion signature driven by its ElementProfile. */
 export enum ParticleKind {
-  /** Gold Dust — the player's only equippable dust type. */
-  Physical  = 0,
-  // ── Legacy kinds (removed from player equipment, kept for backward compat) ──
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Fire      = 1,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Ice       = 2,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Lightning = 3,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Poison    = 4,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Arcane    = 5,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Wind      = 6,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Holy      = 7,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Shadow    = 8,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Metal     = 9,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Earth     = 10,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Nature    = 11,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Crystal   = 12,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Void      = 13,
-  // Background / environmental (not equippable by players)
+  // ── Collectible dust types — equippable by the player ──────────────────────
+  Physical  = 0,   // Golden Dust — dense gold motes, the starting dust type
+  Fire      = 1,   // Fire Dust — scorching embers
+  Ice       = 2,   // Ice Dust — frozen crystals
+  Lightning = 3,   // Lightning Dust — crackling sparks
+  Poison    = 4,   // Poison Dust — toxic spores
+  Arcane    = 5,   // Arcane Dust — mysterious energy
+  Wind      = 6,   // Wind Dust — whirling gusts
+  Holy      = 7,   // Holy Dust — sacred motes
+  Shadow    = 8,   // Shadow Dust — tendrils of darkness
+  Metal     = 9,   // Metal Dust — razor shards
+  Earth     = 10,  // Earth Dust — heavy stone fragments
+  Nature    = 11,  // Nature Dust — living spores
+  Crystal   = 12,  // Crystal Dust — glittering shards
+  Void      = 13,  // Void Dust — unstable matter from beyond
+  // Background / environmental (not collectible by players)
   Fluid     = 14,  // Background fluid particle — invisible until disturbed
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Water     = 15,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Lava      = 16,
-  /** @deprecated Removed from player equipment. Enemies may still use. */
-  Stone     = 17,
+  Water     = 15,  // Water Dust — flowing droplets (collectible)
+  Lava      = 16,  // Lava Dust — molten fragments (collectible)
+  Stone     = 17,  // Stone Dust — ancient worn fragments (collectible)
   // Special / ability particles (not equippable)
   Gold      = 18,  // Grappling hook chain — bright golden diamond sparkles
   Light     = 19,  // Boss light chains — radiant white-gold glow
@@ -46,19 +29,35 @@ export enum ParticleKind {
 export const PARTICLE_KIND_COUNT = 20;
 
 /**
- * Ordered list of particle kinds that players can equip.
- * Only Gold Dust (Physical) is equippable; all other kinds have been removed
- * from player equipment (enemies may still use them).
+ * Ordered list of particle kinds that players can collect and equip.
+ * All 17 elemental dust types are equippable. Fluid, Gold, and Light
+ * are special/internal kinds that are NOT collectible by the player.
  */
 export const EQUIPPABLE_KINDS: readonly ParticleKind[] = [
   ParticleKind.Physical,
+  ParticleKind.Fire,
+  ParticleKind.Ice,
+  ParticleKind.Lightning,
+  ParticleKind.Poison,
+  ParticleKind.Arcane,
+  ParticleKind.Wind,
+  ParticleKind.Holy,
+  ParticleKind.Shadow,
+  ParticleKind.Metal,
+  ParticleKind.Earth,
+  ParticleKind.Nature,
+  ParticleKind.Crystal,
+  ParticleKind.Void,
+  ParticleKind.Water,
+  ParticleKind.Lava,
+  ParticleKind.Stone,
 ];
 
 /**
  * Number of kinds that players can equip.
  * Equals EQUIPPABLE_KINDS.length; use this for iteration counts.
  */
-export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 1
+export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 17
 
 /**
  * Particle shape enum — controls how each particle kind is rendered.

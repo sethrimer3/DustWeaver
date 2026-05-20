@@ -292,6 +292,10 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
             // Permanently unlock this dust type in the player's progression.
             if (progress) {
               unlockDustType(progress, dustKind);
+              // Persist swarm collection key so swarms don't reappear after save/load.
+              if (!progress.collectedDustSwarmKeys.includes(swarmKey)) {
+                progress.collectedDustSwarmKeys.push(swarmKey);
+              }
             }
             spawnClusterParticles(
               world,
