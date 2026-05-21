@@ -17,7 +17,8 @@ const SAFE_ROOM_ID_RE = /^[a-zA-Z0-9_-]+$/;
  * Resolves the absolute path to the DUSTWEAVER_CAMPAIGN directory.
  *
  * - Dev / unpackaged: writes directly into the project source tree at
- *   <repo>/ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN.
+ *   <repo>/ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN, using app.getAppPath() to
+ *   locate the repo root reliably regardless of how the process was started.
  * - Packaged (asar): the app bundle is read-only, so we use the writable
  *   userData directory instead.
  */
@@ -25,8 +26,8 @@ function resolveCampaignDir() {
   if (app.isPackaged) {
     return path.join(app.getPath("userData"), "CAMPAIGNS", OFFICIAL_CAMPAIGN_ID);
   }
-  // __dirname is <repo>/electron — go up one level to reach the repo root.
-  return path.resolve(__dirname, "..", "ASSETS", "CAMPAIGNS", OFFICIAL_CAMPAIGN_ID);
+  // app.getAppPath() returns the directory containing package.json (repo root).
+  return path.join(app.getAppPath(), "ASSETS", "CAMPAIGNS", OFFICIAL_CAMPAIGN_ID);
 }
 
 // ── IPC handler ───────────────────────────────────────────────────────────────
@@ -91,7 +92,12 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
     // ── Ensure directories exist ──────────────────────────────────────────
     const campaignDir = resolveCampaignDir();
     const roomsDir = path.join(campaignDir, "ROOMS");
-    fs.mkdirSync(roomsDir, { recursive: true });
+    try {
+      fs.mkdirSync(roomsDir, { recursive: true });
+    } catch (dirErr) {
+      const msg = dirErr instanceof Error ? dirErr.message : String(dirErr);
+      return { ok: false, error: `Failed to create campaign directory "${roomsDir}": ${msg}` };
+    }
 
     // ── Write packed campaign file ────────────────────────────────────────
     const packedPath = path.join(campaignDir, PACKED_CAMPAIGN_FILENAME);
@@ -112,7 +118,7 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
     console.log(
       `[dw:save-official-campaign] Wrote ${rooms.length} room(s) + packed campaign to ${campaignDir}`
     );
-    return { ok: true };
+    return { ok: true, campaignDir };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[dw:save-official-campaign] Write failed:", message);

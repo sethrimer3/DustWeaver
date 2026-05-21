@@ -268,7 +268,8 @@ export function exportMainCampaignJson(
       .saveOfficialCampaignToProject(exported)
       .then((result) => {
         if (result.ok) {
-          window.alert('Campaign saved to project files successfully.');
+          const dir = result.campaignDir ?? 'ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN';
+          window.alert(`Campaign saved to project files:\n${dir}`);
         } else {
           window.alert(`Campaign save failed:\n${result.error ?? 'Unknown error'}`);
         }

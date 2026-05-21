@@ -13,6 +13,8 @@ export interface ElectronSaveResult {
   ok: boolean;
   /** Present when ok is false. Human-readable error description. */
   error?: string;
+  /** Present when ok is true. Absolute path of the directory that was written. */
+  campaignDir?: string;
 }
 
 /** Narrow IPC API exposed by the Electron preload script. */
