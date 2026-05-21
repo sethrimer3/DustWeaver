@@ -6,7 +6,7 @@ import { createDefaultProgress, PlayerProgress } from './progression/playerProgr
 import { SaveSlotData, saveSaveSlot } from './progression/saveSlots';
 import type { CampaignSource } from './levels/campaignSource';
 import type { EditableCampaignSession } from './editor/editableCampaignSession';
-import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn, clearRegistryAndApplyCampaignMetadata } from './levels/rooms';
+import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn, clearRegistryAndApplyCampaignMetadata, ROOM_REGISTRY } from './levels/rooms';
 import { setActiveCampaignId } from './levels/campaigns';
 import { stringToParticleKind } from './editor/roomJsonSchema';
 import { unlockDustType, unlockActiveWeave } from './progression/unlocks';
@@ -16,6 +16,7 @@ import {
   ensureCampaignRoomCache,
   loadRoomForGameplayAsync,
   deactivateCampaignRoomCache,
+  isRoomFileCacheActive,
 } from './levels/roomFileLoader';
 import { getCampaignStartRoomId } from './levels/campaignSchema';
 import { createExportProgressModal } from './editor/editorExportProgressModal';
@@ -106,22 +107,51 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         onCancel: () => navigate('mainMenu'),
       });
     } else if (to === 'gameplay') {
-      const activeLoadout = loadout ?? progress.loadout;
-      const savedRoomId = progress.lastSaveRoomId ?? null;
-      // If the player has no saved room, start at the campaign spawn if one is defined.
-      const officialSpawn = savedRoomId === null ? getLoadedOfficialCampaignSpawn() : null;
-      const startRoomId = savedRoomId ?? officialSpawn?.roomId ?? null;
-      const campaignSpawnOverride: readonly [number, number] | null =
-        officialSpawn !== null ? [officialSpawn.xBlock, officialSpawn.yBlock] : null;
-      cleanup = startGameScreen(canvas, uiRoot, activeLoadout, startRoomId, {
-        onReturnToMenu: () => {
-          persistSaveSlot();
-          navigate('mainMenu');
-        },
-        onSave: () => {
-          persistSaveSlot();
-        },
-      }, progress, undefined, undefined, campaignSpawnOverride);
+      // Use an async wrapper so we can await lazy room loading when needed.
+      // The pattern mirrors the 'customCampaignPlay' branch.
+      const doPlayGameplay = async (): Promise<void> => {
+        const activeLoadout = loadout ?? progress.loadout;
+        const savedRoomId = progress.lastSaveRoomId ?? null;
+        // If the player has no saved room, start at the campaign spawn if one is defined.
+        const officialSpawn = savedRoomId === null ? getLoadedOfficialCampaignSpawn() : null;
+        let startRoomId = savedRoomId ?? officialSpawn?.roomId ?? null;
+        const campaignSpawnOverride: readonly [number, number] | null =
+          officialSpawn !== null ? [officialSpawn.xBlock, officialSpawn.yBlock] : null;
+
+        // In Electron lazy-load mode the saved room may not yet be in
+        // ROOM_REGISTRY.  Attempt to load it from the file cache so that
+        // resolveGameStartRoomSelection (called inside startGameScreen) can
+        // find it rather than falling back to the lobby / campaign start.
+        if (
+          savedRoomId !== null &&
+          isRoomFileCacheActive() &&
+          ROOM_REGISTRY.get(savedRoomId) === undefined
+        ) {
+          const savedRoom = await loadRoomForGameplayAsync(savedRoomId);
+          if (savedRoom !== undefined) {
+            console.log(`[game] Lazy-loaded saved room "${savedRoomId}" before gameplay start.`);
+            startRoomId = savedRoomId;
+          } else {
+            console.warn(
+              `[game] Could not lazy-load saved room "${savedRoomId}". ` +
+              'Falling back to campaign start room.',
+            );
+            // Clear startRoomId so the game falls through to the default start room.
+            startRoomId = officialSpawn?.roomId ?? null;
+          }
+        }
+
+        cleanup = startGameScreen(canvas, uiRoot, activeLoadout, startRoomId, {
+          onReturnToMenu: () => {
+            persistSaveSlot();
+            navigate('mainMenu');
+          },
+          onSave: () => {
+            persistSaveSlot();
+          },
+        }, progress, undefined, undefined, campaignSpawnOverride);
+      };
+      void doPlayGameplay();
     } else if (to === 'customCampaignPlay') {
       // Play a custom campaign: load rooms into ROOM_REGISTRY, then start gameplay.
       // Save data is not used — custom campaign games start fresh.

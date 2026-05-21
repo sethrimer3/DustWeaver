@@ -1,6 +1,6 @@
 # Campaign Room-Cache Architecture
 
-> Last updated: BUILD 383
+> Last updated: BUILD 384
 
 ## Overview
 
@@ -240,14 +240,70 @@ Progress status text examples:
 
 ## Export Flow (Browser / GitHub Pages)
 
-The browser path is unchanged from BUILD 301:
+In browser (GitHub Pages) mode the user downloads **two files**:
 
-1. `assembleExportCampaign()` builds the `SavedCampaignV1` object.
-2. `JSON.stringify(exported, null, 2)` serialises it.
-3. A Blob URL download is triggered.
+1. **`[campaignId].dwcampaign.json`** (or `DustweaverCampaign.dwcampaign.json`)  
+   The canonical packed campaign.  This is the only file needed to re-import
+   the campaign.
 
-No room files or manifest are written in browser mode — the user downloads a
-single `.dwcampaign.json` file and must commit it to the repo themselves.
+2. **`[campaignId]_ROOMS.zip`** (or `DustweaverCampaign_ROOMS.zip`)  
+   A derived room-cache ZIP with the same structure as the Electron ROOMS/
+   directory.  Useful for inspection, tooling, or seeding a server-side cache.
+
+ZIP structure:
+```
+ROOMS/
+  manifest.json          ← same format as the Electron manifest
+  <roomId>_room.json     ← one file per room
+  ...
+```
+
+The ZIP is generated asynchronously in `downloadRoomCacheZip()` in
+`src/editor/editorExport.ts` using `src/utils/minimalZipWriter.ts` (a
+store-only, no-dependency ZIP builder).  Room hashes and campaign hash are
+computed via `computeContentHash` (Web Crypto SHA-256), matching the Electron
+manifest format exactly.
+
+The main `.dwcampaign.json` download starts immediately (synchronously); the
+ZIP download fires immediately afterwards (`void downloadRoomCacheZip(...)`).
+Both downloads are triggered by separate `<a>.click()` calls.
+
+**Source-of-truth rule:** the `.dwcampaign.json` is canonical; the ZIP is a
+derived convenience artifact.  Sharing only the JSON is always sufficient.
+
+In DEV builds, timing logs are emitted to the console:
+```
+[campaignPerf] room "lobby" hash+stringify: 2.10ms
+[campaignPerf] room-cache ZIP generation: 48.30ms (84 room(s))
+```
+
+---
+
+## Rolling Backups (Electron)
+
+Before overwriting the packed campaign file, both export handlers
+(`dw:save-official-campaign` and `dw:export-campaign-with-progress`) create
+a timestamped backup of the **existing** packed campaign file.
+
+Backup location: `<campaignDir>/BACKUPS/`
+
+Backup filename pattern:
+```
+DustweaverCampaign_2026-05-21T03-44-12-123Z.dwcampaign.json
+<campaignId>_2026-05-21T03-44-12-123Z.dwcampaign.json
+```
+
+Rules:
+- A backup is only created if the packed file **already exists** and is readable.
+- At most **10** backups are kept per campaign.  When the 11th is written,
+  the oldest backup is deleted until only 10 remain.
+- Backup files are sorted lexicographically (ISO timestamps sort correctly
+  as strings → oldest first → pruning removes the first entries).
+- If backup creation fails, a warning is logged and the export continues.
+
+The BACKUPS directory contains only the canonical packed files — not derived
+room files.  Individual room files are not backed up because they can always
+be regenerated from the canonical file.
 
 ---
 
@@ -295,6 +351,29 @@ artifacts, not editable source files.
    `clearRegistryAndApplyCampaignMetadata` + `loadRoomForGameplayAsync(startRoomId)`.
 5. Starts the game with ONLY the start room in ROOM_REGISTRY.
 6. Falls back to `initRoomRegistry()` (full eager load) if anything fails.
+
+### Saved-game resume with lazy loading
+
+When the player resumes an official save, `game.ts` receives the `lastSaveRoomId`
+from the selected save slot.  In lazy-load mode this room is typically **not** in
+ROOM_REGISTRY (only the campaign start room was loaded at startup).
+
+`game.ts` now handles this:
+1. If `savedRoomId` is set, `isRoomFileCacheActive()` is true, and the room is
+   absent from `ROOM_REGISTRY`:
+   - `await loadRoomForGameplayAsync(savedRoomId)` is called before
+     `startGameScreen`.
+   - If the load succeeds, the game starts in the saved room as expected.
+   - If the load fails (file missing, hash mismatch, etc.), a warning is logged
+     and the game falls back to the campaign start room.
+2. If the file cache is inactive (browser mode, cache disabled), this async path
+   is skipped entirely — the existing behaviour is preserved.
+3. Custom campaign play is unaffected (it doesn't use `lastSaveRoomId` and
+   starts fresh).
+
+This prevents the scenario where a player resumes a save and is silently
+deposited in the lobby / campaign start room instead of their saved location
+because the saved room wasn't yet loaded.
 
 ### Custom campaign (Electron, valid cache)
 
@@ -456,8 +535,23 @@ The cache is considered stale (needs regeneration) if any of the following are t
 | `manifest.campaignHash !== computedHash(campaign)` | Campaign content changed |
 | A room file listed in `manifest.rooms` is absent | Partial export or manual deletion |
 
-The `validateManifest()` function in `src/levels/roomCacheManifest.ts` implements
-all checks except file-existence (which requires filesystem access).
+**Hash vs. version rule:**
+- `campaignHash` (SHA-256) is the **authoritative stale-cache check**.
+- `campaignVersion` is written to the manifest as a convenience diagnostic
+  (useful for debugging) but is **not** used as the primary staleness signal.
+- If the hash matches but `campaignVersion` is lower than expected, the cache
+  is still considered valid — the hash wins.
+- If the hash mismatches, the cache is always regenerated, regardless of
+  `campaignVersion`.
+
+The `validateManifest()` function in `src/levels/roomCacheManifest.ts`
+implements the hash/ID/version checks.
+
+The **missing file check** is performed by `dw:validate-room-cache-files` IPC,
+called from `validateCampaignRoomCache()` in `roomFileLoader.ts`.  If any file
+listed in `manifest.rooms` is absent, validation returns `isValid: false` with
+a message like `"Room cache is incomplete: missing file ROOMS/foo_room.json"`.
+This triggers full cache regeneration instead of a delayed runtime error.
 
 Per-room hash validation is performed in `populateRegistryFromRoomFiles()` in
 `roomFileLoader.ts` when rooms are read from files at startup.
@@ -499,14 +593,15 @@ in `src/levels/roomFileLoader.ts` are intentional mirrors.  Both do:
 | File | Role |
 |------|------|
 | `src/utils/deterministicHash.ts` | Deterministic JSON stringify + FNV-1a hash (renderer-side) |
+| `src/utils/minimalZipWriter.ts` | Store-only ZIP builder for browser room-cache ZIP export |
 | `src/levels/roomCacheManifest.ts` | `RoomCacheManifest` types, `validateManifest()`, `ExportProgressEvent` |
-| `src/levels/roomFileLoader.ts` | Source-selection service: `ensureCampaignRoomCache`, `activateCampaignRoomCache` (stores worldMap), `loadRoomForGameplayAsync` (lazy per-room load, worldMap optional), `isRoomFileCacheActive`, `getActiveWorldMap` |
-| `src/levels/rooms.ts` | `clearRegistryAndApplyCampaignMetadata` (populates world names + map positions), `applyOfficialCampaignMetadata` (sets revision metadata without touching registry) |
+| `src/levels/roomFileLoader.ts` | Source-selection service: `ensureCampaignRoomCache`, `validateCampaignRoomCache` (incl. file-existence check), `activateCampaignRoomCache`, `loadRoomForGameplayAsync`, `isRoomFileCacheActive`, `computeContentHash` (exported for browser ZIP export) |
+| `src/levels/rooms.ts` | `clearRegistryAndApplyCampaignMetadata`, `applyOfficialCampaignMetadata`, `ROOM_REGISTRY` |
 | `src/main.ts` | Official campaign startup: Electron → status overlay + lazy modal → file cache → lazy start room; Browser → `initRoomRegistry()` |
-| `src/game.ts` | Custom campaign play: Electron → status overlay + lazy modal → file cache → lazy start room; Browser → `registerRoomsFromPackedCampaign()` |
-| `src/editor/editorExport.ts` | `exportMainCampaignJson()`, `exportCampaignJson()`, Electron progress helper |
+| `src/game.ts` | Custom campaign play and official gameplay: Electron → status overlay + lazy modal → file cache → lazy start room + **saved-room pre-load**; Browser → `registerRoomsFromPackedCampaign()` |
+| `src/editor/editorExport.ts` | `exportMainCampaignJson()`, `exportCampaignJson()`, Electron progress helper, **browser ZIP export via `downloadRoomCacheZip()`** |
 | `src/editor/editorExportProgressModal.ts` | Reusable DOM progress modal. `createExportProgressModal(root, title?)` — accepts optional title for non-export contexts |
-| `electron/main.cjs` | `dw:export-campaign-with-progress`, `dw:read-room-cache-manifest`, `dw:read-room-file`, `dw:read-all-room-files` IPC handlers |
+| `electron/main.cjs` | `dw:export-campaign-with-progress`, `dw:save-official-campaign`, `dw:read-room-cache-manifest`, `dw:read-room-file`, `dw:read-all-room-files`, **`dw:validate-room-cache-files`** IPC handlers; **atomic write helpers** (`writeJsonAtomic`, `writeTextAtomic`); **rolling backup helpers** (`ensureRollingBackup`, `pruneBackups`) |
 | `electron/preload.cjs` | Exposes all IPC channels to the renderer |
 | `src/electron.d.ts` | TypeScript types for all Electron IPC surface |
 | `src/screens/roomRuntimeCache.ts` | In-memory geometry cache for precomputed wall templates (bounded LRU, 10 slots) |

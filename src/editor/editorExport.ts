@@ -27,6 +27,13 @@ import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCam
 import { WORLD_NAMES } from '../levels/rooms';
 import { BUILD_NUMBER } from '../build-info';
 import { createExportProgressModal } from './editorExportProgressModal';
+import type { SavedCampaignV1 } from '../levels/campaignSchema';
+import {
+  ROOM_CACHE_VERSION,
+} from '../levels/roomCacheManifest';
+import type { RoomCacheManifest, RoomCacheEntry } from '../levels/roomCacheManifest';
+import { computeContentHash, computeCampaignHashForValidation } from '../levels/roomFileLoader';
+import { buildZipBlob } from '../utils/minimalZipWriter';
 
 // ── Main campaign constants ───────────────────────────────────────────────────
 const MAIN_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN';
@@ -36,6 +43,105 @@ const MAIN_CAMPAIGN_DESCRIPTION =
   'The main DustWeaver campaign. This is the core single-player game experience ' +
   'with the canonical world map, progression, and story path.';
 const MAIN_CAMPAIGN_INITIAL_ROOM_ID = 'lobby';
+
+// ── Browser ZIP export helper ─────────────────────────────────────────────────
+
+/**
+ * Generates and downloads a derived room-cache ZIP for browser mode.
+ *
+ * The ZIP mirrors the ROOMS/ directory written by the Electron exporter:
+ *   ROOMS/manifest.json
+ *   ROOMS/<roomId>_room.json   (one per room)
+ *
+ * The manifest uses the same format as the Electron manifest so the ZIP can be
+ * inspected with the same tooling.  Room hashes and campaign hash are computed
+ * via SHA-256 (Web Crypto) exactly as in the Electron main-process path.
+ *
+ * This is called with `void` so the main export functions stay synchronous.
+ * The ZIP download happens asynchronously after the main JSON download.
+ *
+ * Source-of-truth rule: the .dwcampaign.json remains canonical; the ZIP
+ * contains only derived cache artifacts.
+ */
+async function downloadRoomCacheZip(
+  exported: SavedCampaignV1,
+  zipFilename: string,
+): Promise<void> {
+  const zipStartMs = import.meta.env.DEV ? performance.now() : 0;
+
+  const textEncoder = new TextEncoder();
+  const nowIso = new Date().toISOString();
+
+  // ── Compute campaign hash ───────────────────────────────────────────────
+  const campaignHash = await computeCampaignHashForValidation(exported);
+
+  // ── Build entries and manifest rooms ────────────────────────────────────
+  const entries: Array<{ filename: string; data: Uint8Array }> = [];
+  const manifestRooms: Record<string, RoomCacheEntry> = {};
+
+  for (const room of exported.rooms) {
+    const roomId = (room as { id: string }).id;
+    if (typeof roomId !== 'string') continue;
+
+    const roomFilename = `${roomId}_room.json`;
+
+    const roomHashStartMs = import.meta.env.DEV ? performance.now() : 0;
+    const roomHash = await computeContentHash(room);
+    const roomJsonStr = JSON.stringify(room, null, 2);
+    if (import.meta.env.DEV) {
+      console.log(
+        `[campaignPerf] room "${roomId}" hash+stringify: ` +
+        `${(performance.now() - roomHashStartMs).toFixed(2)}ms`,
+      );
+    }
+
+    manifestRooms[roomId] = {
+      roomId,
+      file: roomFilename,
+      hash: roomHash,
+      updatedAt: nowIso,
+    };
+    entries.push({ filename: `ROOMS/${roomFilename}`, data: textEncoder.encode(roomJsonStr) });
+  }
+
+  // ── Build manifest ────────────────────────────────────────────────────
+  const manifest: RoomCacheManifest = {
+    campaignId: exported.campaign.id,
+    campaignName: exported.campaign.title ?? exported.campaign.id,
+    campaignHash,
+    campaignVersion: exported.metadata?.version ?? 0,
+    campaignSchemaVersion: exported.v,
+    roomCacheVersion: ROOM_CACHE_VERSION,
+    exportedAt: nowIso,
+    rooms: manifestRooms,
+  };
+
+  // Insert manifest as the first entry so it appears at the top of the ZIP.
+  entries.unshift({
+    filename: 'ROOMS/manifest.json',
+    data: textEncoder.encode(JSON.stringify(manifest, null, 2)),
+  });
+
+  if (import.meta.env.DEV) {
+    console.log(
+      `[campaignPerf] room-cache ZIP generation: ${(performance.now() - zipStartMs).toFixed(2)}ms` +
+      ` (${exported.rooms.length} room(s))`,
+    );
+  }
+
+  // ── Download the ZIP ──────────────────────────────────────────────────
+  const zipBlob = buildZipBlob(entries);
+  const url = URL.createObjectURL(zipBlob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = zipFilename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 
 /**
  * Exports the given editor room data as a downloadable .json file using the
@@ -249,6 +355,10 @@ export function exportCampaignJson(
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 0);
+
+  // Also download the derived room-cache ZIP alongside the canonical JSON.
+  // The ZIP is a convenience artifact; the .dwcampaign.json remains canonical.
+  void downloadRoomCacheZip(exported, `${exported.campaign.id}_ROOMS.zip`);
 }
 
 /**
@@ -377,4 +487,8 @@ export function exportMainCampaignJson(
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 0);
+
+  // Also download the derived room-cache ZIP alongside the canonical JSON.
+  // The ZIP is a convenience artifact; the .dwcampaign.json remains canonical.
+  void downloadRoomCacheZip(exported, 'DustweaverCampaign_ROOMS.zip');
 }

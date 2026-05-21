@@ -66,6 +66,13 @@ export interface ReadAllRoomFilesResult {
   error?: string;
 }
 
+/** Result returned by `validateRoomCacheFiles`. */
+export interface ValidateRoomCacheFilesResult {
+  ok: boolean;
+  /** Present when ok is false. Human-readable reason for failure. */
+  error?: string;
+}
+
 /** Narrow IPC API exposed by the Electron preload script. */
 export interface DustWeaverElectronAPI {
   /**
@@ -147,6 +154,23 @@ export interface DustWeaverElectronAPI {
     campaignId: string,
     isOfficialCampaign: boolean,
   ): Promise<ReadAllRoomFilesResult>;
+
+  /**
+   * Verifies that every room file listed in the campaign's manifest.json
+   * actually exists on disk.  Returns `{ ok: true }` if all files are present
+   * or `{ ok: false, error }` if any file is missing.
+   *
+   * Called during cache validation so that missing files trigger regeneration
+   * immediately rather than causing delayed runtime failures.
+   *
+   * @param campaignId          The campaign ID.
+   * @param isOfficialCampaign  When true, reads from the official campaign path.
+   * @returns                   Resolves to { ok: true } or { ok: false, error }.
+   */
+  validateRoomCacheFiles?(
+    campaignId: string,
+    isOfficialCampaign: boolean,
+  ): Promise<ValidateRoomCacheFilesResult>;
 }
 
 declare global {
