@@ -8,8 +8,10 @@
 `src/screens/roomPreparationWorker.ts`, `src/screens/roomPreparationWorkerProtocol.ts`):
 
 1. **`roomPreparationWorker.ts`** (new) — Off-main-thread room preparation worker:
-   - Receives a plain-object `RoomDef` via `postMessage` (structured clone — all fields are JSON-safe).
-   - Runs the same three build passes as `buildPreparedRoomRuntime`:
+   - Receives a plain-object `RoomDef` via `postMessage`. `RoomDef` is always produced
+     by JSON hydration (all fields are primitives, plain arrays, or plain sub-objects)
+     so the structured clone algorithm copies it cleanly.
+   - Runs the same four build passes as `buildPreparedRoomRuntime`:
      1. `buildRoomWallTemplate` (O(n²) wall-merge pass)
      2. `buildEdgeExtensionCache` (BFS over expanded occupancy grid)
      3. ambient-light blocker set construction

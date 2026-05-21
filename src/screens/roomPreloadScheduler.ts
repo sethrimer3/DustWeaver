@@ -57,7 +57,7 @@ import type { RoomRuntimeEntry } from './roomRuntimeCache';
 import type { RoomWallTemplate } from './gameRoomWalls';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import type { WallDecoration } from '../render/effects/decorationWaveState';
-import type { WorkerOutboundMessage, SerializedWallTemplate } from './roomPreparationWorkerProtocol';
+import type { WorkerOutboundMessage, WorkerSuccessMessage, SerializedWallTemplate } from './roomPreparationWorkerProtocol';
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 
@@ -233,7 +233,7 @@ function _getOrCreateWorker(): Worker | null {
  * Typed arrays are wrapped around the transferred ArrayBuffers (zero-copy).
  * Sets are reconstructed from the serialised key arrays.
  */
-function _reconstructRoomRuntimeEntry(msg: Exclude<WorkerOutboundMessage, { error: string }>): RoomRuntimeEntry {
+function _reconstructRoomRuntimeEntry(msg: WorkerSuccessMessage): RoomRuntimeEntry {
   const sw = msg.wallTemplate as SerializedWallTemplate;
   const wallTemplate: RoomWallTemplate = {
     wallCount:            sw.wallCount,
@@ -302,7 +302,9 @@ function _dispatchToWorker(
     }
   });
 
-  // `room` is a plain object (JSON-hydrated RoomDef) — structured clone is safe.
+  // `room` is a plain-object `RoomDef` produced by JSON hydration — all fields
+  // are primitive values, plain arrays, or plain sub-objects.  The structured
+  // clone algorithm copies it cleanly without requiring any special handling.
   worker.postMessage({ roomId, room });
   return true;
 }

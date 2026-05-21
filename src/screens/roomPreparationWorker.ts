@@ -1,7 +1,7 @@
 /**
  * roomPreparationWorker.ts — Off-main-thread room preparation worker.
  *
- * Receives a plain-object RoomDef via `postMessage`, runs the three expensive
+ * Receives a plain-object RoomDef via `postMessage`, runs the four expensive
  * build passes on a background thread, and posts back a serialised result
  * whose typed-array fields are **transferred** (zero-copy) rather than copied.
  *
