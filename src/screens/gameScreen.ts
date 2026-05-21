@@ -149,6 +149,7 @@ import { renderEditorBackdrop } from './gameScreenEditorBackdrop';
 import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoomTransitionOrchestrator';
 import type { TransitionDirection } from './gameTransitions';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
+import { loadRoomForGameplayAsync, isRoomFileCacheActive } from '../levels/roomFileLoader';
 
 const FIXED_DT_MS = 16.666;
 
@@ -664,6 +665,10 @@ export function startGameScreen(
       ROOM_REGISTRY,
       roomRuntimeCache,
       import.meta.env.DEV,
+      // In file-cache mode (Electron lazy loading): also load room DATA for
+      // adjacent rooms that are not yet in ROOM_REGISTRY.
+      // In packed-campaign / browser mode: omit — all rooms are already loaded.
+      isRoomFileCacheActive() ? loadRoomForGameplayAsync : undefined,
     );
 
     // Generator complete — Phase F has no trailing yield.

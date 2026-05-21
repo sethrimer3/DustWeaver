@@ -256,8 +256,12 @@ export function restoreMainCampaignSnapshot(): void {
  *
  * Used by the file-based room loading path (Electron only) to prepare the
  * registry for incremental room registration via `registerRoom()`, while still
- * applying world names from `campaign.worldMap.worlds` the same way that
- * `registerRoomsFromPackedCampaign` does.
+ * applying world names and map positions from the campaign's worldMap the same
+ * way that `registerRoomsFromPackedCampaign` does.
+ *
+ * World map positions are populated from `campaign.worldMap.rooms` so that
+ * the minimap and world-map UI function correctly even when room data is loaded
+ * lazily and the registry is only partially populated.
  *
  * After calling this function, the registry is empty.  The caller is
  * responsible for populating it via `registerRoom()` before gameplay starts.
@@ -274,6 +278,30 @@ export function clearRegistryAndApplyCampaignMetadata(campaign: SavedCampaignV1)
   for (const world of campaign.worldMap.worlds) {
     worldNamesMap.set(world.id, world.name);
   }
+
+  // Populate world map positions from the campaign's worldMap.rooms so that
+  // the minimap and world-map overlay show correct positions for rooms that
+  // have not yet been lazily loaded into the registry.
+  for (const wmRoom of campaign.worldMap.rooms) {
+    worldMapPositions.set(wmRoom.id, { mapX: wmRoom.mapX, mapY: wmRoom.mapY });
+  }
+}
+
+/**
+ * Applies official-campaign-specific metadata (revision info and campaign spawn)
+ * to the module-level metadata fields WITHOUT touching ROOM_REGISTRY.
+ *
+ * Call this when the official campaign is loaded via the file-cache path
+ * (Electron only) to ensure `getLoadedOfficialCampaignRevisionMetadata()` and
+ * `getLoadedOfficialCampaignSpawn()` return the correct values even though
+ * `initRoomRegistry()` was not called.
+ *
+ * Editor mode: not needed — editor calls `initRoomRegistry()` which sets these.
+ * Gameplay mode: called from `main.ts` when using the lazy file-cache path.
+ */
+export function applyOfficialCampaignMetadata(campaign: SavedCampaignV1): void {
+  loadedOfficialCampaignRevisionMetadata = campaign.metadata ?? null;
+  loadedOfficialCampaignSpawn = campaign.campaign.campaignSpawn ?? null;
 }
 
 
