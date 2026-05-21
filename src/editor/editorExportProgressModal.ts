@@ -29,8 +29,13 @@ export interface ExportProgressModal {
  * Creates and appends a progress modal to `root`.
  * The modal blocks interaction with the editor while export is in progress.
  * Call `destroy()` to remove it once the export resolves.
+ *
+ * @param root   The DOM element to append the modal backdrop to.
+ * @param title  Optional heading text. Defaults to `'📦 Exporting Campaign'`.
+ *               Pass a custom string when reusing the modal for non-export
+ *               contexts, e.g. `'🔄 Generating Room Cache'`.
  */
-export function createExportProgressModal(root: HTMLElement): ExportProgressModal {
+export function createExportProgressModal(root: HTMLElement, title?: string): ExportProgressModal {
   // ── Backdrop ─────────────────────────────────────────────────────────────
   const backdrop = document.createElement('div');
   backdrop.style.cssText = [
@@ -60,7 +65,7 @@ export function createExportProgressModal(root: HTMLElement): ExportProgressModa
 
   // ── Title ─────────────────────────────────────────────────────────────────
   const titleEl = document.createElement('div');
-  titleEl.textContent = '📦 Exporting Campaign';
+  titleEl.textContent = title ?? '📦 Exporting Campaign';
   titleEl.style.cssText = `font-size:15px;font-weight:bold;color:${GREEN};letter-spacing:0.05em;`;
   panel.appendChild(titleEl);
 
@@ -108,14 +113,17 @@ export function createExportProgressModal(root: HTMLElement): ExportProgressModa
     if (event.step === 'exporting-room' && event.roomIndex !== undefined && event.totalRooms !== undefined) {
       const pct = Math.round((event.roomIndex / event.totalRooms) * 100);
       barFill.style.width = `${pct}%`;
-      detailEl.textContent = `${event.roomIndex} / ${event.totalRooms} rooms`;
+      // Show count and percentage; the status line already shows the room name.
+      const roomIdLabel = event.roomId !== undefined ? ` — ${event.roomId}` : '';
+      detailEl.textContent = `${event.roomIndex} / ${event.totalRooms} rooms${roomIdLabel} (${pct}%)`;
     } else if (event.step === 'complete') {
       barFill.style.width = '100%';
       const written = event.writtenRooms ?? 0;
       const skipped = event.skippedRooms ?? 0;
       detailEl.textContent = `${written} written, ${skipped} unchanged`;
-      // Show success colouring.
-      titleEl.textContent = '✅ Export Complete';
+      // Show success colouring.  Use a generic label so the modal is reusable
+      // for both editor exports and cache-generation contexts.
+      titleEl.textContent = '✅ Complete';
       titleEl.style.color = '#44ff88';
       // Auto-dismiss after 2 seconds on success.
       autoDismissHandle = setTimeout(() => destroy(), 2000);
