@@ -74,6 +74,8 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
 
     // ── Validate room IDs ─────────────────────────────────────────────────
     const roomIds = [];
+    /** Maps room id → first-seen index for clearer duplicate error messages. */
+    const roomIdFirstIndex = new Map();
     for (let i = 0; i < rooms.length; i++) {
       const room = rooms[i];
       if (typeof room !== "object" || room === null) {
@@ -86,6 +88,13 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
           error: `rooms[${i}].id "${id}" contains unsafe characters — only a-z, A-Z, 0-9, _ and - are allowed`,
         };
       }
+      if (roomIdFirstIndex.has(id)) {
+        return {
+          ok: false,
+          error: `Duplicate room id "${id}": first at index ${roomIdFirstIndex.get(id)}, duplicate at index ${i}`,
+        };
+      }
+      roomIdFirstIndex.set(id, i);
       roomIds.push(id);
     }
 
@@ -115,8 +124,40 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
     const manifestPath = path.join(roomsDir, "manifest.json");
     fs.writeFileSync(manifestPath, JSON.stringify(roomIds, null, 2), "utf8");
 
+    // ── Remove stale room files no longer in the manifest ─────────────────
+    // Any <roomId>_room.json file present in the ROOMS directory whose roomId
+    // is not in the current manifest is an orphan from a deleted room.
+    // Remove them so the directory stays in sync with the manifest.
+    // We check: filename ends with _room.json AND the leading roomId part
+    // passes SAFE_ROOM_ID_RE AND is not in the current roomIdFirstIndex map.
+    const ROOM_FILE_SUFFIX = "_room.json";
+    let removedCount = 0;
+    try {
+      const existing = fs.readdirSync(roomsDir);
+      for (const filename of existing) {
+        if (!filename.endsWith(ROOM_FILE_SUFFIX)) continue;
+        const candidateId = filename.slice(0, -ROOM_FILE_SUFFIX.length);
+        // Only treat the file as a room file if its inferred id is safe.
+        if (!SAFE_ROOM_ID_RE.test(candidateId)) continue;
+        // Skip files that belong to the current manifest.
+        if (roomIdFirstIndex.has(candidateId)) continue;
+        try {
+          fs.unlinkSync(path.join(roomsDir, filename));
+          removedCount += 1;
+          console.log(`[dw:save-official-campaign] Removed stale room file: ${filename}`);
+        } catch (unlinkErr) {
+          // Non-fatal — log and continue.
+          console.warn(`[dw:save-official-campaign] Could not remove stale file "${filename}":`, unlinkErr);
+        }
+      }
+    } catch (readdirErr) {
+      // Non-fatal — stale cleanup is best-effort.
+      console.warn("[dw:save-official-campaign] Could not read ROOMS directory for stale cleanup:", readdirErr);
+    }
+
     console.log(
-      `[dw:save-official-campaign] Wrote ${rooms.length} room(s) + packed campaign to ${campaignDir}`
+      `[dw:save-official-campaign] Wrote ${rooms.length} room(s) + packed campaign to ${campaignDir}` +
+      (removedCount > 0 ? ` (removed ${removedCount} stale room file(s))` : "")
     );
     return { ok: true, campaignDir };
   } catch (err) {
@@ -141,7 +182,10 @@ function createWindow() {
     }
   });
 
-  win.webContents.openDevTools();
+  // Only open DevTools in development; packaged builds ship without them.
+  if (!app.isPackaged) {
+    win.webContents.openDevTools();
+  }
 
   win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
     console.error("FAILED TO LOAD:", errorCode, errorDescription, validatedURL);

@@ -256,13 +256,8 @@ export function exportMainCampaignJson(
     worldMap,
   );
 
-  const stringifyStartMs = import.meta.env.DEV ? performance.now() : 0;
-  const text = JSON.stringify(exported, null, 2);
-  if (import.meta.env.DEV) {
-    console.log(`[campaignPerf] export stringify: ${(performance.now() - stringifyStartMs).toFixed(2)}ms`);
-  }
-
   // In Electron, write directly to the project files instead of prompting a download.
+  // The IPC call serialises `exported` itself, so we skip the stringify here.
   if (window.dustweaverElectron !== undefined) {
     window.dustweaverElectron
       .saveOfficialCampaignToProject(exported)
@@ -282,6 +277,12 @@ export function exportMainCampaignJson(
   }
 
   // Browser / GitHub Pages fallback — trigger a download.
+  const stringifyStartMs = import.meta.env.DEV ? performance.now() : 0;
+  const text = JSON.stringify(exported, null, 2);
+  if (import.meta.env.DEV) {
+    console.log(`[campaignPerf] export stringify: ${(performance.now() - stringifyStartMs).toFixed(2)}ms`);
+  }
+
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
