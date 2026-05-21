@@ -52,6 +52,7 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     if (parsed.progress.dustContainerPieces === undefined) parsed.progress.dustContainerPieces = 0;
     if (!Array.isArray(parsed.progress.disabledPassiveWeaves)) parsed.progress.disabledPassiveWeaves = [];
     if (!Array.isArray(parsed.progress.collectedDustSwarmKeys)) parsed.progress.collectedDustSwarmKeys = [];
+    if (!Array.isArray(parsed.progress.collectedDustContainerKeys)) parsed.progress.collectedDustContainerKeys = [];
     return parsed;
   } catch {
     return null;

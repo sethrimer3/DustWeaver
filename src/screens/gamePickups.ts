@@ -58,6 +58,9 @@ export function processRoomPickups(
       collectedKeySet.add(pickupKey);
       if (progress) {
         progress.dustContainerCount += 1;
+        if (!progress.collectedDustContainerKeys.includes(pickupKey)) {
+          progress.collectedDustContainerKeys.push(pickupKey);
+        }
       }
       spawnClusterParticles(
         world,
@@ -86,6 +89,9 @@ export function processRoomPickups(
       collectedKeySet.add(pickupKey);
       if (progress) {
         progress.dustContainerPieces += 1;
+        if (!progress.collectedDustContainerKeys.includes(pickupKey)) {
+          progress.collectedDustContainerKeys.push(pickupKey);
+        }
         if (progress.dustContainerPieces >= DUST_CONTAINER_SHARDS_PER_CONTAINER) {
           const forgedContainerCount = Math.floor(progress.dustContainerPieces / DUST_CONTAINER_SHARDS_PER_CONTAINER);
           progress.dustContainerCount += forgedContainerCount;

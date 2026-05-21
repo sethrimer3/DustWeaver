@@ -265,13 +265,13 @@ export function startGameScreen(
   dustContainerShardSprite.src = `${BASE}SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/dustContainerShard.png`;
   let isDustContainerShardSpriteLoaded = false;
   dustContainerShardSprite.onload = () => { isDustContainerShardSpriteLoaded = true; };
-  /** Keys in the format `${roomId}:${containerIndex}` for already-collected dust containers. */
-  const collectedDustContainerKeySet: Set<string> = new Set();
+  /** Keys in the format `${roomId}:container:${index}` and `${roomId}:containerShard:${index}`
+   * for already-collected dust containers and shards.
+   * Initialized from progress.collectedDustContainerKeys so they stay collected after save/load. */
+  const collectedDustContainerKeySet: Set<string> = new Set(progress?.collectedDustContainerKeys ?? []);
   /** Keys in the format `${roomId}:dustswarm:${index}` for already-collected dust swarms.
    * Initialized from progress.collectedDustSwarmKeys so swarms stay collected after save/load. */
-  const collectedDustSwarmKeySet: Set<string> = progress?.collectedDustSwarmKeys
-    ? new Set(progress.collectedDustSwarmKeys)
-    : new Set();
+  const collectedDustSwarmKeySet: Set<string> = new Set(progress?.collectedDustSwarmKeys ?? []);
 
   /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
   const consumedSkillTombKeySet: Set<string> = new Set();
@@ -451,6 +451,28 @@ export function startGameScreen(
       initMoteQueueFromParticles(world, playerCluster.entityId);
       resetSwordWeaveState(world);
       FP.recordLoadPhaseStep('B:playerParticles+moteQueue', import.meta.env.DEV ? performance.now() - _t0 : 0);
+
+      // ── Dev diagnostic: dust container / capacity state on every room load ──
+      if (import.meta.env.DEV) {
+        let spawnedPlayerParticleCount = 0;
+        for (let particleIndex = 0; particleIndex < world.particleCount; particleIndex++) {
+          if (world.ownerEntityId[particleIndex] === playerCluster.entityId &&
+              world.isAliveFlag[particleIndex] === 1 &&
+              world.isTransientFlag[particleIndex] === 0) {
+            spawnedPlayerParticleCount++;
+          }
+        }
+        console.log(
+          `[gameScreen:roomLoad] room="${room.id}"` +
+          `\n  dustContainerCount  = ${progress?.dustContainerCount ?? 0}` +
+          `\n  playerCapacity      = ${playerCapacity}` +
+          `\n  unlockedDustKinds   = [${(progress?.unlockedDustKinds ?? []).join(', ')}]` +
+          `\n  spawnedParticles    = ${spawnedPlayerParticleCount}` +
+          (progress?.dustContainerCount && !(progress?.unlockedDustKinds?.length)
+            ? '\n  ⚠ player owns containers but has no unlocked dust types — HUD shows empty containers'
+            : ''),
+        );
+      }
     }
 
     yield; // ── Phase B complete ─────────────────────────────────────────────
@@ -1519,6 +1541,7 @@ export function startGameScreen(
       teleportFlashAlpha: lambdaAnchorState.teleportFlashAlpha,
       setTeleportFlashAlpha: lambdaAnchorState.setTeleportFlashAlpha,
       getPlayerDustCount,
+      playerContainerCount: progress?.dustContainerCount ?? 0,
       graphicsQuality: pauseController.state.pauseMenuState.graphicsQuality,
       isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,
       isDeepReductionActive: aqState.isDeepReductionActive,
