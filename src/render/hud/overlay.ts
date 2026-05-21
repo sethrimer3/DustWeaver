@@ -88,6 +88,13 @@ export interface HudDebugState {
   wallDbgSlideSuppressedShort: boolean;
   /** True when wall jump or slide is suppressed because the contact is inside the bottom exclusion zone. */
   wallDbgActionSuppressedExclusion: boolean;
+  /**
+   * Lateral-sample detected adjacent floor top Y (world units).
+   * `Infinity` when no floor was detected beside the face.
+   * Shows which Y level the system identified as ground-connected via the
+   * lateral solid-occupancy query in `computeGroundConnectedExclusion`.
+   */
+  wallDbgAdjacentFloorTopY: number;
 }
 
 export interface HudState {
@@ -144,7 +151,7 @@ export function renderHudOverlay(
         // ── Wall eligibility diagnostics ─────────────────────────────────
         `WallSide: ${d.wallDbgSide}  RawH:${d.wallDbgRawPartHeightWorld.toFixed(0)}wu`,
         `LogicalH:${d.wallDbgLogicalWallHeightWorld.toFixed(0)}wu  ContactY:${d.wallDbgContactYWorld.toFixed(0)}`,
-        `GndFloor:${d.wallDbgGroundFloor ? 'Y' : 'N'}  ExclY:[${d.wallDbgExclusionMinY.toFixed(0)},${d.wallDbgExclusionMaxY.toFixed(0)}]`,
+        `GndFloor:${d.wallDbgGroundFloor ? 'Y' : 'N'}  FLY:${Number.isFinite(d.wallDbgAdjacentFloorTopY) ? d.wallDbgAdjacentFloorTopY.toFixed(0) : '∞'}  ExclY:[${d.wallDbgExclusionMinY.toFixed(0)},${d.wallDbgExclusionMaxY.toFixed(0)}]`,
         `InExcl:${d.wallDbgContactInExclusion ? 'Y' : 'N'}  Jump:${d.wallDbgJumpAllowed ? 'OK' : 'NO'}  Slide:${d.wallDbgSlideAllowed ? 'OK' : 'NO'}`,
         `SlideShort:${d.wallDbgSlideSuppressedShort ? 'Y' : 'N'}  ExclSuppr:${d.wallDbgActionSuppressedExclusion ? 'Y' : 'N'}`,
       );

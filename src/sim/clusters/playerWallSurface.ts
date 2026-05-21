@@ -23,12 +23,14 @@
  *     - Also suppressed inside the bottom 4-block ground-connected exclusion.
  *
  *   Ground-connected exclusion:
- *     - The bottom of the logical wall surface must directly touch a flat
- *       standable surface (a solid wall top-face, or the world floor).
- *     - If there is any gap > WALL_VERTICAL_GAP_TOLERANCE between the wall
- *       bottom and the floor, the exclusion does not apply.
+ *     - Detected by sampling slightly to the PLAYER'S SIDE of the wall face
+ *       (canonical solid-occupancy query — see `computeGroundConnectedExclusion`).
  *     - The exclusion zone spans the bottom WALL_GROUND_EXCLUSION_HEIGHT_WORLD
- *       of the logical surface above the floor connection.
+ *       of the exposed face above the detected floor.
+ *     - This approach is symmetric: equivalent left-facing and right-facing
+ *       walls are treated the same regardless of how collision partitions are
+ *       merged, because the query targets the player-side solid geometry rather
+ *       than the wall-side rectangle boundaries.
  */
 
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
@@ -102,8 +104,15 @@ export interface GroundConnectedExclusion {
   hasGroundConnectedFloor: boolean;
   /** Top Y of the exclusion zone (exclusionMaxY − WALL_GROUND_EXCLUSION_HEIGHT_WORLD). */
   exclusionMinY: number;
-  /** Bottom Y of the exclusion zone (bottom of the logical wall / top of the floor). */
+  /** Bottom Y of the exclusion zone (effective exposed-face bottom / top of the floor). */
   exclusionMaxY: number;
+  /**
+   * The detected adjacent floor top Y, measured by lateral solid-occupancy sampling.
+   * `Infinity` when no floor was found; equals `surface.maxY` for the world-floor
+   * shortcut path.  Exposed here for debug visualisation — shows which Y level the
+   * system identified as "ground at the base of this wall face".
+   */
+  adjacentFloorTopY: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -221,14 +230,40 @@ export function computeLogicalWallSurface(
 }
 
 /**
- * Determines whether the bottom of the given logical wall surface is directly
- * connected to a flat standable floor/landing surface.
+ * Determines whether the base of the given logical wall surface is connected to
+ * solid ground, and returns the corresponding exclusion zone.
  *
- * A floor is "connected" when:
- *   - Its top face (wallTop) is within WALL_VERTICAL_GAP_TOLERANCE of
- *     `surface.maxY` (the bottom of the logical wall), OR the logical wall
- *     bottom reaches the world floor.
- *   - Its horizontal extent overlaps the wall face X coordinate.
+ * WHY LATERAL SAMPLING instead of wallTop-boundary matching:
+ *
+ *   The previous implementation scanned for a wall whose TOP edge coincides
+ *   exactly with `surface.maxY` (the bottom of the merged logical surface).
+ *   This breaks when the wall column was vertically merged with the floor block
+ *   directly below it: the merge pass fuses them because they share the same X
+ *   and width.  In the merged case the floor IS PART of the same rectangle as
+ *   the wall, so no separate rectangle has wallTop == surface.maxY.  Result:
+ *   the exclusion zone was never created, and wall-slide / wall-jump fired
+ *   incorrectly on stair-step terrain.  The bug was asymmetric — one side of
+ *   a formation worked because its floor happened to be a different partition,
+ *   while the equivalent other side failed because the same-column floor block
+ *   had been merged into the wall rectangle.
+ *
+ * THE FIX — canonical solid-occupancy lateral sample:
+ *
+ *   Rather than matching a specific partition boundary, we sample slightly to
+ *   the PLAYER'S SIDE of the wall face and query which solid geometry exists
+ *   there:
+ *
+ *     left wall  (wall body LEFT,  player RIGHT): sampleX = faceX + WALL_FACE_EPSILON
+ *     right wall (wall body RIGHT, player LEFT):  sampleX = faceX − WALL_FACE_EPSILON
+ *
+ *   We then find the HIGHEST (smallest Y = most upward) solid wallTop at
+ *   sampleX within the bottom WALL_GROUND_EXCLUSION_HEIGHT_WORLD of the
+ *   logical surface.  This is the adjacent-floor level, regardless of how
+ *   wall rectangles happen to be merged.
+ *
+ *   This approach is symmetric by construction: equivalent left-facing and
+ *   right-facing walls probe the same kind of lateral occupancy and return the
+ *   same result even when their internal partitions differ.
  *
  * @param surface  The logical wall surface to check.
  * @param side     'left' = wall is to player's left (right face = faceX);
@@ -240,59 +275,84 @@ export function computeGroundConnectedExclusion(
   side: 'left' | 'right',
   world: WorldState,
 ): GroundConnectedExclusion {
-  const wallBottom = surface.maxY;
-  const faceX      = surface.faceX;
+  const surfaceBottom = surface.maxY;
+  const faceX         = surface.faceX;
 
   // ── World-floor shortcut ─────────────────────────────────────────────────
-  if (wallBottom >= world.worldHeightWorld - WALL_VERTICAL_GAP_TOLERANCE) {
+  // When the wall extends all the way to the world floor there is no separate
+  // floor rectangle; treat the world boundary itself as the connected ground.
+  if (surfaceBottom >= world.worldHeightWorld - WALL_VERTICAL_GAP_TOLERANCE) {
     return {
       hasGroundConnectedFloor: true,
-      exclusionMinY: wallBottom - WALL_GROUND_EXCLUSION_HEIGHT_WORLD,
-      exclusionMaxY: wallBottom,
+      exclusionMinY:  surfaceBottom - WALL_GROUND_EXCLUSION_HEIGHT_WORLD,
+      exclusionMaxY:  surfaceBottom,
+      adjacentFloorTopY: surfaceBottom,
     };
   }
 
-  // ── Scan for an adjacent floor wall ──────────────────────────────────────
+  // ── Lateral solid-occupancy sample ───────────────────────────────────────
+  // sampleX is one epsilon to the PLAYER'S SIDE of the face so that we query
+  // the ground geometry the player would stand on — not the wall body geometry.
+  const sampleX = side === 'left'
+    ? faceX + WALL_FACE_EPSILON   // player is to the right of a left-side wall
+    : faceX - WALL_FACE_EPSILON;  // player is to the left of a right-side wall
+
+  // Vertical search window: look for a floor whose top is within the bottom
+  // WALL_GROUND_EXCLUSION_HEIGHT_WORLD of the logical surface.  This covers:
+  //   (a) non-merged case: floor wallTop ≈ surfaceBottom (original scenario), and
+  //   (b) merged case: floor wallTop < surfaceBottom because the floor block was
+  //       fused into the wall column — the floor is "inside" the merged rect.
+  const searchTopY    = surfaceBottom - WALL_GROUND_EXCLUSION_HEIGHT_WORLD;
+  const searchBottomY = surfaceBottom + WALL_VERTICAL_GAP_TOLERANCE;
+
+  let adjacentFloorTopY = Infinity;
+
   for (let wi = 0; wi < world.wallCount; wi++) {
+    // Platforms are one-way and not standable as lateral ground context.
+    if (world.wallIsPlatformFlag[wi] === 1) continue;
+    // Ramps use a different contact model; exclude from ground check.
     if (world.wallRampOrientationIndex[wi] !== 255) continue;
 
-    const wallLeft   = world.wallXWorld[wi];
-    const wallTop    = world.wallYWorld[wi];
-    const wallRight  = wallLeft + world.wallWWorld[wi];
+    const wallLeft  = world.wallXWorld[wi];
+    const wallTop   = world.wallYWorld[wi];
+    const wallRight = wallLeft + world.wallWWorld[wi];
 
-    // The floor's top face must be at (or just below) the logical wall's bottom.
-    if (Math.abs(wallTop - wallBottom) > WALL_VERTICAL_GAP_TOLERANCE) continue;
+    // The wall must horizontally contain the lateral sample point.
+    if (sampleX < wallLeft - WALL_FACE_EPSILON) continue;
+    if (sampleX > wallRight + WALL_FACE_EPSILON) continue;
 
-    // The floor's horizontal extent must overlap or touch the wall face X.
-    // For a left-side wall: floor must extend to the right from faceX
-    //   (i.e., the floor starts at or before faceX and reaches past it).
-    // For a right-side wall: floor must extend to the left from faceX.
-    const floorContainsFaceX =
-      wallLeft <= faceX + WALL_FACE_EPSILON &&
-      wallRight >= faceX - WALL_FACE_EPSILON;
+    // The wall top must fall within the vertical search window.
+    if (wallTop < searchTopY - WALL_VERTICAL_GAP_TOLERANCE) continue;
+    if (wallTop > searchBottomY) continue;
 
-    if (!floorContainsFaceX) continue;
+    // Track the highest (smallest Y = topmost) floor top found.
+    if (wallTop < adjacentFloorTopY) {
+      adjacentFloorTopY = wallTop;
+    }
+  }
 
-    // Make sure the floor is on the correct side:
-    // left wall → floor should extend rightward from faceX.
-    // right wall → floor should extend leftward from faceX.
-    const sideOk = side === 'left'
-      ? wallRight >= faceX - WALL_FACE_EPSILON  // floor reaches at/past the left-wall face
-      : wallLeft  <= faceX + WALL_FACE_EPSILON; // floor reaches at/before the right-wall face
-
-    if (!sideOk) continue;
-
+  if (adjacentFloorTopY === Infinity) {
+    // No connected ground found — wall face is over a gap or ledge.
     return {
-      hasGroundConnectedFloor: true,
-      exclusionMinY: wallBottom - WALL_GROUND_EXCLUSION_HEIGHT_WORLD,
-      exclusionMaxY: wallBottom,
+      hasGroundConnectedFloor: false,
+      exclusionMinY:  0,
+      exclusionMaxY:  0,
+      adjacentFloorTopY: Infinity,
     };
   }
 
+  // When the wall column was merged with the floor block below it, surfaceBottom
+  // is the bottom of the merged rectangle (deeper than the real exposed face).
+  // adjacentFloorTopY is the actual floor level detected on the player's side.
+  // Taking min() gives the correct "where the exposed face actually ends" value
+  // in both the merged and non-merged cases.
+  const effectiveExposedBottom = Math.min(surfaceBottom, adjacentFloorTopY);
+
   return {
-    hasGroundConnectedFloor: false,
-    exclusionMinY: 0,
-    exclusionMaxY: 0,
+    hasGroundConnectedFloor: true,
+    exclusionMinY:  effectiveExposedBottom - WALL_GROUND_EXCLUSION_HEIGHT_WORLD,
+    exclusionMaxY:  effectiveExposedBottom,
+    adjacentFloorTopY,
   };
 }
 
