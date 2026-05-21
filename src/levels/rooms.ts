@@ -251,12 +251,32 @@ export function restoreMainCampaignSnapshot(): void {
 }
 
 /**
- * Replaces the current ROOM_REGISTRY with rooms from a packed campaign.
- * World-map metadata (world names, map positions) is also replaced.
+ * Clears the entire registry and applies world-map metadata from the given
+ * campaign WITHOUT loading any rooms.
  *
- * Used when launching Play or Edit for a packed custom campaign.
- * Call `restoreMainCampaignSnapshot()` to undo when returning to the main menu.
+ * Used by the file-based room loading path (Electron only) to prepare the
+ * registry for incremental room registration via `registerRoom()`, while still
+ * applying world names from `campaign.worldMap.worlds` the same way that
+ * `registerRoomsFromPackedCampaign` does.
+ *
+ * After calling this function, the registry is empty.  The caller is
+ * responsible for populating it via `registerRoom()` before gameplay starts.
  */
+export function clearRegistryAndApplyCampaignMetadata(campaign: SavedCampaignV1): void {
+  registryMap.clear();
+  worldNamesMap.clear();
+  worldMapPositions.clear();
+  roomNameOverridesMap.clear();
+  roomWorldOverridesMap.clear();
+
+  // Populate world names from the campaign's worldMap.worlds so that proper
+  // names (e.g. "Ancient Ruins") are used instead of the "World N" fallbacks.
+  for (const world of campaign.worldMap.worlds) {
+    worldNamesMap.set(world.id, world.name);
+  }
+}
+
+
 export function registerRoomsFromPackedCampaign(campaign: SavedCampaignV1): void {
   const rooms = hydrateSavedCampaignToRoomDefs(campaign);
 

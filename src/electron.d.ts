@@ -36,6 +36,36 @@ export interface ReadManifestResult {
   error?: string;
 }
 
+/** Single room entry returned by `readAllRoomFiles`. */
+export interface RoomFileEntry {
+  /** The room ID (matches the `id` field in the SavedRoomV2 data). */
+  roomId: string;
+  /** Parsed SavedRoomV2 data for the room. */
+  data: unknown;
+  /** Expected content hash from the manifest (for validation). */
+  expectedHash: string;
+}
+
+/** Result returned by `readRoomFile`. */
+export interface ReadRoomFileResult {
+  ok: boolean;
+  /** Parsed SavedRoomV2 data when ok is true. */
+  roomData?: unknown;
+  /** Expected content hash from the manifest (for validation). */
+  expectedHash?: string;
+  error?: string;
+}
+
+/** Result returned by `readAllRoomFiles`. */
+export interface ReadAllRoomFilesResult {
+  ok: boolean;
+  /** All room entries successfully read from disk. Missing/corrupt rooms are skipped. */
+  rooms?: RoomFileEntry[];
+  /** The raw manifest.json object (already verified valid before reading files). */
+  manifest?: RoomCacheManifest;
+  error?: string;
+}
+
 /** Narrow IPC API exposed by the Electron preload script. */
 export interface DustWeaverElectronAPI {
   /**
@@ -88,6 +118,35 @@ export interface DustWeaverElectronAPI {
     campaignId: string,
     isOfficialCampaign: boolean,
   ): Promise<ReadManifestResult>;
+
+  /**
+   * Reads a single derived room JSON file from the campaign's ROOMS directory.
+   * Used to load room data from the file cache during gameplay.
+   *
+   * @param campaignId          The campaign ID.
+   * @param roomId              The room ID to load.
+   * @param isOfficialCampaign  When true, reads from the official campaign path.
+   * @returns                   Resolves to { ok: true, roomData, expectedHash } or { ok: false, error }.
+   */
+  readRoomFile(
+    campaignId: string,
+    roomId: string,
+    isOfficialCampaign: boolean,
+  ): Promise<ReadRoomFileResult>;
+
+  /**
+   * Reads ALL derived room JSON files for a campaign in a single IPC call.
+   * More efficient than calling readRoomFile N times for startup loading.
+   * Skips unreadable room files with a console warning rather than failing entirely.
+   *
+   * @param campaignId          The campaign ID.
+   * @param isOfficialCampaign  When true, reads from the official campaign path.
+   * @returns                   Resolves to { ok: true, rooms, manifest } or { ok: false, error }.
+   */
+  readAllRoomFiles(
+    campaignId: string,
+    isOfficialCampaign: boolean,
+  ): Promise<ReadAllRoomFilesResult>;
 }
 
 declare global {

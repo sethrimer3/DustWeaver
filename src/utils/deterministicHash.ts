@@ -62,6 +62,15 @@ export function hashObject(value: unknown): string {
  *
  * This is intentionally NOT a general-purpose stringify replacement — it is
  * only used for content-addressable hashing of room and campaign data.
+ *
+ * NOTE: This implementation is intentionally duplicated in
+ * `electron/main.cjs` as `deterministicStringify()` because main.cjs runs in
+ * Node.js (CommonJS) and cannot import TypeScript source directly.
+ * Both implementations must produce IDENTICAL output for the same input so
+ * that room-cache hashes stored in manifest.json are portable across the
+ * renderer process (TypeScript) and the main process (main.cjs).
+ * If the algorithm ever changes here, update main.cjs to match.
+ * See docs/campaign-room-cache-architecture.md for details.
  */
 export function deterministicStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {

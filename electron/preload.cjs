@@ -68,4 +68,27 @@ contextBridge.exposeInMainWorld('dustweaverElectron', {
    */
   readRoomCacheManifest: (campaignId, isOfficialCampaign) =>
     ipcRenderer.invoke('dw:read-room-cache-manifest', campaignId, isOfficialCampaign),
+
+  /**
+   * Reads a single derived room JSON file from the campaign's ROOMS directory.
+   * Used by the runtime to load individual rooms from the file cache.
+   *
+   * @param campaignId          The campaign ID.
+   * @param roomId              The room ID to look up.
+   * @param isOfficialCampaign  When true, reads from the official campaign path.
+   * @returns  Promise<{ ok: true, roomData, expectedHash } | { ok: false, error }>.
+   */
+  readRoomFile: (campaignId, roomId, isOfficialCampaign) =>
+    ipcRenderer.invoke('dw:read-room-file', campaignId, roomId, isOfficialCampaign),
+
+  /**
+   * Reads ALL derived room JSON files for a campaign in a single IPC call.
+   * More efficient than calling readRoomFile N times for startup loading.
+   *
+   * @param campaignId          The campaign ID.
+   * @param isOfficialCampaign  When true, reads from the official campaign path.
+   * @returns  Promise<{ ok: true, rooms: [...], manifest } | { ok: false, error }>.
+   */
+  readAllRoomFiles: (campaignId, isOfficialCampaign) =>
+    ipcRenderer.invoke('dw:read-all-room-files', campaignId, isOfficialCampaign),
 });
