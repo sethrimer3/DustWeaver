@@ -186,10 +186,10 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   const dustStartY = HUD_HEALTH_BAR_Y_PX + HUD_HEALTH_BAR_HEIGHT_PX + HUD_HEALTH_DUST_GAP_PX;
 
   ctx.save();
-  for (let i = 0; i < totalContainerSlots; i++) {
-    const squareX = dustStartX + i * (dustSquareSize + dustPadding);
+  for (let containerSlotIndex = 0; containerSlotIndex < totalContainerSlots; containerSlotIndex++) {
+    const squareX = dustStartX + containerSlotIndex * (dustSquareSize + dustPadding);
     // Determine how many quadrants (0–4) to fill for this slot from live particles.
-    const slotParticleStart = i * DUST_PARTICLES_PER_CONTAINER;
+    const slotParticleStart = containerSlotIndex * DUST_PARTICLES_PER_CONTAINER;
     const remaining = Math.max(0, dustCount - slotParticleStart);
     const quadrantsActive = Math.min(remaining, DUST_PARTICLES_PER_CONTAINER);
 

@@ -268,14 +268,10 @@ export function startGameScreen(
   /** Keys in the format `${roomId}:container:${index}` and `${roomId}:containerShard:${index}`
    * for already-collected dust containers and shards.
    * Initialized from progress.collectedDustContainerKeys so they stay collected after save/load. */
-  const collectedDustContainerKeySet: Set<string> = progress?.collectedDustContainerKeys
-    ? new Set(progress.collectedDustContainerKeys)
-    : new Set();
+  const collectedDustContainerKeySet: Set<string> = new Set(progress?.collectedDustContainerKeys ?? []);
   /** Keys in the format `${roomId}:dustswarm:${index}` for already-collected dust swarms.
    * Initialized from progress.collectedDustSwarmKeys so swarms stay collected after save/load. */
-  const collectedDustSwarmKeySet: Set<string> = progress?.collectedDustSwarmKeys
-    ? new Set(progress.collectedDustSwarmKeys)
-    : new Set();
+  const collectedDustSwarmKeySet: Set<string> = new Set(progress?.collectedDustSwarmKeys ?? []);
 
   /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
   const consumedSkillTombKeySet: Set<string> = new Set();
@@ -459,10 +455,10 @@ export function startGameScreen(
       // ── Dev diagnostic: dust container / capacity state on every room load ──
       if (import.meta.env.DEV) {
         let spawnedPlayerParticleCount = 0;
-        for (let _pi = 0; _pi < world.particleCount; _pi++) {
-          if (world.ownerEntityId[_pi] === playerCluster.entityId &&
-              world.isAliveFlag[_pi] === 1 &&
-              world.isTransientFlag[_pi] === 0) {
+        for (let particleIndex = 0; particleIndex < world.particleCount; particleIndex++) {
+          if (world.ownerEntityId[particleIndex] === playerCluster.entityId &&
+              world.isAliveFlag[particleIndex] === 1 &&
+              world.isTransientFlag[particleIndex] === 0) {
             spawnedPlayerParticleCount++;
           }
         }
@@ -472,7 +468,7 @@ export function startGameScreen(
           `\n  playerCapacity      = ${playerCapacity}` +
           `\n  unlockedDustKinds   = [${(progress?.unlockedDustKinds ?? []).join(', ')}]` +
           `\n  spawnedParticles    = ${spawnedPlayerParticleCount}` +
-          (progress?.dustContainerCount && !progress.unlockedDustKinds.length
+          (progress?.dustContainerCount && !(progress?.unlockedDustKinds?.length)
             ? '\n  ⚠ player owns containers but has no unlocked dust types — HUD shows empty containers'
             : ''),
         );
