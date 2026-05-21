@@ -261,6 +261,26 @@ export function exportMainCampaignJson(
   if (import.meta.env.DEV) {
     console.log(`[campaignPerf] export stringify: ${(performance.now() - stringifyStartMs).toFixed(2)}ms`);
   }
+
+  // In Electron, write directly to the project files instead of prompting a download.
+  if (window.dustweaverElectron !== undefined) {
+    window.dustweaverElectron
+      .saveOfficialCampaignToProject(exported)
+      .then((result) => {
+        if (result.ok) {
+          window.alert('Campaign saved to project files successfully.');
+        } else {
+          window.alert(`Campaign save failed:\n${result.error ?? 'Unknown error'}`);
+        }
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        window.alert(`Campaign save failed:\n${msg}`);
+      });
+    return;
+  }
+
+  // Browser / GitHub Pages fallback — trigger a download.
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
