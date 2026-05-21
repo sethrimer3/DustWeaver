@@ -12,24 +12,7 @@
     7
   ],
   "solids": {
-    "byTheme": {
-      "darkStone": {
-        "rects": [
-          [
-            26,
-            0,
-            2,
-            6
-          ],
-          [
-            25,
-            6,
-            2,
-            4
-          ]
-        ]
-      }
-    }
+    "byTheme": {}
   },
   "map": [
     -41,
@@ -65,14 +48,221 @@
         0,
         1,
         1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        0,
+        1,
+        1
       ]
+    },
+    {
+      "r": [
+        27,
+        0,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        1,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        27,
+        1,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        2,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        27,
+        2,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        3,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        27,
+        3,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        4,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        27,
+        4,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        5,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        27,
+        5,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        25,
+        6,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        6,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        25,
+        7,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        7,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        25,
+        8,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        8,
+        1,
+        1
+      ],
+      "theme": "darkStone"
     },
     {
       "r": [
         23,
         9,
-        2,
-        2
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        24,
+        9,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        25,
+        9,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        26,
+        9,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        23,
+        10,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        24,
+        10,
+        1,
+        1
       ],
       "theme": "darkStone"
     },
@@ -80,8 +270,35 @@
       "r": [
         22,
         11,
-        2,
-        2
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        23,
+        11,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        22,
+        12,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        23,
+        12,
+        1,
+        1
       ],
       "theme": "darkStone"
     },
@@ -89,8 +306,35 @@
       "r": [
         21,
         13,
-        2,
-        2
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        22,
+        13,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        21,
+        14,
+        1,
+        1
+      ],
+      "theme": "darkStone"
+    },
+    {
+      "r": [
+        22,
+        14,
+        1,
+        1
       ],
       "theme": "darkStone"
     }
