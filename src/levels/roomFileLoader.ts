@@ -48,8 +48,11 @@ import type { WorldMapJsonDef } from '../editor/worldMapData';
  * (which is itself a duplicate of the same function in main.cjs), hash the
  * result with SHA-256, and return the first 16 hex characters.
  * See docs/campaign-room-cache-architecture.md for details.
+ *
+ * Exported so that the browser ZIP export path (editorExport.ts) can compute
+ * room and campaign hashes without duplicating the implementation.
  */
-async function computeContentHash(value: unknown): Promise<string> {
+export async function computeContentHash(value: unknown): Promise<string> {
   const text = deterministicStringify(value);
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
@@ -218,6 +221,28 @@ export async function validateCampaignRoomCache(
 
   if (!validation.isValid) {
     return { isValid: false, manifest, reason: validation.reason ?? 'Validation failed' };
+  }
+
+  // Verify that every file listed in the manifest actually exists on disk.
+  // Missing files would cause delayed runtime failures during lazy loading;
+  // better to detect them here and trigger full regeneration now.
+  // This check is Electron-only — browser mode has no filesystem access.
+  if (electronApi.validateRoomCacheFiles !== undefined) {
+    let filesResult: Awaited<ReturnType<NonNullable<typeof electronApi.validateRoomCacheFiles>>>;
+    try {
+      filesResult = await electronApi.validateRoomCacheFiles(campaignId, isOfficialCampaign);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Non-fatal: log the error and treat cache as invalid so it regenerates.
+      return { isValid: false, manifest, reason: `IPC error validating room files: ${msg}` };
+    }
+    if (!filesResult.ok) {
+      return {
+        isValid: false,
+        manifest,
+        reason: filesResult.error ?? 'Room cache file validation failed',
+      };
+    }
   }
 
   return { isValid: true, manifest, reason: '' };

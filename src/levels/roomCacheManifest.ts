@@ -33,8 +33,12 @@ export interface RoomCacheEntry {
   /** Relative path from the ROOMS directory to the room's JSON file. */
   file: string;
   /**
-   * FNV-1a hash of the deterministic JSON serialization of the room's
-   * SavedRoomV2 content.  Does NOT include volatile fields like timestamps.
+   * SHA-256 hash (first 16 hex chars) of the deterministic JSON serialisation
+   * of the room's SavedRoomV2 content.  Computed by `computeContentHash` in
+   * both `electron/main.cjs` (Node crypto) and `src/levels/roomFileLoader.ts`
+   * (Web Crypto SubtleCrypto) — both must produce identical output.
+   *
+   * Does NOT include volatile fields like timestamps.
    */
   hash: string;
   /** ISO 8601 UTC timestamp of when this entry was last written. */
@@ -48,14 +52,25 @@ export interface RoomCacheManifest {
   /** Human-readable campaign name for diagnostics. */
   campaignName: string;
   /**
-   * FNV-1a hash of the full deterministic campaign serialization.
-   * Computed from all room data and campaign metadata, excluding volatile
-   * fields (exportedAt, lastEditedIso, etc.).
+   * SHA-256 hash (first 16 hex chars) of the full deterministic campaign
+   * serialisation.  Computed from all room data and campaign metadata,
+   * excluding volatile fields (exportedAt, lastEditedIso, etc.).
+   *
+   * This is the authoritative stale-cache check.  If this hash does not match
+   * the hash recomputed from the current campaign file, the cache is stale
+   * and must be regenerated — regardless of `campaignVersion`.
    */
   campaignHash: string;
   /**
    * Campaign export revision counter from `SavedCampaignRevisionMetadata.version`.
    * Monotonically increasing; 0 when the campaign lacks revision metadata.
+   *
+   * This is a convenience diagnostic, NOT a replacement for the hash check.
+   * The system uses `campaignHash` as the primary staleness signal.  A newer
+   * version with a matching hash means no game-content changes were made
+   * (e.g. only volatile metadata was updated), so the cache is still valid.
+   * A lower version with a matching hash should not happen in normal use, but
+   * is tolerated — hash wins.
    */
   campaignVersion: number;
   /** Schema version of the campaign file (`SavedCampaignV1.v`, currently 1). */

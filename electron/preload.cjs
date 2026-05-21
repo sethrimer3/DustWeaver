@@ -91,4 +91,16 @@ contextBridge.exposeInMainWorld('dustweaverElectron', {
    */
   readAllRoomFiles: (campaignId, isOfficialCampaign) =>
     ipcRenderer.invoke('dw:read-all-room-files', campaignId, isOfficialCampaign),
+
+  /**
+   * Verifies that every room file listed in the campaign's ROOMS/manifest.json
+   * actually exists on disk.  Returns { ok: true } when all files are present,
+   * or { ok: false, error } if any file is missing.
+   *
+   * @param campaignId          The campaign ID.
+   * @param isOfficialCampaign  When true, reads from the official campaign path.
+   * @returns  Promise<{ ok: true } | { ok: false, error }>.
+   */
+  validateRoomCacheFiles: (campaignId, isOfficialCampaign) =>
+    ipcRenderer.invoke('dw:validate-room-cache-files', campaignId, isOfficialCampaign),
 });

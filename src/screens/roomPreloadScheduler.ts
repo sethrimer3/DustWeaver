@@ -114,15 +114,10 @@ function cancelIdle(handle: IdleCallbackHandle): void {
  * the order transitions appear in the room definition.  The source room
  * (radius 0) is excluded.
  *
- * When `manifestRoomIds` is provided (lazy-load mode), room IDs that are in
- * the manifest but not yet in `roomRegistry` are still included in the BFS
- * result — they are read from the room's transition list even though the room
- * data is not yet loaded.  This ensures adjacent rooms are discovered and
- * queued for data loading even before the room data arrives.
- *
- * NOTE: BFS cannot follow transitions from unloaded rooms (their `transitions`
- * array is not available).  The returned pairs therefore only cover rooms
- * reachable through already-loaded rooms in the registry.
+ * NOTE: BFS can only follow transitions from rooms already present in
+ * `roomRegistry`.  Rooms not yet loaded (e.g. in lazy-load mode) are not
+ * reachable via BFS because their `transitions` array is unavailable.
+ * The preload scheduler handles this by re-scheduling after each room loads.
  */
 function _bfsNearbyRooms(
   fromRoomId: string,
