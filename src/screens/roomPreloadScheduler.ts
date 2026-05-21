@@ -18,12 +18,16 @@
  *      are built, completing preparation.
  *
  * Priority model:
- *  - Radius-1 rooms (directly connected): enqueued first, always built.
- *  - Radius-2 rooms (one hop further): enqueued second, but skipped when
- *    their estimated build cost exceeds the available idle budget AND the
- *    callback was not forced by the timeout.  This prevents large rooms
- *    (e.g. underwater_lake, seal_chamber) from causing multi-second main-
- *    thread freezes during background preloading.
+ *  - Radius-1 rooms (directly connected): enqueued first, always built
+ *    synchronously on the main thread (needed imminently).
+ *  - Radius-2 rooms (one hop further): enqueued second.
+ *    - Cheap rooms (estimated cost ≤ MAX_R2_COST_WITHOUT_TIMEOUT_MS) are
+ *      built synchronously in the idle slot.
+ *    - Heavy rooms (estimated cost > threshold) are dispatched to a reusable
+ *      Web Worker via `_dispatchToWorker()` so the main thread is never
+ *      blocked.  The worker posts back a serialised result; on receipt the
+ *      main thread reconstructs the `RoomRuntimeEntry` and calls `cache.set`.
+ *      If the worker is unavailable the old timeout-deferral fallback is used.
  *  - Rooms already in the cache are skipped (idempotent).
  *  - `handle.prioritize(roomId)` moves a room to the front of the queue
  *    (called when the player approaches a transition boundary).
@@ -33,18 +37,14 @@
  *  - Falls back to `setTimeout(0)` on Safari/Firefox where rIC is absent.
  *  - Each callback processes at most one room to keep idle slices short.
  *  - Deadline time-budgeting: each callback checks `timeRemaining()` before
- *    starting a build so that callbacks forced by the timeout do not run
- *    during an active animation frame (unless `didTimeout` is true after the
- *    `IDLE_TIMEOUT_MS` deadline expires, in which case we run but log a warn).
- *  - For radius-2 rooms, an additional cost estimate is compared against
- *    `timeRemaining()`.  If the room is estimated to be heavy AND we are not
- *    in a forced-timeout callback, the room is re-queued for later rather
- *    than blocking the main thread.
+ *    starting a build so that callbacks in a short idle slot do not begin a
+ *    potentially expensive synchronous build inside an animation frame.
+ *    (For heavy radius-2 rooms the worker eliminates this concern entirely.)
  *
  * This module also expands sprite preloading from radius-1 to radius-2 so
  * image assets are ready when the player arrives.
  *
- * BUILD 386
+ * BUILD 387
  */
 
 import type { RoomDef } from '../levels/roomDef';
@@ -53,6 +53,11 @@ import { buildPreparedRoomRuntime } from './preparedRoomRuntime';
 import { preloadRoomThemeSprites } from '../render/roomAssetPreloader';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import { isEntryFullyPrepared } from './roomRuntimeCache';
+import type { RoomRuntimeEntry } from './roomRuntimeCache';
+import type { RoomWallTemplate } from './gameRoomWalls';
+import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
+import type { WallDecoration } from '../render/effects/decorationWaveState';
+import type { WorkerOutboundMessage, SerializedWallTemplate } from './roomPreparationWorkerProtocol';
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 
@@ -115,12 +120,13 @@ function estimateRoomBuildCostMs(room: RoomDef): number {
 
 /**
  * Maximum estimated build cost (ms) for a radius-2 room to be scheduled
- * without a forced-timeout context.  Rooms whose estimated cost exceeds this
- * will be deferred until `didTimeout` is true, preventing multi-second
- * synchronous tasks from firing during an active animation frame.
+ * without worker offloading.  Rooms whose estimated cost exceeds this are
+ * dispatched to the Web Worker instead of running synchronously on the main
+ * thread.  Falls back to the timeout-deferral path only when the worker is
+ * unavailable.
  *
- * Radius-1 rooms are always built regardless of this limit because they are
- * needed imminently.
+ * Radius-1 rooms are always built synchronously regardless of this limit
+ * because they are needed imminently (the worker adds non-trivial latency).
  */
 const MAX_R2_COST_WITHOUT_TIMEOUT_MS = 80;
 
@@ -159,6 +165,146 @@ function cancelIdle(handle: IdleCallbackHandle): void {
   } else {
     clearTimeout(handle as unknown as ReturnType<typeof setTimeout>);
   }
+}
+
+// ── Web Worker management ─────────────────────────────────────────────────────
+//
+// A single worker instance is created lazily on the first heavy radius-2 room
+// dispatch and reused for the lifetime of the game session.  Each room posts
+// one message and receives one reply; there is no per-room worker lifecycle.
+//
+// Pending callbacks are stored by roomId so multiple schedules can coexist:
+// when the worker replies, the result is written to the same shared
+// `RoomRuntimeCache` regardless of which schedule originally dispatched it.
+
+/** Lazily-initialised room preparation worker.  `null` after init failure. */
+let _worker: Worker | null | undefined;
+/** roomId → callback to call when the worker delivers a result. */
+const _workerCallbacks = new Map<string, (entry: RoomRuntimeEntry) => void>();
+/** roomIds currently pending with the worker (prevents double-dispatch). */
+const _pendingWorkerRoomIds = new Set<string>();
+
+/**
+ * Returns the shared worker instance, creating it on first call.
+ * Returns `null` if the environment does not support Workers or the worker
+ * failed to start.
+ */
+function _getOrCreateWorker(): Worker | null {
+  if (_worker !== undefined) return _worker;
+  try {
+    _worker = new Worker(
+      new URL('./roomPreparationWorker.ts', import.meta.url),
+      { type: 'module' },
+    );
+    _worker.onmessage = (event: MessageEvent<WorkerOutboundMessage>) => {
+      const msg = event.data;
+      const callback = _workerCallbacks.get(msg.roomId);
+      _workerCallbacks.delete(msg.roomId);
+      _pendingWorkerRoomIds.delete(msg.roomId);
+
+      if (!callback) return;
+
+      if (msg.error !== undefined) {
+        // Build failed — fall back by letting the cold-miss synchronous path
+        // handle it when the room is needed.  Log in dev so it is visible.
+        if (import.meta.env.DEV) {
+          console.error(`[preload worker] ${msg.roomId} build failed:`, msg.error);
+        }
+        return;
+      }
+
+      callback(_reconstructRoomRuntimeEntry(msg));
+    };
+    _worker.onerror = (err) => {
+      if (import.meta.env.DEV) {
+        console.error('[preload worker] fatal error:', err);
+      }
+      // Nullify so subsequent calls create a fresh worker (one retry).
+      _worker = null;
+    };
+  } catch {
+    _worker = null;
+  }
+  return _worker;
+}
+
+/**
+ * Reconstructs a `RoomRuntimeEntry` from a successful worker reply.
+ * Typed arrays are wrapped around the transferred ArrayBuffers (zero-copy).
+ * Sets are reconstructed from the serialised key arrays.
+ */
+function _reconstructRoomRuntimeEntry(msg: Exclude<WorkerOutboundMessage, { error: string }>): RoomRuntimeEntry {
+  const sw = msg.wallTemplate as SerializedWallTemplate;
+  const wallTemplate: RoomWallTemplate = {
+    wallCount:            sw.wallCount,
+    xWorld:               new Float32Array(sw.xWorld),
+    yWorld:               new Float32Array(sw.yWorld),
+    wWorld:               new Float32Array(sw.wWorld),
+    hWorld:               new Float32Array(sw.hWorld),
+    isPlatformFlag:       new Uint8Array(sw.isPlatformFlag),
+    platformEdge:         new Uint8Array(sw.platformEdge),
+    themeIndex:           new Uint8Array(sw.themeIndex),
+    soundHardnessIndex:   new Uint8Array(sw.soundHardnessIndex),
+    isInvisibleFlag:      new Uint8Array(sw.isInvisibleFlag),
+    rampOrientationIndex: new Uint8Array(sw.rampOrientationIndex),
+    isPillarHalfWidthFlag: new Uint8Array(sw.isPillarHalfWidthFlag),
+    isIceFlag:            new Uint8Array(sw.isIceFlag),
+  };
+
+  const se = msg.edgeExtension;
+  const edgeExtension: EdgeExtensionCache = {
+    roomId:       se.roomId,
+    tiles:        se.tiles,
+    occupancySet: new Set(se.occupancyKeys),
+  };
+
+  // Wire: null  = "built; no blockers"  → RoomRuntimeEntry: undefined
+  //       array = "has blockers"         → RoomRuntimeEntry: Set<string>
+  const blockerKeys: Set<string> | undefined =
+    msg.blockerKeys !== null ? new Set(msg.blockerKeys) : undefined;
+  const darkBlockerKeys: Set<string> | undefined =
+    msg.darkBlockerKeys !== null ? new Set(msg.darkBlockerKeys) : undefined;
+
+  return {
+    wallTemplate,
+    edgeExtension,
+    blockerKeys,
+    darkBlockerKeys,
+    wallDecorations: msg.wallDecorations as WallDecoration[],
+  };
+}
+
+/**
+ * Dispatches `room` to the background worker for preparation.
+ * On success the result is stored in `cache` via `cache.set(roomId, entry)`.
+ *
+ * Returns `true` when the room was accepted by the worker (it may already be
+ * pending, in which case the existing dispatch is reused).
+ * Returns `false` when the worker is unavailable.
+ */
+function _dispatchToWorker(
+  roomId: string,
+  room: RoomDef,
+  cache: RoomRuntimeCache,
+  isDebugMode: boolean,
+): boolean {
+  const worker = _getOrCreateWorker();
+  if (worker === null) return false;
+
+  // Avoid double-dispatching the same room.
+  if (_pendingWorkerRoomIds.has(roomId)) return true;
+
+  _pendingWorkerRoomIds.add(roomId);
+  _workerCallbacks.set(roomId, (entry) => {
+    cache.set(roomId, entry);
+    if (isDebugMode) {
+      console.log(`[preload worker] ${roomId} cached from worker`);
+    }
+  });
+
+  // `room` is a plain object (JSON-hydrated RoomDef) — structured clone is safe.
+  worker.postMessage({ roomId, room });
+  return true;
 }
 
 // ── BFS helpers ───────────────────────────────────────────────────────────────
@@ -335,14 +481,6 @@ export function scheduleRoomPreloads(
       return;
     }
 
-    if (deadline.didTimeout && import.meta.env.DEV) {
-      console.warn(
-        `[preload] idle callback forced after ${IDLE_TIMEOUT_MS}ms timeout ` +
-        `(timeRemaining=${deadline.timeRemaining().toFixed(1)}ms). ` +
-        `This may cause a long task on the main thread.`,
-      );
-    }
-
     // Skip rooms already fully cached.
     while (workQueue.length > 0) {
       const frontEntry = cache.has(workQueue[0].roomId) ? cache.get(workQueue[0].roomId) : undefined;
@@ -401,33 +539,59 @@ export function scheduleRoomPreloads(
     }
 
     // ── Radius-2 cost guard ────────────────────────────────────────────────
-    // For radius-2 rooms (not immediately needed), check the estimated build
-    // cost against the remaining idle budget.  If the room looks expensive
-    // and we are not in a forced-timeout callback, defer it to a later slot.
-    // This prevents huge rooms like underwater_lake from blocking the main
-    // thread for 30+ seconds during background preloading.
+    // For heavy radius-2 rooms, dispatch to the background worker so the main
+    // thread is never blocked.  This eliminates the timeout-forced synchronous
+    // path for large rooms entirely (e.g. underwater_lake, seal_chamber).
     //
-    // Radius-1 rooms are always built immediately regardless of estimated cost:
-    // they are needed as soon as the player walks to the adjacent transition.
-    if (radius >= 2 && !deadline.didTimeout) {
+    // If the worker is unavailable, fall back to the old deferral strategy:
+    // keep re-queuing until `deadline.didTimeout` forces the synchronous build.
+    //
+    // Radius-1 rooms always build synchronously — they are needed imminently
+    // and the worker's async latency would be counterproductive.
+    if (radius >= 2) {
       const estimatedCostMs = estimateRoomBuildCostMs(room);
       if (estimatedCostMs > MAX_R2_COST_WITHOUT_TIMEOUT_MS) {
-        if (isDebugMode) {
-          console.log(
-            `[preload] ${roomId} (radius-2): estimated ${estimatedCostMs.toFixed(0)}ms build cost ` +
-            `exceeds radius-2 budget (${MAX_R2_COST_WITHOUT_TIMEOUT_MS}ms). Deferring.`,
+        const dispatched = _dispatchToWorker(roomId, room, cache, isDebugMode);
+        if (dispatched) {
+          if (isDebugMode) {
+            console.log(
+              `[preload] ${roomId} (radius-2): estimated ${estimatedCostMs.toFixed(0)}ms — ` +
+              `dispatched to worker.`,
+            );
+          }
+          // Worker accepted; continue processing the rest of the queue.
+          if (workQueue.length > 0) {
+            activeHandle = scheduleIdle(processNext);
+          } else {
+            activeHandle = null;
+          }
+          return;
+        }
+        // Worker unavailable — fall back to deferral until timeout.
+        if (!deadline.didTimeout) {
+          if (isDebugMode) {
+            console.log(
+              `[preload] ${roomId} (radius-2): estimated ${estimatedCostMs.toFixed(0)}ms build cost ` +
+              `exceeds radius-2 budget (${MAX_R2_COST_WITHOUT_TIMEOUT_MS}ms). Worker unavailable — deferring.`,
+            );
+          }
+          if (!workQueueSet.has(roomId)) {
+            workQueue.push({ roomId, radius });
+            workQueueSet.add(roomId);
+          }
+          if (workQueue.length > 0) {
+            activeHandle = scheduleIdle(processNext);
+          }
+          return;
+        }
+        // deadline.didTimeout — forced; fall through to synchronous build.
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[preload] idle callback forced after ${IDLE_TIMEOUT_MS}ms timeout ` +
+            `(timeRemaining=${deadline.timeRemaining().toFixed(1)}ms). ` +
+            `This may cause a long task on the main thread.`,
           );
         }
-        // Re-enqueue at back so we revisit after all other rooms finish.
-        // The idle timeout will eventually force it to run.
-        if (!workQueueSet.has(roomId)) {
-          workQueue.push({ roomId, radius });
-          workQueueSet.add(roomId);
-        }
-        if (workQueue.length > 0) {
-          activeHandle = scheduleIdle(processNext);
-        }
-        return;
       }
     }
 
@@ -454,7 +618,6 @@ export function scheduleRoomPreloads(
           `  decorCount=${room.decorations?.length ?? 0}` +
           `  roomSize=${room.widthBlocks}×${room.heightBlocks}` +
           `  radius=${radius}`,
-          '\n  Consider moving heavy preload work to a Web Worker (see nextSteps.md).',
         );
       } else if (isDebugMode) {
         console.log(
@@ -492,6 +655,15 @@ export function scheduleRoomPreloads(
       // No-op if already fully cached.
       const existingEntry = cache.get(roomId);
       if (existingEntry !== undefined && isEntryFullyPrepared(existingEntry)) return;
+
+      // No-op if the worker is already computing this room.  It will deliver
+      // the result shortly and `cache.set` will be called on arrival.
+      if (_pendingWorkerRoomIds.has(roomId)) {
+        if (isDebugMode) {
+          console.log(`[preload:priority] ${roomId} is pending with worker — no action needed`);
+        }
+        return;
+      }
 
       const idx = workQueue.findIndex(e => e.roomId === roomId);
       if (idx > 0) {
