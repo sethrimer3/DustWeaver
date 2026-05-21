@@ -1,5 +1,71 @@
 # DustWeaver — Next Steps
 
+## BUILD 387 — Web Worker Migration for Room Preloading
+
+### What Was Implemented
+
+**Full Web Worker migration for `buildPreparedRoomRuntime`** (`src/screens/roomPreloadScheduler.ts`,
+`src/screens/roomPreparationWorker.ts`, `src/screens/roomPreparationWorkerProtocol.ts`):
+
+1. **`roomPreparationWorker.ts`** (new) — Off-main-thread room preparation worker:
+   - Receives a plain-object `RoomDef` via `postMessage`. `RoomDef` is always produced
+     by JSON hydration (all fields are primitives, plain arrays, or plain sub-objects)
+     so the structured clone algorithm copies it cleanly.
+   - Runs the same four build passes as `buildPreparedRoomRuntime`:
+     1. `buildRoomWallTemplate` (O(n²) wall-merge pass)
+     2. `buildEdgeExtensionCache` (BFS over expanded occupancy grid)
+     3. ambient-light blocker set construction
+     4. `buildRoomDecorations` (pure geometry conversion)
+   - Posts back a `WorkerOutboundMessage` with typed-array fields **transferred** (zero-copy
+     `ArrayBuffer` transfer list) to eliminate memory-copy overhead.
+   - On error: posts `{ roomId, error: string }` so the main thread can fall back to the
+     synchronous build path.
+
+2. **`roomPreparationWorkerProtocol.ts`** (new) — Shared wire-format types:
+   - `SerializedWallTemplate`: all twelve typed-array fields expressed as `ArrayBuffer`.
+   - `SerializedEdgeExtension`: `tiles` as plain-object array; `occupancySet` as `string[]`.
+   - `WorkerSuccessMessage` / `WorkerErrorMessage` / `WorkerOutboundMessage` union.
+   - Zero runtime imports — safe for both worker and main-thread contexts.
+
+3. **`roomPreloadScheduler.ts`** (modified):
+   - Module-level lazy worker: `_getOrCreateWorker()` creates the worker on first heavy dispatch
+     and reuses it for the session.  Falls back to `null` if Worker construction fails.
+   - Module-level pending maps: `_pendingWorkerRoomIds` (Set) and `_workerCallbacks` (Map)
+     track in-flight work across all schedule instances without coupling to any one schedule.
+   - `_reconstructRoomRuntimeEntry()` — reconstructs `RoomRuntimeEntry` from the worker reply
+     by wrapping transferred `ArrayBuffer`s back into typed arrays and rebuilding `Set<string>`
+     from the serialized key arrays.
+   - `_dispatchToWorker()` — posts a room to the worker and registers a callback that calls
+     `cache.set(roomId, entry)` on arrival.  Returns `false` if worker is unavailable.
+   - **Radius-2 cost guard rewritten**: heavy radius-2 rooms (`estimatedCostMs > 80`) are now
+     dispatched to the worker **immediately** instead of being re-queued until `deadline.didTimeout`.
+     This eliminates the timeout-forced synchronous build path for large rooms entirely.
+   - Fallback: if the worker is unavailable (Safari Private, CSP, init error), the old
+     deferral-until-timeout path is preserved as the fallback.
+   - `prioritize()`: skips rooms already pending with the worker (they will cache imminently).
+   - The general `deadline.didTimeout` dev warning was moved into the fallback path where it
+     is now only emitted when the timeout actually fires (worker unavailable).
+
+### Remaining Work
+
+#### A. ~~Idle-callback builds can still block > 16 ms~~ (Fixed by worker migration)
+
+Heavy radius-2 rooms are now built off-thread.  Radius-1 rooms are still synchronous (they
+are needed imminently; the worker's async round-trip latency would be counterproductive).
+If a radius-1 room is extremely large (> 80 ms estimated cost), consider:
+- Pre-building it in the worker and waiting for the result before allowing the transition.
+- Or splitting `buildRoomWallTemplate` into a resumable iterator.
+
+#### B. Test coverage for `buildPreparedRoomRuntime`
+
+No automated test framework is currently set up.  If Vitest or Jest is added in the future:
+- Add a test that exercises `buildPreparedRoomRuntime` with a large room definition to verify
+  timing regressions are detected.
+- Ensure `ensureRoomPrepared` (synchronous urgent fallback) still works correctly as a
+  cold-miss path when the worker has not yet returned.
+
+---
+
 ## BUILD 386 — Room Loading & Preload Freeze Fixes
 
 ### What Was Implemented
@@ -42,52 +108,11 @@
    - `handle.prioritize(roomId)` now promotes the room to `radius: 1` so it bypasses the
      radius-2 budget guard.
 
-### Remaining Work (Web Worker Migration)
+### Remaining Work
 
-The following items from the original preload freeze problem are NOT fixed by this pass:
+~~Web Worker migration for `buildPreparedRoomRuntime`~~ — **Completed in BUILD 387.**
 
-#### Web Worker migration for `buildPreparedRoomRuntime`
-
-Even with the radius-2 budget guard, the idle timeout (4000 ms) will eventually force large
-radius-2 rooms to be built synchronously on the main thread.  The definitive fix is a Web Worker.
-
-**Plan**:
-
-1. Create `src/screens/roomPreparationWorker.ts`:
-   - Receives a serialized `RoomDef` (all primitive/array fields — no DOM, no class instances).
-   - Calls `buildRoomWallTemplate(room)` and `buildEdgeExtensionCache(room)`.
-   - Returns a serializable result:
-     - `wallTemplate`: pack the Float32Array / Uint8Array fields as `ArrayBuffer` (transferable).
-     - `edgeExtension`: serialize BFS tile-strip result.
-     - `wallDecorations`: serialize the pure geometry array.
-     - Blocker sets: serialize as flat arrays, reconstruct `Set<string>` on main thread.
-
-2. In `roomPreloadScheduler.ts`:
-   - Spin up the worker once at module level (or lazily on first use).
-   - For rooms above `MAX_R2_COST_WITHOUT_TIMEOUT_MS`, post them to the worker instead of
-     calling `buildPreparedRoomRuntime` synchronously.
-   - On `worker.onmessage`: reconstruct the `RoomRuntimeEntry` and call `cache.set(roomId, entry)`.
-   - Keep the synchronous path as fallback for radius-1 rooms or when the worker is unavailable.
-
-3. Serialization caveats:
-   - `RoomDef` contains class instances for some optional fields (e.g. `ambientLightBlockers`).
-     Ensure all fields passed to the worker are plain JSON-serializable objects.
-   - `EdgeExtensionCache` internal map structure needs a serialization adapter.
-
-4. Test coverage:
-   - Add a test that exercises `buildPreparedRoomRuntime` with a large room definition to
-     verify timing regressions are detected.
-   - Ensure `ensureRoomPrepared` (synchronous urgent fallback) still works correctly as a
-     cold-miss path when the worker has not yet returned.
-
-#### Per-step cooperative chunking (alternative to worker)
-
-If the worker approach is too risky, the wall-merge pass (`buildRoomWallTemplate`) can be
-made resumable:
-- Extract the merge loop into a generator that yields after every N walls.
-- Drive it from the idle scheduler across multiple callbacks, each consuming up to
-  `deadline.timeRemaining()` ms.
-- This eliminates the single-callback blocking entirely at the cost of more complex state.
+~~Per-step cooperative chunking (alternative to worker)~~ — No longer needed; worker approach implemented.
 
 ---
 
@@ -138,27 +163,18 @@ made resumable:
 The following issues are NOT yet fixed by this pass.  They require more invasive
 changes and are deferred to a follow-up build.
 
-#### A. Idle-callback builds can still block > 16 ms
+#### A. ~~Idle-callback builds can still block > 16 ms~~ (Fixed in BUILD 387)
 
-`buildPreparedRoomRuntime` is a single synchronous call that may take 20–100+ ms
+~~`buildPreparedRoomRuntime` is a single synchronous call that may take 20–100+ ms
 for large rooms (wall merge is O(n²) in block count; edge-extension BFS visits a
 large grid).  Even with deadline checking, once a build starts it runs to
 completion on the main thread.  The deadline check only prevents *starting* a build
-in a tight idle slot; it cannot interrupt a build already in progress.
+in a tight idle slot; it cannot interrupt a build already in progress.~~
 
-**Recommended fix**: Web Worker approach:
-- Create `src/screens/roomPreparationWorker.ts`.
-- Worker input: serializable `RoomDef` subset (no DOM, no classes, Sets → arrays).
-- Worker output: serializable `PreparedRoomRuntime` (Sets reconstructed on main thread).
-- Main thread posts work to the worker; on `message`, calls `cache.set(roomId, entry)`.
-- `_makeLoadRoomPhases` Phase D and F check the cache first, then fall back to
-  synchronous build only if the worker result has not yet arrived (rare cold miss).
+**Fixed**: BUILD 387 migrated heavy radius-2 room preparation to a Web Worker.
+See BUILD 387 notes above.
 
-Alternatively: **cooperative frame-budgeted job system**:
-- Break `buildRoomWallTemplate` and `buildEdgeExtensionCache` into resumable
-  iterators that process a fixed number of blocks per `requestIdleCallback` slice.
-- Each callback processes up to `deadline.timeRemaining()` ms of work, then suspends.
-- Requires significant refactoring of the two build functions.
+~~**Recommended fix**: Web Worker approach~~ — **Implemented in BUILD 387.**
 
 #### B. `_makeLoadRoomPhases` phases are still individually synchronous
 
