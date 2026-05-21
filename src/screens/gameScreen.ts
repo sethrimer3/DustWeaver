@@ -1433,12 +1433,12 @@ export function startGameScreen(
     // Record room/camera context for structured freeze warnings (dev-only).
     if (import.meta.env.DEV) {
       const _fp_player = world.clusters[0];
-      const _fp_px = _fp_player ? Math.floor(_fp_player.positionXWorld / BLOCK_SIZE_SMALL) : -1;
-      const _fp_py = _fp_player ? Math.floor(_fp_player.positionYWorld / BLOCK_SIZE_SMALL) : -1;
+      const _fp_pxBlock = _fp_player ? Math.floor(_fp_player.positionXWorld / BLOCK_SIZE_SMALL) : -1;
+      const _fp_pyBlock = _fp_player ? Math.floor(_fp_player.positionYWorld / BLOCK_SIZE_SMALL) : -1;
       FP.setFrameContext(
         currentRoom.id,
-        `ox=${ox.toFixed(0)},oy=${oy.toFixed(0)}`,
-        `${_fp_px},${_fp_py}`,
+        `ox=${ox.toFixed(0)}px,oy=${oy.toFixed(0)}px`,
+        `${_fp_pxBlock},${_fp_pyBlock}`,
       );
     }
 
