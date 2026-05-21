@@ -91,6 +91,12 @@ function deterministicStringify(value) {
  * Volatile fields (e.g. `lastEditedIso`, `exportedAt`) must be excluded
  * before passing to this function so the hash is stable across re-exports
  * that did not change any game data.
+ *
+ * NOTE: The renderer-side equivalent is `computeContentHash` in
+ * `src/levels/roomFileLoader.ts`, which uses the Web Crypto API (SubtleCrypto)
+ * to compute the same SHA-256 hash.  Both must produce identical hashes for
+ * the same input so that manifest validation works across processes.
+ * If the algorithm changes here, update roomFileLoader.ts to match.
  */
 function computeContentHash(value) {
   const text = deterministicStringify(value);
@@ -553,6 +559,120 @@ ipcMain.handle("dw:read-room-cache-manifest", (_event, campaignId, isOfficialCam
     const raw = fs.readFileSync(manifestPath, "utf8");
     const manifest = JSON.parse(raw);
     return { ok: true, manifest };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+});
+
+// ── IPC handler: dw:read-room-file ───────────────────────────────────────────
+
+/**
+ * Handles 'dw:read-room-file'.
+ *
+ * Reads a single derived room JSON file from an already-exported campaign's
+ * ROOMS directory.  Used by the renderer to load room data from the file
+ * cache during gameplay, preferring derived files over reparsing the full
+ * packed campaign.
+ *
+ * Security: campaignId and roomId are validated against their respective safe
+ * regexes before being used in filesystem paths to prevent path traversal.
+ *
+ * Returns { ok: true, roomData, expectedHash } on success or
+ *         { ok: false, error } on failure.
+ */
+ipcMain.handle("dw:read-room-file", (_event, campaignId, roomId, isOfficialCampaign) => {
+  try {
+    if (typeof campaignId !== "string" || !SAFE_CAMPAIGN_ID_RE.test(campaignId)) {
+      return { ok: false, error: `Unsafe campaign ID: "${campaignId}"` };
+    }
+    if (typeof roomId !== "string" || !SAFE_ROOM_ID_RE.test(roomId)) {
+      return { ok: false, error: `Unsafe room ID: "${roomId}"` };
+    }
+    const campaignDir = isOfficialCampaign
+      ? resolveCampaignDir()
+      : resolveCustomCampaignDir(campaignId);
+    const roomsDir = path.join(campaignDir, "ROOMS");
+
+    // Read manifest to find the file path and expected hash for this room.
+    const manifest = tryReadExistingManifest(roomsDir);
+    if (manifest === null || typeof manifest.rooms !== "object" || manifest.rooms === null) {
+      return { ok: false, error: `No valid manifest found for campaign "${campaignId}"` };
+    }
+    const entry = manifest.rooms[roomId];
+    if (entry === undefined || typeof entry.file !== "string") {
+      return { ok: false, error: `Room "${roomId}" not found in manifest for campaign "${campaignId}"` };
+    }
+
+    // Reject any path that escapes the ROOMS directory.
+    const roomFilePath = path.join(roomsDir, entry.file);
+    if (!roomFilePath.startsWith(roomsDir + path.sep) && roomFilePath !== roomsDir) {
+      return { ok: false, error: `Room file path escapes ROOMS directory: "${entry.file}"` };
+    }
+
+    const raw = fs.readFileSync(roomFilePath, "utf8");
+    const roomData = JSON.parse(raw);
+    return { ok: true, roomData, expectedHash: entry.hash };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+});
+
+// ── IPC handler: dw:read-all-room-files ──────────────────────────────────────
+
+/**
+ * Handles 'dw:read-all-room-files'.
+ *
+ * Reads ALL derived room JSON files for a campaign in a single IPC call,
+ * returning them as an array.  Used at gameplay startup to populate
+ * ROOM_REGISTRY from the file cache without making N separate IPC calls.
+ *
+ * Each element in the `rooms` array is { roomId, data, expectedHash }.
+ * Any room file that cannot be read is skipped with a console warning.
+ *
+ * Returns { ok: true, rooms, manifest } on success or { ok: false, error }.
+ */
+ipcMain.handle("dw:read-all-room-files", (_event, campaignId, isOfficialCampaign) => {
+  try {
+    if (typeof campaignId !== "string" || !SAFE_CAMPAIGN_ID_RE.test(campaignId)) {
+      return { ok: false, error: `Unsafe campaign ID: "${campaignId}"` };
+    }
+    const campaignDir = isOfficialCampaign
+      ? resolveCampaignDir()
+      : resolveCustomCampaignDir(campaignId);
+    const roomsDir = path.join(campaignDir, "ROOMS");
+
+    const manifest = tryReadExistingManifest(roomsDir);
+    if (manifest === null || typeof manifest.rooms !== "object" || manifest.rooms === null) {
+      return { ok: false, error: `No valid manifest found for campaign "${campaignId}"` };
+    }
+
+    const rooms = [];
+    for (const [roomId, entry] of Object.entries(manifest.rooms)) {
+      if (typeof roomId !== "string" || !SAFE_ROOM_ID_RE.test(roomId)) {
+        console.warn(`[dw:read-all-room-files] Skipping unsafe room ID: "${roomId}"`);
+        continue;
+      }
+      if (typeof entry.file !== "string") {
+        console.warn(`[dw:read-all-room-files] Skipping room "${roomId}": missing file path`);
+        continue;
+      }
+      const roomFilePath = path.join(roomsDir, entry.file);
+      if (!roomFilePath.startsWith(roomsDir + path.sep) && roomFilePath !== roomsDir) {
+        console.warn(`[dw:read-all-room-files] Skipping room "${roomId}": path escapes ROOMS dir`);
+        continue;
+      }
+      try {
+        const raw = fs.readFileSync(roomFilePath, "utf8");
+        const data = JSON.parse(raw);
+        rooms.push({ roomId, data, expectedHash: entry.hash });
+      } catch (fileErr) {
+        const msg = fileErr instanceof Error ? fileErr.message : String(fileErr);
+        console.warn(`[dw:read-all-room-files] Skipping room "${roomId}": ${msg}`);
+      }
+    }
+    return { ok: true, rooms, manifest };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };

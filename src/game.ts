@@ -12,6 +12,11 @@ import { stringToParticleKind } from './editor/roomJsonSchema';
 import { unlockDustType, unlockActiveWeave } from './progression/unlocks';
 import { WEAVE_REGISTRY } from './sim/weaves/weaveDefinition';
 import { PLAYER_INITIAL_HEALTH } from './screens/gameSpawn';
+import {
+  ensureCampaignRoomCache,
+  populateRegistryFromRoomFiles,
+  deactivateCampaignRoomCache,
+} from './levels/roomFileLoader';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -57,6 +62,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     if (to === 'mainMenu') {
       // Restore main campaign rooms if we came from a custom campaign session.
       restoreMainCampaignSnapshot();
+      // Deactivate the room file cache so it does not bleed into the next session.
+      deactivateCampaignRoomCache();
 
       cleanup = showMainMenu(uiRoot, {
         onPlay: (slotIndex, saveData) => {
@@ -122,7 +129,70 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         let campaignStartProgress: PlayerProgress | undefined;
         if (source.loadPackedCampaign !== undefined) {
           const campaign = await source.loadPackedCampaign();
-          registerRoomsFromPackedCampaign(campaign);
+
+          // ── Electron: validate / generate room file cache ─────────────────
+          // In Electron, prefer loading rooms from the derived room file cache
+          // rather than reparsing the full packed campaign.  If the cache is
+          // missing or stale it is regenerated automatically before gameplay.
+          // In browser/GitHub Pages mode (no dustweaverElectron) the packed
+          // campaign path is used unchanged.
+          let usedFileCache = false;
+          if (typeof window !== 'undefined' && window.dustweaverElectron !== undefined) {
+            // Show a simple status div while cache validation / generation runs.
+            const statusDiv = document.createElement('div');
+            statusDiv.id = 'room-cache-status';
+            statusDiv.style.cssText = [
+              'position:fixed', 'inset:0', 'display:flex', 'align-items:center',
+              'justify-content:center', 'background:#000', 'color:#ccc',
+              'font:14px/1.4 monospace', 'z-index:9999', 'pointer-events:none',
+            ].join(';');
+            statusDiv.textContent = 'Checking room cache…';
+            uiRoot.appendChild(statusDiv);
+
+            const onStatus = (msg: string): void => {
+              statusDiv.textContent = msg;
+            };
+
+            try {
+              const manifest = await ensureCampaignRoomCache(campaign, false, onStatus);
+              if (manifest !== null) {
+                onStatus('Loading rooms from file cache…');
+                const allLoaded = await populateRegistryFromRoomFiles(
+                  campaign,
+                  manifest,
+                  campaign.campaign.id,
+                  false,
+                );
+                if (allLoaded) {
+                  usedFileCache = true;
+                  console.log(
+                    '[game] Custom campaign rooms loaded from derived room file cache.',
+                  );
+                } else {
+                  console.warn(
+                    '[game] Some rooms could not be loaded from file cache — ' +
+                    'falling back to packed campaign.',
+                  );
+                }
+              } else {
+                console.warn(
+                  '[game] Room file cache unavailable for campaign ' +
+                  `"${campaign.campaign.id}" — falling back to packed campaign.`,
+                );
+              }
+            } catch (cacheErr) {
+              console.warn('[game] Room cache check error:', cacheErr);
+            } finally {
+              statusDiv.remove();
+            }
+          }
+
+          // If the file cache path was not used (browser, IPC failure, hash
+          // mismatch), fall back to the packed campaign as before.
+          if (!usedFileCache) {
+            registerRoomsFromPackedCampaign(campaign);
+          }
+
           const cSpawn = campaign.campaign.campaignSpawn;
           if (cSpawn !== undefined) {
             startRoomId = cSpawn.roomId;
