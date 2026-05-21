@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "lint": "eslint src/",
     "preview": "vite preview",
+    "electron": "electron .",
     "desktop": "npm run build && electron ."
   },
   "devDependencies": {
