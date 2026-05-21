@@ -10,10 +10,18 @@ import type { RoomDef, RoomTransitionDef, TransitionDirection } from '../levels/
 export type { TransitionDirection };
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
-import { isRoomFileCacheActive, loadRoomForGameplayAsync } from '../levels/roomFileLoader';
+import { isRoomFileCacheActive, loadRoomForGameplayAsync, getActiveRoomAdjacency } from '../levels/roomFileLoader';
 import type { WorldState } from '../sim/world';
 
 export const TRANSITION_SPAWN_INSET_BLOCKS = 3;
+
+/**
+ * Rooms with an urgent async load currently in-flight due to a missing-room
+ * transition.  Prevents the per-frame console.warn from firing on every tick
+ * while the load is pending.  The entry is cleared when the load resolves
+ * (success or failure).
+ */
+const _urgentLoadPending = new Set<string>();
 
 export function getOppositeTransitionDirection(direction: TransitionDirection): TransitionDirection {
   if (direction === 'left') return 'right';
@@ -149,17 +157,44 @@ export function checkRoomTransitions(
         if (isRoomFileCacheActive()) {
           // Lazy-loading mode (Electron file cache): the preload scheduler
           // should have loaded this room already.  If it hasn't (e.g. the
-          // player moved faster than the scheduler), trigger an urgent load
-          // now.  The transition will re-fire on the next frame once the
-          // room is registered.  Safe fallback: no crash, no corrupt state.
-          console.warn(
-            `[Transition] Room "${t.targetRoomId}" not yet loaded — ` +
-            'triggering urgent lazy load. Transition will fire next frame.',
-          );
-          void loadRoomForGameplayAsync(t.targetRoomId);
+          // player moved faster than the scheduler), trigger an urgent load.
+          // We deduplicate so the warn and IPC call fire only once per load,
+          // not on every frame that the player stands in the trigger zone.
+          // The transition will re-fire on the next game tick once the room
+          // is registered in ROOM_REGISTRY.
+          if (!_urgentLoadPending.has(t.targetRoomId)) {
+            _urgentLoadPending.add(t.targetRoomId);
+            const adjacency = getActiveRoomAdjacency();
+            const isInManifest = adjacency !== null
+              ? Object.prototype.hasOwnProperty.call(adjacency, t.targetRoomId)
+              : null;
+            console.warn(
+              `[Transition] Room "${t.targetRoomId}" not yet loaded — ` +
+              'triggering urgent lazy load. Transition will fire once loaded.',
+              `\n  currentRoom=${currentRoom.id}, transitionIndex=${ti}`,
+              `\n  isRoomFileCacheActive=true`,
+              `\n  inManifestAdjacency=${isInManifest === null ? 'unknown (no adjacency data)' : isInManifest}`,
+            );
+            void loadRoomForGameplayAsync(t.targetRoomId).then(loaded => {
+              _urgentLoadPending.delete(t.targetRoomId);
+              if (loaded === undefined) {
+                console.error(
+                  `[Transition] Urgent load of "${t.targetRoomId}" FAILED.`,
+                  `\n  currentRoom=${currentRoom.id}, transitionIndex=${ti}`,
+                  `\n  isRoomFileCacheActive=${isRoomFileCacheActive()}`,
+                  `\n  inManifestAdjacency=${isInManifest === null ? 'unknown' : isInManifest}`,
+                  '\n  Possible causes: room not in manifest, IPC read error, hash mismatch, or hydration failure.',
+                );
+              } else {
+                console.log(`[Transition] Urgent load of "${t.targetRoomId}" succeeded — transition will fire on next tick.`);
+              }
+            });
+          }
         } else {
           // Packed-campaign / browser mode: all rooms should be loaded at
-          // startup.  A missing room indicates a broken transition link.
+          // startup.  A missing room indicates a broken transition link or
+          // a startup bug (e.g. the official campaign cache was deactivated
+          // before the player pressed Play — see game.ts navigate('mainMenu')).
           console.warn(`[Transition] Room "${currentRoom.id}" transition[${ti}] points to missing room "${t.targetRoomId}".`);
         }
       }

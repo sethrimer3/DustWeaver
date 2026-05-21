@@ -7,7 +7,7 @@
  * world state (enemies, hazards, particles, falling blocks) — those are reset
  * per-visit in `_makeLoadRoomPhases()` phases B-E and are never cached.
  *
- * BUILD 368
+ * BUILD 386
  */
 
 import type { RoomDef } from '../levels/roomDef';
@@ -19,10 +19,31 @@ import type { RoomRuntimeEntry } from './roomRuntimeCache';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import { ROOM_REGISTRY } from '../levels/rooms';
 
+// ── PreparedRoomResult ────────────────────────────────────────────────────────
+
+/**
+ * Result of `buildPreparedRoomRuntime`, bundling the entry with per-step
+ * timing data so callers can log structured performance reports.
+ */
+export interface PreparedRoomResult {
+  entry: RoomRuntimeEntry;
+  /** Wall template (O(n²) merge pass) build time in ms. */
+  wallMs: number;
+  /** Edge extension (BFS pass) build time in ms. */
+  edgeMs: number;
+  /** Ambient blocker set construction time in ms. */
+  blockerMs: number;
+  /** Wall decoration geometry build time in ms. */
+  decorMs: number;
+  /** Total time in ms (sum of all sub-steps). */
+  totalMs: number;
+}
+
 // ── buildPreparedRoomRuntime ──────────────────────────────────────────────────
 
 /**
- * Builds a fully prepared `RoomRuntimeEntry` for the given room.
+ * Builds a fully prepared `RoomRuntimeEntry` for the given room, returning
+ * it alongside per-step timing data for performance diagnostics.
  *
  * Includes:
  *  - `wallTemplate`      — merged wall geometry (O(n²) merge pass)
@@ -33,14 +54,19 @@ import { ROOM_REGISTRY } from '../levels/rooms';
  *
  * Safe to call from any context (no DOM, no mutable world state, no RNG).
  */
-export function buildPreparedRoomRuntime(room: RoomDef): RoomRuntimeEntry {
+export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
   // ── Wall template (O(n²) merge pass) ─────────────────────────────────────
+  const t0Wall = performance.now();
   const wallTemplate = buildRoomWallTemplate(room);
+  const wallMs = performance.now() - t0Wall;
 
   // ── Edge extension (BFS over expanded grid) ───────────────────────────────
+  const t0Edge = performance.now();
   const edgeExtension = buildEdgeExtensionCache(room);
+  const edgeMs = performance.now() - t0Edge;
 
   // ── Ambient light blocker sets ────────────────────────────────────────────
+  const t0Blocker = performance.now();
   let blockerKeys: Set<string> | undefined;
   let darkBlockerKeys: Set<string> | undefined;
 
@@ -66,16 +92,28 @@ export function buildPreparedRoomRuntime(room: RoomDef): RoomRuntimeEntry {
       }
     }
   }
+  const blockerMs = performance.now() - t0Blocker;
 
   // ── Wall decorations (pure geometry, no mutable state) ────────────────────
+  const t0Decor = performance.now();
   const wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+  const decorMs = performance.now() - t0Decor;
+
+  const totalMs = wallMs + edgeMs + blockerMs + decorMs;
 
   return {
-    wallTemplate,
-    edgeExtension,
-    blockerKeys,
-    darkBlockerKeys,
-    wallDecorations,
+    entry: {
+      wallTemplate,
+      edgeExtension,
+      blockerKeys,
+      darkBlockerKeys,
+      wallDecorations,
+    },
+    wallMs,
+    edgeMs,
+    blockerMs,
+    decorMs,
+    totalMs,
   };
 }
 
@@ -104,8 +142,8 @@ export function ensureRoomPrepared(
   if (room === undefined) return;
 
   const t0 = isDebugMode ? performance.now() : 0;
-  const prepared = buildPreparedRoomRuntime(room);
-  cache.set(roomId, prepared);
+  const result = buildPreparedRoomRuntime(room);
+  cache.set(roomId, result.entry);
 
   if (isDebugMode) {
     console.log(

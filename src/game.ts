@@ -17,6 +17,9 @@ import {
   loadRoomForGameplayAsync,
   deactivateCampaignRoomCache,
   isRoomFileCacheActive,
+  isOfficialCampaignCacheActive,
+  getActiveRoomAdjacency,
+  getActiveCampaignId,
 } from './levels/roomFileLoader';
 import { getCampaignStartRoomId } from './levels/campaignSchema';
 import { createExportProgressModal } from './editor/editorExportProgressModal';
@@ -66,8 +69,15 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     if (to === 'mainMenu') {
       // Restore main campaign rooms if we came from a custom campaign session.
       restoreMainCampaignSnapshot();
-      // Deactivate the room file cache so it does not bleed into the next session.
-      deactivateCampaignRoomCache();
+      // Only deactivate the room file cache when leaving a custom campaign
+      // session.  The official campaign cache must remain active across main-menu
+      // visits so that lazy loading works when the player presses Play again.
+      // Deactivating it here was the root cause of the Electron "points to
+      // missing room" bug: the cache was cleared before the player pressed Play,
+      // leaving ROOM_REGISTRY with only the start room and no way to load others.
+      if (!isOfficialCampaignCacheActive()) {
+        deactivateCampaignRoomCache();
+      }
 
       cleanup = showMainMenu(uiRoot, {
         onPlay: (slotIndex, saveData) => {
@@ -139,6 +149,40 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
             // Clear startRoomId so the game falls through to the default start room.
             startRoomId = officialSpawn?.roomId ?? null;
           }
+        }
+
+        // ── Defensive guard: ensure ROOM_REGISTRY is not partial without a cache ──
+        // If the cache was unexpectedly deactivated (e.g. by a bug in a previous
+        // session) and the registry only has the start room, re-initialize fully
+        // so the player can transition to adjacent rooms normally.
+        if (!isRoomFileCacheActive() && ROOM_REGISTRY.size <= 1) {
+          console.warn(
+            '[game] ROOM_REGISTRY is partial (size=' + ROOM_REGISTRY.size + ') and ' +
+            'no room file cache is active. Re-initializing room registry to recover.',
+          );
+          try {
+            await initRoomRegistry();
+          } catch (reInitErr) {
+            console.error('[game] Re-initialization of room registry failed:', reInitErr);
+          }
+        }
+
+        // ── Dev diagnostics logged every time Play is pressed ─────────────────
+        {
+          const _adj = getActiveRoomAdjacency();
+          const _resolvedStart = startRoomId ?? 'lobby';
+          const _startRoom = ROOM_REGISTRY.get(_resolvedStart);
+          console.log(
+            '[game:startup] Play pressed:',
+            `\n  isRoomFileCacheActive      = ${isRoomFileCacheActive()}`,
+            `\n  isOfficialCampaignCache    = ${isOfficialCampaignCacheActive()}`,
+            `\n  activeCampaignId           = ${getActiveCampaignId() ?? '(none)'}`,
+            `\n  ROOM_REGISTRY.size         = ${ROOM_REGISTRY.size}`,
+            `\n  startRoomId                = ${_resolvedStart}`,
+            `\n  startRoomInRegistry        = ${_startRoom !== undefined}`,
+            `\n  adjacencyManifestExists    = ${_adj !== null}`,
+            `\n  startRoom→w1_room1         = ${_startRoom?.transitions?.some(t => t.targetRoomId === 'w1_room1') ?? false}`,
+          );
         }
 
         cleanup = startGameScreen(canvas, uiRoot, activeLoadout, startRoomId, {

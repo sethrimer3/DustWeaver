@@ -1,5 +1,96 @@
 # DustWeaver — Next Steps
 
+## BUILD 386 — Room Loading & Preload Freeze Fixes
+
+### What Was Implemented
+
+1. **Task A — Electron official campaign lazy loading fixed** (`src/game.ts`, `src/levels/roomFileLoader.ts`):
+   - Root cause: `navigate('mainMenu')` unconditionally called `deactivateCampaignRoomCache()`,
+     destroying the official campaign file cache before the player pressed Play.  This left
+     `ROOM_REGISTRY` with only the start room and no active cache, causing "points to missing
+     room" whenever the player tried to cross into a transition.
+   - Fix: `navigate('mainMenu')` now only calls `deactivateCampaignRoomCache()` when the
+     active cache does NOT belong to the official campaign (`isOfficialCampaignCacheActive()`).
+   - Added `isOfficialCampaignCacheActive()` and `getActiveCampaignId()` exports to `roomFileLoader.ts`.
+   - Added a defensive guard in the `gameplay` branch: if `ROOM_REGISTRY.size <= 1` and no
+     cache is active, calls `initRoomRegistry()` to recover gracefully.
+   - Added dev logging on every "Play" press: cache status, campaign ID, registry size,
+     start room ID, adjacency manifest presence, and whether `w1_room1` is reachable.
+
+2. **Task B — Missing transition targets recover without spamming** (`src/screens/gameTransitions.ts`):
+   - Added `_urgentLoadPending` set to deduplicate per-frame urgent-load warnings.
+   - The `console.warn` and `loadRoomForGameplayAsync` call now fire exactly once per
+     missing-room event, not every frame.
+   - Added `.then()` callback that logs success (`[Transition] Urgent load … succeeded`) or
+     a structured error (`[Transition] Urgent load … FAILED`) with cache status and manifest
+     membership diagnostics.
+
+3. **Task C — Radius-2 heavy room preload throttling** (`src/screens/roomPreloadScheduler.ts`,
+   `src/screens/preparedRoomRuntime.ts`):
+   - `buildPreparedRoomRuntime` now returns a `PreparedRoomResult` (entry + per-step timings:
+     `wallMs`, `edgeMs`, `blockerMs`, `decorMs`, `totalMs`).
+   - The slow-task warning now prints a structured per-room performance report:
+     per-step timings, wall count, background block area, decoration count, room dimensions,
+     and BFS radius.
+   - Added `estimateRoomBuildCostMs(room)` heuristic based on wall count and background area.
+   - Added `MAX_R2_COST_WITHOUT_TIMEOUT_MS = 80`: radius-2 rooms whose estimated cost exceeds
+     this threshold are deferred (re-queued at back) unless `deadline.didTimeout` is true.
+     This prevents huge rooms like `underwater_lake` and `seal_chamber` from being
+     synchronously prepared in an idle callback during normal gameplay.
+   - Radius-1 rooms are always built immediately regardless of cost estimate.
+   - Work queue changed from `string[]` to `Array<{ roomId, radius }>` to track per-item radius.
+   - `handle.prioritize(roomId)` now promotes the room to `radius: 1` so it bypasses the
+     radius-2 budget guard.
+
+### Remaining Work (Web Worker Migration)
+
+The following items from the original preload freeze problem are NOT fixed by this pass:
+
+#### Web Worker migration for `buildPreparedRoomRuntime`
+
+Even with the radius-2 budget guard, the idle timeout (4000 ms) will eventually force large
+radius-2 rooms to be built synchronously on the main thread.  The definitive fix is a Web Worker.
+
+**Plan**:
+
+1. Create `src/screens/roomPreparationWorker.ts`:
+   - Receives a serialized `RoomDef` (all primitive/array fields — no DOM, no class instances).
+   - Calls `buildRoomWallTemplate(room)` and `buildEdgeExtensionCache(room)`.
+   - Returns a serializable result:
+     - `wallTemplate`: pack the Float32Array / Uint8Array fields as `ArrayBuffer` (transferable).
+     - `edgeExtension`: serialize BFS tile-strip result.
+     - `wallDecorations`: serialize the pure geometry array.
+     - Blocker sets: serialize as flat arrays, reconstruct `Set<string>` on main thread.
+
+2. In `roomPreloadScheduler.ts`:
+   - Spin up the worker once at module level (or lazily on first use).
+   - For rooms above `MAX_R2_COST_WITHOUT_TIMEOUT_MS`, post them to the worker instead of
+     calling `buildPreparedRoomRuntime` synchronously.
+   - On `worker.onmessage`: reconstruct the `RoomRuntimeEntry` and call `cache.set(roomId, entry)`.
+   - Keep the synchronous path as fallback for radius-1 rooms or when the worker is unavailable.
+
+3. Serialization caveats:
+   - `RoomDef` contains class instances for some optional fields (e.g. `ambientLightBlockers`).
+     Ensure all fields passed to the worker are plain JSON-serializable objects.
+   - `EdgeExtensionCache` internal map structure needs a serialization adapter.
+
+4. Test coverage:
+   - Add a test that exercises `buildPreparedRoomRuntime` with a large room definition to
+     verify timing regressions are detected.
+   - Ensure `ensureRoomPrepared` (synchronous urgent fallback) still works correctly as a
+     cold-miss path when the worker has not yet returned.
+
+#### Per-step cooperative chunking (alternative to worker)
+
+If the worker approach is too risky, the wall-merge pass (`buildRoomWallTemplate`) can be
+made resumable:
+- Extract the merge loop into a generator that yields after every N walls.
+- Drive it from the idle scheduler across multiple callbacks, each consuming up to
+  `deadline.timeRemaining()` ms.
+- This eliminates the single-callback blocking entirely at the cost of more complex state.
+
+---
+
 ## BUILD 376 — Non-blocking Room Preloading Pass 1
 
 ### What Was Implemented

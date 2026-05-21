@@ -166,6 +166,23 @@ export function isRoomFileCacheActive(): boolean {
 }
 
 /**
+ * Returns true if the currently active room file cache belongs to the official
+ * DustWeaver campaign.
+ *
+ * Use this to decide whether to preserve the cache across main-menu visits:
+ * the official campaign cache should remain active while the player is on the
+ * main menu so that lazy loading continues to work when they press Play again.
+ */
+export function isOfficialCampaignCacheActive(): boolean {
+  return _activeIsOfficialCampaign && _activeManifest !== null && _activeCampaignId !== null;
+}
+
+/** Returns the active campaign ID, or null if no cache is active. */
+export function getActiveCampaignId(): string | null {
+  return _activeCampaignId;
+}
+
+/**
  * Returns the adjacency index from the currently active room cache manifest,
  * or null if no cache is active or the manifest has no adjacency data.
  *
