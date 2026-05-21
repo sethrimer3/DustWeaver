@@ -12,6 +12,8 @@ import {
 } from './levels/roomFileLoader';
 import { fetchOfficialPackedCampaign } from './levels/packedCampaignLoader';
 import { getCampaignStartRoomId } from './levels/campaignSchema';
+import { createExportProgressModal } from './editor/editorExportProgressModal';
+import type { ExportProgressModal } from './editor/editorExportProgressModal';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui-root') as HTMLDivElement;
@@ -42,10 +44,46 @@ async function initAndStart(): Promise<void> {
   // at startup.  Adjacent rooms are preloaded lazily by the preload scheduler.
   // Editor mode: not reached here — editor calls initRoomRegistry() separately.
   if (typeof window !== 'undefined' && window.dustweaverElectron !== undefined) {
+    const electronApi = window.dustweaverElectron;
     try {
       const packedCampaign = await fetchOfficialPackedCampaign();
       if (packedCampaign !== null) {
-        const manifest = await ensureCampaignRoomCache(packedCampaign, true);
+        // Minimal overlay shown during the quick manifest validation step.
+        const cacheStatusDiv = document.createElement('div');
+        cacheStatusDiv.id = 'room-cache-status';
+        cacheStatusDiv.style.cssText = [
+          'position:fixed', 'inset:0', 'display:flex', 'align-items:center',
+          'justify-content:center', 'background:#000', 'color:#ccc',
+          'font:14px/1.4 monospace', 'z-index:9999', 'pointer-events:none',
+        ].join(';');
+        cacheStatusDiv.textContent = 'Checking room cache…';
+        uiRoot.appendChild(cacheStatusDiv);
+
+        // Full progress modal — lazily created on the first IPC progress event.
+        // Only shown when the cache is stale and regeneration is actually needed.
+        let cacheProgressModal: ExportProgressModal | null = null;
+
+        electronApi.onExportProgress(event => {
+          if (cacheProgressModal === null) {
+            cacheStatusDiv.style.display = 'none';
+            cacheProgressModal = createExportProgressModal(uiRoot, '🔄 Generating Room Cache');
+          }
+          cacheProgressModal.update(event);
+        });
+
+        let manifest: Awaited<ReturnType<typeof ensureCampaignRoomCache>>;
+        try {
+          manifest = await ensureCampaignRoomCache(packedCampaign, true);
+        } finally {
+          electronApi.offExportProgress();
+          // TypeScript 5.4 narrowing limitation: it sees only the null
+          // initialisation as proven in the outer scope (the callback
+          // assignment is not tracked). Cast to the declared union so that
+          // ?.destroy() resolves correctly.
+          (cacheProgressModal as ExportProgressModal | null)?.destroy();
+          cacheStatusDiv.remove();
+        }
+
         if (manifest !== null) {
           // Apply metadata (revision info, campaign spawn) so that
           // getLoadedOfficialCampaignRevisionMetadata() and
