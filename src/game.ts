@@ -6,7 +6,7 @@ import { createDefaultProgress, PlayerProgress } from './progression/playerProgr
 import { SaveSlotData, saveSaveSlot } from './progression/saveSlots';
 import type { CampaignSource } from './levels/campaignSource';
 import type { EditableCampaignSession } from './editor/editableCampaignSession';
-import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn } from './levels/rooms';
+import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn, clearRegistryAndApplyCampaignMetadata } from './levels/rooms';
 import { setActiveCampaignId } from './levels/campaigns';
 import { stringToParticleKind } from './editor/roomJsonSchema';
 import { unlockDustType, unlockActiveWeave } from './progression/unlocks';
@@ -14,9 +14,10 @@ import { WEAVE_REGISTRY } from './sim/weaves/weaveDefinition';
 import { PLAYER_INITIAL_HEALTH } from './screens/gameSpawn';
 import {
   ensureCampaignRoomCache,
-  populateRegistryFromRoomFiles,
+  loadRoomForGameplayAsync,
   deactivateCampaignRoomCache,
 } from './levels/roomFileLoader';
+import { getCampaignStartRoomId } from './levels/campaignSchema';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -131,9 +132,14 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           const campaign = await source.loadPackedCampaign();
 
           // ── Electron: validate / generate room file cache ─────────────────
-          // In Electron, prefer loading rooms from the derived room file cache
-          // rather than reparsing the full packed campaign.  If the cache is
-          // missing or stale it is regenerated automatically before gameplay.
+          // In Electron, prefer lazy loading from the derived room file cache
+          // rather than eagerly loading all rooms from the packed campaign.
+          // Only the start room is loaded at startup; adjacent rooms are
+          // preloaded lazily by the room preload scheduler during gameplay.
+          //
+          // Editor mode uses registerRoomsFromPackedCampaign (see below) —
+          // room files are derived artifacts, not editable source files.
+          //
           // In browser/GitHub Pages mode (no dustweaverElectron) the packed
           // campaign path is used unchanged.
           let usedFileCache = false;
@@ -156,22 +162,29 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
             try {
               const manifest = await ensureCampaignRoomCache(campaign, false, onStatus);
               if (manifest !== null) {
-                onStatus('Loading rooms from file cache…');
-                const allLoaded = await populateRegistryFromRoomFiles(
-                  campaign,
-                  manifest,
-                  campaign.campaign.id,
-                  false,
+                // Gameplay mode: apply world-map metadata (world names + map
+                // positions) from campaign data WITHOUT loading all rooms.
+                // The registry starts empty; only the start room is loaded now.
+                // Adjacent rooms are loaded lazily by the preload scheduler.
+                clearRegistryAndApplyCampaignMetadata(campaign);
+
+                const spawnRoomId = getCampaignStartRoomId(campaign);
+                onStatus('Loading start room from file cache…');
+                const startRoomDef = await loadRoomForGameplayAsync(
+                  spawnRoomId,
+                  campaign.worldMap,
                 );
-                if (allLoaded) {
+
+                if (startRoomDef !== undefined) {
                   usedFileCache = true;
                   console.log(
-                    '[game] Custom campaign rooms loaded from derived room file cache.',
+                    '[game] Custom campaign: start room loaded from file cache. ' +
+                    'Remaining rooms will be lazy-loaded during gameplay.',
                   );
                 } else {
                   console.warn(
-                    '[game] Some rooms could not be loaded from file cache — ' +
-                    'falling back to packed campaign.',
+                    '[game] Custom campaign: start room could not be loaded from file cache ' +
+                    `("${spawnRoomId}") — falling back to packed campaign.`,
                   );
                 }
               } else {
@@ -187,8 +200,9 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
             }
           }
 
-          // If the file cache path was not used (browser, IPC failure, hash
-          // mismatch), fall back to the packed campaign as before.
+          // If the file cache path was not used (browser, IPC failure, missing
+          // start room, etc.), fall back to the packed campaign as before.
+          // This eagerly loads all rooms but is always safe.
           if (!usedFileCache) {
             registerRoomsFromPackedCampaign(campaign);
           }

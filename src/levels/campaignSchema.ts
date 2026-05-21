@@ -367,9 +367,21 @@ export function validateSavedCampaignTopLevel(data: unknown): string[] {
   return errors;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HYDRATION
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Returns the room ID where gameplay should start for a campaign.
+ *
+ * Priority:
+ * 1. `campaign.campaignSpawn.roomId` — the explicit campaign spawn room.
+ * 2. `campaign.initialRoomId` — the fallback initial room.
+ *
+ * Used by both `main.ts` (official campaign) and `game.ts` (custom campaign)
+ * to determine which room to load first during lazy-loading startup.
+ */
+export function getCampaignStartRoomId(campaign: SavedCampaignV1): string {
+  return campaign.campaign.campaignSpawn?.roomId ?? campaign.campaign.initialRoomId;
+}
+
+
 
 /**
  * Hydrates all rooms in a validated SavedCampaignV1 into runtime RoomDef objects.

@@ -10,6 +10,7 @@ import type { RoomDef, RoomTransitionDef, TransitionDirection } from '../levels/
 export type { TransitionDirection };
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
+import { isRoomFileCacheActive, loadRoomForGameplayAsync } from '../levels/roomFileLoader';
 import type { WorldState } from '../sim/world';
 
 export const TRANSITION_SPAWN_INSET_BLOCKS = 3;
@@ -144,7 +145,23 @@ export function checkRoomTransitions(
         }
         return true;
       } else {
-        console.warn(`[Transition] Room "${currentRoom.id}" transition[${ti}] points to missing room "${t.targetRoomId}".`);
+        // Room is not in ROOM_REGISTRY.
+        if (isRoomFileCacheActive()) {
+          // Lazy-loading mode (Electron file cache): the preload scheduler
+          // should have loaded this room already.  If it hasn't (e.g. the
+          // player moved faster than the scheduler), trigger an urgent load
+          // now.  The transition will re-fire on the next frame once the
+          // room is registered.  Safe fallback: no crash, no corrupt state.
+          console.warn(
+            `[Transition] Room "${t.targetRoomId}" not yet loaded — ` +
+            'triggering urgent lazy load. Transition will fire next frame.',
+          );
+          void loadRoomForGameplayAsync(t.targetRoomId);
+        } else {
+          // Packed-campaign / browser mode: all rooms should be loaded at
+          // startup.  A missing room indicates a broken transition link.
+          console.warn(`[Transition] Room "${currentRoom.id}" transition[${ti}] points to missing room "${t.targetRoomId}".`);
+        }
       }
     }
   }
