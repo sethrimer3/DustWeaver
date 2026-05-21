@@ -142,7 +142,6 @@ function _bfsNearbyRooms(
     // Prefer live room transitions; fall back to manifest adjacency when the
     // room is not yet hydrated in the registry.
     const room = roomRegistry.get(currentId);
-    let neighborCount = 0;
 
     if (room !== undefined) {
       // Room is loaded — use its authoritative transition list.
@@ -152,7 +151,6 @@ function _bfsNearbyRooms(
         visited.add(targetId);
         result.push([targetId, radius + 1]);
         queue.push([targetId, radius + 1]);
-        neighborCount++;
       }
     } else if (adjacency !== undefined) {
       // Room is not yet loaded — use the manifest adjacency index as a fallback.
@@ -166,12 +164,9 @@ function _bfsNearbyRooms(
           visited.add(targetId);
           result.push([targetId, radius + 1]);
           queue.push([targetId, radius + 1]);
-          neighborCount++;
         }
       }
     }
-
-    void neighborCount; // suppress unused-variable lint
   }
 
   return result;

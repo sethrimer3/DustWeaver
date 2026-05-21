@@ -1,6 +1,6 @@
 # Campaign Room-Cache Architecture
 
-> Last updated: BUILD 384
+> Last updated: BUILD 385
 
 ## Overview
 
@@ -467,19 +467,17 @@ For each nearby roomId:
 Result: radius-1 and radius-2 rooms are loaded from file cache and have
 wall templates built before the player can normally reach them.
 
-**BFS discovery depth:** The preloader uses rooms that are already in
-`ROOM_REGISTRY` as BFS seeds.  It discovers neighbours by inspecting the
-transition portals of already-loaded rooms.  Rooms that are further than radius
-2 from any loaded room are not discovered until the player loads intermediate
-rooms.  This is acceptable for typical campaign layouts where radius-1 rooms
-are always loaded before the player reaches radius-2 rooms.
+**BFS discovery with manifest adjacency index:** When the room file cache is
+active and the manifest includes an `adjacency` index, the preloader can traverse
+neighbours of rooms that are NOT yet in `ROOM_REGISTRY`.  This means radius-2
+rooms are discovered and queued for lazy loading in the same idle pass that
+processes radius-1 rooms, without waiting for those intermediate rooms to be
+hydrated first.
 
-The manifest does not currently store room-adjacency metadata; adjacency is
-inferred from the transition portal arrays of loaded `RoomDef` objects.  If a
-future campaign has unusually long corridors of unloaded rooms, the manifest
-could be extended with a room-adjacency index to allow deeper BFS discovery
-without requiring those rooms to already be loaded.  This enhancement is not
-needed for current campaign sizes.
+When `adjacency` is absent (old manifests or non-file-cache mode), the scheduler
+falls back to registry-only BFS as before: it can only follow transitions from
+rooms already in the registry, and re-discovers deeper rooms after each room
+loads.
 
 ### In-memory room registry behaviour (ROOM_REGISTRY eviction intentionally deferred)
 
