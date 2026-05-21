@@ -34,6 +34,7 @@ import {
 import type { RoomCacheManifest, RoomCacheEntry } from '../levels/roomCacheManifest';
 import { computeContentHash, computeCampaignHashForValidation } from '../levels/roomFileLoader';
 import { buildZipBlob } from '../utils/minimalZipWriter';
+import type { ZipEntry } from '../utils/minimalZipWriter';
 
 // ── Main campaign constants ───────────────────────────────────────────────────
 const MAIN_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN';
@@ -76,7 +77,7 @@ async function downloadRoomCacheZip(
   const campaignHash = await computeCampaignHashForValidation(exported);
 
   // ── Build entries and manifest rooms ────────────────────────────────────
-  const entries: Array<{ filename: string; data: Uint8Array }> = [];
+  const entries: ZipEntry[] = [];
   const manifestRooms: Record<string, RoomCacheEntry> = {};
 
   for (const room of exported.rooms) {
@@ -101,7 +102,7 @@ async function downloadRoomCacheZip(
       hash: roomHash,
       updatedAt: nowIso,
     };
-    entries.push({ filename: `ROOMS/${roomFilename}`, data: textEncoder.encode(roomJsonStr) });
+    entries.push({ path: `ROOMS/${roomFilename}`, data: textEncoder.encode(roomJsonStr) });
   }
 
   // ── Build manifest ────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ async function downloadRoomCacheZip(
 
   // Insert manifest as the first entry so it appears at the top of the ZIP.
   entries.unshift({
-    filename: 'ROOMS/manifest.json',
+    path: 'ROOMS/manifest.json',
     data: textEncoder.encode(JSON.stringify(manifest, null, 2)),
   });
 

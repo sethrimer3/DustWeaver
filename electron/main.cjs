@@ -56,6 +56,8 @@ function resolveCustomCampaignDir(campaignId) {
  * Returns an ISO 8601 timestamp string that is safe to embed in a filename.
  * Colons are replaced with hyphens so the result is valid on Windows/macOS.
  * Example: "2026-05-21T03-44-12-123Z"
+ *
+ * @param {Date} date - The date to format.
  */
 function safeTimestampForFilename(date) {
   return date.toISOString().replace(/:/g, "-");

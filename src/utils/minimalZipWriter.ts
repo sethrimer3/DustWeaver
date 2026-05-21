@@ -62,7 +62,7 @@ function writeU32(buf: Uint8Array, offset: number, v: number): void {
 /** An entry to include in the ZIP archive. */
 export interface ZipEntry {
   /** Path inside the ZIP (e.g. `'ROOMS/manifest.json'`). */
-  filename: string;
+  path: string;
   /** Raw file bytes.  Use `new TextEncoder().encode(str)` for text. */
   data: Uint8Array;
 }
@@ -79,7 +79,7 @@ export function buildZipBlob(entries: ZipEntry[]): Blob {
 
   // Pre-encode each entry and compute CRC-32 up front.
   const prepared = entries.map(e => ({
-    filenameBytes: encoder.encode(e.filename),
+    filenameBytes: encoder.encode(e.path),
     data: e.data,
     crc: crc32(e.data),
   }));
