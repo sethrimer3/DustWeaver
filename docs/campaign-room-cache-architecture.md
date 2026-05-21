@@ -1,6 +1,6 @@
 # Campaign Room-Cache Architecture
 
-> Last updated: BUILD 382
+> Last updated: BUILD 383
 
 ## Overview
 
@@ -30,9 +30,12 @@ are regenerated automatically when needed.
    rewritten.  Unchanged room files are skipped so a small edit to one room
    does not rewrite all 80+ room files.
 
-4. **Progress is visible.**  In Electron editor mode the export UI shows a
-   live progress modal ("Exporting room 12 / 84: Marble Cavern") so users
-   always know what is happening and how long it will take.
+4. **Progress is always visible.**  In Electron, whether the export is triggered
+   from the editor ("Export Campaign") or automatically during first-load cache
+   generation / stale-cache regeneration, a live progress modal is shown so
+   users always know what is happening.  The same `ExportProgressModal` component
+   and the same `electronApi.onExportProgress` IPC event stream are used in both
+   contexts (see [Progress UI](#progress-ui)).
 
 5. **Browser / GitHub Pages is never broken.**  All Electron-specific code is
    guarded behind `if (window.dustweaverElectron !== undefined)`.  Browser
@@ -93,13 +96,13 @@ userData/
   "campaignVersion": 7,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-05-20T12:00:00.000Z",
+  "exportedAt": "2026-05-21T12:00:00.000Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
       "file": "lobby_room.json",
       "hash": "b4c91f2d3e087a56",
-      "updatedAt": "2026-05-20T12:00:00.000Z"
+      "updatedAt": "2026-05-21T12:00:00.000Z"
     }
   }
 }
@@ -119,6 +122,82 @@ Fields:
 Older exports wrote `manifest.json` as a plain JSON array of room ID strings.
 The loader detects this format and falls back gracefully — it will not validate
 room hashes but will not crash.
+
+---
+
+## Progress UI
+
+### Overview
+
+The same `ExportProgressModal` component (`src/editor/editorExportProgressModal.ts`)
+and the same `electronApi.onExportProgress` IPC event stream are reused for all
+three contexts where cache generation can occur:
+
+| Context | Triggered by |
+|---------|-------------|
+| **Editor export** | User clicks "Export Campaign" in Electron editor mode |
+| **First-load cache generation** | Custom campaign opened in Electron play mode with no valid cache |
+| **Stale-cache regeneration** | Campaign file updated since last export; detected at startup |
+| **Official campaign cache generation** | Official campaign missing or stale on Electron startup |
+
+The `createExportProgressModal(root, title?)` function accepts an optional `title`
+parameter.  The editor uses the default title (`'📦 Exporting Campaign'`); the
+cache-generation path passes `'🔄 Generating Room Cache'` to distinguish the two
+contexts visually.
+
+### How progress events flow
+
+```
+Renderer (game.ts or main.ts)          Main Process (electron/main.cjs)
+   │                                         │
+   ├─ show statusDiv "Checking room cache…"  │
+   ├─ electronApi.onExportProgress(cb) ──────► ipcRenderer.on('dw:export-progress')
+   ├─ ensureCampaignRoomCache()              │
+   │    └─ generateCampaignRoomCache()       │
+   │         └─ exportCampaignWithProgress ─►
+   │                                         ├─ sendProgress({step:'serializing'…})
+   │  ◄─ { step: 'serializing', … }         │
+   │    cb fires → modal lazily created,     │
+   │    statusDiv hidden                     │
+   │  ◄─ { step: 'writing-campaign', … }    ├─ Write .dwcampaign.json
+   │  ◄─ { step: 'exporting-room', … } ×N  ├─ For each room: hash → skip/write
+   │  ◄─ { step: 'writing-manifest', … }   ├─ Write manifest.json
+   │  ◄─ { step: 'cleaning-stale', … }     ├─ Remove orphan files
+   │  ◄─ { step: 'complete', … }           │
+   │                                        ◄─ return { ok, campaignDir }
+   ├─ electronApi.offExportProgress()        │
+   ├─ modal.destroy() (if created)           │
+   └─ statusDiv.remove()                     │
+```
+
+**Key behaviour:** the full progress modal is created *lazily* — only when the
+first `dw:export-progress` event arrives.  If the manifest is already fresh and
+no generation is needed, zero events fire and the modal is never constructed.
+The user only sees a brief "Checking room cache…" text overlay that disappears
+almost instantly.
+
+### Progress event payloads (from `electron/main.cjs`)
+
+| `step` | Additional fields | When emitted |
+|--------|-------------------|-------------|
+| `'serializing'` | — | Before writing anything (validation complete) |
+| `'writing-campaign'` | — | About to write the `.dwcampaign.json` file |
+| `'exporting-room'` | `roomIndex`, `totalRooms`, `roomId` | For each room processed |
+| `'writing-manifest'` | — | About to write `manifest.json` |
+| `'cleaning-stale'` | — | About to scan for orphan room files |
+| `'complete'` | `writtenRooms`, `skippedRooms` | All files written successfully |
+| `'error'` | `message` | Any fatal error during generation |
+
+The modal's detail line shows `N / M rooms — <roomId> (pct%)` for each
+`exporting-room` event so users can see exactly which room is being processed.
+
+### Browser / GitHub Pages
+
+In browser mode `window.dustweaverElectron` is `undefined`.  The entire
+`if (window.dustweaverElectron !== undefined)` block in `game.ts` and `main.ts`
+is skipped.  No status overlay, no progress modal, no Electron IPC is attempted.
+The packed campaign path (`registerRoomsFromPackedCampaign` / `initRoomRegistry`)
+is used unchanged.
 
 ---
 
@@ -174,7 +253,7 @@ single `.dwcampaign.json` file and must commit it to the repo themselves.
 
 ## Runtime Room Loading
 
-### Gameplay startup (BUILD 382 — lazy loading)
+### Gameplay startup (lazy loading)
 
 **Gameplay mode** no longer eagerly loads all rooms at startup when a valid
 room file cache exists.  Both the official campaign and custom campaigns now
@@ -185,6 +264,7 @@ startup
 │
 ├─ Fetch packed campaign file               ← always needed for metadata
 ├─ ensureCampaignRoomCache()               ← validate or generate file cache
+│    (progress modal shown if regeneration needed — see Progress UI above)
 │
 ├─ if file cache valid (Electron):
 │    applyOfficialCampaignMetadata()       ← set revision metadata + spawn
@@ -208,20 +288,23 @@ artifacts, not editable source files.
 
 `main.ts` now:
 1. Fetches the official packed campaign (for metadata).
-2. Calls `ensureCampaignRoomCache(campaign, true)` — validates or regenerates
-   the derived room file cache.
-3. If a valid manifest is returned, calls `applyOfficialCampaignMetadata` +
+2. Shows a minimal "Checking room cache…" overlay.
+3. Calls `ensureCampaignRoomCache(campaign, true)` — validates or regenerates
+   the derived room file cache (full progress modal shown if needed).
+4. If a valid manifest is returned, calls `applyOfficialCampaignMetadata` +
    `clearRegistryAndApplyCampaignMetadata` + `loadRoomForGameplayAsync(startRoomId)`.
-4. Starts the game with ONLY the start room in ROOM_REGISTRY.
-5. Falls back to `initRoomRegistry()` (full eager load) if anything fails.
+5. Starts the game with ONLY the start room in ROOM_REGISTRY.
+6. Falls back to `initRoomRegistry()` (full eager load) if anything fails.
 
 ### Custom campaign (Electron, valid cache)
 
 `game.ts` now:
-1. Calls `ensureCampaignRoomCache(campaign, false)`.
-2. If a valid manifest is returned, calls `clearRegistryAndApplyCampaignMetadata` +
+1. Shows a minimal "Checking room cache…" overlay.
+2. Calls `ensureCampaignRoomCache(campaign, false)`.
+   If regeneration is needed, the full progress modal is shown automatically.
+3. If a valid manifest is returned, calls `clearRegistryAndApplyCampaignMetadata` +
    `loadRoomForGameplayAsync(startRoomId)`.
-3. Falls back to `registerRoomsFromPackedCampaign(campaign)` if anything fails.
+4. Falls back to `registerRoomsFromPackedCampaign(campaign)` if anything fails.
 
 ### Browser / GitHub Pages
 
@@ -249,7 +332,7 @@ When the player triggers a room transition:
 
 ### Adjacent room preloading (lazy-load mode)
 
-`roomPreloadScheduler.ts` now accepts an optional `loadRoomAsync` callback
+`roomPreloadScheduler.ts` accepts an optional `loadRoomAsync` callback
 (set to `loadRoomForGameplayAsync` when the file cache is active):
 
 ```
@@ -257,7 +340,7 @@ After each room load:
 │
 scheduleRoomPreloads(currentRoom, ..., loadRoomAsync)
 │
-BFS discovers adjacent rooms (radius 1 and 2 via transitions).
+BFS discovers adjacent rooms (radius 1 and 2 via room transitions).
 │
 For each nearby roomId:
   ├─ if in ROOM_REGISTRY and wall template cached: skip (already done)
@@ -271,15 +354,52 @@ For each nearby roomId:
 Result: radius-1 and radius-2 rooms are loaded from file cache and have
 wall templates built before the player can normally reach them.
 
-### In-memory room cache behaviour
+**BFS discovery depth:** The preloader uses rooms that are already in
+`ROOM_REGISTRY` as BFS seeds.  It discovers neighbours by inspecting the
+transition portals of already-loaded rooms.  Rooms that are further than radius
+2 from any loaded room are not discovered until the player loads intermediate
+rooms.  This is acceptable for typical campaign layouts where radius-1 rooms
+are always loaded before the player reaches radius-2 rooms.
 
-Rooms are stored in `ROOM_REGISTRY` once loaded.  There is no active eviction:
-rooms accumulate in memory as the player explores.  For typical campaign sizes
-(~80 rooms) this is not a concern.  The registry grows lazily (one room per
-transition visit or preload), rather than all at once at startup.
+The manifest does not currently store room-adjacency metadata; adjacency is
+inferred from the transition portal arrays of loaded `RoomDef` objects.  If a
+future campaign has unusually long corridors of unloaded rooms, the manifest
+could be extended with a room-adjacency index to allow deeper BFS discovery
+without requiring those rooms to already be loaded.  This enhancement is not
+needed for current campaign sizes.
 
-The existing `RoomRuntimeCache` (wall templates + edge extensions) is a
-bounded LRU with 10 slots — unchanged.
+### In-memory room registry behaviour (ROOM_REGISTRY eviction intentionally deferred)
+
+Rooms are stored in `ROOM_REGISTRY` (a `Map<string, RoomDef>`) once loaded.
+There is **no active eviction**: rooms accumulate in memory as the player
+explores.
+
+**Why eviction is intentionally deferred:**
+- Typical campaign size is ~80 rooms × ~10–50 KB each ≈ 0.5–4 MB of room data.
+  This is negligible compared to texture atlases, audio buffers, and particle
+  simulation arrays.
+- Eviction would require the preload scheduler to re-load evicted rooms before
+  the player can reach them.  Adding LRU eviction safely requires careful
+  interaction with the preload scheduler, transition system, and the
+  `RoomRuntimeCache` (wall templates + edge extensions) — a separate, non-trivial
+  change.
+- The lazy-loading architecture already prevents the *startup* cost of loading
+  all rooms at once; the memory saved by eviction at runtime is not worth the
+  implementation risk at this stage.
+
+In DEV builds, `loadRoomForGameplayAsync` logs the current `ROOM_REGISTRY` size
+after each lazy registration so developers can monitor accumulation:
+```
+[roomFileLoader] Lazy-loaded "marble_cavern". ROOM_REGISTRY now has 7 room(s) (no eviction).
+```
+
+When eviction is added in a future pass, the recommended approach is an LRU
+strategy that always keeps the current room and the most-recently-visited N rooms
+(e.g. N = 20), evicting far-away rooms.  The `roomPreloadScheduler` will
+re-load evicted rooms from the file cache before the player reaches them again.
+
+The existing `RoomRuntimeCache` (wall templates + edge extensions) already uses
+a **bounded LRU with 10 slots** — unchanged.
 
 ### How gameplay chooses between room files and canonical campaign data (Electron)
 
@@ -303,19 +423,24 @@ ROOM_REGISTRY.get(roomId)
 When a user opens a custom `.dwcampaign.json` for play in Electron and no valid
 room cache exists:
 
-1. `ensureCampaignRoomCache` is called with the parsed campaign.
-2. If the manifest is absent or stale, `generateCampaignRoomCache` triggers
+1. A minimal "Checking room cache…" text overlay is shown immediately.
+2. `ensureCampaignRoomCache` validates the existing manifest (fast path).
+3. If the manifest is absent or stale, `generateCampaignRoomCache` triggers
    `dw:export-campaign-with-progress` IPC (the same pipeline used by the editor).
-3. A minimal status `<div>` overlay ("Generating room cache…") is shown during
-   generation.  Full progress bar UI can be connected in a future pass via the
-   existing `electronApi.onExportProgress` event stream.
-4. After generation, the manifest is re-read and validated.
-5. If validation still fails (e.g. disk full), a warning is logged and the game
+4. The first IPC progress event (`serializing`) causes the text overlay to be
+   hidden and replaced by the full `ExportProgressModal` with title
+   `'🔄 Generating Room Cache'`.
+5. The modal shows live status for each step (serializing, writing-campaign,
+   exporting-room N / M with room ID and percentage, writing-manifest,
+   cleaning-stale, complete / error).
+6. After generation, the manifest is re-read and validated.
+7. If validation still fails (e.g. disk full), a warning is logged and the game
    falls back to the packed campaign.
+8. The text overlay and modal (if shown) are both removed in the `finally` block.
 
 Opening a newer version of a custom campaign (bumped `metadata.version` or
 changed room content) triggers a hash mismatch, which causes the cache to be
-regenerated before gameplay starts.
+regenerated before gameplay starts — with the same full progress UI.
 
 ---
 
@@ -377,14 +502,14 @@ in `src/levels/roomFileLoader.ts` are intentional mirrors.  Both do:
 | `src/levels/roomCacheManifest.ts` | `RoomCacheManifest` types, `validateManifest()`, `ExportProgressEvent` |
 | `src/levels/roomFileLoader.ts` | Source-selection service: `ensureCampaignRoomCache`, `activateCampaignRoomCache` (stores worldMap), `loadRoomForGameplayAsync` (lazy per-room load, worldMap optional), `isRoomFileCacheActive`, `getActiveWorldMap` |
 | `src/levels/rooms.ts` | `clearRegistryAndApplyCampaignMetadata` (populates world names + map positions), `applyOfficialCampaignMetadata` (sets revision metadata without touching registry) |
-| `src/main.ts` | Official campaign startup: Electron → file cache → lazy start room; Browser → `initRoomRegistry()` |
-| `src/game.ts` | Custom campaign play: Electron → file cache → lazy start room; Browser → `registerRoomsFromPackedCampaign()` |
+| `src/main.ts` | Official campaign startup: Electron → status overlay + lazy modal → file cache → lazy start room; Browser → `initRoomRegistry()` |
+| `src/game.ts` | Custom campaign play: Electron → status overlay + lazy modal → file cache → lazy start room; Browser → `registerRoomsFromPackedCampaign()` |
 | `src/editor/editorExport.ts` | `exportMainCampaignJson()`, `exportCampaignJson()`, Electron progress helper |
-| `src/editor/editorExportProgressModal.ts` | DOM progress modal shown during Electron export |
+| `src/editor/editorExportProgressModal.ts` | Reusable DOM progress modal. `createExportProgressModal(root, title?)` — accepts optional title for non-export contexts |
 | `electron/main.cjs` | `dw:export-campaign-with-progress`, `dw:read-room-cache-manifest`, `dw:read-room-file`, `dw:read-all-room-files` IPC handlers |
 | `electron/preload.cjs` | Exposes all IPC channels to the renderer |
 | `src/electron.d.ts` | TypeScript types for all Electron IPC surface |
-| `src/screens/roomRuntimeCache.ts` | In-memory geometry cache for precomputed wall templates |
+| `src/screens/roomRuntimeCache.ts` | In-memory geometry cache for precomputed wall templates (bounded LRU, 10 slots) |
 | `src/screens/roomPreloadScheduler.ts` | BFS idle-time preloader for nearby rooms; in lazy mode also loads room DATA via `loadRoomAsync` callback |
 | `src/screens/gameTransitions.ts` | Room transition trigger; in lazy mode calls `loadRoomForGameplayAsync` when target room is missing |
 
@@ -403,8 +528,9 @@ in `src/levels/roomFileLoader.ts` are intentional mirrors.  Both do:
 
 1. Recipient places `<campaign>.dwcampaign.json` in the custom campaigns folder.
 2. On first play (Electron), `ensureCampaignRoomCache` detects the missing/stale
-   manifest and triggers automatic regeneration before gameplay starts.
-3. Subsequent loads use the derived room files for room loading.
+   manifest and triggers automatic regeneration with a full progress UI before
+   gameplay starts.
+3. Subsequent loads use the derived room files for lazy room loading.
 
 ---
 
@@ -435,28 +561,21 @@ in `src/levels/roomFileLoader.ts` are intentional mirrors.  Both do:
 
 ## Known Limitations / Next Steps
 
-1. **No active room eviction.**  Rooms accumulate in `ROOM_REGISTRY` as the
-   player explores.  For very large campaigns (200+ rooms) this could become
-   a memory concern.  An LRU eviction strategy can be added to `ROOM_REGISTRY`
-   in a future pass — keep current room and last N recently-visited rooms,
-   evict far-away rooms.  The `roomPreloadScheduler` will re-load evicted
-   rooms before the player reaches them.
+1. **No active ROOM_REGISTRY eviction (intentionally deferred).**  Rooms accumulate
+   in `ROOM_REGISTRY` as the player explores.  This is acceptable for typical
+   campaign sizes (~80 rooms).  See the [In-memory room registry behaviour](#in-memory-room-registry-behaviour-room_registry-eviction-intentionally-deferred)
+   section above for the full rationale and a recommended future LRU strategy.
 
-2. **Progress UI during first-load cache generation.**  Currently a minimal
-   status overlay is shown.  Full progress bar UI can be connected via
-   `electronApi.onExportProgress` / `offExportProgress` — the same
-   infrastructure used by the editor export modal — without further changes
-   to the IPC layer.
-
-3. **Custom campaign edit mode.**  The `customCampaignEdit` path in `game.ts`
+2. **Custom campaign edit mode.**  The `customCampaignEdit` path in `game.ts`
    still calls `registerRoomsFromPackedCampaign` directly.  Room file
    validation is not needed there because the editor always reads from the
    canonical campaign session object.  This is correct and intentional.
 
-4. **BFS depth limited by loaded rooms.**  The preload scheduler can only
-   discover radius-2 rooms through already-loaded rooms.  If a campaign has
-   long unvisited chains, deeper rooms won't be discovered until the player
-   loads the intermediate rooms.  This is acceptable for typical campaign
-   layouts where radius-1 rooms are always loaded before the player reaches
-   radius-2 rooms.
+3. **BFS depth limited by loaded rooms.**  The preload scheduler discovers
+   adjacent rooms by inspecting the transition portals of already-loaded rooms.
+   Deep unvisited room chains are not discovered until the player loads
+   intermediate rooms.  This is acceptable for typical campaign layouts.
+   See the [Adjacent room preloading](#adjacent-room-preloading-lazy-load-mode)
+   section above for a description of the current behaviour and a potential
+   future enhancement using manifest-stored room-adjacency metadata.
 

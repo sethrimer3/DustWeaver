@@ -18,6 +18,8 @@ import {
   deactivateCampaignRoomCache,
 } from './levels/roomFileLoader';
 import { getCampaignStartRoomId } from './levels/campaignSchema';
+import { createExportProgressModal } from './editor/editorExportProgressModal';
+import type { ExportProgressModal } from './editor/editorExportProgressModal';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -144,7 +146,9 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           // campaign path is used unchanged.
           let usedFileCache = false;
           if (typeof window !== 'undefined' && window.dustweaverElectron !== undefined) {
-            // Show a simple status div while cache validation / generation runs.
+            const electronApi = window.dustweaverElectron;
+
+            // Minimal overlay shown during the quick manifest validation step.
             const statusDiv = document.createElement('div');
             statusDiv.id = 'room-cache-status';
             statusDiv.style.cssText = [
@@ -155,8 +159,29 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
             statusDiv.textContent = 'Checking room cache…';
             uiRoot.appendChild(statusDiv);
 
+            // Full progress modal — lazily created on the first IPC progress event.
+            // It is only shown if cache regeneration is actually needed; if the
+            // existing manifest is valid the listener fires zero times and the
+            // heavy modal is never constructed.
+            let cacheProgressModal: ExportProgressModal | null = null;
+
+            // Register the progress listener BEFORE calling ensureCampaignRoomCache
+            // so that no events are missed even if generation starts immediately.
+            electronApi.onExportProgress(event => {
+              if (cacheProgressModal === null) {
+                // Switch from the plain text overlay to the full progress modal.
+                statusDiv.style.display = 'none';
+                cacheProgressModal = createExportProgressModal(uiRoot, '🔄 Generating Room Cache');
+              }
+              cacheProgressModal.update(event);
+            });
+
+            // Pass light status text to the plain overlay when the modal is absent
+            // (i.e. during the validation-only phase).
             const onStatus = (msg: string): void => {
-              statusDiv.textContent = msg;
+              if (cacheProgressModal === null) {
+                statusDiv.textContent = msg;
+              }
             };
 
             try {
@@ -196,6 +221,12 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
             } catch (cacheErr) {
               console.warn('[game] Room cache check error:', cacheErr);
             } finally {
+              electronApi.offExportProgress();
+              // TypeScript narrowing limitation: it only tracks the null
+              // initialisation as proven in the outer scope; the callback
+              // assignment is not visible to the control-flow analyser.
+              // Cast to the declared union so that ?.destroy() resolves correctly.
+              (cacheProgressModal as ExportProgressModal | null)?.destroy();
               statusDiv.remove();
             }
           }

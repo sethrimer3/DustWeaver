@@ -614,6 +614,16 @@ export async function loadRoomForGameplayAsync(
     const roomDef = await loadRoomFromFileCache(roomId, map);
     if (roomDef !== null) {
       registerRoom(roomDef);
+      if (import.meta.env.DEV) {
+        // ROOM_REGISTRY grows lazily; each entry here was loaded on demand
+        // rather than at startup.  The registry is never actively evicted —
+        // rooms accumulate as the player explores.  For typical campaign sizes
+        // (~80 rooms) this is not a memory concern.
+        console.debug(
+          `[roomFileLoader] Lazy-loaded "${roomId}". ` +
+          `ROOM_REGISTRY now has ${ROOM_REGISTRY.size} room(s) (no eviction).`,
+        );
+      }
       return roomDef;
     }
   } finally {
