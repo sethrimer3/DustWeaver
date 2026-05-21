@@ -26,6 +26,25 @@ export const ROOM_CACHE_VERSION = 1 as const;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Per-room adjacency entry in the manifest adjacency index.
+ *
+ * This is derived preload-optimisation metadata, not editable source data.
+ * Generated from each room's `SavedTransition.to` fields during export and
+ * stored in `manifest.adjacency` so the preload scheduler can discover
+ * radius-2 neighbours without requiring all intermediate rooms to already
+ * be hydrated in ROOM_REGISTRY.
+ */
+export interface AdjacencyEntry {
+  /** The room ID this entry describes (redundant with the key for robustness). */
+  roomId: string;
+  /**
+   * Deduplicated list of target room IDs reachable via direct transitions.
+   * Only includes room IDs that are present in `manifest.rooms`.
+   */
+  targets: string[];
+}
+
 /** Per-room entry stored in the manifest. */
 export interface RoomCacheEntry {
   /** Room ID — matches the `id` field of the SavedRoomV2 data. */
@@ -86,6 +105,22 @@ export interface RoomCacheManifest {
    * nested field ensures the roomId is always available in the serialised entry.
    */
   rooms: Record<string, RoomCacheEntry>;
+  /**
+   * Optional adjacency index: maps each roomId to the set of rooms reachable
+   * via its direct transitions.
+   *
+   * This is derived preload-optimisation metadata, not editable source data.
+   * It allows the room preload scheduler to discover radius-2 neighbours
+   * via BFS even when intermediate rooms have not yet been hydrated into
+   * ROOM_REGISTRY.
+   *
+   * Generated during export from each room's `SavedTransition.to` fields.
+   * Only rooms present in `manifest.rooms` appear as both keys and targets.
+   *
+   * **Backward-compatible:** absent in old manifests.  When missing, the
+   * preload scheduler falls back to registry-only BFS (existing behaviour).
+   */
+  adjacency?: Record<string, AdjacencyEntry>;
 }
 
 // ── Type guard ────────────────────────────────────────────────────────────────

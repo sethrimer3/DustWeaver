@@ -266,6 +266,48 @@ function tryReadExistingManifest(roomsDir) {
   }
 }
 
+/**
+ * Builds the manifest adjacency index from an array of SavedRoomV2 room objects.
+ *
+ * Each room's `transitions` array is inspected for `.to` target room IDs.
+ * Only room IDs present in `knownRoomIds` appear as both keys and targets in
+ * the result so the scheduler never tries to load rooms not in the manifest.
+ * Targets are deduplicated per room.
+ *
+ * @param {Array}         rooms        - Array of SavedRoomV2 room objects from the campaign.
+ * @param {Set<string>}   knownRoomIds - Set of room IDs present in manifest.rooms.
+ * @returns {Object} adjacency map: { [roomId]: { roomId, targets: string[] } }
+ */
+function buildManifestAdjacency(rooms, knownRoomIds) {
+  const adjacency = {};
+  for (const room of rooms) {
+    if (typeof room !== "object" || room === null) continue;
+    const roomId = room.id;
+    if (typeof roomId !== "string" || !knownRoomIds.has(roomId)) continue;
+
+    const transitions = room.transitions;
+    if (!Array.isArray(transitions)) continue;
+
+    const seen = new Set();
+    const targets = [];
+    for (const t of transitions) {
+      if (typeof t !== "object" || t === null) continue;
+      const to = t.to;
+      if (typeof to !== "string" || to.length === 0) continue;
+      // Only include targets that are known rooms in the manifest.
+      if (!knownRoomIds.has(to)) continue;
+      if (seen.has(to)) continue;
+      seen.add(to);
+      targets.push(to);
+    }
+
+    if (targets.length > 0) {
+      adjacency[roomId] = { roomId, targets };
+    }
+  }
+  return adjacency;
+}
+
 
 // ── IPC handler: dw:save-official-campaign (legacy) ──────────────────────────
 
@@ -398,6 +440,7 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
     }
 
     // ── Write enhanced manifest (atomic) ──────────────────────────────────
+    const knownRoomIds = new Set(Object.keys(manifestRooms));
     const manifest = {
       campaignId: campaignMeta.id,
       campaignName: campaignMeta.title || campaignMeta.id,
@@ -407,6 +450,7 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
       roomCacheVersion: ROOM_CACHE_VERSION,
       exportedAt: nowIso,
       rooms: manifestRooms,
+      adjacency: buildManifestAdjacency(rooms, knownRoomIds),
     };
     const manifestPath = path.join(roomsDir, "manifest.json");
     try {
@@ -644,6 +688,7 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
     // ── Write enhanced manifest (atomic) ──────────────────────────────────
     sendProgress({ step: "writing-manifest", message: "Writing room manifest…" });
 
+    const knownRoomIds = new Set(Object.keys(manifestRooms));
     const manifest = {
       campaignId,
       campaignName: campaignMeta.title || campaignId,
@@ -655,6 +700,7 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
       roomCacheVersion: ROOM_CACHE_VERSION,
       exportedAt: nowIso,
       rooms: manifestRooms,
+      adjacency: buildManifestAdjacency(rooms, knownRoomIds),
     };
     const manifestPath = path.join(roomsDir, "manifest.json");
     try {
