@@ -222,10 +222,10 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
               console.warn('[game] Room cache check error:', cacheErr);
             } finally {
               electronApi.offExportProgress();
-              // TypeScript 5.4 narrowing limitation: it sees only the null
-              // initialisation as proven in the outer scope (the callback
-              // assignment is not tracked). Cast to the declared union so that
-              // ?.destroy() resolves correctly.
+              // TypeScript narrowing limitation: it only tracks the null
+              // initialisation as proven in the outer scope; the callback
+              // assignment is not visible to the control-flow analyser.
+              // Cast to the declared union so that ?.destroy() resolves correctly.
               (cacheProgressModal as ExportProgressModal | null)?.destroy();
               statusDiv.remove();
             }
