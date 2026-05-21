@@ -1,5 +1,87 @@
 # DustWeaver — Next Steps
 
+## BUILD 388 — Transition Cleanup: Legacy-Only Fancy Transitions
+
+### What Was Implemented
+
+**Removed all fancy transition systems from the active gameplay runtime.**
+Normal gameplay now uses exclusively the instant room-to-room transition path.
+
+#### Files changed in active gameplay:
+
+- **`src/render/transitions/transitionState.ts`** — Simplified `TransitionDebugStats` to
+  only instant-transition fields (removed camera interpolation, reveal, bubbles, edge-cache,
+  adjacent-room flags).
+- **`src/render/hud/renderProfiler.ts`** — Simplified transition debug panel to match new
+  `TransitionDebugStats` (4 fields: `currentRoomId`, `destinationRoomId`,
+  `lastPlayerSpeedWorld`, `transitionCooldownMs`).
+- **`src/render/transitions/transitionConfig.ts`** — Simplified to instant-transition-only
+  active config. `ENABLE_SIMPLE_ROOM_TRANSITIONS = true` is the only active flag.
+- **`src/screens/gameRoomTransitionOrchestrator.ts`** — Removed `transitionRevealState`,
+  `ENABLE_TRANSITION_CAMERA_REVEAL`, `notifyTransitionRoomEntered`, `notifyFreshRoomLoaded`,
+  `getOppositeTransitionDirection` imports and the reveal-notify branch.
+- **`src/screens/gameDarkRoomLighting.ts`** — Removed `previewBubbles`/`previewBubbleCount`
+  from `DarkRoomLightingContext` and the bubble-as-light-source loop.
+- **`src/screens/gameRender.ts`** — Removed `EdgeExtensionCache`, `PreviewBubbleState`,
+  `TransitionPreviewContext`, `renderEdgeExtension`, `renderNextRoomFacingEdge`,
+  `ENABLE_EDGE_EXTENSION_RENDERING`, `ENABLE_NEXT_ROOM_EDGE_PREVIEW` from imports and
+  `RenderFrameContext`. Removed edge-extension and next-room-edge rendering branches.
+  Room clip rect is now always single-room (no crossing union). Background fill no longer
+  checks `r.isCrossing`.
+- **`src/screens/gameScreen.ts`** — Removed: `twoRoomCrossing` imports,
+  `gameSeamlessStaging` imports, `buildEdgeExtensionCache`/`EdgeExtensionCache` imports,
+  `computePreviewBubbles`/`PreviewBubbleState` imports, `transitionCameraReveal` imports,
+  `transitionPreviewContext` imports, `ENABLE_TWO_ROOM_CAMERA_CROSSING`,
+  `ENABLE_TRANSITION_CAMERA_REVEAL` flags. State variables removed: `crossingState`,
+  `stagingState`, `edgeExtensionCache`, `previewBubbles`, `previewBubbleCount`,
+  `transitionRevealState`, `transitionPreviewCtx`. Per-frame computation removed:
+  `updateTransitionReveal`, `updateTransitionPreviewContext`, `computePreviewBubbles`,
+  crossing finalization check, `isCrossing`/`renderUnionBounds` derivation. Phase F
+  no longer builds or reads edge-extension cache.
+- **`src/screens/preparedRoomRuntime.ts`** — Removed `buildEdgeExtensionCache` import and
+  call. `buildPreparedRoomRuntime` now builds 3 passes (walls, blockers, decorations).
+  Returns `runtimeEntry` with `edgeExtension: null`.
+- **`src/screens/roomRuntimeCache.ts`** — `isEntryFullyPrepared` no longer requires
+  `edgeExtension` to count a room as fully prepared.
+- **`src/screens/roomPreparationWorker.ts`** — Removed `buildEdgeExtensionCache` import
+  and BFS pass. Worker now runs 3 passes (walls, blockers, decorations).
+- **`src/screens/roomPreparationWorkerProtocol.ts`** — Removed `SerializedEdgeExtension`
+  and `edgeMs` from the protocol. `WorkerSuccessMessage` is simpler.
+- **`src/screens/roomPreloadScheduler.ts`** — Removed `EdgeExtensionCache` import,
+  edge-extension reconstruction in `_reconstructRoomRuntimeEntry`. Sets
+  `edgeExtension: null` on reconstructed entries.
+
+#### Legacy files (not imported by gameplay):
+
+The following files remain in `src/render/transitions/` and `src/screens/` with
+`LEGACY:` header comments. They are not imported by any active gameplay file:
+
+- `src/render/transitions/transitionCameraReveal.ts`
+- `src/render/transitions/transitionPreviewContext.ts`
+- `src/render/transitions/transitionPreviewTypes.ts`
+- `src/render/transitions/previewBubbleState.ts`
+- `src/render/transitions/previewBubbleRenderer.ts`
+- `src/render/transitions/edgeExtensionCache.ts`
+- `src/render/transitions/edgeExtensionRenderer.ts`
+- `src/render/transitions/nextRoomEdgeRenderer.ts`
+- `src/screens/twoRoomCrossing.ts`
+- `src/screens/gameSeamlessStaging.ts`
+- `src/render/transitions/legacy/README.md` (explains re-enablement)
+
+### Acceptance criteria met
+
+- ✅ Normal gameplay imports no active fancy transition rendering/reveal/preview/crossing code.
+- ✅ Instant room transitions still work in all four directions.
+- ✅ Cache-hit transitions remain instant.
+- ✅ Cache-miss transitions use the existing async loading overlay path.
+- ✅ `buildPreparedRoomRuntime` no longer builds edge-extension caches.
+- ✅ `roomPreparationWorker` no longer builds edge-extension caches.
+- ✅ `gameScreen.ts` no longer computes preview bubbles or transition preview context.
+- ✅ `gameRender.ts` no longer accepts or renders transition preview/edge-extension inputs.
+- ✅ `npm run build` passes.
+
+---
+
 ## BUILD 387 — Web Worker Migration for Room Preloading
 
 ### What Was Implemented

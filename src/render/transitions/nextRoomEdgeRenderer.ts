@@ -1,4 +1,10 @@
 /**
+ * LEGACY: nextRoomEdgeRenderer.ts — Staging renderer for the connected room's 2-block
+ * facing edge.
+ *
+ * NOT imported by active gameplay. Retained for historical/reference purposes.
+ * See src/render/transitions/legacy/README.md for re-enablement instructions.
+ *
  * nextRoomEdgeRenderer.ts — Staging renderer for the connected room's 2-block
  * facing edge.
  *

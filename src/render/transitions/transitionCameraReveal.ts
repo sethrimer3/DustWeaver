@@ -1,4 +1,9 @@
 /**
+ * LEGACY: transitionCameraReveal.ts — Smooth camera offset for room-transition reveal.
+ *
+ * NOT imported by active gameplay. Retained for historical/reference purposes.
+ * See src/render/transitions/legacy/README.md for re-enablement instructions.
+ *
  * transitionCameraReveal.ts — Smooth camera offset for room-transition reveal.
  *
  * Computes a world-space offset applied to the camera (via ox/oy) to reveal

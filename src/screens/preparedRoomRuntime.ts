@@ -7,13 +7,15 @@
  * world state (enemies, hazards, particles, falling blocks) — those are reset
  * per-visit in `_makeLoadRoomPhases()` phases B-E and are never cached.
  *
- * BUILD 386
+ * Edge-extension cache building is intentionally excluded — that feature is
+ * legacy-only.  See src/render/transitions/legacy/README.md for details.
+ *
+ * BUILD 388
  */
 
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { buildRoomWallTemplate } from './gameRoomWalls';
-import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { RoomRuntimeEntry } from './roomRuntimeCache';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
@@ -29,8 +31,6 @@ export interface PreparedRoomResult {
   runtimeEntry: RoomRuntimeEntry;
   /** Wall template (O(n²) merge pass) build time in ms. */
   wallMs: number;
-  /** Edge extension (BFS pass) build time in ms. */
-  edgeMs: number;
   /** Ambient blocker set construction time in ms. */
   blockerMs: number;
   /** Wall decoration geometry build time in ms. */
@@ -47,11 +47,11 @@ export interface PreparedRoomResult {
  *
  * Includes:
  *  - `wallTemplate`      — merged wall geometry (O(n²) merge pass)
- *  - `edgeExtension`     — edge-strip tile cache (BFS over expanded grid)
  *  - `blockerKeys`       — ambient-light blocker `Set<string>`
  *  - `darkBlockerKeys`   — dark-ambient blocker `Set<string>`
  *  - `wallDecorations`   — static decoration geometry array
  *
+ * Edge-extension cache is not built here (legacy feature, disabled).
  * Safe to call from any context (no DOM, no mutable world state, no RNG).
  */
 export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
@@ -59,11 +59,6 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
   const t0Wall = performance.now();
   const wallTemplate = buildRoomWallTemplate(room);
   const wallMs = performance.now() - t0Wall;
-
-  // ── Edge extension (BFS over expanded grid) ───────────────────────────────
-  const t0Edge = performance.now();
-  const edgeExtension = buildEdgeExtensionCache(room);
-  const edgeMs = performance.now() - t0Edge;
 
   // ── Ambient light blocker sets ────────────────────────────────────────────
   const t0Blocker = performance.now();
@@ -99,18 +94,17 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
   const wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
   const decorMs = performance.now() - t0Decor;
 
-  const totalMs = wallMs + edgeMs + blockerMs + decorMs;
+  const totalMs = wallMs + blockerMs + decorMs;
 
   return {
     runtimeEntry: {
       wallTemplate,
-      edgeExtension,
+      edgeExtension: null,
       blockerKeys,
       darkBlockerKeys,
       wallDecorations,
     },
     wallMs,
-    edgeMs,
     blockerMs,
     decorMs,
     totalMs,

@@ -3,18 +3,23 @@
  *
  * Caches:
  *  - `RoomWallTemplate` — result of the expensive O(n²) wall-merge pass.
- *  - `EdgeExtensionCache` — precomputed edge-extension tile strip.
+ *  - Ambient-light blocker key sets — built inline on cache miss.
+ *  - Wall decorations — pure geometry, no mutable state.
  *
- * Both can be built ahead of time for rooms near the player via
- * `roomPreloadScheduler.ts`, so that when the player crosses a transition the
- * expensive work is already done and `_makeLoadRoomPhases` only copies data
- * rather than recomputing it.
+ * EdgeExtensionCache is no longer built during normal gameplay (legacy feature).
+ * The `edgeExtension` field is kept in `RoomRuntimeEntry` for legacy compatibility
+ * but is always `null` in normal gameplay.  See src/render/transitions/legacy/README.md.
+ *
+ * Both wall templates and blocker sets can be built ahead of time for rooms near
+ * the player via `roomPreloadScheduler.ts`, so that when the player crosses a
+ * transition the expensive work is already done and `_makeLoadRoomPhases` only
+ * copies data rather than recomputing it.
  *
  * Cache invalidation:
  *  - Call `invalidate(roomId)` when a room is edited (editor reload callback).
  *  - Call `invalidateAll()` to reset for save/load round-trips.
  *
- * BUILD 357
+ * BUILD 388
  */
 
 import type { RoomWallTemplate } from './gameRoomWalls';
@@ -27,8 +32,9 @@ export interface RoomRuntimeEntry {
   /** Merged wall geometry snapshot — apply with `applyRoomWallTemplate`. */
   wallTemplate: RoomWallTemplate;
   /**
-   * Edge-extension tile strip — used directly by the renderer.
-   * `null` = not yet built; non-null = ready.
+   * Edge-extension tile strip — used by the editor renderer.
+   * Legacy: not built during normal gameplay (edge-extension rendering disabled).
+   * `null` = not built; non-null = ready (editor-only).
    */
   edgeExtension: EdgeExtensionCache | null;
   /**
@@ -57,10 +63,14 @@ export interface RoomRuntimeEntry {
  * Returns `true` when all static fields in the entry have been computed.
  * A "fully prepared" entry can be applied instantly during a room transition
  * without any build passes.
+ *
+ * Note: `edgeExtension` is intentionally excluded — edge-extension cache
+ * building is no longer part of normal gameplay (legacy feature, disabled).
+ * An entry is considered fully prepared as soon as walls, blockers, and
+ * decorations are ready.
  */
 export function isEntryFullyPrepared(entry: RoomRuntimeEntry): boolean {
   return (
-    entry.edgeExtension !== null &&
     entry.blockerKeys !== null &&
     entry.darkBlockerKeys !== null &&
     entry.wallDecorations !== null

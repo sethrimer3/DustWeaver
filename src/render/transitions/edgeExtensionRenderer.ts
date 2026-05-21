@@ -1,4 +1,9 @@
 /**
+ * LEGACY: edgeExtensionRenderer.ts — Renders visual tiles beyond the room boundary.
+ *
+ * NOT imported by active gameplay. Retained for historical/reference purposes.
+ * See src/render/transitions/legacy/README.md for re-enablement instructions.
+ *
  * edgeExtensionRenderer.ts — Renders visual tiles beyond the room boundary.
  *
  * Must be called BEFORE the room clip rect is set (before ctx.clip() in

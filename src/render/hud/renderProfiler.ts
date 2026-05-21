@@ -457,13 +457,8 @@ export class RenderProfiler {
       const transLines = [
         `Room: ${ts.currentRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)}`,
         `Dest: ${ts.destinationRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH) || '—'}`,
-        `Trans: ${ts.isCameraTransitioning ? `${(ts.cameraTransProgress * 100).toFixed(0)}%` : 'no'}`,
         `Spd@X: ${ts.lastPlayerSpeedWorld.toFixed(0)}wu/s`,
-        `CamS: ${ts.cameraTransStartXWorld.toFixed(0)},${ts.cameraTransStartYWorld.toFixed(0)}`,
-        `CamT: ${ts.cameraTransTargetXWorld.toFixed(0)},${ts.cameraTransTargetYWorld.toFixed(0)}`,
-        `AdjRm: ${ts.isAdjacentRoomRenderingDisabled ? 'OFF' : 'on'}`,
-        `Bubbs: ${ts.activeBubbleCount}`,
-        `Edge$: ${ts.edgeCacheFilled ? 'OK' : '--'}`,
+        `Cooldown: ${ts.transitionCooldownMs.toFixed(0)}ms`,
       ];
       const transPanelH = transLines.length * lineHeightPx + 8;
       ctx.save();

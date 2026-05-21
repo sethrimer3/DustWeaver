@@ -22,29 +22,6 @@ import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, snapCamera, getCameraOffset } from '../render/camera';
-// BUILD 297: ENABLE_TWO_ROOM_CAMERA_CROSSING is false, so isCrossingComplete /
-// getCrossingUnionBounds are only reachable via the preserved dead-code guard
-// block that allows easy re-enablement of the crossing system in the future.
-import {
-  createTwoRoomCrossingState,
-  isCrossingComplete,
-  getCrossingUnionBounds,
-  type TwoRoomCrossingState,
-} from './twoRoomCrossing';
-import {
-  type SeamlessStagingState,
-  createSeamlessStagingState,
-  resetSeamlessStagingState,
-  // finalizeCrossingSeamless is only reached when ENABLE_TWO_ROOM_CAMERA_CROSSING
-  // is true.  Preserved so the crossing system can be re-enabled without
-  // additional import surgery.
-  finalizeCrossingSeamless,
-  computeStagingUnionBounds,
-} from './gameSeamlessStaging';
-import {
-  ENABLE_TWO_ROOM_CAMERA_CROSSING,
-  ENABLE_TRANSITION_CAMERA_REVEAL,
-} from '../render/transitions/transitionConfig';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
@@ -109,22 +86,9 @@ import {
   preloadAdjacentRoomAssets,
   areRoomSpritesReady,
 } from '../render/roomAssetPreloader';
-import { buildEdgeExtensionCache, EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
 import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
 import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
-import { computePreviewBubbles, PreviewBubbleState } from '../render/transitions/previewBubbleState';
-import {
-  createTransitionRevealState,
-  notifyFreshRoomLoaded,
-  updateTransitionReveal,
-  getTransitionRevealOffset,
-} from '../render/transitions/transitionCameraReveal';
-import {
-  createTransitionPreviewContext,
-  updateTransitionPreviewContext,
-  TransitionPreviewContext,
-} from '../render/transitions/transitionPreviewContext';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import { GameLoadingOverlay } from './gameLoadingOverlay';
 import {
@@ -139,7 +103,6 @@ import {
   cancelCameraTransition,
   resetCameraEffBoundsForRoom,
   updateCameraFollow,
-  CAM_TRANS_DURATION_SEC,
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
@@ -289,20 +252,10 @@ export function startGameScreen(
   let roomWidthWorld = currentRoom.widthBlocks * BLOCK_SIZE_MEDIUM;
   let roomHeightWorld = currentRoom.heightBlocks * BLOCK_SIZE_MEDIUM;
 
-  /** BUILD 279: Two-room smooth camera crossing state. */
-  const crossingState: TwoRoomCrossingState = createTwoRoomCrossingState();
+  // Room origin is always 0 — no seamless staging/crossing active.
+  const currentRoomOriginXWorld = 0;
+  const currentRoomOriginYWorld = 0;
 
-  /**
-   * BUILD 284: Seamless room staging state.
-   * BUILD 286: Logic extracted to gameSeamlessStaging.ts.
-   *
-   * After a seamless crossing finalises, the previous room's walls are kept in
-   * `world.walls[]` as a "staged" adjacent room.  `stagingState.currentRoomOriginXWorld/Y`
-   * tracks where the active room starts in world-space (non-zero after a
-   * right/down crossing because we shift the world to keep coordinates
-   * positive).  These are reset to zero by any full `loadRoom` call.
-   */
-  const stagingState: SeamlessStagingState = createSeamlessStagingState();
   const dustContainerSprite = new Image();
   dustContainerSprite.src = `${BASE}SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/dustContainer.png`;
   let isDustContainerSpriteLoaded = false;
@@ -360,18 +313,8 @@ export function startGameScreen(
     roomWidthWorld = room.widthBlocks * BLOCK_SIZE_MEDIUM;
     roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
 
-    // BUILD 279: Always clear any in-progress two-room crossing on room load.
-    // This handles death recovery, save-load, and any other loadRoom call.
-    crossingState.phase       = 'inactive';
-    crossingState.nextRoom    = null;
-    crossingState.currentRoom = null;
-
-    // BUILD 284: Reset seamless-staging state on any full room load.
-    resetSeamlessStagingState(stagingState);
-
-    // BUILD 297: Cancel any in-progress camera transition so non-transition
-    // room loads (death respawn, editor reload, lambda teleport) do not
-    // inherit the interpolation.  The transition callback sets it true AFTER
+    // Reset camera transition state on any full room load.
+    // The transition callback sets isTransitionActive true AFTER
     // loadRoom returns, so clearing it here is always safe.
     cancelCameraTransition(camState);
 
@@ -620,42 +563,9 @@ export function startGameScreen(
     }
 
     // Reset effective camera clamp bounds to the new room's single-room bounds.
-    // If this load preserves the camera (seamless crossing), the next frame will
-    // snap these bounds to the staging union bounds when stagingState is updated.
     resetCameraEffBoundsForRoom(camState, roomWidthWorld, roomHeightWorld);
 
     preloadRoomThemeSprites(room);
-
-    // Use cached edge extension if available; build and store otherwise.
-    // Must run after walls are applied (Phase D) so wall geometry is finalised.
-    const _cachedEntry = roomRuntimeCache.get(room.id);
-    if (_cachedEntry !== undefined && _cachedEntry.edgeExtension !== null) {
-      edgeExtensionCache = _cachedEntry.edgeExtension;
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} edge: cache HIT`);
-      }
-    } else {
-      const _edgeT0 = import.meta.env.DEV ? performance.now() : 0;
-      const built = buildEdgeExtensionCache(room);
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} edge: cache MISS (build ${(performance.now() - _edgeT0).toFixed(1)}ms)`);
-      }
-      edgeExtensionCache = built;
-      // Update the cache entry (or create a new one if Phase D somehow cleared it).
-      const wallEntry = roomRuntimeCache.get(room.id);
-      if (wallEntry !== undefined) {
-        wallEntry.edgeExtension = built;
-      } else {
-        // Should not normally happen; build missing fields too.
-        roomRuntimeCache.set(room.id, {
-          wallTemplate: buildRoomWallTemplate(room),
-          edgeExtension: built,
-          blockerKeys: null,
-          darkBlockerKeys: null,
-          wallDecorations: null,
-        });
-      }
-    }
 
     // Cancel any in-flight preload schedule from the previous room and start
     // a new one for the rooms adjacent to the newly loaded room.
@@ -751,14 +661,10 @@ export function startGameScreen(
   /** Tracks the last seen world.lastPlayerBlockedTick to detect new BLOCKED events. */
   const prevLastPlayerBlockedTick = { value: -1 };
 
-  // ── Edge extension cache ──────────────────────────────────────────────────
-  // Built once per loadRoom() call.  Rendered as visual tiles beyond the
-  // room edge boundary to prevent a hard black cutoff at room walls.
-  let edgeExtensionCache: EdgeExtensionCache | null = null;
-
-  // ── Room runtime cache (wall templates + edge extensions) ─────────────────
+  // ── Room runtime cache (wall templates) ──────────────────────────────────
   // Precomputed static room data keyed by room ID.  Allows _makeLoadRoomPhases
   // to skip the expensive merge pass when a room has already been preloaded.
+  // Edge-extension caches are no longer built here — see legacy README.
   // Bounded LRU with 10 slots (current room + 2-hop radius + headroom).
   const roomRuntimeCache = new RoomRuntimeCache(10);
 
@@ -789,30 +695,8 @@ export function startGameScreen(
     transitionDir: null,
   };
 
-  // ── Preview bubble state ──────────────────────────────────────────────────
-  // Pre-allocated array of per-bubble state, updated each frame via
-  // computePreviewBubbles().  Only entries [0, previewBubbleCount) are valid.
-  const previewBubbles: PreviewBubbleState[] = [];
-  let previewBubbleCount = 0;
-
-  // ── Camera transition reveal state ───────────────────────────────────────
-  // Tracks a smooth camera offset applied on top of the normal follow-and-clamp
-  // camera to reveal edge-extension tiles as the player approaches or crosses
-  // a room transition.  No fade overlay is used — transitions feel like a
-  // camera pan toward the room boundary.
-  const transitionRevealState = createTransitionRevealState();
-  const lambdaAnchorState = createGameLambdaAnchorState(() => {
-    notifyFreshRoomLoaded(transitionRevealState);
-  });
-
-  // ── Transition preview context ────────────────────────────────────────────
-  // Updated each frame from the reveal state.  Provides the connected room's
-  // 2-block facing-edge tiles for rendering, and is the attachment point for
-  // future dual-room rendering.  See transitionPreviewContext.ts.
-  const transitionPreviewCtx: TransitionPreviewContext = createTransitionPreviewContext();
-
   // ── Camera transition state ───────────────────────────────────────────────
-  // BUILD 297: After every room switch the camera smoothly interpolates from
+  // After every room switch the camera smoothly interpolates from
   // its world-space position in the old room to the clamped target position in
   // the new room.  Logic extracted to gameCameraState.ts.
   const camState: GameCameraState = createGameCameraState(roomWidthWorld, roomHeightWorld);
@@ -829,6 +713,10 @@ export function startGameScreen(
     lastTransitionPlayerSpeedWorld: 0,
     lastTransitionDestRoomId: '',
   };
+
+  const lambdaAnchorState = createGameLambdaAnchorState(() => {
+    // No-op: transition reveal system removed (legacy feature).
+  });
 
   // ── Initial loading overlay ───────────────────────────────────────────────
   // Shown when gameplay first starts (or when a room's sprites are not yet
@@ -994,8 +882,7 @@ export function startGameScreen(
     // Invalidate this room's cached runtime data so edits take effect immediately.
     roomRuntimeCache.invalidate(roomDef.id);
     loadRoom(roomDef, validX, validY, preserveCamera);
-    // Editor loads are not transitions — reset reveal to neutral.
-    notifyFreshRoomLoaded(transitionRevealState);
+    // Editor loads are not transitions — transition reveal state is removed (legacy).
   }, () => {
     // Called when editor closes (confirm or cancel)
     editorDebugControls?.handleEditorClosed();
@@ -1038,9 +925,9 @@ export function startGameScreen(
     campaignSpawnBlock,
     skillTombRenderer,
     getCurrentRoom: () => currentRoom,
-    getCurrentRoomOrigin: () => [stagingState.currentRoomOriginXWorld, stagingState.currentRoomOriginYWorld],
+    getCurrentRoomOrigin: () => [currentRoomOriginXWorld, currentRoomOriginYWorld],
     loadRoom,
-    onResetTransitionReveal: () => { notifyFreshRoomLoaded(transitionRevealState); },
+    onResetTransitionReveal: () => { /* no-op: transition reveal system removed */ },
     onResetFrameClock: () => { lastTimestampMs = 0; },
     onExitToMainMenu: () => {
       isRunning = false;
@@ -1265,15 +1152,14 @@ export function startGameScreen(
       roomHeightWorld,
       camState,
       elapsedMs,
-      crossingState.phase === 'inactive',
+      true, // isCrossingInactive: always true (instant transitions only)
       preTransVX,
       preTransVY,
       startTransitionLoad,
       resolveSpawnBlock,
       camera,
-      transitionRevealState,
-      stagingState.currentRoomOriginXWorld,
-      stagingState.currentRoomOriginYWorld,
+      currentRoomOriginXWorld,
+      currentRoomOriginYWorld,
       preloadAdjacentCurrentRoomAssets,
       transitionDebugState,
     );
@@ -1287,8 +1173,8 @@ export function startGameScreen(
     {
       const _proxPlayer = world.clusters[0];
       if (_proxPlayer !== undefined && _proxPlayer.isAliveFlag === 1) {
-        const _px = _proxPlayer.positionXWorld - stagingState.currentRoomOriginXWorld;
-        const _py = _proxPlayer.positionYWorld - stagingState.currentRoomOriginYWorld;
+        const _px = _proxPlayer.positionXWorld - currentRoomOriginXWorld;
+        const _py = _proxPlayer.positionYWorld - currentRoomOriginYWorld;
         for (let _ti = 0; _ti < currentRoom.transitions.length; _ti++) {
           const _t = currentRoom.transitions[_ti];
           const _tId = _t.targetRoomId;
@@ -1318,8 +1204,8 @@ export function startGameScreen(
     {
       const player = world.clusters[0];
       // Convert to room-local block coords (triggers are defined in room space).
-      const playerXBlock = player ? Math.floor((player.positionXWorld - stagingState.currentRoomOriginXWorld) / BLOCK_SIZE_SMALL) : -1;
-      const playerYBlock = player ? Math.floor((player.positionYWorld - stagingState.currentRoomOriginYWorld) / BLOCK_SIZE_SMALL) : -1;
+      const playerXBlock = player ? Math.floor((player.positionXWorld - currentRoomOriginXWorld) / BLOCK_SIZE_SMALL) : -1;
+      const playerYBlock = player ? Math.floor((player.positionYWorld - currentRoomOriginYWorld) / BLOCK_SIZE_SMALL) : -1;
       checkDialogueTriggers(
         playerXBlock, playerYBlock,
         currentRoom, firedDialogueTriggerUids, cachedRoomConversations,
@@ -1415,48 +1301,20 @@ export function startGameScreen(
       gameOverlayController.showPlayerDeathScreen();
     }
 
-    // ── Crossing finalization check ──────────────────────────────────────────
-    // BUILD 297: ENABLE_TWO_ROOM_CAMERA_CROSSING is false, so this block is
-    // never entered.  Kept as a guard so re-enabling the flag would still work.
-    if (crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING) {
-      const playerForCrossing = world.clusters[0];
-      if (playerForCrossing !== undefined && playerForCrossing.isAliveFlag === 1 &&
-          isCrossingComplete(crossingState, playerForCrossing.positionXWorld, playerForCrossing.positionYWorld)) {
-        finalizeCrossingSeamless(
-          stagingState,
-          world,
-          camera,
-          interpolationBuffers.prevClusterPosX,
-          interpolationBuffers.prevClusterPosY,
-          crossingState,
-          loadRoom,
-        );
-        notifyFreshRoomLoaded(transitionRevealState);
-        preloadAdjacentRoomAssets(currentRoom);
-      }
-    }
-
     // ── Update skill tomb renderer ──────────────────────────────────────────
     const playerForTomb = world.clusters[0];
     if (playerForTomb !== undefined && playerForTomb.isAliveFlag === 1) {
       // Convert to room-local coords since tomb positions are room-local.
-      const tombPx = playerForTomb.positionXWorld - stagingState.currentRoomOriginXWorld;
-      const tombPy = playerForTomb.positionYWorld - stagingState.currentRoomOriginYWorld;
+      const tombPx = playerForTomb.positionXWorld - currentRoomOriginXWorld;
+      const tombPy = playerForTomb.positionYWorld - currentRoomOriginYWorld;
       skillTombRenderer.update(tombPx, tombPy, elapsedMs / 1000);
       skillTombEffectRenderer.update(tombPx, tombPy, elapsedMs / 1000);
 
       processRoomPickups(world, currentRoom, collectedDustContainerKeySet, progress, playerForTomb, levelRng,
-        stagingState.currentRoomOriginXWorld, stagingState.currentRoomOriginYWorld);
+        currentRoomOriginXWorld, currentRoomOriginYWorld);
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
-    // BUILD 297: isCrossing is always false (ENABLE_TWO_ROOM_CAMERA_CROSSING=false),
-    // renderUnionBounds is always null, effective bounds are single-room bounds.
-    const isCrossing = crossingState.phase === 'crossing' && ENABLE_TWO_ROOM_CAMERA_CROSSING;
-    const crossingBounds = isCrossing ? getCrossingUnionBounds(crossingState) : null;
-    const stagingUnionBounds = isCrossing ? null : computeStagingUnionBounds(stagingState, currentRoom);
-    const renderUnionBounds = isCrossing ? crossingBounds : stagingUnionBounds;
-
     const playerForCamera = world.clusters[0];
     if (playerForCamera !== undefined && playerForCamera.isAliveFlag === 1) {
       // Use the render-interpolated player position so the camera tracks the
@@ -1473,7 +1331,7 @@ export function startGameScreen(
         camera,
         camTargetX,
         camTargetY,
-        renderUnionBounds,
+        null, // renderUnionBounds: always null (instant transitions, no staged rooms)
         roomWidthWorld,
         roomHeightWorld,
         virtualWidthPx,
@@ -1483,39 +1341,10 @@ export function startGameScreen(
       );
     }
 
-    // ── Update camera transition reveal offset ──────────────────────────────
-    // Compute the NearTransition and PostTransition reveal each frame and ease
-    // the current offset smoothly toward the target.  Applied to ox/oy below.
-    // Use room-local coordinates (subtract stagingState.currentRoomOriginXWorld/Y).
-    const playerForReveal = world.clusters[0];
-    if (ENABLE_TRANSITION_CAMERA_REVEAL && playerForReveal !== undefined) {
-      updateTransitionReveal(
-        transitionRevealState,
-        playerForReveal.positionXWorld - stagingState.currentRoomOriginXWorld,
-        playerForReveal.positionYWorld - stagingState.currentRoomOriginYWorld,
-        currentRoom,
-        elapsedMs / 1000,
-      );
-    }
-
-    // ── Update transition preview context ────────────────────────────────────
-    // Reads reveal state (updated above) to resolve the connected room and
-    // build/cache the 2-block facing-edge strip for the next-room renderer.
-    updateTransitionPreviewContext(transitionPreviewCtx, transitionRevealState, currentRoom);
-
     // ── Recompute camera offset after update ─────────────────────────────────
-    // During two-room crossing or staged-room mode the camera position already
-    // tracks world space correctly, so no reveal offset is applied.  In normal
-    // single-room mode the reveal offset peeks past the room boundary to show
-    // edge-extension tiles.
     const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
-    let ox = camOff.offsetXPx;
-    let oy = camOff.offsetYPx;
-    if (ENABLE_TRANSITION_CAMERA_REVEAL && crossingState.phase === 'inactive' && stagingState.stagedRooms.length === 0) {
-      const revealOff = getTransitionRevealOffset(transitionRevealState);
-      ox -= revealOff.revealXWorld * camera.zoom;
-      oy -= revealOff.revealYWorld * camera.zoom;
-    }
+    const ox = camOff.offsetXPx;
+    const oy = camOff.offsetYPx;
 
     let aliveCount = 0;
     for (let i = 0; i < world.particleCount; i++) {
@@ -1555,40 +1384,15 @@ export function startGameScreen(
     );
 
     // ── Preview bubble computation ────────────────────────────────────────
-    // Compute proximity-based preview bubble state for nearby transitions.
-    // Subtract stagingState.currentRoomOriginXWorld/Y to convert to room-local coordinates,
-    // which is what computePreviewBubbles expects.
-    const playerForBubbles = world.clusters[0];
-    if (playerForBubbles !== undefined) {
-      previewBubbleCount = computePreviewBubbles(
-        playerForBubbles.positionXWorld - stagingState.currentRoomOriginXWorld,
-        playerForBubbles.positionYWorld - stagingState.currentRoomOriginYWorld,
-        currentRoom,
-        ox, oy, zoom,
-        previewBubbles,
-      );
-    } else {
-      previewBubbleCount = 0;
-    }
+    // Removed: preview bubbles are a legacy feature (not rendered in instant transitions).
 
     // ── Transition debug stats ────────────────────────────────────────────
     if (pauseController.state.isDebugMode && renderProfiler !== undefined) {
-      const camTransProgress = camState.isTransitionActive ? Math.min(1, camState.transitionElapsedSec / CAM_TRANS_DURATION_SEC) : 0;
       const debugStats: TransitionDebugStats = {
         currentRoomId: currentRoom.id,
-        isTransitioning: camState.isTransitionActive,
-        lastDurationMs: Math.round(CAM_TRANS_DURATION_SEC * 1000),
         lastPlayerSpeedWorld: transitionDebugState.lastTransitionPlayerSpeedWorld,
-        activeBubbleCount: previewBubbleCount,
-        edgeCacheFilled: edgeExtensionCache !== null,
-        isCameraTransitioning: camState.isTransitionActive,
-        cameraTransProgress: camTransProgress,
-        cameraTransStartXWorld: camState.transitionStartXWorld,
-        cameraTransStartYWorld: camState.transitionStartYWorld,
-        cameraTransTargetXWorld: camState.transitionTargetXWorld,
-        cameraTransTargetYWorld: camState.transitionTargetYWorld,
+        transitionCooldownMs: camState.transitionCooldownMs,
         destinationRoomId: transitionDebugState.lastTransitionDestRoomId,
-        isAdjacentRoomRenderingDisabled: !ENABLE_TWO_ROOM_CAMERA_CROSSING,
       };
       renderProfiler.updateTransitionStats(debugStats);
     }
@@ -1624,19 +1428,14 @@ export function startGameScreen(
       renderProfiler,
       renderAlpha,
       prevFallingBlockOffsetY: interpolationBuffers.prevFallingBlockOffsetY,
-      edgeExtensionCache,
-      previewBubbles,
-      previewBubbleCount,
-      transitionPreviewCtx,
-      // BUILD 279/284: two-room crossing or staged-room clip rect
-      isCrossing: isCrossing || stagingState.stagedRooms.length > 0,
-      crossingUnionMinXWorld: renderUnionBounds?.minXWorld ?? 0,
-      crossingUnionMinYWorld: renderUnionBounds?.minYWorld ?? 0,
-      crossingUnionMaxXWorld: renderUnionBounds?.maxXWorld ?? roomWidthWorld,
-      crossingUnionMaxYWorld: renderUnionBounds?.maxYWorld ?? roomHeightWorld,
+      // isCrossing is always false — instant transitions only.
+      isCrossing: false,
+      crossingUnionMinXWorld: 0,
+      crossingUnionMinYWorld: 0,
+      crossingUnionMaxXWorld: roomWidthWorld,
+      crossingUnionMaxYWorld: roomHeightWorld,
       alwaysCenterCamera: pauseController.state.pauseMenuState.alwaysCenterCamera,
-      // Staged room background info for seamless crossing rendering.
-      stagedRoom: stagingState.stagedRooms.length > 0 ? stagingState.stagedRooms[0] : null,
+      stagedRoom: null,
     });
 
     // Tick the loading overlay — hides it once sprites are ready.

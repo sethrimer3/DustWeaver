@@ -1,4 +1,9 @@
 /**
+ * LEGACY: twoRoomCrossing.ts — Two-room smooth camera crossing state machine.
+ *
+ * NOT imported by active gameplay. Retained for historical/reference purposes.
+ * See src/render/transitions/legacy/README.md for re-enablement instructions.
+ *
  * twoRoomCrossing.ts — Two-room smooth camera crossing state machine.
  *
  * BUILD 279: Replaces the edge-extension reveal system for transition crossings.

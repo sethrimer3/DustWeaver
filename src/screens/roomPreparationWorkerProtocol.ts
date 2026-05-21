@@ -20,7 +20,10 @@
  *  null      → room has no ambient-light blockers  (RoomRuntimeEntry gets `undefined`)
  *  string[]  → room has blockers                   (RoomRuntimeEntry gets `new Set(arr)`)
  *
- * BUILD 387
+ * Edge-extension cache has been removed from this protocol — that feature is
+ * legacy-only.  See src/render/transitions/legacy/README.md for details.
+ *
+ * BUILD 388
  */
 
 // ── Serialised wall template ──────────────────────────────────────────────────
@@ -49,27 +52,6 @@ export interface SerializedWallTemplate {
   isIceFlag: ArrayBuffer;
 }
 
-// ── Serialised edge extension ─────────────────────────────────────────────────
-
-/**
- * Wire representation of `EdgeExtensionCache`.
- * `tiles` is already composed of plain objects and structured-clones cleanly.
- * `occupancySet` (a `Set<string>`) is serialised as a flat string array.
- */
-export interface SerializedEdgeExtension {
-  roomId: string;
-  /** Flat tile array — same shape as `EdgeExtensionCache.tiles`. */
-  tiles: {
-    colBlock: number;
-    rowBlock: number;
-    isSolid: boolean;
-    theme: string | null;
-    ambientDepth: number;
-  }[];
-  /** `occupancySet` entries serialised as `"col,row"` strings. */
-  occupancyKeys: string[];
-}
-
 // ── Worker outbound messages ──────────────────────────────────────────────────
 
 /** Successful room-preparation result posted from worker to main thread. */
@@ -78,7 +60,6 @@ export interface WorkerSuccessMessage {
   error?: undefined;
   roomId: string;
   wallTemplate: SerializedWallTemplate;
-  edgeExtension: SerializedEdgeExtension;
   /**
    * `null`     → room has no ambient-light blockers.
    * `string[]` → `"xBlock,yBlock"` keys for every blocker tile.
@@ -95,7 +76,6 @@ export interface WorkerSuccessMessage {
   }[];
   /** Per-step timing (ms) for performance diagnostics. */
   wallMs: number;
-  edgeMs: number;
   blockerMs: number;
   decorMs: number;
   totalMs: number;

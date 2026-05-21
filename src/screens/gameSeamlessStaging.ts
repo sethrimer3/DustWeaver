@@ -1,4 +1,9 @@
 /**
+ * LEGACY: gameSeamlessStaging.ts — Seamless two-room staging state and helpers.
+ *
+ * NOT imported by active gameplay. Retained for historical/reference purposes.
+ * See src/render/transitions/legacy/README.md for re-enablement instructions.
+ *
  * gameSeamlessStaging.ts — Seamless two-room staging state and helpers.
  *
  * BUILD 284 introduced seamless room crossings where, after the player crosses
