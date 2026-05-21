@@ -13,12 +13,6 @@ function createWindow() {
     }
   });
 
-  win.webContents.openDevTools();
-
-  win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-    console.error("FAILED TO LOAD:", errorCode, errorDescription, validatedURL);
-  });
-
   win.loadFile(path.join(__dirname, "../dist/index.html"));
 }
 

@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: '.',
-  base: '/DustWeaver/',
+  base: './',
   publicDir: 'ASSETS',
   build: {
     outDir: 'dist',
