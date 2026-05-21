@@ -18,8 +18,12 @@
  *      are built, completing preparation.
  *
  * Priority model:
- *  - Radius-1 rooms (directly connected): enqueued first.
- *  - Radius-2 rooms (one hop further): enqueued second.
+ *  - Radius-1 rooms (directly connected): enqueued first, always built.
+ *  - Radius-2 rooms (one hop further): enqueued second, but skipped when
+ *    their estimated build cost exceeds the available idle budget AND the
+ *    callback was not forced by the timeout.  This prevents large rooms
+ *    (e.g. underwater_lake, seal_chamber) from causing multi-second main-
+ *    thread freezes during background preloading.
  *  - Rooms already in the cache are skipped (idempotent).
  *  - `handle.prioritize(roomId)` moves a room to the front of the queue
  *    (called when the player approaches a transition boundary).
@@ -32,11 +36,15 @@
  *    starting a build so that callbacks forced by the timeout do not run
  *    during an active animation frame (unless `didTimeout` is true after the
  *    `IDLE_TIMEOUT_MS` deadline expires, in which case we run but log a warn).
+ *  - For radius-2 rooms, an additional cost estimate is compared against
+ *    `timeRemaining()`.  If the room is estimated to be heavy AND we are not
+ *    in a forced-timeout callback, the room is re-queued for later rather
+ *    than blocking the main thread.
  *
  * This module also expands sprite preloading from radius-1 to radius-2 so
  * image assets are ready when the player arrives.
  *
- * BUILD 385
+ * BUILD 386
  */
 
 import type { RoomDef } from '../levels/roomDef';
@@ -69,6 +77,52 @@ const IDLE_TIMEOUT_MS = 4000;
  * slow task on the main thread.
  */
 const LONG_TASK_WARN_MS = 16;
+
+// ── Room build cost heuristic ─────────────────────────────────────────────────
+
+/**
+ * Estimates the main-thread build cost of `buildPreparedRoomRuntime` for a
+ * room using a lightweight heuristic based on geometry counts.
+ *
+ * The wall-merge pass is O(n²) in the number of pre-merge wall rectangles,
+ * making it the dominant cost for large open rooms.  Background blocks and
+ * decorations add smaller but measurable overhead.
+ *
+ * Calibrated so that:
+ *   - a typical small/medium room returns ≈ 10–50 ms
+ *   - large rooms like underwater_lake or seal_chamber return 100+ ms
+ *
+ * This estimate is ONLY used as a heuristic to decide whether it is safe to
+ * build a room in the current idle slot.  It does NOT need to be precise.
+ */
+function estimateRoomBuildCostMs(room: RoomDef): number {
+  const wallCount = room.walls?.length ?? 0;
+  // Wall-merge pass is super-linear: O(n²) in the worst case.
+  // Empirically, each wall costs ~0.04 ms + a quadratic term.
+  const wallCost = wallCount * 0.04 + wallCount * wallCount * 0.002;
+  let bgBlockCount = 0;
+  if (room.backgroundBlocks !== undefined) {
+    for (let i = 0; i < room.backgroundBlocks.length; i++) {
+      const b = room.backgroundBlocks[i];
+      bgBlockCount += b.wBlock * b.hBlock;
+    }
+  }
+  const bgCost = bgBlockCount * 0.008;
+  const decorCount = room.decorations?.length ?? 0;
+  const decorCost = decorCount * 0.3;
+  return wallCost + bgCost + decorCost;
+}
+
+/**
+ * Maximum estimated build cost (ms) for a radius-2 room to be scheduled
+ * without a forced-timeout context.  Rooms whose estimated cost exceeds this
+ * will be deferred until `didTimeout` is true, preventing multi-second
+ * synchronous tasks from firing during an active animation frame.
+ *
+ * Radius-1 rooms are always built regardless of this limit because they are
+ * needed imminently.
+ */
+const MAX_R2_COST_WITHOUT_TIMEOUT_MS = 80;
 
 // ── Idle scheduling shim ──────────────────────────────────────────────────────
 
@@ -258,9 +312,14 @@ export function scheduleRoomPreloads(
   }
 
   // Work queue: radius-1 rooms first, then radius-2.
-  const workQueue: string[] = [...radius1, ...radius2];
+  // Each entry tracks the room ID and its BFS radius so that radius-2 rooms
+  // can be subject to a stricter budget policy.
+  const workQueue: Array<{ roomId: string; radius: number }> = [
+    ...radius1.map(id => ({ roomId: id, radius: 1 })),
+    ...radius2.map(id => ({ roomId: id, radius: 2 })),
+  ];
   // Set mirror for O(1) membership checks — kept in sync with workQueue.
-  const workQueueSet = new Set<string>(workQueue);
+  const workQueueSet = new Set<string>(workQueue.map(e => e.roomId));
 
   let activeHandle: IdleCallbackHandle | null = null;
   let isCancelled = false;
@@ -286,9 +345,9 @@ export function scheduleRoomPreloads(
 
     // Skip rooms already fully cached.
     while (workQueue.length > 0) {
-      const frontEntry = cache.has(workQueue[0]) ? cache.get(workQueue[0]) : undefined;
+      const frontEntry = cache.has(workQueue[0].roomId) ? cache.get(workQueue[0].roomId) : undefined;
       if (frontEntry !== undefined && isEntryFullyPrepared(frontEntry)) {
-        workQueueSet.delete(workQueue[0]);
+        workQueueSet.delete(workQueue[0].roomId);
         workQueue.shift();
       } else {
         break;
@@ -296,7 +355,7 @@ export function scheduleRoomPreloads(
     }
     if (workQueue.length === 0) return;
 
-    const roomId = workQueue.shift()!;
+    const { roomId, radius } = workQueue.shift()!;
     workQueueSet.delete(roomId);
     const room = roomRegistry.get(roomId);
 
@@ -319,7 +378,7 @@ export function scheduleRoomPreloads(
               const alreadyCached = cache.get(roomId);
               if (alreadyCached === undefined || !isEntryFullyPrepared(alreadyCached)) {
                 if (!workQueueSet.has(roomId)) {
-                  workQueue.push(roomId);
+                  workQueue.push({ roomId, radius });
                   workQueueSet.add(roomId);
                 }
                 if (activeHandle === null) {
@@ -341,23 +400,65 @@ export function scheduleRoomPreloads(
       return;
     }
 
+    // ── Radius-2 cost guard ────────────────────────────────────────────────
+    // For radius-2 rooms (not immediately needed), check the estimated build
+    // cost against the remaining idle budget.  If the room looks expensive
+    // and we are not in a forced-timeout callback, defer it to a later slot.
+    // This prevents huge rooms like underwater_lake from blocking the main
+    // thread for 30+ seconds during background preloading.
+    //
+    // Radius-1 rooms are always built immediately regardless of estimated cost:
+    // they are needed as soon as the player walks to the adjacent transition.
+    if (radius >= 2 && !deadline.didTimeout) {
+      const estimatedCostMs = estimateRoomBuildCostMs(room);
+      if (estimatedCostMs > MAX_R2_COST_WITHOUT_TIMEOUT_MS) {
+        if (isDebugMode) {
+          console.log(
+            `[preload] ${roomId} (radius-2): estimated ${estimatedCostMs.toFixed(0)}ms build cost ` +
+            `exceeds radius-2 budget (${MAX_R2_COST_WITHOUT_TIMEOUT_MS}ms). Deferring.`,
+          );
+        }
+        // Re-enqueue at back so we revisit after all other rooms finish.
+        // The idle timeout will eventually force it to run.
+        if (!workQueueSet.has(roomId)) {
+          workQueue.push({ roomId, radius });
+          workQueueSet.add(roomId);
+        }
+        if (workQueue.length > 0) {
+          activeHandle = scheduleIdle(processNext);
+        }
+        return;
+      }
+    }
+
     // Skip if already fully prepared.
     const existingEntry = cache.has(roomId) ? cache.get(roomId) : undefined;
     if (room !== undefined && (existingEntry === undefined || !isEntryFullyPrepared(existingEntry))) {
-      const t0 = performance.now();
-      const prepared = buildPreparedRoomRuntime(room);
-      const totalMs = performance.now() - t0;
+      const result = buildPreparedRoomRuntime(room);
+      cache.set(roomId, result.runtimeEntry);
 
-      cache.set(roomId, prepared);
-
-      if (totalMs > LONG_TASK_WARN_MS) {
+      if (result.totalMs > LONG_TASK_WARN_MS) {
+        let bgArea = 0;
+        if (room.backgroundBlocks !== undefined) {
+          for (let _bi = 0; _bi < room.backgroundBlocks.length; _bi++) {
+            const _b = room.backgroundBlocks[_bi];
+            bgArea += _b.wBlock * _b.hBlock;
+          }
+        }
         console.warn(
-          `[preload] SLOW MAIN-THREAD TASK: ${roomId} took ${totalMs.toFixed(1)}ms` +
-          ` (wall+edge+blockers+decor). Consider moving to a Web Worker.`,
+          `[preload] SLOW MAIN-THREAD TASK: ${roomId} took ${result.totalMs.toFixed(1)}ms`,
+          `\n  wall=${result.wallMs.toFixed(1)}ms  edge=${result.edgeMs.toFixed(1)}ms` +
+          `  blockers=${result.blockerMs.toFixed(1)}ms  decor=${result.decorMs.toFixed(1)}ms`,
+          `\n  wallCount=${room.walls?.length ?? 0}` +
+          `  bgBlockArea=${bgArea}` +
+          `  decorCount=${room.decorations?.length ?? 0}` +
+          `  roomSize=${room.widthBlocks}×${room.heightBlocks}` +
+          `  radius=${radius}`,
+          '\n  Consider moving heavy preload work to a Web Worker (see nextSteps.md).',
         );
       } else if (isDebugMode) {
         console.log(
-          `[preload] ${roomId} prepared in ${totalMs.toFixed(1)}ms` +
+          `[preload] ${roomId} prepared in ${result.totalMs.toFixed(1)}ms` +
           ` (wall+edge+blockers+decor, cache size=${cache.size})`,
         );
       }
@@ -392,18 +493,19 @@ export function scheduleRoomPreloads(
       const existingEntry = cache.get(roomId);
       if (existingEntry !== undefined && isEntryFullyPrepared(existingEntry)) return;
 
-      const idx = workQueue.indexOf(roomId);
+      const idx = workQueue.findIndex(e => e.roomId === roomId);
       if (idx > 0) {
         // Move from its current position to front of queue.
+        // Promote to radius-1 since the player is approaching this room.
         workQueue.splice(idx, 1);
-        workQueue.unshift(roomId);
+        workQueue.unshift({ roomId, radius: 1 });
         // workQueueSet membership unchanged — just moved position.
         if (isDebugMode) {
-          console.log(`[preload:priority] ${roomId} moved to front of queue`);
+          console.log(`[preload:priority] ${roomId} moved to front of queue (promoted to radius-1)`);
         }
       } else if (idx === -1) {
-        // Not in queue yet — add to front.
-        workQueue.unshift(roomId);
+        // Not in queue yet — add to front as radius-1.
+        workQueue.unshift({ roomId, radius: 1 });
         workQueueSet.add(roomId);
         if (isDebugMode) {
           console.log(`[preload:priority] ${roomId} added to front of queue`);
