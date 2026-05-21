@@ -36,10 +36,11 @@
  * This module also expands sprite preloading from radius-1 to radius-2 so
  * image assets are ready when the player arrives.
  *
- * BUILD 382
+ * BUILD 385
  */
 
 import type { RoomDef } from '../levels/roomDef';
+import type { AdjacencyEntry } from '../levels/roomCacheManifest';
 import { buildPreparedRoomRuntime } from './preparedRoomRuntime';
 import { preloadRoomThemeSprites } from '../render/roomAssetPreloader';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
@@ -114,15 +115,21 @@ function cancelIdle(handle: IdleCallbackHandle): void {
  * the order transitions appear in the room definition.  The source room
  * (radius 0) is excluded.
  *
- * NOTE: BFS can only follow transitions from rooms already present in
- * `roomRegistry`.  Rooms not yet loaded (e.g. in lazy-load mode) are not
- * reachable via BFS because their `transitions` array is unavailable.
- * The preload scheduler handles this by re-scheduling after each room loads.
+ * When `adjacency` is provided (from the active manifest), BFS can traverse
+ * neighbours of rooms that are NOT yet loaded in `roomRegistry`.  This allows
+ * discovery of radius-2 rooms even in lazy-load mode where only the current
+ * room is hydrated.  If a room is in the registry, its live transitions take
+ * precedence; the adjacency index is used only as a fallback.
+ *
+ * NOTE: Without adjacency, BFS can only follow transitions from rooms already
+ * present in `roomRegistry`.  Rooms not yet loaded are not reachable and the
+ * scheduler re-discovers them after each room loads.
  */
 function _bfsNearbyRooms(
   fromRoomId: string,
   roomRegistry: ReadonlyMap<string, RoomDef>,
   maxRadius: number,
+  adjacency?: Record<string, AdjacencyEntry>,
 ): Array<[string, number]> {
   const visited = new Set<string>([fromRoomId]);
   const result: Array<[string, number]> = [];
@@ -132,16 +139,39 @@ function _bfsNearbyRooms(
     const [currentId, radius] = queue.shift()!;
     if (radius >= maxRadius) continue;
 
+    // Prefer live room transitions; fall back to manifest adjacency when the
+    // room is not yet hydrated in the registry.
     const room = roomRegistry.get(currentId);
-    if (room === undefined) continue;
+    let neighborCount = 0;
 
-    for (let ti = 0; ti < room.transitions.length; ti++) {
-      const targetId = room.transitions[ti].targetRoomId;
-      if (visited.has(targetId)) continue;
-      visited.add(targetId);
-      result.push([targetId, radius + 1]);
-      queue.push([targetId, radius + 1]);
+    if (room !== undefined) {
+      // Room is loaded — use its authoritative transition list.
+      for (let ti = 0; ti < room.transitions.length; ti++) {
+        const targetId = room.transitions[ti].targetRoomId;
+        if (visited.has(targetId)) continue;
+        visited.add(targetId);
+        result.push([targetId, radius + 1]);
+        queue.push([targetId, radius + 1]);
+        neighborCount++;
+      }
+    } else if (adjacency !== undefined) {
+      // Room is not yet loaded — use the manifest adjacency index as a fallback.
+      const adjEntry = adjacency[currentId];
+      if (adjEntry !== undefined && Array.isArray(adjEntry.targets)) {
+        for (let ti = 0; ti < adjEntry.targets.length; ti++) {
+          const targetId = adjEntry.targets[ti];
+          // Basic safety guard against malformed manifest entries.
+          if (typeof targetId !== 'string' || targetId.length === 0) continue;
+          if (visited.has(targetId)) continue;
+          visited.add(targetId);
+          result.push([targetId, radius + 1]);
+          queue.push([targetId, radius + 1]);
+          neighborCount++;
+        }
+      }
     }
+
+    void neighborCount; // suppress unused-variable lint
   }
 
   return result;
@@ -194,6 +224,12 @@ export interface PreloadScheduleHandle {
  *                       `loadRoomForGameplayAsync` from `roomFileLoader.ts`.
  *                       When absent (browser mode or packed-campaign mode),
  *                       rooms not in the registry are silently skipped.
+ * @param adjacency      Optional adjacency index from the active manifest.
+ *                       When provided, BFS can traverse neighbours of rooms
+ *                       that are not yet loaded in `roomRegistry`, enabling
+ *                       radius-2 discovery in lazy-load mode.  Falls back to
+ *                       registry-only BFS when absent (old manifests or
+ *                       browser / packed-campaign mode).
  */
 export function scheduleRoomPreloads(
   currentRoom: RoomDef,
@@ -201,8 +237,9 @@ export function scheduleRoomPreloads(
   cache: RoomRuntimeCache,
   isDebugMode = false,
   loadRoomAsync?: (roomId: string) => Promise<RoomDef | undefined>,
+  adjacency?: Record<string, AdjacencyEntry>,
 ): PreloadScheduleHandle {
-  const nearby = _bfsNearbyRooms(currentRoom.id, roomRegistry, 2);
+  const nearby = _bfsNearbyRooms(currentRoom.id, roomRegistry, 2, adjacency);
 
   // Separate into radius-1 (urgent) and radius-2 (background) queues.
   const radius1: string[] = [];

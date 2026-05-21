@@ -104,6 +104,12 @@ userData/
       "hash": "b4c91f2d3e087a56",
       "updatedAt": "2026-05-21T12:00:00.000Z"
     }
+  },
+  "adjacency": {
+    "lobby": {
+      "roomId": "lobby",
+      "targets": ["corridor_01", "upper_passage"]
+    }
   }
 }
 ```
@@ -116,6 +122,34 @@ Fields:
 | `campaignVersion` | Monotonic revision counter from `SavedCampaignV1.metadata.version`. |
 | `roomCacheVersion` | Version of the manifest format itself (currently `1`). Increment when the schema changes incompatibly. |
 | `rooms[id].hash` | SHA-256 of the deterministic JSON of the individual `SavedRoomV2` room data. |
+| `adjacency[id].targets` | Deduplicated list of room IDs reachable by direct transition from `id`. Derived from `SavedTransition.to` during export. Only rooms present in `manifest.rooms` are included. |
+
+### Adjacency index
+
+`manifest.adjacency` is a derived preload-optimisation index.  It is **not
+editable source data**.
+
+**Why it exists:**  The room preload scheduler performs a BFS from the current
+room to discover which rooms to preload.  Without the adjacency index, BFS can
+only traverse rooms that are already hydrated in `ROOM_REGISTRY`.  In lazy-load
+mode only the current room is loaded at startup, which means the scheduler could
+not discover radius-2 neighbours (neighbours of neighbours) until radius-1 rooms
+had been lazily fetched and registered.
+
+With the adjacency index, the BFS can look up transition targets for rooms that
+are not yet in the registry using the manifest data written at export time.  This
+means radius-2 rooms are discovered and queued for lazy loading in the same idle
+pass that processes radius-1 rooms, substantially improving preload coverage when
+the player moves quickly through a long corridor of unloaded rooms.
+
+**Backward compatibility:** `adjacency` is an optional field.  Old manifests that
+do not have it remain valid.  When `adjacency` is absent, the preload scheduler
+falls back silently to registry-only BFS — the same behaviour as before.
+
+**Safety:** The adjacency index is generated with the same room-ID safety rules
+as the rest of the manifest.  Targets are only included if they are present in
+`manifest.rooms`.  The scheduler additionally checks that each target is a
+non-empty string before using it.
 
 ### Legacy manifest format
 

@@ -149,7 +149,7 @@ import { renderEditorBackdrop } from './gameScreenEditorBackdrop';
 import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoomTransitionOrchestrator';
 import type { TransitionDirection } from './gameTransitions';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
-import { loadRoomForGameplayAsync, isRoomFileCacheActive } from '../levels/roomFileLoader';
+import { loadRoomForGameplayAsync, isRoomFileCacheActive, getActiveRoomAdjacency } from '../levels/roomFileLoader';
 
 const FIXED_DT_MS = 16.666;
 
@@ -669,6 +669,11 @@ export function startGameScreen(
       // adjacent rooms that are not yet in ROOM_REGISTRY.
       // In packed-campaign / browser mode: omit — all rooms are already loaded.
       isRoomFileCacheActive() ? loadRoomForGameplayAsync : undefined,
+      // Pass manifest adjacency index so the scheduler can discover radius-2
+      // rooms via BFS even when intermediate rooms are not yet in ROOM_REGISTRY.
+      // Absent when no file cache is active or the manifest lacks adjacency
+      // (old manifests) — falls back to registry-only BFS.
+      getActiveRoomAdjacency() ?? undefined,
     );
 
     // Generator complete — Phase F has no trailing yield.

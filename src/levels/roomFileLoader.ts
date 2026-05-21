@@ -166,6 +166,19 @@ export function isRoomFileCacheActive(): boolean {
 }
 
 /**
+ * Returns the adjacency index from the currently active room cache manifest,
+ * or null if no cache is active or the manifest has no adjacency data.
+ *
+ * The adjacency index maps each roomId to its directly-connected neighbours as
+ * recorded at export time.  Use this to seed BFS in the preload scheduler so
+ * radius-2 rooms can be discovered even when intermediate rooms are not yet
+ * hydrated in ROOM_REGISTRY.
+ */
+export function getActiveRoomAdjacency(): import('./roomCacheManifest').RoomCacheManifest['adjacency'] | null {
+  return _activeManifest?.adjacency ?? null;
+}
+
+/**
  * Returns the worldMap for the currently active campaign, or null if no cache
  * is active.  Used by the preload scheduler and room-transition fallback path
  * to call `loadRoomForGameplayAsync` without passing worldMap explicitly.

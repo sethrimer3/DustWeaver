@@ -31,7 +31,7 @@ import type { SavedCampaignV1 } from '../levels/campaignSchema';
 import {
   ROOM_CACHE_VERSION,
 } from '../levels/roomCacheManifest';
-import type { RoomCacheManifest, RoomCacheEntry } from '../levels/roomCacheManifest';
+import type { RoomCacheManifest, RoomCacheEntry, AdjacencyEntry } from '../levels/roomCacheManifest';
 import { computeContentHash, computeCampaignHashForValidation } from '../levels/roomFileLoader';
 import { buildZipBlob } from '../utils/minimalZipWriter';
 import type { ZipEntry } from '../utils/minimalZipWriter';
@@ -105,6 +105,34 @@ async function downloadRoomCacheZip(
     entries.push({ path: `ROOMS/${roomFilename}`, data: textEncoder.encode(roomJsonStr) });
   }
 
+  // ── Build adjacency index ─────────────────────────────────────────────
+  // Derived from transition portal data; only rooms present in manifestRooms
+  // appear as keys or targets.
+  const adjacency: Record<string, AdjacencyEntry> = {};
+  for (const room of exported.rooms) {
+    const roomId = (room as { id: string }).id;
+    if (typeof roomId !== 'string' || !(roomId in manifestRooms)) continue;
+
+    const transitions = (room as { transitions?: unknown }).transitions;
+    if (!Array.isArray(transitions)) continue;
+
+    const seen = new Set<string>();
+    const targets: string[] = [];
+    for (const t of transitions) {
+      const to = (t as { to?: unknown }).to;
+      if (typeof to !== 'string' || to.length === 0) continue;
+      // Only include targets that are known rooms in the manifest.
+      if (!(to in manifestRooms)) continue;
+      if (seen.has(to)) continue;
+      seen.add(to);
+      targets.push(to);
+    }
+
+    if (targets.length > 0) {
+      adjacency[roomId] = { roomId, targets };
+    }
+  }
+
   // ── Build manifest ────────────────────────────────────────────────────
   const manifest: RoomCacheManifest = {
     campaignId: exported.campaign.id,
@@ -115,6 +143,7 @@ async function downloadRoomCacheZip(
     roomCacheVersion: ROOM_CACHE_VERSION,
     exportedAt: nowIso,
     rooms: manifestRooms,
+    adjacency,
   };
 
   // Insert manifest as the first entry so it appears at the top of the ZIP.
