@@ -98,6 +98,9 @@ export function createExportProgressModal(root: HTMLElement): ExportProgressModa
   // ── Append to root ────────────────────────────────────────────────────────
   root.appendChild(backdrop);
 
+  // ── Auto-dismiss handle ───────────────────────────────────────────────────
+  let autoDismissHandle: ReturnType<typeof setTimeout> | null = null;
+
   // ── Update logic ──────────────────────────────────────────────────────────
   function update(event: ExportProgressEvent): void {
     statusEl.textContent = event.message;
@@ -115,7 +118,7 @@ export function createExportProgressModal(root: HTMLElement): ExportProgressModa
       titleEl.textContent = '✅ Export Complete';
       titleEl.style.color = '#44ff88';
       // Auto-dismiss after 2 seconds on success.
-      setTimeout(() => destroy(), 2000);
+      autoDismissHandle = setTimeout(() => destroy(), 2000);
     } else if (event.step === 'error') {
       barFill.style.background = '#ff4422';
       barFill.style.width = '100%';
@@ -151,6 +154,10 @@ export function createExportProgressModal(root: HTMLElement): ExportProgressModa
   }
 
   function destroy(): void {
+    if (autoDismissHandle !== null) {
+      clearTimeout(autoDismissHandle);
+      autoDismissHandle = null;
+    }
     if (backdrop.parentElement) {
       backdrop.parentElement.removeChild(backdrop);
     }

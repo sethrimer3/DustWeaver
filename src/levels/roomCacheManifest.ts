@@ -64,7 +64,12 @@ export interface RoomCacheManifest {
   roomCacheVersion: typeof ROOM_CACHE_VERSION;
   /** ISO 8601 UTC timestamp of when this manifest was written. */
   exportedAt: string;
-  /** Map of roomId → per-room cache entry. */
+  /**
+   * Map of roomId → per-room cache entry.
+   * The Record key is the roomId string and must match `RoomCacheEntry.roomId`.
+   * The redundancy is intentional: the key enables O(1) lookups, while the
+   * nested field ensures the roomId is always available in the serialised entry.
+   */
   rooms: Record<string, RoomCacheEntry>;
 }
 

@@ -53,6 +53,15 @@ function resolveCustomCampaignDir(campaignId) {
  * keys.  Arrays preserve their order.  Produces the same string for the same
  * data structure regardless of key insertion order.
  */
+/**
+ * Deterministic JSON stringify with sorted object keys.
+ *
+ * NOTE: This is intentionally duplicated from `src/utils/deterministicHash.ts`
+ * because main.cjs runs in Node.js (CommonJS) and cannot import the TypeScript
+ * source directly.  Both implementations must produce identical output for the
+ * same input so hashes stored in manifest.json remain portable across contexts.
+ * Keep the two implementations in sync if the algorithm ever changes.
+ */
 function deterministicStringify(value) {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -71,14 +80,19 @@ function deterministicStringify(value) {
 }
 
 /**
- * Computes an 8-character hex sha256 hash of the deterministic JSON
- * serialisation of `value`.  Used for detecting stale room cache files.
+ * Computes a 16-character hex content hash (first 64 bits of SHA-256) of the
+ * deterministic JSON serialisation of `value`.
+ *
+ * This is intentionally truncated (not the full 256-bit digest) because the
+ * hash is only used for cache invalidation — not cryptographic security.
+ * 64 bits is sufficient to detect accidental staleness with negligible
+ * collision probability for campaign-sized data.
  *
  * Volatile fields (e.g. `lastEditedIso`, `exportedAt`) must be excluded
  * before passing to this function so the hash is stable across re-exports
  * that did not change any game data.
  */
-function hashObject(value) {
+function computeContentHash(value) {
   const text = deterministicStringify(value);
   return crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 16);
 }
@@ -97,7 +111,7 @@ function computeCampaignHash(campaign) {
     // Intentionally exclude: campaign.editor (lastEditedIso) and
     // campaign.metadata (lastEditedAt) — those are volatile timestamps.
   };
-  return hashObject(stable);
+  return computeContentHash(stable);
 }
 
 /**
@@ -220,10 +234,10 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
       const room = rooms[i];
       const roomFilename = `${room.id}${ROOM_FILE_SUFFIX}`;
       const roomPath = path.join(roomsDir, roomFilename);
-      const roomHash = hashObject(room);
+      const roomHash = computeContentHash(room);
 
       const prev = existingRooms[room.id];
-      const isUnchanged = prev && prev.hash === roomHash;
+      const isUnchanged = prev && typeof prev.hash === 'string' && prev.hash === roomHash;
       if (!isUnchanged) {
         fs.writeFileSync(roomPath, JSON.stringify(room, null, 2), "utf8");
       }
@@ -430,7 +444,7 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
       const roomId = room.id;
       const roomFilename = `${roomId}${ROOM_FILE_SUFFIX}`;
       const roomPath = path.join(roomsDir, roomFilename);
-      const roomHash = hashObject(room);
+      const roomHash = computeContentHash(room);
 
       const prev = existingRooms[roomId];
       const isUnchanged = prev && typeof prev.hash === "string" && prev.hash === roomHash;
