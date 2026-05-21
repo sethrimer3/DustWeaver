@@ -57,6 +57,7 @@ import type { RoomRuntimeEntry } from './roomRuntimeCache';
 import type { RoomWallTemplate } from './gameRoomWalls';
 import type { WallDecoration } from '../render/effects/decorationWaveState';
 import type { WorkerOutboundMessage, WorkerSuccessMessage, SerializedWallTemplate } from './roomPreparationWorkerProtocol';
+import * as FP from '../debug/perfFreezeProfiler';
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 
@@ -75,6 +76,20 @@ const MIN_IDLE_BUDGET_MS = 20;
  * firing during an active animation frame.
  */
 const IDLE_TIMEOUT_MS = 4000;
+
+/**
+ * Estimated cost threshold above which a radius-1 room is dispatched to the
+ * background worker instead of being built synchronously on the main thread.
+ *
+ * Radius-1 rooms were previously always built synchronously ("needed
+ * imminently"), which could freeze gameplay by 1–5 seconds when a large room
+ * was directly adjacent to the current room.  Rooms below this threshold
+ * remain synchronous because they are genuinely cheap; heavier rooms are sent
+ * to the worker.  The worker's async latency is acceptable since the existing
+ * async loading overlay will cover any gap if the player transitions before
+ * the worker finishes.
+ */
+const MAX_R1_COST_SYNC_MS = 8;
 
 /**
  * Dev-mode threshold (ms) above which a single room build is logged as a
@@ -540,16 +555,21 @@ export function scheduleRoomPreloads(
     // If the worker is unavailable, fall back to the old deferral strategy:
     // keep re-queuing until `deadline.didTimeout` forces the synchronous build.
     //
-    // Radius-1 rooms always build synchronously — they are needed imminently
-    // and the worker's async latency would be counterproductive.
-    if (radius >= 2) {
+    // ── Radius-1 cost guard ────────────────────────────────────────────────
+    // Radius-1 rooms with estimated cost > MAX_R1_COST_SYNC_MS are also sent
+    // to the worker to prevent 1–5 second gameplay freezes when the player
+    // approaches a large adjacent room.  The worker's async latency is fine —
+    // the existing loading overlay covers any gap if the player crosses before
+    // the worker finishes.
+    if (radius >= 1) {
       const estimatedCostMs = estimateRoomBuildCostMs(room);
-      if (estimatedCostMs > MAX_R2_COST_WITHOUT_TIMEOUT_MS) {
+      const threshold = radius === 1 ? MAX_R1_COST_SYNC_MS : MAX_R2_COST_WITHOUT_TIMEOUT_MS;
+      if (estimatedCostMs > threshold) {
         const dispatched = _dispatchToWorker(roomId, room, cache, isDebugMode);
         if (dispatched) {
           if (isDebugMode) {
             console.log(
-              `[preload] ${roomId} (radius-2): estimated ${estimatedCostMs.toFixed(0)}ms — ` +
+              `[preload] ${roomId} (radius-${radius}): estimated ${estimatedCostMs.toFixed(0)}ms — ` +
               `dispatched to worker.`,
             );
           }
@@ -561,8 +581,9 @@ export function scheduleRoomPreloads(
           }
           return;
         }
-        // Worker unavailable — fall back to deferral until timeout.
-        if (!deadline.didTimeout) {
+        // Worker unavailable.
+        if (radius >= 2 && !deadline.didTimeout) {
+          // For radius-2: defer until timeout as before.
           if (isDebugMode) {
             console.log(
               `[preload] ${roomId} (radius-2): estimated ${estimatedCostMs.toFixed(0)}ms build cost ` +
@@ -578,13 +599,20 @@ export function scheduleRoomPreloads(
           }
           return;
         }
-        // deadline.didTimeout — forced; fall through to synchronous build.
+        // For radius-1 or forced timeout: log warning and fall through to sync build.
         if (import.meta.env.DEV) {
-          console.warn(
-            `[preload] idle callback forced after ${IDLE_TIMEOUT_MS}ms timeout ` +
-            `(timeRemaining=${deadline.timeRemaining().toFixed(1)}ms). ` +
-            `This may cause a long task on the main thread.`,
-          );
+          if (radius === 1) {
+            console.warn(
+              `[preload] ${roomId} (radius-1): estimated ${estimatedCostMs.toFixed(0)}ms — ` +
+              `worker unavailable, falling back to synchronous build. This may cause a freeze.`,
+            );
+          } else {
+            console.warn(
+              `[preload] idle callback forced after ${IDLE_TIMEOUT_MS}ms timeout ` +
+              `(timeRemaining=${deadline.timeRemaining().toFixed(1)}ms). ` +
+              `This may cause a long task on the main thread.`,
+            );
+          }
         }
       }
     }
@@ -592,8 +620,10 @@ export function scheduleRoomPreloads(
     // Skip if already fully prepared.
     const existingEntry = cache.has(roomId) ? cache.get(roomId) : undefined;
     if (room !== undefined && (existingEntry === undefined || !isEntryFullyPrepared(existingEntry))) {
+      const _buildT0 = import.meta.env.DEV ? performance.now() : 0;
       const result = buildPreparedRoomRuntime(room);
       cache.set(roomId, result.runtimeEntry);
+      if (import.meta.env.DEV) FP.recordPreloadTask(roomId, performance.now() - _buildT0);
 
       if (result.totalMs > LONG_TASK_WARN_MS) {
         let bgArea = 0;

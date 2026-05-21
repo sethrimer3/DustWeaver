@@ -23,7 +23,18 @@
  *   retained indefinitely (not evicted) so re-visiting chunks costs only a
  *   cheap dirty-check + drawImage blit.  For extreme room sizes the caller can
  *   call dispose() to free everything and start fresh.
+ *
+ * Per-frame rebuild budget
+ * ────────────────────────
+ *   `maxChunksPerFrame` (see setMaxChunksPerFrame()) caps how many chunks can
+ *   be rebuilt in a single renderVisibleChunks() call.  When the budget runs
+ *   out, pending chunks are skipped for this frame; their `hadFallbacksFlag` is
+ *   set so they are retried next frame.  Use a solid-colour fallback background
+ *   for the skipped chunk so the tile area is not invisible while warming up.
+ *   A value of 0 disables the cap (unlimited — original behaviour).
  */
+
+import * as FP from '../../debug/perfFreezeProfiler';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -58,6 +69,10 @@ export interface ChunkCacheStats {
   memoryEstimateKB: number;
   /** Cumulative chunk canvases evicted due to the memory cap (0 when no cap set). */
   evictedTotal: number;
+  /** Total milliseconds spent rebuilding chunks this frame. */
+  rebuildMsThisFrame: number;
+  /** Chunks that needed a rebuild but were skipped due to the per-frame budget. */
+  skippedThisFrame: number;
 }
 
 // ── Per-chunk data ─────────────────────────────────────────────────────────────
@@ -85,6 +100,17 @@ export class RoomChunkCache {
   private readonly _dirtyKeys = new Set<string>();
 
   /**
+   * When true, chunk build times are recorded as background-layer metrics
+   * in the freeze profiler (FP.recordBgChunkBuild).  When false (default),
+   * they are recorded as wall-layer metrics (FP.recordWallChunkBuild).
+   */
+  private readonly _isBgLayer: boolean;
+
+  constructor(isBgLayer = false) {
+    this._isBgLayer = isBgLayer;
+  }
+
+  /**
    * Object identity of the wall layout used when chunks were last built.
    * When this changes (any wall modified) all chunks are marked dirty.
    */
@@ -95,13 +121,24 @@ export class RoomChunkCache {
 
   /** Mutable stats object updated every frame. */
   readonly stats: ChunkCacheStats = {
-    visibleChunkCount: 0,
-    totalChunkCount:   0,
-    dirtyChunkCount:   0,
-    rebuiltThisFrame:  0,
-    memoryEstimateKB:  0,
-    evictedTotal:      0,
+    visibleChunkCount:  0,
+    totalChunkCount:    0,
+    dirtyChunkCount:    0,
+    rebuiltThisFrame:   0,
+    memoryEstimateKB:   0,
+    evictedTotal:       0,
+    rebuildMsThisFrame: 0,
+    skippedThisFrame:   0,
   };
+
+  /**
+   * Maximum chunk rebuilds allowed per renderVisibleChunks() call.
+   * 0 = unlimited (original behaviour).
+   * When the budget is reached, remaining dirty/missing chunks are skipped
+   * for this frame; their `hadFallbacksFlag` ensures they are retried next
+   * frame.  A value of 4 is a good default for 60 fps gameplay.
+   */
+  private _maxChunksPerFrame = 4;
 
   /**
    * Maximum estimated canvas memory before eviction begins (KB).
@@ -131,6 +168,18 @@ export class RoomChunkCache {
    */
   setMaxMemoryKB(kb: number): void {
     this._maxMemoryKB = kb;
+  }
+
+  /**
+   * Set the maximum number of chunk rebuilds allowed per
+   * renderVisibleChunks() call (per frame).
+   *
+   * 0 = unlimited (original behaviour — can cause frame freezes when many
+   *     chunks become visible at once).
+   * 4 = recommended default for 60 fps gameplay.
+   */
+  setMaxChunksPerFrame(n: number): void {
+    this._maxChunksPerFrame = n;
   }
 
   // ── Invalidation ──────────────────────────────────────────────────────────
@@ -266,6 +315,8 @@ export class RoomChunkCache {
 
     let visibleCount  = 0;
     let rebuiltCount  = 0;
+    let skippedCount  = 0;
+    let rebuildTotalMs = 0;
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -279,6 +330,25 @@ export class RoomChunkCache {
         const needsBuild = chunk === undefined || isDirty || chunk.hadFallbacksFlag;
 
         if (needsBuild) {
+          // ── Per-frame rebuild budget check ──────────────────────────────
+          if (this._maxChunksPerFrame > 0 && rebuiltCount > this._maxChunksPerFrame) {
+            // Budget exhausted — skip this chunk for this frame.
+            // Ensure it will be retried next frame.
+            if (chunk !== undefined) {
+              chunk.hadFallbacksFlag = true;
+            }
+            skippedCount++;
+            // Still blit the existing (possibly stale) canvas if available.
+            if (chunk !== undefined) {
+              const screenX = Math.round(cx * chunkSizePx + offsetXPx);
+              const screenY = Math.round(cy * chunkSizePx + offsetYPx);
+              ctx.drawImage(chunk.canvas, screenX, screenY);
+              visibleCount++;
+              this._lastVisibleFrame.set(key, this._frame);
+            }
+            continue;
+          }
+
           // ── Allocate canvas on first access ─────────────────────────────
           if (chunk === undefined) {
             const side = Math.max(1, Math.ceil(chunkSizePx));
@@ -303,6 +373,7 @@ export class RoomChunkCache {
             const chunkOffX = -(colMin * blockSizePx * scalePx);
             const chunkOffY = -(rowMin * blockSizePx * scalePx);
 
+            const _ct0 = import.meta.env.DEV ? performance.now() : 0;
             chunk.hadFallbacksFlag = buildChunkFn(
               chunkCtx,
               chunkOffX,
@@ -314,6 +385,15 @@ export class RoomChunkCache {
               colMax,
               rowMax,
             );
+            if (import.meta.env.DEV) {
+              const chunkMs = performance.now() - _ct0;
+              rebuildTotalMs += chunkMs;
+              if (this._isBgLayer) {
+                FP.recordBgChunkBuild(key, chunkMs);
+              } else {
+                FP.recordWallChunkBuild(key, chunkMs);
+              }
+            }
 
             this._dirtyKeys.delete(key);
             rebuiltCount++;
@@ -334,10 +414,12 @@ export class RoomChunkCache {
     ctx.restore();
 
     // ── Update diagnostics ──────────────────────────────────────────────────
-    this.stats.visibleChunkCount = visibleCount;
-    this.stats.totalChunkCount   = this._chunks.size;
-    this.stats.dirtyChunkCount   = this._dirtyKeys.size;
-    this.stats.rebuiltThisFrame  = rebuiltCount;
+    this.stats.visibleChunkCount  = visibleCount;
+    this.stats.totalChunkCount    = this._chunks.size;
+    this.stats.dirtyChunkCount    = this._dirtyKeys.size;
+    this.stats.rebuiltThisFrame   = rebuiltCount;
+    this.stats.rebuildMsThisFrame = rebuildTotalMs;
+    this.stats.skippedThisFrame   = skippedCount;
     this.stats.memoryEstimateKB  = Math.round(
       this._chunks.size
         * Math.ceil(chunkSizePx)

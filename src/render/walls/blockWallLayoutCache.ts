@@ -12,6 +12,46 @@ import { WallSnapshot } from '../snapshot';
 import type { BlockTheme } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
+import * as FP from '../../debug/perfFreezeProfiler';
+
+// ── Fast layout signature hash ─────────────────────────────────────────────────
+
+/**
+ * Computes a cheap wall-layout signature using a Knuth multiplicative hash.
+ *
+ * Instead of building a multi-kilobyte string via repeated `+=` for every
+ * wall every frame, we fold the wall data into a single 32-bit integer using
+ * `Math.imul` (hardware 32-bit multiply). The result is encoded as
+ * `"${visibleCount}|${hash32}"` — compact, fast, and collision-resistant
+ * enough for frame-level invalidation.
+ *
+ * Moving invisible falling-block slots are excluded (same exclusion as before)
+ * to prevent spurious cache misses while blocks fall.
+ */
+function _computeLayoutSignature(walls: WallSnapshot, blockSizePx: number): string {
+  let h = (blockSizePx * 31 + walls.count) | 0;
+  let visible = 0;
+  for (let wi = 0; wi < walls.count; wi++) {
+    if (walls.isInvisibleFlag[wi] === 1) continue;
+    visible++;
+    // Fold 5 fields (x, y, w, h, flags) into h using cheap imul chaining.
+    h = Math.imul(h, 1664525) + 1013904223 | 0;
+    h = h ^ (walls.xWorld[wi] | 0);
+    h = Math.imul(h, 1664525) + 1013904223 | 0;
+    h = h ^ (walls.yWorld[wi] | 0);
+    h = Math.imul(h, 1664525) + 1013904223 | 0;
+    h = h ^ ((walls.wWorld[wi] | 0) + (walls.hWorld[wi] << 16) | 0);
+    h = Math.imul(h, 1664525) + 1013904223 | 0;
+    h = h ^ (
+      (walls.isPlatformFlag[wi])        |
+      (walls.platformEdge[wi]      << 1) |
+      (walls.themeIndex[wi]        << 3) |
+      (walls.rampOrientationIndex[wi] === 255 ? 0 : 1 << 11) |
+      (walls.isPillarHalfWidthFlag[wi] << 12)
+    );
+  }
+  return `${visible}|${h >>> 0}`;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -145,21 +185,18 @@ export function getWallLayoutCache(
   walls: WallSnapshot,
   blockSizePx: number,
 ): CachedWallLayout {
-  let signature = `${blockSizePx}|${walls.count}`;
-  for (let wi = 0; wi < walls.count; wi++) {
-    // Invisible walls (e.g. falling-block collision slots) are never rendered
-    // as visible geometry, so they must not contribute to the visible-layout
-    // signature.  Excluding them prevents moving invisible walls from
-    // invalidating the baked wall sprite cache every frame while a block falls.
-    if (walls.isInvisibleFlag[wi] === 1) continue;
-    signature += `|${walls.xWorld[wi]},${walls.yWorld[wi]},${walls.wWorld[wi]},${walls.hWorld[wi]},${walls.isPlatformFlag[wi]},${walls.platformEdge[wi]},${walls.themeIndex[wi]},${walls.rampOrientationIndex[wi]},${walls.isPillarHalfWidthFlag[wi]}`;
-  }
+  const _sigT0 = import.meta.env.DEV ? performance.now() : 0;
+  const signature = _computeLayoutSignature(walls, blockSizePx);
+  const _sigMs = import.meta.env.DEV ? performance.now() - _sigT0 : 0;
 
   if (_cachedWallLayout !== null &&
       _cachedWallLayout.signature === signature &&
       _cachedWallLayout.blockSizePx === blockSizePx) {
+    if (import.meta.env.DEV) FP.recordLayoutWork(_sigMs, 0, walls.count);
     return _cachedWallLayout;
   }
+
+  const _rebuildT0 = import.meta.env.DEV ? performance.now() : 0;
 
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
@@ -273,6 +310,8 @@ export function getWallLayoutCache(
   // Build per-chunk buckets AFTER all arrays are populated so the bucket maps
   // reflect the final state and chunk rebuilds are O(items-in-chunk).
   _buildChunkBuckets(_cachedWallLayout, walls);
+
+  if (import.meta.env.DEV) FP.recordLayoutWork(_sigMs, performance.now() - _rebuildT0, walls.count);
 
   return _cachedWallLayout;
 }

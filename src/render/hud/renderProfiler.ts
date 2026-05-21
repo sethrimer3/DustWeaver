@@ -39,6 +39,7 @@ import type { TransitionDebugStats } from '../transitions/transitionState';
 import type { LiquidDebugStats } from '../liquidBodyCache';
 import type { DebugPanelVisibility } from '../../ui/debugPanelManager';
 import { isPanelVisible } from '../../ui/debugPanelManager';
+import * as FP from '../../debug/perfFreezeProfiler';
 
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
@@ -335,9 +336,10 @@ export class RenderProfiler {
     const showChunks = isPanelVisible('chunks',      panelVisibility);
     const showRoom   = isPanelVisible('room',        panelVisibility);
     const showWater  = isPanelVisible('water',       panelVisibility);
+    const showFreeze = isPanelVisible('freeze',      panelVisibility);
 
     // Nothing to render — bail early to avoid drawing an empty frame.
-    if (!showPerf && !showChunks && !showRoom && !showWater) return;
+    if (!showPerf && !showChunks && !showRoom && !showWater && !showFreeze) return;
 
     const lineHeightPx = 9;
     const fontSizePx   = 7;
@@ -414,8 +416,8 @@ export class RenderProfiler {
       const cs = this._chunkStats;
       const chunkLines = [
         `FG Chunks V=${cs.visibleChunkCount} T=${cs.totalChunkCount}`,
-        `Dirty=${cs.dirtyChunkCount} Built=${cs.rebuiltThisFrame}`,
-        `Mem~${cs.memoryEstimateKB}KB Evict=${cs.evictedTotal}`,
+        `Dirty=${cs.dirtyChunkCount} Built=${cs.rebuiltThisFrame} Skip=${cs.skippedThisFrame}`,
+        `RbldMs=${cs.rebuildMsThisFrame.toFixed(1)} Mem~${cs.memoryEstimateKB}KB`,
       ];
       const chunkPanelH = chunkLines.length * lineHeightPx + 8;
       ctx.save();
@@ -435,8 +437,8 @@ export class RenderProfiler {
       const bc = this._bgChunkStats;
       const bgLines = [
         `BG Chunks V=${bc.visibleChunkCount} T=${bc.totalChunkCount}`,
-        `Dirty=${bc.dirtyChunkCount} Built=${bc.rebuiltThisFrame}`,
-        `Mem~${bc.memoryEstimateKB}KB`,
+        `Dirty=${bc.dirtyChunkCount} Built=${bc.rebuiltThisFrame} Skip=${bc.skippedThisFrame}`,
+        `RbldMs=${bc.rebuildMsThisFrame.toFixed(1)} Mem~${bc.memoryEstimateKB}KB`,
       ];
       const bgPanelH = bgLines.length * lineHeightPx + 8;
       ctx.save();
@@ -491,6 +493,55 @@ export class RenderProfiler {
       ctx.fillStyle = '#40d0ff';
       for (let i = 0; i < liquidLines.length; i++) {
         ctx.fillText(liquidLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+      nextPanelY += liquidPanelH + 4;
+    }
+
+    // ── Freeze Profiler panel ─────────────────────────────────────────────────
+    if (showFreeze) {
+      const cur  = FP.getLastFrame();
+      const long = FP.getLastLongFrame();
+      const sev  = FP.getLastSevereFreeze();
+      const freezeLines: string[] = [
+        '── Freeze Profiler ──',
+        cur !== null
+          ? `frame ${cur.frameMs.toFixed(1)}ms  top:${cur.topCause || '—'}`
+          : 'frame —',
+        cur !== null
+          ? `wChk ${cur.wallChunkBuiltCount}×${cur.wallChunkBuildMs.toFixed(1)}ms`
+          : 'wChk —',
+        cur !== null
+          ? `bChk ${cur.bgChunkBuiltCount}×${cur.bgChunkBuildMs.toFixed(1)}ms`
+          : 'bChk —',
+        cur !== null
+          ? `bake ${cur.spriteBakeCount}×${cur.spriteBakeMs.toFixed(1)}ms`
+          : 'bake —',
+        cur !== null
+          ? `edge ${cur.edgeShadingCount}×${cur.edgeShadingMs.toFixed(1)}ms`
+          : 'edge —',
+        cur !== null
+          ? `lay sig${cur.layoutSigMs.toFixed(1)}ms rbl${cur.layoutRebuildMs.toFixed(1)}ms`
+          : 'layout —',
+        cur !== null && cur.preloadMainThreadMs > 0
+          ? `prel ${cur.preloadMainThreadMs.toFixed(1)}ms (${cur.preloadMainThreadRoomId.slice(0, 12)})`
+          : 'prel —',
+        long !== null
+          ? `last>100: ${long.frameMs.toFixed(0)}ms ${long.topCause}`
+          : 'last>100: —',
+        sev !== null
+          ? `last>1s: ${sev.frameMs.toFixed(0)}ms ${sev.topCause}`
+          : 'last>1s: —',
+      ];
+      const freezePanelH = freezeLines.length * lineHeightPx + 8;
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.70)';
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, freezePanelH);
+      for (let i = 0; i < freezeLines.length; i++) {
+        const isWarn = cur !== null && i === 1 && cur.frameMs > FP.LONG_FRAME_WARN_MS;
+        ctx.fillStyle = isWarn ? '#ff6060' : i === 0 ? '#ffcc00' : '#d0d0ff';
+        ctx.fillText(freezeLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
     }

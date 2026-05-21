@@ -25,6 +25,7 @@
 import { loadImg } from '../imageCache';
 import { hashTilePosition } from './proceduralBlockSprite';
 import { applyOrganicEdgeShading, OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
+import * as FP from '../../debug/perfFreezeProfiler';
 
 // ── Build-time asset discovery ────────────────────────────────────────────────
 
@@ -370,7 +371,9 @@ function _createShadedCanvas(
   worldOriginXWorld: number,
   worldOriginYWorld: number,
   seed: number,
+  key: string,
 ): HTMLCanvasElement {
+  const _t0 = import.meta.env.DEV ? performance.now() : 0;
   const c = document.createElement('canvas');
   c.width  = widthPx;
   c.height = heightPx;
@@ -379,6 +382,7 @@ function _createShadedCanvas(
   ctx.imageSmoothingEnabled = false; // preserve pixel-art crispness
   ctx.drawImage(src, 0, 0, widthPx, heightPx);
   applyOrganicEdgeShading(ctx, widthPx, heightPx, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
+  if (import.meta.env.DEV) FP.recordSpriteBake(key, performance.now() - _t0);
   return c;
 }
 
@@ -427,7 +431,12 @@ export function getTheme1x1SpriteShaded(
   const cached = _shadedCache.get(key);
   if (cached !== undefined) return cached;
 
-  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, worldX, worldY, seed);
+  // Per-frame budget guard: if too many shaded canvases have been baked this
+  // frame already, return null so the chunk falls back and retries next frame.
+  // This prevents a burst of getImageData/putImageData calls from stalling gameplay.
+  if (FP.isBakeBudgetExhausted()) return null;
+
+  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, worldX, worldY, seed, key);
   _shadedCache.set(key, shaded);
   return shaded;
 }
@@ -473,7 +482,10 @@ export function getTheme2x2SpriteShaded(
   const cached = _shadedCache.get(key);
   if (cached !== undefined) return cached;
 
-  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, worldX, worldY, seed);
+  // Per-frame budget guard (same as 1×1 path).
+  if (FP.isBakeBudgetExhausted()) return null;
+
+  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, worldX, worldY, seed, key);
   _shadedCache.set(key, shaded);
   return shaded;
 }

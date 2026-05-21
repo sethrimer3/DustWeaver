@@ -17,7 +17,8 @@ export type DebugPanelId =
   | 'performance'
   | 'chunks'
   | 'particles'
-  | 'room';
+  | 'room'
+  | 'freeze';
 
 export interface DebugPanelVisibility {
   movement: boolean;
@@ -27,6 +28,7 @@ export interface DebugPanelVisibility {
   chunks: boolean;
   particles: boolean;
   room: boolean;
+  freeze: boolean;
 }
 
 const STORAGE_KEY = 'dw_debug_panels';
@@ -40,6 +42,7 @@ function makeDefaults(): DebugPanelVisibility {
     chunks:      false,
     particles:   false,
     room:        false,
+    freeze:      false,
   };
 }
 

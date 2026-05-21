@@ -40,7 +40,7 @@ const FALLBACK_FILL = 'rgba(80, 80, 80, 0.35)';
 // ── Module-level chunk cache ──────────────────────────────────────────────────
 
 /** Chunk cache for background block canvases. */
-const _bgChunkCache = new RoomChunkCache();
+const _bgChunkCache = new RoomChunkCache(true); // isBgLayer=true → FP.recordBgChunkBuild
 
 /** The room ID used to detect room changes. */
 let _bgCacheRoomRef: string | null = null;
