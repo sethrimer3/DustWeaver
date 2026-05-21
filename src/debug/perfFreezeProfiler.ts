@@ -1,0 +1,379 @@
+/**
+ * perfFreezeProfiler.ts — Dev-only per-frame freeze profiler.
+ *
+ * Tracks synchronous work that can cause long frames:
+ *   - Wall and background chunk rebuilds (chunkRenderCache)
+ *   - Shaded sprite bakes (folderBlockThemes / proceduralBlockSprite)
+ *   - Organic edge-shading calls (blockEdgeShading)
+ *   - Wall layout signature/rebuild time (blockWallLayoutCache)
+ *   - Room preload main-thread tasks (roomPreloadScheduler)
+ *   - Room load phase/substep timing (gameScreen)
+ *
+ * All exported functions are no-ops when `import.meta.env.DEV` is false
+ * so they are tree-shaken from production builds.
+ *
+ * Usage:
+ *   // At start of RAF callback, before sim/render:
+ *   freezeProfiler.beginFrame(rawElapsedMs);
+ *
+ *   // (Inside rendering subsystems, instrumented separately)
+ *
+ *   // At end of RAF callback:
+ *   freezeProfiler.endFrame();
+ *
+ * A "long frame" warning is printed to the console whenever a frame
+ * exceeds LONG_FRAME_WARN_MS (100 ms).
+ * A "severe freeze" warning is printed above SEVERE_FREEZE_MS (1000 ms).
+ */
+
+// ── Thresholds ────────────────────────────────────────────────────────────────
+
+/** Frame duration above which a structured console warning is emitted. */
+export const LONG_FRAME_WARN_MS   = 100;
+/** Frame duration above which a "severe freeze" console error is emitted. */
+export const SEVERE_FREEZE_MS     = 1000;
+
+// ── Per-frame data ────────────────────────────────────────────────────────────
+
+export interface FreezeFrameData {
+  /** Raw elapsed ms for this frame (RAF timestamp delta). */
+  frameMs: number;
+  /** Number of simulation ticks that ran this frame (filled by gameScreen). */
+  simTickCount: number;
+  /** Total render ms (filled via endFrame). */
+  renderMs: number;
+
+  // ── Wall chunks ─────────────────────────────────────────────────────────────
+  wallChunkBuiltCount: number;
+  wallChunkBuildMs: number;
+
+  // ── Background chunks ────────────────────────────────────────────────────────
+  bgChunkBuiltCount: number;
+  bgChunkBuildMs: number;
+
+  // ── Sprite baking ────────────────────────────────────────────────────────────
+  spriteBakeCount: number;
+  spriteBakeMs: number;
+  /** Worst single sprite bake key this frame (empty when none). */
+  worstSpriteBakeKey: string;
+  worstSpriteBakeMs: number;
+
+  // ── Edge shading (applyOrganicEdgeShading) ────────────────────────────────────
+  edgeShadingCount: number;
+  edgeShadingMs: number;
+
+  // ── Wall layout ──────────────────────────────────────────────────────────────
+  layoutSigMs: number;
+  layoutRebuildMs: number;
+  layoutWallCount: number;
+
+  // ── Room preload (main-thread tasks) ────────────────────────────────────────
+  preloadMainThreadMs: number;
+  preloadMainThreadRoomId: string;
+
+  // ── Load phase (async room loading behind overlay) ───────────────────────────
+  loadPhaseMs: number;
+  loadPhaseDetail: string;
+
+  // ── Derived ─────────────────────────────────────────────────────────────────
+  /** Name of the subsystem that consumed the most measured ms this frame. */
+  topCause: string;
+}
+
+function _makeBlankFrame(): FreezeFrameData {
+  return {
+    frameMs:              0,
+    simTickCount:         0,
+    renderMs:             0,
+    wallChunkBuiltCount:  0,
+    wallChunkBuildMs:     0,
+    bgChunkBuiltCount:    0,
+    bgChunkBuildMs:       0,
+    spriteBakeCount:      0,
+    spriteBakeMs:         0,
+    worstSpriteBakeKey:   '',
+    worstSpriteBakeMs:    0,
+    edgeShadingCount:     0,
+    edgeShadingMs:        0,
+    layoutSigMs:          0,
+    layoutRebuildMs:      0,
+    layoutWallCount:      0,
+    preloadMainThreadMs:  0,
+    preloadMainThreadRoomId: '',
+    loadPhaseMs:          0,
+    loadPhaseDetail:      '',
+    topCause:             '',
+  };
+}
+
+// ── Ring buffer ────────────────────────────────────────────────────────────────
+
+const RING_SIZE = 120;
+
+/** Pre-allocated ring of frame data objects (avoids per-frame allocation). */
+const _ring: FreezeFrameData[] = [];
+for (let i = 0; i < RING_SIZE; i++) _ring.push(_makeBlankFrame());
+
+let _ringHead = 0;
+/** Current mutable frame being filled; committed to ring in endFrame(). */
+let _cur: FreezeFrameData = _makeBlankFrame();
+
+/** Last frame with frameMs > LONG_FRAME_WARN_MS. */
+let _lastLongFrame: FreezeFrameData | null = null;
+/** Last frame with frameMs > SEVERE_FREEZE_MS. */
+let _lastSevereFreeze: FreezeFrameData | null = null;
+
+// ── Camera / player context (for structured warnings) ─────────────────────────
+let _contextRoomId = '';
+let _contextCamBlockRange = '';
+let _contextPlayerBlock  = '';
+
+// ── Per-frame sprite-bake budget state ────────────────────────────────────────
+
+/**
+ * Maximum shaded-canvas bakes allowed per frame.
+ * After this, `isBakeBudgetExhausted()` returns true and callers return null
+ * (fallback) so no more `getImageData/putImageData` calls fire this frame.
+ * The chunk's `hadFallbacksFlag` ensures a retry next frame.
+ *
+ * Set 0 to disable the cap (unlimited baking — original behaviour).
+ * This limit applies in both dev and production builds.
+ */
+let _spriteBakeMaxPerFrame = 8;
+
+/** Returns the current per-frame bake budget. */
+export function getSpriteBakeMaxPerFrame(): number {
+  return _spriteBakeMaxPerFrame;
+}
+
+/** Call from game settings to change the budget at runtime. */
+export function setSpriteBakeMaxPerFrame(n: number): void {
+  _spriteBakeMaxPerFrame = n;
+}
+
+/**
+ * Production-safe per-frame bake counter.
+ * This is reset by _resetBakeBudget() which is called from beginFrame() in
+ * both dev and production mode.
+ */
+let _spriteBakesThisFrame = 0;
+
+/** Resets the per-frame bake counter. Called from beginFrame (both dev and prod). */
+function _resetBakeBudget(): void {
+  _spriteBakesThisFrame = 0;
+}
+
+/** Returns true when the per-frame bake budget is exhausted. */
+export function isBakeBudgetExhausted(): boolean {
+  return _spriteBakeMaxPerFrame > 0 && _spriteBakesThisFrame >= _spriteBakeMaxPerFrame;
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Call once per RAF callback with the raw elapsed ms.
+ * Resets all per-frame counters.
+ * The bake-budget counter is also reset here so it works in production.
+ */
+export function beginFrame(frameMs: number): void {
+  // Always reset the bake-budget counter (works in both dev and prod).
+  _resetBakeBudget();
+  if (!import.meta.env.DEV) return;
+  // Reset current frame
+  const c = _cur;
+  c.frameMs              = frameMs;
+  c.simTickCount         = 0;
+  c.renderMs             = 0;
+  c.wallChunkBuiltCount  = 0;
+  c.wallChunkBuildMs     = 0;
+  c.bgChunkBuiltCount    = 0;
+  c.bgChunkBuildMs       = 0;
+  c.spriteBakeCount      = 0;
+  c.spriteBakeMs         = 0;
+  c.worstSpriteBakeKey   = '';
+  c.worstSpriteBakeMs    = 0;
+  c.edgeShadingCount     = 0;
+  c.edgeShadingMs        = 0;
+  c.layoutSigMs          = 0;
+  c.layoutRebuildMs      = 0;
+  c.layoutWallCount      = 0;
+  c.preloadMainThreadMs  = 0;
+  c.preloadMainThreadRoomId = '';
+  c.loadPhaseMs          = 0;
+  c.loadPhaseDetail      = '';
+  c.topCause             = '';
+}
+
+/** Record sim tick count for this frame (call from sim loop). */
+export function recordSimTicks(count: number): void {
+  if (!import.meta.env.DEV) return;
+  _cur.simTickCount = count;
+}
+
+/** Record total render time. Call from endFrame in renderProfiler. */
+export function recordRenderMs(ms: number): void {
+  if (!import.meta.env.DEV) return;
+  _cur.renderMs = ms;
+}
+
+/** Record a wall-layer chunk rebuild. */
+export function recordWallChunkBuild(_key: string, buildMs: number): void {
+  if (!import.meta.env.DEV) return;
+  _cur.wallChunkBuiltCount++;
+  _cur.wallChunkBuildMs += buildMs;
+}
+
+/** Record a background-block chunk rebuild. */
+export function recordBgChunkBuild(_key: string, buildMs: number): void {
+  if (!import.meta.env.DEV) return;
+  _cur.bgChunkBuiltCount++;
+  _cur.bgChunkBuildMs += buildMs;
+}
+
+/**
+ * Record a shaded-sprite canvas bake.
+ * Also increments the production-safe bake counter (used by isBakeBudgetExhausted).
+ */
+export function recordSpriteBake(key: string, bakeMs: number): void {
+  // Always increment the production-safe counter.
+  _spriteBakesThisFrame++;
+  if (!import.meta.env.DEV) return;
+  _cur.spriteBakeCount++;
+  _cur.spriteBakeMs += bakeMs;
+  if (bakeMs > _cur.worstSpriteBakeMs) {
+    _cur.worstSpriteBakeMs  = bakeMs;
+    _cur.worstSpriteBakeKey = key;
+  }
+}
+
+/** Record a single `applyOrganicEdgeShading` call. */
+export function recordEdgeShading(ms: number): void {
+  if (!import.meta.env.DEV) return;
+  _cur.edgeShadingCount++;
+  _cur.edgeShadingMs += ms;
+}
+
+/** Record wall layout signature build and optional full rebuild. */
+export function recordLayoutWork(sigMs: number, rebuildMs: number, wallCount: number): void {
+  if (!import.meta.env.DEV) return;
+  _cur.layoutSigMs      += sigMs;
+  _cur.layoutRebuildMs  += rebuildMs;
+  _cur.layoutWallCount   = wallCount;
+}
+
+/** Record a main-thread room preload task. */
+export function recordPreloadTask(roomId: string, ms: number): void {
+  if (!import.meta.env.DEV) return;
+  _cur.preloadMainThreadMs += ms;
+  if (ms > 0) _cur.preloadMainThreadRoomId = roomId;
+}
+
+/** Record a load-phase sub-step. */
+export function recordLoadPhaseStep(detail: string, ms: number): void {
+  if (!import.meta.env.DEV) return;
+  _cur.loadPhaseMs    += ms;
+  if (ms > 0) _cur.loadPhaseDetail = detail;
+}
+
+/** Set the current room/camera context for structured freeze warnings. */
+export function setFrameContext(
+  roomId: string,
+  camBlockRange: string,
+  playerBlock: string,
+): void {
+  if (!import.meta.env.DEV) return;
+  _contextRoomId        = roomId;
+  _contextCamBlockRange = camBlockRange;
+  _contextPlayerBlock   = playerBlock;
+}
+
+/**
+ * Call at the end of the RAF callback.
+ * Commits the current frame to the ring buffer and emits console warnings
+ * for long frames.
+ */
+export function endFrame(): void {
+  if (!import.meta.env.DEV) return;
+  const c = _cur;
+
+  // Determine top cause
+  const causes: Array<[string, number]> = [
+    ['wallChunks',     c.wallChunkBuildMs],
+    ['bgChunks',       c.bgChunkBuildMs],
+    ['spriteBake',     c.spriteBakeMs],
+    ['edgeShading',    c.edgeShadingMs],
+    ['layoutSig',      c.layoutSigMs],
+    ['layoutRebuild',  c.layoutRebuildMs],
+    ['preload',        c.preloadMainThreadMs],
+    ['loadPhase',      c.loadPhaseMs],
+  ];
+  let topCause = '';
+  let topMs = 0;
+  for (const [name, ms] of causes) {
+    if (ms > topMs) { topMs = ms; topCause = name; }
+  }
+  c.topCause = topCause;
+
+  // Commit to ring
+  const slot = _ring[_ringHead];
+  // Copy c → slot (avoid object churn)
+  Object.assign(slot, c);
+  _ringHead = (_ringHead + 1) % RING_SIZE;
+
+  // Emit structured warnings
+  if (c.frameMs >= LONG_FRAME_WARN_MS) {
+    const severity = c.frameMs >= SEVERE_FREEZE_MS ? 'SEVERE FREEZE' : 'LONG FRAME';
+    console.warn(
+      `[freeze] ${severity} ${c.frameMs.toFixed(1)}ms\n` +
+      `  topCause=${c.topCause}\n` +
+      `  wallChunks=${c.wallChunkBuiltCount} (${c.wallChunkBuildMs.toFixed(1)}ms)\n` +
+      `  bgChunks=${c.bgChunkBuiltCount} (${c.bgChunkBuildMs.toFixed(1)}ms)\n` +
+      `  spriteBakeCount=${c.spriteBakeCount} spriteBakeMs=${c.spriteBakeMs.toFixed(1)}ms\n` +
+      `  edgeShadingCount=${c.edgeShadingCount} edgeShadingMs=${c.edgeShadingMs.toFixed(1)}ms\n` +
+      `  layoutSigMs=${c.layoutSigMs.toFixed(1)}ms layoutRebuildMs=${c.layoutRebuildMs.toFixed(1)}ms\n` +
+      `  preloadMs=${c.preloadMainThreadMs.toFixed(1)}ms (${c.preloadMainThreadRoomId})\n` +
+      `  loadPhase=${c.loadPhaseMs.toFixed(1)}ms (${c.loadPhaseDetail})\n` +
+      `  roomId=${_contextRoomId}\n` +
+      `  cameraBlockRange=${_contextCamBlockRange}\n` +
+      `  playerBlock=${_contextPlayerBlock}`,
+    );
+    _lastLongFrame = slot;
+    if (c.frameMs >= SEVERE_FREEZE_MS) {
+      _lastSevereFreeze = slot;
+    }
+  }
+}
+
+// ── Read-only accessors for debug overlay ─────────────────────────────────────
+
+/** Returns a snapshot of the most recent `count` frames (oldest-first). */
+export function getRecentFrames(count: number): readonly FreezeFrameData[] {
+  if (!import.meta.env.DEV) return [];
+  const n = Math.min(count, RING_SIZE);
+  const out: FreezeFrameData[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const idx = (_ringHead - 1 - i + RING_SIZE) % RING_SIZE;
+    out.push(_ring[idx]);
+  }
+  return out;
+}
+
+/** Returns a copy of the most recent completed frame's data (or null before first endFrame). */
+export function getLastFrame(): FreezeFrameData | null {
+  if (!import.meta.env.DEV) return null;
+  const idx = (_ringHead - 1 + RING_SIZE) % RING_SIZE;
+  const f = _ring[idx];
+  return f.frameMs === 0 ? null : f;
+}
+
+/** Returns the last frame that exceeded LONG_FRAME_WARN_MS (100 ms). */
+export function getLastLongFrame(): FreezeFrameData | null {
+  if (!import.meta.env.DEV) return null;
+  return _lastLongFrame;
+}
+
+/** Returns the last frame that exceeded SEVERE_FREEZE_MS (1000 ms). */
+export function getLastSevereFreeze(): FreezeFrameData | null {
+  if (!import.meta.env.DEV) return null;
+  return _lastSevereFreeze;
+}

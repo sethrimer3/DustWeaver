@@ -70,6 +70,7 @@ import { renderTeleportFlash } from '../render/lambdaAnchorRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
 import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
+import * as FP from '../debug/perfFreezeProfiler';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -274,6 +275,9 @@ export function renderFrame(r: RenderFrameContext): void {
     sunbeamRenderer,
     atmosphericLightDust,
   });
+
+  // Freeze profiler — resets per-frame counters (including bake budget) in both dev and prod.
+  FP.beginFrame(r.world.dtMs);
 
   // Start the render profiler for this frame.
   if (renderProfiler !== undefined) renderProfiler.beginFrame(isDebugMode);
@@ -524,4 +528,5 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // Finalise the profiler — updates EMA-smoothed values used by next frame's overlay.
   if (renderProfiler !== undefined) renderProfiler.endFrame();
+  FP.endFrame();
 }

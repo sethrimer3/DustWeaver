@@ -261,6 +261,8 @@ function _countCardinalAirNeighbors(
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 
+import * as FP from '../../debug/perfFreezeProfiler';
+
 /**
  * Applies organic edge shading to a block sprite already drawn on `ctx`.
  *
@@ -289,6 +291,7 @@ export function applyOrganicEdgeShading(
   worldOriginYWorld: number,
   seed: number,
 ): void {
+  const _t0 = import.meta.env.DEV ? performance.now() : 0;
   const imageData = ctx.getImageData(0, 0, widthPx, heightPx);
   const data = imageData.data;
   const pixelCount = widthPx * heightPx;
@@ -416,4 +419,5 @@ export function applyOrganicEdgeShading(
   }
 
   ctx.putImageData(imageData, 0, 0);
+  if (import.meta.env.DEV) FP.recordEdgeShading(performance.now() - _t0);
 }

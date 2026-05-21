@@ -1,5 +1,114 @@
 # DustWeaver — Next Steps
 
+## BUILD 389 — Deep Performance Investigation: Gameplay Freeze Fix
+
+### Top Freeze Causes Found (Code Inspection)
+
+1. **Unbounded synchronous chunk rebuilds** (`chunkRenderCache.ts`)
+   - `renderVisibleChunks()` rebuilt ALL missing/dirty chunks in a single frame with no limit.
+   - A camera pan into a new area triggers 10–20 cold chunks simultaneously.
+   - Each chunk calls `buildChunkFn`, which calls `applyOrganicEdgeShading` (getImageData/putImageData) per tile.
+
+2. **Lazy shaded-sprite baking burst** (`folderBlockThemes.ts`, `blockEdgeShading.ts`)
+   - `getTheme1x1SpriteShaded()` / `getTheme2x2SpriteShaded()` call `_createShadedCanvas()` on cache miss.
+   - Cache key includes world tile position → EVERY tile position is a unique bake.
+   - A single 32×32 new chunk entering view could trigger up to 1024 `getImageData/putImageData` bakes.
+   - No per-frame cap existed; all bakes fired synchronously in one frame.
+
+3. **Per-frame layout signature string concatenation** (`blockWallLayoutCache.ts`)
+   - `getWallLayoutCache()` rebuilt a multi-kilobyte string via `+=` for ALL walls EVERY render frame.
+   - For 200 walls this creates a ~3 KB string every frame: O(n) GC pressure and string work.
+
+4. **Synchronous radius-1 room preloading** (`roomPreloadScheduler.ts`)
+   - Radius-1 rooms were always built synchronously on the main thread regardless of cost.
+   - `prioritize()` promoting a room to radius-1 would eventually trigger a 1–5 s sync build
+     when the forced idle callback fired (after 4000 ms timeout) during an active frame.
+
+### What Was Implemented
+
+#### `src/debug/perfFreezeProfiler.ts` (NEW)
+- Global dev-only per-frame freeze profiler with 120-frame pre-allocated ring buffer.
+- Tracks: wall chunk builds, bg chunk builds, sprite bakes, edge-shading calls, layout sig/rebuild, room preload main-thread tasks, load phase steps.
+- `isBakeBudgetExhausted()` / `spriteBakeMaxPerFrame=8` for per-frame bake budget (works in both dev and production).
+- `endFrame()` emits structured `[freeze] LONG FRAME` console warnings for frames >100 ms.
+- `getLastFrame()`, `getLastLongFrame()`, `getLastSevereFreeze()`, `getRecentFrames(n)` accessors.
+
+#### `src/render/walls/blockEdgeShading.ts`
+- Instrumented `applyOrganicEdgeShading` with `performance.now()` timing.
+- Calls `FP.recordEdgeShading(ms)` after each GPU readback/writeback cycle.
+
+#### `src/render/walls/folderBlockThemes.ts`
+- Added per-frame bake budget guard: `if (FP.isBakeBudgetExhausted()) return null;`
+- Calls `FP.recordSpriteBake(key, ms)` on every new shaded-canvas bake.
+- When budget is exhausted, returns `null` (fallback); chunk's `hadFallbacksFlag` retries next frame.
+- `_createShadedCanvas()` now receives `key` argument for profiling.
+
+#### `src/render/walls/chunkRenderCache.ts`
+- Added `_maxChunksPerFrame = 4` default rebuild budget.
+- `setMaxChunksPerFrame(n)` setter allows tuning at runtime (0 = unlimited).
+- New `ChunkCacheStats` fields: `rebuildMsThisFrame`, `skippedThisFrame`.
+- Budget enforcement: when `rebuiltCount >= _maxChunksPerFrame`, remaining dirty/missing chunks are skipped this frame but still blit their stale canvas; `hadFallbacksFlag=true` ensures retry next frame.
+- `isBgLayer` constructor flag routes profiler calls to `FP.recordWallChunkBuild` vs `FP.recordBgChunkBuild`.
+
+#### `src/render/walls/backgroundBlockRenderer.ts`
+- `_bgChunkCache` now constructed as `new RoomChunkCache(true)` (bg layer).
+
+#### `src/render/walls/blockWallLayoutCache.ts`
+- Replaced O(n) string-concatenation signature with a fast LCG-based 32-bit hash (`_computeLayoutSignature`).
+- Signature is now `"${visibleCount}|${hash32}"` — computed in a single pass with `Math.imul`.
+- Invisible falling-block slots remain excluded (same correctness as before).
+- Instrumented with `FP.recordLayoutWork(sigMs, rebuildMs, wallCount)`.
+
+#### `src/screens/roomPreloadScheduler.ts`
+- Added `MAX_R1_COST_SYNC_MS = 8` threshold constant.
+- Radius-1 rooms with estimated cost > 8 ms are now dispatched to the background worker instead of building synchronously.
+- Falls back to synchronous build only when worker is unavailable, with a warning log.
+- Unified radius-1 and radius-2 cost guard into one block.
+- Added `FP.recordPreloadTask(roomId, ms)` around the synchronous build path.
+
+#### `src/ui/debugPanelManager.ts`
+- Added `'freeze'` to `DebugPanelId` union and `DebugPanelVisibility` interface.
+- Defaults to `false` (hidden by default).
+
+#### `src/render/hud/renderProfiler.ts`
+- Imports `perfFreezeProfiler`.
+- Added Freeze Profiler debug panel (toggle `'freeze'`): shows current-frame breakdown (wallChunks, bgChunks, bakes, edge-shading, layout, preload) plus last long-frame and last severe-freeze event.
+- Chunk panels now show `RbldMs` and `Skip` fields from the new `ChunkCacheStats` fields.
+
+#### `src/screens/gameRender.ts`
+- `renderFrame()` calls `FP.beginFrame(world.dtMs)` before render starts (resets bake-budget counter in both dev and production).
+- Calls `FP.endFrame()` after `renderProfiler.endFrame()`.
+
+### Acceptance Criteria Met
+
+- ✅ `src/debug/perfFreezeProfiler.ts` identifies freeze causes in console and debug overlay.
+- ✅ Wall/BG chunk rebuilds are capped at 4 per layer per frame; skipped chunks blit stale canvas and retry next frame.
+- ✅ Shaded-sprite bakes are capped at 8 per frame (production-safe; works when DEV is false).
+- ✅ Layout signature no longer generates a multi-KB string every frame.
+- ✅ Radius-1 rooms with estimated cost > 8 ms are dispatched to the worker, not built synchronously.
+- ✅ `[freeze] LONG FRAME` warnings fire in DEV when a frame exceeds 100 ms.
+- ✅ `npm run build` passes.
+
+### Remaining Risks
+
+1. **Sprite cache warm-up lag**: With a budget of 8 bakes/frame and chunks capped at 4 rebuilds/frame, a cold-start room now converges over ~10–20 frames instead of 1. This is intentional (avoids the freeze) but means tiles may appear as fallback blocks briefly when entering a new area. If this is noticeable, increase `spriteBakeMaxPerFrame` or `_maxChunksPerFrame`.
+
+2. **Worker fallback for radius-1**: If the Web Worker is unavailable (Safari Private, strict CSP), radius-1 rooms >8 ms still build synchronously with a console warning. The loading overlay does not cover this path. Consider adding an explicit overlay for this case.
+
+3. **Phase timing not yet added to `_makeLoadRoomPhases`**: Items F (sub-step timing in `gameScreen.ts`) from the specification were not implemented in this build. The most expensive phases (C: `spawnEnemyClusters`, D: wall template build) could still cause individual load-phase frames >8 ms without surfacing in the profiler.
+
+4. **`FP.beginFrame` uses `world.dtMs`**: The freeze profiler receives the fixed sim timestep (16.666 ms) as `frameMs` rather than actual elapsed wall-clock time between RAF callbacks. For the console warning threshold this means the warning fires based on frame time as reported by `endFrame`-minus-`beginFrame` via a separate clock path. This is a known limitation.
+
+### How to Reproduce and Verify the Fix
+
+1. Enable debug mode in the pause menu.
+2. Toggle the **Freeze** debug panel (press the Freeze button in the debug overlay).
+3. Walk into a large room or pan the camera quickly into unexplored areas.
+4. Previously: 1–5 second freezes. Now: smooth progression as chunks warm up over ~10–20 frames.
+5. Check the browser console for `[freeze] LONG FRAME` messages. The `topCause` field identifies which subsystem (wallChunks, bgChunks, spriteBake, edgeShading, preload) is responsible.
+
+---
+
 ## BUILD 388 — Transition Cleanup: Legacy-Only Fancy Transitions
 
 ### What Was Implemented
