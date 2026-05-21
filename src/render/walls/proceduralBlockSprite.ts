@@ -31,6 +31,7 @@ import {
   OPEN_AIR_SIDE_W,
   OPEN_AIR_ALL_SIDES,
 } from './blockEdgeShading';
+import * as FP from '../../debug/perfFreezeProfiler';
 
 // Re-export open-air side constants so callers (blockSpriteRenderer.ts) do not
 // need to change their import paths.
@@ -161,12 +162,18 @@ export function getProceduralSprite(
   const cached = _spriteCache.get(key);
   if (cached !== undefined) return cached;
 
+  // Do not bake a new sprite when the per-frame budget is exhausted.
+  // Return null so the caller uses its stale/fallback canvas and retries later.
+  if (FP.isBakeBudgetExhausted()) return null;
+
   const base     = _loadImg(baseUrl);
   const template = _loadImg(templateUrl);
   if (!_isReady(base) || !_isReady(template)) return null;
 
+  const _t0 = import.meta.env.DEV ? performance.now() : 0;
   const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
   _spriteCache.set(key, result);
+  FP.recordSpriteBake(key, import.meta.env.DEV ? performance.now() - _t0 : 0);
   return result;
 }
 

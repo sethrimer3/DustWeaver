@@ -331,20 +331,27 @@ export class RoomChunkCache {
 
         if (needsBuild) {
           // ── Per-frame rebuild budget check ──────────────────────────────
-          if (this._maxChunksPerFrame > 0 && rebuiltCount > this._maxChunksPerFrame) {
+          if (this._maxChunksPerFrame > 0 && rebuiltCount >= this._maxChunksPerFrame) {
             // Budget exhausted — skip this chunk for this frame.
             // Ensure it will be retried next frame.
             if (chunk !== undefined) {
               chunk.hadFallbacksFlag = true;
             }
             skippedCount++;
-            // Still blit the existing (possibly stale) canvas if available.
+            const screenX = Math.round(cx * chunkSizePx + offsetXPx);
+            const screenY = Math.round(cy * chunkSizePx + offsetYPx);
             if (chunk !== undefined) {
-              const screenX = Math.round(cx * chunkSizePx + offsetXPx);
-              const screenY = Math.round(cy * chunkSizePx + offsetYPx);
+              // Blit existing (possibly stale) canvas.
               ctx.drawImage(chunk.canvas, screenX, screenY);
               visibleCount++;
               this._lastVisibleFrame.set(key, this._frame);
+            } else {
+              // No canvas yet — draw a cheap dark fallback so the area is not
+              // an invisible hole while the chunk warms up.  Do not allocate a
+              // canvas here; the real build happens on the next frame.
+              const side = Math.max(1, Math.ceil(chunkSizePx));
+              ctx.fillStyle = 'rgba(20,20,24,0.85)';
+              ctx.fillRect(screenX, screenY, side, side);
             }
             continue;
           }
