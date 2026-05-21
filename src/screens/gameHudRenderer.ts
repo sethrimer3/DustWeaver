@@ -63,6 +63,10 @@ export interface HudRenderContext {
   combatText: CombatTextSystem;
   prevLastPlayerBlockedTick: { value: number };
   getPlayerDustCount: () => number;
+  /** Number of dust containers the player owns (from progress.dustContainerCount).
+   * Drives the number of container outlines shown in the HUD regardless of whether
+   * any dust type is currently unlocked or any live particles are present. */
+  playerContainerCount: number;
   /** When provided, the render profiler panel is drawn in the top-right corner. */
   renderProfiler?: RenderProfiler;
 }
@@ -80,7 +84,7 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     ctx, world, ox, oy, zoom,
     prevHealthMap, healthBarDisplayUntilTick,
     combatText, prevLastPlayerBlockedTick,
-    getPlayerDustCount,
+    getPlayerDustCount, playerContainerCount,
   } = r;
 
   // ── Player health bar in HUD (top-left, above dust display) ─────────────
@@ -163,19 +167,31 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   }
 
   // ── Dust container display (top-left, below health bar) ───────────────────
+  // Container outlines come from owned capacity (playerContainerCount) so they
+  // persist even when no dust type is unlocked or no live particles exist.
+  // Quadrant fills come from live particle count so they reflect the current
+  // in-world dust amount.
   const dustCount = getPlayerDustCount();
-  const fullContainers = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
+  const fullContainersFromParticles = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
   const partialDust = dustCount % DUST_PARTICLES_PER_CONTAINER;
+  // Total slots to draw: at least the owned containers, but also cover any
+  // extra live particles that exceed the recorded container count (edge case).
+  const totalContainerSlots = Math.max(
+    playerContainerCount,
+    fullContainersFromParticles + (partialDust > 0 ? 1 : 0),
+  );
   const dustSquareSize = 8;
   const dustPadding = 2;
   const dustStartX = 8;
   const dustStartY = HUD_HEALTH_BAR_Y_PX + HUD_HEALTH_BAR_HEIGHT_PX + HUD_HEALTH_DUST_GAP_PX;
 
   ctx.save();
-  for (let i = 0; i < fullContainers + (partialDust > 0 ? 1 : 0); i++) {
+  for (let i = 0; i < totalContainerSlots; i++) {
     const squareX = dustStartX + i * (dustSquareSize + dustPadding);
-    const isPartial = i === fullContainers;
-    const quadrantsActive = isPartial ? partialDust : DUST_PARTICLES_PER_CONTAINER;
+    // Determine how many quadrants (0–4) to fill for this slot from live particles.
+    const slotParticleStart = i * DUST_PARTICLES_PER_CONTAINER;
+    const remaining = Math.max(0, dustCount - slotParticleStart);
+    const quadrantsActive = Math.min(remaining, DUST_PARTICLES_PER_CONTAINER);
 
     // Draw square background
     ctx.fillStyle = 'rgba(0,0,0,0.4)';

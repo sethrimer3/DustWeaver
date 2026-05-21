@@ -184,6 +184,9 @@ export interface RenderFrameContext {
 
   // Callbacks
   getPlayerDustCount: () => number;
+  /** Number of dust containers the player owns (from progress.dustContainerCount).
+   * Passed through to renderGameHud so the HUD shows owned container outlines. */
+  playerContainerCount: number;
 
   // Graphics quality for this frame — drives quality-tier rendering decisions.
   graphicsQuality: GraphicsQuality;

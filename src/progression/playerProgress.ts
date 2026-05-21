@@ -92,6 +92,14 @@ export interface PlayerProgress {
    */
   collectedDustSwarmKeys: string[];
   /**
+   * Keys of dust containers and dust container shards the player has
+   * permanently collected, in the formats
+   * `${roomId}:container:${index}` and `${roomId}:containerShard:${index}`.
+   * Persisted so containers/shards cannot be re-collected after room reload,
+   * save/load, or game restart.
+   */
+  collectedDustContainerKeys: string[];
+  /**
    * Optional starting health override applied only on the very first room load
    * of a new campaign session (when no existing player cluster exists).
    * Campaigns may set this via CampaignSpawnData.startingHealth.
@@ -140,6 +148,7 @@ export function createDefaultProgress(): PlayerProgress {
     disabledPassiveWeaves: [],
     hasCompletedEarlyAutoAssignment: false,
     collectedDustSwarmKeys: [],
+    collectedDustContainerKeys: [],
   };
 }
 

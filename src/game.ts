@@ -167,6 +167,34 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           }
         }
 
+        // ── Apply official campaign starting values for brand-new players ───────
+        // When the player has never entered any room (exploredRoomIds is empty)
+        // and the official campaign defines a campaignSpawn with starting items,
+        // apply those values to progress now.  This mirrors the logic in the
+        // customCampaignPlay branch so both paths start consistently.
+        if (officialSpawn !== null && progress.exploredRoomIds.length === 0) {
+          if (officialSpawn.startingHealth !== undefined) {
+            progress.startingHealth = Math.max(1, Math.min(officialSpawn.startingHealth, PLAYER_INITIAL_HEALTH));
+          }
+          if (officialSpawn.startingDustContainerCount !== undefined) {
+            progress.dustContainerCount = Math.max(
+              progress.dustContainerCount,
+              Math.max(0, Math.floor(officialSpawn.startingDustContainerCount)),
+            );
+          }
+          if (Array.isArray(officialSpawn.startingDustTypes)) {
+            for (const name of officialSpawn.startingDustTypes) {
+              const kind = stringToParticleKind(name);
+              if (kind !== null) unlockDustType(progress, kind);
+            }
+          }
+          if (Array.isArray(officialSpawn.startingWeaves)) {
+            for (const weaveId of officialSpawn.startingWeaves) {
+              if (WEAVE_REGISTRY.has(weaveId)) unlockActiveWeave(progress, weaveId);
+            }
+          }
+        }
+
         // ── Dev diagnostics logged every time Play is pressed ─────────────────
         {
           const _adj = getActiveRoomAdjacency();
