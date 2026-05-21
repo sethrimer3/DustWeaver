@@ -382,7 +382,7 @@ function _createShadedCanvas(
   ctx.imageSmoothingEnabled = false; // preserve pixel-art crispness
   ctx.drawImage(src, 0, 0, widthPx, heightPx);
   applyOrganicEdgeShading(ctx, widthPx, heightPx, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
-  if (import.meta.env.DEV) FP.recordSpriteBake(key, performance.now() - _t0);
+  FP.recordSpriteBake(key, import.meta.env.DEV ? performance.now() - _t0 : 0);
   return c;
 }
 

@@ -582,12 +582,14 @@ export function scheduleRoomPreloads(
           return;
         }
         // Worker unavailable.
-        if (radius >= 2 && !deadline.didTimeout) {
-          // For radius-2: defer until timeout as before.
+        if (!deadline.didTimeout) {
+          // Defer for both radius-1 and radius-2 until the idle timeout forces
+          // the build.  This prevents a main-thread freeze during active gameplay
+          // when a heavy room is due and the worker is not available.
           if (isDebugMode) {
             console.log(
-              `[preload] ${roomId} (radius-2): estimated ${estimatedCostMs.toFixed(0)}ms build cost ` +
-              `exceeds radius-2 budget (${MAX_R2_COST_WITHOUT_TIMEOUT_MS}ms). Worker unavailable — deferring.`,
+              `[preload] ${roomId} (radius-${radius}): estimated ${estimatedCostMs.toFixed(0)}ms build cost ` +
+              `exceeds threshold. Worker unavailable — deferring until idle timeout.`,
             );
           }
           if (!workQueueSet.has(roomId)) {
@@ -599,20 +601,13 @@ export function scheduleRoomPreloads(
           }
           return;
         }
-        // For radius-1 or forced timeout: log warning and fall through to sync build.
+        // Idle timeout forced — build synchronously now (last resort).
         if (import.meta.env.DEV) {
-          if (radius === 1) {
-            console.warn(
-              `[preload] ${roomId} (radius-1): estimated ${estimatedCostMs.toFixed(0)}ms — ` +
-              `worker unavailable, falling back to synchronous build. This may cause a freeze.`,
-            );
-          } else {
-            console.warn(
-              `[preload] idle callback forced after ${IDLE_TIMEOUT_MS}ms timeout ` +
-              `(timeRemaining=${deadline.timeRemaining().toFixed(1)}ms). ` +
-              `This may cause a long task on the main thread.`,
-            );
-          }
+          console.warn(
+            `[preload] ${roomId} (radius-${radius}): idle timeout forced ` +
+            `(estimated ${estimatedCostMs.toFixed(0)}ms, worker unavailable). ` +
+            `Building synchronously — may cause a frame freeze.`,
+          );
         }
       }
     }

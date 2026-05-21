@@ -113,6 +113,7 @@ import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoo
 import type { TransitionDirection } from './gameTransitions';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { loadRoomForGameplayAsync, isRoomFileCacheActive, getActiveRoomAdjacency } from '../levels/roomFileLoader';
+import * as FP from '../debug/perfFreezeProfiler';
 
 const FIXED_DT_MS = 16.666;
 
@@ -330,57 +331,61 @@ export function startGameScreen(
     const _phaseAEntry = roomRuntimeCache.get(room.id);
     let blockerKeys: Set<string> | undefined;
     let darkBlockerKeys: Set<string> | undefined;
-    if (_phaseAEntry !== undefined && _phaseAEntry.blockerKeys !== null) {
-      // null = not computed; undefined = no blockers (valid); Set = populated.
-      blockerKeys     = _phaseAEntry.blockerKeys;
-      darkBlockerKeys = _phaseAEntry.darkBlockerKeys ?? undefined;
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} blockerKeys: cache HIT`);
-      }
-    } else {
-      // Build from scratch and store back into the cache entry if one exists.
-      const _blockerT0 = import.meta.env.DEV ? performance.now() : 0;
-      if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
-        blockerKeys = new Set<string>();
-        for (const b of room.ambientLightBlockers) {
-          const key = `${b.xBlock},${b.yBlock}`;
-          blockerKeys.add(key);
-          if (b.isDark) {
-            if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
-            darkBlockerKeys.add(key);
-          }
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      if (_phaseAEntry !== undefined && _phaseAEntry.blockerKeys !== null) {
+        // null = not computed; undefined = no blockers (valid); Set = populated.
+        blockerKeys     = _phaseAEntry.blockerKeys;
+        darkBlockerKeys = _phaseAEntry.darkBlockerKeys ?? undefined;
+        if (import.meta.env.DEV) {
+          console.log(`[loadRoom] ${room.id} blockerKeys: cache HIT`);
         }
-      }
-      // Add light-blocking background blocks to the ambient blocker set.
-      if (room.backgroundBlocks) {
-        for (const b of room.backgroundBlocks) {
-          if (b.isLightBlockingFlag !== 1) continue;
-          if (!blockerKeys) blockerKeys = new Set<string>();
-          for (let dy = 0; dy < b.hBlock; dy++) {
-            for (let dx = 0; dx < b.wBlock; dx++) {
-              blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
+      } else {
+        // Build from scratch and store back into the cache entry if one exists.
+        const _blockerT0 = import.meta.env.DEV ? performance.now() : 0;
+        if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
+          blockerKeys = new Set<string>();
+          for (const b of room.ambientLightBlockers) {
+            const key = `${b.xBlock},${b.yBlock}`;
+            blockerKeys.add(key);
+            if (b.isDark) {
+              if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
+              darkBlockerKeys.add(key);
             }
           }
         }
+        // Add light-blocking background blocks to the ambient blocker set.
+        if (room.backgroundBlocks) {
+          for (const b of room.backgroundBlocks) {
+            if (b.isLightBlockingFlag !== 1) continue;
+            if (!blockerKeys) blockerKeys = new Set<string>();
+            for (let dy = 0; dy < b.hBlock; dy++) {
+              for (let dx = 0; dx < b.wBlock; dx++) {
+                blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
+              }
+            }
+          }
+        }
+        if (_phaseAEntry !== undefined) {
+          // Store `undefined` (not `null`) so `isEntryFullyPrepared` can see these
+          // fields are computed.  `null` is the "not yet computed" sentinel.
+          _phaseAEntry.blockerKeys     = blockerKeys;
+          _phaseAEntry.darkBlockerKeys = darkBlockerKeys;
+        }
+        if (import.meta.env.DEV) {
+          console.log(`[loadRoom] ${room.id} blockerKeys: cache MISS (build ${(performance.now() - _blockerT0).toFixed(1)}ms)`);
+        }
       }
-      if (_phaseAEntry !== undefined) {
-        // Store `undefined` (not `null`) so `isEntryFullyPrepared` can see these
-        // fields are computed.  `null` is the "not yet computed" sentinel.
-        _phaseAEntry.blockerKeys     = blockerKeys;
-        _phaseAEntry.darkBlockerKeys = darkBlockerKeys;
-      }
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} blockerKeys: cache MISS (build ${(performance.now() - _blockerT0).toFixed(1)}ms)`);
-      }
+      setActiveBlockLighting(
+        room.lightingEffect ?? 'Ambient',
+        room.widthBlocks,
+        room.heightBlocks,
+        room.ambientLightDirection,
+        blockerKeys,
+      );
+      setActiveDarkAmbientBlockers(darkBlockerKeys);
+      FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
-    setActiveBlockLighting(
-      room.lightingEffect ?? 'Ambient',
-      room.widthBlocks,
-      room.heightBlocks,
-      room.ambientLightDirection,
-      blockerKeys,
-    );
-    setActiveDarkAmbientBlockers(darkBlockerKeys);
     musicManager.notifyRoomEntered(room.songId ?? '_continue');
 
     let carryHealthPoints = PLAYER_INITIAL_HEALTH;
@@ -423,44 +428,59 @@ export function startGameScreen(
     playerCluster.healthPoints = Math.min(carryHealthPoints, playerCluster.maxHealthPoints);
     world.clusters.push(playerCluster);
 
-    const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
-    const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
-      || playerWeaveLoadout.secondary.boundDust.length > 0;
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
+      const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
+        || playerWeaveLoadout.secondary.boundDust.length > 0;
 
-    if (hasWeaveBoundDust) {
-      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
-    } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
-      const dustKind = progress.unlockedDustKinds[0];
-      const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
-      if (particleCount > 0) {
-        spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+      if (hasWeaveBoundDust) {
+        spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+      } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
+        const dustKind = progress.unlockedDustKinds[0];
+        const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
+        if (particleCount > 0) {
+          spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+        }
       }
+
+      world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
+      world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
+      world.isMoteSourceOrbitFlag = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
+
+      initMoteQueueFromParticles(world, playerCluster.entityId);
+      resetSwordWeaveState(world);
+      FP.recordLoadPhaseStep('B:playerParticles+moteQueue', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
-
-    world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
-    world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
-    world.isMoteSourceOrbitFlag = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
-
-    initMoteQueueFromParticles(world, playerCluster.entityId);
-    resetSwordWeaveState(world);
 
     yield; // ── Phase B complete ─────────────────────────────────────────────
 
     // ── Phase C: spawn enemies (5–15 ms on complex rooms) ────────────────
-    spawnEnemyClusters(world, room.enemies, 2, levelRng);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      spawnEnemyClusters(world, room.enemies, 2, levelRng);
+      FP.recordLoadPhaseStep('C:enemySpawn', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
 
     yield; // ── Phase C complete ─────────────────────────────────────────────
 
     // ── Phase D: background particles + grapple chains + walls ───────────
-    spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      spawnBackgroundFluidParticles(world, BACKGROUND_FLUID_COUNT, levelRng);
+      FP.recordLoadPhaseStep('D:bgFluidParticles', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
 
-    initGrappleChainParticles(world, 1);
-
-    for (let ci = 0; ci < world.clusters.length; ci++) {
-      const cl = world.clusters[ci];
-      if (cl.isGrappleHunterFlag === 1) {
-        initGrappleHunterChainParticles(world, cl);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      initGrappleChainParticles(world, 1);
+      for (let ci = 0; ci < world.clusters.length; ci++) {
+        const cl = world.clusters[ci];
+        if (cl.isGrappleHunterFlag === 1) {
+          initGrappleHunterChainParticles(world, cl);
+        }
       }
+      FP.recordLoadPhaseStep('D:grappleChains', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
 
     // Use cached wall template if available (avoids O(n²) merge pass).
@@ -490,27 +510,64 @@ export function startGameScreen(
         wallDecorations: null,
       });
     }
+    FP.recordLoadPhaseStep('D:wallTemplate', import.meta.env.DEV ? performance.now() - _wallT0 : 0);
 
     yield; // ── Phase D complete ─────────────────────────────────────────────
 
     // ── Phase E: hazards + ropes + blocks + grasshoppers + dialogue ──────
-    loadRoomHazards(world, room);
-    loadRoomRopes(world, room);
-    loadRoomFallingBlocks(world, room);
-    loadRoomGrasshoppers(world, room);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      loadRoomHazards(world, room);
+      FP.recordLoadPhaseStep('E:hazards', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      loadRoomRopes(world, room);
+      FP.recordLoadPhaseStep('E:ropes', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      loadRoomFallingBlocks(world, room);
+      FP.recordLoadPhaseStep('E:fallingBlocks', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      loadRoomGrasshoppers(world, room);
+      FP.recordLoadPhaseStep('E:grasshoppers', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
 
-    const dialogueVisitState = prepareRoomDialogueVisitState(room, dialogueState, dialogueRenderer);
-    firedDialogueTriggerUids = dialogueVisitState.firedDialogueTriggerUids;
-    cachedRoomConversations = dialogueVisitState.cachedRoomConversations;
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      const dialogueVisitState = prepareRoomDialogueVisitState(room, dialogueState, dialogueRenderer);
+      firedDialogueTriggerUids = dialogueVisitState.firedDialogueTriggerUids;
+      cachedRoomConversations = dialogueVisitState.cachedRoomConversations;
+      FP.recordLoadPhaseStep('E:dialoguePrep', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
 
-    spawnAllDustPiles(world);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      spawnAllDustPiles(world);
+      FP.recordLoadPhaseStep('E:dustPiles', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
 
     yield; // ── Phase E complete ─────────────────────────────────────────────
 
     // ── Phase F: environment effects + rendering state + camera setup ─────
-    environmentalDust.initFromWorld(world, room.worldNumber);
-    sunbeamRenderer.initFromRoom(room);
-    atmosphericLightDust.initFromRoom(room);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      environmentalDust.initFromWorld(world, room.worldNumber);
+      FP.recordLoadPhaseStep('F:environmentalDust', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      sunbeamRenderer.initFromRoom(room);
+      FP.recordLoadPhaseStep('F:sunbeamRenderer', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      atmosphericLightDust.initFromRoom(room);
+      FP.recordLoadPhaseStep('F:atmosphericLightDust', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
 
     playerCloak.reset();
     phantomCloak.reset();
@@ -519,39 +576,47 @@ export function startGameScreen(
 
     // Use cached wall decorations if available (pure geometry, no mutable state).
     const _decorEntry = roomRuntimeCache.get(room.id);
-    if (_decorEntry !== undefined && _decorEntry.wallDecorations !== null) {
-      cachedWallDecorations = _decorEntry.wallDecorations;
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} decorations: cache HIT`);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      if (_decorEntry !== undefined && _decorEntry.wallDecorations !== null) {
+        cachedWallDecorations = _decorEntry.wallDecorations;
+        if (import.meta.env.DEV) {
+          console.log(`[loadRoom] ${room.id} decorations: cache HIT`);
+        }
+      } else {
+        const _decorT0 = import.meta.env.DEV ? performance.now() : 0;
+        cachedWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+        if (_decorEntry !== undefined) {
+          _decorEntry.wallDecorations = cachedWallDecorations;
+        }
+        if (import.meta.env.DEV) {
+          console.log(`[loadRoom] ${room.id} decorations: cache MISS (build ${(performance.now() - _decorT0).toFixed(1)}ms)`);
+        }
       }
-    } else {
-      const _decorT0 = import.meta.env.DEV ? performance.now() : 0;
-      cachedWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
-      if (_decorEntry !== undefined) {
-        _decorEntry.wallDecorations = cachedWallDecorations;
+      for (let _di = 0; _di < cachedWallDecorations.length; _di++) {
+        const _d = cachedWallDecorations[_di];
+        cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
+        cachedDecorationCenterY[_di] = _d.worldAnchorYPx;
       }
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} decorations: cache MISS (build ${(performance.now() - _decorT0).toFixed(1)}ms)`);
-      }
-    }
-    for (let _di = 0; _di < cachedWallDecorations.length; _di++) {
-      const _d = cachedWallDecorations[_di];
-      cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
-      cachedDecorationCenterY[_di] = _d.worldAnchorYPx;
+      FP.recordLoadPhaseStep('F:wallDecorations', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
 
     resetReusableSnapshot(reusableSnapshot, world);
 
     captureClusterInterpolationState(world, interpolationBuffers);
 
-    skillTombRenderer.init(room.saveTombs, room.walls);
-    skillTombEffectRenderer.init(room.skillTombs);
-    const roomSkillTombsForInit = room.skillTombs ?? [];
-    for (let i = roomSkillTombsForInit.length - 1; i >= 0; i--) {
-      const st = roomSkillTombsForInit[i];
-      if (consumedSkillTombKeySet.has(`${room.id}:${st.xBlock}:${st.yBlock}`)) {
-        skillTombEffectRenderer.removeTomb(i);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      skillTombRenderer.init(room.saveTombs, room.walls);
+      skillTombEffectRenderer.init(room.skillTombs);
+      const roomSkillTombsForInit = room.skillTombs ?? [];
+      for (let i = roomSkillTombsForInit.length - 1; i >= 0; i--) {
+        const st = roomSkillTombsForInit[i];
+        if (consumedSkillTombKeySet.has(`${room.id}:${st.xBlock}:${st.yBlock}`)) {
+          skillTombEffectRenderer.removeTomb(i);
+        }
       }
+      FP.recordLoadPhaseStep('F:skillTombInit', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
 
     if (progress && !progress.exploredRoomIds.includes(room.id)) {
@@ -565,26 +630,34 @@ export function startGameScreen(
     // Reset effective camera clamp bounds to the new room's single-room bounds.
     resetCameraEffBoundsForRoom(camState, roomWidthWorld, roomHeightWorld);
 
-    preloadRoomThemeSprites(room);
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      preloadRoomThemeSprites(room);
+      FP.recordLoadPhaseStep('F:preloadRoomThemeSprites', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
 
     // Cancel any in-flight preload schedule from the previous room and start
     // a new one for the rooms adjacent to the newly loaded room.
     _preloadScheduleHandle?.cancel();
-    _preloadScheduleHandle = scheduleRoomPreloads(
-      room,
-      ROOM_REGISTRY,
-      roomRuntimeCache,
-      import.meta.env.DEV,
-      // In file-cache mode (Electron lazy loading): also load room DATA for
-      // adjacent rooms that are not yet in ROOM_REGISTRY.
-      // In packed-campaign / browser mode: omit — all rooms are already loaded.
-      isRoomFileCacheActive() ? loadRoomForGameplayAsync : undefined,
-      // Pass manifest adjacency index so the scheduler can discover radius-2
-      // rooms via BFS even when intermediate rooms are not yet in ROOM_REGISTRY.
-      // Absent when no file cache is active or the manifest lacks adjacency
-      // (old manifests) — falls back to registry-only BFS.
-      getActiveRoomAdjacency() ?? undefined,
-    );
+    {
+      const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      _preloadScheduleHandle = scheduleRoomPreloads(
+        room,
+        ROOM_REGISTRY,
+        roomRuntimeCache,
+        import.meta.env.DEV,
+        // In file-cache mode (Electron lazy loading): also load room DATA for
+        // adjacent rooms that are not yet in ROOM_REGISTRY.
+        // In packed-campaign / browser mode: omit — all rooms are already loaded.
+        isRoomFileCacheActive() ? loadRoomForGameplayAsync : undefined,
+        // Pass manifest adjacency index so the scheduler can discover radius-2
+        // rooms via BFS even when intermediate rooms are not yet in ROOM_REGISTRY.
+        // Absent when no file cache is active or the manifest lacks adjacency
+        // (old manifests) — falls back to registry-only BFS.
+        getActiveRoomAdjacency() ?? undefined,
+      );
+      FP.recordLoadPhaseStep('F:scheduleRoomPreloads', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
 
     // Generator complete — Phase F has no trailing yield.
   }
@@ -967,11 +1040,12 @@ export function startGameScreen(
   function frame(timestampMs: number): void {
     if (!isRunning) return;
 
-    // DEV: record frame start for long-frame detection.
-    const _devFrameT0 = import.meta.env.DEV ? performance.now() : 0;
-
     const elapsedMs = lastTimestampMs === 0 ? FIXED_DT_MS : timestampMs - lastTimestampMs;
     lastTimestampMs = timestampMs;
+
+    // Reset per-frame freeze-profiler counters (works in both dev and production
+    // because it also resets the production-safe sprite-bake budget counter).
+    FP.beginFrame(elapsedMs);
 
     // Record raw frame time to the profiler ring buffer unconditionally so
     // frame-pacing stats are available immediately when debug mode is enabled.
@@ -1043,6 +1117,8 @@ export function startGameScreen(
         );
 
         rafHandle = requestAnimationFrame(frame);
+        // endFrame covers editor-backdrop frames too.
+        FP.endFrame();
         return;
       }
     }
@@ -1078,6 +1154,7 @@ export function startGameScreen(
       }
       // Keep the overlay visible and skip gameplay sim/render this frame.
       tickLoadingOverlay();
+      FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
     }
@@ -1131,12 +1208,14 @@ export function startGameScreen(
     if (pauseController.state.isPaused
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
+      FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
     }
 
     // While dead, still render the frozen scene but skip sim
     if (gameOverlayController.state.isPlayerDead) {
+      FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
     }
@@ -1239,6 +1318,7 @@ export function startGameScreen(
     // and multi-second browser stalls.
     accumulatorMs = Math.min(accumulatorMs + elapsedMs, FIXED_DT_MS * 5);
 
+    let _simTickCount = 0;
     while (accumulatorMs >= FIXED_DT_MS) {
       // Capture cluster positions just before THIS tick so that after the loop,
       // prevClusterPos holds the positions from the start of the LAST tick that
@@ -1265,6 +1345,7 @@ export function startGameScreen(
       world.playerSprintHeldFlag = (!isDialogueBlockingInput && inputState.isSprintHeldFlag) ? 1 : 0;
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
       tick(world);
+      _simTickCount++;
       // If the player died during this tick, stop processing further ticks in
       // this frame.  Continuing to run enemy AI, spike contact, and force
       // accumulation on a dead cluster produces erratic post-death effects.
@@ -1292,6 +1373,9 @@ export function startGameScreen(
     // Fraction of a tick remaining in the accumulator — used to blend rendered
     // cluster positions between the pre-tick and post-tick physics positions.
     const renderAlpha = accumulatorMs / FIXED_DT_MS;
+
+    // Record sim-tick count in the freeze profiler (dev-only no-op in production).
+    FP.recordSimTicks(_simTickCount);
 
     // ── Check for player death ───────────────────────────────────────────────
     const playerForDeath = world.clusters[0];
@@ -1346,6 +1430,18 @@ export function startGameScreen(
     const ox = camOff.offsetXPx;
     const oy = camOff.offsetYPx;
 
+    // Record room/camera context for structured freeze warnings (dev-only).
+    if (import.meta.env.DEV) {
+      const _fp_player = world.clusters[0];
+      const _fp_pxBlock = _fp_player ? Math.floor(_fp_player.positionXWorld / BLOCK_SIZE_SMALL) : -1;
+      const _fp_pyBlock = _fp_player ? Math.floor(_fp_player.positionYWorld / BLOCK_SIZE_SMALL) : -1;
+      FP.setFrameContext(
+        currentRoom.id,
+        `ox=${ox.toFixed(0)}px,oy=${oy.toFixed(0)}px`,
+        `${_fp_pxBlock},${_fp_pyBlock}`,
+      );
+    }
+
     let aliveCount = 0;
     for (let i = 0; i < world.particleCount; i++) {
       if (world.isAliveFlag[i] === 1) aliveCount++;
@@ -1397,6 +1493,7 @@ export function startGameScreen(
       renderProfiler.updateTransitionStats(debugStats);
     }
 
+    const _renderT0 = import.meta.env.DEV ? performance.now() : 0;
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
@@ -1437,16 +1534,14 @@ export function startGameScreen(
       alwaysCenterCamera: pauseController.state.pauseMenuState.alwaysCenterCamera,
       stagedRoom: null,
     });
+    FP.recordRenderMs(import.meta.env.DEV ? performance.now() - _renderT0 : 0);
 
     // Tick the loading overlay — hides it once sprites are ready.
     tickLoadingOverlay();
 
-    if (import.meta.env.DEV && _devFrameT0 > 0) {
-      const _frameMs = performance.now() - _devFrameT0;
-      if (_frameMs > 50) {
-        console.warn(`[perf] LONG FRAME (gameplay): ${_frameMs.toFixed(1)}ms`);
-      }
-    }
+    // Commit freeze-profiler frame data; emits structured [freeze] LONG FRAME
+    // console warning (dev-only) when the frame exceeds LONG_FRAME_WARN_MS.
+    FP.endFrame();
 
     rafHandle = requestAnimationFrame(frame);
   }

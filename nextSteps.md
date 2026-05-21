@@ -1,6 +1,135 @@
 # DustWeaver — Next Steps
 
-## BUILD 389 — Deep Performance Investigation: Gameplay Freeze Fix
+## BUILD 390 — Follow-up: Fix Merged BUILD 389 Bugs
+
+### What Was Wrong in BUILD 389
+
+BUILD 389 (PR #370) introduced the freeze-fix infrastructure but merged with several bugs that
+made parts of the fix ineffective or incomplete:
+
+1. **Sprite bake budget not enforced in production** (`folderBlockThemes.ts`)
+   `FP.recordSpriteBake()` was called inside `if (import.meta.env.DEV)`, so
+   `_spriteBakesThisFrame` was never incremented in production builds, meaning
+   `isBakeBudgetExhausted()` always returned false and the cap never fired outside dev mode.
+
+2. **Bake budget never reset per frame** (`gameScreen.ts` / `gameRender.ts`)
+   `FP.beginFrame()` was wired into `gameRender.ts` using `world.dtMs` (the fixed sim
+   timestep, not actual wall-clock elapsed time). The main RAF loop in `gameScreen.ts` never
+   called it directly, so the elapsed-ms argument was always the fixed 16.666 ms constant
+   rather than real frame time. More critically, `endFrame()` was not called at every RAF
+   continuation path (editor, async load, pause, death), meaning the ring buffer could go
+   stale on frames that took an early exit.
+
+3. **Chunk rebuild budget off-by-one** (`chunkRenderCache.ts`)
+   The budget check used `rebuiltCount > this._maxChunksPerFrame` (strict greater-than),
+   allowing one extra chunk rebuild per frame. A cap of 4 rebuilt 5 chunks.
+
+4. **Missing chunks drew nothing when budget exhausted** (`chunkRenderCache.ts`)
+   When budget was exhausted and no prior canvas existed for a chunk (first visit to an area),
+   the skipped chunk produced an invisible hole. The stale-canvas blit path was only reached
+   when a canvas already existed; brand-new chunks had no fallback.
+
+5. **Procedural sprite bakes were completely unbudgeted** (`proceduralBlockSprite.ts`)
+   `getProceduralSprite()` called `_generateSprite()` → `applyOrganicEdgeShading()` with no
+   budget check. This is an active gameplay path (walls, platforms, ramps) and could bake
+   unlimited sprites in a single frame.
+
+6. **Freeze profiler never wired into the main game loop** (`gameScreen.ts`)
+   `beginFrame`, `endFrame`, `recordSimTicks`, `setFrameContext`, `recordRenderMs` were never
+   called from the RAF loop. The profiler existed but collected no data during active gameplay.
+
+7. **Async load phases had no sub-step timing** (`gameScreen.ts`)
+   Load phase logging only showed total phase time. When room entry caused a freeze, the
+   profiler could not identify which sub-step (enemy spawn, wall template build, etc.) was
+   responsible.
+
+8. **Radius-1 worker-unavailable path could stall main thread** (`roomPreloadScheduler.ts`)
+   When the Web Worker was unavailable, the idle callback built radius-1 rooms synchronously
+   regardless of `deadline.timeRemaining()`. Radius-2 had the `!deadline.didTimeout` guard
+   but radius-1 bypassed it entirely.
+
+### What Was Fixed in This PR
+
+#### `src/render/walls/folderBlockThemes.ts` — Fix #1
+- Removed `if (import.meta.env.DEV)` guard from `FP.recordSpriteBake()` call.
+- The budget counter now increments in both dev and production builds.
+
+#### `src/render/walls/chunkRenderCache.ts` — Fix #3 + #4
+- Changed `rebuiltCount > this._maxChunksPerFrame` → `rebuiltCount >= this._maxChunksPerFrame`
+  (eliminates the off-by-one; a cap of 4 now rebuilds at most 4 chunks).
+- Added a cheap `ctx.fillRect(x, y, w, h, 'rgba(20,20,24,0.85)')` fallback for chunks that
+  have no prior canvas when budget is exhausted. No canvas is allocated for the fallback;
+  the chunk key stays absent from `_chunks` so it retries normally next frame.
+
+#### `src/render/walls/proceduralBlockSprite.ts` — Fix #5
+- Added `import * as FP from '../../debug/perfFreezeProfiler'`.
+- Added `if (FP.isBakeBudgetExhausted()) return null` guard before `_generateSprite()`.
+- Added `FP.recordSpriteBake(key, ms)` unconditionally after a successful bake, sharing the
+  same per-frame counter as folder-based bakes.
+
+#### `src/screens/roomPreloadScheduler.ts` — Fix #8
+- Changed worker-unavailable idle callback condition from `if (radius >= 2 && !deadline.didTimeout)`
+  to `if (!deadline.didTimeout)`, deferring both radius-1 and radius-2 rooms when the worker
+  is unavailable and the idle deadline has not yet timed out.
+
+#### `src/screens/gameScreen.ts` — Fix #2, #6, #7
+- Added `import * as FP from '../debug/perfFreezeProfiler'`.
+- Calls `FP.beginFrame(elapsedMs)` at the top of every RAF frame using actual wall-clock
+  elapsed time (not the fixed sim timestep).
+- Calls `FP.endFrame()` before every RAF continuation: editor backdrop path, async load
+  path, pause/dead early-return path, and the normal gameplay end.
+- Removed the old `_devFrameT0` variable and generic `[perf] LONG FRAME` console.warn;
+  the structured freeze profiler warning supersedes it.
+- Added `_simTickCount` counter + `FP.recordSimTicks(_simTickCount)` after the sim loop.
+- Added `FP.setFrameContext(room.id, firstVisibleBlockX, lastVisibleBlockX, playerBlockX)`
+  after camera offset is computed.
+- Added `FP.recordRenderMs(renderMs)` wrapping `renderFrame()`.
+- Added `FP.recordLoadPhaseStep(detail, ms)` for every sub-step in `_makeLoadRoomPhases()`:
+  - Phase A: blockers+lighting
+  - Phase B: playerParticles+moteQueue
+  - Phase C: enemySpawn
+  - Phase D: bgFluidParticles, grappleChains, wallTemplate
+  - Phase E: hazards, ropes, fallingBlocks, grasshoppers, dialoguePrep, dustPiles
+  - Phase F: environmentalDust, sunbeamRenderer, atmosphericLightDust, wallDecorations,
+    skillTombInit, preloadRoomThemeSprites, scheduleRoomPreloads
+
+### How to Use the Freeze Profiler
+
+1. Open the game in a browser dev build.
+2. Open the pause menu → Debug → toggle **Freeze** panel.
+3. Walk into new areas, approach transition doors, or perform room transitions.
+4. In the browser console, `[freeze] LONG FRAME` messages appear for frames >100 ms.
+   Each message includes a `topCause` field (e.g. `wallChunks`, `spriteBake`, `enemySpawn`)
+   identifying the dominant cost.
+5. The Freeze panel in the HUD shows the current frame's per-subsystem budget consumption
+   and the last long-frame / last severe-freeze snapshots.
+6. From the console REPL: `window.__FP?.getLastLongFrame()` returns the last captured
+   long-frame event with full sub-step timing breakdown.
+
+### Remaining Freeze Risks
+
+1. **Sprite/chunk warm-up lag on cold entry**: With caps of 8 bakes/frame and 4 chunks/frame,
+   a fresh room now converges over ~10–20 frames. Tiles near the camera may briefly show the
+   dark fallback fill. If this is visible in play, increase `spriteBakeMaxPerFrame` or
+   `_maxChunksPerFrame` from the console.
+
+2. **Worker unavailable (Safari Private / strict CSP)**: Radius-1 rooms still build
+   synchronously on the main thread after the 4-second idle timeout when the worker is
+   unavailable. The loading overlay does not cover this path.
+
+3. **`applyOrganicEdgeShading` inside `blockEdgeShading.ts` direct callers**: Any future
+   caller that bypasses `folderBlockThemes.ts` or `proceduralBlockSprite.ts` must add its
+   own budget check. The budget is not enforced at the `applyOrganicEdgeShading` call site
+   itself to avoid circular dependencies.
+
+4. **Phase D wall template build can exceed frame budget**: `buildRoomWallTemplate()` on a
+   large room is O(tiles) and may take >16 ms. It runs in Phase D (one phase per RAF frame),
+   so it does not block other phases, but Phase D itself may still be a long frame.
+   Consider moving wall template builds to the Web Worker preload path.
+
+---
+
+
 
 ### Top Freeze Causes Found (Code Inspection)
 
