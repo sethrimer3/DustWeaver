@@ -3,6 +3,15 @@
  *
  * Rooms are saved in the compact v2 schema (`SavedRoomV2`) by default.  The
  * loader auto-detects v2 vs. legacy so older files keep working.
+ *
+ * In Electron editor mode, "Export Campaign" writes directly to the filesystem
+ * via the `dw:export-campaign-with-progress` IPC channel and displays a
+ * progress modal.  In browser / GitHub Pages mode, a download is triggered
+ * instead so the user can save the file manually.
+ *
+ * Source-of-truth rule: the .dwcampaign.json file is canonical.  The
+ * individual room files (ROOMS/*.json) and manifest.json are derived cache
+ * artifacts, regenerated on every export.
  */
 
 import type { EditorRoomData } from './editorState';
@@ -17,6 +26,7 @@ import type { EditableCampaignSession } from './editableCampaignSession';
 import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCampaignSession';
 import { WORLD_NAMES } from '../levels/rooms';
 import { BUILD_NUMBER } from '../build-info';
+import { createExportProgressModal } from './editorExportProgressModal';
 
 // ── Main campaign constants ───────────────────────────────────────────────────
 const MAIN_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN';
@@ -113,21 +123,73 @@ export function exportAllChanges(
   return exportCount;
 }
 
+// ── Electron progress-based export helpers ────────────────────────────────────
+
+/**
+ * Runs an Electron progress export for the given campaign payload.
+ *
+ * Shows a progress modal in `progressRoot`, registers the progress listener,
+ * invokes the IPC, and cleans up the listener when the promise resolves.
+ *
+ * This is an internal helper — call `exportMainCampaignJson` or
+ * `exportCampaignJson` instead.
+ */
+async function runElectronProgressExport(
+  exported: import('../levels/campaignSchema').SavedCampaignV1,
+  isOfficialCampaign: boolean,
+  progressRoot: HTMLElement,
+): Promise<void> {
+  const electronApi = window.dustweaverElectron;
+  if (!electronApi) return;
+
+  const modal = createExportProgressModal(progressRoot);
+  modal.update({ step: 'serializing', message: 'Serializing campaign…' });
+
+  // Register progress listener before invoking so no events are missed.
+  electronApi.onExportProgress((event) => {
+    modal.update(event);
+  });
+
+  let result: Awaited<ReturnType<typeof electronApi.exportCampaignWithProgress>>;
+  try {
+    result = await electronApi.exportCampaignWithProgress(exported, { isOfficialCampaign });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    modal.update({ step: 'error', message: `Export failed: ${msg}` });
+    electronApi.offExportProgress();
+    return;
+  }
+
+  // Clean up the listener immediately after the IPC call resolves.
+  electronApi.offExportProgress();
+
+  if (!result.ok) {
+    modal.update({ step: 'error', message: `Export failed: ${result.error ?? 'Unknown error'}` });
+  }
+  // On success the modal auto-dismisses via the 'complete' event sent by main.
+}
+
 /**
  * Exports the entire custom campaign as a single `.dwcampaign.json` file.
  *
  * Collects all rooms from ROOM_REGISTRY (the campaign rooms), merges pending
  * room edits, and includes world-map metadata and campaign metadata from the
- * session. The result is a valid SavedCampaignV1 for placement in
- * ASSETS/CAMPAIGNS/CUSTOM/<campaign-id>.dwcampaign.json.
+ * session. The result is a valid SavedCampaignV1.
+ *
+ * In Electron: writes directly to userData/CUSTOM_CAMPAIGNS/<id>/ with a
+ * progress modal.  In browser: triggers a download.
  *
  * @param session          The active campaign editing session.
  * @param pendingRoomEdits  Rooms with unsaved edits (including the current room).
+ * @param activeRoomData   The room currently open in the editor (may be unsaved).
+ * @param progressRoot     When provided and running in Electron, the progress
+ *                         modal is appended here.
  */
 export function exportCampaignJson(
   session: EditableCampaignSession,
   pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
   activeRoomData?: EditorRoomData | null,
+  progressRoot?: HTMLElement | null,
 ): void {
   let exported: ReturnType<typeof assembleExportCampaign>;
   if (session.campaignStore !== undefined) {
@@ -160,6 +222,16 @@ export function exportCampaignJson(
     exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
   }
 
+  // In Electron, write directly to userData/CUSTOM_CAMPAIGNS/<id>/ with progress.
+  if (window.dustweaverElectron !== undefined && progressRoot != null) {
+    runElectronProgressExport(exported, false, progressRoot).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[editorExport] Electron custom campaign export error:', msg);
+    });
+    return;
+  }
+
+  // Browser / GitHub Pages fallback — trigger a download.
   const stringifyStartMs = import.meta.env.DEV ? performance.now() : 0;
   const text = JSON.stringify(exported, null, 2);
   if (import.meta.env.DEV) {
@@ -186,17 +258,20 @@ export function exportCampaignJson(
  * (dehydrating every room) and merges any pending room edits on top before
  * assembling the final SavedCampaignV1 payload.
  *
- * The exported file is named `DustweaverCampaign.dwcampaign.json` — the
- * canonical runtime filename. Place it under
- * `ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/` to deploy it.
+ * In Electron: writes directly to the project ASSETS/ directory (or userData
+ * in packaged builds) with a live progress modal.
+ * In browser / GitHub Pages: triggers a file download.
  *
- * This is the handler for the "Export Campaign" button when editing the main
- * DustWeaver campaign (not a custom campaign session).
+ * Source-of-truth rule: the .dwcampaign.json file remains canonical.  The
+ * individual ROOMS/ files are derived cache artifacts written alongside it.
  *
  * @param pendingRoomEdits  Rooms with unsaved edits from the current session.
+ * @param progressRoot      When provided and running in Electron, the progress
+ *                          modal is appended to this element.
  */
 export function exportMainCampaignJson(
   pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
+  progressRoot?: HTMLElement | null,
 ): void {
   if (import.meta.env.DEV) {
     for (const [, data] of pendingRoomEdits) {
@@ -256,8 +331,17 @@ export function exportMainCampaignJson(
     worldMap,
   );
 
-  // In Electron, write directly to the project files instead of prompting a download.
-  // The IPC call serialises `exported` itself, so we skip the stringify here.
+  // In Electron, write directly to the project files with a progress modal.
+  if (window.dustweaverElectron !== undefined && progressRoot != null) {
+    runElectronProgressExport(exported, true, progressRoot).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[editorExport] Electron main campaign export error:', msg);
+    });
+    return;
+  }
+
+  // In Electron without a progressRoot (legacy callers) fall back to the old
+  // synchronous IPC call so no regression occurs.
   if (window.dustweaverElectron !== undefined) {
     window.dustweaverElectron
       .saveOfficialCampaignToProject(exported)

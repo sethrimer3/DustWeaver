@@ -354,9 +354,9 @@ export function createEditorController(
         onExportCampaignJson: () => {
           commitActiveRoomToCampaign('export');
           if (campaignSession) {
-            exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData);
+            exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData, uiRoot);
           } else {
-            exportMainCampaignJson(pendingRoomEdits);
+            exportMainCampaignJson(pendingRoomEdits, uiRoot);
           }
         },
         onOpenVisualMap: () => openVisualMap(),
