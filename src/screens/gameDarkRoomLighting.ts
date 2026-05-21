@@ -19,7 +19,6 @@ import {
 import { buildPlayerShadowOccluders, type ShadowCasterOccluderPx } from '../render/effects/shadowCaster';
 import { collectDecorationLights, type WallDecoration } from '../render/effects/wallDecorations';
 import type { WorldSnapshot } from '../render/snapshot';
-import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
 import { BLOCK_SIZE_SMALL, type RoomDef } from '../levels/roomDef';
 import { STAGE_LIGHTING, type RenderProfiler } from '../render/hud/renderProfiler';
 import type { RenderQualityConfig } from '../render/renderQualityConfig';
@@ -75,8 +74,6 @@ export interface DarkRoomLightingContext {
   currentRoom: RoomDef;
   snapshot: WorldSnapshot;
   cachedDecorations: readonly WallDecoration[];
-  previewBubbles: PreviewBubbleState[];
-  previewBubbleCount: number;
   darkRoomOverlay: DarkRoomOverlay;
   ox: number;
   oy: number;
@@ -100,7 +97,7 @@ export interface DarkRoomLightingContext {
 export function renderDarkRoomLighting(r: DarkRoomLightingContext, qc: RenderQualityConfig): void {
   const {
     ctx, currentRoom, snapshot, cachedDecorations,
-    previewBubbles, previewBubbleCount, darkRoomOverlay,
+    darkRoomOverlay,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx, renderProfiler,
   } = r;
 
@@ -195,18 +192,6 @@ export function renderDarkRoomLighting(r: DarkRoomLightingContext, qc: RenderQua
     );
   } else {
     _scratchShadows.length = 0;
-  }
-
-  // ── Preview bubbles as DarkRoom light sources ────────────────────────────
-  // Each active preview bubble punches a small aperture-shaped hole in the
-  // darkness mask at the transition opening.  This ensures the glowing cue
-  // is visible through the DarkRoom overlay and blends naturally with the
-  // player's lantern light.  The bubble opacity drives the inner-fraction so
-  // the hole fades in as the player approaches, matching the glow animation.
-  for (let bi = 0; bi < previewBubbleCount; bi++) {
-    const b = previewBubbles[bi];
-    if (b.opacity <= 0 || b.radiusPx <= 0) continue;
-    _pushLight(b.centerXPx, b.centerYPx, b.radiusPx, b.opacity * 0.4);
   }
 
   darkRoomOverlay.render(ctx, _scratchLights, _scratchLightCount, _scratchShadows);

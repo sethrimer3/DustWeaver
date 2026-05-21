@@ -1,15 +1,17 @@
 /**
  * roomPreparationWorker.ts — Off-main-thread room preparation worker.
  *
- * Receives a plain-object RoomDef via `postMessage`, runs the four expensive
+ * Receives a plain-object RoomDef via `postMessage`, runs the three expensive
  * build passes on a background thread, and posts back a serialised result
  * whose typed-array fields are **transferred** (zero-copy) rather than copied.
  *
- * Build passes executed here (same as `buildPreparedRoomRuntime` on main thread):
+ * Build passes executed here:
  *  1. `buildRoomWallTemplate`    — iterative O(n²) wall-merge pass
- *  2. `buildEdgeExtensionCache`  — BFS over expanded occupancy grid
- *  3. ambient-light blocker sets — two Set<string> from room metadata
- *  4. `buildRoomDecorations`     — pure geometry conversion
+ *  2. ambient-light blocker sets — two Set<string> from room metadata
+ *  3. `buildRoomDecorations`     — pure geometry conversion
+ *
+ * Edge-extension cache building has been removed — that feature is legacy-only.
+ * See src/render/transitions/legacy/README.md for details.
  *
  * This worker is created lazily in `roomPreloadScheduler.ts` and reused for
  * the lifetime of the game session.  Communication is strictly request/response:
@@ -18,7 +20,7 @@
  * No DOM APIs are called.  `performance.now()` is available in all worker
  * environments and is used only for per-step timing diagnostics.
  *
- * BUILD 387
+ * BUILD 388
  */
 
 // Minimal interface for the dedicated-worker global scope.
@@ -35,11 +37,9 @@ const _self = self as unknown as _WorkerCtx;
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { buildRoomWallTemplate } from './gameRoomWalls';
-import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { buildRoomDecorations } from '../render/effects/decorationWaveState';
 import type {
   SerializedWallTemplate,
-  SerializedEdgeExtension,
   WorkerOutboundMessage,
 } from './roomPreparationWorkerProtocol';
 
@@ -54,12 +54,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
     const wt = buildRoomWallTemplate(room);
     const wallMs = performance.now() - t0Wall;
 
-    // ── 2. Edge extension (BFS over expanded grid) ────────────────────────
-    const t0Edge = performance.now();
-    const ee = buildEdgeExtensionCache(room);
-    const edgeMs = performance.now() - t0Edge;
-
-    // ── 3. Ambient-light blocker sets ─────────────────────────────────────
+    // ── 2. Ambient-light blocker sets ─────────────────────────────────────
     // Mirrors the logic in buildPreparedRoomRuntime exactly.
     const t0Blocker = performance.now();
     let blockerSet: Set<string> | undefined;
@@ -89,7 +84,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
     }
     const blockerMs = performance.now() - t0Blocker;
 
-    // ── 4. Wall decorations (pure geometry) ───────────────────────────────
+    // ── 3. Wall decorations (pure geometry) ───────────────────────────────
     const t0Decor = performance.now();
     const wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
     const decorMs = performance.now() - t0Decor;
@@ -116,14 +111,6 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       isIceFlag: wt.isIceFlag.buffer as ArrayBuffer,
     };
 
-    // ── Serialise edge extension ──────────────────────────────────────────
-    const serialisedEe: SerializedEdgeExtension = {
-      roomId: ee.roomId,
-      // tiles is readonly EdgeExtensionTile[] — plain objects, clone cleanly.
-      tiles: ee.tiles as SerializedEdgeExtension['tiles'],
-      occupancyKeys: Array.from(ee.occupancySet),
-    };
-
     // ── Wire encoding for blocker sets ─────────────────────────────────────
     // null  = "built; room has no blockers"  (main thread stores as undefined)
     // array = "built; these are the blocker keys"
@@ -135,15 +122,13 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
     const msg: WorkerOutboundMessage = {
       roomId,
       wallTemplate: serialisedWt,
-      edgeExtension: serialisedEe,
       blockerKeys,
       darkBlockerKeys,
       wallDecorations,
       wallMs,
-      edgeMs,
       blockerMs,
       decorMs,
-      totalMs: wallMs + edgeMs + blockerMs + decorMs,
+      totalMs: wallMs + blockerMs + decorMs,
     };
 
     // Transfer all typed-array backing buffers (zero-copy).

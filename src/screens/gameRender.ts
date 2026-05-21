@@ -66,17 +66,8 @@ import { renderDarkRoomLighting } from './gameDarkRoomLighting';
 import { applyRenderQualitySettings } from './gameRenderQuality';
 import { renderBackgroundPass, type StagedRoomBgInfo } from './gameRenderBackgroundPass';
 import { renderSceneLightingPass } from './gameRenderSceneLighting';
-import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
-import { renderEdgeExtension } from '../render/transitions/edgeExtensionRenderer';
-import type { PreviewBubbleState } from '../render/transitions/previewBubbleState';
-import type { TransitionPreviewContext } from '../render/transitions/transitionPreviewContext';
-import { renderNextRoomFacingEdge } from '../render/transitions/nextRoomEdgeRenderer';
 import { renderTeleportFlash } from '../render/lambdaAnchorRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
-import {
-  ENABLE_EDGE_EXTENSION_RENDERING,
-  ENABLE_NEXT_ROOM_EDGE_PREVIEW,
-} from '../render/transitions/transitionConfig';
 import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
 
@@ -222,38 +213,12 @@ export interface RenderFrameContext {
    * between the pre-tick and post-tick offsetYWorld values for smooth motion.
    */
   prevFallingBlockOffsetY: Float32Array;
-  /**
-   * Cached edge extension tile data for the current room.
-   * Built once per loadRoom() call; null before the first room is loaded.
-   * Passed to renderEdgeExtension() to draw wall tiles beyond the room boundary.
-   */
-  edgeExtensionCache: EdgeExtensionCache | null;
 
   /**
-   * Pre-allocated array of PreviewBubbleState entries.
-   * Written by computePreviewBubbles() in gameScreen.ts each frame.
-   * Only entries [0, previewBubbleCount) are valid for this frame.
-   */
-  previewBubbles: PreviewBubbleState[];
-
-  /**
-   * Number of valid entries in previewBubbles for this frame (0 = none active).
-   */
-  previewBubbleCount: number;
-
-  /**
-   * Current transition preview context.  Provides the connected room's 2-block
-   * facing-edge tile data for rendering just beyond the current room's boundary.
-   * Built each frame in gameScreen.ts from the reveal state.
-   * The attachment point for future dual-room rendering (see nextSteps.md).
-   */
-  transitionPreviewCtx: TransitionPreviewContext;
-
-  /**
-   * BUILD 279: When the two-room camera crossing is active, the clip rect is
-   * expanded to the union of both rooms.  All values are in world units.
-   * When `isCrossing` is false these fields are ignored and the renderer clips
-   * to the current room only.
+   * BUILD 279/284 legacy: two-room crossing and staged-room clip rect.
+   * These are always false/zero since ENABLE_TWO_ROOM_CAMERA_CROSSING is disabled.
+   * Kept to avoid breaking the call sites; will be removed in a future pass.
+   * @deprecated Use instant room transitions only (ENABLE_SIMPLE_ROOM_TRANSITIONS).
    */
   isCrossing: boolean;
   crossingUnionMinXWorld: number;
@@ -271,7 +236,7 @@ export interface RenderFrameContext {
   /**
    * When a previous room is staged after a seamless crossing, provides the
    * minimal metadata needed to render its background layer clipped to its
-   * screen-space rect.  Null when no staging is active.
+   * screen-space rect.  Null when no staging is active (always null now).
    */
   stagedRoom: StagedRoomBgInfo | null;
 }
@@ -333,87 +298,20 @@ export function renderFrame(r: RenderFrameContext): void {
     // Keep legacy room-local background tinting behavior when no WebGL layer
     // is active, while preserving black room margins via clipping below.
     ctx.fillStyle = bgColor;
-    if (r.isCrossing) {
-      // During crossing, fill the union rect so both rooms get a background.
-      const unionX = r.crossingUnionMinXWorld * zoom + ox;
-      const unionY = r.crossingUnionMinYWorld * zoom + oy;
-      const unionW = (r.crossingUnionMaxXWorld - r.crossingUnionMinXWorld) * zoom;
-      const unionH = (r.crossingUnionMaxYWorld - r.crossingUnionMinYWorld) * zoom;
-      ctx.fillRect(unionX, unionY, unionW, unionH);
-    } else {
-      ctx.fillRect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
-    }
-  }
-
-  // ── Edge extension layer (drawn BEFORE room clip) ────────────────────────
-  // Renders procedural wall tiles 6 blocks beyond every room edge so the
-  // void outside the room appears as a continuation of the boundary walls
-  // rather than a hard black cutout.  The tiles have no collision.
-  // Must be called here (before ctx.clip()) so tiles outside the room rect
-  // are visible.
-  // BUILD 279: disabled when two-room crossing is enabled (ENABLE_EDGE_EXTENSION_RENDERING = false).
-  if (ENABLE_EDGE_EXTENSION_RENDERING && r.edgeExtensionCache !== null) {
-    renderEdgeExtension(
-      ctx,
-      r.edgeExtensionCache,
-      ox,
-      oy,
-      zoom,
-      virtualWidthPx,
-      virtualHeightPx,
-      bgColor,
-      currentRoom.lightingEffect ?? 'Ambient',
-    );
+    ctx.fillRect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
   }
 
   // ── Transition passage gradients (drawn BEFORE room clip) ────────────────
   // Fills transition opening passages with the authored fade gradient so the
   // black void in the passage is replaced by a proper depth-darkness effect.
-  // Drawn after edge extension tiles so the gradient composites over them.
-  // Skip during active crossing — both rooms are rendered in full.
-  if (!r.isCrossing) {
-    renderTransitionPassageGradients(ctx, currentRoom, ox, oy, zoom);
-  }
+  renderTransitionPassageGradients(ctx, currentRoom, ox, oy, zoom);
 
-  // ── Next-room facing-edge layer (drawn BEFORE room clip) ─────────────────
-  // When a transition reveal is active, render the connected room's 2-block
-  // facing-edge strip just beyond the current room's boundary.  Combined with
-  // the current room's own extension tiles, this shows the player 4 columns/
-  // rows of tile continuity at each transition.  Only drawn when revealProgress
-  // exceeds a small threshold — invisible during normal room navigation.
-  // BUILD 279: disabled when two-room crossing is enabled (ENABLE_NEXT_ROOM_EDGE_PREVIEW = false).
-  if (ENABLE_NEXT_ROOM_EDGE_PREVIEW) {
-    renderNextRoomFacingEdge(
-      ctx,
-      r.transitionPreviewCtx,
-      ox,
-      oy,
-      zoom,
-      virtualWidthPx,
-      virtualHeightPx,
-      currentRoom.lightingEffect ?? 'Ambient',
-    );
-  }
-
-  // ── Clip rect: room bounds or crossing union bounds ───────────────────────
-  // During two-room crossing, expand the clip to the union of both rooms so
-  // the next room's walls (appended to world.walls) are drawn without being
-  // cut off at the current room's boundary.
-  let clipXWorld: number;
-  let clipYWorld: number;
-  let clipWWorld: number;
-  let clipHWorld: number;
-  if (r.isCrossing) {
-    clipXWorld = r.crossingUnionMinXWorld;
-    clipYWorld = r.crossingUnionMinYWorld;
-    clipWWorld = r.crossingUnionMaxXWorld - r.crossingUnionMinXWorld;
-    clipHWorld = r.crossingUnionMaxYWorld - r.crossingUnionMinYWorld;
-  } else {
-    clipXWorld = 0;
-    clipYWorld = 0;
-    clipWWorld = roomWidthWorld;
-    clipHWorld = roomHeightWorld;
-  }
+  // ── Clip rect: room bounds ────────────────────────────────────────────────
+  // Always clip to the current room bounds (instant room transitions only).
+  const clipXWorld = 0;
+  const clipYWorld = 0;
+  const clipWWorld = roomWidthWorld;
+  const clipHWorld = roomHeightWorld;
   const clipScreenXPx = clipXWorld * zoom + ox;
   const clipScreenYPx = clipYWorld * zoom + oy;
   const clipScreenWPx = clipWWorld * zoom;

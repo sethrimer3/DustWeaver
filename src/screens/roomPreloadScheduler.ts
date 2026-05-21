@@ -55,7 +55,6 @@ import type { RoomRuntimeCache } from './roomRuntimeCache';
 import { isEntryFullyPrepared } from './roomRuntimeCache';
 import type { RoomRuntimeEntry } from './roomRuntimeCache';
 import type { RoomWallTemplate } from './gameRoomWalls';
-import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import type { WallDecoration } from '../render/effects/decorationWaveState';
 import type { WorkerOutboundMessage, WorkerSuccessMessage, SerializedWallTemplate } from './roomPreparationWorkerProtocol';
 
@@ -251,13 +250,6 @@ function _reconstructRoomRuntimeEntry(msg: WorkerSuccessMessage): RoomRuntimeEnt
     isIceFlag:            new Uint8Array(sw.isIceFlag),
   };
 
-  const se = msg.edgeExtension;
-  const edgeExtension: EdgeExtensionCache = {
-    roomId:       se.roomId,
-    tiles:        se.tiles,
-    occupancySet: new Set(se.occupancyKeys),
-  };
-
   // Wire: null  = "built; no blockers"  → RoomRuntimeEntry: undefined
   //       array = "has blockers"         → RoomRuntimeEntry: Set<string>
   const blockerKeys: Set<string> | undefined =
@@ -267,7 +259,7 @@ function _reconstructRoomRuntimeEntry(msg: WorkerSuccessMessage): RoomRuntimeEnt
 
   return {
     wallTemplate,
-    edgeExtension,
+    edgeExtension: null,
     blockerKeys,
     darkBlockerKeys,
     wallDecorations: msg.wallDecorations as WallDecoration[],
@@ -613,8 +605,7 @@ export function scheduleRoomPreloads(
         }
         console.warn(
           `[preload] SLOW MAIN-THREAD TASK: ${roomId} took ${result.totalMs.toFixed(1)}ms`,
-          `\n  wall=${result.wallMs.toFixed(1)}ms  edge=${result.edgeMs.toFixed(1)}ms` +
-          `  blockers=${result.blockerMs.toFixed(1)}ms  decor=${result.decorMs.toFixed(1)}ms`,
+          `\n  wall=${result.wallMs.toFixed(1)}ms  blockers=${result.blockerMs.toFixed(1)}ms  decor=${result.decorMs.toFixed(1)}ms`,
           `\n  wallCount=${room.walls?.length ?? 0}` +
           `  bgBlockArea=${bgArea}` +
           `  decorCount=${room.decorations?.length ?? 0}` +
@@ -624,7 +615,7 @@ export function scheduleRoomPreloads(
       } else if (isDebugMode) {
         console.log(
           `[preload] ${roomId} prepared in ${result.totalMs.toFixed(1)}ms` +
-          ` (wall+edge+blockers+decor, cache size=${cache.size})`,
+          ` (wall+blockers+decor, cache size=${cache.size})`,
         );
       }
     }

@@ -1,4 +1,9 @@
 /**
+ * LEGACY: transitionPreviewContext.ts — Transition preview abstraction.
+ *
+ * NOT imported by active gameplay. Retained for historical/reference purposes.
+ * See src/render/transitions/legacy/README.md for re-enablement instructions.
+ *
  * transitionPreviewContext.ts — Transition preview abstraction.
  *
  * `TransitionPreviewContext` is the single data structure that knows:

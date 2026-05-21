@@ -1,4 +1,10 @@
 /**
+ * LEGACY: edgeExtensionCache.ts — Cached visual tiles beyond the room boundary.
+ *
+ * NOT imported by active gameplay. Retained for historical/reference purposes.
+ * See src/render/transitions/legacy/README.md for re-enablement instructions.
+ * NOTE: This file is still used by the editor (editorController.ts, editorRenderer.ts).
+ *
  * edgeExtensionCache.ts — Cached visual tiles beyond the room boundary.
  *
  * At room load time, `buildEdgeExtensionCache()` inspects the outermost

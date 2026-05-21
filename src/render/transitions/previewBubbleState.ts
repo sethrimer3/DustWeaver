@@ -1,4 +1,9 @@
 /**
+ * LEGACY: previewBubbleState.ts — Computation of nearby-transition preview bubble state.
+ *
+ * NOT imported by active gameplay. Retained for historical/reference purposes.
+ * See src/render/transitions/legacy/README.md for re-enablement instructions.
+ *
  * previewBubbleState.ts — Computation of nearby-transition preview bubble state.
  *
  * When the player is within `PREVIEW_START_DISTANCE_WORLD` world units of a
