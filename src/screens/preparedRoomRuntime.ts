@@ -26,7 +26,7 @@ import { ROOM_REGISTRY } from '../levels/rooms';
  * timing data so callers can log structured performance reports.
  */
 export interface PreparedRoomResult {
-  entry: RoomRuntimeEntry;
+  runtimeEntry: RoomRuntimeEntry;
   /** Wall template (O(n²) merge pass) build time in ms. */
   wallMs: number;
   /** Edge extension (BFS pass) build time in ms. */
@@ -102,7 +102,7 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
   const totalMs = wallMs + edgeMs + blockerMs + decorMs;
 
   return {
-    entry: {
+    runtimeEntry: {
       wallTemplate,
       edgeExtension,
       blockerKeys,
@@ -143,7 +143,7 @@ export function ensureRoomPrepared(
 
   const t0 = isDebugMode ? performance.now() : 0;
   const result = buildPreparedRoomRuntime(room);
-  cache.set(roomId, result.entry);
+  cache.set(roomId, result.runtimeEntry);
 
   if (isDebugMode) {
     console.log(

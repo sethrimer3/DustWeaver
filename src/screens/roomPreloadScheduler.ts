@@ -100,7 +100,13 @@ function estimateRoomBuildCostMs(room: RoomDef): number {
   // Wall-merge pass is super-linear: O(n²) in the worst case.
   // Empirically, each wall costs ~0.04 ms + a quadratic term.
   const wallCost = wallCount * 0.04 + wallCount * wallCount * 0.002;
-  const bgBlockCount = room.backgroundBlocks?.reduce((s, b) => s + b.wBlock * b.hBlock, 0) ?? 0;
+  let bgBlockCount = 0;
+  if (room.backgroundBlocks !== undefined) {
+    for (let i = 0; i < room.backgroundBlocks.length; i++) {
+      const b = room.backgroundBlocks[i];
+      bgBlockCount += b.wBlock * b.hBlock;
+    }
+  }
   const bgCost = bgBlockCount * 0.008;
   const decorCount = room.decorations?.length ?? 0;
   const decorCost = decorCount * 0.3;
@@ -429,15 +435,22 @@ export function scheduleRoomPreloads(
     const existingEntry = cache.has(roomId) ? cache.get(roomId) : undefined;
     if (room !== undefined && (existingEntry === undefined || !isEntryFullyPrepared(existingEntry))) {
       const result = buildPreparedRoomRuntime(room);
-      cache.set(roomId, result.entry);
+      cache.set(roomId, result.runtimeEntry);
 
       if (result.totalMs > LONG_TASK_WARN_MS) {
+        let bgArea = 0;
+        if (room.backgroundBlocks !== undefined) {
+          for (let _bi = 0; _bi < room.backgroundBlocks.length; _bi++) {
+            const _b = room.backgroundBlocks[_bi];
+            bgArea += _b.wBlock * _b.hBlock;
+          }
+        }
         console.warn(
           `[preload] SLOW MAIN-THREAD TASK: ${roomId} took ${result.totalMs.toFixed(1)}ms`,
           `\n  wall=${result.wallMs.toFixed(1)}ms  edge=${result.edgeMs.toFixed(1)}ms` +
           `  blockers=${result.blockerMs.toFixed(1)}ms  decor=${result.decorMs.toFixed(1)}ms`,
           `\n  wallCount=${room.walls?.length ?? 0}` +
-          `  bgBlockArea=${room.backgroundBlocks?.reduce((s, b) => s + b.wBlock * b.hBlock, 0) ?? 0}` +
+          `  bgBlockArea=${bgArea}` +
           `  decorCount=${room.decorations?.length ?? 0}` +
           `  roomSize=${room.widthBlocks}×${room.heightBlocks}` +
           `  radius=${radius}`,
@@ -484,9 +497,8 @@ export function scheduleRoomPreloads(
       if (idx > 0) {
         // Move from its current position to front of queue.
         // Promote to radius-1 since the player is approaching this room.
-        const entry = workQueue.splice(idx, 1)[0];
+        workQueue.splice(idx, 1);
         workQueue.unshift({ roomId, radius: 1 });
-        void entry; // suppress unused warning
         // workQueueSet membership unchanged — just moved position.
         if (isDebugMode) {
           console.log(`[preload:priority] ${roomId} moved to front of queue (promoted to radius-1)`);
