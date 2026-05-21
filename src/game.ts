@@ -17,6 +17,7 @@ import {
   loadRoomForGameplayAsync,
   deactivateCampaignRoomCache,
 } from './levels/roomFileLoader';
+import { getCampaignStartRoomId } from './levels/campaignSchema';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -167,9 +168,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
                 // Adjacent rooms are loaded lazily by the preload scheduler.
                 clearRegistryAndApplyCampaignMetadata(campaign);
 
-                const spawnRoomId =
-                  campaign.campaign.campaignSpawn?.roomId ??
-                  campaign.campaign.initialRoomId;
+                const spawnRoomId = getCampaignStartRoomId(campaign);
                 onStatus('Loading start room from file cache…');
                 const startRoomDef = await loadRoomForGameplayAsync(
                   spawnRoomId,

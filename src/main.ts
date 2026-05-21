@@ -11,6 +11,7 @@ import {
   deactivateCampaignRoomCache,
 } from './levels/roomFileLoader';
 import { fetchOfficialPackedCampaign } from './levels/packedCampaignLoader';
+import { getCampaignStartRoomId } from './levels/campaignSchema';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui-root') as HTMLDivElement;
@@ -60,9 +61,7 @@ async function initAndStart(): Promise<void> {
 
           // Load only the start room.  Adjacent rooms will be preloaded lazily
           // during gameplay by the room preload scheduler.
-          const startRoomId =
-            packedCampaign.campaign.campaignSpawn?.roomId ??
-            packedCampaign.campaign.initialRoomId;
+          const startRoomId = getCampaignStartRoomId(packedCampaign);
           const startRoom = await loadRoomForGameplayAsync(
             startRoomId,
             packedCampaign.worldMap,

@@ -229,6 +229,8 @@ export function scheduleRoomPreloads(
 
   // Work queue: radius-1 rooms first, then radius-2.
   const workQueue: string[] = [...radius1, ...radius2];
+  // Set mirror for O(1) membership checks — kept in sync with workQueue.
+  const workQueueSet = new Set<string>(workQueue);
 
   let activeHandle: IdleCallbackHandle | null = null;
   let isCancelled = false;
@@ -256,6 +258,7 @@ export function scheduleRoomPreloads(
     while (workQueue.length > 0) {
       const frontEntry = cache.has(workQueue[0]) ? cache.get(workQueue[0]) : undefined;
       if (frontEntry !== undefined && isEntryFullyPrepared(frontEntry)) {
+        workQueueSet.delete(workQueue[0]);
         workQueue.shift();
       } else {
         break;
@@ -264,6 +267,7 @@ export function scheduleRoomPreloads(
     if (workQueue.length === 0) return;
 
     const roomId = workQueue.shift()!;
+    workQueueSet.delete(roomId);
     const room = roomRegistry.get(roomId);
 
     // ── Lazy room data loading ─────────────────────────────────────────────
@@ -284,8 +288,9 @@ export function scheduleRoomPreloads(
             if (!isCancelled) {
               const alreadyCached = cache.get(roomId);
               if (alreadyCached === undefined || !isEntryFullyPrepared(alreadyCached)) {
-                if (!workQueue.includes(roomId)) {
+                if (!workQueueSet.has(roomId)) {
                   workQueue.push(roomId);
+                  workQueueSet.add(roomId);
                 }
                 if (activeHandle === null) {
                   activeHandle = scheduleIdle(processNext);
@@ -362,12 +367,14 @@ export function scheduleRoomPreloads(
         // Move from its current position to front of queue.
         workQueue.splice(idx, 1);
         workQueue.unshift(roomId);
+        // workQueueSet membership unchanged — just moved position.
         if (isDebugMode) {
           console.log(`[preload:priority] ${roomId} moved to front of queue`);
         }
       } else if (idx === -1) {
         // Not in queue yet — add to front.
         workQueue.unshift(roomId);
+        workQueueSet.add(roomId);
         if (isDebugMode) {
           console.log(`[preload:priority] ${roomId} added to front of queue`);
         }

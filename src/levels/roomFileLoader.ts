@@ -598,6 +598,13 @@ export async function loadRoomForGameplayAsync(
   const map = worldMap ?? _activeWorldMap;
   if (map === null) {
     // No worldMap available — file-cache loading is not possible.
+    // This is expected in browser mode or before a campaign has been activated.
+    if (import.meta.env.DEV) {
+      console.debug(
+        `[roomFileLoader] loadRoomForGameplayAsync("${roomId}"): ` +
+        'no worldMap available (browser mode or no active campaign). Returning undefined.',
+      );
+    }
     return undefined;
   }
 
