@@ -155,7 +155,10 @@ function _bfsNearbyRooms(
     } else if (adjacency !== undefined) {
       // Room is not yet loaded — use the manifest adjacency index as a fallback.
       const adjEntry = adjacency[currentId];
-      if (adjEntry !== undefined && Array.isArray(adjEntry.targets)) {
+      if (adjEntry !== undefined &&
+          // Deliberate runtime Array.isArray guard: `targets` comes from JSON-parsed
+          // manifest data and may be malformed even when the TypeScript type says string[].
+          Array.isArray(adjEntry.targets)) {
         for (let ti = 0; ti < adjEntry.targets.length; ti++) {
           const targetId = adjEntry.targets[ti];
           // Basic safety guard against malformed manifest entries.

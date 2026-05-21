@@ -280,8 +280,7 @@ function tryReadExistingManifest(roomsDir) {
  */
 function buildManifestAdjacency(rooms, knownRoomIds) {
   const adjacency = {};
-  for (let i = 0; i < rooms.length; i++) {
-    const room = rooms[i];
+  for (const room of rooms) {
     if (typeof room !== "object" || room === null) continue;
     const roomId = room.id;
     if (typeof roomId !== "string" || !knownRoomIds.has(roomId)) continue;
@@ -291,8 +290,7 @@ function buildManifestAdjacency(rooms, knownRoomIds) {
 
     const seen = new Set();
     const targets = [];
-    for (let ti = 0; ti < transitions.length; ti++) {
-      const t = transitions[ti];
+    for (const t of transitions) {
       if (typeof t !== "object" || t === null) continue;
       const to = t.to;
       if (typeof to !== "string" || to.length === 0) continue;
