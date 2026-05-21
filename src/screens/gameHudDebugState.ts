@@ -58,6 +58,7 @@ export function buildHudDebugState(
   let wallDbgSlideAllowed             = false;
   let wallDbgSlideSuppressedShort     = false;
   let wallDbgActionSuppressedExclusion = false;
+  let wallDbgAdjacentFloorTopY        = Infinity;
 
   const isTouchLeft  = player.isTouchingWallLeftFlag  === 1;
   const isTouchRight = player.isTouchingWallRightFlag === 1;
@@ -96,6 +97,7 @@ export function buildHudDebugState(
     wallDbgSlideSuppressedShort      = !slideOk && !inExcl &&
       surface.height < MIN_WALL_SLIDE_SURFACE_HEIGHT_WORLD;
     wallDbgActionSuppressedExclusion = inExcl;
+    wallDbgAdjacentFloorTopY         = exclusion.adjacentFloorTopY;
   }
 
   return {
@@ -157,5 +159,6 @@ export function buildHudDebugState(
     wallDbgSlideAllowed,
     wallDbgSlideSuppressedShort,
     wallDbgActionSuppressedExclusion,
+    wallDbgAdjacentFloorTopY,
   };
 }
