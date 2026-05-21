@@ -606,7 +606,7 @@ ipcMain.handle("dw:read-room-file", (_event, campaignId, roomId, isOfficialCampa
 
     // Reject any path that escapes the ROOMS directory.
     const roomFilePath = path.join(roomsDir, entry.file);
-    if (!roomFilePath.startsWith(roomsDir + path.sep) && roomFilePath !== roomsDir) {
+    if (!roomFilePath.startsWith(roomsDir + path.sep)) {
       return { ok: false, error: `Room file path escapes ROOMS directory: "${entry.file}"` };
     }
 
@@ -659,7 +659,7 @@ ipcMain.handle("dw:read-all-room-files", (_event, campaignId, isOfficialCampaign
         continue;
       }
       const roomFilePath = path.join(roomsDir, entry.file);
-      if (!roomFilePath.startsWith(roomsDir + path.sep) && roomFilePath !== roomsDir) {
+      if (!roomFilePath.startsWith(roomsDir + path.sep)) {
         console.warn(`[dw:read-all-room-files] Skipping room "${roomId}": path escapes ROOMS dir`);
         continue;
       }

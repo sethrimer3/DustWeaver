@@ -323,6 +323,10 @@ export async function ensureCampaignRoomCache(
  * Hydrates a raw room-file payload (SavedRoomV2 shape) into a `RoomDef`,
  * applying world-map metadata overlay from the campaign's worldMap.
  *
+ * `roomData` is typed as `unknown` because it arrives from IPC (JSON parse)
+ * and must be validated by `isSavedRoomV2` before use.  Callers must NOT
+ * cast to `SavedRoomV2` before passing — let this function do the guard.
+ *
  * Returns null if the data is invalid or hydration fails.
  */
 function hydrateRoomFileData(
@@ -444,11 +448,17 @@ export async function populateRegistryFromRoomFiles(
 // ── Runtime: single-room file loading ─────────────────────────────────────────
 
 /**
- * Loads a single room from its derived room file.  Used for lazy on-demand
- * loading when a room is not yet in ROOM_REGISTRY (e.g. after warm cache
- * invalidation or when incremental loading is introduced in a future pass).
+ * Loads a single room from its derived room file.
  *
- * Validates the room's content hash before returning.
+ * This is infrastructure for **future lazy per-room loading** — it is not
+ * currently invoked from the gameplay hot path (all rooms are loaded eagerly
+ * at startup via `populateRegistryFromRoomFiles`).  It is used by
+ * `loadRoomForGameplayAsync` as a fallback for rooms that are not yet in
+ * ROOM_REGISTRY (e.g. after incremental loading is introduced for very large
+ * campaigns or after a targeted cache invalidation).
+ *
+ * TODO: Wire this into the room transition path when lazy loading is needed.
+ *
  * Returns null if the file cache is not active, the room is not in the manifest,
  * the file cannot be read, the hash mismatches, or hydration fails.
  * Never throws.
