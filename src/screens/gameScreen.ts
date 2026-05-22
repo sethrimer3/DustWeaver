@@ -1019,12 +1019,12 @@ export function startGameScreen(
   // checkpointRunTimerMs:       timer value at the last save point (used for
   //                             death/respawn restoration).
   // timerWaitingForMovement:    true after load/respawn until intentional player
-  //                             movement is detected; prevents the timer from
+  //                             input is detected; prevents the timer from
   //                             ticking during physics settling or room init.
-  let runTimerMs: number = Math.max(0, isFinite(runOptions?.initialRunTimerMs ?? 0)
-    ? (runOptions?.initialRunTimerMs ?? 0) : 0);
-  let checkpointRunTimerMs: number = Math.max(0, isFinite(runOptions?.initialCheckpointRunTimerMs ?? 0)
-    ? (runOptions?.initialCheckpointRunTimerMs ?? 0) : 0);
+  /** Clamp a raw timer value from save data: treats NaN/Infinity/negative as 0. */
+  const _clampTimerMs = (ms: number | undefined): number => Math.max(0, isFinite(ms ?? 0) ? (ms ?? 0) : 0);
+  let runTimerMs: number = _clampTimerMs(runOptions?.initialRunTimerMs);
+  let checkpointRunTimerMs: number = _clampTimerMs(runOptions?.initialCheckpointRunTimerMs);
   let timerWaitingForMovement = true; // start in "waiting" state so the timer doesn't
   //                                    tick on first load before the player moves.
 
@@ -1299,9 +1299,11 @@ export function startGameScreen(
       const _player = world.clusters[0];
       const _playerAlive = _player !== undefined && _player.isAliveFlag === 1;
       if (timerWaitingForMovement) {
-        // Arm the timer once the player provides deliberate movement input.
-        const hasMovementInput = (moveDx !== 0) || jumpTriggered || inputState.isJumpHeldFlag;
-        if (hasMovementInput && _playerAlive) {
+        // Arm the timer once the player provides any deliberate input
+        // (horizontal movement or jump). Passive physics such as gravity
+        // settling, camera motion, and room init do not qualify.
+        const hasIntentionalInput = (moveDx !== 0) || jumpTriggered || inputState.isJumpHeldFlag;
+        if (hasIntentionalInput && _playerAlive) {
           timerWaitingForMovement = false;
         }
       }

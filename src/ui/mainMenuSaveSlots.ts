@@ -112,10 +112,53 @@ function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: 
     overlayEl.remove();
     onConfirm(true);
   });
+  actionsEl.appendChild(normalBtn);
+
+  const assistBtn = document.createElement('button');
+  assistBtn.textContent = 'Enable Assist Mode';
+  assistBtn.style.cssText = `
+    background: rgba(30,80,140,0.35); border: 1px solid rgba(80,160,220,0.65);
+    color: #80c8f8; padding: 0.5rem 1.1rem; font-size: 0.85rem;
+    font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.07em;
+    border-radius: 2px;
+  `;
+  assistBtn.addEventListener('mouseenter', () => {
+    assistBtn.style.background = 'rgba(30,80,140,0.55)';
+    assistBtn.style.borderColor = 'rgba(80,160,220,0.9)';
+  });
+  assistBtn.addEventListener('mouseleave', () => {
+    assistBtn.style.background = 'rgba(30,80,140,0.35)';
+    assistBtn.style.borderColor = 'rgba(80,160,220,0.65)';
+  });
+  assistBtn.addEventListener('click', () => {
+    overlayEl.remove();
+    onConfirm(true);
+  });
   actionsEl.appendChild(assistBtn);
 
+  // Cancel button: closes the dialog without creating a save.
+  const cancelBtn2 = document.createElement('button');
+  cancelBtn2.textContent = 'Cancel';
+  cancelBtn2.style.cssText = `
+    background: transparent; border: 1px solid rgba(212,168,75,0.25);
+    color: rgba(212,168,75,0.55); padding: 0.5rem 1.1rem; font-size: 0.85rem;
+    font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.07em;
+    border-radius: 2px;
+  `;
+  cancelBtn2.addEventListener('mouseenter', () => {
+    cancelBtn2.style.borderColor = 'rgba(212,168,75,0.6)';
+    cancelBtn2.style.color = '#d4a84b';
+  });
+  cancelBtn2.addEventListener('mouseleave', () => {
+    cancelBtn2.style.borderColor = 'rgba(212,168,75,0.25)';
+    cancelBtn2.style.color = 'rgba(212,168,75,0.55)';
+  });
+  cancelBtn2.addEventListener('click', () => { overlayEl.remove(); });
+  actionsEl.appendChild(cancelBtn2);
+
+  // Prevent clicks inside the panel from propagating to the overlay.
   panelEl.addEventListener('click', (e) => e.stopPropagation());
-  overlayEl.addEventListener('click', () => overlayEl.remove());
+  // Clicking outside the panel does nothing (no accidental dismissal).
   overlayEl.appendChild(panelEl);
   container.appendChild(overlayEl);
 }
