@@ -21,6 +21,22 @@ export interface SaveSlotData {
   playTimeMs: number;
   /** ISO-8601 timestamp of the last time this slot was played. */
   lastPlayedIso: string;
+  /**
+   * Speedrun timer: elapsed active gameplay time in milliseconds for this run.
+   * Does not include time spent in menus, inventory, map, or waiting after load/respawn.
+   */
+  runTimerMs: number;
+  /**
+   * Timer value at the last save-point interaction.
+   * Restored when the player dies and respawns at that save point.
+   */
+  checkpointRunTimerMs: number;
+  /**
+   * When true, this save was created with Assist Mode enabled.
+   * Assist Mode grants unlimited air grapples (no ground-touch required to recharge).
+   * This flag cannot be disabled once set.
+   */
+  assistMode: boolean;
 }
 
 /** Returns the localStorage key for a given slot index. */
@@ -53,6 +69,17 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     if (!Array.isArray(parsed.progress.disabledPassiveWeaves)) parsed.progress.disabledPassiveWeaves = [];
     if (!Array.isArray(parsed.progress.collectedDustSwarmKeys)) parsed.progress.collectedDustSwarmKeys = [];
     if (!Array.isArray(parsed.progress.collectedDustContainerKeys)) parsed.progress.collectedDustContainerKeys = [];
+    // Migrate timer fields (added for speedrun timer feature).
+    if (typeof parsed.runTimerMs !== 'number' || !isFinite(parsed.runTimerMs) || parsed.runTimerMs < 0) {
+      parsed.runTimerMs = 0;
+    }
+    if (typeof parsed.checkpointRunTimerMs !== 'number' || !isFinite(parsed.checkpointRunTimerMs) || parsed.checkpointRunTimerMs < 0) {
+      parsed.checkpointRunTimerMs = 0;
+    }
+    // Migrate assist mode flag (added for assist mode feature; old saves default off).
+    if (typeof parsed.assistMode !== 'boolean') {
+      parsed.assistMode = false;
+    }
     return parsed;
   } catch {
     return null;
@@ -78,12 +105,40 @@ export function deleteSaveSlot(slotIndex: number): void {
 }
 
 /** Creates a brand-new save slot with default progress and zero play time. */
-export function createNewSaveSlot(): SaveSlotData {
+export function createNewSaveSlot(assistMode = false): SaveSlotData {
   return {
     progress: createDefaultProgress(),
     playTimeMs: 0,
     lastPlayedIso: new Date().toISOString(),
+    runTimerMs: 0,
+    checkpointRunTimerMs: 0,
+    assistMode,
   };
+}
+
+/**
+ * Formats milliseconds into a speedrun timer string.
+ * Under an hour: `MM:SS.mmm`  (e.g. "12:34.500")
+ * Over an hour:  `H:MM:SS.mmm` (e.g. "1:02:03.456")
+ */
+export function formatRunTimer(ms: number): string {
+  const safeMs = Math.max(0, isFinite(ms) ? ms : 0);
+  const totalMs    = Math.floor(safeMs);
+  const millis     = totalMs % 1000;
+  const totalSecs  = Math.floor(totalMs / 1000);
+  const secs       = totalSecs % 60;
+  const totalMins  = Math.floor(totalSecs / 60);
+  const mins       = totalMins % 60;
+  const hours      = Math.floor(totalMins / 60);
+
+  const mm  = String(mins).padStart(2, '0');
+  const ss  = String(secs).padStart(2, '0');
+  const mmm = String(millis).padStart(3, '0');
+
+  if (hours > 0) {
+    return `${hours}:${mm}:${ss}.${mmm}`;
+  }
+  return `${mm}:${ss}.${mmm}`;
 }
 
 /**

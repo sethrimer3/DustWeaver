@@ -20,6 +20,7 @@ import {
   BASE_MOTE_REGENERATION_TICKS,
   MOTE_REGEN_FLASH_TICKS,
 } from '../sim/motes/orderedMoteQueue';
+import { formatRunTimer } from '../progression/saveSlots';
 
 // ── HUD layout constants ────────────────────────────────────────────────────
 
@@ -69,6 +70,9 @@ export interface HudRenderContext {
   playerContainerCount: number;
   /** When provided, the render profiler panel is drawn in the top-right corner. */
   renderProfiler?: RenderProfiler;
+  /** Current speedrun timer value in milliseconds (0 = not started).
+   * Displayed as MM:SS.mmm in the top-right corner. */
+  runTimerMs: number;
 }
 
 /**
@@ -367,4 +371,22 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
 
   // ── Floating combat text (damage numbers, BLOCKED) ────────────────────────
   combatText.render(ctx, ox, oy, zoom, nowMs);
+
+  // ── Speedrun timer (top-right corner) ─────────────────────────────────────
+  // Always visible during gameplay. Uses monospace format MM:SS.mmm / H:MM:SS.mmm.
+  {
+    const timerText = formatRunTimer(r.runTimerMs);
+    const timerPaddingRight = 6;
+    const timerY = 10;
+    ctx.save();
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    // Dark shadow for legibility over any background.
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillText(timerText, r.virtualWidthPx - timerPaddingRight + 1, timerY + 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(timerText, r.virtualWidthPx - timerPaddingRight, timerY);
+    ctx.restore();
+  }
 }

@@ -366,6 +366,16 @@ export interface GrappleWorldState {
    * walls that have since been destroyed).
    */
   grappleWrapPointWallIndex: Int16Array;
+
+  // ── Assist Mode ────────────────────────────────────────────────────────────
+  /**
+   * 1 when this save was created with Assist Mode enabled.
+   * In Assist Mode the "must touch ground before grappling again" restriction
+   * is bypassed — the player can grapple repeatedly in mid-air.
+   * All other grapple constraints (range, line-of-sight, cooldown, etc.) are
+   * unaffected.  Set once at game-session start from SaveSlotData.assistMode.
+   */
+  isAssistModeFlag: 0 | 1;
 }
 
 /** Returns the default-initialised grapple state for use in createWorldState(). */
@@ -447,5 +457,6 @@ export function createGrappleWorldState(): GrappleWorldState {
     grappleWrapPointXWorld:                new Float32Array(MAX_GRAPPLE_WRAP_POINTS),
     grappleWrapPointYWorld:                new Float32Array(MAX_GRAPPLE_WRAP_POINTS),
     grappleWrapPointWallIndex:             new Int16Array(MAX_GRAPPLE_WRAP_POINTS).fill(-1),
+    isAssistModeFlag:                      0,
   };
 }

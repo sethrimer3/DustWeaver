@@ -187,6 +187,9 @@ export interface RenderFrameContext {
   /** Number of dust containers the player owns (from progress.dustContainerCount).
    * Passed through to renderGameHud so the HUD shows owned container outlines. */
   playerContainerCount: number;
+  /** Current speedrun timer value in milliseconds (0 = not started).
+   * Passed to renderGameHud to display in the top-right HUD corner. */
+  runTimerMs: number;
 
   // Graphics quality for this frame — drives quality-tier rendering decisions.
   graphicsQuality: GraphicsQuality;

@@ -21,6 +21,105 @@ export interface SaveSlotsCallbacks {
   onPlay: (slotIndex: number, saveData: SaveSlotData) => void;
 }
 
+/**
+ * Shows an Assist Mode opt-in dialog overlaid on the given container.
+ * Calls `onConfirm(enableAssist)` when the player makes a choice.
+ * Assist Mode cannot be disabled after save creation — the dialog makes this clear.
+ */
+function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: boolean) => void): void {
+  const overlayEl = document.createElement('div');
+  overlayEl.style.cssText = `
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.75); z-index: 5;
+  `;
+
+  const panelEl = document.createElement('div');
+  panelEl.style.cssText = `
+    min-width: 360px; max-width: 440px; background: rgba(0,0,0,0.88);
+    border: 1px solid rgba(212,168,75,0.55); border-radius: 3px;
+    padding: 1.3rem 1.4rem 1.1rem; text-align: center;
+  `;
+
+  const titleEl = document.createElement('div');
+  titleEl.textContent = 'Assist Mode';
+  titleEl.style.cssText = `
+    color: #80c8f8; font-size: 1.1rem; letter-spacing: 0.1em;
+    text-transform: uppercase; margin-bottom: 0.7rem;
+  `;
+  panelEl.appendChild(titleEl);
+
+  const descEl = document.createElement('div');
+  descEl.textContent =
+    'Assist Mode allows unlimited air grapples — you can grapple repeatedly without '
+    + 'touching the ground first. This cannot be turned off for this save.';
+  descEl.style.cssText = `
+    color: rgba(212,168,75,0.8); font-size: 0.82rem; line-height: 1.5;
+    letter-spacing: 0.04em; margin-bottom: 0.95rem;
+  `;
+  panelEl.appendChild(descEl);
+
+  const noteEl = document.createElement('div');
+  noteEl.textContent = 'Saves with Assist Mode enabled are labelled "Assist".';
+  noteEl.style.cssText = `
+    color: rgba(255,255,255,0.4); font-size: 0.75rem; letter-spacing: 0.04em;
+    margin-bottom: 1.1rem;
+  `;
+  panelEl.appendChild(noteEl);
+
+  const actionsEl = document.createElement('div');
+  actionsEl.style.cssText = 'display: flex; gap: 0.8rem; justify-content: center;';
+  panelEl.appendChild(actionsEl);
+
+  const normalBtn = document.createElement('button');
+  normalBtn.textContent = 'Normal Mode';
+  normalBtn.style.cssText = `
+    background: transparent; border: 1px solid rgba(212,168,75,0.45);
+    color: #d4a84b; padding: 0.5rem 1.1rem; font-size: 0.85rem;
+    font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.07em;
+    border-radius: 2px;
+  `;
+  normalBtn.addEventListener('mouseenter', () => {
+    normalBtn.style.background = 'rgba(212,168,75,0.1)';
+    normalBtn.style.borderColor = 'rgba(212,168,75,0.8)';
+  });
+  normalBtn.addEventListener('mouseleave', () => {
+    normalBtn.style.background = 'transparent';
+    normalBtn.style.borderColor = 'rgba(212,168,75,0.45)';
+  });
+  normalBtn.addEventListener('click', () => {
+    overlayEl.remove();
+    onConfirm(false);
+  });
+  actionsEl.appendChild(normalBtn);
+
+  const assistBtn = document.createElement('button');
+  assistBtn.textContent = 'Enable Assist Mode';
+  assistBtn.style.cssText = `
+    background: rgba(30,80,140,0.35); border: 1px solid rgba(80,160,220,0.65);
+    color: #80c8f8; padding: 0.5rem 1.1rem; font-size: 0.85rem;
+    font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.07em;
+    border-radius: 2px;
+  `;
+  assistBtn.addEventListener('mouseenter', () => {
+    assistBtn.style.background = 'rgba(30,80,140,0.55)';
+    assistBtn.style.borderColor = 'rgba(80,160,220,0.9)';
+  });
+  assistBtn.addEventListener('mouseleave', () => {
+    assistBtn.style.background = 'rgba(30,80,140,0.35)';
+    assistBtn.style.borderColor = 'rgba(80,160,220,0.65)';
+  });
+  assistBtn.addEventListener('click', () => {
+    overlayEl.remove();
+    onConfirm(true);
+  });
+  actionsEl.appendChild(assistBtn);
+
+  panelEl.addEventListener('click', (e) => e.stopPropagation());
+  overlayEl.addEventListener('click', () => overlayEl.remove());
+  overlayEl.appendChild(panelEl);
+  container.appendChild(overlayEl);
+}
+
 export function buildSaveSlotUI(
   container: HTMLDivElement,
   callbacks: SaveSlotsCallbacks,
@@ -127,9 +226,18 @@ export function buildSaveSlotUI(
     `;
 
     if (hasData) {
+      const assistBadge = slotData.assistMode
+        ? `<span style="
+            display: inline-block; margin-left: 0.5rem;
+            background: rgba(80,160,220,0.22); border: 1px solid rgba(80,160,220,0.6);
+            color: #80c8f8; font-size: 0.65rem; letter-spacing: 0.08em;
+            padding: 0.1em 0.4em; border-radius: 2px; vertical-align: middle;
+            text-transform: uppercase;
+          ">Assist</span>`
+        : '';
       slotBtn.innerHTML = `
         <div style="font-size: 1.1rem; letter-spacing: 0.1em; margin-bottom: 0.4rem; font-weight: 400;">
-          Save Slot ${i + 1}
+          Save Slot ${i + 1}${assistBadge}
         </div>
         <div style="font-size: 0.8rem; color: rgba(212,168,75,0.65); letter-spacing: 0.05em;">
           Play Time: ${formatPlayTimeMs(slotData.playTimeMs)}
@@ -160,12 +268,17 @@ export function buildSaveSlotUI(
 
     const slotIndex = i;
     slotBtn.addEventListener('click', () => {
-      let data = slotData;
-      if (data === null) {
-        data = createNewSaveSlot();
-        saveSaveSlot(slotIndex, data);
+      if (slotData !== null) {
+        // Existing save — play immediately.
+        callbacks.onPlay(slotIndex, slotData);
+        return;
       }
-      callbacks.onPlay(slotIndex, data);
+      // New save — show Assist Mode opt-in dialog before creating.
+      showAssistModeDialog(container, (enableAssist) => {
+        const data = createNewSaveSlot(enableAssist);
+        saveSaveSlot(slotIndex, data);
+        callbacks.onPlay(slotIndex, data);
+      });
     });
 
     slotRowEl.appendChild(slotBtn);
