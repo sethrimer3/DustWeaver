@@ -138,6 +138,25 @@ export interface SavedRoomRope {
   thick?: 0 | 1 | 2;
 }
 
+/** A single control point in a compact guide dust path: [xBlock, yBlock]. */
+export type SavedGuideDustPoint = [number, number];
+
+/** Compact golden dust guide path entry. */
+export interface SavedGuideDustPath {
+  /** Control points as [xBlock, yBlock] pairs. */
+  pts: SavedGuideDustPoint[];
+  /** 1 when the path loops (last point connects back to first). Omit when false. */
+  lp?: 1;
+  /** Mote count override. Omit when equal to default (8). */
+  n?: number;
+  /** Speed factor override. Omit when equal to default (1.0). */
+  sp?: number;
+  /** Opacity percent override. Omit when equal to default (100). */
+  op?: number;
+  /** 0 when NOT visible in game. Omit when visible (default). */
+  vi?: 0;
+}
+
 /** Compact background (visual-only) block entry. */
 export interface SavedBgBlock {
   /** [x, y, w, h] */
@@ -236,4 +255,6 @@ export interface SavedRoomV2 {
   exactWalls?: SavedSpecialWall[];
   /** Visual-only background blocks — no collision, drawn behind walls. */
   bgBlocks?: SavedBgBlock[];
+  /** Golden dust guide paths. */
+  guidePaths?: SavedGuideDustPath[];
 }

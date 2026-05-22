@@ -25,6 +25,7 @@ export type {
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,
   EditorAmbientLightBlocker, EditorLightSource, EditorSunbeam, EditorFallingBlock,
   EditorBackgroundBlock, EditorDialogueEntry, EditorDialogueTrigger,
+  EditorGuideDustPath, EditorGuideDustPathPoint,
   EditorRoomData, SelectedElementType, SelectedElement,
 } from './editorElementTypes';
 
@@ -160,6 +161,11 @@ export interface EditorState {
   brushRectStartBlockX: number | null;
   /** Block Y where a rect-brush drag started (null when not dragging). */
   brushRectStartBlockY: number | null;
+  /**
+   * When a guide dust path is selected, the index of the control point that is
+   * currently highlighted / being dragged. Null when no control point is active.
+   */
+  guideDustPathSelectedPointIndex: number | null;
 }
 
 export function createEditorState(): EditorState {
@@ -205,6 +211,7 @@ export function createEditorState(): EditorState {
     brushMode: 'single',
     brushRectStartBlockX: null,
     brushRectStartBlockY: null,
+    guideDustPathSelectedPointIndex: null,
   };
 }
 

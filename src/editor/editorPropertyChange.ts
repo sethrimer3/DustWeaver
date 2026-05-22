@@ -32,6 +32,7 @@ import type {
   EditorDustBoostJar,
   EditorDustSwarm,
   EditorRope,
+  EditorGuideDustPath,
   SelectedElement,
   BlockTheme,
   RopeDestructibility,
@@ -39,6 +40,14 @@ import type {
 import type { EditorHistory } from './editorHistory';
 import { pushSnapshot } from './editorHistory';
 import { createDefaultDialogueEntry, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
+
+// Guide dust path property validation bounds
+const MIN_MOTE_COUNT      = 3;
+const MAX_MOTE_COUNT      = 20;
+const MIN_MOTE_SPEED_FACTOR = 0.1;
+const MAX_MOTE_SPEED_FACTOR = 5.0;
+const MIN_OPACITY_PCT     = 0;
+const MAX_OPACITY_PCT     = 100;
 
 /**
  * Applies a single named property change to one selected element.
@@ -329,6 +338,16 @@ export function applyPropertyToElement(
           trigger.entries[idx].portraitSide = value;
         }
       }
+    }
+  } else if (el.type === 'guideDustPath') {
+    const paths = room.guideDustPaths ?? [];
+    const path: EditorGuideDustPath | undefined = paths.find(p => p.uid === el.uid);
+    if (path) {
+      if (prop === 'guideDustPath.loop') path.loop = value === 1 || value === 'true';
+      else if (prop === 'guideDustPath.visibleInGame') path.visibleInGame = value === 1 || value === 'true';
+      else if (prop === 'guideDustPath.moteCount' && !isNaN(numVal)) path.moteCount = Math.max(MIN_MOTE_COUNT, Math.min(MAX_MOTE_COUNT, Math.round(numVal)));
+      else if (prop === 'guideDustPath.moteSpeedFactor' && !isNaN(numVal)) path.moteSpeedFactor = Math.max(MIN_MOTE_SPEED_FACTOR, Math.min(MAX_MOTE_SPEED_FACTOR, numVal));
+      else if (prop === 'guideDustPath.opacityPct' && !isNaN(numVal)) path.opacityPct = Math.max(MIN_OPACITY_PCT, Math.min(MAX_OPACITY_PCT, Math.round(numVal)));
     }
   }
 }

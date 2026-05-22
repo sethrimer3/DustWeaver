@@ -12,7 +12,7 @@ import {
   EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea, EditorFallingBlock,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
-  SelectedElement, allocateUid, EditorRoomData,
+  SelectedElement, allocateUid, EditorRoomData, EditorGuideDustPath,
 } from './editorState';
 
 // ── Drag-to-move helpers ──────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ import {
  */
 export function storeDragStartPositions(
   s: EditorState,
-  positions: Map<number, { xBlock: number; yBlock: number }>,
+  positions: Map<number | string, { xBlock: number; yBlock: number }>,
 ): void {
   positions.clear();
   if (!s.roomData) return;
@@ -97,6 +97,14 @@ export function storeDragStartPositions(
       if (tr) {
         positions.set(key, { xBlock: tr.xBlock, yBlock: tr.yBlock });
       }
+    } else if (el.type === 'guideDustPath') {
+      // Store each control point individually; key = uid * 10000 + pointIndex
+      const p = (s.roomData.guideDustPaths ?? []).find(p2 => p2.uid === el.uid);
+      if (p) {
+        for (let i = 0; i < p.points.length; i++) {
+          positions.set(`${el.uid}:${i}`, { xBlock: p.points[i].xBlock, yBlock: p.points[i].yBlock });
+        }
+      }
     }
   }
 }
@@ -107,7 +115,7 @@ export function storeDragStartPositions(
  */
 export function moveSelectedElements(
   s: EditorState,
-  positions: Map<number, { xBlock: number; yBlock: number }>,
+  positions: Map<number | string, { xBlock: number; yBlock: number }>,
   deltaX: number,
   deltaY: number,
 ): void {
@@ -194,6 +202,17 @@ export function moveSelectedElements(
         // Keep legacy positionBlock in sync
         tr.positionBlock = isHoriz ? newY : newX;
       }
+    } else if (el.type === 'guideDustPath') {
+      const p = (s.roomData.guideDustPaths ?? []).find(p2 => p2.uid === el.uid);
+      if (p) {
+        for (let i = 0; i < p.points.length; i++) {
+          const ptOrig = positions.get(`${el.uid}:${i}`);
+          if (ptOrig) {
+            p.points[i].xBlock = ptOrig.xBlock + deltaX;
+            p.points[i].yBlock = ptOrig.yBlock + deltaY;
+          }
+        }
+      }
     }
   }
 }
@@ -229,6 +248,7 @@ export function serializeSelectedElements(
     grasshopperAreas: EditorGrasshopperArea[];
     fireflyAreas: EditorFireflyArea[];
     fallingBlocks: EditorFallingBlock[];
+    guideDustPaths: EditorGuideDustPath[];
   } = {
     walls: [], enemies: [], saveTombs: [], skillTombs: [],
     dustContainers: [], dustContainerPieces: [], dustBoostJars: [],
@@ -236,7 +256,7 @@ export function serializeSelectedElements(
     lambdaAnchors: [],
     dustPiles: [],
     decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
-    bouncePads: [], grasshopperAreas: [], fireflyAreas: [], fallingBlocks: [],
+    bouncePads: [], grasshopperAreas: [], fireflyAreas: [], fallingBlocks: [], guideDustPaths: [],
   };
   for (const el of elements) {
     if (el.type === 'wall') {
@@ -299,6 +319,9 @@ export function serializeSelectedElements(
     } else if (el.type === 'fireflyArea') {
       const a = (room.fireflyAreas ?? []).find(a2 => a2.uid === el.uid);
       if (a) data.fireflyAreas.push({ ...a });
+    } else if (el.type === 'guideDustPath') {
+      const p = (room.guideDustPaths ?? []).find(p2 => p2.uid === el.uid);
+      if (p) data.guideDustPaths.push({ ...p, points: p.points.map(pt => ({ ...pt })) });
     }
   }
   return JSON.stringify(data);
@@ -331,6 +354,7 @@ export function pasteFromClipboard(s: EditorState): void {
     grasshopperAreas?: EditorGrasshopperArea[];
     fireflyAreas?: EditorFireflyArea[];
     fallingBlocks?: EditorFallingBlock[];
+    guideDustPaths?: EditorGuideDustPath[];
   };
   try {
     data = JSON.parse(s.clipboard) as typeof data;
@@ -353,6 +377,8 @@ export function pasteFromClipboard(s: EditorState): void {
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
     ...(data.bouncePads ?? []), ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
     ...(data.fallingBlocks ?? []),
+    // For guide paths, collect all control points for proper bounding-box offset
+    ...(data.guideDustPaths ?? []).flatMap(p => p.points),
   ];
   for (const e of allEntities) { minX = Math.min(minX, e.xBlock); minY = Math.min(minY, e.yBlock); }
   if (!isFinite(minX)) minX = 0;
@@ -571,6 +597,21 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: fb.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'fallingBlock', uid: newUid });
+  }
+  s.selectedElements = newElements;
+  // Append guide dust paths with new UIDs and offset all control points
+  for (const p of (data.guideDustPaths ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.guideDustPaths) s.roomData.guideDustPaths = [];
+    s.roomData.guideDustPaths.push({
+      ...p,
+      uid: newUid,
+      points: p.points.map(pt => ({
+        xBlock: pt.xBlock - minX + offsetX,
+        yBlock: pt.yBlock - minY + offsetY,
+      })),
+    });
+    newElements.push({ type: 'guideDustPath', uid: newUid });
   }
   s.selectedElements = newElements;
 }

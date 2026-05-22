@@ -70,6 +70,8 @@ export type {
   SavedKineticBlock,
   SavedRoomRope,
   SavedBgBlock,
+  SavedGuideDustPoint,
+  SavedGuideDustPath,
   SavedRoomV2,
 } from './roomSavedTypes';
 
@@ -98,6 +100,8 @@ import type {
   SavedKineticBlock,
   SavedRoomRope,
   SavedBgBlock,
+  SavedGuideDustPath,
+  SavedGuideDustPoint,
   SavedRoomV2,
   SavedRect,
   SavedPoint,
@@ -394,6 +398,20 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
 
   if (json.sceneLights && json.sceneLights.length > 0) {
     out.sceneLights = json.sceneLights;
+  }
+
+  if (json.guideDustPaths && json.guideDustPaths.length > 0) {
+    out.guidePaths = json.guideDustPaths.map(p => {
+      const entry: SavedGuideDustPath = {
+        pts: p.points.map(pt => [pt.xBlock, pt.yBlock] as SavedGuideDustPoint),
+      };
+      if (p.loop) entry.lp = 1;
+      if (p.moteCount !== undefined && p.moteCount !== 8) entry.n = p.moteCount;
+      if (p.moteSpeedFactor !== undefined && p.moteSpeedFactor !== 1.0) entry.sp = p.moteSpeedFactor;
+      if (p.opacityPct !== undefined && p.opacityPct !== 100) entry.op = p.opacityPct;
+      if (p.visibleInGame === false) entry.vi = 0;
+      return entry;
+    });
   }
 
   return out;

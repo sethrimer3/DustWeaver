@@ -527,13 +527,38 @@ export interface EditorRoomData {
   dialogueTriggers?: EditorDialogueTrigger[];
   /** Visual-only background blocks — no collision, drawn behind foreground walls. */
   backgroundBlocks?: EditorBackgroundBlock[];
+  /** Golden dust guide paths (Catmull-Rom splines with organic mote particles). */
+  guideDustPaths?: EditorGuideDustPath[];
 }
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'kineticBlock' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'kineticBlock' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath';
 
 export interface SelectedElement {
   type: SelectedElementType;
   uid: number;
+}
+
+// ── Guide dust path editor types ─────────────────────────────────────────────
+
+/** A single control point on an editor-placed guide dust path. */
+export interface EditorGuideDustPathPoint {
+  xBlock: number;
+  yBlock: number;
+}
+
+/** An editor-owned Catmull-Rom spline guide path for golden dust motes. */
+export interface EditorGuideDustPath {
+  uid: number;
+  points: EditorGuideDustPathPoint[];
+  loop: boolean;
+  /** Whether motes are rendered during normal gameplay (default true). */
+  visibleInGame: boolean;
+  /** Number of motes travelling along the path (3–20, default 8). */
+  moteCount: number;
+  /** Speed multiplier relative to the 6-second default crossing time (default 1.0). */
+  moteSpeedFactor: number;
+  /** Overall mote opacity (0–100 %, default 100). */
+  opacityPct: number;
 }

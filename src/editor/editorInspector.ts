@@ -706,5 +706,21 @@ export function updateInspector(
     }
   } else if (el.type === 'dialogueTrigger') {
     buildDialogueTriggerInspector(div, el.uid, state, callbacks);
+  } else if (el.type === 'guideDustPath') {
+    const paths = room.guideDustPaths ?? [];
+    const path = paths.find(p => p.uid === el.uid);
+    if (path) {
+      addField(div, 'control points', String(path.points.length), () => {});
+      addCheckbox(div, 'loop', path.loop,
+        v => callbacks?.onPropertyChange('guideDustPath.loop', v ? 1 : 0));
+      addCheckbox(div, 'visible in game', path.visibleInGame,
+        v => callbacks?.onPropertyChange('guideDustPath.visibleInGame', v ? 1 : 0));
+      addNumberField(div, 'mote count', path.moteCount, 3, 20,
+        v => callbacks?.onPropertyChange('guideDustPath.moteCount', v));
+      addSliderField(div, 'speed factor', path.moteSpeedFactor, 0.1, 5.0,
+        v => callbacks?.onPropertyChange('guideDustPath.moteSpeedFactor', v));
+      addSliderField(div, 'opacity %', path.opacityPct, 0, 100,
+        v => callbacks?.onPropertyChange('guideDustPath.opacityPct', v));
+    }
   }
 }

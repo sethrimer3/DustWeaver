@@ -152,7 +152,7 @@ export function createEditorController(
   let originalRoomDef: RoomDef | null = null;
 
   // Drag-to-move: original positions of selected elements at drag start
-  const dragOriginalPositions: Map<number, { xBlock: number; yBlock: number }> = new Map();
+  const dragOriginalPositions: Map<number | string, { xBlock: number; yBlock: number }> = new Map();
 
   // ── Pending-edits persistence for multi-room editing ────────────────────
   // Stores EditorRoomData snapshots saved by the user as they navigate rooms.

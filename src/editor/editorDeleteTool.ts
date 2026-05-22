@@ -319,4 +319,30 @@ export function deleteAtCursor(state: EditorState): void {
       return;
     }
   }
+
+  // Check guide dust paths — clicking near a control point removes that point
+  // (or the whole path if it would drop below 2 points). Clicking anywhere on
+  // the bounding region of a path deletes the entire path.
+  const guideDustPaths = room.guideDustPaths ?? [];
+  for (let i = 0; i < guideDustPaths.length; i++) {
+    const p = guideDustPaths[i];
+    // First check control-point proximity (1.5 block pick radius)
+    for (let pi = 0; pi < p.points.length; pi++) {
+      const pt = p.points[pi];
+      const dx = bx - pt.xBlock;
+      const dy = by - pt.yBlock;
+      if (dx * dx + dy * dy <= 1.5 * 1.5) {
+        if (p.points.length <= 2) {
+          // Delete the whole path
+          guideDustPaths.splice(i, 1);
+          room.guideDustPaths = guideDustPaths;
+          state.selectedElements = state.selectedElements.filter(e => e.uid !== p.uid);
+        } else {
+          p.points.splice(pi, 1);
+        }
+        state.guideDustPathSelectedPointIndex = null;
+        return;
+      }
+    }
+  }
 }

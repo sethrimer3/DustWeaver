@@ -23,6 +23,7 @@ import type {
   RoomJsonCrumbleBlock,
   RoomJsonBouncePad,
   RoomJsonBackgroundBlock,
+  RoomJsonGuideDustPath,
 } from './roomJsonSchema';
 
 /**
@@ -341,6 +342,19 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   }
   if ((data.sceneLights ?? []).length > 0) {
     json.sceneLights = (data.sceneLights ?? []).map(s => lightDefToSaved({ ...s }));
+  }
+  if ((data.guideDustPaths ?? []).length > 0) {
+    json.guideDustPaths = (data.guideDustPaths ?? []).map(p => {
+      const entry: RoomJsonGuideDustPath = {
+        points: p.points.map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock })),
+      };
+      if (p.loop) entry.loop = true;
+      if (p.moteCount !== 8) entry.moteCount = p.moteCount;
+      if (p.moteSpeedFactor !== 1.0) entry.moteSpeedFactor = p.moteSpeedFactor;
+      if (p.opacityPct !== 100) entry.opacityPct = p.opacityPct;
+      if (!p.visibleInGame) entry.visibleInGame = false;
+      return entry;
+    });
   }
   return json;
 }

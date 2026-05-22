@@ -347,5 +347,13 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       const { uid: _uid, ...lightDef } = s;
       return lightDef as import('../levels/lightingSchema').LightDef;
     }),
+    guideDustPaths: (data.guideDustPaths ?? []).map(p => ({
+      points: p.points.map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock })),
+      loop: p.loop,
+      visibleInGame: p.visibleInGame,
+      moteCount: p.moteCount,
+      moteSpeedFactor: p.moteSpeedFactor,
+      opacityPct: p.opacityPct,
+    })),
   };
 }

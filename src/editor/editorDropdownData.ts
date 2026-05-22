@@ -17,7 +17,7 @@ import { FOLDER_BLOCK_THEMES, folderThemeShortId } from '../render/walls/folderB
 /** Active brush mode for painting tools. */
 export type BrushMode = 'single' | '3x3' | '5x5' | 'rect';
 
-export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'collectables' | 'environment' | 'objects' | 'lighting' | 'liquids' | 'ropes';
+export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'collectables' | 'environment' | 'objects' | 'lighting' | 'liquids' | 'ropes' | 'guidePaths';
 
 export interface PaletteItem {
   id: string;
@@ -71,6 +71,8 @@ export interface PaletteItem {
   isLightBlockingBackgroundBlockItem?: 1;
   /** 1 if this palette item places a scene light (visibility-polygon shadow system). */
   isSceneLightItem?: 1;
+  /** 1 if this palette item places/extends a golden dust guide path. */
+  isGuideDustPathItem?: 1;
 }
 
 export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
@@ -218,6 +220,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'bg_block_light_1x1', label: 'BG Block Light-Block 1×1',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBackgroundBlockItem: 1 as const, isLightBlockingBackgroundBlockItem: 1 as const },
   { id: 'bg_block_light_2x2', label: 'BG Block Light-Block 2×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBackgroundBlockItem: 1 as const, isLightBlockingBackgroundBlockItem: 1 as const },
   { id: 'rope', label: 'Rope', category: 'ropes', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'guide_dust_path', label: 'Guide Dust Path', category: 'guidePaths', isGuideDustPathItem: 1 as const },
 ];
 
 const LEGACY_BLOCK_THEME_META: Readonly<Record<string, { shortId: BlockThemeId; label: string }>> = {

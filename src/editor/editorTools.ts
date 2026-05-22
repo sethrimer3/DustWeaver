@@ -181,6 +181,19 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check guide dust paths — hit-test control points (1.5 block pick radius)
+  for (const p of (room.guideDustPaths ?? [])) {
+    for (let i = 0; i < p.points.length; i++) {
+      const pt = p.points[i];
+      const dx = bx - pt.xBlock;
+      const dy = by - pt.yBlock;
+      if (dx * dx + dy * dy <= 1.5 * 1.5) {
+        state.guideDustPathSelectedPointIndex = i;
+        return { type: 'guideDustPath', uid: p.uid };
+      }
+    }
+  }
+
   // Check bounce pads
   for (const b of (room.bouncePads ?? [])) {
     if (hitTestZone({ xBlock: b.xBlock, yBlock: b.yBlock, wBlock: b.wBlock, hBlock: b.hBlock }, bx, by)) {
