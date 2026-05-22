@@ -98,7 +98,7 @@ export function storeDragStartPositions(
         positions.set(key, { xBlock: tr.xBlock, yBlock: tr.yBlock });
       }
     } else if (el.type === 'guideDustPath') {
-      // Store each control point individually; key = "${uid}:${pointIndex}"
+      // Store each control point individually; key uses string template `${uid}:${i}`
       const p = (s.roomData.guideDustPaths ?? []).find(p2 => p2.uid === el.uid);
       if (p) {
         for (let i = 0; i < p.points.length; i++) {

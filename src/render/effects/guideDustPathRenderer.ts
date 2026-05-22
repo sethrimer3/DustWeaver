@@ -36,14 +36,29 @@ function catmullRomWorld(
   const i3 = loop ? (segIndex + 2) % n : Math.min(n - 1, segIndex + 2);
 
   const bs = BLOCK_SIZE_SMALL;
-  const x0 = pts[i0].xBlock * bs, y0 = pts[i0].yBlock * bs;
-  const x1 = pts[i1].xBlock * bs, y1 = pts[i1].yBlock * bs;
-  const x2 = pts[i2].xBlock * bs, y2 = pts[i2].yBlock * bs;
-  const x3 = pts[i3].xBlock * bs, y3 = pts[i3].yBlock * bs;
+  const x0 = pts[i0].xBlock * bs;
+  const y0 = pts[i0].yBlock * bs;
+  const x1 = pts[i1].xBlock * bs;
+  const y1 = pts[i1].yBlock * bs;
+  const x2 = pts[i2].xBlock * bs;
+  const y2 = pts[i2].yBlock * bs;
+  const x3 = pts[i3].xBlock * bs;
+  const y3 = pts[i3].yBlock * bs;
 
-  const t2 = localT * localT, t3 = t2 * localT;
-  const x = 0.5 * ((2 * x1) + (-x0 + x2) * localT + (2 * x0 - 5 * x1 + 4 * x2 - x3) * t2 + (-x0 + 3 * x1 - 3 * x2 + x3) * t3);
-  const y = 0.5 * ((2 * y1) + (-y0 + y2) * localT + (2 * y0 - 5 * y1 + 4 * y2 - y3) * t2 + (-y0 + 3 * y1 - 3 * y2 + y3) * t3);
+  const t2 = localT * localT;
+  const t3 = t2 * localT;
+  const x = 0.5 * (
+    (2 * x1) +
+    (-x0 + x2) * localT +
+    (2 * x0 - 5 * x1 + 4 * x2 - x3) * t2 +
+    (-x0 + 3 * x1 - 3 * x2 + x3) * t3
+  );
+  const y = 0.5 * (
+    (2 * y1) +
+    (-y0 + y2) * localT +
+    (2 * y0 - 5 * y1 + 4 * y2 - y3) * t2 +
+    (-y0 + 3 * y1 - 3 * y2 + y3) * t3
+  );
   return { x, y };
 }
 
