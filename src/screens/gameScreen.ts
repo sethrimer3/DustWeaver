@@ -145,6 +145,22 @@ import type { EditableCampaignSession } from '../editor/editableCampaignSession'
 export interface GameScreenCallbacks {
   onReturnToMenu: () => void;
   onSave?: () => void;
+  /**
+   * Called when the player activates a save point.
+   * The timer state (runTimerMs) is passed so the caller can persist the
+   * checkpoint timer value in the save slot data.
+   */
+  onCheckpointReached?: (runTimerMs: number) => void;
+}
+
+/** Options for the speedrun timer and assist mode feature. */
+export interface GameScreenRunOptions {
+  /** Initial run timer value in ms, restored from save data (default 0). */
+  initialRunTimerMs?: number;
+  /** Initial checkpoint timer value in ms, restored from save data (default 0). */
+  initialCheckpointRunTimerMs?: number;
+  /** When true, Assist Mode is active for this session (unlimited air grapples). */
+  assistMode?: boolean;
 }
 
 export function startGameScreen(
@@ -157,6 +173,7 @@ export function startGameScreen(
   campaignSession?: EditableCampaignSession | null,
   openEditorImmediately?: boolean,
   campaignSpawnBlockOverride?: readonly [number, number] | null,
+  runOptions?: GameScreenRunOptions,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
   const bloomSystem = new BloomSystem({ ...DEFAULT_BLOOM_CONFIG });
@@ -997,6 +1014,23 @@ export function startGameScreen(
 
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
 
+  // ── Speedrun timer state ──────────────────────────────────────────────────
+  // runTimerMs:                 accumulated active gameplay time this run.
+  // checkpointRunTimerMs:       timer value at the last save point (used for
+  //                             death/respawn restoration).
+  // timerWaitingForMovement:    true after load/respawn until intentional player
+  //                             input is detected; prevents the timer from
+  //                             ticking during physics settling or room init.
+  /** Clamp a raw timer value from save data: treats NaN/Infinity/negative as 0. */
+  const _clampTimerMs = (ms: number | undefined): number => Math.max(0, isFinite(ms ?? 0) ? (ms ?? 0) : 0);
+  let runTimerMs: number = _clampTimerMs(runOptions?.initialRunTimerMs);
+  let checkpointRunTimerMs: number = _clampTimerMs(runOptions?.initialCheckpointRunTimerMs);
+  let timerWaitingForMovement = true; // start in "waiting" state so the timer doesn't
+  //                                    tick on first load before the player moves.
+
+  // Set assist mode flag on the world so the grapple system can check it.
+  world.isAssistModeFlag = (runOptions?.assistMode === true) ? 1 : 0;
+
   let lastTimestampMs = 0;
   let accumulatorMs = 0;
   let frameCount = 0;
@@ -1030,6 +1064,16 @@ export function startGameScreen(
       callbacks.onReturnToMenu();
     },
     onSave: callbacks.onSave,
+    onCheckpointReached: () => {
+      // Snapshot the current timer as the checkpoint value.
+      checkpointRunTimerMs = runTimerMs;
+      if (callbacks.onCheckpointReached) callbacks.onCheckpointReached(runTimerMs);
+    },
+    onRespawn: () => {
+      // Restore the timer to the checkpoint value and wait for player movement.
+      runTimerMs = checkpointRunTimerMs;
+      timerWaitingForMovement = true;
+    },
   });
 
   const pauseController = createGamePauseController({
@@ -1240,6 +1284,32 @@ export function startGameScreen(
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
+    }
+
+    // ── Speedrun timer tick ─────────────────────────────────────────────────
+    // The timer is paused: in menus (handled by early returns above), while
+    // loading (asyncLoadState check above returns early), and while waiting
+    // for the player to move after a load or respawn.
+    //
+    // Movement detection: only intentional horizontal directional input or
+    // jump input counts.  Passive physics (gravity settling, camera, particles,
+    // room init) do NOT count.  This matches the spirit of "the player has
+    // not moved yet" for the waiting state.
+    {
+      const _player = world.clusters[0];
+      const _playerAlive = _player !== undefined && _player.isAliveFlag === 1;
+      if (timerWaitingForMovement) {
+        // Arm the timer once the player provides any deliberate input
+        // (horizontal movement or jump). Passive physics such as gravity
+        // settling, camera motion, and room init do not qualify.
+        const hasIntentionalInput = (moveDx !== 0) || jumpTriggered || inputState.isJumpHeldFlag;
+        if (hasIntentionalInput && _playerAlive) {
+          timerWaitingForMovement = false;
+        }
+      }
+      if (!timerWaitingForMovement && _playerAlive) {
+        runTimerMs = Math.max(0, runTimerMs + elapsedMs);
+      }
     }
 
     // ── Room transition check ──────────────────────────────────────────────
@@ -1542,6 +1612,7 @@ export function startGameScreen(
       setTeleportFlashAlpha: lambdaAnchorState.setTeleportFlashAlpha,
       getPlayerDustCount,
       playerContainerCount: progress?.dustContainerCount ?? 0,
+      runTimerMs,
       graphicsQuality: pauseController.state.pauseMenuState.graphicsQuality,
       isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,
       isDeepReductionActive: aqState.isDeepReductionActive,

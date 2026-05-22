@@ -208,7 +208,12 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // shortcut is intentionally removed — the charge system already refreshes
   // after top-surface grapples and ground contact, so a genuine refire only
   // succeeds when the player actually has a charge.
-  if (world.hasGrappleChargeFlag === 0) {
+  //
+  // Assist Mode exception: the "must touch ground before grappling again"
+  // restriction is bypassed when isAssistModeFlag is set.  All other grapple
+  // constraints (range, line-of-sight, wall collision, cooldown, etc.) remain
+  // fully enforced regardless of assist mode.
+  if (world.hasGrappleChargeFlag === 0 && world.isAssistModeFlag === 0) {
     triggerGrappleEmptyFx(world);
     return;
   }

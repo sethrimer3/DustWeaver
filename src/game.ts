@@ -24,6 +24,7 @@ import {
 import { getCampaignStartRoomId } from './levels/campaignSchema';
 import { createExportProgressModal } from './editor/editorExportProgressModal';
 import type { ExportProgressModal } from './editor/editorExportProgressModal';
+import type { GameScreenRunOptions } from './screens/gameScreen';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -213,6 +214,12 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           );
         }
 
+        const _gameRunOptions: GameScreenRunOptions = {
+          initialRunTimerMs: activeSaveData?.runTimerMs ?? 0,
+          initialCheckpointRunTimerMs: activeSaveData?.checkpointRunTimerMs ?? 0,
+          assistMode: activeSaveData?.assistMode ?? false,
+        };
+
         cleanup = startGameScreen(canvas, uiRoot, activeLoadout, startRoomId, {
           onReturnToMenu: () => {
             persistSaveSlot();
@@ -221,7 +228,17 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           onSave: () => {
             persistSaveSlot();
           },
-        }, progress, undefined, undefined, campaignSpawnOverride);
+          onCheckpointReached: (timerMs: number) => {
+            // Snapshot the checkpoint timer into the save data so that on respawn
+            // the game restores the correct time.
+            if (activeSaveData !== null) {
+              activeSaveData.runTimerMs = timerMs;
+              activeSaveData.checkpointRunTimerMs = timerMs;
+            }
+            // persistSaveSlot() will be called separately by the onSave callback
+            // which fires in the same save-point interaction.
+          },
+        }, progress, undefined, undefined, campaignSpawnOverride, _gameRunOptions);
       };
       void doPlayGameplay();
     } else if (to === 'customCampaignPlay') {

@@ -27,6 +27,10 @@ interface CreateGameOverlayControllerParams {
   onResetFrameClock: () => void;
   onExitToMainMenu: () => void;
   onSave?: () => void;
+  /** Called when the player activates a save point so the checkpoint timer can be snapshotted. */
+  onCheckpointReached?: () => void;
+  /** Called after respawn so the timer can be restored to the checkpoint value. */
+  onRespawn?: () => void;
 }
 
 export interface GameOverlayController {
@@ -55,6 +59,8 @@ export function createGameOverlayController(
     onResetFrameClock,
     onExitToMainMenu,
     onSave,
+    onCheckpointReached,
+    onRespawn,
   } = params;
 
   const state: GameOverlayControllerState = {
@@ -93,6 +99,8 @@ export function createGameOverlayController(
         }
         onResetTransitionReveal();
         onResetFrameClock();
+        // Restore speedrun timer to the value it had when the player last saved.
+        if (onRespawn) onRespawn();
       },
       onReturnToMainMenu: () => {
         state.isPlayerDead = false;
@@ -130,6 +138,8 @@ export function createGameOverlayController(
             Math.round(tombPos.xWorld / BLOCK_SIZE_MEDIUM),
             Math.round(tombPos.yWorld / BLOCK_SIZE_MEDIUM),
           ];
+          // Snapshot the speedrun timer checkpoint at save-point activation.
+          if (onCheckpointReached) onCheckpointReached();
         }
       }
 
