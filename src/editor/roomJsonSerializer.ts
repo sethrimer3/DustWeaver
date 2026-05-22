@@ -24,6 +24,7 @@ import type {
   RoomJsonBouncePad,
   RoomJsonBackgroundBlock,
   RoomJsonGuideDustPath,
+  RoomJsonGuideDustPathPoint,
 } from './roomJsonSchema';
 
 /**
@@ -346,7 +347,11 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if ((data.guideDustPaths ?? []).length > 0) {
     json.guideDustPaths = (data.guideDustPaths ?? []).map(p => {
       const entry: RoomJsonGuideDustPath = {
-        points: p.points.map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock })),
+        points: p.points.map(pt => {
+          const out: RoomJsonGuideDustPathPoint = { xBlock: pt.xBlock, yBlock: pt.yBlock };
+          if (pt.speed !== 1.0) out.speed = pt.speed;
+          return out;
+        }),
       };
       if (p.loop) entry.loop = true;
       if (p.moteCount !== 8) entry.moteCount = p.moteCount;

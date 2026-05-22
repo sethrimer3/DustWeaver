@@ -403,7 +403,11 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.guideDustPaths && json.guideDustPaths.length > 0) {
     out.guidePaths = json.guideDustPaths.map(p => {
       const entry: SavedGuideDustPath = {
-        pts: p.points.map(pt => [pt.xBlock, pt.yBlock] as SavedGuideDustPoint),
+        pts: p.points.map(pt => {
+          const pair: SavedGuideDustPoint = [pt.xBlock, pt.yBlock];
+          if (pt.speed !== undefined && pt.speed !== 1.0) pair[2] = pt.speed;
+          return pair;
+        }),
       };
       if (p.loop) entry.lp = 1;
       if (p.moteCount !== undefined && p.moteCount !== 8) entry.n = p.moteCount;

@@ -453,6 +453,7 @@ export interface ValidationError {
 export interface RoomJsonGuideDustPathPoint {
   xBlock: number;
   yBlock: number;
+  speed?: number;
 }
 
 /** A golden dust guide path stored in room JSON. */

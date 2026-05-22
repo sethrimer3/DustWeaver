@@ -62,6 +62,7 @@ export function applyPropertyToElement(
   el: SelectedElement,
   prop: string,
   value: string | number,
+  selectedPointIndex?: number | null,
 ): void {
   const room = roomData;
   const numVal = typeof value === 'number' ? value : parseInt(value as string, 10);
@@ -348,6 +349,12 @@ export function applyPropertyToElement(
       else if (prop === 'guideDustPath.moteCount' && !isNaN(numVal)) path.moteCount = Math.max(MIN_MOTE_COUNT, Math.min(MAX_MOTE_COUNT, Math.round(numVal)));
       else if (prop === 'guideDustPath.moteSpeedFactor' && !isNaN(numVal)) path.moteSpeedFactor = Math.max(MIN_MOTE_SPEED_FACTOR, Math.min(MAX_MOTE_SPEED_FACTOR, numVal));
       else if (prop === 'guideDustPath.opacityPct' && !isNaN(numVal)) path.opacityPct = Math.max(MIN_OPACITY_PCT, Math.min(MAX_OPACITY_PCT, Math.round(numVal)));
+      else if (prop === 'guideDustPath.point.speed' && !isNaN(numVal)) {
+        const ptIdx = selectedPointIndex ?? null;
+        if (ptIdx !== null && path.points[ptIdx] !== undefined) {
+          path.points[ptIdx].speed = Math.max(0.1, Math.min(10.0, numVal));
+        }
+      }
     }
   }
 }
@@ -368,6 +375,7 @@ export function handlePropertyChange(
   history: EditorHistory,
   prop: string,
   value: string | number,
+  selectedPointIndex?: number | null,
 ): void {
   if (selectedElements.length === 0) return;
 
@@ -375,6 +383,6 @@ export function handlePropertyChange(
 
   // Apply property to all selected elements of matching type
   for (const el of selectedElements) {
-    applyPropertyToElement(roomData, el, prop, value);
+    applyPropertyToElement(roomData, el, prop, value, selectedPointIndex);
   }
 }

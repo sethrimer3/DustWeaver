@@ -368,6 +368,8 @@ export interface RoomDialogueTriggerDef {
 export interface RoomGuideDustPathPointDef {
   xBlock: number;
   yBlock: number;
+  /** Travel speed at this control point (default 1.0). */
+  speed: number;
 }
 
 /** An editor-authored Catmull-Rom spline that golden dust motes travel along in-game. */

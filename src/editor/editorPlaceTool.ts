@@ -556,11 +556,14 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         : undefined;
 
     if (activePath) {
-      activePath.points.push({ xBlock: bx, yBlock: by });
+      activePath.points.push({ xBlock: bx, yBlock: by, speed: 1.0 });
     } else {
       const newPath: EditorGuideDustPath = {
         uid: allocateUid(state),
-        points: [{ xBlock: bx, yBlock: by }],
+        points: [
+          { xBlock: bx, yBlock: by, speed: 1.0 },
+          { xBlock: bx + 2, yBlock: by, speed: 1.0 },
+        ],
         loop: false,
         visibleInGame: true,
         moteCount: 8,

@@ -546,6 +546,7 @@ export interface SelectedElement {
 export interface EditorGuideDustPathPoint {
   xBlock: number;
   yBlock: number;
+  speed: number;
 }
 
 /** An editor-owned Catmull-Rom spline guide path for golden dust motes. */

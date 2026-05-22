@@ -245,7 +245,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
   catBar.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px;';
-  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'collectables', 'environment', 'objects', 'lighting', 'liquids', 'ropes'];
+  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'collectables', 'environment', 'objects', 'lighting', 'liquids', 'ropes', 'guidePaths'];
   const catBtns: HTMLButtonElement[] = [];
   for (const cat of categories) {
     const btn = makeBtn(cat, () => callbacks?.onCategoryChange(cat));

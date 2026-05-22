@@ -348,7 +348,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       return lightDef as import('../levels/lightingSchema').LightDef;
     }),
     guideDustPaths: (data.guideDustPaths ?? []).map(p => ({
-      points: p.points.map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock })),
+      points: p.points.map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock, speed: pt.speed ?? 1.0 })),
       loop: p.loop,
       visibleInGame: p.visibleInGame,
       moteCount: p.moteCount,

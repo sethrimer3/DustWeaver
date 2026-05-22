@@ -324,7 +324,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
 
   if (saved.guidePaths && saved.guidePaths.length > 0) {
     json.guideDustPaths = saved.guidePaths.map(p => ({
-      points: p.pts.map(([x, y]) => ({ xBlock: x, yBlock: y })),
+      points: p.pts.map(([x, y, sp]) => ({ xBlock: x, yBlock: y, speed: sp ?? 1.0 })),
       loop: p.lp === 1 ? true : undefined,
       moteCount: p.n,
       moteSpeedFactor: p.sp,

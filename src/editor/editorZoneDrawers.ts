@@ -472,6 +472,7 @@ export function drawEditorGuideDustPaths(
     const pts = path.points;
     const bs = BLOCK_SIZE_SMALL;
     if (pts.length < 2) {
+      if (pts.length === 0) continue;  // completely empty path — skip
       // Draw a lonely point
       const sel = state.selectedElements.some(e => e.type === 'guideDustPath' && e.uid === path.uid);
       ctx.save();
@@ -547,6 +548,14 @@ export function drawEditorGuideDustPaths(
       ctx.textBaseline = 'middle';
       ctx.fillText(String(i), px, py);
       ctx.restore();
+      // Show speed label if non-default
+      if (isSel && pts[i].speed !== undefined && pts[i].speed !== 1.0) {
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.font = `${Math.max(8, 10 * zoom)}px monospace`;
+        ctx.fillText(`×${pts[i].speed.toFixed(1)}`, px + r + 2, py - r - 2);
+        ctx.restore();
+      }
     }
   }
 }
