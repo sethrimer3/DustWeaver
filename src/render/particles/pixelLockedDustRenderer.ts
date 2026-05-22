@@ -33,6 +33,15 @@ import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
 const MIN_VISIBLE_ALPHA = 0.004;
 
 /**
+ * ageFade threshold above which a glint pixel is drawn for shimmery kinds.
+ * A value of 0.55 means the glint only appears during the first 45% of the
+ * particle's life (near spawn / peak brightness), fading before death.
+ * Increase toward 1.0 to show glint for longer; decrease toward 0.0 to limit
+ * it to the very start of a particle's life.
+ */
+const GLINT_AGE_THRESHOLD = 0.55;
+
+/**
  * Kinds that get an optional glint pixel on the virtual canvas.
  * This is a bitmask over ParticleKind values (kind < 32 so a plain number works).
  */
@@ -47,17 +56,39 @@ const GLINT_KIND_MASK = (
 );
 
 // ---------------------------------------------------------------------------
-// Per-kind palette ramps
-// ---------------------------------------------------------------------------
-//
-// Four tones per kind: [0] = dark, [1] = mid, [2] = bright, [3] = glint.
-// Indices are selected by tonePhase = (fracX*0.55 + fracY*0.45 + seed*0.137)%1.
-// Attack-mode 2×2 motes use all four slots for the four sub-pixels.
-//
-// To tune: edit the hex strings below.  Each ramp must have exactly 4 entries.
+// Tone-selection tuning constants
 // ---------------------------------------------------------------------------
 
-const PALETTE_RAMPS: readonly (readonly string[])[] = [
+/**
+ * Weight applied to the particle's intra-pixel horizontal offset (fracX)
+ * when computing the subpixel tone phase.  Adjust to shift how much
+ * left/right position contributes to palette selection.
+ */
+const TONE_WEIGHT_X = 0.55;
+/**
+ * Weight applied to the particle's intra-pixel vertical offset (fracY).
+ * Together with TONE_WEIGHT_X the two weights need not sum to 1; they are
+ * additive inputs to a modulo-1 phase and can be rebalanced freely.
+ */
+const TONE_WEIGHT_Y = 0.45;
+/**
+ * Weight applied to the stable per-particle seed.  Using an irrational-ish
+ * value (0.137 ≈ 1/φ²) distributes seed contributions evenly across the
+ * palette without clustering at round-number offsets.
+ */
+const TONE_WEIGHT_SEED = 0.137;
+
+/**
+ * Divisor used to normalise the lower 16 bits of `noiseTickSeed` to [0, 1).
+ * Equal to 2^16 = 65536.
+ */
+const SEED_NORMALISE = 65536.0;
+
+// ---------------------------------------------------------------------------
+// Per-kind palette ramps  (indexed by ParticleKind ordinal)
+// ---------------------------------------------------------------------------
+
+const KIND_PALETTE_RAMPS: readonly (readonly string[])[] = [
   // Physical (0) — dense gold motes
   ['#7a5000', '#c48c00', '#ffd700', '#fff5cc'],
   // Fire (1) — scorching embers
@@ -102,7 +133,7 @@ const PALETTE_RAMPS: readonly (readonly string[])[] = [
 
 /** Safe palette lookup — returns Physical ramp if kind is out of range. */
 function getPalette(kind: number): readonly string[] {
-  return PALETTE_RAMPS[kind] ?? PALETTE_RAMPS[0];
+  return KIND_PALETTE_RAMPS[kind] ?? KIND_PALETTE_RAMPS[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -184,10 +215,10 @@ export function renderPixelLockedDust(
     // drifts across virtual pixel boundaries, not every tick).
     const fracX = vx - Math.floor(vx);
     const fracY = vy - Math.floor(vy);
-    const seed  = (noiseTickSeed[i] & 0xFFFF) / 65536.0;  // 0..1, stable
+    const seed  = (noiseTickSeed[i] & 0xFFFF) / SEED_NORMALISE;  // lower 16 bits → [0,1), stable
 
     // tonePhase is the continuous 0..1 selector; floored to palette index.
-    const tonePhase  = (fracX * 0.55 + fracY * 0.45 + seed * 0.137) % 1.0;
+    const tonePhase  = (fracX * TONE_WEIGHT_X + fracY * TONE_WEIGHT_Y + seed * TONE_WEIGHT_SEED) % 1.0;
     const palette    = getPalette(kind);
     const toneIndex  = Math.floor(tonePhase * palette.length) % palette.length;
 
@@ -225,12 +256,13 @@ export function renderPixelLockedDust(
       ctx.fillRect(drawX, drawY, 1, 1);
 
       // Optional glint: a single adjacent pixel at the glint tone.
-      // Only rendered for shimmery kinds when the particle is bright enough
-      // (ageFade > 0.55 so it only appears near spawn/peak-life, not fade).
-      if ((GLINT_KIND_MASK & (1 << kind)) !== 0 && ageFade > 0.55) {
+      // Only rendered for shimmery kinds when the particle is bright enough.
+      if ((GLINT_KIND_MASK & (1 << kind)) !== 0 && ageFade > GLINT_AGE_THRESHOLD) {
         // Glint position shifts by seed so not all particles glint the same way.
         const glintTone = palette[3]; // always the glint/brightest ramp entry
-        const glintAlpha = alpha * 0.45 * (ageFade - 0.55) / 0.45;
+        // Glint fades in above the GLINT_AGE_THRESHOLD and out as the particle dies.
+        // glintAlpha = alpha * (ageFade - threshold), scaled so it peaks at 1× alpha.
+        const glintAlpha = alpha * (ageFade - GLINT_AGE_THRESHOLD);
         ctx.globalAlpha = Math.min(glintAlpha, alpha);
         ctx.fillStyle = glintTone;
         // Offset direction: top-right for even seeds, bottom-left for odd.
