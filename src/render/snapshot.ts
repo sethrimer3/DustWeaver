@@ -347,6 +347,7 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
       disturbanceFactor: world.disturbanceFactor,
       behaviorMode:      world.behaviorMode,
       particleMoteSlotState: new Uint8Array(MAX_PARTICLES),
+      noiseTickSeed:     world.noiseTickSeed,
       particleCount:     world.particleCount,
     },
     clusters,

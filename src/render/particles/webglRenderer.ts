@@ -23,6 +23,7 @@ import { WorldSnapshot } from '../snapshot';
 import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shaders';
 import { ParticleTrailRenderer } from './trailRenderer';
 import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
+import { ParticleKind } from '../../sim/particles/kinds';
 
 /** [x, y, kind, normalizedAge, disturbanceFactor, isOffensive, isSpent] per vertex */
 const FLOATS_PER_VERTEX = 7;
@@ -236,6 +237,10 @@ export class WebGLParticleRenderer {
     for (let i = 0; i < particleCount; i++) {
       if (isAliveFlag[i] === 0) continue;
       if (behaviorMode[i] === BEHAVIOR_MODE_GRAPPLE_CHAIN) continue;
+      // Non-Fluid gameplay particles are now rendered by the Pixel-Locked
+      // Prismatic Dust renderer (pixelLockedDustRenderer.ts) on the Canvas 2D
+      // virtual canvas.  Only Fluid background particles remain in WebGL.
+      if (kindBuffer[i] !== ParticleKind.Fluid) continue;
       const base = vertexCount * FLOATS_PER_VERTEX;
       const lt = lifetimeTicks[i];
       const normAge = lt > 0 ? Math.min(1.0, ageTicks[i] / lt) : 0.0;

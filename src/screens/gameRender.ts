@@ -18,6 +18,7 @@ import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { renderRadiantWeb } from '../render/clusters/radiantWebRenderer';
 import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
+import { renderPixelLockedDust } from '../render/particles/pixelLockedDustRenderer';
 import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
@@ -477,10 +478,16 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Particles ─────────────────────────────────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_PARTICLES);
-  // Particles drawn on top of all game layers (Canvas 2D fallback only —
-  // WebGL renders to its own offscreen canvas at virtual resolution)
+  // When WebGL is available it handles Fluid background particles; all other
+  // gameplay-relevant particles are drawn by renderPixelLockedDust() on the
+  // virtual canvas so they appear crisp and pixel-locked before upscaling.
+  // When WebGL is unavailable, renderParticles() handles Fluid (soft fallback)
+  // and then also delegates to renderPixelLockedDust() internally.
   if (!webglRenderer.isAvailable) {
     renderParticles(ctx, snapshot, ox, oy, zoom);
+  } else {
+    // WebGL path: gameplay particles → pixel-locked Canvas 2D renderer.
+    renderPixelLockedDust(ctx, snapshot, ox, oy, zoom);
   }
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_PARTICLES);
 
