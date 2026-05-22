@@ -40,6 +40,13 @@ export interface ParticleSnapshot {
    * and world.moteSlotState — O(MAX_MOTE_SLOTS) per frame.
    */
   readonly particleMoteSlotState: Uint8Array;
+  /**
+   * Per-particle noise seed (Uint32) — stable throughout each particle's
+   * lifetime and reset on respawn.  Used by the Pixel-Locked Prismatic Dust
+   * renderer as a stable per-particle colour-tone identifier so all particles
+   * don't brighten/shift in sync.
+   */
+  readonly noiseTickSeed:     Uint32Array;
   readonly particleCount:     number;
 }
 

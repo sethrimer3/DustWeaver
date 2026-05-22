@@ -130,6 +130,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
         }
         return arr;
       })(),
+      noiseTickSeed:     world.noiseTickSeed,
       particleCount:     world.particleCount,
     },
     clusters: clusterSnapshots,

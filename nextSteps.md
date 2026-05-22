@@ -1264,3 +1264,79 @@ To surface these in the debug HUD, pass the result from `getWallJumpCandidate` t
    validated against the full room set before merging to main.
 
 
+
+---
+
+## BUILD 393 — Pixel-Locked Prismatic Dust
+
+### What changed
+
+- **`src/render/particles/pixelLockedDustRenderer.ts`** (new file): Core of the new
+  system.  All gameplay-relevant dust (every `ParticleKind` except `Fluid` and
+  grapple-chain particles) is rendered as crisp, grid-snapped motes via `fillRect`.
+  - Simulation positions remain subpixel-smooth; only `drawX = Math.round(vx)` / 
+    `drawY = Math.round(vy)` snap the rendered pixel.
+  - `fracX = vx - Math.floor(vx)` and `fracY = vy - Math.floor(vy)` plus the
+    per-particle `noiseTickSeed` (a stable Uint32 set at spawn) drive a
+    `tonePhase = (fracX*0.55 + fracY*0.45 + seed*0.137) % 1.0` that selects from a
+    4-entry quantized palette ramp — no per-frame randomness, no TV-static flicker.
+  - Normal/shield motes (behaviorMode 0, 2): 1×1 `fillRect` in the selected tone.
+  - Attack motes (behaviorMode 1): 2×2 cluster, each corner uses a different ramp
+    step derived from `tonePhase` offsets — multi-tone square cluster.
+  - Optional single-pixel glint (adjacent pixel at the brightest ramp entry) for
+    shimmery kinds (Physical, Ice, Holy, Metal, Crystal, Gold, Light).  Glint only
+    appears while `ageFade > 0.55` so it fades before the particle dies.
+  - `PALETTE_RAMPS` is a plain `readonly (readonly string[])[]` — index = `ParticleKind`.
+    Each ramp has 4 entries: `[dark, mid, bright, glint]`.
+
+- **`src/render/snapshotTypes.ts`**: Added `readonly noiseTickSeed: Uint32Array` to
+  `ParticleSnapshot` so the stable per-particle seed reaches all renderers.
+
+- **`src/render/snapshot.ts`** and **`src/render/snapshotAllocating.ts`**: Wired
+  `world.noiseTickSeed` through to the snapshot (single-line addition each).
+
+- **`src/render/particles/webglRenderer.ts`**: Packing loop now skips non-Fluid
+  particles (`if (kindBuffer[i] !== ParticleKind.Fluid) continue`).  Only ambient
+  background Fluid particles remain in WebGL (disturbance glow / atmospheric mist).
+  Trail renderer is unchanged — trails still render for attack-mode particles.
+
+- **`src/render/particles/renderer.ts`** (Canvas 2D fallback): Fallback loop now
+  handles only `Fluid` particles (soft circle glow), then calls
+  `renderPixelLockedDust()` for all gameplay particles.
+
+- **`src/screens/gameRender.ts`**: In the `STAGE_PARTICLES` block, when WebGL is
+  available `renderPixelLockedDust()` is called on the virtual canvas; when falling
+  back to Canvas 2D, `renderParticles()` handles Fluid then delegates internally.
+
+### Tuning guide
+
+- **Palette ramps**: Edit `PALETTE_RAMPS` in `pixelLockedDustRenderer.ts`.  Each
+  row corresponds to a `ParticleKind` ordinal; each row has exactly 4 entries
+  `[dark, mid, bright, glint]`.
+- **Glint kinds**: Add/remove bits from `GLINT_KIND_MASK` constant.
+- **Glint threshold**: Change the `ageFade > 0.55` guard to make glints appear
+  longer or shorter during a particle's life.
+- **Tone formula**: Adjust the `0.55`, `0.45`, `0.137` coefficients in `tonePhase`
+  to change how strongly horizontal/vertical subpixel position and seed contribute.
+- **Attack mote arrangement**: The four tone offsets (`offset * 0..3`) in the
+  attack branch control corner brightness arrangement.  Increasing `offset` separates
+  corners more; decreasing it makes them converge to one tone.
+- **Fluid background glow**: Unchanged — stays soft and misty in WebGL.
+
+### Remaining polish opportunities
+
+1. **Per-kind size variety**: The problem statement mentions wanting some particles
+   slightly larger than 1×1 even in normal mode (e.g., Lava, Void).  Could add a
+   `KIND_SIZE` lookup (0=1×1, 1=2×2) and select 2×2 for heavy/dramatic kinds.
+2. **Ordered dithering for shimmer**: Replace `tonePhase` with a Bayer-4 lookup
+   keyed on `(drawX % 4, drawY % 4)` XORed with seed for a classic CRT-dither look.
+3. **disturbanceFactor glow restore**: The WebGL Fluid glow still works.  Consider
+   making non-Fluid gameplay particles very slightly brighter during high-velocity
+   events (multiply `alpha` by `1 + clamp(velMag * 0.05, 0, 0.3)`).
+4. **Trail aura for normal particles**: Currently trails only fire for attack-mode
+   (`behaviorMode === 1`) particles in `trailRenderer.ts`.  A very faint, cheap
+   "after-image" trail for normal orbit particles could reinforce the pixel-locked
+   solid-matter feel.
+5. **Debug overlay**: Add a `showDustRenderMode` dev-flag to draw a 1px outline
+   around particles rendered by `renderPixelLockedDust` vs the WebGL path, making
+   it easy to confirm mode boundaries at runtime.

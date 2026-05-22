@@ -2,6 +2,7 @@ import { WorldSnapshot } from '../snapshot';
 import { getParticleStyle } from './styles';
 import { getKindShape, ParticleShape, ParticleKind } from '../../sim/particles/kinds';
 import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
+import { renderPixelLockedDust } from './pixelLockedDustRenderer';
 
 // ---- Shape drawing helpers -----------------------------------------------
 
@@ -136,18 +137,25 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     particleCount, isAliveFlag,
     positionXWorld, positionYWorld,
     kindBuffer, ageTicks, lifetimeTicks,
-    disturbanceFactor, behaviorMode, particleMoteSlotState,
+    disturbanceFactor, behaviorMode,
   } = particles;
 
   // Radius in screen pixels: world-unit radius scaled by zoom.
   const radiusPx = PARTICLE_RENDER_RADIUS_WORLD * scalePx;
 
+  // Render Fluid background particles only.  All gameplay-relevant particles
+  // (non-Fluid, non-GrappleChain) are drawn by renderPixelLockedDust() which
+  // is called after this function in the Canvas 2D fallback path.
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
     // Grapple chain particles are hidden here — renderGrapple() is the visual authority.
     if (behaviorMode[i] === BEHAVIOR_MODE_GRAPPLE_CHAIN) continue;
 
     const kind  = kindBuffer[i];
+
+    // Gameplay particles are handled by renderPixelLockedDust() below.
+    if (kind !== ParticleKind.Fluid) continue;
+
     const style = getParticleStyle(kind);
 
     const screenX = positionXWorld[i] * scalePx + offsetXPx;
@@ -159,12 +167,7 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     const ageFade = 1.0 - normAge;
 
     // Fluid background particles are only visible when disturbed
-    let alpha = kind === ParticleKind.Fluid
-      ? disturbanceFactor[i] * ageFade * 0.55
-      : ageFade;
-
-    // Depleted mote slot: render at 25% alpha as a "spent" visual cue.
-    if (particleMoteSlotState[i] !== 0) alpha *= 0.25;
+    const alpha = disturbanceFactor[i] * ageFade * 0.55;
 
     if (alpha <= MIN_VISIBLE_ALPHA) continue;
 
@@ -173,5 +176,9 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     drawParticleShape(ctx, screenX, screenY, radiusPx, kind);
   }
   ctx.globalAlpha = 1.0;
+
+  // Render all gameplay-relevant (non-Fluid, non-GrappleChain) particles using
+  // the Pixel-Locked Prismatic Dust renderer for crisp, grid-snapped motes.
+  renderPixelLockedDust(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
 }
 
