@@ -138,8 +138,8 @@ export interface SavedRoomRope {
   thick?: 0 | 1 | 2;
 }
 
-/** A single control point in a compact guide dust path: [xBlock, yBlock]. */
-export type SavedGuideDustPoint = [number, number];
+/** A single control point in a compact guide dust path: [xBlock, yBlock, speed?]. */
+export type SavedGuideDustPoint = [number, number, number?];
 
 /** Compact golden dust guide path entry. */
 export interface SavedGuideDustPath {

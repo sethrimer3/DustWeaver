@@ -404,6 +404,19 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     room.sceneLights = json.sceneLights.map(savedToLightDef);
   }
 
+  if (json.guideDustPaths && json.guideDustPaths.length > 0) {
+    room.guideDustPaths = json.guideDustPaths
+      .filter(p => p.points.length >= 2)
+      .map(p => ({
+        points: p.points.map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock, speed: pt.speed ?? 1.0 })),
+        loop: p.loop ?? false,
+        visibleInGame: p.visibleInGame ?? true,
+        moteCount: p.moteCount ?? 8,
+        moteSpeedFactor: p.moteSpeedFactor ?? 1.0,
+        opacityPct: p.opacityPct ?? 100,
+      }));
+  }
+
   return room;
 }
 

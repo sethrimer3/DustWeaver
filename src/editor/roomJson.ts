@@ -472,7 +472,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
 
   const guideDustPaths: EditorGuideDustPath[] = (json.guideDustPaths ?? []).map(p => ({
     uid: uid++,
-    points: (p.points ?? []).map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock })),
+    points: (p.points ?? []).map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock, speed: pt.speed ?? 1.0 })),
     loop: p.loop ?? false,
     visibleInGame: p.visibleInGame !== false,
     moteCount: p.moteCount ?? 8,

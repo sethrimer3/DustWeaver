@@ -721,6 +721,12 @@ export function updateInspector(
         v => callbacks?.onPropertyChange('guideDustPath.moteSpeedFactor', v));
       addSliderField(div, 'opacity %', path.opacityPct, 0, 100,
         v => callbacks?.onPropertyChange('guideDustPath.opacityPct', v));
+      // Per-point speed for the currently selected control point
+      const selPtIdx = state.guideDustPathSelectedPointIndex;
+      if (selPtIdx !== null && path.points[selPtIdx] !== undefined) {
+        addSliderField(div, `pt ${selPtIdx} speed`, path.points[selPtIdx].speed, 0.1, 5.0,
+          v => callbacks?.onPropertyChange('guideDustPath.point.speed', v));
+      }
     }
   }
 }

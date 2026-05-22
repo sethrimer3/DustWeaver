@@ -1,6 +1,43 @@
 # DustWeaver — Next Steps
 
-## BUILD 390 — Follow-up: Fix Merged BUILD 389 Bugs
+## BUILD 392 — Golden Dust Guide Path Fixes + Timer Persistence Fix
+
+### What Was Fixed in BUILD 392
+
+1. **Critical: `guideDustPaths` never loaded at runtime** (`roomJsonLoader.ts`)
+   `roomJsonDefToRoomDef()` built a `RoomDef` but never mapped `json.guideDustPaths` to
+   `room.guideDustPaths`. Guide paths authored in the editor were silently dropped on load.
+   Fixed by adding the missing mapping after the `sceneLights` block.
+
+2. **Per-point speed control** (`roomElementDefs.ts`, `editorElementTypes.ts`, `roomJsonSchema.ts`,
+   `roomSavedTypes.ts`, `roomSchemaHydrator.ts`, `roomSchemaV2.ts`, `roomJson.ts`,
+   `roomJsonSerializer.ts`, `editorRoomBuilder.ts`, `editorRoomImporter.ts`,
+   `editorPlaceTool.ts`, `editorPropertyChange.ts`, `editorZoneDrawers.ts`, `editorInspector.ts`)
+   Added `speed: number` field to `RoomGuideDustPathPointDef` and `EditorGuideDustPathPoint`.
+   Speed is serialized as optional (omitted when 1.0) across JSON and compact v2 formats.
+   Inspector now shows a per-point speed slider when a control point is selected.
+   Zone drawer shows `×N.N` speed labels next to non-default-speed points.
+
+3. **Organic velocity-gradient renderer** (`guideDustPathRenderer.ts`)
+   Rewrote the renderer to use arc-length parameterization with binary-search t-lookup,
+   per-mote lateral jitter for an organic dusty look, and smooth speed interpolation
+   between control points. Non-looping paths fade in/out over the first/last 15%.
+
+4. **FP duplicate lifecycle removed** (`gameRender.ts`)
+   `FP.beginFrame()` and `FP.endFrame()` in `renderFrame()` were redundant — `gameScreen.ts`
+   already owns the FP lifecycle. Removed the duplicate calls and the now-unused FP import.
+
+5. **Timer persistence ordering fixed** (`gameOverlayController.ts`)
+   The `onSave()` at the top of `openSkillTombMenu()` fired before `onCheckpointReached()`,
+   so the checkpoint timer snapshot was not included in that save. Removed the premature save
+   and moved it to after `onCheckpointReached()` inside the tomb-found block.
+
+6. **Editor quality-of-life**
+   - New paths seed with 2 points instead of 1 so they're immediately renderable.
+   - `'guidePaths'` category added to editor palette tabs.
+   - Empty-path safety guard (`pts.length === 0`) prevents crash in zone drawer.
+   - Copied guide paths preserve per-point `speed`.
+
 
 ### What Was Wrong in BUILD 389
 

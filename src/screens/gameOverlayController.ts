@@ -114,7 +114,6 @@ export function createGameOverlayController(
     if (state.isSkillTombMenuOpen || progress === undefined) return;
     closeMapOnlyIfOpen();
     state.isSkillTombMenuOpen = true;
-    if (onSave) onSave();
 
     const player = world.clusters[0];
     let playerXWorld = 0;
@@ -140,6 +139,7 @@ export function createGameOverlayController(
           ];
           // Snapshot the speedrun timer checkpoint at save-point activation.
           if (onCheckpointReached) onCheckpointReached();
+          if (onSave) onSave();  // save AFTER checkpoint snapshot
         }
       }
 

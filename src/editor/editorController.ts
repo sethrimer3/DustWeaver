@@ -336,7 +336,7 @@ export function createEditorController(
             }
             return; // No applyEdits needed — campaign spawn is not in room data
           }
-          if (state.roomData) handlePropertyChange(state.roomData, state.selectedElements, history, prop, value);
+          if (state.roomData) handlePropertyChange(state.roomData, state.selectedElements, history, prop, value, state.guideDustPathSelectedPointIndex);
           applyEdits('metadata');
         },
         onRoomDimensionsChange: (dimProp: 'widthBlocks' | 'heightBlocks', value: number) => {

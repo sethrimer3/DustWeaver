@@ -98,7 +98,7 @@ export function storeDragStartPositions(
         positions.set(key, { xBlock: tr.xBlock, yBlock: tr.yBlock });
       }
     } else if (el.type === 'guideDustPath') {
-      // Store each control point individually; key = uid * 10000 + pointIndex
+      // Store each control point individually; key = "${uid}:${pointIndex}"
       const p = (s.roomData.guideDustPaths ?? []).find(p2 => p2.uid === el.uid);
       if (p) {
         for (let i = 0; i < p.points.length; i++) {
@@ -609,6 +609,7 @@ export function pasteFromClipboard(s: EditorState): void {
       points: p.points.map(pt => ({
         xBlock: pt.xBlock - minX + offsetX,
         yBlock: pt.yBlock - minY + offsetY,
+        speed: pt.speed ?? 1.0,
       })),
     });
     newElements.push({ type: 'guideDustPath', uid: newUid });
