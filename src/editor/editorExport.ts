@@ -27,7 +27,7 @@ import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCam
 import { WORLD_NAMES } from '../levels/rooms';
 import { BUILD_NUMBER } from '../build-info';
 import { createExportProgressModal } from './editorExportProgressModal';
-import type { SavedCampaignV1 } from '../levels/campaignSchema';
+import type { SavedCampaignV1, CampaignSpawnData } from '../levels/campaignSchema';
 import {
   ROOM_CACHE_VERSION,
 } from '../levels/roomCacheManifest';
@@ -412,6 +412,7 @@ export function exportCampaignJson(
 export function exportMainCampaignJson(
   pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
   progressRoot?: HTMLElement | null,
+  campaignSpawn?: CampaignSpawnData | null,
 ): void {
   if (import.meta.env.DEV) {
     for (const [, data] of pendingRoomEdits) {
@@ -452,8 +453,9 @@ export function exportMainCampaignJson(
         title: MAIN_CAMPAIGN_TITLE,
         creator: MAIN_CAMPAIGN_CREATOR,
         description: MAIN_CAMPAIGN_DESCRIPTION,
-        initialRoomId: MAIN_CAMPAIGN_INITIAL_ROOM_ID,
+        initialRoomId: campaignSpawn?.roomId ?? MAIN_CAMPAIGN_INITIAL_ROOM_ID,
         initialRoomImagePath: null,
+        ...(campaignSpawn !== undefined && campaignSpawn !== null ? { campaignSpawn } : {}),
       },
       worldMap,
       rooms: baselineRooms,

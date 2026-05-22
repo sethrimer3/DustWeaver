@@ -33,7 +33,7 @@ import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
-import { ROOM_REGISTRY, initRoomRegistry, registerRoom } from '../levels/rooms';
+import { ROOM_REGISTRY, initRoomRegistry, registerRoom, getLoadedOfficialCampaignSpawn } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 import {
@@ -171,8 +171,32 @@ export function createEditorController(
 
   // Cleanup function for any currently-visible "Create connected room?" popup.
   let dismissConnectPopup: (() => void) | null = null;
+  const loadedMainCampaignSpawn = getLoadedOfficialCampaignSpawn();
+  const mainCampaignSession: EditableCampaignSession = {
+    source: 'main',
+    campaign: {
+      v: 1,
+      kind: 'DustWeaverCampaign',
+      campaign: {
+        id: 'DUSTWEAVER_CAMPAIGN',
+        title: 'DustWeaver',
+        creator: 'GravyThyme',
+        description: '',
+        initialRoomId: loadedMainCampaignSpawn?.roomId ?? 'lobby',
+        initialRoomImagePath: null,
+        ...(loadedMainCampaignSpawn !== null ? { campaignSpawn: { ...loadedMainCampaignSpawn } } : {}),
+      },
+      worldMap: { worlds: [], rooms: [] },
+      rooms: [],
+      editor: {
+        createdWithBuild: '',
+        lastEditedIso: '',
+      },
+    },
+  };
+  const activeCampaignSession = campaignSession ?? mainCampaignSession;
   // Shared context for campaign spawn helpers (avoids repeating state/session/uiRoot).
-  const campaignSpawnCtx: CampaignSpawnContext = { state, campaignSession, uiRoot };
+  const campaignSpawnCtx: CampaignSpawnContext = { state, campaignSession: activeCampaignSession, uiRoot };
   const usesCampaignStore = campaignSession?.campaignStore !== undefined;
 
   function logEditorPerf(label: string, startMs: number): void {
@@ -238,7 +262,7 @@ export function createEditorController(
 
       inputCleanup = attachEditorInputListeners(canvas, inputState, state);
 
-      const campaignTitle = campaignSession ? campaignSession.campaign.campaign.title : null;
+      const campaignTitle = activeCampaignSession.campaign.campaign.title;
       ui = createEditorUI(uiRoot, campaignTitle);
       ui.setCallbacks({
         onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; },
@@ -259,8 +283,8 @@ export function createEditorController(
         onPropertyChange: (prop: string, value: string | number) => {
           if (prop.startsWith('campaignSpawn.')) {
             // Campaign spawn properties are not stored in room data — update state + session directly.
-            if (state.campaignSpawnBlock !== null && campaignSession?.campaign?.campaign != null) {
-              const spawn = campaignSession.campaign.campaign.campaignSpawn;
+            if (state.campaignSpawnBlock !== null && activeCampaignSession.campaign?.campaign != null) {
+              const spawn = activeCampaignSession.campaign.campaign.campaignSpawn;
               const numVal = typeof value === 'number' ? value : parseInt(String(value));
               if (prop === 'campaignSpawn.xBlock' && !isNaN(numVal)) {
                 state.campaignSpawnBlock = [numVal, state.campaignSpawnBlock[1]];
@@ -356,7 +380,11 @@ export function createEditorController(
           if (campaignSession) {
             exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData, uiRoot);
           } else {
-            exportMainCampaignJson(pendingRoomEdits, uiRoot);
+            exportMainCampaignJson(
+              pendingRoomEdits,
+              uiRoot,
+              activeCampaignSession.campaign.campaign.campaignSpawn ?? null,
+            );
           }
         },
         onOpenVisualMap: () => openVisualMap(),
@@ -770,19 +798,15 @@ export function createEditorController(
             // Campaign spawn: singleton logic — only one allowed in the entire campaign.
             const bx = state.cursorBlockX;
             const by = state.cursorBlockY;
-            if (!campaignSession) {
-              showEditorToast(uiRoot, 'Campaign Spawn requires an open campaign session.');
-            } else {
-              const existingSpawn = campaignSession.campaign.campaign.campaignSpawn;
-              const isInCurrentRoom = existingSpawn !== undefined &&
-                existingSpawn.roomId === state.roomData?.id;
-              if (existingSpawn !== undefined && !isInCurrentRoom) {
+            const existingSpawn = activeCampaignSession.campaign.campaign.campaignSpawn;
+            const isInCurrentRoom = existingSpawn !== undefined &&
+              existingSpawn.roomId === state.roomData?.id;
+            if (existingSpawn !== undefined && !isInCurrentRoom) {
                 // Spawn exists in a different room — ask before replacing.
-                showCampaignSpawnReplaceModal(campaignSpawnCtx, bx, by);
-              } else {
+              showCampaignSpawnReplaceModal(campaignSpawnCtx, bx, by);
+            } else {
                 // Either no spawn yet, or spawn is already in this room — update silently.
-                placeCampaignSpawn(campaignSpawnCtx, bx, by);
-              }
+              placeCampaignSpawn(campaignSpawnCtx, bx, by);
             }
           } else {
             const totalPlacementStartMs = import.meta.env.DEV ? performance.now() : 0;
