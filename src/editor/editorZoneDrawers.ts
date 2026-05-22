@@ -447,6 +447,13 @@ export function drawEditorBackgroundBlocks(
 // ============================================================================
 
 /**
+ * Number of line segments used to approximate each Catmull-Rom spline segment
+ * in the editor overlay. Higher values give smoother curves but cost more draw
+ * calls; 12 is a good balance for the editor's 480×270 virtual canvas.
+ */
+const CATMULL_ROM_SAMPLE_STEPS = 12;
+
+/**
  * Draw guide dust paths in the editor as golden Catmull-Rom spline overlays
  * with control point circles.
  */
@@ -489,7 +496,7 @@ export function drawEditorGuideDustPaths(
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
 
-    const STEPS = 12;
+    const STEPS = CATMULL_ROM_SAMPLE_STEPS;
     const n = pts.length;
     const segCount = path.loop ? n : n - 1;
 

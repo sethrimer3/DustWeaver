@@ -18,6 +18,8 @@ import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 const MAX_MOTES = 512;
 /** Base milliseconds for one full path traversal at speedFactor = 1.0. */
 const BASE_CYCLE_MS = 6000;
+/** Fill color for individual dust motes. */
+const GUIDE_DUST_MOTE_COLOR = 'rgba(255, 200, 50, 1)';
 
 /**
  * Evaluate a Catmull-Rom spline with clamped endpoints at normalized parameter
@@ -179,7 +181,7 @@ export class GuideDustPathRenderer {
 
       const r = Math.max(1.5, 2.5 * zoom);
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = `rgba(255, 200, 50, 1)`;
+      ctx.fillStyle = GUIDE_DUST_MOTE_COLOR;
       ctx.beginPath();
       ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fill();

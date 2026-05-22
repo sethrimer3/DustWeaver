@@ -24,7 +24,7 @@ import {
  */
 export function storeDragStartPositions(
   s: EditorState,
-  positions: Map<number, { xBlock: number; yBlock: number }>,
+  positions: Map<number | string, { xBlock: number; yBlock: number }>,
 ): void {
   positions.clear();
   if (!s.roomData) return;
@@ -102,7 +102,7 @@ export function storeDragStartPositions(
       const p = (s.roomData.guideDustPaths ?? []).find(p2 => p2.uid === el.uid);
       if (p) {
         for (let i = 0; i < p.points.length; i++) {
-          positions.set(el.uid * 10000 + i, { xBlock: p.points[i].xBlock, yBlock: p.points[i].yBlock });
+          positions.set(`${el.uid}:${i}`, { xBlock: p.points[i].xBlock, yBlock: p.points[i].yBlock });
         }
       }
     }
@@ -115,7 +115,7 @@ export function storeDragStartPositions(
  */
 export function moveSelectedElements(
   s: EditorState,
-  positions: Map<number, { xBlock: number; yBlock: number }>,
+  positions: Map<number | string, { xBlock: number; yBlock: number }>,
   deltaX: number,
   deltaY: number,
 ): void {
@@ -206,7 +206,7 @@ export function moveSelectedElements(
       const p = (s.roomData.guideDustPaths ?? []).find(p2 => p2.uid === el.uid);
       if (p) {
         for (let i = 0; i < p.points.length; i++) {
-          const ptOrig = positions.get(el.uid * 10000 + i);
+          const ptOrig = positions.get(`${el.uid}:${i}`);
           if (ptOrig) {
             p.points[i].xBlock = ptOrig.xBlock + deltaX;
             p.points[i].yBlock = ptOrig.yBlock + deltaY;
