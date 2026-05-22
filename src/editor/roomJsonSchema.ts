@@ -422,6 +422,8 @@ export interface RoomJsonDef {
   backgroundBlocks?: RoomJsonBackgroundBlock[];
   /** Designer-placed scene lights (visibility-polygon shadow system). */
   sceneLights?: import('../levels/lightingSchema').SavedSceneLight[];
+  /** Golden dust guide paths (Catmull-Rom splines). */
+  guideDustPaths?: RoomJsonGuideDustPath[];
 }
 
 // ── Background blocks ────────────────────────────────────────────────────────
@@ -443,4 +445,22 @@ export interface RoomJsonBackgroundBlock {
 export interface ValidationError {
   path: string;
   message: string;
+}
+
+// ── Guide dust paths ─────────────────────────────────────────────────────────
+
+/** A single control point in a room JSON guide dust path. */
+export interface RoomJsonGuideDustPathPoint {
+  xBlock: number;
+  yBlock: number;
+}
+
+/** A golden dust guide path stored in room JSON. */
+export interface RoomJsonGuideDustPath {
+  points: RoomJsonGuideDustPathPoint[];
+  loop?: boolean;
+  moteCount?: number;
+  moteSpeedFactor?: number;
+  opacityPct?: number;
+  visibleInGame?: boolean;
 }

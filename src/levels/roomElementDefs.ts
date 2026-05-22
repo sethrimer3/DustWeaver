@@ -360,3 +360,26 @@ export interface RoomDialogueTriggerDef {
   hBlock: number;
   conversation: RoomConversationDef;
 }
+
+
+// ── Guide dust paths ──────────────────────────────────────────────────────────
+
+/** A single control point on a guide dust path (block units). */
+export interface RoomGuideDustPathPointDef {
+  xBlock: number;
+  yBlock: number;
+}
+
+/** An editor-authored Catmull-Rom spline that golden dust motes travel along in-game. */
+export interface RoomGuideDustPathDef {
+  points: readonly RoomGuideDustPathPointDef[];
+  loop: boolean;
+  /** Whether motes are rendered during normal gameplay. */
+  visibleInGame: boolean;
+  /** Number of motes travelling along this path (3–20). */
+  moteCount: number;
+  /** Speed multiplier relative to the 6-second default path-crossing time. */
+  moteSpeedFactor: number;
+  /** Overall opacity of the mote layer (0–100 %). */
+  opacityPct: number;
+}

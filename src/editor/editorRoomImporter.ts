@@ -37,6 +37,7 @@ import type {
   EditorFallingBlock,
   EditorDialogueTrigger,
   EditorSceneLight,
+  EditorGuideDustPath,
 } from './editorState';
 import { particleKindToString } from './roomJsonSchema';
 
@@ -362,6 +363,16 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     })),
   }));
 
+  const guideDustPaths: EditorGuideDustPath[] = (room.guideDustPaths ?? []).map(p => ({
+    uid: uid++,
+    points: p.points.map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock })),
+    loop: p.loop,
+    visibleInGame: p.visibleInGame,
+    moteCount: p.moteCount,
+    moteSpeedFactor: p.moteSpeedFactor,
+    opacityPct: p.opacityPct,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -401,6 +412,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       sceneLights,
       fallingBlocks,
       dialogueTriggers,
+      guideDustPaths,
     },
     nextUid: uid,
   };

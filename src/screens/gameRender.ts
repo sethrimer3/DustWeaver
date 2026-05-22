@@ -35,6 +35,7 @@ import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
+import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
 import type { BloomSystem } from '../render/effects/bloomSystem';
@@ -109,6 +110,8 @@ export interface RenderFrameContext {
   sunbeamRenderer: SunbeamRenderer;
   /** Floating dust motes near local light sources. */
   atmosphericLightDust: AtmosphericLightDust;
+  /** Golden mote particles traveling along editor-authored guide paths. */
+  guideDustPathRenderer: GuideDustPathRenderer;
   /** Decoration sway state for push-wave animation driven by entity velocity. */
   decorationWaveState: DecorationWaveState;
   /** Falling block group dust + tile renderer. */
@@ -258,7 +261,7 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
-    sunbeamRenderer, atmosphericLightDust, fallingBlockDust,
+    sunbeamRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -455,6 +458,7 @@ export function renderFrame(r: RenderFrameContext): void {
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DUST);
   environmentalDust.render(ctx, ox, oy, zoom, isDebugMode);
   atmosphericLightDust.render(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
+  guideDustPathRenderer.render(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   skidDebris.render(ctx, ox, oy, zoom);
   crumbleDebris.render(ctx, ox, oy, zoom);
   weakWallJumpDebris.render(ctx, ox, oy, zoom);

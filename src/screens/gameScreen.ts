@@ -11,6 +11,7 @@ import type { HudState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
+import { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
@@ -607,6 +608,7 @@ export function startGameScreen(
       atmosphericLightDust.initFromRoom(room);
       FP.recordLoadPhaseStep('F:atmosphericLightDust', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
+    guideDustPathRenderer.initFromRoom(room);
 
     playerCloak.reset();
     phantomCloak.reset();
@@ -708,6 +710,7 @@ export function startGameScreen(
   const environmentalDust = new EnvironmentalDustLayer();
   const sunbeamRenderer = new SunbeamRenderer();
   const atmosphericLightDust = new AtmosphericLightDust();
+  const guideDustPathRenderer = new GuideDustPathRenderer();
   const skidDebris = new SkidDebrisRenderer();
   const crumbleDebris = new CrumbleDebrisRenderer();
   const weakWallJumpDebris = new WeakWallJumpDebrisRenderer();
@@ -1452,6 +1455,7 @@ export function startGameScreen(
       }
       environmentalDust.update(world, FIXED_DT_MS);
       atmosphericLightDust.update(FIXED_DT_MS);
+      guideDustPathRenderer.update(FIXED_DT_MS);
       skidDebris.update(world, FIXED_DT_MS);
       weakWallJumpDebris.update(world, FIXED_DT_MS);
       updatePlayerSfx(playerSfx, playerSfxState, world, pendingGrappleFireSfx, FIXED_DT_MS / 1000);
@@ -1590,7 +1594,7 @@ export function startGameScreen(
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
-      sunbeamRenderer, atmosphericLightDust, fallingBlockDust,
+      sunbeamRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,

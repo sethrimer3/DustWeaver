@@ -112,28 +112,6 @@ function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: 
     overlayEl.remove();
     onConfirm(true);
   });
-  actionsEl.appendChild(normalBtn);
-
-  const assistBtn = document.createElement('button');
-  assistBtn.textContent = 'Enable Assist Mode';
-  assistBtn.style.cssText = `
-    background: rgba(30,80,140,0.35); border: 1px solid rgba(80,160,220,0.65);
-    color: #80c8f8; padding: 0.5rem 1.1rem; font-size: 0.85rem;
-    font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.07em;
-    border-radius: 2px;
-  `;
-  assistBtn.addEventListener('mouseenter', () => {
-    assistBtn.style.background = 'rgba(30,80,140,0.55)';
-    assistBtn.style.borderColor = 'rgba(80,160,220,0.9)';
-  });
-  assistBtn.addEventListener('mouseleave', () => {
-    assistBtn.style.background = 'rgba(30,80,140,0.35)';
-    assistBtn.style.borderColor = 'rgba(80,160,220,0.65)';
-  });
-  assistBtn.addEventListener('click', () => {
-    overlayEl.remove();
-    onConfirm(true);
-  });
   actionsEl.appendChild(assistBtn);
 
   // Cancel button: closes the dialog without creating a save.

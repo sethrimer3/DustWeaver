@@ -32,6 +32,7 @@ import type {
   EditorDustBoostJar,
   EditorDustSwarm,
   EditorRope,
+  EditorGuideDustPath,
   SelectedElement,
   BlockTheme,
   RopeDestructibility,
@@ -329,6 +330,16 @@ export function applyPropertyToElement(
           trigger.entries[idx].portraitSide = value;
         }
       }
+    }
+  } else if (el.type === 'guideDustPath') {
+    const paths = room.guideDustPaths ?? [];
+    const path: EditorGuideDustPath | undefined = paths.find(p => p.uid === el.uid);
+    if (path) {
+      if (prop === 'guideDustPath.loop') path.loop = value === 1 || value === 'true';
+      else if (prop === 'guideDustPath.visibleInGame') path.visibleInGame = value === 1 || value === 'true';
+      else if (prop === 'guideDustPath.moteCount' && !isNaN(numVal)) path.moteCount = Math.max(3, Math.min(20, Math.round(numVal)));
+      else if (prop === 'guideDustPath.moteSpeedFactor' && !isNaN(numVal)) path.moteSpeedFactor = Math.max(0.1, Math.min(5.0, numVal));
+      else if (prop === 'guideDustPath.opacityPct' && !isNaN(numVal)) path.opacityPct = Math.max(0, Math.min(100, Math.round(numVal)));
     }
   }
 }

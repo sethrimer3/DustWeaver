@@ -18,6 +18,7 @@ import {
   ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR, ROPE_INVALID_COLOR,
   CRUMBLE_VARIANT_CRACK_COLOR,
   DIALOGUE_TRIGGER_COLOR, DIALOGUE_TRIGGER_SELECTED,
+  GUIDE_DUST_PATH_COLOR, GUIDE_DUST_PATH_SELECTED, GUIDE_DUST_POINT_COLOR,
   drawBlockRect, drawMarker,
 } from './editorRendererHelpers';
 
@@ -438,5 +439,107 @@ export function drawEditorBackgroundBlocks(
     ctx.strokeRect(b.xBlock * bs + offsetXPx, b.yBlock * bs + offsetYPx, b.wBlock * bs, b.hBlock * bs);
     ctx.setLineDash([]);
     ctx.restore();
+  }
+}
+
+// ============================================================================
+// Guide dust paths
+// ============================================================================
+
+/**
+ * Draw guide dust paths in the editor as golden Catmull-Rom spline overlays
+ * with control point circles.
+ */
+export function drawEditorGuideDustPaths(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  state: EditorState,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  const paths = room.guideDustPaths ?? [];
+  if (paths.length === 0) return;
+
+  for (const path of paths) {
+    const pts = path.points;
+    const bs = BLOCK_SIZE_SMALL;
+    if (pts.length < 2) {
+      // Draw a lonely point
+      const sel = state.selectedElements.some(e => e.type === 'guideDustPath' && e.uid === path.uid);
+      ctx.save();
+      ctx.fillStyle = sel ? GUIDE_DUST_PATH_SELECTED : GUIDE_DUST_POINT_COLOR;
+      const r = Math.max(3, 4 * zoom);
+      const px = pts[0].xBlock * bs * zoom + offsetXPx;
+      const py = pts[0].yBlock * bs * zoom + offsetYPx;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
+
+    const isSel = state.selectedElements.some(e => e.type === 'guideDustPath' && e.uid === path.uid);
+    const color = isSel ? GUIDE_DUST_PATH_SELECTED : GUIDE_DUST_PATH_COLOR;
+
+    // Draw Catmull-Rom spline (sampled)
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = isSel ? 2.5 : 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+
+    const STEPS = 12;
+    const n = pts.length;
+    const segCount = path.loop ? n : n - 1;
+
+    for (let seg = 0; seg < segCount; seg++) {
+      const i0 = path.loop ? (seg - 1 + n) % n : Math.max(0, seg - 1);
+      const i1 = seg % n;
+      const i2 = path.loop ? (seg + 1) % n : Math.min(n - 1, seg + 1);
+      const i3 = path.loop ? (seg + 2) % n : Math.min(n - 1, seg + 2);
+      const x0 = pts[i0].xBlock * bs; const y0 = pts[i0].yBlock * bs;
+      const x1 = pts[i1].xBlock * bs; const y1 = pts[i1].yBlock * bs;
+      const x2 = pts[i2].xBlock * bs; const y2 = pts[i2].yBlock * bs;
+      const x3 = pts[i3].xBlock * bs; const y3 = pts[i3].yBlock * bs;
+      for (let step = 0; step <= STEPS; step++) {
+        const t = step / STEPS;
+        const t2 = t * t;
+        const t3 = t2 * t;
+        const x = 0.5 * ((2 * x1) + (-x0 + x2) * t + (2 * x0 - 5 * x1 + 4 * x2 - x3) * t2 + (-x0 + 3 * x1 - 3 * x2 + x3) * t3);
+        const y = 0.5 * ((2 * y1) + (-y0 + y2) * t + (2 * y0 - 5 * y1 + 4 * y2 - y3) * t2 + (-y0 + 3 * y1 - 3 * y2 + y3) * t3);
+        const px = x * zoom + offsetXPx;
+        const py = y * zoom + offsetYPx;
+        if (step === 0 && seg === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Draw control points
+    const selPointIdx = isSel ? (state.guideDustPathSelectedPointIndex ?? null) : null;
+    for (let i = 0; i < pts.length; i++) {
+      const px = pts[i].xBlock * bs * zoom + offsetXPx;
+      const py = pts[i].yBlock * bs * zoom + offsetYPx;
+      const isSelPoint = selPointIdx === i;
+      const r = Math.max(3, (isSelPoint ? 5 : 4) * zoom);
+      ctx.save();
+      ctx.fillStyle = isSelPoint ? GUIDE_DUST_PATH_SELECTED : GUIDE_DUST_POINT_COLOR;
+      ctx.strokeStyle = isSel ? '#fff' : 'rgba(255,200,60,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Label index
+      ctx.fillStyle = '#fff';
+      ctx.font = `${Math.max(7, 8 * zoom)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(i), px, py);
+      ctx.restore();
+    }
   }
 }

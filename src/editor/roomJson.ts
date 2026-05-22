@@ -23,6 +23,7 @@ import type {
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorLambdaAnchor,
   EditorFallingBlock, EditorDialogueTrigger, EditorBackgroundBlock, EditorSceneLight,
+  EditorGuideDustPath,
   RoomSongId,
 } from './editorState';
 import { AVAILABLE_SONGS } from '../audio/musicManager';
@@ -469,6 +470,16 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isLightBlockingFlag: b.isLightBlocking ? 1 : 0,
   }));
 
+  const guideDustPaths: EditorGuideDustPath[] = (json.guideDustPaths ?? []).map(p => ({
+    uid: uid++,
+    points: (p.points ?? []).map(pt => ({ xBlock: pt.xBlock, yBlock: pt.yBlock })),
+    loop: p.loop ?? false,
+    visibleInGame: p.visibleInGame !== false,
+    moteCount: p.moteCount ?? 8,
+    moteSpeedFactor: p.moteSpeedFactor ?? 1.0,
+    opacityPct: p.opacityPct ?? 100,
+  }));
+
   return {
     data: {
       id: json.id,
@@ -511,6 +522,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       fallingBlocks,
       dialogueTriggers,
       backgroundBlocks,
+      guideDustPaths,
     },
     nextUid: uid,
   };

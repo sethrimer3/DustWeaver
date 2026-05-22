@@ -41,6 +41,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     dialogueTrigger:  'dialogue_trigger',
     sceneLight:       'scene_light',
     backgroundBlock:  'background_block',
+    guideDustPath:    'guide_dust_path',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;

@@ -500,3 +500,7 @@ function _drawTransitionHoverArrow(
   ctx.restore();
 }
 
+
+export const GUIDE_DUST_PATH_COLOR    = 'rgba(255, 200, 60, 0.7)';
+export const GUIDE_DUST_PATH_SELECTED = 'rgba(255, 220, 80, 1.0)';
+export const GUIDE_DUST_POINT_COLOR   = 'rgba(255, 240, 100, 0.9)';

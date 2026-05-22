@@ -11,7 +11,7 @@ const ROPE_SEGMENTS_PER_BLOCK = 1.5;
 import {
   EditorState, EditorTool, allocateUid,
   PaletteItem, DecorationKind, EditorBouncePad, EditorKineticBlock, EditorSunbeam, EditorFallingBlock,
-  EditorDialogueTrigger,
+  EditorDialogueTrigger, EditorGuideDustPath,
 } from './editorState';
 import { createDefaultLight } from '../render/lighting/lightingTypes';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
@@ -543,6 +543,32 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       }
       state.pendingRopeAnchorXBlock = null;
       state.pendingRopeAnchorYBlock = null;
+    }
+  } else if (item.isGuideDustPathItem === 1) {
+    if (!room.guideDustPaths) room.guideDustPaths = [];
+
+    // If a guide dust path is currently selected and is still being extended,
+    // append the new point to it. Otherwise start a fresh path.
+    const activeSel = state.selectedElements.length === 1 ? state.selectedElements[0] : null;
+    const activePath: EditorGuideDustPath | undefined =
+      activeSel?.type === 'guideDustPath'
+        ? room.guideDustPaths.find(p => p.uid === activeSel.uid)
+        : undefined;
+
+    if (activePath) {
+      activePath.points.push({ xBlock: bx, yBlock: by });
+    } else {
+      const newPath: EditorGuideDustPath = {
+        uid: allocateUid(state),
+        points: [{ xBlock: bx, yBlock: by }],
+        loop: false,
+        visibleInGame: true,
+        moteCount: 8,
+        moteSpeedFactor: 1.0,
+        opacityPct: 100,
+      };
+      room.guideDustPaths.push(newPath);
+      state.selectedElements = [{ type: 'guideDustPath', uid: newPath.uid }];
     }
   }
 }

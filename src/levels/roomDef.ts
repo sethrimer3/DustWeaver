@@ -44,6 +44,7 @@ import type {
   RoomGrasshopperAreaDef,
   RoomFireflyAreaDef,
   RoomDialogueTriggerDef,
+  RoomGuideDustPathDef,
 } from './roomElementDefs';
 
 // ── Block theme and background types ─────────────────────────────────────────
@@ -461,6 +462,8 @@ export type {
   RoomDialogueEntryDef,
   RoomConversationDef,
   RoomDialogueTriggerDef,
+  RoomGuideDustPathPointDef,
+  RoomGuideDustPathDef,
 } from './roomElementDefs';
 export {
   DEFAULT_ROPE_SEGMENT_COUNT,
@@ -590,6 +593,8 @@ export interface RoomDef {
   backgroundBlocks?: readonly RoomBackgroundBlockDef[];
   /** Dialogue trigger zones — start a conversation when the player enters. */
   dialogueTriggers?: readonly RoomDialogueTriggerDef[];
+  /** Golden dust guide paths — Catmull-Rom splines with organic mote particles. */
+  guideDustPaths?: readonly RoomGuideDustPathDef[];
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default / undefined).

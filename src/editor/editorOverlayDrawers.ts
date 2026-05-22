@@ -53,6 +53,7 @@ export {
   drawEditorRopes,
   drawEditorDialogueTriggers,
   drawEditorBackgroundBlocks,
+  drawEditorGuideDustPaths,
 } from './editorZoneDrawers';
 
 // ============================================================================

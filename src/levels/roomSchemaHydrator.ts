@@ -322,6 +322,17 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     json.sceneLights = saved.sceneLights;
   }
 
+  if (saved.guidePaths && saved.guidePaths.length > 0) {
+    json.guideDustPaths = saved.guidePaths.map(p => ({
+      points: p.pts.map(([x, y]) => ({ xBlock: x, yBlock: y })),
+      loop: p.lp === 1 ? true : undefined,
+      moteCount: p.n,
+      moteSpeedFactor: p.sp,
+      opacityPct: p.op,
+      visibleInGame: p.vi === 0 ? false : undefined,
+    }));
+  }
+
   return json;
 }
 
