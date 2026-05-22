@@ -404,11 +404,12 @@ function drawBeetleSprite(
   sprite: HTMLImageElement,
   cx: number,
   cy: number,
-  halfSizePx: number,
+  halfWidthPx: number,
+  halfHeightPx: number,
 ): boolean {
   if (!isSpriteReady(sprite)) return false;
-  const drawW = halfSizePx * 2;
-  const drawH = halfSizePx * 2;
+  const drawW = halfWidthPx * 2;
+  const drawH = halfHeightPx * 2;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.drawImage(sprite, -drawW * 0.5, -drawH * 0.5, drawW, drawH);
@@ -419,30 +420,32 @@ function drawBeetleSprite(
 export function renderBeetleCrawling(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number,
-  halfSizePx: number,
+  halfWidthPx: number,
+  halfHeightPx: number,
   _normalX: number,
   _normalY: number,
   beetleAiState: number,
 ): void {
   const isIdleState = beetleAiState === 2;
   const sprite = isIdleState ? _beetleDefensiveSprite : _beetleWalkSprite;
-  if (!drawBeetleSprite(ctx, sprite, cx, cy, halfSizePx)) {
+  if (!drawBeetleSprite(ctx, sprite, cx, cy, halfWidthPx, halfHeightPx)) {
     ctx.fillStyle = '#c8900a';
-    ctx.fillRect(cx - halfSizePx, cy - halfSizePx, halfSizePx * 2, halfSizePx * 2);
+    ctx.fillRect(cx - halfWidthPx, cy - halfHeightPx, halfWidthPx * 2, halfHeightPx * 2);
   }
 }
 
 export function renderBeetleFlying(
   ctx: CanvasRenderingContext2D,
   cx: number, cy: number,
-  halfSizePx: number,
+  halfWidthPx: number,
+  halfHeightPx: number,
   beetleAiState: number,
 ): void {
   const isFlyToward = beetleAiState === 4;
   const sprite = isFlyToward ? _beetleDivingSprite : _beetleFlyingSprite;
-  if (!drawBeetleSprite(ctx, sprite, cx, cy, halfSizePx)) {
+  if (!drawBeetleSprite(ctx, sprite, cx, cy, halfWidthPx, halfHeightPx)) {
     ctx.fillStyle = '#c8900a';
-    ctx.fillRect(cx - halfSizePx, cy - halfSizePx, halfSizePx * 2, halfSizePx * 2);
+    ctx.fillRect(cx - halfWidthPx, cy - halfHeightPx, halfWidthPx * 2, halfHeightPx * 2);
   }
 }
 

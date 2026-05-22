@@ -8,7 +8,7 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { createClusterState } from '../sim/clusters/state';
 import { SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
 import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
-import { BEETLE_HALF_SIZE_WORLD } from '../sim/clusters/beetleAi';
+import { BEETLE_HALF_HEIGHT_WORLD, BEETLE_HALF_WIDTH_WORLD } from '../sim/clusters/beetleAi';
 import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../sim/clusters/bubbleAi';
 import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAIL_UPDATE_INTERVAL_TICKS } from '../sim/clusters/squareStampedeAi';
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
@@ -351,8 +351,8 @@ export function spawnEnemyClusters(
       enemyCluster.halfHeightWorld  = WHEEL_ENEMY_HALF_SIZE_WORLD;
     } else if (enemyDef.isBeetleFlag === 1) {
       enemyCluster.isBeetleFlag              = 1;
-      enemyCluster.halfWidthWorld            = BEETLE_HALF_SIZE_WORLD;
-      enemyCluster.halfHeightWorld           = BEETLE_HALF_SIZE_WORLD;
+      enemyCluster.halfWidthWorld            = BEETLE_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld           = BEETLE_HALF_HEIGHT_WORLD;
       // Start in a crawl state; AI will pick the first real state on the first tick.
       enemyCluster.beetleAiState             = 2; // idle briefly so it lands on a surface first
       enemyCluster.beetleAiStateTicks        = 30;
