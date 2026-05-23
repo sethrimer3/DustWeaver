@@ -134,8 +134,8 @@ function _drawDustLeaks(
     else if (edge === 1) { ex = sx + (h >>> 2) % sw; ey = sy + sh; }
     else if (edge === 2) { ex = sx - 1; ey = sy + (h >>> 2) % sh; }
     else               { ex = sx + sw; ey = sy + (h >>> 2) % sh; }
-    const alpha = (Math.sin((tick * 0.2 + i * 1.3) % (Math.PI * 2)) * 0.3 + 0.5).toFixed(2);
-    ctx.globalAlpha = parseFloat(alpha) * 0.6;
+    const alpha = (Math.sin((tick * 0.2 + i * 1.3) % (Math.PI * 2)) * 0.3 + 0.5) * 0.6;
+    ctx.globalAlpha = alpha;
     ctx.fillRect(ex, ey, 1, 1);
   }
   ctx.globalAlpha = 1.0;

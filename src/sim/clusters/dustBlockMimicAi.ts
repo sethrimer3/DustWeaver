@@ -16,6 +16,7 @@
 
 import { WorldState, MAX_DUST_BLOCK_MIMICS, MAX_MOTES_PER_DBM } from '../world';
 import { MAX_PARTICLES } from '../world';
+import { nextFloat, nextFloatRange } from '../rng';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
 import { getElementProfile } from '../particles/elementProfiles';
 import { ParticleKind } from '../particles/kinds';
@@ -58,6 +59,7 @@ import {
   DBM_SMALL_FORMATION_Y,
   DBM_LARGE_FORMATION_X,
   DBM_LARGE_FORMATION_Y,
+  DBM_WAKE_SHAKE_AMP_WORLD,
 } from './dustBlockMimicConfig';
 
 // ── State identifiers ──────────────────────────────────────────────────────
@@ -96,30 +98,20 @@ function _moteBase(slot: number): number {
   return slot * MAX_MOTES_PER_DBM;
 }
 
-/** Simple deterministic noise substitute — returns a value in [−1, 1]. */
-function _noise(seed: number): number {
-  let h = seed ^ (seed >>> 7);
-  h = Math.imul(h, 0x9e3779b9);
-  h = h ^ (h >>> 15);
-  h = Math.imul(h, 0x85ebca6b);
-  return ((h >>> 0) / 0xffffffff) * 2.0 - 1.0;
-}
-
-/** Emit burst particles from a world position (deterministic). */
+/** Emit burst particles from a world position (uses seeded world RNG). */
 function _emitBurst(
   world: WorldState,
   x: number,
   y: number,
   count: number,
   speed: number,
-  rngSeed: number,
 ): void {
   const profile = getElementProfile(ParticleKind.Physical);
   for (let i = 0; i < count; i++) {
     if (world.particleCount >= MAX_PARTICLES) break;
     const idx = world.particleCount++;
-    const angle = ((rngSeed * 2654435761 + i * 1234567) >>> 0) / 0xffffffff * Math.PI * 2;
-    const spd = speed * (0.5 + ((rngSeed ^ (i * 987654)) >>> 0) / 0xffffffff * 0.8);
+    const angle = nextFloat(world.rng) * Math.PI * 2;
+    const spd = speed * (0.5 + nextFloat(world.rng) * 0.8);
     world.positionXWorld[idx] = x;
     world.positionYWorld[idx] = y;
     world.velocityXWorld[idx] = Math.cos(angle) * spd;
@@ -133,9 +125,9 @@ function _emitBurst(
     world.ownerEntityId[idx] = -1;
     world.anchorAngleRad[idx] = 0;
     world.anchorRadiusWorld[idx] = 0;
-    world.lifetimeTicks[idx] = 36 + ((rngSeed ^ (i * 314159)) & 0x1f);
+    world.lifetimeTicks[idx] = 36 + Math.floor(nextFloat(world.rng) * 32);
     world.ageTicks[idx] = 0;
-    world.noiseTickSeed[idx] = (rngSeed ^ (i * 2654435761)) >>> 0;
+    world.noiseTickSeed[idx] = (nextFloat(world.rng) * 0xffffffff) >>> 0;
     world.behaviorMode[idx] = 0;
     world.particleDurability[idx] = profile.toughness;
     world.respawnDelayTicks[idx] = 0;
@@ -218,7 +210,7 @@ export function applyDustBlockMimicAI(world: WorldState): void {
       }
       if (t === DBM_DEATH_BURST_TICK) {
         _emitBurst(world, cluster.positionXWorld, cluster.positionYWorld,
-          DBM_DEATH_BURST_COUNT, DBM_DEATH_BURST_SPEED * 0.9, slot * 31337 + ci);
+          DBM_DEATH_BURST_COUNT, DBM_DEATH_BURST_SPEED * 0.9);
       }
       // Mote drift
       if (t < DBM_DEATH_DURATION_TICKS) {
@@ -273,7 +265,7 @@ export function applyDustBlockMimicAI(world: WorldState): void {
     // ── Wake ───────────────────────────────────────────────────────────────
     if (state === DBM_STATE_WAKE) {
       // Position: shake about spawn
-      const shakeAmt = Math.sin(stateTicks * 1.4) * (1.0 - stateTicks / DBM_WAKE_DURATION_TICKS) * 2.5;
+      const shakeAmt = Math.sin(stateTicks * 1.4) * (1.0 - stateTicks / DBM_WAKE_DURATION_TICKS) * DBM_WAKE_SHAKE_AMP_WORLD;
       cluster.positionXWorld = spawnX + shakeAmt;
       cluster.positionYWorld = spawnY;
       cluster.velocityXWorld = 0;
@@ -290,7 +282,7 @@ export function applyDustBlockMimicAI(world: WorldState): void {
         // Apply burst outward velocities to motes
         for (let m = 0; m < moteCount; m++) {
           const angle = ((m / moteCount) * Math.PI * 2)
-            + _noise(slot * 100 + m * 7) * 0.8;
+            + nextFloatRange(world.rng, -0.8, 0.8);
           world.dbmMoteVelXWorld[base + m] = Math.cos(angle) * DBM_BURST_SPEED;
           world.dbmMoteVelYWorld[base + m] = Math.sin(angle) * DBM_BURST_SPEED;
         }
@@ -372,8 +364,8 @@ export function applyDustBlockMimicAI(world: WorldState): void {
         const idleTargetX = cluster.positionXWorld + tx + oX;
         const idleTargetY = cluster.positionYWorld + ty + oY;
 
-        const jitterX = _noise(stateTicks * 13 + m * 7 + slot * 99) * DBM_MOTE_JITTER_SPEED * (1.0 / 60.0);
-        const jitterY = _noise(stateTicks * 11 + m * 5 + slot * 77) * DBM_MOTE_JITTER_SPEED * (1.0 / 60.0);
+        const jitterX = nextFloatRange(world.rng, -DBM_MOTE_JITTER_SPEED, DBM_MOTE_JITTER_SPEED) * (1.0 / 60.0);
+        const jitterY = nextFloatRange(world.rng, -DBM_MOTE_JITTER_SPEED, DBM_MOTE_JITTER_SPEED) * (1.0 / 60.0);
 
         const dvx = (idleTargetX - mx2) * DBM_MOTE_SPRING_BLEND + jitterX;
         const dvy = (idleTargetY - my2) * DBM_MOTE_SPRING_BLEND + jitterY;
@@ -603,7 +595,7 @@ export function applyDustBlockMimicHit(
     // Scatter motes on hit
     const moteCount = _moteCount(isLarge);
     for (let m = 0; m < moteCount; m++) {
-      const angle = ((m / moteCount) * Math.PI * 2) + _noise(world.tick * 7 + m);
+      const angle = ((m / moteCount) * Math.PI * 2) + nextFloatRange(world.rng, -Math.PI, Math.PI);
       world.dbmMoteVelXWorld[base + m] += Math.cos(angle) * DBM_HIT_SCATTER_SPEED;
       world.dbmMoteVelYWorld[base + m] += Math.sin(angle) * DBM_HIT_SCATTER_SPEED;
     }
