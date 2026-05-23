@@ -401,6 +401,7 @@ export function placeEnemyAtCursor(
       isDustConstellationFlag: 1,
       isDustConstellationLargeFlag: 1,
     });
+  } else if (item.id === 'enemy_radiant_tether') {
     room.enemies.push({
       uid: allocateUid(state),
       xBlock: bx,
