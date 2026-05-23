@@ -1,8 +1,12 @@
 /**
  * Radiant Web — rendering for boss body and beam attacks.
+ *
+ * Body is now rendered as a dust-core: glowing central sphere surrounded by
+ * orbiting/swarming dust motes.  Visual state is managed by dustCoreVisual.ts.
+ * During web-beam attacks, mote emphasis highlights the beam directions.
  */
 
-import { WorldSnapshot, ClusterSnapshot } from '../snapshot';
+import { WorldSnapshot } from '../snapshot';
 import { getRadiantWebBeamState } from '../../sim/clusters/radiantWebAi';
 import {
   RW_STATE_BEAM_GROW,
@@ -22,6 +26,12 @@ import {
   RW_BODY_RADIUS_WORLD,
   RW_DEBUG_ENABLED,
 } from '../../sim/clusters/radiantWebConfig';
+import {
+  updateAndRenderDustCore,
+  clearAllDustCoreVisualState,
+  normalizeDir,
+  type DustCoreConfig,
+} from './dustCoreVisual';
 
 const MAIN_BEAM_COLOR  = `rgba(180, 255, 220, ${RW_MAIN_BEAM_ALPHA})`;
 const MAIN_BEAM_GLOW   = `rgba(100, 255, 180, ${RW_MAIN_BEAM_ALPHA * 0.5})`;
@@ -31,9 +41,36 @@ const BRANCH_FULL_COLOR    = 'rgba(120, 255, 200, 1.0)';
 const BRANCH_GLOW_COLOR    = 'rgba(0, 200, 150, 0.4)';
 const ROPE_COLOR           = 'rgba(80, 220, 180, 0.75)';
 const PUFF_COLOR           = 'rgba(180, 255, 220, 1.0)';
-const BODY_COLOR_CORE      = '#eeffee';
-const BODY_COLOR_GLOW      = 'rgba(100, 255, 180, 0.3)';
-const BODY_COLOR_RING      = 'rgba(100, 255, 200, 0.6)';
+
+// ── Dust-core visual configuration for Radiant Web ────────────────────────────
+// Cool teal/green palette, matching the web beam colors.
+
+const _RW_CORE_CONFIG: DustCoreConfig = {
+  rings: [
+    {
+      count:        6,
+      baseRadius:   RW_BODY_RADIUS_WORLD * 1.8,
+      angularSpeed: 0.032,    // inner ring — faster
+      color:        '#80ffd0',
+      glowColor:    'rgba(80,255,180,0.28)',
+    },
+    {
+      count:        9,
+      baseRadius:   RW_BODY_RADIUS_WORLD * 3.2,
+      angularSpeed: 0.020,    // outer ring — slower
+      color:        '#a0ffe4',
+      glowColor:    'rgba(120,255,210,0.22)',
+    },
+  ],
+  coreColor:       '#d0fff0',
+  coreGlowColor:   'rgba(80,255,180,0.38)',
+  coreRadiusWorld: RW_BODY_RADIUS_WORLD,
+};
+
+/** Reset all Radiant Web visual state (call on room unload). */
+export function resetRadiantWebVisualState(): void {
+  clearAllDustCoreVisualState();
+}
 
 export function renderRadiantWeb(
   ctx: CanvasRenderingContext2D,
@@ -104,9 +141,55 @@ export function renderRadiantWeb(
       }
     }
 
-    if (cluster.isAliveFlag === 1) {
-      renderBossBody(ctx, screenX, screenY, scalePx, cluster);
+    // ── Boss body — dust core with orbiting motes ────────────────────────
+    // Compute attack emphasis from the average main beam direction during
+    // web-attack states; motes arrange into radial spokes matching the beams.
+    let atkDirX = 0;
+    let atkDirY = 0;
+    let emphasisT = 0.0;
+
+    const isAttacking = (
+      state === RW_STATE_BEAM_GROW   ||
+      state === RW_STATE_BRANCH_GROW ||
+      state === RW_STATE_ENERGIZED
+    );
+
+    if (isAttacking && beamState !== null) {
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+      for (let i = 0; i < beamState.mainBeams.length; i++) {
+        const mb = beamState.mainBeams[i];
+        if (mb.isActiveFlag === 0) continue;
+        sumX += mb.dirXWorld;
+        sumY += mb.dirYWorld;
+        count++;
+      }
+      if (count > 0) {
+        [atkDirX, atkDirY] = normalizeDir(sumX, sumY);
+        emphasisT = state === RW_STATE_ENERGIZED ? 0.7 : 0.4;
+      }
     }
+
+    const cfg: DustCoreConfig = {
+      ..._RW_CORE_CONFIG,
+      attackDirX:    atkDirX,
+      attackDirY:    atkDirY,
+      attackEmphasisT: emphasisT,
+    };
+
+    ctx.save();
+    updateAndRenderDustCore(
+      ctx,
+      cluster.entityId,
+      screenX, screenY,
+      scalePx,
+      cluster.isAliveFlag === 1,
+      cluster.healthPoints,
+      snapshot.tick,
+      cfg,
+    );
+    ctx.restore();
 
     if (isDebugMode || RW_DEBUG_ENABLED) {
       const stateNames = ['INACTIVE', 'BEAM_GROW', 'BRANCH_GROW', 'ENERGIZED', 'ROPE_DECAY', 'RESET', 'DEAD'];
@@ -232,37 +315,4 @@ function renderRope(
   ctx.restore();
 }
 
-function renderBossBody(
-  ctx: CanvasRenderingContext2D,
-  screenX: number, screenY: number,
-  scalePx: number,
-  cluster: ClusterSnapshot,
-): void {
-  const radiusPx = RW_BODY_RADIUS_WORLD * scalePx;
-  const healthRatio = cluster.maxHealthPoints > 0 ? cluster.healthPoints / cluster.maxHealthPoints : 1;
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(screenX, screenY, radiusPx * 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = BODY_COLOR_GLOW;
-  ctx.globalAlpha = 0.3 + healthRatio * 0.2;
-  ctx.fill();
-  const pulseT = (cluster.radiantWebStateTicks % 60) / 60;
-  const pulseRadius = radiusPx * (1.2 + 0.3 * Math.sin(pulseT * Math.PI * 2));
-  ctx.beginPath();
-  ctx.arc(screenX, screenY, pulseRadius, 0, Math.PI * 2);
-  ctx.strokeStyle = BODY_COLOR_RING;
-  ctx.lineWidth = 2;
-  ctx.globalAlpha = 0.5 + healthRatio * 0.3;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(screenX, screenY, radiusPx, 0, Math.PI * 2);
-  ctx.fillStyle = BODY_COLOR_CORE;
-  ctx.globalAlpha = 0.85 + healthRatio * 0.15;
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(screenX - radiusPx * 0.3, screenY - radiusPx * 0.3, radiusPx * 0.4, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-  ctx.fill();
-  ctx.globalAlpha = 1.0;
-  ctx.restore();
-}
+

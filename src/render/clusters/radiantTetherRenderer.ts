@@ -3,6 +3,9 @@
  *
  * Reads from the WorldSnapshot (cluster data) and the module-level chain state
  * exported by radiantTetherAi.  All rendering is on the 2D canvas.
+ *
+ * Body is now rendered as a dust-core: glowing central sphere surrounded by
+ * orbiting/swarming dust motes.  Visual state is managed by dustCoreVisual.ts.
  */
 
 import { WorldSnapshot, ClusterSnapshot } from '../snapshot';
@@ -22,17 +25,48 @@ import {
   RT_DEBUG_ENABLED,
 } from '../../sim/clusters/radiantTetherConfig';
 import { computeChainSagPoints } from './radiantTetherChainRenderer';
-import { getRadiantTetherBodySprite } from './enemyRenderers';
-import { isSpriteReady } from '../imageCache';
+import {
+  updateAndRenderDustCore,
+  clearAllDustCoreVisualState,
+  normalizeDir,
+  type DustCoreConfig,
+} from './dustCoreVisual';
 
 // ── Colors ──────────────────────────────────────────────────────────────────
 
 const CHAIN_COLOR_INNER   = '#fffde0';
 const CHAIN_COLOR_OUTER   = 'rgba(255, 240, 180, 0.5)';
 const BROKEN_CHAIN_COLOR  = 'rgba(255, 220, 120, 0.6)';
-const BODY_COLOR_CORE     = '#ffffff';
-const BODY_COLOR_GLOW     = 'rgba(255, 255, 220, 0.3)';
-const BODY_COLOR_RING     = 'rgba(255, 240, 200, 0.6)';
+
+// ── Dust-core visual configuration for Radiant Tether ───────────────────────
+// Warm amber/gold palette, consistent with chain colors.
+
+const _RT_CORE_CONFIG: DustCoreConfig = {
+  rings: [
+    {
+      count:        6,
+      baseRadius:   RT_BODY_RADIUS_WORLD * 1.8,
+      angularSpeed: 0.028,   // inner ring — faster
+      color:        '#ffd080',
+      glowColor:    'rgba(255,200,80,0.28)',
+    },
+    {
+      count:        9,
+      baseRadius:   RT_BODY_RADIUS_WORLD * 3.2,
+      angularSpeed: 0.018,   // outer ring — slower
+      color:        '#ffe4a0',
+      glowColor:    'rgba(255,230,140,0.22)',
+    },
+  ],
+  coreColor:       '#fff8d0',
+  coreGlowColor:   'rgba(255,240,160,0.38)',
+  coreRadiusWorld: RT_BODY_RADIUS_WORLD,
+};
+
+/** Reset all Radiant Tether visual state (call on room unload). */
+export function resetRadiantTetherVisualState(): void {
+  clearAllDustCoreVisualState();
+}
 
 // ── Main render entry point ─────────────────────────────────────────────────
 
@@ -80,10 +114,52 @@ export function renderRadiantTether(
       }
     }
 
-    // ── Boss body (floating sphere of light) ────────────────────────────
-    if (cluster.isAliveFlag === 1) {
-      renderBossBody(ctx, screenX, screenY, scalePx, cluster);
+    // ── Boss body — dust core with orbiting motes ────────────────────────
+    // Compute attack emphasis direction from chains (or base angle in active state).
+    let atkDirX = 0;
+    let atkDirY = 0;
+    let emphasisT = 0.0;
+
+    if (state === RT_STATE_ACTIVE || state === RT_STATE_RESET) {
+      // Average direction toward chain anchors from boss center
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+      if (chainState !== null) {
+        for (let i = 0; i < chainState.chains.length; i++) {
+          const ch = chainState.chains[i];
+          if (ch.isActiveFlag === 0) continue;
+          const dx = ch.anchorXWorld - cluster.positionXWorld;
+          const dy = ch.anchorYWorld - cluster.positionYWorld;
+          const [ndx, ndy] = normalizeDir(dx, dy);
+          sumX += ndx; sumY += ndy; count++;
+        }
+      }
+      if (count > 0) {
+        [atkDirX, atkDirY] = normalizeDir(sumX, sumY);
+        emphasisT = state === RT_STATE_ACTIVE ? 0.45 : 0.15;
+      }
     }
+
+    const cfg: DustCoreConfig = {
+      ..._RT_CORE_CONFIG,
+      attackDirX:    atkDirX,
+      attackDirY:    atkDirY,
+      attackEmphasisT: emphasisT,
+    };
+
+    ctx.save();
+    updateAndRenderDustCore(
+      ctx,
+      cluster.entityId,
+      screenX, screenY,
+      scalePx,
+      cluster.isAliveFlag === 1,
+      cluster.healthPoints,
+      snapshot.tick,
+      cfg,
+    );
+    ctx.restore();
 
     // ── Debug overlay ───────────────────────────────────────────────────
     if ((isDebugMode || RT_DEBUG_ENABLED) && chainState !== null) {
@@ -160,62 +236,6 @@ function renderBrokenChain(
   ctx.restore();
 }
 
-// ── Boss body ───────────────────────────────────────────────────────────────
-
-function renderBossBody(
-  ctx: CanvasRenderingContext2D,
-  screenX: number, screenY: number,
-  scalePx: number,
-  cluster: ClusterSnapshot,
-): void {
-  const radiusPx = RT_BODY_RADIUS_WORLD * scalePx;
-  const healthRatio = cluster.healthPoints / cluster.maxHealthPoints;
-  const bodySprite = getRadiantTetherBodySprite(cluster.radiantTetherState);
-
-  if (isSpriteReady(bodySprite)) {
-    const bodySizePx = radiusPx * 4;
-    ctx.save();
-    ctx.globalAlpha = 0.8 + healthRatio * 0.2;
-    ctx.drawImage(bodySprite, screenX - bodySizePx * 0.5, screenY - bodySizePx * 0.5, bodySizePx, bodySizePx);
-    ctx.globalAlpha = 1.0;
-    ctx.restore();
-    return;
-  }
-
-  // Outer glow
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(screenX, screenY, radiusPx * 2.5, 0, Math.PI * 2);
-  ctx.fillStyle = BODY_COLOR_GLOW;
-  ctx.globalAlpha = 0.3 + healthRatio * 0.2;
-  ctx.fill();
-
-  // Pulsing ring
-  const pulseT = (cluster.radiantTetherStateTicks % 60) / 60;
-  const pulseRadius = radiusPx * (1.2 + 0.3 * Math.sin(pulseT * Math.PI * 2));
-  ctx.beginPath();
-  ctx.arc(screenX, screenY, pulseRadius, 0, Math.PI * 2);
-  ctx.strokeStyle = BODY_COLOR_RING;
-  ctx.lineWidth = 2;
-  ctx.globalAlpha = 0.5 + healthRatio * 0.3;
-  ctx.stroke();
-
-  // Core body
-  ctx.beginPath();
-  ctx.arc(screenX, screenY, radiusPx, 0, Math.PI * 2);
-  ctx.fillStyle = BODY_COLOR_CORE;
-  ctx.globalAlpha = 0.85 + healthRatio * 0.15;
-  ctx.fill();
-
-  // Inner highlight
-  ctx.beginPath();
-  ctx.arc(screenX - radiusPx * 0.3, screenY - radiusPx * 0.3, radiusPx * 0.4, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-  ctx.fill();
-
-  ctx.globalAlpha = 1.0;
-  ctx.restore();
-}
 
 // ── Debug overlay ───────────────────────────────────────────────────────────
 
