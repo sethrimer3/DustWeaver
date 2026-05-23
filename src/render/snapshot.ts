@@ -97,6 +97,13 @@ interface _ReusableBacking {
   beeSwarmBeeYWorld: Float32Array;
   beeSwarmBeeVelXWorld: Float32Array;
   beeSwarmBeeVelYWorld: Float32Array;
+  constellationMoteXWorld: Float32Array;
+  constellationMoteYWorld: Float32Array;
+  constellationMoteVelXWorld: Float32Array;
+  constellationMoteVelYWorld: Float32Array;
+  constellationMoteTargetLocalX: Float32Array;
+  constellationMoteTargetLocalY: Float32Array;
+  constellationMotePulsePhaseRad: Float32Array;
   // Arrow Weave scalar fields updated each frame
   isArrowWeaveLoadingFlag: 0 | 1;
   arrowWeaveCurrentMoteCount: number;
@@ -235,6 +242,13 @@ function _makeEmptyCluster(): _MutableCluster {
     webSpiderState: 0,
     webSpiderAnchorXWorld: 0,
     webSpiderAnchorYWorld: 0,
+    isDustConstellationFlag: 0,
+    isDustConstellationLargeFlag: 0,
+    dustConstellationState: 0,
+    dustConstellationStateTicks: 0,
+    dustConstellationSlotIndex: -1,
+    dustConstellationPatternIndex: 0,
+    dustConstellationActiveBeamIndex: 0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -326,6 +340,13 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.webSpiderState                  = src.webSpiderState;
   dst.webSpiderAnchorXWorld           = src.webSpiderAnchorXWorld;
   dst.webSpiderAnchorYWorld           = src.webSpiderAnchorYWorld;
+  dst.isDustConstellationFlag         = src.isDustConstellationFlag;
+  dst.isDustConstellationLargeFlag    = src.isDustConstellationLargeFlag;
+  dst.dustConstellationState          = src.dustConstellationState;
+  dst.dustConstellationStateTicks     = src.dustConstellationStateTicks;
+  dst.dustConstellationSlotIndex      = src.dustConstellationSlotIndex;
+  dst.dustConstellationPatternIndex   = src.dustConstellationPatternIndex;
+  dst.dustConstellationActiveBeamIndex = src.dustConstellationActiveBeamIndex;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
@@ -444,6 +465,13 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     beeSwarmBeeYWorld:         world.beeSwarmBeeYWorld,
     beeSwarmBeeVelXWorld:      world.beeSwarmBeeVelXWorld,
     beeSwarmBeeVelYWorld:      world.beeSwarmBeeVelYWorld,
+    constellationMoteXWorld:        world.constellationMoteXWorld,
+    constellationMoteYWorld:        world.constellationMoteYWorld,
+    constellationMoteVelXWorld:     world.constellationMoteVelXWorld,
+    constellationMoteVelYWorld:     world.constellationMoteVelYWorld,
+    constellationMoteTargetLocalX:  world.constellationMoteTargetLocalX,
+    constellationMoteTargetLocalY:  world.constellationMoteTargetLocalY,
+    constellationMotePulsePhaseRad: world.constellationMotePulsePhaseRad,
     // Arrow Weave — typed-array fields are shared views (always up-to-date);
     // scalar fields are updated in updateSnapshotInPlace.
     isArrowWeaveLoadingFlag:    world.isArrowWeaveLoadingFlag,

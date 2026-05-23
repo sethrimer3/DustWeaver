@@ -59,6 +59,11 @@ export const MAX_BEE_SWARMS = 4;
 /** Number of bees in a single bee-swarm cluster. */
 export const BEES_PER_SWARM = 10;
 
+/** Maximum number of Dust Constellation Sentinel enemies per room. */
+export const MAX_DUST_CONSTELLATIONS = 6;
+/** Maximum motes per constellation instance (matches the large variant mote count). */
+export const MAX_MOTES_PER_CONSTELLATION = 10;
+
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
   /** Number of active spikes. */
@@ -303,6 +308,26 @@ export interface HazardWorldState {
    * Assigned at spawn time to spread bees around the orbit ring.
    */
   beeSwarmBeePhaseRad: Float32Array;
+
+  // ── Dust Constellation Sentinel ─────────────────────────────────────────────
+  /**
+   * X world position of each mote.
+   * Layout: [slotIndex * MAX_MOTES_PER_CONSTELLATION + moteIndex].
+   * Total length = MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION.
+   */
+  constellationMoteXWorld: Float32Array;
+  /** Y world position of each mote. Same layout as constellationMoteXWorld. */
+  constellationMoteYWorld: Float32Array;
+  /** X velocity of each mote (world units/s). Same layout. */
+  constellationMoteVelXWorld: Float32Array;
+  /** Y velocity of each mote (world units/s). Same layout. */
+  constellationMoteVelYWorld: Float32Array;
+  /** Formation target local X offset per mote. Set during gather/telegraph. */
+  constellationMoteTargetLocalX: Float32Array;
+  /** Formation target local Y offset per mote. */
+  constellationMoteTargetLocalY: Float32Array;
+  /** Per-mote brightness pulse phase (radians). */
+  constellationMotePulsePhaseRad: Float32Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -397,5 +422,12 @@ export function createHazardWorldState(): HazardWorldState {
     beeSwarmBeeVelXWorld:          new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     beeSwarmBeeVelYWorld:          new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     beeSwarmBeePhaseRad:           new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
+    constellationMoteXWorld:        new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
+    constellationMoteYWorld:        new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
+    constellationMoteVelXWorld:     new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
+    constellationMoteVelYWorld:     new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
+    constellationMoteTargetLocalX:  new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
+    constellationMoteTargetLocalY:  new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
+    constellationMotePulsePhaseRad: new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
   };
 }

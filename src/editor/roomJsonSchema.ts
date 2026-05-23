@@ -70,6 +70,8 @@ export interface RoomJsonEnemy {
   isGoldenMimicYFlipped?: boolean;
   isBeeSwarm?: boolean;
   isWebSpider?: boolean;
+  isDustConstellation?: boolean;
+  isDustConstellationLarge?: boolean;
 }
 
 export interface RoomJsonWall {

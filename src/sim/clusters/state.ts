@@ -548,6 +548,40 @@ export interface ClusterState {
   webSpiderCooldownTicks: number;
   /** Countdown ticks until next anchor search attempt (decremented in SEEK state). */
   webSpiderAnchorSearchTicks: number;
+
+  // ---- Dust Constellation Sentinel (isDustConstellationFlag === 1) ----------
+  /**
+   * 1 if this cluster is a Dust Constellation Sentinel — a floating enemy
+   * made of glowing dust motes that attacks by firing sequential beams.
+   */
+  isDustConstellationFlag: 0 | 1;
+  /** 1 for the large variant (more motes, higher HP). */
+  isDustConstellationLargeFlag: 0 | 1;
+  /**
+   * Current AI state:
+   *   0 = idle      — motes drift; waiting for activation
+   *   1 = gather    — motes converge to formation
+   *   2 = telegraph — frozen pattern; lines glow; no damage
+   *   3 = beam_fire — beams fire sequentially
+   *   4 = recover   — beams fade; cooldown begins
+   */
+  dustConstellationState: number;
+  /** Ticks elapsed in the current constellation state. */
+  dustConstellationStateTicks: number;
+  /** Remaining ticks before the next attack may begin. */
+  dustConstellationAttackCooldownTicks: number;
+  /** WorldState slot index for per-constellation mote arrays (-1 if unallocated). */
+  dustConstellationSlotIndex: number;
+  /** Index of the constellation pattern selected for the current attack cycle. */
+  dustConstellationPatternIndex: number;
+  /** Index of the currently-firing beam segment (0 = mote[0]→mote[1], etc.). */
+  dustConstellationActiveBeamIndex: number;
+  /** X of the spawn point — used as the home/leash origin (world units). */
+  dustConstellationSpawnXWorld: number;
+  /** Y of the spawn point — used as the home/leash origin (world units). */
+  dustConstellationSpawnYWorld: number;
+  /** Phase angle for the idle bobbing motion (radians). */
+  dustConstellationBobPhaseRad: number;
 }
 
 export function createClusterState(
@@ -707,5 +741,16 @@ export function createClusterState(
     webSpiderRopeLengthWorld: 0,
     webSpiderCooldownTicks: 0,
     webSpiderAnchorSearchTicks: 0,
+    isDustConstellationFlag: 0,
+    isDustConstellationLargeFlag: 0,
+    dustConstellationState: 0,
+    dustConstellationStateTicks: 0,
+    dustConstellationAttackCooldownTicks: 0,
+    dustConstellationSlotIndex: -1,
+    dustConstellationPatternIndex: 0,
+    dustConstellationActiveBeamIndex: 0,
+    dustConstellationSpawnXWorld: positionXWorld,
+    dustConstellationSpawnYWorld: positionYWorld,
+    dustConstellationBobPhaseRad: 0,
   };
 }

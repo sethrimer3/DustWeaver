@@ -239,6 +239,16 @@ export interface ClusterSnapshot {
   readonly webSpiderAnchorXWorld: number;
   /** World Y of the web anchor. */
   readonly webSpiderAnchorYWorld: number;
+
+  // ---- Dust Constellation Sentinel ----------------------------------------
+  readonly isDustConstellationFlag: 0 | 1;
+  readonly isDustConstellationLargeFlag: 0 | 1;
+  readonly dustConstellationState: number;
+  readonly dustConstellationStateTicks: number;
+  readonly dustConstellationSlotIndex: number;
+  readonly dustConstellationPatternIndex: number;
+  readonly dustConstellationActiveBeamIndex: number;
+
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -419,6 +429,15 @@ export interface WorldSnapshot {
   readonly beeSwarmBeeVelXWorld: Float32Array;
   /** Y velocity of each bee (world units/s). Same layout as beeSwarmBeeXWorld. */
   readonly beeSwarmBeeVelYWorld: Float32Array;
+
+  // ── Dust Constellation Sentinel arrays ───────────────────────────────────
+  readonly constellationMoteXWorld: Float32Array;
+  readonly constellationMoteYWorld: Float32Array;
+  readonly constellationMoteVelXWorld: Float32Array;
+  readonly constellationMoteVelYWorld: Float32Array;
+  readonly constellationMoteTargetLocalX: Float32Array;
+  readonly constellationMoteTargetLocalY: Float32Array;
+  readonly constellationMotePulsePhaseRad: Float32Array;
 
   // ── Arrow Weave state ─────────────────────────────────────────────────────
   /** 1 while the player is loading an arrow (holding secondary weave button). */

@@ -68,6 +68,8 @@ export function enemyTypeToFlags(
     isWheelEnemy:    type === 'wheel',
     isBeetle:        type === 'beetle',
     isWebSpider:     type === 'webSpider',
+    isDustConstellation:      type === 'dustConstellation' || type === 'dustConstellationLarge',
+    isDustConstellationLarge: type === 'dustConstellationLarge',
   };
 }
 

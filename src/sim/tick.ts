@@ -47,6 +47,7 @@ import { applySquareStampedeAI } from './clusters/squareStampedeAi';
 import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
 import { applyBeeSwarmAI } from './clusters/beeSwarmAi';
 import { applyWebSpiderAI } from './clusters/webSpiderAi';
+import { applyDustConstellationAI } from './clusters/dustConstellationAi';
 import { applySnakeAI } from './clusters/snakeAi';
 import {
   syncMoteQueueWithParticles,
@@ -147,6 +148,7 @@ export function tick(world: WorldState): void {
   // 0.5m. Bee Swarm AI — orbit swarm pattern, charge/contact damage
   applyBeeSwarmAI(world);
   applyWebSpiderAI(world);
+  applyDustConstellationAI(world);
   applySnakeAI(world);
 
   // 1. Clear accumulated forces from previous tick

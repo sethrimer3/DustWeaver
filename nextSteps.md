@@ -1340,3 +1340,42 @@ To surface these in the debug HUD, pass the result from `getWallJumpCandidate` t
 5. **Debug overlay**: Add a `showDustRenderMode` dev-flag to draw a 1px outline
    around particles rendered by `renderPixelLockedDust` vs the WebGL path, making
    it easy to confirm mode boundaries at runtime.
+
+---
+
+## Dust Constellation Sentinel (added)
+
+New procedural dust enemy composed of orbiting motes that freeze into a
+constellation pattern and fire sequential beams.  Two variants: small (5–7
+motes) and large (8–10 motes).
+
+### How to place / test
+1. Open the editor, switch to the **enemies** palette.
+2. Find **Dust Constellation Sentinel** (small) or **Dust Constellation
+   Sentinel (L)** (large).
+3. Place in a room and play-test via the editor's play button.
+
+### Key tuning constants (`src/sim/clusters/dustConstellationConfig.ts`)
+| Constant | Default | Purpose |
+|---|---|---|
+| `DC_ACTIVATION_RANGE_WORLD` | 320 | Aggro radius |
+| `DC_ATTACK_COOLDOWN_TICKS` | 180 | Ticks between attacks |
+| `DC_GATHER_DURATION_TICKS` | 60 | Mote convergence time |
+| `DC_TELEGRAPH_DURATION_TICKS` | 45 | Freeze + telegraph time |
+| `DC_BEAM_SEGMENT_DURATION_TICKS` | 18 | Duration per beam segment |
+| `DC_BEAM_DAMAGE` | 1 | Damage per beam hit |
+| `DC_SMALL_HP` / `DC_LARGE_HP` | 4 / 8 | Health per variant |
+| `DC_MOTE_RADIUS_WORLD` | 3 | Mote visual size |
+| `DC_BEAM_HITBOX_HALF_WORLD` | 6 | Beam collision half-thickness |
+
+### Optional future improvements
+1. **Mote-level hit flash**: Flash individual motes white on damage hit.
+2. **Per-mote death burst**: Spawn small dust particles from each mote on
+   enemy death rather than a single central burst.
+3. **Additional patterns**: Add cross/star/spiral patterns to the 3 existing
+   ones (triangle, zigzag, ring).
+4. **Variant 3 — Void Constellation**: Dark motes, wider beams, more health —
+   use the same architecture with different config constants.
+5. **Mote count persisted in save**: Currently mote count is derived from the
+   variant flag each spawn; storing it in room data is not needed but could
+   enable custom-count variants later.

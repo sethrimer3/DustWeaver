@@ -165,6 +165,10 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isSquareStampedeFlag: e.isSquareStampedeFlag,
       isGoldenMimicFlag: e.isGoldenMimicFlag ?? 0,
       isGoldenMimicYFlippedFlag: e.isGoldenMimicYFlippedFlag ?? 0,
+      isBeeSwarmFlag: e.isBeeSwarmFlag ?? 0,
+      isWebSpiderFlag: e.isWebSpiderFlag ?? 0,
+      isDustConstellationFlag: e.isDustConstellationFlag ?? 0,
+      isDustConstellationLargeFlag: e.isDustConstellationLargeFlag ?? 0,
     };
   });
 
