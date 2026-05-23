@@ -28,6 +28,7 @@ import { computeChainSagPoints } from './radiantTetherChainRenderer';
 import {
   updateAndRenderDustCore,
   clearAllDustCoreVisualState,
+  normalizeDir,
   type DustCoreConfig,
 } from './dustCoreVisual';
 
@@ -130,13 +131,12 @@ export function renderRadiantTether(
           if (ch.isActiveFlag === 0) continue;
           const dx = ch.anchorXWorld - cluster.positionXWorld;
           const dy = ch.anchorYWorld - cluster.positionYWorld;
-          const len = Math.sqrt(dx * dx + dy * dy);
-          if (len > 0.01) { sumX += dx / len; sumY += dy / len; count++; }
+          const [ndx, ndy] = normalizeDir(dx, dy);
+          sumX += ndx; sumY += ndy; count++;
         }
       }
       if (count > 0) {
-        const avgLen = Math.sqrt(sumX * sumX + sumY * sumY);
-        if (avgLen > 0.01) { atkDirX = sumX / avgLen; atkDirY = sumY / avgLen; }
+        [atkDirX, atkDirY] = normalizeDir(sumX, sumY);
         emphasisT = state === RT_STATE_ACTIVE ? 0.45 : 0.15;
       }
     }

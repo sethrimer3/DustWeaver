@@ -117,6 +117,20 @@ export function clearAllDustCoreVisualState(): void {
   _registry.clear();
 }
 
+/**
+ * Normalize a 2D vector to unit length.  Returns [x, y] unchanged if the
+ * vector length is below `epsilon` (avoids division by near-zero).
+ *
+ * Shared by Radiant Tether and Radiant Web to compute attack emphasis direction
+ * from the average of their active beam / chain vectors.
+ */
+export function normalizeDir(
+  x: number, y: number, epsilon = 0.01,
+): [number, number] {
+  const len = Math.sqrt(x * x + y * y);
+  return len > epsilon ? [x / len, y / len] : [0, 0];
+}
+
 // ── Init / retrieve ───────────────────────────────────────────────────────────
 
 function _getOrCreate(entityId: number, config: DustCoreConfig): _CoreState {
@@ -159,7 +173,19 @@ function _getOrCreate(entityId: number, config: DustCoreConfig): _CoreState {
 
 // ── Per-frame update ──────────────────────────────────────────────────────────
 
-// Simple deterministic noise, matching pattern used in dustConstellationAi.ts
+// Death-burst animation constants
+/** Fraction of burst window (0→1) at which the collapse phase ends and scatter begins. */
+const BURST_COLLAPSE_THRESHOLD = 0.6;
+/** Inward-collapse scale factor applied to baseRadius during collapse phase. */
+const BURST_INWARD_SCALE = 0.8;
+/** Outward-scatter scale factor applied to baseRadius during scatter phase. */
+const BURST_OUTWARD_SCALE = 3.0;
+
+/**
+ * Deterministic pseudo-random noise in [-1, 1] for the given integer seed.
+ * Uses the same Murmur-style integer hash as dustConstellationAi.ts.
+ * Returns the same value for the same seed on every call (no hidden state).
+ */
 function _noise(seed: number): number {
   let h = seed ^ (seed >>> 7);
   h = Math.imul(h, 0x9e3779b9);
@@ -231,11 +257,11 @@ function _update(state: _CoreState, isAlive: boolean, currentHp: number, config:
     // Death burst: push motes outward
     if (state.burstTicks > 0) {
       const t = state.burstTicks / BURST_DURATION_TICKS;
-      // Collapse briefly then burst outward (first 20% = inward, rest = outward)
-      const collapsePhase = t > 0.6 ? (1.0 - t) / 0.4 : 1.0;
-      const burstScale = t > 0.6
-        ? -((t - 0.6) / 0.4) * ring.baseRadius * 0.8    // inward (t near 1)
-        : (1.0 - t) * ring.baseRadius * 3.0;             // outward (t near 0)
+      // Collapse briefly then burst outward (first 40% = inward, rest = outward)
+      const collapsePhase = t > BURST_COLLAPSE_THRESHOLD ? (1.0 - t) / (1.0 - BURST_COLLAPSE_THRESHOLD) : 1.0;
+      const burstScale = t > BURST_COLLAPSE_THRESHOLD
+        ? -((t - BURST_COLLAPSE_THRESHOLD) / (1.0 - BURST_COLLAPSE_THRESHOLD)) * ring.baseRadius * BURST_INWARD_SCALE
+        : (1.0 - t) * ring.baseRadius * BURST_OUTWARD_SCALE;
       mo.radius = ring.baseRadius * collapsePhase + burstScale;
       mo.angle += state.burstVelX[m] * 0.02;
     }

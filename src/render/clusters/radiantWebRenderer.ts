@@ -29,6 +29,7 @@ import {
 import {
   updateAndRenderDustCore,
   clearAllDustCoreVisualState,
+  normalizeDir,
   type DustCoreConfig,
 } from './dustCoreVisual';
 
@@ -165,8 +166,7 @@ export function renderRadiantWeb(
         count++;
       }
       if (count > 0) {
-        const avgLen = Math.sqrt(sumX * sumX + sumY * sumY);
-        if (avgLen > 0.01) { atkDirX = sumX / avgLen; atkDirY = sumY / avgLen; }
+        [atkDirX, atkDirY] = normalizeDir(sumX, sumY);
         emphasisT = state === RW_STATE_ENERGIZED ? 0.7 : 0.4;
       }
     }
