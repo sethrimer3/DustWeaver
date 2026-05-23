@@ -27,6 +27,10 @@ export const MAX_BOUNCE_PADS = 64;
 
 import { MAX_KINETIC_BLOCKS } from './kineticBlocks/kineticBlockTypes';
 export { MAX_KINETIC_BLOCKS } from './kineticBlocks/kineticBlockTypes';
+import {
+  MAX_ORBITAL_DUST_CORES,
+  MOTES_PER_ODC_SLOT,
+} from './clusters/orbitalDustCoreConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -63,6 +67,15 @@ export const BEES_PER_SWARM = 10;
 export const MAX_DUST_CONSTELLATIONS = 6;
 /** Maximum motes per constellation instance (matches the large variant mote count). */
 export const MAX_MOTES_PER_CONSTELLATION = 10;
+
+// Orbital Dust Core capacity constants are imported from config and re-exported here
+// so all consumers can import from worldHazardState / world.ts as usual.
+export {
+  MAX_ORBITAL_DUST_CORES,
+  MAX_RINGS_PER_ODC,
+  MAX_MOTES_PER_RING_ODC,
+  MOTES_PER_ODC_SLOT,
+} from './clusters/orbitalDustCoreConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -328,6 +341,22 @@ export interface HazardWorldState {
   constellationMoteTargetLocalY: Float32Array;
   /** Per-mote brightness pulse phase (radians). */
   constellationMotePulsePhaseRad: Float32Array;
+
+  // ── Orbital Dust Core ─────────────────────────────────────────────────────
+  /**
+   * Current orbit angle per mote (radians).
+   * Layout: [slotIndex * MOTES_PER_ODC_SLOT + ringIndex * MAX_MOTES_PER_RING_ODC + moteIndex].
+   * Total length = MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT.
+   */
+  odcMoteAngleRad: Float32Array;
+  /** Current orbital radius per mote (world units). Same layout as odcMoteAngleRad. */
+  odcMoteRadiusWorld: Float32Array;
+  /** Target orbital radius per mote (world units). Same layout. */
+  odcMoteTargetRadiusWorld: Float32Array;
+  /** Alive flag per mote (1=alive, 0=dead). Same layout. */
+  odcMoteAliveFlag: Uint8Array;
+  /** Per-mote brightness pulse phase (radians). Same layout. */
+  odcMotePulsePhaseRad: Float32Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -429,5 +458,10 @@ export function createHazardWorldState(): HazardWorldState {
     constellationMoteTargetLocalX:  new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
     constellationMoteTargetLocalY:  new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
     constellationMotePulsePhaseRad: new Float32Array(MAX_DUST_CONSTELLATIONS * MAX_MOTES_PER_CONSTELLATION),
+    odcMoteAngleRad:              new Float32Array(MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT),
+    odcMoteRadiusWorld:           new Float32Array(MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT),
+    odcMoteTargetRadiusWorld:     new Float32Array(MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT),
+    odcMoteAliveFlag:             new Uint8Array(MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT),
+    odcMotePulsePhaseRad:         new Float32Array(MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT),
   };
 }

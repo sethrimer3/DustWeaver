@@ -22,6 +22,13 @@ import {
   getAvailableMoteSlotCount,
   depleteFirstNMoteSlots,
 } from '../motes/orderedMoteQueue';
+import { applyODCHit } from '../clusters/orbitalDustCoreAi';
+import {
+  ODC_SMALL_RING_RADII,
+  ODC_LARGE_RING_RADII,
+  ODC_SMALL_RING_COUNT,
+  ODC_LARGE_RING_COUNT,
+} from '../clusters/orbitalDustCoreConfig';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -273,6 +280,29 @@ function _checkArrowEnemyHit(world: WorldState, i: number): void {
   }
 }
 
+/** Routes an arrow hit to an ODC cluster at the exposed ring's position. */
+function _applyODCArrowHit(world: WorldState, ci: number, arrowIdx: number): void {
+  const cluster = world.clusters[ci];
+  const exposedRing = cluster.orbitalDustCoreExposedRing;
+  const isLarge = cluster.isOrbitalDustCoreLargeFlag;
+  const radii = isLarge === 1 ? ODC_LARGE_RING_RADII : ODC_SMALL_RING_RADII;
+  const ringCount = isLarge === 1 ? ODC_LARGE_RING_COUNT : ODC_SMALL_RING_COUNT;
+
+  // Compute hit point at the exposed ring radius in the direction arrow→cluster
+  const ax = world.arrowXWorld[arrowIdx];
+  const ay = world.arrowYWorld[arrowIdx];
+  const dx = cluster.positionXWorld - ax;
+  const dy = cluster.positionYWorld - ay;
+  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = dx / dist;
+  const ny = dy / dist;
+  const hitR = exposedRing >= ringCount ? 0 : radii[exposedRing];
+  const hitX = cluster.positionXWorld - nx * hitR;
+  const hitY = cluster.positionYWorld - ny * hitR;
+  applyODCHit(world, ci, hitX, hitY, ARROW_MOTE_DAMAGE);
+}
+
+
 /**
  * Ticks down the mote-hit sequence for an arrow and applies damage when each
  * mote delay expires.
@@ -291,10 +321,15 @@ function _tickArrowHitSequence(world: WorldState, i: number): void {
     if (ci >= 0 && ci < world.clusters.length) {
       const cluster = world.clusters[ci];
       if (cluster.isAliveFlag === 1) {
-        cluster.healthPoints -= ARROW_MOTE_DAMAGE;
-        if (cluster.healthPoints <= 0) {
-          cluster.healthPoints = 0;
-          cluster.isAliveFlag = 0;
+        if (cluster.isOrbitalDustCoreFlag === 1) {
+          // ODC handles ring protection; use arrow tip position for ring hit detection
+          _applyODCArrowHit(world, ci, i);
+        } else {
+          cluster.healthPoints -= ARROW_MOTE_DAMAGE;
+          if (cluster.healthPoints <= 0) {
+            cluster.healthPoints = 0;
+            cluster.isAliveFlag = 0;
+          }
         }
       }
     }

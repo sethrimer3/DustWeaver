@@ -104,6 +104,10 @@ interface _ReusableBacking {
   constellationMoteTargetLocalX: Float32Array;
   constellationMoteTargetLocalY: Float32Array;
   constellationMotePulsePhaseRad: Float32Array;
+  odcMoteAngleRad: Float32Array;
+  odcMoteRadiusWorld: Float32Array;
+  odcMoteAliveFlag: Uint8Array;
+  odcMotePulsePhaseRad: Float32Array;
   // Arrow Weave scalar fields updated each frame
   isArrowWeaveLoadingFlag: 0 | 1;
   arrowWeaveCurrentMoteCount: number;
@@ -249,6 +253,20 @@ function _makeEmptyCluster(): _MutableCluster {
     dustConstellationSlotIndex: -1,
     dustConstellationPatternIndex: 0,
     dustConstellationActiveBeamIndex: 0,
+    isOrbitalDustCoreFlag: 0,
+    isOrbitalDustCoreLargeFlag: 0,
+    orbitalDustCoreState: 0,
+    orbitalDustCoreStateTicks: 0,
+    orbitalDustCoreSlotIndex: -1,
+    orbitalDustCoreExposedRing: 0,
+    orbitalDustCoreRing0Health: -1,
+    orbitalDustCoreRing1Health: -1,
+    orbitalDustCoreRing2Health: -1,
+    orbitalDustCoreRing3Health: -1,
+    orbitalDustCorePulseRadius: 0,
+    orbitalDustCorePulseActiveFlag: 0,
+    orbitalDustCoreShieldFlashTicks: 0,
+    orbitalDustCoreCorePulseTicks: 0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -347,6 +365,20 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.dustConstellationSlotIndex      = src.dustConstellationSlotIndex;
   dst.dustConstellationPatternIndex   = src.dustConstellationPatternIndex;
   dst.dustConstellationActiveBeamIndex = src.dustConstellationActiveBeamIndex;
+  dst.isOrbitalDustCoreFlag           = src.isOrbitalDustCoreFlag;
+  dst.isOrbitalDustCoreLargeFlag      = src.isOrbitalDustCoreLargeFlag;
+  dst.orbitalDustCoreState            = src.orbitalDustCoreState;
+  dst.orbitalDustCoreStateTicks       = src.orbitalDustCoreStateTicks;
+  dst.orbitalDustCoreSlotIndex        = src.orbitalDustCoreSlotIndex;
+  dst.orbitalDustCoreExposedRing      = src.orbitalDustCoreExposedRing;
+  dst.orbitalDustCoreRing0Health      = src.orbitalDustCoreRing0Health;
+  dst.orbitalDustCoreRing1Health      = src.orbitalDustCoreRing1Health;
+  dst.orbitalDustCoreRing2Health      = src.orbitalDustCoreRing2Health;
+  dst.orbitalDustCoreRing3Health      = src.orbitalDustCoreRing3Health;
+  dst.orbitalDustCorePulseRadius      = src.orbitalDustCorePulseRadius;
+  dst.orbitalDustCorePulseActiveFlag  = src.orbitalDustCorePulseActiveFlag;
+  dst.orbitalDustCoreShieldFlashTicks = src.orbitalDustCoreShieldFlashTicks;
+  dst.orbitalDustCoreCorePulseTicks   = src.orbitalDustCoreCorePulseTicks;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
@@ -472,6 +504,10 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     constellationMoteTargetLocalX:  world.constellationMoteTargetLocalX,
     constellationMoteTargetLocalY:  world.constellationMoteTargetLocalY,
     constellationMotePulsePhaseRad: world.constellationMotePulsePhaseRad,
+    odcMoteAngleRad:        world.odcMoteAngleRad,
+    odcMoteRadiusWorld:     world.odcMoteRadiusWorld,
+    odcMoteAliveFlag:       world.odcMoteAliveFlag,
+    odcMotePulsePhaseRad:   world.odcMotePulsePhaseRad,
     // Arrow Weave — typed-array fields are shared views (always up-to-date);
     // scalar fields are updated in updateSnapshotInPlace.
     isArrowWeaveLoadingFlag:    world.isArrowWeaveLoadingFlag,

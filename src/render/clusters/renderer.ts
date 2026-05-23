@@ -464,6 +464,9 @@ export function renderClusters(
     } else if (cluster.isDustConstellationFlag === 1) {
       // Dust Constellation Sentinel body is rendered by dustConstellationRenderer.ts
       // Skip default cluster rendering; health bar drawn below.
+    } else if (cluster.isOrbitalDustCoreFlag === 1) {
+      // Orbital Dust Core body is rendered by orbitalDustCoreRenderer.ts
+      // Skip default cluster rendering; health bar drawn below.
     } else if (cluster.isWallSnakeFlag === 1 || cluster.isNeedleSnakeFlag === 1) {
       // Snake bodies are rendered in snakeRenderer.ts after the main cluster pass.
     } else {
@@ -545,6 +548,8 @@ export function renderClusters(
       barColor = '#ffcc00'; // amber-gold for bee swarm
     } else if (cluster.isDustConstellationFlag === 1) {
       barColor = '#aaddff'; // blue-white for dust constellation
+    } else if (cluster.isOrbitalDustCoreFlag === 1) {
+      barColor = '#ffaa44'; // amber-orange for orbital dust core
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

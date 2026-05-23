@@ -127,6 +127,8 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isWebSpider)      return 'webSpider';
   if (e.isDustConstellation && e.isDustConstellationLarge) return 'dustConstellationLarge';
   if (e.isDustConstellation) return 'dustConstellation';
+  if (e.isOrbitalDustCore && e.isOrbitalDustCoreLarge) return 'orbitalDustCoreLarge';
+  if (e.isOrbitalDustCore) return 'orbitalDustCore';
   return 'basic';
 }
 

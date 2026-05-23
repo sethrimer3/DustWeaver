@@ -62,6 +62,10 @@ export function tickEnemyMovement(
   if (cluster.isWebSpiderFlag === 1) {
     return;
   }
+  // Orbital Dust Core has its own movement — handled in orbitalDustCoreAi.ts
+  if (cluster.isOrbitalDustCoreFlag === 1) {
+    return;
+  }
   // Golden Mimic has its own movement AI — velocity set in goldenMimicAi.ts
   if (cluster.isGoldenMimicFlag === 1) {
     return;

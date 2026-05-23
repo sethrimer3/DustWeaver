@@ -40,6 +40,11 @@ import {
   applyHolyHealingAura,
 } from './elementEffectHandlers';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import { applyODCHit } from '../clusters/orbitalDustCoreAi';
+import {
+  ODC_SMALL_RING_RADII,
+  ODC_LARGE_RING_RADII,
+} from '../clusters/orbitalDustCoreConfig';
 
 // Particle half-size: 1/6th of the player's full width (8 world units) divided by 2.
 // Square hitbox side = 8/6 ≈ 1.333 wu; radius = side/2 ≈ 0.667 wu.
@@ -486,7 +491,13 @@ export function applyInterParticleForces(world: WorldState): void {
 
       const dxc = positionXWorld[i] - cluster.positionXWorld;
       const dyc = positionYWorld[i] - cluster.positionYWorld;
-      if (dxc * dxc + dyc * dyc < CORE_RADIUS_WORLD * CORE_RADIUS_WORLD) {
+      // ODC: expand collision radius to cover the outermost ring.
+      let collisionRadius = CORE_RADIUS_WORLD;
+      if (cluster.isOrbitalDustCoreFlag === 1) {
+        const odcRadii = cluster.isOrbitalDustCoreLargeFlag === 1 ? ODC_LARGE_RING_RADII : ODC_SMALL_RING_RADII;
+        collisionRadius = odcRadii[0] + 12; // outermost ring radius + band thickness
+      }
+      if (dxc * dxc + dyc * dyc < collisionRadius * collisionRadius) {
         const profile = getElementProfile(kindBuffer[i]);
         if (cluster.healthPoints > 0) {
           let damage: number;
@@ -511,6 +522,9 @@ export function applyInterParticleForces(world: WorldState): void {
               positionXWorld[i],
               positionYWorld[i],
             );
+          } else if (cluster.isOrbitalDustCoreFlag === 1 && attackerIsPlayer) {
+            // ODC: route player-particle damage through ring-aware hit handler
+            applyODCHit(world, ci, positionXWorld[i], positionYWorld[i], damage);
           } else {
             // When an enemy attack hits the player but armor absorbs all damage,
             // record the tick so the renderer can display a BLOCKED floater.

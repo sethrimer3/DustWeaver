@@ -1,4 +1,4 @@
-import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION } from '../sim/world';
+import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
@@ -22,6 +22,22 @@ import {
 import {
   DC_STATE_IDLE,
 } from '../sim/clusters/dustConstellationAi';
+import {
+  ODC_SMALL_RING_COUNT,
+  ODC_LARGE_RING_COUNT,
+  ODC_SMALL_MOTES_PER_RING,
+  ODC_LARGE_MOTES_PER_RING,
+  ODC_SMALL_RING_RADII,
+  ODC_LARGE_RING_RADII,
+  ODC_SMALL_RING_HEALTH,
+  ODC_LARGE_RING_HEALTH,
+  ODC_SMALL_CORE_HP,
+  ODC_LARGE_CORE_HP,
+  ODC_CORE_HIT_RADIUS_WORLD,
+  ODC_ATTACK_COOLDOWN_TICKS,
+  MAX_MOTES_PER_RING_ODC,
+} from '../sim/clusters/orbitalDustCoreConfig';
+import { ODC_STATE_IDLE } from '../sim/clusters/orbitalDustCoreAi';
 import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
 import {
   BIG_SNAKE_HALF_HEIGHT_WORLD,
@@ -564,6 +580,66 @@ export function spawnEnemyClusters(
           world.constellationMotePulsePhaseRad[base + mi] = phase;
         }
       }
+    } else if (enemyDef.isOrbitalDustCoreFlag === 1) {
+      // Allocate an ODC slot
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_ORBITAL_DUST_CORES; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].orbitalDustCoreSlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) { slotIndex = si; break; }
+      }
+
+      const isLarge = (enemyDef.isOrbitalDustCoreLargeFlag ?? 0) as 0 | 1;
+      const ringCount  = isLarge === 1 ? ODC_LARGE_RING_COUNT : ODC_SMALL_RING_COUNT;
+      const mprArr     = isLarge === 1 ? ODC_LARGE_MOTES_PER_RING : ODC_SMALL_MOTES_PER_RING;
+      const radiiArr   = isLarge === 1 ? ODC_LARGE_RING_RADII : ODC_SMALL_RING_RADII;
+      const healthArr  = isLarge === 1 ? ODC_LARGE_RING_HEALTH : ODC_SMALL_RING_HEALTH;
+      const coreHp     = isLarge === 1 ? ODC_LARGE_CORE_HP : ODC_SMALL_CORE_HP;
+
+      enemyCluster.isOrbitalDustCoreFlag           = 1;
+      enemyCluster.isOrbitalDustCoreLargeFlag       = isLarge;
+      enemyCluster.orbitalDustCoreSlotIndex         = slotIndex;
+      enemyCluster.orbitalDustCoreState             = ODC_STATE_IDLE;
+      enemyCluster.orbitalDustCoreStateTicks        = 0;
+      enemyCluster.orbitalDustCoreSpawnXWorld       = ex;
+      enemyCluster.orbitalDustCoreSpawnYWorld       = ey;
+      enemyCluster.orbitalDustCoreBobPhaseRad       = 0;
+      enemyCluster.orbitalDustCoreAttackCooldownTicks = ODC_ATTACK_COOLDOWN_TICKS;
+      enemyCluster.orbitalDustCoreExposedRing       = 0;
+      enemyCluster.orbitalDustCoreRing0Health       = healthArr[0] ?? -1;
+      enemyCluster.orbitalDustCoreRing1Health       = healthArr[1] ?? -1;
+      enemyCluster.orbitalDustCoreRing2Health       = healthArr[2] ?? -1;
+      enemyCluster.orbitalDustCoreRing3Health       = healthArr[3] ?? -1;
+      enemyCluster.orbitalDustCorePulseRadius       = 0;
+      enemyCluster.orbitalDustCorePulseActiveFlag   = 0;
+      enemyCluster.orbitalDustCorePulseHitPlayerFlag = 0;
+      enemyCluster.orbitalDustCoreShieldFlashTicks  = 0;
+      enemyCluster.orbitalDustCoreCorePulseTicks    = 0;
+      enemyCluster.halfWidthWorld                   = ODC_CORE_HIT_RADIUS_WORLD;
+      enemyCluster.halfHeightWorld                  = ODC_CORE_HIT_RADIUS_WORLD;
+      enemyCluster.healthPoints                     = coreHp;
+      enemyCluster.maxHealthPoints                  = coreHp;
+
+      // Initialise mote arrays: evenly-spaced angles per ring
+      if (slotIndex >= 0) {
+        for (let r = 0; r < ringCount; r++) {
+          const mpr = mprArr[r];
+          const radius = radiiArr[r];
+          for (let m = 0; m < mpr; m++) {
+            const idx = slotIndex * MOTES_PER_ODC_SLOT + r * MAX_MOTES_PER_RING_ODC + m;
+            const angle = (m / mpr) * Math.PI * 2;
+            world.odcMoteAngleRad[idx]      = angle;
+            world.odcMoteRadiusWorld[idx]   = radius;
+            world.odcMoteAliveFlag[idx]     = 1;
+            world.odcMotePulsePhaseRad[idx] = angle;
+          }
+        }
+      }
     }
 
     world.clusters.push(enemyCluster);
@@ -573,7 +649,8 @@ export function spawnEnemyClusters(
     const skipParticleSpawn =
       enemyCluster.isRadiantTetherFlag === 1 ||
       enemyCluster.isRadiantWebFlag    === 1 ||
-      enemyCluster.isDustConstellationFlag === 1;
+      enemyCluster.isDustConstellationFlag === 1 ||
+      enemyCluster.isOrbitalDustCoreFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }
