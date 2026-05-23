@@ -27,7 +27,8 @@ import {
   OPEN_AIR_SIDE_S,
   OPEN_AIR_SIDE_W,
 } from './proceduralBlockSprite';
-import { getDarknessAlphaFromAirDepth } from './ambientLightDepths';
+// getDarknessAlphaFromAirDepth is no longer used here; darkness alphas are
+// pre-computed by blockSpriteRenderer and passed in via ambientDepths.
 import {
   isSpriteReady,
   type BlockSpriteSet,
@@ -79,6 +80,11 @@ const _EMPTY_2X2: ReadonlyArray<readonly [string, number]> = [];
 export interface WallTilePassContext {
   walls: WallSnapshot;
   wallLayout: CachedWallLayout;
+  /**
+   * Pre-computed per-tile darkness alpha map (0 = fully lit, 1 = pitch black).
+   * Built by `blockSpriteRenderer._getAmbientDepths` via `buildAmbientDarknessAlphas`.
+   * Null when tinting is globally disabled (e.g. FullyLit / DarkRoom modes).
+   */
   ambientDepths: Map<string, number> | null;
   offsetXPx: number;
   offsetYPx: number;
@@ -250,8 +256,7 @@ export function render1x1Pass(
 
     if (coveredBy2x2Keys.has(tileKey)) {
       if (isBlockTintEnabled) {
-        const airDepth = (ambientDepths?.get(tileKey) ?? 0);
-        const darknessAlpha = getDarknessAlphaFromAirDepth(airDepth);
+        const darknessAlpha = (ambientDepths?.get(tileKey) ?? 0);
         if (darknessAlpha > 0) {
           ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
           ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -343,8 +348,7 @@ export function render1x1Pass(
     }
 
     if (isBlockTintEnabled) {
-      const airDepth = (ambientDepths?.get(tileKey) ?? 0);
-      const darknessAlpha = getDarknessAlphaFromAirDepth(airDepth);
+      const darknessAlpha = (ambientDepths?.get(tileKey) ?? 0);
       if (darknessAlpha > 0) {
         ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
         ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -444,8 +448,7 @@ export function renderPlatformPass(
 
     const tileKey = key;
     if (isBlockTintEnabled) {
-      const airDepth = (ambientDepths?.get(tileKey) ?? 0);
-      const darknessAlpha = getDarknessAlphaFromAirDepth(airDepth);
+      const darknessAlpha = (ambientDepths?.get(tileKey) ?? 0);
       if (darknessAlpha > 0) {
         ctx.fillStyle = `rgba(0,0,0,${darknessAlpha})`;
         ctx.fillRect(tileX, tileY, tileSizeScreen, tileSizeScreen);

@@ -400,6 +400,10 @@ export function startGameScreen(
         room.heightBlocks,
         room.ambientLightDirection,
         blockerKeys,
+        room.directionalBias,
+        room.sideExposureStrength,
+        room.minimumWallLight,
+        room.falloffPower,
       );
       setActiveDarkAmbientBlockers(darkBlockerKeys);
       FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);

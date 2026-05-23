@@ -241,6 +241,10 @@ export interface EditorUICallbacks {
   onBlockThemeChange: (theme: BlockTheme) => void;
   onLightingEffectChange: (effect: LightingEffect) => void;
   onAmbientLightDirectionChange: (direction: AmbientLightDirection | undefined) => void;
+  onDirectionalBiasChange: (value: number) => void;
+  onSideExposureStrengthChange: (value: number) => void;
+  onMinimumWallLightChange: (value: number) => void;
+  onFalloffPowerChange: (value: number) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onRoomSongChange: (songId: RoomSongId) => void;
   onConfirm: () => void;

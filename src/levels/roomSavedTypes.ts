@@ -214,6 +214,14 @@ export interface SavedRoomV2 {
    * Stored verbatim as the string literal.
    */
   ambientDir?: string;
+  /** Directional-bias blend param (0 = broad ambient, 1 = spotlight). */
+  dBias?: number;
+  /** Side-exposure strength for non-sky-connected air neighbours (0–1). */
+  sExp?: number;
+  /** Minimum wall brightness for air-adjacent tiles (0–1). */
+  minWL?: number;
+  /** Falloff power / gamma exponent (0.5–3). */
+  fpow?: number;
   /**
    * Sparse list of ambient-light blocker tile coordinates.
    * Each entry is [x, y] for a clear blocker, or [x, y, 1] for a dark blocker.

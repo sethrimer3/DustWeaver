@@ -309,6 +309,65 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   ambientDirSelect.addEventListener('click', (e) => e.stopPropagation());
   lightingDiv.appendChild(ambientDirSelect);
 
+  // ── Directional-lighting blend sliders ───────────────────────────────────
+  function makeSliderRow(
+    labelText: string,
+    min: number,
+    max: number,
+    step: number,
+    defaultVal: number,
+    onChange: (v: number) => void,
+  ): { row: HTMLElement; slider: HTMLInputElement; valueLabel: HTMLSpanElement } {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin-top: 6px;';
+    const headerRow = document.createElement('div');
+    headerRow.style.cssText = 'display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;';
+    const lbl = document.createElement('div');
+    lbl.textContent = labelText;
+    lbl.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7);`;
+    const valueLabel = document.createElement('span');
+    valueLabel.style.cssText = `font-size: 11px; color: ${TEXT_COLOR}; font-family: monospace;`;
+    valueLabel.textContent = defaultVal.toFixed(2);
+    headerRow.appendChild(lbl);
+    headerRow.appendChild(valueLabel);
+    row.appendChild(headerRow);
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = String(min);
+    slider.max = String(max);
+    slider.step = String(step);
+    slider.value = String(defaultVal);
+    slider.style.cssText = 'width: 100%; cursor: pointer;';
+    slider.addEventListener('input', () => {
+      const v = parseFloat(slider.value);
+      valueLabel.textContent = v.toFixed(2);
+      onChange(v);
+    });
+    slider.addEventListener('click', (e) => e.stopPropagation());
+    row.appendChild(slider);
+    return { row, slider, valueLabel };
+  }
+
+  const { row: dirBiasRow, slider: dirBiasSlider, valueLabel: dirBiasValLabel } =
+    makeSliderRow('Directional Bias', 0, 1, 0.01, 0.65,
+      (v) => callbacks?.onDirectionalBiasChange(v));
+  lightingDiv.appendChild(dirBiasRow);
+
+  const { row: sideExpRow, slider: sideExpSlider, valueLabel: sideExpValLabel } =
+    makeSliderRow('Side Exposure', 0, 1, 0.01, 0.45,
+      (v) => callbacks?.onSideExposureStrengthChange(v));
+  lightingDiv.appendChild(sideExpRow);
+
+  const { row: minWallRow, slider: minWallSlider, valueLabel: minWallValLabel } =
+    makeSliderRow('Min Wall Light', 0, 1, 0.01, 0.18,
+      (v) => callbacks?.onMinimumWallLightChange(v));
+  lightingDiv.appendChild(minWallRow);
+
+  const { row: falloffRow, slider: falloffSlider, valueLabel: falloffValLabel } =
+    makeSliderRow('Falloff Power', 0.5, 3, 0.05, 1.4,
+      (v) => callbacks?.onFalloffPowerChange(v));
+  lightingDiv.appendChild(falloffRow);
+
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
@@ -511,6 +570,14 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           // ── Lighting dropdown (room-level setting, top of lighting palette) ──
           lightingSelect.value = currentLighting;
           ambientDirSelect.value = state.roomData?.ambientLightDirection ?? '';
+          dirBiasSlider.value = String(state.roomData?.directionalBias ?? 0.65);
+          dirBiasValLabel.textContent  = (state.roomData?.directionalBias  ?? 0.65).toFixed(2);
+          sideExpSlider.value = String(state.roomData?.sideExposureStrength ?? 0.45);
+          sideExpValLabel.textContent  = (state.roomData?.sideExposureStrength ?? 0.45).toFixed(2);
+          minWallSlider.value = String(state.roomData?.minimumWallLight ?? 0.18);
+          minWallValLabel.textContent  = (state.roomData?.minimumWallLight  ?? 0.18).toFixed(2);
+          falloffSlider.value = String(state.roomData?.falloffPower ?? 1.4);
+          falloffValLabel.textContent  = (state.roomData?.falloffPower  ?? 1.40).toFixed(2);
           lastRenderedLightingEffect = currentLighting;
           paletteDiv.appendChild(lightingDiv);
         }
@@ -534,6 +601,21 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       if (document.activeElement !== ambientDirSelect) {
         ambientDirSelect.value = currentAmbientDir ?? '';
       }
+      // Sync slider values when they are not being actively dragged.
+      const syncSlider = (
+        slider: HTMLInputElement, valLabel: HTMLSpanElement,
+        val: number | undefined, def: number,
+      ): void => {
+        if (document.activeElement !== slider) {
+          const v = val ?? def;
+          slider.value = String(v);
+          valLabel.textContent = v.toFixed(2);
+        }
+      };
+      syncSlider(dirBiasSlider,  dirBiasValLabel,  state.roomData?.directionalBias,      0.65);
+      syncSlider(sideExpSlider,  sideExpValLabel,  state.roomData?.sideExposureStrength, 0.45);
+      syncSlider(minWallSlider,  minWallValLabel,  state.roomData?.minimumWallLight,      0.18);
+      syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,          1.40);
     }
 
     // Update palette selection highlight

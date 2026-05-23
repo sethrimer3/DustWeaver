@@ -366,6 +366,14 @@ export interface RoomJsonDef {
   lightingEffect?: LightingEffect;
   /** Ambient/skylight direction (see {@link AmbientLightDirection}). */
   ambientLightDirection?: AmbientLightDirection;
+  /** Directional-bias blend (0 = broad ambient, 1 = spotlight). Range 0–1. */
+  directionalBias?: number;
+  /** Side-exposure strength for non-sky-connected air neighbours. Range 0–1. */
+  sideExposureStrength?: number;
+  /** Minimum brightness fraction for tiles adjacent to open air. Range 0–1. */
+  minimumWallLight?: number;
+  /** Gamma-like exponent on the raw exposure value. Range 0.5–3. */
+  falloffPower?: number;
   /** Sparse tile-coord list of authored ambient-light blockers. */
   ambientLightBlockers?: RoomJsonAmbientLightBlocker[];
   /** Sparse list of authored local light sources. */

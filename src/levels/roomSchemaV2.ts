@@ -306,6 +306,10 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.ambientLightDirection) {
     out.ambientDir = json.ambientLightDirection;
   }
+  if (json.directionalBias    !== undefined) out.dBias = json.directionalBias;
+  if (json.sideExposureStrength !== undefined) out.sExp  = json.sideExposureStrength;
+  if (json.minimumWallLight   !== undefined) out.minWL = json.minimumWallLight;
+  if (json.falloffPower       !== undefined) out.fpow  = json.falloffPower;
   if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
     out.ambientBlockers = json.ambientLightBlockers.map(b =>
       b.isDark

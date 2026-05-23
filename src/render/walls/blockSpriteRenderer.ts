@@ -26,7 +26,11 @@ export type { ChunkCacheStats } from './chunkRenderCache';
 import type { BlockTheme, LightingEffect, AmbientLightDirection } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 import {
-  buildAmbientDepths,
+  buildAmbientDarknessAlphas,
+  DEFAULT_DIRECTIONAL_BIAS,
+  DEFAULT_SIDE_EXPOSURE_STRENGTH,
+  DEFAULT_MINIMUM_WALL_LIGHT,
+  DEFAULT_FALLOFF_POWER,
 } from './ambientLightDepths';
 import {
   BlockSpriteSet,
@@ -78,6 +82,12 @@ let _activeAmbientBlockerKeys: ReadonlySet<string> = new Set();
  */
 let _activeAmbientBlockerSig = '';
 
+// ── Directional-lighting blend parameters ────────────────────────────────────
+let _activeDirectionalBias       = DEFAULT_DIRECTIONAL_BIAS;
+let _activeSideExposureStrength  = DEFAULT_SIDE_EXPOSURE_STRENGTH;
+let _activeMinimumWallLight      = DEFAULT_MINIMUM_WALL_LIGHT;
+let _activeFalloffPower          = DEFAULT_FALLOFF_POWER;
+
 /**
  * Set the active world number for block sprite rendering.
  * Call this when the player enters a room without an explicit blockTheme.
@@ -126,6 +136,10 @@ export function getActiveProceduralMaterial(): string | null {
  * @param ambientBlockers  Optional set of `"col,row"` tile keys that are
  *                         opaque to ambient-light propagation. Authored data
  *                         from {@link import('../../levels/roomDef').RoomAmbientLightBlockerDef}.
+ * @param directionalBias       0 = broad ambient, 1 = strict spotlight.
+ * @param sideExposureStrength  Contribution of non-sky-connected air neighbours.
+ * @param minimumWallLight      Brightness floor for air-adjacent tiles (0–1).
+ * @param falloffPower          Exponent on the raw exposure value.
  */
 export function setActiveBlockLighting(
   effect: LightingEffect,
@@ -133,6 +147,10 @@ export function setActiveBlockLighting(
   roomHeightBlocks: number,
   direction?: AmbientLightDirection,
   ambientBlockers?: ReadonlySet<string>,
+  directionalBias?: number,
+  sideExposureStrength?: number,
+  minimumWallLight?: number,
+  falloffPower?: number,
 ): void {
   _activeLightingEffect = effect;
   _activeRoomWidthBlocks = roomWidthBlocks;
@@ -161,15 +179,20 @@ export function setActiveBlockLighting(
     _activeAmbientBlockerSig = arr.join(';');
   }
 
+  _activeDirectionalBias      = directionalBias      ?? DEFAULT_DIRECTIONAL_BIAS;
+  _activeSideExposureStrength = sideExposureStrength  ?? DEFAULT_SIDE_EXPOSURE_STRENGTH;
+  _activeMinimumWallLight     = minimumWallLight      ?? DEFAULT_MINIMUM_WALL_LIGHT;
+  _activeFalloffPower         = falloffPower          ?? DEFAULT_FALLOFF_POWER;
+
   _invalidateBakedWallCanvas();
 }
 
 // ── Per-frame reusable collections (pre-allocated to avoid GC pressure) ───────
 
 /**
- * Returns the per-tile ambient-light depth map for the current lighting
- * configuration, memoised per `(roomSize × direction × blockerSet)` so the
- * common "camera panning, nothing changed" path costs one Map lookup.
+ * Returns the per-tile darkness-alpha map for the current lighting
+ * configuration, memoised per `(roomSize × direction × blockerSet × params)` so
+ * the common "camera panning, nothing changed" path costs one Map lookup.
  *
  * When the layout cache itself is rebuilt (signature change — e.g. a
  * breakable wall's AABB was zeroed on destruction), this memo is discarded
@@ -177,11 +200,21 @@ export function setActiveBlockLighting(
  * pockets on the next frame.
  */
 function _getAmbientDepths(layout: CachedWallLayout): Map<string, number> {
-  const memoKey = `${_activeRoomWidthBlocks}x${_activeRoomHeightBlocks}|${_activeAmbientDirection}|${_activeAmbientBlockerSig}`;
+  const memoKey = `${_activeRoomWidthBlocks}x${_activeRoomHeightBlocks}|${_activeAmbientDirection}|${_activeAmbientBlockerSig}|${_activeDirectionalBias}|${_activeSideExposureStrength}|${_activeMinimumWallLight}|${_activeFalloffPower}`;
   const cached = layout.ambientDepthsByKey.get(memoKey);
   if (cached !== undefined) return cached;
 
-  const depths = buildAmbientDepths(layout.occupied, _activeAmbientBlockerKeys, _activeAmbientDirection, _activeRoomWidthBlocks, _activeRoomHeightBlocks);
+  const depths = buildAmbientDarknessAlphas(
+    layout.occupied,
+    _activeAmbientBlockerKeys,
+    _activeAmbientDirection,
+    _activeRoomWidthBlocks,
+    _activeRoomHeightBlocks,
+    _activeDirectionalBias,
+    _activeSideExposureStrength,
+    _activeMinimumWallLight,
+    _activeFalloffPower,
+  );
   layout.ambientDepthsByKey.set(memoKey, depths);
   return depths;
 }

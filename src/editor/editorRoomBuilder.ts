@@ -243,6 +243,10 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       kind: d.kind,
     })),
     ambientLightDirection: data.ambientLightDirection,
+    directionalBias:       data.directionalBias,
+    sideExposureStrength:  data.sideExposureStrength,
+    minimumWallLight:      data.minimumWallLight,
+    falloffPower:          data.falloffPower,
     ambientLightBlockers: (data.ambientLightBlockers ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,
