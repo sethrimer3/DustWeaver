@@ -70,6 +70,18 @@ let _navSolidGrid = new Uint8Array(0);
 const _neighborDx = [-1, 0, 1, -1, 1, -1, 0, 1] as const;
 const _neighborDy = [-1, -1, -1, 0, 0, 1, 1, 1] as const;
 
+// Pre-allocated A* scratch buffers for up to 256×128 = 32768 cells.
+// Sized conservatively; DustWeaver rooms are typically well under this limit.
+const _ASTAR_MAX_CELLS = 32768;
+const _astarGScore    = new Float32Array(_ASTAR_MAX_CELLS);
+const _astarFScore    = new Float32Array(_ASTAR_MAX_CELLS);
+const _astarCameFrom  = new Int32Array(_ASTAR_MAX_CELLS);
+const _astarOpenFlags = new Uint8Array(_ASTAR_MAX_CELLS);
+const _astarClosed    = new Uint8Array(_ASTAR_MAX_CELLS);
+// Open-set as a flat typed array; swap-remove avoids O(n) splice.
+const _astarOpenSet   = new Int32Array(MAX_PATH_SEARCH_NODES + 8);
+let   _astarOpenCount = 0;
+
 export function resetSnakeRuntimeState(): void {
   _snakeSegmentsByEntityId.clear();
   _snakePathByEntityId.clear();
@@ -335,44 +347,46 @@ function computePathToTarget(
   const width = world.bgWallGridWidth;
   const height = world.bgWallGridHeight;
   const cellCount = width * height;
-  const gScore = new Float32Array(cellCount);
-  const fScore = new Float32Array(cellCount);
-  const cameFrom = new Int32Array(cellCount);
-  const openFlags = new Uint8Array(cellCount);
-  const closedFlags = new Uint8Array(cellCount);
-  for (let i = 0; i < cellCount; i++) {
-    gScore[i] = Infinity;
-    fScore[i] = Infinity;
-    cameFrom[i] = -1;
-  }
+
+  // Fill only the cells we actually need from the pre-allocated buffers.
+  // Using fill() on the full slice is cheaper than a conditional branch per cell.
+  _astarGScore.fill(Infinity, 0, cellCount);
+  _astarFScore.fill(Infinity, 0, cellCount);
+  _astarCameFrom.fill(-1, 0, cellCount);
+  _astarOpenFlags.fill(0, 0, cellCount);
+  _astarClosed.fill(0, 0, cellCount);
 
   const startIdx = getCellIndex(startCol, startRow, width);
   const targetIdx = getCellIndex(targetCol, targetRow, width);
-  const openSet: number[] = [startIdx];
-  openFlags[startIdx] = 1;
-  gScore[startIdx] = 0;
-  fScore[startIdx] = estimateHeuristic(startCol, startRow, targetCol, targetRow);
+
+  _astarOpenCount = 0;
+  _astarOpenSet[_astarOpenCount++] = startIdx;
+  _astarOpenFlags[startIdx] = 1;
+  _astarGScore[startIdx] = 0;
+  _astarFScore[startIdx] = estimateHeuristic(startCol, startRow, targetCol, targetRow);
 
   let visitedCount = 0;
   let bestIdx = startIdx;
-  let bestHeuristic = fScore[startIdx];
+  let bestHeuristic = _astarFScore[startIdx];
 
-  while (openSet.length > 0 && visitedCount < MAX_PATH_SEARCH_NODES) {
-    let bestOpenIndex = 0;
-    let currentIdx = openSet[0];
-    let currentScore = fScore[currentIdx];
-    for (let i = 1; i < openSet.length; i++) {
-      const idx = openSet[i];
-      if (fScore[idx] < currentScore) {
-        currentScore = fScore[idx];
+  while (_astarOpenCount > 0 && visitedCount < MAX_PATH_SEARCH_NODES) {
+    // Linear scan for minimum-fScore node; swap-remove (O(1)) instead of splice.
+    let bestOpenPos = 0;
+    let currentIdx = _astarOpenSet[0];
+    let currentScore = _astarFScore[currentIdx];
+    for (let i = 1; i < _astarOpenCount; i++) {
+      const idx = _astarOpenSet[i];
+      if (_astarFScore[idx] < currentScore) {
+        currentScore = _astarFScore[idx];
         currentIdx = idx;
-        bestOpenIndex = i;
+        bestOpenPos = i;
       }
     }
 
-    openSet.splice(bestOpenIndex, 1);
-    openFlags[currentIdx] = 0;
-    closedFlags[currentIdx] = 1;
+    // Swap-remove: replace chosen slot with last element, shrink count.
+    _astarOpenSet[bestOpenPos] = _astarOpenSet[--_astarOpenCount];
+    _astarOpenFlags[currentIdx] = 0;
+    _astarClosed[currentIdx] = 1;
     visitedCount += 1;
 
     const currentCol = currentIdx % width;
@@ -393,32 +407,35 @@ function computePathToTarget(
       if (!isCellInBounds(nextCol, nextRow, width, height)) continue;
       if (!canTraverseBetween(world, currentCol, currentRow, nextCol, nextRow)) continue;
       const nextIdx = getCellIndex(nextCol, nextRow, width);
-      if (closedFlags[nextIdx] === 1) continue;
+      if (_astarClosed[nextIdx] === 1) continue;
 
-      const tentativeScore = gScore[currentIdx] + computeStepCost(world, currentCol, currentRow, nextCol, nextRow);
-      if (tentativeScore >= gScore[nextIdx]) continue;
+      const tentativeScore = _astarGScore[currentIdx] + computeStepCost(world, currentCol, currentRow, nextCol, nextRow);
+      if (tentativeScore >= _astarGScore[nextIdx]) continue;
 
-      cameFrom[nextIdx] = currentIdx;
-      gScore[nextIdx] = tentativeScore;
-      fScore[nextIdx] = tentativeScore + estimateHeuristic(nextCol, nextRow, targetCol, targetRow);
-      if (openFlags[nextIdx] === 0) {
-        openSet.push(nextIdx);
-        openFlags[nextIdx] = 1;
+      _astarCameFrom[nextIdx] = currentIdx;
+      _astarGScore[nextIdx] = tentativeScore;
+      _astarFScore[nextIdx] = tentativeScore + estimateHeuristic(nextCol, nextRow, targetCol, targetRow);
+      if (_astarOpenFlags[nextIdx] === 0) {
+        if (_astarOpenCount < _astarOpenSet.length) {
+          _astarOpenSet[_astarOpenCount++] = nextIdx;
+        }
+        _astarOpenFlags[nextIdx] = 1;
       }
     }
   }
 
   const pathState = ensureSnakePathState(cluster);
-  const reverseCols = new Int16Array(MAX_STORED_PATH_NODES);
-  const reverseRows = new Int16Array(MAX_STORED_PATH_NODES);
+
+  // Walk the came-from chain directly into pathState (reversed: target→start),
+  // then reverse in-place. No temporary allocation needed.
   let reverseLength = 0;
   let walkIdx = bestIdx;
   while (walkIdx >= 0 && reverseLength < MAX_STORED_PATH_NODES) {
-    reverseCols[reverseLength] = walkIdx % width;
-    reverseRows[reverseLength] = Math.floor(walkIdx / width);
+    pathState.cols[reverseLength] = walkIdx % width;
+    pathState.rows[reverseLength] = Math.floor(walkIdx / width);
     reverseLength += 1;
     if (walkIdx === startIdx) break;
-    walkIdx = cameFrom[walkIdx];
+    walkIdx = _astarCameFrom[walkIdx];
   }
 
   if (reverseLength <= 0) {
@@ -427,13 +444,14 @@ function computePathToTarget(
     return false;
   }
 
+  // Reverse in-place: swap cols/rows from both ends toward center.
+  for (let lo = 0, hi = reverseLength - 1; lo < hi; lo++, hi--) {
+    const tc = pathState.cols[lo]; pathState.cols[lo] = pathState.cols[hi]; pathState.cols[hi] = tc;
+    const tr = pathState.rows[lo]; pathState.rows[lo] = pathState.rows[hi]; pathState.rows[hi] = tr;
+  }
+
   pathState.length = reverseLength;
   pathState.index = reverseLength > 1 ? 1 : 0;
-  for (let i = 0; i < reverseLength; i++) {
-    const srcIndex = reverseLength - 1 - i;
-    pathState.cols[i] = reverseCols[srcIndex];
-    pathState.rows[i] = reverseRows[srcIndex];
-  }
   return bestIdx === targetIdx || reverseLength > 1;
 }
 

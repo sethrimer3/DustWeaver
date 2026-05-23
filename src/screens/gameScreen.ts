@@ -506,7 +506,13 @@ export function startGameScreen(
       const _t0 = import.meta.env.DEV ? performance.now() : 0;
       world.bgWallGridWidth  = room.widthBlocks;
       world.bgWallGridHeight = room.heightBlocks;
-      world.bgWallGrid = new Uint8Array(room.widthBlocks * room.heightBlocks);
+      // Reuse the existing buffer if dimensions haven't changed; otherwise allocate once.
+      const bgWallCellCount = room.widthBlocks * room.heightBlocks;
+      if (world.bgWallGrid.length !== bgWallCellCount) {
+        world.bgWallGrid = new Uint8Array(bgWallCellCount);
+      } else {
+        world.bgWallGrid.fill(0);
+      }
       if (room.backgroundBlocks) {
         for (const b of room.backgroundBlocks) {
           for (let dy = 0; dy < b.hBlock; dy++) {
