@@ -326,6 +326,13 @@ export interface RoomEnemyDef {
   isWallSnakeFlag?: 0 | 1;
   /** 1 if this enemy is a Needle Snake — thin, fast, erratic wall-climber. */
   isNeedleSnakeFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a Dust Constellation Sentinel — a cluster of glowing
+   * dust motes that attacks by freezing into patterns and firing chained beams.
+   */
+  isDustConstellationFlag?: 0 | 1;
+  /** 1 for the large Dust Constellation Sentinel variant (more motes, higher HP). */
+  isDustConstellationLargeFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

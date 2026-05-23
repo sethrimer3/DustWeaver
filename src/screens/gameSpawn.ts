@@ -1,4 +1,4 @@
-import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM } from '../sim/world';
+import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
@@ -13,6 +13,15 @@ import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS } from '../si
 import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAIL_UPDATE_INTERVAL_TICKS } from '../sim/clusters/squareStampedeAi';
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
 import { BEE_HALF_WIDTH_WORLD, BEE_HALF_HEIGHT_WORLD } from '../sim/clusters/beeSwarmAi';
+import {
+  DC_SMALL_HP,
+  DC_LARGE_HP,
+  DC_HIT_RADIUS_WORLD,
+  DC_ATTACK_COOLDOWN_TICKS,
+} from '../sim/clusters/dustConstellationConfig';
+import {
+  DC_STATE_IDLE,
+} from '../sim/clusters/dustConstellationAi';
 import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
 import {
   BIG_SNAKE_HALF_HEIGHT_WORLD,
@@ -506,6 +515,55 @@ export function spawnEnemyClusters(
       enemyCluster.webSpiderRopeLengthWorld   = 0;
       enemyCluster.webSpiderCooldownTicks     = 0;
       enemyCluster.webSpiderAnchorSearchTicks = 0;
+    } else if (enemyDef.isDustConstellationFlag === 1) {
+      // Allocate a constellation slot
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_DUST_CONSTELLATIONS; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].dustConstellationSlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) { slotIndex = si; break; }
+      }
+
+      const isLarge = (enemyDef.isDustConstellationLargeFlag ?? 0) as 0 | 1;
+      const hp = isLarge === 1 ? DC_LARGE_HP : DC_SMALL_HP;
+
+      enemyCluster.isDustConstellationFlag        = 1;
+      enemyCluster.isDustConstellationLargeFlag   = isLarge;
+      enemyCluster.dustConstellationSlotIndex     = slotIndex;
+      enemyCluster.dustConstellationState         = DC_STATE_IDLE;
+      enemyCluster.dustConstellationStateTicks    = 0;
+      enemyCluster.dustConstellationAttackCooldownTicks = DC_ATTACK_COOLDOWN_TICKS;
+      enemyCluster.dustConstellationPatternIndex  = 0;
+      enemyCluster.dustConstellationActiveBeamIndex = 0;
+      enemyCluster.dustConstellationSpawnXWorld   = ex;
+      enemyCluster.dustConstellationSpawnYWorld   = ey;
+      enemyCluster.dustConstellationBobPhaseRad   = 0;
+      enemyCluster.halfWidthWorld                 = DC_HIT_RADIUS_WORLD;
+      enemyCluster.halfHeightWorld                = DC_HIT_RADIUS_WORLD;
+      enemyCluster.healthPoints                   = hp;
+      enemyCluster.maxHealthPoints                = hp;
+
+      // Initialise mote positions in a ring around the spawn point
+      if (slotIndex >= 0) {
+        const moteCount = isLarge === 1 ? 10 : 6;
+        const base = slotIndex * MAX_MOTES_PER_CONSTELLATION;
+        for (let mi = 0; mi < moteCount; mi++) {
+          const phase = (mi / moteCount) * Math.PI * 2;
+          const r     = 16.0;
+          world.constellationMoteXWorld[base + mi]        = ex + Math.cos(phase) * r;
+          world.constellationMoteYWorld[base + mi]        = ey + Math.sin(phase) * r * 0.6;
+          world.constellationMoteVelXWorld[base + mi]     = 0;
+          world.constellationMoteVelYWorld[base + mi]     = 0;
+          world.constellationMoteTargetLocalX[base + mi]  = Math.cos(phase) * r;
+          world.constellationMoteTargetLocalY[base + mi]  = Math.sin(phase) * r * 0.6;
+          world.constellationMotePulsePhaseRad[base + mi] = phase;
+        }
+      }
     }
 
     world.clusters.push(enemyCluster);
@@ -514,7 +572,8 @@ export function spawnEnemyClusters(
     // particle loadout for them.  Their HP is still derived from particleCount.
     const skipParticleSpawn =
       enemyCluster.isRadiantTetherFlag === 1 ||
-      enemyCluster.isRadiantWebFlag    === 1;
+      enemyCluster.isRadiantWebFlag    === 1 ||
+      enemyCluster.isDustConstellationFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

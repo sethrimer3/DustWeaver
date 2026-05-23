@@ -124,6 +124,8 @@ export interface EditorEnemy {
   isGoldenMimicYFlippedFlag?: 0 | 1;
   isBeeSwarmFlag?: 0 | 1;
   isWebSpiderFlag?: 0 | 1;
+  isDustConstellationFlag?: 0 | 1;
+  isDustConstellationLargeFlag?: 0 | 1;
 }
 
 // ── Transitions ───────────────────────────────────────────────────────────────

@@ -461,6 +461,9 @@ export function renderClusters(
     } else if (cluster.isWebSpiderFlag === 1) {
       // ── Web Spider: dark square body + optional web strand to anchor ──────
       renderWebSpider(ctx, cluster, scalePx, offsetXPx, offsetYPx);
+    } else if (cluster.isDustConstellationFlag === 1) {
+      // Dust Constellation Sentinel body is rendered by dustConstellationRenderer.ts
+      // Skip default cluster rendering; health bar drawn below.
     } else if (cluster.isWallSnakeFlag === 1 || cluster.isNeedleSnakeFlag === 1) {
       // Snake bodies are rendered in snakeRenderer.ts after the main cluster pass.
     } else {
@@ -540,6 +543,8 @@ export function renderClusters(
       barColor = '#ffd700'; // bright gold for golden mimic
     } else if (cluster.isBeeSwarmFlag === 1) {
       barColor = '#ffcc00'; // amber-gold for bee swarm
+    } else if (cluster.isDustConstellationFlag === 1) {
+      barColor = '#aaddff'; // blue-white for dust constellation
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

@@ -111,6 +111,13 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       webSpiderState:                c.webSpiderState,
       webSpiderAnchorXWorld:         c.webSpiderAnchorXWorld,
       webSpiderAnchorYWorld:         c.webSpiderAnchorYWorld,
+      isDustConstellationFlag:       c.isDustConstellationFlag,
+      isDustConstellationLargeFlag:  c.isDustConstellationLargeFlag,
+      dustConstellationState:        c.dustConstellationState,
+      dustConstellationStateTicks:   c.dustConstellationStateTicks,
+      dustConstellationSlotIndex:    c.dustConstellationSlotIndex,
+      dustConstellationPatternIndex: c.dustConstellationPatternIndex,
+      dustConstellationActiveBeamIndex: c.dustConstellationActiveBeamIndex,
       renderPositionXWorld:          c.positionXWorld,
       renderPositionYWorld:          c.positionYWorld,
     });
@@ -265,5 +272,12 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     webSpiderFadingWebToYWorld:        world.webSpiderFadingWebToYWorld,
     webSpiderFadingWebRemainingTicks:  world.webSpiderFadingWebRemainingTicks,
     webSpiderFadingWebMaxTicks:        world.webSpiderFadingWebMaxTicks,
+    constellationMoteXWorld:           world.constellationMoteXWorld,
+    constellationMoteYWorld:           world.constellationMoteYWorld,
+    constellationMoteVelXWorld:        world.constellationMoteVelXWorld,
+    constellationMoteVelYWorld:        world.constellationMoteVelYWorld,
+    constellationMoteTargetLocalX:     world.constellationMoteTargetLocalX,
+    constellationMoteTargetLocalY:     world.constellationMoteTargetLocalY,
+    constellationMotePulsePhaseRad:    world.constellationMotePulsePhaseRad,
   };
 }

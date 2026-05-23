@@ -125,6 +125,8 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isWheelEnemy)     return 'wheel';
   if (e.isBeetle)         return 'beetle';
   if (e.isWebSpider)      return 'webSpider';
+  if (e.isDustConstellation && e.isDustConstellationLarge) return 'dustConstellationLarge';
+  if (e.isDustConstellation) return 'dustConstellation';
   return 'basic';
 }
 
