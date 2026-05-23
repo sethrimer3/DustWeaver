@@ -322,6 +322,10 @@ export interface RoomEnemyDef {
    * swings toward the player via rope physics, detaches, and repeats.
    */
   isWebSpiderFlag?: 0 | 1;
+  /** 1 if this enemy is a Big Wallback Snake — large, slow, thick wall-climber. */
+  isWallSnakeFlag?: 0 | 1;
+  /** 1 if this enemy is a Needle Snake — thin, fast, erratic wall-climber. */
+  isNeedleSnakeFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

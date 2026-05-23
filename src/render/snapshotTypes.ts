@@ -137,6 +137,22 @@ export interface ClusterSnapshot {
   readonly grappleHunterTipXWorld: number;
   /** Y of grapple chain tip (world units). */
   readonly grappleHunterTipYWorld: number;
+  /** 1 if this cluster is a Big Wallback Snake. */
+  readonly isWallSnakeFlag: 0 | 1;
+  /** 1 if this cluster is a Needle Snake. */
+  readonly isNeedleSnakeFlag: 0 | 1;
+  /** Current snake AI state (0-4). */
+  readonly snakeAiState: number;
+  /** Ticks elapsed in the current snake AI state. */
+  readonly snakeAiStateTicks: number;
+  /** 1 while the snake is attached to a background wall. */
+  readonly snakeIsOnWallFlag: 0 | 1;
+  /** Current head direction X (normalized, world space). */
+  readonly snakeHeadDirXWorld: number;
+  /** Current head direction Y (normalized, world space). */
+  readonly snakeHeadDirYWorld: number;
+  /** Current slither phase (radians). */
+  readonly snakeSlitherPhaseRad: number;
   /**
    * Ticks remaining of invulnerability after taking damage.
    * Non-zero while the player cannot be damaged again.

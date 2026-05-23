@@ -253,6 +253,37 @@ export interface ClusterState {
   /** 1 if the grapple tip has hit the player during this attack. */
   grappleHunterHasHitPlayerFlag: 0 | 1;
 
+  // ---- Wall Snake / Needle Snake (isWallSnakeFlag or isNeedleSnakeFlag) --------
+  /** 1 if this cluster is a Big Wallback Snake — large, slow, wall-climber. */
+  isWallSnakeFlag: 0 | 1;
+  /** 1 if this cluster is a Needle Snake — thin, fast, wall-climber. */
+  isNeedleSnakeFlag: 0 | 1;
+  /**
+   * Snake AI state:
+   *   0 = patrol   — slithering around nearby floor/wall
+   *   1 = pursue   — pathfinding toward player
+   *   2 = climb    — following a wall-climb segment of the path
+   *   3 = repath   — waiting to recompute path
+   *   4 = recover  — stuck recovery / unreachable fallback
+   */
+  snakeAiState: number;
+  /** Ticks elapsed in current snake state. */
+  snakeAiStateTicks: number;
+  /** Countdown to next path recomputation. */
+  snakeRepathCooldownTicks: number;
+  /** 1 while the snake is attached to a background wall. */
+  snakeIsOnWallFlag: 0 | 1;
+  /** Current heading direction X (normalized) — the direction the head faces. */
+  snakeHeadDirXWorld: number;
+  /** Current heading direction Y (normalized). */
+  snakeHeadDirYWorld: number;
+  /** Phase angle (radians) for sine-wave slither animation. Incremented each tick. */
+  snakeSlitherPhaseRad: number;
+  /** Spawn X (world units) — patrol center. */
+  snakeSpawnXWorld: number;
+  /** Spawn Y (world units) — patrol center. */
+  snakeSpawnYWorld: number;
+
   // ---- Radiant Tether boss (populated only when isRadiantTetherFlag === 1) --
   /**
    * 1 if this cluster is the Radiant Tether boss — a floating sphere of light
@@ -605,6 +636,17 @@ export function createClusterState(
     grappleHunterFireDirX: 0,
     grappleHunterFireDirY: 0,
     grappleHunterHasHitPlayerFlag: 0,
+    isWallSnakeFlag: 0,
+    isNeedleSnakeFlag: 0,
+    snakeAiState: 0,
+    snakeAiStateTicks: 0,
+    snakeRepathCooldownTicks: 0,
+    snakeIsOnWallFlag: 0,
+    snakeHeadDirXWorld: 1,
+    snakeHeadDirYWorld: 0,
+    snakeSlitherPhaseRad: 0,
+    snakeSpawnXWorld: positionXWorld,
+    snakeSpawnYWorld: positionYWorld,
     isFacingLeftFlag: 0,
     isSprintingFlag: 0,
     isCrouchingFlag: 0,

@@ -14,6 +14,15 @@ import { SQUARE_STAMPEDE_BASE_HALF_SIZE_WORLD, SQUARE_STAMPEDE_LAYER_COUNT, TRAI
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
 import { BEE_HALF_WIDTH_WORLD, BEE_HALF_HEIGHT_WORLD } from '../sim/clusters/beeSwarmAi';
 import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
+import {
+  BIG_SNAKE_HALF_HEIGHT_WORLD,
+  BIG_SNAKE_HALF_WIDTH_WORLD,
+  BIG_SNAKE_HP,
+  NEEDLE_SNAKE_HALF_HEIGHT_WORLD,
+  NEEDLE_SNAKE_HALF_WIDTH_WORLD,
+  NEEDLE_SNAKE_HP,
+  initializeSnakeSegments,
+} from '../sim/clusters/snakeAi';
 import { FLYING_EYE_HALF_SIZE_WORLD } from './gameRoom';
 
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
@@ -413,6 +422,38 @@ export function spawnEnemyClusters(
       enemyCluster.goldenMimicStateTicks     = 0;
       enemyCluster.goldenMimicFadeAlpha      = 1.0;
       // goldenMimicInitialParticleCount is filled in after spawnLoadoutParticles below
+    } else if (enemyDef.isWallSnakeFlag === 1) {
+      enemyCluster.isWallSnakeFlag          = 1;
+      enemyCluster.halfWidthWorld           = BIG_SNAKE_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld          = BIG_SNAKE_HALF_HEIGHT_WORLD;
+      enemyCluster.healthPoints             = BIG_SNAKE_HP;
+      enemyCluster.maxHealthPoints          = BIG_SNAKE_HP;
+      enemyCluster.snakeAiState             = 0;
+      enemyCluster.snakeAiStateTicks        = 0;
+      enemyCluster.snakeRepathCooldownTicks = 0;
+      enemyCluster.snakeIsOnWallFlag        = 0;
+      enemyCluster.snakeHeadDirXWorld       = 1;
+      enemyCluster.snakeHeadDirYWorld       = 0;
+      enemyCluster.snakeSlitherPhaseRad     = 0;
+      enemyCluster.snakeSpawnXWorld         = ex;
+      enemyCluster.snakeSpawnYWorld         = ey;
+      initializeSnakeSegments(enemyCluster.entityId, ex, ey, 18, 5.5, 1, 0);
+    } else if (enemyDef.isNeedleSnakeFlag === 1) {
+      enemyCluster.isNeedleSnakeFlag        = 1;
+      enemyCluster.halfWidthWorld           = NEEDLE_SNAKE_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld          = NEEDLE_SNAKE_HALF_HEIGHT_WORLD;
+      enemyCluster.healthPoints             = NEEDLE_SNAKE_HP;
+      enemyCluster.maxHealthPoints          = NEEDLE_SNAKE_HP;
+      enemyCluster.snakeAiState             = 0;
+      enemyCluster.snakeAiStateTicks        = 0;
+      enemyCluster.snakeRepathCooldownTicks = 0;
+      enemyCluster.snakeIsOnWallFlag        = 0;
+      enemyCluster.snakeHeadDirXWorld       = 1;
+      enemyCluster.snakeHeadDirYWorld       = 0;
+      enemyCluster.snakeSlitherPhaseRad     = 0;
+      enemyCluster.snakeSpawnXWorld         = ex;
+      enemyCluster.snakeSpawnYWorld         = ey;
+      initializeSnakeSegments(enemyCluster.entityId, ex, ey, 14, 3.5, 1, 0);
     } else if (enemyDef.isBeeSwarmFlag === 1) {
       // Allocate a bee-swarm slot
       let slotIndex = -1;

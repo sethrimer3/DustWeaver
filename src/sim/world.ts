@@ -110,6 +110,13 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   wallKineticBlockIndex: Int16Array;
 
+  /** Width of background wall grid (in block units). */
+  bgWallGridWidth: number;
+  /** Height of background wall grid (in block units). */
+  bgWallGridHeight: number;
+  /** Background wall occupancy grid: 1 = has background wall at this block position. */
+  bgWallGrid: Uint8Array;
+
   // ── Ropes ──────────────────────────────────────────────────────────────────
   /** Number of ropes in the current room. */
   ropeCount: number;
@@ -439,6 +446,9 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsIceFlag: new Uint8Array(MAX_WALLS),
     wallIsKineticBlockFlag:           new Uint8Array(MAX_WALLS),
     wallKineticBlockIndex:            new Int16Array(MAX_WALLS).fill(-1),
+    bgWallGridWidth: 0,
+    bgWallGridHeight: 0,
+    bgWallGrid: new Uint8Array(0),
     ropeCount: 0,
     ropeSegmentCount:       new Uint8Array(MAX_ROPES),
     ropeAnchorAXWorld:      new Float32Array(MAX_ROPES),
