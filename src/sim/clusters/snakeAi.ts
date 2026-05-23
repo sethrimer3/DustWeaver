@@ -45,6 +45,9 @@ const NODE_REACHED_DIST_WORLD = 4.0;
 const NEEDLE_WOBBLE_STRENGTH = 0.45;
 const SLITHER_FREQ_BIG = 0.18;
 const SLITHER_FREQ_NEEDLE = 0.32;
+/** Cost multiplier applied when moving through a background-wall node vs a floor node.
+ *  Slightly higher (1.2×) so the A* prefers floor routes when they are equally short. */
+const WALL_MOVE_COST_MULTIPLIER = 1.2;
 
 interface SnakeSegments {
   xs: Float32Array;
@@ -284,7 +287,7 @@ function canTraverseBetween(world: WorldState, fromCol: number, fromRow: number,
 function computeStepCost(world: WorldState, fromCol: number, fromRow: number, toCol: number, toRow: number): number {
   const diagonal = fromCol !== toCol && fromRow !== toRow;
   const moveBase = diagonal ? 1.41421356 : 1.0;
-  return moveBase * (isWallNode(world, toCol, toRow) ? 1.2 : 1.0);
+  return moveBase * (isWallNode(world, toCol, toRow) ? WALL_MOVE_COST_MULTIPLIER : 1.0);
 }
 
 function estimateHeuristic(fromCol: number, fromRow: number, toCol: number, toRow: number): number {
@@ -446,8 +449,8 @@ function computePathToTarget(
 
   // Reverse in-place: swap cols/rows from both ends toward center.
   for (let lo = 0, hi = reverseLength - 1; lo < hi; lo++, hi--) {
-    const tc = pathState.cols[lo]; pathState.cols[lo] = pathState.cols[hi]; pathState.cols[hi] = tc;
-    const tr = pathState.rows[lo]; pathState.rows[lo] = pathState.rows[hi]; pathState.rows[hi] = tr;
+    const tempCol = pathState.cols[lo]; pathState.cols[lo] = pathState.cols[hi]; pathState.cols[hi] = tempCol;
+    const tempRow = pathState.rows[lo]; pathState.rows[lo] = pathState.rows[hi]; pathState.rows[hi] = tempRow;
   }
 
   pathState.length = reverseLength;
