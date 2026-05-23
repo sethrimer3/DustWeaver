@@ -577,7 +577,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           minWallSlider.value = String(state.roomData?.minimumWallLight ?? 0.18);
           minWallValLabel.textContent  = (state.roomData?.minimumWallLight  ?? 0.18).toFixed(2);
           falloffSlider.value = String(state.roomData?.falloffPower ?? 1.4);
-          falloffValLabel.textContent  = (state.roomData?.falloffPower  ?? 1.40).toFixed(2);
+          falloffValLabel.textContent  = (state.roomData?.falloffPower  ?? 1.4).toFixed(2);
           lastRenderedLightingEffect = currentLighting;
           paletteDiv.appendChild(lightingDiv);
         }
@@ -615,7 +615,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       syncSlider(dirBiasSlider,  dirBiasValLabel,  state.roomData?.directionalBias,      0.65);
       syncSlider(sideExpSlider,  sideExpValLabel,  state.roomData?.sideExposureStrength, 0.45);
       syncSlider(minWallSlider,  minWallValLabel,  state.roomData?.minimumWallLight,      0.18);
-      syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,          1.40);
+      syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,          1.4);
     }
 
     // Update palette selection highlight
