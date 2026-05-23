@@ -129,6 +129,8 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isDustConstellation) return 'dustConstellation';
   if (e.isOrbitalDustCore && e.isOrbitalDustCoreLarge) return 'orbitalDustCoreLarge';
   if (e.isOrbitalDustCore) return 'orbitalDustCore';
+  if (e.isDustBlockMimic && e.isDustBlockMimicLarge) return 'dustBlockMimicLarge';
+  if (e.isDustBlockMimic) return 'dustBlockMimic';
   return 'basic';
 }
 

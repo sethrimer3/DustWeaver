@@ -467,6 +467,9 @@ export function renderClusters(
     } else if (cluster.isOrbitalDustCoreFlag === 1) {
       // Orbital Dust Core body is rendered by orbitalDustCoreRenderer.ts
       // Skip default cluster rendering; health bar drawn below.
+    } else if (cluster.isDustBlockMimicFlag === 1) {
+      // Dust Block Mimic body is rendered by dustBlockMimicRenderer.ts
+      // Skip default cluster rendering; health bar drawn below.
     } else if (cluster.isWallSnakeFlag === 1 || cluster.isNeedleSnakeFlag === 1) {
       // Snake bodies are rendered in snakeRenderer.ts after the main cluster pass.
     } else {
@@ -550,6 +553,8 @@ export function renderClusters(
       barColor = '#aaddff'; // blue-white for dust constellation
     } else if (cluster.isOrbitalDustCoreFlag === 1) {
       barColor = '#ffaa44'; // amber-orange for orbital dust core
+    } else if (cluster.isDustBlockMimicFlag === 1) {
+      barColor = '#c8a850'; // warm gold for dust block mimic
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

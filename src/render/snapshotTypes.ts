@@ -265,6 +265,22 @@ export interface ClusterSnapshot {
   readonly orbitalDustCoreShieldFlashTicks: number;
   readonly orbitalDustCoreCorePulseTicks: number;
 
+  // ---- Dust Block Mimic ----------------------------------------------------
+  readonly isDustBlockMimicFlag: 0 | 1;
+  readonly isDustBlockMimicLargeFlag: 0 | 1;
+  readonly dustBlockMimicState: number;
+  readonly dustBlockMimicStateTicks: number;
+  readonly dustBlockMimicSlotIndex: number;
+  readonly dustBlockMimicSpawnXWorld: number;
+  readonly dustBlockMimicSpawnYWorld: number;
+  readonly dustBlockMimicBobPhaseRad: number;
+  readonly dustBlockMimicAttackCooldownTicks: number;
+  readonly dustBlockMimicLungeDirXWorld: number;
+  readonly dustBlockMimicLungeDirYWorld: number;
+  readonly dustBlockMimicLungeDistCovered: number;
+  readonly dustBlockMimicLungeHitPlayerFlag: 0 | 1;
+  readonly dustBlockMimicHitFlashTicks: number;
+
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -460,6 +476,15 @@ export interface WorldSnapshot {
   readonly odcMoteRadiusWorld: Float32Array;
   readonly odcMoteAliveFlag: Uint8Array;
   readonly odcMotePulsePhaseRad: Float32Array;
+
+  // ── Dust Block Mimic mote arrays ──────────────────────────────────────────
+  readonly dbmMoteXWorld: Float32Array;
+  readonly dbmMoteYWorld: Float32Array;
+  readonly dbmMoteVelXWorld: Float32Array;
+  readonly dbmMoteVelYWorld: Float32Array;
+  readonly dbmMoteTargetLocalX: Float32Array;
+  readonly dbmMoteTargetLocalY: Float32Array;
+  readonly dbmMotePulsePhaseRad: Float32Array;
 
   // ── Arrow Weave state ─────────────────────────────────────────────────────
   /** 1 while the player is loading an arrow (holding secondary weave button). */

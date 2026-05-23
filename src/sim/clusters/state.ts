@@ -637,6 +637,49 @@ export interface ClusterState {
   orbitalDustCoreShieldFlashTicks: number;
   /** Ticks remaining for the core pulse flash on ring collapse. */
   orbitalDustCoreCorePulseTicks: number;
+
+  // ---- Dust Block Mimic (isDustBlockMimicFlag === 1) -------------------------
+  /**
+   * 1 if this cluster is a Dust Block Mimic — a false block that cracks open
+   * into a hostile swarm of living dust.
+   */
+  isDustBlockMimicFlag: 0 | 1;
+  /** 1 for the large (2×2 block) variant. */
+  isDustBlockMimicLargeFlag: 0 | 1;
+  /**
+   * Current AI state:
+   *   0 = dormant   — looks like a block; waiting for wake trigger
+   *   1 = wake      — shaking, cracking, leaking dust; no damage yet
+   *   2 = burst     — fragments flying outward into mote formation
+   *   3 = activeIdle — swarm hovers and tracks player; attack cooldown
+   *   4 = telegraph — motes compress into wedge; visual warning
+   *   5 = attack    — shard rush lunge; damage window
+   *   6 = recover   — motes slow and rejoin; return to activeIdle
+   *   7 = dying     — cohesion failure, inward collapse, outward burst
+   */
+  dustBlockMimicState: number;
+  /** Ticks elapsed in the current state. */
+  dustBlockMimicStateTicks: number;
+  /** WorldState slot index for per-mimic mote arrays (-1 if unallocated). */
+  dustBlockMimicSlotIndex: number;
+  /** X of the spawn point (world units). */
+  dustBlockMimicSpawnXWorld: number;
+  /** Y of the spawn point (world units). */
+  dustBlockMimicSpawnYWorld: number;
+  /** Phase angle for the idle bob (radians). */
+  dustBlockMimicBobPhaseRad: number;
+  /** Remaining ticks before the next attack. */
+  dustBlockMimicAttackCooldownTicks: number;
+  /** Shard rush lunge direction X (normalised). */
+  dustBlockMimicLungeDirXWorld: number;
+  /** Shard rush lunge direction Y (normalised). */
+  dustBlockMimicLungeDirYWorld: number;
+  /** Distance covered so far during a shard rush (world units). */
+  dustBlockMimicLungeDistCovered: number;
+  /** 1 once the shard rush has hit the player this pass. */
+  dustBlockMimicLungeHitPlayerFlag: 0 | 1;
+  /** Ticks remaining for the hit-flash visual. */
+  dustBlockMimicHitFlashTicks: number;
 }
 
 export function createClusterState(
@@ -826,5 +869,19 @@ export function createClusterState(
     orbitalDustCorePulseHitPlayerFlag: 0,
     orbitalDustCoreShieldFlashTicks: 0,
     orbitalDustCoreCorePulseTicks: 0,
+    isDustBlockMimicFlag: 0,
+    isDustBlockMimicLargeFlag: 0,
+    dustBlockMimicState: 0,
+    dustBlockMimicStateTicks: 0,
+    dustBlockMimicSlotIndex: -1,
+    dustBlockMimicSpawnXWorld: positionXWorld,
+    dustBlockMimicSpawnYWorld: positionYWorld,
+    dustBlockMimicBobPhaseRad: 0,
+    dustBlockMimicAttackCooldownTicks: 0,
+    dustBlockMimicLungeDirXWorld: 1,
+    dustBlockMimicLungeDirYWorld: 0,
+    dustBlockMimicLungeDistCovered: 0,
+    dustBlockMimicLungeHitPlayerFlag: 0,
+    dustBlockMimicHitFlashTicks: 0,
   };
 }
