@@ -196,6 +196,14 @@ function _makeEmptyCluster(): _MutableCluster {
     grappleHunterChainStartIndex: -1,
     grappleHunterTipXWorld: 0,
     grappleHunterTipYWorld: 0,
+    isWallSnakeFlag: 0,
+    isNeedleSnakeFlag: 0,
+    snakeAiState: 0,
+    snakeAiStateTicks: 0,
+    snakeIsOnWallFlag: 0,
+    snakeHeadDirXWorld: 1,
+    snakeHeadDirYWorld: 0,
+    snakeSlitherPhaseRad: 0,
     invulnerabilityTicks: 0,
     hurtTicks: 0,
     isSlimeFlag: 0,
@@ -279,6 +287,14 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.grappleHunterChainStartIndex    = src.grappleHunterChainStartIndex;
   dst.grappleHunterTipXWorld          = src.grappleHunterTipXWorld;
   dst.grappleHunterTipYWorld          = src.grappleHunterTipYWorld;
+  dst.isWallSnakeFlag                 = src.isWallSnakeFlag;
+  dst.isNeedleSnakeFlag               = src.isNeedleSnakeFlag;
+  dst.snakeAiState                    = src.snakeAiState;
+  dst.snakeAiStateTicks               = src.snakeAiStateTicks;
+  dst.snakeIsOnWallFlag               = src.snakeIsOnWallFlag;
+  dst.snakeHeadDirXWorld              = src.snakeHeadDirXWorld;
+  dst.snakeHeadDirYWorld              = src.snakeHeadDirYWorld;
+  dst.snakeSlitherPhaseRad            = src.snakeSlitherPhaseRad;
   dst.invulnerabilityTicks            = src.invulnerabilityTicks;
   dst.hurtTicks                       = src.hurtTicks;
   dst.isSlimeFlag                     = src.isSlimeFlag;

@@ -72,6 +72,7 @@ import { renderTeleportFlash } from '../render/lambdaAnchorRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
 import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
+import { renderSnakes } from '../render/clusters/snakeRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -421,6 +422,7 @@ export function renderFrame(r: RenderFrameContext): void {
   }
 
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode);
+  renderSnakes(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRadiantWeb(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);

@@ -461,6 +461,8 @@ export function renderClusters(
     } else if (cluster.isWebSpiderFlag === 1) {
       // ── Web Spider: dark square body + optional web strand to anchor ──────
       renderWebSpider(ctx, cluster, scalePx, offsetXPx, offsetYPx);
+    } else if (cluster.isWallSnakeFlag === 1 || cluster.isNeedleSnakeFlag === 1) {
+      // Snake bodies are rendered in snakeRenderer.ts after the main cluster pass.
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';

@@ -50,6 +50,10 @@ export function tickEnemyMovement(
   if (cluster.isWheelEnemyFlag === 1) {
     return;
   }
+  // Wall snakes drive their own movement/pathing in snakeAi.ts
+  if (cluster.isWallSnakeFlag === 1 || cluster.isNeedleSnakeFlag === 1) {
+    return;
+  }
   // Bubble enemies have their own AI — skip standard gravity/movement
   if (cluster.isBubbleEnemyFlag === 1) {
     return;

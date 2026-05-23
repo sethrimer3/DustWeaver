@@ -62,6 +62,7 @@ import {
 import { renderFrame } from './gameRender';
 import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
+import { resetSnakeRuntimeState } from '../sim/clusters/snakeAi';
 import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
@@ -429,6 +430,7 @@ export function startGameScreen(
     world.wallCount = 0;
     world.worldWidthWorld = roomWidthWorld;
     world.worldHeightWorld = roomHeightWorld;
+    resetSnakeRuntimeState();
 
     world.isGrappleActiveFlag     = 0;
     world.isGrappleMissActiveFlag = 0;
@@ -502,6 +504,25 @@ export function startGameScreen(
     // ── Phase C: spawn enemies (5–15 ms on complex rooms) ────────────────
     {
       const _t0 = import.meta.env.DEV ? performance.now() : 0;
+      world.bgWallGridWidth  = room.widthBlocks;
+      world.bgWallGridHeight = room.heightBlocks;
+      world.bgWallGrid = new Uint8Array(room.widthBlocks * room.heightBlocks);
+      if (room.backgroundBlocks) {
+        for (const b of room.backgroundBlocks) {
+          for (let dy = 0; dy < b.hBlock; dy++) {
+            for (let dx = 0; dx < b.wBlock; dx++) {
+              const col = b.xBlock + dx;
+              const row = b.yBlock + dy;
+              if (
+                col >= 0 && col < room.widthBlocks &&
+                row >= 0 && row < room.heightBlocks
+              ) {
+                world.bgWallGrid[col + row * room.widthBlocks] = 1;
+              }
+            }
+          }
+        }
+      }
       spawnEnemyClusters(world, room.enemies, 2, levelRng);
       FP.recordLoadPhaseStep('C:enemySpawn', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
