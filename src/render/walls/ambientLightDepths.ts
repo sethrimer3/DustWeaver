@@ -279,3 +279,265 @@ export function buildAmbientDepths(
 
   return depths;
 }
+
+// ── Default directional-lighting parameter values ─────────────────────────────
+
+/** At 0 = broad ambient (side exposure contributes a lot); at 1 = strict spotlight. */
+export const DEFAULT_DIRECTIONAL_BIAS = 0.65;
+/** How strongly unlit (non-sky-connected) air neighbours contribute to tile brightness. */
+export const DEFAULT_SIDE_EXPOSURE_STRENGTH = 0.45;
+/** Minimum brightness fraction for any solid tile adjacent to open air. */
+export const DEFAULT_MINIMUM_WALL_LIGHT = 0.18;
+/** Gamma-like exponent applied to the raw exposure value before computing darkness. */
+export const DEFAULT_FALLOFF_POWER = 1.4;
+
+/**
+ * Blended directional ambient-light solver.
+ *
+ * Replaces the integer-depth output of {@link buildAmbientDepths} with a
+ * smooth per-tile **darkness alpha** (0 = fully lit, 1 = pitch black) that
+ * respects the primary light direction while giving solid tiles beside open
+ * air some minimum visibility — preventing rooms with sealed ceilings from
+ * rendering their walls as pure black.
+ *
+ * Three-phase algorithm:
+ *
+ * 1. **Lit-air flood** — identical to {@link buildAmbientDepths}: BFS from the
+ *    sky-facing edge through non-solid, non-blocker cells.
+ *
+ * 2. **Surface tile computation** — for every solid tile that has at least one
+ *    air neighbour, compute a darkness alpha from weighted directional exposure:
+ *    - Each air neighbour contributes according to how closely the direction to
+ *      that neighbour aligns with the light source direction.
+ *    - Sky-connected (lit) neighbours contribute at full effectiveness; others
+ *      contribute at `sideExposureStrength`.
+ *    - `directionalBias` blends between a broad (low-bias) and a tight
+ *      (high-bias) directional weighting.
+ *    - The minimum brightness for any air-adjacent tile is clamped to
+ *      `minimumWallLight`.
+ *
+ * 3. **Buried BFS** — solid tiles with no air neighbour are reached by BFS from
+ *    the surface tiles; darkness deepens using the same exponential curve as
+ *    {@link getDarknessAlphaFromAirDepth}, keeping the familiar gradient inside
+ *    thick terrain. Tiles entirely unreachable by BFS are set to 1.0.
+ *
+ * @param occupied              Set of `"col,row"` keys for solid tiles.
+ * @param blockers              Authored ambient-light blocker keys.
+ * @param direction             Ambient-light travel direction.
+ * @param roomWidthBlocks       Room width in tile units.
+ * @param roomHeightBlocks      Room height in tile units.
+ * @param directionalBias       0 = broad ambient, 1 = strict spotlight.
+ * @param sideExposureStrength  Contribution weight for non-sky-connected air.
+ * @param minimumWallLight      Brightness floor for air-adjacent tiles (0–1).
+ * @param falloffPower          Exponent applied to raw exposure before darkness.
+ * @returns Map from tile key to darkness alpha (0–1).
+ */
+export function buildAmbientDarknessAlphas(
+  occupied:             Set<string>,
+  blockers:             ReadonlySet<string>,
+  direction:            AmbientLightDirection,
+  roomWidthBlocks:      number,
+  roomHeightBlocks:     number,
+  directionalBias:      number,
+  sideExposureStrength: number,
+  minimumWallLight:     number,
+  falloffPower:         number,
+): Map<string, number> {
+  const alphas = new Map<string, number>();
+  if (roomWidthBlocks <= 0 || roomHeightBlocks <= 0) return alphas;
+
+  const { dx: dirVecX, dy: dirVecY } = ambientDirectionVector(direction);
+  const isOmni = dirVecX === 0 && dirVecY === 0;
+
+  // srcDir: vector pointing FROM the light source INTO the room (= travel direction).
+  // We want the angle between the neighbour offset and the "arrival" direction so
+  // that an air cell directly above a top-lit tile scores cosAngle = 1.0.
+  // For 'down' (light travels downward), srcDx=0, srcDy=1; the neighbour above
+  // (ny=-1) gives cos = dot((0,-1),(0,1))/(1·1) = -1 — that's wrong.
+  // We want the neighbour OPPOSITE to the travel direction (i.e. the sky side).
+  // Convention: srcDir = -travelDir so that the sky-facing neighbour scores +1.
+  const srcDx = -dirVecX;
+  const srcDy = -dirVecY;
+  const srcMag = isOmni ? 1 : Math.sqrt(srcDx * srcDx + srcDy * srcDy); // always 1 for unit dirs
+
+  // ── Phase 1: lit-air flood-fill ───────────────────────────────────────────
+  const litAir = new Set<string>();
+
+  if (isOmni) {
+    // Omni: every reachable air cell is considered sky-connected.
+    for (let r = 0; r < roomHeightBlocks; r++) {
+      for (let c = 0; c < roomWidthBlocks; c++) {
+        const key = _tileKey(c, r);
+        if (!occupied.has(key) && !blockers.has(key)) litAir.add(key);
+      }
+    }
+  } else {
+    const airQCols: number[] = [];
+    const airQRows: number[] = [];
+    let airQIdx = 0;
+
+    const pushSeed = (c: number, r: number): void => {
+      if (!_isInsideRoom(c, r, roomWidthBlocks, roomHeightBlocks)) return;
+      const key = _tileKey(c, r);
+      if (litAir.has(key) || occupied.has(key) || blockers.has(key)) return;
+      litAir.add(key);
+      airQCols.push(c);
+      airQRows.push(r);
+    };
+
+    if (dirVecY > 0) for (let c = 0; c < roomWidthBlocks; c++) pushSeed(c, 0);
+    if (dirVecY < 0) for (let c = 0; c < roomWidthBlocks; c++) pushSeed(c, roomHeightBlocks - 1);
+    if (dirVecX > 0) for (let r = 0; r < roomHeightBlocks; r++) pushSeed(0, r);
+    if (dirVecX < 0) for (let r = 0; r < roomHeightBlocks; r++) pushSeed(roomWidthBlocks - 1, r);
+
+    while (airQIdx < airQCols.length) {
+      const col = airQCols[airQIdx];
+      const row = airQRows[airQIdx];
+      airQIdx++;
+      for (let ny = -1; ny <= 1; ny++) {
+        for (let nx = -1; nx <= 1; nx++) {
+          if (nx === 0 && ny === 0) continue;
+          if (nx * dirVecX + ny * dirVecY < 0) continue; // don't propagate uphill
+          const c = col + nx;
+          const r = row + ny;
+          if (!_isInsideRoom(c, r, roomWidthBlocks, roomHeightBlocks)) continue;
+          const key = _tileKey(c, r);
+          if (litAir.has(key) || occupied.has(key) || blockers.has(key)) continue;
+          litAir.add(key);
+          airQCols.push(c);
+          airQRows.push(r);
+        }
+      }
+    }
+  }
+
+  // ── Phase 2: surface tile darkness computation ────────────────────────────
+  // BFS queue for Phase 3. We store the "effective depth" so the exponential
+  // falloff inside thick terrain matches the existing getDarknessAlphaFromAirDepth curve.
+  const solidQCols: number[] = [];
+  const solidQRows: number[] = [];
+  const solidQEffDepths: number[] = [];
+
+  for (const key of occupied) {
+    const commaIdx = key.indexOf(',');
+    const col = parseInt(key.slice(0, commaIdx), 10);
+    const row = parseInt(key.slice(commaIdx + 1), 10);
+    if (!_isInsideRoom(col, row, roomWidthBlocks, roomHeightBlocks)) continue;
+
+    // Accumulate multi-neighbour exposure via probabilistic product rule.
+    let exposureProduct = 1.0;
+    let hasAirNeighbor = false;
+
+    for (let ny = -1; ny <= 1; ny++) {
+      for (let nx = -1; nx <= 1; nx++) {
+        if (nx === 0 && ny === 0) continue;
+        const nc = col + nx;
+        const nr = row + ny;
+        if (!_isInsideRoom(nc, nr, roomWidthBlocks, roomHeightBlocks)) continue;
+        const neighborKey = _tileKey(nc, nr);
+        if (occupied.has(neighborKey) || blockers.has(neighborKey)) continue; // solid / blocker: skip
+        hasAirNeighbor = true;
+
+        const isLit = litAir.has(neighborKey);
+
+        let weight: number;
+        if (isOmni) {
+          weight = 1.0;
+        } else {
+          // Cosine of the angle between the neighbour offset and the sky direction.
+          // Normalise the offset (its magnitude is 1 for cardinal, √2 for diagonal).
+          const neighborMag = Math.sqrt(nx * nx + ny * ny);
+          const cosAngle = (nx * srcDx + ny * srcDy) / (neighborMag * srcMag);
+          // broadFactor: gently weighted even for side/opposite neighbours.
+          const broadFactor = Math.max(0.15, (cosAngle + 1) / 2);
+          // tightFactor: only sky-facing neighbours count.
+          const tightFactor = Math.max(0, cosAngle) ** 2;
+          // Blend between broad and tight according to directionalBias.
+          weight = broadFactor + (tightFactor - broadFactor) * directionalBias;
+        }
+
+        const effectiveness = isLit ? 1.0 : sideExposureStrength;
+        const contribution = weight * effectiveness;
+        if (contribution >= 1) {
+          // Full contribution from this neighbour → tile is fully lit, short-circuit.
+          exposureProduct = 0;
+          break;
+        }
+        exposureProduct *= (1 - contribution);
+      }
+      if (exposureProduct === 0) break;
+    }
+
+    if (!hasAirNeighbor) continue; // Tile will be reached via Phase 3 BFS or remain in Phase 4.
+
+    const exposure = 1 - exposureProduct;
+    const finalExposure = exposure <= 0 ? 0 : Math.pow(exposure, falloffPower);
+    const brightness = Math.max(finalExposure, minimumWallLight);
+    const da = Math.min(1, Math.max(0, 1 - brightness));
+
+    alphas.set(key, da);
+    // Invert getDarknessAlphaFromAirDepth: da = 0.1*(2^d - 1) ⟹ d = log2(da/0.1 + 1).
+    const effDepth = Math.log2(da * 10 + 1);
+    solidQCols.push(col);
+    solidQRows.push(row);
+    solidQEffDepths.push(effDepth);
+  }
+
+  // ── Phase 3: BFS into buried solid tiles ─────────────────────────────────
+  // Saturation: getDarknessAlphaFromAirDepth(d) ≥ 1 when d ≥ log2(11) ≈ 3.46.
+  const SATURATE_DEPTH = Math.log2(11);
+
+  let solidQIdx = 0;
+  while (solidQIdx < solidQCols.length) {
+    const col = solidQCols[solidQIdx];
+    const row = solidQRows[solidQIdx];
+    const parentEffDepth = solidQEffDepths[solidQIdx];
+    solidQIdx++;
+
+    const childEffDepth = parentEffDepth + 1;
+    if (childEffDepth > SATURATE_DEPTH) {
+      // All future children will also be saturated — expand but assign 1.0 directly.
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nc = col + dx;
+          const nr = row + dy;
+          if (!_isInsideRoom(nc, nr, roomWidthBlocks, roomHeightBlocks)) continue;
+          const neighborKey = _tileKey(nc, nr);
+          if (!occupied.has(neighborKey) || alphas.has(neighborKey)) continue;
+          alphas.set(neighborKey, 1.0);
+          solidQCols.push(nc);
+          solidQRows.push(nr);
+          solidQEffDepths.push(childEffDepth);
+        }
+      }
+    } else {
+      const childDa = getDarknessAlphaFromAirDepth(childEffDepth);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nc = col + dx;
+          const nr = row + dy;
+          if (!_isInsideRoom(nc, nr, roomWidthBlocks, roomHeightBlocks)) continue;
+          const neighborKey = _tileKey(nc, nr);
+          if (!occupied.has(neighborKey) || alphas.has(neighborKey)) continue;
+          alphas.set(neighborKey, childDa);
+          solidQCols.push(nc);
+          solidQRows.push(nr);
+          solidQEffDepths.push(childEffDepth);
+        }
+      }
+    }
+  }
+
+  // ── Phase 4: unreached solid tiles (fully dark) ───────────────────────────
+  for (const key of occupied) {
+    const commaIdx = key.indexOf(',');
+    const col = parseInt(key.slice(0, commaIdx), 10);
+    const row = parseInt(key.slice(commaIdx + 1), 10);
+    if (!_isInsideRoom(col, row, roomWidthBlocks, roomHeightBlocks)) continue;
+    if (!alphas.has(key)) alphas.set(key, 1.0);
+  }
+
+  return alphas;
+}

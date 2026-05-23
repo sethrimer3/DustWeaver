@@ -202,6 +202,10 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.ambientLightDirection) {
     json.ambientLightDirection = data.ambientLightDirection;
   }
+  if (data.directionalBias      !== undefined) json.directionalBias      = data.directionalBias;
+  if (data.sideExposureStrength !== undefined) json.sideExposureStrength = data.sideExposureStrength;
+  if (data.minimumWallLight     !== undefined) json.minimumWallLight     = data.minimumWallLight;
+  if (data.falloffPower         !== undefined) json.falloffPower         = data.falloffPower;
   if ((data.ambientLightBlockers ?? []).length > 0) {
     json.ambientLightBlockers = data.ambientLightBlockers.map(b => {
       const entry: RoomJsonAmbientLightBlocker = { xBlock: b.xBlock, yBlock: b.yBlock };

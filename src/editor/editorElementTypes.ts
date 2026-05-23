@@ -474,6 +474,14 @@ export interface EditorRoomData {
    * down for `Above`).
    */
   ambientLightDirection?: AmbientLightDirection;
+  /** Directional-bias blend (0 = broad ambient, 1 = spotlight). */
+  directionalBias?: number;
+  /** Side-exposure strength for non-sky-connected air neighbours (0–1). */
+  sideExposureStrength?: number;
+  /** Minimum brightness fraction for tiles adjacent to open air (0–1). */
+  minimumWallLight?: number;
+  /** Gamma-like exponent on the raw exposure value (0.5–3). */
+  falloffPower?: number;
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default).

@@ -358,6 +358,22 @@ export function createEditorController(
           if (state.roomData) state.roomData.ambientLightDirection = direction;
           applyEdits('metadata');
         },
+        onDirectionalBiasChange: (value: number) => {
+          if (state.roomData) state.roomData.directionalBias = value;
+          applyEdits('metadata');
+        },
+        onSideExposureStrengthChange: (value: number) => {
+          if (state.roomData) state.roomData.sideExposureStrength = value;
+          applyEdits('metadata');
+        },
+        onMinimumWallLightChange: (value: number) => {
+          if (state.roomData) state.roomData.minimumWallLight = value;
+          applyEdits('metadata');
+        },
+        onFalloffPowerChange: (value: number) => {
+          if (state.roomData) state.roomData.falloffPower = value;
+          applyEdits('metadata');
+        },
         onBackgroundChange: (bgId: BackgroundId) => {
           if (state.roomData) state.roomData.backgroundId = bgId;
           applyEdits('metadata');

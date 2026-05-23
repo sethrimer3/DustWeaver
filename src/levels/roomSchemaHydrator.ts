@@ -233,6 +233,10 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     // Cast — the JSON field is typed as the literal union `AmbientLightDirection`.
     json.ambientLightDirection = saved.ambientDir as RoomJsonDef['ambientLightDirection'];
   }
+  if (saved.dBias  !== undefined) json.directionalBias      = saved.dBias;
+  if (saved.sExp   !== undefined) json.sideExposureStrength  = saved.sExp;
+  if (saved.minWL  !== undefined) json.minimumWallLight      = saved.minWL;
+  if (saved.fpow   !== undefined) json.falloffPower          = saved.fpow;
   if (saved.ambientBlockers && saved.ambientBlockers.length > 0) {
     json.ambientLightBlockers = saved.ambientBlockers.map(entry => ({
       xBlock: entry[0],

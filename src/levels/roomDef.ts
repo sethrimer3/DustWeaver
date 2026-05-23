@@ -510,6 +510,28 @@ export interface RoomDef {
    */
   ambientLightDirection?: AmbientLightDirection;
   /**
+   * Blends the directional-light model between broad ambient (0) and a strict
+   * spotlight (1). Range 0–1; defaults to 0.65 when unset.
+   */
+  directionalBias?: number;
+  /**
+   * How much non-sky-connected (interior) air neighbours contribute to tile
+   * brightness. Range 0–1; defaults to 0.45 when unset.
+   */
+  sideExposureStrength?: number;
+  /**
+   * Minimum brightness fraction for any solid tile that borders open air.
+   * Prevents walls adjacent to air from going completely black.
+   * Range 0–1; defaults to 0.18 when unset.
+   */
+  minimumWallLight?: number;
+  /**
+   * Gamma-like exponent applied to the raw exposure value before computing
+   * the darkness alpha. Higher values make the falloff steeper.
+   * Range 0.5–3; defaults to 1.4 when unset.
+   */
+  falloffPower?: number;
+  /**
    * Tiles that block ambient-light propagation. Gameplay treats them as empty
    * air; only the ambient-lighting solver sees them as opaque. Used to carve
    * out authored "hidden dark pockets" that only light up when a physical path
