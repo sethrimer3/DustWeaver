@@ -234,6 +234,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isWebSpiderFlag: (e.isWebSpider ?? false) ? 1 : 0,
     isDustConstellationFlag: (e.isDustConstellation ?? false) ? 1 : 0,
     isDustConstellationLargeFlag: (e.isDustConstellationLarge ?? false) ? 1 : 0,
+    isOrbitalDustCoreFlag: (e.isOrbitalDustCore ?? false) ? 1 : 0,
+    isOrbitalDustCoreLargeFlag: (e.isOrbitalDustCoreLarge ?? false) ? 1 : 0,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => {

@@ -72,7 +72,9 @@ export type SavedEnemyType =
   | 'beetle'
   | 'webSpider'
   | 'dustConstellation'
-  | 'dustConstellationLarge';
+  | 'dustConstellationLarge'
+  | 'orbitalDustCore'
+  | 'orbitalDustCoreLarge';
 
 export interface SavedEnemy {
   type: SavedEnemyType;

@@ -72,6 +72,8 @@ export interface RoomJsonEnemy {
   isWebSpider?: boolean;
   isDustConstellation?: boolean;
   isDustConstellationLarge?: boolean;
+  isOrbitalDustCore?: boolean;
+  isOrbitalDustCoreLarge?: boolean;
 }
 
 export interface RoomJsonWall {

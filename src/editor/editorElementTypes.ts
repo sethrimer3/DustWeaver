@@ -126,6 +126,8 @@ export interface EditorEnemy {
   isWebSpiderFlag?: 0 | 1;
   isDustConstellationFlag?: 0 | 1;
   isDustConstellationLargeFlag?: 0 | 1;
+  isOrbitalDustCoreFlag?: 0 | 1;
+  isOrbitalDustCoreLargeFlag?: 0 | 1;
 }
 
 // ── Transitions ───────────────────────────────────────────────────────────────

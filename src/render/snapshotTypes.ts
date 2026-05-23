@@ -249,6 +249,22 @@ export interface ClusterSnapshot {
   readonly dustConstellationPatternIndex: number;
   readonly dustConstellationActiveBeamIndex: number;
 
+  // ---- Orbital Dust Core --------------------------------------------------
+  readonly isOrbitalDustCoreFlag: 0 | 1;
+  readonly isOrbitalDustCoreLargeFlag: 0 | 1;
+  readonly orbitalDustCoreState: number;
+  readonly orbitalDustCoreStateTicks: number;
+  readonly orbitalDustCoreSlotIndex: number;
+  readonly orbitalDustCoreExposedRing: number;
+  readonly orbitalDustCoreRing0Health: number;
+  readonly orbitalDustCoreRing1Health: number;
+  readonly orbitalDustCoreRing2Health: number;
+  readonly orbitalDustCoreRing3Health: number;
+  readonly orbitalDustCorePulseRadius: number;
+  readonly orbitalDustCorePulseActiveFlag: 0 | 1;
+  readonly orbitalDustCoreShieldFlashTicks: number;
+  readonly orbitalDustCoreCorePulseTicks: number;
+
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -438,6 +454,12 @@ export interface WorldSnapshot {
   readonly constellationMoteTargetLocalX: Float32Array;
   readonly constellationMoteTargetLocalY: Float32Array;
   readonly constellationMotePulsePhaseRad: Float32Array;
+
+  // ── Orbital Dust Core mote arrays ─────────────────────────────────────────
+  readonly odcMoteAngleRad: Float32Array;
+  readonly odcMoteRadiusWorld: Float32Array;
+  readonly odcMoteAliveFlag: Uint8Array;
+  readonly odcMotePulsePhaseRad: Float32Array;
 
   // ── Arrow Weave state ─────────────────────────────────────────────────────
   /** 1 while the player is loading an arrow (holding secondary weave button). */

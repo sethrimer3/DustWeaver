@@ -70,6 +70,8 @@ export function enemyTypeToFlags(
     isWebSpider:     type === 'webSpider',
     isDustConstellation:      type === 'dustConstellation' || type === 'dustConstellationLarge',
     isDustConstellationLarge: type === 'dustConstellationLarge',
+    isOrbitalDustCore:        type === 'orbitalDustCore' || type === 'orbitalDustCoreLarge',
+    isOrbitalDustCoreLarge:   type === 'orbitalDustCoreLarge',
   };
 }
 

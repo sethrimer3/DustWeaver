@@ -1379,3 +1379,42 @@ motes) and large (8–10 motes).
 5. **Mote count persisted in save**: Currently mote count is derived from the
    variant flag each spawn; storing it in room data is not needed but could
    enable custom-count variants later.
+
+---
+
+## Orbital Dust Core (BUILD: current)
+
+### What was implemented
+- **`src/sim/clusters/orbitalDustCoreConfig.ts`** — all tuning constants
+- **`src/sim/clusters/orbitalDustCoreAi.ts`** — full AI state machine (idle/active/charge/pulse/recover/dying) + `applyODCHit()` ring-aware damage handler
+- **`src/render/clusters/orbitalDustCoreRenderer.ts`** — mote/core/pulse/shield-flash rendering with debug overlays
+- Wired into: `worldHazardState.ts`, `state.ts`, `snapshotTypes.ts`, `snapshot.ts`, `snapshotAllocating.ts`, `tick.ts`, `gameRender.ts`, `renderer.ts`, `enemyAi.ts`, `enemyMovement.ts`, `gameSpawn.ts`
+- Combat interception in `swordWeave.ts`, `arrowWeave.ts`, `forces.ts`
+- Full editor/room pipeline: `roomDef.ts`, `roomJson.ts`, `roomJsonSerializer.ts`, `roomJsonSchema.ts`, `roomSchemaV2.ts`, `roomSchemaHydrator.ts`, `roomSavedTypes.ts`, `editorElementTypes.ts`, `editorDropdownData.ts`, `editorEnemyPlacer.ts`, `editorRoomBuilder.ts`
+
+### How to place / test
+1. Open the editor, switch to the **enemies** palette.
+2. Find **Orbital Dust Core** (small, 2 rings) or **Orbital Dust Core (L)** (large, 4 rings).
+3. Place in a room and play-test via the editor's play button.
+4. Damage the outer ring with particles/sword/arrow; watch inner rings expand outward; destroy all rings to expose the core.
+
+### Key tuning constants (`src/sim/clusters/orbitalDustCoreConfig.ts`)
+| Constant | Default | Purpose |
+|---|---|---|
+| `ODC_ACTIVATION_RANGE_WORLD` | 220 | Aggro radius |
+| `ODC_ATTACK_COOLDOWN_TICKS` | 200 | Ticks between Gravity Pulse attacks |
+| `ODC_CHARGE_DURATION_TICKS` | 50 | Pulse telegraph duration |
+| `ODC_PULSE_DURATION_TICKS` | 80 | Pulse expansion duration |
+| `ODC_PULSE_DAMAGE` | 1 | Damage if pulse hits player |
+| `ODC_SMALL_RING_RADII` | [32, 20] | Ring orbit radii (small variant) |
+| `ODC_LARGE_RING_RADII` | [52, 40, 28, 18] | Ring orbit radii (large variant) |
+| `ODC_SMALL_RING_HEALTH` | [4, 4] | HP per ring (small) |
+| `ODC_LARGE_RING_HEALTH` | [6, 5, 5, 4] | HP per ring (large) |
+| `ODC_SMALL_CORE_HP` / `ODC_LARGE_CORE_HP` | 5 / 12 | Core HP per variant |
+| `ODC_RING_HIT_BAND_THICKNESS_WORLD` | 12 | Radial thickness of ring hit band |
+
+### Optional future improvements
+1. **Dust Sling attack**: One mote briefly brightens, shoots outward toward the player, then respawns after a delay. Add as a second attack pattern triggered at lower ring count.
+2. **Per-mote death VFX**: Flash each mote white before it bursts, matching the DustConstellation per-mote death style.
+3. **Variant 3 — Corrupted Core**: More rings, darker color palette, wider pulse — same architecture with different config constants.
+4. **Expose ring index in death burst direction**: Currently burst is omnidirectional; could direct particles along the ring's orbital tangent for more visual flair.

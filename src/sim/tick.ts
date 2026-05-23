@@ -48,6 +48,7 @@ import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
 import { applyBeeSwarmAI } from './clusters/beeSwarmAi';
 import { applyWebSpiderAI } from './clusters/webSpiderAi';
 import { applyDustConstellationAI } from './clusters/dustConstellationAi';
+import { applyOrbitalDustCoreAI } from './clusters/orbitalDustCoreAi';
 import { applySnakeAI } from './clusters/snakeAi';
 import {
   syncMoteQueueWithParticles,
@@ -149,6 +150,7 @@ export function tick(world: WorldState): void {
   applyBeeSwarmAI(world);
   applyWebSpiderAI(world);
   applyDustConstellationAI(world);
+  applyOrbitalDustCoreAI(world);
   applySnakeAI(world);
 
   // 1. Clear accumulated forces from previous tick

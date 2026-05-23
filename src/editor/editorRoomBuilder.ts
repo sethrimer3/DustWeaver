@@ -169,6 +169,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isWebSpiderFlag: e.isWebSpiderFlag ?? 0,
       isDustConstellationFlag: e.isDustConstellationFlag ?? 0,
       isDustConstellationLargeFlag: e.isDustConstellationLargeFlag ?? 0,
+      isOrbitalDustCoreFlag: e.isOrbitalDustCoreFlag ?? 0,
+      isOrbitalDustCoreLargeFlag: e.isOrbitalDustCoreLargeFlag ?? 0,
     };
   });
 

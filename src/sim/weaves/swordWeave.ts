@@ -35,6 +35,13 @@ import {
   getCircleOfInfluenceRadiusWorld,
   getAvailableMoteSlotCount,
 } from '../motes/orderedMoteQueue';
+import { applyODCHit } from '../clusters/orbitalDustCoreAi';
+import {
+  ODC_SMALL_RING_RADII,
+  ODC_LARGE_RING_RADII,
+  ODC_SMALL_RING_COUNT,
+  ODC_LARGE_RING_COUNT,
+} from '../clusters/orbitalDustCoreConfig';
 
 // ── Sword state enum ──────────────────────────────────────────────────────────
 
@@ -224,6 +231,23 @@ function _applySlashHits(
 
     // Hit!
     _slashHitFlags[ci] = 1;
+    // ODC handles its own damage routing (ring protection, shield flash, etc.)
+    // Compute hit position at the exposed ring radius in the direction from cluster→anchor,
+    // so applyODCHit correctly identifies which ring (or core) was struck.
+    if (c.isOrbitalDustCoreFlag === 1) {
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const nx = -dx / dist; // direction from cluster toward anchor
+      const ny = -dy / dist;
+      const exposedRing = c.orbitalDustCoreExposedRing;
+      const isLarge = c.isOrbitalDustCoreLargeFlag;
+      const radii = isLarge === 1 ? ODC_LARGE_RING_RADII : ODC_SMALL_RING_RADII;
+      const ringCount = isLarge === 1 ? ODC_LARGE_RING_COUNT : ODC_SMALL_RING_COUNT;
+      const hitR = exposedRing >= ringCount ? 0 : radii[exposedRing];
+      const hitX = c.positionXWorld + nx * hitR;
+      const hitY = c.positionYWorld + ny * hitR;
+      applyODCHit(world, ci, hitX, hitY, SWORD_DAMAGE);
+      continue;
+    }
     c.healthPoints -= SWORD_DAMAGE;
     if (c.healthPoints <= 0) {
       c.healthPoints = 0;

@@ -582,6 +582,61 @@ export interface ClusterState {
   dustConstellationSpawnYWorld: number;
   /** Phase angle for the idle bobbing motion (radians). */
   dustConstellationBobPhaseRad: number;
+
+  // ---- Orbital Dust Core (isOrbitalDustCoreFlag === 1) ----------------------
+  /**
+   * 1 if this cluster is an Orbital Dust Core — a floating enemy made of
+   * orbiting dust mote rings around a vulnerable core.
+   */
+  isOrbitalDustCoreFlag: 0 | 1;
+  /** 1 for the large variant (4 rings, more motes, higher HP). */
+  isOrbitalDustCoreLargeFlag: 0 | 1;
+  /**
+   * Current AI state:
+   *   0 = idle     — drifting near spawn; motes orbit slowly
+   *   1 = active   — player in range; normal orbit speed + attack cooldown
+   *   2 = charge   — Gravity Pulse telegraph; motes tighten inward
+   *   3 = pulse    — pulse ring expanding outward
+   *   4 = recover  — post-pulse cooldown
+   *   5 = dying    — core collapse + burst
+   */
+  orbitalDustCoreState: number;
+  /** Ticks elapsed in the current state. */
+  orbitalDustCoreStateTicks: number;
+  /** WorldState slot index for per-ODC mote arrays (-1 if unallocated). */
+  orbitalDustCoreSlotIndex: number;
+  /** X of the spawn point (world units). */
+  orbitalDustCoreSpawnXWorld: number;
+  /** Y of the spawn point (world units). */
+  orbitalDustCoreSpawnYWorld: number;
+  /** Phase angle for the idle bob motion (radians). */
+  orbitalDustCoreBobPhaseRad: number;
+  /** Remaining ticks before the next attack. */
+  orbitalDustCoreAttackCooldownTicks: number;
+  /**
+   * Index of the currently exposed (damageable) ring.
+   * 0 = outermost ring; increments as rings are destroyed.
+   * When >= ringCount, the core is vulnerable.
+   */
+  orbitalDustCoreExposedRing: number;
+  /** Remaining health of ring 0 (outermost). -1 = ring does not exist. */
+  orbitalDustCoreRing0Health: number;
+  /** Remaining health of ring 1. -1 = ring does not exist. */
+  orbitalDustCoreRing1Health: number;
+  /** Remaining health of ring 2. -1 = ring does not exist. */
+  orbitalDustCoreRing2Health: number;
+  /** Remaining health of ring 3 (innermost). -1 = ring does not exist. */
+  orbitalDustCoreRing3Health: number;
+  /** Current gravity-pulse expansion radius (world units). 0 when inactive. */
+  orbitalDustCorePulseRadius: number;
+  /** 1 while the pulse ring is live and can deal damage. */
+  orbitalDustCorePulseActiveFlag: 0 | 1;
+  /** 1 once the pulse has already hit the player this emission. */
+  orbitalDustCorePulseHitPlayerFlag: 0 | 1;
+  /** Ticks remaining for the shield-hit flash visual (when core is protected). */
+  orbitalDustCoreShieldFlashTicks: number;
+  /** Ticks remaining for the core pulse flash on ring collapse. */
+  orbitalDustCoreCorePulseTicks: number;
 }
 
 export function createClusterState(
@@ -752,5 +807,24 @@ export function createClusterState(
     dustConstellationSpawnXWorld: positionXWorld,
     dustConstellationSpawnYWorld: positionYWorld,
     dustConstellationBobPhaseRad: 0,
+    isOrbitalDustCoreFlag: 0,
+    isOrbitalDustCoreLargeFlag: 0,
+    orbitalDustCoreState: 0,
+    orbitalDustCoreStateTicks: 0,
+    orbitalDustCoreSlotIndex: -1,
+    orbitalDustCoreSpawnXWorld: positionXWorld,
+    orbitalDustCoreSpawnYWorld: positionYWorld,
+    orbitalDustCoreBobPhaseRad: 0,
+    orbitalDustCoreAttackCooldownTicks: 0,
+    orbitalDustCoreExposedRing: 0,
+    orbitalDustCoreRing0Health: -1,
+    orbitalDustCoreRing1Health: -1,
+    orbitalDustCoreRing2Health: -1,
+    orbitalDustCoreRing3Health: -1,
+    orbitalDustCorePulseRadius: 0,
+    orbitalDustCorePulseActiveFlag: 0,
+    orbitalDustCorePulseHitPlayerFlag: 0,
+    orbitalDustCoreShieldFlashTicks: 0,
+    orbitalDustCoreCorePulseTicks: 0,
   };
 }

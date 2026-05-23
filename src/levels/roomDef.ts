@@ -333,6 +333,13 @@ export interface RoomEnemyDef {
   isDustConstellationFlag?: 0 | 1;
   /** 1 for the large Dust Constellation Sentinel variant (more motes, higher HP). */
   isDustConstellationLargeFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is an Orbital Dust Core — a floating enemy made of orbiting
+   * dust mote rings around a vulnerable core.
+   */
+  isOrbitalDustCoreFlag?: 0 | 1;
+  /** 1 for the large Orbital Dust Core variant (4 rings, more motes, higher HP). */
+  isOrbitalDustCoreLargeFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */
