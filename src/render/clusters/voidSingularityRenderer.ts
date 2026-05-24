@@ -35,6 +35,7 @@ import {
   VSP_PROJ_VISUAL_RADIUS_WORLD,
   MAX_MOTES_PER_VS,
   MAX_PROJS_PER_VSP,
+  VS_DEATH_DURATION_TICKS,
 } from '../../sim/clusters/voidSingularityConfig';
 
 // ── Colour palette ─────────────────────────────────────────────────────────────
@@ -292,7 +293,7 @@ export function renderVoidSingularities(
     let deathAlpha = 1.0;
     if (cluster.voidSingularityState === VS_STATE_DYING) {
       // VS_DEATH_DURATION_TICKS = 55 ticks
-      deathAlpha = Math.max(0, 1.0 - cluster.voidSingularityStateTicks / 55);
+      deathAlpha = Math.max(0, 1.0 - cluster.voidSingularityStateTicks / VS_DEATH_DURATION_TICKS);
     }
     const prevAlpha = ctx.globalAlpha;
     ctx.globalAlpha = prevAlpha * deathAlpha;

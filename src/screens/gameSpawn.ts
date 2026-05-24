@@ -1,4 +1,4 @@
-import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT, MAX_DUST_BLOCK_MIMICS, MAX_DUST_WEAVER_ARCHITECTS, MAX_MOTES_PER_DWA, MAX_VOID_SINGULARITIES, MAX_MOTES_PER_VS } from '../sim/world';
+import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT, MAX_DUST_BLOCK_MIMICS, MAX_DUST_WEAVER_ARCHITECTS, MAX_MOTES_PER_DWA, MAX_VOID_SINGULARITIES, MAX_MOTES_PER_VS, MAX_PROJS_PER_VSP } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
@@ -826,8 +826,8 @@ export function spawnEnemyClusters(
         }
         // Clear projectile slots
         if (isPair === 1) {
-          const projBase = slotIndex * 8;
-          for (let p = 0; p < 8; p++) world.vspProjAliveFlag[projBase + p] = 0;
+          const projBase = slotIndex * MAX_PROJS_PER_VSP;
+          for (let p = 0; p < MAX_PROJS_PER_VSP; p++) world.vspProjAliveFlag[projBase + p] = 0;
         }
       }
     }
