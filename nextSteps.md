@@ -40,8 +40,8 @@ block themes. It does not affect collision, tile placement, room geometry, or ch
 
 2. **Profile assignments are keyword-based heuristics.** `getTransitionProfile()` in
    `seamBlending.ts` matches block theme IDs against keyword substrings (e.g., "moss", "crystal",
-   "corrupt"). Themes that don't match any keyword fall back to `'crumbly'`. Manual tuning is
-   needed as new themes are added.
+ "corrupt"). Themes that don't match any keyword fall back to `PROFILES.none` (no overlay).
+ Manual tuning is needed as new themes are added.
 
 3. **Editor backdrop doesn't live-preview seam blending changes.** This is consistent with how
    other renderer-state metadata (lighting, background) works in the editor — changes appear after
@@ -69,7 +69,7 @@ To add artist-authored overlay sprites:
 ### Theme Metadata Still Needing Manual Tuning
 
 The following profile assignments are inferred by keyword. If a new theme ID doesn't match,
-it falls back to `'crumbly'`. Review after adding new block themes:
+it falls back to `PROFILES.none` (no overlay). Review after adding new block themes:
 - `mossy`, `grass`, `organic`, `mud` → mossy
 - `dirt`, `soil`, `sand`, `gravel`, `crumbl` → crumbly
 - `cracked`, `broken`, `fracture`, `shatter` → cracked

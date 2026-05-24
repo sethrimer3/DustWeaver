@@ -70,7 +70,7 @@ const PROFILE_KEYWORDS: [TransitionProfileKind, string[]][] = [
   ['crumbly',   ['dirt', 'soil', 'mud', 'clay', 'earth', 'gravel', 'loam']],
   ['dusty',     ['sand', 'dust', 'ash', 'chalk', 'powder', 'bone', 'desert', 'dry']],
   ['none',      ['marble', 'iron', 'metal', 'steel', 'tile', 'brick', 'clean', 'polished',
-                 'crystal', 'glass', 'ice', 'light']],
+                 'glass', 'ice', 'light']],
 ];
 
 const _profileCache = new Map<string, BlockTransitionProfile>();
