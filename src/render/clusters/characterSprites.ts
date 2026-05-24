@@ -28,11 +28,11 @@ export interface CharacterSprites {
 export const PLAYER_OUTLINE_THICKNESS_WORLD = 1;
 /** Precomputed outer-edge outline masks keyed by source player sprite image. */
 const _playerOutlineMaskCache = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
-/** 8-neighbour offsets used to detect silhouette edges (includes diagonals). */
+/** 4-neighbour outline morphology keeps pixel-art corners cut off. */
 const _outlineNeighborOffsets: ReadonlyArray<readonly [number, number]> = [
-  [-1, -1], [0, -1], [1, -1],
+            [0, -1],
   [-1,  0],          [1,  0],
-  [-1,  1], [0,  1], [1,  1],
+            [0,  1],
 ];
 
 /**
