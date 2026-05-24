@@ -184,7 +184,7 @@ const SLOT_DIAGONAL      = 'diagonal_01';
  *  null       → attempted but 404/error (miss — will not be retried)
  *  image      → loaded (may still be completing; check .complete && .naturalWidth)
  */
-const _spriteCache = new Map<string, HTMLImageElement | null>();
+const _spriteCache = new Map<string, HTMLImageElement | null | 'loading'>();
 
 function _transitionSpriteUrl(profile: TransitionProfileKind, slot: string): string {
   return `ASSETS/SPRITES/BLOCKS/transitions/generic/${profile}/${slot}.png`;
@@ -194,21 +194,22 @@ function _transitionSpriteUrl(profile: TransitionProfileKind, slot: string): str
 function _loadTransitionSprite(profile: TransitionProfileKind, slot: string): void {
   const key = `${profile}/${slot}`;
   if (_spriteCache.has(key)) return;
+  // Set a sentinel immediately so concurrent calls for the same key are no-ops
+  // while the image is still in flight.
+  _spriteCache.set(key, 'loading');
   const img = loadImg(_transitionSpriteUrl(profile, slot));
-  // Attach the error listener before setting the cache entry to avoid a
-  // window where an already-errored image (returned by loadImg's own cache)
-  // would sit in _spriteCache as an image element rather than null.
+  // If the image was already loaded and errored (pre-cached 404 returned by
+  // loadImg), the error event will not fire again — detect it synchronously.
+  if (img.complete && img.naturalWidth === 0) {
+    _spriteCache.set(key, null);
+    return;
+  }
+  // Happy path: image is loading or already complete and valid.
+  _spriteCache.set(key, img);
   img.addEventListener('error', () => {
     // 404 or network error: mark as a permanent miss so we stop retrying.
     _spriteCache.set(key, null);
   }, { once: true });
-  // If the image was already loaded and errored (pre-cached 404), mark it as
-  // a miss immediately — the error event will not fire again.
-  if (img.complete && img.naturalWidth === 0) {
-    _spriteCache.set(key, null);
-  } else {
-    _spriteCache.set(key, img);
-  }
 }
 
 /**
@@ -226,9 +227,9 @@ function _getReadySprite(profile: TransitionProfileKind, slot: string): HTMLImag
     _loadTransitionSprite(profile, slot);
     return null; // not ready yet — use procedural fallback this frame
   }
-  const img = _spriteCache.get(key)!;
-  if (img === null) return null; // known miss
-  if (img.complete && img.naturalWidth > 0) return img;
+  const entry = _spriteCache.get(key)!;
+  if (entry === null || entry === 'loading') return null; // miss or still in flight
+  if (entry.complete && entry.naturalWidth > 0) return entry;
   return null; // still loading
 }
 
@@ -332,6 +333,9 @@ function drawMossy(
   ctx.fillStyle = '#3a7a3a';
   const band = edgeBand(dir, sz, Math.ceil(3 * px1));
   const steps = Math.floor(sz / px1);
+  // Cap at 0.95 as a defensive safety margin (at density=1.4 the highest value is
+  // MOSSY_BASE_THRESHOLD*1.4 ≈ 0.77, well below the cap; the cap guards against
+  // future custom profiles that might pass a larger density value).
   const threshold = Math.min(0.95, MOSSY_BASE_THRESHOLD * density);
   for (let i = 0; i < steps; i++) {
     const h0 = hash01(col, row, dir * 100 + i, 17);
@@ -360,6 +364,8 @@ function drawCrumbly(
   ctx.fillStyle = color;
   const band = edgeBand(dir, sz, Math.ceil(2 * px1));
   const steps = Math.floor(sz / px1);
+  // Cap at 0.95 as a defensive safety margin (at density=1.4 the highest value is
+  // CRUMBLY_BASE_THRESHOLD*1.4 ≈ 0.63, well below the cap; guards future profiles).
   const threshold = Math.min(0.95, CRUMBLY_BASE_THRESHOLD * density);
   for (let i = 0; i < steps; i++) {
     const h0 = hash01(col, row, dir * 100 + i, 7);
@@ -591,8 +597,8 @@ function drawInnerCornerAccent(
   stamp(ctx, cx, cy, px1);
   // Occasional second pixel extending along one axis
   if (h < 0.35) {
-    const jx = CORNER_PIXEL_X[cornerIdx] ? -px1 : px1;
-    stamp(ctx, cx + jx, cy, px1);
+    const extensionX = CORNER_PIXEL_X[cornerIdx] ? -px1 : px1;
+    stamp(ctx, cx + extensionX, cy, px1);
   }
 }
 
