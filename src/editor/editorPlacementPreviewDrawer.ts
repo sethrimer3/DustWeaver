@@ -86,7 +86,7 @@ export function drawPlacementPreview(
     return;
   }
 
-  if (item.isCrumbleBlockItem === 1) {
+  if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
     // Crumble block preview — block shape + crack overlay
     const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;

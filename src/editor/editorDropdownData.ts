@@ -17,7 +17,7 @@ import { FOLDER_BLOCK_THEMES, folderThemeShortId } from '../render/walls/folderB
 /** Active brush mode for painting tools. */
 export type BrushMode = 'single' | '3x3' | '5x5' | 'rect';
 
-export type PaletteCategory = 'blocks' | 'enemies' | 'triggers' | 'collectables' | 'environment' | 'objects' | 'lighting' | 'liquids' | 'ropes' | 'guidePaths';
+export type PaletteCategory = 'blocks' | 'specialBlocks' | 'enemies' | 'triggers' | 'collectables' | 'environment' | 'objects' | 'lighting' | 'liquids' | 'ropes' | 'guidePaths';
 
 export interface PaletteItem {
   id: string;
@@ -51,6 +51,8 @@ export interface PaletteItem {
   bouncePadSpeedFactorIndex?: 0 | 1;
   /** 1 if this palette item places a kinetic block (fixed-velocity boost on contact). */
   isKineticBlockItem?: 1;
+  /** Block theme override used by special block entries such as ice blocks. */
+  blockThemeOverride?: BlockTheme;
   /** 1 if this palette item places a collectible dust container (grants +4 max capacity). */
   isDustContainerItem?: 1;
   /** 1 if this palette item places a collectible dust container piece. */
@@ -198,32 +200,25 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // ── Liquids layer ───────────────────────────────────────────────────────────
   { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLiquidZoneItem: 1 },
   { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLiquidZoneItem: 1 },
-  // ── Crumble blocks ──────────────────────────────────────────────────────────
-  { id: 'crumble_block',    label: 'Crumble 1×1',       category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1 },
-  { id: 'crumble_block_2x2', label: 'Crumble 2×2',      category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1 },
-  { id: 'crumble_ramp_1x1', label: 'Crumble Ramp 1×1',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isCrumbleBlockItem: 1, isRampItem: 1 },
-  { id: 'crumble_ramp_1x2', label: 'Crumble Ramp 1×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isCrumbleBlockItem: 1, isRampItem: 1 },
-  { id: 'crumble_ramp_2x2', label: 'Crumble Ramp 2×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isCrumbleBlockItem: 1, isRampItem: 1 },
   // ── Bounce pads ─────────────────────────────────────────────────────────────
   // Dim = 50 % restitution (small 2×2-pixel core)
-  { id: 'bounce_pad_1x1_dim',       label: 'Bounce 1×1 (50%)',      category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },
-  { id: 'bounce_pad_2x2_dim',       label: 'Bounce 2×2 (50%)',      category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },
-  { id: 'bounce_pad_ramp_1x1_dim',  label: 'Bounce Ramp 1×1 (50%)', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
-  { id: 'bounce_pad_ramp_1x2_dim',  label: 'Bounce Ramp 1×2 (50%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
-  { id: 'bounce_pad_ramp_2x2_dim',  label: 'Bounce Ramp 2×2 (50%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
+  { id: 'bounce_pad_1x1_dim',       label: 'Bounce 1×1 (50%)',      category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },
+  { id: 'bounce_pad_2x2_dim',       label: 'Bounce 2×2 (50%)',      category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },
+  { id: 'bounce_pad_ramp_1x1_dim',  label: 'Bounce Ramp 1×1 (50%)', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
+  { id: 'bounce_pad_ramp_1x2_dim',  label: 'Bounce Ramp 1×2 (50%)', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
+  { id: 'bounce_pad_ramp_2x2_dim',  label: 'Bounce Ramp 2×2 (50%)', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0, isRampItem: 1 },
   // Bright = 100 % restitution (large 4×4-pixel core)
-  { id: 'bounce_pad_1x1_bright',      label: 'Bounce 1×1 (100%)',      category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1 },
-  { id: 'bounce_pad_2x2_bright',      label: 'Bounce 2×2 (100%)',      category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1 },
-  { id: 'bounce_pad_ramp_1x1_bright', label: 'Bounce Ramp 1×1 (100%)', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
-  { id: 'bounce_pad_ramp_1x2_bright', label: 'Bounce Ramp 1×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
-  { id: 'bounce_pad_ramp_2x2_bright', label: 'Bounce Ramp 2×2 (100%)', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
+  { id: 'bounce_pad_1x1_bright',      label: 'Bounce 1×1 (100%)',      category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1 },
+  { id: 'bounce_pad_2x2_bright',      label: 'Bounce 2×2 (100%)',      category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1 },
+  { id: 'bounce_pad_ramp_1x1_bright', label: 'Bounce Ramp 1×1 (100%)', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
+  { id: 'bounce_pad_ramp_1x2_bright', label: 'Bounce Ramp 1×2 (100%)', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
+  { id: 'bounce_pad_ramp_2x2_bright', label: 'Bounce Ramp 2×2 (100%)', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 1, isRampItem: 1 },
   // ── Kinetic blocks (impart fixed directional velocity boost on contact) ───
-  { id: 'kinetic_block_1x1', label: 'Kinetic Block 1×1', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isKineticBlockItem: 1 },
-  { id: 'kinetic_block_2x2', label: 'Kinetic Block 2×2', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isKineticBlockItem: 1 },
-  // ── Falling blocks (triggers as rigid group when disturbed) ──────────────
-  { id: 'falling_block_tough',     label: 'Falling Block, Tough',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'tough' as const },
-  { id: 'falling_block_sensitive', label: 'Falling Block, Sensitive', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'sensitive' as const },
-  { id: 'falling_block_crumbling', label: 'Falling Block, Crumbling', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isFallingBlockItem: 1, fallingBlockVariant: 'crumbling' as const },
+  { id: 'kinetic_block_1x1', label: 'Kinetic Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isKineticBlockItem: 1 },
+  { id: 'kinetic_block_2x2', label: 'Kinetic Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isKineticBlockItem: 1 },
+  // ── Ice blocks (static wall theme with ice-surface physics) ───────────────
+  { id: 'ice_block_1x1', label: 'Ice Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'iceBlock' },
+  { id: 'ice_block_2x2', label: 'Ice Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, blockThemeOverride: 'iceBlock' },
   // ── Background blocks (visual-only, no collision) ────────────────────────
   { id: 'bg_block_1x1',       label: 'BG Block 1×1',              category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBackgroundBlockItem: 1 as const },
   { id: 'bg_block_2x2',       label: 'BG Block 2×2',              category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBackgroundBlockItem: 1 as const },

@@ -123,7 +123,7 @@ export function renderEditorIndicator(
   if (state !== null && state !== undefined &&
       state.activeTool === EditorTool.Place &&
       state.selectedPaletteItem !== null &&
-      state.selectedPaletteItem.category === 'blocks') {
+      (state.selectedPaletteItem.category === 'blocks' || state.selectedPaletteItem.category === 'specialBlocks')) {
     const rampLabels = ['/', '\\', '⌐', '¬'];
     const item = state.selectedPaletteItem;
     let rotHint: string;

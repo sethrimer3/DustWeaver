@@ -10,7 +10,8 @@ import {
   BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS,
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
   AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
-  RoomEdge, EditorUICallbacks, BrushMode,
+  RoomEdge, EditorUICallbacks, BrushMode, BlockPlacementModifier,
+  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant,
 } from './editorState';
 import {
   addDimField,
@@ -245,7 +246,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
   catBar.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px;';
-  const categories: PaletteCategory[] = ['blocks', 'enemies', 'triggers', 'collectables', 'environment', 'objects', 'lighting', 'liquids', 'ropes', 'guidePaths'];
+  const categories: PaletteCategory[] = ['blocks', 'specialBlocks', 'enemies', 'triggers', 'collectables', 'environment', 'objects', 'lighting', 'liquids', 'ropes', 'guidePaths'];
   const catBtns: HTMLButtonElement[] = [];
   for (const cat of categories) {
     const btn = makeBtn(cat, () => callbacks?.onCategoryChange(cat));
@@ -382,6 +383,59 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   let paletteItems: { btn: HTMLElement; itemId: string }[] = [];
 
   const specialItemPickers = createEditorSpecialItemPickers(() => callbacks);
+  const blockModifierDiv = document.createElement('div');
+  blockModifierDiv.style.cssText = `
+    border: 1px solid rgba(120,180,220,0.45); border-radius: 3px;
+    padding: 6px 8px; margin-top: 8px; background: rgba(0,15,25,0.35); display: none;
+  `;
+  const blockModifierTitle = document.createElement('div');
+  blockModifierTitle.textContent = 'Block Modifier';
+  blockModifierTitle.style.cssText = 'font-size: 11px; color: #8fc8ff; margin-bottom: 6px; font-weight: bold;';
+  blockModifierDiv.appendChild(blockModifierTitle);
+  const modifierInputs: HTMLInputElement[] = [];
+  const modifierOptions: { id: BlockPlacementModifier; label: string }[] = [
+    { id: 'cracked', label: 'Cracked' },
+    { id: 'tough', label: 'Falling: Tough' },
+    { id: 'sensitive', label: 'Falling: Sensitive' },
+    { id: 'crumbling', label: 'Falling: Crumbling' },
+  ];
+  function makeModifierRow(id: BlockPlacementModifier, label: string): void {
+    const row = document.createElement('label');
+    row.style.cssText = 'display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 11px; cursor: pointer;';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = id;
+    input.dataset.modifier = id;
+    input.addEventListener('change', () => {
+      callbacks?.onBlockPlacementModifierChange(input.checked ? id : 'none');
+    });
+    input.addEventListener('click', (e) => e.stopPropagation());
+    modifierInputs.push(input);
+    row.appendChild(input);
+    const text = document.createElement('span');
+    text.textContent = label;
+    row.appendChild(text);
+    blockModifierDiv.appendChild(row);
+  }
+  for (const opt of modifierOptions) makeModifierRow(opt.id, opt.label);
+  const modifierCrumbleSelect = document.createElement('select');
+  modifierCrumbleSelect.style.cssText = `
+    width: 100%; margin-top: 6px; background: rgba(0,0,0,0.6);
+    border: 1px solid rgba(143,200,255,0.4); color: ${TEXT_COLOR};
+    padding: 4px 6px; font-size: 11px; font-family: monospace; border-radius: 2px;
+    display: none;
+  `;
+  for (const opt of CRUMBLE_VARIANT_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    modifierCrumbleSelect.appendChild(o);
+  }
+  modifierCrumbleSelect.addEventListener('change', () => {
+    callbacks?.onCrumbleVariantChange(modifierCrumbleSelect.value as CrumbleVariant);
+  });
+  modifierCrumbleSelect.addEventListener('click', (e) => e.stopPropagation());
+  blockModifierDiv.appendChild(modifierCrumbleSelect);
 
   // ── Inspector ────────────────────────────────────────────────────────────
   const inspectorDiv = document.createElement('div');
@@ -389,6 +443,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     border-top: 1px solid ${PANEL_BORDER}; padding-top: 10px; margin-top: 8px;
   `;
   container.appendChild(specialItemPickers.skillTombPickerDiv);
+  container.appendChild(blockModifierDiv);
   container.appendChild(specialItemPickers.crumblePickerDiv);
   container.appendChild(specialItemPickers.dustJarPickerDiv);
   container.appendChild(inspectorDiv);
@@ -626,6 +681,23 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     }
 
     specialItemPickers.update(state);
+    const item = state.selectedPaletteItem;
+    const isModifierEligible = state.activeCategory === 'blocks' &&
+      item !== null &&
+      item.category === 'blocks' &&
+      item.isPlatformItem !== 1 &&
+      item.isRampItem !== 1 &&
+      item.isBackgroundBlockItem !== 1;
+    blockModifierDiv.style.display = isModifierEligible ? '' : 'none';
+    if (isModifierEligible) {
+      for (const input of modifierInputs) {
+        input.checked = input.dataset.modifier === state.pendingBlockPlacementModifier;
+      }
+      modifierCrumbleSelect.style.display = state.pendingBlockPlacementModifier === 'cracked' ? '' : 'none';
+      if (document.activeElement !== modifierCrumbleSelect) {
+        modifierCrumbleSelect.value = state.pendingCrumbleVariant;
+      }
+    }
 
     // Update inspector (only recreate when selected element changes)
     const selUid = state.selectedElements.length > 0 ? state.selectedElements[0].uid : -1;

@@ -10,7 +10,7 @@
  */
 
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
-import type { BlockTheme, BackgroundId, LightingEffect, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+import type { BlockTheme, BackgroundId, LightingEffect, AmbientLightDirection, CrumbleVariant, FallingBlockVariant } from '../levels/roomDef';
 import type { LightType } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 import type { BrushMode, PaletteCategory, PaletteItem } from './editorDropdownData';
@@ -49,6 +49,8 @@ export enum EditorTool {
   Place = 'place',
   Delete = 'delete',
 }
+
+export type BlockPlacementModifier = 'none' | 'cracked' | FallingBlockVariant;
 
 // ── Editor state ─────────────────────────────────────────────────────────────
 
@@ -124,6 +126,8 @@ export interface EditorState {
    * Populated from the crumble variant dropdown when a crumble item is selected.
    */
   pendingCrumbleVariant: CrumbleVariant;
+  /** Optional modifier applied when placing ordinary block boxes. */
+  pendingBlockPlacementModifier: BlockPlacementModifier;
   /**
    * Which dust kind a newly placed dust boost jar will contain.
    * Populated from the dust kind dropdown when dust_boost_jar is selected.
@@ -200,6 +204,7 @@ export function createEditorState(): EditorState {
     clipboard: null,
     pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
     pendingCrumbleVariant: 'normal',
+    pendingBlockPlacementModifier: 'none',
     pendingDustBoostJarKind: 'Physical',
     pendingDustBoostJarCount: 5,
     pendingDustSwarmKind: 'Physical',
@@ -256,6 +261,8 @@ export interface EditorUICallbacks {
   onSkillTombWeaveChange: (weaveId: string) => void;
   /** Called when the user picks a different crumble variant in the crumble variant dropdown. */
   onCrumbleVariantChange: (variant: CrumbleVariant) => void;
+  /** Called when the user toggles the cracked/falling block placement modifier. */
+  onBlockPlacementModifierChange: (modifier: BlockPlacementModifier) => void;
   /** Called when the user picks a different dust kind for the dust boost jar. */
   onDustBoostJarKindChange: (dustKind: string) => void;
   /** Called when the user changes the dust count for the dust boost jar. */

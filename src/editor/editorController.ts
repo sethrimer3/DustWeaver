@@ -410,6 +410,9 @@ export function createEditorController(
         onCrumbleVariantChange: (variant) => {
           state.pendingCrumbleVariant = variant;
         },
+        onBlockPlacementModifierChange: (modifier) => {
+          state.pendingBlockPlacementModifier = modifier;
+        },
         onDustBoostJarKindChange: (dustKind: string) => {
           state.pendingDustBoostJarKind = dustKind;
         },

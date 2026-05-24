@@ -60,7 +60,7 @@ export function getPlacementPreview(state: EditorState): { wBlock: number; hBloc
   if (item.id === 'dialogue_trigger') {
     return { wBlock: 4, hBlock: 4 };
   }
-  if (item.category !== 'blocks') {
+  if (item.category !== 'blocks' && item.category !== 'specialBlocks') {
     return { wBlock: 1, hBlock: 1 };
   }
   return {
@@ -83,6 +83,7 @@ export function placeAtCursor(state: EditorState): void {
   // Brush painting: tile-like items support multi-cell brushes.
   const isBrushable =
     item.category === 'blocks' ||
+    item.category === 'specialBlocks' ||
     item.category === 'liquids' ||
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
 
@@ -204,10 +205,11 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     return;
   }
 
-  if (item.category === 'blocks') {
+  if (item.category === 'blocks' || item.category === 'specialBlocks') {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
     const isPlatformFlag: 0 | 1 = item.isPlatformItem === 1 ? 1 : 0;
+    const placementBlockTheme = item.blockThemeOverride ?? state.selectedBlockTheme;
 
     let rampOrientation: 0 | 1 | 2 | 3 | undefined;
     if (item.isRampItem === 1) {
@@ -275,7 +277,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       return;
     }
 
-    if (item.isCrumbleBlockItem === 1) {
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
 
@@ -306,25 +308,42 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         hBlock: crumbleH,
         rampOrientation: crumbleRamp,
         variant: state.pendingCrumbleVariant,
-        blockTheme: state.selectedBlockTheme,
+        blockTheme: placementBlockTheme,
       });
       return;
     }
 
     // ── Falling block tiles ──────────────────────────────────────────────────
-    if (item.isFallingBlockItem === 1) {
-      const variant = item.fallingBlockVariant ?? 'tough';
-      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
-      if (isFallingBlockAt(room, bx, by)) return;
-      if (rectOverlapsSolidEditorObject(room, bx, by, 1, 1)) return;
+    if (item.isFallingBlockItem === 1 || (
+      item.category === 'blocks' &&
+      (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
+    )) {
+      const variant = item.fallingBlockVariant ?? (
+        state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling'
+          ? state.pendingBlockPlacementModifier
+          : 'tough'
+      );
+      const fallingW = getPlacementWidth(item, state.placementRotationSteps);
+      const fallingH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, fallingW, fallingH)) return;
+      if (rectOverlapsSolidEditorObject(room, bx, by, fallingW, fallingH)) return;
+      for (let yOffset = 0; yOffset < fallingH; yOffset++) {
+        for (let xOffset = 0; xOffset < fallingW; xOffset++) {
+          if (isFallingBlockAt(room, bx + xOffset, by + yOffset)) return;
+        }
+      }
       if (!room.fallingBlocks) room.fallingBlocks = [];
-      const fb: EditorFallingBlock = {
-        uid: allocateUid(state),
-        xBlock: bx,
-        yBlock: by,
-        variant,
-      };
-      room.fallingBlocks.push(fb);
+      for (let yOffset = 0; yOffset < fallingH; yOffset++) {
+        for (let xOffset = 0; xOffset < fallingW; xOffset++) {
+          const fb: EditorFallingBlock = {
+            uid: allocateUid(state),
+            xBlock: bx + xOffset,
+            yBlock: by + yOffset,
+            variant,
+          };
+          room.fallingBlocks.push(fb);
+        }
+      }
       return;
     }
 
@@ -340,7 +359,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         yBlock: by,
         wBlock: bgW,
         hBlock: bgH,
-        blockTheme: state.selectedBlockTheme,
+        blockTheme: placementBlockTheme,
         isLightBlockingFlag: item.isLightBlockingBackgroundBlockItem === 1 ? 1 : 0,
       });
       return;
@@ -358,7 +377,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       hBlock,
       isPlatformFlag,
       platformEdge,
-      blockTheme: state.selectedBlockTheme,
+      blockTheme: placementBlockTheme,
       rampOrientation,
       isPillarHalfWidthFlag,
     });

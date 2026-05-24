@@ -133,7 +133,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     const resolvedTheme = themeIdx === WALL_THEME_DEFAULT_INDEX
       ? room.blockTheme ?? ''
       : indexToBlockTheme(themeIdx);
-    ic.push(resolvedTheme === 'ice' ? 1 : 0);
+    ic.push(resolvedTheme === 'ice' || resolvedTheme === 'iceBlock' ? 1 : 0);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
