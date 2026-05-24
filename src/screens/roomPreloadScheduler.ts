@@ -3,9 +3,8 @@
  *
  * Triggered after every room load via `scheduleRoomPreloads()`.  Performs a
  * BFS from the current room through `RoomDef.transitions` and schedules
- * precomputation of each nearby room's `RoomWallTemplate` and
- * `EdgeExtensionCache` so that room transitions can skip the expensive build
- * pass entirely.
+ * precomputation of each nearby room's `RoomWallTemplate` so that room
+ * transitions can skip the expensive build pass entirely.
  *
  * When `loadRoomAsync` is provided (Electron file-cache mode), the scheduler
  * also loads room DATA for adjacent rooms that are not yet in ROOM_REGISTRY.
@@ -18,16 +17,21 @@
  *      are built, completing preparation.
  *
  * Priority model:
- *  - Radius-1 rooms (directly connected): enqueued first, always built
- *    synchronously on the main thread (needed imminently).
+ *  - Radius-1 rooms (directly connected): enqueued first.
+ *    - Cheap rooms (estimated cost ≤ MAX_R1_COST_SYNC_MS) are built
+ *      synchronously in the idle slot.
+ *    - Heavy rooms (estimated cost > threshold) are dispatched to the Web
+ *      Worker so the main thread is never blocked.
+ *    - If the worker is unavailable, heavy rooms are deferred until the next
+ *      idle slot or **skipped** when the idle timeout fires — they are NOT
+ *      built synchronously on the main thread to avoid freezing gameplay.
+ *      A cache miss on transition is handled by the existing async overlay.
  *  - Radius-2 rooms (one hop further): enqueued second.
  *    - Cheap rooms (estimated cost ≤ MAX_R2_COST_WITHOUT_TIMEOUT_MS) are
  *      built synchronously in the idle slot.
- *    - Heavy rooms (estimated cost > threshold) are dispatched to a reusable
- *      Web Worker via `_dispatchToWorker()` so the main thread is never
- *      blocked.  The worker posts back a serialised result; on receipt the
- *      main thread reconstructs the `RoomRuntimeEntry` and calls `cache.set`.
- *      If the worker is unavailable the old timeout-deferral fallback is used.
+ *    - Heavy rooms are dispatched to the Web Worker.
+ *    - If the worker is unavailable, heavy radius-2 rooms are likewise
+ *      **skipped** when the idle timeout fires.
  *  - Rooms already in the cache are skipped (idempotent).
  *  - `handle.prioritize(roomId)` moves a room to the front of the queue
  *    (called when the player approaches a transition boundary).
@@ -39,12 +43,12 @@
  *  - Deadline time-budgeting: each callback checks `timeRemaining()` before
  *    starting a build so that callbacks in a short idle slot do not begin a
  *    potentially expensive synchronous build inside an animation frame.
- *    (For heavy radius-2 rooms the worker eliminates this concern entirely.)
+ *    For heavy rooms the worker eliminates this concern entirely.
  *
  * This module also expands sprite preloading from radius-1 to radius-2 so
  * image assets are ready when the player arrives.
  *
- * BUILD 387
+ * BUILD 390
  */
 
 import type { RoomDef } from '../levels/roomDef';
@@ -136,11 +140,8 @@ function estimateRoomBuildCostMs(room: RoomDef): number {
  * Maximum estimated build cost (ms) for a radius-2 room to be scheduled
  * without worker offloading.  Rooms whose estimated cost exceeds this are
  * dispatched to the Web Worker instead of running synchronously on the main
- * thread.  Falls back to the timeout-deferral path only when the worker is
- * unavailable.
- *
- * Radius-1 rooms are always built synchronously regardless of this limit
- * because they are needed imminently (the worker adds non-trivial latency).
+ * thread.  When the worker is unavailable, heavy rooms are skipped (not built
+ * synchronously) so active gameplay is never blocked by speculative preloads.
  */
 const MAX_R2_COST_WITHOUT_TIMEOUT_MS = 80;
 
@@ -407,8 +408,8 @@ export interface PreloadScheduleHandle {
 }
 
 /**
- * Schedules precomputation of `RoomWallTemplate` + `EdgeExtensionCache` for
- * all rooms within 2 hops of `currentRoom`.
+ * Schedules precomputation of `RoomWallTemplate` (and associated runtime data)
+ * for all rooms within 2 hops of `currentRoom`.
  *
  * When `loadRoomAsync` is supplied (Electron file-cache mode), the scheduler
  * also loads room DATA for adjacent rooms that are not yet in `roomRegistry`.
@@ -584,9 +585,9 @@ export function scheduleRoomPreloads(
         }
         // Worker unavailable.
         if (!deadline.didTimeout) {
-          // Defer for both radius-1 and radius-2 until the idle timeout forces
-          // the build.  This prevents a main-thread freeze during active gameplay
-          // when a heavy room is due and the worker is not available.
+          // Defer for both radius-1 and radius-2 until the idle timeout fires.
+          // This prevents a main-thread freeze during active gameplay when a
+          // heavy room is due and the worker is not available.
           if (isDebugMode) {
             console.log(
               `[preload] ${roomId} (radius-${radius}): estimated ${estimatedCostMs.toFixed(0)}ms build cost ` +
@@ -602,14 +603,26 @@ export function scheduleRoomPreloads(
           }
           return;
         }
-        // Idle timeout forced — build synchronously now (last resort).
+        // Idle timeout forced — worker still unavailable for this heavy room.
+        // Do NOT build synchronously; that would freeze active gameplay for
+        // potentially hundreds of ms.  Instead, skip this speculative preload
+        // and let the existing async loading overlay handle any cache miss if
+        // the player transitions to this room.
         if (import.meta.env.DEV) {
-          console.warn(
-            `[preload] ${roomId} (radius-${radius}): idle timeout forced ` +
+          console.log(
+            `[preload] ${roomId} (radius-${radius}): skipping heavy speculative preload ` +
             `(estimated ${estimatedCostMs.toFixed(0)}ms, worker unavailable). ` +
-            `Building synchronously — may cause a frame freeze.`,
+            `Async overlay will cover any transition cache miss.`,
           );
+          FP.recordPreloadTask(roomId, 0);
         }
+        // Continue to next room in queue (do NOT fall through to synchronous build).
+        if (workQueue.length > 0) {
+          activeHandle = scheduleIdle(processNext);
+        } else {
+          activeHandle = null;
+        }
+        return;
       }
     }
 
