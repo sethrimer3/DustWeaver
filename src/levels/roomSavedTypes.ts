@@ -76,7 +76,9 @@ export type SavedEnemyType =
   | 'orbitalDustCore'
   | 'orbitalDustCoreLarge'
   | 'dustBlockMimic'
-  | 'dustBlockMimicLarge';
+  | 'dustBlockMimicLarge'
+  | 'voidSingularity'
+  | 'voidSingularityPair';
 
 export interface SavedEnemy {
   type: SavedEnemyType;

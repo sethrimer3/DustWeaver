@@ -40,6 +40,11 @@ import {
   MAX_MOTES_PER_DWA,
   MAX_ARCHITECT_BLOCKS,
 } from './clusters/dustWeaverArchitectConfig';
+import {
+  MAX_VOID_SINGULARITIES,
+  MAX_MOTES_PER_VS,
+  MAX_PROJS_PER_VSP,
+} from './clusters/voidSingularityConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -96,6 +101,12 @@ export {
   MAX_MOTES_PER_DWA,
   MAX_ARCHITECT_BLOCKS,
 } from './clusters/dustWeaverArchitectConfig';
+
+export {
+  MAX_VOID_SINGULARITIES,
+  MAX_MOTES_PER_VS,
+  MAX_PROJS_PER_VSP,
+} from './clusters/voidSingularityConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -408,6 +419,36 @@ export interface HazardWorldState {
   /** Per-mote brightness pulse phase (radians). Same layout as dwaMoteAngleRad. */
   dwaMotePulsePhaseRad: Float32Array;
 
+  // ── Void Singularity mote arrays ─────────────────────────────────────────────
+  /**
+   * Inward-spiral mote angle per mote (radians).
+   * Layout: [slotIndex * MAX_MOTES_PER_VS + moteIndex].
+   * Total length = MAX_VOID_SINGULARITIES * MAX_MOTES_PER_VS.
+   */
+  vsMoteAngleRad: Float32Array;
+  /** Per-mote orbital radius (world units). Same layout as vsMoteAngleRad. */
+  vsMoteRadiusWorld: Float32Array;
+  /** Per-mote brightness pulse phase (radians). Same layout as vsMoteAngleRad. */
+  vsMotePulsePhaseRad: Float32Array;
+
+  // ── Void Singularity Pair projectile arrays ───────────────────────────────────
+  /**
+   * X position of each white-hole projectile (world units).
+   * Layout: [slotIndex * MAX_PROJS_PER_VSP + projIndex].
+   * Total length = MAX_VOID_SINGULARITIES * MAX_PROJS_PER_VSP.
+   */
+  vspProjXWorld: Float32Array;
+  /** Y position of each white-hole projectile (world units). */
+  vspProjYWorld: Float32Array;
+  /** X velocity of each projectile (world units/tick). */
+  vspProjVelXWorld: Float32Array;
+  /** Y velocity of each projectile (world units/tick). */
+  vspProjVelYWorld: Float32Array;
+  /** Remaining lifetime ticks of each projectile. */
+  vspProjLifetimeTicks: Float32Array;
+  /** 1 if the projectile is alive, 0 if dead/inactive. */
+  vspProjAliveFlag: Uint8Array;
+
   // ── Architect Blocks ─────────────────────────────────────────────────────────
   /** Number of active Architect Block slots (0..MAX_ARCHITECT_BLOCKS). */
   architectBlockCount: number;
@@ -551,6 +592,15 @@ export function createHazardWorldState(): HazardWorldState {
     dbmMotePulsePhaseRad:         new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
     dwaMoteAngleRad:              new Float32Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_MOTES_PER_DWA),
     dwaMotePulsePhaseRad:         new Float32Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_MOTES_PER_DWA),
+    vsMoteAngleRad:               new Float32Array(MAX_VOID_SINGULARITIES * MAX_MOTES_PER_VS),
+    vsMoteRadiusWorld:            new Float32Array(MAX_VOID_SINGULARITIES * MAX_MOTES_PER_VS),
+    vsMotePulsePhaseRad:          new Float32Array(MAX_VOID_SINGULARITIES * MAX_MOTES_PER_VS),
+    vspProjXWorld:                new Float32Array(MAX_VOID_SINGULARITIES * MAX_PROJS_PER_VSP),
+    vspProjYWorld:                new Float32Array(MAX_VOID_SINGULARITIES * MAX_PROJS_PER_VSP),
+    vspProjVelXWorld:             new Float32Array(MAX_VOID_SINGULARITIES * MAX_PROJS_PER_VSP),
+    vspProjVelYWorld:             new Float32Array(MAX_VOID_SINGULARITIES * MAX_PROJS_PER_VSP),
+    vspProjLifetimeTicks:         new Float32Array(MAX_VOID_SINGULARITIES * MAX_PROJS_PER_VSP),
+    vspProjAliveFlag:             new Uint8Array(MAX_VOID_SINGULARITIES * MAX_PROJS_PER_VSP),
     architectBlockCount:          0,
     architectBlockXWorld:         new Float32Array(MAX_ARCHITECT_BLOCKS),
     architectBlockYWorld:         new Float32Array(MAX_ARCHITECT_BLOCKS),
