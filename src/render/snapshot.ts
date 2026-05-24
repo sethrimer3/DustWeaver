@@ -267,6 +267,20 @@ function _makeEmptyCluster(): _MutableCluster {
     orbitalDustCorePulseActiveFlag: 0,
     orbitalDustCoreShieldFlashTicks: 0,
     orbitalDustCoreCorePulseTicks: 0,
+    isDustBlockMimicFlag: 0,
+    isDustBlockMimicLargeFlag: 0,
+    dustBlockMimicState: 0,
+    dustBlockMimicStateTicks: 0,
+    dustBlockMimicSlotIndex: -1,
+    dustBlockMimicSpawnXWorld: 0,
+    dustBlockMimicSpawnYWorld: 0,
+    dustBlockMimicBobPhaseRad: 0,
+    dustBlockMimicAttackCooldownTicks: 0,
+    dustBlockMimicLungeDirXWorld: 1,
+    dustBlockMimicLungeDirYWorld: 0,
+    dustBlockMimicLungeDistCovered: 0,
+    dustBlockMimicLungeHitPlayerFlag: 0,
+    dustBlockMimicHitFlashTicks: 0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -379,6 +393,20 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.orbitalDustCorePulseActiveFlag  = src.orbitalDustCorePulseActiveFlag;
   dst.orbitalDustCoreShieldFlashTicks = src.orbitalDustCoreShieldFlashTicks;
   dst.orbitalDustCoreCorePulseTicks   = src.orbitalDustCoreCorePulseTicks;
+  dst.isDustBlockMimicFlag            = src.isDustBlockMimicFlag;
+  dst.isDustBlockMimicLargeFlag       = src.isDustBlockMimicLargeFlag;
+  dst.dustBlockMimicState             = src.dustBlockMimicState;
+  dst.dustBlockMimicStateTicks        = src.dustBlockMimicStateTicks;
+  dst.dustBlockMimicSlotIndex         = src.dustBlockMimicSlotIndex;
+  dst.dustBlockMimicSpawnXWorld       = src.dustBlockMimicSpawnXWorld;
+  dst.dustBlockMimicSpawnYWorld       = src.dustBlockMimicSpawnYWorld;
+  dst.dustBlockMimicBobPhaseRad       = src.dustBlockMimicBobPhaseRad;
+  dst.dustBlockMimicAttackCooldownTicks = src.dustBlockMimicAttackCooldownTicks;
+  dst.dustBlockMimicLungeDirXWorld    = src.dustBlockMimicLungeDirXWorld;
+  dst.dustBlockMimicLungeDirYWorld    = src.dustBlockMimicLungeDirYWorld;
+  dst.dustBlockMimicLungeDistCovered  = src.dustBlockMimicLungeDistCovered;
+  dst.dustBlockMimicLungeHitPlayerFlag = src.dustBlockMimicLungeHitPlayerFlag;
+  dst.dustBlockMimicHitFlashTicks     = src.dustBlockMimicHitFlashTicks;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
@@ -508,6 +536,13 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     odcMoteRadiusWorld:     world.odcMoteRadiusWorld,
     odcMoteAliveFlag:       world.odcMoteAliveFlag,
     odcMotePulsePhaseRad:   world.odcMotePulsePhaseRad,
+    dbmMoteXWorld:          world.dbmMoteXWorld,
+    dbmMoteYWorld:          world.dbmMoteYWorld,
+    dbmMoteVelXWorld:       world.dbmMoteVelXWorld,
+    dbmMoteVelYWorld:       world.dbmMoteVelYWorld,
+    dbmMoteTargetLocalX:    world.dbmMoteTargetLocalX,
+    dbmMoteTargetLocalY:    world.dbmMoteTargetLocalY,
+    dbmMotePulsePhaseRad:   world.dbmMotePulsePhaseRad,
     // Arrow Weave — typed-array fields are shared views (always up-to-date);
     // scalar fields are updated in updateSnapshotInPlace.
     isArrowWeaveLoadingFlag:    world.isArrowWeaveLoadingFlag,

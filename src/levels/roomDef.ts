@@ -340,6 +340,13 @@ export interface RoomEnemyDef {
   isOrbitalDustCoreFlag?: 0 | 1;
   /** 1 for the large Orbital Dust Core variant (4 rings, more motes, higher HP). */
   isOrbitalDustCoreLargeFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a Dust Block Mimic — a false block that cracks open into
+   * a hostile swarm of living dust.
+   */
+  isDustBlockMimicFlag?: 0 | 1;
+  /** 1 for the large Dust Block Mimic variant (2×2 block, more motes, higher HP). */
+  isDustBlockMimicLargeFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

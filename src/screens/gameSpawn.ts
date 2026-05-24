@@ -1,4 +1,4 @@
-import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT } from '../sim/world';
+import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT, MAX_DUST_BLOCK_MIMICS } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
@@ -38,6 +38,23 @@ import {
   MAX_MOTES_PER_RING_ODC,
 } from '../sim/clusters/orbitalDustCoreConfig';
 import { ODC_STATE_IDLE } from '../sim/clusters/orbitalDustCoreAi';
+import {
+  DBM_SMALL_HP,
+  DBM_LARGE_HP,
+  DBM_SMALL_BLOCK_HALF_W,
+  DBM_LARGE_BLOCK_HALF_W,
+  DBM_SMALL_BLOCK_HALF_H,
+  DBM_LARGE_BLOCK_HALF_H,
+  DBM_SMALL_MOTE_COUNT,
+  DBM_LARGE_MOTE_COUNT,
+  DBM_SMALL_FORMATION_X,
+  DBM_SMALL_FORMATION_Y,
+  DBM_LARGE_FORMATION_X,
+  DBM_LARGE_FORMATION_Y,
+  MAX_MOTES_PER_DBM,
+} from '../sim/clusters/dustBlockMimicConfig';
+import { DBM_STATE_DORMANT } from '../sim/clusters/dustBlockMimicAi';
+
 import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
 import {
   BIG_SNAKE_HALF_HEIGHT_WORLD,
@@ -640,6 +657,61 @@ export function spawnEnemyClusters(
           }
         }
       }
+    } else if (enemyDef.isDustBlockMimicFlag === 1) {
+      // Allocate a DBM slot
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_DUST_BLOCK_MIMICS; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].dustBlockMimicSlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) { slotIndex = si; break; }
+      }
+
+      const isLarge = (enemyDef.isDustBlockMimicLargeFlag ?? 0) as 0 | 1;
+      const hw = isLarge === 1 ? DBM_LARGE_BLOCK_HALF_W : DBM_SMALL_BLOCK_HALF_W;
+      const hh = isLarge === 1 ? DBM_LARGE_BLOCK_HALF_H : DBM_SMALL_BLOCK_HALF_H;
+      const hp = isLarge === 1 ? DBM_LARGE_HP : DBM_SMALL_HP;
+      const moteCount = isLarge === 1 ? DBM_LARGE_MOTE_COUNT : DBM_SMALL_MOTE_COUNT;
+      const formX = isLarge === 1 ? DBM_LARGE_FORMATION_X : DBM_SMALL_FORMATION_X;
+      const formY = isLarge === 1 ? DBM_LARGE_FORMATION_Y : DBM_SMALL_FORMATION_Y;
+
+      enemyCluster.isDustBlockMimicFlag               = 1;
+      enemyCluster.isDustBlockMimicLargeFlag          = isLarge;
+      enemyCluster.dustBlockMimicSlotIndex            = slotIndex;
+      enemyCluster.dustBlockMimicState                = DBM_STATE_DORMANT;
+      enemyCluster.dustBlockMimicStateTicks           = 0;
+      enemyCluster.dustBlockMimicSpawnXWorld          = ex;
+      enemyCluster.dustBlockMimicSpawnYWorld          = ey;
+      enemyCluster.dustBlockMimicBobPhaseRad          = 0;
+      enemyCluster.dustBlockMimicAttackCooldownTicks  = 0;
+      enemyCluster.dustBlockMimicLungeDirXWorld       = 1;
+      enemyCluster.dustBlockMimicLungeDirYWorld       = 0;
+      enemyCluster.dustBlockMimicLungeDistCovered     = 0;
+      enemyCluster.dustBlockMimicLungeHitPlayerFlag   = 0;
+      enemyCluster.dustBlockMimicHitFlashTicks        = 0;
+      enemyCluster.halfWidthWorld                     = hw;
+      enemyCluster.halfHeightWorld                    = hh;
+      enemyCluster.healthPoints                       = hp;
+      enemyCluster.maxHealthPoints                    = hp;
+
+      // Initialise mote positions at the spawn point
+      if (slotIndex >= 0) {
+        const base = slotIndex * MAX_MOTES_PER_DBM;
+        for (let m = 0; m < moteCount; m++) {
+          const idx = base + m;
+          world.dbmMoteXWorld[idx]          = ex + formX[m] * hw;
+          world.dbmMoteYWorld[idx]          = ey + formY[m] * hh;
+          world.dbmMoteVelXWorld[idx]       = 0;
+          world.dbmMoteVelYWorld[idx]       = 0;
+          world.dbmMoteTargetLocalX[idx]    = formX[m] * hw * 0.85;
+          world.dbmMoteTargetLocalY[idx]    = formY[m] * hh * 0.85;
+          world.dbmMotePulsePhaseRad[idx]   = (m / moteCount) * Math.PI * 2;
+        }
+      }
     }
 
     world.clusters.push(enemyCluster);
@@ -650,7 +722,8 @@ export function spawnEnemyClusters(
       enemyCluster.isRadiantTetherFlag === 1 ||
       enemyCluster.isRadiantWebFlag    === 1 ||
       enemyCluster.isDustConstellationFlag === 1 ||
-      enemyCluster.isOrbitalDustCoreFlag === 1;
+      enemyCluster.isOrbitalDustCoreFlag === 1 ||
+      enemyCluster.isDustBlockMimicFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

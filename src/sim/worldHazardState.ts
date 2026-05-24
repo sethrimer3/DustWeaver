@@ -31,6 +31,10 @@ import {
   MAX_ORBITAL_DUST_CORES,
   MOTES_PER_ODC_SLOT,
 } from './clusters/orbitalDustCoreConfig';
+import {
+  MAX_DUST_BLOCK_MIMICS,
+  MAX_MOTES_PER_DBM,
+} from './clusters/dustBlockMimicConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -76,6 +80,11 @@ export {
   MAX_MOTES_PER_RING_ODC,
   MOTES_PER_ODC_SLOT,
 } from './clusters/orbitalDustCoreConfig';
+
+export {
+  MAX_DUST_BLOCK_MIMICS,
+  MAX_MOTES_PER_DBM,
+} from './clusters/dustBlockMimicConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -357,6 +366,26 @@ export interface HazardWorldState {
   odcMoteAliveFlag: Uint8Array;
   /** Per-mote brightness pulse phase (radians). Same layout. */
   odcMotePulsePhaseRad: Float32Array;
+
+  // ── Dust Block Mimic ─────────────────────────────────────────────────────
+  /**
+   * X world position of each mote.
+   * Layout: [slotIndex * MAX_MOTES_PER_DBM + moteIndex].
+   * Total length = MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM.
+   */
+  dbmMoteXWorld: Float32Array;
+  /** Y world position of each mote. Same layout as dbmMoteXWorld. */
+  dbmMoteYWorld: Float32Array;
+  /** X velocity per mote (world units/tick). Same layout. */
+  dbmMoteVelXWorld: Float32Array;
+  /** Y velocity per mote (world units/tick). Same layout. */
+  dbmMoteVelYWorld: Float32Array;
+  /** Formation target local X offset per mote (relative to swarm centre). */
+  dbmMoteTargetLocalX: Float32Array;
+  /** Formation target local Y offset per mote. */
+  dbmMoteTargetLocalY: Float32Array;
+  /** Per-mote brightness pulse phase (radians). */
+  dbmMotePulsePhaseRad: Float32Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -463,5 +492,12 @@ export function createHazardWorldState(): HazardWorldState {
     odcMoteTargetRadiusWorld:     new Float32Array(MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT),
     odcMoteAliveFlag:             new Uint8Array(MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT),
     odcMotePulsePhaseRad:         new Float32Array(MAX_ORBITAL_DUST_CORES * MOTES_PER_ODC_SLOT),
+    dbmMoteXWorld:                new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
+    dbmMoteYWorld:                new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
+    dbmMoteVelXWorld:             new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
+    dbmMoteVelYWorld:             new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
+    dbmMoteTargetLocalX:          new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
+    dbmMoteTargetLocalY:          new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
+    dbmMotePulsePhaseRad:         new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
   };
 }

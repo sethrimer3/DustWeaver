@@ -128,6 +128,8 @@ export interface EditorEnemy {
   isDustConstellationLargeFlag?: 0 | 1;
   isOrbitalDustCoreFlag?: 0 | 1;
   isOrbitalDustCoreLargeFlag?: 0 | 1;
+  isDustBlockMimicFlag?: 0 | 1;
+  isDustBlockMimicLargeFlag?: 0 | 1;
 }
 
 // ── Transitions ───────────────────────────────────────────────────────────────

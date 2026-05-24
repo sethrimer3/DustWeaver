@@ -72,6 +72,8 @@ export function enemyTypeToFlags(
     isDustConstellationLarge: type === 'dustConstellationLarge',
     isOrbitalDustCore:        type === 'orbitalDustCore' || type === 'orbitalDustCoreLarge',
     isOrbitalDustCoreLarge:   type === 'orbitalDustCoreLarge',
+    isDustBlockMimic:         type === 'dustBlockMimic' || type === 'dustBlockMimicLarge',
+    isDustBlockMimicLarge:    type === 'dustBlockMimicLarge',
   };
 }
 
