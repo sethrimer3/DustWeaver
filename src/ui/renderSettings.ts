@@ -179,7 +179,7 @@ export type WorldViewPresetId = 'normal' | 'wide' | 'far';
 export interface WorldViewPreset {
   id: WorldViewPresetId;
   label: string;
-  /** Virtual canvas height in pixels. Width is derived from the output aspect ratio. */
+  /** Virtual canvas height in pixels. Width is derived from the device canvas aspect ratio multiplied by this height. */
   virtualHeight: number;
   /** Human-readable description shown in the pause menu. */
   description: string;

@@ -205,7 +205,7 @@ export function startGameScreen(
   // Stage 2: The offscreen canvas is upscaled to the device canvas each frame.
   const virtualCanvas = document.createElement('canvas');
   let virtualWidthPx = BASE_VIRTUAL_WIDTH_PX;
-  // Height is driven by the active World View preset (normal=270, wide=360, far=540).
+  // Height is driven by the active World View preset (normal/wide/far).
   // Declared as `let` so resizeCanvas() can update it when the preset changes.
   let virtualHeightPx = FIXED_VIRTUAL_HEIGHT_PX;
   virtualCanvas.width  = virtualWidthPx;

@@ -18,7 +18,7 @@ import {
   setMusicVolume, setSfxVolume,
   setGraphicsQuality,
   setAlwaysCenterCamera,
-  WORLD_VIEW_PRESETS, setWorldViewPresetId,
+  WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
   type WorldViewPresetId,
 } from './renderSettings';
 import { makeButton, makeSlider, makeTabButton, GOLD, PANEL_BORDER } from './helpers';
@@ -212,7 +212,7 @@ export function showPauseMenu(
       optionsPanel.appendChild(wvBtnRow);
 
       // World View description hint
-      const activePreset = WORLD_VIEW_PRESETS.find(p => p.id === state.worldViewPresetId) ?? WORLD_VIEW_PRESETS[0];
+      const activePreset = getActiveWorldViewPreset();
       const wvHint = document.createElement('div');
       wvHint.textContent = activePreset.description;
       wvHint.style.cssText = `
