@@ -155,10 +155,10 @@ export const DWA_PATTERNS: ReadonlyArray<ReadonlyArray<readonly [number, number]
   /* 3 */ [[-1, 0], [-1, -1], [0, -1]],                              // cage fragment (L)
   /* 4 */ [[0, -1], [0, 0]],                                          // shard pillar
   /* 5 */ [[-2, 0], [-1, 0], [0, 0], [1, 0], [2, 0]],               // wide wall (5 horizontal)
-  /* 6 */ [[-2, 0], [-1, 0], [1, -1], [2, -1], [0, 0]],             // staggered barricade (gap in middle)
+  /* 6 */ [[-2, 0], [-1, 0], [1, -1], [2, -1], [0, 0]],             // staggered barricade (two rows offset)
   /* 7 */ [[-2, 0], [-2, -1], [-1, -1], [1, -1], [2, 0]],           // partial cage U (open top — always escapable)
   /* 8 */ [[-2, 1], [-1, 0], [0, -1], [1, -2]],                     // stepped wall (4 blocks ascending)
-  /* 9 */ [[-2, 0], [-1, 0], [1, 0], [2, 0]],                       // wide broken barrier (4 with center gap)
+  /* 9 */ [[-2, 0], [-1, 0], [1, 0], [2, 0]],                       // wide broken barrier (4 blocks, 1-block gap at center)
   /* 10 */ [[-2, -1], [-2, 0], [2, -1], [2, 0]],                    // two-part pressure (two pillars)
 ];
 
