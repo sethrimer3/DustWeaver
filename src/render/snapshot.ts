@@ -311,6 +311,28 @@ function _makeEmptyCluster(): _MutableCluster {
     voidSingularityWholeCharge: 0,
     voidSingularityWholeState: 0,
     voidSingularityWholeStateTicks: 0,
+    isDustLeechFlag: 0,
+    dustLeechState: 0,
+    dustLeechStateTicks: 0,
+    dustLeechSlotIndex: -1,
+    dustLeechSpawnXWorld: 0,
+    dustLeechSpawnYWorld: 0,
+    dustLeechBobPhaseRad: 0,
+    dustLeechSiphonCharge: 0,
+    dustLeechAttackCooldownTicks: 0,
+    dustLeechHitFlashTicks: 0,
+    isDustEchoFlag: 0,
+    dustEchoState: 0,
+    dustEchoStateTicks: 0,
+    dustEchoLifetimeTicks: 0,
+    dustEchoOwnerEntityId: -1,
+    dustEchoSlotIndex: -1,
+    dustEchoLungeDirXWorld: 1,
+    dustEchoLungeDirYWorld: 0,
+    dustEchoLungeDistCovered: 0,
+    dustEchoLungeHitPlayerFlag: 0,
+    dustEchoLungeCooldownTicks: 0,
+    dustEchoHitFlashTicks: 0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -467,6 +489,28 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.voidSingularityWholeCharge             = src.voidSingularityWholeCharge;
   dst.voidSingularityWholeState              = src.voidSingularityWholeState;
   dst.voidSingularityWholeStateTicks         = src.voidSingularityWholeStateTicks;
+  dst.isDustLeechFlag                = src.isDustLeechFlag;
+  dst.dustLeechState                 = src.dustLeechState;
+  dst.dustLeechStateTicks            = src.dustLeechStateTicks;
+  dst.dustLeechSlotIndex             = src.dustLeechSlotIndex;
+  dst.dustLeechSpawnXWorld           = src.dustLeechSpawnXWorld;
+  dst.dustLeechSpawnYWorld           = src.dustLeechSpawnYWorld;
+  dst.dustLeechBobPhaseRad           = src.dustLeechBobPhaseRad;
+  dst.dustLeechSiphonCharge          = src.dustLeechSiphonCharge;
+  dst.dustLeechAttackCooldownTicks   = src.dustLeechAttackCooldownTicks;
+  dst.dustLeechHitFlashTicks         = src.dustLeechHitFlashTicks;
+  dst.isDustEchoFlag                 = src.isDustEchoFlag;
+  dst.dustEchoState                  = src.dustEchoState;
+  dst.dustEchoStateTicks             = src.dustEchoStateTicks;
+  dst.dustEchoLifetimeTicks          = src.dustEchoLifetimeTicks;
+  dst.dustEchoOwnerEntityId          = src.dustEchoOwnerEntityId;
+  dst.dustEchoSlotIndex              = src.dustEchoSlotIndex;
+  dst.dustEchoLungeDirXWorld         = src.dustEchoLungeDirXWorld;
+  dst.dustEchoLungeDirYWorld         = src.dustEchoLungeDirYWorld;
+  dst.dustEchoLungeDistCovered       = src.dustEchoLungeDistCovered;
+  dst.dustEchoLungeHitPlayerFlag     = src.dustEchoLungeHitPlayerFlag;
+  dst.dustEchoLungeCooldownTicks     = src.dustEchoLungeCooldownTicks;
+  dst.dustEchoHitFlashTicks          = src.dustEchoHitFlashTicks;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
@@ -608,6 +652,11 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     vsMoteAngleRad:              world.vsMoteAngleRad,
     vsMoteRadiusWorld:           world.vsMoteRadiusWorld,
     vsMotePulsePhaseRad:         world.vsMotePulsePhaseRad,
+    dlMoteAngleRad:              world.dlMoteAngleRad,
+    dlMotePulsePhaseRad:         world.dlMotePulsePhaseRad,
+    deMoteOffsetXWorld:          world.deMoteOffsetXWorld,
+    deMoteOffsetYWorld:          world.deMoteOffsetYWorld,
+    deMotePulsePhaseRad:         world.deMotePulsePhaseRad,
     vspProjXWorld:               world.vspProjXWorld,
     vspProjYWorld:               world.vspProjYWorld,
     vspProjVelXWorld:            world.vspProjVelXWorld,

@@ -171,6 +171,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isDustConstellationLargeFlag: e.isDustConstellationLargeFlag ?? 0,
       isOrbitalDustCoreFlag: e.isOrbitalDustCoreFlag ?? 0,
       isOrbitalDustCoreLargeFlag: e.isOrbitalDustCoreLargeFlag ?? 0,
+      isDustLeechFlag: e.isDustLeechFlag ?? 0,
     };
   });
 
@@ -354,7 +355,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       },
     })),
     sceneLights: (data.sceneLights ?? []).map(s => {
-      const { uid: _uid, ...lightDef } = s;
+      const { uid, ...lightDef } = s;
+      void uid;
       return lightDef as import('../levels/lightingSchema').LightDef;
     }),
     guideDustPaths: (data.guideDustPaths ?? []).map(p => ({

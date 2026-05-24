@@ -78,6 +78,7 @@ export interface RoomJsonEnemy {
   isDustBlockMimicLarge?: boolean;
   isVoidSingularity?: boolean;
   isVoidSingularityPair?: boolean;
+  isDustLeech?: boolean;
 }
 
 export interface RoomJsonWall {

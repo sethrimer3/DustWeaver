@@ -657,6 +657,43 @@ export function placeEnemyAtCursor(
       isVoidSingularityFlag: 1,
       isVoidSingularityPairFlag: 1,
     });
+  } else if (item.id === 'enemy_dust_leech') {
+    room.enemies.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      kinds: ['Physical'],
+      particleCount: 0,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 0,
+      isRollingEnemyFlag: 0,
+      rollingEnemySpriteIndex: 0,
+      isRockElementalFlag: 0,
+      isRadiantTetherFlag: 0,
+      isRadiantWebFlag: 0,
+      isGrappleHunterFlag: 0,
+      isSlimeFlag: 0,
+      isLargeSlimeFlag: 0,
+      isWheelEnemyFlag: 0,
+      isBeetleFlag: 0,
+      isBubbleEnemyFlag: 0,
+      isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
+      isBeeSwarmFlag: 0,
+      isWebSpiderFlag: 0,
+      isDustConstellationFlag: 0,
+      isDustConstellationLargeFlag: 0,
+      isOrbitalDustCoreFlag: 0,
+      isOrbitalDustCoreLargeFlag: 0,
+      isDustBlockMimicFlag: 0,
+      isDustBlockMimicLargeFlag: 0,
+      isDustWeaverArchitectFlag: 0,
+      isDustWeaverArchitectLargeFlag: 0,
+      isVoidSingularityFlag: 0,
+      isVoidSingularityPairFlag: 0,
+      isDustLeechFlag: 1,
+    });
+    return true;
   } else if (item.id === 'enemy_radiant_tether') {
     room.enemies.push({
       uid: allocateUid(state),

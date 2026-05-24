@@ -78,7 +78,8 @@ export type SavedEnemyType =
   | 'dustBlockMimic'
   | 'dustBlockMimicLarge'
   | 'voidSingularity'
-  | 'voidSingularityPair';
+  | 'voidSingularityPair'
+  | 'dustLeech';
 
 export interface SavedEnemy {
   type: SavedEnemyType;
