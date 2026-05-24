@@ -12,7 +12,7 @@
  * so all existing import paths continue to work without change.
  */
 
-import type { TransitionDirection, BlockTheme, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending } from '../levels/roomDef';
 import type { LightType, LightBlendMode } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 
@@ -493,6 +493,8 @@ export interface EditorRoomData {
   minimumWallLight?: number;
   /** Gamma-like exponent on the raw exposure value (0.5–3). */
   falloffPower?: number;
+  /** Block seam blending mode for this room. */
+  blockSeamBlending?: BlockSeamBlending;
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default).

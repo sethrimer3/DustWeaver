@@ -246,6 +246,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.sExp   !== undefined) json.sideExposureStrength  = saved.sExp;
   if (saved.minWL  !== undefined) json.minimumWallLight      = saved.minWL;
   if (saved.fpow   !== undefined) json.falloffPower          = saved.fpow;
+  if (saved.seamBlend)            json.blockSeamBlending     = saved.seamBlend;
   if (saved.ambientBlockers && saved.ambientBlockers.length > 0) {
     json.ambientLightBlockers = saved.ambientBlockers.map(entry => ({
       xBlock: entry[0],

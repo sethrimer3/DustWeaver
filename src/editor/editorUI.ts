@@ -11,7 +11,7 @@ import {
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
   AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
   RoomEdge, EditorUICallbacks, BrushMode, BlockPlacementModifier,
-  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant,
+  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant, BlockSeamBlending,
 } from './editorState';
 import {
   addDimField,
@@ -369,6 +369,35 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       (v) => callbacks?.onFalloffPowerChange(v));
   lightingDiv.appendChild(falloffRow);
 
+  // ── Block Seam Blending dropdown ─────────────────────────────────────────
+  const SEAM_BLENDING_OPTIONS: { id: BlockSeamBlending; label: string }[] = [
+    { id: 'off',     label: 'Off' },
+    { id: 'subtle',  label: 'Subtle' },
+    { id: 'organic', label: 'Organic' },
+    { id: 'heavy',   label: 'Heavy' },
+  ];
+  const seamBlendLabel = document.createElement('div');
+  seamBlendLabel.textContent = 'Block Seam Blending';
+  seamBlendLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  lightingDiv.appendChild(seamBlendLabel);
+  const seamBlendSelect = document.createElement('select');
+  seamBlendSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of SEAM_BLENDING_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    seamBlendSelect.appendChild(o);
+  }
+  seamBlendSelect.addEventListener('change', () => {
+    callbacks?.onSeamBlendingChange(seamBlendSelect.value as BlockSeamBlending);
+  });
+  seamBlendSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(seamBlendSelect);
+
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
@@ -633,6 +662,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           minWallValLabel.textContent  = (state.roomData?.minimumWallLight  ?? 0.18).toFixed(2);
           falloffSlider.value = String(state.roomData?.falloffPower ?? 1.4);
           falloffValLabel.textContent  = (state.roomData?.falloffPower  ?? 1.4).toFixed(2);
+          seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
           lastRenderedLightingEffect = currentLighting;
           paletteDiv.appendChild(lightingDiv);
         }
@@ -671,6 +701,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       syncSlider(sideExpSlider,  sideExpValLabel,  state.roomData?.sideExposureStrength, 0.45);
       syncSlider(minWallSlider,  minWallValLabel,  state.roomData?.minimumWallLight,      0.18);
       syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,          1.4);
+      if (document.activeElement !== seamBlendSelect) {
+        seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
+      }
     }
 
     // Update palette selection highlight

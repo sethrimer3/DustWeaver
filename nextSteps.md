@@ -1,5 +1,87 @@
 # DustWeaver — Next Steps
 
+## Block Seam Blending System
+
+### What Was Implemented
+
+The block seam blending system is a fully optional, room-level visual layer that renders
+procedural pixel-art transition overlays at the boundary between adjacent tiles of different
+block themes. It does not affect collision, tile placement, room geometry, or chunk layout.
+
+**Data pipeline** (`SavedRoomV2.seamBlend` → `RoomJsonDef.blockSeamBlending` → `RoomDef.blockSeamBlending`
+↔ `EditorRoomData.blockSeamBlending`):
+- `SavedRoomV2` stores `seamBlend?: 'subtle' | 'organic' | 'heavy'` (absent = off, backward-compatible).
+- The field round-trips through `roomSchemaHydrator.ts`, `roomJsonLoader.ts`, `roomJson.ts`,
+  `roomJsonSerializer.ts`, `roomSchemaV2.ts`, `editorRoomImporter.ts`, `editorRoomBuilder.ts`.
+
+**Renderer** (`src/render/walls/seamBlending.ts`, `src/render/walls/blockSpriteRenderer.ts`):
+- `renderSeamOverlayPass()` runs as a 6th pass in `_doRenderWallTilesDirect` after the base tiles.
+- Seam detection: uses `CachedWallLayout.occupied` and `CachedWallLayout.tileTheme` to find
+  4-neighbor (N/E/S/W) tile pairs of different block themes.
+- Procedural crisp pixel-art stamps: mossy, crumbly, cracked, rooted, dusty, veined, corrupted.
+  All stamps use `fillRect` 1×1 pixels — no blur, no anti-aliasing.
+- Deterministic: hash from `(col, row, dir, roomSeed)` ensures stable variation with no flicker.
+- Opacity by mode: subtle=0.40, organic=0.65, heavy=0.85.
+- Debug overlay: `setSeamBlendingDebug(true)` draws 1px colored edge lines (no stamps) to
+  visualize detected seams. Useful for tuning and diagnosing missing/unexpected overlays.
+
+**Editor UI** (`src/editor/editorUI.ts`, `src/editor/editorState.ts`, `src/editor/editorController.ts`):
+- Dropdown in the Lighting palette: Off / Subtle / Organic / Heavy.
+- Setting saved/loaded with room data. Visual change takes effect on playtest/confirm.
+
+**Gamescreen integration** (`src/screens/gameScreen.ts`):
+- `setActiveSeamBlending(room.blockSeamBlending ?? 'off')` called in `loadRoom()` after
+  `setActiveDarkAmbientBlockers`. Changing the mode invalidates the chunk cache automatically.
+
+### Limitations
+
+1. **No custom sprite asset support yet.** All overlays are procedural. A hook for artist-authored
+   transition sprites is described below.
+
+2. **Profile assignments are keyword-based heuristics.** `getTransitionProfile()` in
+   `seamBlending.ts` matches block theme IDs against keyword substrings (e.g., "moss", "crystal",
+ "corrupt"). Themes that don't match any keyword fall back to `PROFILES.none` (no overlay).
+ Manual tuning is needed as new themes are added.
+
+3. **Editor backdrop doesn't live-preview seam blending changes.** This is consistent with how
+   other renderer-state metadata (lighting, background) works in the editor — changes appear after
+   confirming/playtesting. The setting is saved immediately to `roomData`.
+
+4. **No corner/diagonal contact accent sprites** in the current implementation. Corner cases
+   (inner/outer corners) are not drawn; only 4-directional edge stamps are generated.
+
+5. **Stamp density is not yet tunable per-profile.** The number of pixels/blobs per seam is
+   hardcoded in each profile's stamp function. Organic/Heavy modes increase opacity but not
+   necessarily density.
+
+### Where Custom Transition Sprite Support Should Go
+
+To add artist-authored overlay sprites:
+- Add a `loadTransitionSprites(profile, direction)` async loader in `seamBlending.ts` that tries
+  to fetch from `ASSETS/SPRITES/BLOCKS/transitions/generic/{profile}/edge_{dir}_01.png`.
+- Cache loaded sprites in a module-level `Map<string, HTMLImageElement>`.
+- In `renderSeamOverlayPass`, check the cache before falling back to procedural stamps.
+- Add a `preloadTransitionSprites(profiles)` export to warm the cache at room load time,
+  similar to `preloadRoomThemeSprites` in `blockSpriteRenderer.ts`.
+- Asset folder structure: `ASSETS/SPRITES/BLOCKS/transitions/generic/{profile}/edge_{N|E|S|W}_01.png`
+  and optionally `corner_inner_01.png`, `corner_outer_01.png`.
+
+### Theme Metadata Still Needing Manual Tuning
+
+The following profile assignments are inferred by keyword. If a new theme ID doesn't match,
+it falls back to `PROFILES.none` (no overlay). Review after adding new block themes:
+- `mossy`, `grass`, `organic`, `mud` → mossy
+- `dirt`, `soil`, `sand`, `gravel`, `crumbl` → crumbly
+- `cracked`, `broken`, `fracture`, `shatter` → cracked
+- `root`, `tree`, `wood`, `vine`, `branch` → rooted
+- `dust`, `ash`, `powder`, `soot` → dusty
+- `crystal`, `gem`, `vein`, `quartz`, `glitter` → veined
+- `corrupt`, `shadow`, `dark`, `void`, `taint` → corrupted
+- `metal`, `steel`, `iron`, `marble`, `tile`, `brick`, `carved`, `arch` → none (architectural, no overlay)
+
+Add explicit entries to `EXPLICIT_PROFILES` in `seamBlending.ts` for any theme that the
+heuristic gets wrong.
+
 ## Dust Weaver Architect — Optional Future Improvements
 
 ### Unfinished optional items

@@ -374,6 +374,10 @@ export function createEditorController(
           if (state.roomData) state.roomData.falloffPower = value;
           applyEdits('metadata');
         },
+        onSeamBlendingChange: (mode) => {
+          if (state.roomData) state.roomData.blockSeamBlending = mode;
+          applyEdits('metadata');
+        },
         onBackgroundChange: (bgId: BackgroundId) => {
           if (state.roomData) state.roomData.backgroundId = bgId;
           applyEdits('metadata');

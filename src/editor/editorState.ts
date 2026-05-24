@@ -10,7 +10,7 @@
  */
 
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
-import type { BlockTheme, BackgroundId, LightingEffect, AmbientLightDirection, CrumbleVariant, FallingBlockVariant } from '../levels/roomDef';
+import type { BlockTheme, BackgroundId, LightingEffect, AmbientLightDirection, CrumbleVariant, FallingBlockVariant, BlockSeamBlending } from '../levels/roomDef';
 import type { LightType } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 import type { BrushMode, PaletteCategory, PaletteItem } from './editorDropdownData';
@@ -30,7 +30,7 @@ export type {
 } from './editorElementTypes';
 
 // Re-export for convenience in editor modules
-export type { BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+export type { BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending } from '../levels/roomDef';
 export type { LightType, LightBlendMode } from '../levels/lightingSchema';
 export type { RoomSongId } from '../audio/musicManager';
 // Re-export dropdown data so existing consumers don't need to change their imports.
@@ -250,6 +250,7 @@ export interface EditorUICallbacks {
   onSideExposureStrengthChange: (value: number) => void;
   onMinimumWallLightChange: (value: number) => void;
   onFalloffPowerChange: (value: number) => void;
+  onSeamBlendingChange: (mode: BlockSeamBlending) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onRoomSongChange: (songId: RoomSongId) => void;
   onConfirm: () => void;

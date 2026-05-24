@@ -367,5 +367,6 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       moteSpeedFactor: p.moteSpeedFactor,
       opacityPct: p.opacityPct,
     })),
+    blockSeamBlending: data.blockSeamBlending,
   };
 }
