@@ -347,6 +347,10 @@ export interface RoomEnemyDef {
   isDustBlockMimicFlag?: 0 | 1;
   /** 1 for the large Dust Block Mimic variant (2×2 block, more motes, higher HP). */
   isDustBlockMimicLargeFlag?: 0 | 1;
+  /** 1 if this enemy is a Dust Weaver Architect. */
+  isDustWeaverArchitectFlag?: 0 | 1;
+  /** 1 for the large Dust Weaver Architect variant (more motes, higher HP, larger patterns). */
+  isDustWeaverArchitectLargeFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

@@ -156,6 +156,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_orbital_dust_core_large', label: 'Orbital Dust Core (L)', category: 'enemies' },
   { id: 'enemy_dust_block_mimic', label: 'Dust Block Mimic', category: 'enemies' },
   { id: 'enemy_dust_block_mimic_large', label: 'Dust Block Mimic (L)', category: 'enemies' },
+  { id: 'enemy_dust_weaver_architect', label: 'Dust Weaver Architect', category: 'enemies' },
+  { id: 'enemy_dust_weaver_architect_large', label: 'Dust Weaver Architect (L)', category: 'enemies' },
   { id: 'enemy_radiant_tether', label: 'Radiant Tether (Boss)', category: 'enemies' },
   { id: 'enemy_radiant_web', label: 'Radiant Web (Boss)', category: 'enemies' },
   // Triggers (player-facing activators and room logic)

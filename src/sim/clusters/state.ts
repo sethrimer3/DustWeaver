@@ -680,6 +680,44 @@ export interface ClusterState {
   dustBlockMimicLungeHitPlayerFlag: 0 | 1;
   /** Ticks remaining for the hit-flash visual. */
   dustBlockMimicHitFlashTicks: number;
+
+  // ---- Dust Weaver Architect (isDustWeaverArchitectFlag === 1) ----------------
+  /**
+   * 1 if this cluster is a Dust Weaver Architect — a hovering dust-core enemy
+   * that weaves temporary destructible blocks into the arena.
+   */
+  isDustWeaverArchitectFlag: 0 | 1;
+  /** 1 for the large variant (more motes, higher HP, larger block patterns). */
+  isDustWeaverArchitectLargeFlag: 0 | 1;
+  /**
+   * Current AI state:
+   *   0 = idle          — motes orbit, cooldown countdown
+   *   1 = telegraph     — motes stretch toward build site, outline flickers
+   *   2 = build         — blocks materialise
+   *   3 = recover       — motes relax, cooldown begins
+   *   4 = dying         — core collapses, owned blocks crumble
+   */
+  dustWeaverArchitectState: number;
+  /** Ticks elapsed in the current state. */
+  dustWeaverArchitectStateTicks: number;
+  /** WorldState slot index for per-Architect mote arrays (-1 if unallocated). */
+  dustWeaverArchitectSlotIndex: number;
+  /** X of the spawn point (world units). */
+  dustWeaverArchitectSpawnXWorld: number;
+  /** Y of the spawn point (world units). */
+  dustWeaverArchitectSpawnYWorld: number;
+  /** Phase angle for the idle bob animation (radians). */
+  dustWeaverArchitectBobPhaseRad: number;
+  /** Remaining ticks before the next build cycle starts. */
+  dustWeaverArchitectAttackCooldownTicks: number;
+  /** X of the chosen build site center (world units). */
+  dustWeaverArchitectBuildSiteXWorld: number;
+  /** Y of the chosen build site center (world units). */
+  dustWeaverArchitectBuildSiteYWorld: number;
+  /** Index into DWA_PATTERNS for the chosen build pattern. */
+  dustWeaverArchitectBuildPatternIndex: number;
+  /** Ticks remaining for the hit-flash visual. */
+  dustWeaverArchitectHitFlashTicks: number;
 }
 
 export function createClusterState(
@@ -883,5 +921,18 @@ export function createClusterState(
     dustBlockMimicLungeDistCovered: 0,
     dustBlockMimicLungeHitPlayerFlag: 0,
     dustBlockMimicHitFlashTicks: 0,
+    isDustWeaverArchitectFlag: 0,
+    isDustWeaverArchitectLargeFlag: 0,
+    dustWeaverArchitectState: 0,
+    dustWeaverArchitectStateTicks: 0,
+    dustWeaverArchitectSlotIndex: -1,
+    dustWeaverArchitectSpawnXWorld: positionXWorld,
+    dustWeaverArchitectSpawnYWorld: positionYWorld,
+    dustWeaverArchitectBobPhaseRad: 0,
+    dustWeaverArchitectAttackCooldownTicks: 0,
+    dustWeaverArchitectBuildSiteXWorld: 0,
+    dustWeaverArchitectBuildSiteYWorld: 0,
+    dustWeaverArchitectBuildPatternIndex: 0,
+    dustWeaverArchitectHitFlashTicks: 0,
   };
 }

@@ -1,4 +1,4 @@
-import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT, MAX_DUST_BLOCK_MIMICS } from '../sim/world';
+import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT, MAX_DUST_BLOCK_MIMICS, MAX_DUST_WEAVER_ARCHITECTS, MAX_MOTES_PER_DWA } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
@@ -54,6 +54,16 @@ import {
   MAX_MOTES_PER_DBM,
 } from '../sim/clusters/dustBlockMimicConfig';
 import { DBM_STATE_DORMANT } from '../sim/clusters/dustBlockMimicAi';
+import {
+  DWA_SMALL_HP,
+  DWA_LARGE_HP,
+  DWA_HALF_W,
+  DWA_HALF_H,
+  DWA_SMALL_MOTE_COUNT,
+  DWA_LARGE_MOTE_COUNT,
+  DWA_BUILD_COOLDOWN_TICKS,
+} from '../sim/clusters/dustWeaverArchitectConfig';
+import { DWA_STATE_IDLE } from '../sim/clusters/dustWeaverArchitectAi';
 
 import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
 import {
@@ -712,8 +722,52 @@ export function spawnEnemyClusters(
           world.dbmMotePulsePhaseRad[idx]   = (m / moteCount) * Math.PI * 2;
         }
       }
-    }
+    } else if (enemyDef.isDustWeaverArchitectFlag === 1) {
+      // Allocate a DWA slot
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_DUST_WEAVER_ARCHITECTS; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].dustWeaverArchitectSlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) { slotIndex = si; break; }
+      }
 
+      const isLarge = (enemyDef.isDustWeaverArchitectLargeFlag ?? 0) as 0 | 1;
+      const hp       = isLarge === 1 ? DWA_LARGE_HP : DWA_SMALL_HP;
+      const moteCount = isLarge === 1 ? DWA_LARGE_MOTE_COUNT : DWA_SMALL_MOTE_COUNT;
+
+      enemyCluster.isDustWeaverArchitectFlag              = 1;
+      enemyCluster.isDustWeaverArchitectLargeFlag         = isLarge;
+      enemyCluster.dustWeaverArchitectSlotIndex           = slotIndex;
+      enemyCluster.dustWeaverArchitectState               = DWA_STATE_IDLE;
+      enemyCluster.dustWeaverArchitectStateTicks          = 0;
+      enemyCluster.dustWeaverArchitectSpawnXWorld         = ex;
+      enemyCluster.dustWeaverArchitectSpawnYWorld         = ey;
+      enemyCluster.dustWeaverArchitectBobPhaseRad         = 0;
+      enemyCluster.dustWeaverArchitectAttackCooldownTicks = DWA_BUILD_COOLDOWN_TICKS;
+      enemyCluster.dustWeaverArchitectBuildSiteXWorld     = ex;
+      enemyCluster.dustWeaverArchitectBuildSiteYWorld     = ey;
+      enemyCluster.dustWeaverArchitectBuildPatternIndex   = 0;
+      enemyCluster.dustWeaverArchitectHitFlashTicks       = 0;
+      enemyCluster.halfWidthWorld                         = DWA_HALF_W;
+      enemyCluster.halfHeightWorld                        = DWA_HALF_H;
+      enemyCluster.healthPoints                           = hp;
+      enemyCluster.maxHealthPoints                        = hp;
+
+      // Initialise mote orbit angles
+      if (slotIndex >= 0) {
+        const base = slotIndex * MAX_MOTES_PER_DWA;
+        for (let m = 0; m < moteCount; m++) {
+          const mi = base + m;
+          world.dwaMoteAngleRad[mi]      = (m / moteCount) * Math.PI * 2;
+          world.dwaMotePulsePhaseRad[mi] = (m / moteCount) * Math.PI * 2;
+        }
+      }
+    }
     world.clusters.push(enemyCluster);
     const particleStartIdx = world.particleCount;
     // Radiant Tether and Radiant Web manage their own visuals — do not spawn a
@@ -723,7 +777,8 @@ export function spawnEnemyClusters(
       enemyCluster.isRadiantWebFlag    === 1 ||
       enemyCluster.isDustConstellationFlag === 1 ||
       enemyCluster.isOrbitalDustCoreFlag === 1 ||
-      enemyCluster.isDustBlockMimicFlag === 1;
+      enemyCluster.isDustBlockMimicFlag === 1 ||
+      enemyCluster.isDustWeaverArchitectFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

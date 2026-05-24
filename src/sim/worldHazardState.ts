@@ -35,6 +35,11 @@ import {
   MAX_DUST_BLOCK_MIMICS,
   MAX_MOTES_PER_DBM,
 } from './clusters/dustBlockMimicConfig';
+import {
+  MAX_DUST_WEAVER_ARCHITECTS,
+  MAX_MOTES_PER_DWA,
+  MAX_ARCHITECT_BLOCKS,
+} from './clusters/dustWeaverArchitectConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -85,6 +90,12 @@ export {
   MAX_DUST_BLOCK_MIMICS,
   MAX_MOTES_PER_DBM,
 } from './clusters/dustBlockMimicConfig';
+
+export {
+  MAX_DUST_WEAVER_ARCHITECTS,
+  MAX_MOTES_PER_DWA,
+  MAX_ARCHITECT_BLOCKS,
+} from './clusters/dustWeaverArchitectConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -386,6 +397,45 @@ export interface HazardWorldState {
   dbmMoteTargetLocalY: Float32Array;
   /** Per-mote brightness pulse phase (radians). */
   dbmMotePulsePhaseRad: Float32Array;
+
+  // ── Dust Weaver Architect mote arrays ────────────────────────────────────────
+  /**
+   * Orbit angle per mote (radians).
+   * Layout: [slotIndex * MAX_MOTES_PER_DWA + moteIndex].
+   * Total length = MAX_DUST_WEAVER_ARCHITECTS * MAX_MOTES_PER_DWA.
+   */
+  dwaMoteAngleRad: Float32Array;
+  /** Per-mote brightness pulse phase (radians). Same layout as dwaMoteAngleRad. */
+  dwaMotePulsePhaseRad: Float32Array;
+
+  // ── Architect Blocks ─────────────────────────────────────────────────────────
+  /** Number of active Architect Block slots (0..MAX_ARCHITECT_BLOCKS). */
+  architectBlockCount: number;
+  /** Center X of each Architect Block (world units). */
+  architectBlockXWorld: Float32Array;
+  /** Center Y of each Architect Block (world units). */
+  architectBlockYWorld: Float32Array;
+  /** Current health of each block. */
+  architectBlockHealth: Uint8Array;
+  /** Max health of each block (set at spawn; used for damage visualisation). */
+  architectBlockMaxHealth: Uint8Array;
+  /** Remaining lifetime ticks before the block begins crumbling. */
+  architectBlockLifetimeTicks: Uint16Array;
+  /** Grace ticks remaining (block cannot damage player while > 0). */
+  architectBlockGraceTicks: Uint8Array;
+  /** Forming ticks remaining (0 = fully formed). Counts down from DWA_BLOCK_FORM_TICKS. */
+  architectBlockFormTicks: Uint8Array;
+  /** Crumble ticks remaining (counting down; block removed when it hits 0 from crumble state). */
+  architectBlockCrumbleTicks: Uint8Array;
+  /**
+   * Visual state: 0 = forming, 1 = active, 2 = crumbling.
+   * Transitions: 0→1 when formTicks==0; 1→2 when lifetime==0 or health==0.
+   */
+  architectBlockState: Uint8Array;
+  /** 1 if this block slot is in use. */
+  isArchitectBlockAliveFlag: Uint8Array;
+  /** Slot index of the owning Architect (-1 = none / orphaned). */
+  architectBlockOwnerSlot: Int8Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -499,5 +549,19 @@ export function createHazardWorldState(): HazardWorldState {
     dbmMoteTargetLocalX:          new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
     dbmMoteTargetLocalY:          new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
     dbmMotePulsePhaseRad:         new Float32Array(MAX_DUST_BLOCK_MIMICS * MAX_MOTES_PER_DBM),
+    dwaMoteAngleRad:              new Float32Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_MOTES_PER_DWA),
+    dwaMotePulsePhaseRad:         new Float32Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_MOTES_PER_DWA),
+    architectBlockCount:          0,
+    architectBlockXWorld:         new Float32Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockYWorld:         new Float32Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockHealth:         new Uint8Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockMaxHealth:      new Uint8Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockLifetimeTicks:  new Uint16Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockGraceTicks:     new Uint8Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockFormTicks:      new Uint8Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockCrumbleTicks:   new Uint8Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockState:          new Uint8Array(MAX_ARCHITECT_BLOCKS),
+    isArchitectBlockAliveFlag:    new Uint8Array(MAX_ARCHITECT_BLOCKS),
+    architectBlockOwnerSlot:      new Int8Array(MAX_ARCHITECT_BLOCKS).fill(-1),
   };
 }

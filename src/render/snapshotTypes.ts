@@ -281,6 +281,21 @@ export interface ClusterSnapshot {
   readonly dustBlockMimicLungeHitPlayerFlag: 0 | 1;
   readonly dustBlockMimicHitFlashTicks: number;
 
+  // ── Dust Weaver Architect ─────────────────────────────────────────────────
+  readonly isDustWeaverArchitectFlag: 0 | 1;
+  readonly isDustWeaverArchitectLargeFlag: 0 | 1;
+  readonly dustWeaverArchitectState: number;
+  readonly dustWeaverArchitectStateTicks: number;
+  readonly dustWeaverArchitectSlotIndex: number;
+  readonly dustWeaverArchitectSpawnXWorld: number;
+  readonly dustWeaverArchitectSpawnYWorld: number;
+  readonly dustWeaverArchitectBobPhaseRad: number;
+  readonly dustWeaverArchitectAttackCooldownTicks: number;
+  readonly dustWeaverArchitectBuildSiteXWorld: number;
+  readonly dustWeaverArchitectBuildSiteYWorld: number;
+  readonly dustWeaverArchitectBuildPatternIndex: number;
+  readonly dustWeaverArchitectHitFlashTicks: number;
+
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -485,6 +500,22 @@ export interface WorldSnapshot {
   readonly dbmMoteTargetLocalX: Float32Array;
   readonly dbmMoteTargetLocalY: Float32Array;
   readonly dbmMotePulsePhaseRad: Float32Array;
+
+  // ── Dust Weaver Architect world arrays ────────────────────────────────────
+  readonly dwaMoteAngleRad: Float32Array;
+  readonly dwaMotePulsePhaseRad: Float32Array;
+  readonly architectBlockCount: number;
+  readonly architectBlockXWorld: Float32Array;
+  readonly architectBlockYWorld: Float32Array;
+  readonly architectBlockHealth: Uint8Array;
+  readonly architectBlockMaxHealth: Uint8Array;
+  readonly architectBlockLifetimeTicks: Uint16Array;
+  readonly architectBlockGraceTicks: Uint8Array;
+  readonly architectBlockFormTicks: Uint8Array;
+  readonly architectBlockCrumbleTicks: Uint8Array;
+  readonly architectBlockState: Uint8Array;
+  readonly isArchitectBlockAliveFlag: Uint8Array;
+  readonly architectBlockOwnerSlot: Int8Array;
 
   // ── Arrow Weave state ─────────────────────────────────────────────────────
   /** 1 while the player is loading an arrow (holding secondary weave button). */

@@ -1,5 +1,30 @@
 # DustWeaver — Next Steps
 
+## Dust Weaver Architect — Optional Future Improvements
+
+### Unfinished optional items
+
+1. **Hit-flash visual on the Architect core** — The `dwaHitFlashTicks` field is tracked in
+   `ClusterState` and decremented each tick, but the renderer does not yet read it to brighten
+   the core on impact. Add a quick alpha/color boost in `dustWeaverArchitectRenderer.ts` when
+   `snap.dwaHitFlashTicks > 0`.
+
+2. **Dust Nail secondary attack** — A simple projectile fired when the player stays at range for
+   too long (low-priority; construction pressure is the primary threat).
+
+3. **Variant fine-tuning** — The `large` variant currently uses the same patterns with higher HP
+   and block counts.  Larger patterns (e.g., a 5-block wall) could be added as dedicated entries
+   in `DWA_PATTERNS` and weighted differently for each variant.
+
+4. **Wall-jump suppression near Architect Blocks** — Architect Blocks are hazard entities, not
+   real tiles, so they do not affect `playerWallSurface` eligibility.  If wall-interaction feels
+   wrong near blocks, add a proximity check in the wall-surface pass.
+
+5. **Per-Architect block-count cap enforcement** — The current cap uses a global
+   `MAX_ARCHITECT_BLOCKS` shared across all active Architects.  A per-Architect soft cap
+   (`DWA_MAX_BLOCKS_PER_ARCHITECT`) is defined but enforced only via the pattern-size choice;
+   adding an explicit counted guard would be more robust when several Architects are present.
+
 ## BUILD 392 — Golden Dust Guide Path Fixes + Timer Persistence Fix
 
 ### What Was Fixed in BUILD 392
