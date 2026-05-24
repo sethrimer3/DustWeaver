@@ -162,6 +162,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_dust_weaver_architect_large', label: 'Dust Weaver Architect (L)', category: 'enemies' },
   { id: 'enemy_void_singularity', label: 'Void Singularity', category: 'enemies' },
   { id: 'enemy_void_singularity_pair', label: 'Void Singularity Pair', category: 'enemies' },
+  { id: 'enemy_dust_leech', label: 'Dust Leech', category: 'enemies' },
   { id: 'enemy_radiant_tether', label: 'Radiant Tether (Boss)', category: 'enemies' },
   { id: 'enemy_radiant_web', label: 'Radiant Web (Boss)', category: 'enemies' },
   // Triggers (player-facing activators and room logic)

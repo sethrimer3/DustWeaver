@@ -133,6 +133,7 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isDustBlockMimic) return 'dustBlockMimic';
   if (e.isVoidSingularity && e.isVoidSingularityPair) return 'voidSingularityPair';
   if (e.isVoidSingularity) return 'voidSingularity';
+  if (e.isDustLeech) return 'dustLeech';
   return 'basic';
 }
 

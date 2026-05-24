@@ -355,6 +355,8 @@ export interface RoomEnemyDef {
   isVoidSingularityFlag?: 0 | 1;
   /** 1 when this Void Singularity is part of the paired black hole / white hole variant. */
   isVoidSingularityPairFlag?: 0 | 1;
+  /** 1 if this enemy is a Dust Leech. */
+  isDustLeechFlag?: 0 | 1;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

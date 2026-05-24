@@ -134,6 +134,7 @@ export interface EditorEnemy {
   isDustWeaverArchitectLargeFlag?: 0 | 1;
   isVoidSingularityFlag?: 0 | 1;
   isVoidSingularityPairFlag?: 0 | 1;
+  isDustLeechFlag?: 0 | 1;
 }
 
 // ── Transitions ───────────────────────────────────────────────────────────────

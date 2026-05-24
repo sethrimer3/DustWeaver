@@ -45,6 +45,12 @@ import {
   MAX_MOTES_PER_VS,
   MAX_PROJS_PER_VSP,
 } from './clusters/voidSingularityConfig';
+import {
+  MAX_DUST_LEECHES,
+  MAX_DUST_ECHOES,
+  MAX_MOTES_PER_DL,
+  MAX_MOTES_PER_DE,
+} from './clusters/dustLeechConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -107,6 +113,13 @@ export {
   MAX_MOTES_PER_VS,
   MAX_PROJS_PER_VSP,
 } from './clusters/voidSingularityConfig';
+
+export {
+  MAX_DUST_LEECHES,
+  MAX_DUST_ECHOES,
+  MAX_MOTES_PER_DL,
+  MAX_MOTES_PER_DE,
+} from './clusters/dustLeechConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -477,6 +490,20 @@ export interface HazardWorldState {
   isArchitectBlockAliveFlag: Uint8Array;
   /** Slot index of the owning Architect (-1 = none / orphaned). */
   architectBlockOwnerSlot: Int8Array;
+
+  // ── Dust Leech mote arrays ─────────────────────────────────────────────────
+  /** Per-mote angle (radians). Length = MAX_DUST_LEECHES * MAX_MOTES_PER_DL. */
+  dlMoteAngleRad: Float32Array;
+  /** Per-mote pulse phase (radians). Same layout as dlMoteAngleRad. */
+  dlMotePulsePhaseRad: Float32Array;
+
+  // ── Dust Echo mote arrays ──────────────────────────────────────────────────
+  /** Per-mote body offset X (world units). Length = MAX_DUST_ECHOES * MAX_MOTES_PER_DE. */
+  deMoteOffsetXWorld: Float32Array;
+  /** Per-mote body offset Y (world units). Same layout. */
+  deMoteOffsetYWorld: Float32Array;
+  /** Per-mote pulse phase (radians). Same layout. */
+  deMotePulsePhaseRad: Float32Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -613,5 +640,10 @@ export function createHazardWorldState(): HazardWorldState {
     architectBlockState:          new Uint8Array(MAX_ARCHITECT_BLOCKS),
     isArchitectBlockAliveFlag:    new Uint8Array(MAX_ARCHITECT_BLOCKS),
     architectBlockOwnerSlot:      new Int8Array(MAX_ARCHITECT_BLOCKS).fill(-1),
+    dlMoteAngleRad:               new Float32Array(MAX_DUST_LEECHES * MAX_MOTES_PER_DL),
+    dlMotePulsePhaseRad:          new Float32Array(MAX_DUST_LEECHES * MAX_MOTES_PER_DL),
+    deMoteOffsetXWorld:           new Float32Array(MAX_DUST_ECHOES * MAX_MOTES_PER_DE),
+    deMoteOffsetYWorld:           new Float32Array(MAX_DUST_ECHOES * MAX_MOTES_PER_DE),
+    deMotePulsePhaseRad:          new Float32Array(MAX_DUST_ECHOES * MAX_MOTES_PER_DE),
   };
 }

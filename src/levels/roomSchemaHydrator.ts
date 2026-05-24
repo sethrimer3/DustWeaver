@@ -76,6 +76,7 @@ export function enemyTypeToFlags(
     isDustBlockMimicLarge:    type === 'dustBlockMimicLarge',
     isVoidSingularity:        type === 'voidSingularity' || type === 'voidSingularityPair',
     isVoidSingularityPair:    type === 'voidSingularityPair',
+    isDustLeech:              type === 'dustLeech',
   };
 }
 

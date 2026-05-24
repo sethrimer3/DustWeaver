@@ -238,6 +238,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isOrbitalDustCoreLargeFlag: (e.isOrbitalDustCoreLarge ?? false) ? 1 : 0,
     isVoidSingularityFlag: (e.isVoidSingularity ?? false) ? 1 : 0,
     isVoidSingularityPairFlag: (e.isVoidSingularityPair ?? false) ? 1 : 0,
+    isDustLeechFlag: (e.isDustLeech ?? false) ? 1 : 0,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => {

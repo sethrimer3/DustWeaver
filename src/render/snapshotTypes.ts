@@ -315,6 +315,32 @@ export interface ClusterSnapshot {
   readonly voidSingularityWholeState: number;
   readonly voidSingularityWholeStateTicks: number;
 
+  // ── Dust Leech ────────────────────────────────────────────────────────────
+  readonly isDustLeechFlag: 0 | 1;
+  readonly dustLeechState: number;
+  readonly dustLeechStateTicks: number;
+  readonly dustLeechSlotIndex: number;
+  readonly dustLeechSpawnXWorld: number;
+  readonly dustLeechSpawnYWorld: number;
+  readonly dustLeechBobPhaseRad: number;
+  readonly dustLeechSiphonCharge: number;
+  readonly dustLeechAttackCooldownTicks: number;
+  readonly dustLeechHitFlashTicks: number;
+
+  // ── Dust Echo ─────────────────────────────────────────────────────────────
+  readonly isDustEchoFlag: 0 | 1;
+  readonly dustEchoState: number;
+  readonly dustEchoStateTicks: number;
+  readonly dustEchoLifetimeTicks: number;
+  readonly dustEchoOwnerEntityId: number;
+  readonly dustEchoSlotIndex: number;
+  readonly dustEchoLungeDirXWorld: number;
+  readonly dustEchoLungeDirYWorld: number;
+  readonly dustEchoLungeDistCovered: number;
+  readonly dustEchoLungeHitPlayerFlag: 0 | 1;
+  readonly dustEchoLungeCooldownTicks: number;
+  readonly dustEchoHitFlashTicks: number;
+
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -536,6 +562,15 @@ export interface WorldSnapshot {
   readonly vspProjVelYWorld: Float32Array;
   readonly vspProjLifetimeTicks: Float32Array;
   readonly vspProjAliveFlag: Uint8Array;
+
+  // ── Dust Leech mote arrays ─────────────────────────────────────────────────
+  readonly dlMoteAngleRad: Float32Array;
+  readonly dlMotePulsePhaseRad: Float32Array;
+
+  // ── Dust Echo mote arrays ──────────────────────────────────────────────────
+  readonly deMoteOffsetXWorld: Float32Array;
+  readonly deMoteOffsetYWorld: Float32Array;
+  readonly deMotePulsePhaseRad: Float32Array;
   readonly architectBlockCount: number;
   readonly architectBlockXWorld: Float32Array;
   readonly architectBlockYWorld: Float32Array;

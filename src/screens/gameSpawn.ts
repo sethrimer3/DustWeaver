@@ -73,6 +73,14 @@ import {
   VS_MOTE_START_RADIUS_WORLD,
 } from '../sim/clusters/voidSingularityConfig';
 import { VS_STATE_IDLE as VS_IDLE } from '../sim/clusters/voidSingularityAi';
+import {
+  DL_HP,
+  DL_HALF_W,
+  DL_HALF_H,
+  MAX_DUST_LEECHES,
+  MAX_MOTES_PER_DL,
+} from '../sim/clusters/dustLeechConfig';
+import { DL_STATE_IDLE as DL_IDLE } from '../sim/clusters/dustLeechAi';
 
 import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
 import {
@@ -830,6 +838,43 @@ export function spawnEnemyClusters(
           for (let p = 0; p < MAX_PROJS_PER_VSP; p++) world.vspProjAliveFlag[projBase + p] = 0;
         }
       }
+    } else if (enemyDef.isDustLeechFlag === 1) {
+      // Allocate a Dust Leech slot
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_DUST_LEECHES; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].dustLeechSlotIndex === si && world.clusters[ci2].isDustLeechFlag === 1) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) { slotIndex = si; break; }
+      }
+
+      enemyCluster.isDustLeechFlag              = 1;
+      enemyCluster.dustLeechState               = DL_IDLE;
+      enemyCluster.dustLeechStateTicks          = 0;
+      enemyCluster.dustLeechSlotIndex           = slotIndex;
+      enemyCluster.dustLeechSpawnXWorld         = ex;
+      enemyCluster.dustLeechSpawnYWorld         = ey;
+      enemyCluster.dustLeechBobPhaseRad         = 0;
+      enemyCluster.dustLeechSiphonCharge        = 0;
+      enemyCluster.dustLeechAttackCooldownTicks = 0;
+      enemyCluster.dustLeechHitFlashTicks       = 0;
+      enemyCluster.halfWidthWorld               = DL_HALF_W;
+      enemyCluster.halfHeightWorld              = DL_HALF_H;
+      enemyCluster.healthPoints                 = DL_HP;
+      enemyCluster.maxHealthPoints              = DL_HP;
+
+      if (slotIndex >= 0) {
+        const base = slotIndex * MAX_MOTES_PER_DL;
+        for (let m = 0; m < MAX_MOTES_PER_DL; m++) {
+          const mi = base + m;
+          world.dlMoteAngleRad[mi]      = (m / MAX_MOTES_PER_DL) * Math.PI * 2;
+          world.dlMotePulsePhaseRad[mi] = (m / MAX_MOTES_PER_DL) * Math.PI * 2;
+        }
+      }
     }
     world.clusters.push(enemyCluster);
     const particleStartIdx = world.particleCount;
@@ -842,7 +887,8 @@ export function spawnEnemyClusters(
       enemyCluster.isOrbitalDustCoreFlag === 1 ||
       enemyCluster.isDustBlockMimicFlag === 1 ||
       enemyCluster.isDustWeaverArchitectFlag === 1 ||
-      enemyCluster.isVoidSingularityFlag === 1;
+      enemyCluster.isVoidSingularityFlag === 1 ||
+      enemyCluster.isDustLeechFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

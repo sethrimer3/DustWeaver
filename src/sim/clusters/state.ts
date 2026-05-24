@@ -754,6 +754,54 @@ export interface ClusterState {
   voidSingularityWholeState: number;
   /** Pair: ticks elapsed in the current white hole state. */
   voidSingularityWholeStateTicks: number;
+
+  // ── Dust Leech ──────────────────────────────────────────────────────────────
+  /** 1 if this cluster is a Dust Leech. */
+  isDustLeechFlag: 0 | 1;
+  /** Current Leech state (use DL_STATE_* constants). */
+  dustLeechState: number;
+  /** Ticks elapsed in the current Leech state. */
+  dustLeechStateTicks: number;
+  /** WorldState slot index for per-Leech mote arrays (-1 if unallocated). */
+  dustLeechSlotIndex: number;
+  /** X of the spawn point (world units). */
+  dustLeechSpawnXWorld: number;
+  /** Y of the spawn point (world units). */
+  dustLeechSpawnYWorld: number;
+  /** Phase angle for idle bob animation (radians). */
+  dustLeechBobPhaseRad: number;
+  /** Accumulated siphon charge (0..DL_SIPHON_CHARGE_REQUIRED). */
+  dustLeechSiphonCharge: number;
+  /** Cooldown ticks until next siphon attempt. */
+  dustLeechAttackCooldownTicks: number;
+  /** Ticks remaining for hit-flash visual. */
+  dustLeechHitFlashTicks: number;
+
+  // ── Dust Echo ───────────────────────────────────────────────────────────────
+  /** 1 if this cluster is a Dust Echo (runtime-spawned by a Leech). */
+  isDustEchoFlag: 0 | 1;
+  /** Current Echo state (use DE_STATE_* constants). */
+  dustEchoState: number;
+  /** Ticks elapsed in the current Echo state. */
+  dustEchoStateTicks: number;
+  /** Remaining lifetime ticks before auto-decay. */
+  dustEchoLifetimeTicks: number;
+  /** EntityId of the owning Leech cluster (-1 if no owner). */
+  dustEchoOwnerEntityId: number;
+  /** WorldState slot index for per-Echo mote arrays (-1 if unallocated). */
+  dustEchoSlotIndex: number;
+  /** Lunge direction X (world units, normalized). */
+  dustEchoLungeDirXWorld: number;
+  /** Lunge direction Y (world units, normalized). */
+  dustEchoLungeDirYWorld: number;
+  /** World-unit distance covered during the current lunge. */
+  dustEchoLungeDistCovered: number;
+  /** 1 if the player was already hit during the current lunge. */
+  dustEchoLungeHitPlayerFlag: 0 | 1;
+  /** Cooldown ticks until next lunge attempt. */
+  dustEchoLungeCooldownTicks: number;
+  /** Ticks remaining for hit-flash visual. */
+  dustEchoHitFlashTicks: number;
 }
 
 export function createClusterState(
@@ -987,5 +1035,27 @@ export function createClusterState(
     voidSingularityWholeCharge: 0,
     voidSingularityWholeState: 0,
     voidSingularityWholeStateTicks: 0,
+    isDustLeechFlag: 0,
+    dustLeechState: 0,
+    dustLeechStateTicks: 0,
+    dustLeechSlotIndex: -1,
+    dustLeechSpawnXWorld: positionXWorld,
+    dustLeechSpawnYWorld: positionYWorld,
+    dustLeechBobPhaseRad: 0,
+    dustLeechSiphonCharge: 0,
+    dustLeechAttackCooldownTicks: 0,
+    dustLeechHitFlashTicks: 0,
+    isDustEchoFlag: 0,
+    dustEchoState: 0,
+    dustEchoStateTicks: 0,
+    dustEchoLifetimeTicks: 0,
+    dustEchoOwnerEntityId: -1,
+    dustEchoSlotIndex: -1,
+    dustEchoLungeDirXWorld: 1,
+    dustEchoLungeDirYWorld: 0,
+    dustEchoLungeDistCovered: 0,
+    dustEchoLungeHitPlayerFlag: 0,
+    dustEchoLungeCooldownTicks: 0,
+    dustEchoHitFlashTicks: 0,
   };
 }
