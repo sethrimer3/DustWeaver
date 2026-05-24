@@ -340,10 +340,10 @@ export function applyClusterMovement(world: WorldState): void {
           if (cluster.isGroundedOnUltraIceFlag === 1) {
             // First contact: apply minimum lateral velocity in facing direction.
             if (cluster.isOnUltraIceFlag === 0) {
-              const minSpeed = MAX_RUN_SPEED_WORLD_PER_SEC * 0.5;
-              if (Math.abs(cluster.velocityXWorld) < minSpeed) {
+              const minSpeedWorld = MAX_RUN_SPEED_WORLD_PER_SEC * 0.5;
+              if (Math.abs(cluster.velocityXWorld) < minSpeedWorld) {
                 const dir = cluster.isFacingLeftFlag === 1 ? -1 : 1;
-                cluster.velocityXWorld = dir * minSpeed;
+                cluster.velocityXWorld = dir * minSpeedWorld;
               }
             }
             cluster.isOnUltraIceFlag = 1;

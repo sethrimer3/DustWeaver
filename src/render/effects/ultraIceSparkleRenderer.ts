@@ -17,9 +17,10 @@
 
 import type { WallSnapshot } from '../snapshotTypes';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/blockTheme';
+import { BLOCK_SIZE_MEDIUM } from '../../levels/roomDef';
 
-/** Block size in world units (same as BLOCK_SIZE_MEDIUM in roomDef). */
-const BLOCK_PX = 8;
+/** Block size in world units — matches BLOCK_SIZE_MEDIUM from roomDef. */
+const BLOCK_PX = BLOCK_SIZE_MEDIUM;
 
 /**
  * Number of sparkle candidates per block cell.
@@ -126,10 +127,10 @@ export function renderUltraIceSparkles(
           }
           if (alpha <= 0) continue;
 
-          // Colour: blend from pure white to pale cyan based on position hash.
-          const colourPhase = _hash2(seed, 3);
-          const r = Math.round(210 + colourPhase * 45);     // 210–255
-          const g = Math.round(230 + colourPhase * 25);     // 230–255
+          // Deterministic colour variation: blend from pure white to pale cyan.
+          const colourVariation = _hash2(seed, 3);
+          const r = Math.round(210 + colourVariation * 45);     // 210–255
+          const g = Math.round(230 + colourVariation * 25);     // 230–255
           const b = 255;
           ctx.globalAlpha = alpha;
           ctx.fillStyle = `rgb(${r},${g},${b})`;
