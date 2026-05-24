@@ -54,7 +54,17 @@ import {
   DWA_BUILD_SITE_MAX_DIST_WORLD,
   DWA_BUILD_SITE_MIN_DIST_WORLD,
   DWA_PATTERNS,
+  DWA_NORMAL_PATTERN_INDICES,
+  DWA_LARGE_PATTERN_INDICES,
   MAX_MOTES_PER_DWA,
+  MAX_NAILS_PER_DWA,
+  DWA_NAIL_MIN_RANGE_WORLD,
+  DWA_NAIL_RANGE_PRESSURE_TICKS,
+  DWA_NAIL_COOLDOWN_TICKS,
+  DWA_NAIL_SPEED_WORLD,
+  DWA_NAIL_LIFETIME_TICKS,
+  DWA_NAIL_HIT_RADIUS_WORLD,
+  DWA_NAIL_DAMAGE,
 } from './dustWeaverArchitectConfig';
 
 // ── State identifiers ─────────────────────────────────────────────────────────
@@ -427,20 +437,7 @@ function _tickArchitect(world: WorldState, ci: number): void {
   if (cluster.dustWeaverArchitectHitFlashTicks > 0) {
     cluster.dustWeaverArchitectHitFlashTicks--;
   }
-
-  // Detect hits this tick (HP decreased since last tick would be ideal, but
-  // for simplicity we set hit flash whenever invulnerability ticks were set).
-  // We approximate: if invulnerabilityTicks was just set, flash.
-  // Actually simpler: check healthPoints vs. last tick via a stored field.
-  // Since we don't store prevHP here, use the dbm hit detection pattern:
-  // detect by checking if the cluster was hit — but this enemy has standard HP,
-  // not the ring system. The forces.ts loop just decrements healthPoints.
-  // We have no direct "just got hit" signal without a prevHP field.
-  // For simplicity: check invulnerabilityTicks > 0 as the signal.
-  // But the standard enemies don't have invulnerabilityTicks set either (that's player-only).
-  // Best approach: always set hit flash from forces.ts by observing HP change.
-  // We can't do that cleanly here without prevHP. So we skip per-frame hit detection
-  // and instead let the renderer just always pulse the core for visual feedback.
+  // Hit flash is set in forces.ts whenever the Architect takes particle damage.
 
   const state      = cluster.dustWeaverArchitectState;
   const stateTicks = cluster.dustWeaverArchitectStateTicks;
@@ -460,6 +457,33 @@ function _tickArchitect(world: WorldState, ci: number): void {
 
   const spawnX = cluster.dustWeaverArchitectSpawnXWorld;
   const spawnY = cluster.dustWeaverArchitectSpawnYWorld;
+
+  // ── Dust Nail range-pressure system ──────────────────────────────────────
+  // Only fires during Idle (not while building/recovering/dying).
+  // If the player stays far away long enough, fire a Dust Nail as secondary pressure.
+  if (cluster.dustWeaverArchitectNailCooldownTicks > 0) {
+    cluster.dustWeaverArchitectNailCooldownTicks--;
+  }
+  if (state === DWA_STATE_IDLE && cluster.isAliveFlag === 1 && playerCluster !== undefined) {
+    const ndx = playerX - cluster.positionXWorld;
+    const ndy = playerY - cluster.positionYWorld;
+    const nd2 = ndx * ndx + ndy * ndy;
+    if (nd2 > DWA_NAIL_MIN_RANGE_WORLD * DWA_NAIL_MIN_RANGE_WORLD) {
+      // Player is at range — accumulate pressure.
+      if (cluster.dustWeaverArchitectNailCooldownTicks === 0) {
+        cluster.dustWeaverArchitectRangePressureTicks++;
+      }
+      if (cluster.dustWeaverArchitectRangePressureTicks >= DWA_NAIL_RANGE_PRESSURE_TICKS) {
+        // Fire a Dust Nail toward the player.
+        _fireNail(world, slot, cluster.positionXWorld, cluster.positionYWorld, playerX, playerY);
+        cluster.dustWeaverArchitectRangePressureTicks = 0;
+        cluster.dustWeaverArchitectNailCooldownTicks  = DWA_NAIL_COOLDOWN_TICKS;
+      }
+    } else {
+      // Player is close — reset pressure timer.
+      cluster.dustWeaverArchitectRangePressureTicks = 0;
+    }
+  }
 
   // ── Update mote orbit angles ──────────────────────────────────────────────
   if (moteBase >= 0) {
@@ -511,6 +535,14 @@ function _tickArchitect(world: WorldState, ci: number): void {
       }
 
       // Choose build site and transition to Telegraph.
+      // Per-Architect block cap pre-check: skip if already at the limit.
+      if (_ownedBlockCount(world, slot) >= DWA_MAX_BLOCKS_PER_ARCHITECT) {
+        // Already at cap; wait a bit before re-checking.
+        cluster.dustWeaverArchitectAttackCooldownTicks = 60;
+        cluster.dustWeaverArchitectStateTicks++;
+        break;
+      }
+
       const site = _chooseBuildSite(
         world,
         cluster.positionXWorld,
@@ -525,8 +557,10 @@ function _tickArchitect(world: WorldState, ci: number): void {
         break;
       }
 
-      // Pick pattern deterministically.
-      const patternIdx = Math.floor(nextFloat(world.rng) * DWA_PATTERNS.length);
+      // Pick pattern — large-variant Architects get weighted large patterns.
+      const isLargeVariant = cluster.isDustWeaverArchitectLargeFlag === 1;
+      const patternPool = isLargeVariant ? DWA_LARGE_PATTERN_INDICES : DWA_NORMAL_PATTERN_INDICES;
+      const patternIdx  = patternPool[Math.floor(nextFloat(world.rng) * patternPool.length)];
       cluster.dustWeaverArchitectBuildSiteXWorld   = site[0];
       cluster.dustWeaverArchitectBuildSiteYWorld   = site[1];
       cluster.dustWeaverArchitectBuildPatternIndex = patternIdx;
@@ -644,6 +678,75 @@ function _tickArchitect(world: WorldState, ci: number): void {
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 
+/** Fire a single Dust Nail from an Architect toward the player. */
+function _fireNail(
+  world: WorldState,
+  arcSlot: number,
+  originX: number,
+  originY: number,
+  targetX: number,
+  targetY: number,
+): void {
+  const base   = arcSlot * MAX_NAILS_PER_DWA;
+  const dx     = targetX - originX;
+  const dy     = targetY - originY;
+  const len    = Math.sqrt(dx * dx + dy * dy) + 0.001;
+  const vx     = (dx / len) * DWA_NAIL_SPEED_WORLD;
+  const vy     = (dy / len) * DWA_NAIL_SPEED_WORLD;
+  // Find a free nail slot for this Architect.
+  for (let n = 0; n < MAX_NAILS_PER_DWA; n++) {
+    const idx = base + n;
+    if (world.isDwaNailAliveFlag[idx] === 0) {
+      world.isDwaNailAliveFlag[idx]   = 1;
+      world.dwaNailXWorld[idx]        = originX;
+      world.dwaNailYWorld[idx]        = originY;
+      world.dwaNailVelXWorld[idx]     = vx;
+      world.dwaNailVelYWorld[idx]     = vy;
+      world.dwaNailLifetimeTicks[idx] = DWA_NAIL_LIFETIME_TICKS;
+      break; // Only one nail per fire event.
+    }
+  }
+}
+
+/** Tick all active Dust Nail projectiles — move, expire, and check player hit. */
+function _tickDwaNails(world: WorldState, playerCluster: typeof world.clusters[0] | undefined): void {
+  const total = world.isDwaNailAliveFlag.length;
+  if (total === 0) return;
+
+  const hitR2 = DWA_NAIL_HIT_RADIUS_WORLD * DWA_NAIL_HIT_RADIUS_WORLD;
+
+  for (let idx = 0; idx < total; idx++) {
+    if (world.isDwaNailAliveFlag[idx] === 0) continue;
+
+    // Move.
+    world.dwaNailXWorld[idx] += world.dwaNailVelXWorld[idx];
+    world.dwaNailYWorld[idx] += world.dwaNailVelYWorld[idx];
+
+    // Expire.
+    if (world.dwaNailLifetimeTicks[idx] > 0) {
+      world.dwaNailLifetimeTicks[idx]--;
+    } else {
+      world.isDwaNailAliveFlag[idx] = 0;
+      continue;
+    }
+
+    // Player hit check.
+    if (playerCluster !== undefined && playerCluster.isAliveFlag === 1) {
+      const dpx = world.dwaNailXWorld[idx] - playerCluster.positionXWorld;
+      const dpy = world.dwaNailYWorld[idx] - playerCluster.positionYWorld;
+      if (dpx * dpx + dpy * dpy < hitR2) {
+        applyPlayerDamageWithKnockback(
+          playerCluster,
+          DWA_NAIL_DAMAGE,
+          world.dwaNailXWorld[idx],
+          world.dwaNailYWorld[idx],
+        );
+        world.isDwaNailAliveFlag[idx] = 0;
+      }
+    }
+  }
+}
+
 export function applyDustWeaverArchitectAI(world: WorldState): void {
   // Find player cluster once.
   let playerCluster: typeof world.clusters[0] | undefined;
@@ -663,4 +766,7 @@ export function applyDustWeaverArchitectAI(world: WorldState): void {
 
   // Tick all Architect Blocks (shared system).
   _tickArchitectBlocks(world, playerCluster);
+
+  // Tick all Dust Nail projectiles (secondary ranged pressure).
+  _tickDwaNails(world, playerCluster);
 }

@@ -159,6 +159,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       dustWeaverArchitectBuildSiteYWorld:     c.dustWeaverArchitectBuildSiteYWorld,
       dustWeaverArchitectBuildPatternIndex:   c.dustWeaverArchitectBuildPatternIndex,
       dustWeaverArchitectHitFlashTicks:       c.dustWeaverArchitectHitFlashTicks,
+      dustWeaverArchitectRangePressureTicks:  c.dustWeaverArchitectRangePressureTicks,
+      dustWeaverArchitectNailCooldownTicks:   c.dustWeaverArchitectNailCooldownTicks,
       isVoidSingularityFlag:             c.isVoidSingularityFlag,
       isVoidSingularityPairFlag:         c.isVoidSingularityPairFlag,
       voidSingularityState:              c.voidSingularityState,
@@ -398,5 +400,12 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     architectBlockState:         world.architectBlockState,
     isArchitectBlockAliveFlag:   world.isArchitectBlockAliveFlag,
     architectBlockOwnerSlot:     world.architectBlockOwnerSlot,
+    // Dust Nail projectiles — shared typed-array views.
+    dwaNailXWorld:               world.dwaNailXWorld,
+    dwaNailYWorld:               world.dwaNailYWorld,
+    dwaNailVelXWorld:            world.dwaNailVelXWorld,
+    dwaNailVelYWorld:            world.dwaNailVelYWorld,
+    dwaNailLifetimeTicks:        world.dwaNailLifetimeTicks,
+    isDwaNailAliveFlag:          world.isDwaNailAliveFlag,
   };
 }

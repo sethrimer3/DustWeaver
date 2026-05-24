@@ -39,6 +39,7 @@ import {
   MAX_DUST_WEAVER_ARCHITECTS,
   MAX_MOTES_PER_DWA,
   MAX_ARCHITECT_BLOCKS,
+  MAX_NAILS_PER_DWA,
 } from './clusters/dustWeaverArchitectConfig';
 import {
   MAX_VOID_SINGULARITIES,
@@ -106,6 +107,7 @@ export {
   MAX_DUST_WEAVER_ARCHITECTS,
   MAX_MOTES_PER_DWA,
   MAX_ARCHITECT_BLOCKS,
+  MAX_NAILS_PER_DWA,
 } from './clusters/dustWeaverArchitectConfig';
 
 export {
@@ -491,6 +493,24 @@ export interface HazardWorldState {
   /** Slot index of the owning Architect (-1 = none / orphaned). */
   architectBlockOwnerSlot: Int8Array;
 
+  // ── Dust Nail projectiles ─────────────────────────────────────────────────────
+  /**
+   * X position of each Dust Nail projectile (world units).
+   * Layout: [slotIndex * MAX_NAILS_PER_DWA + nailIndex].
+   * Total length = MAX_DUST_WEAVER_ARCHITECTS * MAX_NAILS_PER_DWA.
+   */
+  dwaNailXWorld: Float32Array;
+  /** Y position of each Dust Nail (world units). Same layout as dwaNailXWorld. */
+  dwaNailYWorld: Float32Array;
+  /** X velocity of each Dust Nail (world units/tick). */
+  dwaNailVelXWorld: Float32Array;
+  /** Y velocity of each Dust Nail (world units/tick). */
+  dwaNailVelYWorld: Float32Array;
+  /** Remaining lifetime ticks of each Dust Nail. */
+  dwaNailLifetimeTicks: Uint16Array;
+  /** 1 if this nail slot is active. */
+  isDwaNailAliveFlag: Uint8Array;
+
   // ── Dust Leech mote arrays ─────────────────────────────────────────────────
   /** Per-mote angle (radians). Length = MAX_DUST_LEECHES * MAX_MOTES_PER_DL. */
   dlMoteAngleRad: Float32Array;
@@ -640,6 +660,12 @@ export function createHazardWorldState(): HazardWorldState {
     architectBlockState:          new Uint8Array(MAX_ARCHITECT_BLOCKS),
     isArchitectBlockAliveFlag:    new Uint8Array(MAX_ARCHITECT_BLOCKS),
     architectBlockOwnerSlot:      new Int8Array(MAX_ARCHITECT_BLOCKS).fill(-1),
+    dwaNailXWorld:                new Float32Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_NAILS_PER_DWA),
+    dwaNailYWorld:                new Float32Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_NAILS_PER_DWA),
+    dwaNailVelXWorld:             new Float32Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_NAILS_PER_DWA),
+    dwaNailVelYWorld:             new Float32Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_NAILS_PER_DWA),
+    dwaNailLifetimeTicks:         new Uint16Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_NAILS_PER_DWA),
+    isDwaNailAliveFlag:           new Uint8Array(MAX_DUST_WEAVER_ARCHITECTS * MAX_NAILS_PER_DWA),
     dlMoteAngleRad:               new Float32Array(MAX_DUST_LEECHES * MAX_MOTES_PER_DL),
     dlMotePulsePhaseRad:          new Float32Array(MAX_DUST_LEECHES * MAX_MOTES_PER_DL),
     deMoteOffsetXWorld:           new Float32Array(MAX_DUST_ECHOES * MAX_MOTES_PER_DE),
