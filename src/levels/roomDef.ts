@@ -506,6 +506,15 @@ export {
   ROPE_THICKNESS_HALF_WORLD,
 } from './roomElementDefs';
 
+/**
+ * Intensity of the block seam blending overlay system.
+ * 'off' = no overlay (default, preserves existing visuals exactly).
+ * 'subtle' = conservative organic accents.
+ * 'organic' = visibly natural seam transitions.
+ * 'heavy' = pronounced — good for overgrown or corrupted rooms.
+ */
+export type BlockSeamBlending = 'off' | 'subtle' | 'organic' | 'heavy';
+
 /** Full definition for a single room in the Metroidvania world. */
 export interface RoomDef {
   /** Unique identifier for this room. */
@@ -566,6 +575,13 @@ export interface RoomDef {
    * Range 0.5–3; defaults to 1.4 when unset.
    */
   falloffPower?: number;
+  /**
+   * Optional block seam blending overlay.
+   * When set, the renderer draws procedural transition stamps at tile seams
+   * between adjacent tiles of different block themes.
+   * Defaults to 'off' — existing rooms are visually unchanged.
+   */
+  blockSeamBlending?: BlockSeamBlending;
   /**
    * Tiles that block ambient-light propagation. Gameplay treats them as empty
    * air; only the ambient-lighting solver sees them as opaque. Used to carve

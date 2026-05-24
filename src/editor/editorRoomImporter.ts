@@ -388,6 +388,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       sideExposureStrength:  room.sideExposureStrength,
       minimumWallLight:      room.minimumWallLight,
       falloffPower:          room.falloffPower,
+      blockSeamBlending:     room.blockSeamBlending,
       songId: room.songId ?? '_continue',
       widthBlocks: room.widthBlocks,
       heightBlocks: room.heightBlocks,

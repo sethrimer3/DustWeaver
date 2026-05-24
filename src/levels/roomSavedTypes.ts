@@ -231,6 +231,8 @@ export interface SavedRoomV2 {
   minWL?: number;
   /** Falloff power / gamma exponent (0.5–3). */
   fpow?: number;
+  /** Block seam blending mode. Omitted when 'off'. */
+  seamBlend?: 'subtle' | 'organic' | 'heavy';
   /**
    * Sparse list of ambient-light blocker tile coordinates.
    * Each entry is [x, y] for a clear blocker, or [x, y, 1] for a dark blocker.

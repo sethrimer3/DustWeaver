@@ -23,7 +23,7 @@ import { WallSnapshot } from '../snapshot';
 import { RoomChunkCache } from './chunkRenderCache';
 import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 export type { ChunkCacheStats } from './chunkRenderCache';
-import type { BlockTheme, LightingEffect, AmbientLightDirection } from '../../levels/roomDef';
+import type { BlockTheme, LightingEffect, AmbientLightDirection, BlockSeamBlending } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 import {
   buildAmbientDarknessAlphas,
@@ -52,6 +52,7 @@ import {
   renderRampPass,
   renderHalfPillarPass,
 } from './wallTilePassRenderers';
+import { renderSeamOverlayPass } from './seamBlending';
 
 // Re-export dark-blocker helpers so existing call-sites keep their import path.
 export { setActiveDarkAmbientBlockers, renderDarkAmbientBlockerOverlay } from './darkBlockerOverlay';
@@ -87,6 +88,36 @@ let _activeDirectionalBias       = DEFAULT_DIRECTIONAL_BIAS;
 let _activeSideExposureStrength  = DEFAULT_SIDE_EXPOSURE_STRENGTH;
 let _activeMinimumWallLight      = DEFAULT_MINIMUM_WALL_LIGHT;
 let _activeFalloffPower          = DEFAULT_FALLOFF_POWER;
+
+// ── Block seam blending ───────────────────────────────────────────────────────
+let _activeSeamBlending: BlockSeamBlending = 'off';
+let _seamBlendDebug = false;
+
+/**
+ * Set the active block seam blending mode.
+ * Invalidates the chunk cache so the new overlays render immediately.
+ */
+export function setActiveSeamBlending(mode: BlockSeamBlending): void {
+  if (_activeSeamBlending === mode) return;
+  _activeSeamBlending = mode;
+  _invalidateBakedWallCanvas();
+}
+
+/** Returns the current seam blending mode. */
+export function getActiveSeamBlending(): BlockSeamBlending {
+  return _activeSeamBlending;
+}
+
+/**
+ * Toggle debug seam visualization.
+ * When enabled, seam edges are highlighted with colored 1-pixel lines
+ * (green=N, orange=E, cyan=S, magenta=W) instead of organic overlays.
+ */
+export function setSeamBlendingDebug(enabled: boolean): void {
+  if (_seamBlendDebug === enabled) return;
+  _seamBlendDebug = enabled;
+  _invalidateBakedWallCanvas();
+}
 
 /**
  * Set the active world number for block sprite rendering.
@@ -455,6 +486,15 @@ function _doRenderWallTilesDirect(
   hadFallbacks = renderPlatformPass(ctx, pctx) || hadFallbacks;
   hadFallbacks = renderRampPass(ctx, pctx)     || hadFallbacks;
   hadFallbacks = renderHalfPillarPass(ctx, pctx) || hadFallbacks;
+
+  // Pass 6: seam transition overlays (or debug seam visualization).
+  if (_activeSeamBlending !== 'off' || _seamBlendDebug) {
+    renderSeamOverlayPass(
+      ctx, wallLayout, roomTheme,
+      offsetXPx, offsetYPx, scalePx, blockSizePx,
+      chunkKey, _activeSeamBlending, _seamBlendDebug,
+    );
+  }
 
   ctx.restore();
   return hadFallbacks;

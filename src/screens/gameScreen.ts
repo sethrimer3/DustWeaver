@@ -23,7 +23,7 @@ import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, snapCamera, getCameraOffset } from '../render/camera';
-import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
+import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers, setActiveSeamBlending } from '../render/walls/blockSpriteRenderer';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
@@ -407,6 +407,7 @@ export function startGameScreen(
         room.falloffPower,
       );
       setActiveDarkAmbientBlockers(darkBlockerKeys);
+      setActiveSeamBlending(room.blockSeamBlending ?? 'off');
       FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
     musicManager.notifyRoomEntered(room.songId ?? '_continue');
