@@ -35,6 +35,7 @@ import {
   DWA_LEASH_RADIUS_WORLD,
   DWA_PATTERNS,
   MAX_MOTES_PER_DWA,
+  DWA_HIT_FLASH_TICKS,
 } from '../../sim/clusters/dustWeaverArchitectConfig';
 import { MAX_DUST_WEAVER_ARCHITECTS, MAX_ARCHITECT_BLOCKS } from '../../sim/world';
 
@@ -53,6 +54,9 @@ const BLOCK_SEAM         = 'rgba(180,120,255,0.40)';
 const BLOCK_CRACK        = 'rgba(220,160,255,0.60)';
 const BLOCK_DAMAGED_GLOW = 'rgba(255,100,80,0.30)';
 const BLOCK_CRUMBLE_GLOW = 'rgba(200,100,60,0.40)';
+const CORE_HIT_FLASH     = 'rgba(255,230,255,'; // alpha suffix appended at runtime
+const NAIL_HEAD          = '#f0e0ff';
+const NAIL_GLOW          = 'rgba(220,160,255,0.55)';
 const DBG_RANGE_COLOR    = 'rgba(160,100,240,0.08)';
 const DBG_LEASH_COLOR    = 'rgba(120,80,200,0.15)';
 const DBG_TEXT_COLOR     = 'rgba(220,180,255,0.9)';
@@ -82,6 +86,7 @@ function _drawCore(
   isPulsing: boolean,
   isDying: boolean,
   dyingT: number,
+  hitFlashT: number,  // 0–1; 1 = just hit, decays toward 0
 ): void {
   const r  = Math.max(1, Math.round(DWA_HALF_W * 0.45 * scale));
   const r2 = Math.max(1, Math.round(DWA_HALF_W * 0.22 * scale));
@@ -117,6 +122,17 @@ function _drawCore(
   // Bright centre pixel.
   ctx.fillStyle = CORE_CENTER;
   ctx.fillRect(sx - 1, sy - 1, 2, 2);
+
+  // Hit flash overlay — a brief bright pulse over the entire core.
+  // hitFlashT decays from 1→0 over DWA_HIT_FLASH_TICKS ticks.
+  if (hitFlashT > 0) {
+    const alpha = hitFlashT * 0.75;
+    const fr    = Math.round(r * (1 + hitFlashT * 0.35));  // slightly expanded ring
+    ctx.fillStyle = `${CORE_HIT_FLASH}${alpha.toFixed(2)})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, fr, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // ── Motes ──────────────────────────────────────────────────────────────────────
@@ -366,7 +382,8 @@ function _renderArchitect(
 
   // Core.
   const isPulsing = state === DWA_STATE_BUILD || state === DWA_STATE_TELEGRAPH;
-  _drawCore(ctx, centerSX, centerSY, scale, isPulsing, isDying, dyingT);
+  const hitFlashT = cluster.dustWeaverArchitectHitFlashTicks / DWA_HIT_FLASH_TICKS;
+  _drawCore(ctx, centerSX, centerSY, scale, isPulsing, isDying, dyingT, hitFlashT);
 
   // Debug overlay.
   if (isDebugMode) {
@@ -400,15 +417,60 @@ function _renderArchitect(
       ctx.stroke();
     }
 
-    // State label.
+    // State label and nail/pressure info.
     const stateNames = ['idle','telegraph','build','recover','dying'];
     ctx.fillStyle = DBG_TEXT_COLOR;
     ctx.font = '8px monospace';
     ctx.fillText(
-      `DWA s=${stateNames[state] ?? state} t=${stTicks}`,
-      centerSX + 6, centerSY - 6,
+      `DWA[${slot}] ${stateNames[state] ?? state} t=${stTicks}`,
+      centerSX + 6, centerSY - 14,
+    );
+    // Owned block count.
+    let ownedBlocks = 0;
+    for (let bi = 0; bi < MAX_ARCHITECT_BLOCKS; bi++) {
+      if (snapshot.isArchitectBlockAliveFlag[bi] === 1 && snapshot.architectBlockOwnerSlot[bi] === slot) {
+        ownedBlocks++;
+      }
+    }
+    ctx.fillText(
+      `blks=${ownedBlocks} nail_cd=${cluster.dustWeaverArchitectNailCooldownTicks} rng_p=${cluster.dustWeaverArchitectRangePressureTicks}`,
+      centerSX + 6, centerSY - 5,
     );
     ctx.restore();
+  }
+}
+
+// ── Dust Nail rendering ────────────────────────────────────────────────────────
+
+function _drawDustNails(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  ox: number, oy: number, scale: number,
+  isDebugMode: boolean,
+): void {
+  const total = snapshot.isDwaNailAliveFlag.length;
+  for (let idx = 0; idx < total; idx++) {
+    if (snapshot.isDwaNailAliveFlag[idx] === 0) continue;
+    const nx = _sx(snapshot.dwaNailXWorld[idx], ox, scale);
+    const ny = _sy(snapshot.dwaNailYWorld[idx], oy, scale);
+
+    // Glow halo.
+    ctx.fillStyle = NAIL_GLOW;
+    ctx.beginPath();
+    ctx.arc(nx, ny, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Nail head (bright 2×2 pixel dot).
+    ctx.fillStyle = NAIL_HEAD;
+    ctx.fillRect(nx - 1, ny - 1, 2, 2);
+
+    if (isDebugMode) {
+      ctx.strokeStyle = 'rgba(255,160,255,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 }
 
@@ -436,10 +498,15 @@ export function renderDustWeaverArchitects(
     _drawArchitectBlock(ctx, bi, snapshot, ox, oy, scale);
   }
 
-  // Debug block hitboxes.
+  // Draw Dust Nail projectiles.
+  _drawDustNails(ctx, snapshot, ox, oy, scale, isDebugMode);
+
+  // Debug block hitboxes and global count.
   if (isDebugMode) {
+    let globalBlockCount = 0;
     for (let bi = 0; bi < MAX_ARCHITECT_BLOCKS; bi++) {
       if (snapshot.isArchitectBlockAliveFlag[bi] === 0) continue;
+      globalBlockCount++;
       const bx = snapshot.architectBlockXWorld[bi];
       const by = snapshot.architectBlockYWorld[bi];
       const bsx = _sx(bx - DWA_BLOCK_HALF_W, ox, scale);
@@ -452,7 +519,22 @@ export function renderDustWeaverArchitects(
       ctx.fillStyle = DBG_TEXT_COLOR;
       ctx.font = '7px monospace';
       const lifeT = snapshot.architectBlockLifetimeTicks[bi];
-      ctx.fillText(`hp=${snapshot.architectBlockHealth[bi]} lt=${lifeT}`, bsx, bsy - 1);
+      ctx.fillText(
+        `hp=${snapshot.architectBlockHealth[bi]} lt=${lifeT} own=${snapshot.architectBlockOwnerSlot[bi]}`,
+        bsx, bsy - 1,
+      );
+    }
+    // Global block count HUD line (top-left of viewport area).
+    ctx.fillStyle = DBG_TEXT_COLOR;
+    ctx.font = '8px monospace';
+    ctx.fillText(`DWA global blocks: ${globalBlockCount}/${MAX_ARCHITECT_BLOCKS}`, 2, 10);
+    // Active nail count.
+    let nailCount = 0;
+    for (let idx = 0; idx < snapshot.isDwaNailAliveFlag.length; idx++) {
+      if (snapshot.isDwaNailAliveFlag[idx] === 1) nailCount++;
+    }
+    if (nailCount > 0) {
+      ctx.fillText(`DWA nails: ${nailCount}`, 2, 20);
     }
   }
 }

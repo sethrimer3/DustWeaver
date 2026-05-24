@@ -207,6 +207,11 @@ export function getWallJumpCandidate(
   let rightFaceX = playerRight;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
+    // NOTE: Only real tile walls (world.walls[]) are scanned here.
+    // Architect Blocks are runtime hazard entities stored in world.architectBlock* arrays
+    // and are intentionally NOT included in world.wallCount. This means the player cannot
+    // wall-jump from Architect Blocks, preventing exploitative wall surfaces from temporary
+    // enemy constructs. Normal wall-jump behavior on real tiles is unaffected.
     if (world.wallIsPlatformFlag[wi] === 1) continue;
     if (world.wallRampOrientationIndex[wi] !== 255) continue;
 

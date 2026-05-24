@@ -141,27 +141,47 @@ through this pass).  The main remaining risks are documented below.
 
 ## Priority 3 — Dust Weaver Architect Polish
 
-1. **Hit-flash visual on the Architect core** — `dwaHitFlashTicks` is tracked
-   in `ClusterState` and decremented each tick, but the renderer does not yet
-   read it.  Add a quick alpha/color boost in `dustWeaverArchitectRenderer.ts`
-   when `snap.dwaHitFlashTicks > 0`.
+✅ **Completed items:**
 
-2. **Dust Nail secondary attack** — A simple projectile fired when the player
-   stays at range for too long (low-priority; construction pressure is the
-   primary threat).
+1. **Hit-flash visual on the Architect core** — `dustWeaverArchitectHitFlashTicks`
+   is now set in `forces.ts` when the Architect takes particle damage, and the
+   renderer uses it to draw a bright expanding glow ring over the core for
+   `DWA_HIT_FLASH_TICKS` (8) ticks, decaying smoothly.
 
-3. **Variant fine-tuning** — The `large` variant uses the same patterns with
-   higher HP/block counts.  Dedicated 5-block patterns in `DWA_PATTERNS` would
-   give it a more distinct feel.
+2. **Dust Nail secondary attack** — Fires one Dust Nail toward the player after
+   the player stays outside `DWA_NAIL_MIN_RANGE_WORLD` for
+   `DWA_NAIL_RANGE_PRESSURE_TICKS` ticks (2 s), then resets with a
+   `DWA_NAIL_COOLDOWN_TICKS` (3 s) cooldown. Nails use flat typed arrays in
+   `worldHazardState.ts` and are rendered as a small glow + 2×2 pixel dot.
+   Construction pressure remains the primary identity.
 
-4. **Wall-jump suppression near Architect Blocks** — Architect Blocks are
-   hazard entities, not real tiles, so they do not affect
-   `playerWallSurface` eligibility.  If wall-interaction feels wrong near
-   blocks, add a proximity check in the wall-surface pass.
+3. **Large-variant patterns** — `DWA_PATTERNS` now has 11 entries (0–4 normal,
+   5–10 large). `DWA_LARGE_PATTERN_INDICES` weights indices 5–10 heavily while
+   keeping 0–4 for variety; normal Architects draw only from indices 0–4.
+   All large patterns leave an escape gap and respect safety rules.
 
-5. **Per-Architect block-count cap enforcement** — `DWA_MAX_BLOCKS_PER_ARCHITECT`
-   is defined but enforced only via pattern-size choice; a counted guard would
-   be more robust when several Architects are active.
+4. **Wall-jump behavior near Architect Blocks** — Confirmed: wall-jump only
+   scans `world.wallCount` (real tiles). Architect Blocks are intentionally
+   excluded. Documented with a comment in `playerWallJump.ts`.
+
+5. **Per-Architect block-count cap enforcement** — Added an explicit
+   `_ownedBlockCount()` pre-check in `DWA_STATE_IDLE` before transitioning to
+   Telegraph. If the Architect is already at `DWA_MAX_BLOCKS_PER_ARCHITECT`,
+   it skips the build cycle and retries after a short delay. The global
+   `MAX_ARCHITECT_BLOCKS` remains as a safety fallback.
+
+**Remaining limitations / tuning values worth revisiting:**
+
+- `DWA_NAIL_MIN_RANGE_WORLD = 80` (10 small blocks) — may need adjustment
+  per room size. Larger rooms may warrant a higher threshold.
+- `DWA_NAIL_SPEED_WORLD = 1.6` world-units/tick — currently dodge-able;
+  increase if playtesting shows nails are too easy to ignore.
+- `DWA_NAIL_RANGE_PRESSURE_TICKS = 120` (~2 s at 60 fps) — increase to 180
+  if nails fire too frequently in small rooms.
+- Multiple simultaneous Architects share the `MAX_ARCHITECT_BLOCKS` pool
+  (cap = 40). If 4+ Architects are active, the global cap may be reached
+  before individual caps; consider reducing `DWA_MAX_BLOCKS_PER_ARCHITECT`
+  or raising `MAX_ARCHITECT_BLOCKS` in that scenario.
 
 ---
 

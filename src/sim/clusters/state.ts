@@ -731,6 +731,13 @@ export interface ClusterState {
   dustWeaverArchitectBuildPatternIndex: number;
   /** Ticks remaining for the hit-flash visual. */
   dustWeaverArchitectHitFlashTicks: number;
+  /**
+   * Counts up while the player stays outside DWA_NAIL_MIN_RANGE_WORLD.
+   * Resets to 0 when the player comes within range or a nail is fired.
+   */
+  dustWeaverArchitectRangePressureTicks: number;
+  /** Cooldown ticks remaining after firing a Dust Nail (counts down to 0). */
+  dustWeaverArchitectNailCooldownTicks: number;
 
   // ── Void Singularity ────────────────────────────────────────────────────────
   /** 1 if this cluster is a Void Singularity or Void Singularity Pair. */
@@ -1033,6 +1040,8 @@ export function createClusterState(
     dustWeaverArchitectBuildSiteYWorld: 0,
     dustWeaverArchitectBuildPatternIndex: 0,
     dustWeaverArchitectHitFlashTicks: 0,
+    dustWeaverArchitectRangePressureTicks: 0,
+    dustWeaverArchitectNailCooldownTicks: 0,
     isVoidSingularityFlag: 0,
     isVoidSingularityPairFlag: 0,
     voidSingularityState: 0,

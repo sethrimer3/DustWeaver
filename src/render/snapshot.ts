@@ -294,6 +294,8 @@ function _makeEmptyCluster(): _MutableCluster {
     dustWeaverArchitectBuildSiteYWorld: 0,
     dustWeaverArchitectBuildPatternIndex: 0,
     dustWeaverArchitectHitFlashTicks: 0,
+    dustWeaverArchitectRangePressureTicks: 0,
+    dustWeaverArchitectNailCooldownTicks: 0,
     isVoidSingularityFlag: 0,
     isVoidSingularityPairFlag: 0,
     voidSingularityState: 0,
@@ -472,6 +474,8 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.dustWeaverArchitectBuildSiteYWorld     = src.dustWeaverArchitectBuildSiteYWorld;
   dst.dustWeaverArchitectBuildPatternIndex   = src.dustWeaverArchitectBuildPatternIndex;
   dst.dustWeaverArchitectHitFlashTicks       = src.dustWeaverArchitectHitFlashTicks;
+  dst.dustWeaverArchitectRangePressureTicks  = src.dustWeaverArchitectRangePressureTicks;
+  dst.dustWeaverArchitectNailCooldownTicks   = src.dustWeaverArchitectNailCooldownTicks;
   dst.isVoidSingularityFlag                  = src.isVoidSingularityFlag;
   dst.isVoidSingularityPairFlag              = src.isVoidSingularityPairFlag;
   dst.voidSingularityState                   = src.voidSingularityState;
@@ -675,6 +679,13 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     architectBlockState:         world.architectBlockState,
     isArchitectBlockAliveFlag:   world.isArchitectBlockAliveFlag,
     architectBlockOwnerSlot:     world.architectBlockOwnerSlot,
+    // Dust Nail projectiles — shared typed-array views.
+    dwaNailXWorld:               world.dwaNailXWorld,
+    dwaNailYWorld:               world.dwaNailYWorld,
+    dwaNailVelXWorld:            world.dwaNailVelXWorld,
+    dwaNailVelYWorld:            world.dwaNailVelYWorld,
+    dwaNailLifetimeTicks:        world.dwaNailLifetimeTicks,
+    isDwaNailAliveFlag:          world.isDwaNailAliveFlag,
     // Arrow Weave — typed-array fields are shared views (always up-to-date);
     // scalar fields are updated in updateSnapshotInPlace.
     isArrowWeaveLoadingFlag:    world.isArrowWeaveLoadingFlag,
