@@ -10,7 +10,7 @@
  * Edge-extension cache building is intentionally excluded — that feature is
  * legacy-only.  See src/render/transitions/legacy/README.md for details.
  *
- * BUILD 388
+ * BUILD 390
  */
 
 import type { RoomDef } from '../levels/roomDef';
@@ -114,12 +114,49 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
 // ── ensureRoomPrepared ────────────────────────────────────────────────────────
 
 /**
+ * Lightweight room-build cost heuristic, mirroring the one in
+ * `roomPreloadScheduler.ts`.  Kept local to avoid circular imports.
+ *
+ * Returns an estimated main-thread build time in ms.  Used to guard against
+ * synchronously building obviously expensive rooms during active gameplay.
+ */
+function _estimateRoomBuildCostMs(room: RoomDef): number {
+  const wallCount = room.walls?.length ?? 0;
+  const wallCost = wallCount * 0.04 + wallCount * wallCount * 0.002;
+  let bgBlockCount = 0;
+  if (room.backgroundBlocks !== undefined) {
+    for (let i = 0; i < room.backgroundBlocks.length; i++) {
+      const b = room.backgroundBlocks[i];
+      bgBlockCount += b.wBlock * b.hBlock;
+    }
+  }
+  const bgCost = bgBlockCount * 0.008;
+  const decorCount = room.decorations?.length ?? 0;
+  const decorCost = decorCount * 0.3;
+  return wallCost + bgCost + decorCost;
+}
+
+/**
+ * Estimated-cost threshold (ms) above which a room is considered too expensive
+ * to build synchronously during active gameplay.  Mirrors `MAX_R1_COST_SYNC_MS`
+ * in `roomPreloadScheduler.ts`.
+ *
+ * Exported so call sites can apply the same threshold consistently without
+ * duplicating the constant.
+ */
+export const SAFE_SYNC_BUILD_COST_MS = 8;
+
+/**
  * Immediately builds and caches a `PreparedRoomRuntime` for `roomId` if it is
  * not already in the cache.  Called as an urgent fallback when the player is
  * close to a transition and the preload scheduler has not yet processed that
  * room.
  *
  * Idempotent: a no-op if the room is already cached.
+ *
+ * ⚠️  SYNCHRONOUS — this function always builds on the main thread.  Callers
+ * must ensure the room is cheap enough to build synchronously.  Use
+ * `tryEnsureRoomPreparedIfCheap` when the build cost is unknown.
  */
 export function ensureRoomPrepared(
   roomId: string,
@@ -144,4 +181,54 @@ export function ensureRoomPrepared(
       `[preload:urgent] ${roomId} prepared in ${(performance.now() - t0).toFixed(1)}ms`,
     );
   }
+}
+
+/**
+ * Builds and caches a `PreparedRoomRuntime` for `roomId` only when the
+ * estimated main-thread build cost is at or below `maxCostMs`.
+ *
+ * Use this variant instead of `ensureRoomPrepared` when calling from active
+ * gameplay paths where a long synchronous build would freeze the frame.
+ *
+ * Returns `true` if the room was (or already was) in the cache after the call.
+ * Returns `false` if the room was skipped because the estimated cost exceeded
+ * `maxCostMs` — the caller should rely on the async loading overlay to cover
+ * any resulting cache miss.
+ *
+ * Idempotent: always returns `true` (without rebuilding) when the room is
+ * already in the cache.
+ */
+export function tryEnsureRoomPreparedIfCheap(
+  roomId: string,
+  cache: RoomRuntimeCache,
+  maxCostMs = SAFE_SYNC_BUILD_COST_MS,
+  isDebugMode = false,
+): boolean {
+  if (cache.has(roomId)) return true;
+
+  const room = ROOM_REGISTRY.get(roomId);
+  if (room === undefined) return false;
+
+  const estimatedCostMs = _estimateRoomBuildCostMs(room);
+  if (estimatedCostMs > maxCostMs) {
+    if (isDebugMode) {
+      console.log(
+        `[preload:urgent] ${roomId} skipped — estimated ${estimatedCostMs.toFixed(0)}ms ` +
+        `exceeds safe threshold (${maxCostMs}ms). Async overlay will cover any cache miss.`,
+      );
+    }
+    return false;
+  }
+
+  const t0 = isDebugMode ? performance.now() : 0;
+  const result = buildPreparedRoomRuntime(room);
+  cache.set(roomId, result.runtimeEntry);
+
+  if (isDebugMode) {
+    console.log(
+      `[preload:urgent] ${roomId} prepared in ${(performance.now() - t0).toFixed(1)}ms ` +
+      `(estimated ${estimatedCostMs.toFixed(0)}ms)`,
+    );
+  }
+  return true;
 }
