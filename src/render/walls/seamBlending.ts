@@ -195,11 +195,20 @@ function _loadTransitionSprite(profile: TransitionProfileKind, slot: string): vo
   const key = `${profile}/${slot}`;
   if (_spriteCache.has(key)) return;
   const img = loadImg(_transitionSpriteUrl(profile, slot));
-  _spriteCache.set(key, img);
+  // Attach the error listener before setting the cache entry to avoid a
+  // window where an already-errored image (returned by loadImg's own cache)
+  // would sit in _spriteCache as an image element rather than null.
   img.addEventListener('error', () => {
     // 404 or network error: mark as a permanent miss so we stop retrying.
     _spriteCache.set(key, null);
   }, { once: true });
+  // If the image was already loaded and errored (pre-cached 404), mark it as
+  // a miss immediately — the error event will not fire again.
+  if (img.complete && img.naturalWidth === 0) {
+    _spriteCache.set(key, null);
+  } else {
+    _spriteCache.set(key, img);
+  }
 }
 
 /**
@@ -295,6 +304,21 @@ function edgeToTile(dir: number, u: number, v: number): [number, number] {
 }
 
 // ── Per-profile stamp drawers ─────────────────────────────────────────────────
+//
+// Base draw-rate thresholds (organic/density=1.0 baseline):
+//   MOSSY_BASE_THRESHOLD   = 0.55  → ~55% of edge steps receive a moss blob.
+//   CRUMBLY_BASE_THRESHOLD = 0.45  → ~45% of edge steps receive a crumb pixel.
+// Multiplied by intensityDensity(): subtle≈0.28/0.23, organic≈0.55/0.45, heavy≈0.77/0.63.
+const MOSSY_BASE_THRESHOLD   = 0.55;
+const CRUMBLY_BASE_THRESHOLD = 0.45;
+
+// Hash seed constants for corner and diagonal accents.
+// Chosen as small odd offsets and prime seeds distinct from the edge stamp
+// seeds (17, 31, 7, 19, …) to avoid visual correlation at seam edges.
+const CORNER_HASH_OFFSET   = 10;  // added to cornerIdx to namespace corner hashes
+const CORNER_HASH_SEED     = 251; // prime seed for inner corner skip decisions
+const DIAGONAL_HASH_OFFSET = 20;  // added to cornerIdx to namespace diagonal hashes
+const DIAGONAL_HASH_SEED   = 257; // prime seed for diagonal skip decisions
 
 /** Mossy: clusters of 1–2px blobs, green-tinted, organic placement. */
 function drawMossy(
@@ -308,7 +332,7 @@ function drawMossy(
   ctx.fillStyle = '#3a7a3a';
   const band = edgeBand(dir, sz, Math.ceil(3 * px1));
   const steps = Math.floor(sz / px1);
-  const threshold = Math.min(0.95, 0.55 * density);
+  const threshold = Math.min(0.95, MOSSY_BASE_THRESHOLD * density);
   for (let i = 0; i < steps; i++) {
     const h0 = hash01(col, row, dir * 100 + i, 17);
     if (h0 > threshold) continue;
@@ -336,7 +360,7 @@ function drawCrumbly(
   ctx.fillStyle = color;
   const band = edgeBand(dir, sz, Math.ceil(2 * px1));
   const steps = Math.floor(sz / px1);
-  const threshold = Math.min(0.95, 0.45 * density);
+  const threshold = Math.min(0.95, CRUMBLY_BASE_THRESHOLD * density);
   for (let i = 0; i < steps; i++) {
     const h0 = hash01(col, row, dir * 100 + i, 7);
     if (h0 > threshold) continue;
@@ -559,7 +583,7 @@ function drawInnerCornerAccent(
   sz: number, px1: number,
   profile: BlockTransitionProfile,
 ): void {
-  const h = hash01(col, row, cornerIdx + 10, 251);
+  const h = hash01(col, row, cornerIdx + CORNER_HASH_OFFSET, CORNER_HASH_SEED);
   if (h > 0.70) return; // skip ~30%
   const cx = tx + (CORNER_PIXEL_X[cornerIdx] ? sz - px1 : 0);
   const cy = ty + (CORNER_PIXEL_Y[cornerIdx] ? sz - px1 : 0);
@@ -584,7 +608,7 @@ function drawDiagonalAccent(
   sz: number, px1: number,
   profile: BlockTransitionProfile,
 ): void {
-  const h = hash01(col, row, cornerIdx + 20, 257);
+  const h = hash01(col, row, cornerIdx + DIAGONAL_HASH_OFFSET, DIAGONAL_HASH_SEED);
   if (h > 0.50) return; // skip 50%
   const cx = tx + (CORNER_PIXEL_X[cornerIdx] ? sz - px1 : 0);
   const cy = ty + (CORNER_PIXEL_Y[cornerIdx] ? sz - px1 : 0);
