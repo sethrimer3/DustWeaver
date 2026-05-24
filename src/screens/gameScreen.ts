@@ -33,7 +33,7 @@ import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
-import { getMusicVolume, getSelectedRenderSize } from '../ui/renderSettings';
+import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
 import { BloomSystem } from '../render/effects/bloomSystem';
@@ -205,7 +205,9 @@ export function startGameScreen(
   // Stage 2: The offscreen canvas is upscaled to the device canvas each frame.
   const virtualCanvas = document.createElement('canvas');
   let virtualWidthPx = BASE_VIRTUAL_WIDTH_PX;
-  const virtualHeightPx = FIXED_VIRTUAL_HEIGHT_PX;
+  // Height is driven by the active World View preset (normal/wide/far).
+  // Declared as `let` so resizeCanvas() can update it when the preset changes.
+  let virtualHeightPx = FIXED_VIRTUAL_HEIGHT_PX;
   virtualCanvas.width  = virtualWidthPx;
   virtualCanvas.height = virtualHeightPx;
   const virtualCtx = virtualCanvas.getContext('2d')!;
@@ -219,6 +221,8 @@ export function startGameScreen(
     const selectedRenderSize = getSelectedRenderSize();
     canvas.width = Math.round(selectedRenderSize.widthPx * deviceScale);
     canvas.height = Math.round(selectedRenderSize.heightPx * deviceScale);
+    // Read the active World View preset to determine virtual canvas height.
+    virtualHeightPx = getActiveWorldViewPreset().virtualHeight;
     virtualWidthPx = Math.max(1, Math.round((canvas.width / canvas.height) * virtualHeightPx));
     virtualCanvas.width = virtualWidthPx;
     virtualCanvas.height = virtualHeightPx;
@@ -1131,6 +1135,7 @@ export function startGameScreen(
         editorDebugControls?.removeEditorButton();
       }
     },
+    onResizeCanvas: resizeCanvas,
   });
 
   function onResize(): void {

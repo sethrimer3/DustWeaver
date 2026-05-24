@@ -18,6 +18,8 @@ import {
   setMusicVolume, setSfxVolume,
   setGraphicsQuality,
   setAlwaysCenterCamera,
+  WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
+  type WorldViewPresetId,
 } from './renderSettings';
 import { makeButton, makeSlider, makeTabButton, GOLD, PANEL_BORDER } from './helpers';
 
@@ -27,6 +29,8 @@ export interface PauseMenuCallbacks {
   onResume: () => void;
   onExitToMainMenu: () => void;
   onToggleDebug: () => void;
+  /** Called after a World View preset change so the caller can resize the virtual canvas. */
+  onWorldViewChanged?: () => void;
 }
 
 export interface PauseMenuState {
@@ -36,6 +40,8 @@ export interface PauseMenuState {
   graphicsQuality: 'low' | 'med' | 'high';
   /** Whether the always-center-camera mode is enabled. */
   alwaysCenterCamera: boolean;
+  /** Active world view preset id. */
+  worldViewPresetId: WorldViewPresetId;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -179,6 +185,41 @@ export function showPauseMenu(
       btnRow.appendChild(medBtn);
       btnRow.appendChild(highBtn);
       optionsPanel.appendChild(btnRow);
+
+      // World View preset buttons
+      const worldViewLabel = document.createElement('div');
+      worldViewLabel.textContent = 'World View';
+      worldViewLabel.style.cssText = `
+        font-family: 'Cinzel', serif; color: ${GOLD};
+        font-size: 0.95rem; margin: 18px 0 12px 0;
+      `;
+      optionsPanel.appendChild(worldViewLabel);
+
+      const wvBtnRow = document.createElement('div');
+      wvBtnRow.style.cssText = `display: flex; justify-content: center;`;
+
+      for (const preset of WORLD_VIEW_PRESETS) {
+        const isActive = state.worldViewPresetId === preset.id;
+        const wvBtn = makeQualityButton(preset.label, isActive, () => {
+          state.worldViewPresetId = preset.id;
+          setWorldViewPresetId(preset.id);
+          if (callbacks.onWorldViewChanged) callbacks.onWorldViewChanged();
+          buildOptionsContent();
+        });
+        wvBtn.title = preset.description;
+        wvBtnRow.appendChild(wvBtn);
+      }
+      optionsPanel.appendChild(wvBtnRow);
+
+      // World View description hint
+      const activePreset = getActiveWorldViewPreset();
+      const wvHint = document.createElement('div');
+      wvHint.textContent = activePreset.description;
+      wvHint.style.cssText = `
+        font-family: 'Cinzel', serif; color: rgba(212,168,75,0.65);
+        font-size: 0.72rem; text-align: center; margin-top: 6px;
+      `;
+      optionsPanel.appendChild(wvHint);
 
       // Visual effect opacity sliders
       const edgeGlowSlider = makeSlider(
