@@ -172,6 +172,46 @@ export function setInfluenceHighlightWidth(width: number): void {
   setStoredFloat(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY, width, 0, 1);
 }
 
+// ── World View Presets ────────────────────────────────────────────────────────
+
+export type WorldViewPresetId = 'normal' | 'wide' | 'far';
+
+export interface WorldViewPreset {
+  id: WorldViewPresetId;
+  label: string;
+  /** Virtual canvas height in pixels. Width is derived from the output aspect ratio. */
+  virtualHeight: number;
+  /** Human-readable description shown in the pause menu. */
+  description: string;
+}
+
+export const WORLD_VIEW_PRESETS: readonly WorldViewPreset[] = [
+  { id: 'normal', label: 'Normal', virtualHeight: 270, description: '480×270 · 4× at 1080p' },
+  { id: 'wide',   label: 'Wide',   virtualHeight: 360, description: '640×360 · 3× at 1080p' },
+  { id: 'far',    label: 'Far',    virtualHeight: 540, description: '960×540 · 2× at 1080p' },
+];
+
+const WORLD_VIEW_STORAGE_KEY  = 'dustweaver-world-view';
+const DEFAULT_WORLD_VIEW_ID: WorldViewPresetId = 'normal';
+
+export function getWorldViewPresetId(): WorldViewPresetId {
+  const value = localStorage.getItem(WORLD_VIEW_STORAGE_KEY);
+  if (value === 'normal' || value === 'wide' || value === 'far') return value;
+  return DEFAULT_WORLD_VIEW_ID;
+}
+
+export function setWorldViewPresetId(id: WorldViewPresetId): void {
+  localStorage.setItem(WORLD_VIEW_STORAGE_KEY, id);
+}
+
+export function getActiveWorldViewPreset(): WorldViewPreset {
+  const id = getWorldViewPresetId();
+  for (let i = 0; i < WORLD_VIEW_PRESETS.length; i++) {
+    if (WORLD_VIEW_PRESETS[i].id === id) return WORLD_VIEW_PRESETS[i];
+  }
+  return WORLD_VIEW_PRESETS[0];
+}
+
 // ── Always Center Camera ─────────────────────────────────────────────────────
 
 const ALWAYS_CENTER_CAMERA_STORAGE_KEY = 'dustweaver-always-center-camera';
