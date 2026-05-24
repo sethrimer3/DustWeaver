@@ -21,6 +21,19 @@ export interface ClusterState {
    * suppress normal friction and apply reduced ice traction instead.
    */
   isGroundedOnIceFlag: 0 | 1;
+  /**
+   * 1 when the cluster is grounded on an ultra-ice surface (wallIsUltraIceFlag[wi] === 1).
+   * Cleared each tick alongside isGroundedFlag; set by resolveWallsY when the landing
+   * wall is an ultra-ice block.
+   */
+  isGroundedOnUltraIceFlag: 0 | 1;
+  /**
+   * 1 while the player is in the "ultra ice" state — lateral velocity is locked and
+   * input cannot accelerate or decelerate horizontally.  Set when the player first
+   * touches an ultra-ice surface; cleared when the player lands on any non-ultra-ice
+   * surface.  Persists through jumps and airborne phases.
+   */
+  isOnUltraIceFlag: 0 | 1;
   /** Half-width of the cluster box in world units (used for rendering and collision). */
   halfWidthWorld: number;
   /** Half-height of the cluster box in world units (used for rendering and collision). */
@@ -823,6 +836,8 @@ export function createClusterState(
     maxHealthPoints,
     isGroundedFlag: 0,
     isGroundedOnIceFlag: 0,
+    isGroundedOnUltraIceFlag: 0,
+    isOnUltraIceFlag: 0,
     halfWidthWorld: PLAYER_HALF_WIDTH_WORLD,
     halfHeightWorld: PLAYER_HALF_HEIGHT_WORLD,
     coyoteTimeTicks: 0,

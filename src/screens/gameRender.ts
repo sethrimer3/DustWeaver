@@ -79,6 +79,7 @@ import { getLiquidDebugStats } from '../render/liquidBodyCache';
 import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
 import { renderSnakes } from '../render/clusters/snakeRenderer';
+import { renderUltraIceSparkles } from '../render/effects/ultraIceSparkleRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -384,6 +385,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderUltraIceSparkles(ctx, snapshot.walls, nowMs, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateChunkStats(getChunkCacheStats());

@@ -85,6 +85,7 @@ export function resolveClusterFloorCollision(cluster: ClusterState, world: World
 export function resetClusterGroundedFlag(cluster: ClusterState): void {
   cluster.isGroundedFlag = 0;
   cluster.isGroundedOnIceFlag = 0;
+  cluster.isGroundedOnUltraIceFlag = 0;
 }
 
 /**
