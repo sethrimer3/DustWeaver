@@ -281,6 +281,19 @@ function _makeEmptyCluster(): _MutableCluster {
     dustBlockMimicLungeDistCovered: 0,
     dustBlockMimicLungeHitPlayerFlag: 0,
     dustBlockMimicHitFlashTicks: 0,
+    isDustWeaverArchitectFlag: 0,
+    isDustWeaverArchitectLargeFlag: 0,
+    dustWeaverArchitectState: 0,
+    dustWeaverArchitectStateTicks: 0,
+    dustWeaverArchitectSlotIndex: -1,
+    dustWeaverArchitectSpawnXWorld: 0,
+    dustWeaverArchitectSpawnYWorld: 0,
+    dustWeaverArchitectBobPhaseRad: 0,
+    dustWeaverArchitectAttackCooldownTicks: 0,
+    dustWeaverArchitectBuildSiteXWorld: 0,
+    dustWeaverArchitectBuildSiteYWorld: 0,
+    dustWeaverArchitectBuildPatternIndex: 0,
+    dustWeaverArchitectHitFlashTicks: 0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -407,6 +420,19 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.dustBlockMimicLungeDistCovered  = src.dustBlockMimicLungeDistCovered;
   dst.dustBlockMimicLungeHitPlayerFlag = src.dustBlockMimicLungeHitPlayerFlag;
   dst.dustBlockMimicHitFlashTicks     = src.dustBlockMimicHitFlashTicks;
+  dst.isDustWeaverArchitectFlag              = src.isDustWeaverArchitectFlag;
+  dst.isDustWeaverArchitectLargeFlag         = src.isDustWeaverArchitectLargeFlag;
+  dst.dustWeaverArchitectState               = src.dustWeaverArchitectState;
+  dst.dustWeaverArchitectStateTicks          = src.dustWeaverArchitectStateTicks;
+  dst.dustWeaverArchitectSlotIndex           = src.dustWeaverArchitectSlotIndex;
+  dst.dustWeaverArchitectSpawnXWorld         = src.dustWeaverArchitectSpawnXWorld;
+  dst.dustWeaverArchitectSpawnYWorld         = src.dustWeaverArchitectSpawnYWorld;
+  dst.dustWeaverArchitectBobPhaseRad         = src.dustWeaverArchitectBobPhaseRad;
+  dst.dustWeaverArchitectAttackCooldownTicks = src.dustWeaverArchitectAttackCooldownTicks;
+  dst.dustWeaverArchitectBuildSiteXWorld     = src.dustWeaverArchitectBuildSiteXWorld;
+  dst.dustWeaverArchitectBuildSiteYWorld     = src.dustWeaverArchitectBuildSiteYWorld;
+  dst.dustWeaverArchitectBuildPatternIndex   = src.dustWeaverArchitectBuildPatternIndex;
+  dst.dustWeaverArchitectHitFlashTicks       = src.dustWeaverArchitectHitFlashTicks;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
@@ -543,6 +569,20 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     dbmMoteTargetLocalX:    world.dbmMoteTargetLocalX,
     dbmMoteTargetLocalY:    world.dbmMoteTargetLocalY,
     dbmMotePulsePhaseRad:   world.dbmMotePulsePhaseRad,
+    dwaMoteAngleRad:             world.dwaMoteAngleRad,
+    dwaMotePulsePhaseRad:        world.dwaMotePulsePhaseRad,
+    architectBlockCount:         world.architectBlockCount,
+    architectBlockXWorld:        world.architectBlockXWorld,
+    architectBlockYWorld:        world.architectBlockYWorld,
+    architectBlockHealth:        world.architectBlockHealth,
+    architectBlockMaxHealth:     world.architectBlockMaxHealth,
+    architectBlockLifetimeTicks: world.architectBlockLifetimeTicks,
+    architectBlockGraceTicks:    world.architectBlockGraceTicks,
+    architectBlockFormTicks:     world.architectBlockFormTicks,
+    architectBlockCrumbleTicks:  world.architectBlockCrumbleTicks,
+    architectBlockState:         world.architectBlockState,
+    isArchitectBlockAliveFlag:   world.isArchitectBlockAliveFlag,
+    architectBlockOwnerSlot:     world.architectBlockOwnerSlot,
     // Arrow Weave — typed-array fields are shared views (always up-to-date);
     // scalar fields are updated in updateSnapshotInPlace.
     isArrowWeaveLoadingFlag:    world.isArrowWeaveLoadingFlag,
