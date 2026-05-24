@@ -99,51 +99,43 @@ through this pass).  The main remaining risks are documented below.
 
 ## Priority 2 — Block Seam Blending Polish
 
-### Current Limitations
+### Implemented in This Pass
 
-1. **No custom sprite asset support.**  All overlays are procedural.  A hook
-   for artist-authored transition sprites is described below.
+1. **Custom sprite asset support.**  `seamBlending.ts` now loads artist-authored
+   PNGs from `ASSETS/SPRITES/BLOCKS/transitions/generic/{profile}/edge_{N|E|S|W}_01.png`
+   (plus optional `corner_inner_01.png`, `corner_outer_01.png`, `diagonal_01.png`).
+   Missing sprites are cached as misses after the first 404 — no per-frame fetch
+   cost.  Procedural stamps remain the fallback when sprites are absent.
+   `preloadTransitionSprites(profiles)` warms the cache at room load time.
 
-2. **Profile assignments are keyword-based heuristics.**  `getTransitionProfile()`
-   in `seamBlending.ts` matches theme IDs against keyword substrings.  Themes
-   that don't match any keyword fall back to `PROFILES.none` (no overlay).
-   Manual tuning is needed as new themes are added.
+2. **Explicit profile overrides.**  `EXPLICIT_PROFILES` in `seamBlending.ts` is
+   an override map checked before keyword heuristics.  Profile resolution order:
+   explicit map → keyword heuristic → none.  Add entries to `EXPLICIT_PROFILES`
+   when a new block theme's ID doesn't match any keyword correctly.
 
-3. **Editor backdrop doesn't live-preview seam blending changes.**  Setting
-   takes effect after confirming/playtesting.
+3. **Editor backdrop live-previews seam blending changes.**  `editorController.ts`
+   now calls `setActiveSeamBlending(mode)` immediately on dropdown change, which
+   invalidates the chunk cache so the backdrop updates without a playtest cycle.
 
-4. **No corner/diagonal contact accent sprites.**  Only 4-directional edge
-   stamps are generated; inner/outer corner cases receive no special treatment.
+4. **Corner and diagonal seam accents.**  Inner corners (where two orthogonal
+   seam edges meet) and diagonal-only contacts (tiles that touch only at a corner)
+   both receive small procedural accent stamps.  Custom `corner_inner_01.png` and
+   `diagonal_01.png` sprites are used when present.  Accents are sparse and
+   deterministic (hash-seeded, no flicker).
 
-5. **Stamp density not tunable per-profile.**  Density is hardcoded in each
-   profile's stamp function; organic/heavy modes raise opacity, not density.
+5. **Per-mode density tuning.**  `intensityDensity(mode)` returns 0.5 / 1.0 / 1.4
+   for subtle / organic / heavy.  Each stamp function scales its count or skip
+   threshold by the density multiplier, so subtle is noticeably sparser and heavy
+   is noticeably denser — not just more opaque.
 
-### Where Custom Transition Sprite Support Should Go
+### Remaining Limitations
 
-- Add a `loadTransitionSprites(profile, direction)` async loader in
-  `seamBlending.ts` that tries to fetch from
-  `ASSETS/SPRITES/BLOCKS/transitions/generic/{profile}/edge_{dir}_01.png`.
-- Cache loaded sprites in a module-level `Map<string, HTMLImageElement>`.
-- In `renderSeamOverlayPass`, check the cache before falling back to procedural
-  stamps.
-- Add `preloadTransitionSprites(profiles)` to warm the cache at room load time,
-  similar to `preloadRoomThemeSprites`.
-- Asset folder: `ASSETS/SPRITES/BLOCKS/transitions/generic/{profile}/edge_{N|E|S|W}_01.png`
-  plus optional `corner_inner_01.png`, `corner_outer_01.png`.
+1. **No artist-authored transition sprites exist yet.**  The hooks and fallback
+   are in place; someone still needs to create the PNG assets.
 
-### Explicit Profile Assignments Still Needing Tuning
-
-Add to `EXPLICIT_PROFILES` in `seamBlending.ts` for any theme the heuristic
-gets wrong:
-
-- `mossy`, `grass`, `organic`, `mud` → mossy
-- `dirt`, `soil`, `sand`, `gravel`, `crumbl` → crumbly
-- `cracked`, `broken`, `fracture`, `shatter` → cracked
-- `root`, `tree`, `wood`, `vine`, `branch` → rooted
-- `dust`, `ash`, `powder`, `soot` → dusty
-- `crystal`, `gem`, `vein`, `quartz`, `glitter` → veined
-- `corrupt`, `shadow`, `dark`, `void`, `taint` → corrupted
-- `metal`, `steel`, `iron`, `marble`, `tile`, `brick`, `carved`, `arch` → none
+2. **`EXPLICIT_PROFILES` is empty by default.**  Manual entries are needed as
+   new themes are introduced that the keyword heuristic misidentifies.  The map
+   includes a comment block with examples.
 
 ---
 

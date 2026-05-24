@@ -24,6 +24,7 @@ import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef'
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, snapCamera, getCameraOffset } from '../render/camera';
 import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers, setActiveSeamBlending } from '../render/walls/blockSpriteRenderer';
+import { preloadTransitionSprites } from '../render/walls/seamBlending';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
@@ -711,6 +712,12 @@ export function startGameScreen(
       const _t0 = import.meta.env.DEV ? performance.now() : 0;
       preloadRoomThemeSprites(room);
       FP.recordLoadPhaseStep('F:preloadRoomThemeSprites', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
+
+    // Warm the transition sprite cache for all non-none profile kinds.
+    // Missing sprites are cached as misses after the first 404 — no per-frame cost.
+    if (room.blockSeamBlending && room.blockSeamBlending !== 'off') {
+      preloadTransitionSprites(['mossy', 'crumbly', 'cracked', 'rooted', 'dusty', 'veined', 'corrupted']);
     }
 
     // Cancel any in-flight preload schedule from the previous room and start
