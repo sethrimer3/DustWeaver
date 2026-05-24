@@ -1,4 +1,4 @@
-import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT, MAX_DUST_BLOCK_MIMICS, MAX_DUST_WEAVER_ARCHITECTS, MAX_MOTES_PER_DWA } from '../sim/world';
+import { WorldState, MAX_PARTICLES, MAX_SQUARE_STAMPEDE, MAX_BEE_SWARMS, BEES_PER_SWARM, MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION, MAX_ORBITAL_DUST_CORES, MOTES_PER_ODC_SLOT, MAX_DUST_BLOCK_MIMICS, MAX_DUST_WEAVER_ARCHITECTS, MAX_MOTES_PER_DWA, MAX_VOID_SINGULARITIES, MAX_MOTES_PER_VS } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
@@ -64,6 +64,15 @@ import {
   DWA_BUILD_COOLDOWN_TICKS,
 } from '../sim/clusters/dustWeaverArchitectConfig';
 import { DWA_STATE_IDLE } from '../sim/clusters/dustWeaverArchitectAi';
+
+import {
+  VS_HP,
+  VSP_HP,
+  VS_HALF_W,
+  VS_HALF_H,
+  VS_MOTE_START_RADIUS_WORLD,
+} from '../sim/clusters/voidSingularityConfig';
+import { VS_STATE_IDLE as VS_IDLE } from '../sim/clusters/voidSingularityAi';
 
 import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
 import {
@@ -767,6 +776,60 @@ export function spawnEnemyClusters(
           world.dwaMotePulsePhaseRad[mi] = (m / moteCount) * Math.PI * 2;
         }
       }
+    } else if (enemyDef.isVoidSingularityFlag === 1) {
+      // Allocate a Void Singularity slot
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_VOID_SINGULARITIES; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].voidSingularitySlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) { slotIndex = si; break; }
+      }
+
+      const isPair = (enemyDef.isVoidSingularityPairFlag ?? 0) as 0 | 1;
+      const hp     = isPair === 1 ? VSP_HP : VS_HP;
+
+      enemyCluster.isVoidSingularityFlag         = 1;
+      enemyCluster.isVoidSingularityPairFlag      = isPair;
+      enemyCluster.voidSingularitySlotIndex       = slotIndex;
+      enemyCluster.voidSingularityState           = VS_IDLE;
+      enemyCluster.voidSingularityStateTicks      = 0;
+      enemyCluster.voidSingularitySpawnXWorld     = ex;
+      enemyCluster.voidSingularitySpawnYWorld     = ey;
+      enemyCluster.voidSingularityBobPhaseRad     = 0;
+      enemyCluster.voidSingularityAbsorbedEnergy  = 0;
+      enemyCluster.voidSingularityPulseRadius     = 0;
+      enemyCluster.voidSingularityPulseActiveFlag = 0;
+      enemyCluster.voidSingularityPulseHitPlayerFlag = 0;
+      enemyCluster.voidSingularityHitFlashTicks   = 0;
+      enemyCluster.voidSingularityPairAngleRad    = 0;
+      enemyCluster.voidSingularityWholeCharge     = 0;
+      enemyCluster.voidSingularityWholeState      = 0;
+      enemyCluster.voidSingularityWholeStateTicks = 0;
+      enemyCluster.halfWidthWorld                 = VS_HALF_W;
+      enemyCluster.halfHeightWorld                = VS_HALF_H;
+      enemyCluster.healthPoints                   = hp;
+      enemyCluster.maxHealthPoints                = hp;
+
+      // Initialise mote positions
+      if (slotIndex >= 0) {
+        const base = slotIndex * MAX_MOTES_PER_VS;
+        for (let m = 0; m < MAX_MOTES_PER_VS; m++) {
+          const mi = base + m;
+          world.vsMoteAngleRad[mi]      = (m / MAX_MOTES_PER_VS) * Math.PI * 2;
+          world.vsMoteRadiusWorld[mi]   = VS_MOTE_START_RADIUS_WORLD + (m / MAX_MOTES_PER_VS) * 6.0;
+          world.vsMotePulsePhaseRad[mi] = (m / MAX_MOTES_PER_VS) * Math.PI * 2;
+        }
+        // Clear projectile slots
+        if (isPair === 1) {
+          const projBase = slotIndex * 8;
+          for (let p = 0; p < 8; p++) world.vspProjAliveFlag[projBase + p] = 0;
+        }
+      }
     }
     world.clusters.push(enemyCluster);
     const particleStartIdx = world.particleCount;
@@ -778,7 +841,8 @@ export function spawnEnemyClusters(
       enemyCluster.isDustConstellationFlag === 1 ||
       enemyCluster.isOrbitalDustCoreFlag === 1 ||
       enemyCluster.isDustBlockMimicFlag === 1 ||
-      enemyCluster.isDustWeaverArchitectFlag === 1;
+      enemyCluster.isDustWeaverArchitectFlag === 1 ||
+      enemyCluster.isVoidSingularityFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

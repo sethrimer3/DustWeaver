@@ -718,6 +718,42 @@ export interface ClusterState {
   dustWeaverArchitectBuildPatternIndex: number;
   /** Ticks remaining for the hit-flash visual. */
   dustWeaverArchitectHitFlashTicks: number;
+
+  // ── Void Singularity ────────────────────────────────────────────────────────
+  /** 1 if this cluster is a Void Singularity or Void Singularity Pair. */
+  isVoidSingularityFlag: 0 | 1;
+  /** 1 if this cluster is the Pair variant (black hole + white hole). */
+  isVoidSingularityPairFlag: 0 | 1;
+  /** Current VS state (use VS_STATE_* constants). */
+  voidSingularityState: number;
+  /** Ticks elapsed in the current VS state. */
+  voidSingularityStateTicks: number;
+  /** WorldState slot index for per-VS mote arrays (-1 if unallocated). */
+  voidSingularitySlotIndex: number;
+  /** X of the spawn point (world units). */
+  voidSingularitySpawnXWorld: number;
+  /** Y of the spawn point (world units). */
+  voidSingularitySpawnYWorld: number;
+  /** Phase angle for idle bob animation (radians). */
+  voidSingularityBobPhaseRad: number;
+  /** Accumulated absorbed energy (charges the collapse pulse). */
+  voidSingularityAbsorbedEnergy: number;
+  /** Current radius of the expanding collapse-pulse ring (world units). */
+  voidSingularityPulseRadius: number;
+  /** 1 while the collapse-pulse ring is active and can damage. */
+  voidSingularityPulseActiveFlag: 0 | 1;
+  /** 1 once the pulse ring has already hit the player this cycle. */
+  voidSingularityPulseHitPlayerFlag: 0 | 1;
+  /** Ticks remaining for hit-flash visual. */
+  voidSingularityHitFlashTicks: number;
+  /** Pair: orbit angle of the white hole around the black hole center (radians). */
+  voidSingularityPairAngleRad: number;
+  /** Pair: accumulated white-hole charge from BH absorption. */
+  voidSingularityWholeCharge: number;
+  /** Pair: white hole state (use VSP_WH_STATE_* constants). */
+  voidSingularityWholeState: number;
+  /** Pair: ticks elapsed in the current white hole state. */
+  voidSingularityWholeStateTicks: number;
 }
 
 export function createClusterState(
@@ -934,5 +970,22 @@ export function createClusterState(
     dustWeaverArchitectBuildSiteYWorld: 0,
     dustWeaverArchitectBuildPatternIndex: 0,
     dustWeaverArchitectHitFlashTicks: 0,
+    isVoidSingularityFlag: 0,
+    isVoidSingularityPairFlag: 0,
+    voidSingularityState: 0,
+    voidSingularityStateTicks: 0,
+    voidSingularitySlotIndex: -1,
+    voidSingularitySpawnXWorld: positionXWorld,
+    voidSingularitySpawnYWorld: positionYWorld,
+    voidSingularityBobPhaseRad: 0,
+    voidSingularityAbsorbedEnergy: 0,
+    voidSingularityPulseRadius: 0,
+    voidSingularityPulseActiveFlag: 0,
+    voidSingularityPulseHitPlayerFlag: 0,
+    voidSingularityHitFlashTicks: 0,
+    voidSingularityPairAngleRad: 0,
+    voidSingularityWholeCharge: 0,
+    voidSingularityWholeState: 0,
+    voidSingularityWholeStateTicks: 0,
   };
 }

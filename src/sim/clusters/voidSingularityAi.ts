@@ -22,8 +22,6 @@ import { nextFloat } from '../rng';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
 import { ParticleKind } from '../particles/kinds';
 import {
-  VS_HP,
-  VSP_HP,
   VS_ACTIVATION_RANGE_WORLD,
   VS_LEASH_RADIUS_WORLD,
   VS_HOVER_SPEED,
@@ -42,10 +40,8 @@ import {
   VS_DEATH_DURATION_TICKS,
   VS_PULSE_MAX_RADIUS_WORLD,
   VS_PULSE_DAMAGE,
-  VS_PULSE_IFRAMES_TICKS,
   VS_CONTACT_RADIUS_WORLD,
   VS_CONTACT_DAMAGE,
-  VS_CONTACT_IFRAMES_TICKS,
   VS_MOTE_START_RADIUS_WORLD,
   VS_MOTE_MIN_RADIUS_WORLD,
   VS_MOTE_ANG_VEL_RAD_PER_TICK,
@@ -65,7 +61,6 @@ import {
   VSP_PROJ_LIFETIME_TICKS,
   VSP_PROJ_HIT_RADIUS_WORLD,
   VSP_PROJ_DAMAGE,
-  VSP_PROJ_IFRAMES_TICKS,
   MAX_MOTES_PER_VS,
   MAX_PROJS_PER_VSP,
 } from './voidSingularityConfig';
@@ -316,7 +311,6 @@ function _tickVoidSingularity(world: WorldState, ci: number): void {
             VS_CONTACT_DAMAGE,
             cluster.positionXWorld,
             cluster.positionYWorld,
-            VS_CONTACT_IFRAMES_TICKS,
           );
         }
       }
@@ -415,7 +409,6 @@ function _tickVoidSingularity(world: WorldState, ci: number): void {
             VS_PULSE_DAMAGE,
             cluster.positionXWorld,
             cluster.positionYWorld,
-            VS_PULSE_IFRAMES_TICKS,
           );
           cluster.voidSingularityPulseHitPlayerFlag = 1;
         }
@@ -598,7 +591,6 @@ function _tickVSPProjectiles(
           VSP_PROJ_DAMAGE,
           world.vspProjXWorld[idx],
           world.vspProjYWorld[idx],
-          VSP_PROJ_IFRAMES_TICKS,
         );
         world.vspProjAliveFlag[idx] = 0;
       }

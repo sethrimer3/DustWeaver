@@ -294,6 +294,23 @@ function _makeEmptyCluster(): _MutableCluster {
     dustWeaverArchitectBuildSiteYWorld: 0,
     dustWeaverArchitectBuildPatternIndex: 0,
     dustWeaverArchitectHitFlashTicks: 0,
+    isVoidSingularityFlag: 0,
+    isVoidSingularityPairFlag: 0,
+    voidSingularityState: 0,
+    voidSingularityStateTicks: 0,
+    voidSingularitySlotIndex: -1,
+    voidSingularitySpawnXWorld: 0,
+    voidSingularitySpawnYWorld: 0,
+    voidSingularityBobPhaseRad: 0,
+    voidSingularityAbsorbedEnergy: 0,
+    voidSingularityPulseRadius: 0,
+    voidSingularityPulseActiveFlag: 0,
+    voidSingularityPulseHitPlayerFlag: 0,
+    voidSingularityHitFlashTicks: 0,
+    voidSingularityPairAngleRad: 0,
+    voidSingularityWholeCharge: 0,
+    voidSingularityWholeState: 0,
+    voidSingularityWholeStateTicks: 0,
     renderPositionXWorld: 0,
     renderPositionYWorld: 0,
   };
@@ -433,6 +450,23 @@ function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.dustWeaverArchitectBuildSiteYWorld     = src.dustWeaverArchitectBuildSiteYWorld;
   dst.dustWeaverArchitectBuildPatternIndex   = src.dustWeaverArchitectBuildPatternIndex;
   dst.dustWeaverArchitectHitFlashTicks       = src.dustWeaverArchitectHitFlashTicks;
+  dst.isVoidSingularityFlag                  = src.isVoidSingularityFlag;
+  dst.isVoidSingularityPairFlag              = src.isVoidSingularityPairFlag;
+  dst.voidSingularityState                   = src.voidSingularityState;
+  dst.voidSingularityStateTicks              = src.voidSingularityStateTicks;
+  dst.voidSingularitySlotIndex               = src.voidSingularitySlotIndex;
+  dst.voidSingularitySpawnXWorld             = src.voidSingularitySpawnXWorld;
+  dst.voidSingularitySpawnYWorld             = src.voidSingularitySpawnYWorld;
+  dst.voidSingularityBobPhaseRad             = src.voidSingularityBobPhaseRad;
+  dst.voidSingularityAbsorbedEnergy          = src.voidSingularityAbsorbedEnergy;
+  dst.voidSingularityPulseRadius             = src.voidSingularityPulseRadius;
+  dst.voidSingularityPulseActiveFlag         = src.voidSingularityPulseActiveFlag;
+  dst.voidSingularityPulseHitPlayerFlag      = src.voidSingularityPulseHitPlayerFlag;
+  dst.voidSingularityHitFlashTicks           = src.voidSingularityHitFlashTicks;
+  dst.voidSingularityPairAngleRad            = src.voidSingularityPairAngleRad;
+  dst.voidSingularityWholeCharge             = src.voidSingularityWholeCharge;
+  dst.voidSingularityWholeState              = src.voidSingularityWholeState;
+  dst.voidSingularityWholeStateTicks         = src.voidSingularityWholeStateTicks;
   // Render interpolation: initialised to the physics position by default.
   // updateSnapshotInPlace() overwrites these with the blended position when
   // prev-position buffers and an alpha are supplied.
@@ -571,6 +605,15 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     dbmMotePulsePhaseRad:   world.dbmMotePulsePhaseRad,
     dwaMoteAngleRad:             world.dwaMoteAngleRad,
     dwaMotePulsePhaseRad:        world.dwaMotePulsePhaseRad,
+    vsMoteAngleRad:              world.vsMoteAngleRad,
+    vsMoteRadiusWorld:           world.vsMoteRadiusWorld,
+    vsMotePulsePhaseRad:         world.vsMotePulsePhaseRad,
+    vspProjXWorld:               world.vspProjXWorld,
+    vspProjYWorld:               world.vspProjYWorld,
+    vspProjVelXWorld:            world.vspProjVelXWorld,
+    vspProjVelYWorld:            world.vspProjVelYWorld,
+    vspProjLifetimeTicks:        world.vspProjLifetimeTicks,
+    vspProjAliveFlag:            world.vspProjAliveFlag,
     architectBlockCount:         world.architectBlockCount,
     architectBlockXWorld:        world.architectBlockXWorld,
     architectBlockYWorld:        world.architectBlockYWorld,

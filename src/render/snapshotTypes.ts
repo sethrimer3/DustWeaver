@@ -296,6 +296,25 @@ export interface ClusterSnapshot {
   readonly dustWeaverArchitectBuildPatternIndex: number;
   readonly dustWeaverArchitectHitFlashTicks: number;
 
+  // ── Void Singularity ────────────────────────────────────────────────────────
+  readonly isVoidSingularityFlag: 0 | 1;
+  readonly isVoidSingularityPairFlag: 0 | 1;
+  readonly voidSingularityState: number;
+  readonly voidSingularityStateTicks: number;
+  readonly voidSingularitySlotIndex: number;
+  readonly voidSingularitySpawnXWorld: number;
+  readonly voidSingularitySpawnYWorld: number;
+  readonly voidSingularityBobPhaseRad: number;
+  readonly voidSingularityAbsorbedEnergy: number;
+  readonly voidSingularityPulseRadius: number;
+  readonly voidSingularityPulseActiveFlag: 0 | 1;
+  readonly voidSingularityPulseHitPlayerFlag: 0 | 1;
+  readonly voidSingularityHitFlashTicks: number;
+  readonly voidSingularityPairAngleRad: number;
+  readonly voidSingularityWholeCharge: number;
+  readonly voidSingularityWholeState: number;
+  readonly voidSingularityWholeStateTicks: number;
+
   /**
    * Render-interpolated X position (world units).
    * Linearly blended between the previous tick's position and the current tick's
@@ -504,6 +523,19 @@ export interface WorldSnapshot {
   // ── Dust Weaver Architect world arrays ────────────────────────────────────
   readonly dwaMoteAngleRad: Float32Array;
   readonly dwaMotePulsePhaseRad: Float32Array;
+
+  // ── Void Singularity mote arrays ──────────────────────────────────────────
+  readonly vsMoteAngleRad: Float32Array;
+  readonly vsMoteRadiusWorld: Float32Array;
+  readonly vsMotePulsePhaseRad: Float32Array;
+
+  // ── Void Singularity Pair projectile arrays ───────────────────────────────
+  readonly vspProjXWorld: Float32Array;
+  readonly vspProjYWorld: Float32Array;
+  readonly vspProjVelXWorld: Float32Array;
+  readonly vspProjVelYWorld: Float32Array;
+  readonly vspProjLifetimeTicks: Float32Array;
+  readonly vspProjAliveFlag: Uint8Array;
   readonly architectBlockCount: number;
   readonly architectBlockXWorld: Float32Array;
   readonly architectBlockYWorld: Float32Array;

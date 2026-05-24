@@ -20,6 +20,7 @@ import { renderDustConstellations } from '../render/clusters/dustConstellationRe
 import { renderOrbitalDustCores } from '../render/clusters/orbitalDustCoreRenderer';
 import { renderDustBlockMimics } from '../render/clusters/dustBlockMimicRenderer';
 import { renderDustWeaverArchitects } from '../render/clusters/dustWeaverArchitectRenderer';
+import { renderVoidSingularities } from '../render/clusters/voidSingularityRenderer';
 import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
 import { renderPixelLockedDust } from '../render/particles/pixelLockedDustRenderer';
@@ -433,6 +434,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderOrbitalDustCores(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderDustBlockMimics(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderDustWeaverArchitects(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderVoidSingularities(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
 
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows

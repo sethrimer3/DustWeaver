@@ -87,6 +87,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isDustConstellationLarge: e.isDustConstellationLargeFlag === 1,
       isOrbitalDustCore: e.isOrbitalDustCoreFlag === 1,
       isOrbitalDustCoreLarge: e.isOrbitalDustCoreLargeFlag === 1,
+      isVoidSingularity: e.isVoidSingularityFlag === 1,
+      isVoidSingularityPair: e.isVoidSingularityPairFlag === 1,
     })),
     transitions: data.transitions.map(t => {
       // Compute legacy positionBlock / depthBlock from xBlock/yBlock for backward compat.
