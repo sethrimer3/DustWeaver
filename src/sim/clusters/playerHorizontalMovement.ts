@@ -83,6 +83,22 @@ export function applyPlayerHorizontalMovement(
     }
   }
 
+  // ── Ultra ice velocity lock ─────────────────────────────────────────
+  // While on ultra ice, all lateral input and deceleration is suppressed —
+  // the player carries their velocity unchanged.  Grapple physics still
+  // applies (handled by the grapple constraint path, which skips this block
+  // entirely via the isGrappleActiveFlag check below).
+  if (cluster.isOnUltraIceFlag === 1) {
+    // Only perform the fast-fall hitbox adjustment; skip all input/decel.
+    if (cluster.isGroundedFlag === 0
+        && cluster.velocityYWorld > FAST_FALL_VELOCITY_THRESHOLD_WORLD) {
+      cluster.halfWidthWorld = FAST_FALL_HALF_WIDTH_WORLD;
+    } else {
+      cluster.halfWidthWorld = PLAYER_HALF_WIDTH_WORLD;
+    }
+    return;
+  }
+
   if (world.isGrappleActiveFlag === 0) {
     const baseRunSpeed = ov(debugSpeedOverrides.walkSpeedWorld, MAX_RUN_SPEED_WORLD_PER_SEC);
     const sprintMult = ov(debugSpeedOverrides.sprintMultiplier, SPRINT_SPEED_MULTIPLIER);

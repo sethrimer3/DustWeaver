@@ -109,6 +109,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       rampOrientationIndex: wt.rampOrientationIndex.buffer as ArrayBuffer,
       isPillarHalfWidthFlag: wt.isPillarHalfWidthFlag.buffer as ArrayBuffer,
       isIceFlag: wt.isIceFlag.buffer as ArrayBuffer,
+      isUltraIceFlag: wt.isUltraIceFlag.buffer as ArrayBuffer,
     };
 
     // ── Wire encoding for blocker sets ─────────────────────────────────────
@@ -145,6 +146,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       serialisedWt.rampOrientationIndex,
       serialisedWt.isPillarHalfWidthFlag,
       serialisedWt.isIceFlag,
+      serialisedWt.isUltraIceFlag,
     ];
 
     _self.postMessage(msg, transfer);

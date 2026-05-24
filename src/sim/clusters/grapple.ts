@@ -297,7 +297,7 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   }
 
   // Ice walls cannot be grappled — the grapple head bounces off the surface.
-  if (hit.wallIndex >= 0 && world.wallIsIceFlag[hit.wallIndex] === 1) {
+  if (hit.wallIndex >= 0 && (world.wallIsIceFlag[hit.wallIndex] === 1 || world.wallIsUltraIceFlag[hit.wallIndex] === 1)) {
     clearLegacyGrappleMissState(world);
     // Show the normal approach beam from the player to the ice surface.
     triggerGrappleFailBeam(world, dirX, dirY, hit.t);

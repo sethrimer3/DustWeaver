@@ -263,6 +263,7 @@ function _reconstructRoomRuntimeEntry(msg: WorkerSuccessMessage): RoomRuntimeEnt
     rampOrientationIndex: new Uint8Array(sw.rampOrientationIndex),
     isPillarHalfWidthFlag: new Uint8Array(sw.isPillarHalfWidthFlag),
     isIceFlag:            new Uint8Array(sw.isIceFlag),
+    isUltraIceFlag:       new Uint8Array(sw.isUltraIceFlag),
   };
 
   // Wire: null  = "built; no blockers"  → RoomRuntimeEntry: undefined

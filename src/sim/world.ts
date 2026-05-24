@@ -105,6 +105,14 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   wallIsIceFlag: Uint8Array;
 
   /**
+   * 1 if the corresponding wall uses the 'ultraIceBlock' theme.
+   * Ultra ice locks the player's lateral velocity on contact and prevents
+   * grapple recharge from ground landings.  Grapple attachment is also rejected
+   * (same bounce behaviour as regular ice).
+   */
+  wallIsUltraIceFlag: Uint8Array;
+
+  /**
    * 1 if the corresponding wall is a kinetic block (gives the player a
    * directional velocity boost on contact, rather than reflecting like a
    * bounce pad).
@@ -450,6 +458,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsBouncePadFlag: new Uint8Array(MAX_WALLS),
     wallBouncePadSpeedFactorIndex: new Uint8Array(MAX_WALLS),
     wallIsIceFlag: new Uint8Array(MAX_WALLS),
+    wallIsUltraIceFlag: new Uint8Array(MAX_WALLS),
     wallIsKineticBlockFlag:           new Uint8Array(MAX_WALLS),
     wallKineticBlockIndex:            new Int16Array(MAX_WALLS).fill(-1),
     bgWallGridWidth: 0,

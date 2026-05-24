@@ -50,6 +50,7 @@ export interface SerializedWallTemplate {
   rampOrientationIndex: ArrayBuffer;
   isPillarHalfWidthFlag: ArrayBuffer;
   isIceFlag: ArrayBuffer;
+  isUltraIceFlag: ArrayBuffer;
 }
 
 // ── Worker outbound messages ──────────────────────────────────────────────────
