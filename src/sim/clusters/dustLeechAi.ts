@@ -149,7 +149,7 @@ function _applyLeechHover(
   const dx = targetXWorld - cluster.positionXWorld;
   const dy = targetYWorld - cluster.positionYWorld;
   const distance = Math.sqrt(dx * dx + dy * dy);
-  if (distance > 0.001) {
+  if (distance > EPSILON_DISTANCE_WORLD) {
     const blend = Math.min(DL_HOVER_SPEED / distance, DL_HOVER_MAX_BLEND);
     cluster.velocityXWorld += dx * blend;
     cluster.velocityYWorld += dy * blend;
@@ -168,7 +168,7 @@ function _applyEchoHover(
   const dx = targetXWorld - cluster.positionXWorld;
   const dy = targetYWorld - cluster.positionYWorld;
   const distance = Math.sqrt(dx * dx + dy * dy);
-  if (distance > 0.001) {
+  if (distance > EPSILON_DISTANCE_WORLD) {
     const blend = Math.min(DE_HOVER_SPEED / distance, DE_HOVER_MAX_BLEND);
     cluster.velocityXWorld += dx * blend;
     cluster.velocityYWorld += dy * blend;
