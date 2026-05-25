@@ -198,7 +198,7 @@ export class RenderProfiler {
    * Call this once per frame from gameScreen.ts when debug mode is on.
    */
   updateEntryWarmState(state: EntryWarmState): void {
-    this._entryWarmState = { ...state };
+    this._entryWarmState = state;
   }
 
   // ── Frame-pacing API ──────────────────────────────────────────────────────
