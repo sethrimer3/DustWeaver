@@ -42,6 +42,7 @@ export const SEVERE_FREEZE_MS     = 1000;
 export type FrameContext =
   | 'gameplay'    // Player has control; sim + render running normally.
   | 'loading'     // Async room load in progress behind the loading overlay.
+  | 'entryWarm'   // Entry viewport warm phase — bake allowed, sim/input skipped, overlay active.
   | 'editor'      // Level editor is active.
   | 'paused'      // Pause menu, skill tomb, map overlay, or player-dead screen.
   | 'unknown';    // Default — context not set for this frame yet.

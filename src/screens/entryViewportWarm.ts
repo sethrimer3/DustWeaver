@@ -6,12 +6,15 @@
  * background tile variants are baked during the loading phase so the player
  * sees fully-shaded tiles immediately on room entry.
  *
- * Key guarantee: all warm work runs while isBakeForbiddenInGameplay() is false
- * (i.e. before setBakeForbiddenInGameplay(true) is called for that gameplay
- * frame).  The loading overlay is held until the warm completes or a
- * conservative timeout is reached.
+ * Key guarantee (BUILD 403): tickEntryWarm() is called from a dedicated early
+ * branch in gameScreen.ts — before processPlayerCommands, sim ticks, camera
+ * update, and FP.setFrameGameContext('gameplay').  The frame context is set to
+ * 'entryWarm' so freeze-profiler warnings correctly attribute warm work.
+ * setBakeForbiddenInGameplay(false) is set explicitly in the branch, so shaded
+ * sprites can be baked freely.  Player cannot move or simulate while phase is
+ * 'warming'.
  *
- * BUILD 402
+ * BUILD 403
  */
 
 import type { RoomDef } from '../levels/roomDef';
@@ -137,9 +140,10 @@ export function startEntryWarm(
 /**
  * Advances the entry warm by one step (one frame budget of chunk building).
  *
- * MUST be called while isBakeForbiddenInGameplay() is false — i.e. before the
- * `setBakeForbiddenInGameplay(true)` call at the top of the gameplay render
- * path.  This guarantees shaded sprites can be baked during the warm pass.
+ * MUST be called while isBakeForbiddenInGameplay() is false — i.e. from the
+ * dedicated 'entryWarm' early branch in gameScreen.ts (before gameplay sim),
+ * or from the eager pre-tick inside startTransitionLoad() before the transition
+ * returns.  This guarantees shaded sprites can be baked during the warm pass.
  *
  * Transitions to 'ready' when the entry viewport is fully covered, or to
  * 'timedOut' when the frame/ms budget is exhausted.
