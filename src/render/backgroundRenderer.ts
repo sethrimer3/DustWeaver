@@ -161,6 +161,28 @@ export function preloadRoomBackgroundDecoded(worldNumber: number, backgroundId?:
 }
 
 /**
+ * Returns `true` once the background image for the given room parameters has
+ * been fully decoded and is ready to render without any blocking decode step.
+ *
+ * Mirrors the URL-selection logic of `preloadRoomBackgroundDecoded`:
+ *   - World 99 (solid black) is always considered ready.
+ *   - Procedural backgrounds (no image URL) are always considered ready.
+ *   - Otherwise waits for `isSpriteDecodeReady()` on the selected image.
+ *
+ * Use this alongside `areRoomSpritesReady()` in the loading-overlay tick so the
+ * player is only unblocked once the background image is actually decoded.
+ */
+export function isRoomBackgroundDecodeReady(worldNumber: number, backgroundId?: BackgroundId): boolean {
+  if (worldNumber === 99) return true;
+  const url = backgroundId != null
+    ? backgroundIdToImagePath(backgroundId)
+    : worldBgImagePath(worldNumber);
+  if (url === null) return true; // procedural background — no image needed
+  const img = loadImg(url);
+  return isSpriteDecodeReady(img);
+}
+
+/**
  * Renders the room background for the current world with parallax scrolling.
  *
  * If `backgroundId` is provided it overrides `worldNumber` for image selection.

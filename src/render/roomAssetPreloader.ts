@@ -27,7 +27,7 @@ import { loadImg, decodeImg, isSpriteDecodeReady } from './imageCache';
 import { FOLDER_BLOCK_THEMES, isFolderBasedTheme } from './walls/folderBlockThemes';
 import type { RoomDef } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
-import { preloadRoomBackgroundDecoded } from './backgroundRenderer';
+import { preloadRoomBackgroundDecoded, isRoomBackgroundDecodeReady as _isBgDecodeReady } from './backgroundRenderer';
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
@@ -215,4 +215,19 @@ export async function decodeRoomThemeSprites(room: RoomDef): Promise<void> {
  */
 export function decodeRoomBackground(room: RoomDef): void {
   preloadRoomBackgroundDecoded(room.worldNumber ?? 0, room.backgroundId);
+}
+
+/**
+ * Returns `true` once the background image for `room` has been fully decoded
+ * and is ready to render without a blocking GPU upload step.
+ *
+ * Procedural backgrounds (no static image) and the Thero world (99) always
+ * return `true` immediately.
+ *
+ * Use this alongside `areRoomSpritesReady()` in the loading-overlay tick to
+ * ensure the player is not unblocked before both block sprites and the
+ * background image are decode-ready.
+ */
+export function isRoomBackgroundDecodeReady(room: RoomDef): boolean {
+  return _isBgDecodeReady(room.worldNumber ?? 0, room.backgroundId);
 }
