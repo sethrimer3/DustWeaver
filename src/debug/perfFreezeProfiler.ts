@@ -275,6 +275,15 @@ export function recordLoadPhaseStep(detail: string, ms: number): void {
   if (ms > 0) _cur.loadPhaseDetail = detail;
 }
 
+/**
+ * Record chunks built during an idle prewarm slice.
+ * Called from roomRenderChunkWarmScheduler.ts; no-ops in production.
+ */
+export function recordPrewarmSlice(_chunksBuilt: number): void {
+  // Currently a lightweight no-op that keeps the call in place for future
+  // per-frame aggregation if desired.  The scheduler tracks its own stats.
+}
+
 /** Set the current room/camera context for structured freeze warnings. */
 export function setFrameContext(
   roomId: string,
