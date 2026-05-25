@@ -44,6 +44,8 @@ import {
   CachedWallLayout,
   wallTileKey,
   getWallLayoutCache,
+  getCurrentWallLayout,
+  setPrebuiltWallLayout,
 } from './blockWallLayoutCache';
 import { renderSingleExtensionTileWithState } from './extensionTileRenderer';
 import {
@@ -318,6 +320,56 @@ function _populateCoveredBy2x2Keys(
  */
 const _chunkCache = new RoomChunkCache();
 
+// ── Render chunk prewarm store ────────────────────────────────────────────────
+//
+// Prewarm stores map roomId → (RoomChunkCache, CachedWallLayout) built during
+// idle callbacks for not-yet-active adjacent rooms.  On room entry,
+// adoptPrewarmedWallChunks() moves the pre-built canvases into the active
+// _chunkCache, preventing a cold-build hitch on the first render frame.
+//
+// THREAD SAFETY: JavaScript is single-threaded; idle callbacks never run
+// concurrently with animation frames.  No locking is needed.
+
+const _prewarmWallCaches  = new Map<string, RoomChunkCache>();
+const _prewarmWallLayouts = new Map<string, CachedWallLayout>();
+
+/** Dummy 1×1 canvas used as a throw-away blit target during prewarming. */
+let _prewarmDummyCtx: CanvasRenderingContext2D | null = null;
+function _getPrewarmDummyCtx(): CanvasRenderingContext2D {
+  if (_prewarmDummyCtx === null) {
+    const c = document.createElement('canvas');
+    c.width  = 1;
+    c.height = 1;
+    _prewarmDummyCtx = c.getContext('2d') as CanvasRenderingContext2D;
+  }
+  return _prewarmDummyCtx;
+}
+
+/**
+ * All rendering state required to pre-build wall chunks for a room that is
+ * not currently active.  Constructed by the warm scheduler from RoomDef +
+ * RoomRuntimeEntry so that blockSpriteRenderer never imports those types.
+ */
+export interface WallPrewarmContext {
+  /** Wall geometry adapted from RoomWallTemplate (shared typed-array views — not copied). */
+  wallSnapshot: WallSnapshot;
+  worldNumber: number;
+  blockTheme: BlockTheme | null;
+  lightingEffect: LightingEffect;
+  ambientDirection: AmbientLightDirection;
+  roomWidthBlocks: number;
+  roomHeightBlocks: number;
+  /** Precomputed ambient-light blocker keys (empty Set when none). */
+  blockerKeys: ReadonlySet<string>;
+  directionalBias: number;
+  sideExposureStrength: number;
+  minimumWallLight: number;
+  falloffPower: number;
+  backgroundLightSpill: number;
+  solidLightSoftness: number;
+  seamBlending: BlockSeamBlending;
+}
+
 /**
  * Viewport dimensions used for visible-chunk range computation.
  * Set once per frame by setRenderViewportSize() called from gameRender.ts
@@ -371,6 +423,243 @@ export function invalidateChunkRect(
 /** Invalidates the chunk cache so all chunks are rebuilt on the next render. */
 function _invalidateBakedWallCanvas(): void {
   _chunkCache.invalidateAll();
+}
+
+// ── Render chunk prewarm API ──────────────────────────────────────────────────
+
+/**
+ * Pre-builds wall chunks for a room that is not currently active.
+ *
+ * Saves all module-level rendering state, temporarily sets it up for the
+ * target room, renders up to `maxChunks` new chunks into a dedicated prewarm
+ * cache, then restores the original state.  The active room's chunks are not
+ * touched.
+ *
+ * Safe to call multiple times for the same `roomId` — the prewarm cache
+ * persists between calls so subsequent calls expand coverage outward.
+ *
+ * @param roomId       Unique identifier for the target room.
+ * @param ctx          All rendering parameters for the target room.
+ * @param offsetXPx    Camera X offset for the entrance viewport (virtual px).
+ * @param offsetYPx    Camera Y offset for the entrance viewport (virtual px).
+ * @param vpWPx        Viewport width in virtual pixels.
+ * @param vpHPx        Viewport height in virtual pixels.
+ * @param scalePx      Camera zoom scale (world units → virtual pixels).
+ * @param blockSizePx  Block size in world units.
+ * @param maxChunks    Maximum NEW chunks to build this call.
+ * @returns Number of new chunks actually built.
+ */
+export function prewarmWallChunksForRoom(
+  roomId: string,
+  ctx: WallPrewarmContext,
+  offsetXPx: number,
+  offsetYPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+  blockSizePx: number,
+  maxChunks: number,
+): number {
+  // ── Save active room state ────────────────────────────────────────────────
+  const savedSprites             = _sprites;
+  const savedWorldNumber         = _activeWorldNumber;
+  const savedBlockTheme          = _activeBlockTheme;
+  const savedLightingEffect      = _activeLightingEffect;
+  const savedAmbientDirection    = _activeAmbientDirection;
+  const savedRoomWidthBlocks     = _activeRoomWidthBlocks;
+  const savedRoomHeightBlocks    = _activeRoomHeightBlocks;
+  const savedAmbientBlockerKeys  = _activeAmbientBlockerKeys;
+  const savedAmbientBlockerSig   = _activeAmbientBlockerSig;
+  const savedDirectionalBias     = _activeDirectionalBias;
+  const savedSideExposureStrength = _activeSideExposureStrength;
+  const savedMinimumWallLight    = _activeMinimumWallLight;
+  const savedFalloffPower        = _activeFalloffPower;
+  const savedBackgroundLightSpill = _activeBackgroundLightSpill;
+  const savedSolidLightSoftness  = _activeSolidLightSoftness;
+  const savedSeamBlending        = _activeSeamBlending;
+  const savedSeamBlendDebug      = _seamBlendDebug;
+  const savedVpWPx               = _vpWPx;
+  const savedVpHPx               = _vpHPx;
+  const savedLayout              = getCurrentWallLayout();
+
+  try {
+    // ── Set up state for target room (direct assignment, no setters) ────────
+    // Bypass the public setters to avoid calling _invalidateBakedWallCanvas(),
+    // which would trash the active room's chunk cache.
+    if (ctx.blockTheme !== null) {
+      _activeBlockTheme  = ctx.blockTheme;
+      // _sprites is irrelevant when blockTheme overrides world-based rendering.
+    } else {
+      _activeWorldNumber = ctx.worldNumber;
+      _sprites           = getBlockSpriteSet(ctx.worldNumber);
+      _activeBlockTheme  = null;
+    }
+    _activeLightingEffect      = ctx.lightingEffect;
+    _activeAmbientDirection    = ctx.ambientDirection;
+    _activeRoomWidthBlocks     = ctx.roomWidthBlocks;
+    _activeRoomHeightBlocks    = ctx.roomHeightBlocks;
+    _activeAmbientBlockerKeys  = ctx.blockerKeys;
+    // Build a stable blocker signature (same logic as setActiveBlockLighting).
+    if (ctx.blockerKeys.size === 0) {
+      _activeAmbientBlockerSig = '';
+    } else {
+      const arr: string[] = [];
+      for (const k of ctx.blockerKeys) arr.push(k);
+      arr.sort();
+      _activeAmbientBlockerSig = arr.join(';');
+    }
+    _activeDirectionalBias      = ctx.directionalBias;
+    _activeSideExposureStrength = ctx.sideExposureStrength;
+    _activeMinimumWallLight     = ctx.minimumWallLight;
+    _activeFalloffPower         = ctx.falloffPower;
+    _activeBackgroundLightSpill = ctx.backgroundLightSpill;
+    _activeSolidLightSoftness   = ctx.solidLightSoftness;
+    _activeSeamBlending         = ctx.seamBlending;
+    _seamBlendDebug             = false;
+    _vpWPx = vpWPx;
+    _vpHPx = vpHPx;
+
+    // ── Build / restore wall layout for target room ─────────────────────────
+    const existingLayout = _prewarmWallLayouts.get(roomId);
+    if (existingLayout !== undefined) {
+      // Restore the layout built on a prior prewarm pass so the layout-change
+      // identity check in renderVisibleChunks does not invalidate prior chunks.
+      setPrebuiltWallLayout(existingLayout);
+    }
+    const wallLayout = getWallLayoutCache(ctx.wallSnapshot, blockSizePx);
+    _prewarmWallLayouts.set(roomId, wallLayout);
+
+    // ── Get or create the prewarm chunk cache for this room ─────────────────
+    let tempCache = _prewarmWallCaches.get(roomId);
+    if (tempCache === undefined) {
+      tempCache = new RoomChunkCache();
+      _prewarmWallCaches.set(roomId, tempCache);
+    }
+    tempCache.setMaxChunksPerFrame(maxChunks);
+
+    // ── Compute ambient depths and populate 2×2 covered keys ────────────────
+    _populateCoveredBy2x2Keys(wallLayout.solid2x2Map, blockSizePx, _activeBlockTheme);
+    const ambientDepths = (_activeLightingEffect !== 'DarkRoom' && _activeLightingEffect !== 'FullyLit')
+      ? _getAmbientDepths(wallLayout)
+      : null;
+
+    const walls = ctx.wallSnapshot;
+    const dummyCtx = _getPrewarmDummyCtx();
+
+    // ── Render chunks into the prewarm cache ─────────────────────────────────
+    tempCache.renderVisibleChunks(
+      dummyCtx,
+      wallLayout,
+      offsetXPx,
+      offsetYPx,
+      scalePx,
+      blockSizePx,
+      vpWPx,
+      vpHPx,
+      (chunkCtx, chunkOffX, chunkOffY, s, bsz, colMin, rowMin, colMax, rowMax) =>
+        _doRenderWallTilesDirect(
+          chunkCtx,
+          walls,
+          wallLayout,
+          ambientDepths,
+          chunkOffX,
+          chunkOffY,
+          s,
+          bsz,
+          colMin,
+          colMax,
+          rowMin,
+          rowMax,
+        ),
+    );
+
+    return tempCache.stats.rebuiltThisFrame;
+  } finally {
+    // ── Restore active room state ─────────────────────────────────────────────
+    _sprites               = savedSprites;
+    _activeWorldNumber     = savedWorldNumber;
+    _activeBlockTheme      = savedBlockTheme;
+    _activeLightingEffect  = savedLightingEffect;
+    _activeAmbientDirection = savedAmbientDirection;
+    _activeRoomWidthBlocks = savedRoomWidthBlocks;
+    _activeRoomHeightBlocks = savedRoomHeightBlocks;
+    _activeAmbientBlockerKeys = savedAmbientBlockerKeys;
+    _activeAmbientBlockerSig  = savedAmbientBlockerSig;
+    _activeDirectionalBias    = savedDirectionalBias;
+    _activeSideExposureStrength = savedSideExposureStrength;
+    _activeMinimumWallLight   = savedMinimumWallLight;
+    _activeFalloffPower       = savedFalloffPower;
+    _activeBackgroundLightSpill = savedBackgroundLightSpill;
+    _activeSolidLightSoftness = savedSolidLightSoftness;
+    _activeSeamBlending       = savedSeamBlending;
+    _seamBlendDebug           = savedSeamBlendDebug;
+    _vpWPx                    = savedVpWPx;
+    _vpHPx                    = savedVpHPx;
+    // Restore active room's layout so next render does not trigger a rebuild.
+    if (savedLayout !== null) setPrebuiltWallLayout(savedLayout);
+  }
+}
+
+/**
+ * Adopts pre-warmed wall chunks for a room the player is about to enter.
+ *
+ * Installs the pre-built `CachedWallLayout` into the module-level layout
+ * cache slot and injects the pre-built canvases into the active `_chunkCache`.
+ * The first `renderWallSprites` call after adoption will skip building these
+ * chunks, eliminating the first-frame hitch.
+ *
+ * Must be called after the active wall state (theme, lighting, etc.) is set
+ * up for the new room but BEFORE the first render frame.
+ *
+ * @param roomId  Identifier of the room being entered.
+ * @param scalePx The camera zoom scale that will be used in the first render.
+ * @returns `true` when pre-warmed data was found and adopted; `false` otherwise.
+ */
+export function adoptPrewarmedWallChunks(roomId: string, scalePx: number): boolean {
+  const tempCache = _prewarmWallCaches.get(roomId);
+  const layout    = _prewarmWallLayouts.get(roomId);
+  if (tempCache === undefined || layout === undefined) return false;
+
+  // Install the pre-built layout so the identity check in renderVisibleChunks
+  // sees the same object we used during prewarming.
+  setPrebuiltWallLayout(layout);
+
+  // Extract non-dirty canvases and inject into the active cache.
+  const chunks = tempCache.extractCleanChunks();
+  if (chunks.size > 0) {
+    _chunkCache.injectWarmedChunks(chunks, layout, scalePx);
+  }
+
+  // Clean up prewarm store for this room.
+  _prewarmWallCaches.delete(roomId);
+  _prewarmWallLayouts.delete(roomId);
+
+  return chunks.size > 0;
+}
+
+/** Discards pre-warmed wall chunks for `roomId` without adopting them. */
+export function evictPrewarmedWallChunks(roomId: string): void {
+  _prewarmWallCaches.delete(roomId);
+  _prewarmWallLayouts.delete(roomId);
+}
+
+/** Returns `true` when pre-warmed wall data exists for `roomId`. */
+export function hasPrewarmedWallChunks(roomId: string): boolean {
+  return _prewarmWallCaches.has(roomId);
+}
+
+/**
+ * Returns aggregate stats across all currently-held prewarm caches.
+ * Used by the debug overlay.
+ */
+export function getPrewarmWallStats(): { roomCount: number; totalChunks: number; memoryEstimateKB: number } {
+  let totalChunks = 0;
+  let memoryEstimateKB = 0;
+  for (const cache of _prewarmWallCaches.values()) {
+    totalChunks      += cache.stats.totalChunkCount;
+    memoryEstimateKB += cache.stats.memoryEstimateKB;
+  }
+  return { roomCount: _prewarmWallCaches.size, totalChunks, memoryEstimateKB };
 }
 
 // ── Public render function ────────────────────────────────────────────────────

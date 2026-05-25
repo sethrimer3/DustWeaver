@@ -223,6 +223,50 @@ export class RoomChunkCache {
     }
   }
 
+  /**
+   * Injects pre-warmed chunk canvases into this cache.
+   *
+   * Sets the stored `layoutRef` and `scalePx` to match the pre-warmed state
+   * so that the first `renderVisibleChunks` call does NOT trigger
+   * `invalidateAll`.  Any injected chunk is immediately clean (not dirty).
+   *
+   * Called by the prewarm adoption helpers in blockSpriteRenderer.ts and
+   * backgroundBlockRenderer.ts when the player enters a pre-warmed room.
+   *
+   * @param chunks    Map of chunk-key → pre-built HTMLCanvasElement.
+   * @param layoutRef The same CachedWallLayout / RoomDef object that will be
+   *                  passed as `layoutRef` on the first renderVisibleChunks call.
+   * @param scalePx   Camera zoom scale used when building the chunks.
+   */
+  injectWarmedChunks(
+    chunks: Map<string, HTMLCanvasElement>,
+    layoutRef: unknown,
+    scalePx: number,
+  ): void {
+    this._layoutRef = layoutRef;
+    this._scalePx   = scalePx;
+    for (const [key, canvas] of chunks) {
+      this._chunks.set(key, { canvas, hadFallbacksFlag: false });
+      this._dirtyKeys.delete(key);
+    }
+  }
+
+  /**
+   * Extracts all non-dirty chunk canvases as a `Map<key, HTMLCanvasElement>`.
+   *
+   * Called by `adoptPrewarmedWallChunks` / `adoptPrewarmedBgChunks` to move
+   * pre-built canvases from a temporary prewarm cache into the active cache.
+   */
+  extractCleanChunks(): Map<string, HTMLCanvasElement> {
+    const result = new Map<string, HTMLCanvasElement>();
+    for (const [key, entry] of this._chunks) {
+      if (!entry.hadFallbacksFlag && !this._dirtyKeys.has(key)) {
+        result.set(key, entry.canvas);
+      }
+    }
+    return result;
+  }
+
   /** Releases all cached canvases and resets all state. */
   dispose(): void {
     this._chunks.clear();
