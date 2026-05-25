@@ -17,7 +17,59 @@ either archived or removed entirely.
 The core freeze-fix infrastructure is complete and production-safe (BUILD 389
 through this pass).  The main remaining risks are documented below.
 
-### What Was Fixed in This Pass (BUILD 390)
+### What Was Fixed in This Pass (current optimization pass)
+
+1. **`imageCache.ts` — decode-aware sprite preloading added**
+   Added `decodeImg(src)` which calls `HTMLImageElement.decode()` after the
+   image finishes downloading, ensuring the GPU has rasterized the texture
+   before the first drawImage call.  Added `isSpriteDecodeReady(img)` which
+   returns `true` when decode is confirmed or falls back to `isSpriteReady`
+   for images not preloaded via `decodeImg`.  Both functions are safe in
+   environments without decode() (Safari older, Node): they fall back to the
+   plain load-complete check.  Rejected decode() Promises are swallowed
+   gracefully — failed images still fall back to solid-colour tiles.
+
+2. **`roomAssetPreloader.ts` — decode support and improved readiness check**
+   Added `decodeRoomThemeSprites(room)` which fires `decodeImg()` for all
+   folder-based block-theme sprite URLs of a room. Returns a Promise that
+   resolves when all sprites are decode-ready (or loaded, as a fallback).
+   Updated `areRoomSpritesReady()` to use `isSpriteDecodeReady()` instead of
+   `isSpriteReady()`, so the loading overlay stays up until sprites are both
+   downloaded and decoded when `decodeRoomThemeSprites` has been called for
+   the room.
+
+3. **`roomPreloadScheduler.ts` — radius-1 sprite preloading now uses decode**
+   Changed radius-1 rooms (directly adjacent) from `preloadRoomThemeSprites`
+   (loadImg only) to `void decodeRoomThemeSprites` so that sprites for the
+   most likely next rooms are GPU-rasterized, not just downloaded, by the time
+   the player reaches the boundary. Radius-2 rooms keep the cheaper
+   `preloadRoomThemeSprites` (loadImg only); they get decode triggered later
+   if the player approaches their boundary.
+
+4. **`gameScreen.ts` — current room decoded on Phase F; proximity fires decode**
+   Phase F now fires `void decodeRoomThemeSprites(room)` alongside the existing
+   `preloadRoomThemeSprites` call, ensuring the current room's sprites are
+   decode-queued as soon as the room loads.
+   The proximity-based priority preload block now also calls
+   `void decodeRoomThemeSprites(targetRoom)` when the player is within
+   `URGENT_PRELOAD_PROXIMITY_BLOCKS` of an unprepared transition boundary —
+   giving sprites the maximum lead time for decode before the crossing fires.
+   Both calls are fire-and-forget and never block the gameplay frame.
+
+5. **`blockSpriteRenderer.ts` — equality guards on theme/world setters**
+   Added early-return guards to `setActiveBlockSpriteTheme` and
+   `setActiveBlockSpriteWorld`: if the new value is identical to the current
+   active value, `_invalidateBakedWallCanvas()` is skipped, preventing
+   spurious full-chunk invalidation when a room has the same theme as the
+   previous room.
+
+6. **`roomRuntimeCache.ts` — default capacity increased from 10 → 16**
+   The larger capacity covers: current room (1) + all direct neighbours (~5) +
+   next-hop rooms (~8) + buffer for rapid backtracking — without evicting
+   recently visited rooms too aggressively.  Memory impact is negligible
+   (each entry is a few KB of typed arrays and Sets).
+
+### What Was Fixed in Previous Passes (BUILD 390)
 
 1. **`roomPreloadScheduler.ts` — worker-unavailable heavy-room path**
    Previously, when the Web Worker was unavailable (Safari Private, strict CSP)
@@ -29,51 +81,35 @@ through this pass).  The main remaining risks are documented below.
    rather than forced.  The existing async loading overlay will cover any
    resulting cache miss if the player actually transitions to that room.
 
-   Dev log: `[preload] <roomId> (radius-N): skipping heavy speculative preload
-   (estimated Xms, worker unavailable). Async overlay will cover any transition
-   cache miss.` — visible in DEV builds only.
-
-2. **`roomPreloadScheduler.ts` — stale header comments updated**
-   Removed references to `EdgeExtensionCache` (legacy-only, not built at runtime).
-   Corrected description of radius-1 behavior (was "always synchronous"; now
-   describes worker dispatch and skip-on-unavailable logic accurately).
-
-3. **`preparedRoomRuntime.ts` — safe urgent-build variant added**
+2. **`preparedRoomRuntime.ts` — safe urgent-build variant added**
    Added `tryEnsureRoomPreparedIfCheap(roomId, cache, maxCostMs?)` which
    applies the build-cost heuristic before deciding whether to build
    synchronously.  Returns `false` (without building) if the estimated cost
-   exceeds `maxCostMs` (default: `SAFE_SYNC_BUILD_COST_MS = 8 ms`).  Use
-   this instead of `ensureRoomPrepared` from active gameplay paths.
-   Added `_estimateRoomBuildCostMs` as a local helper (avoids circular import
-   with `roomPreloadScheduler.ts` which already uses an identical heuristic).
-   Exported `SAFE_SYNC_BUILD_COST_MS` constant for consistent threshold sharing.
+   exceeds `maxCostMs` (default: `SAFE_SYNC_BUILD_COST_MS = 8 ms`).
 
-4. **`blockEdgeShading.ts` — budget guard documentation**
-   Added a prominent ⚠️ warning to the `applyOrganicEdgeShading` JSDoc noting
-   that callers must check `FP.isBakeBudgetExhausted()` before invoking it,
-   with pointers to `proceduralBlockSprite.ts` and `folderBlockThemes.ts` as
-   reference implementations of correct usage.
+3. **`blockEdgeShading.ts` — budget guard documentation**
+   Added a prominent ⚠️ warning noting that callers must check
+   `FP.isBakeBudgetExhausted()` before invoking it.
 
 ### Remaining Risks
 
 1. **Sprite/chunk warm-up lag on cold entry**
    With caps of 8 bakes/frame and 4 chunks/frame, a fresh room converges over
-   ~10–20 frames.  Tiles near the camera may briefly show the dark fallback
-   fill.  If noticeable, increase `spriteBakeMaxPerFrame` or `_maxChunksPerFrame`
-   from the console.
+   ~10–20 frames.  Decode-aware preloading reduces pop-in for folder-based
+   themes; legacy world-number sprites (brownRock, dirt, world 0–9) are not
+   tracked by the decode set and still rely on the load-complete check.
+   If residual pop-in is visible, increase `spriteBakeMaxPerFrame` or
+   `_maxChunksPerFrame` from the console.
 
 2. **Worker unavailable — heavy rooms no longer freeze, but also not preloaded**
-   Heavy adjacent rooms are now skipped instead of synchronously built when the
-   worker is unavailable.  Cache-miss transitions to such rooms will hit the
-   async loading overlay.  This is the correct tradeoff for gameplay smoothness,
-   but users on Safari Private or strict CSP environments will see the overlay
-   more often for large rooms.
+   Heavy adjacent rooms are skipped when the worker is unavailable.  Cache-miss
+   transitions use the async loading overlay.  Correct tradeoff for gameplay
+   smoothness, but users on Safari Private or strict CSP see the overlay more
+   often for large rooms.
 
 3. **`applyOrganicEdgeShading` direct callers**
-   Any future code that calls `applyOrganicEdgeShading` directly (bypassing
-   `folderBlockThemes.ts` or `proceduralBlockSprite.ts`) must add its own
-   `FP.isBakeBudgetExhausted()` guard.  The budget is enforced at the caller
-   level, not inside `blockEdgeShading.ts`, to avoid architecture coupling.
+   Any future code that calls `applyOrganicEdgeShading` directly must add its
+   own `FP.isBakeBudgetExhausted()` guard.
 
 4. **Phase D wall template build timing**
    `buildRoomWallTemplate()` on a large room is O(n²) and may exceed 16 ms.
@@ -81,20 +117,63 @@ through this pass).  The main remaining risks are documented below.
    it does not block normal gameplay, but Phase D itself may be a slow frame
    visible in the Freeze debug panel.  Worker-preloaded rooms bypass this entirely.
 
+### Intentionally Deferred
+
+1. **Entry-area chunk pre-baking for the target room**
+   The chunk render cache (`chunkRenderCache.ts`) is a module-level singleton
+   tied to the currently active room's wall layout, theme, and lighting globals
+   in `blockSpriteRenderer.ts`.  Pre-baking chunks for a different (target)
+   room would require either:
+   - A second independent `RoomChunkCache` instance with snapshot of target
+     room theme/lighting state, OR
+   - Splitting `blockSpriteRenderer.ts` so theme/lighting state can be swapped
+     per-cache without affecting the active room.
+   Both require architectural refactoring that is out of scope for a safe
+   incremental pass.  The decode preloading in this pass addresses the largest
+   source of pop-in (GPU rasterize stall) without this risk.
+
+2. **Base-chunk / lighting-overlay architectural split**
+   `setActiveBlockLighting` (and `setActiveBlockSpriteTheme`) call
+   `_invalidateBakedWallCanvas()` which rebuilds all chunks.  Separating
+   "base wall tiles" chunks from "lighting/seam overlay" chunks would let
+   lighting-only changes rebuild only the lighter overlay layer.  This would
+   require adding a second `RoomChunkCache` for overlays and splitting the
+   `buildChunkFn` callback into base and overlay passes.  Deferred to a
+   dedicated refactor pass.
+
+3. **Legacy/world-number sprite decode tracking**
+   `decodeImg` and `decodeRoomThemeSprites` only cover folder-based themes
+   (those in `FOLDER_BLOCK_THEMES`).  Legacy world-number sprites (brownRock,
+   dirt, world 0–9 block/edge/corner/end sets) start loading at module init
+   time via `blockSpriteSets.ts` and are not tracked by `_decodedUrls`.
+   `isSpriteDecodeReady` falls back to `isSpriteReady` for these, so
+   readiness reporting is accurate but decode-awareness is absent.  To address
+   this, the init-time `loadImg` calls in `blockSpriteSets.ts` would need to
+   be replaced with `decodeImg` calls.
+
+4. **`proceduralBlockSprite.ts` private image cache**
+   `proceduralBlockSprite.ts` maintains its own `_imgCache` separate from
+   `render/imageCache.ts`.  Unifying these caches would give more accurate
+   readiness reporting for procedural sprites and avoid the risk of two
+   `HTMLImageElement` objects for the same URL.
+
 ### How to Verify
 
 1. `npm run build` — must pass with no type errors.
-2. Enter large adjacent rooms repeatedly in all four directions.
-3. Test with worker available (normal Chrome): transitions should be instant or
+2. Enter a room with folder-based block themes and observe that wall tiles
+   render without pop-in (no brief solid-colour fallback for decoded sprites).
+3. Move quickly across several connected rooms — transitions should remain
+   instant on the prepared path.
+4. Backtrack between rooms — recently visited rooms should be served from
+   cache without re-preparation.
+5. Test with worker available (normal Chrome): transitions should be instant or
    use the loading overlay with no gameplay freeze.
-4. Test with worker unavailable if feasible (Safari Private / DevTools → Block
-   Workers): large rooms should use the async loading overlay on first visit;
-   no multi-second freeze should occur.
-5. Check the Freeze debug panel (pause menu → Debug → Freeze) — no `preload`
+6. Test with worker unavailable if feasible (Safari Private / DevTools → Block
+   Workers): large rooms should use the async loading overlay on first visit.
+7. Check the Freeze debug panel (pause menu → Debug → Freeze) — no `preload`
    entries >8 ms during normal gameplay.
-6. Confirm no stale `EdgeExtensionCache` runtime references remain in active
-   comments (legacy items are isolated in `src/render/transitions/legacy/`).
-
+8. Confirm no stale `EdgeExtensionCache` runtime references remain in active
+   comments.
 ---
 
 ## Priority 2 — Block Seam Blending Polish

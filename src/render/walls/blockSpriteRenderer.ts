@@ -128,6 +128,7 @@ export function setSeamBlendingDebug(enabled: boolean): void {
  * Call this when the player enters a room without an explicit blockTheme.
  */
 export function setActiveBlockSpriteWorld(worldNumber: number): void {
+  if (_activeWorldNumber === worldNumber && _activeBlockTheme === null) return;
   _activeWorldNumber = worldNumber;
   _sprites = getBlockSpriteSet(worldNumber);
   _activeBlockTheme = null;
@@ -139,6 +140,7 @@ export function setActiveBlockSpriteWorld(worldNumber: number): void {
  * Overrides world-number-based sprite selection until setActiveBlockSpriteWorld is called.
  */
 export function setActiveBlockSpriteTheme(theme: BlockTheme): void {
+  if (_activeBlockTheme === theme) return;
   _activeBlockTheme = theme;
   _invalidateBakedWallCanvas();
 }

@@ -23,7 +23,7 @@
  * preloading via this module.
  */
 
-import { loadImg, isSpriteReady } from './imageCache';
+import { loadImg, decodeImg, isSpriteDecodeReady } from './imageCache';
 import { FOLDER_BLOCK_THEMES, isFolderBasedTheme } from './walls/folderBlockThemes';
 import type { RoomDef } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
@@ -133,7 +133,14 @@ export function preloadNearbyRoomAssets(room: RoomDef, radius: number): void {
 
 /**
  * Returns true when every folder-based block-theme sprite required by `room`
- * has fully loaded (img.complete && img.naturalWidth > 0).
+ * has fully loaded and been decoded (or confirmed loaded when decode() is
+ * unavailable).
+ *
+ * Uses isSpriteDecodeReady() rather than isSpriteReady() so the check reflects
+ * decode-aware readiness when decodeRoomThemeSprites() has been called for the
+ * room.  For rooms whose sprites were loaded only via preloadRoomThemeSprites()
+ * (no explicit decode call), isSpriteDecodeReady() falls back to the plain
+ * isSpriteReady() check — behavior is unchanged from the old implementation.
  *
  * Used by the loading overlay in gameScreen.ts to decide when it is safe to
  * dismiss the "Loading…" screen.
@@ -149,8 +156,38 @@ export function areRoomSpritesReady(room: RoomDef): boolean {
     if (urls === null) continue;
     for (let i = 0; i < urls.length; i++) {
       const img = loadImg(urls[i]);
-      if (!isSpriteReady(img)) return false;
+      if (!isSpriteDecodeReady(img)) return false;
     }
   }
   return true;
+}
+
+/**
+ * Triggers HTMLImageElement.decode() for all folder-based block-theme sprites
+ * required by `room`, ensuring they are fully rasterized and draw-ready before
+ * the player enters.
+ *
+ * Call this when approaching a room (or at campaign start for the spawn room)
+ * so that wall tiles render without pop-in on first entry.  All decode() calls
+ * are asynchronous — this function never blocks the gameplay frame.
+ *
+ * Returns a Promise that resolves when all sprites have been decoded (or
+ * confirmed loaded when decode() is unavailable).  The Promise never rejects;
+ * failed images fall back gracefully to solid-colour tiles.
+ *
+ * Safe to call multiple times — decodeImg() is idempotent for already-decoded URLs.
+ */
+export async function decodeRoomThemeSprites(room: RoomDef): Promise<void> {
+  const themeIds = _collectFolderThemeIds(room);
+  const promises: Promise<void>[] = [];
+  for (const themeId of themeIds) {
+    const urls = _getSpriteUrls(themeId);
+    if (urls === null) continue;
+    for (let i = 0; i < urls.length; i++) {
+      promises.push(decodeImg(urls[i]));
+    }
+  }
+  if (promises.length > 0) {
+    await Promise.all(promises);
+  }
 }

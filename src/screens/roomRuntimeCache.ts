@@ -86,14 +86,16 @@ export function isEntryFullyPrepared(entry: RoomRuntimeEntry): boolean {
  *  - On each `get()` the entry is moved to the end (most-recently-used).
  *  - When `set()` would exceed capacity, the first (oldest) entry is removed.
  *
- * Default capacity is 10 rooms, which covers the current player room plus
- * 2-hop radius and leaves headroom for non-linear traversal.
+ * Default capacity is 16 rooms, which covers the current player room, all
+ * directly adjacent rooms (~5), one hop further (~8), and leaves headroom
+ * for rapid backtracking between recently visited rooms without evicting
+ * adjacent rooms that are still needed.
  */
 export class RoomRuntimeCache {
   private readonly _map = new Map<string, RoomRuntimeEntry>();
   private readonly _capacity: number;
 
-  constructor(capacity = 10) {
+  constructor(capacity = 16) {
     this._capacity = capacity;
   }
 
