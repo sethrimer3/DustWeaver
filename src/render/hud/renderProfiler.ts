@@ -464,7 +464,7 @@ export class RenderProfiler {
         `BG Chunks V=${bc.visibleChunkCount} T=${bc.totalChunkCount}`,
         `Dirty=${bc.dirtyChunkCount} Built=${bc.rebuiltThisFrame} Skip=${bc.skippedThisFrame}`,
         `RbldMs=${bc.rebuildMsThisFrame.toFixed(1)} Mem~${bc.memoryEstimateKB}KB`,
-        `BgImg hit=${bgImgStats.cacheHits} miss=${bgImgStats.cacheMisses} fb=${bgImgStats.fallbacksThisFrame}`,
+        `BgImg rdy=${bgImgStats.drawReady} !rdy=${bgImgStats.drawNotReady} fb=${bgImgStats.fallbacksThisFrame}`,
       ];
       const bgPanelH = bgLines.length * lineHeightPx + 8;
       ctx.save();

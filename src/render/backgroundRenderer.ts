@@ -64,22 +64,24 @@ function worldFallbackColor(worldNumber: number): string {
 
 // ─── Background image stats ───────────────────────────────────────────────────
 
-/** Running count of background image cache hits (image ready on first draw). */
-let _bgCacheHits   = 0;
-/** Running count of background image cache misses (fallback drawn). */
-let _bgCacheMisses = 0;
-/** Count of fallback fills drawn this frame (reset each render call). */
-let _bgFallbacksThisFrame = 0;
+/**
+ * Per-frame background image draw-call result counters.
+ * All three values are reset at the start of each `renderWorldBackground` call
+ * so they reflect the most recent frame only.
+ */
+let _bgDrawReady      = 0;   // draw calls where a decoded image was available
+let _bgDrawNotReady   = 0;   // draw calls where the image was not yet decoded
+let _bgFallbacksThisFrame = 0; // draw calls that fell back to solid fill
 
-/** Returns current background image cache hit / miss / fallback counters. */
+/** Returns per-frame background image draw-call result counters. */
 export function getBgImageStats(): {
-  cacheHits: number;
-  cacheMisses: number;
+  drawReady: number;
+  drawNotReady: number;
   fallbacksThisFrame: number;
 } {
   return {
-    cacheHits:          _bgCacheHits,
-    cacheMisses:        _bgCacheMisses,
+    drawReady:          _bgDrawReady,
+    drawNotReady:       _bgDrawNotReady,
     fallbacksThisFrame: _bgFallbacksThisFrame,
   };
 }
@@ -103,12 +105,12 @@ export function getBgImageStats(): {
 function _getBgImageByUrl(url: string): HTMLImageElement | null {
   const img = loadImg(url);   // idempotent — same element on repeat calls
   if (isSpriteDecodeReady(img)) {
-    _bgCacheHits++;
+    _bgDrawReady++;
     return img;
   }
   // Not yet decoded: kick off a background decode if not already in flight.
   void decodeImg(url);
-  _bgCacheMisses++;
+  _bgDrawNotReady++;
   // Treat plain-loaded images as ready for drawing (avoids a blank frame when
   // decode() is unavailable or the call races with the first render).
   if (isSpriteReady(img)) return img;
@@ -169,6 +171,8 @@ export function renderWorldBackground(
   zoom: number,
   backgroundId?: BackgroundId,
 ): void {
+  _bgDrawReady = 0;
+  _bgDrawNotReady = 0;
   _bgFallbacksThisFrame = 0;
 
   // Thero showcase rooms and Crystalline Cracks use solid black — no parallax image.

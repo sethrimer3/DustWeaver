@@ -522,7 +522,8 @@ export function evictStalePrewarmedChunks(
   for (const roomId of listPrewarmedBgRoomIds()) {
     if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
       evictPrewarmedBgChunks(roomId);
-      // bg-only rooms (no wall prewarm) weren't counted above; count them now.
+      // bg-only rooms (no wall prewarm) weren't counted in the wall loop above.
+      evictedThisPass++;
     }
   }
 
@@ -666,11 +667,6 @@ function _onIdle(deadline: IdleDeadline): void {
       FP.recordPrewarmSlice(built);
       chunksBuilt += built;
       if (built === 0) task.wallDone = true;
-    } else if (!task.wallDone) {
-      // wallDone left false only when blockerKeys is null (should not happen
-      // here because isEntryFullyPrepared already guards that), but guard
-      // defensively so a no-wall room never stalls the queue.
-      task.wallDone = true;
     }
 
     // ── Build bg chunks ───────────────────────────────────────────────────
