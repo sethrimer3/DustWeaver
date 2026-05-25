@@ -156,6 +156,22 @@ export function decodeImg(src: string): Promise<void> {
   // Register the promise under both URL forms so deduplication works either way.
   _decodeInFlight.set(src, promise);
   if (img.src !== src) _decodeInFlight.set(img.src, promise);
+
+  // Safety net: clear stale in-flight entries once the promise settles.
+  //
+  // This handles the edge case where markDecoded() or markFailed() ran
+  // synchronously (img.complete path with no browser decode() API) — which
+  // means those cleanup calls fired *before* the _decodeInFlight.set() above
+  // registered the promise, leaving stale entries that would permanently block
+  // isSpriteDecodeReady() for any image that failed to load.
+  //
+  // The identity check ensures a *newer* in-flight promise for the same key
+  // (issued by a subsequent decodeImg() call) is not accidentally removed.
+  promise.finally(() => {
+    if (_decodeInFlight.get(src) === promise) _decodeInFlight.delete(src);
+    if (_decodeInFlight.get(img.src) === promise) _decodeInFlight.delete(img.src);
+  });
+
   return promise;
 }
 

@@ -61,6 +61,68 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 ## Active Priority 1 Tasks
 
+### 0. In-room runtime freeze elimination pass (completed)
+
+This pass targeted repeated freezes **inside** rooms during active gameplay, distinct from the earlier room-transition loading work.
+
+#### What was found
+
+- **Per-tile shaded canvas explosion** — `_shadedCacheKey()` in `folderBlockThemes.ts` included exact `worldOriginXWorld | worldOriginYWorld` coordinates. In large rooms this created one unique `getImageData`/`putImageData` bake per tile position (potentially thousands), all happening lazily as the camera moved during gameplay.
+- **Same pattern in `proceduralBlockSprite.ts`** — `_cacheKey()` also embedded world coordinates, causing the same O(room_tiles) bake explosion for procedural block/platform/ramp sprites.
+- **Stale `_decodeInFlight` entries** — When `img.complete === true` and `_hasDecode()` is false, `performDecode()` resolved synchronously before `_decodeInFlight.set()` was called, leaving stale entries that permanently block `isSpriteDecodeReady()`.
+- **Prewarm queue stall** — `roomRenderChunkWarmScheduler.ts` used `break` (instead of `continue`) when one room was not ready, stalling the entire prewarm queue rather than skipping to the next room.
+- **No frame-context in freeze profiler** — The profiler could not distinguish active-gameplay freezes from loading or editor frames, making it hard to prioritize freeze sources.
+
+#### What was fixed
+
+1. **Bounded variant cache for `folderBlockThemes.ts`** (`SHADED_VARIANT_BUCKETS = 16`):
+   - `_shadedCacheKey()` now takes a `variantBucket` (0–15) instead of raw world coords.
+   - `variantBucket = hashTilePosition(col, row, seed) % 16` — deterministic per tile, bounded cache size.
+   - `bucketWorldX = variantBucket * blockSizePx` gives each bucket a distinct organic noise pattern.
+   - Cache size is now `sprite_variants × openAirMask_variants × 16` regardless of room size.
+
+2. **Bounded variant cache for `proceduralBlockSprite.ts`** (`PROC_VARIANT_BUCKETS = 16`):
+   - Same approach: `_cacheKey()` uses `variantBucket`; all 6 internal callers (`getBlockSprite1x1`, `getBlockSprite2x2`, `getPlatformSprite1x1`, `getPlatformSpriteFromBaseUrl`, `getPlatformSprite2x2`, ramp/shape accessor) pass `col, row`.
+
+3. **Stale `_decodeInFlight` fix in `imageCache.ts`**:
+   - Added `.finally()` with identity check after `_decodeInFlight.set()`.
+   - Ensures entries are cleaned up even if the promise resolves synchronously before being registered.
+
+4. **Prewarm queue `break` → `continue` in `roomRenderChunkWarmScheduler.ts`**:
+   - Not-ready tasks are now moved to the back and skipped with `continue`.
+   - A `deferralCountThisSlice` guard (max 3) prevents spinning through the entire queue when everything is blocked.
+
+5. **`frameContext` tracking in `perfFreezeProfiler.ts`**:
+   - Added `FrameContext` type: `'gameplay' | 'loading' | 'editor' | 'paused' | 'unknown'`.
+   - `setFrameGameContext()` sets the context; `endFrame()` console warning now prefixes with `⚠ GAMEPLAY` for active-gameplay freezes.
+   - `gameScreen.ts` calls `setFrameGameContext()` at every branch (editor, async-load, paused, gameplay).
+   - The debug freeze profiler panel shows `ctx:gameplay` (or other context) on each frame.
+
+#### Trade-offs made
+
+- **Slight tile-shading noise repetition** — With 16 buckets, the organic noise pattern repeats across tile groups. This is imperceptible in practice (patterns still vary per tile) and far preferable to gameplay freezes.
+- **Perfect world-space seamlessness** is no longer guaranteed for organic edge shading. Nearby tiles share one of 16 representative noise seeds rather than having unique per-coordinate noise. Visual consistency and smooth gameplay take priority.
+
+#### How to use the profiler to diagnose future freezes
+
+1. Open the pause menu → enable **Debug Overlay** → enable **Freeze Profiler**.
+2. Move through rooms. The freeze panel shows `ctx:gameplay` for active-gameplay frames and highlights long frames in red.
+3. Key fields to watch:
+   - `bake N×Xms` — sprite bake count and total cost this frame (should stay near 0 during gameplay).
+   - `edge N×Xms` — organic edge-shading calls (should stay near 0 during gameplay).
+   - `wChk N×Xms` — wall chunks rebuilt (small spikes acceptable on first entry, should taper off).
+   - `bChk N×Xms` — background chunks rebuilt.
+4. If `bake` or `edge` spike during `ctx:gameplay`, the bounded variant cache may need more buckets or a pre-warm call for the entry viewport.
+5. Long-frame console warnings are tagged `⚠ GAMEPLAY` when `frameContext === 'gameplay'` for easy grep filtering.
+
+#### Remaining optimization work
+
+- **Entry viewport pre-warm** — The first visible chunks around spawn are not explicitly warmed before releasing the player. This is safe today because the bounded cache limits bake cost, but a targeted prewarm of the entry viewport would eliminate any remaining first-second stutter.
+- **`proceduralBlockSprite.ts` image-cache unification** — Still maintains its own `_imgCache`/`_loadImg`. Unifying with `render/imageCache.ts` would improve readiness reporting.
+- See items below for the remaining queue and eviction tasks.
+
+---
+
 ### 1. Fix no-blocker rooms in the render prewarm queue
 
 `RoomRuntimeCache` documents `blockerKeys` as:

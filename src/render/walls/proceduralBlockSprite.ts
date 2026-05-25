@@ -68,6 +68,14 @@ function _isReady(img: HTMLImageElement): boolean {
 /** Cache of fully generated sprites keyed by a unique string. */
 const _spriteCache = new Map<string, HTMLCanvasElement>();
 
+/**
+ * Number of distinct noise variants per (baseUrl, templateUrl, size, mask, seed).
+ * See folderBlockThemes.ts SHADED_VARIANT_BUCKETS for the same technique.
+ * Bounds the cache to PROC_VARIANT_BUCKETS entries per unique (url, template,
+ * mask) combination instead of one entry per tile coordinate.
+ */
+const PROC_VARIANT_BUCKETS = 16;
+
 function _cacheKey(
   baseUrl: string,
   templateUrl: string,
@@ -77,11 +85,10 @@ function _cacheKey(
   flipY: boolean,
   rotStep: number,
   openAirSidesMask: number,
-  worldOriginXWorld: number,
-  worldOriginYWorld: number,
+  variantBucket: number,
   seed: number,
 ): string {
-  return `${baseUrl}|${templateUrl}|${widthPx}|${heightPx}|${flipX ? 1 : 0}${flipY ? 1 : 0}${rotStep}|${openAirSidesMask}|${worldOriginXWorld}|${worldOriginYWorld}|${seed}`;
+  return `${baseUrl}|${templateUrl}|${widthPx}|${heightPx}|${flipX ? 1 : 0}${flipY ? 1 : 0}${rotStep}|${openAirSidesMask}|${variantBucket}|${seed}`;
 }
 
 /**
@@ -144,6 +151,10 @@ function _generateSprite(
  * or `null` when either image is not yet loaded.
  *
  * Once both images are loaded the result is generated and permanently cached.
+ *
+ * @param col  Optional tile column — used to compute a bounded variant bucket
+ *             so the sprite cache stays O(variants) rather than O(room_tiles).
+ * @param row  Optional tile row — same purpose as `col`.
  */
 export function getProceduralSprite(
   baseUrl: string,
@@ -157,8 +168,20 @@ export function getProceduralSprite(
   worldOriginXWorld: number = 0,
   worldOriginYWorld: number = 0,
   seed: number = 0,
+  col?: number,
+  row?: number,
 ): HTMLCanvasElement | null {
-  const key = _cacheKey(baseUrl, templateUrl, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
+  // Compute a bounded variant bucket to prevent per-tile cache explosion.
+  // When col/row are provided (all internal callers), use them directly.
+  // Otherwise approximate from world origin — useful for any external callers
+  // that don't have grid coordinates handy.
+  const c = col !== undefined ? col : Math.round(worldOriginXWorld / Math.max(widthPx, 1));
+  const r = row !== undefined ? row : Math.round(worldOriginYWorld / Math.max(heightPx, 1));
+  const variantBucket = hashTilePosition(c, r, seed) % PROC_VARIANT_BUCKETS;
+  // Representative world origin for this bucket — deterministic and bounded.
+  const bucketWorldX  = variantBucket * widthPx;
+
+  const key = _cacheKey(baseUrl, templateUrl, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, variantBucket, seed);
   const cached = _spriteCache.get(key);
   if (cached !== undefined) return cached;
 
@@ -171,7 +194,7 @@ export function getProceduralSprite(
   if (!_isReady(base) || !_isReady(template)) return null;
 
   const _t0 = import.meta.env.DEV ? performance.now() : 0;
-  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
+  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, bucketWorldX, 0, seed);
   _spriteCache.set(key, result);
   FP.recordSpriteBake(key, import.meta.env.DEV ? performance.now() - _t0 : 0);
   return result;
@@ -323,7 +346,7 @@ export function getBlockSprite1x1(
   const hash    = hashTilePosition(col, row, seed);
   const baseUrl = _pickFromPool(pool, hash);
   if (baseUrl === null) return null;
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 block'], blockSizePx, blockSizePx, false, false, 0, openAirSidesMask, col * blockSizePx, row * blockSizePx, seed);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 block'], blockSizePx, blockSizePx, false, false, 0, openAirSidesMask, col * blockSizePx, row * blockSizePx, seed, col, row);
 }
 
 /**
@@ -350,7 +373,7 @@ export function getBlockSprite2x2(
   const baseUrl = _pickFromPool(pool, hash);
   if (baseUrl === null) return null;
   const dim = blockSizePx * 2;
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 block'], dim, dim, false, false, 0, openAirSidesMask, col * blockSizePx, row * blockSizePx, seed);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 block'], dim, dim, false, false, 0, openAirSidesMask, col * blockSizePx, row * blockSizePx, seed, col, row);
 }
 
 /**
@@ -378,7 +401,7 @@ export function getPlatformSprite1x1(
   if (baseUrl === null) return null;
   const [flipX, flipY, rotStep] = _platformEdgeToTransform(platformEdge);
   // Platforms are always at the boundary of solid regions; use all-sides-open default.
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 platform'], blockSizePx, blockSizePx, flipX, flipY, rotStep, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 platform'], blockSizePx, blockSizePx, flipX, flipY, rotStep, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
 }
 
 /**
@@ -411,6 +434,7 @@ export function getPlatformSpriteFromBaseUrl(
     OPEN_AIR_ALL_SIDES,
     col * blockSizePx, row * blockSizePx,
     seed,
+    col, row,
   );
 }
 
@@ -440,7 +464,7 @@ export function getPlatformSprite2x2(
   if (baseUrl === null) return null;
   const [flipX, flipY, rotStep] = _platformEdgeToTransform(platformEdge);
   const dim = blockSizePx * 2;
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 platform'], dim, dim, flipX, flipY, rotStep, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 platform'], dim, dim, flipX, flipY, rotStep, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
 }
 
 /**
@@ -490,5 +514,5 @@ export function getRampSprite(
   }
 
   const [flipX, flipY] = _rampOriToFlips(orientation);
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS[shapeName], widthPx, heightPx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS[shapeName], widthPx, heightPx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
 }

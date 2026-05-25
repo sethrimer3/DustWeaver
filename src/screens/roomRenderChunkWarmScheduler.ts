@@ -609,6 +609,11 @@ function _onIdle(deadline: IdleDeadline): void {
   let chunksBuilt  = 0;
   let deferredNotReady        = _stats.deferredNotReady;
   let deferredSpritesNotReady = _stats.deferredSpritesNotReady;
+  // How many not-ready tasks we've skipped over in this slice.
+  // When this reaches MAX_DEFERRALS_PER_SLICE the slice stops so we don't
+  // loop through the entire queue when everything is blocked.
+  const MAX_DEFERRALS_PER_SLICE = 3;
+  let deferralCountThisSlice = 0;
 
   while (_queue.length > 0) {
     // Check both time and chunk budget before each task.
@@ -635,17 +640,22 @@ function _onIdle(deadline: IdleDeadline): void {
     // `blockerKeys === undefined` means computed, no blockers → ready.
     const entry = _runtimeCache?.get(task.roomId);
     if (entry === undefined || !isEntryFullyPrepared(entry)) {
-      // Room data not ready yet; try again next idle slice.
+      // Room data not ready yet; move to back and try another task this slice.
+      // If too many consecutive deferrals accumulate, stop to avoid spinning.
       deferredNotReady++;
       _queue.push(_queue.shift()!);
-      break;
+      deferralCountThisSlice++;
+      if (deferralCountThisSlice >= MAX_DEFERRALS_PER_SLICE) break;
+      continue;
     }
 
     // Defer if sprites are not ready (don't bake fallback rectangles).
     if (!areRoomSpritesReady(room)) {
       deferredSpritesNotReady++;
       _queue.push(_queue.shift()!);
-      break;
+      deferralCountThisSlice++;
+      if (deferralCountThisSlice >= MAX_DEFERRALS_PER_SLICE) break;
+      continue;
     }
 
     const remaining = chunksLimit - chunksBuilt;
