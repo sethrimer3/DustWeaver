@@ -355,7 +355,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   lightingDiv.appendChild(dirBiasRow);
 
   const { row: sideExpRow, slider: sideExpSlider, valueLabel: sideExpValLabel } =
-    makeSliderRow('Side Exposure', 0, 1, 0.01, 0.35,
+    makeSliderRow('Side/Bottom Exposure', 0, 1, 0.01, 0.35,
       (v) => callbacks?.onSideExposureStrengthChange(v));
   lightingDiv.appendChild(sideExpRow);
 

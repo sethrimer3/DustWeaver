@@ -86,6 +86,9 @@ import { renderUltraIceSparkles } from '../render/effects/ultraIceSparkleRendere
 /** Fixed simulation timestep for tick-to-ms conversion. */
 const FIXED_DT_MS = 16.666;
 
+/** Warm amber fill colour (RGB components) used for the optional background light-spill overlay. */
+const BACKGROUND_SPILL_RGB = '200,150,80' as const;
+
 // ── Public interface ───────────────────────────────────────────────────────
 
 /** All data needed by `renderFrame` — avoids a 20+ positional parameter list. */
@@ -379,7 +382,7 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx.clip();
     // Warm amber tint — clamped to a subtle translucent fill.
     const alpha = Math.min(bgSpill, 0.5);
-    ctx.fillStyle = `rgba(200,150,80,${alpha.toFixed(3)})`;
+    ctx.fillStyle = `rgba(${BACKGROUND_SPILL_RGB},${alpha.toFixed(3)})`;
     ctx.fillRect(clipX, clipY, clipW, clipH);
     ctx.restore();
   }

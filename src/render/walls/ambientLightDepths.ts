@@ -474,12 +474,11 @@ export function buildAmbientDarknessAlphas(
           // Blend between broad and tight according to directionalBias.
           weight = broadFactor + (tightFactor - broadFactor) * directionalBias;
 
-          // Effectiveness is determined by how sky-facing the neighbour is —
-          // NOT by whether it is sky-connected (litAir).  Sky-facing neighbours
-          // (cosAngle > 0) receive full effectiveness; side and bottom neighbours
-          // are always attenuated by sideExposureStrength.  This prevents open
-          // caves (where all interior air is sky-connected) from producing a
-          // broad warm-glow artefact on all surrounding walls.
+          // Effectiveness is direction-based, not sky-connectivity-based.
+          // Sky-facing neighbours (cosAngle > 0) receive full effectiveness;
+          // side and bottom neighbours are always attenuated by sideExposureStrength.
+          // This prevents open caves (where all interior air is sky-connected) from
+          // producing a broad warm-glow artefact on all surrounding walls.
           const skyFacing = Math.max(0, cosAngle); // 0 (side/below) … 1 (straight up)
           effectiveness = skyFacing + (1 - skyFacing) * sideExposureStrength;
         }
