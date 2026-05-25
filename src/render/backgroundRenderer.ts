@@ -10,7 +10,7 @@
  */
 
 import type { BackgroundId } from '../levels/roomDef';
-import { decodeImg } from './imageCache';
+import { loadImg, isSpriteReady, isSpriteDecodeReady, decodeImg } from './imageCache';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -62,33 +62,58 @@ function worldFallbackColor(worldNumber: number): string {
   }
 }
 
-// ─── Image cache ─────────────────────────────────────────────────────────────
-
-/** Caches loaded background images per image URL. */
-const _bgImageCache = new Map<string, HTMLImageElement>();
-
-/** Tracks which URLs have started loading. */
-const _bgLoadStarted = new Set<string>();
+// ─── Background image stats ───────────────────────────────────────────────────
 
 /**
- * Returns the cached background image for the given URL, or null if not
- * yet loaded.  Triggers an async load on the first call for each URL.
+ * Per-frame background image draw-call result counters.
+ * All three values are reset at the start of each `renderWorldBackground` call
+ * so they reflect the most recent frame only.
+ */
+let _bgDrawReady      = 0;   // draw calls where a decoded image was available
+let _bgDrawNotReady   = 0;   // draw calls where the image was not yet decoded
+let _bgFallbacksThisFrame = 0; // draw calls that fell back to solid fill
+
+/** Returns per-frame background image draw-call result counters. */
+export function getBgImageStats(): {
+  drawReady: number;
+  drawNotReady: number;
+  fallbacksThisFrame: number;
+} {
+  return {
+    drawReady:          _bgDrawReady,
+    drawNotReady:       _bgDrawNotReady,
+    fallbacksThisFrame: _bgFallbacksThisFrame,
+  };
+}
+
+// ─── Image access via shared cache ───────────────────────────────────────────
+
+/**
+ * Returns the cached background image for the given URL when it is decoded
+ * and draw-ready, or `null` otherwise.
+ *
+ * Uses the shared `imageCache.loadImg` singleton so the same
+ * HTMLImageElement is returned regardless of which module loaded it first.
+ * If the image has been through `decodeImg()` (e.g. via
+ * `preloadBackgroundImageDecoded()`), `isSpriteDecodeReady()` returns `true`
+ * immediately even before `img.complete` is stable on all browsers.
+ *
+ * A `loadImg()` call is always made so the background image starts loading
+ * the first time `renderWorldBackground()` is called for a new URL, even if
+ * `preloadBackgroundImageDecoded()` was never called.
  */
 function _getBgImageByUrl(url: string): HTMLImageElement | null {
-  const cached = _bgImageCache.get(url);
-  if (cached !== undefined && cached.complete && cached.naturalWidth > 0) {
-    return cached;
+  const img = loadImg(url);   // idempotent — same element on repeat calls
+  if (isSpriteDecodeReady(img)) {
+    _bgDrawReady++;
+    return img;
   }
-
-  if (!_bgLoadStarted.has(url)) {
-    _bgLoadStarted.add(url);
-    const img = new Image();
-    img.src = url;
-    img.onload = () => {
-      _bgImageCache.set(url, img);
-    };
-  }
-
+  // Not yet decoded: kick off a background decode if not already in flight.
+  void decodeImg(url);
+  _bgDrawNotReady++;
+  // Treat plain-loaded images as ready for drawing (avoids a blank frame when
+  // decode() is unavailable or the call races with the first render).
+  if (isSpriteReady(img)) return img;
   return null;
 }
 
@@ -146,6 +171,10 @@ export function renderWorldBackground(
   zoom: number,
   backgroundId?: BackgroundId,
 ): void {
+  _bgDrawReady = 0;
+  _bgDrawNotReady = 0;
+  _bgFallbacksThisFrame = 0;
+
   // Thero showcase rooms and Crystalline Cracks use solid black — no parallax image.
   if (
     worldNumber === 99 ||
@@ -181,6 +210,7 @@ export function renderWorldBackground(
     // Image not loaded yet — draw solid fallback colour
     ctx.fillStyle = worldFallbackColor(worldNumber);
     ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
+    _bgFallbacksThisFrame++;
     return;
   }
 
