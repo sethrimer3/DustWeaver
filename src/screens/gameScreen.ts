@@ -1265,6 +1265,7 @@ export function startGameScreen(
 
         rafHandle = requestAnimationFrame(frame);
         // endFrame covers editor-backdrop frames too.
+        if (import.meta.env.DEV) FP.setFrameGameContext('editor');
         FP.endFrame();
         return;
       }
@@ -1301,6 +1302,7 @@ export function startGameScreen(
       }
       // Keep the overlay visible and skip gameplay sim/render this frame.
       tickLoadingOverlay();
+      if (import.meta.env.DEV) FP.setFrameGameContext('loading');
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1355,6 +1357,7 @@ export function startGameScreen(
     if (pauseController.state.isPaused
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
+      if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1362,6 +1365,7 @@ export function startGameScreen(
 
     // While dead, still render the frozen scene but skip sim
     if (gameOverlayController.state.isPlayerDead) {
+      if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1619,6 +1623,8 @@ export function startGameScreen(
         `ox=${ox.toFixed(0)}px,oy=${oy.toFixed(0)}px`,
         `${_fp_pxBlock},${_fp_pyBlock}`,
       );
+      // Mark this as an active-gameplay frame so freeze warnings highlight it.
+      FP.setFrameGameContext('gameplay');
     }
 
     let aliveCount = 0;

@@ -342,21 +342,31 @@ export function getTheme1x1Sprite(
  * Cache of edge-shaded canvases for folder-based sprites.
  *
  * Keyed by a string encoding (source URL, dimensions, openAirSidesMask,
- * worldOriginX, worldOriginY, seed) so each unique per-tile configuration
- * is baked at most once.
+ * variantBucket, seed).  The variant bucket (0–SHADED_VARIANT_BUCKETS-1) is
+ * derived from the tile position hash, bounding the cache to at most
+ * SHADED_VARIANT_BUCKETS entries per (url, size, mask) combination regardless
+ * of room size — previously the key included exact world coordinates, which
+ * created one canvas per tile and caused O(room_tiles) getImageData bakes.
  */
 const _shadedCache = new Map<string, HTMLCanvasElement>();
+
+/**
+ * Number of distinct shading variants per (url, size, openAirMask, seed).
+ * Tile positions are hashed into this many buckets so the total canvas count
+ * stays bounded.  16 gives good visual variety with ~256 canvases per theme
+ * across all air-mask combinations, versus thousands for large rooms before.
+ */
+const SHADED_VARIANT_BUCKETS = 16;
 
 function _shadedCacheKey(
   url: string,
   widthPx: number,
   heightPx: number,
   openAirSidesMask: number,
-  worldOriginXWorld: number,
-  worldOriginYWorld: number,
+  variantBucket: number,
   seed: number,
 ): string {
-  return `${url}|${widthPx}|${heightPx}|${openAirSidesMask}|${worldOriginXWorld}|${worldOriginYWorld}|${seed}`;
+  return `${url}|${widthPx}|${heightPx}|${openAirSidesMask}|${variantBucket}|${seed}`;
 }
 
 /**
@@ -425,9 +435,19 @@ export function getTheme1x1SpriteShaded(
   const base = _getOrCreate8x8(url);
   if (base === null) return null; // source still loading
 
-  const worldX = col * blockSizePx;
-  const worldY = row * blockSizePx;
-  const key    = _shadedCacheKey(url, 8, 8, openAirSidesMask, worldX, worldY, seed);
+  // Use a bounded variant bucket instead of the exact tile world position as
+  // the cache key.  This caps shaded canvases at SHADED_VARIANT_BUCKETS per
+  // (url, openAirMask, seed) combination, preventing O(room_tiles)
+  // getImageData/putImageData bakes during active gameplay.
+  // Trade-off: tiles that share the same bucket share the same noise pattern
+  // (slight repetition), but smooth gameplay is the priority here.
+  const variantBucket = hashTilePosition(col, row, seed) % SHADED_VARIANT_BUCKETS;
+  // Representative world origin for this bucket — gives each bucket a unique
+  // noise pattern while remaining constant (so the canvas is reused every frame).
+  // Y is always 0; only the X axis carries per-bucket variation.
+  const bucketWorldX  = variantBucket * blockSizePx;
+  const bucketWorldY  = 0;
+  const key    = _shadedCacheKey(url, 8, 8, openAirSidesMask, variantBucket, seed);
   const cached = _shadedCache.get(key);
   if (cached !== undefined) return cached;
 
@@ -436,7 +456,7 @@ export function getTheme1x1SpriteShaded(
   // This prevents a burst of getImageData/putImageData calls from stalling gameplay.
   if (FP.isBakeBudgetExhausted()) return null;
 
-  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, worldX, worldY, seed, key);
+  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, bucketWorldX, bucketWorldY, seed, key);
   _shadedCache.set(key, shaded);
   return shaded;
 }
@@ -476,16 +496,19 @@ export function getTheme2x2SpriteShaded(
   const img = loadImg(url);
   if (!img.complete || img.naturalWidth === 0) return null; // source still loading
 
-  const worldX = col * blockSizePx;
-  const worldY = row * blockSizePx;
-  const key    = _shadedCacheKey(url, 16, 16, openAirSidesMask, worldX, worldY, seed);
+  // Bounded variant bucket (same approach as getTheme1x1SpriteShaded).
+  // Y is always 0; only the X axis carries per-bucket variation.
+  const variantBucket = hashTilePosition(col, row, seed) % SHADED_VARIANT_BUCKETS;
+  const bucketWorldX  = variantBucket * blockSizePx;
+  const bucketWorldY  = 0;
+  const key    = _shadedCacheKey(url, 16, 16, openAirSidesMask, variantBucket, seed);
   const cached = _shadedCache.get(key);
   if (cached !== undefined) return cached;
 
   // Per-frame budget guard (same as 1×1 path).
   if (FP.isBakeBudgetExhausted()) return null;
 
-  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, worldX, worldY, seed, key);
+  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, bucketWorldX, bucketWorldY, seed, key);
   _shadedCache.set(key, shaded);
   return shaded;
 }

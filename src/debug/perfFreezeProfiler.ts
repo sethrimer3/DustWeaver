@@ -33,6 +33,19 @@ export const LONG_FRAME_WARN_MS   = 100;
 /** Frame duration above which a "severe freeze" console error is emitted. */
 export const SEVERE_FREEZE_MS     = 1000;
 
+// ── Frame context ─────────────────────────────────────────────────────────────
+
+/**
+ * Describes what the game was doing during a given RAF frame.
+ * Used to distinguish active-gameplay freezes from expected loading pauses.
+ */
+export type FrameContext =
+  | 'gameplay'    // Player has control; sim + render running normally.
+  | 'loading'     // Async room load in progress behind the loading overlay.
+  | 'editor'      // Level editor is active.
+  | 'paused'      // Pause menu, skill tomb, map overlay, or player-dead screen.
+  | 'unknown';    // Default — context not set for this frame yet.
+
 // ── Per-frame data ────────────────────────────────────────────────────────────
 
 export interface FreezeFrameData {
@@ -92,6 +105,8 @@ export interface FreezeFrameData {
   // ── Derived ─────────────────────────────────────────────────────────────────
   /** Name of the subsystem that consumed the most measured ms this frame. */
   topCause: string;
+  /** What the game was doing this frame — used to identify active-gameplay freezes. */
+  frameContext: FrameContext;
 }
 
 function _makeBlankFrame(): FreezeFrameData {
@@ -122,6 +137,7 @@ function _makeBlankFrame(): FreezeFrameData {
     sceneLightOccluderSegCount: 0,
     bloomSkippedNoGlow:         false,
     topCause:             '',
+    frameContext:         'unknown',
   };
 }
 
@@ -226,6 +242,7 @@ export function beginFrame(frameMs: number): void {
   c.sceneLightOccluderSegCount = 0;
   c.bloomSkippedNoGlow         = false;
   c.topCause             = '';
+  c.frameContext         = 'unknown';
 }
 
 /** Record sim tick count for this frame (call from sim loop). */
@@ -349,6 +366,17 @@ export function setFrameContext(
 }
 
 /**
+ * Record what the game is doing for this frame.
+ * Call once per RAF frame from gameScreen, at the point where the frame path
+ * is known (gameplay, loading, editor, paused).  Used to flag active-gameplay
+ * freezes in console warnings and the debug overlay.
+ */
+export function setFrameGameContext(ctx: FrameContext): void {
+  if (!import.meta.env.DEV) return;
+  _cur.frameContext = ctx;
+}
+
+/**
  * Call at the end of the RAF callback.
  * Commits the current frame to the ring buffer and emits console warnings
  * for long frames.
@@ -384,8 +412,10 @@ export function endFrame(): void {
   // Emit structured warnings
   if (c.frameMs >= LONG_FRAME_WARN_MS) {
     const severity = c.frameMs >= SEVERE_FREEZE_MS ? 'SEVERE FREEZE' : 'LONG FRAME';
+    // Mark active-gameplay freezes prominently — these are the ones that matter most.
+    const ctxTag = c.frameContext === 'gameplay' ? ' ⚠ GAMEPLAY' : ` (${c.frameContext})`;
     console.warn(
-      `[freeze] ${severity} ${c.frameMs.toFixed(1)}ms\n` +
+      `[freeze] ${severity}${ctxTag} ${c.frameMs.toFixed(1)}ms\n` +
       `  topCause=${c.topCause}\n` +
       `  wallChunks=${c.wallChunkBuiltCount} (${c.wallChunkBuildMs.toFixed(1)}ms)\n` +
       `  bgChunks=${c.bgChunkBuiltCount} (${c.bgChunkBuildMs.toFixed(1)}ms)\n` +
@@ -396,6 +426,7 @@ export function endFrame(): void {
       `  loadPhase=${c.loadPhaseMs.toFixed(1)}ms (${c.loadPhaseDetail})\n` +
       `  sceneLights total=${c.sceneLightTotalCount} culled=${c.sceneLightCulledCount} shadow=${c.sceneLightShadowCount} occSegs=${c.sceneLightOccluderSegCount}\n` +
       `  bloomSkippedNoGlow=${c.bloomSkippedNoGlow}\n` +
+      `  frameContext=${c.frameContext}\n` +
       `  roomId=${_contextRoomId}\n` +
       `  cameraBlockRange=${_contextCamBlockRange}\n` +
       `  playerBlock=${_contextPlayerBlock}`,

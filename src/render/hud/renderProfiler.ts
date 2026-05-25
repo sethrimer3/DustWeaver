@@ -535,6 +535,9 @@ export class RenderProfiler {
           ? `frame ${cur.frameMs.toFixed(1)}ms  top:${cur.topCause || '—'}`
           : 'frame —',
         cur !== null
+          ? `ctx:${cur.frameContext}`
+          : 'ctx —',
+        cur !== null
           ? `wChk ${cur.wallChunkBuiltCount}×${cur.wallChunkBuildMs.toFixed(1)}ms`
           : 'wChk —',
         cur !== null
@@ -572,7 +575,9 @@ export class RenderProfiler {
       ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, freezePanelH);
       for (let i = 0; i < freezeLines.length; i++) {
         const isWarn = cur !== null && i === 1 && cur.frameMs > FP.LONG_FRAME_WARN_MS;
-        ctx.fillStyle = isWarn ? '#ff6060' : i === 0 ? '#ffcc00' : '#d0d0ff';
+        // Highlight active-gameplay freezes in a distinct colour.
+        const isGameplayCtx = cur !== null && i === 2 && cur.frameContext === 'gameplay' && cur.frameMs > FP.LONG_FRAME_WARN_MS;
+        ctx.fillStyle = isWarn ? '#ff6060' : isGameplayCtx ? '#ffaa00' : i === 0 ? '#ffcc00' : '#d0d0ff';
         ctx.fillText(freezeLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
