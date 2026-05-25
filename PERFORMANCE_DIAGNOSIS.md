@@ -102,6 +102,39 @@ These APIs let the entry-viewport warm path intentionally bake derived canvases 
 
 ---
 
+## Part D — Entry Viewport Visual Warm (BUILD 402)
+
+BUILD 401 made gameplay freeze-safe by returning stable unshaded fallback canvases when `isBakeForbiddenInGameplay()` is true. This eliminated all `getImageData`/`putImageData` spikes during active gameplay. The trade-off was that tiles visible immediately after room entry could appear briefly unshaded until their shaded variants were baked in a later frame.
+
+BUILD 402 closes this gap by adding a bounded entry viewport warm pass.
+
+### D.1 — Entry warm controller (`entryViewportWarm.ts`)
+
+New module `src/screens/entryViewportWarm.ts` manages `EntryWarmState`, which tracks phase (`idle` | `warming` | `ready` | `timedOut`), frames elapsed, ms spent, and chunks warmed.
+
+`startEntryWarm()` is called after every room load (initial startup, instant transition, and async transition generator completion). It computes the entry camera offset from the spawn block and stores the viewport parameters.
+
+`tickEntryWarm()` is called once per gameplay frame BEFORE `setBakeForbiddenInGameplay(true)`. This window is the only time baking is safe in an active-gameplay frame. The function calls `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom` for the entry viewport (bounded to `ENTRY_WARM_CHUNKS_PER_STEP = 6` chunks each per step). When both sources return 0 new chunks (viewport fully covered), or when the budget fires (max 8 frames / 120 ms), the warm finalises by calling `adoptPrewarmedWallChunks` + `adoptPrewarmedBgChunks` to inject the shaded chunks into the active caches.
+
+### D.2 — Loading overlay gate
+
+`tickLoadingOverlay()` in `gameScreen.ts` now also requires `isEntryWarmReadyOrTimedOut(entryWarmState)`. This holds the loading overlay until:
+
+1. Source sprites are ready (`areRoomSpritesReady`).
+2. Background image is decoded (`isRoomBackgroundDecodeReady`).
+3. The entry warm pass completed or timed out.
+
+The timeout (8 frames / 120 ms) guarantees this never produces a long loading screen.
+
+### D.3 — Guarantees
+
+- **No gameplay freezes**: the warm pass runs entirely before `setBakeForbiddenInGameplay(true)`, so all baking occurs outside the active-gameplay window.
+- **Minimal unshaded fallback**: the loading overlay is held until the entry viewport's shaded chunks are ready or the safe timeout fires.
+- **Bounded overlay delay**: worst-case extra hold is 120 ms (the timeout budget).
+- **No-op when not needed**: `isEntryWarmReadyOrTimedOut` returns true immediately when phase is `idle`, `ready`, or `timedOut`, so rooms without folder-based themes release the overlay instantly.
+
+---
+
 ## Already Well-Optimised Areas (Do Not Regress)
 
 - **Chunked wall/background rendering** (`chunkRenderCache.ts`): walls and background blocks render through per-chunk offscreen canvases. Dirty chunks rebuild under a per-frame cap. Only viewport-visible chunks plus a safety margin are blitted.
