@@ -133,20 +133,20 @@ function getEdgeProfiles(room: RoomDef, style: VoidEdgeStyle): EdgeProfiles {
   if (key === _cacheKey && _cached !== null) return _cached;
 
   const roomSeed = hashRoomId(room.id);
-  const wPx = room.widthBlocks  * BLOCK_SIZE_SMALL; // virtual pixels wide
-  const hPx = room.heightBlocks * BLOCK_SIZE_SMALL; // virtual pixels tall
+  const wWorld = room.widthBlocks  * BLOCK_SIZE_SMALL; // world units (= vp at zoom 1)
+  const hWorld = room.heightBlocks * BLOCK_SIZE_SMALL; // world units (= vp at zoom 1)
 
-  const top    = new Uint8Array(wPx);
-  const bottom = new Uint8Array(wPx);
-  const left   = new Uint8Array(hPx);
-  const right  = new Uint8Array(hPx);
+  const top    = new Uint8Array(wWorld);
+  const bottom = new Uint8Array(wWorld);
+  const left   = new Uint8Array(hWorld);
+  const right  = new Uint8Array(hWorld);
 
   // Fill raw noise
-  for (let x = 0; x < wPx; x++) {
+  for (let x = 0; x < wWorld; x++) {
     top[x]    = computeBiteDepth(roomSeed, 0, x);
     bottom[x] = computeBiteDepth(roomSeed, 1, x);
   }
-  for (let y = 0; y < hPx; y++) {
+  for (let y = 0; y < hWorld; y++) {
     left[y]  = computeBiteDepth(roomSeed, 2, y);
     right[y] = computeBiteDepth(roomSeed, 3, y);
   }
@@ -157,19 +157,19 @@ function getEdgeProfiles(room: RoomDef, style: VoidEdgeStyle): EdgeProfiles {
     if (t.direction === 'up') {
       const lo = t.xBlock * BLOCK_SIZE_SMALL - margin;
       const hi = (t.xBlock + t.openingSizeBlocks) * BLOCK_SIZE_SMALL + margin;
-      for (let x = Math.max(0, lo); x < Math.min(wPx, hi); x++) top[x] = 0;
+      for (let x = Math.max(0, lo); x < Math.min(wWorld, hi); x++) top[x] = 0;
     } else if (t.direction === 'down') {
       const lo = t.xBlock * BLOCK_SIZE_SMALL - margin;
       const hi = (t.xBlock + t.openingSizeBlocks) * BLOCK_SIZE_SMALL + margin;
-      for (let x = Math.max(0, lo); x < Math.min(wPx, hi); x++) bottom[x] = 0;
+      for (let x = Math.max(0, lo); x < Math.min(wWorld, hi); x++) bottom[x] = 0;
     } else if (t.direction === 'left') {
       const lo = t.yBlock * BLOCK_SIZE_SMALL - margin;
       const hi = (t.yBlock + t.openingSizeBlocks) * BLOCK_SIZE_SMALL + margin;
-      for (let y = Math.max(0, lo); y < Math.min(hPx, hi); y++) left[y] = 0;
+      for (let y = Math.max(0, lo); y < Math.min(hWorld, hi); y++) left[y] = 0;
     } else if (t.direction === 'right') {
       const lo = t.yBlock * BLOCK_SIZE_SMALL - margin;
       const hi = (t.yBlock + t.openingSizeBlocks) * BLOCK_SIZE_SMALL + margin;
-      for (let y = Math.max(0, lo); y < Math.min(hPx, hi); y++) right[y] = 0;
+      for (let y = Math.max(0, lo); y < Math.min(hWorld, hi); y++) right[y] = 0;
     }
   }
 
@@ -213,7 +213,7 @@ function drawBiteProfile(
     let j = i + 1;
     while (j < n && depths[j] === d) j++;
     // Render the run as a single rectangle
-    const depthPx = d * zoom;
+    const depthScreen = d * zoom;
     if (horizontal) {
       // Top or bottom edge — rect spans columns [i, j) at depth d
       const rx = Math.floor(i * zoom + startScreenX);
@@ -224,9 +224,9 @@ function drawBiteProfile(
         ry = Math.floor(startScreenY);
       } else {
         // bottom edge: bite grows upward from startScreenY
-        ry = Math.ceil(startScreenY - depthPx);
+        ry = Math.ceil(startScreenY - depthScreen);
       }
-      ctx.fillRect(rx, ry, rw, Math.ceil(depthPx));
+      ctx.fillRect(rx, ry, rw, Math.ceil(depthScreen));
     } else {
       // Left or right edge — rect spans rows [i, j) at depth d
       const ry = Math.floor(i * zoom + startScreenY);
@@ -237,9 +237,9 @@ function drawBiteProfile(
         rx = Math.floor(startScreenX);
       } else {
         // right edge: bite grows leftward from startScreenX
-        rx = Math.ceil(startScreenX - depthPx);
+        rx = Math.ceil(startScreenX - depthScreen);
       }
-      ctx.fillRect(rx, ry, Math.ceil(depthPx), rh);
+      ctx.fillRect(rx, ry, Math.ceil(depthScreen), rh);
     }
     i = j;
   }
@@ -278,17 +278,17 @@ export function renderVoidEdge(
 
   // ── Phase 2: Exterior fill band ─────────────────────────────────────────
   if (style === 'exteriorFill') {
-    const fillDepthWorld = EXTERIOR_FILL_DEPTH_BLOCKS * BLOCK_SIZE_SMALL;
-    const fillDepthPx    = fillDepthWorld * zoom;
+    const fillDepthWorld  = EXTERIOR_FILL_DEPTH_BLOCKS * BLOCK_SIZE_SMALL;
+    const fillDepthScreen = fillDepthWorld * zoom;
     ctx.fillStyle = EXTERIOR_FILL_COLOR;
     // Top exterior band
-    ctx.fillRect(Math.floor(ox), Math.floor(oy - fillDepthPx), Math.ceil(roomScreenW), Math.ceil(fillDepthPx));
+    ctx.fillRect(Math.floor(ox), Math.floor(oy - fillDepthScreen), Math.ceil(roomScreenW), Math.ceil(fillDepthScreen));
     // Bottom exterior band
-    ctx.fillRect(Math.floor(ox), Math.floor(oy + roomScreenH), Math.ceil(roomScreenW), Math.ceil(fillDepthPx));
+    ctx.fillRect(Math.floor(ox), Math.floor(oy + roomScreenH), Math.ceil(roomScreenW), Math.ceil(fillDepthScreen));
     // Left exterior band (full height including corners)
-    ctx.fillRect(Math.floor(ox - fillDepthPx), Math.floor(oy - fillDepthPx), Math.ceil(fillDepthPx), Math.ceil(roomScreenH + fillDepthPx * 2));
+    ctx.fillRect(Math.floor(ox - fillDepthScreen), Math.floor(oy - fillDepthScreen), Math.ceil(fillDepthScreen), Math.ceil(roomScreenH + fillDepthScreen * 2));
     // Right exterior band (full height including corners)
-    ctx.fillRect(Math.floor(ox + roomScreenW), Math.floor(oy - fillDepthPx), Math.ceil(fillDepthPx), Math.ceil(roomScreenH + fillDepthPx * 2));
+    ctx.fillRect(Math.floor(ox + roomScreenW), Math.floor(oy - fillDepthScreen), Math.ceil(fillDepthScreen), Math.ceil(roomScreenH + fillDepthScreen * 2));
   }
 
   // ── Phase 1 & 2: Noisy black edge intrusion ──────────────────────────────
