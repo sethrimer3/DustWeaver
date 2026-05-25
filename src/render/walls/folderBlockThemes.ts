@@ -444,7 +444,9 @@ export function getTheme1x1SpriteShaded(
   const variantBucket = hashTilePosition(col, row, seed) % SHADED_VARIANT_BUCKETS;
   // Representative world origin for this bucket — gives each bucket a unique
   // noise pattern while remaining constant (so the canvas is reused every frame).
+  // Y is always 0; only the X axis carries per-bucket variation.
   const bucketWorldX  = variantBucket * blockSizePx;
+  const bucketWorldY  = 0;
   const key    = _shadedCacheKey(url, 8, 8, openAirSidesMask, variantBucket, seed);
   const cached = _shadedCache.get(key);
   if (cached !== undefined) return cached;
@@ -454,7 +456,7 @@ export function getTheme1x1SpriteShaded(
   // This prevents a burst of getImageData/putImageData calls from stalling gameplay.
   if (FP.isBakeBudgetExhausted()) return null;
 
-  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, bucketWorldX, 0, seed, key);
+  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, bucketWorldX, bucketWorldY, seed, key);
   _shadedCache.set(key, shaded);
   return shaded;
 }
@@ -495,8 +497,10 @@ export function getTheme2x2SpriteShaded(
   if (!img.complete || img.naturalWidth === 0) return null; // source still loading
 
   // Bounded variant bucket (same approach as getTheme1x1SpriteShaded).
+  // Y is always 0; only the X axis carries per-bucket variation.
   const variantBucket = hashTilePosition(col, row, seed) % SHADED_VARIANT_BUCKETS;
   const bucketWorldX  = variantBucket * blockSizePx;
+  const bucketWorldY  = 0;
   const key    = _shadedCacheKey(url, 16, 16, openAirSidesMask, variantBucket, seed);
   const cached = _shadedCache.get(key);
   if (cached !== undefined) return cached;
@@ -504,7 +508,7 @@ export function getTheme2x2SpriteShaded(
   // Per-frame budget guard (same as 1×1 path).
   if (FP.isBakeBudgetExhausted()) return null;
 
-  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, bucketWorldX, 0, seed, key);
+  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, bucketWorldX, bucketWorldY, seed, key);
   _shadedCache.set(key, shaded);
   return shaded;
 }

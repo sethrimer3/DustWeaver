@@ -175,11 +175,13 @@ export function getProceduralSprite(
   // When col/row are provided (all internal callers), use them directly.
   // Otherwise approximate from world origin — useful for any external callers
   // that don't have grid coordinates handy.
-  const c = col !== undefined ? col : Math.round(worldOriginXWorld / Math.max(widthPx, 1));
-  const r = row !== undefined ? row : Math.round(worldOriginYWorld / Math.max(heightPx, 1));
-  const variantBucket = hashTilePosition(c, r, seed) % PROC_VARIANT_BUCKETS;
+  const colForBucket = col !== undefined ? col : Math.round(worldOriginXWorld / Math.max(widthPx, 1));
+  const rowForBucket = row !== undefined ? row : Math.round(worldOriginYWorld / Math.max(heightPx, 1));
+  const variantBucket = hashTilePosition(colForBucket, rowForBucket, seed) % PROC_VARIANT_BUCKETS;
   // Representative world origin for this bucket — deterministic and bounded.
+  // Y is always 0 (only X axis carries the bucket variation to match folderBlockThemes.ts).
   const bucketWorldX  = variantBucket * widthPx;
+  const bucketWorldY  = 0;
 
   const key = _cacheKey(baseUrl, templateUrl, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, variantBucket, seed);
   const cached = _spriteCache.get(key);
@@ -194,7 +196,7 @@ export function getProceduralSprite(
   if (!_isReady(base) || !_isReady(template)) return null;
 
   const _t0 = import.meta.env.DEV ? performance.now() : 0;
-  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, bucketWorldX, 0, seed);
+  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, bucketWorldX, bucketWorldY, seed);
   _spriteCache.set(key, result);
   FP.recordSpriteBake(key, import.meta.env.DEV ? performance.now() - _t0 : 0);
   return result;
