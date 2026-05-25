@@ -114,7 +114,9 @@ New module `src/screens/entryViewportWarm.ts` manages `EntryWarmState`, which tr
 
 `startEntryWarm()` is called after every room load (initial startup, instant transition, and async transition generator completion). It computes the entry camera offset from the spawn block and stores the viewport parameters.
 
-`tickEntryWarm()` is called once per gameplay frame BEFORE `setBakeForbiddenInGameplay(true)`. This window is the only time baking is safe in an active-gameplay frame. The function calls `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom` for the entry viewport (bounded to `ENTRY_WARM_CHUNKS_PER_STEP = 6` chunks each per step). When both sources return 0 new chunks (viewport fully covered), or when the budget fires (max 8 frames / 120 ms), the warm finalises by calling `adoptPrewarmedWallChunks` + `adoptPrewarmedBgChunks` to inject the shaded chunks into the active caches.
+`tickEntryWarm()` is called once per **entry-warm frame** in the new early branch in `gameScreen.ts`, which fires BEFORE `processPlayerCommands`, before sim ticks, before camera update, and before `FP.setFrameGameContext('gameplay')`. The frame context is set to `'entryWarm'` so freeze-profiler warnings distinguish entry-warm work from active-gameplay freezes. `setBakeForbiddenInGameplay(false)` is set explicitly in this branch so shaded sprites can be baked freely. When the warm completes or times out, subsequent frames proceed normally as gameplay frames with `setBakeForbiddenInGameplay(true)`.
+
+**Instant cache-hit transitions** run one eager `tickEntryWarm()` call immediately after `startEntryWarm()`, before the transition returns. If the viewport is already fully warm (wallBuilt=0 && bgBuilt=0), the phase transitions to `'ready'` and no overlay is shown. Otherwise the overlay is shown and subsequent frames take the entry-warm early branch until warm completes.
 
 ### D.2 — Loading overlay gate
 
@@ -128,7 +130,9 @@ The timeout (8 frames / 120 ms) guarantees this never produces a long loading sc
 
 ### D.3 — Guarantees
 
-- **No gameplay freezes**: the warm pass runs entirely before `setBakeForbiddenInGameplay(true)`, so all baking occurs outside the active-gameplay window.
+- **No gameplay freezes**: the warm pass runs in an `'entryWarm'` frame context before command processing and sim ticks.  `setBakeForbiddenInGameplay(false)` is set explicitly, so all baking is outside the active-gameplay window.  The freeze profiler distinguishes `ctx:entryWarm` from `ctx:gameplay`.
+- **Player fully protected**: `processPlayerCommands`, sim ticks, movement, and run-timer advancement are all skipped while `entryWarmState.phase === 'warming'`.  The loading overlay covers the viewport throughout.
+- **Overlay always visible when needed**: for instant cache-hit transitions an eager pre-tick runs immediately; the overlay is only shown if the viewport is not already warm.  For async loads and initial loads the overlay is already active.
 - **Minimal unshaded fallback**: the loading overlay is held until the entry viewport's shaded chunks are ready or the safe timeout fires.
 - **Bounded overlay delay**: worst-case extra hold is 120 ms (the timeout budget).
 - **No-op when not needed**: `isEntryWarmReadyOrTimedOut` returns true immediately when phase is `idle`, `ready`, or `timedOut`, so rooms without folder-based themes release the overlay instantly.
@@ -153,6 +157,8 @@ The timeout (8 frames / 120 ms) guarantees this never produces a long loading sc
 1. Open the pause menu → enable **Debug Overlay** → enable **Freeze Profiler**.
 2. Move through rooms. Key fields:
    - `ctx:gameplay` — active-gameplay frame; freeze warnings are prefixed `⚠ GAMEPLAY`.
+   - `ctx:entryWarm` — entry viewport warm frame; sim/input skipped, overlay active, baking allowed.
+   - `ctx:loading` — async room load in progress.
    - `bake N×Xms` — shaded-sprite bake calls this frame. Should be **0** during active gameplay after BUILD 401.
    - `edge N×Xms` — organic edge-shading calls. Should be **0** during active gameplay.
    - `wChk N×Xms` — wall chunks rebuilt. Small spikes on first entry; tapers to 0.
@@ -163,7 +169,7 @@ The timeout (8 frames / 120 ms) guarantees this never produces a long loading sc
 
 ## Remaining Known Issues / Future Work
 
-1. **Entry viewport pre-warm is not yet explicitly wired.** `prewarmFolderThemeShadedForChunk` and `prewarmProceduralSpriteVariant` exist but are not yet called from the room-entry prewarm path. Connecting them would eliminate any residual first-second unshaded-fallback appearance on room entry.
+1. **Entry warm is wired as a true loading/entry phase (BUILD 403).** `tickEntryWarm()` runs in a dedicated `'entryWarm'` frame context before command processing, sim ticks, and camera updates.  Gameplay simulation and player input are fully suppressed while warming.  Remaining optional work: LRU eviction for prewarmed chunks (item 4), base/lighting overlay split (item 3), and legacy sprite decode tracking (item 2).
 2. **Non-folder themes** (blackRock, brownRock, dirt, world sprites) are not checked by `areRoomSpritesReady()`. They begin loading at module init time and are typically ready within a few hundred ms.
 3. **Base-chunk / lighting-overlay split** — `setActiveBlockLighting` invalidates whole wall chunks. Separating base tiles from lighting overlay would allow lighter lighting-only rebuilds.
 4. **Global prewarm memory eviction** — `evictStalePrewarmedChunks(keepRoomIds)` needs a proper LRU implementation with quality-tier memory budgets.

@@ -37,6 +37,7 @@
 import type { ChunkCacheStats } from '../walls/chunkRenderCache';
 import type { TransitionDebugStats } from '../transitions/transitionState';
 import type { LiquidDebugStats } from '../liquidBodyCache';
+import type { EntryWarmState } from '../../screens/entryViewportWarm';
 import type { DebugPanelVisibility } from '../../ui/debugPanelManager';
 import { isPanelVisible } from '../../ui/debugPanelManager';
 import * as FP from '../../debug/perfFreezeProfiler';
@@ -147,6 +148,9 @@ export class RenderProfiler {
   /** Latest prewarm stats from the chunk warm scheduler. */
   private _prewarmStats: import('../../screens/roomRenderChunkWarmScheduler').PrewarmStats | null = null;
 
+  /** Latest entry warm state snapshot for the prewarm debug panel. */
+  private _entryWarmState: EntryWarmState | null = null;
+
   /**
    * Store the latest chunk-cache diagnostic counters.
    * Call this from gameRender.ts after the walls render stage when debug mode
@@ -187,6 +191,14 @@ export class RenderProfiler {
    */
   updatePrewarmStats(stats: import('../../screens/roomRenderChunkWarmScheduler').PrewarmStats): void {
     this._prewarmStats = stats;
+  }
+
+  /**
+   * Store a snapshot of the current entry warm state for the debug overlay.
+   * Call this once per frame from gameScreen.ts when debug mode is on.
+   */
+  updateEntryWarmState(state: EntryWarmState): void {
+    this._entryWarmState = { ...state };
   }
 
   // ── Frame-pacing API ──────────────────────────────────────────────────────
@@ -613,7 +625,30 @@ export class RenderProfiler {
         ctx.fillText(prewarmLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
-      // nextPanelY would be updated here for any panel added after.
+      nextPanelY += prewarmPanelH + 4;
+    }
+
+    // ── Entry warm stats panel ────────────────────────────────────────────────
+    if (showPrewarm && this._entryWarmState !== null) {
+      const ew = this._entryWarmState;
+      const isWarming = ew.phase === 'warming';
+      const ewLines = [
+        '── Entry Warm ──',
+        `Phase: ${ew.phase}${ew.usedFallbackRelease ? ' (timeout)' : ''}`,
+        `Frames: ${ew.framesWarmed}  Chunks: ${ew.chunksWarmed}`,
+        `Ms: ${ew.msSpent.toFixed(1)}  Room: ${ew.roomId}`,
+      ];
+      const ewPanelH = ewLines.length * lineHeightPx + 8;
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.70)';
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, ewPanelH);
+      for (let i = 0; i < ewLines.length; i++) {
+        const isHeader = i === 0;
+        ctx.fillStyle = isHeader ? '#ffdd44' : isWarming ? '#ffcc44' : ew.phase === 'timedOut' ? '#ff9944' : '#a8ffa8';
+        ctx.fillText(ewLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
     }
   }
 }

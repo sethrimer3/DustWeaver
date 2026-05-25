@@ -1001,14 +1001,21 @@ export function startGameScreen(
         player.velocityXWorld = vx;
         player.velocityYWorld = dir === 'up' ? vy - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION : vy;
       }
-      // Start the entry warm for the instant path.  The prewarm scheduler
-      // adopted chunks in Phase A, but the entry warm ensures the active
-      // viewport chunks are shaded if the overlay is briefly visible.
+      // Start the entry warm for the instant path.  Run one eager tick
+      // immediately: if all viewport chunks are already in the cache,
+      // tickEntryWarm() transitions to 'ready' right away (wallBuilt=0 &&
+      // bgBuilt=0) and no overlay is shown.  If warm work is needed,
+      // show the overlay so the warm phase can run unobserved.
       entryWarmState = createEntryWarmState();
       startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
+      tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
+      if (entryWarmState.phase === 'warming') {
+        showLoadingOverlay();
+      }
       if (import.meta.env.DEV) {
         console.log(
-          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms`,
+          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` +
+          ` (entryWarm: ${entryWarmState.phase})`,
         );
       }
     } else {
@@ -1354,6 +1361,22 @@ export function startGameScreen(
       return;
     }
 
+    // ── Entry viewport warm phase ─────────────────────────────────────────────
+    // When a new room's entry viewport is being warmed (shaded chunks being
+    // built), advance the warm in a loading-style frame — before command
+    // processing, before sim ticks, and without marking the frame as gameplay.
+    // The loading overlay covers the player while the warm is active so no
+    // simulation, movement, or player input is processed.
+    if (entryWarmState.phase === 'warming') {
+      if (import.meta.env.DEV) FP.setFrameGameContext('entryWarm');
+      FP.setBakeForbiddenInGameplay(false);
+      tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
+      tickLoadingOverlay();
+      FP.endFrame();
+      rafHandle = requestAnimationFrame(frame);
+      return;
+    }
+
     // ── Dialogue advance input (capture before collectCommands drains the flag)
     const dialogueAdvanceRequested = inputState.isDialogueAdvanceTriggeredFlag;
 
@@ -1674,12 +1697,6 @@ export function startGameScreen(
       // Mark this as an active-gameplay frame so freeze warnings highlight it.
       FP.setFrameGameContext('gameplay');
     }
-    // Advance the entry viewport warm while bake is still allowed (before the
-    // setBakeForbiddenInGameplay(true) call below).  This builds shaded chunks
-    // for the spawn area and holds the loading overlay until they are ready.
-    if (entryWarmState.phase === 'warming') {
-      tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
-    }
 
     // Forbid expensive derived-sprite baking during active gameplay to prevent
     // getImageData/putImageData stalls.  Cheap unshaded fallbacks are used
@@ -1740,6 +1757,7 @@ export function startGameScreen(
     // Feed prewarm stats to profiler each frame (cheap — reads cached data).
     if (pauseController.state.isDebugMode) {
       renderProfiler.updatePrewarmStats(getPrewarmStats());
+      renderProfiler.updateEntryWarmState(entryWarmState);
     }
 
     const _renderT0 = import.meta.env.DEV ? performance.now() : 0;
