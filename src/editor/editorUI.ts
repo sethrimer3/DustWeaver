@@ -355,12 +355,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   lightingDiv.appendChild(dirBiasRow);
 
   const { row: sideExpRow, slider: sideExpSlider, valueLabel: sideExpValLabel } =
-    makeSliderRow('Side Exposure', 0, 1, 0.01, 0.45,
+    makeSliderRow('Side/Bottom Exposure', 0, 1, 0.01, 0.35,
       (v) => callbacks?.onSideExposureStrengthChange(v));
   lightingDiv.appendChild(sideExpRow);
 
   const { row: minWallRow, slider: minWallSlider, valueLabel: minWallValLabel } =
-    makeSliderRow('Min Wall Light', 0, 1, 0.01, 0.18,
+    makeSliderRow('Min Wall Light', 0, 1, 0.01, 0.15,
       (v) => callbacks?.onMinimumWallLightChange(v));
   lightingDiv.appendChild(minWallRow);
 
@@ -368,6 +368,16 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     makeSliderRow('Falloff Power', 0.5, 3, 0.05, 1.4,
       (v) => callbacks?.onFalloffPowerChange(v));
   lightingDiv.appendChild(falloffRow);
+
+  const { row: bgSpillRow, slider: bgSpillSlider, valueLabel: bgSpillValLabel } =
+    makeSliderRow('Background Spill', 0, 0.5, 0.01, 0.0,
+      (v) => callbacks?.onBackgroundLightSpillChange(v));
+  lightingDiv.appendChild(bgSpillRow);
+
+  const { row: slSoftRow, slider: slSoftSlider, valueLabel: slSoftValLabel } =
+    makeSliderRow('Solid Light Softness', 0, 1, 0.01, 0.0,
+      (v) => callbacks?.onSolidLightSoftnessChange(v));
+  lightingDiv.appendChild(slSoftRow);
 
   // ── Block Seam Blending dropdown ─────────────────────────────────────────
   const SEAM_BLENDING_OPTIONS: { id: BlockSeamBlending; label: string }[] = [
@@ -697,10 +707,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           valLabel.textContent = v.toFixed(2);
         }
       };
-      syncSlider(dirBiasSlider,  dirBiasValLabel,  state.roomData?.directionalBias,      0.65);
-      syncSlider(sideExpSlider,  sideExpValLabel,  state.roomData?.sideExposureStrength, 0.45);
-      syncSlider(minWallSlider,  minWallValLabel,  state.roomData?.minimumWallLight,      0.18);
-      syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,          1.4);
+      syncSlider(dirBiasSlider,  dirBiasValLabel,  state.roomData?.directionalBias,       0.65);
+      syncSlider(sideExpSlider,  sideExpValLabel,  state.roomData?.sideExposureStrength,  0.35);
+      syncSlider(minWallSlider,  minWallValLabel,  state.roomData?.minimumWallLight,       0.15);
+      syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,           1.4);
+      syncSlider(bgSpillSlider,  bgSpillValLabel,  state.roomData?.backgroundLightSpill,  0.0);
+      syncSlider(slSoftSlider,   slSoftValLabel,   state.roomData?.solidLightSoftness,    0.0);
       if (document.activeElement !== seamBlendSelect) {
         seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
       }

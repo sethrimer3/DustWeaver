@@ -284,12 +284,28 @@ export function buildAmbientDepths(
 
 /** At 0 = broad ambient (side exposure contributes a lot); at 1 = strict spotlight. */
 export const DEFAULT_DIRECTIONAL_BIAS = 0.65;
-/** How strongly unlit (non-sky-connected) air neighbours contribute to tile brightness. */
-export const DEFAULT_SIDE_EXPOSURE_STRENGTH = 0.45;
+/**
+ * How strongly non-sky-facing air neighbours (side/bottom) contribute to tile
+ * brightness relative to sky-facing neighbours.  Applied to ALL side/bottom air
+ * neighbours, whether sky-connected or not — this prevents open-cave walls from
+ * producing a broad warm glow effect even when the cave interior is sky-connected.
+ */
+export const DEFAULT_SIDE_EXPOSURE_STRENGTH = 0.35;
 /** Minimum brightness fraction for any solid tile adjacent to open air. */
-export const DEFAULT_MINIMUM_WALL_LIGHT = 0.18;
+export const DEFAULT_MINIMUM_WALL_LIGHT = 0.15;
 /** Gamma-like exponent applied to the raw exposure value before computing darkness. */
 export const DEFAULT_FALLOFF_POWER = 1.4;
+/**
+ * Optional warm-light spill onto the air/background layer.
+ * 0.0 = no spill (default — prevents cloudy blob artefacts).
+ * Higher values add a subtle warm haze into open spaces near lit walls.
+ */
+export const DEFAULT_BACKGROUND_LIGHT_SPILL = 0.0;
+/**
+ * Softness of the per-tile darkness overlay (0 = crisp pixel-art, 1 = max blur).
+ * Keep at 0 to preserve sharp tile boundaries; increase slightly for softer look.
+ */
+export const DEFAULT_SOLID_LIGHT_SOFTNESS = 0.0;
 
 /**
  * Blended directional ambient-light solver.
@@ -309,8 +325,11 @@ export const DEFAULT_FALLOFF_POWER = 1.4;
  *    air neighbour, compute a darkness alpha from weighted directional exposure:
  *    - Each air neighbour contributes according to how closely the direction to
  *      that neighbour aligns with the light source direction.
- *    - Sky-connected (lit) neighbours contribute at full effectiveness; others
- *      contribute at `sideExposureStrength`.
+ *    - Sky-facing neighbours (cosAngle > 0) get full effectiveness regardless of
+ *      lit-air status.  Side and bottom neighbours are always attenuated by
+ *      `sideExposureStrength`, whether the adjacent air is sky-connected or not.
+ *      This prevents open caves from creating a broad warm glow on all their
+ *      surrounding walls even when the entire cave interior is sky-connected.
  *    - `directionalBias` blends between a broad (low-bias) and a tight
  *      (high-bias) directional weighting.
  *    - The minimum brightness for any air-adjacent tile is clamped to
@@ -438,11 +457,11 @@ export function buildAmbientDarknessAlphas(
         if (occupied.has(neighborKey) || blockers.has(neighborKey)) continue; // solid / blocker: skip
         hasAirNeighbor = true;
 
-        const isLit = litAir.has(neighborKey);
-
         let weight: number;
+        let effectiveness: number;
         if (isOmni) {
           weight = 1.0;
+          effectiveness = 1.0;
         } else {
           // Cosine of the angle between the neighbour offset and the sky direction.
           // Normalise the offset (its magnitude is 1 for cardinal, √2 for diagonal).
@@ -454,9 +473,15 @@ export function buildAmbientDarknessAlphas(
           const tightFactor = Math.max(0, cosAngle) ** 2;
           // Blend between broad and tight according to directionalBias.
           weight = broadFactor + (tightFactor - broadFactor) * directionalBias;
-        }
 
-        const effectiveness = isLit ? 1.0 : sideExposureStrength;
+          // Effectiveness is direction-based, not sky-connectivity-based.
+          // Sky-facing neighbours (cosAngle > 0) receive full effectiveness;
+          // side and bottom neighbours are always attenuated by sideExposureStrength.
+          // This prevents open caves (where all interior air is sky-connected) from
+          // producing a broad warm-glow artefact on all surrounding walls.
+          const skyFacing = Math.max(0, cosAngle); // 0 (side/below) … 1 (straight up)
+          effectiveness = skyFacing + (1 - skyFacing) * sideExposureStrength;
+        }
         const contribution = weight * effectiveness;
         if (contribution >= 1) {
           // Full contribution from this neighbour → tile is fully lit, short-circuit.

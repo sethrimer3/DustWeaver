@@ -31,6 +31,8 @@ import {
   DEFAULT_SIDE_EXPOSURE_STRENGTH,
   DEFAULT_MINIMUM_WALL_LIGHT,
   DEFAULT_FALLOFF_POWER,
+  DEFAULT_BACKGROUND_LIGHT_SPILL,
+  DEFAULT_SOLID_LIGHT_SOFTNESS,
 } from './ambientLightDepths';
 import {
   BlockSpriteSet,
@@ -88,6 +90,8 @@ let _activeDirectionalBias       = DEFAULT_DIRECTIONAL_BIAS;
 let _activeSideExposureStrength  = DEFAULT_SIDE_EXPOSURE_STRENGTH;
 let _activeMinimumWallLight      = DEFAULT_MINIMUM_WALL_LIGHT;
 let _activeFalloffPower          = DEFAULT_FALLOFF_POWER;
+let _activeBackgroundLightSpill  = DEFAULT_BACKGROUND_LIGHT_SPILL;
+let _activeSolidLightSoftness    = DEFAULT_SOLID_LIGHT_SOFTNESS;
 
 // ── Block seam blending ───────────────────────────────────────────────────────
 let _activeSeamBlending: BlockSeamBlending = 'off';
@@ -168,9 +172,11 @@ export function getActiveProceduralMaterial(): string | null {
  *                         opaque to ambient-light propagation. Authored data
  *                         from {@link import('../../levels/roomDef').RoomAmbientLightBlockerDef}.
  * @param directionalBias       0 = broad ambient, 1 = strict spotlight.
- * @param sideExposureStrength  Contribution of non-sky-connected air neighbours.
+ * @param sideExposureStrength  Attenuation for side/bottom air neighbours.
  * @param minimumWallLight      Brightness floor for air-adjacent tiles (0–1).
  * @param falloffPower          Exponent on the raw exposure value.
+ * @param backgroundLightSpill  Optional warm-glow spill into air/background (0–1, default 0).
+ * @param solidLightSoftness    Softness of per-tile darkness overlay (0 = crisp, default 0).
  */
 export function setActiveBlockLighting(
   effect: LightingEffect,
@@ -182,6 +188,8 @@ export function setActiveBlockLighting(
   sideExposureStrength?: number,
   minimumWallLight?: number,
   falloffPower?: number,
+  backgroundLightSpill?: number,
+  solidLightSoftness?: number,
 ): void {
   _activeLightingEffect = effect;
   _activeRoomWidthBlocks = roomWidthBlocks;
@@ -214,8 +222,20 @@ export function setActiveBlockLighting(
   _activeSideExposureStrength = sideExposureStrength  ?? DEFAULT_SIDE_EXPOSURE_STRENGTH;
   _activeMinimumWallLight     = minimumWallLight      ?? DEFAULT_MINIMUM_WALL_LIGHT;
   _activeFalloffPower         = falloffPower          ?? DEFAULT_FALLOFF_POWER;
+  _activeBackgroundLightSpill = backgroundLightSpill  ?? DEFAULT_BACKGROUND_LIGHT_SPILL;
+  _activeSolidLightSoftness   = solidLightSoftness    ?? DEFAULT_SOLID_LIGHT_SOFTNESS;
 
   _invalidateBakedWallCanvas();
+}
+
+/** Returns the current background-light-spill strength (used by the render pass). */
+export function getActiveBackgroundLightSpill(): number {
+  return _activeBackgroundLightSpill;
+}
+
+/** Returns the current solid-light softness value (reserved for future blur pass). */
+export function getActiveSolidLightSoftness(): number {
+  return _activeSolidLightSoftness;
 }
 
 // ── Per-frame reusable collections (pre-allocated to avoid GC pressure) ───────

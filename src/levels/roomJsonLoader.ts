@@ -373,6 +373,8 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (json.sideExposureStrength !== undefined) room.sideExposureStrength = json.sideExposureStrength;
   if (json.minimumWallLight     !== undefined) room.minimumWallLight     = json.minimumWallLight;
   if (json.falloffPower         !== undefined) room.falloffPower         = json.falloffPower;
+  if (json.backgroundLightSpill !== undefined) room.backgroundLightSpill = json.backgroundLightSpill;
+  if (json.solidLightSoftness   !== undefined) room.solidLightSoftness   = json.solidLightSoftness;
   if (json.blockSeamBlending)                  room.blockSeamBlending    = json.blockSeamBlending;
   if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
     room.ambientLightBlockers = json.ambientLightBlockers.map(b => ({

@@ -319,6 +319,8 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.sideExposureStrength !== undefined) out.sExp  = json.sideExposureStrength;
   if (json.minimumWallLight   !== undefined) out.minWL = json.minimumWallLight;
   if (json.falloffPower       !== undefined) out.fpow  = json.falloffPower;
+  if (json.backgroundLightSpill !== undefined) out.bgSpill = json.backgroundLightSpill;
+  if (json.solidLightSoftness   !== undefined) out.slSoft  = json.solidLightSoftness;
   if (json.blockSeamBlending && json.blockSeamBlending !== 'off') {
     out.seamBlend = json.blockSeamBlending;
   }
