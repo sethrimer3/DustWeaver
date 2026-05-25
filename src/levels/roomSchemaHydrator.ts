@@ -249,6 +249,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.bgSpill  !== undefined) json.backgroundLightSpill  = saved.bgSpill;
   if (saved.slSoft   !== undefined) json.solidLightSoftness    = saved.slSoft;
   if (saved.seamBlend)              json.blockSeamBlending     = saved.seamBlend;
+  if (saved.voidEdge)               json.voidEdgeStyle         = saved.voidEdge;
   if (saved.ambientBlockers && saved.ambientBlockers.length > 0) {
     json.ambientLightBlockers = saved.ambientBlockers.map(entry => ({
       xBlock: entry[0],

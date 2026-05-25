@@ -216,6 +216,9 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.blockSeamBlending && data.blockSeamBlending !== 'off') {
     json.blockSeamBlending = data.blockSeamBlending;
   }
+  if (data.voidEdgeStyle && data.voidEdgeStyle !== 'off') {
+    json.voidEdgeStyle = data.voidEdgeStyle;
+  }
   if ((data.ambientLightBlockers ?? []).length > 0) {
     json.ambientLightBlockers = data.ambientLightBlockers.map(b => {
       const entry: RoomJsonAmbientLightBlocker = { xBlock: b.xBlock, yBlock: b.yBlock };

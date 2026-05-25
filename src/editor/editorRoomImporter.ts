@@ -391,6 +391,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       backgroundLightSpill:  room.backgroundLightSpill,
       solidLightSoftness:    room.solidLightSoftness,
       blockSeamBlending:     room.blockSeamBlending,
+      voidEdgeStyle:         room.voidEdgeStyle,
       songId: room.songId ?? '_continue',
       widthBlocks: room.widthBlocks,
       heightBlocks: room.heightBlocks,

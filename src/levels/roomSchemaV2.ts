@@ -324,6 +324,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.blockSeamBlending && json.blockSeamBlending !== 'off') {
     out.seamBlend = json.blockSeamBlending;
   }
+  if (json.voidEdgeStyle && json.voidEdgeStyle !== 'off') {
+    out.voidEdge = json.voidEdgeStyle;
+  }
   if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
     out.ambientBlockers = json.ambientLightBlockers.map(b =>
       b.isDark

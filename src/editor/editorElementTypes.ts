@@ -12,7 +12,7 @@
  * so all existing import paths continue to work without change.
  */
 
-import type { TransitionDirection, BlockTheme, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle } from '../levels/roomDef';
 import type { LightType, LightBlendMode } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 
@@ -499,6 +499,8 @@ export interface EditorRoomData {
   solidLightSoftness?: number;
   /** Block seam blending mode for this room. */
   blockSeamBlending?: BlockSeamBlending;
+  /** Void edge style for this room. */
+  voidEdgeStyle?: VoidEdgeStyle;
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default).

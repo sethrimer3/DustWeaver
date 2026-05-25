@@ -8,7 +8,7 @@
  * without modification.
  */
 
-import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, TransitionDirection, CrumbleVariant } from './roomDef';
+import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, TransitionDirection, CrumbleVariant, VoidEdgeStyle } from './roomDef';
 import type { RoomJsonLightSource, RoomJsonSunbeam, RoomJsonDialogueTrigger } from '../editor/roomJson';
 import type { SavedSceneLight } from './lightingSchema';
 export type { SavedRect, SavedRun, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
@@ -237,6 +237,8 @@ export interface SavedRoomV2 {
   slSoft?: number;
   /** Block seam blending mode. Omitted when 'off'. */
   seamBlend?: 'subtle' | 'organic' | 'heavy';
+  /** Void edge style. Omitted when 'off'. */
+  voidEdge?: VoidEdgeStyle;
   /**
    * Sparse list of ambient-light blocker tile coordinates.
    * Each entry is [x, y] for a clear blocker, or [x, y, 1] for a dark blocker.

@@ -391,6 +391,10 @@ export function createEditorController(
           setActiveSeamBlending(mode);
           applyEdits('metadata');
         },
+        onVoidEdgeStyleChange: (style) => {
+          if (state.roomData) state.roomData.voidEdgeStyle = style;
+          applyEdits('metadata');
+        },
         onBackgroundChange: (bgId: BackgroundId) => {
           if (state.roomData) state.roomData.backgroundId = bgId;
           applyEdits('metadata');
