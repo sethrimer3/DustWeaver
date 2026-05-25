@@ -126,6 +126,13 @@ import type { TransitionDirection } from './gameTransitions';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { loadRoomForGameplayAsync, isRoomFileCacheActive, getActiveRoomAdjacency } from '../levels/roomFileLoader';
 import * as FP from '../debug/perfFreezeProfiler';
+import {
+  createEntryWarmState,
+  startEntryWarm,
+  tickEntryWarm,
+  isEntryWarmReadyOrTimedOut,
+  type EntryWarmState,
+} from './entryViewportWarm';
 
 const FIXED_DT_MS = 16.666;
 
@@ -879,6 +886,9 @@ export function startGameScreen(
     preTransVX: number;
     preTransVY: number;
     transitionDir: TransitionDirection | null;
+    /** Spawn block coordinates stored for startEntryWarm() after generator completes. */
+    spawnXBlock: number;
+    spawnYBlock: number;
   }
   const asyncLoadState: AsyncRoomLoadState = {
     isActive: false,
@@ -886,7 +896,15 @@ export function startGameScreen(
     preTransVX: 0,
     preTransVY: 0,
     transitionDir: null,
+    spawnXBlock: 0,
+    spawnYBlock: 0,
   };
+
+  // ── Entry viewport warm state ─────────────────────────────────────────────
+  // Tracks progress of the shaded-chunk warm pass for the current room's
+  // entry viewport.  Holds the loading overlay until the pass completes or
+  // a conservative timeout is reached.  Restarted on every room load.
+  let entryWarmState: EntryWarmState = createEntryWarmState();
 
   // ── Camera transition state ───────────────────────────────────────────────
   // After every room switch the camera smoothly interpolates from
@@ -925,12 +943,13 @@ export function startGameScreen(
   }
 
   /** Hides the overlay once sprites are ready, the minimum show time has passed,
-   *  and no async room load is in progress. */
+   *  no async room load is in progress, and the entry viewport warm completed. */
   function tickLoadingOverlay(): void {
     loadingOverlay.tick(() =>
       !asyncLoadState.isActive
       && areRoomSpritesReady(currentRoom)
-      && isRoomBackgroundDecodeReady(currentRoom),
+      && isRoomBackgroundDecodeReady(currentRoom)
+      && isEntryWarmReadyOrTimedOut(entryWarmState),
     );
   }
 
@@ -982,6 +1001,11 @@ export function startGameScreen(
         player.velocityXWorld = vx;
         player.velocityYWorld = dir === 'up' ? vy - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION : vy;
       }
+      // Start the entry warm for the instant path.  The prewarm scheduler
+      // adopted chunks in Phase A, but the entry warm ensures the active
+      // viewport chunks are shaded if the overlay is briefly visible.
+      entryWarmState = createEntryWarmState();
+      startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
       if (import.meta.env.DEV) {
         console.log(
           `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms`,
@@ -996,6 +1020,8 @@ export function startGameScreen(
       asyncLoadState.preTransVX    = vx;
       asyncLoadState.preTransVY    = vy;
       asyncLoadState.transitionDir = dir;
+      asyncLoadState.spawnXBlock   = spawnXBlock;
+      asyncLoadState.spawnYBlock   = spawnYBlock;
       asyncLoadState.gen           = _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, false);
       asyncLoadState.isActive      = true;
       showLoadingOverlay();
@@ -1031,6 +1057,9 @@ export function startGameScreen(
   } else {
     loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
   }
+  // Start the entry warm immediately after the initial load so the overlay
+  // holds until the entry viewport has shaded chunks available.
+  startEntryWarm(entryWarmState, currentRoom, initialSpawnBlock[0], initialSpawnBlock[1], virtualWidthPx, virtualHeightPx, camera.zoom);
 
   // Preload sprites for adjacent rooms in the background.
   preloadAdjacentRoomAssets(currentRoom);
@@ -1302,6 +1331,16 @@ export function startGameScreen(
               ? asyncLoadState.preTransVY - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION
               : asyncLoadState.preTransVY;
         }
+        // Start the entry warm now that all load phases are complete.
+        // The warm advances in subsequent gameplay frames (before bake is
+        // forbidden) and holds the overlay until coverage is confirmed or
+        // the timeout fires.
+        entryWarmState = createEntryWarmState();
+        startEntryWarm(
+          entryWarmState, currentRoom,
+          asyncLoadState.spawnXBlock, asyncLoadState.spawnYBlock,
+          virtualWidthPx, virtualHeightPx, camera.zoom,
+        );
         if (import.meta.env.DEV) {
           console.log('[transition] async load complete — velocity applied, resuming gameplay');
         }
@@ -1635,6 +1674,13 @@ export function startGameScreen(
       // Mark this as an active-gameplay frame so freeze warnings highlight it.
       FP.setFrameGameContext('gameplay');
     }
+    // Advance the entry viewport warm while bake is still allowed (before the
+    // setBakeForbiddenInGameplay(true) call below).  This builds shaded chunks
+    // for the spawn area and holds the loading overlay until they are ready.
+    if (entryWarmState.phase === 'warming') {
+      tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
+    }
+
     // Forbid expensive derived-sprite baking during active gameplay to prevent
     // getImageData/putImageData stalls.  Cheap unshaded fallbacks are used
     // instead.  This flag is cleared in all non-gameplay early-return paths.

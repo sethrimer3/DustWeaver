@@ -104,7 +104,6 @@ This pass targeted repeated freezes **inside** rooms during active gameplay, dis
 #### Trade-offs made
 
 - **Slight tile-shading noise repetition** — With 16 buckets, organic noise patterns repeat across tile groups. Imperceptible in practice; far preferable to gameplay freezes.
-- **Unshaded tiles during first gameplay entry** — On first room entry, tiles visible before the loading overlay releases will be unshaded if their shaded variants were not warmed during loading. Visual quality degrades slightly; no freeze occurs. Full warm of entry viewport before overlay release is a future improvement.
 
 #### How to use the profiler to diagnose future freezes
 
@@ -117,45 +116,37 @@ This pass targeted repeated freezes **inside** rooms during active gameplay, dis
    - `bChk N×Xms` — background chunks rebuilt.
 4. Long-frame warnings are tagged `⚠ GAMEPLAY` when `frameContext === 'gameplay'`.
 
-#### Remaining work from this pass
+---
 
-- **Entry viewport pre-warm not yet wired** — `prewarmFolderThemeShadedForChunk` and `prewarmProceduralSpriteVariant` exist but are not yet called from the room-entry prewarm path. Connecting them would eliminate residual unshaded-fallback appearance on first room entry.
+### 1. Entry viewport visual warm wiring (COMPLETED — BUILD 402)
+
+`entryViewportWarm.ts` wires a bounded room-entry visual warm phase that runs while the loading overlay is active.
+
+#### What was done
+
+- New `src/screens/entryViewportWarm.ts` module: `EntryWarmState`, `createEntryWarmState()`, `startEntryWarm()`, `tickEntryWarm()`, `isEntryWarmReadyOrTimedOut()`.
+- `startEntryWarm()` called after: initial `loadRoom()`, instant transition `loadRoom()`, and async-load generator completion.
+- `tickEntryWarm()` called in the gameplay loop BEFORE `setBakeForbiddenInGameplay(true)`, so shaded sprites can be baked freely during the warm pass.
+- `tickLoadingOverlay()` condition extended to require `isEntryWarmReadyOrTimedOut(entryWarmState)`, holding the overlay until the entry viewport is covered or the timeout fires.
+- Warm budget: max 8 frames or 120 ms; 6 wall + 6 background chunks per step.
+- On completion or timeout: warmed chunks are adopted into the active cache via `adoptPrewarmedWallChunks`/`adoptPrewarmedBgChunks`.
+- DEV console logs warm result: phase, chunks built, frames elapsed, ms spent.
+
+#### Guarantee
+
+No gameplay freezes: `tickEntryWarm` runs before `setBakeForbiddenInGameplay(true)`, so all bake work is outside the active-gameplay window. The timeout ensures no long loading screens. After the warm, bake is forbidden for the rest of the gameplay frame.
 
 ---
 
-### 1. Fix no-blocker rooms in the render prewarm queue
+### 2. Fix no-blocker rooms in the render prewarm queue (COMPLETED — already done in BUILD 395/401)
 
-`RoomRuntimeCache` documents `blockerKeys` as:
+Confirmed in code: `roomRenderChunkWarmScheduler.ts` line 666 checks `entry.blockerKeys !== null` (defers only `null`; treats `undefined` as ready). `_makeWallPrewarmCtx` converts `undefined` to `new Set<string>()`. No action required.
 
-- `null` = not yet computed
-- `undefined` = computed, and this room has no blockers
-- `Set` = computed and populated
+---
 
-The prewarmer must treat `undefined` as ready. Only `null` should defer wall prewarming. If this is not fixed, rooms without ambient blockers can fail to prewarm wall chunks and may block later tasks in the queue.
+### 3. Add real global/LRU eviction for prewarmed chunks (PARTIALLY DONE)
 
-Required checks:
-
-- In `roomRenderChunkWarmScheduler.ts`, accept `entry.blockerKeys === undefined` as a valid ready state.
-- Use the existing `_makeWallPrewarmCtx` fallback to convert `undefined` to an empty `Set`.
-- Ensure `wallDone` is set correctly for rooms with no walls, no chunks to build, or no blockers.
-- Add debug stats for deferred/skipped prewarm reasons if practical.
-
-### 2. Add real global/LRU eviction for prewarmed chunks
-
-`evictStalePrewarmedChunks(keepRoomIds)` currently exists conceptually but must actually enforce a global prewarm memory budget.
-
-Recommended behavior:
-
-- Track per-room prewarm metadata: roomId, radius, lastTouched time/frame, wall memory KB, background memory KB.
-- Add APIs to enumerate and evict prewarmed room caches from `blockSpriteRenderer.ts` and `backgroundBlockRenderer.ts`.
-- Use quality-tier memory budgets, for example:
-  - low: 4096 KB
-  - medium: 12288 KB
-  - high: 32768 KB
-- Evict radius-3 rooms first, then radius-2, then older radius-1 rooms.
-- Never evict active room chunks.
-- Prefer keeping recently visited or recently scheduled rooms.
-- Run eviction after schedule creation, after adoption, and whenever prewarm memory exceeds budget.
+Quality-tier memory budgets (`PREWARM_MEMORY_BUDGET_KB`) and radius-based eviction exist in the scheduler. What remains:
 
 ---
 
@@ -169,8 +160,8 @@ These are still valid future refactors and should not be treated as accidental o
 2. **Legacy/world-number sprite decode tracking**
    Decode-aware room preloading currently focuses on folder-based block themes. Legacy world-number sprites such as brownRock, dirt, and world 0-9 block sets still start loading at module init time and are not tracked through the same decode-ready set. This is lower priority unless legacy rooms still show visible sprite pop-in.
 
-3. **Entry viewport shaded-sprite pre-warm wiring**
-   `prewarmFolderThemeShadedForChunk` and `prewarmProceduralSpriteVariant` exist (BUILD 401) but are not yet called from the room-entry prewarm path. Connecting them would eliminate residual unshaded-fallback appearance during the first second after room entry. Should be done as a dedicated entry-viewport warm pass, limited to the spawn viewport plus one chunk margin.
+3. **True LRU eviction for prewarmed chunks**
+   Quality-tier memory budgets and radius-based eviction exist. What remains is true last-touched ordering (evict oldest rather than largest/farthest). Low priority while memory budget enforcement is already in place.
 
 4. **Room render manifest**
    Published rooms could eventually export precomputed render data: wall templates, theme sprite URLs, background image URLs, chunk occupancy hints, occluder chunks, and recommended entry chunks. This touches editor export, schema hydration, runtime loading, and preload systems, so it should be a dedicated pass.
