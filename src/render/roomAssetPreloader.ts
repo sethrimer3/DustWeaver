@@ -27,7 +27,7 @@ import { loadImg, decodeImg, isSpriteDecodeReady } from './imageCache';
 import { FOLDER_BLOCK_THEMES, isFolderBasedTheme } from './walls/folderBlockThemes';
 import type { RoomDef } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
-import { preloadBackgroundImageDecoded } from './backgroundRenderer';
+import { preloadRoomBackgroundDecoded } from './backgroundRenderer';
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
@@ -44,7 +44,9 @@ function _getSpriteUrls(themeId: string): readonly string[] | null {
 
 /**
  * Collects the set of unique folder-based block theme IDs used in `room`.
- * Includes both the room-level default theme and per-wall overrides.
+ * Includes the room-level default theme, per-wall overrides, and per-cell
+ * background block overrides (which can introduce folder themes not present
+ * in any wall definition).
  */
 function _collectFolderThemeIds(room: RoomDef): Set<string> {
   const ids = new Set<string>();
@@ -54,6 +56,13 @@ function _collectFolderThemeIds(room: RoomDef): Set<string> {
   for (const wall of room.walls) {
     if (wall.blockTheme && isFolderBasedTheme(wall.blockTheme)) {
       ids.add(wall.blockTheme);
+    }
+  }
+  if (room.backgroundBlocks) {
+    for (const b of room.backgroundBlocks) {
+      if (b.blockTheme && isFolderBasedTheme(b.blockTheme)) {
+        ids.add(b.blockTheme);
+      }
     }
   }
   return ids;
@@ -197,11 +206,13 @@ export async function decodeRoomThemeSprites(room: RoomDef): Promise<void> {
 /**
  * Triggers HTMLImageElement.decode() for the static background image of
  * `room`, so the GPU has rasterized the texture before the first drawImage
- * call.  Fire-and-forget — procedural backgrounds (no static image) are
- * no-ops.
+ * call.  Uses the same URL-selection logic as `renderWorldBackground()` so
+ * the correct image is decoded for rooms that use `worldNumber` instead of
+ * an explicit `backgroundId`.  Fire-and-forget — procedural backgrounds (no
+ * static image) are no-ops.
  *
- * Safe to call multiple times; preloadBackgroundImageDecoded() is idempotent.
+ * Safe to call multiple times; preloadRoomBackgroundDecoded() is idempotent.
  */
 export function decodeRoomBackground(room: RoomDef): void {
-  preloadBackgroundImageDecoded(room.backgroundId ?? 'brownRock');
+  preloadRoomBackgroundDecoded(room.worldNumber ?? 0, room.backgroundId);
 }

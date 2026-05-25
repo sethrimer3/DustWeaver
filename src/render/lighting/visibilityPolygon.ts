@@ -18,6 +18,13 @@ const MAX_VIS_POINTS = 512;
 const MAX_SEGS = 2048;
 const EPSILON = 1e-6;
 
+/**
+ * Angle buffer capacity: 4 angles per segment (2 endpoints × ±ε) plus 4
+ * cardinal fallback rays.  Sized to prevent out-of-bounds writes when
+ * segCount reaches MAX_SEGS.
+ */
+const MAX_ANGLES = MAX_SEGS * 4 + 4;
+
 // ── Public types ──────────────────────────────────────────────────────────────
 
 /** A single axis-aligned wall segment (one edge of an AABB wall). */
@@ -36,8 +43,8 @@ export interface VisibilityResult {
 
 // ── Pre-allocated scratch buffers ─────────────────────────────────────────────
 
-const _anglesRaw    = new Float64Array(MAX_SEGS * 4); // up to 2 endpoints × 2 delta angles
-const _anglesSorted = new Float64Array(MAX_SEGS * 4);
+const _anglesRaw    = new Float64Array(MAX_ANGLES); // up to 2 endpoints × 2 delta angles + 4 cardinal rays
+const _anglesSorted = new Float64Array(MAX_ANGLES);
 const _visPoints    = new Float64Array(MAX_VIS_POINTS * 2);
 /** Pre-allocated 2-element scratch buffer for ray-segment intersection output. */
 const _hitOut       = new Float64Array(2);
@@ -120,6 +127,9 @@ export function buildWallOccluders(
     if (count < MAX_SEGS) { out[count] = out[count] ?? { ax: 0, ay: 0, bx: 0, by: 0 }; const s = out[count]; s.ax = x1; s.ay = y0; s.bx = x1; s.by = y1; count++; }
     if (count < MAX_SEGS) { out[count] = out[count] ?? { ax: 0, ay: 0, bx: 0, by: 0 }; const s = out[count]; s.ax = x1; s.ay = y1; s.bx = x0; s.by = y1; count++; }
     if (count < MAX_SEGS) { out[count] = out[count] ?? { ax: 0, ay: 0, bx: 0, by: 0 }; const s = out[count]; s.ax = x0; s.ay = y1; s.bx = x0; s.by = y0; count++; }
+  }
+  if (import.meta.env.DEV && count >= MAX_SEGS) {
+    console.warn(`[visibilityPolygon] buildWallOccluders hit MAX_SEGS (${MAX_SEGS}); shadow artifacts possible.`);
   }
   return count;
 }
