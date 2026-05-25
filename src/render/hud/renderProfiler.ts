@@ -549,6 +549,12 @@ export class RenderProfiler {
         cur !== null && cur.preloadMainThreadMs > 0
           ? `prel ${cur.preloadMainThreadMs.toFixed(1)}ms (${cur.preloadMainThreadRoomId.slice(0, 12)})`
           : 'prel —',
+        cur !== null && cur.sceneLightTotalCount > 0
+          ? `lit tot=${cur.sceneLightTotalCount} vis=${cur.sceneLightCulledCount} shd=${cur.sceneLightShadowCount} segs=${cur.sceneLightOccluderSegCount}`
+          : 'lit —',
+        cur !== null && cur.bloomSkippedNoGlow
+          ? 'bloom skip(no glow)'
+          : 'bloom —',
         long !== null
           ? `last>100: ${long.frameMs.toFixed(0)}ms ${long.topCause}`
           : 'last>100: —',

@@ -23,12 +23,16 @@ export interface GlowCircleParams {
 }
 
 export class GlowPass {
+  /** True if any glow was submitted since the last clear(). */
+  hasGlow = false;
+
   constructor(
     private readonly ctx: CanvasRenderingContext2D,
     private readonly config: BloomConfig,
   ) {}
 
   clear(widthPx: number, heightPx: number): void {
+    this.hasGlow = false;
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.clearRect(0, 0, widthPx, heightPx);
   }
@@ -37,6 +41,7 @@ export class GlowPass {
     const style = resolveGlowStyle(params.glow, this.config.threshold);
     if (style === null) return;
 
+    this.hasGlow = true;
     const { x, y, width, height, image } = params;
     this.ctx.save();
     this.ctx.globalAlpha = style.intensity;
@@ -55,6 +60,7 @@ export class GlowPass {
     const style = resolveGlowStyle(params.glow, this.config.threshold);
     if (style === null) return;
 
+    this.hasGlow = true;
     this.ctx.save();
     this.ctx.globalAlpha = style.intensity;
     this.ctx.fillStyle = style.color ?? '#ffffff';
@@ -74,6 +80,7 @@ export class GlowPass {
   drawCircleDirect(x: number, y: number, radius: number, intensity: number, color: string | undefined): void {
     if (intensity <= this.config.threshold) return;
 
+    this.hasGlow = true;
     this.ctx.save();
     this.ctx.globalAlpha = intensity;
     this.ctx.fillStyle = color ?? '#ffffff';
