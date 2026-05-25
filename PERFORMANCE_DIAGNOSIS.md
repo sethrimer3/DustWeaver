@@ -172,9 +172,9 @@ A **room entry hold** guard after the `entryWarm` branch holds simulation and in
 
 ## Remaining Known Issues / Future Work
 
-1. **Entry warm lifecycle is complete (BUILD 404).** `tickEntryWarm()` is never called from inside `startTransitionLoad()`.  Instant transitions show a lightweight textless overlay and let the RAF loop advance the warm.  `ctx:entryWarm` is distinct from `ctx:gameplay` in the freeze profiler.  Optional future polish: skip the 80 ms entry warm cover when no warm work is needed (requires exposing `skippedThisFrame` from the prewarm functions as a cheap probe — see nextSteps.md).
+1. **Entry warm lifecycle is complete (BUILD 404/405).** `tickEntryWarm()` is never called from inside `startTransitionLoad()`.  Instant transitions call `canSkipEntryWarm()` first — if the active chunk caches already cover the entry viewport (e.g. the room was prewarmed before the player arrived), the overlay is skipped entirely.  If warm work is needed, a lightweight textless overlay is shown and the RAF loop advances the warm in the dedicated `entryWarm` branch.  `ctx:entryWarm` is distinct from `ctx:gameplay` in the freeze profiler.
 2. **Non-folder themes** (blackRock, brownRock, dirt, world sprites) are not checked by `areRoomSpritesReady()`. They begin loading at module init time and are typically ready within a few hundred ms.
 3. **Base-chunk / lighting-overlay split** — `setActiveBlockLighting` invalidates whole wall chunks. Separating base tiles from lighting overlay would allow lighter lighting-only rebuilds.
-4. **Global prewarm memory eviction** — `evictStalePrewarmedChunks(keepRoomIds)` needs a proper LRU implementation with quality-tier memory budgets.
+4. **Global prewarm memory eviction** — `evictStalePrewarmedChunks(keepRoomIds)` is called at schedule start and after each idle slice that grows the cache past the quality-tier budget. True LRU ordering within the budget is not yet implemented — eviction currently prefers highest-radius/largest-memory candidates.
 5. **Room render manifest** — Future: editor-exported precomputed render data (chunk occupancy, entry chunks, theme sprite URLs) to make room preloading deterministic.
 

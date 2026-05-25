@@ -184,6 +184,8 @@ export interface PrewarmStats {
   queueLength: number;
   /** Chunks warmed during the most recent idle callback. */
   chunksLastSlice: number;
+  /** Chunks skipped (budget exhausted) during the most recent idle callback. */
+  chunksSkippedLastSlice: number;
   /** Milliseconds spent in the most recent idle callback. */
   msLastSlice: number;
   /** Prewarm radius currently being targeted. */
@@ -217,6 +219,8 @@ export interface PrewarmStats {
   totalEvictions: number;
   /** Combined wall + bg prewarm memory estimate (KB). */
   totalPrewarmMemoryKB: number;
+  /** Memory budget for the current quality tier (KB).  0 when scheduler not yet started. */
+  memoryBudgetKB: number;
 }
 
 let _stats: PrewarmStats = {
@@ -228,6 +232,7 @@ let _stats: PrewarmStats = {
   bgMemoryEstimateKB:      0,
   queueLength:             0,
   chunksLastSlice:         0,
+  chunksSkippedLastSlice:  0,
   msLastSlice:             0,
   currentRadius:           1,
   pausedForFrameTime:      false,
@@ -240,6 +245,7 @@ let _stats: PrewarmStats = {
   evictedThisPass:         0,
   totalEvictions:          0,
   totalPrewarmMemoryKB:    0,
+  memoryBudgetKB:          0,
 };
 
 /** Read-only snapshot of prewarm stats. Updates every idle callback. */
@@ -282,6 +288,13 @@ let _getQuality: (() => 'low' | 'med' | 'high') | null = null;
 let _getLastFrameMs: (() => number) | null = null;
 /** Room ID of the current active room — never evicted. */
 let _currentRoomId: string | null = null;
+/**
+ * Set of all room IDs included in the most-recent schedule (BFS neighbourhood).
+ * Kept alive across idle slices so post-slice eviction does not evict rooms
+ * that are within the prewarm radius but whose queue tasks have already
+ * completed.
+ */
+let _keepIds: ReadonlySet<string> = new Set<string>();
 
 // ── Handle ────────────────────────────────────────────────────────────────────
 
@@ -444,6 +457,9 @@ export function scheduleChunkPrewarms(
   // drop stale rooms that are no longer reachable within the warm radius.
   const keepIds = new Set<string>([currentRoom.id]);
   for (const [roomId] of nearby) keepIds.add(roomId);
+  // Persist the keep-set so post-slice eviction passes use the same membership
+  // and do not evict already-completed rooms that are still within the radius.
+  _keepIds = keepIds;
   evictStalePrewarmedChunks(keepIds, getQuality());
 
   // Reset per-schedule deferred counters so they reflect only the new schedule.
@@ -606,7 +622,8 @@ function _onIdle(deadline: IdleDeadline): void {
   }
 
   const sliceStart = performance.now();
-  let chunksBuilt  = 0;
+  let chunksBuilt   = 0;
+  let chunksSkipped = 0;
   let deferredNotReady        = _stats.deferredNotReady;
   let deferredSpritesNotReady = _stats.deferredSpritesNotReady;
   // How many not-ready tasks we've skipped over in this slice.
@@ -666,7 +683,7 @@ function _onIdle(deadline: IdleDeadline): void {
     if (!task.wallDone && entry.blockerKeys !== null) {
       const wallSnap = _wallTemplateToSnapshot(entry.wallTemplate);
       const wallCtx  = _makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
-      const built = prewarmWallChunksForRoom(
+      const wallResult = prewarmWallChunksForRoom(
         task.roomId,
         wallCtx,
         task.offsetXPx,
@@ -677,15 +694,16 @@ function _onIdle(deadline: IdleDeadline): void {
         BLOCK_SIZE_MEDIUM,
         remaining,
       );
-      FP.recordPrewarmSlice(built);
-      chunksBuilt += built;
-      if (built === 0) task.wallDone = true;
+      FP.recordPrewarmSlice(wallResult.rebuilt);
+      chunksBuilt   += wallResult.rebuilt;
+      chunksSkipped += wallResult.skipped;
+      if (wallResult.rebuilt === 0 && wallResult.skipped === 0) task.wallDone = true;
     }
 
     // ── Build bg chunks ───────────────────────────────────────────────────
     if (!task.bgDone && deadline.timeRemaining() >= MIN_IDLE_REMAINING_MS && chunksBuilt < chunksLimit) {
       const bgRemaining = chunksLimit - chunksBuilt;
-      const bgBuilt = prewarmBgChunksForRoom(
+      const bgResult = prewarmBgChunksForRoom(
         room,
         task.scalePx,
         task.offsetXPx,
@@ -694,9 +712,10 @@ function _onIdle(deadline: IdleDeadline): void {
         task.vpHPx,
         bgRemaining,
       );
-      FP.recordPrewarmSlice(bgBuilt);
-      chunksBuilt += bgBuilt;
-      if (bgBuilt === 0) task.bgDone = true;
+      FP.recordPrewarmSlice(bgResult.rebuilt);
+      chunksBuilt   += bgResult.rebuilt;
+      chunksSkipped += bgResult.skipped;
+      if (bgResult.rebuilt === 0 && bgResult.skipped === 0) task.bgDone = true;
     }
 
     // Pop task when both passes are complete.
@@ -710,9 +729,25 @@ function _onIdle(deadline: IdleDeadline): void {
 
   const sliceMs = performance.now() - sliceStart;
 
+  // ── Post-slice memory budget enforcement ───────────────────────────────────
+  // If chunk building during this slice pushed total prewarm memory over the
+  // quality-tier budget, evict stale rooms now.  _keepIds contains all rooms
+  // that are within the BFS neighbourhood of the current schedule, so
+  // completed-but-still-nearby rooms are not accidentally evicted.
+  if (chunksBuilt > 0 && _getQuality !== null) {
+    const q = _getQuality();
+    const budget = PREWARM_MEMORY_BUDGET_KB[q];
+    const ws = getPrewarmWallStats();
+    const bs = getPrewarmBgStats();
+    if (ws.memoryEstimateKB + bs.memoryEstimateKB > budget) {
+      evictStalePrewarmedChunks(_keepIds, q);
+    }
+  }
+
   _stats = {
     ..._refreshStatsObj(),
     chunksLastSlice:         chunksBuilt,
+    chunksSkippedLastSlice:  chunksSkipped,
     msLastSlice:             sliceMs,
     currentRadius:           _queue[0]?.radius ?? _stats.currentRadius,
     pausedForFrameTime:      framePoor,
@@ -763,6 +798,7 @@ function _makeWallPrewarmCtx(
 function _refreshStatsObj(): PrewarmStats {
   const ws = getPrewarmWallStats();
   const bs = getPrewarmBgStats();
+  const quality = _getQuality?.() ?? null;
   return {
     ..._stats,
     wallRoomCount:        ws.roomCount,
@@ -773,6 +809,7 @@ function _refreshStatsObj(): PrewarmStats {
     bgMemoryEstimateKB:   bs.memoryEstimateKB,
     totalPrewarmMemoryKB: ws.memoryEstimateKB + bs.memoryEstimateKB,
     queueLength:          _queue.length,
+    memoryBudgetKB:       quality !== null ? PREWARM_MEMORY_BUDGET_KB[quality] : 0,
   };
 }
 

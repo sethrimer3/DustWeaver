@@ -118,11 +118,11 @@ This pass targeted repeated freezes **inside** rooms during active gameplay, dis
 
 ---
 
-### 1. Entry viewport visual warm wiring (COMPLETED — BUILD 402 + BUILD 403 + BUILD 404)
+### 1. Entry viewport visual warm wiring (COMPLETED — BUILD 402 + BUILD 403 + BUILD 404 + BUILD 405)
 
 `entryViewportWarm.ts` wires a bounded room-entry visual warm phase that runs while the loading overlay is active.
 
-#### What was done (BUILD 402 + BUILD 403 + BUILD 404)
+#### What was done (BUILD 402 + BUILD 403 + BUILD 404 + BUILD 405)
 
 - New `src/screens/entryViewportWarm.ts` module: `EntryWarmState`, `createEntryWarmState()`, `startEntryWarm()`, `tickEntryWarm()`, `isEntryWarmReadyOrTimedOut()`.
 - `startEntryWarm()` called after: initial `loadRoom()`, instant transition `loadRoom()`, and async-load generator completion.
@@ -130,20 +130,17 @@ This pass targeted repeated freezes **inside** rooms during active gameplay, dis
 - `'entryWarm'` added as an explicit `FrameContext` value in `perfFreezeProfiler.ts`.  Freeze warnings show `(entryWarm)` instead of `⚠ GAMEPLAY` for these frames.
 - **BUILD 404 instant-transition fix**: the eager `tickEntryWarm()` call inside `startTransitionLoad()` has been removed.  Instant cache-hit transitions now call `startEntryWarm()` then `loadingOverlay.showEntryWarm()` (a lightweight textless black cover, `minShowMs=0`, `checkIntervalMs=0`, `fadeMs=80`) and return immediately.  All warm work happens in the RAF loop's `entryWarm` branch — never synchronously inside the transition callback.  This eliminates the hidden hitch on the room-boundary frame.
 - **BUILD 404 room entry hold guard**: a guard after the `entryWarm` branch holds simulation and input while the overlay remains visible and sprites/background are still decoding, preventing gameplay advancing behind a still-visible overlay.
+- **BUILD 405 readiness probe**: `canSkipEntryWarm(room, spawnXBlock, spawnYBlock, vpWPx, vpHPx, scalePx)` added to `entryViewportWarm.ts`.  Called in `startTransitionLoad()` before `startEntryWarm()`.  If the active chunk caches already cover the entry viewport (e.g. the room was prewarmed before the player arrived), both `startEntryWarm()` and `loadingOverlay.showEntryWarm()` are skipped — no overlay flash, no warm work.  Implemented via `RoomChunkCache.isViewportCovered()` (pure read, no canvas allocation).
 - `loadingOverlay.showEntryWarm()` and `loadingOverlay.isVisible()` added to `GameLoadingOverlay`.
 - `tickLoadingOverlay()` condition extended to require `isEntryWarmReadyOrTimedOut(entryWarmState)`, holding the overlay until the entry viewport is covered or the timeout fires.
 - Warm budget: max 8 frames or 120 ms; 6 wall + 6 background chunks per step.
 - On completion or timeout: warmed chunks are adopted into the active cache via `adoptPrewarmedWallChunks`/`adoptPrewarmedBgChunks`.
-- DEV console logs warm result: phase, chunks built, frames elapsed, ms spent.
+- DEV console logs warm result: phase, chunks built, frames elapsed, ms spent, and whether the overlay was skipped.
 - Entry warm state shown in the Prewarm debug panel (`renderProfiler.ts`): phase, frames, chunks, ms, timeout flag.
 
 #### Guarantee
 
-No gameplay freezes: `tickEntryWarm` runs in the `'entryWarm'` context, entirely outside the active-gameplay window.  No chunk building occurs before the overlay is visible.  Player simulation and input are blocked while warming.  The timeout ensures no long loading screens.
-
-#### Optional future polish (not implemented)
-
-- **Probe-only readiness check**: skip the 80 ms entry warm cover when no warm work is needed.  Requires exposing `skippedThisFrame` from `prewarmWallChunksForRoom` / `prewarmBgChunksForRoom` (currently only `rebuiltThisFrame` is returned).  With `maxChunks = 1` and `skippedThisFrame = 0` the viewport would be known-clean without building.  Low priority: the 80 ms textless cover is imperceptible.
+No gameplay freezes: `tickEntryWarm` runs in the `'entryWarm'` context, entirely outside the active-gameplay window.  No chunk building occurs before the overlay is visible.  Player simulation and input are blocked while warming.  The timeout ensures no long loading screens.  When the room is already warm, no overlay is shown at all.
 
 
 
@@ -151,9 +148,17 @@ Confirmed in code: `roomRenderChunkWarmScheduler.ts` line 666 checks `entry.bloc
 
 ---
 
-### 3. Add real global/LRU eviction for prewarmed chunks (PARTIALLY DONE)
+### 3. Add real global/LRU eviction for prewarmed chunks (PARTIALLY DONE — BUILD 405)
 
-Quality-tier memory budgets (`PREWARM_MEMORY_BUDGET_KB`) and radius-based eviction exist in the scheduler. What remains:
+Quality-tier memory budgets (`PREWARM_MEMORY_BUDGET_KB`) and radius-based eviction exist in the scheduler.
+
+**BUILD 405 hardening**: `_keepIds` is now persisted as module-level state in `roomRenderChunkWarmScheduler.ts` and set whenever a new schedule starts.  After each idle slice that builds chunks, if total prewarm memory exceeds the quality-tier budget, `evictStalePrewarmedChunks(_keepIds, quality)` is called.  This ensures budget enforcement runs continuously rather than only at schedule start.  Completed-but-still-nearby rooms (removed from `_queue` but still in `_keepIds`) are retained.
+
+Also in BUILD 405:
+- `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom` now return `PrewarmChunkResult { rebuilt, skipped, totalChunks, dirtyChunks }` instead of a raw `number`.  Done detection in both the scheduler and `tickEntryWarm` now checks `rebuilt === 0 && skipped === 0`.
+- `PrewarmStats` gains `chunksSkippedLastSlice` and `memoryBudgetKB` for debug panel visibility.
+
+What remains deferred:
 
 ---
 
