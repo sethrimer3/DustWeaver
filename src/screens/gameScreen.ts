@@ -855,8 +855,8 @@ export function startGameScreen(
   // Precomputed static room data keyed by room ID.  Allows _makeLoadRoomPhases
   // to skip the expensive merge pass when a room has already been preloaded.
   // Edge-extension caches are no longer built here — see legacy README.
-  // Bounded LRU with 10 slots (current room + 2-hop radius + headroom).
-  const roomRuntimeCache = new RoomRuntimeCache(10);
+  // Bounded LRU with 16 slots (current room + 3-hop radius + headroom).
+  const roomRuntimeCache = new RoomRuntimeCache();
 
   // Handle for the current idle preload schedule so it can be cancelled when
   // the player switches rooms before the previous schedule completes.

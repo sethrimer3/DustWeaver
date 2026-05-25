@@ -142,6 +142,25 @@ export function preloadBackgroundImageDecoded(id: BackgroundId): void {
 }
 
 /**
+ * Triggers HTMLImageElement.decode() for the background image that
+ * `renderWorldBackground()` will actually render for the given room parameters.
+ *
+ * Uses the same URL-selection logic as `renderWorldBackground()`:
+ *   - If `backgroundId` is provided, decodes its image (or no-ops for procedural ones).
+ *   - Otherwise decodes the world-number image (`worldBgImagePath(worldNumber)`).
+ *   - World 99 (Thero showcase) uses solid black — nothing to decode.
+ *
+ * Fire-and-forget.  Safe to call multiple times — decodeImg() is idempotent.
+ */
+export function preloadRoomBackgroundDecoded(worldNumber: number, backgroundId?: BackgroundId): void {
+  if (worldNumber === 99) return;
+  const url = backgroundId != null
+    ? backgroundIdToImagePath(backgroundId)
+    : worldBgImagePath(worldNumber);
+  if (url !== null) void decodeImg(url);
+}
+
+/**
  * Renders the room background for the current world with parallax scrolling.
  *
  * If `backgroundId` is provided it overrides `worldNumber` for image selection.

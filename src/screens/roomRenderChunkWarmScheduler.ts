@@ -446,6 +446,9 @@ export function scheduleChunkPrewarms(
   for (const [roomId] of nearby) keepIds.add(roomId);
   evictStalePrewarmedChunks(keepIds, getQuality());
 
+  // Reset per-schedule deferred counters so they reflect only the new schedule.
+  _stats = { ..._stats, deferredNotReady: 0, deferredSpritesNotReady: 0 };
+
   // Kick off the first idle callback.
   _idleHandle = _scheduleIdle(_onIdle);
 
@@ -510,20 +513,19 @@ export function evictStalePrewarmedChunks(
   quality: 'low' | 'med' | 'high',
 ): void {
   const currentRoom = _currentRoomId;
-  let evictedThisPass = 0;
+  const evictedRoomIds = new Set<string>();
 
   // ── Step 1: drop rooms outside the keep set ───────────────────────────────
   for (const roomId of listPrewarmedWallRoomIds()) {
     if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
       evictPrewarmedWallChunks(roomId);
-      evictedThisPass++;
+      evictedRoomIds.add(roomId);
     }
   }
   for (const roomId of listPrewarmedBgRoomIds()) {
     if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
       evictPrewarmedBgChunks(roomId);
-      // bg-only rooms (no wall prewarm) weren't counted in the wall loop above.
-      evictedThisPass++;
+      evictedRoomIds.add(roomId);
     }
   }
 
@@ -566,10 +568,11 @@ export function evictStalePrewarmedChunks(
       evictPrewarmedWallChunks(roomId);
       evictPrewarmedBgChunks(roomId);
       totalMemKB -= memKB;
-      evictedThisPass++;
+      evictedRoomIds.add(roomId);
     }
   }
 
+  const evictedThisPass = evictedRoomIds.size;
   _stats = {
     ..._stats,
     evictedThisPass,

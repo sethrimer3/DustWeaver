@@ -9,11 +9,17 @@ const _imgCache = new Map<string, HTMLImageElement>();
 
 /**
  * URLs whose images have been through HTMLImageElement.decode() (or confirmed
- * loaded when decode() is unavailable).  Used by isSpriteDecodeReady() to
- * report whether an image is fully rasterized and draw-ready without relying
- * solely on img.complete.
+ * loaded when decode() is unavailable).  Both the caller-supplied URL and the
+ * browser-normalised `img.src` are added so that lookups with either form succeed.
  */
 const _decodedUrls = new Set<string>();
+
+/**
+ * In-flight decode promises keyed by both the original URL and the browser-
+ * normalised `img.src`.  Prevents duplicate decode work when `decodeImg()` is
+ * called multiple times for the same image before decode completes.
+ */
+const _decodeInFlight = new Map<string, Promise<void>>();
 
 /** Returns (or creates) a loaded HTMLImageElement for the given URL. */
 export function loadImg(src: string): HTMLImageElement {
@@ -38,11 +44,17 @@ export function isSpriteReady(img: HTMLImageElement): boolean {
  * GPU-rasterize stall that can cause tile pop-in even after img.complete
  * is true on some browsers.
  *
- * Falls back to isSpriteReady() for images that were not preloaded via
+ * If a decode is in-flight (decode was requested but not yet complete), returns
+ * false rather than falling back to isSpriteReady(), so the loading overlay
+ * waits for the actual decode result.
+ *
+ * Falls back to isSpriteReady() only for images that were never preloaded via
  * decodeImg() (e.g. legacy world-number sprites loaded at module init time).
  */
 export function isSpriteDecodeReady(img: HTMLImageElement): boolean {
-  return _decodedUrls.has(img.src) || isSpriteReady(img);
+  if (_decodedUrls.has(img.src)) return true;
+  if (_decodeInFlight.has(img.src)) return false;   // decode requested but pending
+  return isSpriteReady(img);                         // decode never requested
 }
 
 /** Type guard: true when img supports the decode() API. */
@@ -55,6 +67,10 @@ function _hasDecode(img: HTMLImageElement): boolean {
  * ensuring the image is fully rasterized before the caller draws with it.
  *
  * - Idempotent: resolves immediately if already in the decoded set.
+ * - Deduplicates in-flight work: concurrent calls for the same URL share a
+ *   single promise, preventing duplicate decode() calls.
+ * - Tracks readiness by both the caller-supplied URL and the browser-normalised
+ *   `img.src` so that `isSpriteDecodeReady(img)` always finds a match.
  * - Preserves existing fallback rendering: failed images resolve without throwing
  *   so the caller is never blocked by unreachable assets.
  * - Safe in environments without decode() (Safari older versions, Node test
@@ -68,49 +84,79 @@ export function decodeImg(src: string): Promise<void> {
 
   const img = loadImg(src);
 
+  // Also check the browser-normalised form (e.g. relative → absolute URL).
+  if (_decodedUrls.has(img.src)) return Promise.resolve();
+
+  // Return the existing in-flight promise if one is already pending.
+  const existing = _decodeInFlight.get(src) ?? _decodeInFlight.get(img.src);
+  if (existing !== undefined) return existing;
+
+  // Helper to mark the image decoded and clear in-flight entries.
+  const markDecoded = (): void => {
+    _decodedUrls.add(src);
+    if (img.src !== src) _decodedUrls.add(img.src);
+    _decodeInFlight.delete(src);
+    _decodeInFlight.delete(img.src);
+  };
+
+  // Helper to clear in-flight entries on terminal failure (no decode mark).
+  const markFailed = (): void => {
+    _decodeInFlight.delete(src);
+    _decodeInFlight.delete(img.src);
+  };
+
   // Run decode() (or confirm loaded) once the image data is available.
   const performDecode = (): Promise<void> => {
     if (_hasDecode(img)) {
       return img.decode().then(
-        () => { _decodedUrls.add(src); },
+        () => { markDecoded(); },
         () => {
           // decode() rejected — image is still usable if it loaded successfully.
-          const imgAny = img as HTMLImageElement;
-          if (imgAny.complete && imgAny.naturalWidth > 0) _decodedUrls.add(src);
+          if (img.complete && img.naturalWidth > 0) markDecoded();
+          else markFailed();
         },
       );
     }
     // No decode() API — consider ready once load completed.
-    if (img.complete && img.naturalWidth > 0) _decodedUrls.add(src);
+    if (img.complete && img.naturalWidth > 0) markDecoded();
+    else markFailed();
     return Promise.resolve();
   };
 
+  let promise: Promise<void>;
+
   if (img.complete) {
     // Already downloaded — decode immediately.
-    return performDecode();
+    promise = performDecode();
+  } else {
+    // Not yet downloaded — wait for the load event, then decode.
+    promise = new Promise<void>((resolve) => {
+      let settled = false;
+
+      const onSettle = () => {
+        if (settled) return;
+        settled = true;
+        void performDecode().then(resolve);
+      };
+
+      img.addEventListener('load', onSettle, { once: true });
+      img.addEventListener('error', () => {
+        if (settled) return;
+        settled = true;
+        markFailed();
+        resolve(); // Failed load — resolve without marking decoded; fallback rendering handles it
+      }, { once: true });
+
+      // Guard against race: image may have loaded between the .complete check
+      // above and adding the event listeners.
+      if (img.complete) onSettle();
+    });
   }
 
-  // Not yet downloaded — wait for the load event, then decode.
-  return new Promise<void>((resolve) => {
-    let settled = false;
-
-    const onSettle = () => {
-      if (settled) return;
-      settled = true;
-      void performDecode().then(resolve);
-    };
-
-    img.addEventListener('load', onSettle, { once: true });
-    img.addEventListener('error', () => {
-      if (settled) return;
-      settled = true;
-      resolve(); // Failed load — resolve without marking decoded; fallback rendering handles it
-    }, { once: true });
-
-    // Guard against race: image may have loaded between the .complete check
-    // above and adding the event listeners.
-    if (img.complete) onSettle();
-  });
+  // Register the promise under both URL forms so deduplication works either way.
+  _decodeInFlight.set(src, promise);
+  if (img.src !== src) _decodeInFlight.set(img.src, promise);
+  return promise;
 }
 
 /**

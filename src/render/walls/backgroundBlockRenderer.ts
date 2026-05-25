@@ -29,7 +29,7 @@ import {
   getTheme1x1SpriteShaded,
 } from './folderBlockThemes';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
-import { RoomChunkCache } from './chunkRenderCache';
+import { RoomChunkCache, CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 import {
   getBgBlockLayout,
   getCellsForChunk,
@@ -141,8 +141,10 @@ function _makeBgBuildChunkFn(
   colMax: number,
   rowMax: number,
 ) => boolean {
-  // Build (or reuse) the per-chunk cell buckets once per factory call.
-  const layout = getBgBlockLayout(roomBlocks, roomBlockTheme);
+  // Layout is computed lazily inside the returned function so that per-frame
+  // calls to _makeBgBuildChunkFn do not pay the O(backgroundBlocks) signature
+  // cost when no chunk needs to rebuild.
+  let layout: ReturnType<typeof getBgBlockLayout> | null = null;
 
   return (chunkCtx, chunkOffX, chunkOffY, _scalePx, _bsz, colMin, rowMin, _colMax, _rowMax) => {
     if (!roomBlocks || roomBlocks.length === 0) return false;
@@ -153,8 +155,13 @@ function _makeBgBuildChunkFn(
     const sw    = Math.ceil(cellW);
 
     // Derive the chunk coordinates from colMin / rowMin (one chunk assumed).
-    const cx = Math.floor(colMin / 32);
-    const cy = Math.floor(rowMin / 32);
+    const cx = Math.floor(colMin / CHUNK_SIZE_BLOCKS);
+    const cy = Math.floor(rowMin / CHUNK_SIZE_BLOCKS);
+
+    // Compute layout on first actual rebuild and cache it in the closure.
+    if (layout === null) {
+      layout = getBgBlockLayout(roomBlocks, roomBlockTheme);
+    }
     const cells = getCellsForChunk(layout, cx, cy);
 
     for (let ci = 0; ci < cells.length; ci++) {
