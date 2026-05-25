@@ -376,6 +376,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (json.backgroundLightSpill !== undefined) room.backgroundLightSpill = json.backgroundLightSpill;
   if (json.solidLightSoftness   !== undefined) room.solidLightSoftness   = json.solidLightSoftness;
   if (json.blockSeamBlending)                  room.blockSeamBlending    = json.blockSeamBlending;
+  if (json.voidEdgeStyle)                      room.voidEdgeStyle        = json.voidEdgeStyle;
   if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
     room.ambientLightBlockers = json.ambientLightBlockers.map(b => ({
       xBlock: b.xBlock,

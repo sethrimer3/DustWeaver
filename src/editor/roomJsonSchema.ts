@@ -7,7 +7,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { TransitionDirection, BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle } from '../levels/roomDef';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -389,6 +389,8 @@ export interface RoomJsonDef {
   solidLightSoftness?: number;
   /** Block seam blending mode. Omitted when 'off'. */
   blockSeamBlending?: BlockSeamBlending;
+  /** Void edge style. Omitted when 'off'. */
+  voidEdgeStyle?: VoidEdgeStyle;
   /** Sparse tile-coord list of authored ambient-light blockers. */
   ambientLightBlockers?: RoomJsonAmbientLightBlocker[];
   /** Sparse list of authored local light sources. */

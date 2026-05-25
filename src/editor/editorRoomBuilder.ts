@@ -370,5 +370,6 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       opacityPct: p.opacityPct,
     })),
     blockSeamBlending: data.blockSeamBlending,
+    voidEdgeStyle: data.voidEdgeStyle,
   };
 }

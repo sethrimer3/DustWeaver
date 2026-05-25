@@ -75,6 +75,7 @@ import { applyRenderQualitySettings } from './gameRenderQuality';
 import { renderBackgroundPass, type StagedRoomBgInfo } from './gameRenderBackgroundPass';
 import { renderSceneLightingPass } from './gameRenderSceneLighting';
 import { renderTeleportFlash } from '../render/lambdaAnchorRenderer';
+import { renderVoidEdge } from '../render/voidEdgeRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
 import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
@@ -549,6 +550,9 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // End room clip before any HUD/screen-space overlays are drawn.
   ctx.restore();
+
+  // ── Void edge overlay (noisy black intrusion along exposed room boundaries) ─
+  renderVoidEdge(ctx, currentRoom, ox, oy, zoom);
 
   // ── HUD layers (debug overlay, health bar, dust display, enemy bars, combat text) ──
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_HUD);

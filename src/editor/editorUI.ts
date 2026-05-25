@@ -11,7 +11,7 @@ import {
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
   AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
   RoomEdge, EditorUICallbacks, BrushMode, BlockPlacementModifier,
-  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant, BlockSeamBlending,
+  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle,
 } from './editorState';
 import {
   addDimField,
@@ -408,6 +408,34 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   seamBlendSelect.addEventListener('click', (e) => e.stopPropagation());
   lightingDiv.appendChild(seamBlendSelect);
 
+  // ── Void Edge Style dropdown ──────────────────────────────────────────────
+  const VOID_EDGE_OPTIONS: { id: VoidEdgeStyle; label: string }[] = [
+    { id: 'off',          label: 'Off' },
+    { id: 'noisyEdge',    label: 'Noisy Black Edge' },
+    { id: 'exteriorFill', label: 'Exterior Fill + Noisy Edge' },
+  ];
+  const voidEdgeLabel = document.createElement('div');
+  voidEdgeLabel.textContent = 'Void Edge Style';
+  voidEdgeLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  lightingDiv.appendChild(voidEdgeLabel);
+  const voidEdgeSelect = document.createElement('select');
+  voidEdgeSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of VOID_EDGE_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    voidEdgeSelect.appendChild(o);
+  }
+  voidEdgeSelect.addEventListener('change', () => {
+    callbacks?.onVoidEdgeStyleChange(voidEdgeSelect.value as VoidEdgeStyle);
+  });
+  voidEdgeSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(voidEdgeSelect);
+
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
@@ -673,6 +701,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           falloffSlider.value = String(state.roomData?.falloffPower ?? 1.4);
           falloffValLabel.textContent  = (state.roomData?.falloffPower  ?? 1.4).toFixed(2);
           seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
+          voidEdgeSelect.value = state.roomData?.voidEdgeStyle ?? 'off';
           lastRenderedLightingEffect = currentLighting;
           paletteDiv.appendChild(lightingDiv);
         }
@@ -715,6 +744,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       syncSlider(slSoftSlider,   slSoftValLabel,   state.roomData?.solidLightSoftness,    0.0);
       if (document.activeElement !== seamBlendSelect) {
         seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
+      }
+      if (document.activeElement !== voidEdgeSelect) {
+        voidEdgeSelect.value = state.roomData?.voidEdgeStyle ?? 'off';
       }
     }
 

@@ -515,6 +515,24 @@ export {
  */
 export type BlockSeamBlending = 'off' | 'subtle' | 'organic' | 'heavy';
 
+/**
+ * Visual style for the black void outside room bounds.
+ *
+ * Controls how the hard rectangular black cutoff at room edges is softened
+ * when the player viewport extends beyond the room boundary.
+ *
+ * - `'off'`          — default behaviour: pure black hard edge.
+ * - `'noisyEdge'`    — deterministic pixel-art noise bites into the room edge by
+ *                      0–5 virtual pixels for an organic cave-darkness look.
+ * - `'exteriorFill'` — a dark cave-wall continuation fills a short strip outside
+ *                      the room, then the noisy edge mask is applied on top.
+ *
+ * All options are purely visual — no collision or room data is altered.
+ * The effect is deterministic, anchored to room/world coordinates, and stable
+ * during camera movement.
+ */
+export type VoidEdgeStyle = 'off' | 'noisyEdge' | 'exteriorFill';
+
 /** Full definition for a single room in the Metroidvania world. */
 export interface RoomDef {
   /** Unique identifier for this room. */
@@ -596,6 +614,12 @@ export interface RoomDef {
    * Defaults to 'off' — existing rooms are visually unchanged.
    */
   blockSeamBlending?: BlockSeamBlending;
+  /**
+   * Visual style for the black void outside room bounds.
+   * Defaults to 'off' — existing rooms are visually unchanged.
+   * See {@link VoidEdgeStyle} for details.
+   */
+  voidEdgeStyle?: VoidEdgeStyle;
   /**
    * Tiles that block ambient-light propagation. Gameplay treats them as empty
    * air; only the ambient-lighting solver sees them as opaque. Used to carve
