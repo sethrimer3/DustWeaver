@@ -30,6 +30,11 @@ import {
 } from './folderBlockThemes';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
 import { RoomChunkCache } from './chunkRenderCache';
+import {
+  getBgBlockLayout,
+  getCellsForChunk,
+  invalidateBgBlockLayout,
+} from './backgroundBlockLayoutCache';
 
 /** World-space size of a single background block cell (matches 1×1 sprite). */
 const CELL_SIZE_WORLD = BLOCK_SIZE_SMALL;
@@ -58,6 +63,7 @@ let _bgCacheRoomRef: string | null = null;
 export function invalidateBackgroundBlockCache(): void {
   _bgChunkCache.invalidateAll();
   _bgCacheRoomRef = null;
+  invalidateBgBlockLayout();
 }
 
 /**
@@ -71,6 +77,8 @@ export function invalidateBackgroundBlockChunkRect(
   rowMax: number,
 ): void {
   _bgChunkCache.invalidateBlockRect(colMin, rowMin, colMax, rowMax);
+  // Also invalidate layout cache since content has changed.
+  invalidateBgBlockLayout();
 }
 
 /**
@@ -113,6 +121,9 @@ function _getBgPrewarmDummyCtx(): CanvasRenderingContext2D {
 /**
  * Builds a chunk-rendering closure for `room`'s background blocks.
  * Extracted to share logic between the live render and prewarm paths.
+ *
+ * The closure uses {@link getBgBlockLayout} to look up only the cells that
+ * fall inside the target chunk instead of scanning all block definitions.
  */
 function _makeBgBuildChunkFn(
   roomBlocks: RoomDef['backgroundBlocks'],
@@ -130,7 +141,10 @@ function _makeBgBuildChunkFn(
   colMax: number,
   rowMax: number,
 ) => boolean {
-  return (chunkCtx, chunkOffX, chunkOffY, _scalePx, _bsz, colMin, rowMin, colMax, rowMax) => {
+  // Build (or reuse) the per-chunk cell buckets once per factory call.
+  const layout = getBgBlockLayout(roomBlocks, roomBlockTheme);
+
+  return (chunkCtx, chunkOffX, chunkOffY, _scalePx, _bsz, colMin, rowMin, _colMax, _rowMax) => {
     if (!roomBlocks || roomBlocks.length === 0) return false;
     let hadFallbacks = false;
     chunkCtx.imageSmoothingEnabled = false;
@@ -138,45 +152,36 @@ function _makeBgBuildChunkFn(
     const cellW = CELL_SIZE_WORLD * zoom;
     const sw    = Math.ceil(cellW);
 
-    for (let bi = 0; bi < roomBlocks.length; bi++) {
-      const b = roomBlocks[bi];
-      if (b.xBlock + b.wBlock - 1 < colMin || b.xBlock > colMax) continue;
-      if (b.yBlock + b.hBlock - 1 < rowMin || b.yBlock > rowMax) continue;
+    // Derive the chunk coordinates from colMin / rowMin (one chunk assumed).
+    const cx = Math.floor(colMin / 32);
+    const cy = Math.floor(rowMin / 32);
+    const cells = getCellsForChunk(layout, cx, cy);
 
-      const themeId       = b.blockTheme ?? roomBlockTheme;
-      const useFolderSprite = isFolderBasedTheme(themeId);
+    for (let ci = 0; ci < cells.length; ci++) {
+      const { col, row, themeId } = cells[ci];
 
-      for (let dy = 0; dy < b.hBlock; dy++) {
-        const row = b.yBlock + dy;
-        if (row < rowMin || row > rowMax) continue;
-        for (let dx = 0; dx < b.wBlock; dx++) {
-          const col = b.xBlock + dx;
-          if (col < colMin || col > colMax) continue;
+      const sx = Math.round(col * cellW + chunkOffX);
+      const sy = Math.round(row * cellW + chunkOffY);
 
-          const sx = Math.round(col * cellW + chunkOffX);
-          const sy = Math.round(row * cellW + chunkOffY);
-
-          if (useFolderSprite) {
-            const sprite = getTheme1x1SpriteShaded(
-              themeId,
-              col,
-              row,
-              seed,
-              OPEN_AIR_ALL_SIDES,
-              CELL_SIZE_WORLD,
-            );
-            if (sprite !== null) {
-              chunkCtx.drawImage(sprite, sx, sy, sw, sw);
-            } else {
-              chunkCtx.fillStyle = FALLBACK_FILL;
-              chunkCtx.fillRect(sx, sy, sw, sw);
-              hadFallbacks = true;
-            }
-          } else {
-            chunkCtx.fillStyle = FALLBACK_FILL;
-            chunkCtx.fillRect(sx, sy, sw, sw);
-          }
+      if (isFolderBasedTheme(themeId)) {
+        const sprite = getTheme1x1SpriteShaded(
+          themeId,
+          col,
+          row,
+          seed,
+          OPEN_AIR_ALL_SIDES,
+          CELL_SIZE_WORLD,
+        );
+        if (sprite !== null) {
+          chunkCtx.drawImage(sprite, sx, sy, sw, sw);
+        } else {
+          chunkCtx.fillStyle = FALLBACK_FILL;
+          chunkCtx.fillRect(sx, sy, sw, sw);
+          hadFallbacks = true;
         }
+      } else {
+        chunkCtx.fillStyle = FALLBACK_FILL;
+        chunkCtx.fillRect(sx, sy, sw, sw);
       }
     }
 
@@ -264,6 +269,21 @@ export function evictPrewarmedBgChunks(roomId: string): void {
 /** Returns `true` when pre-warmed background block data exists for `roomId`. */
 export function hasPrewarmedBgChunks(roomId: string): boolean {
   return _prewarmBgCaches.has(roomId);
+}
+
+/** Returns the list of room IDs that currently have pre-warmed background block chunks. */
+export function listPrewarmedBgRoomIds(): string[] {
+  return Array.from(_prewarmBgCaches.keys());
+}
+
+/**
+ * Returns per-room prewarm bg stats for `roomId`, or `null` when not held.
+ * Used by the eviction pass to compute per-room memory.
+ */
+export function getPrewarmBgRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
+  const cache = _prewarmBgCaches.get(roomId);
+  if (cache === undefined) return null;
+  return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
 }
 
 /**

@@ -648,6 +648,21 @@ export function hasPrewarmedWallChunks(roomId: string): boolean {
   return _prewarmWallCaches.has(roomId);
 }
 
+/** Returns the list of room IDs that currently have pre-warmed wall chunks. */
+export function listPrewarmedWallRoomIds(): string[] {
+  return Array.from(_prewarmWallCaches.keys());
+}
+
+/**
+ * Returns per-room prewarm wall stats for `roomId`, or `null` when not held.
+ * Used by the eviction pass to compute per-room memory.
+ */
+export function getPrewarmWallRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
+  const cache = _prewarmWallCaches.get(roomId);
+  if (cache === undefined) return null;
+  return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
+}
+
 /**
  * Returns aggregate stats across all currently-held prewarm caches.
  * Used by the debug overlay.
