@@ -40,6 +40,7 @@ import type { LiquidDebugStats } from '../liquidBodyCache';
 import type { DebugPanelVisibility } from '../../ui/debugPanelManager';
 import { isPanelVisible } from '../../ui/debugPanelManager';
 import * as FP from '../../debug/perfFreezeProfiler';
+import { getBgImageStats } from '../backgroundRenderer';
 
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
@@ -458,10 +459,12 @@ export class RenderProfiler {
     // ── Background-block chunk cache stats panel ──────────────────────────────
     if (showChunks && this._bgChunkStats !== null) {
       const bc = this._bgChunkStats;
+      const bgImgStats = getBgImageStats();
       const bgLines = [
         `BG Chunks V=${bc.visibleChunkCount} T=${bc.totalChunkCount}`,
         `Dirty=${bc.dirtyChunkCount} Built=${bc.rebuiltThisFrame} Skip=${bc.skippedThisFrame}`,
         `RbldMs=${bc.rebuildMsThisFrame.toFixed(1)} Mem~${bc.memoryEstimateKB}KB`,
+        `BgImg hit=${bgImgStats.cacheHits} miss=${bgImgStats.cacheMisses} fb=${bgImgStats.fallbacksThisFrame}`,
       ];
       const bgPanelH = bgLines.length * lineHeightPx + 8;
       ctx.save();
@@ -585,9 +588,12 @@ export class RenderProfiler {
         `Wall mem: ~${pw.wallMemoryEstimateKB}KB`,
         `BG rooms: ${pw.bgRoomCount}  chunks: ${pw.totalBgChunks}`,
         `BG mem: ~${pw.bgMemoryEstimateKB}KB`,
+        `Total mem: ~${pw.totalPrewarmMemoryKB}KB`,
         `Last slice: ${pw.chunksLastSlice}ch ${pw.msLastSlice.toFixed(1)}ms`,
         `W hits: ${pw.wallCacheHits}  miss: ${pw.wallCacheMisses}`,
         `BG hits: ${pw.bgCacheHits}  miss: ${pw.bgCacheMisses}`,
+        `Defer!rdy: ${pw.deferredNotReady}  !spr: ${pw.deferredSpritesNotReady}`,
+        `Evict pass: ${pw.evictedThisPass}  total: ${pw.totalEvictions}`,
         pw.pausedForFrameTime ? '⚠ PAUSED (frame time)' : '● warming',
       ];
       const prewarmPanelH = prewarmLines.length * lineHeightPx + 8;

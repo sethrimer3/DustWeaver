@@ -36,11 +36,17 @@ import {
   prewarmWallChunksForRoom,
   adoptPrewarmedWallChunks,
   getPrewarmWallStats,
+  listPrewarmedWallRoomIds,
+  evictPrewarmedWallChunks,
+  getPrewarmWallRoomStats,
 } from '../render/walls/blockSpriteRenderer';
 import {
   prewarmBgChunksForRoom,
   adoptPrewarmedBgChunks,
   getPrewarmBgStats,
+  listPrewarmedBgRoomIds,
+  evictPrewarmedBgChunks,
+  getPrewarmBgRoomStats,
 } from '../render/walls/backgroundBlockRenderer';
 import { areRoomSpritesReady } from '../render/roomAssetPreloader';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
@@ -84,6 +90,17 @@ const MAX_PREWARM_RADIUS = 3;
  * when frame times are stable.
  */
 const RADIUS3_HIGH_QUALITY_ONLY = true;
+
+/**
+ * Global prewarm memory budgets by graphics quality tier (KB).
+ * When total prewarmed wall + bg memory exceeds the budget, stale rooms are
+ * evicted starting with the highest-radius, least-recently-scheduled rooms.
+ */
+const PREWARM_MEMORY_BUDGET_KB: Record<'low' | 'med' | 'high', number> = {
+  low:  4096,
+  med:  12288,
+  high: 32768,
+};
 
 // ── Idle scheduling shim (mirrors roomPreloadScheduler) ──────────────────────
 
@@ -181,24 +198,48 @@ export interface PrewarmStats {
   bgCacheHits: number;
   /** BG cache misses on the most recent room entry. */
   bgCacheMisses: number;
+  /**
+   * Tasks deferred this schedule because runtime data (blockerKeys, wall
+   * template, or decorations) was not yet computed.  Resets each schedule.
+   */
+  deferredNotReady: number;
+  /**
+   * Tasks deferred this schedule because room sprites were not yet decoded.
+   * Resets each schedule.
+   */
+  deferredSpritesNotReady: number;
+  /**
+   * Rooms evicted from prewarm caches in the most recent eviction pass.
+   * Resets each eviction call.
+   */
+  evictedThisPass: number;
+  /** Running total of rooms evicted since the scheduler was started. */
+  totalEvictions: number;
+  /** Combined wall + bg prewarm memory estimate (KB). */
+  totalPrewarmMemoryKB: number;
 }
 
 let _stats: PrewarmStats = {
-  wallRoomCount:        0,
-  totalWallChunks:      0,
-  wallMemoryEstimateKB: 0,
-  bgRoomCount:          0,
-  totalBgChunks:        0,
-  bgMemoryEstimateKB:   0,
-  queueLength:          0,
-  chunksLastSlice:      0,
-  msLastSlice:          0,
-  currentRadius:        1,
-  pausedForFrameTime:   false,
-  wallCacheHits:        0,
-  wallCacheMisses:      0,
-  bgCacheHits:          0,
-  bgCacheMisses:        0,
+  wallRoomCount:           0,
+  totalWallChunks:         0,
+  wallMemoryEstimateKB:    0,
+  bgRoomCount:             0,
+  totalBgChunks:           0,
+  bgMemoryEstimateKB:      0,
+  queueLength:             0,
+  chunksLastSlice:         0,
+  msLastSlice:             0,
+  currentRadius:           1,
+  pausedForFrameTime:      false,
+  wallCacheHits:           0,
+  wallCacheMisses:         0,
+  bgCacheHits:             0,
+  bgCacheMisses:           0,
+  deferredNotReady:        0,
+  deferredSpritesNotReady: 0,
+  evictedThisPass:         0,
+  totalEvictions:          0,
+  totalPrewarmMemoryKB:    0,
 };
 
 /** Read-only snapshot of prewarm stats. Updates every idle callback. */
@@ -239,6 +280,8 @@ let _runtimeCache: RoomRuntimeCache | null = null;
 let _getQuality: (() => 'low' | 'med' | 'high') | null = null;
 /** Frame-time getter supplied by gameScreen.ts (ms per frame, e.g. from FP). */
 let _getLastFrameMs: (() => number) | null = null;
+/** Room ID of the current active room — never evicted. */
+let _currentRoomId: string | null = null;
 
 // ── Handle ────────────────────────────────────────────────────────────────────
 
@@ -350,6 +393,7 @@ export function scheduleChunkPrewarms(
   _runtimeCache   = runtimeCache;
   _getQuality     = getQuality;
   _getLastFrameMs = getLastFrameMs;
+  _currentRoomId  = currentRoom.id;
 
   const nearby = _bfsNearby(currentRoom.id, roomRegistry, MAX_PREWARM_RADIUS);
 
@@ -396,6 +440,12 @@ export function scheduleChunkPrewarms(
     });
   }
 
+  // Build the set of rooms that are part of the new schedule so eviction can
+  // drop stale rooms that are no longer reachable within the warm radius.
+  const keepIds = new Set<string>([currentRoom.id]);
+  for (const [roomId] of nearby) keepIds.add(roomId);
+  evictStalePrewarmedChunks(keepIds, getQuality());
+
   // Kick off the first idle callback.
   _idleHandle = _scheduleIdle(_onIdle);
 
@@ -440,17 +490,90 @@ export function adoptPrewarmedChunksForRoom(room: RoomDef, scalePx: number): voi
 }
 
 /**
- * Evicts pre-warmed chunks for rooms that are no longer nearby (to bound memory).
+ * Evicts pre-warmed chunks for rooms that are no longer nearby, and
+ * enforces the per-quality global memory budget.
  *
- * Call this after building the new prewarm queue so stale rooms are cleared.
+ * Eviction order (least valuable first):
+ *   1. Rooms not in `keepRoomIds` (stale / out of BFS radius).
+ *   2. Remaining rooms that exceed the memory budget, ordered by:
+ *      - Radius 3 first, then radius 2, then radius 1.
+ *      - Within each radius, largest memory footprint first.
+ *
+ * Never evicts the current active room (`_currentRoomId`).
+ * Safe to call at any time — does not touch in-progress idle build state.
+ *
+ * @param keepRoomIds  Set of room IDs that should be retained (current + nearby).
+ * @param quality      Current graphics quality, used to look up the budget.
  */
-export function evictStalePrewarmedChunks(keepRoomIds: ReadonlySet<string>): void {
-  const wallStats = getPrewarmWallStats();
-  // We don't have a direct enumeration of held rooms without iterating —
-  // eviction is handled at the Map level in the renderer modules.
-  // This function is a no-op placeholder until we add explicit room enumeration.
-  void wallStats;
-  void keepRoomIds;
+export function evictStalePrewarmedChunks(
+  keepRoomIds: ReadonlySet<string>,
+  quality: 'low' | 'med' | 'high',
+): void {
+  const currentRoom = _currentRoomId;
+  let evictedThisPass = 0;
+
+  // ── Step 1: drop rooms outside the keep set ───────────────────────────────
+  for (const roomId of listPrewarmedWallRoomIds()) {
+    if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
+      evictPrewarmedWallChunks(roomId);
+      evictedThisPass++;
+    }
+  }
+  for (const roomId of listPrewarmedBgRoomIds()) {
+    if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
+      evictPrewarmedBgChunks(roomId);
+      // bg-only rooms (no wall prewarm) weren't counted above; count them now.
+    }
+  }
+
+  // ── Step 2: enforce the memory budget ─────────────────────────────────────
+  const budget = PREWARM_MEMORY_BUDGET_KB[quality];
+  const ws = getPrewarmWallStats();
+  const bs = getPrewarmBgStats();
+  let totalMemKB = ws.memoryEstimateKB + bs.memoryEstimateKB;
+
+  if (totalMemKB > budget) {
+    // Build a list of remaining prewarm rooms with their radius and memory.
+    // Rooms not currently in the queue get radius 3 (treated as speculative).
+    const radiusMap = new Map<string, number>();
+    for (const task of _queue) radiusMap.set(task.roomId, task.radius);
+
+    interface EvictCandidate { roomId: string; radius: number; memKB: number }
+    const candidates: EvictCandidate[] = [];
+    const seen = new Set<string>();
+
+    for (const roomId of listPrewarmedWallRoomIds()) {
+      if (roomId === currentRoom) continue;
+      seen.add(roomId);
+      const wallMem = getPrewarmWallRoomStats(roomId)?.memoryKB ?? 0;
+      const bgMem   = getPrewarmBgRoomStats(roomId)?.memoryKB   ?? 0;
+      candidates.push({ roomId, radius: radiusMap.get(roomId) ?? 3, memKB: wallMem + bgMem });
+    }
+    for (const roomId of listPrewarmedBgRoomIds()) {
+      if (roomId === currentRoom || seen.has(roomId)) continue;
+      const bgMem = getPrewarmBgRoomStats(roomId)?.memoryKB ?? 0;
+      candidates.push({ roomId, radius: radiusMap.get(roomId) ?? 3, memKB: bgMem });
+    }
+
+    // Sort: highest radius first; within same radius, largest memory first.
+    candidates.sort((a, b) =>
+      b.radius !== a.radius ? b.radius - a.radius : b.memKB - a.memKB,
+    );
+
+    for (const { roomId, memKB } of candidates) {
+      if (totalMemKB <= budget) break;
+      evictPrewarmedWallChunks(roomId);
+      evictPrewarmedBgChunks(roomId);
+      totalMemKB -= memKB;
+      evictedThisPass++;
+    }
+  }
+
+  _stats = {
+    ..._stats,
+    evictedThisPass,
+    totalEvictions: _stats.totalEvictions + evictedThisPass,
+  };
 }
 
 // ── Idle callback ─────────────────────────────────────────────────────────────
@@ -480,6 +603,8 @@ function _onIdle(deadline: IdleDeadline): void {
 
   const sliceStart = performance.now();
   let chunksBuilt  = 0;
+  let deferredNotReady        = _stats.deferredNotReady;
+  let deferredSpritesNotReady = _stats.deferredSpritesNotReady;
 
   while (_queue.length > 0) {
     // Check both time and chunk budget before each task.
@@ -501,16 +626,20 @@ function _onIdle(deadline: IdleDeadline): void {
       continue;
     }
 
-    // Skip if wall template / blocker keys not yet ready.
+    // Defer if wall template / blocker keys not yet ready.
+    // `blockerKeys === null`      means not yet computed → defer.
+    // `blockerKeys === undefined` means computed, no blockers → ready.
     const entry = _runtimeCache?.get(task.roomId);
     if (entry === undefined || !isEntryFullyPrepared(entry)) {
       // Room data not ready yet; try again next idle slice.
+      deferredNotReady++;
       _queue.push(_queue.shift()!);
       break;
     }
 
-    // Skip if sprites are not ready (don't bake fallback rectangles).
+    // Defer if sprites are not ready (don't bake fallback rectangles).
     if (!areRoomSpritesReady(room)) {
+      deferredSpritesNotReady++;
       _queue.push(_queue.shift()!);
       break;
     }
@@ -518,7 +647,9 @@ function _onIdle(deadline: IdleDeadline): void {
     const remaining = chunksLimit - chunksBuilt;
 
     // ── Build wall chunks ─────────────────────────────────────────────────
-    if (!task.wallDone && entry.blockerKeys !== null && entry.blockerKeys !== undefined) {
+    // Only defer when blockerKeys is null (not yet computed).
+    // undefined = computed, no blockers — _makeWallPrewarmCtx converts to empty Set.
+    if (!task.wallDone && entry.blockerKeys !== null) {
       const wallSnap = _wallTemplateToSnapshot(entry.wallTemplate);
       const wallCtx  = _makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
       const built = prewarmWallChunksForRoom(
@@ -535,6 +666,11 @@ function _onIdle(deadline: IdleDeadline): void {
       FP.recordPrewarmSlice(built);
       chunksBuilt += built;
       if (built === 0) task.wallDone = true;
+    } else if (!task.wallDone) {
+      // wallDone left false only when blockerKeys is null (should not happen
+      // here because isEntryFullyPrepared already guards that), but guard
+      // defensively so a no-wall room never stalls the queue.
+      task.wallDone = true;
     }
 
     // ── Build bg chunks ───────────────────────────────────────────────────
@@ -567,14 +703,16 @@ function _onIdle(deadline: IdleDeadline): void {
 
   _stats = {
     ..._refreshStatsObj(),
-    chunksLastSlice:    chunksBuilt,
-    msLastSlice:        sliceMs,
-    currentRadius:      _queue[0]?.radius ?? _stats.currentRadius,
-    pausedForFrameTime: framePoor,
-    wallCacheHits:      _stats.wallCacheHits,
-    wallCacheMisses:    _stats.wallCacheMisses,
-    bgCacheHits:        _stats.bgCacheHits,
-    bgCacheMisses:      _stats.bgCacheMisses,
+    chunksLastSlice:         chunksBuilt,
+    msLastSlice:             sliceMs,
+    currentRadius:           _queue[0]?.radius ?? _stats.currentRadius,
+    pausedForFrameTime:      framePoor,
+    wallCacheHits:           _stats.wallCacheHits,
+    wallCacheMisses:         _stats.wallCacheMisses,
+    bgCacheHits:             _stats.bgCacheHits,
+    bgCacheMisses:           _stats.bgCacheMisses,
+    deferredNotReady:        deferredNotReady,
+    deferredSpritesNotReady: deferredSpritesNotReady,
   };
 
   // Schedule next slice if there's more work.
@@ -624,6 +762,7 @@ function _refreshStatsObj(): PrewarmStats {
     bgRoomCount:          bs.roomCount,
     totalBgChunks:        bs.totalChunks,
     bgMemoryEstimateKB:   bs.memoryEstimateKB,
+    totalPrewarmMemoryKB: ws.memoryEstimateKB + bs.memoryEstimateKB,
     queueLength:          _queue.length,
   };
 }
