@@ -88,6 +88,7 @@ import {
   preloadRoomThemeSprites,
   preloadAdjacentRoomAssets,
   areRoomSpritesReady,
+  isRoomBackgroundDecodeReady,
   decodeRoomThemeSprites,
   decodeRoomBackground,
 } from '../render/roomAssetPreloader';
@@ -926,7 +927,11 @@ export function startGameScreen(
   /** Hides the overlay once sprites are ready, the minimum show time has passed,
    *  and no async room load is in progress. */
   function tickLoadingOverlay(): void {
-    loadingOverlay.tick(() => !asyncLoadState.isActive && areRoomSpritesReady(currentRoom));
+    loadingOverlay.tick(() =>
+      !asyncLoadState.isActive
+      && areRoomSpritesReady(currentRoom)
+      && isRoomBackgroundDecodeReady(currentRoom),
+    );
   }
 
   // ── Dust container state (armor system) ─────────────────────────────────
@@ -1266,6 +1271,7 @@ export function startGameScreen(
         rafHandle = requestAnimationFrame(frame);
         // endFrame covers editor-backdrop frames too.
         if (import.meta.env.DEV) FP.setFrameGameContext('editor');
+        FP.setBakeForbiddenInGameplay(false);
         FP.endFrame();
         return;
       }
@@ -1303,6 +1309,7 @@ export function startGameScreen(
       // Keep the overlay visible and skip gameplay sim/render this frame.
       tickLoadingOverlay();
       if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+      FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1358,6 +1365,7 @@ export function startGameScreen(
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
+      FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1366,6 +1374,7 @@ export function startGameScreen(
     // While dead, still render the frozen scene but skip sim
     if (gameOverlayController.state.isPlayerDead) {
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
+      FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1626,6 +1635,10 @@ export function startGameScreen(
       // Mark this as an active-gameplay frame so freeze warnings highlight it.
       FP.setFrameGameContext('gameplay');
     }
+    // Forbid expensive derived-sprite baking during active gameplay to prevent
+    // getImageData/putImageData stalls.  Cheap unshaded fallbacks are used
+    // instead.  This flag is cleared in all non-gameplay early-return paths.
+    FP.setBakeForbiddenInGameplay(true);
 
     let aliveCount = 0;
     for (let i = 0; i < world.particleCount; i++) {
@@ -1730,6 +1743,11 @@ export function startGameScreen(
 
     // Tick the loading overlay — hides it once sprites are ready.
     tickLoadingOverlay();
+
+    // Clear the gameplay-bake-forbidden flag before ending the frame so it
+    // does not persist into the next non-gameplay frame (e.g. paused frames
+    // that render immediately after a gameplay frame).
+    FP.setBakeForbiddenInGameplay(false);
 
     // Commit freeze-profiler frame data; emits structured [freeze] LONG FRAME
     // console warning (dev-only) when the frame exceeds LONG_FRAME_WARN_MS.

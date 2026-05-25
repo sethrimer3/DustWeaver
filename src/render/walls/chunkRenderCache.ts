@@ -147,6 +147,13 @@ export class RoomChunkCache {
   private _maxMemoryKB = 0;
 
   /**
+   * Last block size (in pixels) passed to renderVisibleChunks().
+   * Stored so _evictStaleChunks() can compute an accurate memory estimate
+   * without hard-coding the default block size.
+   */
+  private _lastBlockSizePx = 8;
+
+  /**
    * Monotonically increasing frame counter.  Incremented each call to
    * renderVisibleChunks so we can track when each chunk was last visible.
    */
@@ -332,6 +339,8 @@ export class RoomChunkCache {
       rowMax: number,
     ) => boolean,
   ): void {
+    // Store the block size so _evictStaleChunks() can use the actual value.
+    this._lastBlockSizePx = blockSizePx;
     // ── Layout / scale change detection ─────────────────────────────────────
     if (layoutRef !== this._layoutRef || scalePx !== this._scalePx) {
       this.invalidateAll();
@@ -512,11 +521,9 @@ export class RoomChunkCache {
 
     this.stats.evictedTotal += toEvict.length;
     this.stats.totalChunkCount = this._chunks.size;
+    const chunkSidePixels = Math.ceil(this._scalePx === 0 ? 1 : CHUNK_SIZE_BLOCKS * this._lastBlockSizePx * this._scalePx);
     this.stats.memoryEstimateKB = Math.round(
-      this._chunks.size
-        * Math.ceil(this._scalePx === 0 ? 1 : CHUNK_SIZE_BLOCKS * 8 * this._scalePx)
-        * Math.ceil(this._scalePx === 0 ? 1 : CHUNK_SIZE_BLOCKS * 8 * this._scalePx)
-        * 4 / 1024,
+      this._chunks.size * chunkSidePixels * chunkSidePixels * 4 / 1024,
     );
   }
 }

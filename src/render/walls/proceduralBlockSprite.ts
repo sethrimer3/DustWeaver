@@ -31,6 +31,7 @@ import {
   OPEN_AIR_SIDE_W,
   OPEN_AIR_ALL_SIDES,
 } from './blockEdgeShading';
+import { loadImg, isSpriteReady } from '../imageCache';
 import * as FP from '../../debug/perfFreezeProfiler';
 
 // Re-export open-air side constants so callers (blockSpriteRenderer.ts) do not
@@ -43,30 +44,19 @@ export {
   OPEN_AIR_ALL_SIDES,
 };
 
-// ── Image loading ─────────────────────────────────────────────────────────────
-
-/** Module-level cache of loaded HTMLImageElements. */
-const _imgCache = new Map<string, HTMLImageElement>();
-
-/** Loads an image URL (fire-and-forget); returns the same element on repeat calls. */
-function _loadImg(url: string): HTMLImageElement {
-  const hit = _imgCache.get(url);
-  if (hit !== undefined) return hit;
-  const img = new Image();
-  img.src = url;
-  _imgCache.set(url, img);
-  return img;
-}
-
-/** Returns true once an image has fully loaded and has non-zero dimensions. */
-function _isReady(img: HTMLImageElement): boolean {
-  return img.complete && img.naturalWidth > 0;
-}
-
 // ── Sprite generation cache ───────────────────────────────────────────────────
 
-/** Cache of fully generated sprites keyed by a unique string. */
+/** Cache of fully generated (shaded) sprites keyed by a unique string. */
 const _spriteCache = new Map<string, HTMLCanvasElement>();
+
+/**
+ * Cache of cheap unshaded sprites for active-gameplay frames when baking is
+ * forbidden.  Keyed by the same string as `_spriteCache` (variant bucket
+ * included) but stored separately so shaded versions can later replace them.
+ * Created with the same base+template compositing but without
+ * `applyOrganicEdgeShading`, making them very cheap (no getImageData/putImageData).
+ */
+const _unshadedSpriteCache = new Map<string, HTMLCanvasElement>();
 
 /**
  * Number of distinct noise variants per (baseUrl, templateUrl, size, mask, seed).
@@ -97,6 +87,9 @@ function _cacheKey(
  *
  * The base texture is drawn upright.  Only the template mask is transformed so
  * the rock detail never rotates/flips while the cut shape does.
+ *
+ * @param applyShading  When true (default), calls `applyOrganicEdgeShading`.
+ *                      Pass false for a cheap unshaded fallback canvas.
  */
 function _generateSprite(
   base: HTMLImageElement,
@@ -110,6 +103,7 @@ function _generateSprite(
   worldOriginXWorld: number,
   worldOriginYWorld: number,
   seed: number,
+  applyShading = true,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width  = widthPx;
@@ -136,10 +130,11 @@ function _generateSprite(
   }
   ctx.globalCompositeOperation = 'source-over';
 
-  // Step 3: apply organic edge shading (shared with folder-based sprites).
-  // Pixels near open air are darkened via multiply, with smooth world-space
-  // noise variation for an organic look across connected blocks.
-  applyOrganicEdgeShading(ctx, widthPx, heightPx, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
+  // Step 3: optionally apply organic edge shading (shared with folder-based sprites).
+  // Skipped for cheap unshaded fallback canvases used during active gameplay.
+  if (applyShading) {
+    applyOrganicEdgeShading(ctx, widthPx, heightPx, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
+  }
 
   return canvas;
 }
@@ -187,16 +182,24 @@ export function getProceduralSprite(
   const cached = _spriteCache.get(key);
   if (cached !== undefined) return cached;
 
-  // Do not bake a new sprite when the per-frame budget is exhausted.
-  // Return null so the caller uses its stale/fallback canvas and retries later.
-  if (FP.isBakeBudgetExhausted()) return null;
+  const base     = loadImg(baseUrl);
+  const template = loadImg(templateUrl);
+  if (!isSpriteReady(base) || !isSpriteReady(template)) return null;
 
-  const base     = _loadImg(baseUrl);
-  const template = _loadImg(templateUrl);
-  if (!_isReady(base) || !_isReady(template)) return null;
+  // During active gameplay, baking new shaded sprites is forbidden to prevent
+  // unexpected getImageData/putImageData stalls.  Return a cheap unshaded
+  // fallback canvas — this is a stable non-null result so the chunk does NOT
+  // set hadFallbacksFlag and will NOT rebuild every frame.
+  if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    const unshadedCached = _unshadedSpriteCache.get(key);
+    if (unshadedCached !== undefined) return unshadedCached;
+    const unshaded = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, bucketWorldX, bucketWorldY, seed, false);
+    _unshadedSpriteCache.set(key, unshaded);
+    return unshaded;
+  }
 
   const _t0 = import.meta.env.DEV ? performance.now() : 0;
-  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, bucketWorldX, bucketWorldY, seed);
+  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, bucketWorldX, bucketWorldY, seed, true);
   _spriteCache.set(key, result);
   FP.recordSpriteBake(key, import.meta.env.DEV ? performance.now() - _t0 : 0);
   return result;
@@ -250,8 +253,8 @@ function _getReadyUrls(probePool: readonly string[]): string[] {
   // Count how many pool images are currently loaded.
   let currentReadyCount = 0;
   for (let i = 0; i < probePool.length; i++) {
-    const img = _loadImg(probePool[i]);
-    if (_isReady(img)) currentReadyCount++;
+    const img = loadImg(probePool[i]);
+    if (isSpriteReady(img)) currentReadyCount++;
   }
 
   const entry = _readyUrlsByPool.get(probePool);
@@ -262,7 +265,7 @@ function _getReadyUrls(probePool: readonly string[]): string[] {
   // Rebuild the ready list.
   const urls: string[] = [];
   for (let i = 0; i < probePool.length; i++) {
-    if (_isReady(_loadImg(probePool[i]))) urls.push(probePool[i]);
+    if (isSpriteReady(loadImg(probePool[i]))) urls.push(probePool[i]);
   }
   _readyUrlsByPool.set(probePool, { urls, readyCount: currentReadyCount });
   return urls;
@@ -517,4 +520,43 @@ export function getRampSprite(
 
   const [flipX, flipY] = _rampOriToFlips(orientation);
   return getProceduralSprite(baseUrl, TEMPLATE_URLS[shapeName], widthPx, heightPx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
+}
+
+// ── Derived-sprite prewarm helper ─────────────────────────────────────────────
+
+/**
+ * Proactively warms the shaded procedural-sprite cache for one tile variant
+ * during a loading or prewarm phase (baking is allowed).
+ *
+ * Calls `getProceduralSprite` directly so the shaded canvas is stored before
+ * the player regains control, preventing first-touch stutter.
+ *
+ * Respects `isBakeBudgetExhausted()` — if the budget is gone this frame the
+ * call is a no-op and returns `false`; the caller should retry next frame.
+ *
+ * @returns `true` when the variant was already cached or was successfully baked;
+ *          `false` when the budget ran out and the bake was skipped.
+ */
+export function prewarmProceduralSpriteVariant(
+  baseUrl:          string,
+  templateUrl:      string,
+  widthPx:          number,
+  heightPx:         number,
+  flipX:            boolean,
+  flipY:            boolean,
+  rotStep:          number,
+  openAirSidesMask: number,
+  col:              number,
+  row:              number,
+  seed:             number,
+): boolean {
+  if (FP.isBakeBudgetExhausted()) return false;
+  const result = getProceduralSprite(
+    baseUrl, templateUrl, widthPx, heightPx,
+    flipX, flipY, rotStep, openAirSidesMask,
+    col * widthPx, row * heightPx,
+    seed, col, row,
+  );
+  // A non-null result means the variant is (or was) cached.
+  return result !== null;
 }

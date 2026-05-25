@@ -203,6 +203,39 @@ export function isBakeBudgetExhausted(): boolean {
   return _spriteBakeMaxPerFrame > 0 && _spriteBakesThisFrame >= _spriteBakeMaxPerFrame;
 }
 
+// ── Gameplay bake-forbidden flag ──────────────────────────────────────────────
+
+/**
+ * Production-safe flag: when true, expensive derived-sprite baking
+ * (applyOrganicEdgeShading) is forbidden for the current frame.
+ *
+ * Set to `true` at the start of every active-gameplay frame and `false` during
+ * loading, paused, or editor frames.  Callers that respect this flag should
+ * return a cheap stable fallback (e.g. the unshaded base sprite) rather than
+ * performing a new bake or returning null (which would cause the chunk to
+ * rebuild every frame).
+ */
+let _bakeForbiddenInGameplay = false;
+
+/**
+ * Sets the gameplay-bake-forbidden flag.
+ * Pass `true` before each active-gameplay render frame.
+ * Pass `false` during loading, paused, or editor frames.
+ * Production-safe — no DEV guard.
+ */
+export function setBakeForbiddenInGameplay(v: boolean): void {
+  _bakeForbiddenInGameplay = v;
+}
+
+/**
+ * Returns true during active-gameplay frames when new expensive derived-sprite
+ * bakes should be skipped in favour of a cheap stable fallback.
+ * Production-safe — no DEV guard.
+ */
+export function isBakeForbiddenInGameplay(): boolean {
+  return _bakeForbiddenInGameplay;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**

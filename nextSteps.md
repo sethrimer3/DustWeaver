@@ -61,7 +61,7 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 ## Active Priority 1 Tasks
 
-### 0. In-room runtime freeze elimination pass (completed)
+### 0. In-room runtime freeze elimination pass (COMPLETED — BUILD 395 + BUILD 401)
 
 This pass targeted repeated freezes **inside** rooms during active gameplay, distinct from the earlier room-transition loading work.
 
@@ -72,54 +72,54 @@ This pass targeted repeated freezes **inside** rooms during active gameplay, dis
 - **Stale `_decodeInFlight` entries** — When `img.complete === true` and `_hasDecode()` is false, `performDecode()` resolved synchronously before `_decodeInFlight.set()` was called, leaving stale entries that permanently block `isSpriteDecodeReady()`.
 - **Prewarm queue stall** — `roomRenderChunkWarmScheduler.ts` used `break` (instead of `continue`) when one room was not ready, stalling the entire prewarm queue rather than skipping to the next room.
 - **No frame-context in freeze profiler** — The profiler could not distinguish active-gameplay freezes from loading or editor frames, making it hard to prioritize freeze sources.
+- **Baking allowed during active gameplay** — Even with bounded caches, new shaded-sprite bakes could occur in active-gameplay frames whenever a bucket was first touched.
+- **Loading overlay released too early** — `tickLoadingOverlay()` only checked `areRoomSpritesReady()`, not background image decode readiness.
+- **Hardcoded block size in chunk memory estimate** — `_evictStaleChunks()` used hardcoded `8` for block pixel size.
+- **Procedural sprites used a private image cache** — `proceduralBlockSprite.ts` maintained its own `_imgCache`/`_loadImg`/`_isReady` instead of shared `imageCache.ts`.
 
-#### What was fixed
+#### What was fixed (BUILD 395)
 
-1. **Bounded variant cache for `folderBlockThemes.ts`** (`SHADED_VARIANT_BUCKETS = 16`):
-   - `_shadedCacheKey()` now takes a `variantBucket` (0–15) instead of raw world coords.
-   - `variantBucket = hashTilePosition(col, row, seed) % 16` — deterministic per tile, bounded cache size.
-   - `bucketWorldX = variantBucket * blockSizePx` gives each bucket a distinct organic noise pattern.
-   - Cache size is now `sprite_variants × openAirMask_variants × 16` regardless of room size.
+1. **Bounded variant cache for `folderBlockThemes.ts`** (`SHADED_VARIANT_BUCKETS = 16`).
+2. **Bounded variant cache for `proceduralBlockSprite.ts`** (`PROC_VARIANT_BUCKETS = 16`).
+3. **Stale `_decodeInFlight` fix** in `imageCache.ts` via `.finally()` identity check.
+4. **Prewarm queue `break` → `continue`** in `roomRenderChunkWarmScheduler.ts`.
+5. **`frameContext` tracking** in `perfFreezeProfiler.ts` (`setFrameGameContext`, `FrameContext`).
 
-2. **Bounded variant cache for `proceduralBlockSprite.ts`** (`PROC_VARIANT_BUCKETS = 16`):
-   - Same approach: `_cacheKey()` uses `variantBucket`; all 6 internal callers (`getBlockSprite1x1`, `getBlockSprite2x2`, `getPlatformSprite1x1`, `getPlatformSpriteFromBaseUrl`, `getPlatformSprite2x2`, ramp/shape accessor) pass `col, row`.
+#### What was fixed (BUILD 401)
 
-3. **Stale `_decodeInFlight` fix in `imageCache.ts`**:
-   - Added `.finally()` with identity check after `_decodeInFlight.set()`.
-   - Ensures entries are cleaned up even if the promise resolves synchronously before being registered.
+6. **Gameplay-bake-forbidden flag** — `perfFreezeProfiler.ts` exports production-safe `setBakeForbiddenInGameplay(v)` / `isBakeForbiddenInGameplay()`. `gameScreen.ts` sets `true` at gameplay frame start, `false` at all other paths and at frame end.
 
-4. **Prewarm queue `break` → `continue` in `roomRenderChunkWarmScheduler.ts`**:
-   - Not-ready tasks are now moved to the back and skipped with `continue`.
-   - A `deferralCountThisSlice` guard (max 3) prevents spinning through the entire queue when everything is blocked.
+7. **Stable unshaded fallback in `folderBlockThemes.ts`** — `getTheme1x1SpriteShaded` and `getTheme2x2SpriteShaded` return a cached unshaded canvas (no `getImageData`/`putImageData`) instead of `null` when bake is forbidden or budget is exhausted. `hadFallbacksFlag` stays false → no rebuild loop.
 
-5. **`frameContext` tracking in `perfFreezeProfiler.ts`**:
-   - Added `FrameContext` type: `'gameplay' | 'loading' | 'editor' | 'paused' | 'unknown'`.
-   - `setFrameGameContext()` sets the context; `endFrame()` console warning now prefixes with `⚠ GAMEPLAY` for active-gameplay freezes.
-   - `gameScreen.ts` calls `setFrameGameContext()` at every branch (editor, async-load, paused, gameplay).
-   - The debug freeze profiler panel shows `ctx:gameplay` (or other context) on each frame.
+8. **Stable unshaded fallback in `proceduralBlockSprite.ts`** — `getProceduralSprite` returns a cached unshaded canvas (template compositing without edge shading) when bake is forbidden.
+
+9. **Unified image cache in `proceduralBlockSprite.ts`** — Private `_imgCache`/`_loadImg`/`_isReady` removed. Now uses shared `loadImg`/`isSpriteReady` from `imageCache.ts`.
+
+10. **Loading overlay waits for background decode** — `tickLoadingOverlay()` now requires `isRoomBackgroundDecodeReady(currentRoom)` in addition to `areRoomSpritesReady()`. Added `isRoomBackgroundDecodeReady()` to `backgroundRenderer.ts` and `roomAssetPreloader.ts`.
+
+11. **Chunk memory estimate uses actual block size** — `_lastBlockSizePx` field added to `RoomChunkCache`; updated in `renderVisibleChunks()`, used in `_evictStaleChunks()`.
+
+12. **Prewarm helpers added** — `prewarmFolderThemeShadedForChunk()` in `folderBlockThemes.ts`; `prewarmProceduralSpriteVariant()` in `proceduralBlockSprite.ts`.
 
 #### Trade-offs made
 
-- **Slight tile-shading noise repetition** — With 16 buckets, the organic noise pattern repeats across tile groups. This is imperceptible in practice (patterns still vary per tile) and far preferable to gameplay freezes.
-- **Perfect world-space seamlessness** is no longer guaranteed for organic edge shading. Nearby tiles share one of 16 representative noise seeds rather than having unique per-coordinate noise. Visual consistency and smooth gameplay take priority.
+- **Slight tile-shading noise repetition** — With 16 buckets, organic noise patterns repeat across tile groups. Imperceptible in practice; far preferable to gameplay freezes.
+- **Unshaded tiles during first gameplay entry** — On first room entry, tiles visible before the loading overlay releases will be unshaded if their shaded variants were not warmed during loading. Visual quality degrades slightly; no freeze occurs. Full warm of entry viewport before overlay release is a future improvement.
 
 #### How to use the profiler to diagnose future freezes
 
 1. Open the pause menu → enable **Debug Overlay** → enable **Freeze Profiler**.
-2. Move through rooms. The freeze panel shows `ctx:gameplay` for active-gameplay frames and highlights long frames in red.
+2. Move through rooms. The freeze panel shows `ctx:gameplay` for active-gameplay frames.
 3. Key fields to watch:
-   - `bake N×Xms` — sprite bake count and total cost this frame (should stay near 0 during gameplay).
-   - `edge N×Xms` — organic edge-shading calls (should stay near 0 during gameplay).
-   - `wChk N×Xms` — wall chunks rebuilt (small spikes acceptable on first entry, should taper off).
+   - `bake N×Xms` — sprite bake count (should stay **0** during `ctx:gameplay` after BUILD 401).
+   - `edge N×Xms` — organic edge-shading calls (should stay **0** during `ctx:gameplay`).
+   - `wChk N×Xms` — wall chunks rebuilt.
    - `bChk N×Xms` — background chunks rebuilt.
-4. If `bake` or `edge` spike during `ctx:gameplay`, the bounded variant cache may need more buckets or a pre-warm call for the entry viewport.
-5. Long-frame console warnings are tagged `⚠ GAMEPLAY` when `frameContext === 'gameplay'` for easy grep filtering.
+4. Long-frame warnings are tagged `⚠ GAMEPLAY` when `frameContext === 'gameplay'`.
 
-#### Remaining optimization work
+#### Remaining work from this pass
 
-- **Entry viewport pre-warm** — The first visible chunks around spawn are not explicitly warmed before releasing the player. This is safe today because the bounded cache limits bake cost, but a targeted prewarm of the entry viewport would eliminate any remaining first-second stutter.
-- **`proceduralBlockSprite.ts` image-cache unification** — Still maintains its own `_imgCache`/`_loadImg`. Unifying with `render/imageCache.ts` would improve readiness reporting.
-- See items below for the remaining queue and eviction tasks.
+- **Entry viewport pre-warm not yet wired** — `prewarmFolderThemeShadedForChunk` and `prewarmProceduralSpriteVariant` exist but are not yet called from the room-entry prewarm path. Connecting them would eliminate residual unshaded-fallback appearance on first room entry.
 
 ---
 
@@ -169,8 +169,8 @@ These are still valid future refactors and should not be treated as accidental o
 2. **Legacy/world-number sprite decode tracking**
    Decode-aware room preloading currently focuses on folder-based block themes. Legacy world-number sprites such as brownRock, dirt, and world 0-9 block sets still start loading at module init time and are not tracked through the same decode-ready set. This is lower priority unless legacy rooms still show visible sprite pop-in.
 
-3. **`proceduralBlockSprite.ts` shared image-cache unification**
-   `proceduralBlockSprite.ts` still maintains its own `_imgCache` and `_loadImg` path. Unifying it with `render/imageCache.ts` would avoid duplicate image objects and improve readiness/decode reporting for procedural sprites.
+3. **Entry viewport shaded-sprite pre-warm wiring**
+   `prewarmFolderThemeShadedForChunk` and `prewarmProceduralSpriteVariant` exist (BUILD 401) but are not yet called from the room-entry prewarm path. Connecting them would eliminate residual unshaded-fallback appearance during the first second after room entry. Should be done as a dedicated entry-viewport warm pass, limited to the spawn viewport plus one chunk margin.
 
 4. **Room render manifest**
    Published rooms could eventually export precomputed render data: wall templates, theme sprite URLs, background image URLs, chunk occupancy hints, occluder chunks, and recommended entry chunks. This touches editor export, schema hydration, runtime loading, and preload systems, so it should be a dedicated pass.
