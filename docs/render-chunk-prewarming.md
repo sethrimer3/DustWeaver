@@ -24,7 +24,8 @@ called with the same room graph.  It queues chunk-warm tasks for:
 ### 2 — Idle-time scheduling
 
 The warmer runs exclusively during browser idle time via `requestIdleCallback`
-(with a `setTimeout(…, 50)` fallback on browsers that lack it).
+(with a `setTimeout(fn, 0)` fallback on browsers that lack it, which fires at
+the next event-loop tick with a synthetic 50 ms time budget).
 
 Each idle callback:
 1. Checks whether the average frame time is above `FRAME_TIME_PAUSE_THRESHOLD_MS`
@@ -96,11 +97,10 @@ All tuning constants live near the top of
 |---|---|---|
 | `MAX_CHUNKS_PER_IDLE` | `6` | Maximum chunks built in a single idle callback. |
 | `MIN_IDLE_REMAINING_MS` | `4` | Stop processing if `timeRemaining()` drops below this. |
-| `IDLE_FALLBACK_DELAY_MS` | `50` | `setTimeout` delay used when `requestIdleCallback` is unavailable. |
+| `IDLE_TIMEOUT_MS` | `5000` | `requestIdleCallback` timeout — the browser must invoke the callback within this many ms even if the system is busy. |
 | `FRAME_TIME_PAUSE_THRESHOLD_MS` | `20` | Pause all prewarming when mean frame time exceeds this (≈50 fps). |
 | `MAX_PREWARM_RADIUS` | `3` | Maximum BFS radius from the current room. |
 | `RADIUS3_HIGH_QUALITY_ONLY` | `true` | Limit radius-3 warming to `graphics='high'` or stable frame times. |
-| `MAX_SPRITE_WAIT_RETRIES` | `5` | Drop a task after this many deferred attempts if sprites never arrive. |
 
 Renderer-side constants live near the top of each renderer file:
 - `blockSpriteRenderer.ts` — `_prewarmWallCaches` / `_prewarmWallLayouts` maps
