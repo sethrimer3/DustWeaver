@@ -143,6 +143,9 @@ export class RenderProfiler {
   /** Latest liquid body debug stats. */
   private _liquidStats: LiquidDebugStats | null = null;
 
+  /** Latest prewarm stats from the chunk warm scheduler. */
+  private _prewarmStats: import('../../screens/roomRenderChunkWarmScheduler').PrewarmStats | null = null;
+
   /**
    * Store the latest chunk-cache diagnostic counters.
    * Call this from gameRender.ts after the walls render stage when debug mode
@@ -175,6 +178,14 @@ export class RenderProfiler {
    */
   updateLiquidStats(stats: LiquidDebugStats): void {
     this._liquidStats = stats;
+  }
+
+  /**
+   * Store the latest prewarm stats from roomRenderChunkWarmScheduler.
+   * Call this once per frame from gameScreen.ts when debug mode is on.
+   */
+  updatePrewarmStats(stats: import('../../screens/roomRenderChunkWarmScheduler').PrewarmStats): void {
+    this._prewarmStats = stats;
   }
 
   // ── Frame-pacing API ──────────────────────────────────────────────────────
@@ -239,6 +250,17 @@ export class RenderProfiler {
    */
   getAvgFrameMs(): number {
     return this._smoothedMs[STAGE_TOTAL];
+  }
+
+  /**
+   * Returns the most-recently recorded raw frame time (ms).
+   * Used by the chunk prewarm scheduler to detect high-load frames and
+   * reduce or pause prewarming.  Returns 0 before any frame has been recorded.
+   */
+  getLastFrameMs(): number {
+    if (this._ringCount === 0) return 0;
+    const idx = (this._ringHead - 1 + RenderProfiler.RING_SIZE) % RenderProfiler.RING_SIZE;
+    return this._frameTimes[idx];
   }
 
   /**
@@ -337,9 +359,10 @@ export class RenderProfiler {
     const showRoom   = isPanelVisible('room',        panelVisibility);
     const showWater  = isPanelVisible('water',       panelVisibility);
     const showFreeze = isPanelVisible('freeze',      panelVisibility);
+    const showPrewarm = isPanelVisible('prewarm',    panelVisibility);
 
     // Nothing to render — bail early to avoid drawing an empty frame.
-    if (!showPerf && !showChunks && !showRoom && !showWater && !showFreeze) return;
+    if (!showPerf && !showChunks && !showRoom && !showWater && !showFreeze && !showPrewarm) return;
 
     const lineHeightPx = 9;
     const fontSizePx   = 7;
@@ -526,6 +549,12 @@ export class RenderProfiler {
         cur !== null && cur.preloadMainThreadMs > 0
           ? `prel ${cur.preloadMainThreadMs.toFixed(1)}ms (${cur.preloadMainThreadRoomId.slice(0, 12)})`
           : 'prel —',
+        cur !== null && cur.sceneLightTotalCount > 0
+          ? `lit tot=${cur.sceneLightTotalCount} vis=${cur.sceneLightCulledCount} shd=${cur.sceneLightShadowCount} segs=${cur.sceneLightOccluderSegCount}`
+          : 'lit —',
+        cur !== null && cur.bloomSkippedNoGlow
+          ? 'bloom skip(no glow)'
+          : 'bloom —',
         long !== null
           ? `last>100: ${long.frameMs.toFixed(0)}ms ${long.topCause}`
           : 'last>100: —',
@@ -544,6 +573,36 @@ export class RenderProfiler {
         ctx.fillText(freezeLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
+    }
+
+    // ── Prewarm stats panel ───────────────────────────────────────────────────
+    if (showPrewarm && this._prewarmStats !== null) {
+      const pw = this._prewarmStats;
+      const prewarmLines = [
+        '── Chunk Prewarm ──',
+        `Queue: ${pw.queueLength}  Radius: ${pw.currentRadius}`,
+        `Wall rooms: ${pw.wallRoomCount}  chunks: ${pw.totalWallChunks}`,
+        `Wall mem: ~${pw.wallMemoryEstimateKB}KB`,
+        `BG rooms: ${pw.bgRoomCount}  chunks: ${pw.totalBgChunks}`,
+        `BG mem: ~${pw.bgMemoryEstimateKB}KB`,
+        `Last slice: ${pw.chunksLastSlice}ch ${pw.msLastSlice.toFixed(1)}ms`,
+        `W hits: ${pw.wallCacheHits}  miss: ${pw.wallCacheMisses}`,
+        `BG hits: ${pw.bgCacheHits}  miss: ${pw.bgCacheMisses}`,
+        pw.pausedForFrameTime ? '⚠ PAUSED (frame time)' : '● warming',
+      ];
+      const prewarmPanelH = prewarmLines.length * lineHeightPx + 8;
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.70)';
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, prewarmPanelH);
+      for (let i = 0; i < prewarmLines.length; i++) {
+        const isHeader  = i === 0;
+        const isPaused  = i === prewarmLines.length - 1 && pw.pausedForFrameTime;
+        ctx.fillStyle = isHeader ? '#ffdd44' : isPaused ? '#ff6060' : '#a8d8ff';
+        ctx.fillText(prewarmLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+      // nextPanelY would be updated here for any panel added after.
     }
   }
 }

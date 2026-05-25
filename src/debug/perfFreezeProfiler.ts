@@ -75,6 +75,20 @@ export interface FreezeFrameData {
   loadPhaseMs: number;
   loadPhaseDetail: string;
 
+  // ── Scene lighting ───────────────────────────────────────────────────────────
+  /** Total scene lights defined in the current room this frame. */
+  sceneLightTotalCount: number;
+  /** Scene lights that passed viewport culling and were drawn this frame. */
+  sceneLightCulledCount: number;
+  /** Number of those drawn lights that cast shadows (ran visibility polygon). */
+  sceneLightShadowCount: number;
+  /** Total occluder segments processed across all shadow-casting lights. */
+  sceneLightOccluderSegCount: number;
+
+  // ── Bloom ────────────────────────────────────────────────────────────────────
+  /** True when the bloom composite was skipped because no glow was submitted. */
+  bloomSkippedNoGlow: boolean;
+
   // ── Derived ─────────────────────────────────────────────────────────────────
   /** Name of the subsystem that consumed the most measured ms this frame. */
   topCause: string;
@@ -102,6 +116,11 @@ function _makeBlankFrame(): FreezeFrameData {
     preloadMainThreadRoomId: '',
     loadPhaseMs:          0,
     loadPhaseDetail:      '',
+    sceneLightTotalCount:       0,
+    sceneLightCulledCount:      0,
+    sceneLightShadowCount:      0,
+    sceneLightOccluderSegCount: 0,
+    bloomSkippedNoGlow:         false,
     topCause:             '',
   };
 }
@@ -201,6 +220,11 @@ export function beginFrame(frameMs: number): void {
   c.preloadMainThreadRoomId = '';
   c.loadPhaseMs          = 0;
   c.loadPhaseDetail      = '';
+  c.sceneLightTotalCount       = 0;
+  c.sceneLightCulledCount      = 0;
+  c.sceneLightShadowCount      = 0;
+  c.sceneLightOccluderSegCount = 0;
+  c.bloomSkippedNoGlow         = false;
   c.topCause             = '';
 }
 
@@ -275,6 +299,43 @@ export function recordLoadPhaseStep(detail: string, ms: number): void {
   if (ms > 0) _cur.loadPhaseDetail = detail;
 }
 
+/**
+ * Record scene-lighting stats for this frame.
+ * Called from lightingSystem.ts once per renderLightingPass() invocation.
+ *
+ * @param totalLights    Total lights defined in the room.
+ * @param culledLights   Lights that passed viewport culling.
+ * @param shadowLights   Shadow-casting lights that ran visibility polygon.
+ * @param occluderSegs   Total occluder segments processed across all shadow lights.
+ */
+export function recordSceneLightStats(
+  totalLights: number,
+  culledLights: number,
+  shadowLights: number,
+  occluderSegs: number,
+): void {
+  if (!import.meta.env.DEV) return;
+  _cur.sceneLightTotalCount       = totalLights;
+  _cur.sceneLightCulledCount      = culledLights;
+  _cur.sceneLightShadowCount      = shadowLights;
+  _cur.sceneLightOccluderSegCount = occluderSegs;
+}
+
+/** Record that the bloom composite was skipped because no glow was submitted. */
+export function recordBloomSkippedNoGlow(): void {
+  if (!import.meta.env.DEV) return;
+  _cur.bloomSkippedNoGlow = true;
+}
+
+/**
+ * Record chunks built during an idle prewarm slice.
+ * Called from roomRenderChunkWarmScheduler.ts; no-ops in production.
+ */
+export function recordPrewarmSlice(_chunksBuilt: number): void {
+  // Currently a lightweight no-op that keeps the call in place for future
+  // per-frame aggregation if desired.  The scheduler tracks its own stats.
+}
+
 /** Set the current room/camera context for structured freeze warnings. */
 export function setFrameContext(
   roomId: string,
@@ -333,6 +394,8 @@ export function endFrame(): void {
       `  layoutSigMs=${c.layoutSigMs.toFixed(1)}ms layoutRebuildMs=${c.layoutRebuildMs.toFixed(1)}ms\n` +
       `  preloadMs=${c.preloadMainThreadMs.toFixed(1)}ms (${c.preloadMainThreadRoomId})\n` +
       `  loadPhase=${c.loadPhaseMs.toFixed(1)}ms (${c.loadPhaseDetail})\n` +
+      `  sceneLights total=${c.sceneLightTotalCount} culled=${c.sceneLightCulledCount} shadow=${c.sceneLightShadowCount} occSegs=${c.sceneLightOccluderSegCount}\n` +
+      `  bloomSkippedNoGlow=${c.bloomSkippedNoGlow}\n` +
       `  roomId=${_contextRoomId}\n` +
       `  cameraBlockRange=${_contextCamBlockRange}\n` +
       `  playerBlock=${_contextPlayerBlock}`,

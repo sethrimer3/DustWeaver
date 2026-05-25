@@ -10,6 +10,7 @@
  */
 
 import type { BackgroundId } from '../levels/roomDef';
+import { decodeImg } from './imageCache';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -100,6 +101,20 @@ function wrapToTileStart(offset: number, tileSize: number): number {
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
+
+/**
+ * Triggers HTMLImageElement.decode() for the static background image
+ * associated with `id`, ensuring the GPU has rasterized the texture before
+ * the first drawImage call.
+ *
+ * Fire-and-forget — returns immediately for procedural backgrounds (those
+ * with no static image URL).  Safe to call multiple times; decodeImg() is
+ * idempotent for already-decoded URLs.
+ */
+export function preloadBackgroundImageDecoded(id: BackgroundId): void {
+  const url = backgroundIdToImagePath(id);
+  if (url !== null) void decodeImg(url);
+}
 
 /**
  * Renders the room background for the current world with parallax scrolling.

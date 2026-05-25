@@ -126,6 +126,32 @@ export interface CachedWallLayout {
 
 let _cachedWallLayout: CachedWallLayout | null = null;
 
+// ── Prewarm layout helpers ────────────────────────────────────────────────────
+
+/**
+ * Returns the currently cached wall layout, or null if none has been built yet.
+ *
+ * Used by the render chunk prewarmer to save the active room's layout before
+ * temporarily computing an adjacent room's layout, so it can be restored
+ * afterward without forcing a full layout rebuild on the next render frame.
+ */
+export function getCurrentWallLayout(): CachedWallLayout | null {
+  return _cachedWallLayout;
+}
+
+/**
+ * Installs a pre-built layout into the module-level cache slot, bypassing
+ * the normal signature check.
+ *
+ * Used by the render chunk prewarmer to:
+ *   1. Restore the active room's layout after a prewarm pass.
+ *   2. Pre-install an adjacent room's layout before room entry so the first
+ *      `renderVisibleChunks` call does not trigger full chunk invalidation.
+ */
+export function setPrebuiltWallLayout(layout: CachedWallLayout): void {
+  _cachedWallLayout = layout;
+}
+
 // ── Tile-key helpers ──────────────────────────────────────────────────────────
 
 /** Returns the string key for a tile grid coordinate. */

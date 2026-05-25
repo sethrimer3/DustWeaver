@@ -450,7 +450,16 @@ export function renderFrame(r: RenderFrameContext): void {
   );
 
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
-  renderHazards(ctx, world, ox, oy, zoom, world.tick, virtualWidthPx, virtualHeightPx);
+  // Skip entirely if the room has no hazard-type entities whatsoever.
+  if (
+    world.spikeCount > 0 || world.springboardCount > 0 ||
+    world.waterZoneCount > 0 || world.lavaZoneCount > 0 ||
+    world.breakableBlockCount > 0 || world.crumbleBlockCount > 0 ||
+    world.bouncePadCount > 0 || world.kineticBlockCount > 0 ||
+    world.dustBoostJarCount > 0 || world.fireflyJarCount > 0 || world.fireflyCount > 0
+  ) {
+    renderHazards(ctx, world, ox, oy, zoom, world.tick, virtualWidthPx, virtualHeightPx);
+  }
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateLiquidStats(getLiquidDebugStats());
   }

@@ -34,7 +34,7 @@ import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
-import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset } from '../ui/renderSettings';
+import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
 import { BloomSystem } from '../render/effects/bloomSystem';
@@ -89,10 +89,17 @@ import {
   preloadAdjacentRoomAssets,
   areRoomSpritesReady,
   decodeRoomThemeSprites,
+  decodeRoomBackground,
 } from '../render/roomAssetPreloader';
 import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
 import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
 import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
+import {
+  scheduleChunkPrewarms,
+  adoptPrewarmedChunksForRoom,
+  getPrewarmStats,
+  type WarmScheduleHandle,
+} from './roomRenderChunkWarmScheduler';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import { GameLoadingOverlay } from './gameLoadingOverlay';
 import {
@@ -416,6 +423,10 @@ export function startGameScreen(
       );
       setActiveDarkAmbientBlockers(darkBlockerKeys);
       setActiveSeamBlending(room.blockSeamBlending ?? 'off');
+      // Adopt any pre-warmed chunks that were built during idle time for this
+      // room.  Must be called after lighting/theme setters but before the first
+      // render frame so the active chunk caches are seeded with pre-built data.
+      adoptPrewarmedChunksForRoom(room, camera.zoom);
       FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
     musicManager.notifyRoomEntered(room.songId ?? '_continue');
@@ -717,6 +728,7 @@ export function startGameScreen(
       // Fire decode() for the current room's sprites so they are GPU-rasterized
       // before the first wall chunks render. Fire-and-forget — never blocks the frame.
       void decodeRoomThemeSprites(room);
+      decodeRoomBackground(room);
       FP.recordLoadPhaseStep('F:preloadRoomThemeSprites', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
 
@@ -748,6 +760,20 @@ export function startGameScreen(
       );
       FP.recordLoadPhaseStep('F:scheduleRoomPreloads', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
+
+    // Start render-chunk prewarm scheduler for nearby rooms.
+    // Runs only during idle time after room data and sprites are ready.
+    _warmScheduleHandle?.cancel();
+    _warmScheduleHandle = scheduleChunkPrewarms(
+      room,
+      ROOM_REGISTRY,
+      roomRuntimeCache,
+      getGraphicsQuality,
+      () => renderProfiler.getLastFrameMs(),
+      virtualWidthPx,
+      virtualHeightPx,
+      camera.zoom,
+    );
 
     // Generator complete — Phase F has no trailing yield.
   }
@@ -835,6 +861,8 @@ export function startGameScreen(
   // Handle for the current idle preload schedule so it can be cancelled when
   // the player switches rooms before the previous schedule completes.
   let _preloadScheduleHandle: PreloadScheduleHandle | null = null;
+  // Handle for the current idle chunk prewarm schedule.
+  let _warmScheduleHandle: WarmScheduleHandle | null = null;
 
   // ── Async room load state ─────────────────────────────────────────────────
   // When a room transition fires and the target is not in the prepared cache,
@@ -1419,6 +1447,7 @@ export function startGameScreen(
             // they are GPU-rasterized before the player crosses. Fire-and-forget.
             const _tRoom = ROOM_REGISTRY.get(_tId);
             if (_tRoom !== undefined) void decodeRoomThemeSprites(_tRoom);
+            if (_tRoom !== undefined) decodeRoomBackground(_tRoom);
             break; // one priority boost per frame is sufficient
           }
         }
@@ -1643,6 +1672,11 @@ export function startGameScreen(
       renderProfiler.updateTransitionStats(debugStats);
     }
 
+    // Feed prewarm stats to profiler each frame (cheap — reads cached data).
+    if (pauseController.state.isDebugMode) {
+      renderProfiler.updatePrewarmStats(getPrewarmStats());
+    }
+
     const _renderT0 = import.meta.env.DEV ? performance.now() : 0;
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
@@ -1711,6 +1745,8 @@ export function startGameScreen(
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
     _preloadScheduleHandle?.cancel();
     _preloadScheduleHandle = null;
+    _warmScheduleHandle?.cancel();
+    _warmScheduleHandle = null;
     pauseController.destroy();
     gameOverlayController.destroy();
     // Stop background music and release resources

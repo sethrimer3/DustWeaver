@@ -54,7 +54,7 @@
 import type { RoomDef } from '../levels/roomDef';
 import type { AdjacencyEntry } from '../levels/roomCacheManifest';
 import { buildPreparedRoomRuntime } from './preparedRoomRuntime';
-import { preloadRoomThemeSprites, decodeRoomThemeSprites } from '../render/roomAssetPreloader';
+import { preloadRoomThemeSprites, decodeRoomThemeSprites, decodeRoomBackground } from '../render/roomAssetPreloader';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import { isEntryFullyPrepared } from './roomRuntimeCache';
 import type { RoomRuntimeEntry } from './roomRuntimeCache';
@@ -464,6 +464,7 @@ export function scheduleRoomPreloads(
   for (let i = 0; i < radius1.length; i++) {
     const r = roomRegistry.get(radius1[i]);
     if (r !== undefined) void decodeRoomThemeSprites(r);
+    if (r !== undefined) decodeRoomBackground(r);
   }
   for (let i = 0; i < radius2.length; i++) {
     const r = roomRegistry.get(radius2[i]);
