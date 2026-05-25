@@ -1001,21 +1001,19 @@ export function startGameScreen(
         player.velocityXWorld = vx;
         player.velocityYWorld = dir === 'up' ? vy - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION : vy;
       }
-      // Start the entry warm for the instant path.  Run one eager tick
-      // immediately: if all viewport chunks are already in the cache,
-      // tickEntryWarm() transitions to 'ready' right away (wallBuilt=0 &&
-      // bgBuilt=0) and no overlay is shown.  If warm work is needed,
-      // show the overlay so the warm phase can run unobserved.
+      // Start the entry warm for the instant path.  Do NOT tick eagerly here:
+      // chunk building inside the transition callback (before the overlay is
+      // visible) can cause a hitch on the room-boundary frame.  Instead, show
+      // a lightweight textless cover immediately and let the normal RAF loop
+      // advance the warm in the dedicated 'entryWarm' early branch.  The cover
+      // fades out in 80 ms once the warm completes (or is already done).
       entryWarmState = createEntryWarmState();
       startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
-      tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
-      if (entryWarmState.phase === 'warming') {
-        showLoadingOverlay();
-      }
+      loadingOverlay.showEntryWarm();
       if (import.meta.env.DEV) {
         console.log(
           `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` +
-          ` (entryWarm: ${entryWarmState.phase})`,
+          ` (entryWarm started — overlay shown)`,
         );
       }
     } else {
@@ -1371,6 +1369,21 @@ export function startGameScreen(
       if (import.meta.env.DEV) FP.setFrameGameContext('entryWarm');
       FP.setBakeForbiddenInGameplay(false);
       tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
+      tickLoadingOverlay();
+      FP.endFrame();
+      rafHandle = requestAnimationFrame(frame);
+      return;
+    }
+
+    // ── Room entry hold ───────────────────────────────────────────────────────
+    // Entry warm has completed (or was never needed), but the loading overlay
+    // may still be visible while source sprites or the background image finish
+    // decoding.  Hold simulation and input until the overlay self-dismisses to
+    // prevent gameplay advancing while the screen is still covered.
+    if (loadingOverlay.isVisible() &&
+        (!areRoomSpritesReady(currentRoom) || !isRoomBackgroundDecodeReady(currentRoom))) {
+      if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+      FP.setBakeForbiddenInGameplay(false);
       tickLoadingOverlay();
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
