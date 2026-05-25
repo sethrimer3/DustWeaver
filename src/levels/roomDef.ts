@@ -576,6 +576,20 @@ export interface RoomDef {
    */
   falloffPower?: number;
   /**
+   * How strongly the solid-tile directional light bleeds as a warm-tinted glow
+   * onto the air/background layer.
+   * 0.0 (default) = no spill — prevents cloudy-blob artefacts.
+   * Increase gently (e.g. 0.04–0.08) for a subtle warm atmosphere.
+   */
+  backgroundLightSpill?: number;
+  /**
+   * Softness radius for the per-tile darkness overlay on solid tiles.
+   * 0.0 (default) = crisp pixel-art; 1.0 = maximum softening.
+   * Kept as a stored setting; the renderer currently accepts the value but
+   * tiles remain pixel-crisp until a blur pass is added.
+   */
+  solidLightSoftness?: number;
+  /**
    * Optional block seam blending overlay.
    * When set, the renderer draws procedural transition stamps at tile seams
    * between adjacent tiles of different block themes.

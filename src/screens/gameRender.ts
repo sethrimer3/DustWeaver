@@ -62,7 +62,7 @@ import {
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
-import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats } from '../render/walls/blockSpriteRenderer';
+import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats, getActiveBackgroundLightSpill } from '../render/walls/blockSpriteRenderer';
 import { renderBackgroundBlocks, getBgChunkCacheStats } from '../render/walls/backgroundBlockRenderer';
 import {
   drawGrappleBloom,
@@ -361,6 +361,28 @@ export function renderFrame(r: RenderFrameContext): void {
     nowMs,
     renderProfiler,
   });
+
+  // ── Background light spill (optional subtle warm glow from nearby walls) ──
+  // Drawn after the world background and before background blocks / walls so
+  // it only affects the air/background layers.  Defaults to 0 (no spill) to
+  // prevent the cloudy orange-blob artefact.
+  const bgSpill = getActiveBackgroundLightSpill();
+  if (bgSpill > 0) {
+    ctx.save();
+    // Clip to the current room so spill doesn't bleed into adjacent rooms.
+    const clipX = Math.round(ox);
+    const clipY = Math.round(oy);
+    const clipW = Math.round(roomWidthWorld * zoom);
+    const clipH = Math.round(roomHeightWorld * zoom);
+    ctx.beginPath();
+    ctx.rect(clipX, clipY, clipW, clipH);
+    ctx.clip();
+    // Warm amber tint — clamped to a subtle translucent fill.
+    const alpha = Math.min(bgSpill, 0.5);
+    ctx.fillStyle = `rgba(200,150,80,${alpha.toFixed(3)})`;
+    ctx.fillRect(clipX, clipY, clipW, clipH);
+    ctx.restore();
+  }
 
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BG_BLOCKS);

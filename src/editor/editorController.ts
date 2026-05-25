@@ -375,6 +375,14 @@ export function createEditorController(
           if (state.roomData) state.roomData.falloffPower = value;
           applyEdits('metadata');
         },
+        onBackgroundLightSpillChange: (value: number) => {
+          if (state.roomData) state.roomData.backgroundLightSpill = value;
+          applyEdits('metadata');
+        },
+        onSolidLightSoftnessChange: (value: number) => {
+          if (state.roomData) state.roomData.solidLightSoftness = value;
+          applyEdits('metadata');
+        },
         onSeamBlendingChange: (mode) => {
           if (state.roomData) state.roomData.blockSeamBlending = mode;
           // Live-preview: update the active renderer immediately so the

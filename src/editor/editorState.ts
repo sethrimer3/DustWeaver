@@ -250,6 +250,8 @@ export interface EditorUICallbacks {
   onSideExposureStrengthChange: (value: number) => void;
   onMinimumWallLightChange: (value: number) => void;
   onFalloffPowerChange: (value: number) => void;
+  onBackgroundLightSpillChange: (value: number) => void;
+  onSolidLightSoftnessChange: (value: number) => void;
   onSeamBlendingChange: (mode: BlockSeamBlending) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onRoomSongChange: (songId: RoomSongId) => void;

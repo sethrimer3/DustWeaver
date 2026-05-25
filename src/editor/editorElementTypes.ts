@@ -493,6 +493,10 @@ export interface EditorRoomData {
   minimumWallLight?: number;
   /** Gamma-like exponent on the raw exposure value (0.5–3). */
   falloffPower?: number;
+  /** Optional warm-light spill onto air/background (0 = no spill, default). Range 0–0.5. */
+  backgroundLightSpill?: number;
+  /** Softness of per-tile darkness overlay (0 = crisp pixel-art, default). Range 0–1. */
+  solidLightSoftness?: number;
   /** Block seam blending mode for this room. */
   blockSeamBlending?: BlockSeamBlending;
   /**

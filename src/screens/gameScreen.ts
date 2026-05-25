@@ -410,6 +410,8 @@ export function startGameScreen(
         room.sideExposureStrength,
         room.minimumWallLight,
         room.falloffPower,
+        room.backgroundLightSpill,
+        room.solidLightSoftness,
       );
       setActiveDarkAmbientBlockers(darkBlockerKeys);
       setActiveSeamBlending(room.blockSeamBlending ?? 'off');
