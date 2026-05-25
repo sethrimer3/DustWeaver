@@ -88,6 +88,7 @@ import {
   preloadRoomThemeSprites,
   preloadAdjacentRoomAssets,
   areRoomSpritesReady,
+  decodeRoomThemeSprites,
 } from '../render/roomAssetPreloader';
 import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
 import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
@@ -713,6 +714,9 @@ export function startGameScreen(
     {
       const _t0 = import.meta.env.DEV ? performance.now() : 0;
       preloadRoomThemeSprites(room);
+      // Fire decode() for the current room's sprites so they are GPU-rasterized
+      // before the first wall chunks render. Fire-and-forget — never blocks the frame.
+      void decodeRoomThemeSprites(room);
       FP.recordLoadPhaseStep('F:preloadRoomThemeSprites', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
 
@@ -1409,8 +1413,12 @@ export function startGameScreen(
             case 'up':    _isNear = _py <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
           }
           if (_isNear) {
-            // Boost priority in the async queue — never block the frame.
+            // Boost runtime-cache build priority in the async queue.
             _preloadScheduleHandle?.prioritize(_tId);
+            // Also aggressively decode sprites for this exact target room so
+            // they are GPU-rasterized before the player crosses. Fire-and-forget.
+            const _tRoom = ROOM_REGISTRY.get(_tId);
+            if (_tRoom !== undefined) void decodeRoomThemeSprites(_tRoom);
             break; // one priority boost per frame is sufficient
           }
         }
