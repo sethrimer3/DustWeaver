@@ -363,32 +363,32 @@ const _unshadedCache16x16 = new Map<string, HTMLCanvasElement>();
 function _getOrCreateUnshaded16x16(url: string, src: HTMLImageElement): HTMLCanvasElement {
   const hit = _unshadedCache16x16.get(url);
   if (hit !== undefined) return hit;
-  const c = document.createElement('canvas');
-  c.width  = 16;
-  c.height = 16;
-  const ctx = c.getContext('2d');
+  const canvas = document.createElement('canvas');
+  canvas.width  = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
   if (ctx !== null) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(src, 0, 0, 16, 16);
   }
-  _unshadedCache16x16.set(url, c);
-  return c;
+  _unshadedCache16x16.set(url, canvas);
+  return canvas;
 }
 
 /** Returns (or creates) an unshaded 8×8 canvas from a loaded source canvas. */
 function _getOrCreateUnshaded8x8(url: string, src: HTMLCanvasElement): HTMLCanvasElement {
   const hit = _unshadedCache8x8.get(url);
   if (hit !== undefined) return hit;
-  const c = document.createElement('canvas');
-  c.width  = 8;
-  c.height = 8;
-  const ctx = c.getContext('2d');
+  const canvas = document.createElement('canvas');
+  canvas.width  = 8;
+  canvas.height = 8;
+  const ctx = canvas.getContext('2d');
   if (ctx !== null) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(src, 0, 0, 8, 8);
   }
-  _unshadedCache8x8.set(url, c);
-  return c;
+  _unshadedCache8x8.set(url, canvas);
+  return canvas;
 }
 
 /**

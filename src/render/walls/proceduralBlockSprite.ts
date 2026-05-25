@@ -193,13 +193,23 @@ export function getProceduralSprite(
   if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
     const unshadedCached = _unshadedSpriteCache.get(key);
     if (unshadedCached !== undefined) return unshadedCached;
-    const unshaded = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, bucketWorldX, bucketWorldY, seed, false);
+    const unshaded = _generateSprite(
+      base, template, widthPx, heightPx,
+      flipX, flipY, rotStep, openAirSidesMask,
+      bucketWorldX, bucketWorldY, seed,
+      /* applyShading */ false,
+    );
     _unshadedSpriteCache.set(key, unshaded);
     return unshaded;
   }
 
   const _t0 = import.meta.env.DEV ? performance.now() : 0;
-  const result = _generateSprite(base, template, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, bucketWorldX, bucketWorldY, seed, true);
+  const result = _generateSprite(
+    base, template, widthPx, heightPx,
+    flipX, flipY, rotStep, openAirSidesMask,
+    bucketWorldX, bucketWorldY, seed,
+    /* applyShading */ true,
+  );
   _spriteCache.set(key, result);
   FP.recordSpriteBake(key, import.meta.env.DEV ? performance.now() - _t0 : 0);
   return result;
