@@ -886,7 +886,7 @@ export function startGameScreen(
     preTransVX: number;
     preTransVY: number;
     transitionDir: TransitionDirection | null;
-    /** Spawn block coordinates stored for startEntryWarm() after generator completes. */
+    /** Spawn block coordinates stored for startEntryWarm() (async generator done and instant transition paths). */
     spawnXBlock: number;
     spawnYBlock: number;
   }

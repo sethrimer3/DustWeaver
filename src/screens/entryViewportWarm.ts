@@ -40,12 +40,17 @@ import {
 
 /**
  * Maximum frames before the entry warm releases the overlay regardless.
- * 8 frames ≈ 133 ms at 60 fps — enough for two or three prewarm steps on
- * most rooms without producing a noticeable loading delay.
+ * At 60 fps this is ~133 ms, but the ENTRY_WARM_BUDGET_MS wall-clock cap
+ * (120 ms) may trigger first — whichever limit is reached first wins.
+ * This is loading-phase only and has no effect on simulation determinism.
  */
 const ENTRY_WARM_MAX_FRAMES = 8;
 
-/** Hard wall-clock budget (ms).  Releases overlay if exceeded. */
+/**
+ * Hard wall-clock budget (ms).  Releases overlay if exceeded.
+ * Loading-phase only — wall-clock timing is acceptable here because the
+ * entry warm runs outside gameplay frames, with no effect on simulation.
+ */
 const ENTRY_WARM_BUDGET_MS = 120;
 
 /** Wall + background chunks built per warm step. */
@@ -217,7 +222,7 @@ export function isEntryWarmReadyOrTimedOut(state: EntryWarmState): boolean {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/** Finalise the warm: adopt all built chunks, update phase, log in DEV. */
+/** Finalize the warm: adopt all built chunks, update phase, log in DEV. */
 function _finishWarm(state: EntryWarmState, room: RoomDef, timedOut: boolean): void {
   adoptPrewarmedWallChunks(room.id, state.scalePx);
   adoptPrewarmedBgChunks(room, state.scalePx);
