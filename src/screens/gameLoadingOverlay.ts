@@ -6,8 +6,9 @@
  *
  * Usage:
  *   const overlay = new GameLoadingOverlay(uiRoot);
- *   overlay.show();           // normal loading overlay
- *   overlay.show(true);       // initial campaign load — longer, deliberate fade-in
+ *   overlay.show();                // normal loading overlay ("Loading…")
+ *   overlay.show(true);            // initial campaign load — longer, deliberate fade-in
+ *   overlay.showEntryWarm();       // instant cache-hit entry warm — textless, instant release
  *   // Each frame:
  *   overlay.tick(() => areRoomSpritesReady(currentRoom));
  */
@@ -31,11 +32,20 @@ const FADE_DURATION_STANDARD_MS = 300;
  */
 const FADE_DURATION_CAMPAIGN_START_MS = 700;
 
+/**
+ * Fade-out duration (ms) for the instant cache-hit entry warm cover.
+ * Kept very short so the transition feel is a brief moment rather than a
+ * loading screen.  The overlay has no text.
+ */
+const FADE_DURATION_ENTRY_WARM_MS = 80;
+
 export class GameLoadingOverlay {
   private el: HTMLDivElement | null = null;
   private minShowUntilMs = 0;
   private lastCheckMs = 0;
   private fadeDurationMs = FADE_DURATION_STANDARD_MS;
+  /** Per-show readiness poll interval (ms). 0 = check every tick. */
+  private checkIntervalMs = CHECK_INTERVAL_MS;
 
   constructor(private readonly uiRoot: HTMLElement) {}
 
@@ -50,6 +60,7 @@ export class GameLoadingOverlay {
     this.fadeDurationMs = isCampaignInitialLoad
       ? FADE_DURATION_CAMPAIGN_START_MS
       : FADE_DURATION_STANDARD_MS;
+    this.checkIntervalMs = CHECK_INTERVAL_MS;
     const div = document.createElement('div');
     div.style.cssText = [
       'position:absolute',
@@ -73,6 +84,51 @@ export class GameLoadingOverlay {
   }
 
   /**
+   * Shows a lightweight textless black cover for instant cache-hit transitions
+   * where an entry viewport warm is needed.
+   *
+   * Differences from `show()`:
+   *   - No "Loading…" text — purely a brief black transition cover.
+   *   - minShowMs = 0 — released as soon as the readiness check passes.
+   *   - checkIntervalMs = 0 — readiness is checked every tick (no 50 ms throttle).
+   *   - fadeMs = 80 ms — very short fade so the cover feels like a cut.
+   *
+   * Typical timeline for a cache-hit transition where no warm work is needed:
+   *   frame N   : transition fires → showEntryWarm() → overlay appears (black)
+   *   frame N+1 : entryWarm branch → tickEntryWarm() → 'ready'; tickLoadingOverlay()
+   *               → all conditions met → fade starts (el → null)
+   *   frame N+1 + 80 ms : fade completes → overlay element removed
+   *
+   * A probe to skip the overlay when no warm is needed was considered but not
+   * implemented (it would require exposing skipped-chunk counts from the prewarm
+   * functions).  The 1-frame + 80 ms cover is imperceptible for the no-work case
+   * and correct for the work-needed case.  Tracked in nextSteps.md.
+   */
+  showEntryWarm(): void {
+    if (this.el !== null) return;
+    this.fadeDurationMs = FADE_DURATION_ENTRY_WARM_MS;
+    this.checkIntervalMs = 0;
+    const div = document.createElement('div');
+    div.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'background:#000',
+      'z-index:9999',
+      'pointer-events:none',
+      `transition:opacity ${(FADE_DURATION_ENTRY_WARM_MS / 1000).toFixed(2)}s`,
+    ].join(';');
+    this.uiRoot.appendChild(div);
+    this.el = div;
+    this.minShowUntilMs = performance.now(); // no minimum — release ASAP when ready
+    this.lastCheckMs = 0;
+  }
+
+  /** Returns true while the overlay element is attached and not yet fading out. */
+  isVisible(): boolean {
+    return this.el !== null;
+  }
+
+  /**
    * Polls readiness; fades out and removes the overlay once the minimum
    * show time has elapsed and `isReady()` returns true.
    * Call once per frame.
@@ -81,7 +137,7 @@ export class GameLoadingOverlay {
     if (this.el === null) return;
     const now = performance.now();
     if (now < this.minShowUntilMs) return;
-    if (now - this.lastCheckMs < CHECK_INTERVAL_MS) return;
+    if (this.checkIntervalMs > 0 && now - this.lastCheckMs < this.checkIntervalMs) return;
     this.lastCheckMs = now;
     if (!isReady()) return;
     // Sprites ready — fade out and remove the overlay.
