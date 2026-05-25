@@ -179,15 +179,16 @@ export function areRoomSpritesReady(room: RoomDef): boolean {
  */
 export async function decodeRoomThemeSprites(room: RoomDef): Promise<void> {
   const themeIds = _collectFolderThemeIds(room);
-  const promises: Promise<void>[] = [];
+  let promises: Promise<void>[] | null = null;
   for (const themeId of themeIds) {
     const urls = _getSpriteUrls(themeId);
     if (urls === null) continue;
     for (let i = 0; i < urls.length; i++) {
+      if (promises === null) promises = [];
       promises.push(decodeImg(urls[i]));
     }
   }
-  if (promises.length > 0) {
+  if (promises !== null) {
     await Promise.all(promises);
   }
 }

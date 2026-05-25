@@ -45,6 +45,11 @@ export function isSpriteDecodeReady(img: HTMLImageElement): boolean {
   return _decodedUrls.has(img.src) || isSpriteReady(img);
 }
 
+/** Type guard: true when img supports the decode() API. */
+function _hasDecode(img: HTMLImageElement): boolean {
+  return typeof (img as HTMLImageElement & { decode?: unknown }).decode === 'function';
+}
+
 /**
  * Loads the image at `src` and triggers HTMLImageElement.decode() if available,
  * ensuring the image is fully rasterized before the caller draws with it.
@@ -65,13 +70,13 @@ export function decodeImg(src: string): Promise<void> {
 
   // Run decode() (or confirm loaded) once the image data is available.
   const performDecode = (): Promise<void> => {
-    const imgWithDecode = img as HTMLImageElement & { decode?: () => Promise<void> };
-    if (typeof imgWithDecode.decode === 'function') {
-      return imgWithDecode.decode().then(
+    if (_hasDecode(img)) {
+      return img.decode().then(
         () => { _decodedUrls.add(src); },
         () => {
           // decode() rejected — image is still usable if it loaded successfully.
-          if (img.complete && img.naturalWidth > 0) _decodedUrls.add(src);
+          const imgAny = img as HTMLImageElement;
+          if (imgAny.complete && imgAny.naturalWidth > 0) _decodedUrls.add(src);
         },
       );
     }
