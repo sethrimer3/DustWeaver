@@ -27,6 +27,7 @@ import { loadImg, decodeImg, isSpriteDecodeReady } from './imageCache';
 import { FOLDER_BLOCK_THEMES, isFolderBasedTheme } from './walls/folderBlockThemes';
 import type { RoomDef } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
+import { preloadBackgroundImageDecoded } from './backgroundRenderer';
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
@@ -191,4 +192,16 @@ export async function decodeRoomThemeSprites(room: RoomDef): Promise<void> {
   if (promises !== null) {
     await Promise.all(promises);
   }
+}
+
+/**
+ * Triggers HTMLImageElement.decode() for the static background image of
+ * `room`, so the GPU has rasterized the texture before the first drawImage
+ * call.  Fire-and-forget — procedural backgrounds (no static image) are
+ * no-ops.
+ *
+ * Safe to call multiple times; preloadBackgroundImageDecoded() is idempotent.
+ */
+export function decodeRoomBackground(room: RoomDef): void {
+  preloadBackgroundImageDecoded(room.backgroundId ?? 'brownRock');
 }

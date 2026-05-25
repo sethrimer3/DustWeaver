@@ -56,6 +56,13 @@ import {
  */
 const WAVE_TAPER_WORLD = BLOCK_SIZE_MEDIUM * 0.8;
 
+/**
+ * Maximum number of wave-line segments rendered per top-edge run.
+ * Prevents O(n) blow-up for very wide liquid bodies at high zoom.
+ * 64 segments is visually indistinguishable from unbounded counts.
+ */
+const MAX_WAVE_STEPS = 64;
+
 // ── Main render functions ─────────────────────────────────────────────────────
 
 /**
@@ -73,6 +80,7 @@ export function renderWaterZones(
   vpW = 480,
   vpH = 270,
 ): void {
+  if (world.waterZoneCount === 0) return;
   tickLiquidBubbles(tick);
   tickWaterSplash();
   const bodies = getLiquidBodies(world);
@@ -134,6 +142,7 @@ export function renderLavaZones(
   vpW = 480,
   vpH = 270,
 ): void {
+  if (world.lavaZoneCount === 0) return;
   tickLavaSparks(tick);
   const bodies = getLiquidBodies(world);
 
@@ -347,7 +356,7 @@ function drawWaveLine(
   zoom: number,
   offsetXPx: number,
 ): void {
-  const steps = Math.max(2, Math.floor(rw / 2));
+  const steps = Math.min(MAX_WAVE_STEPS, Math.max(2, Math.floor(rw / 2)));
   for (let s = 0; s <= steps; s++) {
     const t  = s / steps;
     const px = rx + t * rw;
@@ -381,7 +390,7 @@ function drawWavePath(
   zoom: number,
   offsetXPx: number,
 ): void {
-  const steps = Math.max(2, Math.floor(rw / 2));
+  const steps = Math.min(MAX_WAVE_STEPS, Math.max(2, Math.floor(rw / 2)));
   for (let s = 0; s <= steps; s++) {
     const t  = s / steps;
     const px = rx + t * rw;
