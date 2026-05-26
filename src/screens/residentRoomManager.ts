@@ -494,18 +494,14 @@ export class ResidentRoomManager {
     let ropes: FrozenRopeSnapshot | null = null;
     if (world.ropeCount > 0) {
       const totalSlots = world.ropeCount * MAX_ROPE_SEGMENTS;
+      // Slice directly for independent copies — avoids creating intermediate shared-buffer views.
       ropes = {
         ropeCount: world.ropeCount,
-        posX:  new Float32Array(world.ropeSegPosXWorld.buffer,  0, totalSlots),
-        posY:  new Float32Array(world.ropeSegPosYWorld.buffer,  0, totalSlots),
-        prevX: new Float32Array(world.ropeSegPrevXWorld.buffer, 0, totalSlots),
-        prevY: new Float32Array(world.ropeSegPrevYWorld.buffer, 0, totalSlots),
+        posX:  world.ropeSegPosXWorld.slice(0, totalSlots),
+        posY:  world.ropeSegPosYWorld.slice(0, totalSlots),
+        prevX: world.ropeSegPrevXWorld.slice(0, totalSlots),
+        prevY: world.ropeSegPrevYWorld.slice(0, totalSlots),
       };
-      // Copy out of the shared buffer so the snapshot is independent.
-      ropes.posX  = ropes.posX.slice();
-      ropes.posY  = ropes.posY.slice();
-      ropes.prevX = ropes.prevX.slice();
-      ropes.prevY = ropes.prevY.slice();
     }
 
     // ── Breakable blocks ──────────────────────────────────────────────────
@@ -646,14 +642,19 @@ export class ResidentRoomManager {
     }
 
     // ── Ropes ─────────────────────────────────────────────────────────────
-    if (frozenState.ropes !== null && world.ropeCount === frozenState.ropes.ropeCount) {
+    // Guard on both ropeCount and snapshot length so a recompile that changes
+    // MAX_ROPE_SEGMENTS won't silently restore with a mismatched layout.
+    if (
+      frozenState.ropes !== null &&
+      world.ropeCount === frozenState.ropes.ropeCount &&
+      frozenState.ropes.posX.length === world.ropeCount * MAX_ROPE_SEGMENTS
+    ) {
       const { posX, posY, prevX, prevY } = frozenState.ropes;
-      const totalSlots = world.ropeCount * MAX_ROPE_SEGMENTS;
-      const copyLen = Math.min(totalSlots, posX.length);
-      world.ropeSegPosXWorld.set(posX.subarray(0, copyLen));
-      world.ropeSegPosYWorld.set(posY.subarray(0, copyLen));
-      world.ropeSegPrevXWorld.set(prevX.subarray(0, copyLen));
-      world.ropeSegPrevYWorld.set(prevY.subarray(0, copyLen));
+      const totalSlots = posX.length;
+      world.ropeSegPosXWorld.set(posX.subarray(0, totalSlots));
+      world.ropeSegPosYWorld.set(posY.subarray(0, totalSlots));
+      world.ropeSegPrevXWorld.set(prevX.subarray(0, totalSlots));
+      world.ropeSegPrevYWorld.set(prevY.subarray(0, totalSlots));
     }
 
     // ── Breakable blocks ──────────────────────────────────────────────────
@@ -714,22 +715,35 @@ export class ResidentRoomManager {
 
     // ── Background fluid particles ────────────────────────────────────────
     // Match freshly-spawned Fluid particles to the frozen snapshot by scan order.
-    // The spawn order is deterministic (Phase D always appends them in the same
-    // sequence), so a 1-to-1 index mapping is safe.
+    // Spawn order is deterministic: Phase D calls spawnBackgroundFluidParticles()
+    // unconditionally after Phase B (player) and Phase C (enemies).  Enemies
+    // are spawned in room.enemies index order with a fixed per-enemy particle
+    // count, so the Fluid-particle block always starts at the same buffer offset
+    // for a given room definition.  A count mismatch (frozen ≠ live) indicates
+    // the room definition changed and we skip restoration to avoid mis-mapping.
     if (frozenState.fluidParticles !== null) {
       const fp = frozenState.fluidParticles;
-      let fi = 0; // index into frozen snapshot
-      for (let pi = 0; pi < world.particleCount && fi < fp.count; pi++) {
-        if (world.kindBuffer[pi] !== ParticleKind.Fluid || world.ownerEntityId[pi] !== -1) {
-          continue;
+      // Count live fluid particles first to validate before overwriting any data.
+      let liveFluidCount = 0;
+      for (let pi = 0; pi < world.particleCount; pi++) {
+        if (world.kindBuffer[pi] === ParticleKind.Fluid && world.ownerEntityId[pi] === -1) {
+          liveFluidCount++;
         }
-        world.positionXWorld[pi]   = fp.posX[fi];
-        world.positionYWorld[pi]   = fp.posY[fi];
-        world.velocityXWorld[pi]   = fp.velX[fi];
-        world.velocityYWorld[pi]   = fp.velY[fi];
-        world.disturbanceFactor[pi] = fp.disturbanceFactor[fi];
-        world.ageTicks[pi]         = fp.ageTicks[fi];
-        fi++;
+      }
+      if (liveFluidCount === fp.count) {
+        let fi = 0;
+        for (let pi = 0; pi < world.particleCount && fi < fp.count; pi++) {
+          if (world.kindBuffer[pi] !== ParticleKind.Fluid || world.ownerEntityId[pi] !== -1) {
+            continue;
+          }
+          world.positionXWorld[pi]    = fp.posX[fi];
+          world.positionYWorld[pi]    = fp.posY[fi];
+          world.velocityXWorld[pi]    = fp.velX[fi];
+          world.velocityYWorld[pi]    = fp.velY[fi];
+          world.disturbanceFactor[pi] = fp.disturbanceFactor[fi];
+          world.ageTicks[pi]          = fp.ageTicks[fi];
+          fi++;
+        }
       }
     }
   }
