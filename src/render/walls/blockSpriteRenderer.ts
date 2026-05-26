@@ -28,6 +28,7 @@ import {
   setPrewarmWallLayout,
   getPrewarmWallCache,
   getOrCreatePrewarmWallCache,
+  getPrewarmSnapshotRenderStateKey,
   deletePrewarmEntry,
   getPrewarmDummyCtx,
 } from './wallChunkPrewarmStore';
@@ -529,6 +530,14 @@ export function prewarmWallChunksForRoom(
     _vpWPx = vpWPx;
     _vpHPx = vpHPx;
 
+    // ── Get or create the prewarm chunk cache for this room ─────────────────
+    // Must come BEFORE reading or writing the wall layout so that:
+    //   (a) the snapshot exists when setPrewarmWallLayout writes into it, and
+    //   (b) any stale renderStateKey is evicted before we read the old layout
+    //       — preventing an outdated layout from being restored.
+    const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey);
+    tempCache.setMaxChunksPerFrame(maxChunks);
+
     // ── Build / restore wall layout for target room ─────────────────────────
     const existingLayout = getPrewarmWallLayout(roomId);
     if (existingLayout !== undefined) {
@@ -538,10 +547,6 @@ export function prewarmWallChunksForRoom(
     }
     const wallLayout = getWallLayoutCache(ctx.wallSnapshot, blockSizePx);
     setPrewarmWallLayout(roomId, wallLayout);
-
-    // ── Get or create the prewarm chunk cache for this room ─────────────────
-    const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey);
-    tempCache.setMaxChunksPerFrame(maxChunks);
 
     // ── Compute ambient depths and populate 2×2 covered keys ────────────────
     _populateCoveredBy2x2Keys(wallLayout.solid2x2Map, blockSizePx, _activeBlockTheme);
@@ -622,13 +627,44 @@ export function prewarmWallChunksForRoom(
  * Must be called after the active wall state (theme, lighting, etc.) is set
  * up for the new room but BEFORE the first render frame.
  *
- * @param roomId  Identifier of the room being entered.
- * @param scalePx The camera zoom scale that will be used in the first render.
+ * @param roomId              Identifier of the room being entered.
+ * @param scalePx             The camera zoom scale that will be used in the first render.
+ * @param currentRenderStateKey  When provided, the snapshot key must match or adoption is refused.
  * @returns `true` when pre-warmed data was found and adopted; `false` otherwise.
  */
-export function adoptPrewarmedWallChunks(roomId: string, scalePx: number): boolean {
+export function adoptPrewarmedWallChunks(
+  roomId: string,
+  scalePx: number,
+  currentRenderStateKey?: string,
+): boolean {
+  // Adoption-time stale-key guard: refuse chunks built for a different render state.
+  if (currentRenderStateKey !== undefined) {
+    const snapKey = getPrewarmSnapshotRenderStateKey(roomId);
+    if (snapKey !== undefined && snapKey !== currentRenderStateKey) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          `[adoptPrewarmedWallChunks] stale renderStateKey for ${roomId} — discarding prewarm data.` +
+          `\n  snapshot: ${snapKey}\n  current:  ${currentRenderStateKey}`,
+        );
+      }
+      deletePrewarmEntry(roomId);
+      return false;
+    }
+  }
+
   const tempCache = getPrewarmWallCache(roomId);
   const layout    = getPrewarmWallLayout(roomId);
+
+  if (import.meta.env.DEV && tempCache !== undefined && layout === undefined) {
+    // This state means adoption cannot work: chunks were built but the layout
+    // was never stored.  Most likely caused by calling setPrewarmWallLayout
+    // before the snapshot existed (ordering bug).
+    console.warn(
+      `[adoptPrewarmedWallChunks] DEV invariant: wall cache exists without layout for room ${roomId}` +
+      ' — adoption cannot succeed.  Check prewarmWallChunksForRoom call ordering.',
+    );
+  }
+
   if (tempCache === undefined || layout === undefined) return false;
 
   // Install the pre-built layout so the identity check in renderVisibleChunks

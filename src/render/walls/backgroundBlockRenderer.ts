@@ -275,11 +275,26 @@ export function prewarmBgChunksForRoom(
  * Must be called after any explicit cache invalidation (e.g. room change) but
  * BEFORE the first render frame for the new room.
  *
+ * @param room                   Room definition for the room being entered.
+ * @param zoom                   Camera zoom scale for the first render frame.
+ * @param currentRenderStateKey  When provided, the snapshot key must match or adoption is refused.
  * @returns `true` when pre-warmed data was found and adopted; `false` otherwise.
  */
-export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number): boolean {
+export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRenderStateKey?: string): boolean {
   const snap = getSnapshot(room.id);
   if (snap === undefined || snap.bgCache === null) return false;
+
+  // Adoption-time stale-key guard: refuse chunks built for a different render state.
+  if (currentRenderStateKey !== undefined && snap.renderStateKey !== currentRenderStateKey) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        `[adoptPrewarmedBgChunks] stale renderStateKey for ${room.id} — discarding prewarm data.` +
+        `\n  snapshot: ${snap.renderStateKey}\n  current:  ${currentRenderStateKey}`,
+      );
+    }
+    clearSnapshotBgData(room.id);
+    return false;
+  }
 
   const chunks = snap.bgCache.extractCleanChunks();
   if (chunks.size > 0) {

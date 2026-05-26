@@ -51,6 +51,7 @@ import {
   setActiveDarkAmbientBlockers,
   setActiveSeamBlending,
 } from '../render/walls/blockSpriteRenderer';
+import { computeRenderStateKey } from '../render/walls/roomRenderCacheStore';
 import { preloadTransitionSprites } from '../render/walls/seamBlending';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
@@ -333,7 +334,17 @@ export function* makeLoadRoomPhases(
     // Adopt any pre-warmed chunks that were built during idle time for this
     // room.  Must be called after lighting/theme setters but before the first
     // render frame so the active chunk caches are seeded with pre-built data.
-    adoptPrewarmedChunksForRoom(room, camera.zoom);
+    // Compute the same renderStateKey that the prewarm scheduler used so the
+    // adoption can detect and discard snapshots built for a stale render state.
+    const adoptRenderStateKey = computeRenderStateKey(
+      room.blockTheme ?? null,
+      room.worldNumber ?? 1,
+      room.lightingEffect ?? 'Ambient',
+      room.ambientLightDirection ?? 'omni',
+      room.blockSeamBlending ?? 'off',
+      blockerKeys ?? new Set<string>(),
+    );
+    adoptPrewarmedChunksForRoom(room, camera.zoom, adoptRenderStateKey);
     FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
   musicManager.notifyRoomEntered(room.songId ?? '_continue');
