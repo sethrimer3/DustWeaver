@@ -7,11 +7,10 @@
 
 import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
-  BLOCK_THEMES, BACKGROUND_OPTIONS, LIGHTING_OPTIONS,
-  BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
-  AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
+  BLOCK_THEMES, BACKGROUND_OPTIONS,
+  BlockTheme, BackgroundId, SONG_OPTIONS, RoomSongId,
   RoomEdge, EditorUICallbacks, BrushMode, BlockPlacementModifier,
-  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle,
+  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant,
 } from './editorState';
 import {
   addDimField,
@@ -23,6 +22,7 @@ import {
 } from './editorUIHelpers';
 import { updateInspector } from './editorInspector';
 import { createEditorSpecialItemPickers } from './editorSpecialItemPickers';
+import { createEditorLightingPanel } from './editorUILightingPanel';
 
 // ── UI container ─────────────────────────────────────────────────────────────
 
@@ -256,186 +256,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   container.appendChild(catBar);
 
-  // ── Lighting dropdown (shown only when "lighting" category is active) ──
-  const lightingDiv = document.createElement('div');
-  lightingDiv.style.cssText = `margin-bottom: 8px;`;
-  const lightingLabel = document.createElement('div');
-  lightingLabel.textContent = 'Lighting';
-  lightingLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
-  lightingDiv.appendChild(lightingLabel);
-  const lightingSelect = document.createElement('select');
-  lightingSelect.style.cssText = `
-    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
-  `;
-  for (const opt of LIGHTING_OPTIONS) {
-    const o = document.createElement('option');
-    o.value = opt.id;
-    o.textContent = opt.label;
-    lightingSelect.appendChild(o);
-  }
-  lightingSelect.addEventListener('change', () => {
-    callbacks?.onLightingEffectChange(lightingSelect.value as LightingEffect);
-  });
-  lightingSelect.addEventListener('click', (e) => e.stopPropagation());
-  lightingDiv.appendChild(lightingSelect);
-
-  // ── Ambient Light Direction dropdown ─────────────────────────────────────
-  const ambientDirLabel = document.createElement('div');
-  ambientDirLabel.textContent = 'Ambient Direction';
-  ambientDirLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
-  lightingDiv.appendChild(ambientDirLabel);
-  const ambientDirSelect = document.createElement('select');
-  ambientDirSelect.style.cssText = `
-    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
-  `;
-  // Add undefined/"room default" option
-  const defaultOpt = document.createElement('option');
-  defaultOpt.value = '';
-  defaultOpt.textContent = '(room default)';
-  ambientDirSelect.appendChild(defaultOpt);
-  for (const opt of AMBIENT_LIGHT_DIRECTION_OPTIONS) {
-    const o = document.createElement('option');
-    o.value = opt.id;
-    o.textContent = opt.label;
-    ambientDirSelect.appendChild(o);
-  }
-  ambientDirSelect.addEventListener('change', () => {
-    const val = ambientDirSelect.value as AmbientLightDirection | '';
-    callbacks?.onAmbientLightDirectionChange(val === '' ? undefined : val);
-  });
-  ambientDirSelect.addEventListener('click', (e) => e.stopPropagation());
-  lightingDiv.appendChild(ambientDirSelect);
-
-  // ── Directional-lighting blend sliders ───────────────────────────────────
-  function makeSliderRow(
-    labelText: string,
-    min: number,
-    max: number,
-    step: number,
-    defaultVal: number,
-    onChange: (v: number) => void,
-  ): { row: HTMLElement; slider: HTMLInputElement; valueLabel: HTMLSpanElement } {
-    const row = document.createElement('div');
-    row.style.cssText = 'margin-top: 6px;';
-    const headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;';
-    const lbl = document.createElement('div');
-    lbl.textContent = labelText;
-    lbl.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7);`;
-    const valueLabel = document.createElement('span');
-    valueLabel.style.cssText = `font-size: 11px; color: ${TEXT_COLOR}; font-family: monospace;`;
-    valueLabel.textContent = defaultVal.toFixed(2);
-    headerRow.appendChild(lbl);
-    headerRow.appendChild(valueLabel);
-    row.appendChild(headerRow);
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(min);
-    slider.max = String(max);
-    slider.step = String(step);
-    slider.value = String(defaultVal);
-    slider.style.cssText = 'width: 100%; cursor: pointer;';
-    slider.addEventListener('input', () => {
-      const v = parseFloat(slider.value);
-      valueLabel.textContent = v.toFixed(2);
-      onChange(v);
-    });
-    slider.addEventListener('click', (e) => e.stopPropagation());
-    row.appendChild(slider);
-    return { row, slider, valueLabel };
-  }
-
-  const { row: dirBiasRow, slider: dirBiasSlider, valueLabel: dirBiasValLabel } =
-    makeSliderRow('Directional Bias', 0, 1, 0.01, 0.65,
-      (v) => callbacks?.onDirectionalBiasChange(v));
-  lightingDiv.appendChild(dirBiasRow);
-
-  const { row: sideExpRow, slider: sideExpSlider, valueLabel: sideExpValLabel } =
-    makeSliderRow('Side/Bottom Exposure', 0, 1, 0.01, 0.35,
-      (v) => callbacks?.onSideExposureStrengthChange(v));
-  lightingDiv.appendChild(sideExpRow);
-
-  const { row: minWallRow, slider: minWallSlider, valueLabel: minWallValLabel } =
-    makeSliderRow('Min Wall Light', 0, 1, 0.01, 0.15,
-      (v) => callbacks?.onMinimumWallLightChange(v));
-  lightingDiv.appendChild(minWallRow);
-
-  const { row: falloffRow, slider: falloffSlider, valueLabel: falloffValLabel } =
-    makeSliderRow('Falloff Power', 0.5, 3, 0.05, 1.4,
-      (v) => callbacks?.onFalloffPowerChange(v));
-  lightingDiv.appendChild(falloffRow);
-
-  const { row: bgSpillRow, slider: bgSpillSlider, valueLabel: bgSpillValLabel } =
-    makeSliderRow('Background Spill', 0, 0.5, 0.01, 0.0,
-      (v) => callbacks?.onBackgroundLightSpillChange(v));
-  lightingDiv.appendChild(bgSpillRow);
-
-  const { row: slSoftRow, slider: slSoftSlider, valueLabel: slSoftValLabel } =
-    makeSliderRow('Solid Light Softness', 0, 1, 0.01, 0.0,
-      (v) => callbacks?.onSolidLightSoftnessChange(v));
-  lightingDiv.appendChild(slSoftRow);
-
-  // ── Block Seam Blending dropdown ─────────────────────────────────────────
-  const SEAM_BLENDING_OPTIONS: { id: BlockSeamBlending; label: string }[] = [
-    { id: 'off',     label: 'Off' },
-    { id: 'subtle',  label: 'Subtle' },
-    { id: 'organic', label: 'Organic' },
-    { id: 'heavy',   label: 'Heavy' },
-  ];
-  const seamBlendLabel = document.createElement('div');
-  seamBlendLabel.textContent = 'Block Seam Blending';
-  seamBlendLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
-  lightingDiv.appendChild(seamBlendLabel);
-  const seamBlendSelect = document.createElement('select');
-  seamBlendSelect.style.cssText = `
-    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
-  `;
-  for (const opt of SEAM_BLENDING_OPTIONS) {
-    const o = document.createElement('option');
-    o.value = opt.id;
-    o.textContent = opt.label;
-    seamBlendSelect.appendChild(o);
-  }
-  seamBlendSelect.addEventListener('change', () => {
-    callbacks?.onSeamBlendingChange(seamBlendSelect.value as BlockSeamBlending);
-  });
-  seamBlendSelect.addEventListener('click', (e) => e.stopPropagation());
-  lightingDiv.appendChild(seamBlendSelect);
-
-  // ── Void Edge Style dropdown ──────────────────────────────────────────────
-  const VOID_EDGE_OPTIONS: { id: VoidEdgeStyle; label: string }[] = [
-    { id: 'off',          label: 'Off' },
-    { id: 'noisyEdge',    label: 'Noisy Black Edge' },
-    { id: 'exteriorFill', label: 'Exterior Fill + Noisy Edge' },
-  ];
-  const voidEdgeLabel = document.createElement('div');
-  voidEdgeLabel.textContent = 'Void Edge Style';
-  voidEdgeLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
-  lightingDiv.appendChild(voidEdgeLabel);
-  const voidEdgeSelect = document.createElement('select');
-  voidEdgeSelect.style.cssText = `
-    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
-  `;
-  for (const opt of VOID_EDGE_OPTIONS) {
-    const o = document.createElement('option');
-    o.value = opt.id;
-    o.textContent = opt.label;
-    voidEdgeSelect.appendChild(o);
-  }
-  voidEdgeSelect.addEventListener('change', () => {
-    callbacks?.onVoidEdgeStyleChange(voidEdgeSelect.value as VoidEdgeStyle);
-  });
-  voidEdgeSelect.addEventListener('click', (e) => e.stopPropagation());
-  lightingDiv.appendChild(voidEdgeSelect);
-
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
@@ -444,12 +264,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   // Track rendered palette state to avoid recreating buttons every frame
   let renderedCategory: PaletteCategory | null = null;
   let lastRenderedBlockTheme = '';
-  let lastRenderedLightingEffect = '';
   let lastRenderedRecentBlockThemes = '';
   let isBlockThemePaletteOpen = false;
   let paletteItems: { btn: HTMLElement; itemId: string }[] = [];
 
   const specialItemPickers = createEditorSpecialItemPickers(() => callbacks);
+  const lightingPanel = createEditorLightingPanel(() => callbacks);
   const blockModifierDiv = document.createElement('div');
   blockModifierDiv.style.cssText = `
     border: 1px solid rgba(120,180,220,0.45); border-radius: 3px;
@@ -622,7 +442,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       renderedCategory = state.activeCategory;
       lastRenderedBlockTheme = currentTheme;
       lastRenderedRecentBlockThemes = recentBlockThemeSignature;
-      lastRenderedLightingEffect = currentLighting;
       paletteDiv.innerHTML = '';
       paletteItems = [];
 
@@ -689,21 +508,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       } else {
         // Non-blocks categories: simple text button list
         if (state.activeCategory === 'lighting') {
-          // ── Lighting dropdown (room-level setting, top of lighting palette) ──
-          lightingSelect.value = currentLighting;
-          ambientDirSelect.value = state.roomData?.ambientLightDirection ?? '';
-          dirBiasSlider.value = String(state.roomData?.directionalBias ?? 0.65);
-          dirBiasValLabel.textContent  = (state.roomData?.directionalBias  ?? 0.65).toFixed(2);
-          sideExpSlider.value = String(state.roomData?.sideExposureStrength ?? 0.45);
-          sideExpValLabel.textContent  = (state.roomData?.sideExposureStrength ?? 0.45).toFixed(2);
-          minWallSlider.value = String(state.roomData?.minimumWallLight ?? 0.18);
-          minWallValLabel.textContent  = (state.roomData?.minimumWallLight  ?? 0.18).toFixed(2);
-          falloffSlider.value = String(state.roomData?.falloffPower ?? 1.4);
-          falloffValLabel.textContent  = (state.roomData?.falloffPower  ?? 1.4).toFixed(2);
-          seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
-          voidEdgeSelect.value = state.roomData?.voidEdgeStyle ?? 'off';
-          lastRenderedLightingEffect = currentLighting;
-          paletteDiv.appendChild(lightingDiv);
+          lightingPanel.syncOnRebuild(state, currentLighting, paletteDiv);
         }
         const items = PALETTE_ITEMS.filter(i => i.category === state.activeCategory);
         for (const item of items) {
@@ -716,38 +521,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         }
       }
     } else if (state.activeCategory === 'lighting') {
-      // Lighting and ambient direction may change independently; update selects in-place
-      if (currentLighting !== lastRenderedLightingEffect && document.activeElement !== lightingSelect) {
-        lastRenderedLightingEffect = currentLighting;
-        lightingSelect.value = currentLighting;
-      }
-      const currentAmbientDir = state.roomData?.ambientLightDirection;
-      if (document.activeElement !== ambientDirSelect) {
-        ambientDirSelect.value = currentAmbientDir ?? '';
-      }
-      // Sync slider values when they are not being actively dragged.
-      const syncSlider = (
-        slider: HTMLInputElement, valLabel: HTMLSpanElement,
-        val: number | undefined, def: number,
-      ): void => {
-        if (document.activeElement !== slider) {
-          const v = val ?? def;
-          slider.value = String(v);
-          valLabel.textContent = v.toFixed(2);
-        }
-      };
-      syncSlider(dirBiasSlider,  dirBiasValLabel,  state.roomData?.directionalBias,       0.65);
-      syncSlider(sideExpSlider,  sideExpValLabel,  state.roomData?.sideExposureStrength,  0.35);
-      syncSlider(minWallSlider,  minWallValLabel,  state.roomData?.minimumWallLight,       0.15);
-      syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,           1.4);
-      syncSlider(bgSpillSlider,  bgSpillValLabel,  state.roomData?.backgroundLightSpill,  0.0);
-      syncSlider(slSoftSlider,   slSoftValLabel,   state.roomData?.solidLightSoftness,    0.0);
-      if (document.activeElement !== seamBlendSelect) {
-        seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
-      }
-      if (document.activeElement !== voidEdgeSelect) {
-        voidEdgeSelect.value = state.roomData?.voidEdgeStyle ?? 'off';
-      }
+      lightingPanel.syncInPlace(state, currentLighting);
     }
 
     // Update palette selection highlight
@@ -813,7 +587,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       lastRenderedSongId = '';
       lastRenderedBlockTheme = '';
       lastRenderedRecentBlockThemes = '';
-      lastRenderedLightingEffect = '';
+      lightingPanel.resetState();
       dimWidthInput = null;
       dimHeightInput = null;
       if (container.parentElement) container.parentElement.removeChild(container);
