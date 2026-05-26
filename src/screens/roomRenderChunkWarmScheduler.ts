@@ -558,11 +558,19 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
  * Call this in `_makeLoadRoomPhases` Phase A, after setting up lighting and
  * theme but BEFORE the first render frame.
  *
+ * When `renderStateKey` is provided it is forwarded to the individual adoption
+ * functions so they can refuse chunks whose snapshot key no longer matches the
+ * active room render state (stale-key protection).
+ *
  * Updates the prewarm stats with cache hit/miss information.
  */
-export function adoptPrewarmedChunksForRoom(room: RoomDef, scalePx: number): void {
-  const wallHit = adoptPrewarmedWallChunks(room.id, scalePx);
-  const bgHit   = adoptPrewarmedBgChunks(room, scalePx);
+export function adoptPrewarmedChunksForRoom(
+  room: RoomDef,
+  scalePx: number,
+  renderStateKey?: string,
+): void {
+  const wallHit = adoptPrewarmedWallChunks(room.id, scalePx, renderStateKey);
+  const bgHit   = adoptPrewarmedBgChunks(room, scalePx, renderStateKey);
 
   if (import.meta.env.DEV) {
     if (wallHit || bgHit) {

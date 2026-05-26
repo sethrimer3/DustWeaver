@@ -43,6 +43,15 @@ export function getPrewarmWallCache(roomId: string): RoomChunkCache | undefined 
 }
 
 /**
+ * Returns the `renderStateKey` stored in the snapshot for `roomId`, or
+ * `undefined` when no snapshot is held.  Used by the adoption path to
+ * detect stale snapshots whose key no longer matches the active room state.
+ */
+export function getPrewarmSnapshotRenderStateKey(roomId: string): string | undefined {
+  return getSnapshot(roomId)?.renderStateKey;
+}
+
+/**
  * Returns the existing prewarm wall cache for `roomId`, or creates a new one.
  * `renderStateKey` is forwarded to `getOrCreateSnapshot` so that a stale
  * snapshot (built with a different theme/lighting) is evicted automatically.
