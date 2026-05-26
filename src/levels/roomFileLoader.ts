@@ -35,6 +35,30 @@ import { isSavedRoomV2, hydrateV2Room } from './roomSchemaV2';
 import { roomJsonDefToRoomDef } from './roomJsonLoader';
 import { ROOM_REGISTRY, registerRoom, clearRegistryAndApplyCampaignMetadata } from './rooms';
 import type { WorldMapJsonDef } from '../editor/worldMapData';
+import {
+  activateCampaignRoomCache,
+  deactivateCampaignRoomCache,
+  isRoomFileCacheActive,
+  isOfficialCampaignCacheActive,
+  getActiveCampaignId,
+  getActiveRoomAdjacency,
+  getActiveWorldMap,
+  getActiveManifest,
+  getActiveIsOfficialCampaign,
+  roomFilePendingLoadIds,
+} from './roomFileCacheState';
+
+// Re-export the public cache-state API so callers continue to import from
+// roomFileLoader.ts without modification.
+export {
+  activateCampaignRoomCache,
+  deactivateCampaignRoomCache,
+  isRoomFileCacheActive,
+  isOfficialCampaignCacheActive,
+  getActiveCampaignId,
+  getActiveRoomAdjacency,
+  getActiveWorldMap,
+};
 
 // ── SHA-256 content hash ──────────────────────────────────────────────────────
 
@@ -60,30 +84,6 @@ export async function computeContentHash(value: unknown): Promise<string> {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
 }
-
-// ── Module-level cache state ──────────────────────────────────────────────────
-
-/** Manifest for the currently active room file cache. Null = no cache active. */
-let _activeManifest: RoomCacheManifest | null = null;
-/** Campaign ID of the currently active cache. Null = no cache active. */
-let _activeCampaignId: string | null = null;
-/** Whether the active cache belongs to the official campaign. */
-let _activeIsOfficialCampaign = false;
-/**
- * worldMap for the currently active campaign.  Stored here so that
- * `loadRoomForGameplayAsync` can be called without passing worldMap explicitly
- * (e.g. from the preload scheduler or room-transition fallback path).
- *
- * Set when the room cache is activated and cleared when it is deactivated.
- */
-let _activeWorldMap: WorldMapJsonDef | null = null;
-
-/**
- * Room IDs whose lazy load is currently in-flight.  Used to avoid firing
- * duplicate IPC calls when the player stands in a transition zone for more
- * than one frame before the room data arrives.
- */
-const _pendingLoadIds = new Set<string>();
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -118,90 +118,6 @@ export async function computeCampaignHashForValidation(campaign: SavedCampaignV1
     // Intentionally excluded: campaign.editor (lastEditedIso) and
     // campaign.metadata (lastEditedAt) — these are volatile timestamps.
   });
-}
-
-// ── Cache state management ────────────────────────────────────────────────────
-
-/**
- * Activates the room file cache for a given campaign.
- * Called after successfully validating or generating a manifest.
- *
- * @param manifest            The validated room cache manifest.
- * @param campaignId          The campaign ID.
- * @param isOfficialCampaign  Whether this is the built-in DustWeaver campaign.
- * @param worldMap            The campaign's worldMap — stored so that
- *                            `loadRoomForGameplayAsync` can be called without
- *                            an explicit worldMap argument (e.g. from the
- *                            preload scheduler).  Pass `undefined` only when
- *                            the worldMap is guaranteed to be supplied at every
- *                            `loadRoomForGameplayAsync` call site.
- */
-export function activateCampaignRoomCache(
-  manifest: RoomCacheManifest,
-  campaignId: string,
-  isOfficialCampaign: boolean,
-  worldMap?: WorldMapJsonDef,
-): void {
-  _activeManifest = manifest;
-  _activeCampaignId = campaignId;
-  _activeIsOfficialCampaign = isOfficialCampaign;
-  _activeWorldMap = worldMap ?? null;
-}
-
-/**
- * Deactivates the room file cache.
- * Called when returning from a custom campaign session to the main menu.
- */
-export function deactivateCampaignRoomCache(): void {
-  _activeManifest = null;
-  _activeCampaignId = null;
-  _activeIsOfficialCampaign = false;
-  _activeWorldMap = null;
-  _pendingLoadIds.clear();
-}
-
-/** Returns true if a room file cache is currently active (Electron only). */
-export function isRoomFileCacheActive(): boolean {
-  return _activeManifest !== null && _activeCampaignId !== null;
-}
-
-/**
- * Returns true if the currently active room file cache belongs to the official
- * DustWeaver campaign.
- *
- * Use this to decide whether to preserve the cache across main-menu visits:
- * the official campaign cache should remain active while the player is on the
- * main menu so that lazy loading continues to work when they press Play again.
- */
-export function isOfficialCampaignCacheActive(): boolean {
-  return _activeIsOfficialCampaign && _activeManifest !== null && _activeCampaignId !== null;
-}
-
-/** Returns the active campaign ID, or null if no cache is active. */
-export function getActiveCampaignId(): string | null {
-  return _activeCampaignId;
-}
-
-/**
- * Returns the adjacency index from the currently active room cache manifest,
- * or null if no cache is active or the manifest has no adjacency data.
- *
- * The adjacency index maps each roomId to its directly-connected neighbours as
- * recorded at export time.  Use this to seed BFS in the preload scheduler so
- * radius-2 rooms can be discovered even when intermediate rooms are not yet
- * hydrated in ROOM_REGISTRY.
- */
-export function getActiveRoomAdjacency(): import('./roomCacheManifest').RoomCacheManifest['adjacency'] | null {
-  return _activeManifest?.adjacency ?? null;
-}
-
-/**
- * Returns the worldMap for the currently active campaign, or null if no cache
- * is active.  Used by the preload scheduler and room-transition fallback path
- * to call `loadRoomForGameplayAsync` without passing worldMap explicitly.
- */
-export function getActiveWorldMap(): WorldMapJsonDef | null {
-  return _activeWorldMap;
 }
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -558,11 +474,13 @@ export async function loadRoomFromFileCache(
   worldMap: WorldMapJsonDef,
 ): Promise<RoomDef | null> {
   const electronApi = getElectronApi();
-  if (electronApi === undefined || _activeManifest === null || _activeCampaignId === null) {
+  const manifest = getActiveManifest();
+  const campaignId = getActiveCampaignId();
+  if (electronApi === undefined || manifest === null || campaignId === null) {
     return null;
   }
 
-  const entry = _activeManifest.rooms[roomId];
+  const entry = manifest.rooms[roomId];
   if (entry === undefined) {
     console.warn(`[roomFileLoader] Room "${roomId}" is not in the active manifest.`);
     return null;
@@ -570,7 +488,7 @@ export async function loadRoomFromFileCache(
 
   let result: Awaited<ReturnType<typeof electronApi.readRoomFile>>;
   try {
-    result = await electronApi.readRoomFile(_activeCampaignId, roomId, _activeIsOfficialCampaign);
+    result = await electronApi.readRoomFile(campaignId, roomId, getActiveIsOfficialCampaign());
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.warn(`[roomFileLoader] IPC error reading room "${roomId}":`, msg);
@@ -645,12 +563,12 @@ export async function loadRoomForGameplayAsync(
   if (existing !== undefined) return existing;
 
   // Deduplicate concurrent in-flight loads for the same room.
-  if (_pendingLoadIds.has(roomId)) {
+  if (roomFilePendingLoadIds.has(roomId)) {
     return undefined;
   }
 
   // Resolve worldMap: use the stored active worldMap if not explicitly provided.
-  const map = worldMap ?? _activeWorldMap;
+  const map = worldMap ?? getActiveWorldMap();
   if (map === null) {
     // No worldMap available — file-cache loading is not possible.
     // This is expected in browser mode or before a campaign has been activated.
@@ -663,7 +581,7 @@ export async function loadRoomForGameplayAsync(
     return undefined;
   }
 
-  _pendingLoadIds.add(roomId);
+  roomFilePendingLoadIds.add(roomId);
   try {
     // Room is not in registry — try the file cache.
     const roomDef = await loadRoomFromFileCache(roomId, map);
@@ -682,7 +600,7 @@ export async function loadRoomForGameplayAsync(
       return roomDef;
     }
   } finally {
-    _pendingLoadIds.delete(roomId);
+    roomFilePendingLoadIds.delete(roomId);
   }
 
   return undefined;

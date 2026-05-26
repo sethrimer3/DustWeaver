@@ -1,10 +1,8 @@
 import { createWorldState } from '../sim/world';
-import { createClusterState } from '../sim/clusters/state';
-import { initGrappleChainParticles } from '../sim/clusters/grapple';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng } from '../sim/rng';
-import { createReusableSnapshot, updateSnapshotInPlace, resetReusableSnapshot } from '../render/snapshot';
+import { createReusableSnapshot, updateSnapshotInPlace } from '../render/snapshot';
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { HudState } from '../render/hud/overlay';
@@ -22,18 +20,12 @@ import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
-import { createCameraState, snapCamera, getCameraOffset } from '../render/camera';
-import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers, setActiveSeamBlending } from '../render/walls/blockSpriteRenderer';
-import { preloadTransitionSprites } from '../render/walls/seamBlending';
+import { createCameraState, getCameraOffset } from '../render/camera';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
-import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
-import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
-import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
-import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
@@ -41,40 +33,22 @@ import { BloomSystem } from '../render/effects/bloomSystem';
 import { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import { DEFAULT_BLOOM_CONFIG } from '../render/effects/bloomConfig';
 import { RenderProfiler } from '../render/hud/renderProfiler';
-import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
 import {
-  spawnClusterParticles,
-  spawnWeaveLoadoutParticles,
-  spawnBackgroundFluidParticles,
-  spawnAllDustPiles,
-  PARTICLE_COUNT_PER_CLUSTER,
-  BACKGROUND_FLUID_COUNT,
-  PLAYER_INITIAL_HEALTH,
-} from './gameSpawn';
-import { spawnEnemyClusters } from './gameEnemySpawn';
-import {
-  loadRoomHazards,
-  loadRoomRopes,
-  loadRoomFallingBlocks,
-  loadRoomGrasshoppers,
   worldBgColor,
   resolveSpawnBlock,
 } from './gameRoom';
 import { renderFrame } from './gameRender';
 import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
-import { resetSnakeRuntimeState } from '../sim/clusters/snakeAi';
-import { DecorationWaveState, buildRoomDecorations } from '../render/effects/wallDecorations';
+import { DecorationWaveState } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
 import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { createPlayerSfxState, updatePlayerSfx } from './gamePlayerSfx';
-import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
-import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
 import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
-import { handleDialogueAdvance, checkDialogueTriggers, prepareRoomDialogueVisitState } from './gameDialogueHandler';
+import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
 import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
 import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
 import {
@@ -85,19 +59,15 @@ import {
 import { buildHudDebugState } from './gameHudDebugState';
 import type { Conversation } from '../dialogue/dialogueTypes';
 import {
-  preloadRoomThemeSprites,
   preloadAdjacentRoomAssets,
   areRoomSpritesReady,
   isRoomBackgroundDecodeReady,
   decodeRoomThemeSprites,
   decodeRoomBackground,
 } from '../render/roomAssetPreloader';
-import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
 import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
-import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
+import { type PreloadScheduleHandle } from './roomPreloadScheduler';
 import {
-  scheduleChunkPrewarms,
-  adoptPrewarmedChunksForRoom,
   getPrewarmStats,
   type WarmScheduleHandle,
 } from './roomRenderChunkWarmScheduler';
@@ -112,8 +82,6 @@ import { resolveGameStartRoomSelection } from './gameStartRoom';
 import {
   type GameCameraState,
   createGameCameraState,
-  cancelCameraTransition,
-  resetCameraEffBoundsForRoom,
   updateCameraFollow,
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
@@ -124,7 +92,6 @@ import { renderEditorBackdrop } from './gameScreenEditorBackdrop';
 import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoomTransitionOrchestrator';
 import type { TransitionDirection } from './gameTransitions';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
-import { loadRoomForGameplayAsync, isRoomFileCacheActive, getActiveRoomAdjacency } from '../levels/roomFileLoader';
 import * as FP from '../debug/perfFreezeProfiler';
 import { type LoadRoomCtx, makeLoadRoomPhases } from './gameLoadRoomPhases';
 import {
