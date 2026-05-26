@@ -425,3 +425,40 @@ still bridges prewarm store and active cache and remains in `blockSpriteRenderer
 No circular dependencies introduced.
 
 **Validation:** `npm run build` passes after both extractions (703/704 modules, ✓ built).
+
+---
+
+## Section 11 — BUILD 408
+
+### `src/screens/gameScreen.ts`  (1872 → 1483 lines)
+
+**Problem:** `gameScreen.ts` contained `_makeLoadRoomPhases`, a ~470-line
+async generator responsible for all 6 phases of room loading (world reset,
+player/particle init, enemy spawn, wall/bg particles, hazard/dialogue, env
+effects/camera).  This generator had no dependency on the outer closure's
+mutable UI or frame-tick state — it only needed references to data objects and
+a small set of setter callbacks to write back results.  It was unrelated to the
+camera smoothing, input handling, pause logic, and frame tick that make up the
+rest of `gameScreen.ts`.
+
+**Extraction:**
+
+- [x] **`src/screens/gameLoadRoomPhases.ts`** (680 lines) — owns the
+  `LoadRoomCtx` interface and `makeLoadRoomPhases` generator.  Contains all 6
+  load phases: A (metadata/world reset), B (player/particles), C (enemies),
+  D (bg particles/walls), E (hazards/dialogue), F (env effects/camera snap).
+  Setter callbacks (`setCurrentRoom`, `setRoomWidthWorld`, etc.) are used for
+  the Phase-A write-backs that `startTransitionLoad` depends on via the
+  `gen.next()` advance pattern.
+
+- [x] `gameScreen.ts` retains `_makeLoadRoomPhases` as a 3-line wrapper that
+  creates `loadRoomCtx` (40-field context object) and delegates via
+  `yield* makeLoadRoomPhases(loadRoomCtx, ...)`.
+
+**Behavior preserved:** All gameplay phases execute in identical order.
+`startTransitionLoad`'s `gen.next()` advance still writes `currentRoom` back
+via `ctx.setCurrentRoom()` synchronously before `onRoomBecameActive()` is
+called.  No new per-frame allocations.  No circular dependencies.
+
+**Validation:** `npm run build` (tsc) produces no new errors beyond the
+pre-existing `TS2688 vite/client` issue that exists on the baseline branch.
