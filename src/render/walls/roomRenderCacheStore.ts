@@ -164,14 +164,14 @@ export function listBgPrewarmRoomIds(): string[] {
 /** Per-room wall prewarm stats, or `null` when not held. */
 export function getSnapshotWallRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
   const cache = _snapshots.get(roomId)?.wallCache;
-  if (cache === undefined || cache === null) return null;
+  if (cache == null) return null;
   return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
 }
 
 /** Per-room bg prewarm stats, or `null` when not held. */
 export function getSnapshotBgRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
   const cache = _snapshots.get(roomId)?.bgCache;
-  if (cache === undefined || cache === null) return null;
+  if (cache == null) return null;
   return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
 }
 

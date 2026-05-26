@@ -103,6 +103,13 @@ const PREWARM_MEMORY_BUDGET_KB: Record<'low' | 'med' | 'high', number> = {
   high: 32768,
 };
 
+/**
+ * Minimum pre-transition velocity magnitude (world units/frame) required on
+ * either axis before velocity-direction queue ordering is applied.
+ * Below this threshold the player is considered stationary and ordering is skipped.
+ */
+const MIN_VELOCITY_FOR_DIRECTION_ORDERING = 1;
+
 // ── Idle scheduling shim (mirrors roomPreloadScheduler) ──────────────────────
 
 type IdleCallbackHandle = number;
@@ -388,12 +395,19 @@ export function scheduleChunkPrewarms(
   // Build the task queue (radius-1 first, then radius-2, then radius-3).
   _queue = [];
   const currentRoomDef = roomRegistry.get(currentRoom.id);
+  if (currentRoomDef === undefined) {
+    // Should not happen in practice; currentRoom is always registered.
+    if (import.meta.env.DEV) {
+      console.warn('[chunkPrewarm] currentRoom not found in registry:', currentRoom.id);
+    }
+    return { cancel(): void {} };
+  }
   for (const [roomId, radius, transIdx] of nearby) {
     let entranceOffsetXPx = 0;
     let entranceOffsetYPx = 0;
     let transitionDir: TransitionDirection | undefined;
 
-    if (currentRoomDef !== undefined && transIdx >= 0 && transIdx < currentRoomDef.transitions.length) {
+    if (transIdx >= 0 && transIdx < currentRoomDef.transitions.length) {
       const t = currentRoomDef.transitions[transIdx];
       if (t.targetRoomId === roomId) {
         const { offsetXPx, offsetYPx } = computeEntranceOffset(t, vpWPx, vpHPx, scalePx);
@@ -442,7 +456,7 @@ export function scheduleChunkPrewarms(
     const { vx, vy } = preTransVelocity;
     const absX = Math.abs(vx);
     const absY = Math.abs(vy);
-    if (absX > 1 || absY > 1) {
+    if (absX > MIN_VELOCITY_FOR_DIRECTION_ORDERING || absY > MIN_VELOCITY_FOR_DIRECTION_ORDERING) {
       const dominant: TransitionDirection =
         absX >= absY
           ? (vx >= 0 ? 'right' : 'left')

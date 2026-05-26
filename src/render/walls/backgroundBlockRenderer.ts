@@ -109,6 +109,7 @@ export function setBgChunkCacheMemoryKB(kb: number): void {
 
 import { RoomChunkCache as _RCC } from './chunkRenderCache'; // local alias to avoid shadowing
 import {
+  computeRenderStateKey,
   getSnapshot,
   getOrCreateSnapshot,
   clearSnapshotBgData,
@@ -221,11 +222,19 @@ export function prewarmBgChunksForRoom(
 
   // Reuse the RoomRenderSnapshot that was created by the wall prewarm for the
   // same room, if one exists.  If not (corner case: bg called without a prior
-  // wall prewarm), create a new snapshot with a minimal bg-only key.
+  // wall prewarm), create a new snapshot with a minimal key derived from the
+  // same computeRenderStateKey format so keys are consistent.
   let snap = getSnapshot(room.id);
   if (snap === undefined) {
-    const bgKey = `bg:${room.blockTheme ?? `w${room.worldNumber ?? 1}`}`;
-    snap = getOrCreateSnapshot(room.id, bgKey);
+    // No lighting/ambient context available here; use neutral defaults.  In
+    // practice this path is not taken since wall prewarm always runs first.
+    const fallbackKey = computeRenderStateKey(
+      room.blockTheme ?? null,
+      room.worldNumber ?? 1,
+      'none', 'default', 'false',
+      new Set<string>(),
+    );
+    snap = getOrCreateSnapshot(room.id, fallbackKey);
   }
   if (snap.bgCache === null) {
     snap.bgCache = new _RCC(true);
