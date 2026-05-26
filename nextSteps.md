@@ -210,7 +210,52 @@ What remains deferred:
 
 ---
 
-## Still Intentionally Deferred
+### 4. Predictive Adjacent-Room Prewarm Pipeline (COMPLETED — current build)
+
+The goal was to eliminate the brief loading overlay on first-time room entry by ensuring the target room's chunk caches are ready before the player crosses the boundary.
+
+#### What was implemented
+
+1. **`prioritizeChunkPrewarm(roomId)`** — New exported function in `roomRenderChunkWarmScheduler.ts`. Moves the warm task for `roomId` to the front of the idle queue and kicks off a new idle callback if one is not already running. Analogous to `PreloadScheduleHandle.prioritize()` for the runtime-cache scheduler.
+
+2. **Proximity boost hooks chunk prewarm** — The proximity-boost block in `gameScreen.ts` now calls `prioritizeChunkPrewarm(_tId)` for every nearby transition target, in addition to the existing `_preloadScheduleHandle?.prioritize()` for runtime cache. The two boosts are now independent: chunk prewarm is boosted even for rooms whose runtime cache is already prepared (because runtime-cache readiness is a prerequisite for chunk building, not chunk completion). Reorganised the `continue` early-exit so the proximity check runs for all transitions, then conditionally applies each boost.
+
+3. **`invalidateRoomChunkPrewarm(roomId)`** — New exported function in `roomRenderChunkWarmScheduler.ts`. Evicts pre-warmed wall and bg chunks for `roomId` and removes it from `_keepIds` so the next `scheduleChunkPrewarms` will re-add it to the queue. Called from the editor callback in `gameScreen.ts` alongside `roomRuntimeCache.invalidate()` so that stale chunk canvases cannot be adopted after room edits.
+
+4. **`TransitionOutcome` type and `lastTransitionOutcome` stat** — New `TransitionOutcome = 'hot' | 'entryWarm' | 'loading' | 'none'` type in `roomRenderChunkWarmScheduler.ts`. Added `lastTransitionOutcome` field to `PrewarmStats`. `recordTransitionOutcome(outcome)` exported function updates the stat. Called from both paths in `startTransitionLoad`:
+   - `'hot'` — instant load, chunk caches ready, no overlay at all.
+   - `'entryWarm'` — instant load, but a brief 80 ms textless cover was shown while chunks warmed.
+   - `'loading'` — full async load with "Loading…" overlay (cold cache miss).
+
+5. **Debug panel shows transition outcome** — `renderProfiler.ts` prewarm panel now shows `Last xtn: hot/entryWarm/loading/none`. Combine with the existing entry-warm panel to see whether each transition was seamless.
+
+#### Acceptance criteria met
+
+- **Hot-cache transitions** (room runtime prepared + chunks warm): no overlay, instant entry (`canSkipEntryWarm` returns true). This is the common case for rooms the player revisits or for radius-1 rooms the scheduler had time to warm.
+- **Entry-warm transitions** (runtime prepared, chunks not yet fully warm): 80 ms textless black cover while `tickEntryWarm` catches up. No "Loading…" text. Player stays still during warm; momentum is applied after overlay clears.
+- **Cold-cache transitions** (runtime not yet built): existing full async load + "Loading…" overlay still fires as fallback. Debug panel records `loading` so it is visible.
+- **Editor edits**: stale chunk canvases are now evicted immediately, preventing visual corruption after room changes.
+
+#### What was NOT implemented (deferred)
+
+1. **Velocity-direction-based task ordering in `scheduleChunkPrewarms`**
+   The initial BFS queue could be sorted so that the room in the player's travel direction is warmed first. This would require passing the pre-transition player velocity to Phase F of `_makeLoadRoomPhases`. At Phase F execution time the player velocity in the new room is 0 (it is applied after `loadRoom()` returns in both instant and async paths), so the velocity would need to be stored in `LoadRoomCtx`. The proximity boost already partially handles this by moving the nearest room to the front of the queue; the velocity sort would be an additional refinement. Deferred as a small future improvement.
+
+2. **Isolated `RoomRenderCache` keyed by roomId + render-state hash (singleton refactor)**
+   The current prewarm chunk stores (`_prewarmWallCaches`, `_prewarmWallLayouts`, etc.) are module-level singletons in `wallChunkPrewarmStore.ts` / `bgChunkPrewarmStore.ts`, keyed only by room ID, with no version hash. An isolated `RoomRenderCache` object (keyed by `roomId + themeKey + lightingKey + wallHash`) would:
+   - Allow automatic invalidation when block themes, lighting, or wall layouts change.
+   - Allow multiple versions of the same room to coexist (e.g. editor preview vs. gameplay).
+   - Enable a clean handoff API where the prewarm snapshot is atomically swapped into the active render state on transition.
+   This refactor requires splitting the active-room chunk caches from the prewarm stores, changing all write paths in the chunk renderers, and updating `adoptPrewarmedWallChunks`/`adoptPrewarmedBgChunks` to accept a typed snapshot. Estimated scope: 3–5 files, ~200–400 lines. Deferred as a dedicated architectural pass.
+
+   **Current mitigation**: `invalidateRoomChunkPrewarm()` is called alongside `roomRuntimeCache.invalidate()` in the editor callback, so editor-induced stale chunks are evicted. Theme/lighting changes outside the editor do not currently invalidate prewarm chunks; in practice these settings do not change at runtime without a room reload.
+
+3. **Cache invalidation on block-theme or lighting-setting changes outside the editor**
+   If `setActiveBlockLighting`, `setActiveBlockSpriteTheme`, or similar settings change mid-session (e.g. via the pause menu's quality settings), prewarm chunks for adjacent rooms may be stale. The chunk renderers do have `setActiveBlockLighting` invalidation for the active room's cache, but the prewarm stores are not invalidated. Low risk currently since quality-setting changes call `scheduleChunkPrewarms` which rebuilds the queue from scratch; any already-built prewarm chunks for rooms with different settings would be corrected on the next idle pass. Document as a known rough edge.
+
+---
+
+
 
 These are still valid future refactors and should not be treated as accidental omissions.
 

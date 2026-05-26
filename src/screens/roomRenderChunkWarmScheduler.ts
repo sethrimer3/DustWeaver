@@ -166,6 +166,28 @@ function _wallTemplateToSnapshot(t: {
   };
 }
 
+// ── Transition outcome tracking ───────────────────────────────────────────────
+
+/**
+ * Records whether the most recent room transition used:
+ *  - 'hot'       — instant, no overlay (chunk caches were ready).
+ *  - 'entryWarm' — instant load but brief textless cover while chunks warmed.
+ *  - 'loading'   — full async load with "Loading…" overlay (cold cache miss).
+ *  - 'none'      — no transition has occurred yet.
+ */
+export type TransitionOutcome = 'hot' | 'entryWarm' | 'loading' | 'none';
+
+/**
+ * Records the outcome of the most recent room transition into the prewarm stats
+ * so it is visible in the debug panel.
+ *
+ * Call this from `startTransitionLoad` in gameScreen.ts immediately after the
+ * instant vs. async path is decided.
+ */
+export function recordTransitionOutcome(outcome: TransitionOutcome): void {
+  _stats = { ..._stats, lastTransitionOutcome: outcome };
+}
+
 // ── Prewarm stats (shared with debug panel) ───────────────────────────────────
 
 export interface PrewarmStats {
@@ -222,6 +244,8 @@ export interface PrewarmStats {
   totalPrewarmMemoryKB: number;
   /** Memory budget for the current quality tier (KB).  0 when scheduler not yet started. */
   memoryBudgetKB: number;
+  /** Outcome of the most recent room transition. */
+  lastTransitionOutcome: TransitionOutcome;
 }
 
 let _stats: PrewarmStats = {
@@ -247,6 +271,7 @@ let _stats: PrewarmStats = {
   totalEvictions:          0,
   totalPrewarmMemoryKB:    0,
   memoryBudgetKB:          0,
+  lastTransitionOutcome:   'none' as TransitionOutcome,
 };
 
 /** Read-only snapshot of prewarm stats. Updates every idle callback. */
@@ -417,6 +442,60 @@ export function scheduleChunkPrewarms(
       }
     },
   };
+}
+
+// ── Priority boost API ────────────────────────────────────────────────────────
+
+/**
+ * Moves the warm task for `roomId` to the front of the idle queue.
+ *
+ * Call this from the proximity-based preload boost in gameScreen.ts so that
+ * when the player is close to a room boundary, its chunk build is accelerated.
+ *
+ * No-op if:
+ *   - `roomId` is not in the current queue (unknown, already complete, or not
+ *     yet scheduled — the next `scheduleChunkPrewarms` will pick it up).
+ *   - `roomId` is already at index 0 (already the highest-priority task).
+ *   - The scheduler is cancelled.
+ *
+ * If the idle callback is not running, this also kicks off a new one.
+ */
+export function prioritizeChunkPrewarm(roomId: string): void {
+  if (_cancelled) return;
+  const idx = _queue.findIndex(t => t.roomId === roomId);
+  if (idx > 0) {
+    // Move task to the front.
+    _queue.unshift(_queue.splice(idx, 1)[0]);
+    if (import.meta.env.DEV) {
+      console.log(`[chunkPrewarm:priority] ${roomId} moved to front of queue`);
+    }
+  }
+  // Ensure an idle callback is scheduled if the queue is non-empty.
+  if (_queue.length > 0 && _idleHandle === 0 && !_cancelled) {
+    _idleHandle = _scheduleIdle(_onIdle);
+  }
+}
+
+/**
+ * Evicts pre-warmed wall and bg chunks for `roomId` and removes it from the
+ * keep-set so it will be re-queued on the next `scheduleChunkPrewarms`.
+ *
+ * Call this whenever editor changes invalidate a room's cached runtime data.
+ * This prevents stale chunk canvases from being adopted on the next room entry.
+ */
+export function invalidateRoomChunkPrewarm(roomId: string): void {
+  evictPrewarmedWallChunks(roomId);
+  evictPrewarmedBgChunks(roomId);
+  // Remove from the keep-set so the scheduler's next eviction pass does not
+  // inadvertently protect it, and so that scheduleChunkPrewarms will re-add it.
+  if (_keepIds.has(roomId)) {
+    const next = new Set(_keepIds);
+    next.delete(roomId);
+    _keepIds = next;
+  }
+  if (import.meta.env.DEV) {
+    console.log(`[chunkPrewarm:invalidate] evicted chunks for ${roomId}`);
+  }
 }
 
 // ── Adoption on room entry ────────────────────────────────────────────────────
