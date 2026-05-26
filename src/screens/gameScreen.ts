@@ -108,6 +108,7 @@ import {
   canSkipEntryWarm,
   type EntryWarmState,
 } from './entryViewportWarm';
+import { ResidentRoomManager } from './residentRoomManager';
 
 const FIXED_DT_MS = 16.666;
 
@@ -329,6 +330,7 @@ export function startGameScreen(
   // Set the selected character on the world for rendering
   world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
+  const residentRoomManager = new ResidentRoomManager();
   const environmentalDust = new EnvironmentalDustLayer();
   const sunbeamRenderer = new SunbeamRenderer();
   const atmosphericLightDust = new AtmosphericLightDust();
@@ -590,9 +592,34 @@ export function startGameScreen(
       if (import.meta.env.DEV) {
         console.log(`[transition] ${room.id}: prepared cache HIT — instant load`);
       }
+      // Freeze the outgoing room before loadRoom destroys its state.
+      residentRoomManager.ensureResident(currentRoom);
+      residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
       // Capture prewarm-store state BEFORE loadRoom (Phase A adoption clears it).
       const { wallPresent, bgPresent, bgRequired } = getRoomPrewarmReadiness(room.id, room);
+      const frozenEnemies = residentRoomManager.getFrozenEnemies(room.id);
       loadRoom(room, spawnXBlock, spawnYBlock);
+      // Restore frozen enemy state if this room was previously visited.
+      residentRoomManager.ensureResident(room);
+      let residentMode: 'residentHot' | 'residentFallback' = 'residentFallback';
+      if (frozenEnemies !== null) {
+        try {
+          const restored = residentRoomManager.restoreFrozenEnemies(world, frozenEnemies, levelRng);
+          if (restored > 0) residentMode = 'residentHot';
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.warn('[resident] restoreFrozenEnemies failed — keeping fresh spawn', err);
+          }
+        }
+      }
+      residentRoomManager.setActiveResidentId(room.id);
+      residentRoomManager.evictDistant(room.id);
+      residentRoomManager.recordTransitionMode(residentMode, '', import.meta.env.DEV ? performance.now() - t0 : 0);
+      // Pre-register adjacent rooms as resident shells for future freeze snapshots.
+      for (const t of room.transitions) {
+        const adjRoom = ROOM_REGISTRY.get(t.targetRoomId);
+        if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);
+      }
       // Retrieve the structured adoption result set by Phase A (adoptPrewarmedChunksForRoom).
       const adoptResult = getLastAdoptionResult();
       const wallAdoptStatus = adoptResult?.wall.status ?? 'missing';
@@ -649,7 +676,7 @@ export function startGameScreen(
           missReason,
         });
       } else {
-        recordTransitionOutcome('hot', {
+        recordTransitionOutcome(residentMode === 'residentHot' ? 'residentHot' : 'hot', {
           roomId: room.id,
           runtimeReady: true,
           wallPrewarmPresent: wallPresent,
@@ -657,7 +684,7 @@ export function startGameScreen(
           bgPrewarmRequired:  bgRequired,
           renderStateKeyMatches,
           entryViewportCovered: true,
-          outcome: 'hot',
+          outcome: residentMode === 'residentHot' ? 'residentHot' : 'hot',
           spritesDecoded,
           backgroundDecoded,
           missReason: 'none',
@@ -675,6 +702,10 @@ export function startGameScreen(
         const status = cacheEntry === undefined ? 'cold' : 'partial';
         console.warn(`[transition] ${room.id}: cache MISS (${status}) — async load`);
       }
+      // Freeze outgoing room before the async generator destroys world state.
+      residentRoomManager.ensureResident(currentRoom);
+      residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
+      residentRoomManager.recordTransitionMode('legacyLoad');
       asyncLoadState.preTransVX    = vx;
       asyncLoadState.preTransVY    = vy;
       asyncLoadState.transitionDir = dir;
@@ -727,6 +758,14 @@ export function startGameScreen(
     );
   } else {
     loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
+  }
+  // Register the start room as the initial active resident.
+  residentRoomManager.ensureResident(currentRoom);
+  residentRoomManager.setActiveResidentId(currentRoom.id);
+  // Pre-register adjacent rooms as resident shells.
+  for (const t of currentRoom.transitions) {
+    const adjRoom = ROOM_REGISTRY.get(t.targetRoomId);
+    if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);
   }
   // Start the entry warm immediately after the initial load so the overlay
   // holds until the entry viewport has shaded chunks available.
@@ -905,6 +944,9 @@ export function startGameScreen(
     // frame-pacing stats are available immediately when debug mode is enabled.
     renderProfiler.recordFrameTime(elapsedMs);
 
+    // Advance resident room frame counter (used for LRU eviction timestamps).
+    residentRoomManager.tickFrame();
+
     // ── Adaptive quality update ───────────────────────────────────────────
     // Reads the profiler's EMA average frame time and adjusts quality caps
     // when the average is persistently over/under budget.
@@ -1003,6 +1045,15 @@ export function startGameScreen(
             asyncLoadState.transitionDir === 'up'
               ? asyncLoadState.preTransVY - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION
               : asyncLoadState.preTransVY;
+        }
+        // Register the newly loaded room as an active resident.
+        residentRoomManager.ensureResident(currentRoom);
+        residentRoomManager.setActiveResidentId(currentRoom.id);
+        residentRoomManager.evictDistant(currentRoom.id);
+        // Pre-register adjacent rooms.
+        for (const t of currentRoom.transitions) {
+          const adjRoom = ROOM_REGISTRY.get(t.targetRoomId);
+          if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);
         }
         // Start the entry warm now that all load phases are complete.
         // The warm advances in subsequent gameplay frames (before bake is
@@ -1451,6 +1502,7 @@ export function startGameScreen(
     if (pauseController.state.isDebugMode) {
       renderProfiler.updatePrewarmStats(getPrewarmStats());
       renderProfiler.updateEntryWarmState(entryWarmState);
+      renderProfiler.updateResidentDiagnostics(residentRoomManager.getDiagnostics());
     }
 
     const _renderT0 = import.meta.env.DEV ? performance.now() : 0;

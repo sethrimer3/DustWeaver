@@ -19,7 +19,8 @@ export type DebugPanelId =
   | 'particles'
   | 'room'
   | 'freeze'
-  | 'prewarm';
+  | 'prewarm'
+  | 'resident';
 
 export interface DebugPanelVisibility {
   movement: boolean;
@@ -31,6 +32,7 @@ export interface DebugPanelVisibility {
   room: boolean;
   freeze: boolean;
   prewarm: boolean;
+  resident: boolean;
 }
 
 const STORAGE_KEY = 'dw_debug_panels';
@@ -46,6 +48,7 @@ function makeDefaults(): DebugPanelVisibility {
     room:        false,
     freeze:      false,
     prewarm:     false,
+    resident:    false,
   };
 }
 

@@ -151,6 +151,9 @@ export class RenderProfiler {
   /** Latest entry warm state snapshot for the prewarm debug panel. */
   private _entryWarmState: EntryWarmState | null = null;
 
+  /** Latest resident room diagnostics for the resident debug panel. */
+  private _residentDiagnostics: import('../../screens/residentRoomManager').ResidentRoomDiagnostics | null = null;
+
   /**
    * Store the latest chunk-cache diagnostic counters.
    * Call this from gameRender.ts after the walls render stage when debug mode
@@ -199,6 +202,16 @@ export class RenderProfiler {
    */
   updateEntryWarmState(state: EntryWarmState): void {
     this._entryWarmState = state;
+  }
+
+  /**
+   * Store the latest resident room diagnostics for the resident debug panel.
+   * Call this once per frame from gameScreen.ts when debug mode is on.
+   */
+  updateResidentDiagnostics(
+    diag: import('../../screens/residentRoomManager').ResidentRoomDiagnostics,
+  ): void {
+    this._residentDiagnostics = diag;
   }
 
   // ── Frame-pacing API ──────────────────────────────────────────────────────
@@ -372,10 +385,11 @@ export class RenderProfiler {
     const showRoom   = isPanelVisible('room',        panelVisibility);
     const showWater  = isPanelVisible('water',       panelVisibility);
     const showFreeze = isPanelVisible('freeze',      panelVisibility);
-    const showPrewarm = isPanelVisible('prewarm',    panelVisibility);
+    const showPrewarm = isPanelVisible('prewarm',   panelVisibility);
+    const showResident = isPanelVisible('resident', panelVisibility);
 
     // Nothing to render — bail early to avoid drawing an empty frame.
-    if (!showPerf && !showChunks && !showRoom && !showWater && !showFreeze && !showPrewarm) return;
+    if (!showPerf && !showChunks && !showRoom && !showWater && !showFreeze && !showPrewarm && !showResident) return;
 
     const lineHeightPx = 9;
     const fontSizePx   = 7;
@@ -676,6 +690,37 @@ export class RenderProfiler {
         const isHeader = i === 0;
         ctx.fillStyle = isHeader ? '#ffdd44' : isWarming ? '#ffcc44' : ew.phase === 'timedOut' ? '#ff9944' : '#a8ffa8';
         ctx.fillText(ewLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+      nextPanelY += ewPanelH + 4;
+    }
+
+    // ── Resident room stats panel ─────────────────────────────────────────────
+    if (showResident && this._residentDiagnostics !== null) {
+      const rd = this._residentDiagnostics;
+      const mode = rd.lastTransitionMode;
+      const residentLines = [
+        '── Resident Rooms ──',
+        `Active: ${rd.activeRoomId ?? 'none'}`,
+        `Residents: ${rd.residentCount}  Frozen: ${rd.frozenCount}`,
+        `Last xtn: ${mode}`,
+        rd.lastResidentMissReason ? `Miss: ${rd.lastResidentMissReason}` : 'Miss: —',
+        `ActivMs: ${rd.lastActivationMs.toFixed(1)}  Evict: ${rd.evictionsTotal}`,
+      ];
+      const residentPanelH = residentLines.length * lineHeightPx + 8;
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.70)';
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, residentPanelH);
+      const modeColor: Record<string, string> = {
+        residentHot:      '#88ff88',
+        residentFallback: '#ffcc44',
+        legacyLoad:       '#ff8844',
+      };
+      for (let i = 0; i < residentLines.length; i++) {
+        const isHeader = i === 0;
+        ctx.fillStyle = isHeader ? '#ffdd44' : (i === 3 ? (modeColor[mode] ?? '#b8d8ff') : '#b8d8ff');
+        ctx.fillText(residentLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
     }

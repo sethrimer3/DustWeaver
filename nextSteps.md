@@ -210,7 +210,98 @@ What remains deferred:
 
 ---
 
-### 4. Predictive Adjacent-Room Prewarm Pipeline (HARDENED — BUILD 414 polish pass)
+### 0b. Resident Room Runtime — Phase 1 (BUILD 413)
+
+This pass introduces `ResidentRoomManager` to preserve enemy state across room transitions.  The existing preload/prewarm system remains unchanged as the render-cache preparation layer.
+
+#### What was implemented
+
+**New file: `src/screens/residentRoomManager.ts`**
+
+- `ResidentRoomInstance` — per-room record tracking lifecycle (`active` | `frozen` | `evictable`), frozen enemy snapshots, and LRU timestamps.
+- `FrozenEnemyEntry` — shallow copy of a `ClusterState` plus the `RoomEnemyDef` reference needed to respawn particles at the correct HP.
+- `ResidentRoomManager` — plain class (not a singleton) instantiated in `gameScreen.ts`:
+  - `tickFrame()` — advances internal frame counter; call once per RAF.
+  - `ensureResident(roomDef)` — registers a room shell; idempotent.
+  - `setActiveResidentId(roomId)` — promotes a room to `active`, demotes the prior active room to `frozen`.
+  - `freezeRoom(world, roomId, room)` — snapshots `world.clusters[1..]` into `frozenEnemies` before `loadRoom` destroys them.
+  - `getFrozenEnemies(roomId)` — returns the frozen snapshot, or `null` on first visit.
+  - `restoreFrozenEnemies(world, frozen, levelRng)` — after `loadRoom`, kills fresh-spawn particles for restorable enemies, replaces clusters with frozen snapshots, and respawns particles at the frozen HP.  Re-initialises grapple-hunter chain particles.
+  - `recordTransitionMode(mode, missReason, ms)` — captures last transition outcome for the debug overlay.
+  - `getDiagnostics()` — returns `ResidentRoomDiagnostics` snapshot.
+  - `evictDistant(currentRoomId)` — LRU-evicts rooms beyond `MAX_RESIDENTS = 8`.
+
+**Integration in `src/screens/gameScreen.ts`**
+
+- `residentRoomManager` instantiated alongside `world` and `levelRng`.
+- `tickFrame()` called at the top of every RAF frame.
+- **Instant transition path** (`isPrepared` branch):
+  1. `freezeRoom()` snapshots the outgoing room before `loadRoom`.
+  2. After `loadRoom`, `restoreFrozenEnemies()` restores the target room's enemy state.
+  3. Transition mode set to `'residentHot'` when enemies were restored, `'residentFallback'` on first visit.
+  4. `recordTransitionOutcome` records `'residentHot'` in the viewport-covered branch when applicable.
+  5. Adjacent rooms pre-registered as resident shells.
+  6. `evictDistant()` called after each transition.
+- **Async transition path** (`loading` branch):
+  - `freezeRoom()` called before the async generator starts.
+  - On generator completion: `ensureResident`, `setActiveResidentId`, `evictDistant`, adjacent-room registration.
+  - `recordTransitionMode('legacyLoad')`.
+- **Initial load**: start room registered as active; adjacent rooms registered as shells.
+- **Debug stats**: `renderProfiler.updateResidentDiagnostics()` called each frame in debug mode.
+
+**New `TransitionOutcome` value: `'residentHot'`** in `roomRenderChunkWarmScheduler.ts`.
+
+**New debug panel: `'resident'`** in `debugPanelManager.ts`, `debugPanel.ts`, and `renderProfiler.ts`.
+
+- Panel shows: active room ID, resident count, frozen count, last transition mode (colour-coded), miss reason, activation ms, total evictions.
+
+#### Enemy restoration policy
+
+- **Restorable** (shallow-copy safe): all enemy types except the 8 complex types listed below.
+- **Not restorable in Phase 1** (complex global state): RadiantTether, RadiantWeb, DustConstellation, OrbitalDustCore, DustBlockMimic, DustWeaverArchitect, VoidSingularity, DustLeech.  These respawn fresh on revisit.
+- Dead restorable enemies stay dead.
+- Alive restorable enemies respawn at their frozen HP (partial health preserved).
+- Grapple hunter chains are re-initialised at fresh buffer indices after restoration.
+
+#### What is NOT persisted in Phase 1
+
+- **Hazard state** (rope positions, falling block positions, grasshopper positions) — not captured.
+- **Background fluid/liquid** particles — not captured.
+- **Room particles** (environmental effects) — not captured.
+- **Complex enemy simulation state** (tether connections, constellation rings, etc.) — respawns fresh.
+- **Breakable block damage** — not captured.
+
+These limitations are architectural, not bugs.  The existing `loadRoom` path remains intact as the ground truth for all non-enemy simulation state on every transition.
+
+#### Fallback behaviour
+
+- On first visit to a room: `getFrozenEnemies()` returns `null`; fresh spawn from `loadRoom` is used.
+- On `restoreFrozenEnemies` exception: caught, logged in DEV, fresh spawn is kept — no crash.
+- Async load path uses the full `loadRoom`/phase generator as before; resident registration happens after completion.
+
+#### Transition modes tracked
+
+| Mode | Meaning |
+| --- | --- |
+| `residentHot` | Instant path, enemy state restored from frozen snapshot |
+| `residentFallback` | Instant path, first visit — fresh enemy spawn |
+| `legacyLoad` | Async path (cache miss), full destructive load |
+| `entryWarm` | Instant path but viewport not covered, entry-warm overlay shown |
+| `none` | No transition yet |
+
+#### What remains deferred (see Phase 2)
+
+1. **Full simulation residency** — frozen rooms retain render caches only; enemy/hazard simulation state is NOT kept in memory between transitions (loadRoom still runs on every entry).  True hot-swap without `loadRoom` requires per-room `WorldState` instances — a larger architectural change.
+2. **Hazard/rope/falling-block persistence** — Phase 1 snapshots only cluster state.  Hazard positions, rope tensors, falling block states require dedicated freeze/restore hooks.
+3. **Complex enemy restoration** — RadiantTether, DustConstellation, etc. need their own serialization paths.
+4. **Breakable block persistence** — must integrate with existing room-block-override or save-slot systems.
+5. **Per-room renderer context** — currently module-level renderer state (theme, lighting, blocker keys, chunk caches) is applied on each `loadRoom`.  A per-room render context object would make true hot-swap possible without re-applying renderer state.
+6. **Room radius > 1** — currently adjacent-only pre-registration; no radius-2 shell creation.
+7. **Projectiles crossing room boundaries** — not handled; projectiles that reach a boundary are lost.
+
+---
+
+### 0c. Predictive Adjacent-Room Prewarm Pipeline (HARDENED — BUILD 414 polish pass)
 
 The goal was to eliminate the brief loading overlay on first-time room entry by ensuring the target room's chunk caches are ready before the player crosses the boundary.
 
@@ -257,14 +348,14 @@ The goal was to eliminate the brief loading overlay on first-time room entry by 
 
 7. **"Atomic adoption" wording corrected in `wallChunkPrewarmStore.ts`.** Header comment now says adoption is staged (wall then bg) and NOT atomic. `roomRenderCacheStore.ts` was already corrected in BUILD 413.
 
-#### What was implemented earlier (BUILD 402–413)
+#### What was implemented earlier (BUILD 402–412)
 
 - BUILD 402: `entryViewportWarm.ts` entry-warm controller (8 frames / 120 ms budget).
 - BUILD 404: textless entry-warm overlay (80 ms minShow); `isVisible()` on overlay; hold guard after entry-warm.
 - BUILD 406: `isViewportCovered()` includes `CHUNK_MARGIN`; DEV diagnostics for margin-vs-core miss.
 - BUILD 411: `roomRenderCacheStore.ts` unified snapshot store; `renderStateKey` for invalidation; velocity-direction queue ordering in `scheduleChunkPrewarms`.
 - BUILD 412: `prewarmWallChunksForRoom` ordering fix; `adoptPrewarmedWallChunks`/`Bg` accept optional `currentRenderStateKey`; DEV warning for cache-without-layout.
-- BUILD 413: `ensureChunkPrewarmQueued`; `TransitionReadinessDiagnostic`; `RoomRenderSnapshot` adoption-time key validation; proximity-boost DEV diagnostics.
+- BUILD 413: Resident Room Runtime (see below).
 
 #### What is validated at adoption time (Phase A)
 
