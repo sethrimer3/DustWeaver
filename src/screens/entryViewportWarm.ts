@@ -30,11 +30,13 @@ import {
   prewarmWallChunksForRoom,
   adoptPrewarmedWallChunks,
   isWallActiveViewportCovered,
+  isWallCoreViewportCovered,
 } from '../render/walls/blockSpriteRenderer';
 import {
   prewarmBgChunksForRoom,
   adoptPrewarmedBgChunks,
   isBgActiveViewportCovered,
+  isBgCoreViewportCovered,
 } from '../render/walls/backgroundBlockRenderer';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import {
@@ -226,7 +228,8 @@ export function tickEntryWarm(
 
 /**
  * Cheap read-only probe: returns `true` when the entry viewport is already
- * fully covered by the active chunk caches and no warm work is needed.
+ * fully covered by the active chunk caches — including the `CHUNK_MARGIN`
+ * safety ring used by `renderVisibleChunks` — and no warm work is needed.
  *
  * Intended to be called from the instant-transition path in startTransitionLoad()
  * AFTER loadRoom() has run (which adopts any pre-warmed chunks).  If this
@@ -249,10 +252,26 @@ export function canSkipEntryWarm(
   const offsetXPx = vpWPx / 2 - spawnXWorld * scalePx;
   const offsetYPx = vpHPx / 2 - spawnYWorld * scalePx;
 
-  return (
-    isWallActiveViewportCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, BLOCK_SIZE_MEDIUM) &&
-    isBgActiveViewportCovered(room, offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx)
-  );
+  const wallCovered = isWallActiveViewportCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, BLOCK_SIZE_MEDIUM);
+  const bgCovered   = isBgActiveViewportCovered(room, offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx);
+  const result      = wallCovered && bgCovered;
+
+  if (import.meta.env.DEV && !result) {
+    // Log once per transition — not per frame.  Distinguishes missing
+    // safety-margin chunks from missing core viewport chunks to aid tuning
+    // of prewarm radius/budget.
+    const wallCoreCovered = isWallCoreViewportCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, BLOCK_SIZE_MEDIUM);
+    const bgCoreCovered   = isBgCoreViewportCovered(room, offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx);
+    const marginOnly = wallCoreCovered && bgCoreCovered;
+    console.log(
+      `[canSkipEntryWarm] false — room: ${room.id}, ` +
+      (marginOnly
+        ? 'reason: missing safety-margin chunks (core covered)'
+        : `reason: missing core chunks (wall:${wallCovered ? 'ok' : 'miss'}, bg:${bgCovered ? 'ok' : 'miss'})`),
+    );
+  }
+
+  return result;
 }
 
 /**

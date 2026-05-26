@@ -684,11 +684,12 @@ export function getPrewarmWallStats(): { roomCount: number; totalChunks: number;
 
 /**
  * Cheap read-only check: returns `true` when every chunk grid cell in the
- * given viewport is already present, clean, and had no fallbacks in the
- * **active** wall chunk cache.
+ * given viewport — including the `CHUNK_MARGIN` safety ring — is already
+ * present, clean, and had no fallbacks in the **active** wall chunk cache.
  *
- * Returns `false` if the zoom has changed, or if any visible chunk is missing,
- * dirty, or has pending fallback sprites.  Does **not** build any canvases.
+ * Returns `false` if the zoom has changed, or if any visible-plus-margin chunk
+ * is missing, dirty, or has pending fallback sprites.  Does **not** build any
+ * canvases.
  */
 export function isWallActiveViewportCovered(
   offsetXPx: number,
@@ -699,6 +700,22 @@ export function isWallActiveViewportCovered(
   blockSizePx: number,
 ): boolean {
   return _chunkCache.isViewportCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx);
+}
+
+/**
+ * Like `isWallActiveViewportCovered` but checks only the **core** visible
+ * range (no margin).  Intended for DEV diagnostics only — always use
+ * `isWallActiveViewportCovered` for production readiness decisions.
+ */
+export function isWallCoreViewportCovered(
+  offsetXPx: number,
+  offsetYPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+  blockSizePx: number,
+): boolean {
+  return _chunkCache.isViewportCoreCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx);
 }
 
 
