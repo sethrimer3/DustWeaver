@@ -46,12 +46,12 @@ import {
   spawnClusterParticles,
   spawnWeaveLoadoutParticles,
   spawnBackgroundFluidParticles,
-  spawnEnemyClusters,
   spawnAllDustPiles,
   PARTICLE_COUNT_PER_CLUSTER,
   BACKGROUND_FLUID_COUNT,
   PLAYER_INITIAL_HEALTH,
 } from './gameSpawn';
+import { spawnEnemyClusters } from './gameEnemySpawn';
 import {
   loadRoomHazards,
   loadRoomRopes,
