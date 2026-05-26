@@ -306,6 +306,21 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
    `TransitionProfileKind` and `BlockTransitionProfile` re-exported from
    `seamBlending.ts` for backward compatibility.
 
+3. **`snapshot.ts` 916 → 548 lines**: Cluster initialization helpers
+   (`_MutableCluster` type, `_makeEmptyCluster`, `_fillCluster`) extracted to
+   `snapshotClusterInit.ts` (277 lines). `snapshot.ts` retains the reusable
+   snapshot lifecycle (`createReusableSnapshot`, `updateSnapshotInPlace`,
+   `resetReusableSnapshot`). No allocations added to the per-frame hot path.
+
+4. **`blockSpriteRenderer.ts` 927 → 881 lines**: Prewarm store state
+   (`_prewarmWallCaches`, `_prewarmWallLayouts`, `_prewarmDummyCtx`) and store
+   management functions (`evictPrewarmedWallChunks`, `hasPrewarmedWallChunks`,
+   `listPrewarmedWallRoomIds`, `getPrewarmWallRoomStats`, `getPrewarmWallStats`)
+   extracted to `wallChunkPrewarmStore.ts` (112 lines). Internal accessors
+   (`getPrewarmWallLayout`, `getOrCreatePrewarmWallCache`, `deletePrewarmEntry`,
+   `getPrewarmDummyCtx`) used by `blockSpriteRenderer.ts` internally. Public
+   management API re-exported for backward compatibility.
+
 ### Remaining refactor candidates
 
 1. **`gameScreen.ts` (~1872 lines)**: Most logic lives inside a deep module
@@ -314,14 +329,13 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
    variable can be cleanly isolated (e.g. `updateRoomBounds`, `cameraState`
    helpers already moved in prior passes).
 
-2. **`blockSpriteRenderer.ts` (~927 lines)**: `prewarmWallChunksForRoom` is
-   heavily interleaved with module-level cache state. Safe extractions would
-   require passing the full module context, which adds more complexity than
-   it removes.
-
-3. **`editorController.ts` (~993 lines after prior passes)**: The main
+2. **`editorController.ts` (~993 lines after prior passes)**: The main
    `update()` closure captures ~40 variables from the outer scope. Any further
    extraction risks shadowing bugs. Defer until a clear seam is identified.
+
+3. **`roomRenderChunkWarmScheduler.ts` (~820 lines)**: The pure BFS helpers
+   (`_bfsNearby`, `_computeEntranceOffset`, ~70 lines) could be extracted to
+   a `prewarmBfsHelpers.ts` module but the size reduction is small. Deferred.
 
 ---
 

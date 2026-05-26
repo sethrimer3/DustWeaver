@@ -367,3 +367,61 @@ sprite loading, and the main `renderSeamOverlayPass` orchestration logic.
   compatibility.
 
 **Validation:** `npm run build` passes after both extractions.
+
+## Section 10 — BUILD 408
+
+Two additional monolithic files were identified and refactored.
+
+### `src/render/snapshot.ts`  (916 → 548 lines)
+
+**Problem:** The file mixed two distinct concerns — (1) low-level cluster
+data-initialization helpers (`_makeEmptyCluster`, `_fillCluster`, the
+`_MutableCluster` mapped type) and (2) the reusable snapshot lifecycle
+(`createReusableSnapshot`, `updateSnapshotInPlace`, `resetReusableSnapshot`,
+`_ReusableBacking`). The initialization helpers together accounted for ~370
+lines and had no dependencies on the snapshot lifecycle code.
+
+**Extraction:**
+
+- [x] **`src/render/snapshotClusterInit.ts`** (277 lines) — `_MutableCluster`
+  type, `_makeEmptyCluster()` (zero-fills a cluster object), `_fillCluster()`
+  (copies `ClusterState` fields into a pre-allocated object).  These functions
+  are pure helpers with no cross-module state. `_fillCluster` is called per
+  frame per cluster by `updateSnapshotInPlace` — no behavior change.
+
+- [x] `snapshot.ts` retained as snapshot lifecycle module (548 lines).
+  Imports `_MutableCluster`, `_makeEmptyCluster`, `_fillCluster` from
+  `./snapshotClusterInit`.  The `ClusterState`, `INFLUENCE_RADIUS_WORLD`, and
+  `DASH_COOLDOWN_TICKS` imports removed from `snapshot.ts` (now owned by
+  `snapshotClusterInit.ts`).
+
+**Behavior preserved:** All public exports unchanged.  No allocations added
+to hot path — `_fillCluster` is still a direct function call.
+
+### `src/render/walls/blockSpriteRenderer.ts`  (927 → 881 lines)
+
+**Problem:** The module mixed (1) active wall rendering state, (2) the prewarm
+engine (`prewarmWallChunksForRoom`), and (3) prewarm store management
+(Map state + evict/has/list/stats helpers). The store management functions
+had no dependency on the active rendering state and were already called
+primarily from external modules (scheduler, entryViewportWarm).
+
+**Extraction:**
+
+- [x] **`src/render/walls/wallChunkPrewarmStore.ts`** (112 lines) — owns
+  `_prewarmWallCaches`, `_prewarmWallLayouts`, `_prewarmDummyCtx` state plus
+  internal accessor helpers (`getPrewarmWallLayout`, `setPrewarmWallLayout`,
+  `getPrewarmWallCache`, `getOrCreatePrewarmWallCache`, `deletePrewarmEntry`,
+  `getPrewarmDummyCtx`) and the public management API
+  (`evictPrewarmedWallChunks`, `hasPrewarmedWallChunks`,
+  `listPrewarmedWallRoomIds`, `getPrewarmWallRoomStats`, `getPrewarmWallStats`).
+
+- [x] `blockSpriteRenderer.ts` retained as rendering module (881 lines).
+  Imports internal accessors from `./wallChunkPrewarmStore`; re-exports the
+  public management API for backward compatibility.
+
+**Behavior preserved:** All public exports unchanged. `adoptPrewarmedWallChunks`
+still bridges prewarm store and active cache and remains in `blockSpriteRenderer.ts`.
+No circular dependencies introduced.
+
+**Validation:** `npm run build` passes after both extractions (703/704 modules, ✓ built).

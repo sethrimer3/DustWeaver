@@ -23,6 +23,22 @@ import { WallSnapshot } from '../snapshot';
 import { RoomChunkCache, PrewarmChunkResult } from './chunkRenderCache';
 import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 export type { ChunkCacheStats } from './chunkRenderCache';
+import {
+  getPrewarmWallLayout,
+  setPrewarmWallLayout,
+  getPrewarmWallCache,
+  getOrCreatePrewarmWallCache,
+  deletePrewarmEntry,
+  getPrewarmDummyCtx,
+} from './wallChunkPrewarmStore';
+// Re-export prewarm store management API so existing import paths continue to work.
+export {
+  evictPrewarmedWallChunks,
+  hasPrewarmedWallChunks,
+  listPrewarmedWallRoomIds,
+  getPrewarmWallRoomStats,
+  getPrewarmWallStats,
+} from './wallChunkPrewarmStore';
 import type { BlockTheme, LightingEffect, AmbientLightDirection, BlockSeamBlending } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 import {
@@ -326,24 +342,7 @@ const _chunkCache = new RoomChunkCache();
 // idle callbacks for not-yet-active adjacent rooms.  On room entry,
 // adoptPrewarmedWallChunks() moves the pre-built canvases into the active
 // _chunkCache, preventing a cold-build hitch on the first render frame.
-//
-// THREAD SAFETY: JavaScript is single-threaded; idle callbacks never run
-// concurrently with animation frames.  No locking is needed.
-
-const _prewarmWallCaches  = new Map<string, RoomChunkCache>();
-const _prewarmWallLayouts = new Map<string, CachedWallLayout>();
-
-/** Dummy 1×1 canvas used as a throw-away blit target during prewarming. */
-let _prewarmDummyCtx: CanvasRenderingContext2D | null = null;
-function _getPrewarmDummyCtx(): CanvasRenderingContext2D {
-  if (_prewarmDummyCtx === null) {
-    const c = document.createElement('canvas');
-    c.width  = 1;
-    c.height = 1;
-    _prewarmDummyCtx = c.getContext('2d') as CanvasRenderingContext2D;
-  }
-  return _prewarmDummyCtx;
-}
+// Prewarm store state lives in wallChunkPrewarmStore.ts.
 
 /**
  * All rendering state required to pre-build wall chunks for a room that is
@@ -520,21 +519,17 @@ export function prewarmWallChunksForRoom(
     _vpHPx = vpHPx;
 
     // ── Build / restore wall layout for target room ─────────────────────────
-    const existingLayout = _prewarmWallLayouts.get(roomId);
+    const existingLayout = getPrewarmWallLayout(roomId);
     if (existingLayout !== undefined) {
       // Restore the layout built on a prior prewarm pass so the layout-change
       // identity check in renderVisibleChunks does not invalidate prior chunks.
       setPrebuiltWallLayout(existingLayout);
     }
     const wallLayout = getWallLayoutCache(ctx.wallSnapshot, blockSizePx);
-    _prewarmWallLayouts.set(roomId, wallLayout);
+    setPrewarmWallLayout(roomId, wallLayout);
 
     // ── Get or create the prewarm chunk cache for this room ─────────────────
-    let tempCache = _prewarmWallCaches.get(roomId);
-    if (tempCache === undefined) {
-      tempCache = new RoomChunkCache();
-      _prewarmWallCaches.set(roomId, tempCache);
-    }
+    const tempCache = getOrCreatePrewarmWallCache(roomId);
     tempCache.setMaxChunksPerFrame(maxChunks);
 
     // ── Compute ambient depths and populate 2×2 covered keys ────────────────
@@ -544,7 +539,7 @@ export function prewarmWallChunksForRoom(
       : null;
 
     const walls = ctx.wallSnapshot;
-    const dummyCtx = _getPrewarmDummyCtx();
+    const dummyCtx = getPrewarmDummyCtx();
 
     // ── Render chunks into the prewarm cache ─────────────────────────────────
     tempCache.renderVisibleChunks(
@@ -621,8 +616,8 @@ export function prewarmWallChunksForRoom(
  * @returns `true` when pre-warmed data was found and adopted; `false` otherwise.
  */
 export function adoptPrewarmedWallChunks(roomId: string, scalePx: number): boolean {
-  const tempCache = _prewarmWallCaches.get(roomId);
-  const layout    = _prewarmWallLayouts.get(roomId);
+  const tempCache = getPrewarmWallCache(roomId);
+  const layout    = getPrewarmWallLayout(roomId);
   if (tempCache === undefined || layout === undefined) return false;
 
   // Install the pre-built layout so the identity check in renderVisibleChunks
@@ -636,50 +631,9 @@ export function adoptPrewarmedWallChunks(roomId: string, scalePx: number): boole
   }
 
   // Clean up prewarm store for this room.
-  _prewarmWallCaches.delete(roomId);
-  _prewarmWallLayouts.delete(roomId);
+  deletePrewarmEntry(roomId);
 
   return chunks.size > 0;
-}
-
-/** Discards pre-warmed wall chunks for `roomId` without adopting them. */
-export function evictPrewarmedWallChunks(roomId: string): void {
-  _prewarmWallCaches.delete(roomId);
-  _prewarmWallLayouts.delete(roomId);
-}
-
-/** Returns `true` when pre-warmed wall data exists for `roomId`. */
-export function hasPrewarmedWallChunks(roomId: string): boolean {
-  return _prewarmWallCaches.has(roomId);
-}
-
-/** Returns the list of room IDs that currently have pre-warmed wall chunks. */
-export function listPrewarmedWallRoomIds(): string[] {
-  return Array.from(_prewarmWallCaches.keys());
-}
-
-/**
- * Returns per-room prewarm wall stats for `roomId`, or `null` when not held.
- * Used by the eviction pass to compute per-room memory.
- */
-export function getPrewarmWallRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
-  const cache = _prewarmWallCaches.get(roomId);
-  if (cache === undefined) return null;
-  return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
-}
-
-/**
- * Returns aggregate stats across all currently-held prewarm caches.
- * Used by the debug overlay.
- */
-export function getPrewarmWallStats(): { roomCount: number; totalChunks: number; memoryEstimateKB: number } {
-  let totalChunks = 0;
-  let memoryEstimateKB = 0;
-  for (const cache of _prewarmWallCaches.values()) {
-    totalChunks      += cache.stats.totalChunkCount;
-    memoryEstimateKB += cache.stats.memoryEstimateKB;
-  }
-  return { roomCount: _prewarmWallCaches.size, totalChunks, memoryEstimateKB };
 }
 
 /**
