@@ -283,8 +283,7 @@ export function prewarmBgChunksForRoom(
 }
 
 /**
- * Adopts pre-warmed background block chunks for a room the player is about to enter.
- /**
+ * Adopts pre-warmed background block chunks when the player enters a room.
  * Injects pre-built canvases into the active `_bgChunkCache` and sets the
  * room reference so the first `renderBackgroundBlocks` call skips the
  * invalidation check.

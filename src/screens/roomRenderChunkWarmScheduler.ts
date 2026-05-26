@@ -790,8 +790,6 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
 
 /**
  * Attempts to adopt pre-warmed chunks when the player enters `room`.
- /**
- * Attempts to adopt pre-warmed chunks when the player enters `room`.
  *
  * Call this in `_makeLoadRoomPhases` Phase A, after setting up lighting and
  * theme but BEFORE the first render frame.
