@@ -8,6 +8,53 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## Electron Desktop Build Notes
+
+### Failure reproduced and fixed
+
+**Environment:** Node v24.15.0, npm 11.12.1, Electron 42.2.0, Linux (container/WSL/non-root).
+
+**What worked:**
+- `npm ci` — clean install, no errors.
+- `npm run build` (tsc && vite build) — TypeScript compiles cleanly; Vite bundles 706 modules; `dist/index.html` produced.
+
+**Failure:** `npm run electron` and `npm run desktop` crashed immediately on Linux with:
+
+```
+The SUID sandbox helper binary was found, but is not configured correctly.
+Rather than run without sandboxing I'm aborting now. You need to make sure that
+node_modules/electron/dist/chrome-sandbox is owned by root and has mode 4755.
+/node_modules/electron/dist/electron exited with signal SIGTRAP
+```
+
+**Root cause:** Electron's OS-level Chromium sandbox requires `chrome-sandbox` to be owned by root
+with SUID (`chmod 4755`). This is never set up in containers, WSL, or ordinary user-owned
+development trees. Electron 42 aborts rather than silently downgrading.
+
+**Fix applied:**
+- `package.json` `electron` and `desktop` scripts now pass `--no-sandbox`.
+  This disables the OS-level process sandbox but does **not** affect the renderer-process
+  security model (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true` in
+  `webPreferences` all remain in effect). For a local desktop game this is the standard approach.
+- `.nvmrc` added pinning Node `22` (Electron 42 requires ≥ 22.12.0).
+
+**Node version requirement:** Electron 42.2.0 requires Node ≥ 22.12.0.
+Run `nvm use` in the repo root to select the correct version automatically.
+
+### Remaining / not completed
+
+- **Packaged/distributed builds on Linux:** A properly packaged Electron app (`.deb`, AppImage)
+  needs either a correctly configured `chrome-sandbox` SUID binary or an
+  `--no-sandbox` flag in the launcher. The current fix covers development only.
+  A future packaging step (e.g. `electron-builder`) should handle this automatically.
+- **Windows/macOS:** The sandbox issue does not occur there; the added `--no-sandbox` flag
+  is harmless on those platforms.
+- **CI smoke test:** No automated `npm run build` check exists in CI yet. Adding a GitHub
+  Actions workflow to run `npm ci && npm run build` would catch TypeScript/Vite regressions
+  before they reach developers.
+
+---
+
 ## Priority 1 — Performance and Transition Safety
 
 ### Current Status
