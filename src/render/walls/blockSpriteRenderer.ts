@@ -20,7 +20,7 @@
  */
 
 import { WallSnapshot } from '../snapshot';
-import { RoomChunkCache } from './chunkRenderCache';
+import { RoomChunkCache, PrewarmChunkResult } from './chunkRenderCache';
 import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 export type { ChunkCacheStats } from './chunkRenderCache';
 import type { BlockTheme, LightingEffect, AmbientLightDirection, BlockSeamBlending } from '../../levels/roomDef';
@@ -459,7 +459,7 @@ export function prewarmWallChunksForRoom(
   scalePx: number,
   blockSizePx: number,
   maxChunks: number,
-): number {
+): PrewarmChunkResult {
   // ── Save active room state ────────────────────────────────────────────────
   const savedSprites             = _sprites;
   const savedWorldNumber         = _activeWorldNumber;
@@ -573,7 +573,12 @@ export function prewarmWallChunksForRoom(
         ),
     );
 
-    return tempCache.stats.rebuiltThisFrame;
+    return {
+      rebuilt:     tempCache.stats.rebuiltThisFrame,
+      skipped:     tempCache.stats.skippedThisFrame,
+      totalChunks: tempCache.stats.totalChunkCount,
+      dirtyChunks: tempCache.stats.dirtyChunkCount,
+    };
   } finally {
     // ── Restore active room state ─────────────────────────────────────────────
     _sprites               = savedSprites;
@@ -677,7 +682,26 @@ export function getPrewarmWallStats(): { roomCount: number; totalChunks: number;
   return { roomCount: _prewarmWallCaches.size, totalChunks, memoryEstimateKB };
 }
 
-// ── Public render function ────────────────────────────────────────────────────
+/**
+ * Cheap read-only check: returns `true` when every chunk grid cell in the
+ * given viewport is already present, clean, and had no fallbacks in the
+ * **active** wall chunk cache.
+ *
+ * Returns `false` if the zoom has changed, or if any visible chunk is missing,
+ * dirty, or has pending fallback sprites.  Does **not** build any canvases.
+ */
+export function isWallActiveViewportCovered(
+  offsetXPx: number,
+  offsetYPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+  blockSizePx: number,
+): boolean {
+  return _chunkCache.isViewportCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx);
+}
+
+
 
 /**
  * Renders all walls using context-sensitive (auto-tiling) block sprites.

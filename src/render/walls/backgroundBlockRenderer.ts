@@ -29,7 +29,7 @@ import {
   getTheme1x1SpriteShaded,
 } from './folderBlockThemes';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
-import { RoomChunkCache, CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
+import { RoomChunkCache, CHUNK_SIZE_BLOCKS, PrewarmChunkResult } from './chunkRenderCache';
 import {
   getBgBlockLayout,
   getCellsForChunk,
@@ -212,9 +212,11 @@ export function prewarmBgChunksForRoom(
   vpWPx: number,
   vpHPx: number,
   maxChunks: number,
-): number {
+): PrewarmChunkResult {
   const blocks = room.backgroundBlocks;
-  if (!blocks || blocks.length === 0) return 0;
+  if (!blocks || blocks.length === 0) {
+    return { rebuilt: 0, skipped: 0, totalChunks: 0, dirtyChunks: 0 };
+  }
 
   let tempCache = _prewarmBgCaches.get(room.id);
   if (tempCache === undefined) {
@@ -238,7 +240,12 @@ export function prewarmBgChunksForRoom(
     buildFn,
   );
 
-  return tempCache.stats.rebuiltThisFrame;
+  return {
+    rebuilt:     tempCache.stats.rebuiltThisFrame,
+    skipped:     tempCache.stats.skippedThisFrame,
+    totalChunks: tempCache.stats.totalChunkCount,
+    dirtyChunks: tempCache.stats.dirtyChunkCount,
+  };
 }
 
 /**
@@ -307,7 +314,37 @@ export function getPrewarmBgStats(): { roomCount: number; totalChunks: number; m
   return { roomCount: _prewarmBgCaches.size, totalChunks, memoryEstimateKB };
 }
 
-// ── Public render function ────────────────────────────────────────────────────
+/**
+ * Cheap read-only check: returns `true` when every chunk grid cell in the
+ * given viewport is already present, clean, and had no fallbacks in the
+ * **active** background chunk cache.
+ *
+ * Returns `true` immediately when the room has no background blocks (nothing
+ * to warm).  Returns `false` if the zoom has changed or if any visible chunk
+ * is missing, dirty, or has pending fallback sprites.  Does **not** build any
+ * canvases.
+ */
+export function isBgActiveViewportCovered(
+  room: RoomDef,
+  offsetXPx: number,
+  offsetYPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+): boolean {
+  const blocks = room.backgroundBlocks;
+  if (!blocks || blocks.length === 0) return true;
+  return _bgChunkCache.isViewportCovered(
+    offsetXPx,
+    offsetYPx,
+    vpWPx,
+    vpHPx,
+    scalePx,
+    CELL_SIZE_WORLD,
+  );
+}
+
+
 
 /**
  * Renders all background blocks in `room` onto `ctx` using a chunk cache.

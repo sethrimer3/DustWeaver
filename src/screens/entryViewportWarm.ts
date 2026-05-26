@@ -29,10 +29,12 @@ import type { WallPrewarmContext } from '../render/walls/blockSpriteRenderer';
 import {
   prewarmWallChunksForRoom,
   adoptPrewarmedWallChunks,
+  isWallActiveViewportCovered,
 } from '../render/walls/blockSpriteRenderer';
 import {
   prewarmBgChunksForRoom,
   adoptPrewarmedBgChunks,
+  isBgActiveViewportCovered,
 } from '../render/walls/backgroundBlockRenderer';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import {
@@ -180,7 +182,7 @@ export function tickEntryWarm(
   const wallSnap = _wallTemplateToSnapshot(entry.wallTemplate);
   const wallCtx  = _makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
 
-  const wallBuilt = prewarmWallChunksForRoom(
+  const wallResult = prewarmWallChunksForRoom(
     room.id,
     wallCtx,
     state.entryOffsetXPx,
@@ -192,7 +194,7 @@ export function tickEntryWarm(
     ENTRY_WARM_CHUNKS_PER_STEP,
   );
 
-  const bgBuilt = prewarmBgChunksForRoom(
+  const bgResult = prewarmBgChunksForRoom(
     room,
     state.scalePx,
     state.entryOffsetXPx,
@@ -202,12 +204,16 @@ export function tickEntryWarm(
     ENTRY_WARM_CHUNKS_PER_STEP,
   );
 
-  state.chunksWarmed += wallBuilt + bgBuilt;
+  state.chunksWarmed += wallResult.rebuilt + bgResult.rebuilt;
   state.msSpent      += performance.now() - t0;
   state.framesWarmed++;
 
-  // When both sources returned 0 new chunks the viewport is fully covered.
-  if (wallBuilt === 0 && bgBuilt === 0) {
+  // Viewport is fully covered when neither pass rebuilt nor skipped any chunk.
+  // Using both fields rather than rebuilt === 0 alone makes intent explicit.
+  if (
+    wallResult.rebuilt === 0 && wallResult.skipped === 0 &&
+    bgResult.rebuilt   === 0 && bgResult.skipped   === 0
+  ) {
     _finishWarm(state, room, /* timedOut */ false);
     return;
   }
@@ -216,6 +222,37 @@ export function tickEntryWarm(
   if (state.msSpent >= ENTRY_WARM_BUDGET_MS || state.framesWarmed >= ENTRY_WARM_MAX_FRAMES) {
     _finishWarm(state, room, /* timedOut */ true);
   }
+}
+
+/**
+ * Cheap read-only probe: returns `true` when the entry viewport is already
+ * fully covered by the active chunk caches and no warm work is needed.
+ *
+ * Intended to be called from the instant-transition path in startTransitionLoad()
+ * AFTER loadRoom() has run (which adopts any pre-warmed chunks).  If this
+ * returns `true`, startEntryWarm() and loadingOverlay.showEntryWarm() can be
+ * skipped entirely — saving the 80 ms textless overlay for an already-warm room.
+ *
+ * This function does NOT build any canvases.  It is pure-read and safe to call
+ * during a transition callback.
+ */
+export function canSkipEntryWarm(
+  room: RoomDef,
+  spawnXBlock: number,
+  spawnYBlock: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+): boolean {
+  const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
+  const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
+  const offsetXPx = vpWPx / 2 - spawnXWorld * scalePx;
+  const offsetYPx = vpHPx / 2 - spawnYWorld * scalePx;
+
+  return (
+    isWallActiveViewportCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, BLOCK_SIZE_MEDIUM) &&
+    isBgActiveViewportCovered(room, offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx)
+  );
 }
 
 /**

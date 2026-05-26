@@ -53,6 +53,31 @@ export const CHUNK_SIZE_BLOCKS = 32;
  */
 const CHUNK_MARGIN = 1;
 
+// ── Prewarm result ────────────────────────────────────────────────────────────
+
+/**
+ * Result returned by `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom`.
+ *
+ * Callers should use `rebuilt === 0 && skipped === 0` to determine that no
+ * more work remains in the entry viewport.  Using both fields rather than
+ * `rebuilt === 0` alone is correct: when the per-frame chunk budget
+ * (`maxChunksPerFrame`) is exhausted, `skipped > 0` with `rebuilt === 0` is
+ * possible — the viewport is NOT yet fully covered in that case.
+ *
+ * `totalChunks === 0` distinguishes "no background blocks at all" from "all
+ * viewport chunks already warm".
+ */
+export interface PrewarmChunkResult {
+  /** Chunks actually rebuilt in this call. */
+  rebuilt: number;
+  /** Chunks that needed rebuild but were skipped due to the per-frame budget. */
+  skipped: number;
+  /** Total allocated chunk canvases in this room's prewarm cache. */
+  totalChunks: number;
+  /** Chunks currently marked dirty (need rebuild on next call). */
+  dirtyChunks: number;
+}
+
 // ── Chunk cache statistics ─────────────────────────────────────────────────────
 
 /** Diagnostic counters updated each frame by renderVisibleChunks(). */
@@ -274,7 +299,62 @@ export class RoomChunkCache {
     return result;
   }
 
-  /** Releases all cached canvases and resets all state. */
+  /**
+   * Returns the block size (in pixels) last used by `renderVisibleChunks` or
+   * injected via `injectWarmedChunks`.  Used by readiness probes that need to
+   * verify the cached scale matches the current camera zoom.
+   */
+  get lastBlockSizePx(): number {
+    return this._lastBlockSizePx;
+  }
+
+  /**
+   * Cheap read-only check: returns `true` when every chunk grid cell in the
+   * given viewport is already present, clean, and had no fallbacks.
+   *
+   * This is a pure read — it does **not** build any canvases.  Returns `false`
+   * if the zoom has changed since chunks were last built (scale mismatch) or if
+   * any visible chunk is missing, dirty, or marked `hadFallbacksFlag`.
+   *
+   * Intended to be called from `canSkipEntryWarm` in the instant-transition
+   * path to avoid showing the textless overlay when nothing needs building.
+   */
+  isViewportCovered(
+    offsetXPx: number,
+    offsetYPx: number,
+    vpWPx: number,
+    vpHPx: number,
+    scalePx: number,
+    blockSizePx: number,
+  ): boolean {
+    // Scale mismatch means all existing chunks are stale — not covered.
+    if (this._scalePx === 0 || this._scalePx !== scalePx) return false;
+
+    const chunkSizePx = CHUNK_SIZE_BLOCKS * blockSizePx * scalePx;
+    if (chunkSizePx <= 0) return false;
+
+    const blockLeft  = -offsetXPx / (blockSizePx * scalePx);
+    const blockTop   = -offsetYPx / (blockSizePx * scalePx);
+    const blockRight = blockLeft  + vpWPx / (blockSizePx * scalePx);
+    const blockBot   = blockTop   + vpHPx / (blockSizePx * scalePx);
+
+    const cxMin = Math.max(0, Math.floor(blockLeft  / CHUNK_SIZE_BLOCKS));
+    const cyMin = Math.max(0, Math.floor(blockTop   / CHUNK_SIZE_BLOCKS));
+    const cxMax = Math.max(0, Math.floor(blockRight / CHUNK_SIZE_BLOCKS));
+    const cyMax = Math.max(0, Math.floor(blockBot   / CHUNK_SIZE_BLOCKS));
+
+    for (let cy = cyMin; cy <= cyMax; cy++) {
+      for (let cx = cxMin; cx <= cxMax; cx++) {
+        const key = `${cx},${cy}`;
+        const entry = this._chunks.get(key);
+        if (!entry || entry.hadFallbacksFlag || this._dirtyKeys.has(key)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   dispose(): void {
     this._chunks.clear();
     this._dirtyKeys.clear();

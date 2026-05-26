@@ -131,6 +131,7 @@ import {
   startEntryWarm,
   tickEntryWarm,
   isEntryWarmReadyOrTimedOut,
+  canSkipEntryWarm,
   type EntryWarmState,
 } from './entryViewportWarm';
 
@@ -1004,16 +1005,21 @@ export function startGameScreen(
       // Start the entry warm for the instant path.  Do NOT tick eagerly here:
       // chunk building inside the transition callback (before the overlay is
       // visible) can cause a hitch on the room-boundary frame.  Instead, show
-      // a lightweight textless cover immediately and let the normal RAF loop
-      // advance the warm in the dedicated 'entryWarm' early branch.  The cover
-      // fades out in 80 ms once the warm completes (or is already done).
+      // a lightweight textless cover and let the normal RAF loop advance the
+      // warm in the dedicated 'entryWarm' early branch.
+      //
+      // Probe the active chunk caches first: if the entry viewport is already
+      // fully covered (e.g. the room was prewarmed before the player arrived),
+      // skip the overlay entirely — no visible flash, no warm work needed.
       entryWarmState = createEntryWarmState();
-      startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
-      loadingOverlay.showEntryWarm();
+      if (!canSkipEntryWarm(currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom)) {
+        startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
+        loadingOverlay.showEntryWarm();
+      }
       if (import.meta.env.DEV) {
+        const warmStatus = entryWarmState.phase === 'idle' ? ' (entryWarm skipped — viewport covered)' : ' (entryWarm started — overlay shown)';
         console.log(
-          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` +
-          ` (entryWarm started — overlay shown)`,
+          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` + warmStatus,
         );
       }
     } else {
