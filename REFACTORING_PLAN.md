@@ -323,3 +323,47 @@ Boss chain simulation and rendering data preparation mixed together.
 | 2026-04-02 | copilot | Extracted `gameSpawn.ts`, `gameRoom.ts` from `gameScreen.ts`; extracted `movementConstants.ts`, `movementCollision.ts` from `movement.ts`; split `combat.ts` → `playerCombat.ts` + `enemyCombat.ts`; split `rooms.ts` into `rooms/` directory (lobbyRoom, world1Rooms, world2Rooms, world3Rooms, bossRooms, roomBuilders); split `elementProfiles.ts` into `elementProfiles/equippableProfiles.ts` + `environmentalProfiles.ts` + `elementProfileTypes.ts`; extracted `elementEffectSpawners.ts` from `forces.ts` |
 | 2026-04-02 | copilot | Fixed `rooms.ts` barrel: removed duplicate inline room definitions left over from the prior split; resolved export/import conflicts that broke the build. `rooms.ts` is now a clean ~45-line barrel that imports from `rooms/` sub-files and assembles `ROOM_REGISTRY`. |
 | 2026-04-02 | copilot | Extracted `gameRender.ts` (385 lines) from `gameScreen.ts`, reducing it from 1303→1043 lines. Reviewed sections 3, 4, 8 and marked their checklist items as complete/superseded — element effects already extracted to consolidated files, `skillTombMenu.ts` already thin (174 lines, delegates to tab builders), `radiantTetherChains.ts` already 100 % sim code with rendering in a separate file. All 8 refactoring sections now fully addressed. |
+
+---
+
+## 9  Post-plan extractions (2026-05-26)
+
+Two additional monolithic files were identified and refactored after the
+original 8 sections were completed.
+
+### `src/screens/gameSpawn.ts`  (909 → 259 lines)
+
+**Problem:** The file had two unrelated responsibilities — particle-spawn
+utilities (short, pure helpers) and the full enemy cluster initialization
+sequence (`spawnEnemyClusters` — ~550 lines, dozens of cluster-AI imports).
+
+**Extraction:**
+
+- [x] **`src/screens/gameEnemySpawn.ts`** (669 lines) — Enemy cluster
+  initialization: `spawnEnemyClusters`, `BOSS_HP_MULTIPLIER`,
+  `SLIME_HOP_INTERVAL_INITIAL_TICKS`, `LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS`.
+  Imports `spawnLoadoutParticles` from `./gameSpawn` (one-direction dep, no
+  circular). `gameScreen.ts` import updated to use the new file.
+
+- [x] `gameSpawn.ts` retained as particle-spawn module (259 lines).
+
+### `src/render/walls/seamBlending.ts`  (829 → 420 lines)
+
+**Problem:** The file mixed two distinct layers: (1) pure procedural pixel-art
+drawing helpers (`drawMossy`, `drawCrumbly`, etc.) and (2) profile resolution,
+sprite loading, and the main `renderSeamOverlayPass` orchestration logic.
+
+**Extraction:**
+
+- [x] **`src/render/walls/seamProfileDrawers.ts`** (439 lines) — All pure
+  drawing helpers: `TransitionProfileKind`, `BlockTransitionProfile`, `DIR_*`
+  constants, `NEIGHBOR_OFFSETS`, `intensityAlpha`, `intensityDensity`,
+  `hash01`, `stamp`, `edgeBand`, `edgeToTile`, and all `draw*` functions.
+  No imports from `seamBlending.ts` — zero circular-dependency risk.
+
+- [x] `seamBlending.ts` retained as orchestration layer (420 lines): profile
+  resolution, sprite cache, `preloadTransitionSprites`, `renderSeamOverlayPass`.
+  Re-exports `TransitionProfileKind` and `BlockTransitionProfile` for backward
+  compatibility.
+
+**Validation:** `npm run build` passes after both extractions.

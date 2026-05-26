@@ -289,6 +289,42 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
 
 ---
 
+## Architecture Refactoring — Completed and Remaining Candidates
+
+### Completed (2026-05-26)
+
+1. **`gameSpawn.ts` 909 → 259 lines**: Enemy cluster initialization extracted to
+   `gameEnemySpawn.ts` (669 lines). Particle-spawn utilities remain in
+   `gameSpawn.ts`. No circular dependencies introduced; only `gameScreen.ts`
+   needed an import-site update.
+
+2. **`seamBlending.ts` 829 → 420 lines**: Pure procedural drawing helpers
+   (`draw*`, `intensityAlpha`, `intensityDensity`, `TransitionProfileKind`,
+   `BlockTransitionProfile`, `DIR_*` constants) extracted to
+   `seamProfileDrawers.ts` (439 lines). `seamBlending.ts` now orchestrates
+   profile resolution, sprite loading, and `renderSeamOverlayPass`.
+   `TransitionProfileKind` and `BlockTransitionProfile` re-exported from
+   `seamBlending.ts` for backward compatibility.
+
+### Remaining refactor candidates
+
+1. **`gameScreen.ts` (~1872 lines)**: Most logic lives inside a deep module
+   closure, making it risky to extract without careful re-threading of shared
+   state. Not further reduced in this pass. Defer unless a specific closure
+   variable can be cleanly isolated (e.g. `updateRoomBounds`, `cameraState`
+   helpers already moved in prior passes).
+
+2. **`blockSpriteRenderer.ts` (~927 lines)**: `prewarmWallChunksForRoom` is
+   heavily interleaved with module-level cache state. Safe extractions would
+   require passing the full module context, which adds more complexity than
+   it removes.
+
+3. **`editorController.ts` (~993 lines after prior passes)**: The main
+   `update()` closure captures ~40 variables from the outer scope. Any further
+   extraction risks shadowing bugs. Defer until a clear seam is identified.
+
+---
+
 ## Verification Checklist
 
 - [ ] `npm run build` passes.
