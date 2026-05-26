@@ -185,7 +185,7 @@ export type TransitionOutcome = 'hot' | 'entryWarm' | 'loading' | 'none';
  * instant vs. async path is decided.
  */
 export function recordTransitionOutcome(outcome: TransitionOutcome): void {
-  _stats = { ..._stats, lastTransitionOutcome: outcome };
+  _stats.lastTransitionOutcome = outcome;
 }
 
 // ── Prewarm stats (shared with debug panel) ───────────────────────────────────
@@ -320,7 +320,7 @@ let _currentRoomId: string | null = null;
  * that are within the prewarm radius but whose queue tasks have already
  * completed.
  */
-let _keepIds: ReadonlySet<string> = new Set<string>();
+let _keepIds: Set<string> = new Set<string>();
 
 // ── Handle ────────────────────────────────────────────────────────────────────
 
@@ -488,11 +488,7 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
   evictPrewarmedBgChunks(roomId);
   // Remove from the keep-set so the scheduler's next eviction pass does not
   // inadvertently protect it, and so that scheduleChunkPrewarms will re-add it.
-  if (_keepIds.has(roomId)) {
-    const next = new Set(_keepIds);
-    next.delete(roomId);
-    _keepIds = next;
-  }
+  _keepIds.delete(roomId);
   if (import.meta.env.DEV) {
     console.log(`[chunkPrewarm:invalidate] evicted chunks for ${roomId}`);
   }
