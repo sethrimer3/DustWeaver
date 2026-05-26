@@ -210,79 +210,87 @@ What remains deferred:
 
 ---
 
-### 4. Predictive Adjacent-Room Prewarm Pipeline (IMPROVED — BUILD 413 hardening pass)
+### 4. Predictive Adjacent-Room Prewarm Pipeline (HARDENED — BUILD 414 polish pass)
 
 The goal was to eliminate the brief loading overlay on first-time room entry by ensuring the target room's chunk caches are ready before the player crosses the boundary.
 
-**Status:** The pipeline is substantially hardened but the no-loading goal is NOT fully complete. See "Remaining limitations" below.
+**Status:** The pipeline is substantially hardened and diagnostics are much more precise, but the no-loading goal is NOT fully guaranteed. See "Remaining limitations" below. Normal single-tile crossings are consistently hot when the idle scheduler has had time to complete. Very fast crossings (grapple, zip) and GPU warm-up behaviour remain browser-dependent.
 
-#### What was implemented (BUILD 413)
+#### What was implemented (BUILD 414 — correctness and diagnostics hardening)
 
-1. **`ensureChunkPrewarmQueued(roomId, reason)`** replaces proximity-boost's `prioritizeChunkPrewarm` call.
-   - `prioritizeChunkPrewarm` was a silent no-op when the room's warm task had already completed and been popped from the queue (the common steady-state case near a boundary the player stands close to for a while). The new function:
-     - Moves an existing task to the front if it is still in the queue.
-     - **Creates a new task** if the room is in the registry, has no prewarm data yet, and is not already in the queue.
-     - Skips without action if the room already has wall + bg prewarm data (already warm).
-     - Kicks the idle callback if a new task was added.
-   - `prioritizeChunkPrewarm` is retained as a deprecated compatibility wrapper.
+1. **`computeRenderStateKey` expanded.** The key now includes all known render-affecting fields:
+   - block theme, world number, lighting effect, ambient direction, seam blending, ambient blocker keys (pre-existing)
+   - `roomWidthBlocks`, `roomHeightBlocks` (affect ambient depth calculations)
+   - `directionalBias`, `sideExposureStrength`, `minimumWallLight`, `falloffPower` (wall lighting shape)
+   - `backgroundLightSpill`, `solidLightSoftness` (background blending parameters)
+   - All numeric fields are `.toFixed(4)`-normalised for key stability.
+   - Callsites updated: wall prewarm, Phase A adoption (`gameLoadRoomPhases.ts`), entry-warm adoption (`entryViewportWarm.ts`), fallback key in `backgroundBlockRenderer.ts`.
 
-2. **`getRoomPrewarmReadiness(roomId)`** — new diagnostic helper.
-   Returns `{ wallPresent: boolean; bgPresent: boolean }` by probing `getPrewarmWallRoomStats`/`getPrewarmBgRoomStats`. Called in `startTransitionLoad` before `loadRoom` so the pre-adoption state is captured (adoption clears the store).
+2. **Background readiness semantics corrected.** Rooms with no background blocks are now treated as bg-ready, not bg-missing.
+   - `getRoomPrewarmReadiness(roomId, room)` now accepts a `RoomDef` and returns `bgRequired: boolean`.
+   - `ensureChunkPrewarmQueued` skips the bg-ready gate (and does not recreate bg tasks) when the room has no background blocks.
+   - Transition diagnostics include `bgPrewarmRequired: boolean`. `bgChunksMissing` is no longer reported for bg-free rooms.
 
-3. **`TransitionReadinessDiagnostic` interface and `lastTransitionDiagnostic` stat.**
-   Every transition records a `TransitionReadinessDiagnostic` with:
-   - `roomId` — which room was entered
-   - `runtimeReady` — whether the instant (prepared) path fired
-   - `wallPrewarmPresent` / `bgPrewarmPresent` — prewarm store state before adoption
-   - `renderStateKeyMatches: boolean | null` — always `null` (see limitations)
-   - `entryViewportCovered` — whether `canSkipEntryWarm` passed
-   - `outcome` — `'hot' | 'entryWarm' | 'loading'`
-   - `missReason` — one of: `'none' | 'runtimeNotReady' | 'wallChunksMissing' | 'bgChunksMissing' | 'entryViewportNotCovered' | 'unknown'`
-   Stored in `PrewarmStats.lastTransitionDiagnostic`; visible in the debug overlay.
+3. **Structured adoption results (`PrewarmAdoptResult`).** Adoption functions now return a discriminated union instead of `boolean`:
+   ```ts
+   type PrewarmAdoptResult =
+     | { status: 'adopted'; chunks: number }
+     | { status: 'missing' }
+     | { status: 'staleRenderState'; snapshotKey: string; currentKey: string }
+     | { status: 'empty' };
+   ```
+   Applied to `adoptPrewarmedWallChunks`, `adoptPrewarmedBgChunks`, and `adoptPrewarmedChunksForRoom`.
+   The scheduler captures the last result via `_lastAdoptionResult` / `getLastAdoptionResult()`.
 
-4. **Debug overlay shows last-transition diagnostic.**
-   The prewarm panel in `renderProfiler.ts` now shows (after `Last xtn:`):
-   - `xtn room: <roomId>`
-   - `miss: <missReason>` (colour-coded: green=hot, amber=entryWarm, red=loading)
-   - `W:ready/miss B:ready/miss rdy:y/n`
+4. **`staleRenderState` miss reason.** `TransitionReadinessDiagnostic['missReason']` now includes `'staleRenderState'`, `'wallAdoptEmpty'`, and `'bgAdoptEmpty'`. `startTransitionLoad` records `staleRenderState` when adoption rejected chunks because the snapshot key did not match the current key. This was previously hidden as a generic miss.
 
-5. **DEV console logs on non-hot transitions.** `startTransitionLoad` emits `console.warn` with full diagnostic when `outcome !== 'hot'`.
+5. **Sprite / background decode fields in diagnostics.** `TransitionReadinessDiagnostic` now carries:
+   - `spritesDecoded: boolean | null` — from `areRoomSpritesReady`
+   - `backgroundDecoded: boolean | null` — from `isRoomBackgroundDecodeReady`
+   These are diagnostic-only; they do not gate hot transitions unless readiness is already gated elsewhere.
 
-6. **`entryViewportWarm.ts` now computes and forwards `currentRenderStateKey`** to `_finishWarm`, which passes it to `adoptPrewarmedWallChunks` / `adoptPrewarmedBgChunks`. This ensures that even chunks built by the entry-warm path are rejected if a theme/lighting change happened mid-warm.
+6. **Debug overlay improved.** The prewarm panel now shows:
+   - `xtn: <roomId>` — target room
+   - `miss: <missReason> KEY_MISMATCH` — stale-key indicator appended when applicable
+   - `W:ready/miss B:ready/n/a bgReq:y/n rdy:y/n` — wall, bg, bg-required flag, runtime
+   - `spr:y/n/? bgDec:y/n/? vpc:y/n` — sprite decode, background decode, viewport coverage
 
-7. **"Atomic handoff" comment corrected.** `roomRenderCacheStore.ts` header comment now correctly documents that adoption is staged (wall then bg), not atomic.
+7. **"Atomic adoption" wording corrected in `wallChunkPrewarmStore.ts`.** Header comment now says adoption is staged (wall then bg) and NOT atomic. `roomRenderCacheStore.ts` was already corrected in BUILD 413.
 
-8. **`nextSteps.md` updated honestly.** This section replaces the previous "COMPLETED" declaration.
-
-#### What was implemented earlier (BUILD 402–412)
+#### What was implemented earlier (BUILD 402–413)
 
 - BUILD 402: `entryViewportWarm.ts` entry-warm controller (8 frames / 120 ms budget).
 - BUILD 404: textless entry-warm overlay (80 ms minShow); `isVisible()` on overlay; hold guard after entry-warm.
 - BUILD 406: `isViewportCovered()` includes `CHUNK_MARGIN`; DEV diagnostics for margin-vs-core miss.
 - BUILD 411: `roomRenderCacheStore.ts` unified snapshot store; `renderStateKey` for invalidation; velocity-direction queue ordering in `scheduleChunkPrewarms`.
 - BUILD 412: `prewarmWallChunksForRoom` ordering fix; `adoptPrewarmedWallChunks`/`Bg` accept optional `currentRenderStateKey`; DEV warning for cache-without-layout.
+- BUILD 413: `ensureChunkPrewarmQueued`; `TransitionReadinessDiagnostic`; `RoomRenderSnapshot` adoption-time key validation; proximity-boost DEV diagnostics.
 
 #### What is validated at adoption time (Phase A)
 
-- `adoptPrewarmedChunksForRoom` in `gameLoadRoomPhases.ts` computes `adoptRenderStateKey` using the room's current `blockTheme`, `worldNumber`, `lightingEffect`, `ambientLightDirection`, `blockSeamBlending`, and `blockerKeys`.
-- Both `adoptPrewarmedWallChunks` and `adoptPrewarmedBgChunks` compare this key against `snapshot.renderStateKey` and discard the snapshot on mismatch (logging a DEV warning).
-- `_finishWarm` in `entryViewportWarm.ts` now also forwards the current key so entry-warm adoption is guarded the same way.
+- `adoptPrewarmedChunksForRoom` in `gameLoadRoomPhases.ts` computes `adoptRenderStateKey` using all 14 render-affecting fields (expanded in BUILD 414).
+- Both `adoptPrewarmedWallChunks` and `adoptPrewarmedBgChunks` compare this key against `snapshot.renderStateKey` and return `{ status: 'staleRenderState' }` on mismatch.
+- `_finishWarm` in `entryViewportWarm.ts` forwards the current key so entry-warm adoption is guarded the same way.
+- The scheduler captures the structured result and `startTransitionLoad` translates it to a specific `missReason`.
 
 #### Remaining limitations
 
-1. **`renderStateKeyMatches` is always `null` in the diagnostic.** The comparison happens inside the adopt calls, which do not surface the result back to the caller. To populate this field, `adoptPrewarmedWallChunks` / `adoptPrewarmedBgChunks` would need to return a boolean. This is a low-priority plumbing improvement.
+1. **Very fast crossings can outpace idle prewarming.** Grapple and zip traversal can move the player across a room boundary before the idle scheduler has completed the target room's prewarm pass. `ensureChunkPrewarmQueued` is called on proximity, but proximity detection depends on normal-speed movement. No fix planned for now — entry-warm handles the fallback.
 
 2. **Partial prewarm still causes `entryWarm`.** If the idle scheduler only completed the wall pass (not bg) before the player crossed, `bgPrewarmPresent: false` will show in the diagnostic and outcome will be `entryWarm`. The entry-warm path handles this correctly but the player sees a brief textless cover.
 
-3. **Stale cache invalidation on mid-session settings changes (outside editor).** If `setActiveBlockLighting`, `setActiveBlockSpriteTheme`, or related render settings change mid-session via the pause menu, the `renderStateKey` encoded in already-warmed snapshots will no longer match. New schedule passes will evict stale snapshots correctly. In-flight warm tasks finish against the current key. However, there is currently no explicit global invalidation pass triggered by settings-change callbacks; the correction only fires at next `scheduleChunkPrewarms` or at adoption time. Adding explicit cache-bust calls to the settings change handlers would close this gap.
+3. **Stale cache invalidation on mid-session settings changes.** If `setActiveBlockLighting`, `setActiveBlockSpriteTheme`, or related settings change mid-session via the pause menu, existing warmed snapshots will have a stale key. Eviction and re-key correction only fires at the next `scheduleChunkPrewarms` or at adoption time. Adding explicit cache-bust calls to settings-change handlers would close this gap.
 
-4. **First-draw / GPU warm-up not fully solved.** `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom` construct off-screen chunk canvases using the normal chunk renderer path. This forces canvas allocation and 2D raster work during the idle pass. However, whether the browser's GPU rasterizer uploads the canvas texture to the GPU at that point (vs. deferring until the first `drawImage` on screen) is browser-dependent. A safe warm-up draw to an invisible 1×1 offscreen canvas on each warmed chunk would force a GPU upload, but the cost-per-chunk is unknown and could spike on low-end hardware. Deferred pending measurement.
+4. **First-draw / GPU warm-up is browser-dependent.** Off-screen chunk canvases are built during the idle pass, but whether the GPU rasterizer uploads the texture at that point or defers until the first on-screen `drawImage` is browser-specific. A forced 1×1 offscreen warm-draw per chunk would ensure GPU upload, but the per-chunk cost is unknown. Deferred pending measurement.
 
-5. **`hot` for revisited rooms may not always hold.** If the player re-enters a room whose snapshot was evicted (e.g. memory budget was hit, or the room was invalidated by an editor change), the runtime-cache entry will still be prepared (instant path), but chunk caches will be empty, yielding `entryWarm`. The `ensureChunkPrewarmQueued` proximity boost will have kicked in before the player reaches the boundary in the steady-state case, but a very fast crossing (grapple, zip) may outpace the idle scheduler.
+5. **`hot` for revisited rooms may not always hold.** If a room's snapshot was evicted under memory pressure, chunk caches will be empty on re-entry, yielding `entryWarm`. Proximity boost will normally have re-queued the room before the player reaches the boundary; very fast crossings may still lose the race.
+
+6. **Sprite / background decode fields are diagnostic-only.** `spritesDecoded` and `backgroundDecoded` are recorded but do not gate hot transitions. If decode latency is found to cause visible pop-in, they should be promoted to readiness conditions.
 
 #### What was NOT implemented
 
-- A higher-level `adoptPrewarmedRoomRenderSnapshot` coordinator function (requirement 6). The current two-call staged adoption is defended by the shared `currentRenderStateKey` guard and documented as staged.
+- Explicit settings-change cache-bust callbacks (limitation 3 above).
+- Forced GPU warm-up draw per chunk (limitation 4 above).
 - Explicit settings-change handlers that call `invalidateRoomChunkPrewarm` for all affected rooms.
 - `renderStateKeyMatches` populated in `TransitionReadinessDiagnostic`.
 

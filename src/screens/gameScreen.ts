@@ -73,6 +73,7 @@ import {
   invalidateRoomChunkPrewarm,
   recordTransitionOutcome,
   getRoomPrewarmReadiness,
+  getLastAdoptionResult,
   type TransitionReadinessDiagnostic,
   type WarmScheduleHandle,
 } from './roomRenderChunkWarmScheduler';
@@ -590,8 +591,17 @@ export function startGameScreen(
         console.log(`[transition] ${room.id}: prepared cache HIT — instant load`);
       }
       // Capture prewarm-store state BEFORE loadRoom (Phase A adoption clears it).
-      const { wallPresent, bgPresent } = getRoomPrewarmReadiness(room.id);
+      const { wallPresent, bgPresent, bgRequired } = getRoomPrewarmReadiness(room.id, room);
       loadRoom(room, spawnXBlock, spawnYBlock);
+      // Retrieve the structured adoption result set by Phase A (adoptPrewarmedChunksForRoom).
+      const adoptResult = getLastAdoptionResult();
+      const wallAdoptStatus = adoptResult?.wall.status ?? 'missing';
+      const bgAdoptStatus   = adoptResult?.bg.status   ?? 'missing';
+      const renderStateKeyMatches =
+        wallAdoptStatus !== 'staleRenderState' && bgAdoptStatus !== 'staleRenderState' ? null :
+        false;
+      const spritesDecoded: boolean | null    = areRoomSpritesReady(room);
+      const backgroundDecoded: boolean | null = isRoomBackgroundDecodeReady(room);
       const player = world.clusters[0];
       if (player !== undefined && player.isPlayerFlag === 1) {
         player.velocityXWorld = vx;
@@ -612,13 +622,17 @@ export function startGameScreen(
         startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
         loadingOverlay.showEntryWarm();
         const missReason: TransitionReadinessDiagnostic['missReason'] =
+          wallAdoptStatus === 'staleRenderState' || bgAdoptStatus === 'staleRenderState' ? 'staleRenderState' :
           !wallPresent ? 'wallChunksMissing' :
           !bgPresent   ? 'bgChunksMissing'   :
+          wallAdoptStatus === 'empty' ? 'wallAdoptEmpty' :
+          (bgRequired && bgAdoptStatus === 'empty') ? 'bgAdoptEmpty' :
                          'entryViewportNotCovered';
         if (import.meta.env.DEV) {
           console.warn(
             `[transition] ${room.id}: entryWarm — missReason: ${missReason}` +
-            ` wallPresent:${wallPresent} bgPresent:${bgPresent}`,
+            ` wallPresent:${wallPresent} bgPresent:${bgPresent} bgReq:${bgRequired}` +
+            ` wall:${wallAdoptStatus} bg:${bgAdoptStatus}`,
           );
         }
         recordTransitionOutcome('entryWarm', {
@@ -626,9 +640,12 @@ export function startGameScreen(
           runtimeReady: true,
           wallPrewarmPresent: wallPresent,
           bgPrewarmPresent:   bgPresent,
-          renderStateKeyMatches: null,
+          bgPrewarmRequired:  bgRequired,
+          renderStateKeyMatches,
           entryViewportCovered: false,
           outcome: 'entryWarm',
+          spritesDecoded,
+          backgroundDecoded,
           missReason,
         });
       } else {
@@ -637,9 +654,12 @@ export function startGameScreen(
           runtimeReady: true,
           wallPrewarmPresent: wallPresent,
           bgPrewarmPresent:   bgPresent,
-          renderStateKeyMatches: null,
+          bgPrewarmRequired:  bgRequired,
+          renderStateKeyMatches,
           entryViewportCovered: true,
           outcome: 'hot',
+          spritesDecoded,
+          backgroundDecoded,
           missReason: 'none',
         });
       }
@@ -667,9 +687,12 @@ export function startGameScreen(
         runtimeReady: false,
         wallPrewarmPresent: false,
         bgPrewarmPresent:   false,
+        bgPrewarmRequired:  (room.backgroundBlocks?.length ?? 0) > 0,
         renderStateKeyMatches: null,
         entryViewportCovered: false,
         outcome: 'loading',
+        spritesDecoded: null,
+        backgroundDecoded: null,
         missReason: 'runtimeNotReady',
       });
       showLoadingOverlay();

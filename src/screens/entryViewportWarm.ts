@@ -191,6 +191,14 @@ export function tickEntryWarm(
     room.ambientLightDirection ?? 'omni',
     room.blockSeamBlending ?? 'off',
     entry.blockerKeys ?? new Set<string>(),
+    room.widthBlocks,
+    room.heightBlocks,
+    room.directionalBias    ?? DEFAULT_DIRECTIONAL_BIAS,
+    room.sideExposureStrength ?? DEFAULT_SIDE_EXPOSURE_STRENGTH,
+    room.minimumWallLight   ?? DEFAULT_MINIMUM_WALL_LIGHT,
+    room.falloffPower       ?? DEFAULT_FALLOFF_POWER,
+    room.backgroundLightSpill ?? DEFAULT_BACKGROUND_LIGHT_SPILL,
+    room.solidLightSoftness ?? DEFAULT_SOLID_LIGHT_SOFTNESS,
   );
 
   const t0 = performance.now();

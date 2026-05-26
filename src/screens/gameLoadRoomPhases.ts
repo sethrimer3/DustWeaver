@@ -52,6 +52,14 @@ import {
   setActiveSeamBlending,
 } from '../render/walls/blockSpriteRenderer';
 import { computeRenderStateKey } from '../render/walls/roomRenderCacheStore';
+import {
+  DEFAULT_DIRECTIONAL_BIAS,
+  DEFAULT_SIDE_EXPOSURE_STRENGTH,
+  DEFAULT_MINIMUM_WALL_LIGHT,
+  DEFAULT_FALLOFF_POWER,
+  DEFAULT_BACKGROUND_LIGHT_SPILL,
+  DEFAULT_SOLID_LIGHT_SOFTNESS,
+} from '../render/walls/ambientLightDepths';
 import { preloadTransitionSprites } from '../render/walls/seamBlending';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
@@ -343,6 +351,14 @@ export function* makeLoadRoomPhases(
       room.ambientLightDirection ?? 'omni',
       room.blockSeamBlending ?? 'off',
       blockerKeys ?? new Set<string>(),
+      room.widthBlocks,
+      room.heightBlocks,
+      room.directionalBias    ?? DEFAULT_DIRECTIONAL_BIAS,
+      room.sideExposureStrength ?? DEFAULT_SIDE_EXPOSURE_STRENGTH,
+      room.minimumWallLight   ?? DEFAULT_MINIMUM_WALL_LIGHT,
+      room.falloffPower       ?? DEFAULT_FALLOFF_POWER,
+      room.backgroundLightSpill ?? DEFAULT_BACKGROUND_LIGHT_SPILL,
+      room.solidLightSoftness ?? DEFAULT_SOLID_LIGHT_SOFTNESS,
     );
     adoptPrewarmedChunksForRoom(room, camera.zoom, adoptRenderStateKey);
     FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);

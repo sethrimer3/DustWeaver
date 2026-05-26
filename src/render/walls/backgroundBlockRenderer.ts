@@ -105,7 +105,7 @@ export function setBgChunkCacheMemoryKB(kb: number): void {
 // ── Background block prewarm store ────────────────────────────────────────────
 // Bg prewarm data is stored as part of the shared RoomRenderSnapshot in
 // roomRenderCacheStore.ts, co-located with wall prewarm data for the same room.
-// This allows atomic adoption and automatic invalidation when renderStateKey changes.
+// This allows staged adoption and automatic invalidation when renderStateKey changes.
 
 import { RoomChunkCache as _RCC } from './chunkRenderCache'; // local alias to avoid shadowing
 import {
@@ -118,7 +118,16 @@ import {
   getSnapshotBgRoomStats,
   getAggregateBgStats,
   getBgPrewarmDummyCtx,
+  type PrewarmAdoptResult,
 } from './roomRenderCacheStore';
+import {
+  DEFAULT_DIRECTIONAL_BIAS,
+  DEFAULT_SIDE_EXPOSURE_STRENGTH,
+  DEFAULT_MINIMUM_WALL_LIGHT,
+  DEFAULT_FALLOFF_POWER,
+  DEFAULT_BACKGROUND_LIGHT_SPILL,
+  DEFAULT_SOLID_LIGHT_SOFTNESS,
+} from './ambientLightDepths';
 
 /**
  * Builds a chunk-rendering closure for `room`'s background blocks.
@@ -233,6 +242,14 @@ export function prewarmBgChunksForRoom(
       room.worldNumber ?? 1,
       'none', 'default', 'false',
       new Set<string>(),
+      room.widthBlocks,
+      room.heightBlocks,
+      DEFAULT_DIRECTIONAL_BIAS,
+      DEFAULT_SIDE_EXPOSURE_STRENGTH,
+      DEFAULT_MINIMUM_WALL_LIGHT,
+      DEFAULT_FALLOFF_POWER,
+      DEFAULT_BACKGROUND_LIGHT_SPILL,
+      DEFAULT_SOLID_LIGHT_SOFTNESS,
     );
     snap = getOrCreateSnapshot(room.id, fallbackKey);
   }
@@ -266,8 +283,7 @@ export function prewarmBgChunksForRoom(
 }
 
 /**
- * Adopts pre-warmed background block chunks for a room the player is about to enter.
- *
+ * Adopts pre-warmed background block chunks when the player enters a room.
  * Injects pre-built canvases into the active `_bgChunkCache` and sets the
  * room reference so the first `renderBackgroundBlocks` call skips the
  * invalidation check.
@@ -275,14 +291,18 @@ export function prewarmBgChunksForRoom(
  * Must be called after any explicit cache invalidation (e.g. room change) but
  * BEFORE the first render frame for the new room.
  *
+ * For rooms with no background blocks, returns `{ status: 'missing' }` since
+ * there is never any bg prewarm data to adopt (and the caller should treat
+ * such rooms as already bg-ready).
+ *
  * @param room                   Room definition for the room being entered.
  * @param zoom                   Camera zoom scale for the first render frame.
  * @param currentRenderStateKey  When provided, the snapshot key must match or adoption is refused.
- * @returns `true` when pre-warmed data was found and adopted; `false` otherwise.
+ * @returns Structured `PrewarmAdoptResult` describing the outcome.
  */
-export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRenderStateKey?: string): boolean {
+export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRenderStateKey?: string): PrewarmAdoptResult {
   const snap = getSnapshot(room.id);
-  if (snap === undefined || snap.bgCache === null) return false;
+  if (snap === undefined || snap.bgCache === null) return { status: 'missing' };
 
   // Adoption-time stale-key guard: refuse chunks built for a different render state.
   if (currentRenderStateKey !== undefined && snap.renderStateKey !== currentRenderStateKey) {
@@ -293,7 +313,7 @@ export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRende
       );
     }
     clearSnapshotBgData(room.id);
-    return false;
+    return { status: 'staleRenderState', snapshotKey: snap.renderStateKey, currentKey: currentRenderStateKey };
   }
 
   const chunks = snap.bgCache.extractCleanChunks();
@@ -305,7 +325,7 @@ export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRende
 
   // Clear bg data from the snapshot (removes snapshot if all fields are now null).
   clearSnapshotBgData(room.id);
-  return chunks.size > 0;
+  return chunks.size > 0 ? { status: 'adopted', chunks: chunks.size } : { status: 'empty' };
 }
 
 /** Discards pre-warmed background block chunks for `roomId` without adopting them. */
