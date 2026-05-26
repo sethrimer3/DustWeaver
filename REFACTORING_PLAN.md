@@ -462,3 +462,83 @@ called.  No new per-frame allocations.  No circular dependencies.
 
 **Validation:** `npm run build` (tsc) produces no new errors beyond the
 pre-existing `TS2688 vite/client` issue that exists on the baseline branch.
+
+---
+
+## Section 12 — BUILD 409 (this session)
+
+### Fix: `src/screens/gameScreen.ts` — stale imports cleaned up
+
+**Problem:** After the BUILD 408 extraction of `gameLoadRoomPhases.ts`, 30
+`TS6133` / `TS6192` unused-import errors remained in `gameScreen.ts` because
+the prior session added the imports to `gameLoadRoomPhases.ts` without removing
+them from `gameScreen.ts`.  `noUnusedLocals: true` in `tsconfig.json` caused
+`tsc` to exit non-zero, preventing the vite build step from running.
+
+**Fix:** Removed all 30 unused imports from `gameScreen.ts`.  Imports of value
+symbols that are now only used inside `makeLoadRoomPhases` (e.g.
+`loadRoomHazards`, `spawnEnemyClusters`, `buildRoomWallTemplate`, etc.) were
+deleted.  Type-only symbols still needed for local declarations (e.g.
+`PreloadScheduleHandle`, `WarmScheduleHandle`, `DecorationWaveState`) were
+retained.
+
+- [x] `gameScreen.ts` — 30 stale import specifiers removed; build restored.
+
+---
+
+### `src/levels/roomFileLoader.ts`  (689 → 607 lines)
+
+**Problem:** `roomFileLoader.ts` mixed two unrelated responsibilities: (1) the
+lifecycle and query API for the active room-file cache (`activateCampaignRoomCache`,
+`deactivateCampaignRoomCache`, `isRoomFileCacheActive`, etc.) and (2) the
+actual file I/O, hash validation, and room hydration logic that performs the
+loads.  The four module-level state variables (`_activeManifest`,
+`_activeCampaignId`, `_activeIsOfficialCampaign`, `_activeWorldMap`) and the
+deduplication set (`_pendingLoadIds`) were tightly coupled to the lifecycle
+functions but unrelated to the loading algorithms.
+
+**Extraction:**
+
+- [x] **`src/levels/roomFileCacheState.ts`** (154 lines) — owns all 5 state
+  variables plus `activateCampaignRoomCache`, `deactivateCampaignRoomCache`,
+  `isRoomFileCacheActive`, `isOfficialCampaignCacheActive`, `getActiveCampaignId`,
+  `getActiveRoomAdjacency`, `getActiveWorldMap`, `getActiveManifest` (internal),
+  and `getActiveIsOfficialCampaign` (internal). `roomFilePendingLoadIds` exported
+  as `const Set` for use by the loading functions.
+
+- [x] `roomFileLoader.ts` retained as file I/O module (607 lines).  Imports
+  from `./roomFileCacheState`; re-exports the 7 public cache-lifecycle
+  functions for backward compatibility.  Loading functions use `getActiveManifest()`,
+  `getActiveCampaignId()`, `getActiveIsOfficialCampaign()`, `getActiveWorldMap()`
+  getters, and the shared `roomFilePendingLoadIds` Set.
+
+**Behavior preserved:** All public exports unchanged (re-exported from
+`roomFileLoader.ts`).  Cache activation/deactivation sequence, pending-load
+deduplication, and hash-validated lazy loading all work identically.
+No circular dependencies.
+
+---
+
+### `src/render/snapshotTypes.ts`  (709 → 409 lines)
+
+**Problem:** `snapshotTypes.ts` held three unrelated snapshot interfaces:
+`ParticleSnapshot` (particle buffers), `ClusterSnapshot` (per-entity render
+data — 306 lines), and `WorldSnapshot` (full-world view).  `ClusterSnapshot`
+alone was 43% of the file, describes entirely per-entity render state, and is
+imported separately from the world-level snapshot in several files.
+
+**Extraction:**
+
+- [x] **`src/render/clusterSnapshotTypes.ts`** (314 lines) — owns the
+  `ClusterSnapshot` interface.  No imported types (all fields are primitives).
+
+- [x] `snapshotTypes.ts` re-exports `ClusterSnapshot` via
+  `export type { ClusterSnapshot } from './clusterSnapshotTypes'` for backward
+  compatibility.  Also imports it with `import type` for use inside
+  `WorldSnapshot.clusters`.
+
+**Behavior preserved:** All existing import paths continue to work unchanged.
+Pure type extraction — no runtime behaviour.
+
+**Validation:** `npm run build` passes (706 modules, ✓ built in ~4 s) with
+zero new TypeScript errors after all three changes above.

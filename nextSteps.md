@@ -321,9 +321,27 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
    `getPrewarmDummyCtx`) used by `blockSpriteRenderer.ts` internally. Public
    management API re-exported for backward compatibility.
 
+### Completed additions (BUILD 409)
+
+5. **`roomFileLoader.ts` 689 → 607 lines**: Room-file-cache lifecycle state
+   (`_activeManifest`, `_activeCampaignId`, `_activeIsOfficialCampaign`,
+   `_activeWorldMap`, `_pendingLoadIds`) and 7 management/query functions
+   extracted to `roomFileCacheState.ts` (154 lines). All 7 public functions
+   re-exported from `roomFileLoader.ts` for backward compatibility. Loading
+   functions now use getter accessors instead of direct state access.
+
+6. **`snapshotTypes.ts` 709 → 409 lines**: `ClusterSnapshot` interface
+   (306 lines of pure per-entity render types) extracted to
+   `clusterSnapshotTypes.ts` (314 lines). Re-exported and imported into
+   `WorldSnapshot` via `import type`. No runtime changes.
+
+7. **`gameScreen.ts` (stale import cleanup)**: 30 unused import specifiers
+   left over from BUILD 408's `gameLoadRoomPhases.ts` extraction removed.
+   Restored clean `tsc` pass (`noUnusedLocals: true`).
+
 ### Remaining refactor candidates
 
-1. **`gameScreen.ts` (~1872 lines)**: Most logic lives inside a deep module
+1. **`gameScreen.ts` (~1483 lines)**: Most logic lives inside a deep module
    closure, making it risky to extract without careful re-threading of shared
    state. Not further reduced in this pass. Defer unless a specific closure
    variable can be cleanly isolated (e.g. `updateRoomBounds`, `cameraState`
@@ -336,6 +354,14 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
 3. **`roomRenderChunkWarmScheduler.ts` (~820 lines)**: The pure BFS helpers
    (`_bfsNearby`, `_computeEntranceOffset`, ~70 lines) could be extracted to
    a `prewarmBfsHelpers.ts` module but the size reduction is small. Deferred.
+
+4. **`snapshotTypes.ts` (~409 lines after BUILD 409)**: `ParticleSnapshot`
+   and `WallSnapshot` could each move to their own files for symmetry, but
+   both are short and frequently co-imported with `WorldSnapshot`. Deferred.
+
+5. **`roomSchemaV2.ts` (~813 lines after prior passes)**: Further extraction
+   possible for hydration helpers, but schema logic is tightly interleaved with
+   type assertions. Requires careful audit before splitting.
 
 ---
 
