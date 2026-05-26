@@ -102,6 +102,7 @@ const DEBUG_PANEL_DEFS: readonly DebugPanelDef[] = [
   { id: 'chunks',      label: 'Rendering / Chunks Debug' },
   { id: 'particles',   label: 'Particles / Dust Debug' },
   { id: 'room',        label: 'Room / Editor Debug' },
+  { id: 'resident',    label: 'Resident Room Debug' },
 ];
 
 export interface DebugPanel {

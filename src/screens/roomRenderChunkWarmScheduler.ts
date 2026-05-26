@@ -178,12 +178,13 @@ function _wallTemplateToSnapshot(t: {
 
 /**
  * Records whether the most recent room transition used:
- *  - 'hot'       — instant, no overlay (chunk caches were ready and valid).
- *  - 'entryWarm' — instant load but brief textless cover while chunks warmed.
- *  - 'loading'   — full async load with "Loading…" overlay (cold cache miss).
- *  - 'none'      — no transition has occurred yet.
+ *  - 'residentHot' — instant hot-swap; frozen enemy state restored from resident snapshot.
+ *  - 'hot'         — instant, no overlay (chunk caches were ready and valid).
+ *  - 'entryWarm'   — instant load but brief textless cover while chunks warmed.
+ *  - 'loading'     — full async load with "Loading…" overlay (cold cache miss).
+ *  - 'none'        — no transition has occurred yet.
  */
-export type TransitionOutcome = 'hot' | 'entryWarm' | 'loading' | 'none';
+export type TransitionOutcome = 'residentHot' | 'hot' | 'entryWarm' | 'loading' | 'none';
 
 /**
  * Explains why the most recent transition was not 'hot'.
