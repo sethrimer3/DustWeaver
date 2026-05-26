@@ -595,9 +595,11 @@ export function startGameScreen(
       // Freeze the outgoing room before loadRoom destroys its state.
       residentRoomManager.ensureResident(currentRoom);
       residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
+      residentRoomManager.freezeSimState(world, currentRoom.id);
       // Capture prewarm-store state BEFORE loadRoom (Phase A adoption clears it).
       const { wallPresent, bgPresent, bgRequired } = getRoomPrewarmReadiness(room.id, room);
       const frozenEnemies = residentRoomManager.getFrozenEnemies(room.id);
+      const frozenSimState = residentRoomManager.getFrozenSimState(room.id);
       loadRoom(room, spawnXBlock, spawnYBlock);
       // Restore frozen enemy state if this room was previously visited.
       residentRoomManager.ensureResident(room);
@@ -609,6 +611,15 @@ export function startGameScreen(
         } catch (err) {
           if (import.meta.env.DEV) {
             console.warn('[resident] restoreFrozenEnemies failed — keeping fresh spawn', err);
+          }
+        }
+      }
+      if (frozenSimState !== null) {
+        try {
+          residentRoomManager.restoreSimState(world, frozenSimState);
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.warn('[resident] restoreSimState failed — keeping fresh sim state', err);
           }
         }
       }
@@ -705,6 +716,7 @@ export function startGameScreen(
       // Freeze outgoing room before the async generator destroys world state.
       residentRoomManager.ensureResident(currentRoom);
       residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
+      residentRoomManager.freezeSimState(world, currentRoom.id);
       residentRoomManager.recordTransitionMode('legacyLoad');
       asyncLoadState.preTransVX    = vx;
       asyncLoadState.preTransVY    = vy;

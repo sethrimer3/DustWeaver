@@ -1,37 +1,52 @@
 /**
  * residentRoomManager.ts — Resident Room Runtime manager.
  *
- * Tracks frozen enemy state per room so that revisiting a room restores
- * enemies to the state they were in when the player left, instead of
- * respawning them at full health.
+ * Tracks frozen enemy state and dynamic simulation state per room so that
+ * revisiting a room restores it to the state it was in when the player left,
+ * instead of respawning enemies/hazards at their initial conditions.
  *
  * Architecture:
  *   Each visited room gets a ResidentRoomInstance that stores the frozen
- *   enemy cluster snapshots.  On transition to a previously visited room:
- *     1. Freeze the outgoing room (snapshot its enemy clusters).
- *     2. Run loadRoom normally (spawns fresh enemies via Phase C).
- *     3. Restore the frozen enemies in-place (replacing the fresh spawn).
+ *   enemy cluster snapshots (Phase 1) and simulation-state snapshots (Phase 2).
+ *   On transition to a previously visited room:
+ *     1. Freeze the outgoing room (snapshot clusters + sim state).
+ *     2. Run loadRoom normally (spawns fresh enemies/hazards via Phase C–E).
+ *     3. Restore frozen enemies in-place (replacing the fresh spawn).
+ *     4. Restore frozen sim state (overwriting freshly-loaded hazard/rope/block state).
  *
  * Phase-1 scope:
  *   - Enemy health, alive status, position, and AI state are preserved.
  *   - Complex enemies (radiant tether, dust constellation, etc.) are skipped
  *     in this pass and respawn fresh on revisit.  See nextSteps.md.
- *   - Hazard state, falling-block positions, and background fluid are not
- *     persisted in Phase 1.  See nextSteps.md for full simulation residency.
+ *
+ * Phase-2 scope (this file):
+ *   - Falling block state machine (warning, falling, landed, crumbling, removed).
+ *   - Rope Verlet positions (ropes remember their settled shape).
+ *   - Breakable block damage (broken blocks stay broken on revisit).
+ *   - Crumble block damage (cracked/destroyed blocks persist on revisit).
+ *   - Grasshopper positions and velocities (critters stay where they hopped to).
+ *   - Background fluid particle positions (fluid settles into same visual state).
  *
  * Fallback behaviour:
- *   If restoration is skipped (first visit or complex enemies), loadRoom's
- *   fresh spawn is used unchanged.  No crash path — missing residents are
- *   transparent to gameplay.
+ *   If restoration is skipped (first visit) or throws, loadRoom's fresh spawn
+ *   is used unchanged.  No crash path — missing residents are transparent.
  */
 
 import type { ClusterState } from '../sim/clusters/state';
 import type { RoomDef, RoomEnemyDef } from '../levels/roomDef';
 import type { WorldState } from '../sim/world';
+import { MAX_ROPE_SEGMENTS } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { spawnLoadoutParticles } from './gameSpawn';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import type { RngState } from '../sim/rng';
+import {
+  type FallingBlockState,
+  FB_STATE_IDLE_STABLE,
+  FB_STATE_REMOVED,
+  getFBGroupTopWorld,
+  getFBGroupLeftWorld,
+} from '../sim/fallingBlocks/fallingBlockTypes';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +60,111 @@ export interface FrozenEnemyEntry {
   /** Original room enemy definition (provides particle kinds and count). */
   readonly enemyDef: RoomEnemyDef;
 }
+
+// ── Phase-2 simulation-state snapshots ───────────────────────────────────────
+
+/**
+ * Per-group falling block state snapshot.
+ * Only groups that are NOT in `FB_STATE_IDLE_STABLE` are stored —
+ * idle-stable groups need no restoration (loadRoom puts them there by default).
+ */
+export interface FrozenFallingBlockState {
+  /** groupId from the FallingBlockGroup (stable across reloads of same room). */
+  groupId: number;
+  /** State machine enum value. */
+  state: FallingBlockState;
+  /** Ticks elapsed in the current state. */
+  stateTimerTicks: number;
+  /** Current vertical fall offset from rest position (world units). */
+  offsetYWorld: number;
+  /** Current downward fall velocity (world units/s). */
+  velocityYWorld: number;
+  /** Horizontal shake offset for the warning-shake animation (world units). */
+  shakeOffsetXWorld: number;
+  /** 1 once the group has reached terminal fall velocity. */
+  hasReachedTopSpeedFlag: 0 | 1;
+  /** Countdown ticks until crumble removes the group (crumbling variant). */
+  crumbleTimerTicks: number;
+}
+
+/**
+ * Full Verlet position snapshot for all ropes in a room.
+ * Allows ropes to restore their settled shape on revisit instead of
+ * re-running the pre-simulation settle pass from scratch.
+ */
+export interface FrozenRopeSnapshot {
+  ropeCount: number;
+  /** Verlet current positions — flat layout [r0s0, r0s1, …, r1s0, …]. */
+  posX: Float32Array;
+  posY: Float32Array;
+  /** Verlet previous positions (same layout) — needed for velocity integration. */
+  prevX: Float32Array;
+  prevY: Float32Array;
+}
+
+/** Active-flag snapshot for all breakable blocks in a room. */
+export interface FrozenBreakableBlockState {
+  count: number;
+  /** 1 = still active (solid), 0 = broken.  Index-parallel with room.breakableBlocks. */
+  activeFlags: Uint8Array;
+}
+
+/** Active-flag and hits-remaining snapshot for all crumble blocks in a room. */
+export interface FrozenCrumbleBlockState {
+  count: number;
+  /** 1 = still active, 0 = destroyed. */
+  activeFlags: Uint8Array;
+  /** Hits remaining until destruction (2 = intact, 1 = cracked, 0 = gone). */
+  hitsRemaining: Uint8Array;
+}
+
+/** Grasshopper positions and velocities snapshot. */
+export interface FrozenGrasshopperSnapshot {
+  count: number;
+  xWorld: Float32Array;
+  yWorld: Float32Array;
+  velXWorld: Float32Array;
+  velYWorld: Float32Array;
+  hopTimerTicks: Float32Array;
+  isAliveFlag: Uint8Array;
+}
+
+/**
+ * Background fluid particle snapshot.
+ * Stores position, velocity, disturbance, and age for every Fluid-kind
+ * particle with ownerEntityId === −1 at freeze time.
+ */
+export interface FrozenFluidSnapshot {
+  count: number;
+  posX: Float32Array;
+  posY: Float32Array;
+  velX: Float32Array;
+  velY: Float32Array;
+  disturbanceFactor: Float32Array;
+  ageTicks: Float32Array;
+}
+
+/**
+ * Full Phase-2 simulation state snapshot for one resident room.
+ * All fields are null when the room has never been frozen or the
+ * corresponding feature is absent from the room.
+ */
+export interface FrozenSimState {
+  /** Non-idle-stable falling block states keyed by groupId. */
+  fallingBlocks: FrozenFallingBlockState[];
+  /** Rope Verlet positions, or null if the room has no ropes. */
+  ropes: FrozenRopeSnapshot | null;
+  /** Breakable block active flags, or null if room has none. */
+  breakableBlocks: FrozenBreakableBlockState | null;
+  /** Crumble block state, or null if room has none. */
+  crumbleBlocks: FrozenCrumbleBlockState | null;
+  /** Grasshopper snapshot, or null if room has none. */
+  grasshoppers: FrozenGrasshopperSnapshot | null;
+  /** Background fluid particle snapshot, or null if no fluid was present. */
+  fluidParticles: FrozenFluidSnapshot | null;
+}
+
+// ── Instance & diagnostics types ─────────────────────────────────────────────
 
 /** Lifecycle of a resident room instance. */
 export type ResidentLifecycle = 'active' | 'frozen' | 'evictable';
@@ -62,6 +182,11 @@ export interface ResidentRoomInstance {
    * null = room has never been frozen (first visit gets fresh enemies).
    */
   frozenEnemies: FrozenEnemyEntry[] | null;
+  /**
+   * Phase-2 simulation state snapshot taken on last freeze.
+   * null = room has never been frozen or has no dynamic simulation state.
+   */
+  frozenSimState: FrozenSimState | null;
 }
 
 /** Diagnostic snapshot for the debug overlay. */
@@ -168,6 +293,7 @@ export class ResidentRoomManager {
       lastActiveFrame:      0,
       lastTouchedFrame:     this._currentFrame,
       frozenEnemies:        null,
+      frozenSimState:       null,
     };
     this._residents.set(roomDef.id, instance);
     return instance;
@@ -327,7 +453,286 @@ export class ResidentRoomManager {
     return restoredCount;
   }
 
-  // ── Diagnostics ────────────────────────────────────────────────────────────
+  // ── Phase-2: freeze / restore simulation state ────────────────────────────
+
+  /**
+   * Snapshot the room's dynamic simulation state into the named resident.
+   * Call this alongside freezeRoom(), BEFORE loadRoom() destroys the state.
+   *
+   * Captures:
+   *   - Falling block state machines (only non-idle-stable groups).
+   *   - Rope Verlet positions (all segments for all ropes).
+   *   - Breakable block active flags.
+   *   - Crumble block active flags and hits-remaining.
+   *   - Grasshopper positions and velocities.
+   *   - Background fluid particle positions, velocities, and disturbance.
+   *
+   * @param world   Live WorldState to snapshot.
+   * @param roomId  Id of the room being frozen.
+   */
+  freezeSimState(world: WorldState, roomId: string): void {
+    const resident = this._residents.get(roomId);
+    if (resident === undefined) return;
+
+    // ── Falling blocks ────────────────────────────────────────────────────
+    const fallingBlocks: FrozenFallingBlockState[] = [];
+    for (const g of world.fallingBlockGroups) {
+      if (g.state === FB_STATE_IDLE_STABLE) continue; // default — no need to store
+      fallingBlocks.push({
+        groupId:              g.groupId,
+        state:                g.state,
+        stateTimerTicks:      g.stateTimerTicks,
+        offsetYWorld:         g.offsetYWorld,
+        velocityYWorld:       g.velocityYWorld,
+        shakeOffsetXWorld:    g.shakeOffsetXWorld,
+        hasReachedTopSpeedFlag: g.hasReachedTopSpeedFlag,
+        crumbleTimerTicks:    g.crumbleTimerTicks,
+      });
+    }
+
+    // ── Ropes ─────────────────────────────────────────────────────────────
+    let ropes: FrozenRopeSnapshot | null = null;
+    if (world.ropeCount > 0) {
+      const totalSlots = world.ropeCount * MAX_ROPE_SEGMENTS;
+      ropes = {
+        ropeCount: world.ropeCount,
+        posX:  new Float32Array(world.ropeSegPosXWorld.buffer,  0, totalSlots),
+        posY:  new Float32Array(world.ropeSegPosYWorld.buffer,  0, totalSlots),
+        prevX: new Float32Array(world.ropeSegPrevXWorld.buffer, 0, totalSlots),
+        prevY: new Float32Array(world.ropeSegPrevYWorld.buffer, 0, totalSlots),
+      };
+      // Copy out of the shared buffer so the snapshot is independent.
+      ropes.posX  = ropes.posX.slice();
+      ropes.posY  = ropes.posY.slice();
+      ropes.prevX = ropes.prevX.slice();
+      ropes.prevY = ropes.prevY.slice();
+    }
+
+    // ── Breakable blocks ──────────────────────────────────────────────────
+    let breakableBlocks: FrozenBreakableBlockState | null = null;
+    if (world.breakableBlockCount > 0) {
+      breakableBlocks = {
+        count: world.breakableBlockCount,
+        activeFlags: world.isBreakableBlockActiveFlag.slice(0, world.breakableBlockCount),
+      };
+    }
+
+    // ── Crumble blocks ────────────────────────────────────────────────────
+    let crumbleBlocks: FrozenCrumbleBlockState | null = null;
+    if (world.crumbleBlockCount > 0) {
+      crumbleBlocks = {
+        count: world.crumbleBlockCount,
+        activeFlags:    world.isCrumbleBlockActiveFlag.slice(0, world.crumbleBlockCount),
+        hitsRemaining:  world.crumbleBlockHitsRemaining.slice(0, world.crumbleBlockCount),
+      };
+    }
+
+    // ── Grasshoppers ──────────────────────────────────────────────────────
+    let grasshoppers: FrozenGrasshopperSnapshot | null = null;
+    if (world.grasshopperCount > 0) {
+      const n = world.grasshopperCount;
+      grasshoppers = {
+        count:         n,
+        xWorld:        world.grasshopperXWorld.slice(0, n),
+        yWorld:        world.grasshopperYWorld.slice(0, n),
+        velXWorld:     world.grasshopperVelXWorld.slice(0, n),
+        velYWorld:     world.grasshopperVelYWorld.slice(0, n),
+        hopTimerTicks: world.grasshopperHopTimerTicks.slice(0, n),
+        isAliveFlag:   world.isGrasshopperAliveFlag.slice(0, n),
+      };
+    }
+
+    // ── Background fluid particles ────────────────────────────────────────
+    // Scan the particle buffer for Fluid-kind particles owned by no entity.
+    // These are always spawned by spawnBackgroundFluidParticles with ownerEntityId = -1.
+    let fluidParticles: FrozenFluidSnapshot | null = null;
+    {
+      // Pre-count to allocate exact arrays.
+      let fluidCount = 0;
+      for (let pi = 0; pi < world.particleCount; pi++) {
+        if (world.kindBuffer[pi] === ParticleKind.Fluid && world.ownerEntityId[pi] === -1) {
+          fluidCount++;
+        }
+      }
+      if (fluidCount > 0) {
+        const posX  = new Float32Array(fluidCount);
+        const posY  = new Float32Array(fluidCount);
+        const velX  = new Float32Array(fluidCount);
+        const velY  = new Float32Array(fluidCount);
+        const dist  = new Float32Array(fluidCount);
+        const age   = new Float32Array(fluidCount);
+        let fi = 0;
+        for (let pi = 0; pi < world.particleCount; pi++) {
+          if (world.kindBuffer[pi] === ParticleKind.Fluid && world.ownerEntityId[pi] === -1) {
+            posX[fi]  = world.positionXWorld[pi];
+            posY[fi]  = world.positionYWorld[pi];
+            velX[fi]  = world.velocityXWorld[pi];
+            velY[fi]  = world.velocityYWorld[pi];
+            dist[fi]  = world.disturbanceFactor[pi];
+            age[fi]   = world.ageTicks[pi];
+            fi++;
+          }
+        }
+        fluidParticles = { count: fluidCount, posX, posY, velX, velY, disturbanceFactor: dist, ageTicks: age };
+      }
+    }
+
+    resident.frozenSimState = {
+      fallingBlocks,
+      ropes,
+      breakableBlocks,
+      crumbleBlocks,
+      grasshoppers,
+      fluidParticles,
+    };
+  }
+
+  /**
+   * Returns the frozen Phase-2 simulation state for roomId, or null if the
+   * room has never been frozen (first visit — fresh state from loadRoom is used).
+   */
+  getFrozenSimState(roomId: string): FrozenSimState | null {
+    return this._residents.get(roomId)?.frozenSimState ?? null;
+  }
+
+  /**
+   * Restore frozen simulation state into world AFTER loadRoom() has completed.
+   *
+   * Call order within gameScreen.ts (instant-path):
+   *   1. freezeRoom()        + freezeSimState()  — before loadRoom
+   *   2. loadRoom()
+   *   3. restoreFrozenEnemies()                  — after loadRoom
+   *   4. restoreSimState()                       — after loadRoom
+   *
+   * Each category is restored independently so a partial failure does not
+   * prevent the others from being applied.
+   *
+   * @param world       Live WorldState after loadRoom.
+   * @param frozenState Snapshot from getFrozenSimState().
+   */
+  restoreSimState(world: WorldState, frozenState: FrozenSimState): void {
+    // ── Falling blocks ────────────────────────────────────────────────────
+    if (frozenState.fallingBlocks.length > 0) {
+      // Build groupId → frozen state lookup.
+      const byGroupId = new Map<number, FrozenFallingBlockState>();
+      for (const fb of frozenState.fallingBlocks) {
+        byGroupId.set(fb.groupId, fb);
+      }
+      for (const g of world.fallingBlockGroups) {
+        const fb = byGroupId.get(g.groupId);
+        if (fb === undefined) continue;
+        // Restore dynamic state.
+        g.state                  = fb.state;
+        g.stateTimerTicks        = fb.stateTimerTicks;
+        g.offsetYWorld           = fb.offsetYWorld;
+        g.velocityYWorld         = fb.velocityYWorld;
+        g.shakeOffsetXWorld      = fb.shakeOffsetXWorld;
+        g.hasReachedTopSpeedFlag = fb.hasReachedTopSpeedFlag;
+        g.crumbleTimerTicks      = fb.crumbleTimerTicks;
+        // Sync the wall slot to match the restored position.
+        const wi = g.wallIndex;
+        if (wi >= 0 && wi < world.wallCount) {
+          if (g.state === FB_STATE_REMOVED) {
+            world.wallWWorld[wi] = 0;
+            world.wallHWorld[wi] = 0;
+          } else {
+            world.wallXWorld[wi] = getFBGroupLeftWorld(g);
+            world.wallYWorld[wi] = getFBGroupTopWorld(g);
+            world.wallWWorld[wi] = g.wWorld;
+            world.wallHWorld[wi] = g.hWorld;
+          }
+        }
+      }
+    }
+
+    // ── Ropes ─────────────────────────────────────────────────────────────
+    if (frozenState.ropes !== null && world.ropeCount === frozenState.ropes.ropeCount) {
+      const { posX, posY, prevX, prevY } = frozenState.ropes;
+      const totalSlots = world.ropeCount * MAX_ROPE_SEGMENTS;
+      const copyLen = Math.min(totalSlots, posX.length);
+      world.ropeSegPosXWorld.set(posX.subarray(0, copyLen));
+      world.ropeSegPosYWorld.set(posY.subarray(0, copyLen));
+      world.ropeSegPrevXWorld.set(prevX.subarray(0, copyLen));
+      world.ropeSegPrevYWorld.set(prevY.subarray(0, copyLen));
+    }
+
+    // ── Breakable blocks ──────────────────────────────────────────────────
+    if (
+      frozenState.breakableBlocks !== null &&
+      world.breakableBlockCount === frozenState.breakableBlocks.count
+    ) {
+      const { count, activeFlags } = frozenState.breakableBlocks;
+      for (let i = 0; i < count; i++) {
+        if (activeFlags[i] === 0) {
+          world.isBreakableBlockActiveFlag[i] = 0;
+          // Deactivate the corresponding wall slot (mirrors hazards.ts break logic).
+          const wi = world.breakableBlockWallIndex[i];
+          if (wi >= 0 && wi < world.wallCount) {
+            world.wallWWorld[wi] = 0;
+            world.wallHWorld[wi] = 0;
+          }
+        }
+        // Flag = 1 is the loadRoom default; no action needed for intact blocks.
+      }
+    }
+
+    // ── Crumble blocks ────────────────────────────────────────────────────
+    if (
+      frozenState.crumbleBlocks !== null &&
+      world.crumbleBlockCount === frozenState.crumbleBlocks.count
+    ) {
+      const { count, activeFlags, hitsRemaining } = frozenState.crumbleBlocks;
+      for (let i = 0; i < count; i++) {
+        if (activeFlags[i] === 0) {
+          world.isCrumbleBlockActiveFlag[i] = 0;
+          const wi = world.crumbleBlockWallIndex[i];
+          if (wi >= 0 && wi < world.wallCount) {
+            world.wallWWorld[wi] = 0;
+            world.wallHWorld[wi] = 0;
+          }
+        } else {
+          // Restore reduced hit count for cracked-but-intact blocks.
+          world.crumbleBlockHitsRemaining[i] = hitsRemaining[i];
+        }
+      }
+    }
+
+    // ── Grasshoppers ──────────────────────────────────────────────────────
+    if (
+      frozenState.grasshoppers !== null &&
+      world.grasshopperCount === frozenState.grasshoppers.count
+    ) {
+      const gh = frozenState.grasshoppers;
+      const n = gh.count;
+      world.grasshopperXWorld.set(gh.xWorld.subarray(0, n));
+      world.grasshopperYWorld.set(gh.yWorld.subarray(0, n));
+      world.grasshopperVelXWorld.set(gh.velXWorld.subarray(0, n));
+      world.grasshopperVelYWorld.set(gh.velYWorld.subarray(0, n));
+      world.grasshopperHopTimerTicks.set(gh.hopTimerTicks.subarray(0, n));
+      world.isGrasshopperAliveFlag.set(gh.isAliveFlag.subarray(0, n));
+    }
+
+    // ── Background fluid particles ────────────────────────────────────────
+    // Match freshly-spawned Fluid particles to the frozen snapshot by scan order.
+    // The spawn order is deterministic (Phase D always appends them in the same
+    // sequence), so a 1-to-1 index mapping is safe.
+    if (frozenState.fluidParticles !== null) {
+      const fp = frozenState.fluidParticles;
+      let fi = 0; // index into frozen snapshot
+      for (let pi = 0; pi < world.particleCount && fi < fp.count; pi++) {
+        if (world.kindBuffer[pi] !== ParticleKind.Fluid || world.ownerEntityId[pi] !== -1) {
+          continue;
+        }
+        world.positionXWorld[pi]   = fp.posX[fi];
+        world.positionYWorld[pi]   = fp.posY[fi];
+        world.velocityXWorld[pi]   = fp.velX[fi];
+        world.velocityYWorld[pi]   = fp.velY[fi];
+        world.disturbanceFactor[pi] = fp.disturbanceFactor[fi];
+        world.ageTicks[pi]         = fp.ageTicks[fi];
+        fi++;
+      }
+    }
+  }
 
   /**
    * Record the outcome of the most recent transition for the debug overlay.
