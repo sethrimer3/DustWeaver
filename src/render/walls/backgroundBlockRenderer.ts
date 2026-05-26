@@ -315,14 +315,13 @@ export function getPrewarmBgStats(): { roomCount: number; totalChunks: number; m
 }
 
 /**
- * Cheap read-only check: returns `true` when every chunk grid cell in the
- * given viewport is already present, clean, and had no fallbacks in the
- * **active** background chunk cache.
+ * Cheap read-only viewport coverage probe for the **active** background chunk
+ * cache, including the `CHUNK_MARGIN` safety ring.
  *
  * Returns `true` immediately when the room has no background blocks (nothing
- * to warm).  Returns `false` if the zoom has changed or if any visible chunk
- * is missing, dirty, or has pending fallback sprites.  Does **not** build any
- * canvases.
+ * to warm).  Returns `false` if the zoom has changed or if any visible-plus-margin
+ * chunk is missing, dirty, or has pending fallback sprites.  Does **not** build
+ * any canvases.
  */
 export function isBgActiveViewportCovered(
   room: RoomDef,
@@ -335,6 +334,31 @@ export function isBgActiveViewportCovered(
   const blocks = room.backgroundBlocks;
   if (!blocks || blocks.length === 0) return true;
   return _bgChunkCache.isViewportCovered(
+    offsetXPx,
+    offsetYPx,
+    vpWPx,
+    vpHPx,
+    scalePx,
+    CELL_SIZE_WORLD,
+  );
+}
+
+/**
+ * Like `isBgActiveViewportCovered` but checks only the **core** visible range
+ * (no margin).  Intended for DEV diagnostics only — always use
+ * `isBgActiveViewportCovered` for production readiness decisions.
+ */
+export function isBgCoreViewportCovered(
+  room: RoomDef,
+  offsetXPx: number,
+  offsetYPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+): boolean {
+  const blocks = room.backgroundBlocks;
+  if (!blocks || blocks.length === 0) return true;
+  return _bgChunkCache.isViewportCoreCovered(
     offsetXPx,
     offsetYPx,
     vpWPx,
