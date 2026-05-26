@@ -1,149 +1,180 @@
-# DustWeaver — Room Transition & Rendering Performance Diagnosis
+# DustWeaver — Rendering Performance Diagnosis
 
-_Written as part of the room-transition performance improvement pass (BUILD 259)._
+_Originally written for the room-transition performance improvement pass (BUILD 259). Updated in BUILD 401+ to cover in-room gameplay freezes._
 
 ---
 
 ## Executive Summary
 
-Room transitions can appear to freeze for 1–5 seconds because:
-1. Block-sprite images start loading lazily the moment a room is first entered, but rendering
-   proceeds immediately with solid-colour fallback tiles until images arrive.
-2. `loadRoom()` executes entirely in one synchronous frame — particle spawning, wall merging,
-   ambient-light BFS, and bake-canvas creation all run back-to-back with no budget control.
-3. Nothing preloads adjacent rooms in the background, so every transition is cold.
+Two separate classes of freeze have been diagnosed and addressed:
 
-The rendering pipeline itself is already well-optimised in several areas (bake cache,
-ambient-depth memoisation, imageCache deduplication), but lacked any preloading or graceful
-transition UX.
+1. **Room-transition freezes** (BUILD 259–270): blank tiles and stall on room entry because sprites loaded lazily and `loadRoom()` was synchronous.
+2. **In-room gameplay freezes** (BUILD 395–401): frame spikes while the player moves because derived visual canvases (shaded sprites, procedural block cutouts) were baked on-demand during active gameplay using expensive `getImageData`/`putImageData` calls.
+
+Both problems have been substantially fixed. The sections below describe each in detail.
 
 ---
 
-## Bottleneck 1 — Lazy sprite loading causes blank fallback tiles
+## Part A — Room-Transition Freezes (BUILD 259)
 
-**What happens:** When `loadRoom()` is called it calls `setActiveBlockSpriteTheme()` /
-`setActiveBlockSpriteWorld()`, which invalidates `_bakedWallCanvas` in
-`blockSpriteRenderer.ts`.  The next frame tries to bake a new canvas.  At that point the
-sprite `HTMLImageElement` objects exist (they were created by `loadImg()`) but their `onload`
-has not fired — `img.complete === false`.  Every tile falls back to a solid-colour rectangle.
-Once images finish loading the bake redraws with sprites.  On a warm browser cache this takes
-~50–200 ms; on first load it can take several seconds.
+### A.1 — Lazy sprite loading causes blank fallback tiles
 
-**Where:** `src/render/walls/blockSpriteRenderer.ts` — `_doRenderWallTilesDirect()`,
-`_getOrCreate8x8()` in `folderBlockThemes.ts`, `getBlockSprite1x1/2x2` in
-`proceduralBlockSprite.ts`.
+**What happened:** When `loadRoom()` ran it created `HTMLImageElement` objects but network fetches had not completed. Every tile fell back to a solid-colour rectangle until images arrived (50 ms–5 s depending on cache state).
 
-**Fix applied:** `roomAssetPreloader.ts` now calls `loadImg()` on all sprite URLs for the
-spawn room and adjacent rooms **before** gameplay starts.  This starts network fetches early
-enough that sprites are typically ready by the time the player triggers the first transition.
+**Fix:** `roomAssetPreloader.ts` preloads sprites for the spawn room and adjacent rooms before gameplay starts. `decodeRoomThemeSprites()` additionally calls `HTMLImageElement.decode()` so images are GPU-rasterized before first draw. The loading overlay waits for `areRoomSpritesReady()` and `isRoomBackgroundDecodeReady()` before releasing the player.
 
----
+### A.2 — `loadRoom()` synchronous stall
 
-## Bottleneck 2 — `loadRoom()` is fully synchronous and stalls one frame
+**What happened:** Wall merge, BFS ambient-light computation, particle spawn, and bake-canvas creation all ran in one synchronous RAF callback. On large rooms this could take 30–80 ms.
 
-**What happens:** Every room transition calls `loadRoom()` within the same RAF callback.
-The work includes:
-- Spawning hundreds of particles (player + enemies + background fluid + grapple chain).
-- Merging up to 128 wall rectangles through the iterative AABB merge pass.
-- Building the ambient-light BFS depth map (potentially O(width × height) BFS).
-- Constructing the bake canvas for the wall layer.
-- Re-computing the occupancy grid for the wall layout cache.
-- Re-initialising rope physics, crumble blocks, falling blocks, grasshoppers, dialogue, etc.
+**Fix:** A fade-out / fade-in transition (~167 ms) hides the stall. The room load executes at maximum fade (fully black) so the player never sees the partially-constructed room.
 
-On a large room at 60 fps the budget per frame is ~16 ms.  `loadRoom()` on a complex room can
-take 30–80 ms, causing a visible freeze.
+### A.3 — Adjacent rooms not preloaded
 
-**Where:** `src/screens/gameScreen.ts` — `loadRoom()` function, called from both the
-transition callback and the initial load path.
-
-**Fix applied:** A **fade-out / fade-in transition** (black overlay fading over ~167 ms)
-hides the loading frame.  The room load executes at maximum fade (fully black), so the player
-never sees the partially-constructed room.  This doesn't remove the work, but it removes the
-visible stall — the transition feels intentional rather than broken.
-
-**Remaining work:** Spreading particle spawning and wall processing across multiple frames
-(using a generator or idle callbacks) would truly eliminate the stall for very large rooms.
-This is higher-risk and is deferred as follow-up work.
+**Fix:** `preloadAdjacentRoomAssets()` fires `loadImg()` for all block-theme sprites in directly-connected rooms after each `loadRoom()` call. `preloadNearbyRoomAssets(room, radius)` extends this to radius-2 and radius-3 rooms.
 
 ---
 
-## Bottleneck 3 — Adjacent rooms are not preloaded
+## Part B — In-Room Gameplay Freezes (BUILD 395–401)
 
-**What happens:** When the player crosses a door into room B, room B's sprites begin loading
-from scratch.  At 60 fps the player sees 0.5–3 s of fallback tiles while they walk around.
+### B.1 — Per-tile shaded canvas explosion
 
-**Where:** No preloading logic existed prior to BUILD 259.
+**What happened:** `getTheme1x1SpriteShaded()` and `getTheme2x2SpriteShaded()` in `folderBlockThemes.ts` keyed the shaded-canvas cache by exact world coordinates (`worldOriginXWorld | worldOriginYWorld`). In a large room this produced one unique `getImageData`/`putImageData` bake per tile position — potentially thousands — all triggered lazily as the camera moved during gameplay.
 
-**Fix applied:** After every `loadRoom()` call, `preloadAdjacentRoomAssets(currentRoom)` fires
-`loadImg()` for each unique block-theme sprite URL found in directly-connected rooms.  This is
-O(rooms × sprites-per-theme) one-time work, all async, with no frame-budget impact after the
-first room load.
+**Fix (BUILD 395):** `SHADED_VARIANT_BUCKETS = 16`. Cache keys now use `variantBucket = hashTilePosition(col, row, seed) % 16` instead of exact world coordinates. Cache size is now bounded to `sprite_variants × mask_variants × 16` regardless of room size.
+
+**Fix (BUILD 401 — gameplay-safe fallback):** When `isBakeForbiddenInGameplay()` is true, shaded-sprite functions now return a cheap **unshaded canvas** (plain `drawImage`, no `getImageData`/`putImageData`) rather than `null`. The unshaded canvas is permanently cached in `_unshadedCache8x8` / `_unshadedCache16x16`. Returning a non-null stable canvas means `hadFallbacksFlag = false` on the chunk, preventing repeated rebuild loops during gameplay. Shaded variants are baked only during loading/prewarm phases.
+
+### B.2 — Same pattern in `proceduralBlockSprite.ts`
+
+**Fix (BUILD 395):** `PROC_VARIANT_BUCKETS = 16`; all internal callers pass `col, row`.
+
+**Fix (BUILD 401):** `getProceduralSprite()` now returns an unshaded fallback canvas (template compositing without edge shading) when bake is forbidden, stored in `_unshadedSpriteCache`.
+
+**Additional fix (BUILD 401):** Unified private `_imgCache` / `_loadImg` / `_isReady` with the shared `imageCache.ts` (`loadImg` / `isSpriteReady`). No duplicate `HTMLImageElement` objects for procedural base/template images.
+
+### B.3 — Baking allowed during active gameplay
+
+**What happened:** Even with bounded caches, new shaded-sprite bakes could still occur during active gameplay whenever a variant bucket was first touched. On room entry, camera movement across new chunks would trigger `applyOrganicEdgeShading()` spikes in active gameplay frames.
+
+**Fix (BUILD 401):** `perfFreezeProfiler.ts` exports a production-safe `setBakeForbiddenInGameplay(v)` / `isBakeForbiddenInGameplay()` flag (no DEV guard — works in production builds). `gameScreen.ts` sets it:
+
+- `true` immediately after the gameplay path begins (before rendering).
+- `false` at the end of the gameplay frame (after render, before `endFrame()`).
+- `false` in every non-gameplay early-return path (editor, loading, paused, dead).
+
+All expensive bake paths (`getTheme1x1SpriteShaded`, `getTheme2x2SpriteShaded`, `getProceduralSprite`) check `isBakeForbiddenInGameplay()` first and return a stable unshaded fallback if true.
+
+### B.4 — Loading overlay released too early
+
+**What happened:** The loading overlay's release condition was `!asyncLoadState.isActive && areRoomSpritesReady(currentRoom)`. This only checked folder-based block-sprite decode readiness. The background image could still be mid-decode.
+
+**Fix (BUILD 401):** Condition now also requires `isRoomBackgroundDecodeReady(currentRoom)`. Added `isRoomBackgroundDecodeReady()` to `backgroundRenderer.ts` and a thin wrapper in `roomAssetPreloader.ts`.
+
+### B.5 — Stale `_decodeInFlight` entries in `imageCache.ts`
+
+**What happened:** When `img.complete === true` at the time `decodeImg()` was called, the promise resolved synchronously before `_decodeInFlight.set()` ran, leaving a stale in-flight entry that permanently blocked `isSpriteDecodeReady()`.
+
+**Fix (BUILD 395):** Added `.finally()` with identity check after `_decodeInFlight.set()` to ensure cleanup even for synchronous resolution.
+
+### B.6 — Prewarm queue stall
+
+**What happened:** `roomRenderChunkWarmScheduler.ts` used `break` when one room was not ready, stalling the entire prewarm queue instead of skipping to the next room.
+
+**Fix (BUILD 395):** Changed to `continue`; added `deferralCountThisSlice` guard (max 3) to prevent queue spinning.
+
+### B.7 — Hardcoded block size in chunk memory estimate
+
+**What happened:** `_evictStaleChunks()` in `chunkRenderCache.ts` computed chunk memory as `CHUNK_SIZE_BLOCKS * 8 * scalePx` (hardcoded `8` = assumed block size in pixels). This would silently underestimate when block sizes differ.
+
+**Fix (BUILD 401):** Added `_lastBlockSizePx` field to `RoomChunkCache`. Updated at the start of `renderVisibleChunks()`. Eviction memory estimate now uses `CHUNK_SIZE_BLOCKS * this._lastBlockSizePx * scalePx`.
 
 ---
 
-## Bottleneck 4 — First gameplay entry: no loading screen, instant freeze possible
+## Part C — Prewarm and Readiness Helpers Added (BUILD 401)
 
-**What happens:** When `startGameScreen()` is called, `loadRoom()` runs immediately, then the
-RAF loop starts.  If sprites are not cached (first visit or cleared browser cache) the first
-second of gameplay shows fallback tiles and may stutter while images decode.
+These APIs let the entry-viewport warm path intentionally bake derived canvases during loading:
 
-**Fix applied:** A DOM loading overlay ("Loading…") is shown immediately when gameplay starts.
-It is polled each frame (≤100 ms interval) and removed once `areRoomSpritesReady(currentRoom)`
-returns true (all folder-theme sprites for the spawn room are loaded).  The player sees a
-clean black screen with "Loading…" text instead of a partially-textured world.
+- `prewarmFolderThemeShadedForChunk(themeId, colMin, rowMin, colMax, rowMax, seed, mask, blockSizePx, use2x2)` — iterates tiles, calls shaded-sprite functions under budget.
+- `prewarmProceduralSpriteVariant(baseUrl, templateUrl, widthPx, heightPx, flipX, flipY, rotStep, mask, col, row, seed)` — calls `getProceduralSprite` for one variant.
+- `isRoomBackgroundDecodeReady(worldNumber, backgroundId?)` in `backgroundRenderer.ts`.
+- `isRoomBackgroundDecodeReady(room)` thin wrapper in `roomAssetPreloader.ts`.
+
+---
+
+## Part D — Entry Viewport Visual Warm (BUILD 402 / BUILD 404)
+
+BUILD 401 made gameplay freeze-safe by returning stable unshaded fallback canvases when `isBakeForbiddenInGameplay()` is true. This eliminated all `getImageData`/`putImageData` spikes during active gameplay. The trade-off was that tiles visible immediately after room entry could appear briefly unshaded until their shaded variants were baked in a later frame.
+
+BUILD 402 closes this gap by adding a bounded entry viewport warm pass.  BUILD 403 moved `tickEntryWarm()` into a dedicated early branch in the RAF loop.  BUILD 404 removes the remaining eager pre-tick from the instant transition callback.
+
+### D.1 — Entry warm controller (`entryViewportWarm.ts`)
+
+New module `src/screens/entryViewportWarm.ts` manages `EntryWarmState`, which tracks phase (`idle` | `warming` | `ready` | `timedOut`), frames elapsed, ms spent, and chunks warmed.
+
+`startEntryWarm()` is called after every room load (initial startup, instant transition, and async transition generator completion). It computes the entry camera offset from the spawn block and stores the viewport parameters.
+
+`tickEntryWarm()` is called **only** from the dedicated early branch in `gameScreen.ts`, which fires BEFORE `processPlayerCommands`, before sim ticks, before camera update, and before `FP.setFrameGameContext('gameplay')`. The frame context is set to `'entryWarm'` so freeze-profiler warnings distinguish entry-warm work from active-gameplay freezes. `setBakeForbiddenInGameplay(false)` is set explicitly in this branch so shaded sprites can be baked freely. When the warm completes or times out, subsequent frames proceed normally as gameplay frames with `setBakeForbiddenInGameplay(true)`.
+
+**Instant cache-hit transitions** call `startEntryWarm()` then immediately show a lightweight textless overlay (`loadingOverlay.showEntryWarm()`) and return.  No chunk building occurs inside the transition callback.  The RAF loop's `entryWarm` early branch advances the warm on the very next frame; if no work is needed the warm completes in one frame and the overlay fades out in 80 ms.  This ensures the overlay is always visible before any warm work starts, preventing hidden hitches on the room-boundary frame.
+
+### D.2 — Loading overlay gate
+
+`tickLoadingOverlay()` in `gameScreen.ts` requires all of the following before releasing the overlay:
+
+1. No async room load in progress (`!asyncLoadState.isActive`).
+2. Source sprites are ready (`areRoomSpritesReady`).
+3. Background image is decoded (`isRoomBackgroundDecodeReady`).
+4. The entry warm pass completed or timed out (`isEntryWarmReadyOrTimedOut`).
+
+The timeout (8 frames / 120 ms) guarantees this never produces a long loading screen.
+
+A **room entry hold** guard after the `entryWarm` branch holds simulation and input while the overlay remains visible and sprites/background are not yet decoded.  This prevents gameplay advancing behind a still-visible overlay once the entry warm phase is done.
+
+### D.3 — Guarantees
+
+- **No warm work before overlay**: `tickEntryWarm()` is never called from `startTransitionLoad()`.  The overlay is always visible before the first warm tick runs.
+- **No gameplay freezes**: the warm pass runs in an `'entryWarm'` frame context before command processing and sim ticks.  `setBakeForbiddenInGameplay(false)` is set explicitly, so all baking is outside the active-gameplay window.  The freeze profiler distinguishes `ctx:entryWarm` from `ctx:gameplay`.
+- **Player fully protected**: `processPlayerCommands`, sim ticks, movement, and run-timer advancement are all skipped while `entryWarmState.phase === 'warming'` or while the room entry hold guard is active.  The loading overlay covers the viewport throughout.
+- **Minimal unshaded fallback**: the loading overlay is held until the entry viewport's shaded chunks are ready or the safe timeout fires.
+- **Bounded overlay delay**: worst-case extra hold is 120 ms (the timeout budget).
+- **No-op when not needed**: `isEntryWarmReadyOrTimedOut` returns true immediately when phase is `idle`, `ready`, or `timedOut`, so rooms without folder-based themes release the overlay instantly (after the 80 ms entry warm cover fades).
 
 ---
 
 ## Already Well-Optimised Areas (Do Not Regress)
 
-- **Wall bake cache** (`_bakedWallCanvas`): walls are pre-rendered once to an offscreen canvas
-  and blitted cheaply every frame.  Invalidated correctly on room/theme/lighting changes.
-- **Ambient-light BFS** (`buildAmbientDepths`): memoised per `(roomSize × direction × blockerSet)`.
-  Cost is O(tiles) only on the first render of a new configuration, then O(1) lookup.
-- **ImageCache** (`render/imageCache.ts`): `loadImg()` is a singleton cache — no URL is ever
-  loaded into two separate `HTMLImageElement` objects.
-- **Wall layout cache** (`blockWallLayoutCache.ts`): occupancy grid, neighbour masks, and 2×2
-  detection are memoised per wall-snapshot signature.
-- **RenderProfiler**: per-stage timing overlay in debug mode (F9 / pause-menu debug toggle).
-  Shows BG / Walls / Entities / Particles / Dust / Bloom / Lighting / HUD timing.
+- **Chunked wall/background rendering** (`chunkRenderCache.ts`): walls and background blocks render through per-chunk offscreen canvases. Dirty chunks rebuild under a per-frame cap. Only viewport-visible chunks plus a safety margin are blitted.
+- **Idle-time chunk prewarming** (`roomRenderChunkWarmScheduler.ts`): adjacent rooms' wall/background chunks are speculatively built during idle time and adopted on room entry.
+- **Ambient-light BFS memoisation** (`buildAmbientDepths`): O(tiles) only on first use per configuration.
+- **ImageCache deduplication** (`render/imageCache.ts`): `loadImg()` is a singleton cache.
+- **Wall layout cache** (`blockWallLayoutCache.ts`): occupancy, neighbour masks, and 2×2 detection memoised per wall-snapshot signature.
+- **Bounded variant caches**: `SHADED_VARIANT_BUCKETS = 16` in `folderBlockThemes.ts`, `PROC_VARIANT_BUCKETS = 16` in `proceduralBlockSprite.ts`.
+- **Scene-light viewport culling** and **bloom empty-frame skipping**.
+- **RenderProfiler** (F9 / pause-menu debug toggle): per-stage timing for BG/Walls/Entities/Particles/Dust/Bloom/Lighting/HUD.
+
+---
+
+## How to Use the Freeze Profiler
+
+1. Open the pause menu → enable **Debug Overlay** → enable **Freeze Profiler**.
+2. Move through rooms. Key fields:
+   - `ctx:gameplay` — active-gameplay frame; freeze warnings are prefixed `⚠ GAMEPLAY`.
+   - `ctx:entryWarm` — entry viewport warm frame; sim/input skipped, overlay active, baking allowed.
+   - `ctx:loading` — async room load in progress.
+   - `bake N×Xms` — shaded-sprite bake calls this frame. Should be **0** during active gameplay after BUILD 401.
+   - `edge N×Xms` — organic edge-shading calls. Should be **0** during active gameplay.
+   - `wChk N×Xms` — wall chunks rebuilt. Small spikes on first entry; tapers to 0.
+   - `bChk N×Xms` — background chunks rebuilt.
+3. If `bake` or `edge` spikes appear during `ctx:gameplay`, the `isBakeForbiddenInGameplay()` flag is not being set or the sprite function is not checking it.
 
 ---
 
 ## Remaining Known Issues / Future Work
 
-1. **`loadRoom()` synchronous stall**: for very large rooms (> 6000 tiles) the stall can
-   exceed 50 ms even behind the fade.  Chunked/yielding particle spawn or wall-processing
-   across multiple idle callbacks would address this.
-2. **procblockSprite has its own private image cache**: `proceduralBlockSprite.ts` uses a
-   module-level `_imgCache` separate from `render/imageCache.ts`.  These could be unified for
-   more accurate readiness reporting.
-3. **Non-folder themes (blackRock, brownRock, dirt, world sprites)** are not checked by
-   `areRoomSpritesReady()` — the loading overlay uses only folder-based theme readiness.
-   Legacy world sprites begin loading at module init time so they are typically ready within a
-   few hundred ms anyway.
-4. **LRU room cache**: if the campaign grows very large, all room defs stay in memory forever
-   (they are plain JSON objects).  This is unlikely to matter in practice (<5 MB total) but
-   could be addressed with a bounded cache if needed.
-5. **Worker-based room parsing / asset decoding**: for future campaigns with many large rooms,
-   decoding images via `createImageBitmap()` in a Worker and uploading the result to an
-   `OffscreenCanvas` or `ImageBitmap` would remove image decode time from the main thread.
-   This is currently not implemented because the integration risk is non-trivial.
+1. **Entry warm lifecycle is complete (BUILD 404/405).** `tickEntryWarm()` is never called from inside `startTransitionLoad()`.  Instant transitions call `canSkipEntryWarm()` first — if the active chunk caches already cover the entry viewport (e.g. the room was prewarmed before the player arrived), the overlay is skipped entirely.  If warm work is needed, a lightweight textless overlay is shown and the RAF loop advances the warm in the dedicated `entryWarm` branch.  `ctx:entryWarm` is distinct from `ctx:gameplay` in the freeze profiler.
+2. **Non-folder themes** (blackRock, brownRock, dirt, world sprites) are not checked by `areRoomSpritesReady()`. They begin loading at module init time and are typically ready within a few hundred ms.
+3. **Base-chunk / lighting-overlay split** — `setActiveBlockLighting` invalidates whole wall chunks. Separating base tiles from lighting overlay would allow lighter lighting-only rebuilds.
+4. **Global prewarm memory eviction** — `evictStalePrewarmedChunks(keepRoomIds)` is called at schedule start and after each idle slice that grows the cache past the quality-tier budget. True LRU ordering within the budget is not yet implemented — eviction currently prefers highest-radius/largest-memory candidates.
+5. **Room render manifest** — Future: editor-exported precomputed render data (chunk occupancy, entry chunks, theme sprite URLs) to make room preloading deterministic.
 
----
-
-## How to Test Locally
-
-1. `npm run build && vite preview` (or `npm run dev`).
-2. Open in a browser with **DevTools → Network → throttled to "Slow 3G"** to simulate slow
-   asset loading.
-3. Start a new campaign:
-   - Confirm the "Loading…" overlay appears before the game world is visible.
-   - Confirm it disappears once block sprites are ready and the room is fully textured.
-4. Walk through a door to an adjacent room:
-   - Confirm a brief black fade-out (~167 ms) before the new room appears.
-   - Confirm a fade-in (~167 ms) after the new room loads.
-   - Confirm block sprites are ready in the new room (no solid-colour fallback tiles) because
-     they were preloaded in the background while you played the previous room.
-5. Continue through several rooms and verify adjacent-room preloading keeps up.
-6. Confirm ramps, platforms, crumble blocks, lighting, save tombs, particles, grapple, and
-   editor mode still work correctly.

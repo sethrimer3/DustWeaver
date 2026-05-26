@@ -50,7 +50,7 @@ const _SPECIAL_BLOCKS_GLOB = import.meta.glob(
 // Only folders representing static wall textures are valid wall themes.
 // Folders like 'kineticBlock' and 'fallingBlockOverlay' are dynamic overlays
 // drawn by the hazard renderer, not by the wall texture system.
-const _SPECIAL_WALL_THEMES = new Set(['iceBlock']);
+const _SPECIAL_WALL_THEMES = new Set(['iceBlock', 'ultraIceBlock']);
 
 // ── Folder name filter ────────────────────────────────────────────────────────
 
@@ -342,21 +342,72 @@ export function getTheme1x1Sprite(
  * Cache of edge-shaded canvases for folder-based sprites.
  *
  * Keyed by a string encoding (source URL, dimensions, openAirSidesMask,
- * worldOriginX, worldOriginY, seed) so each unique per-tile configuration
- * is baked at most once.
+ * variantBucket, seed).  The variant bucket (0–SHADED_VARIANT_BUCKETS-1) is
+ * derived from the tile position hash, bounding the cache to at most
+ * SHADED_VARIANT_BUCKETS entries per (url, size, mask) combination regardless
+ * of room size — previously the key included exact world coordinates, which
+ * created one canvas per tile and caused O(room_tiles) getImageData bakes.
  */
 const _shadedCache = new Map<string, HTMLCanvasElement>();
+
+/**
+ * Cheap unshaded fallback canvases for active-gameplay frames when baking is
+ * forbidden.  Keyed by URL only (no shading variants) — one canvas per source
+ * URL per size.  Created by a plain drawImage with no getImageData/putImageData
+ * and are stable non-null results that prevent chunk hadFallbacksFlag loops.
+ */
+const _unshadedCache8x8  = new Map<string, HTMLCanvasElement>();
+const _unshadedCache16x16 = new Map<string, HTMLCanvasElement>();
+
+/** Returns (or creates) an unshaded 16×16 canvas from a loaded source image. */
+function _getOrCreateUnshaded16x16(url: string, src: HTMLImageElement): HTMLCanvasElement {
+  const hit = _unshadedCache16x16.get(url);
+  if (hit !== undefined) return hit;
+  const canvas = document.createElement('canvas');
+  canvas.width  = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  if (ctx !== null) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(src, 0, 0, 16, 16);
+  }
+  _unshadedCache16x16.set(url, canvas);
+  return canvas;
+}
+
+/** Returns (or creates) an unshaded 8×8 canvas from a loaded source canvas. */
+function _getOrCreateUnshaded8x8(url: string, src: HTMLCanvasElement): HTMLCanvasElement {
+  const hit = _unshadedCache8x8.get(url);
+  if (hit !== undefined) return hit;
+  const canvas = document.createElement('canvas');
+  canvas.width  = 8;
+  canvas.height = 8;
+  const ctx = canvas.getContext('2d');
+  if (ctx !== null) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(src, 0, 0, 8, 8);
+  }
+  _unshadedCache8x8.set(url, canvas);
+  return canvas;
+}
+
+/**
+ * Number of distinct shading variants per (url, size, openAirMask, seed).
+ * Tile positions are hashed into this many buckets so the total canvas count
+ * stays bounded.  16 gives good visual variety with ~256 canvases per theme
+ * across all air-mask combinations, versus thousands for large rooms before.
+ */
+const SHADED_VARIANT_BUCKETS = 16;
 
 function _shadedCacheKey(
   url: string,
   widthPx: number,
   heightPx: number,
   openAirSidesMask: number,
-  worldOriginXWorld: number,
-  worldOriginYWorld: number,
+  variantBucket: number,
   seed: number,
 ): string {
-  return `${url}|${widthPx}|${heightPx}|${openAirSidesMask}|${worldOriginXWorld}|${worldOriginYWorld}|${seed}`;
+  return `${url}|${widthPx}|${heightPx}|${openAirSidesMask}|${variantBucket}|${seed}`;
 }
 
 /**
@@ -425,18 +476,31 @@ export function getTheme1x1SpriteShaded(
   const base = _getOrCreate8x8(url);
   if (base === null) return null; // source still loading
 
-  const worldX = col * blockSizePx;
-  const worldY = row * blockSizePx;
-  const key    = _shadedCacheKey(url, 8, 8, openAirSidesMask, worldX, worldY, seed);
+  // Use a bounded variant bucket instead of the exact tile world position as
+  // the cache key.  This caps shaded canvases at SHADED_VARIANT_BUCKETS per
+  // (url, openAirMask, seed) combination, preventing O(room_tiles)
+  // getImageData/putImageData bakes during active gameplay.
+  // Trade-off: tiles that share the same bucket share the same noise pattern
+  // (slight repetition), but smooth gameplay is the priority here.
+  const variantBucket = hashTilePosition(col, row, seed) % SHADED_VARIANT_BUCKETS;
+  // Representative world origin for this bucket — gives each bucket a unique
+  // noise pattern while remaining constant (so the canvas is reused every frame).
+  // Y is always 0; only the X axis carries per-bucket variation.
+  const bucketWorldX  = variantBucket * blockSizePx;
+  const bucketWorldY  = 0;
+  const key    = _shadedCacheKey(url, 8, 8, openAirSidesMask, variantBucket, seed);
   const cached = _shadedCache.get(key);
   if (cached !== undefined) return cached;
 
-  // Per-frame budget guard: if too many shaded canvases have been baked this
-  // frame already, return null so the chunk falls back and retries next frame.
-  // This prevents a burst of getImageData/putImageData calls from stalling gameplay.
-  if (FP.isBakeBudgetExhausted()) return null;
+  // During active gameplay, baking new shaded canvases is forbidden to prevent
+  // unexpected getImageData/putImageData stalls.  Return an unshaded fallback
+  // canvas instead — this is a stable non-null result so the chunk does NOT
+  // set hadFallbacksFlag and will NOT rebuild every frame.
+  if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    return _getOrCreateUnshaded8x8(url, base);
+  }
 
-  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, worldX, worldY, seed, key);
+  const shaded = _createShadedCanvas(base, 8, 8, openAirSidesMask, bucketWorldX, bucketWorldY, seed, key);
   _shadedCache.set(key, shaded);
   return shaded;
 }
@@ -476,16 +540,22 @@ export function getTheme2x2SpriteShaded(
   const img = loadImg(url);
   if (!img.complete || img.naturalWidth === 0) return null; // source still loading
 
-  const worldX = col * blockSizePx;
-  const worldY = row * blockSizePx;
-  const key    = _shadedCacheKey(url, 16, 16, openAirSidesMask, worldX, worldY, seed);
+  // Bounded variant bucket (same approach as getTheme1x1SpriteShaded).
+  // Y is always 0; only the X axis carries per-bucket variation.
+  const variantBucket = hashTilePosition(col, row, seed) % SHADED_VARIANT_BUCKETS;
+  const bucketWorldX  = variantBucket * blockSizePx;
+  const bucketWorldY  = 0;
+  const key    = _shadedCacheKey(url, 16, 16, openAirSidesMask, variantBucket, seed);
   const cached = _shadedCache.get(key);
   if (cached !== undefined) return cached;
 
-  // Per-frame budget guard (same as 1×1 path).
-  if (FP.isBakeBudgetExhausted()) return null;
+  // During active gameplay, baking new shaded canvases is forbidden.  Return a
+  // cheap unshaded canvas so the chunk renders without hadFallbacksFlag loops.
+  if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    return _getOrCreateUnshaded16x16(url, img);
+  }
 
-  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, worldX, worldY, seed, key);
+  const shaded = _createShadedCanvas(img, 16, 16, openAirSidesMask, bucketWorldX, bucketWorldY, seed, key);
   _shadedCache.set(key, shaded);
   return shaded;
 }
@@ -517,4 +587,55 @@ export function getFolderThemeBaseUrl(
   if (entry === null || entry.sprite16Urls.length === 0) return null;
   const hash = hashTilePosition(col, row, seed);
   return entry.sprite16Urls[hash % entry.sprite16Urls.length];
+}
+
+// ── Derived-sprite prewarm helpers ────────────────────────────────────────────
+
+/**
+ * Proactively warms the shaded-canvas cache for a rectangle of folder-based
+ * tiles during a loading or prewarm phase (baking is allowed).
+ *
+ * Iterates the tile grid from (colMin,rowMin) to (colMax,rowMax) inclusive for
+ * the given `themeId` and calls `getTheme1x1SpriteShaded` / `getTheme2x2SpriteShaded`
+ * so each variant bucket is baked and stored before the player regains control.
+ *
+ * Call this from the entry-viewport prewarm path with the loading overlay still
+ * visible.  Each call respects `isBakeBudgetExhausted()` and stops early when
+ * the per-frame cap is reached — the caller should spread across multiple frames
+ * if needed.
+ *
+ * @param themeId          Folder theme ID (e.g. `'grayStone'`).
+ * @param colMin           First tile column (inclusive).
+ * @param rowMin           First tile row (inclusive).
+ * @param colMax           Last tile column (inclusive).
+ * @param rowMax           Last tile row (inclusive).
+ * @param seed             World/room seed.
+ * @param openAirSidesMask Typical air-mask for these tiles (or OPEN_AIR_ALL_SIDES).
+ * @param blockSizePx      Block size in world units (normally 8).
+ * @param use2x2           When true, prewarm 16×16 (2×2) shaded sprites; otherwise 8×8 (1×1).
+ * @returns                `true` when all requested variants were baked; `false`
+ *                         when the per-frame budget ran out early (retry next frame).
+ */
+export function prewarmFolderThemeShadedForChunk(
+  themeId:          string,
+  colMin:           number,
+  rowMin:           number,
+  colMax:           number,
+  rowMax:           number,
+  seed:             number,
+  openAirSidesMask: number,
+  blockSizePx:      number,
+  use2x2:           boolean,
+): boolean {
+  for (let row = rowMin; row <= rowMax; row++) {
+    for (let col = colMin; col <= colMax; col++) {
+      if (FP.isBakeBudgetExhausted()) return false;
+      if (use2x2) {
+        getTheme2x2SpriteShaded(themeId, col, row, seed, openAirSidesMask, blockSizePx);
+      } else {
+        getTheme1x1SpriteShaded(themeId, col, row, seed, openAirSidesMask, blockSizePx);
+      }
+    }
+  }
+  return true;
 }

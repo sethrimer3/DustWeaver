@@ -7,7 +7,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { TransitionDirection, BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle } from '../levels/roomDef';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -377,12 +377,20 @@ export interface RoomJsonDef {
   ambientLightDirection?: AmbientLightDirection;
   /** Directional-bias blend (0 = broad ambient, 1 = spotlight). Range 0–1. */
   directionalBias?: number;
-  /** Side-exposure strength for non-sky-connected air neighbours. Range 0–1. */
+  /** Side-exposure strength for non-sky-facing air neighbours. Range 0–1. */
   sideExposureStrength?: number;
   /** Minimum brightness fraction for tiles adjacent to open air. Range 0–1. */
   minimumWallLight?: number;
   /** Gamma-like exponent on the raw exposure value. Range 0.5–3. */
   falloffPower?: number;
+  /** Optional warm-light spill onto air/background. 0 = no spill (default). Range 0–0.5. */
+  backgroundLightSpill?: number;
+  /** Softness of per-tile darkness overlay. 0 = crisp (default). Range 0–1. */
+  solidLightSoftness?: number;
+  /** Block seam blending mode. Omitted when 'off'. */
+  blockSeamBlending?: BlockSeamBlending;
+  /** Void edge style. Omitted when 'off'. */
+  voidEdgeStyle?: VoidEdgeStyle;
   /** Sparse tile-coord list of authored ambient-light blockers. */
   ambientLightBlockers?: RoomJsonAmbientLightBlocker[];
   /** Sparse list of authored local light sources. */

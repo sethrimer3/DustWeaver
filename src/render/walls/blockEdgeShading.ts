@@ -270,6 +270,16 @@ import * as FP from '../../debug/perfFreezeProfiler';
  * depth darkening + outer-corner overlay), and writes the result back.
  * All shading is multiply-based so hue is preserved.
  *
+ * ⚠️  CALLER BUDGET RESPONSIBILITY
+ *   This function calls `getImageData`/`putImageData` which are expensive GPU
+ *   readback/writeback operations.  Callers MUST check
+ *   `FP.isBakeBudgetExhausted()` from `perfFreezeProfiler.ts` BEFORE calling
+ *   this function to avoid an unbounded per-frame GPU readback burst.
+ *   See `proceduralBlockSprite.getProceduralSprite` and
+ *   `folderBlockThemes._createShadedCanvas` for examples of correct usage
+ *   with a preceding budget guard.  Direct callers that bypass those helpers
+ *   must add their own guard to preserve the per-frame bake budget.
+ *
  * @param ctx                  The 2D rendering context containing the sprite.
  * @param widthPx              Canvas width in pixels.
  * @param heightPx             Canvas height in pixels.

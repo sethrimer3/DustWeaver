@@ -261,6 +261,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallIsBouncePadFlag[wallIdx] = 0;
       world.wallBouncePadSpeedFactorIndex[wallIdx] = 0;
       world.wallIsIceFlag[wallIdx] = 0;
+      world.wallIsUltraIceFlag[wallIdx] = 0;
       world.wallIsKineticBlockFlag[wallIdx] = 1;
       world.wallKineticBlockIndex[wallIdx] = world.kineticBlockCount;
     }

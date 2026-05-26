@@ -502,6 +502,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       sideExposureStrength:  json.sideExposureStrength,
       minimumWallLight:      json.minimumWallLight,
       falloffPower:          json.falloffPower,
+      blockSeamBlending:     json.blockSeamBlending,
+      voidEdgeStyle:         json.voidEdgeStyle,
       songId: parseSongId(json.songId),
       widthBlocks: json.widthBlocks,
       heightBlocks: json.heightBlocks,

@@ -45,6 +45,7 @@ import {
   ODC_SMALL_RING_RADII,
   ODC_LARGE_RING_RADII,
 } from '../clusters/orbitalDustCoreConfig';
+import { DWA_HIT_FLASH_TICKS } from '../clusters/dustWeaverArchitectConfig';
 
 // Particle half-size: 1/6th of the player's full width (8 world units) divided by 2.
 // Square hitbox side = 8/6 ≈ 1.333 wu; radius = side/2 ≈ 0.667 wu.
@@ -535,6 +536,10 @@ export function applyInterParticleForces(world: WorldState): void {
             if (cluster.healthPoints <= 0) {
               cluster.healthPoints = 0;
               cluster.isAliveFlag = 0;
+            }
+            // Trigger hit flash on the Architect core when it takes damage.
+            if (cluster.isDustWeaverArchitectFlag === 1 && damage > 0) {
+              cluster.dustWeaverArchitectHitFlashTicks = DWA_HIT_FLASH_TICKS;
             }
           }
           // Rolling enemies become aggressive when hit — chase player even

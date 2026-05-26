@@ -49,6 +49,8 @@ export interface RoomWallTemplate {
   readonly isPillarHalfWidthFlag: Uint8Array;
   /** 1 for walls whose theme is 'ice' — used for ice-surface physics and grapple rejection. */
   readonly isIceFlag: Uint8Array;
+  /** 1 for walls whose theme is 'ultraIceBlock' — velocity lock and grapple recharge suppression. */
+  readonly isUltraIceFlag: Uint8Array;
 }
 
 /** Epsilon used when deciding whether wall edges are contiguous during merge. */
@@ -108,6 +110,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
   const ro: number[] = []; // rampOrientationIndex (255 = not a ramp)
   const ph: number[] = []; // isPillarHalfWidthFlag (0 or 1)
   const ic: number[] = []; // isIceFlag (0 or 1)
+  const uic: number[] = []; // isUltraIceFlag (0 or 1)
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -134,6 +137,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
       ? room.blockTheme ?? ''
       : indexToBlockTheme(themeIdx);
     ic.push(resolvedTheme === 'ice' || resolvedTheme === 'iceBlock' ? 1 : 0);
+    uic.push(resolvedTheme === 'ultraIceBlock' ? 1 : 0);
   }
 
   // ── Iterative merge pass ─────────────────────────────────────────────────
@@ -174,7 +178,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
             fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
-            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1);
             merged = true;
             break;
           }
@@ -200,7 +204,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
             fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
-            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1);
             merged = true;
             break;
           }
@@ -226,6 +230,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     rampOrientationIndex: new Uint8Array(finalCount),
     isPillarHalfWidthFlag: new Uint8Array(finalCount),
     isIceFlag: new Uint8Array(finalCount),
+    isUltraIceFlag: new Uint8Array(finalCount),
   };
   for (let wi = 0; wi < finalCount; wi++) {
     template.xWorld[wi] = xs[wi];
@@ -240,6 +245,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     template.rampOrientationIndex[wi] = ro[wi];
     template.isPillarHalfWidthFlag[wi] = ph[wi];
     template.isIceFlag[wi] = ic[wi];
+    template.isUltraIceFlag[wi] = uic[wi];
   }
   return template;
 }
@@ -272,6 +278,7 @@ export function applyRoomWallTemplate(world: WorldState, template: RoomWallTempl
     world.wallIsBouncePadFlag[wi] = 0;
     world.wallBouncePadSpeedFactorIndex[wi] = 0;
     world.wallIsIceFlag[wi] = template.isIceFlag[wi];
+    world.wallIsUltraIceFlag[wi] = template.isUltraIceFlag[wi];
     world.wallIsKineticBlockFlag[wi] = 0;
     world.wallKineticBlockIndex[wi] = -1;
   }

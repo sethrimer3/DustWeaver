@@ -129,6 +129,7 @@ export function getLiquidDebugStats(): LiquidDebugStats {
  * Despawns expired bubbles and spawns new ones.
  */
 export function tickLiquidBubbles(tick: number): void {
+  if (_bodies.length === 0) return;
   if (tick === _lastBubbleTick) return; // Already ticked this tick
   _lastBubbleTick = tick;
 
@@ -138,7 +139,7 @@ export function tickLiquidBubbles(tick: number): void {
   }
 
   for (const body of _bodies) {
-    const { bubbles, tileSet, bottomByColumn, topByColumn } = body;
+    const { bubbles, tileSet, bottomByColumn, topByColumn, columnKeys } = body;
     const B = BLOCK_SIZE_MEDIUM;
 
     // ── Tick existing bubbles ──────────────────────────────────────────────
@@ -186,9 +187,8 @@ export function tickLiquidBubbles(tick: number): void {
       && globalBubbleCount < LIQUID_BUBBLE_GLOBAL_CAP
       && bottomByColumn.size > 0
     ) {
-      // Pick a random column
-      const cols = Array.from(bottomByColumn.keys());
-      const col = cols[Math.floor(Math.random() * cols.length)];
+      // Pick a random column (use pre-built columnKeys to avoid per-frame Array.from allocation)
+      const col = columnKeys[Math.floor(Math.random() * columnKeys.length)];
       const bottomY = bottomByColumn.get(col)!;
 
       // Spawn near bottom of that column

@@ -220,6 +220,9 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // ── Ice blocks (static wall theme with ice-surface physics) ───────────────
   { id: 'ice_block_1x1', label: 'Ice Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'iceBlock' },
   { id: 'ice_block_2x2', label: 'Ice Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, blockThemeOverride: 'iceBlock' },
+  // ── Ultra ice blocks (velocity-locking ice with sparkling effect) ─────────
+  { id: 'ultra_ice_block_1x1', label: 'Ultra Ice Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'ultraIceBlock' },
+  { id: 'ultra_ice_block_2x2', label: 'Ultra Ice Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, blockThemeOverride: 'ultraIceBlock' },
   // ── Background blocks (visual-only, no collision) ────────────────────────
   { id: 'bg_block_1x1',       label: 'BG Block 1×1',              category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBackgroundBlockItem: 1 as const },
   { id: 'bg_block_2x2',       label: 'BG Block 2×2',              category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBackgroundBlockItem: 1 as const },

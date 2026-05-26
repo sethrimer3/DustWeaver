@@ -37,9 +37,11 @@
 import type { ChunkCacheStats } from '../walls/chunkRenderCache';
 import type { TransitionDebugStats } from '../transitions/transitionState';
 import type { LiquidDebugStats } from '../liquidBodyCache';
+import type { EntryWarmState } from '../../screens/entryViewportWarm';
 import type { DebugPanelVisibility } from '../../ui/debugPanelManager';
 import { isPanelVisible } from '../../ui/debugPanelManager';
 import * as FP from '../../debug/perfFreezeProfiler';
+import { getBgImageStats } from '../backgroundRenderer';
 
 // ── Stage identifiers ────────────────────────────────────────────────────────
 
@@ -143,6 +145,12 @@ export class RenderProfiler {
   /** Latest liquid body debug stats. */
   private _liquidStats: LiquidDebugStats | null = null;
 
+  /** Latest prewarm stats from the chunk warm scheduler. */
+  private _prewarmStats: import('../../screens/roomRenderChunkWarmScheduler').PrewarmStats | null = null;
+
+  /** Latest entry warm state snapshot for the prewarm debug panel. */
+  private _entryWarmState: EntryWarmState | null = null;
+
   /**
    * Store the latest chunk-cache diagnostic counters.
    * Call this from gameRender.ts after the walls render stage when debug mode
@@ -175,6 +183,22 @@ export class RenderProfiler {
    */
   updateLiquidStats(stats: LiquidDebugStats): void {
     this._liquidStats = stats;
+  }
+
+  /**
+   * Store the latest prewarm stats from roomRenderChunkWarmScheduler.
+   * Call this once per frame from gameScreen.ts when debug mode is on.
+   */
+  updatePrewarmStats(stats: import('../../screens/roomRenderChunkWarmScheduler').PrewarmStats): void {
+    this._prewarmStats = stats;
+  }
+
+  /**
+   * Store a snapshot of the current entry warm state for the debug overlay.
+   * Call this once per frame from gameScreen.ts when debug mode is on.
+   */
+  updateEntryWarmState(state: EntryWarmState): void {
+    this._entryWarmState = state;
   }
 
   // ── Frame-pacing API ──────────────────────────────────────────────────────
@@ -239,6 +263,17 @@ export class RenderProfiler {
    */
   getAvgFrameMs(): number {
     return this._smoothedMs[STAGE_TOTAL];
+  }
+
+  /**
+   * Returns the most-recently recorded raw frame time (ms).
+   * Used by the chunk prewarm scheduler to detect high-load frames and
+   * reduce or pause prewarming.  Returns 0 before any frame has been recorded.
+   */
+  getLastFrameMs(): number {
+    if (this._ringCount === 0) return 0;
+    const idx = (this._ringHead - 1 + RenderProfiler.RING_SIZE) % RenderProfiler.RING_SIZE;
+    return this._frameTimes[idx];
   }
 
   /**
@@ -337,9 +372,10 @@ export class RenderProfiler {
     const showRoom   = isPanelVisible('room',        panelVisibility);
     const showWater  = isPanelVisible('water',       panelVisibility);
     const showFreeze = isPanelVisible('freeze',      panelVisibility);
+    const showPrewarm = isPanelVisible('prewarm',    panelVisibility);
 
     // Nothing to render — bail early to avoid drawing an empty frame.
-    if (!showPerf && !showChunks && !showRoom && !showWater && !showFreeze) return;
+    if (!showPerf && !showChunks && !showRoom && !showWater && !showFreeze && !showPrewarm) return;
 
     const lineHeightPx = 9;
     const fontSizePx   = 7;
@@ -435,10 +471,12 @@ export class RenderProfiler {
     // ── Background-block chunk cache stats panel ──────────────────────────────
     if (showChunks && this._bgChunkStats !== null) {
       const bc = this._bgChunkStats;
+      const bgImgStats = getBgImageStats();
       const bgLines = [
         `BG Chunks V=${bc.visibleChunkCount} T=${bc.totalChunkCount}`,
         `Dirty=${bc.dirtyChunkCount} Built=${bc.rebuiltThisFrame} Skip=${bc.skippedThisFrame}`,
         `RbldMs=${bc.rebuildMsThisFrame.toFixed(1)} Mem~${bc.memoryEstimateKB}KB`,
+        `BgImg rdy=${bgImgStats.drawReady} !rdy=${bgImgStats.drawNotReady} fb=${bgImgStats.fallbacksThisFrame}`,
       ];
       const bgPanelH = bgLines.length * lineHeightPx + 8;
       ctx.save();
@@ -509,6 +547,9 @@ export class RenderProfiler {
           ? `frame ${cur.frameMs.toFixed(1)}ms  top:${cur.topCause || '—'}`
           : 'frame —',
         cur !== null
+          ? `ctx:${cur.frameContext}`
+          : 'ctx —',
+        cur !== null
           ? `wChk ${cur.wallChunkBuiltCount}×${cur.wallChunkBuildMs.toFixed(1)}ms`
           : 'wChk —',
         cur !== null
@@ -526,6 +567,12 @@ export class RenderProfiler {
         cur !== null && cur.preloadMainThreadMs > 0
           ? `prel ${cur.preloadMainThreadMs.toFixed(1)}ms (${cur.preloadMainThreadRoomId.slice(0, 12)})`
           : 'prel —',
+        cur !== null && cur.sceneLightTotalCount > 0
+          ? `lit tot=${cur.sceneLightTotalCount} vis=${cur.sceneLightCulledCount} shd=${cur.sceneLightShadowCount} segs=${cur.sceneLightOccluderSegCount}`
+          : 'lit —',
+        cur !== null && cur.bloomSkippedNoGlow
+          ? 'bloom skip(no glow)'
+          : 'bloom —',
         long !== null
           ? `last>100: ${long.frameMs.toFixed(0)}ms ${long.topCause}`
           : 'last>100: —',
@@ -540,8 +587,66 @@ export class RenderProfiler {
       ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, freezePanelH);
       for (let i = 0; i < freezeLines.length; i++) {
         const isWarn = cur !== null && i === 1 && cur.frameMs > FP.LONG_FRAME_WARN_MS;
-        ctx.fillStyle = isWarn ? '#ff6060' : i === 0 ? '#ffcc00' : '#d0d0ff';
+        // Highlight active-gameplay freezes in a distinct colour.
+        const isGameplayCtx = cur !== null && i === 2 && cur.frameContext === 'gameplay' && cur.frameMs > FP.LONG_FRAME_WARN_MS;
+        ctx.fillStyle = isWarn ? '#ff6060' : isGameplayCtx ? '#ffaa00' : i === 0 ? '#ffcc00' : '#d0d0ff';
         ctx.fillText(freezeLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+    }
+
+    // ── Prewarm stats panel ───────────────────────────────────────────────────
+    if (showPrewarm && this._prewarmStats !== null) {
+      const pw = this._prewarmStats;
+      const prewarmLines = [
+        '── Chunk Prewarm ──',
+        `Queue: ${pw.queueLength}  Radius: ${pw.currentRadius}`,
+        `Wall rooms: ${pw.wallRoomCount}  chunks: ${pw.totalWallChunks}`,
+        `Wall mem: ~${pw.wallMemoryEstimateKB}KB`,
+        `BG rooms: ${pw.bgRoomCount}  chunks: ${pw.totalBgChunks}`,
+        `BG mem: ~${pw.bgMemoryEstimateKB}KB`,
+        `Total mem: ~${pw.totalPrewarmMemoryKB}KB  budget: ${pw.memoryBudgetKB}KB`,
+        `Last slice: ${pw.chunksLastSlice}ch skip:${pw.chunksSkippedLastSlice} ${pw.msLastSlice.toFixed(1)}ms`,
+        `W hits: ${pw.wallCacheHits}  miss: ${pw.wallCacheMisses}`,
+        `BG hits: ${pw.bgCacheHits}  miss: ${pw.bgCacheMisses}`,
+        `Defer!rdy: ${pw.deferredNotReady}  !spr: ${pw.deferredSpritesNotReady}`,
+        `Evict pass: ${pw.evictedThisPass}  total: ${pw.totalEvictions}`,
+        pw.pausedForFrameTime ? '⚠ PAUSED (frame time)' : '● warming',
+      ];
+      const prewarmPanelH = prewarmLines.length * lineHeightPx + 8;
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.70)';
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, prewarmPanelH);
+      for (let i = 0; i < prewarmLines.length; i++) {
+        const isHeader  = i === 0;
+        const isPaused  = i === prewarmLines.length - 1 && pw.pausedForFrameTime;
+        ctx.fillStyle = isHeader ? '#ffdd44' : isPaused ? '#ff6060' : '#a8d8ff';
+        ctx.fillText(prewarmLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
+      }
+      ctx.restore();
+      nextPanelY += prewarmPanelH + 4;
+    }
+
+    // ── Entry warm stats panel ────────────────────────────────────────────────
+    if (showPrewarm && this._entryWarmState !== null) {
+      const ew = this._entryWarmState;
+      const isWarming = ew.phase === 'warming';
+      const ewLines = [
+        '── Entry Warm ──',
+        `Phase: ${ew.phase}${ew.usedFallbackRelease ? ' (timeout)' : ''}`,
+        `Frames: ${ew.framesWarmed}  Chunks: ${ew.chunksWarmed}`,
+        `Ms: ${ew.msSpent.toFixed(1)}  Room: ${ew.roomId}`,
+      ];
+      const ewPanelH = ewLines.length * lineHeightPx + 8;
+      ctx.save();
+      ctx.font = `${fontSizePx}px monospace`;
+      ctx.fillStyle = 'rgba(0,0,0,0.70)';
+      ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, ewPanelH);
+      for (let i = 0; i < ewLines.length; i++) {
+        const isHeader = i === 0;
+        ctx.fillStyle = isHeader ? '#ffdd44' : isWarming ? '#ffcc44' : ew.phase === 'timedOut' ? '#ff9944' : '#a8ffa8';
+        ctx.fillText(ewLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();
     }

@@ -11,7 +11,7 @@ import {
   BlockTheme, BackgroundId, LightingEffect, SONG_OPTIONS, RoomSongId,
   AMBIENT_LIGHT_DIRECTION_OPTIONS, AmbientLightDirection,
   RoomEdge, EditorUICallbacks, BrushMode, BlockPlacementModifier,
-  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant,
+  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle,
 } from './editorState';
 import {
   addDimField,
@@ -355,12 +355,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   lightingDiv.appendChild(dirBiasRow);
 
   const { row: sideExpRow, slider: sideExpSlider, valueLabel: sideExpValLabel } =
-    makeSliderRow('Side Exposure', 0, 1, 0.01, 0.45,
+    makeSliderRow('Side/Bottom Exposure', 0, 1, 0.01, 0.35,
       (v) => callbacks?.onSideExposureStrengthChange(v));
   lightingDiv.appendChild(sideExpRow);
 
   const { row: minWallRow, slider: minWallSlider, valueLabel: minWallValLabel } =
-    makeSliderRow('Min Wall Light', 0, 1, 0.01, 0.18,
+    makeSliderRow('Min Wall Light', 0, 1, 0.01, 0.15,
       (v) => callbacks?.onMinimumWallLightChange(v));
   lightingDiv.appendChild(minWallRow);
 
@@ -368,6 +368,73 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     makeSliderRow('Falloff Power', 0.5, 3, 0.05, 1.4,
       (v) => callbacks?.onFalloffPowerChange(v));
   lightingDiv.appendChild(falloffRow);
+
+  const { row: bgSpillRow, slider: bgSpillSlider, valueLabel: bgSpillValLabel } =
+    makeSliderRow('Background Spill', 0, 0.5, 0.01, 0.0,
+      (v) => callbacks?.onBackgroundLightSpillChange(v));
+  lightingDiv.appendChild(bgSpillRow);
+
+  const { row: slSoftRow, slider: slSoftSlider, valueLabel: slSoftValLabel } =
+    makeSliderRow('Solid Light Softness', 0, 1, 0.01, 0.0,
+      (v) => callbacks?.onSolidLightSoftnessChange(v));
+  lightingDiv.appendChild(slSoftRow);
+
+  // ── Block Seam Blending dropdown ─────────────────────────────────────────
+  const SEAM_BLENDING_OPTIONS: { id: BlockSeamBlending; label: string }[] = [
+    { id: 'off',     label: 'Off' },
+    { id: 'subtle',  label: 'Subtle' },
+    { id: 'organic', label: 'Organic' },
+    { id: 'heavy',   label: 'Heavy' },
+  ];
+  const seamBlendLabel = document.createElement('div');
+  seamBlendLabel.textContent = 'Block Seam Blending';
+  seamBlendLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  lightingDiv.appendChild(seamBlendLabel);
+  const seamBlendSelect = document.createElement('select');
+  seamBlendSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of SEAM_BLENDING_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    seamBlendSelect.appendChild(o);
+  }
+  seamBlendSelect.addEventListener('change', () => {
+    callbacks?.onSeamBlendingChange(seamBlendSelect.value as BlockSeamBlending);
+  });
+  seamBlendSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(seamBlendSelect);
+
+  // ── Void Edge Style dropdown ──────────────────────────────────────────────
+  const VOID_EDGE_OPTIONS: { id: VoidEdgeStyle; label: string }[] = [
+    { id: 'off',          label: 'Off' },
+    { id: 'noisyEdge',    label: 'Noisy Black Edge' },
+    { id: 'exteriorFill', label: 'Exterior Fill + Noisy Edge' },
+  ];
+  const voidEdgeLabel = document.createElement('div');
+  voidEdgeLabel.textContent = 'Void Edge Style';
+  voidEdgeLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  lightingDiv.appendChild(voidEdgeLabel);
+  const voidEdgeSelect = document.createElement('select');
+  voidEdgeSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of VOID_EDGE_OPTIONS) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    voidEdgeSelect.appendChild(o);
+  }
+  voidEdgeSelect.addEventListener('change', () => {
+    callbacks?.onVoidEdgeStyleChange(voidEdgeSelect.value as VoidEdgeStyle);
+  });
+  voidEdgeSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(voidEdgeSelect);
 
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
@@ -633,6 +700,8 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           minWallValLabel.textContent  = (state.roomData?.minimumWallLight  ?? 0.18).toFixed(2);
           falloffSlider.value = String(state.roomData?.falloffPower ?? 1.4);
           falloffValLabel.textContent  = (state.roomData?.falloffPower  ?? 1.4).toFixed(2);
+          seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
+          voidEdgeSelect.value = state.roomData?.voidEdgeStyle ?? 'off';
           lastRenderedLightingEffect = currentLighting;
           paletteDiv.appendChild(lightingDiv);
         }
@@ -667,10 +736,18 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           valLabel.textContent = v.toFixed(2);
         }
       };
-      syncSlider(dirBiasSlider,  dirBiasValLabel,  state.roomData?.directionalBias,      0.65);
-      syncSlider(sideExpSlider,  sideExpValLabel,  state.roomData?.sideExposureStrength, 0.45);
-      syncSlider(minWallSlider,  minWallValLabel,  state.roomData?.minimumWallLight,      0.18);
-      syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,          1.4);
+      syncSlider(dirBiasSlider,  dirBiasValLabel,  state.roomData?.directionalBias,       0.65);
+      syncSlider(sideExpSlider,  sideExpValLabel,  state.roomData?.sideExposureStrength,  0.35);
+      syncSlider(minWallSlider,  minWallValLabel,  state.roomData?.minimumWallLight,       0.15);
+      syncSlider(falloffSlider,  falloffValLabel,  state.roomData?.falloffPower,           1.4);
+      syncSlider(bgSpillSlider,  bgSpillValLabel,  state.roomData?.backgroundLightSpill,  0.0);
+      syncSlider(slSoftSlider,   slSoftValLabel,   state.roomData?.solidLightSoftness,    0.0);
+      if (document.activeElement !== seamBlendSelect) {
+        seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
+      }
+      if (document.activeElement !== voidEdgeSelect) {
+        voidEdgeSelect.value = state.roomData?.voidEdgeStyle ?? 'off';
+      }
     }
 
     // Update palette selection highlight

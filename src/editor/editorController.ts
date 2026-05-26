@@ -58,6 +58,7 @@ import {
 
 import { handleEditorKeyboardShortcuts } from './editorKeyboardShortcuts';
 import { invalidateRoomContour } from '../ui/mapSketchRenderer';
+import { setActiveSeamBlending } from '../render/walls/blockSpriteRenderer';
 
 const BS = BLOCK_SIZE_MEDIUM;
 
@@ -372,6 +373,26 @@ export function createEditorController(
         },
         onFalloffPowerChange: (value: number) => {
           if (state.roomData) state.roomData.falloffPower = value;
+          applyEdits('metadata');
+        },
+        onBackgroundLightSpillChange: (value: number) => {
+          if (state.roomData) state.roomData.backgroundLightSpill = value;
+          applyEdits('metadata');
+        },
+        onSolidLightSoftnessChange: (value: number) => {
+          if (state.roomData) state.roomData.solidLightSoftness = value;
+          applyEdits('metadata');
+        },
+        onSeamBlendingChange: (mode) => {
+          if (state.roomData) state.roomData.blockSeamBlending = mode;
+          // Live-preview: update the active renderer immediately so the
+          // editor backdrop reflects the change without a full playtest cycle.
+          // setActiveSeamBlending already invalidates the chunk cache.
+          setActiveSeamBlending(mode);
+          applyEdits('metadata');
+        },
+        onVoidEdgeStyleChange: (style) => {
+          if (state.roomData) state.roomData.voidEdgeStyle = style;
           applyEdits('metadata');
         },
         onBackgroundChange: (bgId: BackgroundId) => {

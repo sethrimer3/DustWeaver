@@ -60,6 +60,7 @@ import {
   CLUSTER_EDGE_MARGIN_WORLD,
   LANDING_SKID_SPEED_THRESHOLD_WORLD,
   LANDING_SKID_SPEED_FACTOR_MAX,
+  MAX_RUN_SPEED_WORLD_PER_SEC,
 } from './movementConstants';
 
 // ============================================================================
@@ -332,10 +333,31 @@ export function applyClusterMovement(world: WorldState): void {
           cluster.coyoteTimeTicks = COYOTE_TIME_TICKS;
         }
 
+        // ── Ultra ice state management ────────────────────────────────────
+        // Touching an ultra-ice surface locks lateral velocity; touching any
+        // other grounded surface clears the ultra-ice state.
+        if (cluster.isGroundedFlag === 1) {
+          if (cluster.isGroundedOnUltraIceFlag === 1) {
+            // First contact: apply minimum lateral velocity in facing direction.
+            if (cluster.isOnUltraIceFlag === 0) {
+              const minSpeedWorld = MAX_RUN_SPEED_WORLD_PER_SEC * 0.5;
+              if (Math.abs(cluster.velocityXWorld) < minSpeedWorld) {
+                const dir = cluster.isFacingLeftFlag === 1 ? -1 : 1;
+                cluster.velocityXWorld = dir * minSpeedWorld;
+              }
+            }
+            cluster.isOnUltraIceFlag = 1;
+          } else {
+            // Landed on non-ultra-ice ground — exit ultra ice state.
+            cluster.isOnUltraIceFlag = 0;
+          }
+        }
+
         // ── Grapple charge refresh on ground contact ─────────────────────────
         // The player can only grapple once while airborne.  Touching the ground
         // restores the charge so they can grapple again.
-        if (cluster.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1) {
+        // Ultra ice ground does NOT restore the grapple charge.
+        if ((cluster.isGroundedFlag === 1 && cluster.isGroundedOnUltraIceFlag === 0) || world.isGrappleStuckFlag === 1) {
           // Detect the 0→1 recharge transition to trigger the golden ring VFX.
           // At this point hasGrappleChargeFlag is still 0 (we assign 1 below), so
           // the transition is indicated by both prev=0 and current=0 (about to become 1).

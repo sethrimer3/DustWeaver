@@ -33,6 +33,20 @@ export const LONG_FRAME_WARN_MS   = 100;
 /** Frame duration above which a "severe freeze" console error is emitted. */
 export const SEVERE_FREEZE_MS     = 1000;
 
+// ── Frame context ─────────────────────────────────────────────────────────────
+
+/**
+ * Describes what the game was doing during a given RAF frame.
+ * Used to distinguish active-gameplay freezes from expected loading pauses.
+ */
+export type FrameContext =
+  | 'gameplay'    // Player has control; sim + render running normally.
+  | 'loading'     // Async room load in progress behind the loading overlay.
+  | 'entryWarm'   // Entry viewport warm phase — bake allowed, sim/input skipped, overlay active.
+  | 'editor'      // Level editor is active.
+  | 'paused'      // Pause menu, skill tomb, map overlay, or player-dead screen.
+  | 'unknown';    // Default — context not set for this frame yet.
+
 // ── Per-frame data ────────────────────────────────────────────────────────────
 
 export interface FreezeFrameData {
@@ -75,9 +89,25 @@ export interface FreezeFrameData {
   loadPhaseMs: number;
   loadPhaseDetail: string;
 
+  // ── Scene lighting ───────────────────────────────────────────────────────────
+  /** Total scene lights defined in the current room this frame. */
+  sceneLightTotalCount: number;
+  /** Scene lights that passed viewport culling and were drawn this frame. */
+  sceneLightCulledCount: number;
+  /** Number of those drawn lights that cast shadows (ran visibility polygon). */
+  sceneLightShadowCount: number;
+  /** Total occluder segments processed across all shadow-casting lights. */
+  sceneLightOccluderSegCount: number;
+
+  // ── Bloom ────────────────────────────────────────────────────────────────────
+  /** True when the bloom composite was skipped because no glow was submitted. */
+  bloomSkippedNoGlow: boolean;
+
   // ── Derived ─────────────────────────────────────────────────────────────────
   /** Name of the subsystem that consumed the most measured ms this frame. */
   topCause: string;
+  /** What the game was doing this frame — used to identify active-gameplay freezes. */
+  frameContext: FrameContext;
 }
 
 function _makeBlankFrame(): FreezeFrameData {
@@ -102,7 +132,13 @@ function _makeBlankFrame(): FreezeFrameData {
     preloadMainThreadRoomId: '',
     loadPhaseMs:          0,
     loadPhaseDetail:      '',
+    sceneLightTotalCount:       0,
+    sceneLightCulledCount:      0,
+    sceneLightShadowCount:      0,
+    sceneLightOccluderSegCount: 0,
+    bloomSkippedNoGlow:         false,
     topCause:             '',
+    frameContext:         'unknown',
   };
 }
 
@@ -168,6 +204,39 @@ export function isBakeBudgetExhausted(): boolean {
   return _spriteBakeMaxPerFrame > 0 && _spriteBakesThisFrame >= _spriteBakeMaxPerFrame;
 }
 
+// ── Gameplay bake-forbidden flag ──────────────────────────────────────────────
+
+/**
+ * Production-safe flag: when true, expensive derived-sprite baking
+ * (applyOrganicEdgeShading) is forbidden for the current frame.
+ *
+ * Set to `true` at the start of every active-gameplay frame and `false` during
+ * loading, paused, or editor frames.  Callers that respect this flag should
+ * return a cheap stable fallback (e.g. the unshaded base sprite) rather than
+ * performing a new bake or returning null (which would cause the chunk to
+ * rebuild every frame).
+ */
+let _bakeForbiddenInGameplay = false;
+
+/**
+ * Sets the gameplay-bake-forbidden flag.
+ * Pass `true` before each active-gameplay render frame.
+ * Pass `false` during loading, paused, or editor frames.
+ * Production-safe — no DEV guard.
+ */
+export function setBakeForbiddenInGameplay(v: boolean): void {
+  _bakeForbiddenInGameplay = v;
+}
+
+/**
+ * Returns true during active-gameplay frames when new expensive derived-sprite
+ * bakes should be skipped in favour of a cheap stable fallback.
+ * Production-safe — no DEV guard.
+ */
+export function isBakeForbiddenInGameplay(): boolean {
+  return _bakeForbiddenInGameplay;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -201,7 +270,13 @@ export function beginFrame(frameMs: number): void {
   c.preloadMainThreadRoomId = '';
   c.loadPhaseMs          = 0;
   c.loadPhaseDetail      = '';
+  c.sceneLightTotalCount       = 0;
+  c.sceneLightCulledCount      = 0;
+  c.sceneLightShadowCount      = 0;
+  c.sceneLightOccluderSegCount = 0;
+  c.bloomSkippedNoGlow         = false;
   c.topCause             = '';
+  c.frameContext         = 'unknown';
 }
 
 /** Record sim tick count for this frame (call from sim loop). */
@@ -275,6 +350,43 @@ export function recordLoadPhaseStep(detail: string, ms: number): void {
   if (ms > 0) _cur.loadPhaseDetail = detail;
 }
 
+/**
+ * Record scene-lighting stats for this frame.
+ * Called from lightingSystem.ts once per renderLightingPass() invocation.
+ *
+ * @param totalLights    Total lights defined in the room.
+ * @param culledLights   Lights that passed viewport culling.
+ * @param shadowLights   Shadow-casting lights that ran visibility polygon.
+ * @param occluderSegs   Total occluder segments processed across all shadow lights.
+ */
+export function recordSceneLightStats(
+  totalLights: number,
+  culledLights: number,
+  shadowLights: number,
+  occluderSegs: number,
+): void {
+  if (!import.meta.env.DEV) return;
+  _cur.sceneLightTotalCount       = totalLights;
+  _cur.sceneLightCulledCount      = culledLights;
+  _cur.sceneLightShadowCount      = shadowLights;
+  _cur.sceneLightOccluderSegCount = occluderSegs;
+}
+
+/** Record that the bloom composite was skipped because no glow was submitted. */
+export function recordBloomSkippedNoGlow(): void {
+  if (!import.meta.env.DEV) return;
+  _cur.bloomSkippedNoGlow = true;
+}
+
+/**
+ * Record chunks built during an idle prewarm slice.
+ * Called from roomRenderChunkWarmScheduler.ts; no-ops in production.
+ */
+export function recordPrewarmSlice(_chunksBuilt: number): void {
+  // Currently a lightweight no-op that keeps the call in place for future
+  // per-frame aggregation if desired.  The scheduler tracks its own stats.
+}
+
 /** Set the current room/camera context for structured freeze warnings. */
 export function setFrameContext(
   roomId: string,
@@ -285,6 +397,17 @@ export function setFrameContext(
   _contextRoomId        = roomId;
   _contextCamBlockRange = camBlockRange;
   _contextPlayerBlock   = playerBlock;
+}
+
+/**
+ * Record what the game is doing for this frame.
+ * Call once per RAF frame from gameScreen, at the point where the frame path
+ * is known (gameplay, loading, editor, paused).  Used to flag active-gameplay
+ * freezes in console warnings and the debug overlay.
+ */
+export function setFrameGameContext(ctx: FrameContext): void {
+  if (!import.meta.env.DEV) return;
+  _cur.frameContext = ctx;
 }
 
 /**
@@ -323,8 +446,10 @@ export function endFrame(): void {
   // Emit structured warnings
   if (c.frameMs >= LONG_FRAME_WARN_MS) {
     const severity = c.frameMs >= SEVERE_FREEZE_MS ? 'SEVERE FREEZE' : 'LONG FRAME';
+    // Mark active-gameplay freezes prominently — these are the ones that matter most.
+    const ctxTag = c.frameContext === 'gameplay' ? ' ⚠ GAMEPLAY' : ` (${c.frameContext})`;
     console.warn(
-      `[freeze] ${severity} ${c.frameMs.toFixed(1)}ms\n` +
+      `[freeze] ${severity}${ctxTag} ${c.frameMs.toFixed(1)}ms\n` +
       `  topCause=${c.topCause}\n` +
       `  wallChunks=${c.wallChunkBuiltCount} (${c.wallChunkBuildMs.toFixed(1)}ms)\n` +
       `  bgChunks=${c.bgChunkBuiltCount} (${c.bgChunkBuildMs.toFixed(1)}ms)\n` +
@@ -333,6 +458,9 @@ export function endFrame(): void {
       `  layoutSigMs=${c.layoutSigMs.toFixed(1)}ms layoutRebuildMs=${c.layoutRebuildMs.toFixed(1)}ms\n` +
       `  preloadMs=${c.preloadMainThreadMs.toFixed(1)}ms (${c.preloadMainThreadRoomId})\n` +
       `  loadPhase=${c.loadPhaseMs.toFixed(1)}ms (${c.loadPhaseDetail})\n` +
+      `  sceneLights total=${c.sceneLightTotalCount} culled=${c.sceneLightCulledCount} shadow=${c.sceneLightShadowCount} occSegs=${c.sceneLightOccluderSegCount}\n` +
+      `  bloomSkippedNoGlow=${c.bloomSkippedNoGlow}\n` +
+      `  frameContext=${c.frameContext}\n` +
       `  roomId=${_contextRoomId}\n` +
       `  cameraBlockRange=${_contextCamBlockRange}\n` +
       `  playerBlock=${_contextPlayerBlock}`,

@@ -53,6 +53,80 @@ export const CHUNK_SIZE_BLOCKS = 32;
  */
 const CHUNK_MARGIN = 1;
 
+// ── Shared chunk-range scratch ────────────────────────────────────────────────
+
+/**
+ * Reusable output object for `_fillChunkRange`.  Using a module-level scratch
+ * avoids a small heap allocation on every `renderVisibleChunks` call.
+ * Safe because JavaScript is single-threaded and no call re-enters.
+ */
+const _rangeOut = { cxMin: 0, cyMin: 0, cxMax: 0, cyMax: 0 };
+
+/**
+ * Compute the chunk grid range that covers the viewport (± `margin` chunks).
+ *
+ * This is the single source of truth for chunk-range arithmetic shared by
+ * `renderVisibleChunks` and `isViewportCovered` so the two can never drift.
+ *
+ * @param offsetXPx  Camera X offset in virtual pixels (world origin → screen).
+ * @param offsetYPx  Camera Y offset in virtual pixels.
+ * @param vpWPx      Viewport width in virtual pixels.
+ * @param vpHPx      Viewport height in virtual pixels.
+ * @param scalePx    World-to-virtual-pixel scale factor (zoom).
+ * @param blockSizePx Block size in world units.
+ * @param margin     Extra chunk margin beyond the visible edges (normally `CHUNK_MARGIN`).
+ * @param out        Object that receives `{cxMin, cyMin, cxMax, cyMax}`.
+ */
+function _fillChunkRange(
+  offsetXPx:   number,
+  offsetYPx:   number,
+  vpWPx:       number,
+  vpHPx:       number,
+  scalePx:     number,
+  blockSizePx: number,
+  margin:      number,
+  out: { cxMin: number; cyMin: number; cxMax: number; cyMax: number },
+): void {
+  // Block index of the left/top/right/bottom viewport edges.
+  // screen pixel 0 → world unit (−offsetXPx / scalePx)
+  // block index   = floor(world / blockSizePx)
+  const blockLeft  = Math.floor(-offsetXPx / (blockSizePx * scalePx));
+  const blockTop   = Math.floor(-offsetYPx / (blockSizePx * scalePx));
+  const blockRight = Math.ceil((vpWPx - offsetXPx) / (blockSizePx * scalePx));
+  const blockBot   = Math.ceil((vpHPx - offsetYPx)  / (blockSizePx * scalePx));
+  // Chunk grid indices — min is clamped to 0; max is left unclamped so it
+  // extends to the room edge naturally.
+  out.cxMin = Math.max(0, Math.floor(blockLeft  / CHUNK_SIZE_BLOCKS) - margin);
+  out.cyMin = Math.max(0, Math.floor(blockTop   / CHUNK_SIZE_BLOCKS) - margin);
+  out.cxMax =              Math.floor(blockRight / CHUNK_SIZE_BLOCKS) + margin;
+  out.cyMax =              Math.floor(blockBot   / CHUNK_SIZE_BLOCKS) + margin;
+}
+
+// ── Prewarm result ────────────────────────────────────────────────────────────
+
+/**
+ * Result returned by `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom`.
+ *
+ * Callers should use `rebuilt === 0 && skipped === 0` to determine that no
+ * more work remains in the entry viewport.  Using both fields rather than
+ * `rebuilt === 0` alone is correct: when the per-frame chunk budget
+ * (`maxChunksPerFrame`) is exhausted, `skipped > 0` with `rebuilt === 0` is
+ * possible — the viewport is NOT yet fully covered in that case.
+ *
+ * `totalChunks === 0` distinguishes "no background blocks at all" from "all
+ * viewport chunks already warm".
+ */
+export interface PrewarmChunkResult {
+  /** Chunks actually rebuilt in this call. */
+  rebuilt: number;
+  /** Chunks that needed rebuild but were skipped due to the per-frame budget. */
+  skipped: number;
+  /** Total allocated chunk canvases in this room's prewarm cache. */
+  totalChunks: number;
+  /** Chunks currently marked dirty (need rebuild on next call). */
+  dirtyChunks: number;
+}
+
 // ── Chunk cache statistics ─────────────────────────────────────────────────────
 
 /** Diagnostic counters updated each frame by renderVisibleChunks(). */
@@ -147,6 +221,13 @@ export class RoomChunkCache {
   private _maxMemoryKB = 0;
 
   /**
+   * Last block size (in pixels) passed to renderVisibleChunks().
+   * Stored so _evictStaleChunks() can compute an accurate memory estimate
+   * without hard-coding the default block size.
+   */
+  private _lastBlockSizePx = 8;
+
+  /**
    * Monotonically increasing frame counter.  Incremented each call to
    * renderVisibleChunks so we can track when each chunk was last visible.
    */
@@ -223,7 +304,135 @@ export class RoomChunkCache {
     }
   }
 
-  /** Releases all cached canvases and resets all state. */
+  /**
+   * Injects pre-warmed chunk canvases into this cache.
+   *
+   * Sets the stored `layoutRef` and `scalePx` to match the pre-warmed state
+   * so that the first `renderVisibleChunks` call does NOT trigger
+   * `invalidateAll`.  Any injected chunk is immediately clean (not dirty).
+   *
+   * Called by the prewarm adoption helpers in blockSpriteRenderer.ts and
+   * backgroundBlockRenderer.ts when the player enters a pre-warmed room.
+   *
+   * @param chunks    Map of chunk-key → pre-built HTMLCanvasElement.
+   * @param layoutRef The same CachedWallLayout / RoomDef object that will be
+   *                  passed as `layoutRef` on the first renderVisibleChunks call.
+   * @param scalePx   Camera zoom scale used when building the chunks.
+   */
+  injectWarmedChunks(
+    chunks: Map<string, HTMLCanvasElement>,
+    layoutRef: unknown,
+    scalePx: number,
+  ): void {
+    this._layoutRef = layoutRef;
+    this._scalePx   = scalePx;
+    for (const [key, canvas] of chunks) {
+      this._chunks.set(key, { canvas, hadFallbacksFlag: false });
+      this._dirtyKeys.delete(key);
+    }
+  }
+
+  /**
+   * Extracts all non-dirty chunk canvases as a `Map<key, HTMLCanvasElement>`.
+   *
+   * Called by `adoptPrewarmedWallChunks` / `adoptPrewarmedBgChunks` to move
+   * pre-built canvases from a temporary prewarm cache into the active cache.
+   */
+  extractCleanChunks(): Map<string, HTMLCanvasElement> {
+    const result = new Map<string, HTMLCanvasElement>();
+    for (const [key, entry] of this._chunks) {
+      if (!entry.hadFallbacksFlag && !this._dirtyKeys.has(key)) {
+        result.set(key, entry.canvas);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Returns the block size (in pixels) last used by `renderVisibleChunks` or
+   * injected via `injectWarmedChunks`.  Used by readiness probes that need to
+   * verify the cached scale matches the current camera zoom.
+   */
+  get lastBlockSizePx(): number {
+    return this._lastBlockSizePx;
+  }
+
+  /**
+   * Cheap read-only check: returns `true` when every chunk grid cell in the
+   * given viewport — **including the `CHUNK_MARGIN` safety ring** used by
+   * `renderVisibleChunks` — is already present, clean, and had no fallbacks.
+   *
+   * This is a pure read — it does **not** build any canvases.  Returns `false`
+   * if the zoom has changed since chunks were last built (scale mismatch) or if
+   * any visible-plus-margin chunk is missing, dirty, or marked `hadFallbacksFlag`.
+   *
+   * Uses the same chunk-range formula as `renderVisibleChunks` (via
+   * `_fillChunkRange`) so the two cannot drift.
+   *
+   * Intended to be called from `canSkipEntryWarm` in the instant-transition
+   * path to avoid showing the textless overlay when nothing needs building.
+   */
+  isViewportCovered(
+    offsetXPx: number,
+    offsetYPx: number,
+    vpWPx: number,
+    vpHPx: number,
+    scalePx: number,
+    blockSizePx: number,
+  ): boolean {
+    return this._checkRange(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx, CHUNK_MARGIN);
+  }
+
+  /**
+   * Like `isViewportCovered` but checks only the **core** visible range
+   * (margin = 0).  Used in DEV to distinguish "missing safety-margin chunks"
+   * from "missing core viewport chunks" in `canSkipEntryWarm` diagnostics.
+   *
+   * Not intended for production readiness decisions — always use
+   * `isViewportCovered` (with margin) for that.
+   */
+  isViewportCoreCovered(
+    offsetXPx: number,
+    offsetYPx: number,
+    vpWPx: number,
+    vpHPx: number,
+    scalePx: number,
+    blockSizePx: number,
+  ): boolean {
+    return this._checkRange(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx, 0);
+  }
+
+  /** Shared implementation for isViewportCovered / isViewportCoreCovered. */
+  private _checkRange(
+    offsetXPx: number,
+    offsetYPx: number,
+    vpWPx: number,
+    vpHPx: number,
+    scalePx: number,
+    blockSizePx: number,
+    margin: number,
+  ): boolean {
+    // Scale mismatch means all existing chunks are stale — not covered.
+    if (this._scalePx === 0 || this._scalePx !== scalePx) return false;
+
+    const chunkSizePx = CHUNK_SIZE_BLOCKS * blockSizePx * scalePx;
+    if (chunkSizePx <= 0) return false;
+
+    _fillChunkRange(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx, margin, _rangeOut);
+    const { cxMin, cyMin, cxMax, cyMax } = _rangeOut;
+
+    for (let cy = cyMin; cy <= cyMax; cy++) {
+      for (let cx = cxMin; cx <= cxMax; cx++) {
+        const key = `${cx},${cy}`;
+        const entry = this._chunks.get(key);
+        if (!entry || entry.hadFallbacksFlag || this._dirtyKeys.has(key)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   dispose(): void {
     this._chunks.clear();
     this._dirtyKeys.clear();
@@ -288,6 +497,8 @@ export class RoomChunkCache {
       rowMax: number,
     ) => boolean,
   ): void {
+    // Store the block size so _evictStaleChunks() can use the actual value.
+    this._lastBlockSizePx = blockSizePx;
     // ── Layout / scale change detection ─────────────────────────────────────
     if (layoutRef !== this._layoutRef || scalePx !== this._scalePx) {
       this.invalidateAll();
@@ -296,22 +507,15 @@ export class RoomChunkCache {
     }
 
     // ── Compute visible chunk range ──────────────────────────────────────────
-    // Virtual pixels per chunk side (may be fractional when scalePx ≠ 1).
+    // Uses _fillChunkRange so the range matches isViewportCovered exactly.
+    _fillChunkRange(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx, CHUNK_MARGIN, _rangeOut);
+    const cxMin = _rangeOut.cxMin;
+    const cyMin = _rangeOut.cyMin;
+    const cxMax = _rangeOut.cxMax;
+    const cyMax = _rangeOut.cyMax;
+
+    // Virtual pixels per chunk side — used for screen-coordinate math below.
     const chunkSizePx = CHUNK_SIZE_BLOCKS * blockSizePx * scalePx;
-
-    // Block index of the left/top/right/bottom viewport edges.
-    // screen pixel 0 → world unit (−offsetXPx / scalePx)
-    // block index    = floor(world / blockSizePx)
-    const blockLeft  = Math.floor(-offsetXPx / (blockSizePx * scalePx));
-    const blockTop   = Math.floor(-offsetYPx / (blockSizePx * scalePx));
-    const blockRight = Math.ceil((vpWPx - offsetXPx) / (blockSizePx * scalePx));
-    const blockBot   = Math.ceil((vpHPx - offsetYPx) / (blockSizePx * scalePx));
-
-    // Chunk grid indices covering the visible area plus the safety margin.
-    const cxMin = Math.max(0, Math.floor(blockLeft  / CHUNK_SIZE_BLOCKS) - CHUNK_MARGIN);
-    const cyMin = Math.max(0, Math.floor(blockTop   / CHUNK_SIZE_BLOCKS) - CHUNK_MARGIN);
-    const cxMax =              Math.floor(blockRight / CHUNK_SIZE_BLOCKS) + CHUNK_MARGIN;
-    const cyMax =              Math.floor(blockBot   / CHUNK_SIZE_BLOCKS) + CHUNK_MARGIN;
 
     let visibleCount  = 0;
     let rebuiltCount  = 0;
@@ -468,11 +672,9 @@ export class RoomChunkCache {
 
     this.stats.evictedTotal += toEvict.length;
     this.stats.totalChunkCount = this._chunks.size;
+    const chunkSidePixels = Math.ceil(this._scalePx === 0 ? 1 : CHUNK_SIZE_BLOCKS * this._lastBlockSizePx * this._scalePx);
     this.stats.memoryEstimateKB = Math.round(
-      this._chunks.size
-        * Math.ceil(this._scalePx === 0 ? 1 : CHUNK_SIZE_BLOCKS * 8 * this._scalePx)
-        * Math.ceil(this._scalePx === 0 ? 1 : CHUNK_SIZE_BLOCKS * 8 * this._scalePx)
-        * 4 / 1024,
+      this._chunks.size * chunkSidePixels * chunkSidePixels * 4 / 1024,
     );
   }
 }

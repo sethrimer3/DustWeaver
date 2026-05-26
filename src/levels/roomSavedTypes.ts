@@ -8,7 +8,7 @@
  * without modification.
  */
 
-import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, TransitionDirection, CrumbleVariant } from './roomDef';
+import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, TransitionDirection, CrumbleVariant, VoidEdgeStyle } from './roomDef';
 import type { RoomJsonLightSource, RoomJsonSunbeam, RoomJsonDialogueTrigger } from '../editor/roomJson';
 import type { SavedSceneLight } from './lightingSchema';
 export type { SavedRect, SavedRun, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
@@ -225,12 +225,20 @@ export interface SavedRoomV2 {
   ambientDir?: string;
   /** Directional-bias blend param (0 = broad ambient, 1 = spotlight). */
   dBias?: number;
-  /** Side-exposure strength for non-sky-connected air neighbours (0–1). */
+  /** Side-exposure strength for non-sky-facing air neighbours (0–1). */
   sExp?: number;
   /** Minimum wall brightness for air-adjacent tiles (0–1). */
   minWL?: number;
   /** Falloff power / gamma exponent (0.5–3). */
   fpow?: number;
+  /** Background light spill strength (0 = none, default; subtle warm haze into air). */
+  bgSpill?: number;
+  /** Solid light softness (0 = crisp pixel-art, 1 = max softening). */
+  slSoft?: number;
+  /** Block seam blending mode. Omitted when 'off'. */
+  seamBlend?: 'subtle' | 'organic' | 'heavy';
+  /** Void edge style. Omitted when 'off'. */
+  voidEdge?: VoidEdgeStyle;
   /**
    * Sparse list of ambient-light blocker tile coordinates.
    * Each entry is [x, y] for a clear blocker, or [x, y, 1] for a dark blocker.

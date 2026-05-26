@@ -1,7 +1,19 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, protocol, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "dustweaver",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 // ── Safety constants ──────────────────────────────────────────────────────────
 
@@ -21,6 +33,38 @@ const ROOM_CACHE_VERSION = 1;
 const ROOM_FILE_SUFFIX = "_room.json";
 /** Maximum number of rolling backups to keep per campaign. */
 const MAX_BACKUPS = 10;
+const ELECTRON_APP_ORIGIN = "dustweaver://app";
+const ELECTRON_DEV_SERVER_URL =
+  process.env.DUSTWEAVER_ELECTRON_DEV_URL ||
+  process.env.ELECTRON_RENDERER_URL ||
+  process.env.VITE_DEV_SERVER_URL ||
+  "";
+const IS_ELECTRON_DEV_SERVER = !app.isPackaged && ELECTRON_DEV_SERVER_URL.length > 0;
+const ELECTRON_PROD_CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "media-src 'self' blob: data:",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+].join("; ");
+const ELECTRON_DEV_CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "script-src 'self' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "media-src 'self' blob: data:",
+  "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*",
+  "worker-src 'self' blob:",
+].join("; ");
+const ELECTRON_APP_ICON_FILENAME = "Dustweaver_Icon.ico";
 
 // ── Path resolution ───────────────────────────────────────────────────────────
 
@@ -48,6 +92,10 @@ function resolveCampaignDir() {
  */
 function resolveCustomCampaignDir(campaignId) {
   return path.join(app.getPath("userData"), "CUSTOM_CAMPAIGNS", campaignId);
+}
+
+function resolveAppIconPath() {
+  return path.resolve(app.getAppPath(), "ASSETS", "icon", ELECTRON_APP_ICON_FILENAME);
 }
 
 // ── Atomic file write helpers ─────────────────────────────────────────────────
@@ -88,6 +136,98 @@ function writeTextAtomic(filePath, text) {
     try { fs.unlinkSync(tmpPath); } catch { /* ignore cleanup error */ }
     throw err;
   }
+}
+
+function getContentTypeForPath(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  switch (extension) {
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+      return "text/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".ico":
+      return "image/x-icon";
+    case ".mp3":
+      return "audio/mpeg";
+    case ".ogg":
+      return "audio/ogg";
+    case ".m4a":
+      return "audio/mp4";
+    case ".ttf":
+      return "font/ttf";
+    case ".woff":
+      return "font/woff";
+    case ".woff2":
+      return "font/woff2";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function resolveDistFilePath(url) {
+  const distDir = path.join(__dirname, "../dist");
+  const parsedUrl = new URL(url);
+  const decodedPath = decodeURIComponent(parsedUrl.pathname);
+  const relativePath = decodedPath === "/" ? "index.html" : decodedPath.replace(/^\/+/, "");
+  const filePath = path.normalize(path.join(distDir, relativePath));
+  const normalizedDistDir = path.normalize(distDir);
+  if (filePath !== normalizedDistDir && !filePath.startsWith(normalizedDistDir + path.sep)) {
+    return null;
+  }
+  return filePath;
+}
+
+function registerElectronCsp() {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const csp = IS_ELECTRON_DEV_SERVER ? ELECTRON_DEV_CSP : ELECTRON_PROD_CSP;
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [csp],
+      },
+    });
+  });
+}
+
+function registerElectronAppProtocol() {
+  protocol.handle("dustweaver", async (request) => {
+    const filePath = resolveDistFilePath(request.url);
+    if (filePath === null) {
+      return new Response("Blocked invalid DustWeaver asset path.", {
+        status: 403,
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Security-Policy": ELECTRON_PROD_CSP },
+      });
+    }
+    try {
+      const data = await fs.promises.readFile(filePath);
+      return new Response(data, {
+        status: 200,
+        headers: {
+          "Content-Type": getContentTypeForPath(filePath),
+          "Content-Security-Policy": ELECTRON_PROD_CSP,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(message, {
+        status: 404,
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Security-Policy": ELECTRON_PROD_CSP },
+      });
+    }
+  });
 }
 
 /**
@@ -963,11 +1103,14 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 720,
+    icon: resolveAppIconPath(),
     backgroundColor: "#000000",
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
       preload: path.join(__dirname, "preload.cjs"),
     }
   });
@@ -981,10 +1124,18 @@ function createWindow() {
     console.error("FAILED TO LOAD:", errorCode, errorDescription, validatedURL);
   });
 
-  win.loadFile(path.join(__dirname, "../dist/index.html"));
+  if (IS_ELECTRON_DEV_SERVER) {
+    win.loadURL(ELECTRON_DEV_SERVER_URL);
+  } else {
+    win.loadURL(`${ELECTRON_APP_ORIGIN}/index.html`);
+  }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  registerElectronCsp();
+  registerElectronAppProtocol();
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

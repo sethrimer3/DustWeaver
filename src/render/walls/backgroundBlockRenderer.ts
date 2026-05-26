@@ -29,7 +29,12 @@ import {
   getTheme1x1SpriteShaded,
 } from './folderBlockThemes';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
-import { RoomChunkCache } from './chunkRenderCache';
+import { RoomChunkCache, CHUNK_SIZE_BLOCKS, PrewarmChunkResult } from './chunkRenderCache';
+import {
+  getBgBlockLayout,
+  getCellsForChunk,
+  invalidateBgBlockLayout,
+} from './backgroundBlockLayoutCache';
 
 /** World-space size of a single background block cell (matches 1×1 sprite). */
 const CELL_SIZE_WORLD = BLOCK_SIZE_SMALL;
@@ -58,6 +63,7 @@ let _bgCacheRoomRef: string | null = null;
 export function invalidateBackgroundBlockCache(): void {
   _bgChunkCache.invalidateAll();
   _bgCacheRoomRef = null;
+  invalidateBgBlockLayout();
 }
 
 /**
@@ -71,6 +77,8 @@ export function invalidateBackgroundBlockChunkRect(
   rowMax: number,
 ): void {
   _bgChunkCache.invalidateBlockRect(colMin, rowMin, colMax, rowMax);
+  // Also invalidate layout cache since content has changed.
+  invalidateBgBlockLayout();
 }
 
 /**
@@ -94,7 +102,273 @@ export function setBgChunkCacheMemoryKB(kb: number): void {
   _bgChunkCache.setMaxMemoryKB(kb);
 }
 
-// ── Public render function ────────────────────────────────────────────────────
+// ── Background block prewarm store ────────────────────────────────────────────
+
+const _prewarmBgCaches = new Map<string, RoomChunkCache>();
+
+/** Dummy 1×1 canvas used as a throw-away blit target during bg prewarming. */
+let _prewarmBgDummyCtx: CanvasRenderingContext2D | null = null;
+function _getBgPrewarmDummyCtx(): CanvasRenderingContext2D {
+  if (_prewarmBgDummyCtx === null) {
+    const c = document.createElement('canvas');
+    c.width  = 1;
+    c.height = 1;
+    _prewarmBgDummyCtx = c.getContext('2d') as CanvasRenderingContext2D;
+  }
+  return _prewarmBgDummyCtx;
+}
+
+/**
+ * Builds a chunk-rendering closure for `room`'s background blocks.
+ * Extracted to share logic between the live render and prewarm paths.
+ *
+ * The closure uses {@link getBgBlockLayout} to look up only the cells that
+ * fall inside the target chunk instead of scanning all block definitions.
+ */
+function _makeBgBuildChunkFn(
+  roomBlocks: RoomDef['backgroundBlocks'],
+  roomBlockTheme: string | null,
+  seed: number,
+  zoom: number,
+): (
+  chunkCtx: CanvasRenderingContext2D,
+  chunkOffX: number,
+  chunkOffY: number,
+  _scalePx: number,
+  _bsz: number,
+  colMin: number,
+  rowMin: number,
+  colMax: number,
+  rowMax: number,
+) => boolean {
+  // Layout is computed lazily inside the returned function so that per-frame
+  // calls to _makeBgBuildChunkFn do not pay the O(backgroundBlocks) signature
+  // cost when no chunk needs to rebuild.
+  let layout: ReturnType<typeof getBgBlockLayout> | null = null;
+
+  return (chunkCtx, chunkOffX, chunkOffY, _scalePx, _bsz, colMin, rowMin, _colMax, _rowMax) => {
+    if (!roomBlocks || roomBlocks.length === 0) return false;
+    let hadFallbacks = false;
+    chunkCtx.imageSmoothingEnabled = false;
+
+    const cellW = CELL_SIZE_WORLD * zoom;
+    const sw    = Math.ceil(cellW);
+
+    // Derive the chunk coordinates from colMin / rowMin (one chunk assumed).
+    const cx = Math.floor(colMin / CHUNK_SIZE_BLOCKS);
+    const cy = Math.floor(rowMin / CHUNK_SIZE_BLOCKS);
+
+    // Compute layout on first actual rebuild and cache it in the closure.
+    if (layout === null) {
+      layout = getBgBlockLayout(roomBlocks, roomBlockTheme);
+    }
+    const cells = getCellsForChunk(layout, cx, cy);
+
+    for (let ci = 0; ci < cells.length; ci++) {
+      const { col, row, themeId } = cells[ci];
+
+      const sx = Math.round(col * cellW + chunkOffX);
+      const sy = Math.round(row * cellW + chunkOffY);
+
+      if (isFolderBasedTheme(themeId)) {
+        const sprite = getTheme1x1SpriteShaded(
+          themeId,
+          col,
+          row,
+          seed,
+          OPEN_AIR_ALL_SIDES,
+          CELL_SIZE_WORLD,
+        );
+        if (sprite !== null) {
+          chunkCtx.drawImage(sprite, sx, sy, sw, sw);
+        } else {
+          chunkCtx.fillStyle = FALLBACK_FILL;
+          chunkCtx.fillRect(sx, sy, sw, sw);
+          hadFallbacks = true;
+        }
+      } else {
+        chunkCtx.fillStyle = FALLBACK_FILL;
+        chunkCtx.fillRect(sx, sy, sw, sw);
+      }
+    }
+
+    return hadFallbacks;
+  };
+}
+
+/**
+ * Pre-builds background block chunks for a room that is not currently active.
+ *
+ * Safe to call multiple times — the prewarm cache persists between calls so
+ * subsequent calls can expand coverage outward.
+ *
+ * @returns Number of new chunks actually built.
+ */
+export function prewarmBgChunksForRoom(
+  room: RoomDef,
+  zoom: number,
+  offsetXPx: number,
+  offsetYPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  maxChunks: number,
+): PrewarmChunkResult {
+  const blocks = room.backgroundBlocks;
+  if (!blocks || blocks.length === 0) {
+    return { rebuilt: 0, skipped: 0, totalChunks: 0, dirtyChunks: 0 };
+  }
+
+  let tempCache = _prewarmBgCaches.get(room.id);
+  if (tempCache === undefined) {
+    tempCache = new RoomChunkCache(true);
+    _prewarmBgCaches.set(room.id, tempCache);
+  }
+  tempCache.setMaxChunksPerFrame(maxChunks);
+
+  const buildFn = _makeBgBuildChunkFn(blocks, room.blockTheme ?? null, room.worldNumber ?? 0, zoom);
+  const dummyCtx = _getBgPrewarmDummyCtx();
+
+  tempCache.renderVisibleChunks(
+    dummyCtx,
+    room,            // layoutRef: same object used on actual render → identity preserved
+    offsetXPx,
+    offsetYPx,
+    zoom,
+    CELL_SIZE_WORLD,
+    vpWPx,
+    vpHPx,
+    buildFn,
+  );
+
+  return {
+    rebuilt:     tempCache.stats.rebuiltThisFrame,
+    skipped:     tempCache.stats.skippedThisFrame,
+    totalChunks: tempCache.stats.totalChunkCount,
+    dirtyChunks: tempCache.stats.dirtyChunkCount,
+  };
+}
+
+/**
+ * Adopts pre-warmed background block chunks for a room the player is about to enter.
+ *
+ * Injects pre-built canvases into the active `_bgChunkCache` and sets the
+ * room reference so the first `renderBackgroundBlocks` call skips the
+ * invalidation check.
+ *
+ * Must be called after any explicit cache invalidation (e.g. room change) but
+ * BEFORE the first render frame for the new room.
+ *
+ * @returns `true` when pre-warmed data was found and adopted; `false` otherwise.
+ */
+export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number): boolean {
+  const tempCache = _prewarmBgCaches.get(room.id);
+  if (tempCache === undefined) return false;
+
+  const chunks = tempCache.extractCleanChunks();
+  if (chunks.size > 0) {
+    _bgChunkCache.injectWarmedChunks(chunks, room, zoom);
+    // Mark room ref so renderBackgroundBlocks skips its invalidation check.
+    _bgCacheRoomRef = room.id;
+  }
+
+  _prewarmBgCaches.delete(room.id);
+  return chunks.size > 0;
+}
+
+/** Discards pre-warmed background block chunks for `roomId` without adopting them. */
+export function evictPrewarmedBgChunks(roomId: string): void {
+  _prewarmBgCaches.delete(roomId);
+}
+
+/** Returns `true` when pre-warmed background block data exists for `roomId`. */
+export function hasPrewarmedBgChunks(roomId: string): boolean {
+  return _prewarmBgCaches.has(roomId);
+}
+
+/** Returns the list of room IDs that currently have pre-warmed background block chunks. */
+export function listPrewarmedBgRoomIds(): string[] {
+  return Array.from(_prewarmBgCaches.keys());
+}
+
+/**
+ * Returns per-room prewarm bg stats for `roomId`, or `null` when not held.
+ * Used by the eviction pass to compute per-room memory.
+ */
+export function getPrewarmBgRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
+  const cache = _prewarmBgCaches.get(roomId);
+  if (cache === undefined) return null;
+  return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
+}
+
+/**
+ * Returns aggregate stats across all currently-held background prewarm caches.
+ * Used by the debug overlay.
+ */
+export function getPrewarmBgStats(): { roomCount: number; totalChunks: number; memoryEstimateKB: number } {
+  let totalChunks = 0;
+  let memoryEstimateKB = 0;
+  for (const cache of _prewarmBgCaches.values()) {
+    totalChunks      += cache.stats.totalChunkCount;
+    memoryEstimateKB += cache.stats.memoryEstimateKB;
+  }
+  return { roomCount: _prewarmBgCaches.size, totalChunks, memoryEstimateKB };
+}
+
+/**
+ * Cheap read-only viewport coverage probe for the **active** background chunk
+ * cache, including the `CHUNK_MARGIN` safety ring.
+ *
+ * Returns `true` immediately when the room has no background blocks (nothing
+ * to warm).  Returns `false` if the zoom has changed or if any visible-plus-margin
+ * chunk is missing, dirty, or has pending fallback sprites.  Does **not** build
+ * any canvases.
+ */
+export function isBgActiveViewportCovered(
+  room: RoomDef,
+  offsetXPx: number,
+  offsetYPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+): boolean {
+  const blocks = room.backgroundBlocks;
+  if (!blocks || blocks.length === 0) return true;
+  return _bgChunkCache.isViewportCovered(
+    offsetXPx,
+    offsetYPx,
+    vpWPx,
+    vpHPx,
+    scalePx,
+    CELL_SIZE_WORLD,
+  );
+}
+
+/**
+ * Like `isBgActiveViewportCovered` but checks only the **core** visible range
+ * (no margin).  Intended for DEV diagnostics only — always use
+ * `isBgActiveViewportCovered` for production readiness decisions.
+ */
+export function isBgCoreViewportCovered(
+  room: RoomDef,
+  offsetXPx: number,
+  offsetYPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+): boolean {
+  const blocks = room.backgroundBlocks;
+  if (!blocks || blocks.length === 0) return true;
+  return _bgChunkCache.isViewportCoreCovered(
+    offsetXPx,
+    offsetYPx,
+    vpWPx,
+    vpHPx,
+    scalePx,
+    CELL_SIZE_WORLD,
+  );
+}
+
+
 
 /**
  * Renders all background blocks in `room` onto `ctx` using a chunk cache.
@@ -129,10 +403,7 @@ export function renderBackgroundBlocks(
   }
 
   const seed = room.worldNumber ?? 0;
-
-  // Capture room reference locally for the closure.
-  const roomBlocks = blocks;
-  const roomBlockTheme = room.blockTheme ?? null;
+  const buildFn = _makeBgBuildChunkFn(blocks, room.blockTheme ?? null, seed, zoom);
 
   ctx.save();
   // Background blocks are rendered at 50 % opacity.  The chunk canvases are
@@ -149,61 +420,7 @@ export function renderBackgroundBlocks(
     CELL_SIZE_WORLD,    // blockSizePx
     vpWPx,
     vpHPx,
-    (chunkCtx, chunkOffX, chunkOffY, _scalePx, _bsz, colMin, rowMin, colMax, rowMax) => {
-      let hadFallbacks = false;
-      chunkCtx.imageSmoothingEnabled = false;
-
-      const cellW = CELL_SIZE_WORLD * zoom;
-      const sw    = Math.ceil(cellW);
-
-      for (let bi = 0; bi < roomBlocks.length; bi++) {
-        const b = roomBlocks[bi];
-        // Quick AABB cull: skip entire block definition if it doesn't overlap
-        // this chunk's tile range.
-        if (b.xBlock + b.wBlock - 1 < colMin || b.xBlock > colMax) continue;
-        if (b.yBlock + b.hBlock - 1 < rowMin || b.yBlock > rowMax) continue;
-
-        const themeId       = b.blockTheme ?? roomBlockTheme;
-        const useFolderSprite = isFolderBasedTheme(themeId);
-
-        for (let dy = 0; dy < b.hBlock; dy++) {
-          const row = b.yBlock + dy;
-          if (row < rowMin || row > rowMax) continue;
-          for (let dx = 0; dx < b.wBlock; dx++) {
-            const col = b.xBlock + dx;
-            if (col < colMin || col > colMax) continue;
-
-            const sx = Math.round(col * cellW + chunkOffX);
-            const sy = Math.round(row * cellW + chunkOffY);
-
-            if (useFolderSprite) {
-              const sprite = getTheme1x1SpriteShaded(
-                themeId,
-                col,
-                row,
-                seed,
-                OPEN_AIR_ALL_SIDES,
-                CELL_SIZE_WORLD,
-              );
-              if (sprite !== null) {
-                chunkCtx.drawImage(sprite, sx, sy, sw, sw);
-              } else {
-                // Sprite still loading — draw fallback and request a rebuild
-                // next frame so the final sprite appears as soon as it loads.
-                chunkCtx.fillStyle = FALLBACK_FILL;
-                chunkCtx.fillRect(sx, sy, sw, sw);
-                hadFallbacks = true;
-              }
-            } else {
-              chunkCtx.fillStyle = FALLBACK_FILL;
-              chunkCtx.fillRect(sx, sy, sw, sw);
-            }
-          }
-        }
-      }
-
-      return hadFallbacks;
-    },
+    buildFn,
   );
 
   ctx.restore();

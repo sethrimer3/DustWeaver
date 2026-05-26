@@ -1,5 +1,6 @@
 import type { BloomConfig } from './bloomConfig';
 import { GlowPass } from './glowPass';
+import * as FP from '../../debug/perfFreezeProfiler';
 
 /**
  * Owns reusable render targets for selective bloom and exposes a tiny API:
@@ -81,6 +82,14 @@ export class BloomSystem {
 
   compositeToDevice(deviceCtx: CanvasRenderingContext2D, deviceWidthPx: number, deviceHeightPx: number): void {
     if (!this.config.enabled) return;
+
+    // Skip the entire blur + composite pass when nothing was drawn to the glow
+    // canvas this frame — saves canvas filter + drawImage cost for frames
+    // without any glow sources (e.g. rooms with no bloom-emitting elements).
+    if (!this.glowPass.hasGlow) {
+      FP.recordBloomSkippedNoGlow();
+      return;
+    }
 
     const blurRadius = Math.max(0, this.config.blurRadiusPx);
 

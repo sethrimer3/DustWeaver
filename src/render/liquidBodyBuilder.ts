@@ -114,6 +114,12 @@ export interface LiquidBody {
    * Pre-cached during body construction so bubble spawn is O(1) (no upward scan).
    */
   readonly topByColumn: Map<number, number>;
+  /**
+   * Pre-built array of column grid-X indices that have bottom-tile entries.
+   * Avoids an `Array.from(bottomByColumn.keys())` allocation in the hot
+   * bubble-tick loop — built once at body construction time.
+   */
+  readonly columnKeys: readonly number[];
   /** Active bubbles for this body. */
   readonly bubbles: LiquidBubble[];
   /** Ticks until the next bubble spawn attempt. */
@@ -338,6 +344,11 @@ function buildBody(
     Math.max(0, Math.floor(Math.sqrt(keys.length) * 0.8)),
   );
 
+  // Pre-build a stable array of column grid-X keys from bottomByColumn so the
+  // bubble-tick loop can iterate without an Array.from allocation each frame.
+  const columnKeys: number[] = [];
+  for (const col of bottomByColumn.keys()) columnKeys.push(col);
+
   const body: LiquidBody = {
     kind,
     tileCount: keys.length,
@@ -350,6 +361,7 @@ function buildBody(
     topEdgeRuns,
     bottomByColumn,
     topByColumn,
+    columnKeys,
     bubbles: [],
     bubbleCap,
     nextBubbleSpawnTicks: Math.floor(

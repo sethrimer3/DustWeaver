@@ -62,7 +62,7 @@ import {
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
-import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats } from '../render/walls/blockSpriteRenderer';
+import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats, getActiveBackgroundLightSpill } from '../render/walls/blockSpriteRenderer';
 import { renderBackgroundBlocks, getBgChunkCacheStats } from '../render/walls/backgroundBlockRenderer';
 import {
   drawGrappleBloom,
@@ -75,15 +75,20 @@ import { applyRenderQualitySettings } from './gameRenderQuality';
 import { renderBackgroundPass, type StagedRoomBgInfo } from './gameRenderBackgroundPass';
 import { renderSceneLightingPass } from './gameRenderSceneLighting';
 import { renderTeleportFlash } from '../render/lambdaAnchorRenderer';
+import { renderVoidEdge } from '../render/voidEdgeRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
 import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
 import { renderSnakes } from '../render/clusters/snakeRenderer';
+import { renderUltraIceSparkles } from '../render/effects/ultraIceSparkleRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
 /** Fixed simulation timestep for tick-to-ms conversion. */
 const FIXED_DT_MS = 16.666;
+
+/** Warm amber fill colour (RGB components) used for the optional background light-spill overlay. */
+const BACKGROUND_SPILL_RGB = '200,150,80' as const;
 
 // ── Public interface ───────────────────────────────────────────────────────
 
@@ -361,6 +366,28 @@ export function renderFrame(r: RenderFrameContext): void {
     renderProfiler,
   });
 
+  // ── Background light spill (optional subtle warm glow from nearby walls) ──
+  // Drawn after the world background and before background blocks / walls so
+  // it only affects the air/background layers.  Defaults to 0 (no spill) to
+  // prevent the cloudy orange-blob artefact.
+  const bgSpill = getActiveBackgroundLightSpill();
+  if (bgSpill > 0) {
+    ctx.save();
+    // Clip to the current room so spill doesn't bleed into adjacent rooms.
+    const clipX = Math.round(ox);
+    const clipY = Math.round(oy);
+    const clipW = Math.round(roomWidthWorld * zoom);
+    const clipH = Math.round(roomHeightWorld * zoom);
+    ctx.beginPath();
+    ctx.rect(clipX, clipY, clipW, clipH);
+    ctx.clip();
+    // Warm amber tint — clamped to a subtle translucent fill.
+    const alpha = Math.min(bgSpill, 0.5);
+    ctx.fillStyle = `rgba(${BACKGROUND_SPILL_RGB},${alpha.toFixed(3)})`;
+    ctx.fillRect(clipX, clipY, clipW, clipH);
+    ctx.restore();
+  }
+
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BG_BLOCKS);
   renderBackgroundBlocks(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
@@ -384,6 +411,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderUltraIceSparkles(ctx, snapshot.walls, nowMs, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateChunkStats(getChunkCacheStats());
@@ -422,7 +450,16 @@ export function renderFrame(r: RenderFrameContext): void {
   );
 
   // Environmental hazards (water/lava zones behind, spikes/jars/fireflies on top)
-  renderHazards(ctx, world, ox, oy, zoom, world.tick, virtualWidthPx, virtualHeightPx);
+  // Skip entirely if the room has no hazard-type entities whatsoever.
+  if (
+    world.spikeCount > 0 || world.springboardCount > 0 ||
+    world.waterZoneCount > 0 || world.lavaZoneCount > 0 ||
+    world.breakableBlockCount > 0 || world.crumbleBlockCount > 0 ||
+    world.bouncePadCount > 0 || world.kineticBlockCount > 0 ||
+    world.dustBoostJarCount > 0 || world.fireflyJarCount > 0 || world.fireflyCount > 0
+  ) {
+    renderHazards(ctx, world, ox, oy, zoom, world.tick, virtualWidthPx, virtualHeightPx);
+  }
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateLiquidStats(getLiquidDebugStats());
   }
@@ -522,6 +559,9 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // End room clip before any HUD/screen-space overlays are drawn.
   ctx.restore();
+
+  // ── Void edge overlay (noisy black intrusion along exposed room boundaries) ─
+  renderVoidEdge(ctx, currentRoom, ox, oy, zoom);
 
   // ── HUD layers (debug overlay, health bar, dust display, enemy bars, combat text) ──
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_HUD);

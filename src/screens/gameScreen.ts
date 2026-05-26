@@ -23,7 +23,8 @@ import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, snapCamera, getCameraOffset } from '../render/camera';
-import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers } from '../render/walls/blockSpriteRenderer';
+import { setActiveBlockSpriteWorld, setActiveBlockSpriteTheme, setActiveBlockLighting, setActiveDarkAmbientBlockers, setActiveSeamBlending } from '../render/walls/blockSpriteRenderer';
+import { preloadTransitionSprites } from '../render/walls/seamBlending';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
@@ -33,7 +34,7 @@ import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
-import { getMusicVolume, getSelectedRenderSize } from '../ui/renderSettings';
+import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality } from '../ui/renderSettings';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
 import { BloomSystem } from '../render/effects/bloomSystem';
@@ -87,10 +88,19 @@ import {
   preloadRoomThemeSprites,
   preloadAdjacentRoomAssets,
   areRoomSpritesReady,
+  isRoomBackgroundDecodeReady,
+  decodeRoomThemeSprites,
+  decodeRoomBackground,
 } from '../render/roomAssetPreloader';
 import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
 import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
 import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
+import {
+  scheduleChunkPrewarms,
+  adoptPrewarmedChunksForRoom,
+  getPrewarmStats,
+  type WarmScheduleHandle,
+} from './roomRenderChunkWarmScheduler';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import { GameLoadingOverlay } from './gameLoadingOverlay';
 import {
@@ -116,6 +126,14 @@ import type { TransitionDirection } from './gameTransitions';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { loadRoomForGameplayAsync, isRoomFileCacheActive, getActiveRoomAdjacency } from '../levels/roomFileLoader';
 import * as FP from '../debug/perfFreezeProfiler';
+import {
+  createEntryWarmState,
+  startEntryWarm,
+  tickEntryWarm,
+  isEntryWarmReadyOrTimedOut,
+  canSkipEntryWarm,
+  type EntryWarmState,
+} from './entryViewportWarm';
 
 const FIXED_DT_MS = 16.666;
 
@@ -205,7 +223,9 @@ export function startGameScreen(
   // Stage 2: The offscreen canvas is upscaled to the device canvas each frame.
   const virtualCanvas = document.createElement('canvas');
   let virtualWidthPx = BASE_VIRTUAL_WIDTH_PX;
-  const virtualHeightPx = FIXED_VIRTUAL_HEIGHT_PX;
+  // Height is driven by the active World View preset (normal/wide/far).
+  // Declared as `let` so resizeCanvas() can update it when the preset changes.
+  let virtualHeightPx = FIXED_VIRTUAL_HEIGHT_PX;
   virtualCanvas.width  = virtualWidthPx;
   virtualCanvas.height = virtualHeightPx;
   const virtualCtx = virtualCanvas.getContext('2d')!;
@@ -219,6 +239,8 @@ export function startGameScreen(
     const selectedRenderSize = getSelectedRenderSize();
     canvas.width = Math.round(selectedRenderSize.widthPx * deviceScale);
     canvas.height = Math.round(selectedRenderSize.heightPx * deviceScale);
+    // Read the active World View preset to determine virtual canvas height.
+    virtualHeightPx = getActiveWorldViewPreset().virtualHeight;
     virtualWidthPx = Math.max(1, Math.round((canvas.width / canvas.height) * virtualHeightPx));
     virtualCanvas.width = virtualWidthPx;
     virtualCanvas.height = virtualHeightPx;
@@ -405,8 +427,15 @@ export function startGameScreen(
         room.sideExposureStrength,
         room.minimumWallLight,
         room.falloffPower,
+        room.backgroundLightSpill,
+        room.solidLightSoftness,
       );
       setActiveDarkAmbientBlockers(darkBlockerKeys);
+      setActiveSeamBlending(room.blockSeamBlending ?? 'off');
+      // Adopt any pre-warmed chunks that were built during idle time for this
+      // room.  Must be called after lighting/theme setters but before the first
+      // render frame so the active chunk caches are seeded with pre-built data.
+      adoptPrewarmedChunksForRoom(room, camera.zoom);
       FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
     musicManager.notifyRoomEntered(room.songId ?? '_continue');
@@ -705,7 +734,17 @@ export function startGameScreen(
     {
       const _t0 = import.meta.env.DEV ? performance.now() : 0;
       preloadRoomThemeSprites(room);
+      // Fire decode() for the current room's sprites so they are GPU-rasterized
+      // before the first wall chunks render. Fire-and-forget — never blocks the frame.
+      void decodeRoomThemeSprites(room);
+      decodeRoomBackground(room);
       FP.recordLoadPhaseStep('F:preloadRoomThemeSprites', import.meta.env.DEV ? performance.now() - _t0 : 0);
+    }
+
+    // Warm the transition sprite cache for all non-none profile kinds.
+    // Missing sprites are cached as misses after the first 404 — no per-frame cost.
+    if (room.blockSeamBlending && room.blockSeamBlending !== 'off') {
+      preloadTransitionSprites(['mossy', 'crumbly', 'cracked', 'rooted', 'dusty', 'veined', 'corrupted']);
     }
 
     // Cancel any in-flight preload schedule from the previous room and start
@@ -730,6 +769,20 @@ export function startGameScreen(
       );
       FP.recordLoadPhaseStep('F:scheduleRoomPreloads', import.meta.env.DEV ? performance.now() - _t0 : 0);
     }
+
+    // Start render-chunk prewarm scheduler for nearby rooms.
+    // Runs only during idle time after room data and sprites are ready.
+    _warmScheduleHandle?.cancel();
+    _warmScheduleHandle = scheduleChunkPrewarms(
+      room,
+      ROOM_REGISTRY,
+      roomRuntimeCache,
+      getGraphicsQuality,
+      () => renderProfiler.getLastFrameMs(),
+      virtualWidthPx,
+      virtualHeightPx,
+      camera.zoom,
+    );
 
     // Generator complete — Phase F has no trailing yield.
   }
@@ -811,12 +864,14 @@ export function startGameScreen(
   // Precomputed static room data keyed by room ID.  Allows _makeLoadRoomPhases
   // to skip the expensive merge pass when a room has already been preloaded.
   // Edge-extension caches are no longer built here — see legacy README.
-  // Bounded LRU with 10 slots (current room + 2-hop radius + headroom).
-  const roomRuntimeCache = new RoomRuntimeCache(10);
+  // Bounded LRU with 16 slots (current room + 3-hop radius + headroom).
+  const roomRuntimeCache = new RoomRuntimeCache();
 
   // Handle for the current idle preload schedule so it can be cancelled when
   // the player switches rooms before the previous schedule completes.
   let _preloadScheduleHandle: PreloadScheduleHandle | null = null;
+  // Handle for the current idle chunk prewarm schedule.
+  let _warmScheduleHandle: WarmScheduleHandle | null = null;
 
   // ── Async room load state ─────────────────────────────────────────────────
   // When a room transition fires and the target is not in the prepared cache,
@@ -832,6 +887,9 @@ export function startGameScreen(
     preTransVX: number;
     preTransVY: number;
     transitionDir: TransitionDirection | null;
+    /** Spawn block coordinates stored for startEntryWarm() (async generator done and instant transition paths). */
+    spawnXBlock: number;
+    spawnYBlock: number;
   }
   const asyncLoadState: AsyncRoomLoadState = {
     isActive: false,
@@ -839,7 +897,15 @@ export function startGameScreen(
     preTransVX: 0,
     preTransVY: 0,
     transitionDir: null,
+    spawnXBlock: 0,
+    spawnYBlock: 0,
   };
+
+  // ── Entry viewport warm state ─────────────────────────────────────────────
+  // Tracks progress of the shaded-chunk warm pass for the current room's
+  // entry viewport.  Holds the loading overlay until the pass completes or
+  // a conservative timeout is reached.  Restarted on every room load.
+  let entryWarmState: EntryWarmState = createEntryWarmState();
 
   // ── Camera transition state ───────────────────────────────────────────────
   // After every room switch the camera smoothly interpolates from
@@ -878,9 +944,14 @@ export function startGameScreen(
   }
 
   /** Hides the overlay once sprites are ready, the minimum show time has passed,
-   *  and no async room load is in progress. */
+   *  no async room load is in progress, and the entry viewport warm completed. */
   function tickLoadingOverlay(): void {
-    loadingOverlay.tick(() => !asyncLoadState.isActive && areRoomSpritesReady(currentRoom));
+    loadingOverlay.tick(() =>
+      !asyncLoadState.isActive
+      && areRoomSpritesReady(currentRoom)
+      && isRoomBackgroundDecodeReady(currentRoom)
+      && isEntryWarmReadyOrTimedOut(entryWarmState),
+    );
   }
 
   // ── Dust container state (armor system) ─────────────────────────────────
@@ -931,9 +1002,24 @@ export function startGameScreen(
         player.velocityXWorld = vx;
         player.velocityYWorld = dir === 'up' ? vy - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION : vy;
       }
+      // Start the entry warm for the instant path.  Do NOT tick eagerly here:
+      // chunk building inside the transition callback (before the overlay is
+      // visible) can cause a hitch on the room-boundary frame.  Instead, show
+      // a lightweight textless cover and let the normal RAF loop advance the
+      // warm in the dedicated 'entryWarm' early branch.
+      //
+      // Probe the active chunk caches first: if the entry viewport is already
+      // fully covered (e.g. the room was prewarmed before the player arrived),
+      // skip the overlay entirely — no visible flash, no warm work needed.
+      entryWarmState = createEntryWarmState();
+      if (!canSkipEntryWarm(currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom)) {
+        startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
+        loadingOverlay.showEntryWarm();
+      }
       if (import.meta.env.DEV) {
+        const warmStatus = entryWarmState.phase === 'idle' ? ' (entryWarm skipped — viewport covered)' : ' (entryWarm started — overlay shown)';
         console.log(
-          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms`,
+          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` + warmStatus,
         );
       }
     } else {
@@ -945,6 +1031,8 @@ export function startGameScreen(
       asyncLoadState.preTransVX    = vx;
       asyncLoadState.preTransVY    = vy;
       asyncLoadState.transitionDir = dir;
+      asyncLoadState.spawnXBlock   = spawnXBlock;
+      asyncLoadState.spawnYBlock   = spawnYBlock;
       asyncLoadState.gen           = _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, false);
       asyncLoadState.isActive      = true;
       showLoadingOverlay();
@@ -980,6 +1068,9 @@ export function startGameScreen(
   } else {
     loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
   }
+  // Start the entry warm immediately after the initial load so the overlay
+  // holds until the entry viewport has shaded chunks available.
+  startEntryWarm(entryWarmState, currentRoom, initialSpawnBlock[0], initialSpawnBlock[1], virtualWidthPx, virtualHeightPx, camera.zoom);
 
   // Preload sprites for adjacent rooms in the background.
   preloadAdjacentRoomAssets(currentRoom);
@@ -1130,6 +1221,7 @@ export function startGameScreen(
         editorDebugControls?.removeEditorButton();
       }
     },
+    onResizeCanvas: resizeCanvas,
   });
 
   function onResize(): void {
@@ -1218,6 +1310,8 @@ export function startGameScreen(
 
         rafHandle = requestAnimationFrame(frame);
         // endFrame covers editor-backdrop frames too.
+        if (import.meta.env.DEV) FP.setFrameGameContext('editor');
+        FP.setBakeForbiddenInGameplay(false);
         FP.endFrame();
         return;
       }
@@ -1248,11 +1342,54 @@ export function startGameScreen(
               ? asyncLoadState.preTransVY - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION
               : asyncLoadState.preTransVY;
         }
+        // Start the entry warm now that all load phases are complete.
+        // The warm advances in subsequent gameplay frames (before bake is
+        // forbidden) and holds the overlay until coverage is confirmed or
+        // the timeout fires.
+        entryWarmState = createEntryWarmState();
+        startEntryWarm(
+          entryWarmState, currentRoom,
+          asyncLoadState.spawnXBlock, asyncLoadState.spawnYBlock,
+          virtualWidthPx, virtualHeightPx, camera.zoom,
+        );
         if (import.meta.env.DEV) {
           console.log('[transition] async load complete — velocity applied, resuming gameplay');
         }
       }
       // Keep the overlay visible and skip gameplay sim/render this frame.
+      tickLoadingOverlay();
+      if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+      FP.setBakeForbiddenInGameplay(false);
+      FP.endFrame();
+      rafHandle = requestAnimationFrame(frame);
+      return;
+    }
+
+    // ── Entry viewport warm phase ─────────────────────────────────────────────
+    // When a new room's entry viewport is being warmed (shaded chunks being
+    // built), advance the warm in a loading-style frame — before command
+    // processing, before sim ticks, and without marking the frame as gameplay.
+    // The loading overlay covers the player while the warm is active so no
+    // simulation, movement, or player input is processed.
+    if (entryWarmState.phase === 'warming') {
+      if (import.meta.env.DEV) FP.setFrameGameContext('entryWarm');
+      FP.setBakeForbiddenInGameplay(false);
+      tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
+      tickLoadingOverlay();
+      FP.endFrame();
+      rafHandle = requestAnimationFrame(frame);
+      return;
+    }
+
+    // ── Room entry hold ───────────────────────────────────────────────────────
+    // Entry warm has completed (or was never needed), but the loading overlay
+    // may still be visible while source sprites or the background image finish
+    // decoding.  Hold simulation and input until the overlay self-dismisses to
+    // prevent gameplay advancing while the screen is still covered.
+    if (loadingOverlay.isVisible() &&
+        (!areRoomSpritesReady(currentRoom) || !isRoomBackgroundDecodeReady(currentRoom))) {
+      if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+      FP.setBakeForbiddenInGameplay(false);
       tickLoadingOverlay();
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
@@ -1308,6 +1445,8 @@ export function startGameScreen(
     if (pauseController.state.isPaused
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
+      if (import.meta.env.DEV) FP.setFrameGameContext('paused');
+      FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1315,6 +1454,8 @@ export function startGameScreen(
 
     // While dead, still render the frozen scene but skip sim
     if (gameOverlayController.state.isPlayerDead) {
+      if (import.meta.env.DEV) FP.setFrameGameContext('paused');
+      FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
       return;
@@ -1394,8 +1535,13 @@ export function startGameScreen(
             case 'up':    _isNear = _py <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
           }
           if (_isNear) {
-            // Boost priority in the async queue — never block the frame.
+            // Boost runtime-cache build priority in the async queue.
             _preloadScheduleHandle?.prioritize(_tId);
+            // Also aggressively decode sprites for this exact target room so
+            // they are GPU-rasterized before the player crosses. Fire-and-forget.
+            const _tRoom = ROOM_REGISTRY.get(_tId);
+            if (_tRoom !== undefined) void decodeRoomThemeSprites(_tRoom);
+            if (_tRoom !== undefined) decodeRoomBackground(_tRoom);
             break; // one priority boost per frame is sufficient
           }
         }
@@ -1567,7 +1713,14 @@ export function startGameScreen(
         `ox=${ox.toFixed(0)}px,oy=${oy.toFixed(0)}px`,
         `${_fp_pxBlock},${_fp_pyBlock}`,
       );
+      // Mark this as an active-gameplay frame so freeze warnings highlight it.
+      FP.setFrameGameContext('gameplay');
     }
+
+    // Forbid expensive derived-sprite baking during active gameplay to prevent
+    // getImageData/putImageData stalls.  Cheap unshaded fallbacks are used
+    // instead.  This flag is cleared in all non-gameplay early-return paths.
+    FP.setBakeForbiddenInGameplay(true);
 
     let aliveCount = 0;
     for (let i = 0; i < world.particleCount; i++) {
@@ -1620,6 +1773,12 @@ export function startGameScreen(
       renderProfiler.updateTransitionStats(debugStats);
     }
 
+    // Feed prewarm stats to profiler each frame (cheap — reads cached data).
+    if (pauseController.state.isDebugMode) {
+      renderProfiler.updatePrewarmStats(getPrewarmStats());
+      renderProfiler.updateEntryWarmState(entryWarmState);
+    }
+
     const _renderT0 = import.meta.env.DEV ? performance.now() : 0;
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
@@ -1668,6 +1827,11 @@ export function startGameScreen(
     // Tick the loading overlay — hides it once sprites are ready.
     tickLoadingOverlay();
 
+    // Clear the gameplay-bake-forbidden flag before ending the frame so it
+    // does not persist into the next non-gameplay frame (e.g. paused frames
+    // that render immediately after a gameplay frame).
+    FP.setBakeForbiddenInGameplay(false);
+
     // Commit freeze-profiler frame data; emits structured [freeze] LONG FRAME
     // console warning (dev-only) when the frame exceeds LONG_FRAME_WARN_MS.
     FP.endFrame();
@@ -1688,6 +1852,8 @@ export function startGameScreen(
     if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
     _preloadScheduleHandle?.cancel();
     _preloadScheduleHandle = null;
+    _warmScheduleHandle?.cancel();
+    _warmScheduleHandle = null;
     pauseController.destroy();
     gameOverlayController.destroy();
     // Stop background music and release resources

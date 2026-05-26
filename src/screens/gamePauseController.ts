@@ -4,6 +4,7 @@ import {
   getGraphicsQuality,
   getMusicVolume,
   getSfxVolume,
+  getWorldViewPresetId,
 } from '../ui/renderSettings';
 
 interface CreateGamePauseControllerParams {
@@ -12,6 +13,8 @@ interface CreateGamePauseControllerParams {
   onResetFrameClock: () => void;
   onExitToMainMenu: () => void;
   onDebugModeChanged: (isDebugMode: boolean) => void;
+  /** Called when the player changes the World View preset so the caller can resize the canvas. */
+  onResizeCanvas?: () => void;
 }
 
 export interface GamePauseControllerState {
@@ -35,12 +38,14 @@ export function createGamePauseController(
     onResetFrameClock,
     onExitToMainMenu,
     onDebugModeChanged,
+    onResizeCanvas,
   } = params;
 
   const initialMusicVolume = getMusicVolume();
   const initialSfxVolume = getSfxVolume();
   const initialGraphicsQuality = getGraphicsQuality();
   const initialAlwaysCenterCamera = getAlwaysCenterCamera();
+  const initialWorldViewPresetId = getWorldViewPresetId();
 
   const state: GamePauseControllerState = {
     isPaused: false,
@@ -51,6 +56,7 @@ export function createGamePauseController(
       sfxVolume: initialSfxVolume,
       graphicsQuality: initialGraphicsQuality,
       alwaysCenterCamera: initialAlwaysCenterCamera,
+      worldViewPresetId: initialWorldViewPresetId,
     },
   };
 
@@ -75,6 +81,7 @@ export function createGamePauseController(
         state.pauseMenuState.isDebugOn = state.isDebugMode;
         onDebugModeChanged(state.isDebugMode);
       },
+      onWorldViewChanged: onResizeCanvas,
     });
   }
 
@@ -90,6 +97,7 @@ export function createGamePauseController(
     state.pauseMenuState.sfxVolume = initialSfxVolume;
     state.pauseMenuState.graphicsQuality = initialGraphicsQuality;
     state.pauseMenuState.alwaysCenterCamera = initialAlwaysCenterCamera;
+    state.pauseMenuState.worldViewPresetId = initialWorldViewPresetId;
   }
 
   return {

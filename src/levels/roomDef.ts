@@ -506,6 +506,33 @@ export {
   ROPE_THICKNESS_HALF_WORLD,
 } from './roomElementDefs';
 
+/**
+ * Intensity of the block seam blending overlay system.
+ * 'off' = no overlay (default, preserves existing visuals exactly).
+ * 'subtle' = conservative organic accents.
+ * 'organic' = visibly natural seam transitions.
+ * 'heavy' = pronounced — good for overgrown or corrupted rooms.
+ */
+export type BlockSeamBlending = 'off' | 'subtle' | 'organic' | 'heavy';
+
+/**
+ * Visual style for the black void outside room bounds.
+ *
+ * Controls how the hard rectangular black cutoff at room edges is softened
+ * when the player viewport extends beyond the room boundary.
+ *
+ * - `'off'`          — default behaviour: pure black hard edge.
+ * - `'noisyEdge'`    — deterministic pixel-art noise bites into the room edge by
+ *                      0–5 virtual pixels for an organic cave-darkness look.
+ * - `'exteriorFill'` — a dark cave-wall continuation fills a short strip outside
+ *                      the room, then the noisy edge mask is applied on top.
+ *
+ * All options are purely visual — no collision or room data is altered.
+ * The effect is deterministic, anchored to room/world coordinates, and stable
+ * during camera movement.
+ */
+export type VoidEdgeStyle = 'off' | 'noisyEdge' | 'exteriorFill';
+
 /** Full definition for a single room in the Metroidvania world. */
 export interface RoomDef {
   /** Unique identifier for this room. */
@@ -566,6 +593,33 @@ export interface RoomDef {
    * Range 0.5–3; defaults to 1.4 when unset.
    */
   falloffPower?: number;
+  /**
+   * How strongly the solid-tile directional light bleeds as a warm-tinted glow
+   * onto the air/background layer.
+   * 0.0 (default) = no spill — prevents cloudy-blob artefacts.
+   * Increase gently (e.g. 0.04–0.08) for a subtle warm atmosphere.
+   */
+  backgroundLightSpill?: number;
+  /**
+   * Softness radius for the per-tile darkness overlay on solid tiles.
+   * 0.0 (default) = crisp pixel-art; 1.0 = maximum softening.
+   * Kept as a stored setting; the renderer currently accepts the value but
+   * tiles remain pixel-crisp until a blur pass is added.
+   */
+  solidLightSoftness?: number;
+  /**
+   * Optional block seam blending overlay.
+   * When set, the renderer draws procedural transition stamps at tile seams
+   * between adjacent tiles of different block themes.
+   * Defaults to 'off' — existing rooms are visually unchanged.
+   */
+  blockSeamBlending?: BlockSeamBlending;
+  /**
+   * Visual style for the black void outside room bounds.
+   * Defaults to 'off' — existing rooms are visually unchanged.
+   * See {@link VoidEdgeStyle} for details.
+   */
+  voidEdgeStyle?: VoidEdgeStyle;
   /**
    * Tiles that block ambient-light propagation. Gameplay treats them as empty
    * air; only the ambient-lighting solver sees them as opaque. Used to carve

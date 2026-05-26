@@ -21,6 +21,19 @@ export interface ClusterState {
    * suppress normal friction and apply reduced ice traction instead.
    */
   isGroundedOnIceFlag: 0 | 1;
+  /**
+   * 1 when the cluster is grounded on an ultra-ice surface (wallIsUltraIceFlag[wi] === 1).
+   * Cleared each tick alongside isGroundedFlag; set by resolveWallsY when the landing
+   * wall is an ultra-ice block.
+   */
+  isGroundedOnUltraIceFlag: 0 | 1;
+  /**
+   * 1 while the player is in the "ultra ice" state — lateral velocity is locked and
+   * input cannot accelerate or decelerate horizontally.  Set when the player first
+   * touches an ultra-ice surface; cleared when the player lands on any non-ultra-ice
+   * surface.  Persists through jumps and airborne phases.
+   */
+  isOnUltraIceFlag: 0 | 1;
   /** Half-width of the cluster box in world units (used for rendering and collision). */
   halfWidthWorld: number;
   /** Half-height of the cluster box in world units (used for rendering and collision). */
@@ -718,6 +731,13 @@ export interface ClusterState {
   dustWeaverArchitectBuildPatternIndex: number;
   /** Ticks remaining for the hit-flash visual. */
   dustWeaverArchitectHitFlashTicks: number;
+  /**
+   * Counts up while the player stays outside DWA_NAIL_MIN_RANGE_WORLD.
+   * Resets to 0 when the player comes within range or a nail is fired.
+   */
+  dustWeaverArchitectRangePressureTicks: number;
+  /** Cooldown ticks remaining after firing a Dust Nail (counts down to 0). */
+  dustWeaverArchitectNailCooldownTicks: number;
 
   // ── Void Singularity ────────────────────────────────────────────────────────
   /** 1 if this cluster is a Void Singularity or Void Singularity Pair. */
@@ -823,6 +843,8 @@ export function createClusterState(
     maxHealthPoints,
     isGroundedFlag: 0,
     isGroundedOnIceFlag: 0,
+    isGroundedOnUltraIceFlag: 0,
+    isOnUltraIceFlag: 0,
     halfWidthWorld: PLAYER_HALF_WIDTH_WORLD,
     halfHeightWorld: PLAYER_HALF_HEIGHT_WORLD,
     coyoteTimeTicks: 0,
@@ -1018,6 +1040,8 @@ export function createClusterState(
     dustWeaverArchitectBuildSiteYWorld: 0,
     dustWeaverArchitectBuildPatternIndex: 0,
     dustWeaverArchitectHitFlashTicks: 0,
+    dustWeaverArchitectRangePressureTicks: 0,
+    dustWeaverArchitectNailCooldownTicks: 0,
     isVoidSingularityFlag: 0,
     isVoidSingularityPairFlag: 0,
     voidSingularityState: 0,

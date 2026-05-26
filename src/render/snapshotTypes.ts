@@ -295,6 +295,8 @@ export interface ClusterSnapshot {
   readonly dustWeaverArchitectBuildSiteYWorld: number;
   readonly dustWeaverArchitectBuildPatternIndex: number;
   readonly dustWeaverArchitectHitFlashTicks: number;
+  readonly dustWeaverArchitectRangePressureTicks: number;
+  readonly dustWeaverArchitectNailCooldownTicks: number;
 
   // ── Void Singularity ────────────────────────────────────────────────────────
   readonly isVoidSingularityFlag: 0 | 1;
@@ -583,6 +585,14 @@ export interface WorldSnapshot {
   readonly architectBlockState: Uint8Array;
   readonly isArchitectBlockAliveFlag: Uint8Array;
   readonly architectBlockOwnerSlot: Int8Array;
+
+  // ── Dust Nail projectiles ────────────────────────────────────────────────────
+  readonly dwaNailXWorld: Float32Array;
+  readonly dwaNailYWorld: Float32Array;
+  readonly dwaNailVelXWorld: Float32Array;
+  readonly dwaNailVelYWorld: Float32Array;
+  readonly dwaNailLifetimeTicks: Uint16Array;
+  readonly isDwaNailAliveFlag: Uint8Array;
 
   // ── Arrow Weave state ─────────────────────────────────────────────────────
   /** 1 while the player is loading an arrow (holding secondary weave button). */

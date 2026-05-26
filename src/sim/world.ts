@@ -15,7 +15,7 @@ export {
   MAX_DUST_CONSTELLATIONS, MAX_MOTES_PER_CONSTELLATION,
   MAX_ORBITAL_DUST_CORES, MAX_RINGS_PER_ODC, MAX_MOTES_PER_RING_ODC, MOTES_PER_ODC_SLOT,
   MAX_DUST_BLOCK_MIMICS, MAX_MOTES_PER_DBM,
-  MAX_DUST_WEAVER_ARCHITECTS, MAX_MOTES_PER_DWA, MAX_ARCHITECT_BLOCKS,
+  MAX_DUST_WEAVER_ARCHITECTS, MAX_MOTES_PER_DWA, MAX_ARCHITECT_BLOCKS, MAX_NAILS_PER_DWA,
   MAX_VOID_SINGULARITIES, MAX_MOTES_PER_VS, MAX_PROJS_PER_VSP,
   MAX_DUST_LEECHES, MAX_DUST_ECHOES, MAX_MOTES_PER_DL, MAX_MOTES_PER_DE,
   MAX_KINETIC_BLOCKS,
@@ -103,6 +103,14 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * to flag ice landings and by the grapple system to reject attachment.
    */
   wallIsIceFlag: Uint8Array;
+
+  /**
+   * 1 if the corresponding wall uses the 'ultraIceBlock' theme.
+   * Ultra ice locks the player's lateral velocity on contact and prevents
+   * grapple recharge from ground landings.  Grapple attachment is also rejected
+   * (same bounce behaviour as regular ice).
+   */
+  wallIsUltraIceFlag: Uint8Array;
 
   /**
    * 1 if the corresponding wall is a kinetic block (gives the player a
@@ -450,6 +458,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsBouncePadFlag: new Uint8Array(MAX_WALLS),
     wallBouncePadSpeedFactorIndex: new Uint8Array(MAX_WALLS),
     wallIsIceFlag: new Uint8Array(MAX_WALLS),
+    wallIsUltraIceFlag: new Uint8Array(MAX_WALLS),
     wallIsKineticBlockFlag:           new Uint8Array(MAX_WALLS),
     wallKineticBlockIndex:            new Int16Array(MAX_WALLS).fill(-1),
     bgWallGridWidth: 0,
