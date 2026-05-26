@@ -177,7 +177,7 @@ function _wallTemplateToSnapshot(t: {
 
 /**
  * Records whether the most recent room transition used:
- *  - 'hot'       — instant, no overlay (chunk caches were ready).
+ *  - 'hot'       — instant, no overlay (chunk caches were ready and valid).
  *  - 'entryWarm' — instant load but brief textless cover while chunks warmed.
  *  - 'loading'   — full async load with "Loading…" overlay (cold cache miss).
  *  - 'none'      — no transition has occurred yet.
@@ -185,14 +185,77 @@ function _wallTemplateToSnapshot(t: {
 export type TransitionOutcome = 'hot' | 'entryWarm' | 'loading' | 'none';
 
 /**
+ * Explains why the most recent transition was not 'hot'.
+ *
+ * Captured at transition time (inside `startTransitionLoad`) and stored in
+ * `PrewarmStats.lastTransitionDiagnostic` for display in the debug panel.
+ */
+export interface TransitionReadinessDiagnostic {
+  /** Target room ID. */
+  roomId: string;
+  /** Whether the runtime cache entry was fully prepared when the transition fired. */
+  runtimeReady: boolean;
+  /**
+   * Whether prewarm wall-chunk data was present in the store at transition time
+   * (captured BEFORE adoption, which clears the store entry).
+   */
+  wallPrewarmPresent: boolean;
+  /**
+   * Whether prewarm bg-chunk data was present in the store at transition time
+   * (captured BEFORE adoption, which clears the store entry).
+   */
+  bgPrewarmPresent: boolean;
+  /**
+   * Whether the render-state key of the prewarm snapshot matched the active
+   * room render state.  `null` when no prewarm data was present or the key
+   * could not be determined at diagnostic-capture time (stale-key detection is
+   * still enforced inside `adoptPrewarmedWallChunks`/`adoptPrewarmedBgChunks`
+   * and logged as a DEV console warning).
+   */
+  renderStateKeyMatches: boolean | null;
+  /** Whether the entry viewport was fully covered after adoption (canSkipEntryWarm). */
+  entryViewportCovered: boolean;
+  /** Transition outcome. */
+  outcome: TransitionOutcome;
+  /**
+   * Primary reason the transition was not hot.
+   *  - 'none'                  — transition was hot.
+   *  - 'runtimeNotReady'       — runtime cache miss (full async overlay).
+   *  - 'wallChunksMissing'     — no wall prewarm data was present.
+   *  - 'bgChunksMissing'       — no bg prewarm data was present.
+   *  - 'entryViewportNotCovered' — data present but did not cover the entry viewport
+   *                                (may indicate stale key, partial coverage, or
+   *                                wrong entrance offset — check DEV console).
+   *  - 'unknown'               — outcome was not hot for an unclassified reason.
+   */
+  missReason:
+    | 'none'
+    | 'runtimeNotReady'
+    | 'wallChunksMissing'
+    | 'bgChunksMissing'
+    | 'entryViewportNotCovered'
+    | 'unknown';
+}
+
+/**
  * Records the outcome of the most recent room transition into the prewarm stats
  * so it is visible in the debug panel.
  *
  * Call this from `startTransitionLoad` in gameScreen.ts immediately after the
  * instant vs. async path is decided.
+ *
+ * Pass a `TransitionReadinessDiagnostic` to explain why the transition was not
+ * hot — the diagnostic is shown in the debug prewarm panel.
  */
-export function recordTransitionOutcome(outcome: TransitionOutcome): void {
-  _stats.lastTransitionOutcome = outcome;
+export function recordTransitionOutcome(
+  outcome: TransitionOutcome,
+  diagnostic?: TransitionReadinessDiagnostic,
+): void {
+  _stats = {
+    ..._stats,
+    lastTransitionOutcome:    outcome,
+    lastTransitionDiagnostic: diagnostic ?? null,
+  };
 }
 
 // ── Prewarm stats (shared with debug panel) ───────────────────────────────────
@@ -253,6 +316,11 @@ export interface PrewarmStats {
   memoryBudgetKB: number;
   /** Outcome of the most recent room transition. */
   lastTransitionOutcome: TransitionOutcome;
+  /**
+   * Readiness diagnostic for the most recent room transition.
+   * `null` until a transition has occurred or if diagnostics were not captured.
+   */
+  lastTransitionDiagnostic: TransitionReadinessDiagnostic | null;
 }
 
 let _stats: PrewarmStats = {
@@ -279,6 +347,7 @@ let _stats: PrewarmStats = {
   totalPrewarmMemoryKB:    0,
   memoryBudgetKB:          0,
   lastTransitionOutcome:   'none' as TransitionOutcome,
+  lastTransitionDiagnostic: null,
 };
 
 /** Read-only snapshot of prewarm stats. Updates every idle callback. */
@@ -326,6 +395,13 @@ let _getQuality: (() => 'low' | 'med' | 'high') | null = null;
 let _getLastFrameMs: (() => number) | null = null;
 /** Room ID of the current active room — never evicted. */
 let _currentRoomId: string | null = null;
+/**
+ * Most-recent viewport dimensions passed to `scheduleChunkPrewarms`.
+ * Used by `ensureChunkPrewarmQueued` to create new tasks with correct params.
+ */
+let _lastVpWPx: number = 0;
+let _lastVpHPx: number = 0;
+let _lastScalePx: number = 1;
 /**
  * Set of all room IDs included in the most-recent schedule (BFS neighbourhood).
  * Kept alive across idle slices so post-slice eviction does not evict rooms
@@ -389,6 +465,10 @@ export function scheduleChunkPrewarms(
   _getQuality     = getQuality;
   _getLastFrameMs = getLastFrameMs;
   _currentRoomId  = currentRoom.id;
+  // Persist viewport params for `ensureChunkPrewarmQueued` task creation.
+  _lastVpWPx   = vpWPx;
+  _lastVpHPx   = vpHPx;
+  _lastScalePx = scalePx;
 
   const nearby = bfsNearbyRooms(currentRoom.id, roomRegistry, MAX_PREWARM_RADIUS);
 
@@ -503,33 +583,144 @@ export function scheduleChunkPrewarms(
 // ── Priority boost API ────────────────────────────────────────────────────────
 
 /**
- * Moves the warm task for `roomId` to the front of the idle queue.
- *
- * Call this from the proximity-based preload boost in gameScreen.ts so that
- * when the player is close to a room boundary, its chunk build is accelerated.
- *
- * No-op if:
- *   - `roomId` is not in the current queue (unknown, already complete, or not
- *     yet scheduled — the next `scheduleChunkPrewarms` will pick it up).
- *   - `roomId` is already at index 0 (already the highest-priority task).
- *   - The scheduler is cancelled.
- *
- * If the idle callback is not running, this also kicks off a new one.
+ * The reason why `ensureChunkPrewarmQueued` was called.
+ * Used for DEV logging only.
  */
-export function prioritizeChunkPrewarm(roomId: string): void {
+export type EnsureQueuedReason = 'proximity' | 'velocity' | 'manual' | 'transition';
+
+/**
+ * Ensures a chunk prewarm task exists for `roomId` and is at the front of the
+ * idle queue.  Unlike `prioritizeChunkPrewarm`, this **also creates a new task**
+ * when the room has not been queued (e.g. was already completed on a prior
+ * schedule pass, or the scheduler was restarted without including this room).
+ *
+ * Behaviour:
+ *  - Room already at queue front → no-op (already highest priority).
+ *  - Room elsewhere in queue → moved to front; idle callback kicked.
+ *  - Room not in queue, prewarm data present for both wall and bg → skipped
+ *    (room was fully warmed; adoption will use the cached data).
+ *  - Room not in queue, prewarm data missing → new radius-1 task created at
+ *    the front of the queue; idle callback kicked.
+ *  - Scheduler cancelled or room not in registry → no-op.
+ *
+ * @param roomId  Target room to ensure is warmed.
+ * @param reason  Why the ensure was requested (used in DEV log messages only).
+ */
+export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedReason): void {
   if (_cancelled) return;
+
   const idx = _queue.findIndex(t => t.roomId === roomId);
+
+  if (idx === 0) {
+    // Already at the front — nothing to do.
+    return;
+  }
+
   if (idx > 0) {
-    // Move task to the front.
+    // Move existing task to the front.
     _queue.unshift(_queue.splice(idx, 1)[0]);
     if (import.meta.env.DEV) {
-      console.log(`[chunkPrewarm:priority] ${roomId} moved to front of queue`);
+      console.log(`[chunkPrewarm:ensure] ${roomId} moved to front (${reason})`);
+    }
+    if (_idleHandle === 0 && !_cancelled) {
+      _idleHandle = _scheduleIdle(_onIdle);
+    }
+    return;
+  }
+
+  // Room is NOT in the queue.
+
+  // If prewarm data is already present for both wall and bg, adoption will pick
+  // it up — no need to re-queue.
+  const wallReady = getPrewarmWallRoomStats(roomId) !== null;
+  const bgReady   = getPrewarmBgRoomStats(roomId)   !== null;
+  if (wallReady && bgReady) {
+    if (import.meta.env.DEV) {
+      console.log(`[chunkPrewarm:ensure] ${roomId} already warmed — skip (${reason})`);
+    }
+    return;
+  }
+
+  // Room is not in registry — cannot create a task.
+  if (_roomRegistry === null) return;
+  const room = _roomRegistry.get(roomId);
+  if (room === undefined) {
+    if (import.meta.env.DEV) {
+      console.log(`[chunkPrewarm:ensure] ${roomId} not in registry — skip (${reason})`);
+    }
+    return;
+  }
+
+  // Compute entrance offset from the current room's transition to this room.
+  let offsetXPx = 0;
+  let offsetYPx = 0;
+  // Fall back to typical virtual-canvas dimensions if the scheduler has not yet
+  // processed a frame (i.e. scheduleChunkPrewarms has not been called).  These
+  // values match BASE_VIRTUAL_WIDTH_PX / FIXED_VIRTUAL_HEIGHT_PX in gameScreen.ts
+  // and are safe defaults; in steady-state play _lastVpWPx/_lastVpHPx are always set.
+  const vpW = _lastVpWPx > 0 ? _lastVpWPx : 480;
+  const vpH = _lastVpHPx > 0 ? _lastVpHPx : 270;
+  const sp  = _lastScalePx > 0 ? _lastScalePx : 1;
+  if (_currentRoomId !== null) {
+    const currentRoomDef = _roomRegistry.get(_currentRoomId);
+    if (currentRoomDef !== undefined) {
+      const trans = currentRoomDef.transitions.find(t => t.targetRoomId === roomId);
+      if (trans !== undefined) {
+        const off = computeEntranceOffset(trans, vpW, vpH, sp);
+        offsetXPx = off.offsetXPx;
+        offsetYPx = off.offsetYPx;
+      }
     }
   }
-  // Ensure an idle callback is scheduled if the queue is non-empty.
-  if (_queue.length > 0 && _idleHandle === 0 && !_cancelled) {
+
+  // Create a new radius-1 task at the front of the queue.
+  _queue.unshift({
+    roomId,
+    radius: 1,
+    offsetXPx,
+    offsetYPx,
+    vpWPx:  vpW,
+    vpHPx:  vpH,
+    scalePx: sp,
+    transitionDir: undefined,
+    wallDone: false,
+    bgDone:   false,
+  });
+
+  // Add to the keep-set so the next eviction pass does not remove newly created data.
+  _keepIds.add(roomId);
+
+  if (import.meta.env.DEV) {
+    console.log(`[chunkPrewarm:ensure] ${roomId} created new task at front (${reason})`);
+  }
+
+  if (_idleHandle === 0 && !_cancelled) {
     _idleHandle = _scheduleIdle(_onIdle);
   }
+}
+
+/**
+ * Moves the warm task for `roomId` to the front of the idle queue.
+ *
+ * @deprecated Prefer `ensureChunkPrewarmQueued`, which also creates a task
+ * if the room is not yet queued.  This wrapper is retained for any external
+ * callers that only need the move-to-front behaviour.
+ */
+export function prioritizeChunkPrewarm(roomId: string): void {
+  ensureChunkPrewarmQueued(roomId, 'manual');
+}
+
+/**
+ * Returns a snapshot of the prewarm store readiness for a room, captured
+ * **before** adoption (which clears the store entry).
+ *
+ * Intended for building `TransitionReadinessDiagnostic` in `startTransitionLoad`.
+ */
+export function getRoomPrewarmReadiness(roomId: string): { wallPresent: boolean; bgPresent: boolean } {
+  return {
+    wallPresent: getPrewarmWallRoomStats(roomId) !== null,
+    bgPresent:   getPrewarmBgRoomStats(roomId)   !== null,
+  };
 }
 
 /**

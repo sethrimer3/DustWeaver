@@ -38,6 +38,7 @@ import {
   isBgActiveViewportCovered,
   isBgCoreViewportCovered,
 } from '../render/walls/backgroundBlockRenderer';
+import { computeRenderStateKey } from '../render/walls/roomRenderCacheStore';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import {
   DEFAULT_DIRECTIONAL_BIAS,
@@ -165,7 +166,7 @@ export function tickEntryWarm(
 
   // Guard: max-frame timeout
   if (state.framesWarmed >= ENTRY_WARM_MAX_FRAMES || state.msSpent >= ENTRY_WARM_BUDGET_MS) {
-    _finishWarm(state, room, /* timedOut */ true);
+    _finishWarm(state, room, /* timedOut */ true, undefined);
     return;
   }
 
@@ -174,10 +175,23 @@ export function tickEntryWarm(
     // Runtime data not yet ready — defer, counting against frame budget.
     state.framesWarmed++;
     if (state.framesWarmed >= ENTRY_WARM_MAX_FRAMES) {
-      _finishWarm(state, room, /* timedOut */ true);
+      _finishWarm(state, room, /* timedOut */ true, undefined);
     }
     return;
   }
+
+  // Compute the current render-state key for adoption-time validation.
+  // This mirrors the key computed in Phase A of makeLoadRoomPhases and by
+  // prewarmWallChunksForRoom, ensuring chunks built here are adopted with the
+  // correct key and stale chunks (if any) are rejected.
+  const currentRenderStateKey = computeRenderStateKey(
+    room.blockTheme ?? null,
+    room.worldNumber ?? 1,
+    room.lightingEffect ?? 'Ambient',
+    room.ambientLightDirection ?? 'omni',
+    room.blockSeamBlending ?? 'off',
+    entry.blockerKeys ?? new Set<string>(),
+  );
 
   const t0 = performance.now();
 
@@ -216,13 +230,13 @@ export function tickEntryWarm(
     wallResult.rebuilt === 0 && wallResult.skipped === 0 &&
     bgResult.rebuilt   === 0 && bgResult.skipped   === 0
   ) {
-    _finishWarm(state, room, /* timedOut */ false);
+    _finishWarm(state, room, /* timedOut */ false, currentRenderStateKey);
     return;
   }
 
   // Check budget after this step.
   if (state.msSpent >= ENTRY_WARM_BUDGET_MS || state.framesWarmed >= ENTRY_WARM_MAX_FRAMES) {
-    _finishWarm(state, room, /* timedOut */ true);
+    _finishWarm(state, room, /* timedOut */ true, currentRenderStateKey);
   }
 }
 
@@ -286,10 +300,18 @@ export function isEntryWarmReadyOrTimedOut(state: EntryWarmState): boolean {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/** Finalize the warm: adopt all built chunks, update phase, log in DEV. */
-function _finishWarm(state: EntryWarmState, room: RoomDef, timedOut: boolean): void {
-  adoptPrewarmedWallChunks(room.id, state.scalePx);
-  adoptPrewarmedBgChunks(room, state.scalePx);
+/** Finalize the warm: adopt all built chunks (with render-state validation), update phase, log in DEV. */
+function _finishWarm(
+  state: EntryWarmState,
+  room: RoomDef,
+  timedOut: boolean,
+  currentRenderStateKey: string | undefined,
+): void {
+  // Pass the current render-state key so that adoptPrewarmedWallChunks and
+  // adoptPrewarmedBgChunks can reject any snapshot whose key does not match
+  // (e.g. if a lighting/theme change happened mid-warm).
+  adoptPrewarmedWallChunks(room.id, state.scalePx, currentRenderStateKey);
+  adoptPrewarmedBgChunks(room, state.scalePx, currentRenderStateKey);
 
   state.phase              = timedOut ? 'timedOut' : 'ready';
   state.usedFallbackRelease = timedOut;
