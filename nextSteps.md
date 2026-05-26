@@ -282,7 +282,7 @@ These limitations are architectural, not bugs.  The existing `loadRoom` path rem
 #### Transition modes tracked
 
 | Mode | Meaning |
-|---|---|
+| --- | --- |
 | `residentHot` | Instant path, enemy state restored from frozen snapshot |
 | `residentFallback` | Instant path, first visit — fresh enemy spawn |
 | `legacyLoad` | Async path (cache miss), full destructive load |

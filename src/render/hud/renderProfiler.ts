@@ -712,16 +712,14 @@ export class RenderProfiler {
       ctx.font = `${fontSizePx}px monospace`;
       ctx.fillStyle = 'rgba(0,0,0,0.70)';
       ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, residentPanelH);
+      const modeColor: Record<string, string> = {
+        residentHot:      '#88ff88',
+        residentFallback: '#ffcc44',
+        legacyLoad:       '#ff8844',
+      };
       for (let i = 0; i < residentLines.length; i++) {
-        const isHeader    = i === 0;
-        const isHot       = i === 3 && mode === 'residentHot';
-        const isFallback  = i === 3 && mode === 'residentFallback';
-        const isLegacy    = i === 3 && mode === 'legacyLoad';
-        ctx.fillStyle = isHeader   ? '#ffdd44'
-          : isHot      ? '#88ff88'
-          : isFallback ? '#ffcc44'
-          : isLegacy   ? '#ff8844'
-          : '#b8d8ff';
+        const isHeader = i === 0;
+        ctx.fillStyle = isHeader ? '#ffdd44' : (i === 3 ? (modeColor[mode] ?? '#b8d8ff') : '#b8d8ff');
         ctx.fillText(residentLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();

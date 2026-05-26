@@ -215,11 +215,14 @@ export class ResidentRoomManager {
     const enemies = room.enemies ?? [];
     for (let ci = 1; ci < world.clusters.length; ci++) {
       const cl = world.clusters[ci];
-      // Cluster index ci−1 maps to room.enemies[ci−1] (spawn order is stable).
+      // Cluster index ci-1 maps to room.enemies[ci-1] (spawn order is stable).
       const enemyDef = enemies[ci - 1];
       if (enemyDef === undefined) continue; // guard against spawn anomalies
       frozen.push({
-        cluster:  { ...cl } as ClusterState, // shallow copy — all fields are primitives
+        cluster:  { ...cl } as ClusterState, // shallow copy — ClusterState fields are all
+        // number/0|1 primitives; the only "index" field (grappleHunterChainStartIndex) is
+        // a number offset into the particle buffer, not a reference.  It is reset to -1
+        // in restoreFrozenEnemies() before the cluster is inserted into a new WorldState.
         enemyDef,
       });
     }
