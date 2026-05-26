@@ -21,7 +21,7 @@
  * BUILD 394
  */
 
-import type { RoomDef } from '../levels/roomDef';
+import type { RoomDef, TransitionDirection } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { bfsNearbyRooms, computeEntranceOffset } from './roomPrewarmNeighborhood';
 import {
@@ -103,6 +103,13 @@ const PREWARM_MEMORY_BUDGET_KB: Record<'low' | 'med' | 'high', number> = {
   high: 32768,
 };
 
+/**
+ * Minimum pre-transition velocity magnitude (world units/frame) required on
+ * either axis before velocity-direction queue ordering is applied.
+ * Below this threshold the player is considered stationary and ordering is skipped.
+ */
+const MIN_VELOCITY_FOR_DIRECTION_ORDERING = 1;
+
 // ── Idle scheduling shim (mirrors roomPreloadScheduler) ──────────────────────
 
 type IdleCallbackHandle = number;
@@ -166,6 +173,28 @@ function _wallTemplateToSnapshot(t: {
   };
 }
 
+// ── Transition outcome tracking ───────────────────────────────────────────────
+
+/**
+ * Records whether the most recent room transition used:
+ *  - 'hot'       — instant, no overlay (chunk caches were ready).
+ *  - 'entryWarm' — instant load but brief textless cover while chunks warmed.
+ *  - 'loading'   — full async load with "Loading…" overlay (cold cache miss).
+ *  - 'none'      — no transition has occurred yet.
+ */
+export type TransitionOutcome = 'hot' | 'entryWarm' | 'loading' | 'none';
+
+/**
+ * Records the outcome of the most recent room transition into the prewarm stats
+ * so it is visible in the debug panel.
+ *
+ * Call this from `startTransitionLoad` in gameScreen.ts immediately after the
+ * instant vs. async path is decided.
+ */
+export function recordTransitionOutcome(outcome: TransitionOutcome): void {
+  _stats.lastTransitionOutcome = outcome;
+}
+
 // ── Prewarm stats (shared with debug panel) ───────────────────────────────────
 
 export interface PrewarmStats {
@@ -222,6 +251,8 @@ export interface PrewarmStats {
   totalPrewarmMemoryKB: number;
   /** Memory budget for the current quality tier (KB).  0 when scheduler not yet started. */
   memoryBudgetKB: number;
+  /** Outcome of the most recent room transition. */
+  lastTransitionOutcome: TransitionOutcome;
 }
 
 let _stats: PrewarmStats = {
@@ -247,6 +278,7 @@ let _stats: PrewarmStats = {
   totalEvictions:          0,
   totalPrewarmMemoryKB:    0,
   memoryBudgetKB:          0,
+  lastTransitionOutcome:   'none' as TransitionOutcome,
 };
 
 /** Read-only snapshot of prewarm stats. Updates every idle callback. */
@@ -267,6 +299,11 @@ interface WarmTask {
   vpHPx: number;
   /** Camera zoom factor (usually 1.0). */
   scalePx: number;
+  /**
+   * Transition direction from the current room to this room (radius-1 only).
+   * `undefined` for radius > 1.  Used for velocity-direction queue ordering.
+   */
+  transitionDir?: TransitionDirection;
   /** Whether wall chunks still need more coverage in this task. */
   wallDone: boolean;
   /** Whether bg chunks still need more coverage. */
@@ -295,7 +332,7 @@ let _currentRoomId: string | null = null;
  * that are within the prewarm radius but whose queue tasks have already
  * completed.
  */
-let _keepIds: ReadonlySet<string> = new Set<string>();
+let _keepIds: Set<string> = new Set<string>();
 
 // ── Handle ────────────────────────────────────────────────────────────────────
 
@@ -315,15 +352,19 @@ export interface WarmScheduleHandle {
  * Must be called after `scheduleRoomPreloads` (or at the same time) so that
  * room runtime data and sprites have a head start before we try to build chunks.
  *
- * @param currentRoom     The room the player just entered.
- * @param roomRegistry    Map of all loaded room definitions.
- * @param runtimeCache    The shared `RoomRuntimeCache` instance.
- * @param getQuality      Returns the current graphics quality setting.
- * @param getLastFrameMs  Returns the most recent main-thread frame time (ms).
- * @param vpWPx           Viewport width (virtual pixels).
- * @param vpHPx           Viewport height (virtual pixels).
- * @param scalePx         Camera zoom factor.
- * @returns               A handle to cancel the schedule.
+ * @param currentRoom      The room the player just entered.
+ * @param roomRegistry     Map of all loaded room definitions.
+ * @param runtimeCache     The shared `RoomRuntimeCache` instance.
+ * @param getQuality       Returns the current graphics quality setting.
+ * @param getLastFrameMs   Returns the most recent main-thread frame time (ms).
+ * @param vpWPx            Viewport width (virtual pixels).
+ * @param vpHPx            Viewport height (virtual pixels).
+ * @param scalePx          Camera zoom factor.
+ * @param preTransVelocity Player velocity at the moment of the transition trigger.
+ *                         When provided, the radius-1 task whose entrance direction
+ *                         matches the dominant velocity axis is moved to the front
+ *                         of the queue so it is built first during idle time.
+ * @returns                A handle to cancel the schedule.
  */
 export function scheduleChunkPrewarms(
   currentRoom: RoomDef,
@@ -334,6 +375,7 @@ export function scheduleChunkPrewarms(
   vpWPx: number,
   vpHPx: number,
   scalePx: number,
+  preTransVelocity?: { vx: number; vy: number },
 ): WarmScheduleHandle {
   // Cancel any previous run.
   _cancelled = false;
@@ -352,17 +394,26 @@ export function scheduleChunkPrewarms(
 
   // Build the task queue (radius-1 first, then radius-2, then radius-3).
   _queue = [];
+  const currentRoomDef = roomRegistry.get(currentRoom.id);
+  if (currentRoomDef === undefined) {
+    // Should not happen in practice; currentRoom is always registered.
+    if (import.meta.env.DEV) {
+      console.warn('[chunkPrewarm] currentRoom not found in registry:', currentRoom.id);
+    }
+    return { cancel(): void {} };
+  }
   for (const [roomId, radius, transIdx] of nearby) {
-    const currentRoomDef = roomRegistry.get(currentRoom.id);
     let entranceOffsetXPx = 0;
     let entranceOffsetYPx = 0;
+    let transitionDir: TransitionDirection | undefined;
 
-    if (currentRoomDef !== undefined && transIdx >= 0 && transIdx < currentRoomDef.transitions.length) {
+    if (transIdx >= 0 && transIdx < currentRoomDef.transitions.length) {
       const t = currentRoomDef.transitions[transIdx];
       if (t.targetRoomId === roomId) {
         const { offsetXPx, offsetYPx } = computeEntranceOffset(t, vpWPx, vpHPx, scalePx);
         entranceOffsetXPx = offsetXPx;
         entranceOffsetYPx = offsetYPx;
+        transitionDir = t.direction;
       }
     } else {
       // Radius > 1: find the first transition in the target room itself
@@ -388,9 +439,39 @@ export function scheduleChunkPrewarms(
       vpWPx,
       vpHPx,
       scalePx,
+      transitionDir,
       wallDone: false,
       bgDone:   false,
     });
+  }
+
+  // ── Velocity-direction queue ordering ───────────────────────────────────────
+  // If the player's pre-transition velocity is known and meaningful, move the
+  // radius-1 task whose entrance direction matches the dominant velocity axis
+  // to the front so it gets warmed first during idle time.
+  // (The proximity boost in gameScreen.ts handles the most time-critical case;
+  // this ordering ensures idle work targets the likeliest next room from the
+  // very first idle slice.)
+  if (preTransVelocity !== undefined) {
+    const { vx, vy } = preTransVelocity;
+    const absX = Math.abs(vx);
+    const absY = Math.abs(vy);
+    if (absX > MIN_VELOCITY_FOR_DIRECTION_ORDERING || absY > MIN_VELOCITY_FOR_DIRECTION_ORDERING) {
+      const dominant: TransitionDirection =
+        absX >= absY
+          ? (vx >= 0 ? 'right' : 'left')
+          : (vy >= 0 ? 'down'  : 'up');
+      const idx = _queue.findIndex(t => t.radius === 1 && t.transitionDir === dominant);
+      if (idx > 0) {
+        _queue.unshift(_queue.splice(idx, 1)[0]);
+        if (import.meta.env.DEV) {
+          console.log(
+            `[chunkPrewarm] velocity-ordered: ${_queue[0].roomId} (${dominant}) moved to front` +
+            ` (vx=${vx.toFixed(1)} vy=${vy.toFixed(1)})`,
+          );
+        }
+      }
+    }
   }
 
   // Build the set of rooms that are part of the new schedule so eviction can
@@ -417,6 +498,56 @@ export function scheduleChunkPrewarms(
       }
     },
   };
+}
+
+// ── Priority boost API ────────────────────────────────────────────────────────
+
+/**
+ * Moves the warm task for `roomId` to the front of the idle queue.
+ *
+ * Call this from the proximity-based preload boost in gameScreen.ts so that
+ * when the player is close to a room boundary, its chunk build is accelerated.
+ *
+ * No-op if:
+ *   - `roomId` is not in the current queue (unknown, already complete, or not
+ *     yet scheduled — the next `scheduleChunkPrewarms` will pick it up).
+ *   - `roomId` is already at index 0 (already the highest-priority task).
+ *   - The scheduler is cancelled.
+ *
+ * If the idle callback is not running, this also kicks off a new one.
+ */
+export function prioritizeChunkPrewarm(roomId: string): void {
+  if (_cancelled) return;
+  const idx = _queue.findIndex(t => t.roomId === roomId);
+  if (idx > 0) {
+    // Move task to the front.
+    _queue.unshift(_queue.splice(idx, 1)[0]);
+    if (import.meta.env.DEV) {
+      console.log(`[chunkPrewarm:priority] ${roomId} moved to front of queue`);
+    }
+  }
+  // Ensure an idle callback is scheduled if the queue is non-empty.
+  if (_queue.length > 0 && _idleHandle === 0 && !_cancelled) {
+    _idleHandle = _scheduleIdle(_onIdle);
+  }
+}
+
+/**
+ * Evicts pre-warmed wall and bg chunks for `roomId` and removes it from the
+ * keep-set so it will be re-queued on the next `scheduleChunkPrewarms`.
+ *
+ * Call this whenever editor changes invalidate a room's cached runtime data.
+ * This prevents stale chunk canvases from being adopted on the next room entry.
+ */
+export function invalidateRoomChunkPrewarm(roomId: string): void {
+  evictPrewarmedWallChunks(roomId);
+  evictPrewarmedBgChunks(roomId);
+  // Remove from the keep-set so the scheduler's next eviction pass does not
+  // inadvertently protect it, and so that scheduleChunkPrewarms will re-add it.
+  _keepIds.delete(roomId);
+  if (import.meta.env.DEV) {
+    console.log(`[chunkPrewarm:invalidate] evicted chunks for ${roomId}`);
+  }
 }
 
 // ── Adoption on room entry ────────────────────────────────────────────────────

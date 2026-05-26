@@ -611,6 +611,7 @@ export class RenderProfiler {
         `BG hits: ${pw.bgCacheHits}  miss: ${pw.bgCacheMisses}`,
         `Defer!rdy: ${pw.deferredNotReady}  !spr: ${pw.deferredSpritesNotReady}`,
         `Evict pass: ${pw.evictedThisPass}  total: ${pw.totalEvictions}`,
+        `Last xtn: ${pw.lastTransitionOutcome}`,
         pw.pausedForFrameTime ? '⚠ PAUSED (frame time)' : '● warming',
       ];
       const prewarmPanelH = prewarmLines.length * lineHeightPx + 8;

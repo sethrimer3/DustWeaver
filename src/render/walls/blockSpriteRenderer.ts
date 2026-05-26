@@ -31,6 +31,7 @@ import {
   deletePrewarmEntry,
   getPrewarmDummyCtx,
 } from './wallChunkPrewarmStore';
+import { computeRenderStateKey } from './roomRenderCacheStore';
 // Re-export prewarm store management API so existing import paths continue to work.
 export {
   evictPrewarmedWallChunks,
@@ -459,6 +460,16 @@ export function prewarmWallChunksForRoom(
   blockSizePx: number,
   maxChunks: number,
 ): PrewarmChunkResult {
+  // ── Compute render-state key before save/restore (uses only ctx fields) ────
+  const renderStateKey = computeRenderStateKey(
+    ctx.blockTheme,
+    ctx.worldNumber,
+    ctx.lightingEffect,
+    ctx.ambientDirection,
+    ctx.seamBlending,
+    ctx.blockerKeys,
+  );
+
   // ── Save active room state ────────────────────────────────────────────────
   const savedSprites             = _sprites;
   const savedWorldNumber         = _activeWorldNumber;
@@ -529,7 +540,7 @@ export function prewarmWallChunksForRoom(
     setPrewarmWallLayout(roomId, wallLayout);
 
     // ── Get or create the prewarm chunk cache for this room ─────────────────
-    const tempCache = getOrCreatePrewarmWallCache(roomId);
+    const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey);
     tempCache.setMaxChunksPerFrame(maxChunks);
 
     // ── Compute ambient depths and populate 2×2 covered keys ────────────────

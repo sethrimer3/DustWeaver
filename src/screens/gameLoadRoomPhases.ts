@@ -183,6 +183,12 @@ export interface LoadRoomCtx {
   setPreloadScheduleHandle: (h: PreloadScheduleHandle | null) => void;
   getWarmScheduleHandle: () => WarmScheduleHandle | null;
   setWarmScheduleHandle: (h: WarmScheduleHandle | null) => void;
+  /**
+   * Returns the player's velocity at the moment the room transition was
+   * triggered.  Used by Phase F to order the chunk prewarm queue so the
+   * room in the travel direction is built first.
+   */
+  getPreTransitionVelocity: () => { vx: number; vy: number };
 }
 
 /**
@@ -674,6 +680,7 @@ export function* makeLoadRoomPhases(
     ctx.getVirtualWidthPx(),
     ctx.getVirtualHeightPx(),
     camera.zoom,
+    ctx.getPreTransitionVelocity(),
   ));
 
   // Generator complete — Phase F has no trailing yield.

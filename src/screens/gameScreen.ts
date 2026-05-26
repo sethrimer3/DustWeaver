@@ -69,6 +69,9 @@ import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
 import { type PreloadScheduleHandle } from './roomPreloadScheduler';
 import {
   getPrewarmStats,
+  prioritizeChunkPrewarm,
+  invalidateRoomChunkPrewarm,
+  recordTransitionOutcome,
   type WarmScheduleHandle,
 } from './roomRenderChunkWarmScheduler';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
@@ -433,6 +436,12 @@ export function startGameScreen(
     spawnYBlock: 0,
   };
 
+  // Pre-transition velocity: the player's velocity at the moment the transition
+  // was triggered.  Captured in startTransitionLoad (both instant and async paths)
+  // and exposed to the load-room generator so Phase F can order the prewarm queue.
+  let _preTransVX = 0;
+  let _preTransVY = 0;
+
   // ── Entry viewport warm state ─────────────────────────────────────────────
   // Tracks progress of the shaded-chunk warm pass for the current room's
   // entry viewport.  Holds the loading overlay until the pass completes or
@@ -489,6 +498,7 @@ export function startGameScreen(
     setPreloadScheduleHandle:   (h) => { _preloadScheduleHandle   = h; },
     getWarmScheduleHandle:      () => _warmScheduleHandle,
     setWarmScheduleHandle:      (h) => { _warmScheduleHandle      = h; },
+    getPreTransitionVelocity:   () => ({ vx: _preTransVX, vy: _preTransVY }),
   };
 
   // ── Transition cooldown ───────────────────────────────────────────────────
@@ -566,6 +576,9 @@ export function startGameScreen(
     dir: TransitionDirection,
   ): void {
     const t0 = import.meta.env.DEV ? performance.now() : 0;
+    // Capture pre-transition velocity for Phase F prewarm queue ordering.
+    _preTransVX = vx;
+    _preTransVY = vy;
     const cacheEntry = roomRuntimeCache.get(room.id);
     const isPrepared = cacheEntry !== undefined && isEntryFullyPrepared(cacheEntry);
 
@@ -593,6 +606,9 @@ export function startGameScreen(
       if (!canSkipEntryWarm(currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom)) {
         startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
         loadingOverlay.showEntryWarm();
+        recordTransitionOutcome('entryWarm');
+      } else {
+        recordTransitionOutcome('hot');
       }
       if (import.meta.env.DEV) {
         const warmStatus = entryWarmState.phase === 'idle' ? ' (entryWarm skipped — viewport covered)' : ' (entryWarm started — overlay shown)';
@@ -613,6 +629,7 @@ export function startGameScreen(
       asyncLoadState.spawnYBlock   = spawnYBlock;
       asyncLoadState.gen           = _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, false);
       asyncLoadState.isActive      = true;
+      recordTransitionOutcome('loading');
       showLoadingOverlay();
       // Advance Phase A immediately (room metadata + world reset, < 1ms).
       // This sets `currentRoom = room` so `onRoomBecameActive()` — called by
@@ -696,6 +713,8 @@ export function startGameScreen(
     const [validX, validY] = resolveSpawnBlock(roomDef, spawnX, spawnY);
     // Invalidate this room's cached runtime data so edits take effect immediately.
     roomRuntimeCache.invalidate(roomDef.id);
+    // Also evict any pre-warmed render chunks so stale canvas data is not adopted.
+    invalidateRoomChunkPrewarm(roomDef.id);
     loadRoom(roomDef, validX, validY, preserveCamera);
     // Editor loads are not transitions — transition reveal state is removed (legacy).
   }, () => {
@@ -1090,10 +1109,16 @@ export function startGameScreen(
 
     // ── Proximity-based priority preload ───────────────────────────────────
     // When the player is within URGENT_PRELOAD_PROXIMITY_BLOCKS of a room
-    // boundary that has an unprepared transition target, move that room to the
-    // front of the async preload queue.  We never block the gameplay frame here
-    // — if the player crosses before preparation finishes the async overlay path
-    // will handle it.
+    // boundary, boost the preload priority for that transition target.
+    //
+    // - Runtime-cache boost (`prioritize`): only needed while the runtime entry
+    //   is still being computed.
+    // - Chunk-prewarm boost (`prioritizeChunkPrewarm`): needed whenever chunk
+    //   canvases are not yet ready, even if the runtime cache is fully prepared.
+    //   Boosting is cheap (it just reorders the idle queue).
+    //
+    // We never block the gameplay frame here — if the player crosses before
+    // preparation finishes the async overlay path will handle it.
     {
       const _proxPlayer = world.clusters[0];
       if (_proxPlayer !== undefined && _proxPlayer.isAliveFlag === 1) {
@@ -1102,8 +1127,6 @@ export function startGameScreen(
         for (let _ti = 0; _ti < currentRoom.transitions.length; _ti++) {
           const _t = currentRoom.transitions[_ti];
           const _tId = _t.targetRoomId;
-          const _tEntry = roomRuntimeCache.get(_tId);
-          if (_tEntry !== undefined && isEntryFullyPrepared(_tEntry)) continue;
 
           let _isNear = false;
           switch (_t.direction) {
@@ -1113,13 +1136,20 @@ export function startGameScreen(
             case 'up':    _isNear = _py <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
           }
           if (_isNear) {
-            // Boost runtime-cache build priority in the async queue.
-            _preloadScheduleHandle?.prioritize(_tId);
-            // Also aggressively decode sprites for this exact target room so
-            // they are GPU-rasterized before the player crosses. Fire-and-forget.
-            const _tRoom = ROOM_REGISTRY.get(_tId);
-            if (_tRoom !== undefined) void decodeRoomThemeSprites(_tRoom);
-            if (_tRoom !== undefined) decodeRoomBackground(_tRoom);
+            const _tEntry = roomRuntimeCache.get(_tId);
+            // Boost runtime-cache build if not yet fully prepared.
+            if (_tEntry === undefined || !isEntryFullyPrepared(_tEntry)) {
+              _preloadScheduleHandle?.prioritize(_tId);
+              // Also aggressively decode sprites for this exact target room so
+              // they are GPU-rasterized before the player crosses. Fire-and-forget.
+              const _tRoom = ROOM_REGISTRY.get(_tId);
+              if (_tRoom !== undefined) void decodeRoomThemeSprites(_tRoom);
+              if (_tRoom !== undefined) decodeRoomBackground(_tRoom);
+            }
+            // Always boost chunk prewarm when near — this is cheap and ensures
+            // that even rooms whose runtime data is ready get their chunks built
+            // before the player arrives.
+            prioritizeChunkPrewarm(_tId);
             break; // one priority boost per frame is sufficient
           }
         }
