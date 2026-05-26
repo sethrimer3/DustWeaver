@@ -23,6 +23,7 @@
 
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import { bfsNearbyRooms, computeEntranceOffset } from './roomPrewarmNeighborhood';
 import {
   DEFAULT_DIRECTIONAL_BIAS,
   DEFAULT_SIDE_EXPOSURE_STRENGTH,
@@ -305,67 +306,6 @@ export interface WarmScheduleHandle {
 
 // ── BFS helper ────────────────────────────────────────────────────────────────
 
-/**
- * Builds a BFS-ordered list of `[roomId, radius, incomingTransitionIndex]`
- * triples for rooms within `maxRadius` hops of `fromRoomId`.
- *
- * `incomingTransitionIndex` is the index of the transition IN THE CURRENT ROOM
- * that leads to the neighbour (used to compute the entrance viewport).
- * For radius > 1, it's set to -1 (we use the first transition in the neighbour).
- */
-function _bfsNearby(
-  fromRoomId: string,
-  registry: ReadonlyMap<string, RoomDef>,
-  maxRadius: number,
-): Array<[string, number, number]> {
-  const visited = new Set<string>([fromRoomId]);
-  const result: Array<[string, number, number]> = [];
-  const queue: Array<[string, number, number]> = [[fromRoomId, 0, -1]];
-
-  while (queue.length > 0) {
-    const [currentId, radius, _] = queue.shift()!;
-    if (radius >= maxRadius) continue;
-
-    const room = registry.get(currentId);
-    if (room === undefined) continue;
-
-    for (let ti = 0; ti < room.transitions.length; ti++) {
-      const targetId = room.transitions[ti].targetRoomId;
-      if (visited.has(targetId)) continue;
-      visited.add(targetId);
-      // For radius-1 neighbours, record which transition leads to them.
-      const transIdx = (radius === 0) ? ti : -1;
-      result.push([targetId, radius + 1, transIdx]);
-      queue.push([targetId, radius + 1, transIdx]);
-    }
-  }
-
-  return result;
-}
-
-// ── Entrance viewport computation ──────────────────────────────────────────────
-
-/**
- * Computes the camera offset (virtual pixels) representing the first viewport
- * the player will see when entering `targetRoom` via `transition`.
- *
- * The resulting `offsetXPx, offsetYPx` are passed to `prewarmWallChunksForRoom`
- * so it prioritises building chunks that will be visible in the first frame.
- */
-function _computeEntranceOffset(
-  transition: { targetSpawnBlock: readonly [number, number] },
-  vpWPx: number,
-  vpHPx: number,
-  scalePx: number,
-): { offsetXPx: number; offsetYPx: number } {
-  const [spawnXBlock, spawnYBlock] = transition.targetSpawnBlock;
-  const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
-  const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
-  const offsetXPx   = vpWPx / 2 - spawnXWorld * scalePx;
-  const offsetYPx   = vpHPx / 2 - spawnYWorld * scalePx;
-  return { offsetXPx, offsetYPx };
-}
-
 // ── Schedule public API ───────────────────────────────────────────────────────
 
 /**
@@ -408,7 +348,7 @@ export function scheduleChunkPrewarms(
   _getLastFrameMs = getLastFrameMs;
   _currentRoomId  = currentRoom.id;
 
-  const nearby = _bfsNearby(currentRoom.id, roomRegistry, MAX_PREWARM_RADIUS);
+  const nearby = bfsNearbyRooms(currentRoom.id, roomRegistry, MAX_PREWARM_RADIUS);
 
   // Build the task queue (radius-1 first, then radius-2, then radius-3).
   _queue = [];
@@ -420,7 +360,7 @@ export function scheduleChunkPrewarms(
     if (currentRoomDef !== undefined && transIdx >= 0 && transIdx < currentRoomDef.transitions.length) {
       const t = currentRoomDef.transitions[transIdx];
       if (t.targetRoomId === roomId) {
-        const { offsetXPx, offsetYPx } = _computeEntranceOffset(t, vpWPx, vpHPx, scalePx);
+        const { offsetXPx, offsetYPx } = computeEntranceOffset(t, vpWPx, vpHPx, scalePx);
         entranceOffsetXPx = offsetXPx;
         entranceOffsetYPx = offsetYPx;
       }
@@ -429,7 +369,7 @@ export function scheduleChunkPrewarms(
       // and approximate the entrance from that side.
       const targetRoom = roomRegistry.get(roomId);
       if (targetRoom !== undefined && targetRoom.transitions.length > 0) {
-        const { offsetXPx, offsetYPx } = _computeEntranceOffset(
+        const { offsetXPx, offsetYPx } = computeEntranceOffset(
           targetRoom.transitions[0],
           vpWPx,
           vpHPx,

@@ -368,6 +368,41 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
    `getPrewarmDummyCtx`) used by `blockSpriteRenderer.ts` internally. Public
    management API re-exported for backward compatibility.
 
+### Completed additions (BUILD 411)
+
+10. **`folderBlockThemes.ts` 643 → ~460 lines**: Theme discovery and catalogue
+    (190 lines) extracted to `folderThemeCatalogue.ts`. New module owns the
+    two `import.meta.glob` calls, `FolderThemeData` interface, `_folderToLabel`,
+    `_folderToShortId`, `_buildFolderThemes`, `FOLDER_BLOCK_THEMES`,
+    `isFolderBasedTheme`, and `folderThemeShortId`. All four exports re-exported
+    from `folderBlockThemes.ts` for backward compatibility. Sprite loading and
+    the 8×8 downscale cache remain in the original file.
+
+11. **`roomPreloadScheduler.ts` 728 → ~595 lines**: Web Worker management
+    (135 lines) extracted to `roomPreparationWorkerManager.ts`. New module owns
+    `_worker`, `_workerCallbacks`, `_pendingWorkerRoomIds`, `_getOrCreateWorker`,
+    `_reconstructRoomRuntimeEntry`, and exposes `dispatchRoomToWorker` and
+    `isRoomPendingWithWorker` as named exports. Scheduler's `prioritize()` uses
+    `isRoomPendingWithWorker`; its inner `processNext()` uses `dispatchRoomToWorker`.
+
+### Completed additions (BUILD 410)
+
+8. **`editorUI.ts` 823 → 647 lines**: Lighting panel DOM construction and
+   per-frame sync logic (180 lines) extracted to `editorUILightingPanel.ts`.
+   Exposes `createEditorLightingPanel(getCallbacks)` returning an
+   `EditorLightingPanel` with `syncOnRebuild`, `syncInPlace`, and `resetState`.
+   Six slider rows, two dropdowns (lighting effect, ambient direction), seam
+   blending, and void-edge controls now live in the new module. Pre-existing
+   default-value inconsistency between rebuild path (0.45/0.18) and in-place
+   sync path (0.35/0.15) preserved exactly.
+
+9. **`roomRenderChunkWarmScheduler.ts` 820 → 750 lines**: Pure BFS helpers
+   (`_bfsNearby`, `_computeEntranceOffset`, ~70 lines) extracted to
+   `roomPrewarmNeighborhood.ts` as named exports `bfsNearbyRooms` and
+   `computeEntranceOffset`. Scheduler now imports from the new module.
+   `BLOCK_SIZE_MEDIUM` retained in the scheduler for its separate usage in
+   the chunk-build slice.
+
 ### Completed additions (BUILD 409)
 
 5. **`roomFileLoader.ts` 689 → 607 lines**: Room-file-cache lifecycle state
@@ -398,9 +433,10 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
    `update()` closure captures ~40 variables from the outer scope. Any further
    extraction risks shadowing bugs. Defer until a clear seam is identified.
 
-3. **`roomRenderChunkWarmScheduler.ts` (~820 lines)**: The pure BFS helpers
-   (`_bfsNearby`, `_computeEntranceOffset`, ~70 lines) could be extracted to
-   a `prewarmBfsHelpers.ts` module but the size reduction is small. Deferred.
+3. **`roomRenderChunkWarmScheduler.ts` (~750 lines after BUILD 410)**: Pure BFS
+   helpers extracted to `roomPrewarmNeighborhood.ts` in BUILD 410. Remaining
+   content is tightly coupled scheduler/task state that is difficult to split
+   further without introducing complex state-passing. Deferred.
 
 4. **`snapshotTypes.ts` (~409 lines after BUILD 409)**: `ParticleSnapshot`
    and `WallSnapshot` could each move to their own files for symmetry, but
@@ -409,6 +445,12 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
 5. **`roomSchemaV2.ts` (~813 lines after prior passes)**: Further extraction
    possible for hydration helpers, but schema logic is tightly interleaved with
    type assertions. Requires careful audit before splitting.
+
+6. **`roomPreloadScheduler.ts` (~595 lines after BUILD 411)**: Worker management
+   extracted to `roomPreparationWorkerManager.ts`. Remaining content is the idle
+   scheduler loop, BFS helpers, and the main `scheduleRoomPreloads` function.
+   Further reduction possible (e.g. extract BFS into its own file), but the
+   scheduler loop itself is tightly coupled to the BFS results. Defer.
 
 ---
 
