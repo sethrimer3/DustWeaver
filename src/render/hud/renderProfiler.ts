@@ -621,6 +621,8 @@ export class RenderProfiler {
         ...diagLines,
         pw.pausedForFrameTime ? '⚠ PAUSED (frame time)' : '● warming',
       ];
+      // Index at which diagLines were spliced in, used for colour coding below.
+      const diagStartIdx = prewarmLines.length - 1 - diagLines.length;
       const prewarmPanelH = prewarmLines.length * lineHeightPx + 8;
       ctx.save();
       ctx.font = `${fontSizePx}px monospace`;
@@ -629,7 +631,7 @@ export class RenderProfiler {
       for (let i = 0; i < prewarmLines.length; i++) {
         const isHeader  = i === 0;
         const isPaused  = i === prewarmLines.length - 1 && pw.pausedForFrameTime;
-        const isDiag    = diag !== null && i >= 13 && i < 13 + diagLines.length;
+        const isDiag    = diag !== null && i >= diagStartIdx && i < diagStartIdx + diagLines.length;
         const diagHot   = isDiag && diag.outcome === 'hot';
         const diagWarm  = isDiag && diag.outcome === 'entryWarm';
         const diagLoad  = isDiag && diag.outcome === 'loading';

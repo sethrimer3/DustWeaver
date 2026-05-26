@@ -254,7 +254,7 @@ export function recordTransitionOutcome(
   _stats = {
     ..._stats,
     lastTransitionOutcome:    outcome,
-    lastTransitionDiagnostic: diagnostic !== undefined ? diagnostic : null,
+    lastTransitionDiagnostic: diagnostic ?? null,
   };
 }
 
@@ -654,6 +654,10 @@ export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedRea
   // Compute entrance offset from the current room's transition to this room.
   let offsetXPx = 0;
   let offsetYPx = 0;
+  // Fall back to typical virtual-canvas dimensions if the scheduler has not yet
+  // processed a frame (i.e. scheduleChunkPrewarms has not been called).  These
+  // values match BASE_VIRTUAL_WIDTH_PX / FIXED_VIRTUAL_HEIGHT_PX in gameScreen.ts
+  // and are safe defaults; in steady-state play _lastVpWPx/_lastVpHPx are always set.
   const vpW = _lastVpWPx > 0 ? _lastVpWPx : 480;
   const vpH = _lastVpHPx > 0 ? _lastVpHPx : 270;
   const sp  = _lastScalePx > 0 ? _lastScalePx : 1;
