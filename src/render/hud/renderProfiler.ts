@@ -598,6 +598,12 @@ export class RenderProfiler {
     // ── Prewarm stats panel ───────────────────────────────────────────────────
     if (showPrewarm && this._prewarmStats !== null) {
       const pw = this._prewarmStats;
+      const diag = pw.lastTransitionDiagnostic;
+      const diagLines = diag !== null ? [
+        `xtn room: ${diag.roomId}`,
+        `miss: ${diag.missReason}`,
+        `W:${diag.wallPrewarmPresent ? 'ready' : 'miss'} B:${diag.bgPrewarmPresent ? 'ready' : 'miss'} rdy:${diag.runtimeReady ? 'y' : 'n'}`,
+      ] : [];
       const prewarmLines = [
         '── Chunk Prewarm ──',
         `Queue: ${pw.queueLength}  Radius: ${pw.currentRadius}`,
@@ -612,6 +618,7 @@ export class RenderProfiler {
         `Defer!rdy: ${pw.deferredNotReady}  !spr: ${pw.deferredSpritesNotReady}`,
         `Evict pass: ${pw.evictedThisPass}  total: ${pw.totalEvictions}`,
         `Last xtn: ${pw.lastTransitionOutcome}`,
+        ...diagLines,
         pw.pausedForFrameTime ? '⚠ PAUSED (frame time)' : '● warming',
       ];
       const prewarmPanelH = prewarmLines.length * lineHeightPx + 8;
@@ -622,7 +629,16 @@ export class RenderProfiler {
       for (let i = 0; i < prewarmLines.length; i++) {
         const isHeader  = i === 0;
         const isPaused  = i === prewarmLines.length - 1 && pw.pausedForFrameTime;
-        ctx.fillStyle = isHeader ? '#ffdd44' : isPaused ? '#ff6060' : '#a8d8ff';
+        const isDiag    = diag !== null && i >= 13 && i < 13 + diagLines.length;
+        const diagHot   = isDiag && diag.outcome === 'hot';
+        const diagWarm  = isDiag && diag.outcome === 'entryWarm';
+        const diagLoad  = isDiag && diag.outcome === 'loading';
+        ctx.fillStyle = isHeader ? '#ffdd44'
+          : isPaused  ? '#ff6060'
+          : diagHot   ? '#88ff88'
+          : diagWarm  ? '#ffcc44'
+          : diagLoad  ? '#ff8844'
+          : '#a8d8ff';
         ctx.fillText(prewarmLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();

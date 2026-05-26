@@ -10,7 +10,10 @@
  * lighting changes.
  *
  * Wall and background caches are stored together in one `RoomRenderSnapshot`
- * object, enabling a clean atomic handoff on room entry.
+ * object.  Note: adoption is staged (wall then bg) in two separate calls — it
+ * is NOT truly atomic.  A torn read is unlikely in practice because both calls
+ * occur in the same synchronous transition sequence, but callers should treat
+ * wall and background availability independently.
  *
  * Individual cache types (wall vs bg) can be cleared independently: wall data
  * is cleared after `adoptPrewarmedWallChunks`, and bg data after

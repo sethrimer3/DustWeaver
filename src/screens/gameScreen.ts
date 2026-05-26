@@ -69,9 +69,11 @@ import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
 import { type PreloadScheduleHandle } from './roomPreloadScheduler';
 import {
   getPrewarmStats,
-  prioritizeChunkPrewarm,
+  ensureChunkPrewarmQueued,
   invalidateRoomChunkPrewarm,
   recordTransitionOutcome,
+  getRoomPrewarmReadiness,
+  type TransitionReadinessDiagnostic,
   type WarmScheduleHandle,
 } from './roomRenderChunkWarmScheduler';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
@@ -587,6 +589,8 @@ export function startGameScreen(
       if (import.meta.env.DEV) {
         console.log(`[transition] ${room.id}: prepared cache HIT — instant load`);
       }
+      // Capture prewarm-store state BEFORE loadRoom (Phase A adoption clears it).
+      const { wallPresent, bgPresent } = getRoomPrewarmReadiness(room.id);
       loadRoom(room, spawnXBlock, spawnYBlock);
       const player = world.clusters[0];
       if (player !== undefined && player.isPlayerFlag === 1) {
@@ -603,12 +607,41 @@ export function startGameScreen(
       // fully covered (e.g. the room was prewarmed before the player arrived),
       // skip the overlay entirely — no visible flash, no warm work needed.
       entryWarmState = createEntryWarmState();
-      if (!canSkipEntryWarm(currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom)) {
+      const viewportCovered = canSkipEntryWarm(currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
+      if (!viewportCovered) {
         startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
         loadingOverlay.showEntryWarm();
-        recordTransitionOutcome('entryWarm');
+        const missReason: TransitionReadinessDiagnostic['missReason'] =
+          !wallPresent ? 'wallChunksMissing' :
+          !bgPresent   ? 'bgChunksMissing'   :
+                         'entryViewportNotCovered';
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[transition] ${room.id}: entryWarm — missReason: ${missReason}` +
+            ` wallPresent:${wallPresent} bgPresent:${bgPresent}`,
+          );
+        }
+        recordTransitionOutcome('entryWarm', {
+          roomId: room.id,
+          runtimeReady: true,
+          wallPrewarmPresent: wallPresent,
+          bgPrewarmPresent:   bgPresent,
+          renderStateKeyMatches: null,
+          entryViewportCovered: false,
+          outcome: 'entryWarm',
+          missReason,
+        });
       } else {
-        recordTransitionOutcome('hot');
+        recordTransitionOutcome('hot', {
+          roomId: room.id,
+          runtimeReady: true,
+          wallPrewarmPresent: wallPresent,
+          bgPrewarmPresent:   bgPresent,
+          renderStateKeyMatches: null,
+          entryViewportCovered: true,
+          outcome: 'hot',
+          missReason: 'none',
+        });
       }
       if (import.meta.env.DEV) {
         const warmStatus = entryWarmState.phase === 'idle' ? ' (entryWarm skipped — viewport covered)' : ' (entryWarm started — overlay shown)';
@@ -629,7 +662,16 @@ export function startGameScreen(
       asyncLoadState.spawnYBlock   = spawnYBlock;
       asyncLoadState.gen           = _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, false);
       asyncLoadState.isActive      = true;
-      recordTransitionOutcome('loading');
+      recordTransitionOutcome('loading', {
+        roomId: room.id,
+        runtimeReady: false,
+        wallPrewarmPresent: false,
+        bgPrewarmPresent:   false,
+        renderStateKeyMatches: null,
+        entryViewportCovered: false,
+        outcome: 'loading',
+        missReason: 'runtimeNotReady',
+      });
       showLoadingOverlay();
       // Advance Phase A immediately (room metadata + world reset, < 1ms).
       // This sets `currentRoom = room` so `onRoomBecameActive()` — called by
@@ -1113,9 +1155,10 @@ export function startGameScreen(
     //
     // - Runtime-cache boost (`prioritize`): only needed while the runtime entry
     //   is still being computed.
-    // - Chunk-prewarm boost (`prioritizeChunkPrewarm`): needed whenever chunk
-    //   canvases are not yet ready, even if the runtime cache is fully prepared.
-    //   Boosting is cheap (it just reorders the idle queue).
+    // - Chunk-prewarm boost (`ensureChunkPrewarmQueued`): ensures a prewarm task
+    //   exists and is at the front of the queue.  Unlike the old prioritize-only
+    //   call, this also creates a new task if the room was already completed,
+    //   evicted, or never scheduled — preventing a silent no-op near the boundary.
     //
     // We never block the gameplay frame here — if the player crosses before
     // preparation finishes the async overlay path will handle it.
@@ -1146,10 +1189,10 @@ export function startGameScreen(
               if (_tRoom !== undefined) void decodeRoomThemeSprites(_tRoom);
               if (_tRoom !== undefined) decodeRoomBackground(_tRoom);
             }
-            // Always boost chunk prewarm when near — this is cheap and ensures
-            // that even rooms whose runtime data is ready get their chunks built
-            // before the player arrives.
-            prioritizeChunkPrewarm(_tId);
+            // Always boost chunk prewarm when near — this ensures that rooms
+            // whose prewarm task completed, was never queued, or was evicted
+            // get a new task created rather than silently skipped.
+            ensureChunkPrewarmQueued(_tId, 'proximity');
             break; // one priority boost per frame is sufficient
           }
         }
