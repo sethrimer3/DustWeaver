@@ -8,8 +8,8 @@
     "build": "tsc && vite build",
     "lint": "eslint src/",
     "preview": "vite preview",
-    "electron": "electron .",
-    "desktop": "npm run build && electron ."
+    "electron": "electron --no-sandbox .",
+    "desktop": "npm run build && electron --no-sandbox ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
