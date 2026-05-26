@@ -59,9 +59,10 @@ const CHUNK_MARGIN = 1;
  * Result returned by `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom`.
  *
  * Callers should use `rebuilt === 0 && skipped === 0` to determine that no
- * more work remains in the entry viewport, rather than relying on `rebuilt === 0`
- * alone.  The explicit skipped field makes intent clear even though in practice
- * `skipped > 0 && rebuilt === 0` cannot occur when maxChunks ≥ 1.
+ * more work remains in the entry viewport.  Using both fields rather than
+ * `rebuilt === 0` alone is correct: when the per-frame chunk budget
+ * (`maxChunksPerFrame`) is exhausted, `skipped > 0` with `rebuilt === 0` is
+ * possible — the viewport is NOT yet fully covered in that case.
  *
  * `totalChunks === 0` distinguishes "no background blocks at all" from "all
  * viewport chunks already warm".

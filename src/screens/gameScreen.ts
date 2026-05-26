@@ -1017,9 +1017,9 @@ export function startGameScreen(
         loadingOverlay.showEntryWarm();
       }
       if (import.meta.env.DEV) {
-        const skipped = entryWarmState.phase === 'idle' ? ' (entryWarm skipped — viewport covered)' : ' (entryWarm started — overlay shown)';
+        const warmStatus = entryWarmState.phase === 'idle' ? ' (entryWarm skipped — viewport covered)' : ' (entryWarm started — overlay shown)';
         console.log(
-          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` + skipped,
+          `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` + warmStatus,
         );
       }
     } else {
