@@ -159,6 +159,8 @@ function _buildFolderThemes(): FolderThemeData[] {
 
     const folder = m[1];
     if (!_SPECIAL_WALL_THEMES.has(folder)) continue;
+    const filename = fullPath.slice(fullPath.lastIndexOf('/') + 1);
+    if (!filename.startsWith(folder)) continue;
 
     const publicUrl = fullPath.slice('/ASSETS/'.length);
     const existing = byFolder.get(folder);
