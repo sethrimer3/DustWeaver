@@ -368,6 +368,23 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
    `getPrewarmDummyCtx`) used by `blockSpriteRenderer.ts` internally. Public
    management API re-exported for backward compatibility.
 
+### Completed additions (BUILD 411)
+
+10. **`folderBlockThemes.ts` 643 → ~460 lines**: Theme discovery and catalogue
+    (190 lines) extracted to `folderThemeCatalogue.ts`. New module owns the
+    two `import.meta.glob` calls, `FolderThemeData` interface, `_folderToLabel`,
+    `_folderToShortId`, `_buildFolderThemes`, `FOLDER_BLOCK_THEMES`,
+    `isFolderBasedTheme`, and `folderThemeShortId`. All four exports re-exported
+    from `folderBlockThemes.ts` for backward compatibility. Sprite loading and
+    the 8×8 downscale cache remain in the original file.
+
+11. **`roomPreloadScheduler.ts` 728 → ~595 lines**: Web Worker management
+    (135 lines) extracted to `roomPreparationWorkerManager.ts`. New module owns
+    `_worker`, `_workerCallbacks`, `_pendingWorkerRoomIds`, `_getOrCreateWorker`,
+    `_reconstructRoomRuntimeEntry`, and exposes `dispatchRoomToWorker` and
+    `isRoomPendingWithWorker` as named exports. Scheduler's `prioritize()` uses
+    `isRoomPendingWithWorker`; its inner `processNext()` uses `dispatchRoomToWorker`.
+
 ### Completed additions (BUILD 410)
 
 8. **`editorUI.ts` 823 → 647 lines**: Lighting panel DOM construction and
@@ -428,6 +445,12 @@ If `liquidBodyBuilder.ts` still creates a temporary four-item `neighbours` array
 5. **`roomSchemaV2.ts` (~813 lines after prior passes)**: Further extraction
    possible for hydration helpers, but schema logic is tightly interleaved with
    type assertions. Requires careful audit before splitting.
+
+6. **`roomPreloadScheduler.ts` (~595 lines after BUILD 411)**: Worker management
+   extracted to `roomPreparationWorkerManager.ts`. Remaining content is the idle
+   scheduler loop, BFS helpers, and the main `scheduleRoomPreloads` function.
+   Further reduction possible (e.g. extract BFS into its own file), but the
+   scheduler loop itself is tightly coupled to the BFS results. Defer.
 
 ---
 
