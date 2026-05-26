@@ -210,11 +210,11 @@ What remains deferred:
 
 ---
 
-### 0b. Resident Room Runtime — Phase 1 (BUILD 413)
+### 0b. Resident Room Runtime — Phase 1 (BUILD 413) + Phase 2 (BUILD 414)
 
 This pass introduces `ResidentRoomManager` to preserve enemy state across room transitions.  The existing preload/prewarm system remains unchanged as the render-cache preparation layer.
 
-#### What was implemented
+#### What was implemented (Phase 1 — BUILD 413)
 
 **New file: `src/screens/residentRoomManager.ts`**
 
@@ -263,20 +263,37 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 - Alive restorable enemies respawn at their frozen HP (partial health preserved).
 - Grapple hunter chains are re-initialised at fresh buffer indices after restoration.
 
-#### What is NOT persisted in Phase 1
+#### What was implemented (Phase 2 — BUILD 414)
 
-- **Hazard state** (rope positions, falling block positions, grasshopper positions) — not captured.
-- **Background fluid/liquid** particles — not captured.
-- **Room particles** (environmental effects) — not captured.
-- **Complex enemy simulation state** (tether connections, constellation rings, etc.) — respawns fresh.
-- **Breakable block damage** — not captured.
+**Extended `src/screens/residentRoomManager.ts`** — Phase 2 simulation-state snapshot types and methods:
 
-These limitations are architectural, not bugs.  The existing `loadRoom` path remains intact as the ground truth for all non-enemy simulation state on every transition.
+- `FrozenFallingBlockState` — per-group state machine snapshot (state, timer, offsets, velocity, shake, crumble timer).  Only non-`FB_STATE_IDLE_STABLE` groups are stored.
+- `FrozenRopeSnapshot` — Verlet position/prev-position arrays for all ropes in a room (flat layout: `ropeCount × MAX_ROPE_SEGMENTS`).
+- `FrozenBreakableBlockState` — `isBreakableBlockActiveFlag` copy (index-parallel with `room.breakableBlocks`).
+- `FrozenCrumbleBlockState` — `isCrumbleBlockActiveFlag` + `crumbleBlockHitsRemaining` copy.
+- `FrozenGrasshopperSnapshot` — per-grasshopper position, velocity, hop timer, and alive flag.
+- `FrozenFluidSnapshot` — per-background-fluid-particle position, velocity, disturbance factor, and age ticks.
+- `FrozenSimState` — top-level container for all six categories above; stored on `ResidentRoomInstance.frozenSimState`.
+- `freezeSimState(world, roomId)` — snapshots all six categories before `loadRoom`.
+- `getFrozenSimState(roomId)` — returns the snapshot, or `null` on first visit.
+- `restoreSimState(world, frozenState)` — applied after `loadRoom`:
+  - Falling blocks: per-group field overwrite + wall-slot sync (mirrors `updateWallSlot` in `fallingBlockSim.ts`; removed groups zero `wallWWorld/wallHWorld`).
+  - Ropes: overwrites `ropeSegPosXWorld/Y` and `ropeSegPrevXWorld/Y` (only when `ropeCount` matches, preventing mismatched-layout corruption).
+  - Breakable blocks: sets `isBreakableBlockActiveFlag[i]=0` and zeros the wall slot for each broken block.
+  - Crumble blocks: destroys wall slot for destroyed blocks; restores hit count for cracked-but-intact blocks.
+  - Grasshoppers: bulk-sets position/velocity/hop-timer/alive arrays.
+  - Fluid particles: scan-order 1-to-1 match of `ParticleKind.Fluid + ownerEntityId=-1` particles in the freshly-loaded buffer; overwrites position/velocity/disturbance/age.
+
+**Integration in `src/screens/gameScreen.ts`**
+
+- **Instant transition path**: `freezeSimState()` called alongside `freezeRoom()` before `loadRoom`; `getFrozenSimState()` captures the target room's snapshot; `restoreSimState()` called after `restoreFrozenEnemies()` (guarded by try/catch with DEV warning).
+- **Async transition path**: `freezeSimState()` called alongside `freezeRoom()` before the async generator (no restore — the async path always uses fresh `loadRoom` state for the target room on its first instant-path visit).
 
 #### Fallback behaviour
 
-- On first visit to a room: `getFrozenEnemies()` returns `null`; fresh spawn from `loadRoom` is used.
-- On `restoreFrozenEnemies` exception: caught, logged in DEV, fresh spawn is kept — no crash.
+- On first visit to a room: `getFrozenEnemies()` / `getFrozenSimState()` return `null`; fresh spawn from `loadRoom` is used.
+- On `restoreFrozenEnemies` / `restoreSimState` exception: caught, logged in DEV, fresh spawn is kept — no crash.
+- Count-mismatch guards (rope count, breakable/crumble/grasshopper count) skip restoration rather than corrupt state when the room definition changes between visits.
 - Async load path uses the full `loadRoom`/phase generator as before; resident registration happens after completion.
 
 #### Transition modes tracked
@@ -289,25 +306,23 @@ These limitations are architectural, not bugs.  The existing `loadRoom` path rem
 | `entryWarm` | Instant path but viewport not covered, entry-warm overlay shown |
 | `none` | No transition yet |
 
-#### What remains deferred (see Phase 2)
+#### What remains deferred (Phase 3 and beyond)
 
-1. **Full simulation residency** — frozen rooms retain render caches only; enemy/hazard simulation state is NOT kept in memory between transitions (loadRoom still runs on every entry).  True hot-swap without `loadRoom` requires per-room `WorldState` instances — a larger architectural change.
-2. **Hazard/rope/falling-block persistence** — Phase 1 snapshots only cluster state.  Hazard positions, rope tensors, falling block states require dedicated freeze/restore hooks.
-3. **Complex enemy restoration** — RadiantTether, DustConstellation, etc. need their own serialization paths.
-4. **Breakable block persistence** — must integrate with existing room-block-override or save-slot systems.
-5. **Per-room renderer context** — currently module-level renderer state (theme, lighting, blocker keys, chunk caches) is applied on each `loadRoom`.  A per-room render context object would make true hot-swap possible without re-applying renderer state.
-6. **Room radius > 1** — currently adjacent-only pre-registration; no radius-2 shell creation.
-7. **Projectiles crossing room boundaries** — not handled; projectiles that reach a boundary are lost.
+1. **True hot-swap without `loadRoom`** — requires per-room `WorldState` instances so the live simulation state is never destroyed on transition.  A larger architectural change.
+2. **Complex enemy restoration** — RadiantTether, DustConstellation, OrbitalDustCore, etc. carry module-level singleton state (e.g. `_chainState` in `radiantTetherAi.ts`) that is not inside `WorldState`.  Requires dedicated serialization paths.
+3. **Per-room renderer context** — currently module-level renderer state (theme, lighting, blocker keys, chunk caches) is applied on each `loadRoom`.  A per-room render context object would make true hot-swap possible without re-applying renderer state.
+4. **Room radius > 1** — currently adjacent-only pre-registration; no radius-2 shell creation.
+5. **Projectiles crossing room boundaries** — not handled; projectiles that reach a boundary are lost.
 
 ---
 
-### 0c. Predictive Adjacent-Room Prewarm Pipeline (HARDENED — BUILD 414 polish pass)
+### 0c. Predictive Adjacent-Room Prewarm Pipeline (HARDENED — BUILD 413 polish pass)
 
 The goal was to eliminate the brief loading overlay on first-time room entry by ensuring the target room's chunk caches are ready before the player crosses the boundary.
 
 **Status:** The pipeline is substantially hardened and diagnostics are much more precise, but the no-loading goal is NOT fully guaranteed. See "Remaining limitations" below. Normal single-tile crossings are consistently hot when the idle scheduler has had time to complete. Very fast crossings (grapple, zip) and GPU warm-up behaviour remain browser-dependent.
 
-#### What was implemented (BUILD 414 — correctness and diagnostics hardening)
+#### What was implemented (BUILD 413 — correctness and diagnostics hardening)
 
 1. **`computeRenderStateKey` expanded.** The key now includes all known render-affecting fields:
    - block theme, world number, lighting effect, ambient direction, seam blending, ambient blocker keys (pre-existing)
