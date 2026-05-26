@@ -26,7 +26,7 @@ export function bfsNearbyRooms(
   const queue: Array<[string, number, number]> = [[fromRoomId, 0, -1]];
 
   while (queue.length > 0) {
-    const [currentId, radius, _] = queue.shift()!;
+    const [currentId, radius, _incomingTransIdx] = queue.shift()!;
     if (radius >= maxRadius) continue;
 
     const room = registry.get(currentId);
