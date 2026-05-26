@@ -428,7 +428,7 @@ No circular dependencies introduced.
 
 ---
 
-## Section 11 — BUILD 409
+## Section 11 — BUILD 408
 
 ### `src/screens/gameScreen.ts`  (1872 → 1483 lines)
 

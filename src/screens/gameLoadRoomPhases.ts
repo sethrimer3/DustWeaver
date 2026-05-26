@@ -1,7 +1,7 @@
 /**
  * gameLoadRoomPhases.ts
  *
- * Extracted from gameScreen.ts (BUILD 409).
+ * Extracted from gameScreen.ts (BUILD 408).
  *
  * Defines `LoadRoomCtx` — a context object that bundles all dependencies
  * needed by the 6-phase room-load generator — and `makeLoadRoomPhases`, the
