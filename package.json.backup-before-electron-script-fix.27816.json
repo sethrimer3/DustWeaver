@@ -1,5 +1,5 @@
 {
-  "main": "electron/main.cjs",
+"main": "electron/main.cjs",
   "name": "dustweaver",
   "version": "0.1.0",
   "private": true,
@@ -8,8 +8,8 @@
     "build": "tsc && vite build",
     "lint": "eslint src/",
     "preview": "vite preview",
-    "electron": "npm exec -- electron --no-sandbox .",
-    "desktop": "npm run build && npm exec -- electron --no-sandbox ."
+    "electron": "electron --no-sandbox .",
+    "desktop": "npm run build && electron --no-sandbox ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

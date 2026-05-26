@@ -1,0 +1,9 @@
+DustWeaver Electron Repair Log
+Started: Mon 05/25/2026 23:16:53.68
+Working directory: C:\Users\srime\Documents\GitHub\DustWeaver
+
+Found package.json.
+
+> where node
+C:\Program Files\nodejs\node.exe
+DustWeaver closed normally through npm exec fallback.
