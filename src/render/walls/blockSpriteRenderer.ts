@@ -32,7 +32,7 @@ import {
   deletePrewarmEntry,
   getPrewarmDummyCtx,
 } from './wallChunkPrewarmStore';
-import { computeRenderStateKey } from './roomRenderCacheStore';
+import { computeRenderStateKey, type PrewarmAdoptResult } from './roomRenderCacheStore';
 // Re-export prewarm store management API so existing import paths continue to work.
 export {
   evictPrewarmedWallChunks,
@@ -469,6 +469,14 @@ export function prewarmWallChunksForRoom(
     ctx.ambientDirection,
     ctx.seamBlending,
     ctx.blockerKeys,
+    ctx.roomWidthBlocks,
+    ctx.roomHeightBlocks,
+    ctx.directionalBias,
+    ctx.sideExposureStrength,
+    ctx.minimumWallLight,
+    ctx.falloffPower,
+    ctx.backgroundLightSpill,
+    ctx.solidLightSoftness,
   );
 
   // ── Save active room state ────────────────────────────────────────────────
@@ -630,13 +638,13 @@ export function prewarmWallChunksForRoom(
  * @param roomId              Identifier of the room being entered.
  * @param scalePx             The camera zoom scale that will be used in the first render.
  * @param currentRenderStateKey  When provided, the snapshot key must match or adoption is refused.
- * @returns `true` when pre-warmed data was found and adopted; `false` otherwise.
+ * @returns Structured `PrewarmAdoptResult` describing the outcome.
  */
 export function adoptPrewarmedWallChunks(
   roomId: string,
   scalePx: number,
   currentRenderStateKey?: string,
-): boolean {
+): PrewarmAdoptResult {
   // Adoption-time stale-key guard: refuse chunks built for a different render state.
   if (currentRenderStateKey !== undefined) {
     const snapKey = getPrewarmSnapshotRenderStateKey(roomId);
@@ -648,7 +656,7 @@ export function adoptPrewarmedWallChunks(
         );
       }
       deletePrewarmEntry(roomId);
-      return false;
+      return { status: 'staleRenderState', snapshotKey: snapKey, currentKey: currentRenderStateKey };
     }
   }
 
@@ -665,7 +673,7 @@ export function adoptPrewarmedWallChunks(
     );
   }
 
-  if (tempCache === undefined || layout === undefined) return false;
+  if (tempCache === undefined || layout === undefined) return { status: 'missing' };
 
   // Install the pre-built layout so the identity check in renderVisibleChunks
   // sees the same object we used during prewarming.
@@ -680,7 +688,7 @@ export function adoptPrewarmedWallChunks(
   // Clean up prewarm store for this room.
   deletePrewarmEntry(roomId);
 
-  return chunks.size > 0;
+  return chunks.size > 0 ? { status: 'adopted', chunks: chunks.size } : { status: 'empty' };
 }
 
 /**

@@ -24,6 +24,7 @@
 import type { RoomDef, TransitionDirection } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { bfsNearbyRooms, computeEntranceOffset } from './roomPrewarmNeighborhood';
+import type { PrewarmAdoptResult } from '../render/walls/roomRenderCacheStore';
 import {
   DEFAULT_DIRECTIONAL_BIAS,
   DEFAULT_SIDE_EXPOSURE_STRENGTH,
@@ -203,8 +204,14 @@ export interface TransitionReadinessDiagnostic {
   /**
    * Whether prewarm bg-chunk data was present in the store at transition time
    * (captured BEFORE adoption, which clears the store entry).
+   * For rooms with no background blocks this is always `true`.
    */
   bgPrewarmPresent: boolean;
+  /**
+   * Whether background blocks are required for this room (`false` for rooms
+   * with no background blocks, in which case `bgPrewarmPresent` is trivially true).
+   */
+  bgPrewarmRequired: boolean;
   /**
    * Whether the render-state key of the prewarm snapshot matched the active
    * room render state.  `null` when no prewarm data was present or the key
@@ -218,14 +225,27 @@ export interface TransitionReadinessDiagnostic {
   /** Transition outcome. */
   outcome: TransitionOutcome;
   /**
+   * Whether all folder-based sprites for the target room were decoded at transition time.
+   * `null` when the information was not available.
+   */
+  spritesDecoded: boolean | null;
+  /**
+   * Whether the background image for the target room was decoded at transition time.
+   * `null` when the information was not available.
+   */
+  backgroundDecoded: boolean | null;
+  /**
    * Primary reason the transition was not hot.
    *  - 'none'                  — transition was hot.
    *  - 'runtimeNotReady'       — runtime cache miss (full async overlay).
    *  - 'wallChunksMissing'     — no wall prewarm data was present.
    *  - 'bgChunksMissing'       — no bg prewarm data was present.
+   *  - 'staleRenderState'      — prewarm snapshot existed but its renderStateKey did not
+   *                               match the current room render state (wall or bg).
+   *  - 'wallAdoptEmpty'        — wall prewarm data existed but yielded zero clean chunks.
+   *  - 'bgAdoptEmpty'          — bg prewarm data existed but yielded zero clean chunks.
    *  - 'entryViewportNotCovered' — data present but did not cover the entry viewport
-   *                                (may indicate stale key, partial coverage, or
-   *                                wrong entrance offset — check DEV console).
+   *                                (may indicate partial coverage or wrong entrance offset).
    *  - 'unknown'               — outcome was not hot for an unclassified reason.
    */
   missReason:
@@ -233,6 +253,9 @@ export interface TransitionReadinessDiagnostic {
     | 'runtimeNotReady'
     | 'wallChunksMissing'
     | 'bgChunksMissing'
+    | 'staleRenderState'
+    | 'wallAdoptEmpty'
+    | 'bgAdoptEmpty'
     | 'entryViewportNotCovered'
     | 'unknown';
 }
@@ -353,6 +376,19 @@ let _stats: PrewarmStats = {
 /** Read-only snapshot of prewarm stats. Updates every idle callback. */
 export function getPrewarmStats(): Readonly<PrewarmStats> {
   return _stats;
+}
+
+/** Last structured adoption result from `adoptPrewarmedChunksForRoom`. */
+let _lastAdoptionResult: { wall: PrewarmAdoptResult; bg: PrewarmAdoptResult } | null = null;
+
+/**
+ * Returns the structured adoption result from the most recent call to
+ * `adoptPrewarmedChunksForRoom`.  `null` before any room has been entered.
+ *
+ * Useful for building `TransitionReadinessDiagnostic` after `loadRoom` returns.
+ */
+export function getLastAdoptionResult(): { wall: PrewarmAdoptResult; bg: PrewarmAdoptResult } | null {
+  return _lastAdoptionResult;
 }
 
 // ── Scheduler state ───────────────────────────────────────────────────────────
@@ -631,22 +667,23 @@ export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedRea
   // Room is NOT in the queue.
 
   // If prewarm data is already present for both wall and bg, adoption will pick
-  // it up — no need to re-queue.
-  const wallReady = getPrewarmWallRoomStats(roomId) !== null;
-  const bgReady   = getPrewarmBgRoomStats(roomId)   !== null;
-  if (wallReady && bgReady) {
-    if (import.meta.env.DEV) {
-      console.log(`[chunkPrewarm:ensure] ${roomId} already warmed — skip (${reason})`);
-    }
-    return;
-  }
-
-  // Room is not in registry — cannot create a task.
+  // it up — no need to re-queue.  For rooms with no background blocks, bg is
+  // inherently ready (there is nothing to warm).
   if (_roomRegistry === null) return;
   const room = _roomRegistry.get(roomId);
   if (room === undefined) {
     if (import.meta.env.DEV) {
       console.log(`[chunkPrewarm:ensure] ${roomId} not in registry — skip (${reason})`);
+    }
+    return;
+  }
+
+  const wallReady = getPrewarmWallRoomStats(roomId) !== null;
+  const hasBg     = (room.backgroundBlocks?.length ?? 0) > 0;
+  const bgReady   = !hasBg || getPrewarmBgRoomStats(roomId) !== null;
+  if (wallReady && bgReady) {
+    if (import.meta.env.DEV) {
+      console.log(`[chunkPrewarm:ensure] ${roomId} already warmed — skip (${reason})`);
     }
     return;
   }
@@ -714,12 +751,20 @@ export function prioritizeChunkPrewarm(roomId: string): void {
  * Returns a snapshot of the prewarm store readiness for a room, captured
  * **before** adoption (which clears the store entry).
  *
+ * `bgPrewarmRequired` is `false` when the room has no background blocks —
+ * that room is inherently bg-ready regardless of whether prewarm data exists.
+ *
  * Intended for building `TransitionReadinessDiagnostic` in `startTransitionLoad`.
  */
-export function getRoomPrewarmReadiness(roomId: string): { wallPresent: boolean; bgPresent: boolean } {
+export function getRoomPrewarmReadiness(
+  roomId: string,
+  room: RoomDef,
+): { wallPresent: boolean; bgPresent: boolean; bgRequired: boolean } {
+  const hasBg = (room.backgroundBlocks?.length ?? 0) > 0;
   return {
     wallPresent: getPrewarmWallRoomStats(roomId) !== null,
-    bgPresent:   getPrewarmBgRoomStats(roomId)   !== null,
+    bgPresent:   !hasBg || getPrewarmBgRoomStats(roomId) !== null,
+    bgRequired:  hasBg,
   };
 }
 
@@ -745,6 +790,8 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
 
 /**
  * Attempts to adopt pre-warmed chunks when the player enters `room`.
+ /**
+ * Attempts to adopt pre-warmed chunks when the player enters `room`.
  *
  * Call this in `_makeLoadRoomPhases` Phase A, after setting up lighting and
  * theme but BEFORE the first render frame.
@@ -754,18 +801,26 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
  * active room render state (stale-key protection).
  *
  * Updates the prewarm stats with cache hit/miss information.
+ *
+ * @returns The structured adoption results for both wall and bg, so callers can
+ *   record diagnostics (e.g. `staleRenderState` miss reasons).
  */
 export function adoptPrewarmedChunksForRoom(
   room: RoomDef,
   scalePx: number,
   renderStateKey?: string,
-): void {
-  const wallHit = adoptPrewarmedWallChunks(room.id, scalePx, renderStateKey);
-  const bgHit   = adoptPrewarmedBgChunks(room, scalePx, renderStateKey);
+): { wall: PrewarmAdoptResult; bg: PrewarmAdoptResult } {
+  const wallResult = adoptPrewarmedWallChunks(room.id, scalePx, renderStateKey);
+  const bgResult   = adoptPrewarmedBgChunks(room, scalePx, renderStateKey);
+
+  const wallHit = wallResult.status === 'adopted';
+  const bgHit   = bgResult.status === 'adopted';
 
   if (import.meta.env.DEV) {
     if (wallHit || bgHit) {
-      console.log(`[chunkPrewarm] adopted chunks for ${room.id}: wall=${wallHit} bg=${bgHit}`);
+      console.log(`[chunkPrewarm] adopted chunks for ${room.id}: wall=${wallResult.status} bg=${bgResult.status}`);
+    } else if (wallResult.status !== 'missing' || bgResult.status !== 'missing') {
+      console.log(`[chunkPrewarm] adoption outcome for ${room.id}: wall=${wallResult.status} bg=${bgResult.status}`);
     }
   }
 
@@ -776,6 +831,10 @@ export function adoptPrewarmedChunksForRoom(
     bgCacheHits:     bgHit    ? _stats.bgCacheHits     + 1 : _stats.bgCacheHits,
     bgCacheMisses:   !bgHit   ? _stats.bgCacheMisses   + 1 : _stats.bgCacheMisses,
   };
+
+  _lastAdoptionResult = { wall: wallResult, bg: bgResult };
+
+  return { wall: wallResult, bg: bgResult };
 }
 
 /**

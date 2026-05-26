@@ -2,9 +2,12 @@
  * Pre-warm chunk store for wall rendering.
  *
  * Thin adapter over `roomRenderCacheStore.ts`.  Wall and bg caches share one
- * `RoomRenderSnapshot` per room so that a single renderStateKey can gate both,
- * and so adoption is atomic.  This module re-exports the public management API
- * consumed by `blockSpriteRenderer.ts` and (via re-export) by the scheduler.
+ * `RoomRenderSnapshot` per room so that a single renderStateKey can gate both.
+ * Adoption is staged (wall then bg) in two separate calls — it is NOT atomic.
+ * Both calls occur in the same synchronous transition sequence so a torn read
+ * is unlikely in practice, but callers should treat wall and bg availability
+ * independently.  This module re-exports the public management API consumed by
+ * `blockSpriteRenderer.ts` and (via re-export) by the scheduler.
  *
  * BUILD 411
  */

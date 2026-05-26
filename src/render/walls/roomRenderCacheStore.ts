@@ -40,6 +40,22 @@ export interface RoomRenderSnapshot {
   bgCache: RoomChunkCache | null;
 }
 
+/**
+ * Structured result returned by `adoptPrewarmedWallChunks` and
+ * `adoptPrewarmedBgChunks`.  Callers that only need a boolean can check
+ * `result.status === 'adopted'`; diagnostic paths can inspect the full reason.
+ *
+ *  - `adopted`           — snapshot found, key matched, chunks injected.
+ *  - `empty`             — snapshot found, key matched, but zero clean chunks were extracted.
+ *  - `missing`           — no prewarm snapshot/cache existed for this room.
+ *  - `staleRenderState`  — snapshot existed but its key did not match the current render state.
+ */
+export type PrewarmAdoptResult =
+  | { status: 'adopted';          chunks: number }
+  | { status: 'empty' }
+  | { status: 'missing' }
+  | { status: 'staleRenderState'; snapshotKey: string; currentKey: string };
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 /** One snapshot per room (keyed by roomId). */
@@ -48,10 +64,14 @@ const _snapshots = new Map<string, RoomRenderSnapshot>();
 // ── Key computation ───────────────────────────────────────────────────────────
 
 /**
- * Computes a stable render-state key from the fields that affect wall rendering.
+ * Computes a stable render-state key from all fields that affect baked wall
+ * and background chunk visuals.
  *
  * Called both at prewarm time (from `WallPrewarmContext`) and at adoption time
  * so that stale snapshots can be detected.
+ *
+ * Numbers are rounded to 4 decimal places before stringification so that
+ * floating-point noise from independent re-computations produces identical keys.
  */
 export function computeRenderStateKey(
   blockTheme: string | null,
@@ -60,6 +80,14 @@ export function computeRenderStateKey(
   ambientDirection: string,
   seamBlending: string,
   blockerKeys: ReadonlySet<string>,
+  roomWidthBlocks: number,
+  roomHeightBlocks: number,
+  directionalBias: number,
+  sideExposureStrength: number,
+  minimumWallLight: number,
+  falloffPower: number,
+  backgroundLightSpill: number,
+  solidLightSoftness: number,
 ): string {
   const themeOrWorld = blockTheme !== null ? blockTheme : `w${worldNumber}`;
   let blockerSig: string;
@@ -71,7 +99,14 @@ export function computeRenderStateKey(
     arr.sort();
     blockerSig = arr.join(';');
   }
-  return `${themeOrWorld}|${lightingEffect}|${ambientDirection}|${seamBlending}|${blockerSig}`;
+  // Normalise floats to 4 dp so independent re-computations produce identical keys.
+  const n = (v: number) => v.toFixed(4);
+  return (
+    `${themeOrWorld}|${lightingEffect}|${ambientDirection}|${seamBlending}|${blockerSig}` +
+    `|${roomWidthBlocks}x${roomHeightBlocks}` +
+    `|db${n(directionalBias)}_se${n(sideExposureStrength)}_ml${n(minimumWallLight)}` +
+    `_fp${n(falloffPower)}_bs${n(backgroundLightSpill)}_ss${n(solidLightSoftness)}`
+  );
 }
 
 // ── Snapshot lifecycle ────────────────────────────────────────────────────────

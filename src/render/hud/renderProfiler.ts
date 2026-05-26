@@ -599,11 +599,21 @@ export class RenderProfiler {
     if (showPrewarm && this._prewarmStats !== null) {
       const pw = this._prewarmStats;
       const diag = pw.lastTransitionDiagnostic;
-      const diagLines = diag !== null ? [
-        `xtn room: ${diag.roomId}`,
-        `miss: ${diag.missReason}`,
-        `W:${diag.wallPrewarmPresent ? 'ready' : 'miss'} B:${diag.bgPrewarmPresent ? 'ready' : 'miss'} rdy:${diag.runtimeReady ? 'y' : 'n'}`,
-      ] : [];
+      let diagLines: string[] = [];
+      if (diag !== null) {
+        const wSt  = diag.wallPrewarmPresent ? 'ready' : 'miss';
+        const bReq = diag.bgPrewarmRequired;
+        const bSt  = !bReq ? 'n/a' : (diag.bgPrewarmPresent ? 'ready' : 'miss');
+        const spr  = diag.spritesDecoded    === null ? '?' : (diag.spritesDecoded    ? 'y' : 'n');
+        const bgDec = diag.backgroundDecoded === null ? '?' : (diag.backgroundDecoded ? 'y' : 'n');
+        const staleInfo = diag.missReason === 'staleRenderState' ? ' KEY_MISMATCH' : '';
+        diagLines = [
+          `xtn: ${diag.roomId}`,
+          `miss: ${diag.missReason}${staleInfo}`,
+          `W:${wSt} B:${bSt} bgReq:${bReq ? 'y' : 'n'} rdy:${diag.runtimeReady ? 'y' : 'n'}`,
+          `spr:${spr} bgDec:${bgDec} vpc:${diag.entryViewportCovered ? 'y' : 'n'}`,
+        ];
+      }
       const prewarmLines = [
         '── Chunk Prewarm ──',
         `Queue: ${pw.queueLength}  Radius: ${pw.currentRadius}`,
