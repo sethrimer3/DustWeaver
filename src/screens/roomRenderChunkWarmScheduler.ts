@@ -21,7 +21,7 @@
  * BUILD 394
  */
 
-import type { RoomDef } from '../levels/roomDef';
+import type { RoomDef, TransitionDirection } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { bfsNearbyRooms, computeEntranceOffset } from './roomPrewarmNeighborhood';
 import {
@@ -292,6 +292,11 @@ interface WarmTask {
   vpHPx: number;
   /** Camera zoom factor (usually 1.0). */
   scalePx: number;
+  /**
+   * Transition direction from the current room to this room (radius-1 only).
+   * `undefined` for radius > 1.  Used for velocity-direction queue ordering.
+   */
+  transitionDir?: TransitionDirection;
   /** Whether wall chunks still need more coverage in this task. */
   wallDone: boolean;
   /** Whether bg chunks still need more coverage. */
@@ -340,15 +345,19 @@ export interface WarmScheduleHandle {
  * Must be called after `scheduleRoomPreloads` (or at the same time) so that
  * room runtime data and sprites have a head start before we try to build chunks.
  *
- * @param currentRoom     The room the player just entered.
- * @param roomRegistry    Map of all loaded room definitions.
- * @param runtimeCache    The shared `RoomRuntimeCache` instance.
- * @param getQuality      Returns the current graphics quality setting.
- * @param getLastFrameMs  Returns the most recent main-thread frame time (ms).
- * @param vpWPx           Viewport width (virtual pixels).
- * @param vpHPx           Viewport height (virtual pixels).
- * @param scalePx         Camera zoom factor.
- * @returns               A handle to cancel the schedule.
+ * @param currentRoom      The room the player just entered.
+ * @param roomRegistry     Map of all loaded room definitions.
+ * @param runtimeCache     The shared `RoomRuntimeCache` instance.
+ * @param getQuality       Returns the current graphics quality setting.
+ * @param getLastFrameMs   Returns the most recent main-thread frame time (ms).
+ * @param vpWPx            Viewport width (virtual pixels).
+ * @param vpHPx            Viewport height (virtual pixels).
+ * @param scalePx          Camera zoom factor.
+ * @param preTransVelocity Player velocity at the moment of the transition trigger.
+ *                         When provided, the radius-1 task whose entrance direction
+ *                         matches the dominant velocity axis is moved to the front
+ *                         of the queue so it is built first during idle time.
+ * @returns                A handle to cancel the schedule.
  */
 export function scheduleChunkPrewarms(
   currentRoom: RoomDef,
@@ -359,6 +368,7 @@ export function scheduleChunkPrewarms(
   vpWPx: number,
   vpHPx: number,
   scalePx: number,
+  preTransVelocity?: { vx: number; vy: number },
 ): WarmScheduleHandle {
   // Cancel any previous run.
   _cancelled = false;
@@ -377,10 +387,11 @@ export function scheduleChunkPrewarms(
 
   // Build the task queue (radius-1 first, then radius-2, then radius-3).
   _queue = [];
+  const currentRoomDef = roomRegistry.get(currentRoom.id);
   for (const [roomId, radius, transIdx] of nearby) {
-    const currentRoomDef = roomRegistry.get(currentRoom.id);
     let entranceOffsetXPx = 0;
     let entranceOffsetYPx = 0;
+    let transitionDir: TransitionDirection | undefined;
 
     if (currentRoomDef !== undefined && transIdx >= 0 && transIdx < currentRoomDef.transitions.length) {
       const t = currentRoomDef.transitions[transIdx];
@@ -388,6 +399,7 @@ export function scheduleChunkPrewarms(
         const { offsetXPx, offsetYPx } = computeEntranceOffset(t, vpWPx, vpHPx, scalePx);
         entranceOffsetXPx = offsetXPx;
         entranceOffsetYPx = offsetYPx;
+        transitionDir = t.direction;
       }
     } else {
       // Radius > 1: find the first transition in the target room itself
@@ -413,9 +425,39 @@ export function scheduleChunkPrewarms(
       vpWPx,
       vpHPx,
       scalePx,
+      transitionDir,
       wallDone: false,
       bgDone:   false,
     });
+  }
+
+  // ── Velocity-direction queue ordering ───────────────────────────────────────
+  // If the player's pre-transition velocity is known and meaningful, move the
+  // radius-1 task whose entrance direction matches the dominant velocity axis
+  // to the front so it gets warmed first during idle time.
+  // (The proximity boost in gameScreen.ts handles the most time-critical case;
+  // this ordering ensures idle work targets the likeliest next room from the
+  // very first idle slice.)
+  if (preTransVelocity !== undefined) {
+    const { vx, vy } = preTransVelocity;
+    const absX = Math.abs(vx);
+    const absY = Math.abs(vy);
+    if (absX > 1 || absY > 1) {
+      const dominant: TransitionDirection =
+        absX >= absY
+          ? (vx >= 0 ? 'right' : 'left')
+          : (vy >= 0 ? 'down'  : 'up');
+      const idx = _queue.findIndex(t => t.radius === 1 && t.transitionDir === dominant);
+      if (idx > 0) {
+        _queue.unshift(_queue.splice(idx, 1)[0]);
+        if (import.meta.env.DEV) {
+          console.log(
+            `[chunkPrewarm] velocity-ordered: ${_queue[0].roomId} (${dominant}) moved to front` +
+            ` (vx=${vx.toFixed(1)} vy=${vy.toFixed(1)})`,
+          );
+        }
+      }
+    }
   }
 
   // Build the set of rooms that are part of the new schedule so eviction can

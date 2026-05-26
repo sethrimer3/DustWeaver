@@ -436,6 +436,12 @@ export function startGameScreen(
     spawnYBlock: 0,
   };
 
+  // Pre-transition velocity: the player's velocity at the moment the transition
+  // was triggered.  Captured in startTransitionLoad (both instant and async paths)
+  // and exposed to the load-room generator so Phase F can order the prewarm queue.
+  let _preTransVX = 0;
+  let _preTransVY = 0;
+
   // ── Entry viewport warm state ─────────────────────────────────────────────
   // Tracks progress of the shaded-chunk warm pass for the current room's
   // entry viewport.  Holds the loading overlay until the pass completes or
@@ -492,6 +498,7 @@ export function startGameScreen(
     setPreloadScheduleHandle:   (h) => { _preloadScheduleHandle   = h; },
     getWarmScheduleHandle:      () => _warmScheduleHandle,
     setWarmScheduleHandle:      (h) => { _warmScheduleHandle      = h; },
+    getPreTransitionVelocity:   () => ({ vx: _preTransVX, vy: _preTransVY }),
   };
 
   // ── Transition cooldown ───────────────────────────────────────────────────
@@ -569,6 +576,9 @@ export function startGameScreen(
     dir: TransitionDirection,
   ): void {
     const t0 = import.meta.env.DEV ? performance.now() : 0;
+    // Capture pre-transition velocity for Phase F prewarm queue ordering.
+    _preTransVX = vx;
+    _preTransVY = vy;
     const cacheEntry = roomRuntimeCache.get(room.id);
     const isPrepared = cacheEntry !== undefined && isEntryFullyPrepared(cacheEntry);
 

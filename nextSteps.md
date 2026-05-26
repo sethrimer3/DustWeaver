@@ -238,20 +238,22 @@ The goal was to eliminate the brief loading overlay on first-time room entry by 
 
 #### What was NOT implemented (deferred)
 
-1. **Velocity-direction-based task ordering in `scheduleChunkPrewarms`**
-   The initial BFS queue could be sorted so that the room in the player's travel direction is warmed first. This would require passing the pre-transition player velocity to Phase F of `_makeLoadRoomPhases`. At Phase F execution time the player velocity in the new room is 0 (it is applied after `loadRoom()` returns in both instant and async paths), so the velocity would need to be stored in `LoadRoomCtx`. The proximity boost already partially handles this by moving the nearest room to the front of the queue; the velocity sort would be an additional refinement. Deferred as a small future improvement.
+~~1. **Velocity-direction-based task ordering in `scheduleChunkPrewarms`**~~
+   ~~The initial BFS queue could be sorted so that the room in the player's travel direction is warmed first. This would require passing the pre-transition player velocity to Phase F of `_makeLoadRoomPhases`. At Phase F execution time the player velocity in the new room is 0 (it is applied after `loadRoom()` returns in both instant and async paths), so the velocity would need to be stored in `LoadRoomCtx`. The proximity boost already partially handles this by moving the nearest room to the front of the queue; the velocity sort would be an additional refinement. Deferred as a small future improvement.~~
 
-2. **Isolated `RoomRenderCache` keyed by roomId + render-state hash (singleton refactor)**
-   The current prewarm chunk stores (`_prewarmWallCaches`, `_prewarmWallLayouts`, etc.) are module-level singletons in `wallChunkPrewarmStore.ts` / `bgChunkPrewarmStore.ts`, keyed only by room ID, with no version hash. An isolated `RoomRenderCache` object (keyed by `roomId + themeKey + lightingKey + wallHash`) would:
-   - Allow automatic invalidation when block themes, lighting, or wall layouts change.
-   - Allow multiple versions of the same room to coexist (e.g. editor preview vs. gameplay).
-   - Enable a clean handoff API where the prewarm snapshot is atomically swapped into the active render state on transition.
-   This refactor requires splitting the active-room chunk caches from the prewarm stores, changing all write paths in the chunk renderers, and updating `adoptPrewarmedWallChunks`/`adoptPrewarmedBgChunks` to accept a typed snapshot. Estimated scope: 3–5 files, ~200–400 lines. Deferred as a dedicated architectural pass.
+   **Implemented in BUILD 411.** `_preTransVX`/`_preTransVY` captured in `startTransitionLoad`, exposed via `LoadRoomCtx.getPreTransitionVelocity()`, passed to `scheduleChunkPrewarms`. Dominant-axis detection unshifts the matching radius-1 task to the head of the queue when `|vx| > 1 || |vy| > 1`.
 
-   **Current mitigation**: `invalidateRoomChunkPrewarm()` is called alongside `roomRuntimeCache.invalidate()` in the editor callback, so editor-induced stale chunks are evicted. Theme/lighting changes outside the editor do not currently invalidate prewarm chunks; in practice these settings do not change at runtime without a room reload.
+~~2. **Isolated `RoomRenderCache` keyed by roomId + render-state hash (singleton refactor)**~~
+   ~~The current prewarm chunk stores (`_prewarmWallCaches`, `_prewarmWallLayouts`, etc.) are module-level singletons in `wallChunkPrewarmStore.ts` / `bgChunkPrewarmStore.ts`, keyed only by room ID, with no version hash. An An isolated `RoomRenderCache` object (keyed by `roomId + themeKey + lightingKey + wallHash`) would:~~
+   ~~- Allow automatic invalidation when block themes, lighting, or wall layouts change.~~
+   ~~- Allow multiple versions of the same room to coexist (e.g. editor preview vs. gameplay).~~
+   ~~- Enable a clean handoff API where the prewarm snapshot is atomically swapped into the active render state on transition.~~
+   ~~This refactor requires splitting the active-room chunk caches from the prewarm stores, changing all write paths in the chunk renderers, and updating `adoptPrewarmedWallChunks`/`adoptPrewarmedBgChunks` to accept a typed snapshot. Estimated scope: 3–5 files, ~200–400 lines. Deferred as a dedicated architectural pass.~~
 
-3. **Cache invalidation on block-theme or lighting-setting changes outside the editor**
-   If `setActiveBlockLighting`, `setActiveBlockSpriteTheme`, or similar settings change mid-session (e.g. via the pause menu's quality settings), prewarm chunks for adjacent rooms may be stale. The chunk renderers do have `setActiveBlockLighting` invalidation for the active room's cache, but the prewarm stores are not invalidated. Low risk currently since quality-setting changes call `scheduleChunkPrewarms` which rebuilds the queue from scratch; any already-built prewarm chunks for rooms with different settings would be corrected on the next idle pass. Document as a known rough edge.
+   **Implemented in BUILD 411.** `roomRenderCacheStore.ts` introduced as the unified snapshot store. `RoomRenderSnapshot` objects (wallCache, wallLayout, bgCache) are keyed by roomId with a `renderStateKey` for automatic invalidation on theme/lighting changes. `wallChunkPrewarmStore.ts` and `backgroundBlockRenderer.ts` delegate to the new store. Atomic handoff preserved: wall adoption clears only wall fields; bg adoption then clears bg fields and removes the snapshot.
+
+1. **Cache invalidation on block-theme or lighting-setting changes outside the editor**
+   If `setActiveBlockLighting`, `setActiveBlockSpriteTheme`, or similar settings change mid-session (e.g. via the pause menu's quality settings), prewarm chunks for adjacent rooms may be stale. The `renderStateKey` computed by `roomRenderCacheStore.ts` now encodes theme and lighting so newly-scheduled prewarm tasks will evict any stale snapshot. Already-in-progress warm tasks finish against the current key; on adoption, the stored key is compared and a mismatch would be caught by the stale-entry guard in `evictStalePrewarmedChunks`.
 
 ---
 

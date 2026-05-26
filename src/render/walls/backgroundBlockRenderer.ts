@@ -103,20 +103,21 @@ export function setBgChunkCacheMemoryKB(kb: number): void {
 }
 
 // ── Background block prewarm store ────────────────────────────────────────────
+// Bg prewarm data is stored as part of the shared RoomRenderSnapshot in
+// roomRenderCacheStore.ts, co-located with wall prewarm data for the same room.
+// This allows atomic adoption and automatic invalidation when renderStateKey changes.
 
-const _prewarmBgCaches = new Map<string, RoomChunkCache>();
-
-/** Dummy 1×1 canvas used as a throw-away blit target during bg prewarming. */
-let _prewarmBgDummyCtx: CanvasRenderingContext2D | null = null;
-function _getBgPrewarmDummyCtx(): CanvasRenderingContext2D {
-  if (_prewarmBgDummyCtx === null) {
-    const c = document.createElement('canvas');
-    c.width  = 1;
-    c.height = 1;
-    _prewarmBgDummyCtx = c.getContext('2d') as CanvasRenderingContext2D;
-  }
-  return _prewarmBgDummyCtx;
-}
+import { RoomChunkCache as _RCC } from './chunkRenderCache'; // local alias to avoid shadowing
+import {
+  getSnapshot,
+  getOrCreateSnapshot,
+  clearSnapshotBgData,
+  hasBgPrewarmData,
+  listBgPrewarmRoomIds,
+  getSnapshotBgRoomStats,
+  getAggregateBgStats,
+  getBgPrewarmDummyCtx,
+} from './roomRenderCacheStore';
 
 /**
  * Builds a chunk-rendering closure for `room`'s background blocks.
@@ -218,15 +219,22 @@ export function prewarmBgChunksForRoom(
     return { rebuilt: 0, skipped: 0, totalChunks: 0, dirtyChunks: 0 };
   }
 
-  let tempCache = _prewarmBgCaches.get(room.id);
-  if (tempCache === undefined) {
-    tempCache = new RoomChunkCache(true);
-    _prewarmBgCaches.set(room.id, tempCache);
+  // Reuse the RoomRenderSnapshot that was created by the wall prewarm for the
+  // same room, if one exists.  If not (corner case: bg called without a prior
+  // wall prewarm), create a new snapshot with a minimal bg-only key.
+  let snap = getSnapshot(room.id);
+  if (snap === undefined) {
+    const bgKey = `bg:${room.blockTheme ?? `w${room.worldNumber ?? 1}`}`;
+    snap = getOrCreateSnapshot(room.id, bgKey);
   }
+  if (snap.bgCache === null) {
+    snap.bgCache = new _RCC(true);
+  }
+  const tempCache = snap.bgCache;
   tempCache.setMaxChunksPerFrame(maxChunks);
 
   const buildFn = _makeBgBuildChunkFn(blocks, room.blockTheme ?? null, room.worldNumber ?? 0, zoom);
-  const dummyCtx = _getBgPrewarmDummyCtx();
+  const dummyCtx = getBgPrewarmDummyCtx();
 
   tempCache.renderVisibleChunks(
     dummyCtx,
@@ -261,33 +269,34 @@ export function prewarmBgChunksForRoom(
  * @returns `true` when pre-warmed data was found and adopted; `false` otherwise.
  */
 export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number): boolean {
-  const tempCache = _prewarmBgCaches.get(room.id);
-  if (tempCache === undefined) return false;
+  const snap = getSnapshot(room.id);
+  if (snap === undefined || snap.bgCache === null) return false;
 
-  const chunks = tempCache.extractCleanChunks();
+  const chunks = snap.bgCache.extractCleanChunks();
   if (chunks.size > 0) {
     _bgChunkCache.injectWarmedChunks(chunks, room, zoom);
     // Mark room ref so renderBackgroundBlocks skips its invalidation check.
     _bgCacheRoomRef = room.id;
   }
 
-  _prewarmBgCaches.delete(room.id);
+  // Clear bg data from the snapshot (removes snapshot if all fields are now null).
+  clearSnapshotBgData(room.id);
   return chunks.size > 0;
 }
 
 /** Discards pre-warmed background block chunks for `roomId` without adopting them. */
 export function evictPrewarmedBgChunks(roomId: string): void {
-  _prewarmBgCaches.delete(roomId);
+  clearSnapshotBgData(roomId);
 }
 
 /** Returns `true` when pre-warmed background block data exists for `roomId`. */
 export function hasPrewarmedBgChunks(roomId: string): boolean {
-  return _prewarmBgCaches.has(roomId);
+  return hasBgPrewarmData(roomId);
 }
 
 /** Returns the list of room IDs that currently have pre-warmed background block chunks. */
 export function listPrewarmedBgRoomIds(): string[] {
-  return Array.from(_prewarmBgCaches.keys());
+  return listBgPrewarmRoomIds();
 }
 
 /**
@@ -295,9 +304,7 @@ export function listPrewarmedBgRoomIds(): string[] {
  * Used by the eviction pass to compute per-room memory.
  */
 export function getPrewarmBgRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
-  const cache = _prewarmBgCaches.get(roomId);
-  if (cache === undefined) return null;
-  return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
+  return getSnapshotBgRoomStats(roomId);
 }
 
 /**
@@ -305,13 +312,7 @@ export function getPrewarmBgRoomStats(roomId: string): { chunks: number; memoryK
  * Used by the debug overlay.
  */
 export function getPrewarmBgStats(): { roomCount: number; totalChunks: number; memoryEstimateKB: number } {
-  let totalChunks = 0;
-  let memoryEstimateKB = 0;
-  for (const cache of _prewarmBgCaches.values()) {
-    totalChunks      += cache.stats.totalChunkCount;
-    memoryEstimateKB += cache.stats.memoryEstimateKB;
-  }
-  return { roomCount: _prewarmBgCaches.size, totalChunks, memoryEstimateKB };
+  return getAggregateBgStats();
 }
 
 /**
