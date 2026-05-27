@@ -724,7 +724,9 @@ export class RenderProfiler {
       };
       for (let i = 0; i < residentLines.length; i++) {
         const isHeader = i === 0;
-        ctx.fillStyle = isHeader ? '#ffdd44' : (i === 4 ? (modeColor[mode] ?? '#b8d8ff') : '#b8d8ff');
+        // Index 4 is the 'Last xtn:' line (see residentLines above); colour-code it by mode.
+        const LAST_XTN_LINE_INDEX = 4;
+        ctx.fillStyle = isHeader ? '#ffdd44' : (i === LAST_XTN_LINE_INDEX ? (modeColor[mode] ?? '#b8d8ff') : '#b8d8ff');
         ctx.fillText(residentLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();

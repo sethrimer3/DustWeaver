@@ -598,8 +598,8 @@ export function startGameScreen(
       }
       const carryHealthPoints = (world.clusters[0]?.healthPoints) ?? PLAYER_INITIAL_HEALTH;
       // Remove player and player-owned particles from the outgoing world before freezing.
-      for (let _pi = 0; _pi < world.particleCount; _pi++) {
-        if (world.ownerEntityId[_pi] === 1) world.isAliveFlag[_pi] = 0;
+      for (let pi = 0; pi < world.particleCount; pi++) {
+        if (world.ownerEntityId[pi] === 1) world.isAliveFlag[pi] = 0;
       }
       world.clusters.splice(0, 1);
       world.isGrappleActiveFlag     = 0;
@@ -1666,35 +1666,35 @@ export function startGameScreen(
     // low enough to avoid gameplay hitches.  Priority: radius-1 adjacent rooms
     // first, then radius-2.  One build per frame keeps the budget bounded.
     if (renderProfiler.getLastFrameMs() < 10) {
-      const _buildRooms = [...bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2)];
-      let _builtOne = false;
-      for (const [_adjId, _adjDist] of _buildRooms) {
-        const _adjRoom = ROOM_REGISTRY.get(_adjId);
-        if (_adjRoom === undefined || _builtOne) continue;
-        const _adjResident = residentRoomManager.getResident(_adjId);
-        if (_adjResident !== undefined && _adjResident.runtimeReady) continue;
+      const buildRooms = [...bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2)];
+      let builtOne = false;
+      for (const [adjId, adjDist] of buildRooms) {
+        const adjRoom = ROOM_REGISTRY.get(adjId);
+        if (adjRoom === undefined || builtOne) continue;
+        const adjResident = residentRoomManager.getResident(adjId);
+        if (adjResident !== undefined && adjResident.runtimeReady) continue;
         // Build and store a frozen world for this adjacent room.
         try {
-          const _builtWorld = buildResidentWorldState(_adjRoom, levelRng, roomRuntimeCache);
-          residentRoomManager.ensureResident(_adjRoom);
-          residentRoomManager.setResidentWorld(_adjId, _builtWorld, false);
+          const builtWorld = buildResidentWorldState(adjRoom, levelRng, roomRuntimeCache);
+          residentRoomManager.ensureResident(adjRoom);
+          residentRoomManager.setResidentWorld(adjId, builtWorld, false);
           if (import.meta.env.DEV) {
-            console.log(`[resident] idle built ${_adjId} (dist=${_adjDist})`);
+            console.log(`[resident] idle built ${adjId} (dist=${adjDist})`);
           }
-        } catch (_err) {
+        } catch (buildErr) {
           if (import.meta.env.DEV) {
-            console.warn(`[resident] idle build failed for ${_adjId}:`, _err);
+            console.warn(`[resident] idle build failed for ${adjId}:`, buildErr);
           }
         }
-        _builtOne = true;
+        builtOne = true;
       }
       // Update build queue diagnostic.
-      let _pendingCount = 0;
-      for (const [_adjId2] of _buildRooms) {
-        const _r2 = residentRoomManager.getResident(_adjId2);
-        if (_r2 === undefined || !_r2.runtimeReady) _pendingCount++;
+      let pendingCount = 0;
+      for (const [adjId2] of buildRooms) {
+        const resident = residentRoomManager.getResident(adjId2);
+        if (resident === undefined || !resident.runtimeReady) pendingCount++;
       }
-      residentRoomManager.setResidentBuildQueueLength(_pendingCount);
+      residentRoomManager.setResidentBuildQueueLength(pendingCount);
     }
 
     // Clear the gameplay-bake-forbidden flag before ending the frame so it

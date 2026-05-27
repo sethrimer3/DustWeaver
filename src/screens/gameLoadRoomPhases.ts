@@ -804,10 +804,10 @@ export function applyResidentRoomActivation(
   let blockerKeys: Set<string> | undefined;
   let darkBlockerKeys: Set<string> | undefined;
   {
-    const _entry = roomRuntimeCache.get(room.id);
-    if (_entry !== undefined && _entry.blockerKeys !== null) {
-      blockerKeys     = _entry.blockerKeys;
-      darkBlockerKeys = _entry.darkBlockerKeys ?? undefined;
+    const cacheEntry = roomRuntimeCache.get(room.id);
+    if (cacheEntry !== undefined && cacheEntry.blockerKeys !== null) {
+      blockerKeys     = cacheEntry.blockerKeys;
+      darkBlockerKeys = cacheEntry.darkBlockerKeys ?? undefined;
     } else {
       if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
         blockerKeys = new Set<string>();
@@ -831,9 +831,9 @@ export function applyResidentRoomActivation(
           }
         }
       }
-      if (_entry !== undefined) {
-        _entry.blockerKeys     = blockerKeys;
-        _entry.darkBlockerKeys = darkBlockerKeys;
+      if (cacheEntry !== undefined) {
+        cacheEntry.blockerKeys     = blockerKeys;
+        cacheEntry.darkBlockerKeys = darkBlockerKeys;
       }
     }
     setActiveBlockLighting(
@@ -933,21 +933,21 @@ export function applyResidentRoomActivation(
   decorationWaveState.reset(room.decorations?.length ?? 0);
 
   {
-    const _decorEntry = roomRuntimeCache.get(room.id);
-    let _localWallDecorations: import('../render/effects/wallDecorations').WallDecoration[];
-    if (_decorEntry !== undefined && _decorEntry.wallDecorations !== null) {
-      _localWallDecorations = _decorEntry.wallDecorations;
+    const decorCacheEntry = roomRuntimeCache.get(room.id);
+    let wallDecorations: import('../render/effects/wallDecorations').WallDecoration[];
+    if (decorCacheEntry !== undefined && decorCacheEntry.wallDecorations !== null) {
+      wallDecorations = decorCacheEntry.wallDecorations;
     } else {
-      _localWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
-      if (_decorEntry !== undefined) {
-        _decorEntry.wallDecorations = _localWallDecorations;
+      wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+      if (decorCacheEntry !== undefined) {
+        decorCacheEntry.wallDecorations = wallDecorations;
       }
     }
-    ctx.setCachedWallDecorations(_localWallDecorations);
-    for (let _di = 0; _di < _localWallDecorations.length; _di++) {
-      const _d = _localWallDecorations[_di];
-      cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
-      cachedDecorationCenterY[_di] = _d.worldAnchorYPx;
+    ctx.setCachedWallDecorations(wallDecorations);
+    for (let di = 0; di < wallDecorations.length; di++) {
+      const decoration = wallDecorations[di];
+      cachedDecorationCenterX[di] = decoration.worldLeftPx + BLOCK_SIZE_SMALL / 2;
+      cachedDecorationCenterY[di] = decoration.worldAnchorYPx;
     }
   }
 
@@ -956,9 +956,9 @@ export function applyResidentRoomActivation(
 
   skillTombRenderer.init(room.saveTombs, room.walls);
   skillTombEffectRenderer.init(room.skillTombs);
-  const _roomSkillTombs = room.skillTombs ?? [];
-  for (let i = _roomSkillTombs.length - 1; i >= 0; i--) {
-    const st = _roomSkillTombs[i];
+  const roomSkillTombs = room.skillTombs ?? [];
+  for (let i = roomSkillTombs.length - 1; i >= 0; i--) {
+    const st = roomSkillTombs[i];
     if (consumedSkillTombKeySet.has(`${room.id}:${st.xBlock}:${st.yBlock}`)) {
       skillTombEffectRenderer.removeTomb(i);
     }

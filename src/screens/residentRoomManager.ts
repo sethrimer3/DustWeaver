@@ -166,7 +166,16 @@ export interface FrozenSimState {
 
 // ── Instance & diagnostics types ─────────────────────────────────────────────
 
-/** Lifecycle of a resident room instance. */
+/**
+ * Lifecycle of a resident room instance.
+ *
+ * - `'active'`    — This is the currently playing room.
+ * - `'frozen'`    — Fully built WorldState stored; not ticking.
+ * - `'loading'`   — Reserved for future async background-build tracking;
+ *                   not currently set by any code path (idle builds complete
+ *                   synchronously in one frame and jump directly to 'frozen').
+ * - `'evictable'` — Candidate for eviction; no valuable state stored.
+ */
 export type ResidentLifecycle = 'active' | 'frozen' | 'loading' | 'evictable';
 
 /** A resident room entry. Holds frozen simulation state for one room. */
