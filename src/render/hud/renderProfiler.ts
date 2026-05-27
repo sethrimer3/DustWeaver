@@ -713,6 +713,7 @@ export class RenderProfiler {
         `Last xtn: ${mode}${skipLabel}${ptLabel}`,
         rd.lastResidentMissReason ? `Miss: ${rd.lastResidentMissReason}` : 'Miss: —',
         `ActivMs: ${rd.lastActivationMs.toFixed(1)}  Evict: ${rd.evictionsTotal}`,
+        `Backtrack: ${rd.backtrackHot ? 'hot ✓' : rd.lastOutgoingRoomId !== null ? 'cold ✗' : '—'}`,
       ];
       const residentPanelH = residentLines.length * lineHeightPx + 8;
       ctx.save();
@@ -729,8 +730,18 @@ export class RenderProfiler {
       for (let i = 0; i < residentLines.length; i++) {
         const isHeader = i === 0;
         // Index 4 is the 'Last xtn:' line (see residentLines above); colour-code it by mode.
-        const LAST_XTN_LINE_INDEX = 4;
-        ctx.fillStyle = isHeader ? '#ffdd44' : (i === LAST_XTN_LINE_INDEX ? (modeColor[mode] ?? '#b8d8ff') : '#b8d8ff');
+        const LAST_XTN_LINE_INDEX  = 4;
+        // Index 7 is the 'Backtrack:' line; colour-code by hot/cold.
+        const BACKTRACK_LINE_INDEX = 7;
+        let lineColor = '#b8d8ff';
+        if (isHeader) {
+          lineColor = '#ffdd44';
+        } else if (i === LAST_XTN_LINE_INDEX) {
+          lineColor = modeColor[mode] ?? '#b8d8ff';
+        } else if (i === BACKTRACK_LINE_INDEX) {
+          lineColor = rd.backtrackHot ? '#44ff88' : rd.lastOutgoingRoomId !== null ? '#ff8844' : '#b8d8ff';
+        }
+        ctx.fillStyle = lineColor;
         ctx.fillText(residentLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();

@@ -15,12 +15,19 @@
  * resetRadiantWebState) are NOT called here because they affect the currently
  * active world.  They are called in activateResidentRoom instead.
  *
- * BUILD 416
+ * RNG isolation (BUILD 417):
+ *   Background resident builds use a deterministic per-room RNG derived from
+ *   `campaignSeed`, `room.id`, and `room.worldNumber`.  This RNG is local to
+ *   the build call and never shared with the active gameplay RNG, so idle
+ *   resident builds cannot perturb active randomness regardless of timing or
+ *   room-load order.
+ *
+ * BUILD 416, hardened in BUILD 417
  */
 
 import { WorldState, createWorldState } from '../sim/world';
 import { RoomDef, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
-import type { RngState } from '../sim/rng';
+import { createRng, type RngState } from '../sim/rng';
 import { spawnBackgroundFluidParticles, spawnAllDustPiles, BACKGROUND_FLUID_COUNT } from './gameSpawn';
 import { spawnEnemyClusters } from './gameEnemySpawn';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
@@ -31,23 +38,74 @@ import * as FP from '../debug/perfFreezeProfiler';
 
 const FIXED_DT_MS = 16.666;
 
+// ── Per-room RNG ──────────────────────────────────────────────────────────────
+
+/**
+ * A simple djb2-style string hash used to derive a numeric seed from a room id.
+ * Uses XOR (rather than the canonical addition variant) for slightly better
+ * avalanche behaviour on short room-id strings.
+ * Not cryptographic — just needs good bit distribution for seed mixing.
+ */
+function _hashRoomId(id: string): number {
+  let h = 5381;
+  for (let i = 0; i < id.length; i++) {
+    h = Math.imul(h, 33) ^ id.charCodeAt(i);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Create a deterministic per-room RNG for resident world builds.
+ *
+ * The seed is derived from:
+ *   - `campaignSeed` — session-level seed (e.g. the active gameplay seed).
+ *   - `room.id`      — stable string identifier for the room.
+ *   - `room.worldNumber` — world tier (1–N); prevents collisions between rooms
+ *                          with similar ids across different worlds.
+ *
+ * The resulting RNG is independent from the active gameplay `levelRng` so
+ * background resident builds cannot perturb active randomness.
+ *
+ * @param room          Room definition being built.
+ * @param campaignSeed  Numeric seed for the current campaign/session.
+ * @returns             A fresh RngState local to this build call.
+ */
+export function createResidentRoomRng(room: RoomDef, campaignSeed: number): RngState {
+  const roomIdHash   = _hashRoomId(room.id);
+  // Use the Knuth multiplicative hash constant (2654435761) to spread
+  // worldNumber contributions across the seed bits.
+  const worldContrib = Math.imul(room.worldNumber, 2654435761) >>> 0;
+  const combined     = (campaignSeed ^ roomIdHash ^ worldContrib) >>> 0;
+  return createRng(combined);
+}
+
+// ── buildResidentWorldState ───────────────────────────────────────────────────
+
 /**
  * Build a frozen WorldState for `room` without a player cluster.
  *
  * Uses the provided `roomRuntimeCache` to skip the expensive wall-merge pass
  * for rooms that are already prepared (e.g. by roomPreloadScheduler).
  *
- * @param room            Room definition to build.
- * @param levelRng        Room-level RNG (same instance used by the active world).
+ * The RNG used for enemy and background fluid spawning is a deterministic
+ * per-room RNG derived from `campaignSeed` and the room's id/worldNumber.
+ * It is never shared with the active gameplay RNG, so this call is safe
+ * to make at any time without perturbing active randomness.
+ *
+ * @param room             Room definition to build.
+ * @param campaignSeed     Numeric campaign/session seed for per-room RNG derivation.
  * @param roomRuntimeCache Runtime cache for wall templates and blocker keys.
- * @returns               A fully-built WorldState ready to be frozen.
+ * @returns                A fully-built WorldState ready to be frozen.
  */
 export function buildResidentWorldState(
   room: RoomDef,
-  levelRng: RngState,
+  campaignSeed: number,
   roomRuntimeCache: RoomRuntimeCache,
 ): WorldState {
   const t0 = import.meta.env.DEV ? performance.now() : 0;
+
+  // Derive a local per-room RNG — never shared with active gameplay levelRng.
+  const levelRng: RngState = createResidentRoomRng(room, campaignSeed);
 
   const rw = createWorldState(FIXED_DT_MS, 42);
 
