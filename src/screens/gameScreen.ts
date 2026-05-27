@@ -329,6 +329,8 @@ export function startGameScreen(
     yield* makeLoadRoomPhases(loadRoomCtx, room, spawnXBlock, spawnYBlock, preserveCamera);
   }
 
+  // `world` is `let` because it gets reassigned during resident WorldState
+  // hot-swap transitions (see startTransitionLoad: world = targetResident.world).
   let world = createWorldState(FIXED_DT_MS, 42);
   // Set the selected character on the world for rendering
   world.characterId = progress?.characterId ?? 'knight';
@@ -596,7 +598,7 @@ export function startGameScreen(
       if (import.meta.env.DEV) {
         console.log(`[transition] ${room.id}: residentWorldHot — skipping loadRoom`);
       }
-      const carryHealthPoints = (world.clusters[0]?.healthPoints) ?? PLAYER_INITIAL_HEALTH;
+      const carryHealthPoints = world.clusters[0]?.healthPoints ?? PLAYER_INITIAL_HEALTH;
       // Remove player and player-owned particles from the outgoing world before freezing.
       for (let pi = 0; pi < world.particleCount; pi++) {
         if (world.ownerEntityId[pi] === 1) world.isAliveFlag[pi] = 0;
@@ -614,6 +616,9 @@ export function startGameScreen(
       // Switch active world to the target resident's pre-built WorldState.
       world = targetResident.world;
       loadRoomCtx.world = world;
+      // Invalidate the outgoing room's stored WorldState: after switching to the
+      // target resident's world, the old reference is no longer a valid frozen
+      // resident (player was removed and it will be rebuilt in the background).
       residentRoomManager.invalidateResidentWorld(currentRoom.id);
       // Apply Phase-A renderer, Phase-B player spawn, Phase-F env/camera.
       applyResidentRoomActivation(loadRoomCtx, room, spawnXBlock, spawnYBlock, carryHealthPoints);

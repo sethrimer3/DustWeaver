@@ -888,8 +888,7 @@ export function applyResidentRoomActivation(
   // ── Phase B equivalent: insert player at clusters[0] ─────────────────────
   const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
   const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
-  const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
-  playerCluster.healthPoints = Math.min(carryHealthPoints, playerCluster.maxHealthPoints);
+  const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, Math.min(carryHealthPoints, PLAYER_INITIAL_HEALTH));
   // Enemies are already in the world from the pre-build; insert player at index 0.
   world.clusters.unshift(playerCluster);
 

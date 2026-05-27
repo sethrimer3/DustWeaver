@@ -934,8 +934,7 @@ export class ResidentRoomManager {
     for (let i = 0; i < toEvict && i < candidates.length; i++) {
       const evicted = candidates[i];
       // Null out the WorldState reference so GC can reclaim the memory.
-      evicted.world        = null;
-      evicted.runtimeReady = false;
+      evicted.world = null;
       this._residents.delete(evicted.roomId);
       this._evictionsTotal++;
     }
