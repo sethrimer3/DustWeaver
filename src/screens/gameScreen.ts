@@ -786,7 +786,7 @@ export function startGameScreen(
           missReason,
         });
       } else {
-        recordTransitionOutcome(residentMode === 'residentRestore' ? 'residentRestore' : 'hot', {
+        recordTransitionOutcome(residentMode, {
           roomId: room.id,
           runtimeReady: true,
           wallPrewarmPresent: wallPresent,
@@ -794,7 +794,7 @@ export function startGameScreen(
           bgPrewarmRequired:  bgRequired,
           renderStateKeyMatches,
           entryViewportCovered: true,
-          outcome: residentMode === 'residentRestore' ? 'residentRestore' : 'hot',
+          outcome: residentMode,
           spritesDecoded,
           backgroundDecoded,
           missReason: 'none',
@@ -985,7 +985,7 @@ export function startGameScreen(
 
   const gameOverlayController = createGameOverlayController({
     uiRoot,
-    world,
+    getWorld: () => world,
     roomRegistry: ROOM_REGISTRY,
     progress,
     campaignSpawnRoom,

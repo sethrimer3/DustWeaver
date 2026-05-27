@@ -22,10 +22,10 @@ const MAX_REUSABLE_CLUSTERS = 64;
  */
 interface _ReusableBacking {
   tick: number;
-  /** Sub-object whose typed-array fields are fixed references; only particleCount changes. */
+  /** Sub-object whose typed-array fields are refreshed on every room transition via refreshSnapshotWorldArrayRefs(). */
   readonly particles: { particleCount: number; particleMoteSlotState: Uint8Array };
   clusters: _MutableCluster[];
-  /** Sub-object whose typed-array fields are fixed references; only count changes. */
+  /** Sub-object whose typed-array fields are refreshed on every room transition via refreshSnapshotWorldArrayRefs(). */
   readonly walls: { count: number };
   isGrappleActiveFlag: 0 | 1;
   isGrappleMissActiveFlag: 0 | 1;
@@ -524,11 +524,148 @@ export function updateSnapshotInPlace(
 }
 
 /**
+ * Re-points every typed-array field in the reusable snapshot at the new world's
+ * buffers.  Must be called after a resident WorldState hot-swap (or any room
+ * transition that replaces the active WorldState object) so that render and
+ * interpolation code reads from the correct buffers rather than the previous
+ * room's memory.
+ *
+ * `resetReusableSnapshot` calls this automatically, so callers do not need to
+ * invoke it directly.
+ */
+export function refreshSnapshotWorldArrayRefs(
+  snap: ReusableWorldSnapshot,
+  world: WorldState,
+): void {
+  // Use a plain Record cast for the sub-objects and for backing fields that are
+  // not exposed in _ReusableBacking (typed-array fields only present at runtime).
+  const raw = snap as unknown as Record<string, unknown>;
+
+  // ── Particles sub-object ─────────────────────────────────────────────────
+  const p = (snap as unknown as { particles: Record<string, unknown> }).particles;
+  p.positionXWorld    = world.positionXWorld;
+  p.positionYWorld    = world.positionYWorld;
+  p.velocityXWorld    = world.velocityXWorld;
+  p.velocityYWorld    = world.velocityYWorld;
+  p.isAliveFlag       = world.isAliveFlag;
+  p.kindBuffer        = world.kindBuffer;
+  p.ownerEntityId     = world.ownerEntityId;
+  p.ageTicks          = world.ageTicks;
+  p.lifetimeTicks     = world.lifetimeTicks;
+  p.disturbanceFactor = world.disturbanceFactor;
+  p.behaviorMode      = world.behaviorMode;
+  p.noiseTickSeed     = world.noiseTickSeed;
+
+  // ── Walls sub-object ─────────────────────────────────────────────────────
+  const w = (snap as unknown as { walls: Record<string, unknown> }).walls;
+  w.xWorld                = world.wallXWorld;
+  w.yWorld                = world.wallYWorld;
+  w.wWorld                = world.wallWWorld;
+  w.hWorld                = world.wallHWorld;
+  w.isPlatformFlag        = world.wallIsPlatformFlag;
+  w.platformEdge          = world.wallPlatformEdge;
+  w.themeIndex            = world.wallThemeIndex;
+  w.isInvisibleFlag       = world.wallIsInvisibleFlag;
+  w.rampOrientationIndex  = world.wallRampOrientationIndex;
+  w.isPillarHalfWidthFlag = world.wallIsPillarHalfWidthFlag;
+
+  // ── Top-level typed-array fields ─────────────────────────────────────────
+  raw.grasshopperXWorld              = world.grasshopperXWorld;
+  raw.grasshopperYWorld              = world.grasshopperYWorld;
+  raw.isGrasshopperAliveFlag         = world.isGrasshopperAliveFlag;
+  raw.squareStampedeTrailXWorld      = world.squareStampedeTrailXWorld;
+  raw.squareStampedeTrailYWorld      = world.squareStampedeTrailYWorld;
+  raw.squareStampedeTrailHead        = world.squareStampedeTrailHead;
+  raw.squareStampedeTrailCount       = world.squareStampedeTrailCount;
+  raw.beeSwarmBeeXWorld              = world.beeSwarmBeeXWorld;
+  raw.beeSwarmBeeYWorld              = world.beeSwarmBeeYWorld;
+  raw.beeSwarmBeeVelXWorld           = world.beeSwarmBeeVelXWorld;
+  raw.beeSwarmBeeVelYWorld           = world.beeSwarmBeeVelYWorld;
+  raw.constellationMoteXWorld        = world.constellationMoteXWorld;
+  raw.constellationMoteYWorld        = world.constellationMoteYWorld;
+  raw.constellationMoteVelXWorld     = world.constellationMoteVelXWorld;
+  raw.constellationMoteVelYWorld     = world.constellationMoteVelYWorld;
+  raw.constellationMoteTargetLocalX  = world.constellationMoteTargetLocalX;
+  raw.constellationMoteTargetLocalY  = world.constellationMoteTargetLocalY;
+  raw.constellationMotePulsePhaseRad = world.constellationMotePulsePhaseRad;
+  raw.odcMoteAngleRad                = world.odcMoteAngleRad;
+  raw.odcMoteRadiusWorld             = world.odcMoteRadiusWorld;
+  raw.odcMoteAliveFlag               = world.odcMoteAliveFlag;
+  raw.odcMotePulsePhaseRad           = world.odcMotePulsePhaseRad;
+  raw.dbmMoteXWorld                  = world.dbmMoteXWorld;
+  raw.dbmMoteYWorld                  = world.dbmMoteYWorld;
+  raw.dbmMoteVelXWorld               = world.dbmMoteVelXWorld;
+  raw.dbmMoteVelYWorld               = world.dbmMoteVelYWorld;
+  raw.dbmMoteTargetLocalX            = world.dbmMoteTargetLocalX;
+  raw.dbmMoteTargetLocalY            = world.dbmMoteTargetLocalY;
+  raw.dbmMotePulsePhaseRad           = world.dbmMotePulsePhaseRad;
+  raw.dwaMoteAngleRad                = world.dwaMoteAngleRad;
+  raw.dwaMotePulsePhaseRad           = world.dwaMotePulsePhaseRad;
+  raw.vsMoteAngleRad                 = world.vsMoteAngleRad;
+  raw.vsMoteRadiusWorld              = world.vsMoteRadiusWorld;
+  raw.vsMotePulsePhaseRad            = world.vsMotePulsePhaseRad;
+  raw.dlMoteAngleRad                 = world.dlMoteAngleRad;
+  raw.dlMotePulsePhaseRad            = world.dlMotePulsePhaseRad;
+  raw.deMoteOffsetXWorld             = world.deMoteOffsetXWorld;
+  raw.deMoteOffsetYWorld             = world.deMoteOffsetYWorld;
+  raw.deMotePulsePhaseRad            = world.deMotePulsePhaseRad;
+  raw.vspProjXWorld                  = world.vspProjXWorld;
+  raw.vspProjYWorld                  = world.vspProjYWorld;
+  raw.vspProjVelXWorld               = world.vspProjVelXWorld;
+  raw.vspProjVelYWorld               = world.vspProjVelYWorld;
+  raw.vspProjLifetimeTicks           = world.vspProjLifetimeTicks;
+  raw.vspProjAliveFlag               = world.vspProjAliveFlag;
+  raw.architectBlockXWorld           = world.architectBlockXWorld;
+  raw.architectBlockYWorld           = world.architectBlockYWorld;
+  raw.architectBlockHealth           = world.architectBlockHealth;
+  raw.architectBlockMaxHealth        = world.architectBlockMaxHealth;
+  raw.architectBlockLifetimeTicks    = world.architectBlockLifetimeTicks;
+  raw.architectBlockGraceTicks       = world.architectBlockGraceTicks;
+  raw.architectBlockFormTicks        = world.architectBlockFormTicks;
+  raw.architectBlockCrumbleTicks     = world.architectBlockCrumbleTicks;
+  raw.architectBlockState            = world.architectBlockState;
+  raw.isArchitectBlockAliveFlag      = world.isArchitectBlockAliveFlag;
+  raw.architectBlockOwnerSlot        = world.architectBlockOwnerSlot;
+  raw.dwaNailXWorld                  = world.dwaNailXWorld;
+  raw.dwaNailYWorld                  = world.dwaNailYWorld;
+  raw.dwaNailVelXWorld               = world.dwaNailVelXWorld;
+  raw.dwaNailVelYWorld               = world.dwaNailVelYWorld;
+  raw.dwaNailLifetimeTicks           = world.dwaNailLifetimeTicks;
+  raw.isDwaNailAliveFlag             = world.isDwaNailAliveFlag;
+  raw.arrowXWorld                    = world.arrowXWorld;
+  raw.arrowYWorld                    = world.arrowYWorld;
+  raw.arrowDirXWorld                 = world.arrowDirXWorld;
+  raw.arrowDirYWorld                 = world.arrowDirYWorld;
+  raw.arrowMoteCount                 = world.arrowMoteCount;
+  raw.isArrowStuckFlag               = world.isArrowStuckFlag;
+  raw.isArrowHitEnemyFlag            = world.isArrowHitEnemyFlag;
+  raw.arrowLifetimeTicksLeft         = world.arrowLifetimeTicksLeft;
+  raw.grappleWrapPointXWorld         = world.grappleWrapPointXWorld;
+  raw.grappleWrapPointYWorld         = world.grappleWrapPointYWorld;
+  raw.ropeSegmentCount               = world.ropeSegmentCount;
+  raw.ropeHalfThickWorld             = world.ropeHalfThickWorld;
+  raw.ropeSegPosXWorld               = world.ropeSegPosXWorld;
+  raw.ropeSegPosYWorld               = world.ropeSegPosYWorld;
+  raw.webSpiderFadingWebFromXWorld     = world.webSpiderFadingWebFromXWorld;
+  raw.webSpiderFadingWebFromYWorld     = world.webSpiderFadingWebFromYWorld;
+  raw.webSpiderFadingWebToXWorld       = world.webSpiderFadingWebToXWorld;
+  raw.webSpiderFadingWebToYWorld       = world.webSpiderFadingWebToYWorld;
+  raw.webSpiderFadingWebRemainingTicks = world.webSpiderFadingWebRemainingTicks;
+  raw.webSpiderFadingWebMaxTicks       = world.webSpiderFadingWebMaxTicks;
+}
+
+/**
  * Resets the reusable snapshot after a room load that changes the cluster
  * set.  Ensures the cluster array is properly sized and all slots are
  * populated from the current world state.
+ *
+ * Also calls `refreshSnapshotWorldArrayRefs` to re-point every typed-array
+ * field at the new world's buffers.  This is essential after a resident
+ * WorldState hot-swap where `world` is a different object than the one passed
+ * to `createReusableSnapshot`.
  */
 export function resetReusableSnapshot(snap: ReusableWorldSnapshot, world: WorldState): void {
+  refreshSnapshotWorldArrayRefs(snap, world);
   const b = _asBacking(snap);
   // Grow pool if this room has more clusters than any previous room.
   while (b._clusterPool.length < world.clusters.length) {
