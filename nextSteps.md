@@ -300,8 +300,9 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
 | Mode | Meaning |
 | --- | --- |
-| `residentHot` | Instant path, enemy state restored from frozen snapshot |
-| `residentFallback` | Instant path, first visit — fresh enemy spawn |
+| `residentWorldHot` | TRUE hot-swap: resident WorldState activated, `loadRoom` NOT called (BUILD 416+) |
+| `residentRestore` | Instant path + snapshot restore (`loadRoom` ran, snapshots patched back); formerly `residentHot` |
+| `residentFallback` | Instant path, first visit — fresh enemy spawn, no snapshot to restore |
 | `legacyLoad` | Async path (cache miss), full destructive load |
 | `entryWarm` | Instant path but viewport not covered, entry-warm overlay shown |
 | `none` | No transition yet |
@@ -320,12 +321,35 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
    - `false` — either wall or bg returned `staleRenderState`.
    - `null`  — both caches were `missing` (no prewarmed chunks existed).
 
-#### What remains deferred (Phase 3 and beyond)
+#### What was implemented (Phase 4 — BUILD 416: True resident WorldState hot-swap)
 
-1. **True hot-swap without `loadRoom`** — requires per-room `WorldState` instances so the live simulation state is never destroyed on transition.  A larger architectural change.
-2. **Complex enemy restoration** — RadiantTether, DustConstellation, OrbitalDustCore, etc. carry module-level singleton state (e.g. `_chainState` in `radiantTetherAi.ts`) that is not inside `WorldState`.  Requires dedicated serialization paths.
-3. **Per-room renderer context** — currently module-level renderer state (theme, lighting, blocker keys, chunk caches) is applied on each `loadRoom`.  A per-room render context object would make true hot-swap possible without re-applying renderer state.
-4. **Projectiles crossing room boundaries** — not handled; projectiles that reach a boundary are lost.
+1. **`residentWorldBuilder.ts` (new).** Pure function `buildResidentWorldState(room, levelRng, roomRuntimeCache): WorldState` builds a fully-initialised frozen WorldState without a player cluster. Equivalent to Phases A/C/D/E of `makeLoadRoomPhases` (no player, no renderer state, no camera). Module-level singleton resets are deferred to activation time.
+
+2. **`ResidentRoomInstance.world: WorldState | null`.** Each resident instance now carries a full loaded `WorldState`. `runtimeReady: boolean` gates the hot-swap path. New methods: `setResidentWorld`, `invalidateResidentWorld`, `setResidentBuildQueueLength`, `setRadiusReadyCounts`.
+
+3. **`applyResidentRoomActivation()` in `gameLoadRoomPhases.ts` (new export).** Applies Phase-A renderer state + Phase-B player spawn (`world.clusters.unshift(playerCluster)`) + Phase-F env effects/camera/schedules to the already-switched world. Carries HP from the outgoing room. All imports were already present in `gameLoadRoomPhases.ts`.
+
+4. **True hot-swap path in `startTransitionLoad()`.** Before the existing instant path: if `targetResident.runtimeReady && targetResident.world !== null`, removes player from outgoing world, freezes outgoing world (enemies only), switches `world = targetResident.world`, calls `applyResidentRoomActivation()`, applies transition velocity. **`loadRoom` is never called on this path.** Records `'residentWorldHot'`.
+
+5. **`residentRestore` renaming.** Snapshot-restore path now records `'residentRestore'` instead of `'residentHot'`. `TransitionOutcome` still includes `'residentHot'` for backward compatibility.
+
+6. **Resident world stored after every load.** `setResidentWorld(room.id, world, true)` called after: startup load, instant-path (snapshot-restore), async load completion.
+
+7. **Idle-frame background world building.** When `renderProfiler.getLastFrameMs() < 10`, one resident WorldState is built per frame for the highest-priority adjacent room missing `runtimeReady`. One build per frame keeps the budget bounded (~5–15 ms each).
+
+#### What remains deferred (Phase 4 limitations)
+
+1. **Complex enemy module-level state.** RadiantTether, DustConstellation, OrbitalDustCore etc. carry module-level singleton state not inside `WorldState`. On hot-swap activation, these singletons are reset (via `resetRadiantTetherState` / `resetRadiantWebState`), discarding the frozen AI chain state. Full fix requires serializing these singletons into `WorldState`.
+
+2. **Per-room renderer context.** Module-level renderer state is re-applied on every activation. Future work: store renderer state per resident and apply atomically.
+
+3. **Projectiles crossing room boundaries.** Not handled; any in-flight projectile at a boundary is lost on transition.
+
+4. **Player particle carry-over.** Dust particles are re-spawned fresh on activation (matching weave loadout) rather than transferred from the outgoing world.
+
+5. **Memory footprint.** Each WorldState ~570 KB; 16 residents = ~9 MB additional. Acceptable but should be monitored.
+
+6. **RNG determinism.** `buildResidentWorldState` uses the shared `levelRng` instance. Results may differ slightly from a fresh `loadRoom` for RNG-dependent cosmetics.
 
 ---
 
