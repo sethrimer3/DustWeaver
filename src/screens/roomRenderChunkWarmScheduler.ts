@@ -178,13 +178,17 @@ function _wallTemplateToSnapshot(t: {
 
 /**
  * Records whether the most recent room transition used:
- *  - 'residentHot' — instant hot-swap; frozen enemy state restored from resident snapshot.
- *  - 'hot'         — instant, no overlay (chunk caches were ready and valid).
- *  - 'entryWarm'   — instant load but brief textless cover while chunks warmed.
- *  - 'loading'     — full async load with "Loading…" overlay (cold cache miss).
- *  - 'none'        — no transition has occurred yet.
+ *  - 'residentWorldHot' — TRUE hot-swap; resident WorldState activated, loadRoom NOT called.
+ *  - 'residentHot'      — snapshot-restore (loadRoom ran, snapshots patched back).
+ *                         Kept for backward compatibility; prefer 'residentRestore' in new code.
+ *  - 'residentRestore'  — snapshot-restore (loadRoom ran, frozen enemy state patched back).
+ *  - 'residentFallback' — loadRoom ran but no frozen state to restore (first visit via instant path).
+ *  - 'hot'              — instant, no overlay (chunk caches were ready and valid).
+ *  - 'entryWarm'        — instant load but brief textless cover while chunks warmed.
+ *  - 'loading'          — full async load with "Loading…" overlay (cold cache miss).
+ *  - 'none'             — no transition has occurred yet.
  */
-export type TransitionOutcome = 'residentHot' | 'hot' | 'entryWarm' | 'loading' | 'none';
+export type TransitionOutcome = 'residentWorldHot' | 'residentHot' | 'residentRestore' | 'residentFallback' | 'hot' | 'entryWarm' | 'loading' | 'none';
 
 /**
  * Explains why the most recent transition was not 'hot'.

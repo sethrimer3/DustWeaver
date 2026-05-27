@@ -14,7 +14,7 @@ export interface GameOverlayControllerState {
 
 interface CreateGameOverlayControllerParams {
   uiRoot: HTMLElement;
-  world: WorldState;
+  getWorld: () => WorldState;
   roomRegistry: ReadonlyMap<string, RoomDef>;
   progress?: PlayerProgress;
   campaignSpawnRoom: RoomDef;
@@ -46,7 +46,7 @@ export function createGameOverlayController(
 ): GameOverlayController {
   const {
     uiRoot,
-    world,
+    getWorld,
     roomRegistry,
     progress,
     campaignSpawnRoom,
@@ -115,6 +115,7 @@ export function createGameOverlayController(
     closeMapOnlyIfOpen();
     state.isSkillTombMenuOpen = true;
 
+    const world = getWorld();
     const player = world.clusters[0];
     let playerXWorld = 0;
     let playerYWorld = 0;
@@ -181,6 +182,7 @@ export function createGameOverlayController(
 
   function openMapOnly(): void {
     if (state.isMapOnlyOpen || state.isSkillTombMenuOpen || progress === undefined) return;
+    const world = getWorld();
     const player = world.clusters[0];
     if (player === undefined) return;
     state.isMapOnlyOpen = true;
