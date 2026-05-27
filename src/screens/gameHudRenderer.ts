@@ -14,7 +14,6 @@ import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
 import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
-import { HEALTH_BAR_DISPLAY_MS } from './gameRoom';
 import {
   MOTE_STATE_AVAILABLE,
   BASE_MOTE_REGENERATION_TICKS,
@@ -37,6 +36,18 @@ const HEALTH_THRESHOLD_CRITICAL_FRACTION = 0.20;  // below this → pulsing red 
 
 /** Fixed simulation timestep for tick-to-ms conversion. */
 const FIXED_DT_MS = 16.666;
+
+/** Temporary health-bar visibility test: not final tuning, just comparing what works better for the game. */
+const HEALTH_BAR_FADE_MS = 350;
+/** Temporary health-bar visibility test: not final tuning, just comparing what works better for the game. */
+const HEALTH_BAR_HOLD_VISIBLE_MS = 3000;
+/** Temporary health-bar visibility test: not final tuning, just comparing what works better for the game. */
+const HEALTH_BAR_HOLD_HIDDEN_MS = 3000;
+const HEALTH_BAR_FADE_TICKS = Math.max(1, Math.round(HEALTH_BAR_FADE_MS / FIXED_DT_MS));
+const HEALTH_BAR_HOLD_VISIBLE_TICKS = Math.round(HEALTH_BAR_HOLD_VISIBLE_MS / FIXED_DT_MS);
+const HEALTH_BAR_HOLD_HIDDEN_TICKS = Math.round(HEALTH_BAR_HOLD_HIDDEN_MS / FIXED_DT_MS);
+const HEALTH_BAR_CYCLE_TICKS =
+  HEALTH_BAR_FADE_TICKS * 2 + HEALTH_BAR_HOLD_VISIBLE_TICKS + HEALTH_BAR_HOLD_HIDDEN_TICKS;
 
 // ── Mote dot row layout constants (virtual pixels) ──────────────────────────
 /** Side length of each mote indicator square. */
@@ -75,6 +86,41 @@ export interface HudRenderContext {
   runTimerMs: number;
 }
 
+function getHealthBarAlpha(
+  entityId: number,
+  healthFraction: number,
+  currentTick: number,
+  healthBarDisplayUntilTick: Map<number, number>,
+): number {
+  if (healthFraction >= 1) {
+    healthBarDisplayUntilTick.delete(entityId);
+    return 0;
+  }
+
+  let cycleStartTick = healthBarDisplayUntilTick.get(entityId);
+  if (cycleStartTick === undefined) {
+    cycleStartTick = currentTick;
+    healthBarDisplayUntilTick.set(entityId, cycleStartTick);
+  }
+
+  const cycleTick = (currentTick - cycleStartTick) % HEALTH_BAR_CYCLE_TICKS;
+  if (cycleTick < HEALTH_BAR_FADE_TICKS) {
+    return cycleTick / HEALTH_BAR_FADE_TICKS;
+  }
+
+  const visibleEndTick = HEALTH_BAR_FADE_TICKS + HEALTH_BAR_HOLD_VISIBLE_TICKS;
+  if (cycleTick < visibleEndTick) {
+    return 1;
+  }
+
+  const fadeOutEndTick = visibleEndTick + HEALTH_BAR_FADE_TICKS;
+  if (cycleTick < fadeOutEndTick) {
+    return 1 - (cycleTick - visibleEndTick) / HEALTH_BAR_FADE_TICKS;
+  }
+
+  return 0;
+}
+
 /**
  * Render all HUD layers onto the virtual canvas.
  * Called after the room clip is closed so HUD elements sit above all world
@@ -96,6 +142,13 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     const playerForHealth = world.clusters[0];
     if (playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
       const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
+      const healthBarAlpha = getHealthBarAlpha(
+        playerForHealth.entityId,
+        healthFraction,
+        world.tick,
+        healthBarDisplayUntilTick,
+      );
+      if (healthBarAlpha > 0) {
       const isCritical = healthFraction < HEALTH_THRESHOLD_CRITICAL_FRACTION;
       const isDanger   = healthFraction < HEALTH_THRESHOLD_DANGER_FRACTION;
 
@@ -106,6 +159,7 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
       const fillW = barW * Math.max(0, healthFraction);
 
       ctx.save();
+      ctx.globalAlpha *= healthBarAlpha;
 
       // ── Outer danger glow at critical health (pulsing shadow) ────────────
       if (isCritical) {
@@ -166,7 +220,11 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
       ctx.lineWidth   = 0.5;
       ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1);
 
+      ctx.fillStyle = '#0066ff';
+      ctx.fillRect(barX + barW + 3, barY, 1, 1);
+
       ctx.restore();
+      }
     }
   }
 
@@ -294,8 +352,7 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     }
   }
 
-  // ── Enemy health bar display (only when damaged) ──────────────────────────
-  const healthBarDisplayTicks = Math.floor(HEALTH_BAR_DISPLAY_MS / FIXED_DT_MS);
+  // Enemy health bar display: only while below full health.
   // Hoist constant canvas state outside the per-enemy loop to avoid redundant
   // state-change calls and one save/restore pair per live enemy.
   ctx.save();
@@ -337,21 +394,21 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     // Player health bar is in the HUD; skip per-character bar for player.
     if (cluster.isPlayerFlag === 1) continue;
 
-    // Check for health changes to trigger enemy health bar display.
-    if (healthDelta > 0) {
-      healthBarDisplayUntilTick.set(cluster.entityId, world.tick + healthBarDisplayTicks);
-    }
-
-    // Only show health bar if recently damaged (tick-based).
-    const displayUntilTick = healthBarDisplayUntilTick.get(cluster.entityId) ?? 0;
-    if (world.tick > displayUntilTick) continue;
-
     const healthFraction = cluster.healthPoints / cluster.maxHealthPoints;
+    const healthBarAlpha = getHealthBarAlpha(
+      cluster.entityId,
+      healthFraction,
+      world.tick,
+      healthBarDisplayUntilTick,
+    );
+    if (healthBarAlpha <= 0) continue;
+
     const barWidth  = 24;
     const barHeight = 3;
     const barX = cluster.positionXWorld * zoom + ox - barWidth / 2;
     const barY = (cluster.positionYWorld - cluster.halfHeightWorld - 5) * zoom + oy;
 
+    ctx.globalAlpha = healthBarAlpha;
     // Thin gold outline
     ctx.strokeRect(barX - 0.5, barY - 0.5, barWidth + 1, barHeight + 1);
     // Background
@@ -366,6 +423,8 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
       ctx.fillStyle = 'rgba(255,255,255,0.15)';
       ctx.fillRect(barX, barY, enemyFillW, 1);
     }
+    ctx.fillStyle = '#0066ff';
+    ctx.fillRect(barX + barWidth + 2, barY, 1, 1);
   }
   ctx.restore();
 
