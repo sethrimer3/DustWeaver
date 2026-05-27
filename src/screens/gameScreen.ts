@@ -1723,8 +1723,8 @@ export function startGameScreen(
           const _pvy = _proxPlayer.velocityYWorld;
           const _absVx = Math.abs(_pvx);
           const _absVy = Math.abs(_pvy);
-          const MIN_VEL_DIRECTION = 1.0; // world units/tick
-          if (_absVx > MIN_VEL_DIRECTION || _absVy > MIN_VEL_DIRECTION) {
+          const MIN_VEL_DIRECTION_WORLD = 1.0; // world units/tick
+          if (_absVx > MIN_VEL_DIRECTION_WORLD || _absVy > MIN_VEL_DIRECTION_WORLD) {
             const _velDir = _absVx >= _absVy
               ? (_pvx > 0 ? 'right' : 'left')
               : (_pvy > 0 ? 'down'  : 'up');

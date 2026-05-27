@@ -704,12 +704,8 @@ export class RenderProfiler {
       let queueLabel = '';
       if (rd.residentBuildQueueLength > 0) {
         const byPri = rd.residentBuildQueueByPriority;
-        if (byPri !== undefined) {
-          const priStr = byPri.map((c, i) => `p${i + 1}:${c}`).join(' ');
-          queueLabel = ` Q:${rd.residentBuildQueueLength} [${priStr}]`;
-        } else {
-          queueLabel = ` Q:${rd.residentBuildQueueLength}`;
-        }
+        const priStr = byPri.map((c, i) => `p${i + 1}:${c}`).join(' ');
+        queueLabel = ` Q:${rd.residentBuildQueueLength} [${priStr}]`;
       }
       const ptLabel = rd.lastPlayerParticlesCaptured > 0
         ? ` pt:${rd.lastPlayerParticlesRestored}/${rd.lastPlayerParticlesCaptured}` +
