@@ -153,13 +153,12 @@ export function raycastToWallWithNormal(
         const dotRight  = -dirXWorld;
         const dotTop    =  dirYWorld;
         const dotBottom = -dirYWorld;
-        let normalXWorld: number;
-        let normalYWorld: number;
         const best = Math.max(dotLeft, dotRight, dotTop, dotBottom);
-        if (best === dotLeft)        { normalXWorld = -1; normalYWorld =  0; }
-        else if (best === dotRight)  { normalXWorld =  1; normalYWorld =  0; }
-        else if (best === dotTop)    { normalXWorld =  0; normalYWorld = -1; }
-        else                         { normalXWorld =  0; normalYWorld =  1; }
+        const [normalXWorld, normalYWorld] =
+          best === dotLeft       ? [-1, 0] :
+          best === dotRight      ? [ 1, 0] :
+          best === dotTop        ? [ 0,-1] :
+                                   [ 0, 1];
         return { xWorld: prevX, yWorld: prevY, normalXWorld, normalYWorld };
       }
     }
