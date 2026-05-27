@@ -372,6 +372,7 @@ export function startGameScreen(
   }
   const _residentBuildQueue: ResidentBuildTask[] = [];
   const _residentBuildQueueIds = new Set<string>();
+  let _residentBuildQueueDirty = false; // true when new items or priority changes require a re-sort
 
   /**
    * Enqueue a resident build task.  Deduplicates by roomId and ignores the
@@ -390,11 +391,13 @@ export function startGameScreen(
       if (idx >= 0 && task.priority < _residentBuildQueue[idx].priority) {
         _residentBuildQueue[idx].priority = task.priority;
         _residentBuildQueue[idx].reason   = task.reason;
+        _residentBuildQueueDirty = true;
       }
       return;
     }
     _residentBuildQueueIds.add(task.roomId);
     _residentBuildQueue.push({ roomId: task.roomId, room, priority: task.priority, reason: task.reason });
+    _residentBuildQueueDirty = true;
   }
 
   /**
@@ -1103,14 +1106,15 @@ export function startGameScreen(
     residentRoomManager.invalidateResidentWorld(roomDef.id);
     // Also invalidate radius-1 neighbours — their transition data may reference
     // this room's geometry, enemies, or walls.
-    for (const [adjId] of bfsNearbyRooms(roomDef.id, ROOM_REGISTRY, 1)) {
+    const editedNeighbours = bfsNearbyRooms(roomDef.id, ROOM_REGISTRY, 1);
+    for (const [adjId] of editedNeighbours) {
       residentRoomManager.invalidateResidentWorld(adjId);
       _residentBuildQueueIds.delete(adjId); // allow re-enqueue at high priority
     }
     _residentBuildQueueIds.delete(roomDef.id); // allow re-enqueue at high priority
     // Queue rebuilds for the edited room and its radius-1 neighbours.
     _enqueueResidentBuild({ roomId: roomDef.id, priority: 5, reason: 'rebuildAfterEdit' });
-    for (const [adjId] of bfsNearbyRooms(roomDef.id, ROOM_REGISTRY, 1)) {
+    for (const [adjId] of editedNeighbours) {
       _enqueueResidentBuild({ roomId: adjId, priority: 5, reason: 'rebuildAfterEdit' });
     }
     loadRoom(roomDef, validX, validY, preserveCamera);
@@ -1860,29 +1864,28 @@ export function startGameScreen(
     // are still synchronous and the diagnostic records the actual cost.
     // Never build more than one resident per frame; never build the active room.
     if (_residentBuildQueue.length > 0 && renderProfiler.getLastFrameMs() < 10) {
-      // Sort queue by priority (lower number first) so the most urgent room
-      // is always at index 0.  A simple insertion-sort would be faster but
-      // the queue is small (≤ ~16 entries) so a full sort is fine.
-      _residentBuildQueue.sort((a, b) => a.priority - b.priority);
-      // Dequeue the highest-priority task, skipping already-built or active rooms.
-      let taskIdx = -1;
-      for (let qi = 0; qi < _residentBuildQueue.length; qi++) {
-        const t = _residentBuildQueue[qi];
-        if (t.roomId === currentRoom.id) continue;
-        const existing = residentRoomManager.getResident(t.roomId);
-        if (existing !== undefined && existing.runtimeReady) {
-          // Already built (e.g. loaded by initial pass); remove and skip.
-          _residentBuildQueue.splice(qi, 1);
-          _residentBuildQueueIds.delete(t.roomId);
-          qi--;
-          continue;
-        }
-        taskIdx = qi;
-        break;
+      // Sort queue by priority only when new tasks have been added or priorities
+      // have changed (tracked by the dirty flag).  Lower number = more urgent.
+      if (_residentBuildQueueDirty) {
+        _residentBuildQueue.sort((a, b) => a.priority - b.priority);
+        _residentBuildQueueDirty = false;
       }
-      if (taskIdx >= 0) {
-        const task = _residentBuildQueue[taskIdx];
-        _residentBuildQueue.splice(taskIdx, 1);
+      // Remove already-built or active-room entries in a single pass to avoid
+      // O(n²) index-shifting from multiple splices during iteration.
+      const stale = new Set<string>();
+      for (const t of _residentBuildQueue) {
+        if (t.roomId === currentRoom.id) { stale.add(t.roomId); continue; }
+        const existing = residentRoomManager.getResident(t.roomId);
+        if (existing !== undefined && existing.runtimeReady) stale.add(t.roomId);
+      }
+      if (stale.size > 0) {
+        for (const id of stale) _residentBuildQueueIds.delete(id);
+        _residentBuildQueue.splice(0, _residentBuildQueue.length,
+          ..._residentBuildQueue.filter(t => !stale.has(t.roomId)));
+      }
+      // Execute the highest-priority task (first entry after the sort above).
+      if (_residentBuildQueue.length > 0) {
+        const task = _residentBuildQueue.shift()!;
         _residentBuildQueueIds.delete(task.roomId);
         const _buildT0 = performance.now();
         try {

@@ -723,6 +723,11 @@ export class RenderProfiler {
         `ActivMs: ${rd.lastActivationMs.toFixed(1)}  Evict: ${rd.evictionsTotal}`,
         `Backtrack: ${rd.backtrackHot ? 'hot ✓' : rd.lastOutgoingRoomId !== null ? 'cold ✗' : '—'}`,
       ];
+      // Derive indices from the array so that adding/removing lines doesn't
+      // silently break the colour-coding below.
+      const R1R2_LINE_INDEX      = residentLines.findIndex(l => l.startsWith('R1:'));
+      const LAST_XTN_LINE_INDEX  = residentLines.findIndex(l => l.startsWith('Last xtn:'));
+      const BACKTRACK_LINE_INDEX = residentLines.findIndex(l => l.startsWith('Backtrack:'));
       const residentPanelH = residentLines.length * lineHeightPx + 8;
       ctx.save();
       ctx.font = `${fontSizePx}px monospace`;
@@ -737,12 +742,6 @@ export class RenderProfiler {
       };
       for (let i = 0; i < residentLines.length; i++) {
         const isHeader = i === 0;
-        // Index 5 is the 'Last xtn:' line (see residentLines above); colour-code it by mode.
-        const LAST_XTN_LINE_INDEX  = 5;
-        // Index 8 is the 'Backtrack:' line; colour-code by hot/cold.
-        const BACKTRACK_LINE_INDEX = 8;
-        // Index 3 has R1/R2/queue/initProgress — colour-code by initial-load completion.
-        const R1R2_LINE_INDEX = 3;
         let lineColor = '#b8d8ff';
         if (isHeader) {
           lineColor = '#ffdd44';
