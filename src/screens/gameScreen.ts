@@ -375,6 +375,9 @@ export function startGameScreen(
   let _residentBuildQueueDirty = false; // true when new items or priority changes require a re-sort
   const urgentResidentBuildPriorityThreshold = 2;
   const residentBuildBackgroundFrameBudgetMs = 10;
+  const nonUrgentResidentBuildForcedStartFrames = 90;
+  const nonUrgentWallsBuildDeferralFrameCap = 45;
+  let _nonUrgentQueueBlockedFrames = 0;
 
   /**
    * Per-room version counter.  Incremented when a room is edited so that
@@ -396,6 +399,8 @@ export function startGameScreen(
     capturedVersion: number;
     /** Last phase label yielded by the generator, for diagnostics. */
     currentPhase:   string;
+    /** Consecutive frames a non-urgent walls_build step has been deferred. */
+    deferredFrames: number;
   }
   let _activeBuildSession: ResidentBuildSession | null = null;
 
@@ -2093,43 +2098,53 @@ export function startGameScreen(
       // Step 1: advance active session one phase.
       if (_activeBuildSession !== null) {
         const _sess = _activeBuildSession;
-        try {
-          const _phaseResult = _sess.gen.next();
-          if (_phaseResult.done) {
-            // Generator returned the completed WorldState.
-            const _buildMs = performance.now() - _sess.t0;
-            const _currentVer = _roomVersions.get(_sess.task.roomId) ?? 0;
-            if (_sess.capturedVersion === _currentVer) {
-              residentRoomManager.ensureResident(_sess.task.room);
-              residentRoomManager.setResidentWorld(_sess.task.roomId, _phaseResult.value, false);
-              residentRoomManager.setLastBuildInfo(_sess.task.roomId, _buildMs);
-              if (import.meta.env.DEV) {
-                console.log(
-                  `[resident] incremental build done: ${_sess.task.roomId}` +
-                  ` (reason=${_sess.task.reason} pri=${_sess.task.priority}) in ${_buildMs.toFixed(1)}ms`,
-                );
-              }
-              _updateRadiusReadyCounts();
-            } else {
-              if (import.meta.env.DEV) {
+        const _lastFrameMs = renderProfiler.getLastFrameMs();
+        const _isNonUrgent = _sess.task.priority > urgentResidentBuildPriorityThreshold;
+        const _isHeavyWallsStepPending = _sess.currentPhase === 'phaseD_walls_lookup';
+        const _shouldDeferHeavyWallsStep = _isNonUrgent
+          && _isHeavyWallsStepPending
+          && _lastFrameMs >= residentBuildBackgroundFrameBudgetMs
+          && _sess.deferredFrames < nonUrgentWallsBuildDeferralFrameCap;
+        if (_shouldDeferHeavyWallsStep) {
+          _sess.deferredFrames++;
+        } else {
+          _sess.deferredFrames = 0;
+          try {
+            const _phaseResult = _sess.gen.next();
+            if (_phaseResult.done) {
+              // Generator returned the completed WorldState.
+              const _buildMs = performance.now() - _sess.t0;
+              const _currentVer = _roomVersions.get(_sess.task.roomId) ?? 0;
+              if (_sess.capturedVersion === _currentVer) {
+                residentRoomManager.ensureResident(_sess.task.room);
+                residentRoomManager.setResidentWorld(_sess.task.roomId, _phaseResult.value, false);
+                residentRoomManager.setLastBuildInfo(_sess.task.roomId, _buildMs);
+                if (import.meta.env.DEV) {
+                  console.log(
+                    `[resident] incremental build done: ${_sess.task.roomId}` +
+                    ` (reason=${_sess.task.reason} pri=${_sess.task.priority}) in ${_buildMs.toFixed(1)}ms`,
+                  );
+                }
+                _updateRadiusReadyCounts();
+              } else if (import.meta.env.DEV) {
                 console.warn(
                   `[resident] incremental build DISCARDED (stale): ${_sess.task.roomId}` +
                   ` ver=${_sess.capturedVersion} but current=${_currentVer}`,
                 );
               }
+              _activeBuildSession = null;
+              residentRoomManager.setCurrentBuildInfo(null, null, null);
+            } else {
+              _sess.currentPhase = _phaseResult.value;
+              residentRoomManager.setCurrentBuildInfo(_sess.task.roomId, _sess.task.reason, _phaseResult.value);
+            }
+          } catch (_sessErr) {
+            if (import.meta.env.DEV) {
+              console.warn(`[resident] incremental build FAILED: ${_sess.task.roomId}`, _sessErr);
             }
             _activeBuildSession = null;
             residentRoomManager.setCurrentBuildInfo(null, null, null);
-          } else {
-            _sess.currentPhase = _phaseResult.value;
-            residentRoomManager.setCurrentBuildInfo(_sess.task.roomId, _sess.task.reason, _phaseResult.value);
           }
-        } catch (_sessErr) {
-          if (import.meta.env.DEV) {
-            console.warn(`[resident] incremental build FAILED: ${_sess.task.roomId}`, _sessErr);
-          }
-          _activeBuildSession = null;
-          residentRoomManager.setCurrentBuildInfo(null, null, null);
         }
       }
 
@@ -2139,9 +2154,18 @@ export function startGameScreen(
       // transition candidates don't starve under sustained load.
       // Background priorities (3–5) still respect the <10 ms gate.
       const nextPriority = _residentBuildQueue.length > 0 ? _residentBuildQueue[0].priority : null;
+      const lastFrameMs = renderProfiler.getLastFrameMs();
+      const isUrgentHead = nextPriority !== null && nextPriority <= urgentResidentBuildPriorityThreshold;
+      if (nextPriority !== null && !isUrgentHead && lastFrameMs >= residentBuildBackgroundFrameBudgetMs) {
+        _nonUrgentQueueBlockedFrames++;
+      } else {
+        _nonUrgentQueueBlockedFrames = 0;
+      }
+      const forceStartNonUrgent = nextPriority !== null
+        && nextPriority > urgentResidentBuildPriorityThreshold
+        && _nonUrgentQueueBlockedFrames >= nonUrgentResidentBuildForcedStartFrames;
       const canStartSession = nextPriority !== null
-        && (nextPriority <= urgentResidentBuildPriorityThreshold
-          || renderProfiler.getLastFrameMs() < residentBuildBackgroundFrameBudgetMs);
+        && (isUrgentHead || lastFrameMs < residentBuildBackgroundFrameBudgetMs || forceStartNonUrgent);
       if (_activeBuildSession === null && _residentBuildQueue.length > 0 && canStartSession) {
         // Purge already-built or active-room entries from the front of the queue.
         let _dequeued: ResidentBuildTask | null = null;
@@ -2163,12 +2187,16 @@ export function startGameScreen(
           break;
         }
         if (_dequeued !== null) {
+          if (_dequeued.priority > urgentResidentBuildPriorityThreshold) {
+            _nonUrgentQueueBlockedFrames = 0;
+          }
           _activeBuildSession = {
             task:            _dequeued,
             gen:             createResidentBuildGenerator(_dequeued.room, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache),
             t0:              performance.now(),
             capturedVersion: _roomVersions.get(_dequeued.roomId) ?? 0,
             currentPhase:    'starting',
+            deferredFrames:  0,
           };
           residentRoomManager.setCurrentBuildInfo(_dequeued.roomId, _dequeued.reason, 'starting');
         }

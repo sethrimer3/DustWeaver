@@ -152,7 +152,7 @@ for (let i = 0; i < RING_SIZE; i++) _ring.push(_makeBlankFrame());
 
 let _ringHead = 0;
 /** Current mutable frame being filled; committed to ring in endFrame(). */
-let _cur: FreezeFrameData = _makeBlankFrame();
+const _cur: FreezeFrameData = _makeBlankFrame();
 
 /** Last frame with frameMs > LONG_FRAME_WARN_MS. */
 let _lastLongFrame: FreezeFrameData | null = null;
