@@ -679,6 +679,8 @@ export function startGameScreen(
     activeRoom:  null as import('../levels/roomDef').RoomDef | null,
     /** Most recent phase label yielded by activeGen, for diagnostics. */
     activeGenPhase: '' as string,
+    /** performance.now() when the current activeGen was created, for per-room timing. */
+    activeGenT0: 0,
   };
 
   // ── Initial loading overlay ───────────────────────────────────────────────
@@ -1405,7 +1407,7 @@ export function startGameScreen(
             // Generator returned the fully-built WorldState — commit it.
             residentRoomManager.ensureResident(_room);
             residentRoomManager.setResidentWorld(_room.id, _phaseResult.value, false);
-            const _buildMs = performance.now() - _initialResidentBuildPhase.t0; // rough elapsed
+            const _buildMs = performance.now() - _initialResidentBuildPhase.activeGenT0;
             residentRoomManager.setLastBuildInfo(_room.id, _buildMs);
             _initialResidentBuildPhase.built++;
             _initialResidentBuildPhase.activeGen  = null;
@@ -1448,6 +1450,7 @@ export function startGameScreen(
           _initialResidentBuildPhase.activeGen      = createResidentBuildGenerator(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache);
           _initialResidentBuildPhase.activeRoom     = adjRoom;
           _initialResidentBuildPhase.activeGenPhase = 'starting';
+          _initialResidentBuildPhase.activeGenT0    = performance.now();
           break;
         }
       }
