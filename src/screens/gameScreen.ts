@@ -340,10 +340,12 @@ export function startGameScreen(
   world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
   // Stable numeric seed for background resident world builds (BUILD 417).
-  // This constant is intentionally decoupled from levelRng — resident builds must
-  // not consume the active gameplay RNG stream.  Per-room RNG is derived inside
-  // buildResidentWorldState() using createResidentRoomRng(room, RESIDENT_CAMPAIGN_SEED).
-  const RESIDENT_CAMPAIGN_SEED = 12345;
+  // Intentionally a DIFFERENT value from the levelRng seed so it is visually
+  // clear that resident builds are decoupled from active gameplay randomness.
+  // Per-room RNG is further derived inside buildResidentWorldState() via
+  // createResidentRoomRng(room, RESIDENT_CAMPAIGN_SEED), which mixes in the
+  // room id hash and world number so each room gets a distinct RNG stream.
+  const RESIDENT_CAMPAIGN_SEED = 0xd457_0417; // distinct from levelRng seed (12345)
   const residentRoomManager = new ResidentRoomManager();
   const environmentalDust = new EnvironmentalDustLayer();
   const sunbeamRenderer = new SunbeamRenderer();

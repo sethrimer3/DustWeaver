@@ -42,7 +42,9 @@ const FIXED_DT_MS = 16.666;
 
 /**
  * A simple djb2-style string hash used to derive a numeric seed from a room id.
- * This is intentionally lightweight and not cryptographic.
+ * Uses XOR (rather than the canonical addition variant) for slightly better
+ * avalanche behaviour on short room-id strings.
+ * Not cryptographic — just needs good bit distribution for seed mixing.
  */
 function _hashRoomId(id: string): number {
   let h = 5381;

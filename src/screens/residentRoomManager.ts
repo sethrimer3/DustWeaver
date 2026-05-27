@@ -414,12 +414,16 @@ export class ResidentRoomManager {
    * @param world            Live WorldState (enemies at world.clusters[1..]).
    * @param roomId           Id of the room being frozen.
    * @param room             RoomDef for that room (used to retrieve RoomEnemyDef.kinds).
-   * @param opts.playerDetached  When `true` (true hot-swap path): the player MUST have
-   *                         been removed from `world` before calling this method; a DEV
-   *                         error is logged if a player cluster is found.
-   *                         When `false` or omitted (legacy/snapshot path): the player
-   *                         may still be present; the snapshot only captures non-player
-   *                         enemy clusters and no diagnostic is emitted for the player.
+   * @param opts.playerDetached
+   *   Controls the DEV player-presence check (default: `false`/omitted = no check).
+   *   - `true`  — true hot-swap path: the player MUST have been removed from `world`
+   *               before this call.  A DEV `console.error` is emitted if any player
+   *               cluster is still present.  Use this when the caller guarantees
+   *               `detachPlayerFromResidentWorld()` has already run.
+   *   - `false` / omitted — legacy/snapshot path: the player may still be in `world`
+   *               (freeze is called before `loadRoom()`).  No diagnostic is emitted
+   *               for the player cluster; only non-player enemies are snapshotted
+   *               either way.
    */
   freezeRoom(world: WorldState, roomId: string, room: RoomDef, opts?: { playerDetached?: boolean }): void {
     const resident = this._residents.get(roomId);
