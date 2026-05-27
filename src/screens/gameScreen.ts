@@ -114,7 +114,7 @@ import {
 } from './entryViewportWarm';
 import { ResidentRoomManager } from './residentRoomManager';
 import { bfsNearbyRooms } from './roomPrewarmNeighborhood';
-import { buildResidentWorldState, createResidentBuildGenerator } from './residentWorldBuilder';
+import { createResidentBuildGenerator } from './residentWorldBuilder';
 import { PLAYER_INITIAL_HEALTH } from './gameSpawn';
 
 const FIXED_DT_MS = 16.666;
@@ -368,7 +368,7 @@ export function startGameScreen(
     roomId:   string;
     room:     import('../levels/roomDef').RoomDef;
     priority: 1 | 2 | 3 | 4 | 5;
-    reason:   'initial' | 'adjacent' | 'proximity' | 'backtrack' | 'rebuildAfterEdit';
+    reason:   'initial' | 'adjacent' | 'proximity' | 'velocityDirection' | 'backtrack' | 'rebuildAfterEdit';
   }
   const _residentBuildQueue: ResidentBuildTask[] = [];
   const _residentBuildQueueIds = new Set<string>();
@@ -670,6 +670,15 @@ export function startGameScreen(
     t0:          0,
     /** Frames remaining before builds start (allow overlay to paint first). */
     yieldFrames: 2,
+    // ── Incremental generator session (BUILD 419) ──────────────────────────
+    // One generator phase is advanced per RAF frame so no single startup frame
+    // bears the full synchronous build cost (was ~15–25 ms per room).
+    /** Active generator for the room currently being built, or null. */
+    activeGen:   null as Generator<string, WorldState, void> | null,
+    /** RoomDef for the room whose generator is active. */
+    activeRoom:  null as import('../levels/roomDef').RoomDef | null,
+    /** Most recent phase label yielded by activeGen, for diagnostics. */
+    activeGenPhase: '' as string,
   };
 
   // ── Initial loading overlay ───────────────────────────────────────────────
@@ -1362,10 +1371,12 @@ export function startGameScreen(
       }
     }
 
-    // ── Initial resident build phase (BUILD 418+) ────────────────────────────
-    // Pre-gameplay phase that builds radius-2 resident WorldStates one room per
-    // RAF frame.  The loading overlay is already visible (shown before the RAF
-    // loop started).  Gameplay, sim, input, and transitions remain blocked.
+    // ── Initial resident build phase (BUILD 418+, incremental BUILD 419) ────
+    // Pre-gameplay phase that builds radius-2 resident WorldStates incrementally
+    // using createResidentBuildGenerator().  One generator phase is advanced per
+    // RAF frame so no single frame bears the full synchronous build cost.
+    // The loading overlay is already visible.  Gameplay, sim, input, and
+    // transitions remain blocked.
     //
     // Two "yield" frames are inserted first so the browser has time to paint
     // the overlay before any build work begins.
@@ -1383,43 +1394,66 @@ export function startGameScreen(
       if (_initialResidentBuildPhase.t0 === 0) {
         _initialResidentBuildPhase.t0 = performance.now();
       }
-      // Advance through rooms until we find one that needs a build (skip
-      // already-ready rooms in O(1) per frame without any build cost).
-      let builtOne = false;
-      while (!builtOne && _initialResidentBuildPhase.idx < _initialResidentBuildPhase.rooms.length) {
-        const [adjId] = _initialResidentBuildPhase.rooms[_initialResidentBuildPhase.idx];
-        _initialResidentBuildPhase.idx++;
-        const adjResident = residentRoomManager.getResident(adjId);
-        if (adjResident !== undefined && adjResident.runtimeReady) {
-          // Already built (start room or duplicate) — count and skip.
-          _initialResidentBuildPhase.built++;
-          continue;
-        }
-        const adjRoom = ROOM_REGISTRY.get(adjId);
-        if (adjRoom === undefined) continue;
+
+      // ── Step A: advance the active generator one phase ──────────────────
+      if (_initialResidentBuildPhase.activeGen !== null) {
+        const _gen  = _initialResidentBuildPhase.activeGen;
+        const _room = _initialResidentBuildPhase.activeRoom!;
         try {
-          const _bT0 = performance.now();
-          const _builtWorld = buildResidentWorldState(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache);
-          const _buildMs = performance.now() - _bT0;
-          residentRoomManager.ensureResident(adjRoom);
-          residentRoomManager.setResidentWorld(adjId, _builtWorld, false);
-          residentRoomManager.setLastBuildInfo(adjId, _buildMs);
-          _initialResidentBuildPhase.built++;
-          if (import.meta.env.DEV) {
-            console.log(
-              `[startup] initial resident ${_initialResidentBuildPhase.built}/${_initialResidentBuildPhase.total}:` +
-              ` ${adjId} in ${_buildMs.toFixed(1)}ms`,
-            );
+          const _phaseResult = _gen.next();
+          if (_phaseResult.done) {
+            // Generator returned the fully-built WorldState — commit it.
+            residentRoomManager.ensureResident(_room);
+            residentRoomManager.setResidentWorld(_room.id, _phaseResult.value, false);
+            const _buildMs = performance.now() - _initialResidentBuildPhase.t0; // rough elapsed
+            residentRoomManager.setLastBuildInfo(_room.id, _buildMs);
+            _initialResidentBuildPhase.built++;
+            _initialResidentBuildPhase.activeGen  = null;
+            _initialResidentBuildPhase.activeRoom = null;
+            _initialResidentBuildPhase.activeGenPhase = '';
+            if (import.meta.env.DEV) {
+              console.log(
+                `[startup] initial resident ${_initialResidentBuildPhase.built}/${_initialResidentBuildPhase.total}:` +
+                ` ${_room.id} done`,
+              );
+            }
+          } else {
+            _initialResidentBuildPhase.activeGenPhase = _phaseResult.value;
           }
-        } catch (_buildErr) {
+        } catch (_genErr) {
           _initialResidentBuildPhase.failed++;
+          _initialResidentBuildPhase.activeGen  = null;
+          _initialResidentBuildPhase.activeRoom = null;
+          _initialResidentBuildPhase.activeGenPhase = '';
           if (import.meta.env.DEV) {
-            console.warn(`[startup] initial resident FAILED: ${adjId}`, _buildErr);
+            console.warn(`[startup] initial resident FAILED: ${_room.id}`, _genErr);
           }
         }
-        builtOne = true; // one full room per frame
       }
-      const _initDone = _initialResidentBuildPhase.idx >= _initialResidentBuildPhase.rooms.length;
+
+      // ── Step B: dequeue the next room when the generator slot is free ───
+      if (_initialResidentBuildPhase.activeGen === null) {
+        while (_initialResidentBuildPhase.idx < _initialResidentBuildPhase.rooms.length) {
+          const [adjId] = _initialResidentBuildPhase.rooms[_initialResidentBuildPhase.idx];
+          _initialResidentBuildPhase.idx++;
+          const adjResident = residentRoomManager.getResident(adjId);
+          if (adjResident !== undefined && adjResident.runtimeReady) {
+            // Already built (start room or duplicate) — skip without consuming a frame.
+            _initialResidentBuildPhase.built++;
+            continue;
+          }
+          const adjRoom = ROOM_REGISTRY.get(adjId);
+          if (adjRoom === undefined) continue;
+          // Start incremental generator for this room.
+          _initialResidentBuildPhase.activeGen      = createResidentBuildGenerator(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache);
+          _initialResidentBuildPhase.activeRoom     = adjRoom;
+          _initialResidentBuildPhase.activeGenPhase = 'starting';
+          break;
+        }
+      }
+
+      const _initDone = _initialResidentBuildPhase.idx >= _initialResidentBuildPhase.rooms.length
+        && _initialResidentBuildPhase.activeGen === null;
       const _initElapsed = performance.now() - _initialResidentBuildPhase.t0;
       residentRoomManager.setInitialRadius2Progress(
         _initialResidentBuildPhase.total,
@@ -1732,7 +1766,7 @@ export function startGameScreen(
               if (_vt.direction === _velDir) {
                 const _vtResident = residentRoomManager.getResident(_vt.targetRoomId);
                 if (_vtResident === undefined || !_vtResident.runtimeReady) {
-                  _enqueueResidentBuild({ roomId: _vt.targetRoomId, priority: 2, reason: 'proximity' });
+                  _enqueueResidentBuild({ roomId: _vt.targetRoomId, priority: 2, reason: 'velocityDirection' });
                 }
                 break;
               }
@@ -2034,6 +2068,16 @@ export function startGameScreen(
     //      discard if stale.
     //   3. If no session is active and the queue is non-empty, start a new
     //      session only when the previous frame was fast (< 10 ms).
+    //
+    // Scheduling note (BUILD 419): build phases execute post-render, before
+    // FP.endFrame(), so their cost is included in the current frame's wall time
+    // but NOT attributed to the gameplay sim or render buckets.  A true
+    // post-paint path (requestIdleCallback) would avoid contributing to frame
+    // latency, but requires additional synchronisation to ensure builds never
+    // read/write the active room's WorldState or roomRuntimeCache from a
+    // callback that races with the RAF loop.  Deferred to a future pass;
+    // the per-phase debug overlay (currentBuildPhase) gives sufficient
+    // visibility into the cost of individual phases in the interim.
     {
       // Sort the queue only when dirty.  Lower number = more urgent.
       if (_residentBuildQueueDirty) {
@@ -2070,16 +2114,17 @@ export function startGameScreen(
               }
             }
             _activeBuildSession = null;
-            residentRoomManager.setCurrentBuildInfo(null, null);
+            residentRoomManager.setCurrentBuildInfo(null, null, null);
           } else {
             _sess.currentPhase = _phaseResult.value;
+            residentRoomManager.setCurrentBuildInfo(_sess.task.roomId, _sess.task.reason, _phaseResult.value);
           }
         } catch (_sessErr) {
           if (import.meta.env.DEV) {
-            console.warn(`[resident] incremental build FAILED: ${_activeBuildSession.task.roomId}`, _sessErr);
+            console.warn(`[resident] incremental build FAILED: ${_sess.task.roomId}`, _sessErr);
           }
           _activeBuildSession = null;
-          residentRoomManager.setCurrentBuildInfo(null, null);
+          residentRoomManager.setCurrentBuildInfo(null, null, null);
         }
       }
 
@@ -2113,7 +2158,7 @@ export function startGameScreen(
             capturedVersion: _roomVersions.get(_dequeued.roomId) ?? 0,
             currentPhase:    'starting',
           };
-          residentRoomManager.setCurrentBuildInfo(_dequeued.roomId, _dequeued.reason);
+          residentRoomManager.setCurrentBuildInfo(_dequeued.roomId, _dequeued.reason, 'starting');
         }
       }
 

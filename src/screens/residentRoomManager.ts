@@ -261,6 +261,14 @@ export interface ResidentRoomDiagnostics {
   currentBuildRoomId: string | null;
   /** Build reason for the current in-progress build, or null. */
   currentBuildReason: string | null;
+  /**
+   * Most recent phase label yielded by the active incremental build session, or null.
+   * Matches the phase strings from createResidentBuildGenerator:
+   *   'starting' | 'phaseA' | 'phaseC' | 'phaseD_fluid' | 'phaseD_chains' |
+   *   'phaseD_walls_lookup' | 'phaseD_walls_build' | 'phaseE_sim' | 'phaseE_dust'
+   * Cleared (null) when no build is in progress.
+   */
+  currentBuildPhase: string | null;
   evictionsTotal: number;
   // ── Player transfer diagnostics (BUILD 416) ──────────────────────────────
   /** Number of non-transient player-owned particles captured in the last hot-swap. */
@@ -364,6 +372,7 @@ export class ResidentRoomManager {
   /** room id of the in-progress incremental build, or null. */
   private _currentBuildRoomId: string | null = null;
   private _currentBuildReason: string | null = null;
+  private _currentBuildPhase:  string | null = null;
   /** radius-1/2 ready/total counts set by gameScreen after each transition. */
   private _radius1ReadyCount = 0;
   private _radius2ReadyCount = 0;
@@ -932,9 +941,10 @@ export class ResidentRoomManager {
   }
 
   /** Update the in-progress incremental build info shown in the debug overlay. */
-  setCurrentBuildInfo(roomId: string | null, reason: string | null): void {
+  setCurrentBuildInfo(roomId: string | null, reason: string | null, phase?: string | null): void {
     this._currentBuildRoomId = roomId;
     this._currentBuildReason = reason;
+    this._currentBuildPhase  = phase !== undefined ? phase : (roomId !== null ? this._currentBuildPhase : null);
   }
 
   /** Update radius readiness and total counts shown in the debug overlay. */
@@ -1147,6 +1157,7 @@ export class ResidentRoomManager {
       residentBuildQueueByPriority:       [...this._residentBuildQueueByPriority] as unknown as readonly [number, number, number, number, number],
       currentBuildRoomId:                 this._currentBuildRoomId,
       currentBuildReason:                 this._currentBuildReason,
+      currentBuildPhase:                  this._currentBuildPhase,
       evictionsTotal:                     this._evictionsTotal,
       lastPlayerParticlesCaptured:        this._lastPlayerParticlesCaptured,
       lastPlayerParticlesRestored:        this._lastPlayerParticlesRestored,

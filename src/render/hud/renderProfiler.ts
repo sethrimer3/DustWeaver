@@ -722,7 +722,7 @@ export class RenderProfiler {
         : ` [init done ${rd.initialRadius2Built}/${rd.initialRadius2Total} ${rd.initialRadius2LoadMs.toFixed(0)}ms]`;
       // Current incremental build session info.
       const currentBuildLine = rd.currentBuildRoomId !== null
-        ? `Building: ${rd.currentBuildRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)} (${rd.currentBuildReason ?? '?'})`
+        ? `Building: ${rd.currentBuildRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)} (${rd.currentBuildReason ?? '?'}${rd.currentBuildPhase ? ' ' + rd.currentBuildPhase : ''})`
         : null;
       const residentLines = [
         '── Resident Rooms ──',

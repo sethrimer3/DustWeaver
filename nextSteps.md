@@ -451,11 +451,12 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
    Deduplication by room id with priority upgrades (lower number wins). Queue length by priority shown in debug overlay.
 
-8. **Initial radius-2 residents — pre-gameplay phase with overlay (BUILD 418+).** The loading overlay is shown unconditionally before the RAF loop. The initial build phase runs inside the RAF loop (not before it): two "yield" frames allow the overlay to paint, then one full `buildResidentWorldState` call per RAF frame completes all radius-2 rooms before gameplay begins. Gameplay, sim, input, and transitions remain blocked for the entire initial build phase. Diagnostics (`initialRadius2Built/Total/Failed/LoadMs`) shown in the debug overlay and logged to console.
+8. **Initial radius-2 residents — incremental pre-gameplay phase with overlay (BUILD 418+, BUILD 419).** The loading overlay is shown unconditionally before the RAF loop. The initial build phase runs inside the RAF loop (not before it): two "yield" frames allow the overlay to paint, then `createResidentBuildGenerator()` is used for each room — one generator phase per RAF frame — so no single startup frame bears the full synchronous build cost. Gameplay, sim, input, and transitions remain blocked for the entire initial build phase. Diagnostics (`initialRadius2Built/Total/Failed/LoadMs`) shown in the debug overlay and logged to console. `runtimeReady` is only set when the generator returns the completed `WorldState` (never on an intermediate yield).
 
 9. **Editor invalidation — hardened (BUILD 418+).** On editor room changes:
    - Edited room's `_roomVersions` counter is incremented (stale-build guard).
-   - `roomRuntimeCache.invalidate` and `invalidateRoomChunkPrewarm` called for edited room AND all radius-1 neighbours.
+   - `roomRuntimeCache.invalidate` called for the **edited room only** — neighbor wall templates are built purely from their own room geometry and do not depend on adjacent rooms, so their cache entries remain valid.
+   - `invalidateRoomChunkPrewarm` called for edited room AND all radius-1 neighbours (render chunks can reference shared-boundary geometry).
    - `invalidateResidentWorld` called for edited room and radius-1 neighbours; all re-enqueued at priority 5.
    - After `loadRoom()`, `setResidentWorld(roomId, world, true)` updates the active resident record with the freshly-loaded world so subsequent hot-swaps do not see the null/stale state.
 
@@ -464,26 +465,28 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 These checks confirm correct behaviour for the resident-room runtime. Run manually in DEV mode:
 
 - [ ] `npm run build` passes (tsc exits 0; pre-existing TS2688 vite/client warning is harmless).
-- [ ] Startup: loading overlay is visible before any resident builds begin; console shows `[startup] init resident N/T: roomId in Xms` for each room; game does not become interactive until all initial builds log done.
+- [ ] Startup: loading overlay is visible before any resident builds begin; console shows `[startup] initial resident N/T: roomId done` for each room; game does not become interactive until all initial builds complete; no single startup frame spends > ~10 ms on a full synchronous build.
 - [ ] Normal adjacent transition: console shows `residentWorldHot` mode; `loadRoom` is NOT called; overlay does not reappear.
 - [ ] Immediate backtracking (A→B then B→A): second transition also uses `residentWorldHot`; debug overlay shows `Backtrack: hot ✓`.
 - [ ] Legacy/fallback path: `residentFallback` or `legacyLoad` mode; no false duplicate-player DEV errors logged.
 - [ ] Player dust transfer: `pt:N/M` in debug overlay; restored count matches captured count; no DEV skipped-particle warnings under normal conditions.
-- [ ] Runtime incremental scheduler: debug overlay shows `Building: roomId (reason)` while a session is active; no single frame shows 15+ ms from a full synchronous build; console shows `[resident] incremental build done:` messages.
-- [ ] Priority boosting: when player approaches a boundary, debug overlay Q breakdown shows p1/p2 entries before p3/p4.
+- [ ] Runtime incremental scheduler: debug overlay shows `Building: roomId (reason phaseD_walls_build)` (with phase label) while a session is active; no single frame shows 15+ ms from a full synchronous build; console shows `[resident] incremental build done:` messages; `Building:` line clears when build finishes.
+- [ ] Priority boosting: when player approaches a boundary, debug overlay Q breakdown shows p1 entry; velocity-direction entry shows p2 with reason `velocityDirection`; p3/p4 for radius-1/2 adjacents.
 - [ ] Editor invalidation: editing a room then immediately transitioning into it does NOT hot-swap stale pre-edit state; debug overlay shows the edited room's resident rebuilding; stale chunk caches evicted.
 
-#### Remaining limitations (BUILD 418+)
+#### Remaining limitations (BUILD 418+, updated BUILD 419)
 
-1. **Incremental phase granularity.** The generator yields after each phase but phases are still synchronous. `phaseD_walls` (background fluid, grapple chains, wall template/cache) can still take 5–10 ms on large rooms. A truly bounded scheduler would need finer yields inside each phase. This is deferred; the per-phase cost is documented in DEV logs.
+1. **`phaseD_walls_build` is still a single synchronous step.** `buildRoomWallTemplate()` is not internally incremental. On very large rooms (> ~80×50 blocks) it can still take 5–10 ms in one generator phase. The cache-hit path is fast (~0.1 ms). DEV timing is recorded via `FP.recordLoadPhaseStep('Resident:walls_build')` so the freeze profiler captures the cost. Making `buildRoomWallTemplate()` internally incremental is deferred to a future pass.
 
-2. **Priority 1/2 enqueue is per-frame, not edge-triggered.** The proximity and velocity checks run every gameplay frame. `_enqueueResidentBuild` de-duplicates by id with priority upgrade, so this is safe (no queue explosion) but does generate small per-frame overhead. An edge-triggered alternative (enqueue on direction change or crossing proximity threshold) could be cleaner — deferred.
+2. **Build phases execute pre-paint (post-render, pre-endFrame).** A `requestIdleCallback`-style path would advance build phases after the browser paints the frame, reducing their contribution to frame latency. This requires synchronising the idle callback with the RAF loop to prevent concurrent mutations to `roomRuntimeCache` or the active `WorldState`. Deferred; the per-phase debug overlay provides sufficient visibility into individual phase costs in the interim.
 
-3. **Active-session cancellation on priority upgrade.** If a p4 session is in progress and the player nears a boundary for that same room (upgrading to p1), the in-progress session is NOT interrupted — it will simply complete and the result will be accepted at the original version. The priority upgrade only affects queued-but-not-yet-started tasks. Interrupting an in-progress session is deferred.
+3. **Priority 1/2 enqueue is per-frame, not edge-triggered.** The proximity and velocity checks run every gameplay frame. `_enqueueResidentBuild` de-duplicates by id with priority upgrade, so this is safe (no queue explosion) but does generate small per-frame overhead. An edge-triggered alternative (enqueue on direction change or crossing proximity threshold) could be cleaner — deferred.
 
-4. **Complex enemy module-level state** (RadiantTether, DustConstellation, etc.) still not serialized. Hot-swap resets these singletons on activation. Full fix requires serializing them into WorldState.
+4. **Active-session cancellation on priority upgrade.** If a p4 session is in progress and the player nears a boundary for that same room (upgrading to p1), the in-progress session is NOT interrupted — it will simply complete and the result will be accepted at the original version. The priority upgrade only affects queued-but-not-yet-started tasks. Interrupting an in-progress session is deferred.
 
-5. **Per-room renderer context** not yet stored per-resident. Module-level renderer state is re-applied on every activation.
+5. **Complex enemy module-level state** (RadiantTether, DustConstellation, etc.) still not serialized. Hot-swap resets these singletons on activation. Full fix requires serializing them into WorldState.
+
+6. **Per-room renderer context** not yet stored per-resident. Module-level renderer state is re-applied on every activation.
 
 ---
 
