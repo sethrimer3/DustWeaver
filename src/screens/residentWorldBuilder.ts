@@ -272,10 +272,51 @@ export function buildResidentWorldState(
  *
  * BUILD 418
  */
+/**
+ * Optional diagnostics context passed to createResidentBuildGenerator.
+ *
+ * Provides build reason and priority for per-phase warning messages, and an
+ * optional callback that fires when any phase exceeds the 8 ms threshold.
+ * All fields are optional so callers can pass partial context.
+ */
+export interface ResidentBuildDiagContext {
+  /** Human-readable build reason (e.g. 'adjacent', 'initial', 'hotSwapTarget'). */
+  reason?: string;
+  /** Numeric priority of the build task (1 = most urgent). */
+  priority?: number;
+  /**
+   * Called in DEV when a generator phase exceeds LONG_PHASE_WARN_MS.
+   * @param phase  Phase label (e.g. 'phaseD_walls_build').
+   * @param ms     Measured wall-clock time for the phase in milliseconds.
+   */
+  onLongPhase?: (phase: string, ms: number) => void;
+}
+
+/** Threshold in ms above which a resident build phase is considered slow. */
+const LONG_PHASE_WARN_MS = 8;
+
+/**
+ * DEV-only helper: emits a console.warn and fires the diagContext callback
+ * when a generator phase exceeds LONG_PHASE_WARN_MS.
+ */
+function _warnLongPhase(
+  phase: string,
+  ms: number,
+  roomId: string,
+  diagContext: ResidentBuildDiagContext | undefined,
+): void {
+  if (ms <= LONG_PHASE_WARN_MS) return;
+  const rStr = diagContext?.reason   !== undefined ? ` reason=${diagContext.reason}`   : '';
+  const pStr = diagContext?.priority !== undefined ? ` pri=${diagContext.priority}`     : '';
+  console.warn(`[resident] long phase roomId=${roomId}${rStr}${pStr} phase=${phase} ms=${ms.toFixed(1)}`);
+  diagContext?.onLongPhase?.(phase, ms);
+}
+
 export function* createResidentBuildGenerator(
   room: RoomDef,
   campaignSeed: number,
   roomRuntimeCache: RoomRuntimeCache,
+  diagContext?: ResidentBuildDiagContext,
 ): Generator<string, WorldState, void> {
   const t0 = import.meta.env.DEV ? performance.now() : 0;
 
@@ -289,7 +330,11 @@ export function* createResidentBuildGenerator(
     const _t = import.meta.env.DEV ? performance.now() : 0;
     rw.worldWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
     rw.worldHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
-    FP.recordLoadPhaseStep('Resident:phaseA', import.meta.env.DEV ? performance.now() - _t : 0);
+    if (import.meta.env.DEV) {
+      const _ms = performance.now() - _t;
+      FP.recordLoadPhaseStep('Resident:phaseA', _ms);
+      _warnLongPhase('phaseA', _ms, room.id, diagContext);
+    } else { FP.recordLoadPhaseStep('Resident:phaseA', 0); }
   }
   yield 'phaseA';
 
@@ -318,7 +363,11 @@ export function* createResidentBuildGenerator(
       }
     }
     spawnEnemyClusters(rw, room.enemies, 2, levelRng);
-    FP.recordLoadPhaseStep('Resident:phaseC', import.meta.env.DEV ? performance.now() - _t : 0);
+    if (import.meta.env.DEV) {
+      const _ms = performance.now() - _t;
+      FP.recordLoadPhaseStep('Resident:phaseC', _ms);
+      _warnLongPhase('phaseC', _ms, room.id, diagContext);
+    } else { FP.recordLoadPhaseStep('Resident:phaseC', 0); }
   }
   yield 'phaseC';
 
@@ -326,7 +375,11 @@ export function* createResidentBuildGenerator(
   {
     const _t = import.meta.env.DEV ? performance.now() : 0;
     spawnBackgroundFluidParticles(rw, BACKGROUND_FLUID_COUNT, levelRng);
-    FP.recordLoadPhaseStep('Resident:bgFluid', import.meta.env.DEV ? performance.now() - _t : 0);
+    if (import.meta.env.DEV) {
+      const _ms = performance.now() - _t;
+      FP.recordLoadPhaseStep('Resident:bgFluid', _ms);
+      _warnLongPhase('phaseD_fluid', _ms, room.id, diagContext);
+    } else { FP.recordLoadPhaseStep('Resident:bgFluid', 0); }
   }
   yield 'phaseD_fluid';
 
@@ -339,7 +392,11 @@ export function* createResidentBuildGenerator(
         initGrappleHunterChainParticles(rw, cl);
       }
     }
-    FP.recordLoadPhaseStep('Resident:grappleChains', import.meta.env.DEV ? performance.now() - _t : 0);
+    if (import.meta.env.DEV) {
+      const _ms = performance.now() - _t;
+      FP.recordLoadPhaseStep('Resident:grappleChains', _ms);
+      _warnLongPhase('phaseD_chains', _ms, room.id, diagContext);
+    } else { FP.recordLoadPhaseStep('Resident:grappleChains', 0); }
   }
   yield 'phaseD_chains';
 
@@ -355,12 +412,18 @@ export function* createResidentBuildGenerator(
     if (cacheEntry !== undefined) {
       applyRoomWallTemplate(rw, cacheEntry.wallTemplate);
       _wallsCacheHit = true;
-      FP.recordLoadPhaseStep('Resident:walls_lookup_hit', import.meta.env.DEV ? performance.now() - _t : 0);
       if (import.meta.env.DEV) {
+        const _ms = performance.now() - _t;
+        FP.recordLoadPhaseStep('Resident:walls_lookup_hit', _ms);
+        _warnLongPhase('phaseD_walls_lookup', _ms, room.id, diagContext);
         console.log(`[residentBuild:gen] ${room.id} walls: cache HIT`);
-      }
+      } else { FP.recordLoadPhaseStep('Resident:walls_lookup_hit', 0); }
     } else {
-      FP.recordLoadPhaseStep('Resident:walls_lookup_miss', import.meta.env.DEV ? performance.now() - _t : 0);
+      if (import.meta.env.DEV) {
+        const _ms = performance.now() - _t;
+        FP.recordLoadPhaseStep('Resident:walls_lookup_miss', _ms);
+        _warnLongPhase('phaseD_walls_lookup', _ms, room.id, diagContext);
+      } else { FP.recordLoadPhaseStep('Resident:walls_lookup_miss', 0); }
     }
   }
   yield 'phaseD_walls_lookup';
@@ -369,6 +432,8 @@ export function* createResidentBuildGenerator(
   // This phase is only reached when the runtime cache did not have an entry for
   // the room.  buildRoomWallTemplate() can take 5–10 ms on large rooms; keeping
   // it in its own generator phase ensures no other work compounds this cost.
+  // phaseD_walls_build remains a single synchronous step (not yet incremental).
+  // See nextSteps.md for the deferred incremental wall-build investigation.
   if (!_wallsCacheHit) {
     const _t = import.meta.env.DEV ? performance.now() : 0;
     const wallTemplate = buildRoomWallTemplate(room);
@@ -380,10 +445,12 @@ export function* createResidentBuildGenerator(
       darkBlockerKeys: null,
       wallDecorations: null,
     });
-    FP.recordLoadPhaseStep('Resident:walls_build', import.meta.env.DEV ? performance.now() - _t : 0);
     if (import.meta.env.DEV) {
-      console.log(`[residentBuild:gen] ${room.id} walls: cache MISS (built in ${(performance.now() - _t).toFixed(1)}ms)`);
-    }
+      const _ms = performance.now() - _t;
+      FP.recordLoadPhaseStep('Resident:walls_build', _ms);
+      console.log(`[residentBuild:gen] ${room.id} walls: cache MISS (built in ${_ms.toFixed(1)}ms)`);
+      _warnLongPhase('phaseD_walls_build', _ms, room.id, diagContext);
+    } else { FP.recordLoadPhaseStep('Resident:walls_build', 0); }
     yield 'phaseD_walls_build';
   }
 
@@ -391,13 +458,14 @@ export function* createResidentBuildGenerator(
   {
     const _t = import.meta.env.DEV ? performance.now() : 0;
     loadRoomHazards(rw, room);
-    FP.recordLoadPhaseStep('Resident:hazards', import.meta.env.DEV ? performance.now() - _t : 0);
     loadRoomRopes(rw, room);
-    FP.recordLoadPhaseStep('Resident:ropes', import.meta.env.DEV ? performance.now() - _t : 0);
     loadRoomFallingBlocks(rw, room);
-    FP.recordLoadPhaseStep('Resident:fallingBlocks', import.meta.env.DEV ? performance.now() - _t : 0);
     loadRoomGrasshoppers(rw, room);
-    FP.recordLoadPhaseStep('Resident:grasshoppers', import.meta.env.DEV ? performance.now() - _t : 0);
+    if (import.meta.env.DEV) {
+      const _ms = performance.now() - _t;
+      FP.recordLoadPhaseStep('Resident:phaseE_sim', _ms);
+      _warnLongPhase('phaseE_sim', _ms, room.id, diagContext);
+    } else { FP.recordLoadPhaseStep('Resident:phaseE_sim', 0); }
   }
   yield 'phaseE_sim';
 
@@ -405,7 +473,11 @@ export function* createResidentBuildGenerator(
   {
     const _t = import.meta.env.DEV ? performance.now() : 0;
     spawnAllDustPiles(rw);
-    FP.recordLoadPhaseStep('Resident:dustPiles', import.meta.env.DEV ? performance.now() - _t : 0);
+    if (import.meta.env.DEV) {
+      const _ms = performance.now() - _t;
+      FP.recordLoadPhaseStep('Resident:dustPiles', _ms);
+      _warnLongPhase('phaseE_dust', _ms, room.id, diagContext);
+    } else { FP.recordLoadPhaseStep('Resident:dustPiles', 0); }
   }
   yield 'phaseE_dust';
 

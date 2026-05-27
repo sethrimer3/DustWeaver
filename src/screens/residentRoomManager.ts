@@ -290,6 +290,16 @@ export interface ResidentRoomDiagnostics {
   lastBuildRoomId: string | null;
   /** Wall-clock ms for the most recent background build (0 if none yet). */
   lastBuildDurationMs: number;
+  // ── Long-phase diagnostics (BUILD 419) ───────────────────────────────────
+  /**
+   * Phase label of the most recent generator phase that exceeded LONG_PHASE_WARN_MS,
+   * or null if no long phase has been recorded this session.
+   */
+  lastLongPhase: string | null;
+  /** Duration in ms of the last long phase (0 if none recorded). */
+  lastLongPhaseMs: number;
+  /** Room id associated with the last long phase, or null. */
+  lastLongPhaseRoomId: string | null;
   // ── Initial radius-2 load progress (BUILD 418) ───────────────────────────
   /** Total radius-2 rooms targeted for initial resident build. */
   initialRadius2Total: number;
@@ -388,6 +398,10 @@ export class ResidentRoomManager {
   // ── Build diagnostics (BUILD 418) ────────────────────────────────────────
   private _lastBuildRoomId: string | null = null;
   private _lastBuildDurationMs = 0;
+  // ── Long-phase diagnostics (BUILD 419) ───────────────────────────────────
+  private _lastLongPhase: string | null = null;
+  private _lastLongPhaseMs = 0;
+  private _lastLongPhaseRoomId: string | null = null;
   // ── Initial radius-2 load progress (BUILD 418) ───────────────────────────
   private _initialRadius2Total = 0;
   private _initialRadius2Built = 0;
@@ -964,6 +978,16 @@ export class ResidentRoomManager {
     }
   }
 
+  /**
+   * Record the most recent generator phase that exceeded the long-phase threshold (BUILD 419).
+   * Called by the onLongPhase callback wired in gameScreen.ts.
+   */
+  recordLongPhase(phase: string, ms: number, roomId: string): void {
+    this._lastLongPhase    = phase;
+    this._lastLongPhaseMs  = ms;
+    this._lastLongPhaseRoomId = roomId;
+  }
+
   /** Update initial radius-2 load progress (BUILD 418). */
   setInitialRadius2Progress(total: number, built: number, failed: number, loadMs: number, complete: boolean): void {
     this._initialRadius2Total    = total;
@@ -1167,6 +1191,9 @@ export class ResidentRoomManager {
                                             (this._residents.get(this._lastOutgoingRoomId)?.runtimeReady ?? false),
       lastBuildRoomId:                    this._lastBuildRoomId,
       lastBuildDurationMs:                this._lastBuildDurationMs,
+      lastLongPhase:                      this._lastLongPhase,
+      lastLongPhaseMs:                    this._lastLongPhaseMs,
+      lastLongPhaseRoomId:                this._lastLongPhaseRoomId,
       initialRadius2Total:                this._initialRadius2Total,
       initialRadius2Built:                this._initialRadius2Built,
       initialRadius2Failed:               this._initialRadius2Failed,
