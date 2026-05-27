@@ -1488,11 +1488,11 @@ export function startGameScreen(
           const adjRoom = ROOM_REGISTRY.get(adjId);
           if (adjRoom === undefined) continue;
           // Start incremental generator for this room.
-          const _adjRoomRef = adjRoom; // capture for closure
+          const capturedAdjRoom = adjRoom; // capture for closure
           _initialResidentBuildPhase.activeGen      = createResidentBuildGenerator(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache, {
             reason:      'initial',
             priority:    0,
-            onLongPhase: (phase, ms) => { residentRoomManager.recordLongPhase(phase, ms, _adjRoomRef.id); },
+            onLongPhase: (phase, ms) => { residentRoomManager.recordLongPhase(phase, ms, capturedAdjRoom.id); },
           });
           _initialResidentBuildPhase.activeRoom     = adjRoom;
           _initialResidentBuildPhase.activeGenPhase = 'starting';
@@ -2232,13 +2232,13 @@ export function startGameScreen(
           if (_dequeued.priority > urgentResidentBuildPriorityThreshold) {
             _nonUrgentQueueBlockedFrames = 0;
           }
-          const _dequeuedRef = _dequeued; // capture for closure
+          const capturedDequeued = _dequeued; // capture for closure
           _activeBuildSession = {
             task:            _dequeued,
             gen:             createResidentBuildGenerator(_dequeued.room, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache, {
               reason:       _dequeued.reason,
               priority:     _dequeued.priority,
-              onLongPhase:  (phase, ms) => { residentRoomManager.recordLongPhase(phase, ms, _dequeuedRef.roomId); },
+              onLongPhase:  (phase, ms) => { residentRoomManager.recordLongPhase(phase, ms, capturedDequeued.roomId); },
             }),
             t0:              performance.now(),
             capturedVersion: _roomVersions.get(_dequeued.roomId) ?? 0,
