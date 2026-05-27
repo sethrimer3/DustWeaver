@@ -263,6 +263,22 @@ export interface ResidentRoomDiagnostics {
    * meaning an immediate backtrack A → B → A can use residentWorldHot.
    */
   backtrackHot: boolean;
+  // ── Build diagnostics (BUILD 418) ────────────────────────────────────────
+  /** Room id of the most recently completed background build, or null if none yet. */
+  lastBuildRoomId: string | null;
+  /** Wall-clock ms for the most recent background build (0 if none yet). */
+  lastBuildDurationMs: number;
+  // ── Initial radius-2 load progress (BUILD 418) ───────────────────────────
+  /** Total radius-2 rooms targeted for initial resident build. */
+  initialRadius2Total: number;
+  /** Radius-2 rooms successfully built during initial load. */
+  initialRadius2Built: number;
+  /** Radius-2 rooms that failed to build during initial load. */
+  initialRadius2Failed: number;
+  /** Total ms spent building initial radius-2 residents. */
+  initialRadius2LoadMs: number;
+  /** true once all initial radius-2 resident builds have completed or failed. */
+  initialRadius2Complete: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -340,6 +356,15 @@ export class ResidentRoomManager {
   // ── Backtrack diagnostic (BUILD 417) ─────────────────────────────────────
   /** Room id of the room the player transitioned away from on the last transition. */
   private _lastOutgoingRoomId: string | null = null;
+  // ── Build diagnostics (BUILD 418) ────────────────────────────────────────
+  private _lastBuildRoomId: string | null = null;
+  private _lastBuildDurationMs = 0;
+  // ── Initial radius-2 load progress (BUILD 418) ───────────────────────────
+  private _initialRadius2Total = 0;
+  private _initialRadius2Built = 0;
+  private _initialRadius2Failed = 0;
+  private _initialRadius2LoadMs = 0;
+  private _initialRadius2Complete = false;
 
   // ── Frame tracking ─────────────────────────────────────────────────────────
 
@@ -885,6 +910,24 @@ export class ResidentRoomManager {
     this._radius2ReadyCount = radius2;
   }
 
+  /** Record the room id and duration of the most recent background build (BUILD 418). */
+  setLastBuildInfo(roomId: string, durationMs: number): void {
+    this._lastBuildRoomId    = roomId;
+    this._lastBuildDurationMs = durationMs;
+    if (import.meta.env.DEV && durationMs > 8) {
+      console.warn(`[resident] build took ${durationMs.toFixed(1)}ms for ${roomId} (> 8 ms threshold)`);
+    }
+  }
+
+  /** Update initial radius-2 load progress (BUILD 418). */
+  setInitialRadius2Progress(total: number, built: number, failed: number, loadMs: number, complete: boolean): void {
+    this._initialRadius2Total    = total;
+    this._initialRadius2Built    = built;
+    this._initialRadius2Failed   = failed;
+    this._initialRadius2LoadMs   = loadMs;
+    this._initialRadius2Complete = complete;
+  }
+
   // ── Player transfer diagnostics (BUILD 416) ──────────────────────────────
 
   /**
@@ -1071,6 +1114,13 @@ export class ResidentRoomManager {
       lastOutgoingRoomId:                 this._lastOutgoingRoomId,
       backtrackHot:                       this._lastOutgoingRoomId !== null &&
                                             (this._residents.get(this._lastOutgoingRoomId)?.runtimeReady ?? false),
+      lastBuildRoomId:                    this._lastBuildRoomId,
+      lastBuildDurationMs:                this._lastBuildDurationMs,
+      initialRadius2Total:                this._initialRadius2Total,
+      initialRadius2Built:                this._initialRadius2Built,
+      initialRadius2Failed:               this._initialRadius2Failed,
+      initialRadius2LoadMs:               this._initialRadius2LoadMs,
+      initialRadius2Complete:             this._initialRadius2Complete,
     };
   }
 

@@ -705,11 +705,19 @@ export class RenderProfiler {
         ? ` pt:${rd.lastPlayerParticlesRestored}/${rd.lastPlayerParticlesCaptured}` +
           (rd.lastPlayerParticlesSkipped > 0 ? ` (skip:${rd.lastPlayerParticlesSkipped})` : '')
         : '';
+      const buildLabel = rd.lastBuildRoomId !== null
+        ? `${rd.lastBuildRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)} (${rd.lastBuildDurationMs.toFixed(1)}ms)`
+        : '—';
+      const initProgress = !rd.initialRadius2Complete
+        ? ` [init ${rd.initialRadius2Built}/${rd.initialRadius2Total}` +
+          (rd.initialRadius2Failed > 0 ? ` err:${rd.initialRadius2Failed}` : '') + ']'
+        : ` [init done ${rd.initialRadius2Built}/${rd.initialRadius2Total} ${rd.initialRadius2LoadMs.toFixed(0)}ms]`;
       const residentLines = [
         '── Resident Rooms ──',
         `Active: ${rd.activeRoomId ?? 'none'}`,
         `Residents: ${rd.residentCount}  Worlds: ${rd.residentWorldCount}  Frozen: ${rd.frozenCount}`,
-        `R1: ${rd.radius1ReadyCount}  R2: ${rd.radius2ReadyCount}${queueLabel}`,
+        `R1: ${rd.radius1ReadyCount}  R2: ${rd.radius2ReadyCount}${queueLabel}${initProgress}`,
+        `LastBuild: ${buildLabel}`,
         `Last xtn: ${mode}${skipLabel}${ptLabel}`,
         rd.lastResidentMissReason ? `Miss: ${rd.lastResidentMissReason}` : 'Miss: —',
         `ActivMs: ${rd.lastActivationMs.toFixed(1)}  Evict: ${rd.evictionsTotal}`,
@@ -729,13 +737,17 @@ export class RenderProfiler {
       };
       for (let i = 0; i < residentLines.length; i++) {
         const isHeader = i === 0;
-        // Index 4 is the 'Last xtn:' line (see residentLines above); colour-code it by mode.
-        const LAST_XTN_LINE_INDEX  = 4;
-        // Index 7 is the 'Backtrack:' line; colour-code by hot/cold.
-        const BACKTRACK_LINE_INDEX = 7;
+        // Index 5 is the 'Last xtn:' line (see residentLines above); colour-code it by mode.
+        const LAST_XTN_LINE_INDEX  = 5;
+        // Index 8 is the 'Backtrack:' line; colour-code by hot/cold.
+        const BACKTRACK_LINE_INDEX = 8;
+        // Index 3 has R1/R2/queue/initProgress — colour-code by initial-load completion.
+        const R1R2_LINE_INDEX = 3;
         let lineColor = '#b8d8ff';
         if (isHeader) {
           lineColor = '#ffdd44';
+        } else if (i === R1R2_LINE_INDEX) {
+          lineColor = rd.initialRadius2Complete ? '#b8d8ff' : '#ffcc44';
         } else if (i === LAST_XTN_LINE_INDEX) {
           lineColor = modeColor[mode] ?? '#b8d8ff';
         } else if (i === BACKTRACK_LINE_INDEX) {
