@@ -701,12 +701,16 @@ export class RenderProfiler {
       const mode = rd.lastTransitionMode;
       const skipLabel = rd.loadRoomSkippedOnLastTransition ? ' ✓skip' : '';
       const queueLabel = rd.residentBuildQueueLength > 0 ? ` Q:${rd.residentBuildQueueLength}` : '';
+      const ptLabel = rd.lastPlayerParticlesCaptured > 0
+        ? ` pt:${rd.lastPlayerParticlesRestored}/${rd.lastPlayerParticlesCaptured}` +
+          (rd.lastPlayerParticlesSkipped > 0 ? ` (skip:${rd.lastPlayerParticlesSkipped})` : '')
+        : '';
       const residentLines = [
         '── Resident Rooms ──',
         `Active: ${rd.activeRoomId ?? 'none'}`,
         `Residents: ${rd.residentCount}  Worlds: ${rd.residentWorldCount}  Frozen: ${rd.frozenCount}`,
         `R1: ${rd.radius1ReadyCount}  R2: ${rd.radius2ReadyCount}${queueLabel}`,
-        `Last xtn: ${mode}${skipLabel}`,
+        `Last xtn: ${mode}${skipLabel}${ptLabel}`,
         rd.lastResidentMissReason ? `Miss: ${rd.lastResidentMissReason}` : 'Miss: —',
         `ActivMs: ${rd.lastActivationMs.toFixed(1)}  Evict: ${rd.evictionsTotal}`,
       ];

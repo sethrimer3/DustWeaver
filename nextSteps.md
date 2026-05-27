@@ -369,6 +369,40 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
    - `freezeRoom`: asserts no cluster with `isPlayerFlag === 1` exists in the outgoing world. On the hot-swap path the player must be removed before freeze; this catches any regression.
    - `setResidentWorld` (active): asserts exactly one player cluster is present after activation.
 
+#### BUILD 416 player transfer hardening (Phase 4 pass 2)
+
+**What was implemented:**
+
+1. **Explicit player transfer functions** (`src/screens/playerTransfer.ts`):
+   - `capturePlayerTransferState(world)` — snapshots health, facing direction (`isFacingLeftFlag`), and all non-transient player-owned particles before detach.
+   - `detachPlayerFromResidentWorld(world)` — kills all player-owned particles (clearing `respawnDelayTicks` so frozen world won't regen them), removes player cluster, clears all grapple flags.
+   - `restoreTransferredPlayerParticles(world, snapshot, entityId, spawnX, spawnY)` — writes captured particles into the target world anchored to the new spawn position. Resets combat fields (behaviorMode, attackModeTicksLeft) to orbit. Returns `{restored, skipped}`.
+
+2. **Player particle carry-over** — non-transient player-owned dust particles (kind, durability, regen delay, weave slot, noise seed, orbit anchor, lifetime/age) transfer across hot-swap. Transient particles (stone shards, lava embers etc.) are intentionally not carried.
+
+3. **Sprite facing direction preserved** — `isFacingLeftFlag` from the captured snapshot is applied to the new cluster before insertion so the player does not snap to right-facing on room entry.
+
+4. **Ownership invariant scan** — `ResidentRoomManager.scanOwnershipInvariant()` (DEV-only): checks all resident worlds for correct player counts (1 in active, 0 in frozen), no live non-transient player-owned particles in frozen worlds, and no duplicate player entity ids across worlds. Called automatically after every hot-swap in DEV mode.
+
+5. **Particle transfer diagnostics** — `ResidentRoomDiagnostics` gains `lastPlayerParticlesCaptured`, `lastPlayerParticlesRestored`, `lastPlayerParticlesSkipped`. Debug overlay shows `pt:restored/captured (skip:N)` on the "Last xtn:" line when particles were transferred.
+
+6. **Stale world capture audit** — All major controllers and renderers confirmed safe: `gameOverlayController` already fixed; `gamePlayerCloakUpdate`, `gamePlayerSfx`, `gamePauseController`, `combatText`, `gameHudDebugState`, HUD renderers all receive `world` as a per-call parameter and hold no long-lived captures.
+
+**What is preserved across transitions:**
+- Player health (`healthPoints`)
+- Sprite facing direction (`isFacingLeftFlag`)
+- Transition velocity (applied after activation, unchanged)
+- Non-transient player-owned dust particles (kind, durability, regen state, orbit parameters)
+- Weave slot assignments per particle
+
+**What is intentionally reset on transition:**
+- All room-local collision flags (`isGroundedFlag`, `isTouchingWallLeftFlag`, etc.) — zeroed by `createClusterState`
+- Grapple state — cleared by `detachPlayerFromResidentWorld` / `applyResidentRoomActivation`
+- Particle positions — reanchored to the new spawn point using preserved orbit angle/radius
+- Particle velocities — zeroed; particle settles into orbit naturally
+- Particle behavior mode — reset to orbit (0); previous room's attack state is stale
+- Transient particles — room-local effects, not carried
+
 #### What remains deferred (Phase 4 limitations)
 
 1. **Complex enemy module-level state.** RadiantTether, DustConstellation, OrbitalDustCore etc. carry module-level singleton state not inside `WorldState`. On hot-swap activation, these singletons are reset (via `resetRadiantTetherState` / `resetRadiantWebState`), discarding the frozen AI chain state. Full fix requires serializing these singletons into `WorldState`.
@@ -377,7 +411,7 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
 3. **Projectiles crossing room boundaries.** Not handled; any in-flight projectile at a boundary is lost on transition.
 
-4. **Player particle carry-over.** Dust particles are re-spawned fresh on activation (matching weave loadout) rather than transferred from the outgoing world.
+4. **Player particle carry-over — IMPLEMENTED (BUILD 416).** Non-transient player-owned dust particles are now captured before room detach and restored in the target world after the player cluster is inserted. Transferred fields: kind, anchor angle/radius, durability, regen delay, weave slot, noise seed, mass, lifetime, age, isAliveFlag. Reset on entry: position (reanchored to spawn), velocity, behavior mode, attack timer, disturbance factor. If the particle buffer is full, skipped particles are logged as a DEV warning. The fresh-spawn loadout path remains for first visit or legacy load. Diagnostics: `pt:restored/captured` shown in the debug overlay.
 
 5. **Memory footprint.** Each WorldState ~570 KB; 16 residents = ~9 MB additional. Acceptable but should be monitored.
 

@@ -248,6 +248,13 @@ export interface ResidentRoomDiagnostics {
   /** Number of rooms in the background build queue. */
   residentBuildQueueLength: number;
   evictionsTotal: number;
+  // ── Player transfer diagnostics (BUILD 416) ──────────────────────────────
+  /** Number of non-transient player-owned particles captured in the last hot-swap. */
+  lastPlayerParticlesCaptured: number;
+  /** Number of captured particles successfully restored in the target world. */
+  lastPlayerParticlesRestored: number;
+  /** Number of particles skipped during restore (particle buffer full). */
+  lastPlayerParticlesSkipped:  number;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -318,6 +325,10 @@ export class ResidentRoomManager {
   /** radius-1/2 ready counts set by gameScreen after each transition. */
   private _radius1ReadyCount = 0;
   private _radius2ReadyCount = 0;
+  // ── Player transfer diagnostics (BUILD 416) ──────────────────────────────
+  private _lastPlayerParticlesCaptured = 0;
+  private _lastPlayerParticlesRestored = 0;
+  private _lastPlayerParticlesSkipped  = 0;
 
   // ── Frame tracking ─────────────────────────────────────────────────────────
 
@@ -854,7 +865,105 @@ export class ResidentRoomManager {
     this._radius2ReadyCount = radius2;
   }
 
-  // ── Per-room WorldState management (BUILD 416) ─────────────────────────────
+  // ── Player transfer diagnostics (BUILD 416) ──────────────────────────────
+
+  /**
+   * Record the outcome of a player particle transfer following a hot-swap.
+   * Called by gameScreen after applyResidentRoomActivation().
+   *
+   * @param captured  Non-transient player particles captured from the outgoing world.
+   * @param restored  Particles successfully written into the target world.
+   * @param skipped   Particles that could not be written (buffer full).
+   */
+  recordPlayerTransfer(captured: number, restored: number, skipped: number): void {
+    this._lastPlayerParticlesCaptured = captured;
+    this._lastPlayerParticlesRestored = restored;
+    this._lastPlayerParticlesSkipped  = skipped;
+    if (import.meta.env.DEV) {
+      console.log(
+        `[resident] player transfer: captured=${captured} restored=${restored} skipped=${skipped}`,
+      );
+    }
+  }
+
+  /**
+   * DEV-only: scan all resident worlds and log invariant violations.
+   *
+   * Invariants checked:
+   *   - Active world has exactly one player cluster.
+   *   - Frozen worlds have zero player clusters.
+   *   - No frozen world contains live non-transient particles owned by
+   *     any resident's departed player entity (entityId=1 in current codebase).
+   *   - No two worlds contain a player with the same entity id.
+   */
+  scanOwnershipInvariant(): void {
+    if (!import.meta.env.DEV) return;
+
+    const playerEntityIdsFound: Array<{ roomId: string; entityId: number }> = [];
+
+    for (const r of this._residents.values()) {
+      if (r.world === null) continue;
+      const w = r.world;
+
+      // Count player clusters.
+      let playerCount = 0;
+      for (let ci = 0; ci < w.clusters.length; ci++) {
+        if (w.clusters[ci].isPlayerFlag === 1) {
+          playerCount++;
+          playerEntityIdsFound.push({ roomId: r.roomId, entityId: w.clusters[ci].entityId });
+        }
+      }
+
+      if (r.lifecycle === 'active' && playerCount !== 1) {
+        console.error(
+          `[resident] scanOwnershipInvariant: active room "${r.roomId}" has ${playerCount} player(s) ` +
+          '(expected exactly 1).',
+        );
+      }
+      if (r.lifecycle !== 'active' && playerCount !== 0) {
+        console.error(
+          `[resident] scanOwnershipInvariant: frozen room "${r.roomId}" has ${playerCount} player(s) ` +
+          '(expected 0).',
+        );
+      }
+
+      // Check for live non-transient particles owned by entityId=1 in frozen worlds.
+      // (entityId=1 is the player in this codebase; frozen worlds should have no live
+      // player-owned particles after detachPlayerFromResidentWorld().)
+      if (r.lifecycle !== 'active') {
+        for (let pi = 0; pi < w.particleCount; pi++) {
+          if (
+            w.ownerEntityId[pi] === 1 &&
+            w.isAliveFlag[pi] === 1 &&
+            w.isTransientFlag[pi] === 0
+          ) {
+            console.error(
+              `[resident] scanOwnershipInvariant: frozen room "${r.roomId}" has live ` +
+              `non-transient particle at slot ${pi} owned by entityId=1 (player). ` +
+              'Expected no live player-owned particles in frozen worlds.',
+            );
+            break; // one error per room is enough
+          }
+        }
+      }
+    }
+
+    // Check for duplicate player entity ids across worlds (O(n) via Set).
+    const seenEntityIds = new Map<number, string>(); // entityId → first-seen roomId
+    for (const { roomId, entityId } of playerEntityIdsFound) {
+      const firstRoom = seenEntityIds.get(entityId);
+      if (firstRoom !== undefined) {
+        console.error(
+          `[resident] scanOwnershipInvariant: duplicate player entityId=${entityId} ` +
+          `found in rooms "${firstRoom}" and "${roomId}".`,
+        );
+      } else {
+        seenEntityIds.set(entityId, roomId);
+      }
+    }
+  }
+
+
 
   /**
    * Store a fully-built WorldState on the named resident and mark it as
@@ -928,6 +1037,9 @@ export class ResidentRoomManager {
       loadRoomSkippedOnLastTransition:    this._loadRoomSkippedOnLastTransition,
       residentBuildQueueLength:           this._residentBuildQueueLength,
       evictionsTotal:                     this._evictionsTotal,
+      lastPlayerParticlesCaptured:        this._lastPlayerParticlesCaptured,
+      lastPlayerParticlesRestored:        this._lastPlayerParticlesRestored,
+      lastPlayerParticlesSkipped:         this._lastPlayerParticlesSkipped,
     };
   }
 
