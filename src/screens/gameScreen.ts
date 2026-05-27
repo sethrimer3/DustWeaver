@@ -376,7 +376,7 @@ export function startGameScreen(
   const urgentResidentBuildPriorityThreshold = 2;
   const residentBuildBackgroundFrameBudgetMs = 10;
   const nonUrgentResidentBuildForcedStartFrames = 90;
-  const nonUrgentWallsBuildDeferralFrameCap = 45;
+  const nonUrgentWallsBuildDeferralFramesCap = 45;
   let _nonUrgentQueueBlockedFrames = 0;
 
   /**
@@ -2100,11 +2100,11 @@ export function startGameScreen(
         const _sess = _activeBuildSession;
         const _lastFrameMs = renderProfiler.getLastFrameMs();
         const _isNonUrgent = _sess.task.priority > urgentResidentBuildPriorityThreshold;
-        const _isHeavyWallsStepPending = _sess.currentPhase === 'phaseD_walls_lookup';
+        const _isCurrentPhaseHeavyWalls = _sess.currentPhase === 'phaseD_walls_lookup';
         const _shouldDeferHeavyWallsStep = _isNonUrgent
-          && _isHeavyWallsStepPending
+          && _isCurrentPhaseHeavyWalls
           && _lastFrameMs >= residentBuildBackgroundFrameBudgetMs
-          && _sess.deferredFrames < nonUrgentWallsBuildDeferralFrameCap;
+          && _sess.deferredFrames < nonUrgentWallsBuildDeferralFramesCap;
         if (_shouldDeferHeavyWallsStep) {
           _sess.deferredFrames++;
         } else {
