@@ -724,6 +724,9 @@ export class RenderProfiler {
       const currentBuildLine = rd.currentBuildRoomId !== null
         ? `Building: ${rd.currentBuildRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)} (${rd.currentBuildReason ?? '?'}${rd.currentBuildPhase ? ' ' + rd.currentBuildPhase : ''})`
         : null;
+      const lastLongPhaseLine = rd.lastLongPhase !== null
+        ? `LongPhase: ${rd.lastLongPhaseRoomId?.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH) ?? '?'} ${rd.lastLongPhase} ${rd.lastLongPhaseMs.toFixed(1)}ms`
+        : null;
       const residentLines = [
         '── Resident Rooms ──',
         `Active: ${rd.activeRoomId ?? 'none'}`,
@@ -731,6 +734,7 @@ export class RenderProfiler {
         `R1: ${rd.radius1ReadyCount}${r1Total}  R2: ${rd.radius2ReadyCount}${r2Total}${queueLabel}${initProgress}`,
         currentBuildLine ?? `LastBuild: ${buildLabel}`,
         ...(currentBuildLine !== null ? [`LastBuild: ${buildLabel}`] : []),
+        ...(lastLongPhaseLine !== null ? [lastLongPhaseLine] : []),
         `Last xtn: ${mode}${skipLabel}${ptLabel}`,
         rd.lastResidentMissReason ? `Miss: ${rd.lastResidentMissReason}` : 'Miss: —',
         `ActivMs: ${rd.lastActivationMs.toFixed(1)}  Evict: ${rd.evictionsTotal}`,
@@ -740,6 +744,7 @@ export class RenderProfiler {
       // silently break the colour-coding below.
       const R1R2_LINE_INDEX      = residentLines.findIndex(l => l.startsWith('R1:'));
       const BUILDING_LINE_INDEX  = residentLines.findIndex(l => l.startsWith('Building:'));
+      const LONG_PHASE_LINE_INDEX = residentLines.findIndex(l => l.startsWith('LongPhase:'));
       const LAST_XTN_LINE_INDEX  = residentLines.findIndex(l => l.startsWith('Last xtn:'));
       const BACKTRACK_LINE_INDEX = residentLines.findIndex(l => l.startsWith('Backtrack:'));
       if (import.meta.env.DEV) {
@@ -769,6 +774,8 @@ export class RenderProfiler {
           lineColor = rd.initialRadius2Complete ? '#b8d8ff' : '#ffcc44';
         } else if (i === BUILDING_LINE_INDEX) {
           lineColor = '#aaffcc'; // active build — light green
+        } else if (i === LONG_PHASE_LINE_INDEX) {
+          lineColor = '#ff9944'; // last long phase — orange (slow phase warning)
         } else if (i === LAST_XTN_LINE_INDEX) {
           lineColor = modeColor[mode] ?? '#b8d8ff';
         } else if (i === BACKTRACK_LINE_INDEX) {

@@ -418,9 +418,27 @@ export function startGameScreen(
     if (task.roomId === currentRoom.id) return; // Never build active room.
     const room = task.room ?? ROOM_REGISTRY.get(task.roomId);
     if (room === undefined) return;
-    // Cancel an active session for this room so it restarts with fresh version.
+    // If the room is already being built, upgrade the session's priority/reason
+    // in-place rather than cancelling it.  Restarting the generator wastes the
+    // work done so far; the generator output is the same regardless of priority.
     if (_activeBuildSession !== null && _activeBuildSession.task.roomId === task.roomId) {
-      _activeBuildSession = null;
+      if (task.priority < _activeBuildSession.task.priority) {
+        _activeBuildSession.task.priority = task.priority;
+        _activeBuildSession.task.reason   = task.reason;
+        // Reflect the upgraded priority in diagnostics immediately.
+        residentRoomManager.setCurrentBuildInfo(
+          _activeBuildSession.task.roomId,
+          _activeBuildSession.task.reason,
+          _activeBuildSession.currentPhase,
+        );
+        if (import.meta.env.DEV) {
+          console.log(
+            `[resident] priority upgrade for active session: ${task.roomId}` +
+            ` ${_activeBuildSession.task.priority} → ${task.priority} (${task.reason})`,
+          );
+        }
+      }
+      return; // Session already running — no need to queue.
     }
     if (_residentBuildQueueIds.has(task.roomId)) {
       // Update priority if new task is more urgent.
@@ -758,6 +776,21 @@ export function startGameScreen(
 
     // ── True resident world hot-swap (no loadRoom) ────────────────────────
     const targetResident = residentRoomManager.getResident(room.id);
+    // Compute the hot-swap miss reason BEFORE the guard so it is available
+    // to the fallback paths below without duplicate lookups.
+    const _hotSwapMissReason: string = (() => {
+      if (targetResident === undefined) return 'residentMissing';
+      if (!targetResident.runtimeReady) {
+        // Distinguish why runtimeReady is false.
+        if (_activeBuildSession !== null && _activeBuildSession.task.roomId === room.id) {
+          return `buildInProgress:${_activeBuildSession.currentPhase}`;
+        }
+        if (_residentBuildQueueIds.has(room.id)) return 'buildQueued';
+        return 'runtimeNotReady';
+      }
+      if (targetResident.world === null) return 'worldNull';
+      return 'none'; // Should not reach here — hot-swap guard should have matched.
+    })();
     if (targetResident !== undefined && targetResident.runtimeReady && targetResident.world !== null) {
       if (import.meta.env.DEV) {
         console.log(`[transition] ${room.id}: residentWorldHot — skipping loadRoom`);
@@ -905,7 +938,7 @@ export function startGameScreen(
       residentRoomManager.setResidentWorld(room.id, world, true);
       residentRoomManager.setActiveResidentId(room.id);
       residentRoomManager.evictDistant(room.id);
-      residentRoomManager.recordTransitionMode(residentMode, '', import.meta.env.DEV ? performance.now() - t0 : 0);
+      residentRoomManager.recordTransitionMode(residentMode, _hotSwapMissReason, import.meta.env.DEV ? performance.now() - t0 : 0);
       // Pre-register adjacent rooms (radius ≤ 2) as resident shells for future freeze snapshots.
       for (const [adjId] of bfsNearbyRooms(room.id, ROOM_REGISTRY, 2)) {
         const adjRoom = ROOM_REGISTRY.get(adjId);
@@ -1003,7 +1036,7 @@ export function startGameScreen(
       residentRoomManager.ensureResident(currentRoom);
       residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
       residentRoomManager.freezeSimState(world, currentRoom.id);
-      residentRoomManager.recordTransitionMode('legacyLoad');
+      residentRoomManager.recordTransitionMode('legacyLoad', _hotSwapMissReason);
       asyncLoadState.preTransVX    = vx;
       asyncLoadState.preTransVY    = vy;
       asyncLoadState.transitionDir = dir;
@@ -1447,14 +1480,20 @@ export function startGameScreen(
           _initialResidentBuildPhase.idx++;
           const adjResident = residentRoomManager.getResident(adjId);
           if (adjResident !== undefined && adjResident.runtimeReady) {
-            // Already built (start room or duplicate) — skip without consuming a frame.
-            _initialResidentBuildPhase.built++;
+            // Already ready (e.g. start room or pre-built) — skip without consuming
+            // a frame.  Do NOT increment built here: built only counts rooms freshly
+            // built during this startup phase; total reflects rooms that needed building.
             continue;
           }
           const adjRoom = ROOM_REGISTRY.get(adjId);
           if (adjRoom === undefined) continue;
           // Start incremental generator for this room.
-          _initialResidentBuildPhase.activeGen      = createResidentBuildGenerator(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache);
+          const capturedAdjRoom = adjRoom; // capture for closure
+          _initialResidentBuildPhase.activeGen      = createResidentBuildGenerator(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache, {
+            reason:      'initial',
+            priority:    0,
+            onLongPhase: (phase, ms) => { residentRoomManager.recordLongPhase(phase, ms, capturedAdjRoom.id); },
+          });
           _initialResidentBuildPhase.activeRoom     = adjRoom;
           _initialResidentBuildPhase.activeGenPhase = 'starting';
           _initialResidentBuildPhase.activeGenT0    = performance.now();
@@ -2100,9 +2139,12 @@ export function startGameScreen(
         const _sess = _activeBuildSession;
         const _lastFrameMs = renderProfiler.getLastFrameMs();
         const _isNonUrgent = _sess.task.priority > urgentResidentBuildPriorityThreshold;
-        const _isCurrentPhaseHeavyWalls = _sess.currentPhase === 'phaseD_walls_lookup';
+        // The current phase is 'phaseD_walls_lookup', meaning the NEXT gen.next() call
+        // will execute the expensive phaseD_walls_build step.  Gate that step on frame
+        // budget so large rooms don't cause a hitch when build priority is non-urgent.
+        const _isAboutToRunHeavyWallsBuild = _sess.currentPhase === 'phaseD_walls_lookup';
         const _shouldDeferHeavyWallsStep = _isNonUrgent
-          && _isCurrentPhaseHeavyWalls
+          && _isAboutToRunHeavyWallsBuild
           && _lastFrameMs >= residentBuildBackgroundFrameBudgetMs
           && _sess.deferredFrames < nonUrgentWallsBuildDeferralFramesCap;
         if (_shouldDeferHeavyWallsStep) {
@@ -2190,9 +2232,14 @@ export function startGameScreen(
           if (_dequeued.priority > urgentResidentBuildPriorityThreshold) {
             _nonUrgentQueueBlockedFrames = 0;
           }
+          const capturedDequeued = _dequeued; // capture for closure
           _activeBuildSession = {
             task:            _dequeued,
-            gen:             createResidentBuildGenerator(_dequeued.room, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache),
+            gen:             createResidentBuildGenerator(_dequeued.room, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache, {
+              reason:       _dequeued.reason,
+              priority:     _dequeued.priority,
+              onLongPhase:  (phase, ms) => { residentRoomManager.recordLongPhase(phase, ms, capturedDequeued.roomId); },
+            }),
             t0:              performance.now(),
             capturedVersion: _roomVersions.get(_dequeued.roomId) ?? 0,
             currentPhase:    'starting',

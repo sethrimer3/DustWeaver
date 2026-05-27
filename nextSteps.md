@@ -474,21 +474,59 @@ These checks confirm correct behaviour for the resident-room runtime. Run manual
 - [ ] Priority boosting: when player approaches a boundary, debug overlay Q breakdown shows p1 entry; velocity-direction entry shows p2 with reason `velocityDirection`; p3/p4 for radius-1/2 adjacents.
 - [ ] Editor invalidation: editing a room then immediately transitioning into it does NOT hot-swap stale pre-edit state; debug overlay shows the edited room's resident rebuilding; stale chunk caches evicted.
 
-#### Remaining limitations (BUILD 418+, updated BUILD 419)
+#### BUILD 419 hardening pass
 
-1. **`phaseD_walls_build` is still a single synchronous step.** `buildRoomWallTemplate()` is not internally incremental. On very large rooms (> ~80×50 blocks) it can still take 5–10 ms in one generator phase. The cache-hit path is fast (~0.1 ms). DEV timing is recorded via `FP.recordLoadPhaseStep('Resident:walls_build')` so the freeze profiler captures the cost. Making `buildRoomWallTemplate()` internally incremental is deferred to a future pass.
+**What was verified:**
+- Hot-swap guard (`targetResident.runtimeReady && targetResident.world !== null`) confirmed in `startTransitionLoad`; instant path (`residentWorldHot`) skips `loadRoom`.
+- Initial build phase (`_initialResidentBuildPhase`) confirmed to block gameplay/sim/input/transitions until all radius-2 builds complete or fail.
+- Editor invalidation: `invalidateResidentWorld` called for edited room + radius-1 neighbours, re-enqueued at priority 5; stale-build version guard discards any in-flight session for the same room.
+- Priority queue and deduplication confirmed: `_enqueueResidentBuild` uses a min-heap keyed on priority; duplicate enqueue with lower priority number wins; equal priority de-duplicates silently.
+- `backtrackHot` confirmed: outgoing world is stored via `setResidentWorld(outgoingRoomId, outgoingWorld, false)` so an immediate B→A transition hot-swaps.
+
+**What was changed (BUILD 419):**
+
+1. **Per-phase 8 ms timing warnings.** `createResidentBuildGenerator` gains an optional `diagContext: ResidentBuildDiagContext` parameter (exported interface). Each of the 8 generator phases captures wall-clock time; `_warnLongPhase()` emits a `[resident] long phase` console warning in DEV when any phase exceeds `LONG_PHASE_WARN_MS = 8` ms. `diagContext.onLongPhase(phase, ms, roomId)` is called so the manager can record the last long phase.
+
+2. **`lastLongPhase` diagnostics.** `ResidentRoomDiagnostics` gains `lastLongPhase`, `lastLongPhaseMs`, and `lastLongPhaseRoomId`. `ResidentRoomManager.recordLongPhase()` updates these. The debug overlay now shows a `Last long phase:` line in orange when a long phase was recorded.
+
+3. **Priority upgrade for active sessions — FIXED.** Previously, re-enqueuing an already-active session at higher priority set `_activeBuildSession = null`, restarting the entire generator from scratch. Fixed: `_enqueueResidentBuild` now updates `_activeBuildSession.task.priority` and `.reason` in-place when the active session's room matches the new task. `setCurrentBuildInfo` is called immediately so the debug overlay reflects the upgrade without a generator restart.
+
+4. **`initialRadius2Built` off-by-one — FIXED.** The `built` counter now increments only when a generator actually completes a fresh build. The already-`runtimeReady` early-exit path no longer increments `built` (it only advances `total` when the room needed building). `total` reflects rooms that required a build; `built` reflects rooms where the build ran to completion this startup.
+
+5. **Resident miss reason specificity.** `_hotSwapMissReason` computed in `startTransitionLoad` distinguishes:
+   - `'residentMissing'` — no resident record exists for the target room.
+   - `'buildInProgress:<phase>'` — a generator session is actively running; includes the current phase label.
+   - `'buildQueued'` — a build task is queued but not yet started.
+   - `'runtimeNotReady'` — resident exists but `runtimeReady = false` (build not yet complete or failed).
+   - `'worldNull'` — `runtimeReady = true` but `world` is null (should not occur; indicates a bug).
+   - `''` (empty) — hot-swap was used; no miss.
+   Passed to `recordTransitionMode` so the resident diagnostics panel shows the specific miss reason.
+
+6. **Renamed `_isCurrentPhaseHeavyWalls` → `_isAboutToRunHeavyWallsBuild`.** The deferral check triggers when the current phase label is `'phaseD_walls_lookup'` (meaning the *next* generator step will run `buildRoomWallTemplate()`). The old name implied the heavy step was the *current* step, which was misleading.
+
+7. **`diagContext` wired at both call sites.** Both the runtime scheduler and the initial build phase now pass `diagContext` (with `roomId` captured in a `const` ref) to `createResidentBuildGenerator`. Long-phase callbacks correctly identify the room even after `_activeBuildSession` or `_adjRoom` is reassigned.
+
+**`phaseD_walls_build` status:** Still a single synchronous step. `buildRoomWallTemplate()` is O(n²) iterative merge over the room's wall array; it cannot be trivially split across frames without carrying substantial intermediate merge state between yields. The per-phase 8 ms warning (item 1 above) makes long `phaseD_walls_build` executions visible in the debug overlay and DEV console. Full incremental wall building is deferred.
+
+**Runtime phase budget policy:** Unchanged from BUILD 418. One generator phase per RAF frame, executed post-render before endFrame. The heavy-walls deferral gate (`_isAboutToRunHeavyWallsBuild`) skips `phaseD_walls_build` when last-frame time ≥ 10 ms. Priority-1/2 heavy phases are not deferred.
+
+#### Remaining limitations (BUILD 419)
+
+1. **`phaseD_walls_build` is still a single synchronous step.** `buildRoomWallTemplate()` is not internally incremental. On very large rooms (> ~80×50 blocks) it can still take 5–10 ms in one generator phase. The cache-hit path is fast (~0.1 ms). Per-phase 8 ms warnings (BUILD 419) make long executions visible. Making `buildRoomWallTemplate()` internally incremental is deferred.
 
 2. **Build phases execute pre-paint (post-render, pre-endFrame).** A `requestIdleCallback`-style path would advance build phases after the browser paints the frame, reducing their contribution to frame latency. This requires synchronising the idle callback with the RAF loop to prevent concurrent mutations to `roomRuntimeCache` or the active `WorldState`. Deferred; the per-phase debug overlay provides sufficient visibility into individual phase costs in the interim.
 
 3. **Priority 1/2 enqueue is per-frame, not edge-triggered.** The proximity and velocity checks run every gameplay frame. `_enqueueResidentBuild` de-duplicates by id with priority upgrade, so this is safe (no queue explosion) but does generate small per-frame overhead. An edge-triggered alternative (enqueue on direction change or crossing proximity threshold) could be cleaner — deferred.
 
-4. **Active-session cancellation on priority upgrade.** If a p4 session is in progress and the player nears a boundary for that same room (upgrading to p1), the in-progress session is NOT interrupted — it will simply complete and the result will be accepted at the original version. The priority upgrade only affects queued-but-not-yet-started tasks. Interrupting an in-progress session is deferred.
+4. **Active-session priority upgrade — FIXED in BUILD 419 (in-place, no generator restart).** Priority and reason are updated on the active session without restarting the generator. If the room definition changed (different version), a restart would be correct but is not currently triggered by a priority upgrade alone; that case relies on the stale-build version guard completing the session and discarding the result.
 
 5. **Only urgent starts bypass frame gate.** Priority-1/2 entries now bypass the `<10 ms` start gate to avoid starvation under sustained load, but background Priority-3/4/5 entries still wait for a fast prior frame. If frame time remains consistently high, non-urgent resident builds can still lag behind.
 
 6. **Complex enemy module-level state** (RadiantTether, DustConstellation, etc.) still not serialized. Hot-swap resets these singletons on activation. Full fix requires serializing them into WorldState.
 
 7. **Per-room renderer context** not yet stored per-resident. Module-level renderer state is re-applied on every activation.
+
+8. **`lastLongPhase` overlay line persists for the session.** Once set, it is never cleared. This is intentional for diagnostic visibility (captures the worst phase that occurred) but may be confusing if the issue was transient.
 
 ---
 
