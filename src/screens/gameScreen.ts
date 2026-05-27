@@ -339,6 +339,11 @@ export function startGameScreen(
   // Set the selected character on the world for rendering
   world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
+  // Stable numeric seed for background resident world builds (BUILD 417).
+  // This constant is intentionally decoupled from levelRng — resident builds must
+  // not consume the active gameplay RNG stream.  Per-room RNG is derived inside
+  // buildResidentWorldState() using createResidentRoomRng(room, RESIDENT_CAMPAIGN_SEED).
+  const RESIDENT_CAMPAIGN_SEED = 12345;
   const residentRoomManager = new ResidentRoomManager();
   const environmentalDust = new EnvironmentalDustLayer();
   const sunbeamRenderer = new SunbeamRenderer();
@@ -602,22 +607,29 @@ export function startGameScreen(
       if (import.meta.env.DEV) {
         console.log(`[transition] ${room.id}: residentWorldHot — skipping loadRoom`);
       }
+      // Record the outgoing room id for the backtrackHot diagnostic.
+      const outgoingRoomId = currentRoom.id;
       // Capture player state (health, facing, owned dust particles) BEFORE detach.
       const playerTransferSnap = capturePlayerTransferState(world);
       const carryHealthPoints  = playerTransferSnap?.healthPoints ?? PLAYER_INITIAL_HEALTH;
       // Detach player: kills owned particles, removes cluster, clears grapple flags.
       detachPlayerFromResidentWorld(world);
       // Freeze outgoing world snapshot AFTER removing player (enemies only).
+      // Pass playerDetached:true so freezeRoom asserts the player is gone.
       residentRoomManager.ensureResident(currentRoom);
-      residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
-      residentRoomManager.freezeSimState(world, currentRoom.id);
+      residentRoomManager.freezeRoom(world, outgoingRoomId, currentRoom, { playerDetached: true });
+      residentRoomManager.freezeSimState(world, outgoingRoomId);
+      // Preserve the detached outgoing world as a frozen resident so immediate
+      // backtracking (B → A) can hot-swap without calling loadRoom.
+      const outgoingWorld = world;
       // Switch active world to the target resident's pre-built WorldState.
       world = targetResident.world;
       loadRoomCtx.world = world;
-      // Invalidate the outgoing room's stored WorldState: after switching to the
-      // target resident's world, the old reference is no longer a valid frozen
-      // resident (player was removed and it will be rebuilt in the background).
-      residentRoomManager.invalidateResidentWorld(currentRoom.id);
+      // Store the detached outgoing world as a frozen resident (runtimeReady=true).
+      // This enables instant backtracking: the outgoing room is ready to hot-swap
+      // without a loadRoom rebuild.
+      residentRoomManager.setResidentWorld(outgoingRoomId, outgoingWorld, false);
+      residentRoomManager.recordOutgoingRoom(outgoingRoomId);
       // Apply Phase-A renderer, Phase-B player spawn (with particle transfer),
       // Phase-F env/camera.
       const { particlesRestored, particlesSkipped } = applyResidentRoomActivation(
@@ -697,6 +709,8 @@ export function startGameScreen(
         console.log(`[transition] ${room.id}: prepared cache HIT — instant load (residentRestore/fallback)`);
       }
       // Freeze the outgoing room before loadRoom destroys its state.
+      // playerDetached is NOT set (false/omitted) — the player is still present
+      // at this point; this is the legacy snapshot path, not a true hot-swap.
       residentRoomManager.ensureResident(currentRoom);
       residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
       residentRoomManager.freezeSimState(world, currentRoom.id);
@@ -823,6 +837,8 @@ export function startGameScreen(
         console.warn(`[transition] ${room.id}: cache MISS (${status}) — async load`);
       }
       // Freeze outgoing room before the async generator destroys world state.
+      // playerDetached is NOT set (false/omitted) — the player is still present
+      // on the legacy async path; no false duplicate-player diagnostic should fire.
       residentRoomManager.ensureResident(currentRoom);
       residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
       residentRoomManager.freezeSimState(world, currentRoom.id);
@@ -1690,7 +1706,7 @@ export function startGameScreen(
         if (adjResident !== undefined && adjResident.runtimeReady) continue;
         // Build and store a frozen world for this adjacent room.
         try {
-          const builtWorld = buildResidentWorldState(adjRoom, levelRng, roomRuntimeCache);
+          const builtWorld = buildResidentWorldState(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache);
           residentRoomManager.ensureResident(adjRoom);
           residentRoomManager.setResidentWorld(adjId, builtWorld, false);
           if (import.meta.env.DEV) {

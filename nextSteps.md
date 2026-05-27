@@ -366,7 +366,7 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
 4. **DEV duplicate-player diagnostics (new).**
    Added two DEV-only checks in `residentRoomManager.ts`:
-   - `freezeRoom`: asserts no cluster with `isPlayerFlag === 1` exists in the outgoing world. On the hot-swap path the player must be removed before freeze; this catches any regression.
+   - `freezeRoom`: asserts no cluster with `isPlayerFlag === 1` exists in the outgoing world **when called with `{ playerDetached: true }`**. On the hot-swap path the player must be removed before freeze; this catches any regression.
    - `setResidentWorld` (active): asserts exactly one player cluster is present after activation.
 
 #### BUILD 416 player transfer hardening (Phase 4 pass 2)
@@ -403,6 +403,29 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 - Particle behavior mode — reset to orbit (0); previous room's attack state is stale
 - Transient particles — room-local effects, not carried
 
+#### BUILD 417 resident lifecycle hardening (Phase 4 pass 3)
+
+**Three correctness issues fixed:**
+
+1. **Outgoing resident world preserved after true hot-swap (was: discarded).**
+   After `detachPlayerFromResidentWorld(world)` the outgoing `WorldState` is clean — no player cluster, enemies/hazards/ropes/blocks intact exactly as the player left them.  The previous BUILD 416 code called `invalidateResidentWorld(currentRoom.id)` immediately after switching to the target world, destroying this valid frozen state.
+   Fixed: `setResidentWorld(outgoingRoomId, outgoingWorld, false)` is called instead of `invalidateResidentWorld`, storing the detached world as a `runtimeReady = true`, `lifecycle = 'frozen'` resident.  Immediate backtracking (A→B then B→A) now hot-swaps without `loadRoom`.
+
+2. **False duplicate-player DEV error on legacy/snapshot paths eliminated.**
+   `freezeRoom()` previously logged a DEV error whenever any player cluster was found in the outgoing world.  This was correct for the hot-swap path (player must be detached first) but wrong for the legacy `isPrepared` and async paths that call `freezeRoom` before `loadRoom` while the player is still present.
+   Fixed: `freezeRoom` gains an optional `opts.playerDetached` boolean.  The DEV check fires only when `opts.playerDetached === true`.  The hot-swap call site passes `{ playerDetached: true }` (strict); legacy call sites omit the option (permissive, no false alarm).
+
+3. **Resident builds no longer consume the shared `levelRng` (RNG isolation).**
+   `buildResidentWorldState` previously accepted `levelRng: RngState` — the same instance used by active gameplay — and consumed it for enemy and background fluid spawning.  Depending on idle timing and room-load order this could perturb active gameplay randomness.
+   Fixed: the signature changes from `(room, levelRng, cache)` to `(room, campaignSeed, cache)`.  A dedicated `createResidentRoomRng(room, campaignSeed)` function derives a stable per-room RNG by hashing `campaignSeed ^ _hashRoomId(room.id) ^ (room.worldNumber * 2654435761)`.  This RNG is local to each build call; the active `levelRng` is never touched.  The call site passes `RESIDENT_CAMPAIGN_SEED = 12345` (decoupled constant).
+   Note: enemy placement and background fluid in resident builds will differ cosmetically from a fresh `loadRoom` call for the same room.  This is intentional and documented.
+
+**Diagnostic improvements:**
+- `ResidentRoomDiagnostics` gains `lastOutgoingRoomId` and `backtrackHot`.
+- `backtrackHot` is `true` when the room the player just came from is still `runtimeReady` (frozen world preserved), meaning an immediate B→A transition can hot-swap.
+- Debug overlay "Resident Rooms" panel gains a "Backtrack:" line: `hot ✓` (green) or `cold ✗` (orange) depending on outgoing room state.
+- `ResidentRoomManager.recordOutgoingRoom(roomId)` called on every true hot-swap.
+
 #### What remains deferred (Phase 4 limitations)
 
 1. **Complex enemy module-level state.** RadiantTether, DustConstellation, OrbitalDustCore etc. carry module-level singleton state not inside `WorldState`. On hot-swap activation, these singletons are reset (via `resetRadiantTetherState` / `resetRadiantWebState`), discarding the frozen AI chain state. Full fix requires serializing these singletons into `WorldState`.
@@ -415,7 +438,7 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
 5. **Memory footprint.** Each WorldState ~570 KB; 16 residents = ~9 MB additional. Acceptable but should be monitored.
 
-6. **RNG determinism.** `buildResidentWorldState` uses the shared `levelRng` instance. Results may differ slightly from a fresh `loadRoom` for RNG-dependent cosmetics.
+6. **RNG determinism — FIXED (BUILD 417).** `buildResidentWorldState` now uses a stable per-room RNG derived from `campaignSeed`, `room.id`, and `room.worldNumber`.  Active gameplay `levelRng` is never consumed by background resident builds.  Enemy and fluid placement in resident builds is deterministic but intentionally decoupled from the active gameplay RNG stream.
 
 7. **Idle resident builds are synchronous per frame.** Each background world build is ~5–15 ms and happens during idle frames only. A large synchronous build cannot happen during active gameplay because the idle gate (`renderProfiler.getLastFrameMs() < 10`) prevents builds on busy frames. However, if multiple builds are needed (e.g. after a cold start), they are spread across separate idle frames — one build per frame.
 

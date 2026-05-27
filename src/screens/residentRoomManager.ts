@@ -255,6 +255,14 @@ export interface ResidentRoomDiagnostics {
   lastPlayerParticlesRestored: number;
   /** Number of particles skipped during restore (particle buffer full). */
   lastPlayerParticlesSkipped:  number;
+  // ── Backtrack diagnostic (BUILD 417) ─────────────────────────────────────
+  /** Room id of the room the player transitioned away from on the last hot-swap. */
+  lastOutgoingRoomId: string | null;
+  /**
+   * true if the last outgoing room is still runtimeReady (frozen world preserved),
+   * meaning an immediate backtrack A → B → A can use residentWorldHot.
+   */
+  backtrackHot: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -329,6 +337,9 @@ export class ResidentRoomManager {
   private _lastPlayerParticlesCaptured = 0;
   private _lastPlayerParticlesRestored = 0;
   private _lastPlayerParticlesSkipped  = 0;
+  // ── Backtrack diagnostic (BUILD 417) ─────────────────────────────────────
+  /** Room id of the room the player transitioned away from on the last transition. */
+  private _lastOutgoingRoomId: string | null = null;
 
   // ── Frame tracking ─────────────────────────────────────────────────────────
 
@@ -399,17 +410,22 @@ export class ResidentRoomManager {
 
   /**
    * Snapshot all non-player enemy clusters from world into the named resident.
-   * Call this BEFORE loadRoom() to preserve the outgoing room's enemy state.
    *
-   * @param world   Live WorldState (enemies at world.clusters[1..]).
-   * @param roomId  Id of the room being frozen.
-   * @param room    RoomDef for that room (used to retrieve RoomEnemyDef.kinds).
+   * @param world            Live WorldState (enemies at world.clusters[1..]).
+   * @param roomId           Id of the room being frozen.
+   * @param room             RoomDef for that room (used to retrieve RoomEnemyDef.kinds).
+   * @param opts.playerDetached  When `true` (true hot-swap path): the player MUST have
+   *                         been removed from `world` before calling this method; a DEV
+   *                         error is logged if a player cluster is found.
+   *                         When `false` or omitted (legacy/snapshot path): the player
+   *                         may still be present; the snapshot only captures non-player
+   *                         enemy clusters and no diagnostic is emitted for the player.
    */
-  freezeRoom(world: WorldState, roomId: string, room: RoomDef): void {
+  freezeRoom(world: WorldState, roomId: string, room: RoomDef, opts?: { playerDetached?: boolean }): void {
     const resident = this._residents.get(roomId);
     if (resident === undefined) return;
 
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && opts?.playerDetached === true) {
       // On the true hot-swap path the player cluster must be removed from the
       // outgoing world before freezeRoom() is called.  Flag any violation so
       // duplicate-player bugs are surfaced immediately.
@@ -887,6 +903,14 @@ export class ResidentRoomManager {
   }
 
   /**
+   * Record the outgoing room id for the backtrackHot diagnostic.
+   * Call during a room transition, passing the id of the room being left.
+   */
+  recordOutgoingRoom(roomId: string): void {
+    this._lastOutgoingRoomId = roomId;
+  }
+
+  /**
    * DEV-only: scan all resident worlds and log invariant violations.
    *
    * Invariants checked:
@@ -1040,6 +1064,9 @@ export class ResidentRoomManager {
       lastPlayerParticlesCaptured:        this._lastPlayerParticlesCaptured,
       lastPlayerParticlesRestored:        this._lastPlayerParticlesRestored,
       lastPlayerParticlesSkipped:         this._lastPlayerParticlesSkipped,
+      lastOutgoingRoomId:                 this._lastOutgoingRoomId,
+      backtrackHot:                       this._lastOutgoingRoomId !== null &&
+                                            (this._residents.get(this._lastOutgoingRoomId)?.runtimeReady ?? false),
     };
   }
 
