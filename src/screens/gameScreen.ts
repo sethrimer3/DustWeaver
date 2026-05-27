@@ -373,6 +373,8 @@ export function startGameScreen(
   const _residentBuildQueue: ResidentBuildTask[] = [];
   const _residentBuildQueueIds = new Set<string>();
   let _residentBuildQueueDirty = false; // true when new items or priority changes require a re-sort
+  const urgentResidentBuildPriorityThreshold = 2;
+  const residentBuildBackgroundFrameBudgetMs = 10;
 
   /**
    * Per-room version counter.  Incremented when a room is edited so that
@@ -2131,9 +2133,16 @@ export function startGameScreen(
         }
       }
 
-      // Step 2: start a new session if idle, queue is non-empty, and frame budget allows.
-      if (_activeBuildSession === null && _residentBuildQueue.length > 0
-          && renderProfiler.getLastFrameMs() < 10) {
+      // Step 2: start a new session if idle and queue has work.
+      // Priority-1/2 tasks (near-boundary / velocity-direction targets) are
+      // allowed to start even when the previous frame was >= 10 ms so urgent
+      // transition candidates don't starve under sustained load.
+      // Background priorities (3–5) still respect the <10 ms gate.
+      const nextPriority = _residentBuildQueue.length > 0 ? _residentBuildQueue[0].priority : null;
+      const canStartSession = nextPriority !== null
+        && (nextPriority <= urgentResidentBuildPriorityThreshold
+          || renderProfiler.getLastFrameMs() < residentBuildBackgroundFrameBudgetMs);
+      if (_activeBuildSession === null && _residentBuildQueue.length > 0 && canStartSession) {
         // Purge already-built or active-room entries from the front of the queue.
         let _dequeued: ResidentBuildTask | null = null;
         while (_residentBuildQueue.length > 0) {
