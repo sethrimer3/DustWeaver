@@ -45,7 +45,7 @@ import type { ParticleKind } from '../sim/particles/kinds';
  *   attackModeTicksLeft              — reset to 0 for same reason
  */
 export interface CapturedPlayerParticle {
-  kindBuffer:         ParticleKind;
+  particleKind:       ParticleKind;
   anchorAngleRad:     number;
   anchorRadiusWorld:  number;
   particleDurability: number;
@@ -110,7 +110,7 @@ export function capturePlayerTransferState(world: WorldState): PlayerTransferSna
     // lava embers, etc.) and must not be carried to the new room.
     if (world.isTransientFlag[pi] === 1) continue;
     ownedParticles.push({
-      kindBuffer:         world.kindBuffer[pi] as ParticleKind,
+      particleKind:       world.kindBuffer[pi] as ParticleKind,
       anchorAngleRad:     world.anchorAngleRad[pi],
       anchorRadiusWorld:  world.anchorRadiusWorld[pi],
       particleDurability: world.particleDurability[pi],
@@ -237,7 +237,7 @@ export function restoreTransferredPlayerParticles(
     world.massKg[idx]          = p.massKg;
     world.chargeUnits[idx]     = 0;
     world.isAliveFlag[idx]     = p.isAliveFlag;
-    world.kindBuffer[idx]      = p.kindBuffer;
+    world.kindBuffer[idx]      = p.particleKind;
     world.ownerEntityId[idx]   = newPlayerEntityId;
 
     world.anchorAngleRad[idx]    = p.anchorAngleRad;

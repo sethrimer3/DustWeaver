@@ -948,15 +948,17 @@ export class ResidentRoomManager {
       }
     }
 
-    // Check for duplicate player entity ids across worlds.
-    for (let i = 0; i < playerEntityIdsFound.length; i++) {
-      for (let j = i + 1; j < playerEntityIdsFound.length; j++) {
-        if (playerEntityIdsFound[i].entityId === playerEntityIdsFound[j].entityId) {
-          console.error(
-            `[resident] scanOwnershipInvariant: duplicate player entityId=${playerEntityIdsFound[i].entityId} ` +
-            `found in rooms "${playerEntityIdsFound[i].roomId}" and "${playerEntityIdsFound[j].roomId}".`,
-          );
-        }
+    // Check for duplicate player entity ids across worlds (O(n) via Set).
+    const seenEntityIds = new Map<number, string>(); // entityId → first-seen roomId
+    for (const { roomId, entityId } of playerEntityIdsFound) {
+      const firstRoom = seenEntityIds.get(entityId);
+      if (firstRoom !== undefined) {
+        console.error(
+          `[resident] scanOwnershipInvariant: duplicate player entityId=${entityId} ` +
+          `found in rooms "${firstRoom}" and "${roomId}".`,
+        );
+      } else {
+        seenEntityIds.set(entityId, roomId);
       }
     }
   }
