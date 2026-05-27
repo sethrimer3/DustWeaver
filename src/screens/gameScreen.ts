@@ -109,6 +109,7 @@ import {
   type EntryWarmState,
 } from './entryViewportWarm';
 import { ResidentRoomManager } from './residentRoomManager';
+import { bfsNearbyRooms } from './roomPrewarmNeighborhood';
 
 const FIXED_DT_MS = 16.666;
 
@@ -626,18 +627,19 @@ export function startGameScreen(
       residentRoomManager.setActiveResidentId(room.id);
       residentRoomManager.evictDistant(room.id);
       residentRoomManager.recordTransitionMode(residentMode, '', import.meta.env.DEV ? performance.now() - t0 : 0);
-      // Pre-register adjacent rooms as resident shells for future freeze snapshots.
-      for (const t of room.transitions) {
-        const adjRoom = ROOM_REGISTRY.get(t.targetRoomId);
+      // Pre-register adjacent rooms (radius ≤ 2) as resident shells for future freeze snapshots.
+      for (const [adjId] of bfsNearbyRooms(room.id, ROOM_REGISTRY, 2)) {
+        const adjRoom = ROOM_REGISTRY.get(adjId);
         if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);
       }
       // Retrieve the structured adoption result set by Phase A (adoptPrewarmedChunksForRoom).
       const adoptResult = getLastAdoptionResult();
       const wallAdoptStatus = adoptResult?.wall.status ?? 'missing';
       const bgAdoptStatus   = adoptResult?.bg.status   ?? 'missing';
-      const renderStateKeyMatches =
-        wallAdoptStatus !== 'staleRenderState' && bgAdoptStatus !== 'staleRenderState' ? null :
-        false;
+      const renderStateKeyMatches: boolean | null =
+        wallAdoptStatus === 'staleRenderState' || bgAdoptStatus === 'staleRenderState' ? false :
+        wallAdoptStatus === 'adopted'          || bgAdoptStatus === 'adopted'          ? true  :
+        null;
       const spritesDecoded: boolean | null    = areRoomSpritesReady(room);
       const backgroundDecoded: boolean | null = isRoomBackgroundDecodeReady(room);
       const player = world.clusters[0];
@@ -774,9 +776,9 @@ export function startGameScreen(
   // Register the start room as the initial active resident.
   residentRoomManager.ensureResident(currentRoom);
   residentRoomManager.setActiveResidentId(currentRoom.id);
-  // Pre-register adjacent rooms as resident shells.
-  for (const t of currentRoom.transitions) {
-    const adjRoom = ROOM_REGISTRY.get(t.targetRoomId);
+  // Pre-register adjacent rooms (radius ≤ 2) as resident shells.
+  for (const [adjId] of bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2)) {
+    const adjRoom = ROOM_REGISTRY.get(adjId);
     if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);
   }
   // Start the entry warm immediately after the initial load so the overlay
@@ -1062,9 +1064,9 @@ export function startGameScreen(
         residentRoomManager.ensureResident(currentRoom);
         residentRoomManager.setActiveResidentId(currentRoom.id);
         residentRoomManager.evictDistant(currentRoom.id);
-        // Pre-register adjacent rooms.
-        for (const t of currentRoom.transitions) {
-          const adjRoom = ROOM_REGISTRY.get(t.targetRoomId);
+        // Pre-register adjacent rooms (radius ≤ 2).
+        for (const [adjId] of bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2)) {
+          const adjRoom = ROOM_REGISTRY.get(adjId);
           if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);
         }
         // Start the entry warm now that all load phases are complete.

@@ -205,9 +205,12 @@ export interface ResidentRoomDiagnostics {
 /**
  * Maximum number of rooms kept resident simultaneously.
  * Active room + up to (MAX_RESIDENTS - 1) frozen neighbours.
- * LRU eviction by lastTouchedFrame when exceeded.
+ * Increased from 8 to 16 in BUILD 415 to accommodate radius-2 pre-registration
+ * (active room + up to ~4 radius-1 + up to ~12 radius-2 neighbours).
+ * LRU eviction by lastTouchedFrame when exceeded, with shells (never activated)
+ * evicted before rooms carrying frozen state.
  */
-const MAX_RESIDENTS = 8;
+const MAX_RESIDENTS = 16;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -782,13 +785,23 @@ export class ResidentRoomManager {
   /**
    * Evict stale residents to stay within MAX_RESIDENTS.
    * Keeps the active room and the (MAX_RESIDENTS − 1) most recently touched
-   * frozen rooms.  Call after every room transition.
+   * frozen rooms.  Rooms that have never been activated (pre-registered shells
+   * with no frozen state) are evicted before rooms carrying frozen enemy or
+   * sim-state snapshots.  Call after every room transition.
    */
   evictDistant(currentRoomId: string): void {
     if (this._residents.size <= MAX_RESIDENTS) return;
     const candidates = [...this._residents.values()]
       .filter(r => r.roomId !== currentRoomId && r.lifecycle !== 'active')
-      .sort((a, b) => a.lastTouchedFrame - b.lastTouchedFrame);
+      .sort((a, b) => {
+        // Evict shells (never activated — no frozen state to lose) before rooms
+        // carrying frozen state.  Within each tier, evict oldest-first.
+        // activatedPriority: 0 = shell (evict first), 1 = has frozen state (keep).
+        const aActivatedPriority = a.hasEverBeenActivated ? 1 : 0;
+        const bActivatedPriority = b.hasEverBeenActivated ? 1 : 0;
+        if (aActivatedPriority !== bActivatedPriority) return aActivatedPriority - bActivatedPriority;
+        return a.lastTouchedFrame - b.lastTouchedFrame;
+      });
     const toEvict = this._residents.size - MAX_RESIDENTS;
     for (let i = 0; i < toEvict && i < candidates.length; i++) {
       this._residents.delete(candidates[i].roomId);

@@ -229,7 +229,7 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
   - `restoreFrozenEnemies(world, frozen, levelRng)` — after `loadRoom`, kills fresh-spawn particles for restorable enemies, replaces clusters with frozen snapshots, and respawns particles at the frozen HP.  Re-initialises grapple-hunter chain particles.
   - `recordTransitionMode(mode, missReason, ms)` — captures last transition outcome for the debug overlay.
   - `getDiagnostics()` — returns `ResidentRoomDiagnostics` snapshot.
-  - `evictDistant(currentRoomId)` — LRU-evicts rooms beyond `MAX_RESIDENTS = 8`.
+  - `evictDistant(currentRoomId)` — LRU-evicts rooms beyond `MAX_RESIDENTS = 16`; shells (never activated) evicted before rooms with frozen state.
 
 **Integration in `src/screens/gameScreen.ts`**
 
@@ -306,13 +306,26 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 | `entryWarm` | Instant path but viewport not covered, entry-warm overlay shown |
 | `none` | No transition yet |
 
+#### What was implemented (Phase 3 — BUILD 415)
+
+1. **Radius-2 resident shell pre-registration.** All three pre-registration sites in `gameScreen.ts` (instant-transition path, initial-load path, async-completion path) now call `bfsNearbyRooms(room.id, ROOM_REGISTRY, 2)` to register shells for rooms up to 2 hops away.  This ensures that rooms the player might visit after a single intermediate hop are already tracked before the first freeze.
+   - `bfsNearbyRooms` imported from `roomPrewarmNeighborhood.ts` (already used by `roomRenderChunkWarmScheduler.ts`).
+
+2. **`MAX_RESIDENTS` increased from 8 → 16.** The old limit was sized for radius-1 only (active + ≤ 4 neighbours). Radius-2 BFS can produce up to ~12 additional shells, so the budget was raised to 16 to prevent eviction of valuable frozen state.
+
+3. **Shell-first eviction in `evictDistant`.** The LRU eviction now evicts rooms with `hasEverBeenActivated: false` (pre-registered shells with no frozen state) before rooms carrying actual frozen enemy/sim snapshots.  Within each priority tier, order is still oldest-first by `lastTouchedFrame`.  This ensures that radius-2 pre-registration does not displace frozen state from previously visited rooms.
+
+4. **`renderStateKeyMatches` correctly populated.** Previously the field was always `null` unless a stale-key rejection occurred.  It is now:
+   - `true`  — at least one of wall/bg adopted successfully and neither was stale.
+   - `false` — either wall or bg returned `staleRenderState`.
+   - `null`  — both caches were `missing` (no prewarmed chunks existed).
+
 #### What remains deferred (Phase 3 and beyond)
 
 1. **True hot-swap without `loadRoom`** — requires per-room `WorldState` instances so the live simulation state is never destroyed on transition.  A larger architectural change.
 2. **Complex enemy restoration** — RadiantTether, DustConstellation, OrbitalDustCore, etc. carry module-level singleton state (e.g. `_chainState` in `radiantTetherAi.ts`) that is not inside `WorldState`.  Requires dedicated serialization paths.
 3. **Per-room renderer context** — currently module-level renderer state (theme, lighting, blocker keys, chunk caches) is applied on each `loadRoom`.  A per-room render context object would make true hot-swap possible without re-applying renderer state.
-4. **Room radius > 1** — currently adjacent-only pre-registration; no radius-2 shell creation.
-5. **Projectiles crossing room boundaries** — not handled; projectiles that reach a boundary are lost.
+4. **Projectiles crossing room boundaries** — not handled; projectiles that reach a boundary are lost.
 
 ---
 
