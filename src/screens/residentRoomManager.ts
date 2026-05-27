@@ -227,8 +227,12 @@ export interface ResidentRoomDiagnostics {
   residentWorldCount: number;
   /** Radius-1 neighbours of the active room that are runtimeReady. */
   radius1ReadyCount: number;
+  /** Total radius-1 neighbours of the active room (runtimeReady or not). */
+  radius1Total: number;
   /** Radius-2 neighbours of the active room that are runtimeReady. */
   radius2ReadyCount: number;
+  /** Total radius-2 neighbours of the active room (runtimeReady or not). */
+  radius2Total: number;
   /**
    * Transition mode labels (BUILD 416):
    *  - `residentWorldHot`: true hot-swap — loadRoom was NOT called.
@@ -247,6 +251,16 @@ export interface ResidentRoomDiagnostics {
   loadRoomSkippedOnLastTransition: boolean;
   /** Number of rooms in the background build queue. */
   residentBuildQueueLength: number;
+  /**
+   * Build queue length split by priority (indices 0–4 correspond to priorities 1–5).
+   * Priority 1 = hot-swap transition target (highest urgency).
+   * Priority 5 = rebuildAfterEdit (lowest urgency).
+   */
+  residentBuildQueueByPriority: readonly [number, number, number, number, number];
+  /** Room id of the build currently in progress (incremental session), or null. */
+  currentBuildRoomId: string | null;
+  /** Build reason for the current in-progress build, or null. */
+  currentBuildReason: string | null;
   evictionsTotal: number;
   // ── Player transfer diagnostics (BUILD 416) ──────────────────────────────
   /** Number of non-transient player-owned particles captured in the last hot-swap. */
@@ -346,9 +360,15 @@ export class ResidentRoomManager {
   private _loadRoomSkippedOnLastTransition = false;
   /** Externally managed queue length — updated by gameScreen via setResidentBuildQueueLength(). */
   private _residentBuildQueueLength = 0;
-  /** radius-1/2 ready counts set by gameScreen after each transition. */
+  private _residentBuildQueueByPriority: [number, number, number, number, number] = [0, 0, 0, 0, 0];
+  /** room id of the in-progress incremental build, or null. */
+  private _currentBuildRoomId: string | null = null;
+  private _currentBuildReason: string | null = null;
+  /** radius-1/2 ready/total counts set by gameScreen after each transition. */
   private _radius1ReadyCount = 0;
   private _radius2ReadyCount = 0;
+  private _radius1Total = 0;
+  private _radius2Total = 0;
   // ── Player transfer diagnostics (BUILD 416) ──────────────────────────────
   private _lastPlayerParticlesCaptured = 0;
   private _lastPlayerParticlesRestored = 0;
@@ -899,15 +919,30 @@ export class ResidentRoomManager {
     this._loadRoomSkippedOnLastTransition   = loadRoomSkipped;
   }
 
-  /** Update the background build queue length shown in the debug overlay. */
-  setResidentBuildQueueLength(length: number): void {
+  /** Update background build queue length and per-priority breakdown shown in the debug overlay. */
+  setResidentBuildQueueLength(length: number, byPriority?: [number, number, number, number, number]): void {
     this._residentBuildQueueLength = length;
+    if (byPriority !== undefined) {
+      this._residentBuildQueueByPriority[0] = byPriority[0];
+      this._residentBuildQueueByPriority[1] = byPriority[1];
+      this._residentBuildQueueByPriority[2] = byPriority[2];
+      this._residentBuildQueueByPriority[3] = byPriority[3];
+      this._residentBuildQueueByPriority[4] = byPriority[4];
+    }
   }
 
-  /** Update radius readiness counts shown in the debug overlay. */
-  setRadiusReadyCounts(radius1: number, radius2: number): void {
-    this._radius1ReadyCount = radius1;
-    this._radius2ReadyCount = radius2;
+  /** Update the in-progress incremental build info shown in the debug overlay. */
+  setCurrentBuildInfo(roomId: string | null, reason: string | null): void {
+    this._currentBuildRoomId = roomId;
+    this._currentBuildReason = reason;
+  }
+
+  /** Update radius readiness and total counts shown in the debug overlay. */
+  setRadiusReadyCounts(radius1Ready: number, radius2Ready: number, radius1Total?: number, radius2Total?: number): void {
+    this._radius1ReadyCount = radius1Ready;
+    this._radius2ReadyCount = radius2Ready;
+    if (radius1Total !== undefined) this._radius1Total = radius1Total;
+    if (radius2Total !== undefined) this._radius2Total = radius2Total;
   }
 
   /** Record the room id and duration of the most recent background build (BUILD 418). */
@@ -1101,12 +1136,17 @@ export class ResidentRoomManager {
       frozenCount,
       residentWorldCount,
       radius1ReadyCount:                  this._radius1ReadyCount,
+      radius1Total:                       this._radius1Total,
       radius2ReadyCount:                  this._radius2ReadyCount,
+      radius2Total:                       this._radius2Total,
       lastTransitionMode:                 this._lastTransitionMode,
       lastResidentMissReason:             this._lastResidentMissReason,
       lastActivationMs:                   this._lastActivationMs,
       loadRoomSkippedOnLastTransition:    this._loadRoomSkippedOnLastTransition,
       residentBuildQueueLength:           this._residentBuildQueueLength,
+      residentBuildQueueByPriority:       [...this._residentBuildQueueByPriority] as unknown as readonly [number, number, number, number, number],
+      currentBuildRoomId:                 this._currentBuildRoomId,
+      currentBuildReason:                 this._currentBuildReason,
       evictionsTotal:                     this._evictionsTotal,
       lastPlayerParticlesCaptured:        this._lastPlayerParticlesCaptured,
       lastPlayerParticlesRestored:        this._lastPlayerParticlesRestored,

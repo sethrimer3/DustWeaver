@@ -700,7 +700,13 @@ export class RenderProfiler {
       const rd = this._residentDiagnostics;
       const mode = rd.lastTransitionMode;
       const skipLabel = rd.loadRoomSkippedOnLastTransition ? ' ✓skip' : '';
-      const queueLabel = rd.residentBuildQueueLength > 0 ? ` Q:${rd.residentBuildQueueLength}` : '';
+      // Queue breakdown: "Q:3 [p1:1 p2:0 p3:1 p4:1 p5:0]" or "Q:0"
+      let queueLabel = '';
+      if (rd.residentBuildQueueLength > 0) {
+        const byPri = rd.residentBuildQueueByPriority;
+        const priStr = byPri.map((c, i) => `p${i + 1}:${c}`).join(' ');
+        queueLabel = ` Q:${rd.residentBuildQueueLength} [${priStr}]`;
+      }
       const ptLabel = rd.lastPlayerParticlesCaptured > 0
         ? ` pt:${rd.lastPlayerParticlesRestored}/${rd.lastPlayerParticlesCaptured}` +
           (rd.lastPlayerParticlesSkipped > 0 ? ` (skip:${rd.lastPlayerParticlesSkipped})` : '')
@@ -708,16 +714,23 @@ export class RenderProfiler {
       const buildLabel = rd.lastBuildRoomId !== null
         ? `${rd.lastBuildRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)} (${rd.lastBuildDurationMs.toFixed(1)}ms)`
         : '—';
+      const r1Total = rd.radius1Total !== undefined ? `/${rd.radius1Total}` : '';
+      const r2Total = rd.radius2Total !== undefined ? `/${rd.radius2Total}` : '';
       const initProgress = !rd.initialRadius2Complete
         ? ` [init ${rd.initialRadius2Built}/${rd.initialRadius2Total}` +
           (rd.initialRadius2Failed > 0 ? ` err:${rd.initialRadius2Failed}` : '') + ']'
         : ` [init done ${rd.initialRadius2Built}/${rd.initialRadius2Total} ${rd.initialRadius2LoadMs.toFixed(0)}ms]`;
+      // Current incremental build session info.
+      const currentBuildLine = rd.currentBuildRoomId !== null
+        ? `Building: ${rd.currentBuildRoomId.slice(0, MAX_ROOM_ID_DISPLAY_LENGTH)} (${rd.currentBuildReason ?? '?'})`
+        : null;
       const residentLines = [
         '── Resident Rooms ──',
         `Active: ${rd.activeRoomId ?? 'none'}`,
         `Residents: ${rd.residentCount}  Worlds: ${rd.residentWorldCount}  Frozen: ${rd.frozenCount}`,
-        `R1: ${rd.radius1ReadyCount}  R2: ${rd.radius2ReadyCount}${queueLabel}${initProgress}`,
-        `LastBuild: ${buildLabel}`,
+        `R1: ${rd.radius1ReadyCount}${r1Total}  R2: ${rd.radius2ReadyCount}${r2Total}${queueLabel}${initProgress}`,
+        currentBuildLine ?? `LastBuild: ${buildLabel}`,
+        ...(currentBuildLine !== null ? [`LastBuild: ${buildLabel}`] : []),
         `Last xtn: ${mode}${skipLabel}${ptLabel}`,
         rd.lastResidentMissReason ? `Miss: ${rd.lastResidentMissReason}` : 'Miss: —',
         `ActivMs: ${rd.lastActivationMs.toFixed(1)}  Evict: ${rd.evictionsTotal}`,
@@ -726,6 +739,7 @@ export class RenderProfiler {
       // Derive indices from the array so that adding/removing lines doesn't
       // silently break the colour-coding below.
       const R1R2_LINE_INDEX      = residentLines.findIndex(l => l.startsWith('R1:'));
+      const BUILDING_LINE_INDEX  = residentLines.findIndex(l => l.startsWith('Building:'));
       const LAST_XTN_LINE_INDEX  = residentLines.findIndex(l => l.startsWith('Last xtn:'));
       const BACKTRACK_LINE_INDEX = residentLines.findIndex(l => l.startsWith('Backtrack:'));
       if (import.meta.env.DEV) {
@@ -753,6 +767,8 @@ export class RenderProfiler {
           lineColor = '#ffdd44';
         } else if (i === R1R2_LINE_INDEX) {
           lineColor = rd.initialRadius2Complete ? '#b8d8ff' : '#ffcc44';
+        } else if (i === BUILDING_LINE_INDEX) {
+          lineColor = '#aaffcc'; // active build — light green
         } else if (i === LAST_XTN_LINE_INDEX) {
           lineColor = modeColor[mode] ?? '#b8d8ff';
         } else if (i === BACKTRACK_LINE_INDEX) {
