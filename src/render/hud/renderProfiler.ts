@@ -728,6 +728,12 @@ export class RenderProfiler {
       const R1R2_LINE_INDEX      = residentLines.findIndex(l => l.startsWith('R1:'));
       const LAST_XTN_LINE_INDEX  = residentLines.findIndex(l => l.startsWith('Last xtn:'));
       const BACKTRACK_LINE_INDEX = residentLines.findIndex(l => l.startsWith('Backtrack:'));
+      if (import.meta.env.DEV) {
+        if (R1R2_LINE_INDEX < 0 || LAST_XTN_LINE_INDEX < 0 || BACKTRACK_LINE_INDEX < 0) {
+          console.warn('[renderProfiler] resident panel: colour-index mismatch',
+            { R1R2_LINE_INDEX, LAST_XTN_LINE_INDEX, BACKTRACK_LINE_INDEX });
+        }
+      }
       const residentPanelH = residentLines.length * lineHeightPx + 8;
       ctx.save();
       ctx.font = `${fontSizePx}px monospace`;

@@ -357,7 +357,7 @@ export function startGameScreen(
   //   2 — velocity-direction target  (room the player is heading toward)
   //   3 — radius-1 adjacent room
   //   4 — radius-2 adjacent room
-  //   5 — rebuild-after-editor-edit
+  //   5 — rebuildAfterEdit
   //
   // Invariants:
   //   - Deduplicated by roomId.
@@ -1111,6 +1111,8 @@ export function startGameScreen(
       residentRoomManager.invalidateResidentWorld(adjId);
       _residentBuildQueueIds.delete(adjId); // allow re-enqueue at high priority
     }
+    // IDs must be deleted from the queue-id set BEFORE calling _enqueueResidentBuild
+    // below, because _enqueueResidentBuild skips rooms whose ID is still present.
     _residentBuildQueueIds.delete(roomDef.id); // allow re-enqueue at high priority
     // Queue rebuilds for the edited room and its radius-1 neighbours.
     _enqueueResidentBuild({ roomId: roomDef.id, priority: 5, reason: 'rebuildAfterEdit' });
@@ -1870,8 +1872,9 @@ export function startGameScreen(
         _residentBuildQueue.sort((a, b) => a.priority - b.priority);
         _residentBuildQueueDirty = false;
       }
-      // Remove already-built or active-room entries in a single pass to avoid
-      // O(n²) index-shifting from multiple splices during iteration.
+      // Remove already-built or active-room entries in a single pass.
+      // The queue is bounded by radius-2 neighbours (typically ≤ 8–16 entries),
+      // so O(queue_length) getResident lookups per frame are negligible.
       const stale = new Set<string>();
       for (const t of _residentBuildQueue) {
         if (t.roomId === currentRoom.id) { stale.add(t.roomId); continue; }
