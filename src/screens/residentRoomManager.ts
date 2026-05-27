@@ -1094,7 +1094,7 @@ export class ResidentRoomManager {
    *                     If false, mark lifecycle 'frozen' (background-built resident).
    */
   setResidentWorld(roomId: string, w: WorldState, isActive: boolean): void {
-    let resident = this._residents.get(roomId);
+    const resident = this._residents.get(roomId);
     if (resident === undefined) return; // Must ensureResident() first.
     resident.world        = w;
     resident.runtimeReady = true;

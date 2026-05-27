@@ -43,7 +43,7 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
   const visited = new Set<string>();
   let nextGroupId = 0;
 
-  for (const [_key, tile] of tileMap) {
+  for (const [, tile] of tileMap) {
     const startKey = `${tile.xBlock},${tile.yBlock}`;
     if (visited.has(startKey)) continue;
 

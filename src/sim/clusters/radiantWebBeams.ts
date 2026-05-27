@@ -129,13 +129,11 @@ export function raycastToWallWithNormal(
 ): { xWorld: number; yWorld: number; normalXWorld: number; normalYWorld: number } | null {
   const step = RW_RAYCAST_STEP_WORLD;
   const steps = Math.ceil(maxRangeWorld / step);
-  let prevX = startXWorld;
-  let prevY = startYWorld;
   let x = startXWorld;
   let y = startYWorld;
   for (let s = 0; s < steps; s++) {
-    prevX = x;
-    prevY = y;
+    const prevX = x;
+    const prevY = y;
     x += dirXWorld * step;
     y += dirYWorld * step;
     for (let wi = 0; wi < world.wallCount; wi++) {
@@ -155,13 +153,12 @@ export function raycastToWallWithNormal(
         const dotRight  = -dirXWorld;
         const dotTop    =  dirYWorld;
         const dotBottom = -dirYWorld;
-        let normalXWorld = 0;
-        let normalYWorld = 0;
         const best = Math.max(dotLeft, dotRight, dotTop, dotBottom);
-        if (best === dotLeft)        { normalXWorld = -1; normalYWorld =  0; }
-        else if (best === dotRight)  { normalXWorld =  1; normalYWorld =  0; }
-        else if (best === dotTop)    { normalXWorld =  0; normalYWorld = -1; }
-        else                         { normalXWorld =  0; normalYWorld =  1; }
+        const [normalXWorld, normalYWorld] =
+          best === dotLeft       ? [-1, 0] :
+          best === dotRight      ? [ 1, 0] :
+          best === dotTop        ? [ 0,-1] :
+                                   [ 0, 1];
         return { xWorld: prevX, yWorld: prevY, normalXWorld, normalYWorld };
       }
     }

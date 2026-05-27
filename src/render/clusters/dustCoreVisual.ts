@@ -139,7 +139,6 @@ function _getOrCreate(entityId: number, config: DustCoreConfig): _CoreState {
 
   const totalMotes = config.rings.reduce((n, r) => n + r.count, 0);
   const motes: _MoteState[] = [];
-  let moteIdx = 0;
   for (let ri = 0; ri < config.rings.length; ri++) {
     const ring = config.rings[ri];
     const step = (Math.PI * 2) / ring.count;
@@ -153,7 +152,6 @@ function _getOrCreate(entityId: number, config: DustCoreConfig): _CoreState {
         pulsePhase: initAngle * 1.7 + ri * 0.9,
         ringIdx:    ri,
       });
-      moteIdx++;
     }
   }
 

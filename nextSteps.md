@@ -440,7 +440,7 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
 6. **RNG determinism — FIXED (BUILD 417).** `buildResidentWorldState` now uses a stable per-room RNG derived from `campaignSeed`, `room.id`, and `room.worldNumber`.  Active gameplay `levelRng` is never consumed by background resident builds.  Enemy and fluid placement in resident builds is deterministic but intentionally decoupled from the active gameplay RNG stream.
 
-7. **Idle resident builds — incremental multi-phase scheduler (BUILD 418+).** Each background world build is split into 7 generator phases (`phaseA`, `phaseC`, `phaseD_fluid`, `phaseD_chains`, `phaseD_walls`, `phaseE_sim`, `phaseE_dust`) via `createResidentBuildGenerator()` in `residentWorldBuilder.ts`. The scheduler processes one phase per RAF frame (not one full build) so no single frame bears the full build cost. A stale-build guard (`_roomVersions` map) discards in-flight sessions if the room was edited after the session started. At most one session is active at a time. A new session is started only when the previous frame was < 10 ms. Build duration (full session) and current phase are shown in the debug overlay.
+7. **Idle resident builds — incremental multi-phase scheduler (BUILD 418+).** Each background world build is split into generator phases (`phaseA`, `phaseC`, `phaseD_fluid`, `phaseD_chains`, `phaseD_walls_lookup`, optional `phaseD_walls_build`, `phaseE_sim`, `phaseE_dust`) via `createResidentBuildGenerator()` in `residentWorldBuilder.ts`. The scheduler processes one phase per RAF frame (not one full build) so no single frame bears the full build cost. A stale-build guard (`_roomVersions` map) discards in-flight sessions if the room was edited after the session started. At most one session is active at a time. Priority-1/2 tasks can start regardless of last-frame time; priority-3/4/5 starts remain gated on previous frame < 10 ms. Build duration (full session) and current phase are shown in the debug overlay.
 
    Queue priorities (now actually wired):
    - Priority 1: hot-swap transition target (enqueued when player is within URGENT_PRELOAD_PROXIMITY_BLOCKS of a boundary)
@@ -484,9 +484,11 @@ These checks confirm correct behaviour for the resident-room runtime. Run manual
 
 4. **Active-session cancellation on priority upgrade.** If a p4 session is in progress and the player nears a boundary for that same room (upgrading to p1), the in-progress session is NOT interrupted — it will simply complete and the result will be accepted at the original version. The priority upgrade only affects queued-but-not-yet-started tasks. Interrupting an in-progress session is deferred.
 
-5. **Complex enemy module-level state** (RadiantTether, DustConstellation, etc.) still not serialized. Hot-swap resets these singletons on activation. Full fix requires serializing them into WorldState.
+5. **Only urgent starts bypass frame gate.** Priority-1/2 entries now bypass the `<10 ms` start gate to avoid starvation under sustained load, but background Priority-3/4/5 entries still wait for a fast prior frame. If frame time remains consistently high, non-urgent resident builds can still lag behind.
 
-6. **Per-room renderer context** not yet stored per-resident. Module-level renderer state is re-applied on every activation.
+6. **Complex enemy module-level state** (RadiantTether, DustConstellation, etc.) still not serialized. Hot-swap resets these singletons on activation. Full fix requires serializing them into WorldState.
+
+7. **Per-room renderer context** not yet stored per-resident. Module-level renderer state is re-applied on every activation.
 
 ---
 
