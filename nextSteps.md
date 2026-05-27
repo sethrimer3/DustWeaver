@@ -417,7 +417,7 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
 3. **Resident builds no longer consume the shared `levelRng` (RNG isolation).**
    `buildResidentWorldState` previously accepted `levelRng: RngState` — the same instance used by active gameplay — and consumed it for enemy and background fluid spawning.  Depending on idle timing and room-load order this could perturb active gameplay randomness.
-   Fixed: the signature changes from `(room, levelRng, cache)` to `(room, campaignSeed, cache)`.  A dedicated `createResidentRoomRng(room, campaignSeed)` function derives a stable per-room RNG by hashing `campaignSeed ^ _hashRoomId(room.id) ^ (room.worldNumber * 2654435761)`.  This RNG is local to each build call; the active `levelRng` is never touched.  The call site passes `RESIDENT_CAMPAIGN_SEED = 12345` (decoupled constant).
+   Fixed: the signature changes from `(room, levelRng, cache)` to `(room, campaignSeed, cache)`.  A dedicated `createResidentRoomRng(room, campaignSeed)` function derives a stable per-room RNG by hashing `campaignSeed ^ _hashRoomId(room.id) ^ (room.worldNumber * 2654435761)`.  This RNG is local to each build call; the active `levelRng` is never touched.  The call site passes `RESIDENT_CAMPAIGN_SEED = 0xd457_0417` (decoupled constant, distinct from the levelRng seed `12345`).
    Note: enemy placement and background fluid in resident builds will differ cosmetically from a fresh `loadRoom` call for the same room.  This is intentional and documented.
 
 **Diagnostic improvements:**
@@ -440,7 +440,11 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
 6. **RNG determinism — FIXED (BUILD 417).** `buildResidentWorldState` now uses a stable per-room RNG derived from `campaignSeed`, `room.id`, and `room.worldNumber`.  Active gameplay `levelRng` is never consumed by background resident builds.  Enemy and fluid placement in resident builds is deterministic but intentionally decoupled from the active gameplay RNG stream.
 
-7. **Idle resident builds are synchronous per frame.** Each background world build is ~5–15 ms and happens during idle frames only. A large synchronous build cannot happen during active gameplay because the idle gate (`renderProfiler.getLastFrameMs() < 10`) prevents builds on busy frames. However, if multiple builds are needed (e.g. after a cold start), they are spread across separate idle frames — one build per frame.
+7. **Idle resident builds are synchronous per frame — BUILD 418 scheduler added.** Each background world build is ~5–15 ms.  BUILD 418 replaces the ad-hoc inline `bfsNearbyRooms` loop with an explicit priority queue (`ResidentBuildTask[]`).  Tasks are deduplicated by room id; priority: 1=hot-swap target, 2=velocity-direction, 3=radius-1, 4=radius-2, 5=rebuild-after-edit.  At most one build per RAF frame.  Builds are skipped when the previous frame exceeded 10 ms.  Build duration is recorded per task and shown in the debug overlay.  Builds > 8 ms emit a DEV warning.  Note: the 10 ms gate is a best-effort heuristic — builds remain synchronous and can still push the current frame to 15–25 ms if the timing check is satisfied just before a long build.
+
+8. **Initial radius-2 residents — now built before gameplay (BUILD 418).** During the initial campaign load `startGameScreen` builds a full frozen `WorldState` for every radius-2 neighbour of the start room synchronously before the RAF loop begins.  The loading overlay covers this phase; gameplay is held until all builds complete (or fail safely with a DEV warning).  Diagnostics: `initialRadius2Total/Built/Failed/LoadMs` shown in the debug overlay.
+
+9. **Editor invalidation — now propagated to resident worlds (BUILD 418).** When `editorController` calls `loadRoom`, the edited room's resident `WorldState` is invalidated and a rebuild task (priority 5, `rebuildAfterEdit`) is queued.  Radius-1 neighbours are also invalidated and queued.  Stale pre-edit frozen worlds cannot be used for hot-swap after an editor change.
 
 ---
 
