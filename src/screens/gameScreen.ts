@@ -1,4 +1,4 @@
-import { createWorldState } from '../sim/world';
+import { createWorldState, type WorldState } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng } from '../sim/rng';
@@ -114,7 +114,7 @@ import {
 } from './entryViewportWarm';
 import { ResidentRoomManager } from './residentRoomManager';
 import { bfsNearbyRooms } from './roomPrewarmNeighborhood';
-import { buildResidentWorldState } from './residentWorldBuilder';
+import { buildResidentWorldState, createResidentBuildGenerator } from './residentWorldBuilder';
 import { PLAYER_INITIAL_HEALTH } from './gameSpawn';
 
 const FIXED_DT_MS = 16.666;
@@ -363,7 +363,7 @@ export function startGameScreen(
   //   - Deduplicated by roomId.
   //   - Active room is never in the queue.
   //   - Rooms already runtimeReady are skipped at dequeue time.
-  //   - At most one build per RAF frame (budget guard).
+  //   - At most one incremental build session active at a time; one phase per frame.
   interface ResidentBuildTask {
     roomId:   string;
     room:     import('../levels/roomDef').RoomDef;
@@ -375,9 +375,35 @@ export function startGameScreen(
   let _residentBuildQueueDirty = false; // true when new items or priority changes require a re-sort
 
   /**
+   * Per-room version counter.  Incremented when a room is edited so that
+   * in-progress incremental build sessions that started before the edit can be
+   * detected and discarded (stale-build guard).
+   */
+  const _roomVersions = new Map<string, number>();
+
+  /**
+   * Active incremental build session.  One session is active at a time;
+   * the generator is advanced one phase per frame until complete.
+   */
+  interface ResidentBuildSession {
+    task:           ResidentBuildTask;
+    /** Generator from createResidentBuildGenerator — yields a phase label each step. */
+    gen:            Generator<string, WorldState, void>;
+    t0:             number;
+    /** Room version at the time the session was dequeued — used for stale-build detection. */
+    capturedVersion: number;
+    /** Last phase label yielded by the generator, for diagnostics. */
+    currentPhase:   string;
+  }
+  let _activeBuildSession: ResidentBuildSession | null = null;
+
+  /**
    * Enqueue a resident build task.  Deduplicates by roomId and ignores the
    * active room.  If the room is already in the queue with a higher priority
    * number (lower urgency), replace the entry with the new higher-priority one.
+   *
+   * Also cancels any active build session for the same room so a fresh session
+   * (with the current room version) is started.
    */
   function _enqueueResidentBuild(
     task: Omit<ResidentBuildTask, 'room'> & { room?: import('../levels/roomDef').RoomDef },
@@ -385,6 +411,10 @@ export function startGameScreen(
     if (task.roomId === currentRoom.id) return; // Never build active room.
     const room = task.room ?? ROOM_REGISTRY.get(task.roomId);
     if (room === undefined) return;
+    // Cancel an active session for this room so it restarts with fresh version.
+    if (_activeBuildSession !== null && _activeBuildSession.task.roomId === task.roomId) {
+      _activeBuildSession = null;
+    }
     if (_residentBuildQueueIds.has(task.roomId)) {
       // Update priority if new task is more urgent.
       const idx = _residentBuildQueue.findIndex(t => t.roomId === task.roomId);
@@ -420,15 +450,18 @@ export function startGameScreen(
    * diagnostics accurate.
    */
   function _updateRadiusReadyCounts(): void {
-    let r1 = 0, r2 = 0;
+    let r1 = 0, r2 = 0, r1Total = 0, r2Total = 0;
     for (const [adjId, adjDist] of bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2)) {
       const adj = residentRoomManager.getResident(adjId);
-      if (adj !== undefined && adj.runtimeReady) {
-        if (adjDist === 1) r1++;
-        else if (adjDist === 2) r2++;
+      if (adjDist === 1) {
+        r1Total++;
+        if (adj !== undefined && adj.runtimeReady) r1++;
+      } else if (adjDist === 2) {
+        r2Total++;
+        if (adj !== undefined && adj.runtimeReady) r2++;
       }
     }
-    residentRoomManager.setRadiusReadyCounts(r1, r2);
+    residentRoomManager.setRadiusReadyCounts(r1, r2, r1Total, r2Total);
   }
   const environmentalDust = new EnvironmentalDustLayer();
   const sunbeamRenderer = new SunbeamRenderer();
@@ -622,6 +655,23 @@ export function startGameScreen(
     // No-op: transition reveal system removed (legacy feature).
   });
 
+  // ── Initial resident build phase state (BUILD 418) ───────────────────────
+  // Holds state for the pre-gameplay radius-2 build phase.  Gameplay, sim,
+  // input, and transitions remain blocked until isActive = false.
+  // The loading overlay is shown BEFORE this phase starts so the user sees
+  // a black screen with "Loading…" while builds happen.
+  const _initialResidentBuildPhase = {
+    isActive:    false,
+    rooms:       [] as Array<[string, number, number]>,
+    idx:         0,
+    built:       0,
+    failed:      0,
+    total:       0,
+    t0:          0,
+    /** Frames remaining before builds start (allow overlay to paint first). */
+    yieldFrames: 2,
+  };
+
   // ── Initial loading overlay ───────────────────────────────────────────────
   // Shown when gameplay first starts (or when a room's sprites are not yet
   // loaded).  Polled each frame and dismissed once areRoomSpritesReady().
@@ -636,10 +686,12 @@ export function startGameScreen(
   }
 
   /** Hides the overlay once sprites are ready, the minimum show time has passed,
-   *  no async room load is in progress, and the entry viewport warm completed. */
+   *  no async room load is in progress, the initial resident build phase is done,
+   *  and the entry viewport warm completed. */
   function tickLoadingOverlay(): void {
     loadingOverlay.tick(() =>
       !asyncLoadState.isActive
+      && !_initialResidentBuildPhase.isActive
       && areRoomSpritesReady(currentRoom)
       && isRoomBackgroundDecodeReady(currentRoom)
       && isEntryWarmReadyOrTimedOut(entryWarmState),
@@ -997,57 +1049,36 @@ export function startGameScreen(
     if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);
   }
 
-  // ── Initial radius-2 resident build (BUILD 418) ──────────────────────────
-  // Build full frozen WorldStates for all radius-2 neighbours during the
-  // initial loading overlay so they are ready before gameplay begins.
-  // The loading overlay stays visible during this phase (isCampaignStart=true
-  // below ensures it is shown).  Failed builds log a DEV warning and fall
-  // back gracefully to the runtime-build path.
+  // ── Initial radius-2 resident build (BUILD 418+) ─────────────────────────
+  // Build full frozen WorldStates for radius-2 neighbours INSIDE the RAF loop
+  // so the loading overlay is visible and progress is shown to the player.
+  // Gameplay, sim, input, and transitions remain blocked until the phase ends.
+  //
+  // The loading overlay is shown BEFORE the RAF loop starts so the browser
+  // paints it before the first build frame.  Two yield frames are inserted at
+  // the start of the RAF phase to ensure the overlay is visible on screen.
   {
     const _initR2Rooms = bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2);
-    const _initR2Total = _initR2Rooms.length;
-    let _initR2Built   = 0;
-    let _initR2Failed  = 0;
-    const _initR2T0    = import.meta.env.DEV ? performance.now() : 0;
-    for (const [adjId] of _initR2Rooms) {
-      const adjRoom = ROOM_REGISTRY.get(adjId);
-      if (adjRoom === undefined) continue;
-      const adjResident = residentRoomManager.getResident(adjId);
-      if (adjResident !== undefined && adjResident.runtimeReady) {
-        _initR2Built++;
-        continue;
-      }
-      try {
-        const _t0 = performance.now();
-        const builtWorld = buildResidentWorldState(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache);
-        const _buildMs = performance.now() - _t0;
-        residentRoomManager.ensureResident(adjRoom);
-        residentRoomManager.setResidentWorld(adjId, builtWorld, false);
-        residentRoomManager.setLastBuildInfo(adjId, _buildMs);
-        _initR2Built++;
-        if (import.meta.env.DEV) {
-          console.log(`[startup] initial resident built ${adjId} in ${_buildMs.toFixed(1)}ms`);
-        }
-      } catch (buildErr) {
-        _initR2Failed++;
-        if (import.meta.env.DEV) {
-          console.warn(`[startup] initial resident build FAILED for ${adjId}:`, buildErr);
-        }
-      }
+    const _initR2NeedBuild = _initR2Rooms.filter(([adjId]) => {
+      const r = residentRoomManager.getResident(adjId);
+      return r === undefined || !r.runtimeReady;
+    });
+    if (_initR2NeedBuild.length > 0) {
+      _initialResidentBuildPhase.isActive    = true;
+      _initialResidentBuildPhase.rooms       = _initR2Rooms;
+      _initialResidentBuildPhase.idx         = 0;
+      _initialResidentBuildPhase.built       = 0;
+      _initialResidentBuildPhase.failed      = 0;
+      _initialResidentBuildPhase.total       = _initR2NeedBuild.length;
+      _initialResidentBuildPhase.t0          = 0; // set on first build frame
+      _initialResidentBuildPhase.yieldFrames = 2;
+      residentRoomManager.setInitialRadius2Progress(_initR2NeedBuild.length, 0, 0, 0, false);
+    } else {
+      // Nothing to build — mark complete immediately.
+      residentRoomManager.setInitialRadius2Progress(0, 0, 0, 0, true);
+      _refreshResidentBuildQueue();
+      _updateRadiusReadyCounts();
     }
-    const _initR2TotalMs = import.meta.env.DEV ? performance.now() - _initR2T0 : 0;
-    residentRoomManager.setInitialRadius2Progress(_initR2Total, _initR2Built, _initR2Failed, _initR2TotalMs, true);
-    if (import.meta.env.DEV) {
-      console.log(
-        `[startup] initial radius-2 residents: ${_initR2Built}/${_initR2Total} built` +
-        (_initR2Failed > 0 ? `, ${_initR2Failed} failed` : '') +
-        ` in ${_initR2TotalMs.toFixed(1)}ms`,
-      );
-    }
-    // Populate the build queue with any rooms that were not yet built
-    // (failed builds or rooms added later).  These will be retried at runtime.
-    _refreshResidentBuildQueue();
-    _updateRadiusReadyCounts();
   }
   // Start the entry warm immediately after the initial load so the overlay
   // holds until the entry viewport has shaded chunks available.
@@ -1056,16 +1087,12 @@ export function startGameScreen(
   // Preload sprites for adjacent rooms in the background.
   preloadAdjacentRoomAssets(currentRoom);
 
-  // Show the loading overlay if the spawn room's sprites aren't ready yet, OR
-  // always show it on the initial campaign load to produce the fade-from-black effect.
+  // Show the loading overlay BEFORE the RAF loop begins so the browser paints
+  // it before the first initial-resident-build frame fires.  This ensures the
+  // "Loading…" screen is visible while radius-2 residents are built.
   // areRoomSpritesReady returns true instantly for rooms with no folder-based
   // themes (legacy sprites load at module init), so the overlay won't flash.
-  // Capture the flag value before calling showLoadingOverlay() (which resets it)
-  // so the intent is explicit regardless of future call ordering.
-  const isCampaignStart = isInitialCampaignLoad;
-  if (!areRoomSpritesReady(currentRoom) || isCampaignStart) {
-    showLoadingOverlay();
-  }
+  showLoadingOverlay();
 
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
@@ -1097,6 +1124,9 @@ export function startGameScreen(
     // wall (e.g. in a newly-created room or after heavy edits).  Always resolve
     // to an open position so the player isn't stuck on entry.
     const [validX, validY] = resolveSpawnBlock(roomDef, spawnX, spawnY);
+    // Bump the room version so any in-flight incremental build for this room
+    // will be detected as stale and discarded (BUILD 418+ stale-build guard).
+    _roomVersions.set(roomDef.id, (_roomVersions.get(roomDef.id) ?? 0) + 1);
     // Invalidate this room's cached runtime data so edits take effect immediately.
     roomRuntimeCache.invalidate(roomDef.id);
     // Also evict any pre-warmed render chunks so stale canvas data is not adopted.
@@ -1110,6 +1140,9 @@ export function startGameScreen(
     for (const [adjId] of editedNeighbours) {
       residentRoomManager.invalidateResidentWorld(adjId);
       _residentBuildQueueIds.delete(adjId); // allow re-enqueue at high priority
+      // Also evict pre-warmed render chunks for neighbours whose geometry may
+      // depend on the edited room (e.g. shared boundary walls).
+      invalidateRoomChunkPrewarm(adjId);
     }
     // IDs must be deleted from the queue-id set BEFORE calling _enqueueResidentBuild
     // below, because _enqueueResidentBuild skips rooms whose ID is still present.
@@ -1120,6 +1153,14 @@ export function startGameScreen(
       _enqueueResidentBuild({ roomId: adjId, priority: 5, reason: 'rebuildAfterEdit' });
     }
     loadRoom(roomDef, validX, validY, preserveCamera);
+    // After loadRoom(), the module-level `world` holds the newly loaded room.
+    // Update the active resident record to point at this fresh world so that
+    // subsequent hot-swaps see the correct state.  Without this, the resident
+    // for the edited room would remain null/stale and the next hot-swap would
+    // fall back to a cold load or hot-swap an outdated world.
+    residentRoomManager.ensureResident(roomDef);
+    residentRoomManager.setActiveResidentId(roomDef.id);
+    residentRoomManager.setResidentWorld(roomDef.id, world, true);
     // Editor loads are not transitions — transition reveal state is removed (legacy).
   }, () => {
     // Called when editor closes (confirm or cancel)
@@ -1319,6 +1360,96 @@ export function startGameScreen(
         FP.endFrame();
         return;
       }
+    }
+
+    // ── Initial resident build phase (BUILD 418+) ────────────────────────────
+    // Pre-gameplay phase that builds radius-2 resident WorldStates one room per
+    // RAF frame.  The loading overlay is already visible (shown before the RAF
+    // loop started).  Gameplay, sim, input, and transitions remain blocked.
+    //
+    // Two "yield" frames are inserted first so the browser has time to paint
+    // the overlay before any build work begins.
+    if (_initialResidentBuildPhase.isActive) {
+      if (_initialResidentBuildPhase.yieldFrames > 0) {
+        _initialResidentBuildPhase.yieldFrames--;
+        tickLoadingOverlay();
+        if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+        FP.setBakeForbiddenInGameplay(false);
+        FP.endFrame();
+        rafHandle = requestAnimationFrame(frame);
+        return;
+      }
+      // First real build frame — record start time.
+      if (_initialResidentBuildPhase.t0 === 0) {
+        _initialResidentBuildPhase.t0 = performance.now();
+      }
+      // Advance through rooms until we find one that needs a build (skip
+      // already-ready rooms in O(1) per frame without any build cost).
+      let builtOne = false;
+      while (!builtOne && _initialResidentBuildPhase.idx < _initialResidentBuildPhase.rooms.length) {
+        const [adjId] = _initialResidentBuildPhase.rooms[_initialResidentBuildPhase.idx];
+        _initialResidentBuildPhase.idx++;
+        const adjResident = residentRoomManager.getResident(adjId);
+        if (adjResident !== undefined && adjResident.runtimeReady) {
+          // Already built (start room or duplicate) — count and skip.
+          _initialResidentBuildPhase.built++;
+          continue;
+        }
+        const adjRoom = ROOM_REGISTRY.get(adjId);
+        if (adjRoom === undefined) continue;
+        try {
+          const _bT0 = performance.now();
+          const _builtWorld = buildResidentWorldState(adjRoom, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache);
+          const _buildMs = performance.now() - _bT0;
+          residentRoomManager.ensureResident(adjRoom);
+          residentRoomManager.setResidentWorld(adjId, _builtWorld, false);
+          residentRoomManager.setLastBuildInfo(adjId, _buildMs);
+          _initialResidentBuildPhase.built++;
+          if (import.meta.env.DEV) {
+            console.log(
+              `[startup] initial resident ${_initialResidentBuildPhase.built}/${_initialResidentBuildPhase.total}:` +
+              ` ${adjId} in ${_buildMs.toFixed(1)}ms`,
+            );
+          }
+        } catch (_buildErr) {
+          _initialResidentBuildPhase.failed++;
+          if (import.meta.env.DEV) {
+            console.warn(`[startup] initial resident FAILED: ${adjId}`, _buildErr);
+          }
+        }
+        builtOne = true; // one full room per frame
+      }
+      const _initDone = _initialResidentBuildPhase.idx >= _initialResidentBuildPhase.rooms.length;
+      const _initElapsed = performance.now() - _initialResidentBuildPhase.t0;
+      residentRoomManager.setInitialRadius2Progress(
+        _initialResidentBuildPhase.total,
+        _initialResidentBuildPhase.built,
+        _initialResidentBuildPhase.failed,
+        _initElapsed,
+        _initDone,
+      );
+      if (_initDone) {
+        _initialResidentBuildPhase.isActive = false;
+        if (import.meta.env.DEV) {
+          console.log(
+            `[startup] initial radius-2 residents done: ${_initialResidentBuildPhase.built}/${_initialResidentBuildPhase.total} built` +
+            (_initialResidentBuildPhase.failed > 0 ? `, ${_initialResidentBuildPhase.failed} failed` : '') +
+            ` in ${_initElapsed.toFixed(0)}ms`,
+          );
+        }
+        _refreshResidentBuildQueue();
+        _updateRadiusReadyCounts();
+      }
+      // Update diagnostics every initial-build frame so the overlay text stays current.
+      if (pauseController.state.isDebugMode) {
+        renderProfiler.updateResidentDiagnostics(residentRoomManager.getDiagnostics());
+      }
+      tickLoadingOverlay();
+      if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+      FP.setBakeForbiddenInGameplay(false);
+      FP.endFrame();
+      rafHandle = requestAnimationFrame(frame);
+      return;
     }
 
     // ── Async room load advancement ──────────────────────────────────────────
@@ -1571,7 +1702,41 @@ export function startGameScreen(
             // whose prewarm task completed, was never queued, or was evicted
             // get a new task created rather than silently skipped.
             ensureChunkPrewarmQueued(_tId, 'proximity');
+            // Boost resident build to priority 1 (hot-swap transition target)
+            // so it is built as soon as possible in the incremental scheduler.
+            {
+              const _tResident = residentRoomManager.getResident(_tId);
+              if (_tResident === undefined || !_tResident.runtimeReady) {
+                _enqueueResidentBuild({ roomId: _tId, priority: 1, reason: 'proximity' });
+              }
+            }
             break; // one priority boost per frame is sufficient
+          }
+        }
+
+        // ── Velocity-direction resident pre-build (priority 2) ──────────────
+        // If the player is moving fast enough in a direction that matches a
+        // room transition, enqueue the target at priority 2 so the incremental
+        // scheduler works on it before radius-1/2 background entries.
+        {
+          const _pvx = _proxPlayer.velocityXWorld;
+          const _pvy = _proxPlayer.velocityYWorld;
+          const _absVx = Math.abs(_pvx);
+          const _absVy = Math.abs(_pvy);
+          const MIN_VEL_DIRECTION = 1.0; // world units/tick
+          if (_absVx > MIN_VEL_DIRECTION || _absVy > MIN_VEL_DIRECTION) {
+            const _velDir = _absVx >= _absVy
+              ? (_pvx > 0 ? 'right' : 'left')
+              : (_pvy > 0 ? 'down'  : 'up');
+            for (const _vt of currentRoom.transitions) {
+              if (_vt.direction === _velDir) {
+                const _vtResident = residentRoomManager.getResident(_vt.targetRoomId);
+                if (_vtResident === undefined || !_vtResident.runtimeReady) {
+                  _enqueueResidentBuild({ roomId: _vt.targetRoomId, priority: 2, reason: 'proximity' });
+                }
+                break;
+              }
+            }
           }
         }
       }
@@ -1857,60 +2022,109 @@ export function startGameScreen(
     // Tick the loading overlay — hides it once sprites are ready.
     tickLoadingOverlay();
 
-    // ── Resident build queue scheduler (BUILD 418) ───────────────────────────
-    // Drain one task from the explicit priority queue per frame, but only when
-    // the previous frame was fast enough to have budget headroom.
-    // Rationale: synchronous resident builds are 5–15 ms each; building on a
-    // frame where < 10 ms was already spent still risks pushing the current
-    // frame to 15–25 ms.  The 10 ms guard is a best-effort heuristic — builds
-    // are still synchronous and the diagnostic records the actual cost.
-    // Never build more than one resident per frame; never build the active room.
-    if (_residentBuildQueue.length > 0 && renderProfiler.getLastFrameMs() < 10) {
-      // Sort queue by priority only when new tasks have been added or priorities
-      // have changed (tracked by the dirty flag).  Lower number = more urgent.
+    // ── Resident build queue scheduler (BUILD 418+) ──────────────────────────
+    // Incremental multi-phase build scheduler.  One generator phase per frame so
+    // no single frame bears the full cost of a synchronous build (~15–25 ms).
+    //
+    // Session lifecycle:
+    //   1. If a session is active, advance one phase per frame unconditionally.
+    //      Each phase is bounded (< ~10 ms) so the per-phase cost is tolerable.
+    //   2. When the session generator is exhausted, check the room version to
+    //      detect stale builds (room was edited after session started) and
+    //      discard if stale.
+    //   3. If no session is active and the queue is non-empty, start a new
+    //      session only when the previous frame was fast (< 10 ms).
+    {
+      // Sort the queue only when dirty.  Lower number = more urgent.
       if (_residentBuildQueueDirty) {
         _residentBuildQueue.sort((a, b) => a.priority - b.priority);
         _residentBuildQueueDirty = false;
       }
-      // Remove already-built or active-room entries in a single pass.
-      // The queue is bounded by radius-2 neighbours (typically ≤ 8–16 entries),
-      // so O(queue_length) getResident lookups per frame are negligible.
-      const stale = new Set<string>();
-      for (const t of _residentBuildQueue) {
-        if (t.roomId === currentRoom.id) { stale.add(t.roomId); continue; }
-        const existing = residentRoomManager.getResident(t.roomId);
-        if (existing !== undefined && existing.runtimeReady) stale.add(t.roomId);
-      }
-      if (stale.size > 0) {
-        for (const id of stale) _residentBuildQueueIds.delete(id);
-        _residentBuildQueue.splice(0, _residentBuildQueue.length,
-          ..._residentBuildQueue.filter(t => !stale.has(t.roomId)));
-      }
-      // Execute the highest-priority task (first entry after the sort above).
-      if (_residentBuildQueue.length > 0) {
-        const task = _residentBuildQueue.shift()!;
-        _residentBuildQueueIds.delete(task.roomId);
-        const _buildT0 = performance.now();
+
+      // Step 1: advance active session one phase.
+      if (_activeBuildSession !== null) {
+        const _sess = _activeBuildSession;
         try {
-          const builtWorld = buildResidentWorldState(task.room, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache);
-          const _buildMs = performance.now() - _buildT0;
-          residentRoomManager.ensureResident(task.room);
-          residentRoomManager.setResidentWorld(task.roomId, builtWorld, false);
-          residentRoomManager.setLastBuildInfo(task.roomId, _buildMs);
-          if (import.meta.env.DEV) {
-            console.log(`[resident] queued build ${task.roomId} (reason=${task.reason} pri=${task.priority}) in ${_buildMs.toFixed(1)}ms`);
+          const _phaseResult = _sess.gen.next();
+          if (_phaseResult.done) {
+            // Generator returned the completed WorldState.
+            const _buildMs = performance.now() - _sess.t0;
+            const _currentVer = _roomVersions.get(_sess.task.roomId) ?? 0;
+            if (_sess.capturedVersion === _currentVer) {
+              residentRoomManager.ensureResident(_sess.task.room);
+              residentRoomManager.setResidentWorld(_sess.task.roomId, _phaseResult.value, false);
+              residentRoomManager.setLastBuildInfo(_sess.task.roomId, _buildMs);
+              if (import.meta.env.DEV) {
+                console.log(
+                  `[resident] incremental build done: ${_sess.task.roomId}` +
+                  ` (reason=${_sess.task.reason} pri=${_sess.task.priority}) in ${_buildMs.toFixed(1)}ms`,
+                );
+              }
+              _updateRadiusReadyCounts();
+            } else {
+              if (import.meta.env.DEV) {
+                console.warn(
+                  `[resident] incremental build DISCARDED (stale): ${_sess.task.roomId}` +
+                  ` ver=${_sess.capturedVersion} but current=${_currentVer}`,
+                );
+              }
+            }
+            _activeBuildSession = null;
+            residentRoomManager.setCurrentBuildInfo(null, null);
+          } else {
+            _sess.currentPhase = _phaseResult.value;
           }
-        } catch (buildErr) {
+        } catch (_sessErr) {
           if (import.meta.env.DEV) {
-            console.warn(`[resident] queued build FAILED for ${task.roomId}:`, buildErr);
+            console.warn(`[resident] incremental build FAILED: ${_activeBuildSession.task.roomId}`, _sessErr);
           }
+          _activeBuildSession = null;
+          residentRoomManager.setCurrentBuildInfo(null, null);
         }
-        // Recompute radius counts after a build.
-        _updateRadiusReadyCounts();
       }
+
+      // Step 2: start a new session if idle, queue is non-empty, and frame budget allows.
+      if (_activeBuildSession === null && _residentBuildQueue.length > 0
+          && renderProfiler.getLastFrameMs() < 10) {
+        // Purge already-built or active-room entries from the front of the queue.
+        let _dequeued: ResidentBuildTask | null = null;
+        while (_residentBuildQueue.length > 0) {
+          const _candidate = _residentBuildQueue[0];
+          if (_candidate.roomId === currentRoom.id) {
+            _residentBuildQueue.shift();
+            _residentBuildQueueIds.delete(_candidate.roomId);
+            continue;
+          }
+          const _existing = residentRoomManager.getResident(_candidate.roomId);
+          if (_existing !== undefined && _existing.runtimeReady) {
+            _residentBuildQueue.shift();
+            _residentBuildQueueIds.delete(_candidate.roomId);
+            continue;
+          }
+          _dequeued = _residentBuildQueue.shift()!;
+          _residentBuildQueueIds.delete(_dequeued.roomId);
+          break;
+        }
+        if (_dequeued !== null) {
+          _activeBuildSession = {
+            task:            _dequeued,
+            gen:             createResidentBuildGenerator(_dequeued.room, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache),
+            t0:              performance.now(),
+            capturedVersion: _roomVersions.get(_dequeued.roomId) ?? 0,
+            currentPhase:    'starting',
+          };
+          residentRoomManager.setCurrentBuildInfo(_dequeued.roomId, _dequeued.reason);
+        }
+      }
+
+      // Step 3: update diagnostics each frame.
+      const _qByPri: [number, number, number, number, number] = [0, 0, 0, 0, 0];
+      for (const _qt of _residentBuildQueue) {
+        const _pi = (_qt.priority - 1) as 0 | 1 | 2 | 3 | 4;
+        _qByPri[_pi]++;
+      }
+      residentRoomManager.setResidentBuildQueueLength(_residentBuildQueue.length, _qByPri);
     }
-    // Keep queue-length diagnostic in sync each frame.
-    residentRoomManager.setResidentBuildQueueLength(_residentBuildQueue.length);
 
     // Clear the gameplay-bake-forbidden flag before ending the frame so it
     // does not persist into the next non-gameplay frame (e.g. paused frames
