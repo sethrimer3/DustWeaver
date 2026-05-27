@@ -243,13 +243,20 @@ export function buildResidentWorldState(
  * frame so no single phase can cause a large gameplay hitch.
  *
  * Phases and their approximate cost per room:
- *   phaseA       — world dimensions         (~0.1 ms)
- *   phaseC       — bgWallGrid + enemies      (~1–4 ms, varies with enemy count)
- *   phaseD_fluid — background fluid          (~0.5 ms)
- *   phaseD_chains— grapple hunter chains     (~0.1 ms)
- *   phaseD_walls — wall template (expensive) (~3–10 ms)
- *   phaseE_sim   — hazards/ropes/blocks/grass (~1–3 ms)
- *   phaseE_dust  — dust piles                (~0.5 ms)
+ *   phaseA              — world dimensions                  (~0.1 ms)
+ *   phaseC              — bgWallGrid + enemies              (~1–4 ms, varies with enemy count)
+ *   phaseD_fluid        — background fluid                  (~0.5 ms)
+ *   phaseD_chains       — grapple hunter chains             (~0.1 ms)
+ *   phaseD_walls_lookup — wall template cache probe + apply (~0.1 ms on hit, cache check only on miss)
+ *   phaseD_walls_build  — wall template build (miss only)   (~3–10 ms; skipped on cache hit)
+ *   phaseE_sim          — hazards/ropes/blocks/grass        (~1–3 ms)
+ *   phaseE_dust         — dust piles                        (~0.5 ms)
+ *
+ * Note: phaseD_walls_build is only emitted on a cache miss.  On a cache hit the
+ * generator emits phaseD_walls_lookup and proceeds directly to phaseE_sim.
+ * buildRoomWallTemplate() is still a single synchronous step; if a room is
+ * very large (> ~80×50 blocks) this phase may still take 5–10 ms.  DEV timing
+ * is recorded via FP.recordLoadPhaseStep so the freeze profiler captures it.
  *
  * Usage:
  *   const gen = createResidentBuildGenerator(room, campaignSeed, cache);
@@ -336,32 +343,49 @@ export function* createResidentBuildGenerator(
   }
   yield 'phaseD_chains';
 
-  // ── Phase D step 3: wall template (most expensive phase) ─────────────────
+  // ── Phase D step 3: wall template cache probe ────────────────────────────
+  // Split into two phases so the expensive buildRoomWallTemplate() step on a
+  // cache miss occupies its own frame rather than being bundled with the lookup.
+  // On a cache hit only phaseD_walls_lookup is emitted; phaseD_walls_build is
+  // skipped and we proceed directly to phaseE_sim the following frame.
+  let _wallsCacheHit = false;
   {
     const _t = import.meta.env.DEV ? performance.now() : 0;
     const cacheEntry = roomRuntimeCache.get(room.id);
     if (cacheEntry !== undefined) {
       applyRoomWallTemplate(rw, cacheEntry.wallTemplate);
+      _wallsCacheHit = true;
+      FP.recordLoadPhaseStep('Resident:walls_lookup_hit', import.meta.env.DEV ? performance.now() - _t : 0);
       if (import.meta.env.DEV) {
         console.log(`[residentBuild:gen] ${room.id} walls: cache HIT`);
       }
     } else {
-      const wallTemplate = buildRoomWallTemplate(room);
-      applyRoomWallTemplate(rw, wallTemplate);
-      roomRuntimeCache.set(room.id, {
-        wallTemplate,
-        edgeExtension: null,
-        blockerKeys:    null,
-        darkBlockerKeys: null,
-        wallDecorations: null,
-      });
-      if (import.meta.env.DEV) {
-        console.log(`[residentBuild:gen] ${room.id} walls: cache MISS (built in ${(performance.now() - _t).toFixed(1)}ms)`);
-      }
+      FP.recordLoadPhaseStep('Resident:walls_lookup_miss', import.meta.env.DEV ? performance.now() - _t : 0);
     }
-    FP.recordLoadPhaseStep('Resident:walls', import.meta.env.DEV ? performance.now() - _t : 0);
   }
-  yield 'phaseD_walls';
+  yield 'phaseD_walls_lookup';
+
+  // ── Phase D step 4: wall template build (cache miss only) ────────────────
+  // This phase is only reached when the runtime cache did not have an entry for
+  // the room.  buildRoomWallTemplate() can take 5–10 ms on large rooms; keeping
+  // it in its own generator phase ensures no other work compounds this cost.
+  if (!_wallsCacheHit) {
+    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const wallTemplate = buildRoomWallTemplate(room);
+    applyRoomWallTemplate(rw, wallTemplate);
+    roomRuntimeCache.set(room.id, {
+      wallTemplate,
+      edgeExtension:   null,
+      blockerKeys:     null,
+      darkBlockerKeys: null,
+      wallDecorations: null,
+    });
+    FP.recordLoadPhaseStep('Resident:walls_build', import.meta.env.DEV ? performance.now() - _t : 0);
+    if (import.meta.env.DEV) {
+      console.log(`[residentBuild:gen] ${room.id} walls: cache MISS (built in ${(performance.now() - _t).toFixed(1)}ms)`);
+    }
+    yield 'phaseD_walls_build';
+  }
 
   // ── Phase E step 1: hazards + ropes + falling blocks + grasshoppers ───────
   {
