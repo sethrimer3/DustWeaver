@@ -794,11 +794,12 @@ export class ResidentRoomManager {
     const candidates = [...this._residents.values()]
       .filter(r => r.roomId !== currentRoomId && r.lifecycle !== 'active')
       .sort((a, b) => {
-        // Evict shells (never activated — no frozen state to lose) first, then
-        // by last-touched age (oldest first).
-        const aIsShell = a.hasEverBeenActivated ? 1 : 0;
-        const bIsShell = b.hasEverBeenActivated ? 1 : 0;
-        if (aIsShell !== bIsShell) return aIsShell - bIsShell;
+        // Evict shells (never activated — no frozen state to lose) before rooms
+        // carrying frozen state.  Within each tier, evict oldest-first.
+        // activatedPriority: 0 = shell (evict first), 1 = has frozen state (keep).
+        const aActivatedPriority = a.hasEverBeenActivated ? 1 : 0;
+        const bActivatedPriority = b.hasEverBeenActivated ? 1 : 0;
+        if (aActivatedPriority !== bActivatedPriority) return aActivatedPriority - bActivatedPriority;
         return a.lastTouchedFrame - b.lastTouchedFrame;
       });
     const toEvict = this._residents.size - MAX_RESIDENTS;

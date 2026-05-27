@@ -229,7 +229,7 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
   - `restoreFrozenEnemies(world, frozen, levelRng)` — after `loadRoom`, kills fresh-spawn particles for restorable enemies, replaces clusters with frozen snapshots, and respawns particles at the frozen HP.  Re-initialises grapple-hunter chain particles.
   - `recordTransitionMode(mode, missReason, ms)` — captures last transition outcome for the debug overlay.
   - `getDiagnostics()` — returns `ResidentRoomDiagnostics` snapshot.
-  - `evictDistant(currentRoomId)` — LRU-evicts rooms beyond `MAX_RESIDENTS = 8` (raised to 16 in BUILD 415).
+  - `evictDistant(currentRoomId)` — LRU-evicts rooms beyond `MAX_RESIDENTS = 16`; shells (never activated) evicted before rooms with frozen state.
 
 **Integration in `src/screens/gameScreen.ts`**
 
