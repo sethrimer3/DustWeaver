@@ -712,3 +712,293 @@ export function* makeLoadRoomPhases(
 
   // Generator complete — Phase F has no trailing yield.
 }
+
+// ── applyResidentRoomActivation ───────────────────────────────────────────────
+
+/**
+ * Apply Phase-A renderer state, Phase-B player spawn, and Phase-F environment
+ * effects to `ctx.world` for a resident-room hot-swap transition.
+ *
+ * **Preconditions (caller's responsibility before calling):**
+ *  - `ctx.world` has already been updated to the target resident's WorldState.
+ *  - The player cluster and all player-owned particles have been removed from
+ *    the outgoing world (so the frozen outgoing resident has no player).
+ *  - `carryHealthPoints` was captured from the outgoing world's player cluster.
+ *
+ * **What this does:**
+ *  - Applies block theme/lighting/seams to the renderer (Phase A equivalent).
+ *  - Resets module-level singletons (snake, radiantTether, radiantWeb).
+ *  - Inserts the player cluster at `world.clusters[0]` (Phase B equivalent).
+ *  - Spawns player particles and inits the mote queue.
+ *  - Initialises environment effects, resets cloaks, sets wall decorations.
+ *  - Snaps the camera to the spawn point and resets camera eff-bounds.
+ *  - Schedules room preloads and chunk prewarms.
+ *
+ * **What this does NOT do:**
+ *  - Does not touch Phases C, D, E — enemies/hazards/ropes/blocks are already
+ *    in the resident WorldState.
+ *  - Does not reset `world.clusters.length` or `world.particleCount`.
+ *  - Does not call any yielding / async operation — fully synchronous.
+ *
+ * BUILD 416
+ *
+ * @param ctx                LoadRoomCtx with `ctx.world` pointing to the
+ *                           target resident WorldState.
+ * @param room               Room definition for the target room.
+ * @param spawnXBlock        Horizontal spawn block (from the transition).
+ * @param spawnYBlock        Vertical spawn block (from the transition).
+ * @param carryHealthPoints  Player HP captured from the outgoing world.
+ */
+export function applyResidentRoomActivation(
+  ctx: LoadRoomCtx,
+  room: RoomDef,
+  spawnXBlock: number,
+  spawnYBlock: number,
+  carryHealthPoints: number,
+): void {
+  const {
+    world,
+    camera,
+    camState,
+    musicManager,
+    roomRuntimeCache,
+    playerWeaveLoadout,
+    progress,
+    playerCloak,
+    phantomCloak,
+    decorationWaveState,
+    environmentalDust,
+    sunbeamRenderer,
+    atmosphericLightDust,
+    guideDustPathRenderer,
+    reusableSnapshot,
+    interpolationBuffers,
+    skillTombRenderer,
+    skillTombEffectRenderer,
+    consumedSkillTombKeySet,
+    dialogueState,
+    dialogueRenderer,
+    levelRng,
+    renderProfiler,
+    cachedDecorationCenterX,
+    cachedDecorationCenterY,
+  } = ctx;
+
+  const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
+  const roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
+
+  // ── Phase A equivalent: room metadata + renderer setup ───────────────────
+  ctx.setCurrentRoom(room);
+  ctx.setBgColor(worldBgColor(room.worldNumber));
+  ctx.setRoomWidthWorld(roomWidthWorld);
+  ctx.setRoomHeightWorld(roomHeightWorld);
+
+  cancelCameraTransition(camState);
+
+  if (room.blockTheme) {
+    setActiveBlockSpriteTheme(room.blockTheme);
+  } else {
+    setActiveBlockSpriteWorld(room.worldNumber);
+  }
+
+  let blockerKeys: Set<string> | undefined;
+  let darkBlockerKeys: Set<string> | undefined;
+  {
+    const _entry = roomRuntimeCache.get(room.id);
+    if (_entry !== undefined && _entry.blockerKeys !== null) {
+      blockerKeys     = _entry.blockerKeys;
+      darkBlockerKeys = _entry.darkBlockerKeys ?? undefined;
+    } else {
+      if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
+        blockerKeys = new Set<string>();
+        for (const b of room.ambientLightBlockers) {
+          const key = `${b.xBlock},${b.yBlock}`;
+          blockerKeys.add(key);
+          if (b.isDark) {
+            if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
+            darkBlockerKeys.add(key);
+          }
+        }
+      }
+      if (room.backgroundBlocks) {
+        for (const b of room.backgroundBlocks) {
+          if (b.isLightBlockingFlag !== 1) continue;
+          if (!blockerKeys) blockerKeys = new Set<string>();
+          for (let dy = 0; dy < b.hBlock; dy++) {
+            for (let dx = 0; dx < b.wBlock; dx++) {
+              blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
+            }
+          }
+        }
+      }
+      if (_entry !== undefined) {
+        _entry.blockerKeys     = blockerKeys;
+        _entry.darkBlockerKeys = darkBlockerKeys;
+      }
+    }
+    setActiveBlockLighting(
+      room.lightingEffect ?? 'Ambient',
+      room.widthBlocks,
+      room.heightBlocks,
+      room.ambientLightDirection,
+      blockerKeys,
+      room.directionalBias,
+      room.sideExposureStrength,
+      room.minimumWallLight,
+      room.falloffPower,
+      room.backgroundLightSpill,
+      room.solidLightSoftness,
+    );
+    setActiveDarkAmbientBlockers(darkBlockerKeys);
+    setActiveSeamBlending(room.blockSeamBlending ?? 'off');
+    const adoptRenderStateKey = computeRenderStateKey(
+      room.blockTheme ?? null,
+      room.worldNumber ?? 1,
+      room.lightingEffect ?? 'Ambient',
+      room.ambientLightDirection ?? 'omni',
+      room.blockSeamBlending ?? 'off',
+      blockerKeys ?? new Set<string>(),
+      room.widthBlocks,
+      room.heightBlocks,
+      room.directionalBias    ?? DEFAULT_DIRECTIONAL_BIAS,
+      room.sideExposureStrength ?? DEFAULT_SIDE_EXPOSURE_STRENGTH,
+      room.minimumWallLight   ?? DEFAULT_MINIMUM_WALL_LIGHT,
+      room.falloffPower       ?? DEFAULT_FALLOFF_POWER,
+      room.backgroundLightSpill ?? DEFAULT_BACKGROUND_LIGHT_SPILL,
+      room.solidLightSoftness ?? DEFAULT_SOLID_LIGHT_SOFTNESS,
+    );
+    adoptPrewarmedChunksForRoom(room, camera.zoom, adoptRenderStateKey);
+  }
+  musicManager.notifyRoomEntered(room.songId ?? '_continue');
+
+  // Reset module-level singletons (must run on the frame this world becomes active).
+  resetSnakeRuntimeState();
+  resetRadiantTetherState();
+  resetRadiantWebState();
+
+  // Reset world-level grapple state (player arrives in the new room with no active grapple).
+  world.isGrappleActiveFlag      = 0;
+  world.isGrappleMissActiveFlag  = 0;
+  world.isGrappleRetractingFlag  = 0;
+  world.isGrappleZipActiveFlag   = 0;
+  world.isGrappleStuckFlag       = 0;
+  world.hasGrappleChargeFlag     = 1;
+  world.grappleParticleStartIndex = -1;
+
+  // ── Phase B equivalent: insert player at clusters[0] ─────────────────────
+  const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
+  const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
+  const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
+  playerCluster.healthPoints = Math.min(carryHealthPoints, playerCluster.maxHealthPoints);
+  // Enemies are already in the world from the pre-build; insert player at index 0.
+  world.clusters.unshift(playerCluster);
+
+  {
+    const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
+    const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
+      || playerWeaveLoadout.secondary.boundDust.length > 0;
+
+    if (hasWeaveBoundDust) {
+      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+    } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
+      const dustKind = progress.unlockedDustKinds[0];
+      const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
+      if (particleCount > 0) {
+        spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+      }
+    }
+
+    world.playerPrimaryWeaveId   = playerWeaveLoadout.primary.weaveId;
+    world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
+    world.isMoteSourceOrbitFlag  = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
+    world.characterId            = ctx.progress?.characterId ?? 'knight';
+
+    initMoteQueueFromParticles(world, playerCluster.entityId);
+    resetSwordWeaveState(world);
+  }
+
+  // ── Dialogue reset (Phase E equivalent) ──────────────────────────────────
+  const dialogueVisitState = prepareRoomDialogueVisitState(room, dialogueState, dialogueRenderer);
+  ctx.setFiredDialogueTriggerUids(dialogueVisitState.firedDialogueTriggerUids);
+  ctx.setCachedRoomConversations(dialogueVisitState.cachedRoomConversations);
+
+  // ── Phase F equivalent: environment effects + rendering state + camera ────
+  environmentalDust.initFromWorld(world, room.worldNumber);
+  sunbeamRenderer.initFromRoom(room);
+  atmosphericLightDust.initFromRoom(room);
+  guideDustPathRenderer.initFromRoom(room);
+
+  playerCloak.reset();
+  phantomCloak.reset();
+  decorationWaveState.reset(room.decorations?.length ?? 0);
+
+  {
+    const _decorEntry = roomRuntimeCache.get(room.id);
+    let _localWallDecorations: import('../render/effects/wallDecorations').WallDecoration[];
+    if (_decorEntry !== undefined && _decorEntry.wallDecorations !== null) {
+      _localWallDecorations = _decorEntry.wallDecorations;
+    } else {
+      _localWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+      if (_decorEntry !== undefined) {
+        _decorEntry.wallDecorations = _localWallDecorations;
+      }
+    }
+    ctx.setCachedWallDecorations(_localWallDecorations);
+    for (let _di = 0; _di < _localWallDecorations.length; _di++) {
+      const _d = _localWallDecorations[_di];
+      cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
+      cachedDecorationCenterY[_di] = _d.worldAnchorYPx;
+    }
+  }
+
+  resetReusableSnapshot(reusableSnapshot, world);
+  captureClusterInterpolationState(world, interpolationBuffers);
+
+  skillTombRenderer.init(room.saveTombs, room.walls);
+  skillTombEffectRenderer.init(room.skillTombs);
+  const _roomSkillTombs = room.skillTombs ?? [];
+  for (let i = _roomSkillTombs.length - 1; i >= 0; i--) {
+    const st = _roomSkillTombs[i];
+    if (consumedSkillTombKeySet.has(`${room.id}:${st.xBlock}:${st.yBlock}`)) {
+      skillTombEffectRenderer.removeTomb(i);
+    }
+  }
+
+  if (progress && !progress.exploredRoomIds.includes(room.id)) {
+    progress.exploredRoomIds.push(room.id);
+  }
+
+  snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, ctx.getVirtualWidthPx(), ctx.getVirtualHeightPx());
+  resetCameraEffBoundsForRoom(camState, roomWidthWorld, roomHeightWorld);
+
+  preloadRoomThemeSprites(room);
+  void decodeRoomThemeSprites(room);
+  decodeRoomBackground(room);
+
+  if (room.blockSeamBlending && room.blockSeamBlending !== 'off') {
+    preloadTransitionSprites(['mossy', 'crumbly', 'cracked', 'rooted', 'dusty', 'veined', 'corrupted']);
+  }
+
+  ctx.getPreloadScheduleHandle()?.cancel();
+  ctx.setPreloadScheduleHandle(scheduleRoomPreloads(
+    room,
+    ROOM_REGISTRY,
+    roomRuntimeCache,
+    import.meta.env.DEV,
+    isRoomFileCacheActive() ? loadRoomForGameplayAsync : undefined,
+    getActiveRoomAdjacency() ?? undefined,
+  ));
+
+  ctx.getWarmScheduleHandle()?.cancel();
+  ctx.setWarmScheduleHandle(scheduleChunkPrewarms(
+    room,
+    ROOM_REGISTRY,
+    roomRuntimeCache,
+    ctx.getGraphicsQuality,
+    () => renderProfiler.getLastFrameMs(),
+    ctx.getVirtualWidthPx(),
+    ctx.getVirtualHeightPx(),
+    camera.zoom,
+    ctx.getPreTransitionVelocity(),
+  ));
+}

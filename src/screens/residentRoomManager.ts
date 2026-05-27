@@ -167,7 +167,7 @@ export interface FrozenSimState {
 // ── Instance & diagnostics types ─────────────────────────────────────────────
 
 /** Lifecycle of a resident room instance. */
-export type ResidentLifecycle = 'active' | 'frozen' | 'evictable';
+export type ResidentLifecycle = 'active' | 'frozen' | 'loading' | 'evictable';
 
 /** A resident room entry. Holds frozen simulation state for one room. */
 export interface ResidentRoomInstance {
@@ -187,6 +187,26 @@ export interface ResidentRoomInstance {
    * null = room has never been frozen or has no dynamic simulation state.
    */
   frozenSimState: FrozenSimState | null;
+
+  // ── True per-room WorldState (BUILD 416+) ──────────────────────────────
+
+  /**
+   * Fully-built WorldState for this room, built by buildResidentWorldState().
+   * null = not yet built (will fall back to snapshot-restore or legacy load).
+   *
+   * While this room is active, `world` is the same object as the gameScreen
+   * module-level `world` variable.  While frozen, it holds the room's
+   * simulation state (enemies, hazards, ropes, particles, etc.) exactly as
+   * the player left it.  Frozen worlds do NOT tick.
+   */
+  world: WorldState | null;
+
+  /**
+   * true when `world` is fully built and safe to activate without calling
+   * loadRoom().  Set by setResidentWorld() and cleared by
+   * invalidateResidentWorld().
+   */
+  runtimeReady: boolean;
 }
 
 /** Diagnostic snapshot for the debug overlay. */
@@ -194,9 +214,30 @@ export interface ResidentRoomDiagnostics {
   activeRoomId: string | null;
   residentCount: number;
   frozenCount: number;
-  lastTransitionMode: 'residentHot' | 'residentFallback' | 'legacyLoad' | 'entryWarm' | 'none';
+  /** Number of residents with runtimeReady=true (true WorldState hot-swap capable). */
+  residentWorldCount: number;
+  /** Radius-1 neighbours of the active room that are runtimeReady. */
+  radius1ReadyCount: number;
+  /** Radius-2 neighbours of the active room that are runtimeReady. */
+  radius2ReadyCount: number;
+  /**
+   * Transition mode labels (BUILD 416):
+   *  - `residentWorldHot`: true hot-swap — loadRoom was NOT called.
+   *  - `residentRestore`:  snapshot-restore — loadRoom ran, snapshots patched back.
+   *  - `legacyLoad`:       full async/destructive load (cold entry).
+   *  - `entryWarm`:        render cache not yet ready; entry-warm overlay shown.
+   *  - `none`:             no transition recorded yet.
+   *
+   * @deprecated `residentHot` is preserved as an alias for `residentRestore`
+   * during the transition period.  Do not use `residentHot` for new code.
+   */
+  lastTransitionMode: 'residentWorldHot' | 'residentRestore' | 'residentHot' | 'residentFallback' | 'legacyLoad' | 'entryWarm' | 'none';
   lastResidentMissReason: string;
   lastActivationMs: number;
+  /** true if the most recent transition skipped loadRoom entirely. */
+  loadRoomSkippedOnLastTransition: boolean;
+  /** Number of rooms in the background build queue. */
+  residentBuildQueueLength: number;
   evictionsTotal: number;
 }
 
@@ -262,6 +303,12 @@ export class ResidentRoomManager {
   private _lastTransitionMode: ResidentRoomDiagnostics['lastTransitionMode'] = 'none';
   private _lastResidentMissReason = '';
   private _lastActivationMs = 0;
+  private _loadRoomSkippedOnLastTransition = false;
+  /** Externally managed queue length — updated by gameScreen via setResidentBuildQueueLength(). */
+  private _residentBuildQueueLength = 0;
+  /** radius-1/2 ready counts set by gameScreen after each transition. */
+  private _radius1ReadyCount = 0;
+  private _radius2ReadyCount = 0;
 
   // ── Frame tracking ─────────────────────────────────────────────────────────
 
@@ -297,6 +344,8 @@ export class ResidentRoomManager {
       lastTouchedFrame:     this._currentFrame,
       frozenEnemies:        null,
       frozenSimState:       null,
+      world:                null,
+      runtimeReady:         false,
     };
     this._residents.set(roomDef.id, instance);
     return instance;
@@ -753,30 +802,95 @@ export class ResidentRoomManager {
 
   /**
    * Record the outcome of the most recent transition for the debug overlay.
+   * @param mode            Transition mode label.
+   * @param missReason      Why a resident world was not available (if applicable).
+   * @param activationMs    Wall-clock ms spent on the activation.
+   * @param loadRoomSkipped Whether loadRoom was skipped entirely (true resident hot-swap).
    */
   recordTransitionMode(
     mode: ResidentRoomDiagnostics['lastTransitionMode'],
     missReason = '',
     activationMs = 0,
+    loadRoomSkipped = false,
   ): void {
-    this._lastTransitionMode     = mode;
-    this._lastResidentMissReason = missReason;
-    this._lastActivationMs       = activationMs;
+    this._lastTransitionMode                = mode;
+    this._lastResidentMissReason            = missReason;
+    this._lastActivationMs                  = activationMs;
+    this._loadRoomSkippedOnLastTransition   = loadRoomSkipped;
+  }
+
+  /** Update the background build queue length shown in the debug overlay. */
+  setResidentBuildQueueLength(length: number): void {
+    this._residentBuildQueueLength = length;
+  }
+
+  /** Update radius readiness counts shown in the debug overlay. */
+  setRadiusReadyCounts(radius1: number, radius2: number): void {
+    this._radius1ReadyCount = radius1;
+    this._radius2ReadyCount = radius2;
+  }
+
+  // ── Per-room WorldState management (BUILD 416) ─────────────────────────────
+
+  /**
+   * Store a fully-built WorldState on the named resident and mark it as
+   * runtimeReady.  Called:
+   *   - After the initial campaign load (start room's world is the live world).
+   *   - After buildResidentWorldState() finishes for a neighbour room.
+   *   - After activateResidentRoom() freezes the outgoing room's world.
+   *
+   * @param roomId       Room identifier.
+   * @param w            Fully-built WorldState for this room.
+   * @param isActive     If true, mark lifecycle 'active' (caller is the live world).
+   *                     If false, mark lifecycle 'frozen' (background-built resident).
+   */
+  setResidentWorld(roomId: string, w: WorldState, isActive: boolean): void {
+    let resident = this._residents.get(roomId);
+    if (resident === undefined) return; // Must ensureResident() first.
+    resident.world        = w;
+    resident.runtimeReady = true;
+    resident.lifecycle    = isActive ? 'active' : 'frozen';
+    if (isActive) {
+      resident.hasEverBeenActivated = true;
+      resident.lastActiveFrame      = this._currentFrame;
+    }
+    resident.lastTouchedFrame = this._currentFrame;
+  }
+
+  /**
+   * Mark a resident's WorldState as invalid (e.g. because loadRoom is about
+   * to destructively reset the active world for a legacy cold load).
+   * Clears `world` and `runtimeReady` so the resident knows it needs to be
+   * rebuilt in the background.  Frozen enemy/sim snapshots are NOT cleared —
+   * the legacy snapshot-restore path can still use them.
+   */
+  invalidateResidentWorld(roomId: string): void {
+    const resident = this._residents.get(roomId);
+    if (resident === undefined) return;
+    resident.world        = null;
+    resident.runtimeReady = false;
   }
 
   getDiagnostics(): ResidentRoomDiagnostics {
     let frozenCount = 0;
+    let residentWorldCount = 0;
     for (const r of this._residents.values()) {
       if (r.lifecycle !== 'active') frozenCount++;
+      if (r.runtimeReady && r.world !== null) residentWorldCount++;
     }
     return {
-      activeRoomId:           this._activeRoomId,
-      residentCount:          this._residents.size,
+      activeRoomId:                       this._activeRoomId,
+      residentCount:                      this._residents.size,
       frozenCount,
-      lastTransitionMode:     this._lastTransitionMode,
-      lastResidentMissReason: this._lastResidentMissReason,
-      lastActivationMs:       this._lastActivationMs,
-      evictionsTotal:         this._evictionsTotal,
+      residentWorldCount,
+      radius1ReadyCount:                  this._radius1ReadyCount,
+      radius2ReadyCount:                  this._radius2ReadyCount,
+      lastTransitionMode:                 this._lastTransitionMode,
+      lastResidentMissReason:             this._lastResidentMissReason,
+      lastActivationMs:                   this._lastActivationMs,
+      loadRoomSkippedOnLastTransition:    this._loadRoomSkippedOnLastTransition,
+      residentBuildQueueLength:           this._residentBuildQueueLength,
+      evictionsTotal:                     this._evictionsTotal,
     };
   }
 
@@ -795,16 +909,25 @@ export class ResidentRoomManager {
       .filter(r => r.roomId !== currentRoomId && r.lifecycle !== 'active')
       .sort((a, b) => {
         // Evict shells (never activated — no frozen state to lose) before rooms
-        // carrying frozen state.  Within each tier, evict oldest-first.
-        // activatedPriority: 0 = shell (evict first), 1 = has frozen state (keep).
+        // carrying frozen state.  Within each tier, prefer rooms with runtimeReady
+        // worlds (more expensive to rebuild) over snapshot-only rooms.
+        // Within each sub-tier, evict oldest-first.
         const aActivatedPriority = a.hasEverBeenActivated ? 1 : 0;
         const bActivatedPriority = b.hasEverBeenActivated ? 1 : 0;
         if (aActivatedPriority !== bActivatedPriority) return aActivatedPriority - bActivatedPriority;
+        // Prefer to keep runtimeReady worlds (cost more to rebuild).
+        const aWorldPriority = a.runtimeReady ? 1 : 0;
+        const bWorldPriority = b.runtimeReady ? 1 : 0;
+        if (aWorldPriority !== bWorldPriority) return aWorldPriority - bWorldPriority;
         return a.lastTouchedFrame - b.lastTouchedFrame;
       });
     const toEvict = this._residents.size - MAX_RESIDENTS;
     for (let i = 0; i < toEvict && i < candidates.length; i++) {
-      this._residents.delete(candidates[i].roomId);
+      const evicted = candidates[i];
+      // Null out the WorldState reference so GC can reclaim the memory.
+      evicted.world        = null;
+      evicted.runtimeReady = false;
+      this._residents.delete(evicted.roomId);
       this._evictionsTotal++;
     }
   }

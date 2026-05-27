@@ -699,11 +699,14 @@ export class RenderProfiler {
     if (showResident && this._residentDiagnostics !== null) {
       const rd = this._residentDiagnostics;
       const mode = rd.lastTransitionMode;
+      const skipLabel = rd.loadRoomSkippedOnLastTransition ? ' ✓skip' : '';
+      const queueLabel = rd.residentBuildQueueLength > 0 ? ` Q:${rd.residentBuildQueueLength}` : '';
       const residentLines = [
         '── Resident Rooms ──',
         `Active: ${rd.activeRoomId ?? 'none'}`,
-        `Residents: ${rd.residentCount}  Frozen: ${rd.frozenCount}`,
-        `Last xtn: ${mode}`,
+        `Residents: ${rd.residentCount}  Worlds: ${rd.residentWorldCount}  Frozen: ${rd.frozenCount}`,
+        `R1: ${rd.radius1ReadyCount}  R2: ${rd.radius2ReadyCount}${queueLabel}`,
+        `Last xtn: ${mode}${skipLabel}`,
         rd.lastResidentMissReason ? `Miss: ${rd.lastResidentMissReason}` : 'Miss: —',
         `ActivMs: ${rd.lastActivationMs.toFixed(1)}  Evict: ${rd.evictionsTotal}`,
       ];
@@ -713,13 +716,15 @@ export class RenderProfiler {
       ctx.fillStyle = 'rgba(0,0,0,0.70)';
       ctx.fillRect(padXPx - 4, nextPanelY, panelWidth + 8, residentPanelH);
       const modeColor: Record<string, string> = {
-        residentHot:      '#88ff88',
-        residentFallback: '#ffcc44',
-        legacyLoad:       '#ff8844',
+        residentWorldHot: '#44ff88', // True hot-swap — bright green
+        residentRestore:  '#ffcc44', // Snapshot-restore — yellow
+        residentHot:      '#ffcc44', // Legacy alias for residentRestore — yellow
+        residentFallback: '#ffaa44', // Fallback — orange-yellow
+        legacyLoad:       '#ff8844', // Full cold load — orange
       };
       for (let i = 0; i < residentLines.length; i++) {
         const isHeader = i === 0;
-        ctx.fillStyle = isHeader ? '#ffdd44' : (i === 3 ? (modeColor[mode] ?? '#b8d8ff') : '#b8d8ff');
+        ctx.fillStyle = isHeader ? '#ffdd44' : (i === 4 ? (modeColor[mode] ?? '#b8d8ff') : '#b8d8ff');
         ctx.fillText(residentLines[i], padXPx, nextPanelY + fontSizePx + 4 + i * lineHeightPx);
       }
       ctx.restore();

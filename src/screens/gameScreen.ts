@@ -99,7 +99,7 @@ import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoo
 import type { TransitionDirection } from './gameTransitions';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import * as FP from '../debug/perfFreezeProfiler';
-import { type LoadRoomCtx, makeLoadRoomPhases } from './gameLoadRoomPhases';
+import { type LoadRoomCtx, makeLoadRoomPhases, applyResidentRoomActivation } from './gameLoadRoomPhases';
 import {
   createEntryWarmState,
   startEntryWarm,
@@ -110,6 +110,8 @@ import {
 } from './entryViewportWarm';
 import { ResidentRoomManager } from './residentRoomManager';
 import { bfsNearbyRooms } from './roomPrewarmNeighborhood';
+import { buildResidentWorldState } from './residentWorldBuilder';
+import { PLAYER_INITIAL_HEALTH } from './gameSpawn';
 
 const FIXED_DT_MS = 16.666;
 
@@ -327,7 +329,7 @@ export function startGameScreen(
     yield* makeLoadRoomPhases(loadRoomCtx, room, spawnXBlock, spawnYBlock, preserveCamera);
   }
 
-  const world = createWorldState(FIXED_DT_MS, 42);
+  let world = createWorldState(FIXED_DT_MS, 42);
   // Set the selected character on the world for rendering
   world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
@@ -588,15 +590,103 @@ export function startGameScreen(
     const cacheEntry = roomRuntimeCache.get(room.id);
     const isPrepared = cacheEntry !== undefined && isEntryFullyPrepared(cacheEntry);
 
-    if (isPrepared) {
-      // ── Instant path (fully prepared cache hit) ───────────────────────────
+    // ── True resident world hot-swap (no loadRoom) ────────────────────────
+    const targetResident = residentRoomManager.getResident(room.id);
+    if (targetResident !== undefined && targetResident.runtimeReady && targetResident.world !== null) {
       if (import.meta.env.DEV) {
-        console.log(`[transition] ${room.id}: prepared cache HIT — instant load`);
+        console.log(`[transition] ${room.id}: residentWorldHot — skipping loadRoom`);
+      }
+      const carryHealthPoints = (world.clusters[0]?.healthPoints) ?? PLAYER_INITIAL_HEALTH;
+      // Remove player and player-owned particles from the outgoing world before freezing.
+      for (let _pi = 0; _pi < world.particleCount; _pi++) {
+        if (world.ownerEntityId[_pi] === 1) world.isAliveFlag[_pi] = 0;
+      }
+      world.clusters.splice(0, 1);
+      world.isGrappleActiveFlag     = 0;
+      world.isGrappleMissActiveFlag = 0;
+      world.isGrappleRetractingFlag = 0;
+      world.isGrappleZipActiveFlag  = 0;
+      world.isGrappleStuckFlag      = 0;
+      // Freeze outgoing world snapshot AFTER removing player (enemies only).
+      residentRoomManager.ensureResident(currentRoom);
+      residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
+      residentRoomManager.freezeSimState(world, currentRoom.id);
+      // Switch active world to the target resident's pre-built WorldState.
+      world = targetResident.world;
+      loadRoomCtx.world = world;
+      residentRoomManager.invalidateResidentWorld(currentRoom.id);
+      // Apply Phase-A renderer, Phase-B player spawn, Phase-F env/camera.
+      applyResidentRoomActivation(loadRoomCtx, room, spawnXBlock, spawnYBlock, carryHealthPoints);
+      const player = world.clusters[0];
+      if (player !== undefined && player.isPlayerFlag === 1) {
+        player.velocityXWorld = vx;
+        player.velocityYWorld = dir === 'up' ? vy - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION : vy;
+      }
+      residentRoomManager.setResidentWorld(room.id, world, true);
+      residentRoomManager.setActiveResidentId(room.id);
+      residentRoomManager.evictDistant(room.id);
+      residentRoomManager.recordTransitionMode('residentWorldHot', '', import.meta.env.DEV ? performance.now() - t0 : 0, true);
+      for (const [adjId] of bfsNearbyRooms(room.id, ROOM_REGISTRY, 2)) {
+        const adjRoom = ROOM_REGISTRY.get(adjId);
+        if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);
+      }
+      const { wallPresent: hwWallPresent, bgPresent: hwBgPresent, bgRequired: hwBgRequired } = getRoomPrewarmReadiness(room.id, room);
+      const hwAdoptResult = getLastAdoptionResult();
+      const hwWallStatus = hwAdoptResult?.wall.status ?? 'missing';
+      const hwBgStatus   = hwAdoptResult?.bg.status   ?? 'missing';
+      const hwRenderKeyMatches: boolean | null =
+        hwWallStatus === 'staleRenderState' || hwBgStatus === 'staleRenderState' ? false :
+        hwWallStatus === 'adopted' || hwBgStatus === 'adopted' ? true : null;
+      entryWarmState = createEntryWarmState();
+      const hwViewportCovered = canSkipEntryWarm(currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
+      if (!hwViewportCovered) {
+        startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
+        loadingOverlay.showEntryWarm();
+        recordTransitionOutcome('entryWarm', {
+          roomId: room.id,
+          runtimeReady: true,
+          wallPrewarmPresent: hwWallPresent,
+          bgPrewarmPresent:   hwBgPresent,
+          bgPrewarmRequired:  hwBgRequired,
+          renderStateKeyMatches: hwRenderKeyMatches,
+          entryViewportCovered: false,
+          outcome: 'entryWarm',
+          spritesDecoded: areRoomSpritesReady(room),
+          backgroundDecoded: isRoomBackgroundDecodeReady(room),
+          missReason: 'entryViewportNotCovered',
+        });
+      } else {
+        recordTransitionOutcome('residentWorldHot', {
+          roomId: room.id,
+          runtimeReady: true,
+          wallPrewarmPresent: hwWallPresent,
+          bgPrewarmPresent:   hwBgPresent,
+          bgPrewarmRequired:  hwBgRequired,
+          renderStateKeyMatches: hwRenderKeyMatches,
+          entryViewportCovered: true,
+          outcome: 'residentWorldHot',
+          spritesDecoded: areRoomSpritesReady(room),
+          backgroundDecoded: isRoomBackgroundDecodeReady(room),
+          missReason: 'none',
+        });
+      }
+      if (import.meta.env.DEV) {
+        console.log(`[transition] ${room.id}: residentWorldHot done in ${(performance.now() - t0).toFixed(1)}ms`);
+      }
+      return;
+    }
+
+    if (isPrepared) {
+      // ── Instant path (fully prepared cache hit + snapshot restore) ─────────
+      if (import.meta.env.DEV) {
+        console.log(`[transition] ${room.id}: prepared cache HIT — instant load (residentRestore/fallback)`);
       }
       // Freeze the outgoing room before loadRoom destroys its state.
       residentRoomManager.ensureResident(currentRoom);
       residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
       residentRoomManager.freezeSimState(world, currentRoom.id);
+      // Invalidate outgoing resident world — loadRoom will corrupt it.
+      residentRoomManager.invalidateResidentWorld(currentRoom.id);
       // Capture prewarm-store state BEFORE loadRoom (Phase A adoption clears it).
       const { wallPresent, bgPresent, bgRequired } = getRoomPrewarmReadiness(room.id, room);
       const frozenEnemies = residentRoomManager.getFrozenEnemies(room.id);
@@ -604,11 +694,11 @@ export function startGameScreen(
       loadRoom(room, spawnXBlock, spawnYBlock);
       // Restore frozen enemy state if this room was previously visited.
       residentRoomManager.ensureResident(room);
-      let residentMode: 'residentHot' | 'residentFallback' = 'residentFallback';
+      let residentMode: 'residentRestore' | 'residentFallback' = 'residentFallback';
       if (frozenEnemies !== null) {
         try {
           const restored = residentRoomManager.restoreFrozenEnemies(world, frozenEnemies, levelRng);
-          if (restored > 0) residentMode = 'residentHot';
+          if (restored > 0) residentMode = 'residentRestore';
         } catch (err) {
           if (import.meta.env.DEV) {
             console.warn('[resident] restoreFrozenEnemies failed — keeping fresh spawn', err);
@@ -624,6 +714,8 @@ export function startGameScreen(
           }
         }
       }
+      // Store the newly loaded world in the resident for future hot-swap.
+      residentRoomManager.setResidentWorld(room.id, world, true);
       residentRoomManager.setActiveResidentId(room.id);
       residentRoomManager.evictDistant(room.id);
       residentRoomManager.recordTransitionMode(residentMode, '', import.meta.env.DEV ? performance.now() - t0 : 0);
@@ -689,7 +781,7 @@ export function startGameScreen(
           missReason,
         });
       } else {
-        recordTransitionOutcome(residentMode === 'residentHot' ? 'residentHot' : 'hot', {
+        recordTransitionOutcome(residentMode === 'residentRestore' ? 'residentRestore' : 'hot', {
           roomId: room.id,
           runtimeReady: true,
           wallPrewarmPresent: wallPresent,
@@ -697,7 +789,7 @@ export function startGameScreen(
           bgPrewarmRequired:  bgRequired,
           renderStateKeyMatches,
           entryViewportCovered: true,
-          outcome: residentMode === 'residentHot' ? 'residentHot' : 'hot',
+          outcome: residentMode === 'residentRestore' ? 'residentRestore' : 'hot',
           spritesDecoded,
           backgroundDecoded,
           missReason: 'none',
@@ -773,9 +865,10 @@ export function startGameScreen(
   } else {
     loadRoom(currentRoom, initialSpawnBlock[0], initialSpawnBlock[1]);
   }
-  // Register the start room as the initial active resident.
+  // Register the start room as the initial active resident and store the world.
   residentRoomManager.ensureResident(currentRoom);
   residentRoomManager.setActiveResidentId(currentRoom.id);
+  residentRoomManager.setResidentWorld(currentRoom.id, world, true);
   // Pre-register adjacent rooms (radius ≤ 2) as resident shells.
   for (const [adjId] of bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2)) {
     const adjRoom = ROOM_REGISTRY.get(adjId);
@@ -1060,9 +1153,10 @@ export function startGameScreen(
               ? asyncLoadState.preTransVY - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION
               : asyncLoadState.preTransVY;
         }
-        // Register the newly loaded room as an active resident.
+        // Register the newly loaded room as an active resident and store the world.
         residentRoomManager.ensureResident(currentRoom);
         residentRoomManager.setActiveResidentId(currentRoom.id);
+        residentRoomManager.setResidentWorld(currentRoom.id, world, true);
         residentRoomManager.evictDistant(currentRoom.id);
         // Pre-register adjacent rooms (radius ≤ 2).
         for (const [adjId] of bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2)) {
@@ -1566,6 +1660,42 @@ export function startGameScreen(
 
     // Tick the loading overlay — hides it once sprites are ready.
     tickLoadingOverlay();
+
+    // ── Idle-frame resident world building ────────────────────────────────
+    // Build one frozen resident WorldState per frame when the frame budget is
+    // low enough to avoid gameplay hitches.  Priority: radius-1 adjacent rooms
+    // first, then radius-2.  One build per frame keeps the budget bounded.
+    if (renderProfiler.getLastFrameMs() < 10) {
+      const _buildRooms = [...bfsNearbyRooms(currentRoom.id, ROOM_REGISTRY, 2)];
+      let _builtOne = false;
+      for (const [_adjId, _adjDist] of _buildRooms) {
+        const _adjRoom = ROOM_REGISTRY.get(_adjId);
+        if (_adjRoom === undefined || _builtOne) continue;
+        const _adjResident = residentRoomManager.getResident(_adjId);
+        if (_adjResident !== undefined && _adjResident.runtimeReady) continue;
+        // Build and store a frozen world for this adjacent room.
+        try {
+          const _builtWorld = buildResidentWorldState(_adjRoom, levelRng, roomRuntimeCache);
+          residentRoomManager.ensureResident(_adjRoom);
+          residentRoomManager.setResidentWorld(_adjId, _builtWorld, false);
+          if (import.meta.env.DEV) {
+            console.log(`[resident] idle built ${_adjId} (dist=${_adjDist})`);
+          }
+        } catch (_err) {
+          if (import.meta.env.DEV) {
+            console.warn(`[resident] idle build failed for ${_adjId}:`, _err);
+          }
+        }
+        _builtOne = true;
+      }
+      // Update build queue diagnostic.
+      let _pendingCount = 0;
+      for (const [_adjId2] of _buildRooms) {
+        const _r2 = residentRoomManager.getResident(_adjId2);
+        if (_r2 === undefined || !_r2.runtimeReady) _pendingCount++;
+      }
+      residentRoomManager.setResidentBuildQueueLength(_pendingCount);
+    }
 
     // Clear the gameplay-bake-forbidden flag before ending the frame so it
     // does not persist into the next non-gameplay frame (e.g. paused frames
