@@ -101,6 +101,10 @@ import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import * as FP from '../debug/perfFreezeProfiler';
 import { type LoadRoomCtx, makeLoadRoomPhases, applyResidentRoomActivation } from './gameLoadRoomPhases';
 import {
+  capturePlayerTransferState,
+  detachPlayerFromResidentWorld,
+} from './playerTransfer';
+import {
   createEntryWarmState,
   startEntryWarm,
   tickEntryWarm,
@@ -598,17 +602,11 @@ export function startGameScreen(
       if (import.meta.env.DEV) {
         console.log(`[transition] ${room.id}: residentWorldHot — skipping loadRoom`);
       }
-      const carryHealthPoints = world.clusters[0]?.healthPoints ?? PLAYER_INITIAL_HEALTH;
-      // Remove player and player-owned particles from the outgoing world before freezing.
-      for (let pi = 0; pi < world.particleCount; pi++) {
-        if (world.ownerEntityId[pi] === 1) world.isAliveFlag[pi] = 0;
-      }
-      world.clusters.splice(0, 1);
-      world.isGrappleActiveFlag     = 0;
-      world.isGrappleMissActiveFlag = 0;
-      world.isGrappleRetractingFlag = 0;
-      world.isGrappleZipActiveFlag  = 0;
-      world.isGrappleStuckFlag      = 0;
+      // Capture player state (health, facing, owned dust particles) BEFORE detach.
+      const playerTransferSnap = capturePlayerTransferState(world);
+      const carryHealthPoints  = playerTransferSnap?.healthPoints ?? PLAYER_INITIAL_HEALTH;
+      // Detach player: kills owned particles, removes cluster, clears grapple flags.
+      detachPlayerFromResidentWorld(world);
       // Freeze outgoing world snapshot AFTER removing player (enemies only).
       residentRoomManager.ensureResident(currentRoom);
       residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
@@ -620,8 +618,12 @@ export function startGameScreen(
       // target resident's world, the old reference is no longer a valid frozen
       // resident (player was removed and it will be rebuilt in the background).
       residentRoomManager.invalidateResidentWorld(currentRoom.id);
-      // Apply Phase-A renderer, Phase-B player spawn, Phase-F env/camera.
-      applyResidentRoomActivation(loadRoomCtx, room, spawnXBlock, spawnYBlock, carryHealthPoints);
+      // Apply Phase-A renderer, Phase-B player spawn (with particle transfer),
+      // Phase-F env/camera.
+      const { particlesRestored, particlesSkipped } = applyResidentRoomActivation(
+        loadRoomCtx, room, spawnXBlock, spawnYBlock, carryHealthPoints,
+        playerTransferSnap ?? undefined,
+      );
       const player = world.clusters[0];
       if (player !== undefined && player.isPlayerFlag === 1) {
         player.velocityXWorld = vx;
@@ -631,6 +633,14 @@ export function startGameScreen(
       residentRoomManager.setActiveResidentId(room.id);
       residentRoomManager.evictDistant(room.id);
       residentRoomManager.recordTransitionMode('residentWorldHot', '', import.meta.env.DEV ? performance.now() - t0 : 0, true);
+      residentRoomManager.recordPlayerTransfer(
+        playerTransferSnap?.ownedParticles.length ?? 0,
+        particlesRestored,
+        particlesSkipped,
+      );
+      if (import.meta.env.DEV) {
+        residentRoomManager.scanOwnershipInvariant();
+      }
       for (const [adjId] of bfsNearbyRooms(room.id, ROOM_REGISTRY, 2)) {
         const adjRoom = ROOM_REGISTRY.get(adjId);
         if (adjRoom !== undefined) residentRoomManager.ensureResident(adjRoom);

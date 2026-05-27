@@ -122,6 +122,10 @@ import {
 } from './gameCameraState';
 import { resetSnakeRuntimeState } from '../sim/clusters/snakeAi';
 import {
+  type PlayerTransferSnapshot,
+  restoreTransferredPlayerParticles,
+} from './playerTransfer';
+import {
   loadRoomForGameplayAsync,
   isRoomFileCacheActive,
   getActiveRoomAdjacency,
@@ -748,14 +752,25 @@ export function* makeLoadRoomPhases(
  * @param spawnXBlock        Horizontal spawn block (from the transition).
  * @param spawnYBlock        Vertical spawn block (from the transition).
  * @param carryHealthPoints  Player HP captured from the outgoing world.
+ * @param playerTransfer     Optional transfer snapshot from the outgoing world's
+ *                           player.  When provided, carried dust particles are
+ *                           restored instead of spawning a fresh loadout.
  */
+export interface ResidentActivationResult {
+  /** Number of carried player particles restored in the target world. 0 if fresh spawn was used. */
+  particlesRestored: number;
+  /** Number of carried player particles skipped (buffer full). 0 if fresh spawn was used. */
+  particlesSkipped:  number;
+}
+
 export function applyResidentRoomActivation(
   ctx: LoadRoomCtx,
   room: RoomDef,
   spawnXBlock: number,
   spawnYBlock: number,
   carryHealthPoints: number,
-): void {
+  playerTransfer?: PlayerTransferSnapshot,
+): ResidentActivationResult {
   const {
     world,
     camera,
@@ -889,21 +904,38 @@ export function applyResidentRoomActivation(
   const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
   const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
   const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, Math.min(carryHealthPoints, PLAYER_INITIAL_HEALTH));
+  // Preserve sprite facing direction from the outgoing room so the player
+  // does not snap to the default (right-facing) on entry.
+  if (playerTransfer !== undefined) {
+    playerCluster.isFacingLeftFlag = playerTransfer.isFacingLeftFlag;
+  }
   // Enemies are already in the world from the pre-build; insert player at index 0.
   world.clusters.unshift(playerCluster);
 
+  let particlesRestored = 0;
+  let particlesSkipped  = 0;
   {
-    const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
-    const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
-      || playerWeaveLoadout.secondary.boundDust.length > 0;
+    if (playerTransfer !== undefined && playerTransfer.ownedParticles.length > 0) {
+      // Restore transferred dust particles rather than spawning a fresh loadout.
+      const result = restoreTransferredPlayerParticles(
+        world, playerTransfer, playerCluster.entityId, spawnXWorld, spawnYWorld,
+      );
+      particlesRestored = result.restored;
+      particlesSkipped  = result.skipped;
+    } else {
+      // Fresh spawn path: first visit or no particles to carry.
+      const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
+      const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
+        || playerWeaveLoadout.secondary.boundDust.length > 0;
 
-    if (hasWeaveBoundDust) {
-      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
-    } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
-      const dustKind = progress.unlockedDustKinds[0];
-      const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
-      if (particleCount > 0) {
-        spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+      if (hasWeaveBoundDust) {
+        spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+      } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
+        const dustKind = progress.unlockedDustKinds[0];
+        const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
+        if (particleCount > 0) {
+          spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+        }
       }
     }
 
@@ -1000,4 +1032,6 @@ export function applyResidentRoomActivation(
     camera.zoom,
     ctx.getPreTransitionVelocity(),
   ));
+
+  return { particlesRestored, particlesSkipped };
 }
