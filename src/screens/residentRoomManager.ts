@@ -398,6 +398,21 @@ export class ResidentRoomManager {
     const resident = this._residents.get(roomId);
     if (resident === undefined) return;
 
+    if (import.meta.env.DEV) {
+      // On the true hot-swap path the player cluster must be removed from the
+      // outgoing world before freezeRoom() is called.  Flag any violation so
+      // duplicate-player bugs are surfaced immediately.
+      for (let ci = 0; ci < world.clusters.length; ci++) {
+        if (world.clusters[ci].isPlayerFlag === 1) {
+          console.error(
+            `[resident] freezeRoom(${roomId}): player cluster found at index ${ci} — ` +
+            'player was not removed before freeze; duplicate-player bug likely.',
+          );
+          break;
+        }
+      }
+    }
+
     const frozen: FrozenEnemyEntry[] = [];
     const enemies = room.enemies ?? [];
     for (let ci = 1; ci < world.clusters.length; ci++) {
@@ -862,6 +877,19 @@ export class ResidentRoomManager {
     if (isActive) {
       resident.hasEverBeenActivated = true;
       resident.lastActiveFrame      = this._currentFrame;
+      if (import.meta.env.DEV) {
+        // After activation exactly one player cluster must be present.
+        let playerCount = 0;
+        for (let ci = 0; ci < w.clusters.length; ci++) {
+          if (w.clusters[ci].isPlayerFlag === 1) playerCount++;
+        }
+        if (playerCount !== 1) {
+          console.error(
+            `[resident] setResidentWorld(${roomId}, active): expected 1 player cluster, ` +
+            `found ${playerCount} — duplicate or missing player bug.`,
+          );
+        }
+      }
     }
     resident.lastTouchedFrame = this._currentFrame;
   }

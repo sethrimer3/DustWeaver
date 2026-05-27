@@ -337,6 +337,38 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 
 7. **Idle-frame background world building.** When `renderProfiler.getLastFrameMs() < 10`, one resident WorldState is built per frame for the highest-priority adjacent room missing `runtimeReady`. One build per frame keeps the budget bounded (~5–15 ms each).
 
+#### BUILD 416 correctness audit (Phase 4 hardening)
+
+**Verified:**
+- True hot-swap path (`residentWorldHot`) does NOT call `loadRoom` — confirmed in `gameScreen.ts:597–681`.
+- `world = targetResident.world` is the active-world swap; `loadRoomCtx.world = world` propagates it immediately.
+- Frozen rooms are not ticked — `tick()`, enemy AI, hazards, ropes, grasshoppers, particles, and all sim systems are called only against the active `world`.
+- `applyResidentRoomActivation` inserts exactly one player cluster via `world.clusters.unshift(playerCluster)`.
+- Player HP is carried via `carryHealthPoints`; velocity is set after activation.
+- `resetReusableSnapshot` + `captureClusterInterpolationState` are called in `applyResidentRoomActivation` before returning.
+- `environmentalDust`, `sunbeamRenderer`, `atmosphericLightDust`, `guideDustPathRenderer` are re-initialised per Phase F.
+- `playerCloak`, `phantomCloak`, `decorationWaveState` are reset.
+- Renderer theme, lighting, blockers, seam blending are applied via Phase A.
+- Prewarm chunk adoption via `adoptPrewarmedChunksForRoom` is called as part of Phase A.
+- `cancelCameraTransition` clears stale camera state.
+- Legacy fallback (`isPrepared` path) and async path (`loadRoom` path) remain intact and safe.
+
+**Bugs found and fixed:**
+
+1. **Critical: Stale typed-array references in `reusableSnapshot` after hot-swap.**
+   `createReusableSnapshot(world)` stores direct TypedArray references from the initial WorldState. After `world = targetResident.world`, the snapshot still pointed at the old room's buffers (particles, walls, ropes, grasshoppers, enemies, projectiles, etc.). `updateSnapshotInPlace` only updates scalars, not TypedArray references; `resetReusableSnapshot` only reset the cluster pool before calling `updateSnapshotInPlace`. Fixed by adding `refreshSnapshotWorldArrayRefs(snap, world)` to `snapshot.ts` (exported), which re-points all ~90 typed-array fields at the new world. Called as the first step in `resetReusableSnapshot` so it applies on every room load (hot-swap or legacy).
+
+2. **Stale `world` reference in `gameOverlayController` after hot-swap.**
+   `createGameOverlayController` received `world: WorldState` as a direct object reference captured at construction time. `openSkillTombMenu()` and `openMapOnly()` used this captured reference to read `world.clusters[0]` and mutate particle durabilities — reading the old room's data after hot-swap. Fixed by changing the parameter to `getWorld: () => WorldState` and calling `getWorld()` at the top of each function that needs the live world.
+
+3. **Incorrect diagnostic: `'hot'` recorded when `loadRoom` ran (`residentFallback` path).**
+   `recordTransitionOutcome` was called with `'hot'` when `residentMode === 'residentFallback'` (instant path, loadRoom ran, no frozen state to restore). `'hot'` implies no loadRoom. Fixed by adding `'residentFallback'` to `TransitionOutcome` (in `roomRenderChunkWarmScheduler.ts`) and passing `residentMode` directly to both the `recordTransitionOutcome` call and the `outcome` field.
+
+4. **DEV duplicate-player diagnostics (new).**
+   Added two DEV-only checks in `residentRoomManager.ts`:
+   - `freezeRoom`: asserts no cluster with `isPlayerFlag === 1` exists in the outgoing world. On the hot-swap path the player must be removed before freeze; this catches any regression.
+   - `setResidentWorld` (active): asserts exactly one player cluster is present after activation.
+
 #### What remains deferred (Phase 4 limitations)
 
 1. **Complex enemy module-level state.** RadiantTether, DustConstellation, OrbitalDustCore etc. carry module-level singleton state not inside `WorldState`. On hot-swap activation, these singletons are reset (via `resetRadiantTetherState` / `resetRadiantWebState`), discarding the frozen AI chain state. Full fix requires serializing these singletons into `WorldState`.
@@ -350,6 +382,8 @@ This pass introduces `ResidentRoomManager` to preserve enemy state across room t
 5. **Memory footprint.** Each WorldState ~570 KB; 16 residents = ~9 MB additional. Acceptable but should be monitored.
 
 6. **RNG determinism.** `buildResidentWorldState` uses the shared `levelRng` instance. Results may differ slightly from a fresh `loadRoom` for RNG-dependent cosmetics.
+
+7. **Idle resident builds are synchronous per frame.** Each background world build is ~5–15 ms and happens during idle frames only. A large synchronous build cannot happen during active gameplay because the idle gate (`renderProfiler.getLastFrameMs() < 10`) prevents builds on busy frames. However, if multiple builds are needed (e.g. after a cold start), they are spread across separate idle frames — one build per frame.
 
 ---
 
