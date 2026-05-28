@@ -156,6 +156,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       blockerKeys,
       darkBlockerKeys,
       wallDecorations,
+      wallSource,
       wallMs,
       blockerMs,
       decorMs,

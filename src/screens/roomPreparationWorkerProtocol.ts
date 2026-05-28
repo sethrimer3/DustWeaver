@@ -75,6 +75,8 @@ export interface WorkerSuccessMessage {
     kind: string;
     seed: number;
   }[];
+  /** Where the wall template came from: pre-baked JSON data or runtime merge. */
+  wallSource: 'baked' | 'fallback';
   /** Per-step timing (ms) for performance diagnostics. */
   wallMs: number;
   blockerMs: number;

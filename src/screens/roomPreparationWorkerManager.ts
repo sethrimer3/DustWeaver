@@ -53,6 +53,11 @@ function _getOrCreateWorker(): Worker | null {
       }
 
       callback(_reconstructRoomRuntimeEntry(msg));
+
+      if (import.meta.env.DEV) {
+        console.log(`[wallTemplate] roomId=${msg.roomId} source=worker:${msg.wallSource}` +
+          ` wallCount=${msg.wallTemplate.wallCount} wallMs=${msg.wallMs.toFixed(1)}ms`);
+      }
     };
     _worker.onerror = (err) => {
       if (import.meta.env.DEV) {
