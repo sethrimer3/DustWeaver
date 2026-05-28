@@ -18,6 +18,7 @@ import type { WorldState } from '../sim/world';
 import { MAX_WALLS } from '../sim/world';
 import {
   type RoomDef,
+  type RoomWallTemplate,
   BLOCK_SIZE_MEDIUM,
   blockThemeToIndex,
   blockSoundHardnessToIndex,
@@ -26,32 +27,8 @@ import {
   indexToBlockTheme,
 } from '../levels/roomDef';
 
-// ── RoomWallTemplate ──────────────────────────────────────────────────────────
-
-/**
- * Immutable snapshot of the merged wall geometry for a single room.
- * Produced by `buildRoomWallTemplate()` and consumed by `applyRoomWallTemplate()`.
- * Arrays are sized to `wallCount` (the actual post-merge count), not MAX_WALLS,
- * so cached templates are memory-efficient even for large rooms.
- */
-export interface RoomWallTemplate {
-  readonly wallCount: number;
-  readonly xWorld: Float32Array;
-  readonly yWorld: Float32Array;
-  readonly wWorld: Float32Array;
-  readonly hWorld: Float32Array;
-  readonly isPlatformFlag: Uint8Array;
-  readonly platformEdge: Uint8Array;
-  readonly themeIndex: Uint8Array;
-  readonly soundHardnessIndex: Uint8Array;
-  readonly isInvisibleFlag: Uint8Array;
-  readonly rampOrientationIndex: Uint8Array;
-  readonly isPillarHalfWidthFlag: Uint8Array;
-  /** 1 for walls whose theme is 'ice' — used for ice-surface physics and grapple rejection. */
-  readonly isIceFlag: Uint8Array;
-  /** 1 for walls whose theme is 'ultraIceBlock' — velocity lock and grapple recharge suppression. */
-  readonly isUltraIceFlag: Uint8Array;
-}
+// Re-export RoomWallTemplate so existing callers that import it from here are unaffected.
+export type { RoomWallTemplate };
 
 /** Epsilon used when deciding whether wall edges are contiguous during merge. */
 const WALL_MERGE_EPSILON_WORLD = 0.001;

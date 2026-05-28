@@ -171,16 +171,30 @@ export function buildResidentWorldState(
   }
 
   {
-    // Wall template — use cache if available.
+    // Wall template — priority: cache → baked JSON template → runtime build.
     const _t = import.meta.env.DEV ? performance.now() : 0;
     const cacheEntry = roomRuntimeCache.get(room.id);
     if (cacheEntry !== undefined) {
       applyRoomWallTemplate(rw, cacheEntry.wallTemplate);
       if (import.meta.env.DEV) {
-        console.log(`[residentBuild] ${room.id} walls: cache HIT`);
+        console.log(`[wallTemplate] roomId=${room.id} source=cache wallCount=${cacheEntry.wallTemplate.wallCount}`);
+      }
+    } else if (room.bakedWallTemplate !== undefined) {
+      applyRoomWallTemplate(rw, room.bakedWallTemplate);
+      roomRuntimeCache.set(room.id, {
+        wallTemplate: room.bakedWallTemplate,
+        edgeExtension: null,
+        blockerKeys:    null,
+        darkBlockerKeys: null,
+        wallDecorations: null,
+      });
+      if (import.meta.env.DEV) {
+        console.log(`[wallTemplate] roomId=${room.id} source=baked wallCount=${room.bakedWallTemplate.wallCount}` +
+          ` (apply ${(performance.now() - _t).toFixed(1)}ms)`);
       }
     } else {
       const wallTemplate = buildRoomWallTemplate(room);
+      const _buildMs = import.meta.env.DEV ? performance.now() - _t : 0;
       applyRoomWallTemplate(rw, wallTemplate);
       roomRuntimeCache.set(room.id, {
         wallTemplate,
@@ -190,7 +204,8 @@ export function buildResidentWorldState(
         wallDecorations: null,
       });
       if (import.meta.env.DEV) {
-        console.log(`[residentBuild] ${room.id} walls: cache MISS (built in ${(performance.now() - _t).toFixed(1)}ms)`);
+        console.log(`[wallTemplate] roomId=${room.id} source=fallback reason=missing wallCount=${wallTemplate.wallCount}` +
+          ` (build ${_buildMs.toFixed(1)}ms)`);
       }
     }
     FP.recordLoadPhaseStep('Resident:walls', import.meta.env.DEV ? performance.now() - _t : 0);

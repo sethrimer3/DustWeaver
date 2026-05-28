@@ -511,19 +511,36 @@ export function* makeLoadRoomPhases(
   }
 
   // Use cached wall template if available (avoids O(n²) merge pass).
+  // Priority: 1. RoomRuntimeCache (fastest — already merged), 2. bakedWallTemplate
+  // from JSON (skip runtime merge), 3. buildRoomWallTemplate (fallback).
   const _wallCacheEntry = roomRuntimeCache.get(room.id);
   const _wallT0 = import.meta.env.DEV ? performance.now() : 0;
   if (_wallCacheEntry !== undefined) {
     applyRoomWallTemplate(world, _wallCacheEntry.wallTemplate);
     if (import.meta.env.DEV) {
-      console.log(`[loadRoom] ${room.id} walls: cache HIT (apply ${(performance.now() - _wallT0).toFixed(1)}ms)`);
+      console.log(`[wallTemplate] roomId=${room.id} source=cache wallCount=${_wallCacheEntry.wallTemplate.wallCount}` +
+        ` (apply ${(performance.now() - _wallT0).toFixed(1)}ms)`);
     }
+  } else if (room.bakedWallTemplate !== undefined) {
+    applyRoomWallTemplate(world, room.bakedWallTemplate);
+    if (import.meta.env.DEV) {
+      console.log(`[wallTemplate] roomId=${room.id} source=baked wallCount=${room.bakedWallTemplate.wallCount}` +
+        ` (apply ${(performance.now() - _wallT0).toFixed(1)}ms)`);
+    }
+    roomRuntimeCache.set(room.id, {
+      wallTemplate: room.bakedWallTemplate,
+      edgeExtension: null,
+      blockerKeys,
+      darkBlockerKeys,
+      wallDecorations: null,
+    });
   } else {
     const wallTemplate = buildRoomWallTemplate(room);
     const _buildMs = import.meta.env.DEV ? performance.now() - _wallT0 : 0;
     applyRoomWallTemplate(world, wallTemplate);
     if (import.meta.env.DEV) {
-      console.log(`[loadRoom] ${room.id} walls: cache MISS (build ${_buildMs.toFixed(1)}ms)`);
+      console.log(`[wallTemplate] roomId=${room.id} source=fallback reason=missing wallCount=${wallTemplate.wallCount}` +
+        ` (build ${_buildMs.toFixed(1)}ms)`);
     }
     // Store in cache so subsequent visits to this room are fast.
     // Remaining fields (edgeExtension, wallDecorations) are filled in Phase F.

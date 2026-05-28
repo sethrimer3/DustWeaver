@@ -2,9 +2,12 @@
  * Room JSON loader — fetches room JSON files from CAMPAIGNS/<CAMPAIGN_ID>/ROOMS/ at startup
  * and converts them into RoomDef objects for the ROOM_REGISTRY.
  *
- * Boundary walls and tunnel corridor walls are NOT stored in the JSON;
- * they are regenerated deterministically at load time from room dimensions
- * and transition definitions.
+ * Boundary walls are NOT stored in the JSON; they are generated from room dimensions
+ * at load time as complete solid edge walls (no transition holes).
+ *
+ * If the JSON includes a valid `bakedWallTemplate`, it is hydrated and stored on
+ * the RoomDef so that the runtime can skip `buildRoomWallTemplate()` on first load.
+ * See `roomBoundaryWalls.ts` for the complete-boundary design decision.
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
@@ -27,12 +30,14 @@ import {
   stringToParticleKind,
   parseSongId,
 } from '../editor/roomJson';
-import type { RoomJsonDef, RoomJsonTransition } from '../editor/roomJson';
+import type { RoomJsonDef } from '../editor/roomJson';
 import { isSavedRoomV2, hydrateV2Room } from './roomSchemaV2';
 import { getActiveCampaignId, getCampaignById, getCampaignRoomsBasePath } from './campaigns';
 import { savedToLightDef } from './lightingSchema';
+import { buildCompleteBoundaryWalls } from './roomBoundaryWalls';
+import { hydrateAndValidateBakedWallTemplate } from './roomWallTemplateHash';
 
-// ── Boundary wall generation (mirrors roomBuilders.ts) ───────────────────────
+// ── Async loader — fetches room JSON files at startup ────────────────────────
 
 const DISCOVERED_ROOM_FILE_PATHS = Object.keys(import.meta.glob('/ASSETS/CAMPAIGNS/*/ROOMS/*.json', {
   query: '?url',
@@ -56,111 +61,22 @@ function discoverRoomFilenames(campaignFolderNames: readonly string[]): string[]
 }
 
 
-// ── Async loader — fetches room JSON files at startup ────────────────────────
-
-function buildBoundaryWalls(
-  widthBlocks: number,
-  heightBlocks: number,
-  transitions: RoomJsonTransition[],
-): RoomWallDef[] {
-  const walls: RoomWallDef[] = [];
-
-  const gw = (t: RoomJsonTransition) => t.gradientWidthBlocks ?? 3;
-
-  // Compute xBlock/yBlock from positionBlock/depthBlock for JSON that lacks the new fields.
-  function getXBlock(t: RoomJsonTransition): number {
-    if (t.xBlock !== undefined) return t.xBlock;
-    const isHoriz = t.direction === 'left' || t.direction === 'right';
-    if (isHoriz) return t.depthBlock ?? 0;
-    return t.positionBlock;
-  }
-  function getYBlock(t: RoomJsonTransition): number {
-    if (t.yBlock !== undefined) return t.yBlock;
-    const isHoriz = t.direction === 'left' || t.direction === 'right';
-    if (isHoriz) return t.positionBlock;
-    return t.depthBlock ?? 0;
-  }
-
-  // Top wall — gap where an 'up' transition's zone starts at y=0
-  const upTunnels = transitions.filter(t => t.direction === 'up' && getYBlock(t) === 0);
-  buildHorizontalWall(walls, 0, 0, widthBlocks,
-    upTunnels.map(t => ({ positionBlock: getXBlock(t), openingSizeBlocks: t.openingSizeBlocks })));
-
-  // Bottom wall — gap where a 'down' transition's zone ends at y=heightBlocks
-  const downTunnels = transitions.filter(t => t.direction === 'down' && getYBlock(t) + gw(t) >= heightBlocks);
-  buildHorizontalWall(walls, heightBlocks - 1, 0, widthBlocks,
-    downTunnels.map(t => ({ positionBlock: getXBlock(t), openingSizeBlocks: t.openingSizeBlocks })));
-
-  // Left wall — gap where a 'left' transition's zone starts at x=0
-  const leftTunnels = transitions.filter(t => t.direction === 'left' && getXBlock(t) === 0);
-  buildSideWall(walls, 0, 1, heightBlocks - 2,
-    leftTunnels.map(t => ({ positionBlock: getYBlock(t), openingSizeBlocks: t.openingSizeBlocks })));
-
-  // Right wall — gap where a 'right' transition's zone ends at x=widthBlocks
-  const rightTunnels = transitions.filter(t => t.direction === 'right' && getXBlock(t) + gw(t) >= widthBlocks);
-  buildSideWall(walls, widthBlocks - 1, 1, heightBlocks - 2,
-    rightTunnels.map(t => ({ positionBlock: getYBlock(t), openingSizeBlocks: t.openingSizeBlocks })));
-
-  return walls;
-}
-
-function buildSideWall(
-  out: RoomWallDef[],
-  xBlock: number,
-  startYBlock: number,
-  totalHeightBlocks: number,
-  tunnels: Array<{ positionBlock: number; openingSizeBlocks: number }>,
-): void {
-  const sorted = [...tunnels].sort((a, b) => a.positionBlock - b.positionBlock);
-  let currentY = startYBlock;
-  const endY = startYBlock + totalHeightBlocks;
-
-  for (const tunnel of sorted) {
-    const tunnelTop = tunnel.positionBlock;
-    const tunnelBottom = tunnel.positionBlock + tunnel.openingSizeBlocks;
-    if (tunnelTop > currentY) {
-      out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: tunnelTop - currentY, isInvisibleFlag: 1 });
-    }
-    currentY = tunnelBottom;
-  }
-
-  if (currentY < endY) {
-    out.push({ xBlock, yBlock: currentY, wBlock: 1, hBlock: endY - currentY, isInvisibleFlag: 1 });
-  }
-}
-
-function buildHorizontalWall(
-  out: RoomWallDef[],
-  yBlock: number,
-  startXBlock: number,
-  totalWidthBlocks: number,
-  tunnels: Array<{ positionBlock: number; openingSizeBlocks: number }>,
-): void {
-  const sorted = [...tunnels].sort((a, b) => a.positionBlock - b.positionBlock);
-  let currentX = startXBlock;
-  const endX = startXBlock + totalWidthBlocks;
-
-  for (const tunnel of sorted) {
-    const tunnelLeft = tunnel.positionBlock;
-    const tunnelRight = tunnel.positionBlock + tunnel.openingSizeBlocks;
-    if (tunnelLeft > currentX) {
-      out.push({ xBlock: currentX, yBlock, wBlock: tunnelLeft - currentX, hBlock: 1, isInvisibleFlag: 1 });
-    }
-    currentX = tunnelRight;
-  }
-
-  if (currentX < endX) {
-    out.push({ xBlock: currentX, yBlock, wBlock: endX - currentX, hBlock: 1, isInvisibleFlag: 1 });
-  }
-}
+// ── roomJsonDefToRoomDef ──────────────────────────────────────────────────────
 
 /**
  * Converts a validated RoomJsonDef into a full RoomDef suitable for runtime
- * loading. Boundary walls are regenerated. Tunnel corridor walls are no longer
- * generated — transitions are purely trigger/fade zones.
+ * loading.
+ *
+ * Boundary walls are complete solid edge walls (no transition holes).
+ * See `roomBoundaryWalls.ts` for the design rationale.
+ *
+ * If the JSON contains a valid `bakedWallTemplate`, it is hydrated and stored
+ * in `room.bakedWallTemplate` so that Phase D of room loading can skip the
+ * expensive `buildRoomWallTemplate()` merge pass.
  */
 export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
-  const boundaryWalls = buildBoundaryWalls(json.widthBlocks, json.heightBlocks, json.transitions);
+  // Complete boundary walls — no holes for transitions (BUILD 420+)
+  const boundaryWalls = buildCompleteBoundaryWalls(json.widthBlocks, json.heightBlocks);
 
   const interiorWalls: RoomWallDef[] = json.interiorWalls.map(w => ({
     xBlock: w.xBlock,
@@ -423,6 +339,17 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
         moteSpeedFactor: p.moteSpeedFactor ?? 1.0,
         opacityPct: p.opacityPct ?? 100,
       }));
+  }
+
+  // ── Baked wall template (optional) ──────────────────────────────────────
+  // If present and valid, stored on the RoomDef so Phase D can skip
+  // buildRoomWallTemplate().  hydrateAndValidateBakedWallTemplate() logs a
+  // DEV warning and returns undefined on any validation failure.
+  if (json.bakedWallTemplate !== undefined) {
+    const hydrated = hydrateAndValidateBakedWallTemplate(json, json.bakedWallTemplate);
+    if (hydrated !== undefined) {
+      room.bakedWallTemplate = hydrated;
+    }
   }
 
   return room;
