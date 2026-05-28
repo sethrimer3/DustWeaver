@@ -126,10 +126,10 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 - `src/levels/roomRoundTripValidator.ts` — dev-only dehydrate→hydrate correctness validator
 - All 15 active room files migrated to v3
 
-**Results (room file size reduction):**
+**Results (room file size reduction after v3 wall compression):**
 
-| Room | Before | After | Reduction |
-|------|--------|-------|-----------|
+| Room | Before | After v3 | Reduction |
+|------|--------|-----------|-----------|
 | underwater_lake_room.json | 973 KB | 388 KB | 60% |
 | chasm_room.json | 483 KB | 84 KB | 83% |
 | seal_chamber_room.json | 236 KB | 29 KB | 88% |
@@ -140,17 +140,52 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 **Backward compatibility:** Old v2 files still load (their `exactWalls` array is still read by the hydrator). `isSavedRoomV2` accepts both v=2 and v=3.
 
-**Remaining optimization opportunities (not yet done):**
+---
 
-1. **Water/lava zone rectangle merging.** Zones are currently stored as individual `[x, y, 1, 1]` rectangles in many rooms. Merging adjacent same-type zones into larger rects would further reduce file size. Requires care about zone semantic boundaries (e.g. separate visual bodies should stay separate).
+### BUILD 432 (continued) — Water/lava zone, ambient blocker, and bgBlock compression (COMPLETED)
 
-2. **Ambient blocker and background block compression.** Blockers and bgBlocks are stored per-entry. Groups of adjacent same-property entries could be merged.
+**Problem:** After v3 wall compression, several rooms still had bloated JSON due to:
+- `underwater_lake_room.json`: 4,185 individual `[x,y,1,1]` water-zone rectangles + 3,455 per-cell ambient blocker entries → 388 KB
+- `seal_chamber_room.json`: 307 per-cell dark ambient blocker entries → 29 KB
+- `interesting_room_room.json`: 32 individual `[x,y,4,4]` lava-zone rectangles → 9 KB
 
-3. **`soundHardness` deprecation.** Per-wall `soundHardness` overrides in `exactWalls`/`specialWalls` are not currently emitted by the editor but the field exists in types. Sound hardness should derive from `blockTheme` globally. The field can be removed from `SavedSpecialWall` in a future cleanup pass.
+**Fix:** Extended the v3 schema with new compact fields (purely additive — schema version stays at 3):
+- `waterLayer` / `lavaLayer` — `SavedSolidLayer` (rects + runs + points) replacing `waterZones` / `lavaZones`
+- `ambientBlockersClear` / `ambientBlockersDark` — `Saved1x1Layer` (runs + points), one per isDark value, replacing `ambientBlockers`
+- `bgLayers` — `SavedBgLayer[]` grouped by `(themeKey, lb)`, each using `SavedSolidLayer`, replacing `bgBlocks`
 
-4. **Remove `exactWalls` type field entirely.** Once all campaign rooms are v3, the `exactWalls` field on `SavedRoomV2` can be marked `@deprecated`. It should remain readable for backward compat but the writer no longer produces it.
+**Key invariants:**
+- Water and lava are stored in separate fields — never merged.
+- Clear and dark ambient blockers are stored in separate fields — `isDark` identity is always preserved.
+- Background block groups are never merged across theme or light-blocking differences.
+- Zone rectangles can be merged freely because the runtime only does cell-coverage checks.
+- Ambient blockers use runs+points (never 2D rects) since they are per-cell, not spatial extents.
+- Legacy `waterZones`, `lavaZones`, `ambientBlockers`, `bgBlocks`, `exactWalls` fields are marked `@deprecated` in `SavedRoomV2` and remain readable for backward compat.
 
-5. **Audit utility integration.** `roomFileAudit.ts` and `roomRoundTripValidator.ts` exist but are not yet wired into any editor UI panel. Consider adding a "Room Audit" button to the editor dev toolbar.
+**Files changed:**
+- `src/levels/tileGridCompressor.ts` — `expandLayerToRects()`, `expandBlockerLayerToCells()` (hydrate direction)
+- `src/levels/roomSavedTypes.ts` — `SavedBgLayer`; new fields `waterLayer`, `lavaLayer`, `ambientBlockersClear`, `ambientBlockersDark`, `bgLayers`; deprecated old fields
+- `src/levels/roomSchemaV2.ts` — `dehydrateZoneLayer()`, `dehydrateBlockerLayer()`, `dehydrateBgLayers()` helpers; `dehydrateRoom()` writes new compact fields
+- `src/levels/roomSchemaHydrator.ts` — reads new compact fields with fallback to legacy fields for old v2/v3 files
+- `src/levels/roomFileAudit.ts` — updated `RoomFileAuditEntry` with compact-field counters; updated `printRoomAuditTable()`
+- `src/levels/roomRoundTripValidator.ts` — added water/lava/blocker/bgBlock coverage validation
+- 3 room files migrated (underwater_lake, seal_chamber, interesting_room)
+
+**Results (room file size after water/lava/blocker compression):**
+
+| Room | After v3 walls | After full compression | Reduction |
+|------|---------------|----------------------|-----------|
+| underwater_lake_room.json | 388 KB | 7.7 KB | 98% |
+| seal_chamber_room.json | 29 KB | 3.1 KB | 89% |
+| interesting_room_room.json | 9.3 KB | 1.5 KB | 84% |
+
+**soundHardness:** No active room file contains per-wall `soundHardness` overrides. The `SavedSpecialWall.soundHardness` field exists in types for backward compat reading of old files, but the editor export never writes it. Sound hardness at runtime derives from block theme.
+
+**exactWalls:** All v3 rooms have zero `exactWalls`. The field is deprecated in types; the writer never emits it for ordinary terrain; the hydrator still reads it from old v2 files.
+
+**Remaining minor items:**
+1. **Audit utility integration.** `roomFileAudit.ts` and `roomRoundTripValidator.ts` are not yet wired into any editor UI panel. Consider adding a "Room Audit" button to the editor dev toolbar.
+2. **`soundHardness` final removal.** `SavedSpecialWall.soundHardness` can be deleted from types once any legacy v2 files using it are no longer needed.
 
 
 

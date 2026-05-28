@@ -45,6 +45,7 @@ import type {
   RoomJsonWall,
   RoomJsonEnemy,
   RoomJsonTransition,
+  RoomJsonZone,
 } from '../editor/roomJson';
 import { createTileGrid, paintRect, extractLayerFromGrid, extract1x1LayerFromGrid } from './tileGridCompressor';
 import { hydrateSolidsByTheme, hydrateV2Room } from './roomSchemaHydrator';
@@ -71,6 +72,7 @@ export type {
   SavedKineticBlock,
   SavedRoomRope,
   SavedBgBlock,
+  SavedBgLayer,
   SavedGuideDustPoint,
   SavedGuideDustPath,
   SavedRoomV2,
@@ -102,6 +104,7 @@ import type {
   SavedKineticBlock,
   SavedRoomRope,
   SavedBgBlock,
+  SavedBgLayer,
   SavedGuideDustPath,
   SavedGuideDustPoint,
   SavedRoomV2,
@@ -161,6 +164,109 @@ export function isUniformSolidWall(w: RoomJsonWall): boolean {
 /** Pick the theme-grouping key for a wall (sentinel for room-default theme). */
 function themeKeyForWall(wallTheme: BlockTheme | undefined, defaultTheme: BlockTheme): string {
   return wallTheme && wallTheme !== defaultTheme ? blockThemeToId(wallTheme) : DEFAULT_THEME_KEY;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEHYDRATE  zones (water / lava)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compresses a list of RoomJsonZone rectangles into a single compact
+ * SavedSolidLayer using the greedy rect/run/point algorithm.
+ *
+ * All zones are rasterized into a boolean tile grid and then re-extracted as
+ * the minimal covering set of rects, runs, and points.  This merges adjacent
+ * or overlapping 1×1 zones into larger shapes automatically.
+ *
+ * Water and lava MUST be passed to separate calls — never mix zone types.
+ */
+function dehydrateZoneLayer(
+  zones: readonly RoomJsonZone[],
+  widthBlocks: number,
+  heightBlocks: number,
+): SavedSolidLayer | undefined {
+  if (zones.length === 0) return undefined;
+  const grid = createTileGrid(widthBlocks, heightBlocks);
+  for (const z of zones) paintRect(grid, z.xBlock, z.yBlock, z.wBlock, z.hBlock);
+  const layer = extractLayerFromGrid(grid);
+  if (!layer.rects && !layer.runs && !layer.points) return undefined;
+  return layer;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEHYDRATE  ambient blockers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compresses a set of single-cell blocker coordinates into a compact
+ * Saved1x1Layer (horizontal runs + points).
+ *
+ * Clear and dark blockers MUST be passed to separate calls — they are stored
+ * in separate fields (`ambientBlockersClear` and `ambientBlockersDark`) so
+ * that hydration can restore the `isDark` flag per cell without ambiguity.
+ */
+function dehydrateBlockerLayer(
+  cells: ReadonlyArray<{ xBlock: number; yBlock: number }>,
+  widthBlocks: number,
+  heightBlocks: number,
+): Saved1x1Layer | undefined {
+  if (cells.length === 0) return undefined;
+  const grid = createTileGrid(widthBlocks, heightBlocks);
+  for (const b of cells) paintRect(grid, b.xBlock, b.yBlock, 1, 1);
+  const layer = extract1x1LayerFromGrid(grid);
+  if (!layer.runs && !layer.points) return undefined;
+  return layer;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEHYDRATE  background blocks
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compresses a list of background blocks into SavedBgLayer groups.
+ *
+ * Background blocks are grouped by (themeKey, lb) so that only blocks with
+ * identical visual and lighting properties are merged together.  The full
+ * greedy rect algorithm is applied to each group independently.
+ *
+ * Never merge:
+ *   • blocks with different block themes
+ *   • light-blocking blocks with non-light-blocking blocks
+ */
+function dehydrateBgLayers(
+  bgBlocks: readonly { xBlock: number; yBlock: number; wBlock: number; hBlock: number; blockTheme?: BlockTheme | undefined; isLightBlocking?: boolean | undefined }[],
+  widthBlocks: number,
+  heightBlocks: number,
+  defaultTheme: BlockTheme,
+): SavedBgLayer[] | undefined {
+  if (bgBlocks.length === 0) return undefined;
+
+  // Group by (themeKey, lb).
+  type GroupKey = string;
+  const groups = new Map<GroupKey, typeof bgBlocks[number][]>();
+  for (const b of bgBlocks) {
+    const themeKey = b.blockTheme && b.blockTheme !== defaultTheme ? blockThemeToId(b.blockTheme) : DEFAULT_THEME_KEY;
+    const lb = b.isLightBlocking ? 1 : 0;
+    const key: GroupKey = `${themeKey}\0${lb}`;
+    const list = groups.get(key) ?? [];
+    list.push(b);
+    if (!groups.has(key)) groups.set(key, list);
+  }
+
+  const layers: SavedBgLayer[] = [];
+  // Deterministic order: sort group keys.
+  for (const [key, members] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const [themeKey, lbStr] = key.split('\0');
+    const grid = createTileGrid(widthBlocks, heightBlocks);
+    for (const b of members) paintRect(grid, b.xBlock, b.yBlock, b.wBlock, b.hBlock);
+    const layer = extractLayerFromGrid(grid);
+    if (!layer.rects && !layer.runs && !layer.points) continue;
+    const entry: SavedBgLayer = { themeKey, layer };
+    if (lbStr === '1') entry.lb = 1;
+    layers.push(entry);
+  }
+
+  return layers.length > 0 ? layers : undefined;
 }
 
 /**
@@ -320,10 +426,16 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.springboards = json.springboards.map(s => [s.xBlock, s.yBlock] as SavedPoint);
   }
   if (json.waterZones && json.waterZones.length > 0) {
-    out.waterZones = json.waterZones.map(z => [z.xBlock, z.yBlock, z.wBlock, z.hBlock] as SavedRect);
+    // Compress water zones using the greedy rect algorithm.  Adjacent/overlapping
+    // 1×1 zones merge into larger rects, drastically reducing file size for
+    // large rooms with many painted water tiles (e.g. underwater_lake_room).
+    const layer = dehydrateZoneLayer(json.waterZones, json.widthBlocks, json.heightBlocks);
+    if (layer) out.waterLayer = layer;
   }
   if (json.lavaZones && json.lavaZones.length > 0) {
-    out.lavaZones = json.lavaZones.map(z => [z.xBlock, z.yBlock, z.wBlock, z.hBlock] as SavedRect);
+    // Same compression for lava.  Water and lava are never mixed.
+    const layer = dehydrateZoneLayer(json.lavaZones, json.widthBlocks, json.heightBlocks);
+    if (layer) out.lavaLayer = layer;
   }
   if (json.breakableBlocks && json.breakableBlocks.length > 0) {
     out.breakableBlocks = json.breakableBlocks.map(b => [b.xBlock, b.yBlock] as SavedPoint);
@@ -366,11 +478,15 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.voidEdge = json.voidEdgeStyle;
   }
   if (json.ambientLightBlockers && json.ambientLightBlockers.length > 0) {
-    out.ambientBlockers = json.ambientLightBlockers.map(b =>
-      b.isDark
-        ? ([b.xBlock, b.yBlock, 1] as [number, number, 1])
-        : ([b.xBlock, b.yBlock] as [number, number]),
-    );
+    // Compress clear and dark blockers separately into compact run+point layers.
+    // Keeping them in separate fields preserves the isDark identity per cell —
+    // never merge clear and dark blockers into the same primitive.
+    const clearBlockers = json.ambientLightBlockers.filter(b => !b.isDark);
+    const darkBlockers  = json.ambientLightBlockers.filter(b => b.isDark);
+    const clearLayer = dehydrateBlockerLayer(clearBlockers, json.widthBlocks, json.heightBlocks);
+    const darkLayer  = dehydrateBlockerLayer(darkBlockers,  json.widthBlocks, json.heightBlocks);
+    if (clearLayer) out.ambientBlockersClear = clearLayer;
+    if (darkLayer)  out.ambientBlockersDark  = darkLayer;
   }
   if (json.lightSources && json.lightSources.length > 0) {
     const hasExtendedLightSources = json.lightSources.some(l => (l.dustMoteCount ?? 0) > 0 || (l.dustMoteSpreadBlocks ?? 0) > 0);
@@ -437,12 +553,10 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   }
 
   if (json.backgroundBlocks && json.backgroundBlocks.length > 0) {
-    out.bgBlocks = json.backgroundBlocks.map(b => {
-      const entry: SavedBgBlock = { r: [b.xBlock, b.yBlock, b.wBlock, b.hBlock] };
-      if (b.blockTheme) entry.theme = blockThemeToId(b.blockTheme);
-      if (b.isLightBlocking) entry.lb = 1;
-      return entry;
-    });
+    // Compress background blocks grouped by (themeKey, lb).  Never merge across
+    // theme differences or light-blocking differences.
+    const layers = dehydrateBgLayers(json.backgroundBlocks, json.widthBlocks, json.heightBlocks, defaultTheme);
+    if (layers) out.bgLayers = layers;
   }
 
   if (json.sceneLights && json.sceneLights.length > 0) {

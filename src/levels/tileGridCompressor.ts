@@ -113,6 +113,58 @@ function clearRect(grid: TileGrid, x: number, y: number, w: number, h: number): 
   }
 }
 
+// ── Expansion helpers (hydrate direction) ─────────────────────────────────────
+
+/**
+ * Expand a SavedSolidLayer back to an array of [x, y, w, h] rectangles.
+ *
+ * Used by the hydrator to convert compressed zone layers (water/lava/bgBlocks)
+ * back to the verbose rectangle list the rest of the engine expects.
+ *
+ *  • Each `rects` entry is passed through as-is.
+ *  • Each `runs` entry [y, xStart, xEnd] becomes a 1-tall rect [xStart, y, xEnd-xStart, 1].
+ *  • Each `points` entry [x, y] becomes [x, y, 1, 1].
+ */
+export function expandLayerToRects(layer: SavedSolidLayer): SavedRect[] {
+  const out: SavedRect[] = [];
+  if (layer.rects) {
+    for (const r of layer.rects) out.push(r);
+  }
+  if (layer.runs) {
+    for (const [y, xStart, xEnd] of layer.runs) {
+      out.push([xStart, y, xEnd - xStart, 1]);
+    }
+  }
+  if (layer.points) {
+    for (const [x, y] of layer.points) {
+      out.push([x, y, 1, 1]);
+    }
+  }
+  return out;
+}
+
+/**
+ * Expand a Saved1x1Layer back to an array of [x, y] cell coordinates.
+ *
+ * Used by the hydrator to convert compressed ambient-blocker layers back to
+ * the per-cell list the lighting system expects.
+ *
+ *  • Each `runs` entry [y, xStart, xEnd] expands to individual cells [x, y].
+ *  • Each `points` entry [x, y] is passed through as-is.
+ */
+export function expandBlockerLayerToCells(layer: { runs?: ReadonlyArray<readonly [number, number, number]>; points?: ReadonlyArray<readonly [number, number]> }): Array<readonly [number, number]> {
+  const out: Array<readonly [number, number]> = [];
+  if (layer.runs) {
+    for (const [y, xStart, xEnd] of layer.runs) {
+      for (let x = xStart; x < xEnd; x++) out.push([x, y]);
+    }
+  }
+  if (layer.points) {
+    for (const pt of layer.points) out.push(pt);
+  }
+  return out;
+}
+
 /**
  * One-pass 1×1-safe layer extraction: horizontal runs + points ONLY.
  *
