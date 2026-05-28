@@ -63,6 +63,8 @@ import {
   MAX_RUN_SPEED_WORLD_PER_SEC,
 } from './movementConstants';
 
+const ULTRA_ICE_STOPPED_SPEED_EPSILON_WORLD = 0.1;
+
 // ============================================================================
 // Collision helpers — imported from dedicated module for maintainability.
 // ============================================================================
@@ -353,11 +355,25 @@ export function applyClusterMovement(world: WorldState): void {
           }
         }
 
+        // ── Ultra ice edge-case exits ────────────────────────────────────────
+        // Wall contact must be able to take over from ultra-ice slip so normal
+        // wall slide / wall jump responsiveness is available after impact.
+        if (cluster.isOnUltraIceFlag === 1
+          && (cluster.isTouchingWallLeftFlag === 1 || cluster.isTouchingWallRightFlag === 1)) {
+          cluster.isOnUltraIceFlag = 0;
+        }
+
+        // If collision stops the locked horizontal motion, exit the forced slip
+        // state instead of leaving the player parked with input suppressed.
+        if (cluster.isOnUltraIceFlag === 1
+          && Math.abs(cluster.velocityXWorld) <= ULTRA_ICE_STOPPED_SPEED_EPSILON_WORLD) {
+          cluster.isOnUltraIceFlag = 0;
+        }
+
         // ── Grapple charge refresh on ground contact ─────────────────────────
         // The player can only grapple once while airborne.  Touching the ground
         // restores the charge so they can grapple again.
-        // Ultra ice ground does NOT restore the grapple charge.
-        if ((cluster.isGroundedFlag === 1 && cluster.isGroundedOnUltraIceFlag === 0) || world.isGrappleStuckFlag === 1) {
+        if (justLanded || cluster.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1) {
           // Detect the 0→1 recharge transition to trigger the golden ring VFX.
           // At this point hasGrappleChargeFlag is still 0 (we assign 1 below), so
           // the transition is indicated by both prev=0 and current=0 (about to become 1).
