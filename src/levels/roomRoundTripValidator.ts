@@ -6,11 +6,15 @@
  *   • Same per-cell block theme
  *   • Same 1×1 vs 2×2 visual grain (hBlock=1 walls stay hBlock=1)
  *   • Same special wall count and properties
+ *   • Same water zone cell coverage
+ *   • Same lava zone cell coverage
+ *   • Same ambient blocker cells (clear and dark separately)
+ *   • Same background block cells, theme, and light-blocking identity
  *
  * DEV-only — import and call from a dev panel or test harness.
  */
 
-import type { RoomJsonDef, RoomJsonWall } from '../editor/roomJson';
+import type { RoomJsonDef, RoomJsonWall, RoomJsonZone, RoomJsonBackgroundBlock } from '../editor/roomJson';
 import { dehydrateRoom } from './roomSchemaV2';
 import { hydrateV2Room } from './roomSchemaHydrator';
 
@@ -25,6 +29,55 @@ function wallCells(w: RoomJsonWall): string[] {
     }
   }
   return cells;
+}
+
+/** Expand a zone rect into individual cell keys `"x,y"`. */
+function zoneCells(z: RoomJsonZone): string[] {
+  const cells: string[] = [];
+  for (let dy = 0; dy < z.hBlock; dy++) {
+    for (let dx = 0; dx < z.wBlock; dx++) {
+      cells.push(`${z.xBlock + dx},${z.yBlock + dy}`);
+    }
+  }
+  return cells;
+}
+
+/** Build a Set<"x,y"> covering all cells in an array of zones. */
+function buildZoneCoverage(zones: RoomJsonZone[] | undefined): Set<string> {
+  const set = new Set<string>();
+  for (const z of zones ?? []) for (const k of zoneCells(z)) set.add(k);
+  return set;
+}
+
+/** Build a Map<"x,y", isDark> for all ambient blocker entries. */
+function buildBlockerMap(blockers: RoomJsonDef['ambientLightBlockers']): Map<string, boolean> {
+  const map = new Map<string, boolean>();
+  for (const b of blockers ?? []) {
+    map.set(`${b.xBlock},${b.yBlock}`, b.isDark ?? false);
+  }
+  return map;
+}
+
+/**
+ * Build a Map<"x,y", string> for background blocks where the value encodes
+ * `"theme|lb"` for comparison.
+ */
+function buildBgBlockMap(blocks: RoomJsonBackgroundBlock[] | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const b of blocks ?? []) {
+    // Signature encodes the two properties we must preserve per cell.
+    // Using "theme|lb" where '|' cannot appear in a theme name (theme names use
+    // alphanumeric/underscore identifiers), so this concatenation is unambiguous.
+    const themeStr = b.blockTheme ?? '';
+    const lbStr    = b.isLightBlocking ? '1' : '0';
+    const sig      = `${themeStr}|${lbStr}`;
+    for (let dy = 0; dy < b.hBlock; dy++) {
+      for (let dx = 0; dx < b.wBlock; dx++) {
+        map.set(`${b.xBlock + dx},${b.yBlock + dy}`, sig);
+      }
+    }
+  }
+  return map;
 }
 
 /** Build a Map<cellKey, theme|undefined> for all solid (non-special) walls. */
@@ -75,6 +128,10 @@ export interface RoundTripValidationResult {
  *  2. Per-cell theme (no theme changes)
  *  3. 1×1 vs 2×2 visual grain (cells that had hBlock=1 remain hBlock=1)
  *  4. Special wall count (platforms/ramps/pillars)
+ *  5. Water zone cell coverage
+ *  6. Lava zone cell coverage
+ *  7. Ambient blocker cells (clear and dark identity)
+ *  8. Background block cells, theme, and light-blocking identity
  */
 export function validateRoundTrip(json: RoomJsonDef): RoundTripValidationResult {
   const errors: string[] = [];
@@ -140,6 +197,46 @@ export function validateRoundTrip(json: RoomJsonDef): RoundTripValidationResult 
   // ── 4. Room dimensions ────────────────────────────────────────────────────
   if (json.widthBlocks !== roundTripped.widthBlocks || json.heightBlocks !== roundTripped.heightBlocks) {
     errors.push(`Room size changed: ${json.widthBlocks}×${json.heightBlocks} → ${roundTripped.widthBlocks}×${roundTripped.heightBlocks}`);
+  }
+
+  // ── 5. Water zone coverage ────────────────────────────────────────────────
+  const waterBefore = buildZoneCoverage(json.waterZones);
+  const waterAfter  = buildZoneCoverage(roundTripped.waterZones);
+  for (const k of waterBefore) if (!waterAfter.has(k)) errors.push(`Water cell ${k} DROPPED`);
+  for (const k of waterAfter)  if (!waterBefore.has(k)) errors.push(`Water cell ${k} ADDED`);
+
+  // ── 6. Lava zone coverage ─────────────────────────────────────────────────
+  const lavaBefore = buildZoneCoverage(json.lavaZones);
+  const lavaAfter  = buildZoneCoverage(roundTripped.lavaZones);
+  for (const k of lavaBefore) if (!lavaAfter.has(k))  errors.push(`Lava cell ${k} DROPPED`);
+  for (const k of lavaAfter)  if (!lavaBefore.has(k)) errors.push(`Lava cell ${k} ADDED`);
+
+  // ── 7. Ambient blockers (clear and dark identity) ─────────────────────────
+  const blkBefore = buildBlockerMap(json.ambientLightBlockers);
+  const blkAfter  = buildBlockerMap(roundTripped.ambientLightBlockers);
+  for (const [k, dark] of blkBefore) {
+    if (!blkAfter.has(k)) {
+      errors.push(`Ambient blocker ${k} DROPPED (isDark=${dark})`);
+    } else if (blkAfter.get(k) !== dark) {
+      errors.push(`Ambient blocker ${k} dark-flag changed: ${dark} → ${blkAfter.get(k)}`);
+    }
+  }
+  for (const [k, dark] of blkAfter) {
+    if (!blkBefore.has(k)) errors.push(`Ambient blocker ${k} ADDED (isDark=${dark})`);
+  }
+
+  // ── 8. Background blocks (cell + theme + lb identity) ─────────────────────
+  const bgBefore = buildBgBlockMap(json.backgroundBlocks);
+  const bgAfter  = buildBgBlockMap(roundTripped.backgroundBlocks);
+  for (const [k, sig] of bgBefore) {
+    if (!bgAfter.has(k)) {
+      errors.push(`BG block ${k} DROPPED (sig=${sig})`);
+    } else if (bgAfter.get(k) !== sig) {
+      errors.push(`BG block ${k} sig changed: ${sig} → ${bgAfter.get(k)}`);
+    }
+  }
+  for (const [k, sig] of bgAfter) {
+    if (!bgBefore.has(k)) errors.push(`BG block ${k} ADDED (sig=${sig})`);
   }
 
   // Truncate error list to avoid log flooding for big rooms

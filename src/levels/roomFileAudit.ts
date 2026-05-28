@@ -3,11 +3,13 @@
  *
  * Logs a summary table for each room in a campaign, covering:
  *   • JSON byte size
- *   • exactWalls count (old v2 format)
+ *   • schema version
+ *   • exactWalls count (legacy v2 format — should be 0 in all v3 rooms)
  *   • v1ByTheme primitive counts (runs, points) by theme
  *   • byTheme primitive counts (rects, runs, points) by theme
- *   • waterZone / lavaZone rectangle counts
- *   • bgBlock / ambientBlocker counts
+ *   • waterLayer / lavaLayer primitives (v3 compact zones)
+ *   • ambientBlockersClear / ambientBlockersDark primitives (v3 compact blockers)
+ *   • bgLayers group count and total primitives (v3 compact background)
  *   • hydrated wall count
  *
  * Usage (DEV mode only):
@@ -17,7 +19,7 @@
  * This module tree-shakes out of production builds via the DEV guard.
  */
 
-import type { SavedRoomV2, SavedSolids } from './roomSavedTypes';
+import type { SavedRoomV2, SavedSolids, Saved1x1Layer, SavedSolidLayer } from './roomSavedTypes';
 import { isSavedRoomV2, hydrateSolidsByTheme } from './roomSchemaHydrator';
 
 export interface RoomFileAuditEntry {
@@ -34,10 +36,26 @@ export interface RoomFileAuditEntry {
   byThemeRects: number;
   byThemeRuns: number;
   byThemePoints: number;
-  waterZoneRects: number;
-  lavaZoneRects: number;
-  bgBlockCount: number;
-  ambientBlockerCount: number;
+  /** Primitives in the compact waterLayer (v3+); 0 if using legacy waterZones. */
+  waterLayerPrimitives: number;
+  /** Primitives in the compact lavaLayer (v3+); 0 if using legacy lavaZones. */
+  lavaLayerPrimitives: number;
+  /** Legacy waterZones rect count (v2 only; 0 in v3 rooms). */
+  waterZoneLegacy: number;
+  /** Legacy lavaZones rect count (v2 only; 0 in v3 rooms). */
+  lavaZoneLegacy: number;
+  /** Primitives in the compact ambientBlockersClear layer (v3+). */
+  ambientClearPrimitives: number;
+  /** Primitives in the compact ambientBlockersDark layer (v3+). */
+  ambientDarkPrimitives: number;
+  /** Legacy ambientBlockers count (v2 only; 0 in v3 rooms). */
+  ambientBlockerLegacy: number;
+  /** Number of background layer groups in bgLayers (v3+). */
+  bgLayerGroups: number;
+  /** Total primitives across all bgLayer groups (v3+). */
+  bgLayerPrimitives: number;
+  /** Legacy bgBlocks count (v2 only; 0 in v3 rooms). */
+  bgBlockLegacy: number;
   hydratedWallCount: number;
 }
 
@@ -62,6 +80,18 @@ function countSolids(solids: SavedSolids | undefined): {
   return { byThemeRects, byThemeRuns, byThemePoints, v1Runs, v1Points };
 }
 
+/** Count total primitives (rects + runs + points) in a SavedSolidLayer. */
+function countSolidLayer(layer: SavedSolidLayer | undefined): number {
+  if (!layer) return 0;
+  return (layer.rects?.length ?? 0) + (layer.runs?.length ?? 0) + (layer.points?.length ?? 0);
+}
+
+/** Count total primitives (runs + points) in a Saved1x1Layer. */
+function count1x1Layer(layer: Saved1x1Layer | undefined): number {
+  if (!layer) return 0;
+  return (layer.runs?.length ?? 0) + (layer.points?.length ?? 0);
+}
+
 /**
  * Audit a single room's raw JSON string and return a structured summary.
  * The `rawJson` should be the full room file content as a string.
@@ -76,8 +106,27 @@ export function auditRoomJson(rawJson: string): RoomFileAuditEntry | null {
   const solidCounts = countSolids(saved.solids);
   const hydratedWalls = hydrateSolidsByTheme(saved.solids);
   const exactWallCount = saved.exactWalls?.length ?? 0;
-  // Also count special walls that came from exactWalls in v2 (now folded into specialWalls
-  // or v1ByTheme in v3). For diagnostic purposes we report both sources.
+
+  // Compact zone layers (v3+)
+  const waterLayerPrimitives = countSolidLayer(saved.waterLayer);
+  const lavaLayerPrimitives  = countSolidLayer(saved.lavaLayer);
+  // Legacy zone arrays (v2)
+  const waterZoneLegacy = saved.waterZones?.length ?? 0;
+  const lavaZoneLegacy  = saved.lavaZones?.length  ?? 0;
+
+  // Compact blocker layers (v3+)
+  const ambientClearPrimitives = count1x1Layer(saved.ambientBlockersClear);
+  const ambientDarkPrimitives  = count1x1Layer(saved.ambientBlockersDark);
+  // Legacy blocker array (v2)
+  const ambientBlockerLegacy = saved.ambientBlockers?.length ?? 0;
+
+  // Compact background layers (v3+)
+  let bgLayerGroups = 0, bgLayerPrimitives = 0;
+  if (saved.bgLayers) {
+    bgLayerGroups = saved.bgLayers.length;
+    for (const group of saved.bgLayers) bgLayerPrimitives += countSolidLayer(group.layer);
+  }
+  const bgBlockLegacy = saved.bgBlocks?.length ?? 0;
 
   return {
     roomId:                 saved.id,
@@ -93,11 +142,17 @@ export function auditRoomJson(rawJson: string): RoomFileAuditEntry | null {
     byThemeRects:           solidCounts.byThemeRects,
     byThemeRuns:            solidCounts.byThemeRuns,
     byThemePoints:          solidCounts.byThemePoints,
-    waterZoneRects:         saved.waterZones?.length  ?? 0,
-    lavaZoneRects:          saved.lavaZones?.length   ?? 0,
-    bgBlockCount:           saved.bgBlocks?.length    ?? 0,
-    ambientBlockerCount:    saved.ambientBlockers?.length ?? 0,
-    hydratedWallCount:      hydratedWalls.length + (saved.exactWalls?.length ?? 0) + (saved.specialWalls?.length ?? 0),
+    waterLayerPrimitives,
+    lavaLayerPrimitives,
+    waterZoneLegacy,
+    lavaZoneLegacy,
+    ambientClearPrimitives,
+    ambientDarkPrimitives,
+    ambientBlockerLegacy,
+    bgLayerGroups,
+    bgLayerPrimitives,
+    bgBlockLegacy,
+    hydratedWallCount: hydratedWalls.length + exactWallCount + (saved.specialWalls?.length ?? 0),
   };
 }
 
@@ -128,25 +183,26 @@ export function printRoomAuditTable(rooms: Array<{ id: string; rawJson: string }
   console.log(
     [
       'Room ID'.padEnd(35),
-      pad('v', 3),
-      pad('WxH', 9),
-      pad('bytes', 8),
-      pad('exactW', 7),
+      pad('v',       3),
+      pad('WxH',     9),
+      pad('bytes',   8),
+      pad('exactW',  7),
       pad('v1prims', 8),
-      pad('v1runs', 7),
-      pad('v1pts', 6),
       pad('byPrims', 8),
-      pad('rects', 6),
-      pad('runs', 5),
-      pad('pts', 4),
-      pad('watZn', 6),
-      pad('lavZn', 6),
-      pad('bgBlk', 6),
-      pad('ambBlk', 7),
-      pad('hydWls', 7),
+      pad('watLyr',  7),
+      pad('lavLyr',  7),
+      pad('watLeg',  7),
+      pad('lavLeg',  7),
+      pad('ambClr',  7),
+      pad('ambDrk',  7),
+      pad('ambLeg',  7),
+      pad('bgGrps',  7),
+      pad('bgPrms',  7),
+      pad('bgLeg',   6),
+      pad('hydWls',  7),
     ].join(' '),
   );
-  console.log('-'.repeat(145));
+  console.log('-'.repeat(170));
 
   for (const e of entries.sort((a, b) => b.jsonBytes - a.jsonBytes)) {
     console.log(
@@ -157,16 +213,17 @@ export function printRoomAuditTable(rooms: Array<{ id: string; rawJson: string }
         pad(e.jsonBytes, 8),
         pad(fmt(e.exactWallCount), 7),
         pad(fmt(e.v1ByThemePrimitives), 8),
-        pad(fmt(e.v1ByThemeRuns), 7),
-        pad(fmt(e.v1ByThemePoints), 6),
         pad(fmt(e.byThemePrimitives), 8),
-        pad(fmt(e.byThemeRects), 6),
-        pad(fmt(e.byThemeRuns), 5),
-        pad(fmt(e.byThemePoints), 4),
-        pad(fmt(e.waterZoneRects), 6),
-        pad(fmt(e.lavaZoneRects), 6),
-        pad(fmt(e.bgBlockCount), 6),
-        pad(fmt(e.ambientBlockerCount), 7),
+        pad(fmt(e.waterLayerPrimitives), 7),
+        pad(fmt(e.lavaLayerPrimitives), 7),
+        pad(fmt(e.waterZoneLegacy), 7),
+        pad(fmt(e.lavaZoneLegacy), 7),
+        pad(fmt(e.ambientClearPrimitives), 7),
+        pad(fmt(e.ambientDarkPrimitives), 7),
+        pad(fmt(e.ambientBlockerLegacy), 7),
+        pad(fmt(e.bgLayerGroups), 7),
+        pad(fmt(e.bgLayerPrimitives), 7),
+        pad(fmt(e.bgBlockLegacy), 6),
         pad(e.hydratedWallCount, 7),
       ].join(' '),
     );
@@ -174,8 +231,8 @@ export function printRoomAuditTable(rooms: Array<{ id: string; rawJson: string }
 
   const totalBytes = entries.reduce((s, e) => s + e.jsonBytes, 0);
   const totalExact = entries.reduce((s, e) => s + e.exactWallCount, 0);
-  const totalV1 = entries.reduce((s, e) => s + e.v1ByThemePrimitives, 0);
-  console.log('-'.repeat(145));
+  const totalV1    = entries.reduce((s, e) => s + e.v1ByThemePrimitives, 0);
+  console.log('-'.repeat(170));
   console.log(`Rooms: ${entries.length}  Total JSON: ${(totalBytes / 1024).toFixed(1)} KB  exactWalls: ${totalExact}  v1Prims: ${totalV1}`);
   console.groupEnd();
 }

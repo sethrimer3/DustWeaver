@@ -43,6 +43,7 @@ import type {
   SavedRoomV2,
 } from './roomSavedTypes';
 import { DEFAULT_THEME_KEY } from './roomSavedTypes';
+import { expandLayerToRects, expandBlockerLayerToCells } from './tileGridCompressor';
 
 // ── Enemy type mapping (expand direction) ────────────────────────────────────
 
@@ -263,8 +264,22 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.dustContainers) json.dustContainers  = saved.dustContainers.map(([x, y]) => ({ xBlock: x, yBlock: y }));
   if (saved.spikes)         json.spikes          = saved.spikes.map(([x, y, dir]) => ({ xBlock: x, yBlock: y, direction: dir }) as RoomJsonSpike);
   if (saved.springboards)   json.springboards    = saved.springboards.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonSpringboard);
-  if (saved.waterZones)     json.waterZones      = saved.waterZones.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }) as RoomJsonZone);
-  if (saved.lavaZones)      json.lavaZones       = saved.lavaZones.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }) as RoomJsonZone);
+
+  // Water zones: prefer compact `waterLayer` (v3+); fall back to legacy `waterZones`.
+  if (saved.waterLayer) {
+    const rects = expandLayerToRects(saved.waterLayer);
+    if (rects.length > 0) json.waterZones = rects.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }));
+  } else if (saved.waterZones) {
+    json.waterZones = saved.waterZones.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }) as RoomJsonZone);
+  }
+
+  // Lava zones: prefer compact `lavaLayer` (v3+); fall back to legacy `lavaZones`.
+  if (saved.lavaLayer) {
+    const rects = expandLayerToRects(saved.lavaLayer);
+    if (rects.length > 0) json.lavaZones = rects.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }));
+  } else if (saved.lavaZones) {
+    json.lavaZones = saved.lavaZones.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }) as RoomJsonZone);
+  }
   if (saved.breakableBlocks) json.breakableBlocks = saved.breakableBlocks.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonBreakableBlock);
   if (saved.dustBoostJars)  json.dustBoostJars   = saved.dustBoostJars.map(([x, y, kind, count]) => ({ xBlock: x, yBlock: y, dustKind: kind, dustCount: count }) as RoomJsonDustBoostJar);
   if (saved.dustSwarms)     json.dustSwarms      = saved.dustSwarms.map(([x, y, kind, count]) => ({ xBlock: x, yBlock: y, dustKind: kind, dustCount: count }) as RoomJsonDustSwarm);
@@ -285,7 +300,22 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.slSoft   !== undefined) json.solidLightSoftness    = saved.slSoft;
   if (saved.seamBlend)              json.blockSeamBlending     = saved.seamBlend;
   if (saved.voidEdge)               json.voidEdgeStyle         = saved.voidEdge;
-  if (saved.ambientBlockers && saved.ambientBlockers.length > 0) {
+
+  // Ambient blockers: prefer compact clear/dark layers (v3+); fall back to legacy `ambientBlockers`.
+  if (saved.ambientBlockersClear || saved.ambientBlockersDark) {
+    const blockers: RoomJsonDef['ambientLightBlockers'] = [];
+    if (saved.ambientBlockersClear) {
+      for (const [x, y] of expandBlockerLayerToCells(saved.ambientBlockersClear)) {
+        blockers.push({ xBlock: x, yBlock: y, isDark: false });
+      }
+    }
+    if (saved.ambientBlockersDark) {
+      for (const [x, y] of expandBlockerLayerToCells(saved.ambientBlockersDark)) {
+        blockers.push({ xBlock: x, yBlock: y, isDark: true });
+      }
+    }
+    if (blockers.length > 0) json.ambientLightBlockers = blockers;
+  } else if (saved.ambientBlockers && saved.ambientBlockers.length > 0) {
     json.ambientLightBlockers = saved.ambientBlockers.map(entry => ({
       xBlock: entry[0],
       yBlock: entry[1],
@@ -358,7 +388,27 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.dcPieces && saved.dcPieces.length > 0) {
     json.dustContainerPieces = saved.dcPieces.map(([x, y]) => ({ xBlock: x, yBlock: y }));
   }
-  if (saved.bgBlocks && saved.bgBlocks.length > 0) {
+
+  // Background blocks: prefer compact `bgLayers` (v3+); fall back to legacy `bgBlocks`.
+  if (saved.bgLayers && saved.bgLayers.length > 0) {
+    const bgBlocks: RoomJsonBackgroundBlock[] = [];
+    for (const group of saved.bgLayers) {
+      // themeKey is DEFAULT_THEME_KEY (empty string sentinel) or a BlockThemeId string.
+      // blockThemeRefToTheme handles both BlockTheme and BlockThemeId inputs; casting here
+      // is safe because themeKey originates from blockThemeToId() in the dehydrator.
+      const theme = group.themeKey !== DEFAULT_THEME_KEY
+        ? blockThemeRefToTheme(group.themeKey as BlockTheme | BlockThemeId)
+        : undefined;
+      const isLightBlocking = group.lb === 1;
+      for (const [x, y, w, h] of expandLayerToRects(group.layer)) {
+        const entry: RoomJsonBackgroundBlock = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
+        if (theme) entry.blockTheme = theme;
+        if (isLightBlocking) entry.isLightBlocking = true;
+        bgBlocks.push(entry);
+      }
+    }
+    if (bgBlocks.length > 0) json.backgroundBlocks = bgBlocks;
+  } else if (saved.bgBlocks && saved.bgBlocks.length > 0) {
     json.backgroundBlocks = saved.bgBlocks.map(b => {
       const entry: RoomJsonBackgroundBlock = { xBlock: b.r[0], yBlock: b.r[1], wBlock: b.r[2], hBlock: b.r[3] };
       if (b.theme) {

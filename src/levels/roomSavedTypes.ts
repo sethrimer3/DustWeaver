@@ -42,10 +42,32 @@ export const DEFAULT_THEME_KEY = '__default__';
  * Only horizontal runs and single points — no 2D rects — so that after
  * hydration all walls have hBlock = 1.  This prevents `_buildSolid2x2Map`
  * from promoting them to 2×2-sprite rendering.
+ *
+ * Also used for ambient-blocker layers (clear/dark), where each entry
+ * represents a single blocker cell.
  */
 export interface Saved1x1Layer {
   runs?: SavedRun[];
   points?: SavedPoint[];
+}
+
+/**
+ * Compressed background-block layer for a single (theme, light-blocking) group.
+ *
+ * Background blocks that share the same theme key and the same `lb` flag are
+ * stored together so the greedy rect algorithm can merge adjacent tiles.
+ * Do not merge across different theme keys or different `lb` values.
+ */
+export interface SavedBgLayer {
+  /**
+   * Block theme key for this layer, or `DEFAULT_THEME_KEY` when the room
+   * default theme applies.
+   */
+  themeKey: string;
+  /** 1 if every block in this layer blocks ambient light. Omit if none do. */
+  lb?: 1;
+  /** Compressed tile coverage for this (theme, lb) group. */
+  layer: SavedSolidLayer;
 }
 
 /** Encoded solids, grouped by block theme. */
@@ -62,6 +84,7 @@ export interface SavedSolids {
    */
   v1ByTheme?: Record<string, Saved1x1Layer>;
 }
+
 
 /**
  * A "special" wall entry that cannot participate in the uniform tile-grid
@@ -234,7 +257,26 @@ export interface SavedRoomV2 {
   dustContainers?: SavedPoint[];
   spikes?: [number, number, 'up' | 'down' | 'left' | 'right'][];
   springboards?: SavedPoint[];
+  /**
+   * Compact water-zone coverage layer (v3+ preferred).
+   * Rects/runs/points define the full water coverage; hydrates to RoomJsonZone[].
+   * Water and lava are always kept separate: never merge across zone types.
+   */
+  waterLayer?: SavedSolidLayer;
+  /**
+   * Compact lava-zone coverage layer (v3+ preferred).
+   * Rects/runs/points define the full lava coverage; hydrates to RoomJsonZone[].
+   */
+  lavaLayer?: SavedSolidLayer;
+  /**
+   * @deprecated Legacy per-rect water zone list from v2/early-v3.
+   * New exports write `waterLayer` instead.  Still read for backward compatibility.
+   */
   waterZones?: SavedRect[];
+  /**
+   * @deprecated Legacy per-rect lava zone list from v2/early-v3.
+   * New exports write `lavaLayer` instead.  Still read for backward compatibility.
+   */
   lavaZones?: SavedRect[];
   breakableBlocks?: SavedPoint[];
   dustBoostJars?: [number, number, string, number][];
@@ -271,8 +313,21 @@ export interface SavedRoomV2 {
   /** Void edge style. Omitted when 'off'. */
   voidEdge?: VoidEdgeStyle;
   /**
-   * Sparse list of ambient-light blocker tile coordinates.
-   * Each entry is [x, y] for a clear blocker, or [x, y, 1] for a dark blocker.
+   * Compressed clear ambient-light blocker cells (v3+ preferred).
+   * Runs + points; each cell hydrates to `{xBlock, yBlock, isDark: false}`.
+   * Clear blockers and dark blockers are always stored separately so that
+   * their identities (dark vs clear) are never accidentally merged.
+   */
+  ambientBlockersClear?: Saved1x1Layer;
+  /**
+   * Compressed dark ambient-light blocker cells (v3+ preferred).
+   * Runs + points; each cell hydrates to `{xBlock, yBlock, isDark: true}`.
+   */
+  ambientBlockersDark?: Saved1x1Layer;
+  /**
+   * @deprecated Legacy per-cell ambient blocker list from v2/early-v3.
+   * New exports write `ambientBlockersClear`/`ambientBlockersDark` instead.
+   * Still read for backward compatibility.
    */
   ambientBlockers?: ([number, number] | [number, number, 1])[];
   /**
@@ -307,9 +362,23 @@ export interface SavedRoomV2 {
    * Exact-sized uniform walls that bypass the tile-grid compressor.
    * Used to preserve 1×1 and 2×2 block identity across save/load round-trips.
    * These walls are NOT also encoded in `solids`.
+   *
+   * @deprecated v3 exports no longer write `exactWalls` for ordinary solid walls.
+   * `solids.v1ByTheme` covers all 1×1-visual walls.  This field is kept as
+   * read-only backward-compat support for old v2 files only.  The room audit
+   * warns if a v3 active campaign room still contains this field.
    */
   exactWalls?: SavedSpecialWall[];
-  /** Visual-only background blocks — no collision, drawn behind walls. */
+  /**
+   * Compressed background-block layers, grouped by (themeKey, lb) (v3+ preferred).
+   * Each `SavedBgLayer` covers one (theme, light-blocking) group.
+   * Never merge across different theme keys or different `lb` values.
+   */
+  bgLayers?: SavedBgLayer[];
+  /**
+   * @deprecated Legacy per-entry background block list from v2/early-v3.
+   * New exports write `bgLayers` instead.  Still read for backward compatibility.
+   */
   bgBlocks?: SavedBgBlock[];
   /** Golden dust guide paths. */
   guidePaths?: SavedGuideDustPath[];
