@@ -707,6 +707,13 @@ export interface RoomDef {
   /** Golden dust guide paths — Catmull-Rom splines with organic mote particles. */
   guideDustPaths?: readonly RoomGuideDustPathDef[];
   /**
+   * Pre-baked runtime wall template hydrated from JSON during room load.
+   * When present and valid (source hash matches), Phase D of room loading skips
+   * the expensive `buildRoomWallTemplate()` merge pass and applies this directly.
+   * Absent for older rooms that have not been re-exported since BUILD 420.
+   */
+  bakedWallTemplate?: RoomWallTemplate;
+  /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default / undefined).
    * '_silence'  = stop music when entering this room.
@@ -714,4 +721,35 @@ export interface RoomDef {
    * When undefined, treated as '_continue'.
    */
   songId?: RoomSongId;
+}
+
+// ── RoomWallTemplate ──────────────────────────────────────────────────────────
+
+/**
+ * Immutable snapshot of the merged wall geometry for a single room.
+ * Produced by `buildRoomWallTemplate()` and consumed by `applyRoomWallTemplate()`.
+ * Arrays are sized to `wallCount` (the actual post-merge count), not MAX_WALLS,
+ * so cached templates are memory-efficient even for large rooms.
+ *
+ * Defined here (in roomDef.ts) so that RoomDef.bakedWallTemplate can reference
+ * it without creating a circular dependency with gameRoomWalls.ts.
+ * Re-exported from gameRoomWalls.ts for backward compatibility.
+ */
+export interface RoomWallTemplate {
+  readonly wallCount: number;
+  readonly xWorld: Float32Array;
+  readonly yWorld: Float32Array;
+  readonly wWorld: Float32Array;
+  readonly hWorld: Float32Array;
+  readonly isPlatformFlag: Uint8Array;
+  readonly platformEdge: Uint8Array;
+  readonly themeIndex: Uint8Array;
+  readonly soundHardnessIndex: Uint8Array;
+  readonly isInvisibleFlag: Uint8Array;
+  readonly rampOrientationIndex: Uint8Array;
+  readonly isPillarHalfWidthFlag: Uint8Array;
+  /** 1 for walls whose theme is 'ice' — used for ice-surface physics and grapple rejection. */
+  readonly isIceFlag: Uint8Array;
+  /** 1 for walls whose theme is 'ultraIceBlock' — velocity lock and grapple recharge suppression. */
+  readonly isUltraIceFlag: Uint8Array;
 }

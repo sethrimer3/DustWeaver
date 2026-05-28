@@ -108,6 +108,82 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 ## Active Priority 1 Tasks
 
+### BUILD 420 — Complete boundary walls + baked runtime wall templates (COMPLETED)
+
+#### Part A: Transitions are now trigger strips, not boundary holes
+
+- **Boundary walls are complete solid edge rectangles.** All four boundary edges
+  (top, bottom, left, right) are fully solid invisible walls with no gaps. Transitions
+  no longer cut openings into boundary geometry.
+
+- **Transitions are independent trigger strips** inside the boundary. The trigger fires
+  when the player enters the strip 0.5 blocks past the near edge (`zoneLeft + 0.5BS`
+  for right transitions, etc.), before the boundary wall stops movement.
+
+- **Old room JSON remains compatible.** Fields `positionBlock`, `depthBlock`,
+  `openingSizeBlocks`, `xBlock`, `yBlock`, `gradientWidthBlocks` are still interpreted
+  as trigger-zone geometry. No existing campaign files need to be rewritten.
+
+- **Shared boundary wall builder.** `src/levels/roomBoundaryWalls.ts` exports
+  `buildCompleteBoundaryWalls(widthBlocks, heightBlocks): RoomWallDef[]` — the single
+  source of truth for boundary wall generation used by both the runtime loader and
+  the editor room builder. Do NOT reintroduce wall holes in this function.
+
+- **Files changed:**
+  - `src/levels/roomBoundaryWalls.ts` — NEW: shared complete boundary wall builder
+  - `src/levels/roomJsonLoader.ts` — uses `buildCompleteBoundaryWalls`, removed old hole-cutting helpers
+  - `src/editor/editorRoomBuilder.ts` — uses `buildCompleteBoundaryWalls`, removed old hole-cutting helpers
+  - `src/screens/gameTransitions.ts` — trigger fires on zone entry (near side), not far edge
+
+#### Part B: Baked runtime wall templates
+
+- **Baked wall templates** are saved in exported room JSON under `bakedWallTemplate`.
+  The editor's `editorRoomDataToJson()` runs `buildRoomWallTemplate()` once at export
+  time and stores the result as flat JSON arrays alongside a `sourceHash` and
+  `schemaVersion`.
+
+- **Runtime prefers baked templates.** On room load, the runtime checks (in order):
+  1. `RoomRuntimeCache` (fastest — already-merged from a prior visit)
+  2. `room.bakedWallTemplate` (hydrated from JSON — skips `buildRoomWallTemplate()`)
+  3. `buildRoomWallTemplate()` fallback (old/stale/missing baked data)
+
+- **Source hash** (`computeWallTemplateSourceHash()`) covers: schema version,
+  `BLOCK_SIZE_MEDIUM`, room dimensions, room `blockTheme`/`soundHardness`, and all
+  interior wall properties. It does NOT cover transitions — boundary walls are
+  independent of transitions.
+
+- **Safe fallback.** If `bakedWallTemplate` is absent, has a wrong `schemaVersion`,
+  has a stale `sourceHash`, or has mismatched array lengths, a DEV warning is logged
+  and `buildRoomWallTemplate()` runs normally. Old campaign files without baked data
+  continue to work.
+
+- **Diagnostics.** All three paths emit a `[wallTemplate] roomId=... source=...` log
+  in DEV mode.
+
+- **`RoomWallTemplate` interface moved** from `gameRoomWalls.ts` to `roomDef.ts` so
+  `RoomDef.bakedWallTemplate` can reference it without a circular dependency.
+  `gameRoomWalls.ts` re-exports `RoomWallTemplate` for backward compatibility.
+
+- **Files changed:**
+  - `src/levels/roomDef.ts` — `RoomWallTemplate` interface moved here; `bakedWallTemplate?` added to `RoomDef`
+  - `src/levels/roomWallTemplateHash.ts` — NEW: `BAKED_WALL_SCHEMA_VERSION`, `computeWallTemplateSourceHash`, `hydrateAndValidateBakedWallTemplate`
+  - `src/editor/roomJsonSchema.ts` — `RoomJsonBakedWallTemplate` interface; `bakedWallTemplate?` on `RoomJsonDef`
+  - `src/editor/roomJsonSerializer.ts` — bakes wall template during export
+  - `src/screens/gameRoomWalls.ts` — re-exports `RoomWallTemplate` from `roomDef.ts`
+  - `src/screens/gameLoadRoomPhases.ts` — Phase D uses baked template before falling back
+  - `src/screens/residentWorldBuilder.ts` — resident builds use baked template before falling back
+
+#### Remaining limitations
+
+- Existing campaign room JSON files do not have `bakedWallTemplate`; they will always
+  use the `buildRoomWallTemplate()` fallback until they are re-exported from the editor.
+- The hash does not cover per-wall ice/ultraIce flags (these fields do not exist in
+  `RoomJsonWall`; ice theme is covered by `blockTheme`/`blockThemeId`).
+- `phaseD_walls_build` is skipped for rooms with valid baked templates on their first
+  load; subsequent visits always use `RoomRuntimeCache`.
+
+---
+
 ### 0. In-room runtime freeze elimination pass (COMPLETED — BUILD 395 + BUILD 401)
 
 This pass targeted repeated freezes **inside** rooms during active gameplay, distinct from the earlier room-transition loading work.

@@ -5,6 +5,8 @@
  * half (JSON → EditorRoomData) lives in roomJson.ts alongside the validator.
  *
  * Extracted from roomJson.ts (BUILD 312).
+ * BUILD 420+: Bakes a runtime wall template into the exported JSON so that the
+ * runtime can skip the expensive buildRoomWallTemplate() merge pass.
  */
 
 import { blockThemeToId, DEFAULT_ROPE_SEGMENT_COUNT } from '../levels/roomDef';
@@ -26,6 +28,9 @@ import type {
   RoomJsonGuideDustPath,
   RoomJsonGuideDustPathPoint,
 } from './roomJsonSchema';
+import { editorRoomDataToRoomDef } from './editorRoomBuilder';
+import { buildRoomWallTemplate } from '../screens/gameRoomWalls';
+import { BAKED_WALL_SCHEMA_VERSION, computeWallTemplateSourceHash } from '../levels/roomWallTemplateHash';
 
 /**
  * Converts the in-editor room representation into the compact JSON format that
@@ -378,5 +383,37 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       return entry;
     });
   }
+
+  // ── Bake runtime wall template ───────────────────────────────────────────
+  // Build the RoomDef (with complete boundary walls) and run the merge pass
+  // once at export time.  The result is stored in the JSON so the runtime can
+  // skip buildRoomWallTemplate() for rooms that have not changed since export.
+  try {
+    const roomDef = editorRoomDataToRoomDef(data);
+    const tpl = buildRoomWallTemplate(roomDef);
+    const sourceHash = computeWallTemplateSourceHash(json);
+    json.bakedWallTemplate = {
+      schemaVersion: BAKED_WALL_SCHEMA_VERSION,
+      sourceHash,
+      wallCount: tpl.wallCount,
+      xWorld:                Array.from(tpl.xWorld),
+      yWorld:                Array.from(tpl.yWorld),
+      wWorld:                Array.from(tpl.wWorld),
+      hWorld:                Array.from(tpl.hWorld),
+      isPlatformFlag:        Array.from(tpl.isPlatformFlag),
+      platformEdge:          Array.from(tpl.platformEdge),
+      themeIndex:            Array.from(tpl.themeIndex),
+      soundHardnessIndex:    Array.from(tpl.soundHardnessIndex),
+      isInvisibleFlag:       Array.from(tpl.isInvisibleFlag),
+      rampOrientationIndex:  Array.from(tpl.rampOrientationIndex),
+      isPillarHalfWidthFlag: Array.from(tpl.isPillarHalfWidthFlag),
+      isIceFlag:             Array.from(tpl.isIceFlag),
+      isUltraIceFlag:        Array.from(tpl.isUltraIceFlag),
+    };
+  } catch (err) {
+    // Non-fatal: export still succeeds; runtime will fall back to buildRoomWallTemplate().
+    console.warn('[roomJsonSerializer] Failed to bake wall template:', err);
+  }
+
   return json;
 }

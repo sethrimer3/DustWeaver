@@ -70,11 +70,16 @@ export function computeSpawnBlockForTransition(
 
 /**
  * Checks all transitions in `currentRoom` to see if the player has entered
- * a transition zone.  The trigger is crossing the trigger edge:
- *   right → player x crosses zone right edge
- *   left  → player x crosses zone left edge
- *   down  → player y crosses zone bottom edge
- *   up    → player y crosses zone top edge
+ * a transition zone.  The trigger fires when the player crosses 0.5 blocks past
+ * the NEAR (inner) edge of the zone strip:
+ *   right → player x passes 0.5 blocks past zone left edge
+ *   left  → player x passes 0.5 blocks before zone right edge
+ *   down  → player bottom y passes 0.5 blocks below zone top edge
+ *   up    → player y passes 0.5 blocks above zone bottom edge
+ *
+ * DESIGN (BUILD 420+): Boundary walls are fully solid, so the player cannot
+ * physically reach the far side of a zone.  The trigger fires on entry so
+ * transitions start before the boundary wall stops movement.
  *
  * When a match is found, calls `onLoadRoom` with the target room and computed
  * spawn coordinates and returns `true`.  Returns `false` when no transition
@@ -114,27 +119,31 @@ export function checkRoomTransitions(
     // Player must be inside the zone
     if (px < zoneLeft || px > zoneRight || py < zoneTop || py > zoneBottom) continue;
 
-    // Trigger edge check: player must be past the trigger edge.
-    // TRIGGER_EDGE_THRESHOLD_BLOCKS: how close to the trigger edge before the transition fires.
-    const TRIGGER_EDGE_THRESHOLD_BLOCKS = 0.5;
+    // Trigger edge check: player must be past the near side of the zone.
+    //
+    // DESIGN (BUILD 420+): Boundary walls are now fully solid — the player can
+    // no longer physically reach the far side of a transition zone.  We trigger
+    // when the player has moved 0.5 blocks PAST THE NEAR EDGE of the zone
+    // (i.e. just entered the strip), so the transition fires before the player
+    // is stopped by the boundary wall.
+    const TRIGGER_ENTRY_THRESHOLD_BLOCKS = 0.5;
     const isTriggered = (() => {
       if (t.direction === 'right') {
-        return px >= zoneRight - BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
+        // Zone is near the right wall.  Player enters from the left (near) side.
+        return px >= zoneLeft + BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
       }
       if (t.direction === 'left') {
-        return px <= zoneLeft + BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
+        // Zone is near the left wall.  Player enters from the right (near) side.
+        return px <= zoneRight - BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
       }
       if (t.direction === 'down') {
-        // Use the player's bottom edge rather than center.  The world-floor clamp
-        // in resolveClusterFloorCollision stops the player's CENTER at
-        // (worldHeightWorld - halfHeightWorld), which is further from the zone
-        // bottom than TRIGGER_EDGE_THRESHOLD_BLOCKS * BS would allow — so the
-        // center-based check can never fire.  Using the bottom edge means the
-        // transition triggers as soon as the player's feet reach the zone bottom.
+        // Zone is near the bottom wall.  Player enters from the top (near) side.
+        // Use the player's bottom edge so the trigger fires when feet cross.
         const playerBottom = py + player.halfHeightWorld;
-        return playerBottom >= zoneBottom - BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
+        return playerBottom >= zoneTop + BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
       }
-      return py <= zoneTop + BS * TRIGGER_EDGE_THRESHOLD_BLOCKS;
+      // 'up': zone is near the top wall.  Player enters from the bottom (near) side.
+      return py <= zoneBottom - BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
     })();
 
     if (isTriggered) {

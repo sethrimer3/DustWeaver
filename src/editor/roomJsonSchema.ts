@@ -449,6 +449,13 @@ export interface RoomJsonDef {
   sceneLights?: import('../levels/lightingSchema').SavedSceneLight[];
   /** Golden dust guide paths (Catmull-Rom splines). */
   guideDustPaths?: RoomJsonGuideDustPath[];
+  /**
+   * Pre-baked runtime wall template produced during export/serialisation.
+   * When present and valid (schema version + source hash match), the runtime
+   * skips `buildRoomWallTemplate()` and hydrates this data directly.
+   * Missing in older room files — runtime falls back safely.
+   */
+  bakedWallTemplate?: RoomJsonBakedWallTemplate;
 }
 
 // ── Background blocks ────────────────────────────────────────────────────────
@@ -463,6 +470,37 @@ export interface RoomJsonBackgroundBlock {
   blockTheme?: BlockTheme;
   /** When true, this background block blocks ambient-light propagation. */
   isLightBlocking?: boolean;
+}
+
+// ── Baked wall template ───────────────────────────────────────────────────────
+
+/**
+ * Pre-baked runtime wall template stored in room JSON during export.
+ *
+ * All arrays have length equal to `wallCount`.  Values are plain JSON numbers;
+ * the runtime hydrates them into typed arrays (`Float32Array`, `Uint8Array`).
+ *
+ * `schemaVersion` must match `BAKED_WALL_SCHEMA_VERSION` (currently 1).
+ * `sourceHash`    must match the hash recomputed from the loaded room's
+ *                 wall-affecting inputs.  A mismatch means stale baked data.
+ */
+export interface RoomJsonBakedWallTemplate {
+  schemaVersion: number;
+  sourceHash: string;
+  wallCount: number;
+  xWorld: number[];
+  yWorld: number[];
+  wWorld: number[];
+  hWorld: number[];
+  isPlatformFlag: number[];
+  platformEdge: number[];
+  themeIndex: number[];
+  soundHardnessIndex: number[];
+  isInvisibleFlag: number[];
+  rampOrientationIndex: number[];
+  isPillarHalfWidthFlag: number[];
+  isIceFlag: number[];
+  isUltraIceFlag: number[];
 }
 
 // ── Validation result ────────────────────────────────────────────────────────
