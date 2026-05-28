@@ -107,9 +107,8 @@ import {
   decodeRoomThemeSprites,
   decodeRoomBackground,
 } from '../render/roomAssetPreloader';
-import { applyRoomWallTemplate } from './gameRoomWalls';
-import type { RoomRuntimeCache } from './roomRuntimeCache';
-import { resolveRoomWallTemplate } from './preparedRoomRuntime';
+import { applyRoomWallTemplate, buildRoomWallTemplateIncremental } from './gameRoomWalls';
+import type { RoomRuntimeCache, RoomRuntimeEntry } from './roomRuntimeCache';
 import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
 import {
   scheduleChunkPrewarms,
@@ -521,31 +520,65 @@ export function* makeLoadRoomPhases(
     FP.recordLoadPhaseStep('D:grappleChains', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
 
-  // Use resolveRoomWallTemplate for consistent cache → baked → fallback resolution.
-  // This path participates in the same aggregate diagnostics as the resident-build
-  // and preload paths (getWallTemplateDiagnostics / logWallTemplateDiagnosticsSummary).
-  const _wallT0 = import.meta.env.DEV ? performance.now() : 0;
-  const _wallResolution = resolveRoomWallTemplate(room, roomRuntimeCache);
-  applyRoomWallTemplate(world, _wallResolution.template);
-  if (import.meta.env.DEV) {
-    const _wallElapsed = performance.now() - _wallT0;
-    console.log(
-      `[wallTemplate] roomId=${room.id} source=${_wallResolution.source}` +
-      ` wallCount=${_wallResolution.template.wallCount}` +
-      ` (${_wallResolution.source === 'fallback' ? 'build' : 'apply'} ${_wallElapsed.toFixed(1)}ms)`,
-    );
-  }
-  // After baked/fallback resolution, the new cache entry has blockerKeys: null.
-  // Backfill with the Phase A blocker sets so subsequent visits and the
-  // isEntryFullyPrepared check see correct values without a second rebuild.
-  if (_wallResolution.source !== 'cache') {
-    const _wallEntry = roomRuntimeCache.get(room.id);
-    if (_wallEntry !== undefined) {
-      _wallEntry.blockerKeys     = blockerKeys;
-      _wallEntry.darkBlockerKeys = darkBlockerKeys;
+  // Use resolveRoomWallTemplate for cache → baked hits; on a cache+baked miss
+  // drive buildRoomWallTemplateIncremental() across frames to stay under 8 ms.
+  {
+    const _wallT0 = import.meta.env.DEV ? performance.now() : 0;
+    const cacheEntry = roomRuntimeCache.get(room.id);
+    if (cacheEntry !== undefined) {
+      // Fast path: already in runtime cache.
+      applyRoomWallTemplate(world, cacheEntry.wallTemplate);
+      if (import.meta.env.DEV) {
+        const _ms = performance.now() - _wallT0;
+        console.log(`[wallTemplate] roomId=${room.id} source=cache wallCount=${cacheEntry.wallTemplate.wallCount} (apply ${_ms.toFixed(1)}ms)`);
+        FP.recordLoadPhaseStep('D:wallTemplate', _ms);
+      } else { FP.recordLoadPhaseStep('D:wallTemplate', 0); }
+    } else if (room.bakedWallTemplate !== undefined) {
+      // Baked template present — apply and store so subsequent transitions are fast.
+      applyRoomWallTemplate(world, room.bakedWallTemplate);
+      roomRuntimeCache.set(room.id, {
+        wallTemplate:    room.bakedWallTemplate,
+        edgeExtension:   null,
+        blockerKeys,
+        darkBlockerKeys,
+        wallDecorations: null,
+      } satisfies RoomRuntimeEntry);
+      if (import.meta.env.DEV) {
+        const _ms = performance.now() - _wallT0;
+        console.log(`[wallTemplate] roomId=${room.id} source=baked wallCount=${room.bakedWallTemplate.wallCount} (apply ${_ms.toFixed(1)}ms)`);
+        FP.recordLoadPhaseStep('D:wallTemplate', _ms);
+      } else { FP.recordLoadPhaseStep('D:wallTemplate', 0); }
+    } else {
+      // Fallback: run the incremental merge generator.  Each slice that exceeds
+      // the 4 ms budget yields back to the RAF loop so we never spike a frame.
+      if (import.meta.env.DEV) FP.recordLoadPhaseStep('D:wallTemplate_lookup', performance.now() - _wallT0);
+
+      yield; // ── Phase D walls lookup complete; merge starts next frame ────
+
+      const _mergeT0 = import.meta.env.DEV ? performance.now() : 0;
+      const mergeGen = buildRoomWallTemplateIncremental(room);
+      let mergeStep = mergeGen.next();
+      while (!mergeStep.done) {
+        if (import.meta.env.DEV) FP.recordLoadPhaseStep('D:wallTemplate_merge_slice', performance.now() - _mergeT0);
+        yield; // ── Merge budget elapsed — resume next frame ────────────────
+        mergeStep = mergeGen.next();
+      }
+      const wallTemplate = mergeStep.value;
+      applyRoomWallTemplate(world, wallTemplate);
+      roomRuntimeCache.set(room.id, {
+        wallTemplate,
+        edgeExtension:   null,
+        blockerKeys,
+        darkBlockerKeys,
+        wallDecorations: null,
+      } satisfies RoomRuntimeEntry);
+      if (import.meta.env.DEV) {
+        const _ms = performance.now() - _mergeT0;
+        console.log(`[wallTemplate] roomId=${room.id} source=fallback wallCount=${wallTemplate.wallCount} (build ${_ms.toFixed(1)}ms)`);
+        FP.recordLoadPhaseStep('D:wallTemplate', _ms);
+      } else { FP.recordLoadPhaseStep('D:wallTemplate', 0); }
     }
   }
-  FP.recordLoadPhaseStep('D:wallTemplate', import.meta.env.DEV ? performance.now() - _wallT0 : 0);
 
   yield; // ── Phase D complete ─────────────────────────────────────────────
 
