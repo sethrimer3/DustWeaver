@@ -404,37 +404,42 @@ export interface RoomWallDef {
 export type TransitionDirection = 'left' | 'right' | 'up' | 'down';
 
 /**
- * A passage connecting this room to an adjacent room.
+ * A trigger strip connecting this room to an adjacent room.
  *
- * The tunnel is an opening in the room boundary walls.
- * Blocks line the top and bottom (or sides) of the opening to form
- * a corridor that extends a few blocks beyond the room edge.
+ * Boundary walls are complete solid rectangles with no openings.
+ * Transitions are invisible trigger strips placed inside the boundary.
+ * The trigger fires when the player enters the strip past its near
+ * (inner) edge, before the boundary wall stops movement.
  */
 export interface RoomTransitionDef {
-  /** Direction the player walks to leave through this tunnel. */
+  /** Direction the player walks to leave through this transition. */
   direction: TransitionDirection;
-  /** ID of the room this tunnel leads to. */
+  /** ID of the room this transition leads to. */
   targetRoomId: string;
   /**
-   * X block coordinate of the top-left corner of the transition zone.
+   * X block coordinate of the top-left corner of the trigger zone.
    * For left/right: x-start of the gradient zone.
-   * For up/down: x-start of the opening.
+   * For up/down: x-start of the trigger strip.
    * Populated by editorRoomBuilder at conversion time.
    */
   xBlock: number;
   /**
-   * Y block coordinate of the top-left corner of the transition zone.
-   * For left/right: y-start of the opening.
+   * Y block coordinate of the top-left corner of the trigger zone.
+   * For left/right: y-start of the trigger strip.
    * For up/down: y-start of the gradient zone.
    * Populated by editorRoomBuilder at conversion time.
    */
   yBlock: number;
   /**
-   * @deprecated Legacy field: for left/right = y-start of opening;
-   * for up/down = x-start of opening. Superseded by xBlock/yBlock.
+   * @deprecated Legacy field: for left/right = y-start of trigger strip;
+   * for up/down = x-start of trigger strip. Superseded by xBlock/yBlock.
    */
   positionBlock: number;
-  /** Size of the opening in blocks (height for L/R, width for U/D). */
+  /**
+   * Span (length) of the trigger strip in blocks.
+   * For left/right transitions this is the vertical span (height in blocks).
+   * For up/down transitions this is the horizontal span (width in blocks).
+   */
   openingSizeBlocks: number;
   /**
    * Block coordinate where the player spawns in the target room.

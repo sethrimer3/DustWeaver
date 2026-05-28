@@ -107,8 +107,9 @@ import {
   decodeRoomThemeSprites,
   decodeRoomBackground,
 } from '../render/roomAssetPreloader';
-import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
+import { applyRoomWallTemplate } from './gameRoomWalls';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
+import { resolveRoomWallTemplate } from './preparedRoomRuntime';
 import { scheduleRoomPreloads, type PreloadScheduleHandle } from './roomPreloadScheduler';
 import {
   scheduleChunkPrewarms,
@@ -510,49 +511,29 @@ export function* makeLoadRoomPhases(
     FP.recordLoadPhaseStep('D:grappleChains', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
 
-  // Use cached wall template if available (avoids O(n²) merge pass).
-  // Priority: 1. RoomRuntimeCache (fastest — already merged), 2. bakedWallTemplate
-  // from JSON (skip runtime merge), 3. buildRoomWallTemplate (fallback).
-  const _wallCacheEntry = roomRuntimeCache.get(room.id);
+  // Use resolveRoomWallTemplate for consistent cache → baked → fallback resolution.
+  // This path participates in the same aggregate diagnostics as the resident-build
+  // and preload paths (getWallTemplateDiagnostics / logWallTemplateDiagnosticsSummary).
   const _wallT0 = import.meta.env.DEV ? performance.now() : 0;
-  if (_wallCacheEntry !== undefined) {
-    applyRoomWallTemplate(world, _wallCacheEntry.wallTemplate);
-    if (import.meta.env.DEV) {
-      console.log(`[wallTemplate] roomId=${room.id} source=cache wallCount=${_wallCacheEntry.wallTemplate.wallCount}` +
-        ` (apply ${(performance.now() - _wallT0).toFixed(1)}ms)`);
+  const _wallResolution = resolveRoomWallTemplate(room, roomRuntimeCache);
+  applyRoomWallTemplate(world, _wallResolution.template);
+  if (import.meta.env.DEV) {
+    const _wallElapsed = performance.now() - _wallT0;
+    console.log(
+      `[wallTemplate] roomId=${room.id} source=${_wallResolution.source}` +
+      ` wallCount=${_wallResolution.template.wallCount}` +
+      ` (${_wallResolution.source === 'fallback' ? 'build' : 'apply'} ${_wallElapsed.toFixed(1)}ms)`,
+    );
+  }
+  // After baked/fallback resolution, the new cache entry has blockerKeys: null.
+  // Backfill with the Phase A blocker sets so subsequent visits and the
+  // isEntryFullyPrepared check see correct values without a second rebuild.
+  if (_wallResolution.source !== 'cache') {
+    const _wallEntry = roomRuntimeCache.get(room.id);
+    if (_wallEntry !== undefined) {
+      _wallEntry.blockerKeys     = blockerKeys;
+      _wallEntry.darkBlockerKeys = darkBlockerKeys;
     }
-  } else if (room.bakedWallTemplate !== undefined) {
-    applyRoomWallTemplate(world, room.bakedWallTemplate);
-    if (import.meta.env.DEV) {
-      console.log(`[wallTemplate] roomId=${room.id} source=baked wallCount=${room.bakedWallTemplate.wallCount}` +
-        ` (apply ${(performance.now() - _wallT0).toFixed(1)}ms)`);
-    }
-    roomRuntimeCache.set(room.id, {
-      wallTemplate: room.bakedWallTemplate,
-      edgeExtension: null,
-      blockerKeys,
-      darkBlockerKeys,
-      wallDecorations: null,
-    });
-  } else {
-    const wallTemplate = buildRoomWallTemplate(room);
-    const _buildMs = import.meta.env.DEV ? performance.now() - _wallT0 : 0;
-    applyRoomWallTemplate(world, wallTemplate);
-    if (import.meta.env.DEV) {
-      console.log(`[wallTemplate] roomId=${room.id} source=fallback reason=missing wallCount=${wallTemplate.wallCount}` +
-        ` (build ${_buildMs.toFixed(1)}ms)`);
-    }
-    // Store in cache so subsequent visits to this room are fast.
-    // Remaining fields (edgeExtension, wallDecorations) are filled in Phase F.
-    // blockerKeys and darkBlockerKeys were computed in Phase A of this same generator
-    // run and are in scope; storing them here avoids a second rebuild on next visit.
-    roomRuntimeCache.set(room.id, {
-      wallTemplate,
-      edgeExtension: null,
-      blockerKeys,
-      darkBlockerKeys,
-      wallDecorations: null,
-    });
   }
   FP.recordLoadPhaseStep('D:wallTemplate', import.meta.env.DEV ? performance.now() - _wallT0 : 0);
 

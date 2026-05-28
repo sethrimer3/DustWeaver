@@ -102,6 +102,13 @@ export function checkRoomTransitions(
   const py = player.positionYWorld - playerOffsetYWorld;
   const BS = BLOCK_SIZE_MEDIUM;
 
+  // Estimate previous-tick player position from current velocity.
+  // Used for swept-entry detection so fast grapple/zip movement cannot skip
+  // a trigger strip in a single frame even when ClusterState has no stored
+  // previous-position field.
+  const prevPx = px - player.velocityXWorld;
+  const prevPy = py - player.velocityYWorld;
+
   for (let ti = 0; ti < currentRoom.transitions.length; ti++) {
     const t = currentRoom.transitions[ti];
     const { xBlock, yBlock } = getTransitionXYBlock(t, currentRoom);
@@ -126,24 +133,38 @@ export function checkRoomTransitions(
     // when the player has moved 0.5 blocks PAST THE NEAR EDGE of the zone
     // (i.e. just entered the strip), so the transition fires before the player
     // is stopped by the boundary wall.
+    //
+    // Swept-entry guard: also fires if the player was approaching the threshold
+    // and their previous-tick position (estimated from velocity) was before it.
+    // This prevents fast grapple/zip movement from skipping the strip in a
+    // single frame when the player teleports from outside the zone to inside it.
     const TRIGGER_ENTRY_THRESHOLD_BLOCKS = 0.5;
     const isTriggered = (() => {
       if (t.direction === 'right') {
         // Zone is near the right wall.  Player enters from the left (near) side.
-        return px >= zoneLeft + BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
+        const threshX = zoneLeft + BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
+        return px >= threshX
+          || (player.velocityXWorld > 0 && prevPx < threshX);
       }
       if (t.direction === 'left') {
         // Zone is near the left wall.  Player enters from the right (near) side.
-        return px <= zoneRight - BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
+        const threshX = zoneRight - BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
+        return px <= threshX
+          || (player.velocityXWorld < 0 && prevPx > threshX);
       }
       if (t.direction === 'down') {
         // Zone is near the bottom wall.  Player enters from the top (near) side.
         // Use the player's bottom edge so the trigger fires when feet cross.
         const playerBottom = py + player.halfHeightWorld;
-        return playerBottom >= zoneTop + BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
+        const prevPlayerBottom = prevPy + player.halfHeightWorld;
+        const threshY = zoneTop + BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
+        return playerBottom >= threshY
+          || (player.velocityYWorld > 0 && prevPlayerBottom < threshY);
       }
       // 'up': zone is near the top wall.  Player enters from the bottom (near) side.
-      return py <= zoneBottom - BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
+      const threshY = zoneBottom - BS * TRIGGER_ENTRY_THRESHOLD_BLOCKS;
+      return py <= threshY
+        || (player.velocityYWorld < 0 && prevPy > threshY);
     })();
 
     if (isTriggered) {

@@ -177,6 +177,35 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
   - `src/screens/roomPreparationWorkerProtocol.ts` — `WorkerSuccessMessage` gains `wallSource: 'baked' | 'fallback'`
   - `src/screens/roomPreparationWorkerManager.ts` — logs `[wallTemplate] source=worker:…` in DEV after successful cache store
 
+#### Cleanup hardening (BUILD 420 follow-up)
+
+- **Active-load path now uses the central resolver.** `gameLoadRoomPhases.ts` Phase D
+  was refactored to call `resolveRoomWallTemplate(room, roomRuntimeCache)` instead of
+  duplicating the cache → baked → fallback logic.  The active-load path now participates
+  in the aggregate DEV diagnostics (`logWallTemplateDiagnosticsSummary`).
+
+- **Preload cost heuristic treats baked rooms as cheap.** `roomPreloadScheduler.ts`
+  `estimateRoomBuildCostMs()` now returns zero wall cost when `room.bakedWallTemplate`
+  is present, matching the `_estimateRoomBuildCostMs` logic in `preparedRoomRuntime.ts`.
+  Baked rooms no longer get unnecessarily dispatched to the worker.
+
+- **Aggregate diagnostics are now emitted.** `logWallTemplateDiagnosticsSummary('startup')`
+  is called in `gameScreen.ts` after the initial radius-2 resident build completes,
+  showing cache-hit/baked-hit/fallback counts and slowest fallback rooms in DEV.
+
+- **Stale transition comments removed.** `RoomTransitionDef` in `roomDef.ts` no longer
+  describes transitions as "openings in boundary walls" or "corridors beyond the edge".
+  `openingSizeBlocks` is now documented as the trigger-strip span/length.
+  `roomJsonSchema.ts` `interiorWalls` comment updated: boundary walls regenerate from
+  room dimensions alone (not dimensions + transitions).
+  `roomPreparationWorker.ts` top comment updated to reflect the baked-template fast path.
+
+- **Fast-movement transition robustness.** `checkRoomTransitions()` in `gameTransitions.ts`
+  now estimates the player's previous-tick position from `velocityXWorld`/`velocityYWorld`
+  and fires the trigger if the player was approaching the strip and their velocity-estimated
+  previous position was before the threshold.  This prevents fast grapple/zip movement from
+  skipping the 0.5-block trigger strip in a single frame.
+
 #### Remaining limitations
 
 - Existing campaign room JSON files do not have `bakedWallTemplate`; they will always

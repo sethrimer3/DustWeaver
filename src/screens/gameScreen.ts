@@ -116,6 +116,7 @@ import { ResidentRoomManager } from './residentRoomManager';
 import { bfsNearbyRooms } from './roomPrewarmNeighborhood';
 import { createResidentBuildGenerator } from './residentWorldBuilder';
 import { PLAYER_INITIAL_HEALTH } from './gameSpawn';
+import { logWallTemplateDiagnosticsSummary } from './preparedRoomRuntime';
 
 const FIXED_DT_MS = 16.666;
 
@@ -1519,6 +1520,7 @@ export function startGameScreen(
             (_initialResidentBuildPhase.failed > 0 ? `, ${_initialResidentBuildPhase.failed} failed` : '') +
             ` in ${_initElapsed.toFixed(0)}ms`,
           );
+          logWallTemplateDiagnosticsSummary('startup');
         }
         _refreshResidentBuildQueue();
         _updateRadiusReadyCounts();
