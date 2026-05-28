@@ -63,7 +63,8 @@ export function computeWallTemplateSourceHash(json: RoomJsonDef): string {
   }
 
   function hashBool(b: boolean | undefined): void {
-    mix(b ? 1 : 0);
+    // 0 = false, 1 = true, 2 = undefined — distinct values prevent collisions
+    mix(b === undefined ? 2 : b ? 1 : 0);
   }
 
   // ── Schema anchors ──────────────────────────────────────────────────────
