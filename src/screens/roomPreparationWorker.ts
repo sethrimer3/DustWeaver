@@ -49,9 +49,39 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
   const { roomId, room } = event.data as { roomId: string; room: RoomDef };
 
   try {
-    // ── 1. Wall template (O(n²) merge pass) ──────────────────────────────
+    // ── 1. Wall template — baked → fallback ───────────────────────────────
+    // If the room already has a pre-baked wall template, copy its typed arrays
+    // into fresh buffers (the structured clone gave us worker-owned copies, but
+    // we copy explicitly for safety) and transfer them back — skipping the
+    // O(n²) merge pass entirely.
     const t0Wall = performance.now();
-    const wt = buildRoomWallTemplate(room);
+    let wt: ReturnType<typeof buildRoomWallTemplate>;
+    let wallSource: 'baked' | 'fallback';
+
+    if (room.bakedWallTemplate !== undefined) {
+      const b = room.bakedWallTemplate;
+      // Copy each typed array into a fresh buffer so we own it cleanly.
+      wt = {
+        wallCount:            b.wallCount,
+        xWorld:               new Float32Array(b.xWorld),
+        yWorld:               new Float32Array(b.yWorld),
+        wWorld:               new Float32Array(b.wWorld),
+        hWorld:               new Float32Array(b.hWorld),
+        isPlatformFlag:       new Uint8Array(b.isPlatformFlag),
+        platformEdge:         new Uint8Array(b.platformEdge),
+        themeIndex:           new Uint8Array(b.themeIndex),
+        soundHardnessIndex:   new Uint8Array(b.soundHardnessIndex),
+        isInvisibleFlag:      new Uint8Array(b.isInvisibleFlag),
+        rampOrientationIndex: new Uint8Array(b.rampOrientationIndex),
+        isPillarHalfWidthFlag: new Uint8Array(b.isPillarHalfWidthFlag),
+        isIceFlag:            new Uint8Array(b.isIceFlag),
+        isUltraIceFlag:       new Uint8Array(b.isUltraIceFlag),
+      };
+      wallSource = 'baked';
+    } else {
+      wt = buildRoomWallTemplate(room);
+      wallSource = 'fallback';
+    }
     const wallMs = performance.now() - t0Wall;
 
     // ── 2. Ambient-light blocker sets ─────────────────────────────────────
@@ -126,6 +156,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       blockerKeys,
       darkBlockerKeys,
       wallDecorations,
+      wallSource,
       wallMs,
       blockerMs,
       decorMs,

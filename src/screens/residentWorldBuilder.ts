@@ -32,7 +32,8 @@ import { spawnBackgroundFluidParticles, spawnAllDustPiles, BACKGROUND_FLUID_COUN
 import { spawnEnemyClusters } from './gameEnemySpawn';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { loadRoomHazards, loadRoomRopes, loadRoomFallingBlocks, loadRoomGrasshoppers } from './gameRoom';
-import { buildRoomWallTemplate, applyRoomWallTemplate } from './gameRoomWalls';
+import { applyRoomWallTemplate } from './gameRoomWalls';
+import { resolveRoomWallTemplate } from './preparedRoomRuntime';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import * as FP from '../debug/perfFreezeProfiler';
 
@@ -173,39 +174,18 @@ export function buildResidentWorldState(
   {
     // Wall template — priority: cache → baked JSON template → runtime build.
     const _t = import.meta.env.DEV ? performance.now() : 0;
-    const cacheEntry = roomRuntimeCache.get(room.id);
-    if (cacheEntry !== undefined) {
-      applyRoomWallTemplate(rw, cacheEntry.wallTemplate);
-      if (import.meta.env.DEV) {
-        console.log(`[wallTemplate] roomId=${room.id} source=cache wallCount=${cacheEntry.wallTemplate.wallCount}`);
-      }
-    } else if (room.bakedWallTemplate !== undefined) {
-      applyRoomWallTemplate(rw, room.bakedWallTemplate);
-      roomRuntimeCache.set(room.id, {
-        wallTemplate: room.bakedWallTemplate,
-        edgeExtension: null,
-        blockerKeys:    null,
-        darkBlockerKeys: null,
-        wallDecorations: null,
-      });
-      if (import.meta.env.DEV) {
-        console.log(`[wallTemplate] roomId=${room.id} source=baked wallCount=${room.bakedWallTemplate.wallCount}` +
-          ` (apply ${(performance.now() - _t).toFixed(1)}ms)`);
-      }
-    } else {
-      const wallTemplate = buildRoomWallTemplate(room);
-      const _buildMs = import.meta.env.DEV ? performance.now() - _t : 0;
-      applyRoomWallTemplate(rw, wallTemplate);
-      roomRuntimeCache.set(room.id, {
-        wallTemplate,
-        edgeExtension: null,
-        blockerKeys:    null,
-        darkBlockerKeys: null,
-        wallDecorations: null,
-      });
-      if (import.meta.env.DEV) {
-        console.log(`[wallTemplate] roomId=${room.id} source=fallback reason=missing wallCount=${wallTemplate.wallCount}` +
-          ` (build ${_buildMs.toFixed(1)}ms)`);
+    const resolution = resolveRoomWallTemplate(room, roomRuntimeCache);
+    applyRoomWallTemplate(rw, resolution.template);
+    if (import.meta.env.DEV) {
+      const _ms = performance.now() - _t;
+      if (resolution.source === 'cache') {
+        console.log(`[wallTemplate] roomId=${room.id} source=cache wallCount=${resolution.template.wallCount}`);
+      } else if (resolution.source === 'baked') {
+        console.log(`[wallTemplate] roomId=${room.id} source=baked wallCount=${resolution.template.wallCount}` +
+          ` (apply ${_ms.toFixed(1)}ms)`);
+      } else {
+        console.log(`[wallTemplate] roomId=${room.id} source=fallback reason=missing wallCount=${resolution.template.wallCount}` +
+          ` (build ${resolution.buildMs.toFixed(1)}ms)`);
       }
     }
     FP.recordLoadPhaseStep('Resident:walls', import.meta.env.DEV ? performance.now() - _t : 0);
@@ -415,11 +395,11 @@ export function* createResidentBuildGenerator(
   }
   yield 'phaseD_chains';
 
-  // ── Phase D step 3: wall template cache probe ────────────────────────────
+  // ── Phase D step 3: wall template cache/baked probe ─────────────────────
   // Split into two phases so the expensive buildRoomWallTemplate() step on a
-  // cache miss occupies its own frame rather than being bundled with the lookup.
-  // On a cache hit only phaseD_walls_lookup is emitted; phaseD_walls_build is
-  // skipped and we proceed directly to phaseE_sim the following frame.
+  // cache+baked miss occupies its own frame rather than being bundled with the
+  // lookup. On a cache or baked hit only phaseD_walls_lookup is emitted;
+  // phaseD_walls_build is skipped and we proceed directly to phaseE_sim.
   let _wallsCacheHit = false;
   {
     const _t = import.meta.env.DEV ? performance.now() : 0;
@@ -433,6 +413,24 @@ export function* createResidentBuildGenerator(
         _warnLongPhase('phaseD_walls_lookup', _ms, room.id, diagContext);
         console.log(`[residentBuild:gen] ${room.id} walls: cache HIT`);
       } else { FP.recordLoadPhaseStep('Resident:walls_lookup_hit', 0); }
+    } else if (room.bakedWallTemplate !== undefined) {
+      // Baked template present — apply it and store in cache so subsequent
+      // visitors get a cache hit.  Skip phaseD_walls_build entirely.
+      applyRoomWallTemplate(rw, room.bakedWallTemplate);
+      roomRuntimeCache.set(room.id, {
+        wallTemplate:    room.bakedWallTemplate,
+        edgeExtension:   null,
+        blockerKeys:     null,
+        darkBlockerKeys: null,
+        wallDecorations: null,
+      });
+      _wallsCacheHit = true; // treat as hit so phaseD_walls_build is skipped
+      if (import.meta.env.DEV) {
+        const _ms = performance.now() - _t;
+        FP.recordLoadPhaseStep('Resident:walls_lookup_hit', _ms);
+        _warnLongPhase('phaseD_walls_lookup', _ms, room.id, diagContext);
+        console.log(`[residentBuild:gen] ${room.id} walls: baked HIT wallCount=${room.bakedWallTemplate.wallCount}`);
+      } else { FP.recordLoadPhaseStep('Resident:walls_lookup_hit', 0); }
     } else {
       if (import.meta.env.DEV) {
         const _ms = performance.now() - _t;
@@ -443,27 +441,23 @@ export function* createResidentBuildGenerator(
   }
   yield 'phaseD_walls_lookup';
 
-  // ── Phase D step 4: wall template build (cache miss only) ────────────────
-  // This phase is only reached when the runtime cache did not have an entry for
-  // the room.  buildRoomWallTemplate() can take 5–10 ms on large rooms; keeping
-  // it in its own generator phase ensures no other work compounds this cost.
-  // phaseD_walls_build remains a single synchronous step (not yet incremental).
+  // ── Phase D step 4: wall template build (cache+baked miss only) ─────────
+  // Only reached when neither the runtime cache nor bakedWallTemplate had the
+  // template.  buildRoomWallTemplate() can take 5–10 ms on large rooms;
+  // keeping it in its own generator phase ensures no other work compounds this
+  // cost.  phaseD_walls_build remains a single synchronous step (not yet
+  // incremental).
   // See nextSteps.md for the deferred incremental wall-build investigation.
   if (!_wallsCacheHit) {
     const _t = import.meta.env.DEV ? performance.now() : 0;
-    const wallTemplate = buildRoomWallTemplate(room);
-    applyRoomWallTemplate(rw, wallTemplate);
-    roomRuntimeCache.set(room.id, {
-      wallTemplate,
-      edgeExtension:   null,
-      blockerKeys:     null,
-      darkBlockerKeys: null,
-      wallDecorations: null,
-    });
+    // resolveRoomWallTemplate stores the result in cache automatically.
+    const resolution = resolveRoomWallTemplate(room, roomRuntimeCache);
+    applyRoomWallTemplate(rw, resolution.template);
     if (import.meta.env.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:walls_build', _ms);
-      console.log(`[residentBuild:gen] ${room.id} walls: cache MISS (built in ${_ms.toFixed(1)}ms)`);
+      console.log(`[residentBuild:gen] ${room.id} walls: fallback build in ${_ms.toFixed(1)}ms` +
+        ` wallCount=${resolution.template.wallCount}`);
       _warnLongPhase('phaseD_walls_build', _ms, room.id, diagContext);
     } else { FP.recordLoadPhaseStep('Resident:walls_build', 0); }
     yield 'phaseD_walls_build';

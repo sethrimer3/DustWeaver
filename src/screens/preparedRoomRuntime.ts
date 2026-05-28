@@ -10,16 +10,166 @@
  * Edge-extension cache building is intentionally excluded — that feature is
  * legacy-only.  See src/render/transitions/legacy/README.md for details.
  *
- * BUILD 390
+ * BUILD 420
  */
 
-import type { RoomDef } from '../levels/roomDef';
+import type { RoomDef, RoomWallTemplate } from '../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { buildRoomWallTemplate } from './gameRoomWalls';
 import { buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { RoomRuntimeEntry } from './roomRuntimeCache';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import { ROOM_REGISTRY } from '../levels/rooms';
+
+// ── WallTemplateResolution ────────────────────────────────────────────────────
+
+/** Source of a resolved wall template. */
+export type WallTemplateSource = 'cache' | 'baked' | 'fallback';
+
+/**
+ * Result of `resolveRoomWallTemplate`, bundling the template with its source
+ * and the time taken.  Source helps diagnostics distinguish cheap baked/cache
+ * paths from expensive fallback builds.
+ */
+export interface WallTemplateResolution {
+  template: RoomWallTemplate;
+  /** Where the template came from: runtime cache, pre-baked JSON data, or runtime build. */
+  source: WallTemplateSource;
+  /** Time in ms.  Near-zero for cache/baked; actual build time for fallback. */
+  buildMs: number;
+}
+
+// ── DEV aggregate diagnostics ─────────────────────────────────────────────────
+
+/** Counters tracking wall-template source distribution across all resolution calls. */
+interface _WallDiagState {
+  cacheHits: number;
+  bakedHits: number;
+  fallbackBuilds: number;
+  totalFallbackMs: number;
+  slowestFallbacks: Array<{ roomId: string; ms: number }>;
+}
+
+const _MAX_SLOWEST = 5;
+
+const _diag: _WallDiagState = {
+  cacheHits:       0,
+  bakedHits:       0,
+  fallbackBuilds:  0,
+  totalFallbackMs: 0,
+  slowestFallbacks: [],
+};
+
+function _recordFallback(roomId: string, ms: number): void {
+  _diag.fallbackBuilds++;
+  _diag.totalFallbackMs += ms;
+  _diag.slowestFallbacks.push({ roomId, ms });
+  _diag.slowestFallbacks.sort((a, b) => b.ms - a.ms);
+  if (_diag.slowestFallbacks.length > _MAX_SLOWEST) {
+    _diag.slowestFallbacks.length = _MAX_SLOWEST;
+  }
+}
+
+/**
+ * Returns a snapshot of aggregate wall-template resolution diagnostics.
+ * Includes baked hits, cache hits, fallback builds, and timing.
+ * Only meaningful in DEV; in production all counters remain 0.
+ */
+export function getWallTemplateDiagnostics(): Readonly<_WallDiagState> {
+  return { ..._diag, slowestFallbacks: [..._diag.slowestFallbacks] };
+}
+
+/** Resets the aggregate counters (e.g. after logging a startup summary). */
+export function resetWallTemplateDiagnostics(): void {
+  _diag.cacheHits       = 0;
+  _diag.bakedHits       = 0;
+  _diag.fallbackBuilds  = 0;
+  _diag.totalFallbackMs = 0;
+  _diag.slowestFallbacks.length = 0;
+}
+
+/**
+ * Logs a one-line DEV aggregate of wall-template resolution stats to the
+ * console.  Call after initial resident builds complete to see how many rooms
+ * used baked data vs. required a full merge pass.
+ */
+export function logWallTemplateDiagnosticsSummary(label = 'startup'): void {
+  if (!import.meta.env.DEV) return;
+  const d = _diag;
+  const total = d.cacheHits + d.bakedHits + d.fallbackBuilds;
+  const slowStr = d.slowestFallbacks
+    .map(r => `${r.roomId}(${r.ms.toFixed(0)}ms)`)
+    .join(', ');
+  console.log(
+    `[wallTemplate:${label}] total=${total}` +
+    ` cache=${d.cacheHits} baked=${d.bakedHits} fallback=${d.fallbackBuilds}` +
+    ` fallbackMs=${d.totalFallbackMs.toFixed(1)}` +
+    (slowStr ? ` slowest=[${slowStr}]` : ''),
+  );
+}
+
+// ── resolveRoomWallTemplate ───────────────────────────────────────────────────
+
+/**
+ * Central wall-template resolution helper.  Used by all main-thread paths so
+ * they stay in sync and diagnostics are aggregated in one place.
+ *
+ * Priority:
+ *  1. `cache`  — if provided and the room is already prepared (fastest path).
+ *  2. `baked`  — if `room.bakedWallTemplate` is present (skip merge pass).
+ *  3. fallback — calls `buildRoomWallTemplate(room)` (O(n²) merge pass).
+ *
+ * When a baked or fallback template is resolved and `cache` is provided, the
+ * template is stored in the cache so subsequent callers get a cache hit.
+ *
+ * @param room   The room definition.
+ * @param cache  Optional runtime cache.  Pass `undefined` when unavailable.
+ * @returns      Resolution result including the template, its source, and timing.
+ */
+export function resolveRoomWallTemplate(
+  room: RoomDef,
+  cache?: RoomRuntimeCache,
+): WallTemplateResolution {
+  // 1. Runtime cache (fastest — already merged and stored).
+  if (cache !== undefined) {
+    const cacheEntry = cache.get(room.id);
+    if (cacheEntry !== undefined) {
+      if (import.meta.env.DEV) _diag.cacheHits++;
+      return { template: cacheEntry.wallTemplate, source: 'cache', buildMs: 0 };
+    }
+  }
+
+  // 2. Pre-baked template from JSON (skip the O(n²) merge pass entirely).
+  if (room.bakedWallTemplate !== undefined) {
+    if (cache !== undefined) {
+      cache.set(room.id, {
+        wallTemplate: room.bakedWallTemplate,
+        edgeExtension:   null,
+        blockerKeys:     null,
+        darkBlockerKeys: null,
+        wallDecorations: null,
+      });
+    }
+    if (import.meta.env.DEV) _diag.bakedHits++;
+    return { template: room.bakedWallTemplate, source: 'baked', buildMs: 0 };
+  }
+
+  // 3. Fallback: run the full O(n²) merge pass.
+  const t0 = performance.now();
+  const template = buildRoomWallTemplate(room);
+  const buildMs = performance.now() - t0;
+  if (cache !== undefined) {
+    cache.set(room.id, {
+      wallTemplate: template,
+      edgeExtension:   null,
+      blockerKeys:     null,
+      darkBlockerKeys: null,
+      wallDecorations: null,
+    });
+  }
+  if (import.meta.env.DEV) _recordFallback(room.id, buildMs);
+  return { template, source: 'fallback', buildMs };
+}
 
 // ── PreparedRoomResult ────────────────────────────────────────────────────────
 
@@ -29,8 +179,11 @@ import { ROOM_REGISTRY } from '../levels/rooms';
  */
 export interface PreparedRoomResult {
   runtimeEntry: RoomRuntimeEntry;
-  /** Wall template (O(n²) merge pass) build time in ms. */
+  /** Wall template resolution time in ms (near-zero for baked; merge time for fallback). */
   wallMs: number;
+  /** Where the wall template came from: 'baked' or 'fallback'.
+   *  'cache' is never returned here — this function IS the cache population path. */
+  wallSource: 'baked' | 'fallback';
   /** Ambient blocker set construction time in ms. */
   blockerMs: number;
   /** Wall decoration geometry build time in ms. */
@@ -46,19 +199,21 @@ export interface PreparedRoomResult {
  * it alongside per-step timing data for performance diagnostics.
  *
  * Includes:
- *  - `wallTemplate`      — merged wall geometry (O(n²) merge pass)
+ *  - `wallTemplate`      — merged wall geometry (uses baked template when present)
  *  - `blockerKeys`       — ambient-light blocker `Set<string>`
  *  - `darkBlockerKeys`   — dark-ambient blocker `Set<string>`
  *  - `wallDecorations`   — static decoration geometry array
+ *
+ * Wall template priority: baked JSON template → `buildRoomWallTemplate` fallback.
+ * (Cache is not consulted here since this function IS the cache population path.)
  *
  * Edge-extension cache is not built here (legacy feature, disabled).
  * Safe to call from any context (no DOM, no mutable world state, no RNG).
  */
 export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
-  // ── Wall template (O(n²) merge pass) ─────────────────────────────────────
-  const t0Wall = performance.now();
-  const wallTemplate = buildRoomWallTemplate(room);
-  const wallMs = performance.now() - t0Wall;
+  // ── Wall template — baked → fallback (cache not consulted; this is cache population) ─
+  const wallResolution = resolveRoomWallTemplate(room);
+  const wallTemplate = wallResolution.template;
 
   // ── Ambient light blocker sets ────────────────────────────────────────────
   const t0Blocker = performance.now();
@@ -94,7 +249,7 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
   const wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
   const decorMs = performance.now() - t0Decor;
 
-  const totalMs = wallMs + blockerMs + decorMs;
+  const totalMs = wallResolution.buildMs + blockerMs + decorMs;
 
   return {
     runtimeEntry: {
@@ -104,7 +259,8 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
       darkBlockerKeys,
       wallDecorations,
     },
-    wallMs,
+    wallMs: wallResolution.buildMs,
+    wallSource: wallResolution.source as 'baked' | 'fallback',
     blockerMs,
     decorMs,
     totalMs,
@@ -119,10 +275,17 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
  *
  * Returns an estimated main-thread build time in ms.  Used to guard against
  * synchronously building obviously expensive rooms during active gameplay.
+ *
+ * Rooms with a valid baked wall template skip the O(n²) merge pass, so their
+ * wall cost is treated as zero for scheduling purposes.
  */
 function _estimateRoomBuildCostMs(room: RoomDef): number {
-  const wallCount = room.walls?.length ?? 0;
-  const wallCost = wallCount * 0.04 + wallCount * wallCount * 0.002;
+  // Baked rooms skip the wall-merge pass entirely — treat wall cost as zero.
+  let wallCost = 0;
+  if (room.bakedWallTemplate === undefined) {
+    const wallCount = room.walls?.length ?? 0;
+    wallCost = wallCount * 0.04 + wallCount * wallCount * 0.002;
+  }
   let bgBlockCount = 0;
   if (room.backgroundBlocks !== undefined) {
     for (let i = 0; i < room.backgroundBlocks.length; i++) {

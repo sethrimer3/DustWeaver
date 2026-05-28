@@ -171,7 +171,11 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
   - `src/editor/roomJsonSerializer.ts` — bakes wall template during export
   - `src/screens/gameRoomWalls.ts` — re-exports `RoomWallTemplate` from `roomDef.ts`
   - `src/screens/gameLoadRoomPhases.ts` — Phase D uses baked template before falling back
-  - `src/screens/residentWorldBuilder.ts` — resident builds use baked template before falling back
+  - `src/screens/residentWorldBuilder.ts` — uses `resolveRoomWallTemplate` from `preparedRoomRuntime.ts`; generator baked-hit path skips `phaseD_walls_build`
+  - `src/screens/preparedRoomRuntime.ts` — `resolveRoomWallTemplate` (centralized cache→baked→fallback); DEV aggregate diagnostics (`getWallTemplateDiagnostics`, `logWallTemplateDiagnosticsSummary`); `buildPreparedRoomRuntime` reports `wallSource`; `_estimateRoomBuildCostMs` treats baked rooms as zero wall cost
+  - `src/screens/roomPreparationWorker.ts` — worker uses baked template (copy typed arrays, skip merge pass); posts `wallSource` field
+  - `src/screens/roomPreparationWorkerProtocol.ts` — `WorkerSuccessMessage` gains `wallSource: 'baked' | 'fallback'`
+  - `src/screens/roomPreparationWorkerManager.ts` — logs `[wallTemplate] source=worker:…` in DEV after successful cache store
 
 #### Remaining limitations
 
