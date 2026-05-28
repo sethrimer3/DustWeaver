@@ -486,6 +486,16 @@ export function* makeLoadRoomPhases(
         }
       }
     }
+    if (import.meta.env.DEV && bgWallCellCount > 65536) {
+      const bgBlockCount = room.backgroundBlocks?.length ?? 0;
+      const occupiedCells = world.bgWallGrid.reduce((n, v) => n + v, 0);
+      const sparsePct = bgWallCellCount > 0 ? ((occupiedCells / bgWallCellCount) * 100).toFixed(2) : '0';
+      console.log(
+        `[largeRoom] loadRoom bgWallGrid: roomId=${room.id}` +
+        ` ${room.widthBlocks}×${room.heightBlocks} area=${bgWallCellCount}` +
+        ` bgBlocks=${bgBlockCount} occupiedCells=${occupiedCells} (${sparsePct}%)`,
+      );
+    }
     spawnEnemyClusters(world, room.enemies, 2, levelRng);
     FP.recordLoadPhaseStep('C:enemySpawn', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }

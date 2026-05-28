@@ -147,6 +147,16 @@ export function buildResidentWorldState(
         }
       }
     }
+    if (import.meta.env.DEV && bgWallCellCount > 65536) {
+      const bgBlockCount = room.backgroundBlocks?.length ?? 0;
+      const occupiedCells = rw.bgWallGrid.reduce((n, v) => n + v, 0);
+      const sparsePct = bgWallCellCount > 0 ? ((occupiedCells / bgWallCellCount) * 100).toFixed(2) : '0';
+      console.log(
+        `[largeRoom] resident bgWallGrid: roomId=${room.id}` +
+        ` ${room.widthBlocks}×${room.heightBlocks} area=${bgWallCellCount}` +
+        ` bgBlocks=${bgBlockCount} occupiedCells=${occupiedCells} (${sparsePct}%)`,
+      );
+    }
     // Enemy entityIds start at 2 (same as in the active world).
     spawnEnemyClusters(rw, room.enemies, 2, levelRng);
     FP.recordLoadPhaseStep('Resident:phaseC', import.meta.env.DEV ? performance.now() - _t : 0);
@@ -356,6 +366,16 @@ export function* createResidentBuildGenerator(
           }
         }
       }
+    }
+    if (import.meta.env.DEV && bgWallCellCount > 65536) {
+      const bgBlockCount = room.backgroundBlocks?.length ?? 0;
+      const occupiedCells = rw.bgWallGrid.reduce((n, v) => n + v, 0);
+      const sparsePct = bgWallCellCount > 0 ? ((occupiedCells / bgWallCellCount) * 100).toFixed(2) : '0';
+      console.log(
+        `[largeRoom] resident(gen) bgWallGrid: roomId=${room.id}` +
+        ` ${room.widthBlocks}×${room.heightBlocks} area=${bgWallCellCount}` +
+        ` bgBlocks=${bgBlockCount} occupiedCells=${occupiedCells} (${sparsePct}%)`,
+      );
     }
     spawnEnemyClusters(rw, room.enemies, 2, levelRng);
     if (import.meta.env.DEV) {

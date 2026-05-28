@@ -112,97 +112,69 @@ export function buildAmbientDepths(
   const depths = new Map<string, number>();
   if (roomWidthBlocks <= 0 || roomHeightBlocks <= 0) return depths;
 
+  const _devT0 = import.meta.env.DEV ? performance.now() : 0;
   const { dx: directionVectorX, dy: directionVectorY } = ambientDirectionVector(direction);
   const isOmni = directionVectorX === 0 && directionVectorY === 0;
 
   // ── Phase 1: flood-fill "lit air" cells ──────────────────────────────────
-  // `litAir` tracks which empty cells are connected to the sky.
-  const litAir = new Set<string>();
-  const airQueueCols: number[] = [];
-  const airQueueRows: number[] = [];
-  let airQueueIndex = 0;
+  // `litAir` tracks which empty cells are connected to the sky (directional
+  // mode only).  For omni mode `litAir` stays null — Phase 2 uses an inline
+  // `!occupied && !blockers` check instead.  This avoids the O(W×H) string
+  // allocation that caused 10–20 s main-thread freezes for large sparse rooms.
+  let litAir: Set<string> | null = null;
 
-  const pushAirSeed = (c: number, r: number): void => {
-    if (!_isInsideRoom(c, r, roomWidthBlocks, roomHeightBlocks)) return;
-    const key = _tileKey(c, r);
-    if (litAir.has(key)) return;
-    if (occupied.has(key)) return;       // solid: not a sky-seed
-    if (blockers.has(key)) return;       // authored blocker: opaque to ambient
-    litAir.add(key);
-    airQueueCols.push(c);
-    airQueueRows.push(r);
-  };
+  if (!isOmni) {
+    litAir = new Set<string>();
+    const airQueueCols: number[] = [];
+    const airQueueRows: number[] = [];
+    let airQueueIndex = 0;
 
-  // Seed the "sky side" of the room.
-  //
-  // For `'omni'` mode we preserve the legacy `'DEFAULT'` semantics by seeding
-  // EVERY non-blocker air cell — so a fully-enclosed room with only interior
-  // air still has lit walls around the air, and authored hidden pockets are
-  // created exclusively by painting `ambientLightBlockers` over the pocket's
-  // air cells (those cells fail the `!blockers.has(key)` check and stay dark).
-  //
-  // For a directional mode, seeds come from the edges facing the sky (i.e.
-  // the sides opposite to the direction vector); the flood then propagates
-  // inward through connected air, so a hidden pocket walled off from the
-  // sky-facing edge naturally stays dark.
-  if (isOmni) {
-    for (let r = 0; r < roomHeightBlocks; r++) {
-      for (let c = 0; c < roomWidthBlocks; c++) {
-        const key = _tileKey(c, r);
-        if (occupied.has(key)) continue;
-        if (blockers.has(key)) continue;
-        litAir.add(key);
-      }
-    }
-    // Omni mode doesn't need to flood — every eligible air cell is already
-    // in `litAir` — so skip the queue-based propagation below.
-  } else {
+    const pushAirSeed = (c: number, r: number): void => {
+      if (!_isInsideRoom(c, r, roomWidthBlocks, roomHeightBlocks)) return;
+      const key = _tileKey(c, r);
+      if ((litAir as Set<string>).has(key)) return;
+      if (occupied.has(key)) return;       // solid: not a sky-seed
+      if (blockers.has(key)) return;       // authored blocker: opaque to ambient
+      (litAir as Set<string>).add(key);
+      airQueueCols.push(c);
+      airQueueRows.push(r);
+    };
+
+    // Seeds come from the room edges facing the sky (opposite to the direction
+    // vector); the flood propagates inward through connected air so a hidden
+    // pocket walled off from the sky-facing edge naturally stays dark.
     const seedTop    = directionVectorY > 0;  // light moves downward ⇒ enters from top
     const seedBottom = directionVectorY < 0;
     const seedLeft   = directionVectorX > 0;
     const seedRight  = directionVectorX < 0;
 
-    if (seedTop) {
-      for (let c = 0; c < roomWidthBlocks; c++) pushAirSeed(c, 0);
-    }
-    if (seedBottom) {
-      for (let c = 0; c < roomWidthBlocks; c++) pushAirSeed(c, roomHeightBlocks - 1);
-    }
-    if (seedLeft) {
-      for (let r = 0; r < roomHeightBlocks; r++) pushAirSeed(0, r);
-    }
-    if (seedRight) {
-      for (let r = 0; r < roomHeightBlocks; r++) pushAirSeed(roomWidthBlocks - 1, r);
-    }
-  }
+    if (seedTop)    for (let c = 0; c < roomWidthBlocks; c++) pushAirSeed(c, 0);
+    if (seedBottom) for (let c = 0; c < roomWidthBlocks; c++) pushAirSeed(c, roomHeightBlocks - 1);
+    if (seedLeft)   for (let r = 0; r < roomHeightBlocks; r++) pushAirSeed(0, r);
+    if (seedRight)  for (let r = 0; r < roomHeightBlocks; r++) pushAirSeed(roomWidthBlocks - 1, r);
 
-  // Flood-fill through empty cells. Directional bias: only step into a
-  // neighbour whose offset has a non-negative dot product with the direction
-  // vector (i.e. light keeps travelling generally with the direction). The
-  // check allows perpendicular spread for a natural soft cone.
-  while (airQueueIndex < airQueueCols.length) {
-    const col = airQueueCols[airQueueIndex];
-    const row = airQueueRows[airQueueIndex];
-    airQueueIndex++;
+    // Flood-fill. Directional bias: only step into a neighbour whose offset
+    // has a non-negative dot product with the direction vector (light keeps
+    // travelling generally with the direction; perpendicular spread allowed).
+    while (airQueueIndex < airQueueCols.length) {
+      const col = airQueueCols[airQueueIndex];
+      const row = airQueueRows[airQueueIndex];
+      airQueueIndex++;
 
-    for (let ny = -1; ny <= 1; ny++) {
-      for (let nx = -1; nx <= 1; nx++) {
-        if (nx === 0 && ny === 0) continue;
-        if (!isOmni) {
-          // dot(neighbourOffset, direction) >= 0 — skip stepping "uphill"
+      for (let ny = -1; ny <= 1; ny++) {
+        for (let nx = -1; nx <= 1; nx++) {
+          if (nx === 0 && ny === 0) continue;
           const dot = nx * directionVectorX + ny * directionVectorY;
-          if (dot < 0) continue;
+          if (dot < 0) continue; // skip stepping "uphill"
+          const c = col + nx;
+          const r = row + ny;
+          if (!_isInsideRoom(c, r, roomWidthBlocks, roomHeightBlocks)) continue;
+          const key = _tileKey(c, r);
+          if (litAir.has(key) || occupied.has(key) || blockers.has(key)) continue;
+          litAir.add(key);
+          airQueueCols.push(c);
+          airQueueRows.push(r);
         }
-        const c = col + nx;
-        const r = row + ny;
-        if (!_isInsideRoom(c, r, roomWidthBlocks, roomHeightBlocks)) continue;
-        const key = _tileKey(c, r);
-        if (litAir.has(key)) continue;
-        if (occupied.has(key)) continue;
-        if (blockers.has(key)) continue;
-        litAir.add(key);
-        airQueueCols.push(c);
-        airQueueRows.push(r);
       }
     }
   }
@@ -220,6 +192,8 @@ export function buildAmbientDepths(
     if (!_isInsideRoom(col, row, roomWidthBlocks, roomHeightBlocks)) continue;
 
     // Solid cell is "exposed" if any 8-neighbour is a lit-air cell.
+    // For omni mode litAir is null — every non-occupied non-blocker neighbour
+    // counts as lit air; TypeScript narrows the type in the litAir !== null branch.
     let touchesLitAir = false;
     for (let dy = -1; dy <= 1 && !touchesLitAir; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -227,7 +201,11 @@ export function buildAmbientDepths(
         const nc = col + dx;
         const nr = row + dy;
         if (!_isInsideRoom(nc, nr, roomWidthBlocks, roomHeightBlocks)) continue;
-        if (litAir.has(_tileKey(nc, nr))) {
+        const neighborKey = _tileKey(nc, nr);
+        const isLitAirCell = litAir === null
+          ? (!occupied.has(neighborKey) && !blockers.has(neighborKey))
+          : litAir.has(neighborKey);
+        if (isLitAirCell) {
           touchesLitAir = true;
           break;
         }
@@ -275,6 +253,17 @@ export function buildAmbientDepths(
     const row = parseInt(key.slice(commaIdx + 1), 10);
     if (!_isInsideRoom(col, row, roomWidthBlocks, roomHeightBlocks)) continue;
     if (!depths.has(key)) depths.set(key, maxFallbackDepth);
+  }
+
+  if (import.meta.env.DEV && _devT0 > 0) {
+    const ms = performance.now() - _devT0;
+    const area = roomWidthBlocks * roomHeightBlocks;
+    if (ms > 5 || area > 65536) {
+      console.log(
+        `[ambientLight] buildAmbientDepths: ${roomWidthBlocks}×${roomHeightBlocks}` +
+        ` area=${area} walls=${occupied.size} dir=${direction} ms=${ms.toFixed(1)}`,
+      );
+    }
   }
 
   return depths;
@@ -365,6 +354,7 @@ export function buildAmbientDarknessAlphas(
   const alphas = new Map<string, number>();
   if (roomWidthBlocks <= 0 || roomHeightBlocks <= 0) return alphas;
 
+  const _devT0 = import.meta.env.DEV ? performance.now() : 0;
   const { dx: dirVecX, dy: dirVecY } = ambientDirectionVector(direction);
   const isOmni = dirVecX === 0 && dirVecY === 0;
 
@@ -379,54 +369,21 @@ export function buildAmbientDarknessAlphas(
   const srcDy = -dirVecY;
   const srcMag = isOmni ? 1 : Math.sqrt(srcDx * srcDx + srcDy * srcDy); // always 1 for unit dirs
 
-  // ── Phase 1: lit-air flood-fill ───────────────────────────────────────────
-  const litAir = new Set<string>();
+  // ── Phase 1 (removed): lit-air flood-fill ────────────────────────────────
+  // Phase 2 computes surface darkness purely from geometric neighbor checks
+  // (`!occupied && !blockers`). A separate lit-air Set is not needed and was
+  // never consulted by Phase 2.  For large sparse rooms in omni mode the old
+  // O(W×H) loop over all cells created millions of strings and caused 10–20 s
+  // main-thread freezes.  Removing it has no effect on output correctness.
 
-  if (isOmni) {
-    // Omni: every reachable air cell is considered sky-connected.
-    for (let r = 0; r < roomHeightBlocks; r++) {
-      for (let c = 0; c < roomWidthBlocks; c++) {
-        const key = _tileKey(c, r);
-        if (!occupied.has(key) && !blockers.has(key)) litAir.add(key);
-      }
-    }
-  } else {
-    const airQCols: number[] = [];
-    const airQRows: number[] = [];
-    let airQIdx = 0;
-
-    const pushSeed = (c: number, r: number): void => {
-      if (!_isInsideRoom(c, r, roomWidthBlocks, roomHeightBlocks)) return;
-      const key = _tileKey(c, r);
-      if (litAir.has(key) || occupied.has(key) || blockers.has(key)) return;
-      litAir.add(key);
-      airQCols.push(c);
-      airQRows.push(r);
-    };
-
-    if (dirVecY > 0) for (let c = 0; c < roomWidthBlocks; c++) pushSeed(c, 0);
-    if (dirVecY < 0) for (let c = 0; c < roomWidthBlocks; c++) pushSeed(c, roomHeightBlocks - 1);
-    if (dirVecX > 0) for (let r = 0; r < roomHeightBlocks; r++) pushSeed(0, r);
-    if (dirVecX < 0) for (let r = 0; r < roomHeightBlocks; r++) pushSeed(roomWidthBlocks - 1, r);
-
-    while (airQIdx < airQCols.length) {
-      const col = airQCols[airQIdx];
-      const row = airQRows[airQIdx];
-      airQIdx++;
-      for (let ny = -1; ny <= 1; ny++) {
-        for (let nx = -1; nx <= 1; nx++) {
-          if (nx === 0 && ny === 0) continue;
-          if (nx * dirVecX + ny * dirVecY < 0) continue; // don't propagate uphill
-          const c = col + nx;
-          const r = row + ny;
-          if (!_isInsideRoom(c, r, roomWidthBlocks, roomHeightBlocks)) continue;
-          const key = _tileKey(c, r);
-          if (litAir.has(key) || occupied.has(key) || blockers.has(key)) continue;
-          litAir.add(key);
-          airQCols.push(c);
-          airQRows.push(r);
-        }
-      }
+  if (import.meta.env.DEV) {
+    const _area = roomWidthBlocks * roomHeightBlocks;
+    if (_area > 65536) {
+      console.log(
+        `[largeRoom] buildAmbientDarknessAlphas: ${roomWidthBlocks}×${roomHeightBlocks}` +
+        ` area=${_area} walls=${occupied.size} dir=${direction}` +
+        ` — sparse path (no O(W×H) litAir build)`,
+      );
     }
   }
 
@@ -562,6 +519,17 @@ export function buildAmbientDarknessAlphas(
     const row = parseInt(key.slice(commaIdx + 1), 10);
     if (!_isInsideRoom(col, row, roomWidthBlocks, roomHeightBlocks)) continue;
     if (!alphas.has(key)) alphas.set(key, 1.0);
+  }
+
+  if (import.meta.env.DEV && _devT0 > 0) {
+    const ms = performance.now() - _devT0;
+    const area = roomWidthBlocks * roomHeightBlocks;
+    if (ms > 5 || area > 65536) {
+      console.log(
+        `[ambientLight] buildAmbientDarknessAlphas: ${roomWidthBlocks}×${roomHeightBlocks}` +
+        ` area=${area} walls=${occupied.size} dir=${direction} ms=${ms.toFixed(1)}`,
+      );
+    }
   }
 
   return alphas;
