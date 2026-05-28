@@ -46,7 +46,7 @@ import type {
   RoomJsonEnemy,
   RoomJsonTransition,
 } from '../editor/roomJson';
-import { createTileGrid, paintRect, extractLayerFromGrid } from './tileGridCompressor';
+import { createTileGrid, paintRect, extractLayerFromGrid, extract1x1LayerFromGrid } from './tileGridCompressor';
 import { hydrateSolidsByTheme, hydrateV2Room } from './roomSchemaHydrator';
 
 // Re-export all saved types and tileGridCompressor primitive types so that
@@ -60,6 +60,7 @@ export type {
   SavedRun,
   SavedPoint,
   SavedSolidLayer,
+  Saved1x1Layer,
   SavedSolids,
   SavedSpecialWall,
   SavedEnemyType,
@@ -91,6 +92,7 @@ import {
 } from './roomSavedTypes';
 import type {
   SavedSolids,
+  Saved1x1Layer,
   SavedSpecialWall,
   SavedEnemyType,
   SavedEnemy,
@@ -165,6 +167,11 @@ function themeKeyForWall(wallTheme: BlockTheme | undefined, defaultTheme: BlockT
  * Compresses a list of uniform solid walls into byTheme/rects/runs/points.
  * Walls with special flags (platform/ramp/pillar half) MUST be filtered out
  * before calling this — they travel in `specialWalls` and bypass the grid.
+ *
+ * `v1Walls` are walls with hBlock === 1 that must keep their 1×1 visual grain.
+ * They are stored in `v1ByTheme` using runs + points only (no 2D rects), so
+ * that after hydration they still have hBlock = 1 and are never promoted to
+ * 2×2-sprite rendering by `_buildSolid2x2Map`.
  */
 export function dehydrateSolidsByTheme(
   uniformWalls: readonly RoomJsonWall[],
@@ -172,17 +179,23 @@ export function dehydrateSolidsByTheme(
   heightBlocks: number,
   defaultTheme: BlockTheme,
 ): SavedSolids {
-  // 1. Partition walls by theme key (default theme → sentinel key).
-  const byThemeWalls = new Map<string, RoomJsonWall[]>();
+  // Partition into 1×1-visual walls (hBlock === 1) vs bulk walls.
+  const v1Walls: RoomJsonWall[] = [];
+  const bulkWalls: RoomJsonWall[] = [];
   for (const w of uniformWalls) {
+    if (w.hBlock === 1) v1Walls.push(w);
+    else bulkWalls.push(w);
+  }
+
+  // ── bulk (byTheme): full rect/run/point compressor ──────────────────────
+  const byThemeWalls = new Map<string, RoomJsonWall[]>();
+  for (const w of bulkWalls) {
     const themeKey = themeKeyForWall(w.blockTheme, defaultTheme);
     const list = byThemeWalls.get(themeKey) ?? [];
     list.push(w);
     if (!byThemeWalls.has(themeKey)) byThemeWalls.set(themeKey, list);
   }
 
-  // 2. Rasterize and extract per-theme.  Themes are emitted in alphabetical
-  //    order for stable diffs (default sentinel sorts first due to '_' < 'a').
   const byTheme: Record<string, SavedSolidLayer> = {};
   const themeKeys = [...byThemeWalls.keys()].sort();
   for (const themeKey of themeKeys) {
@@ -192,7 +205,29 @@ export function dehydrateSolidsByTheme(
     const layer = extractLayerFromGrid(grid);
     if (layer.rects || layer.runs || layer.points) byTheme[themeKey] = layer;
   }
-  return { byTheme };
+
+  // ── v1 (v1ByTheme): runs + points only, grouped by theme ────────────────
+  const v1ThemeWalls = new Map<string, RoomJsonWall[]>();
+  for (const w of v1Walls) {
+    const themeKey = themeKeyForWall(w.blockTheme, defaultTheme);
+    const list = v1ThemeWalls.get(themeKey) ?? [];
+    list.push(w);
+    if (!v1ThemeWalls.has(themeKey)) v1ThemeWalls.set(themeKey, list);
+  }
+
+  const v1ByTheme: Record<string, Saved1x1Layer> = {};
+  const v1ThemeKeys = [...v1ThemeWalls.keys()].sort();
+  for (const themeKey of v1ThemeKeys) {
+    const walls = v1ThemeWalls.get(themeKey)!;
+    const grid = createTileGrid(widthBlocks, heightBlocks);
+    for (const w of walls) paintRect(grid, w.xBlock, w.yBlock, w.wBlock, w.hBlock);
+    const layer = extract1x1LayerFromGrid(grid);
+    if (layer.runs || layer.points) v1ByTheme[themeKey] = layer;
+  }
+
+  const solids: SavedSolids = { byTheme };
+  if (Object.keys(v1ByTheme).length > 0) solids.v1ByTheme = v1ByTheme;
+  return solids;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,22 +237,25 @@ export function dehydrateSolidsByTheme(
 /**
  * Dehydrate a verbose RoomJsonDef into the compact SavedRoomV2 shape.
  * The editor saves in this format; the runtime never has to see it.
+ *
+ * v3 change: walls with hBlock === 1 are stored in `solids.v1ByTheme` using
+ * horizontal runs + points (no 2D rects), which preserves their 1×1 visual
+ * grain after round-trip.  `exactWalls` is no longer written for ordinary
+ * solid walls; existing v2 files that do have `exactWalls` still load fine.
  */
 export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   const defaultTheme: BlockTheme = blockThemeRefToTheme(json.blockThemeId) ?? json.blockTheme ?? 'blackRock';
 
-  // Partition walls: exact-size (1×1 and 2×2) go into exactWalls to preserve
-  // identity across round-trips; remaining uniform walls go through the compressor.
+  // Partition walls: special (platform/ramp/pillar) go into specialWalls;
+  // all uniform solid walls go through dehydrateSolidsByTheme which further
+  // splits into byTheme (hBlock>1 bulk) and v1ByTheme (hBlock=1 single-row).
   const uniformWallsBulk: RoomJsonWall[] = [];
-  const exactWallsRaw: RoomJsonWall[] = [];
   const specialWallsRaw: RoomJsonWall[] = [];
   for (const w of json.interiorWalls) {
     const wallTheme = blockThemeRefToTheme(w.blockThemeId);
     if (wallTheme && w.blockTheme === undefined) w.blockTheme = wallTheme;
     if (!isUniformSolidWall(w)) {
       specialWallsRaw.push(w);
-    } else if ((w.wBlock === 1 && w.hBlock === 1) || (w.wBlock === 2 && w.hBlock === 2)) {
-      exactWallsRaw.push(w);
     } else {
       uniformWallsBulk.push(w);
     }
@@ -396,16 +434,6 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   }
   if (json.dustContainerPieces && json.dustContainerPieces.length > 0) {
     out.dcPieces = json.dustContainerPieces.map(p => [p.xBlock, p.yBlock] as [number, number]);
-  }
-
-  // exactWalls: 1×1 and 2×2 uniform walls stored verbatim to preserve identity.
-  if (exactWallsRaw.length > 0) {
-    out.exactWalls = exactWallsRaw.map(w => {
-      const sw: SavedSpecialWall = { r: [w.xBlock, w.yBlock, w.wBlock, w.hBlock] };
-      if (w.blockTheme && w.blockTheme !== defaultTheme) sw.theme = blockThemeToId(w.blockTheme);
-      return sw;
-    });
-    out.exactWalls.sort((a, b) => a.r[1] - b.r[1] || a.r[0] - b.r[0] || a.r[2] - b.r[2] || a.r[3] - b.r[3]);
   }
 
   if (json.backgroundBlocks && json.backgroundBlocks.length > 0) {

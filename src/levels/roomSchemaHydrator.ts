@@ -38,10 +38,11 @@ import type {
 } from '../editor/roomJson';
 import type {
   SavedSolids,
+  Saved1x1Layer,
   SavedEnemyType,
   SavedRoomV2,
 } from './roomSavedTypes';
-import { ROOM_SCHEMA_VERSION, DEFAULT_THEME_KEY } from './roomSavedTypes';
+import { DEFAULT_THEME_KEY } from './roomSavedTypes';
 
 // ── Enemy type mapping (expand direction) ────────────────────────────────────
 
@@ -87,50 +88,84 @@ export function enemyTypeToFlags(
  * / point becomes a single wall rectangle with the theme recovered from the
  * enclosing theme key (the `__default__` sentinel is mapped back to
  * `undefined` so walls use the room-level default theme).
+ *
+ * Also reads `v1ByTheme` (v3 format): runs and points that were originally
+ * authored as 1×1-visual tiles.  These hydrate as hBlock = 1 walls so that
+ * `_buildSolid2x2Map` never promotes them to 2×2-sprite rendering.
  */
 export function hydrateSolidsByTheme(
   solids: SavedSolids | undefined,
 ): RoomJsonWall[] {
   const out: RoomJsonWall[] = [];
-  if (!solids || !solids.byTheme) return out;
+  if (!solids) return out;
 
-  for (const themeKey of Object.keys(solids.byTheme).sort()) {
-    const layer = solids.byTheme[themeKey];
-    const theme: BlockTheme | undefined = themeKey === DEFAULT_THEME_KEY
-      ? undefined
-      : blockThemeRefToTheme(themeKey as BlockTheme | BlockThemeId);
+  // ── byTheme: full rect/run/point layer (bulk walls, hBlock > 1 allowed) ──
+  if (solids.byTheme) {
+    for (const themeKey of Object.keys(solids.byTheme).sort()) {
+      const layer = solids.byTheme[themeKey];
+      const theme: BlockTheme | undefined = themeKey === DEFAULT_THEME_KEY
+        ? undefined
+        : blockThemeRefToTheme(themeKey as BlockTheme | BlockThemeId);
 
-    if (layer.rects) {
-      for (const [x, y, w, h] of layer.rects) {
-        const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
-        if (theme) wall.blockTheme = theme;
-        out.push(wall);
+      if (layer.rects) {
+        for (const [x, y, w, h] of layer.rects) {
+          const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
+          if (theme) wall.blockTheme = theme;
+          out.push(wall);
+        }
       }
-    }
-    if (layer.runs) {
-      for (const [y, xStart, xEnd] of layer.runs) {
-        const wall: RoomJsonWall = { xBlock: xStart, yBlock: y, wBlock: xEnd - xStart, hBlock: 1 };
-        if (theme) wall.blockTheme = theme;
-        out.push(wall);
+      if (layer.runs) {
+        for (const [y, xStart, xEnd] of layer.runs) {
+          const wall: RoomJsonWall = { xBlock: xStart, yBlock: y, wBlock: xEnd - xStart, hBlock: 1 };
+          if (theme) wall.blockTheme = theme;
+          out.push(wall);
+        }
       }
-    }
-    if (layer.points) {
-      for (const [x, y] of layer.points) {
-        const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: 1, hBlock: 1 };
-        if (theme) wall.blockTheme = theme;
-        out.push(wall);
+      if (layer.points) {
+        for (const [x, y] of layer.points) {
+          const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: 1, hBlock: 1 };
+          if (theme) wall.blockTheme = theme;
+          out.push(wall);
+        }
       }
     }
   }
+
+  // ── v1ByTheme: runs + points only (1×1-visual walls, hBlock = 1 always) ──
+  if (solids.v1ByTheme) {
+    for (const themeKey of Object.keys(solids.v1ByTheme).sort()) {
+      const layer: Saved1x1Layer = solids.v1ByTheme[themeKey];
+      const theme: BlockTheme | undefined = themeKey === DEFAULT_THEME_KEY
+        ? undefined
+        : blockThemeRefToTheme(themeKey as BlockTheme | BlockThemeId);
+
+      if (layer.runs) {
+        for (const [y, xStart, xEnd] of layer.runs) {
+          const wall: RoomJsonWall = { xBlock: xStart, yBlock: y, wBlock: xEnd - xStart, hBlock: 1 };
+          if (theme) wall.blockTheme = theme;
+          out.push(wall);
+        }
+      }
+      if (layer.points) {
+        for (const [x, y] of layer.points) {
+          const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: 1, hBlock: 1 };
+          if (theme) wall.blockTheme = theme;
+          out.push(wall);
+        }
+      }
+    }
+  }
+
   return out;
 }
 
 // ── SavedRoomV2 type guard ────────────────────────────────────────────────────
 
-/** Auto-detect whether `data` is a v2 saved room. */
+/** Auto-detect whether `data` is a saved room (v2 or v3). */
 export function isSavedRoomV2(data: unknown): data is SavedRoomV2 {
-  return typeof data === 'object' && data !== null
-      && (data as { v?: unknown }).v === ROOM_SCHEMA_VERSION;
+  if (typeof data !== 'object' || data === null) return false;
+  const v = (data as { v?: unknown }).v;
+  return v === 2 || v === 3;
 }
 
 // ── Full room hydration ───────────────────────────────────────────────────────

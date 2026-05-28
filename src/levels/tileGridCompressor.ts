@@ -114,6 +114,49 @@ function clearRect(grid: TileGrid, x: number, y: number, w: number, h: number): 
 }
 
 /**
+ * One-pass 1×1-safe layer extraction: horizontal runs + points ONLY.
+ *
+ * Used for walls that were originally authored as 1×1 (or hBlock=1) tiles to
+ * ensure they **never** get promoted to 2D rectangles.  Any 2D rect hydrated
+ * back as a RoomJsonWall with hBlock > 1 would be tiled into 2×2 sub-blocks by
+ * `_buildSolid2x2Map`, changing the visual grain from 1×1 to 2×2.
+ *
+ * By emitting only runs (hBlock = 1 after hydration) and points (1×1), we
+ * guarantee the runtime renderer keeps the 1×1 visual intent.
+ *
+ * The grid is read but NOT modified.
+ */
+export function extract1x1LayerFromGrid(grid: TileGrid): { runs?: SavedRun[]; points?: SavedPoint[] } {
+  const runs: SavedRun[] = [];
+  const points: SavedPoint[] = [];
+
+  for (let y = 0; y < grid.heightBlocks; y++) {
+    let x = 0;
+    while (x < grid.widthBlocks) {
+      if (grid.cells[gridIndex(grid, x, y)] !== 1) { x += 1; continue; }
+      let end = x + 1;
+      while (end < grid.widthBlocks && grid.cells[gridIndex(grid, end, y)] === 1) end += 1;
+      const len = end - x;
+      if (len >= RUN_MIN_LENGTH) {
+        runs.push([y, x, end]);
+      } else {
+        points.push([x, y]);
+      }
+      x = end;
+    }
+  }
+
+  // Deterministic sort: runs by (y, xStart); points by (y, x).
+  runs.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  points.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+
+  const out: { runs?: SavedRun[]; points?: SavedPoint[] } = {};
+  if (runs.length > 0) out.runs = runs;
+  if (points.length > 0) out.points = points;
+  return out;
+}
+
+/**
  * Three-pass deterministic tile cover:
  *   1. Rectangles (min 2×2, min area RECT_MIN_AREA).
  *   2. Horizontal runs (length ≥ RUN_MIN_LENGTH).

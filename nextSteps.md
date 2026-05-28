@@ -108,7 +108,51 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 ## Active Priority 1 Tasks
 
-### BUILD 420 — Complete boundary walls + baked runtime wall templates (COMPLETED)
+### BUILD 421 — Room schema v3: compressed 1×1 wall storage (COMPLETED)
+
+**Problem:** `dehydrateRoom()` routed all 1×1 and 2×2 walls to `exactWalls[]` (one JSON object per tile), bypassing the tile-grid compressor. The largest rooms had 5,000+ such objects, making files 160–973 KB.
+
+**Fix:** Introduced schema version 3 with `solids.v1ByTheme` — a runs+points-only compressed format for walls with `hBlock === 1`. Walls with `hBlock > 1` continue to use the existing `byTheme` rect/run/point compressor.
+
+**Key invariant:** walls in `v1ByTheme` hydrate with `hBlock = 1`, so `_buildSolid2x2Map` in `blockWallLayoutCache.ts` never promotes them to 2×2-sprite rendering. The 1×1 visual grain is preserved after every round-trip.
+
+**Files changed:**
+- `src/levels/tileGridCompressor.ts` — `extract1x1LayerFromGrid()` (runs + points only)
+- `src/levels/roomSavedTypes.ts` — `Saved1x1Layer`, `SavedSolids.v1ByTheme`, `ROOM_SCHEMA_VERSION = 3`, `SavedRoomV2.v: 2 | 3`
+- `src/levels/roomSchemaV2.ts` — `dehydrateSolidsByTheme` splits hBlock=1 → v1ByTheme; `dehydrateRoom` no longer writes `exactWalls` for ordinary solid walls
+- `src/levels/roomSchemaHydrator.ts` — `hydrateSolidsByTheme` reads both `byTheme` and `v1ByTheme`; `isSavedRoomV2` accepts v=2 and v=3
+- `scripts/migrate-rooms-v2-to-v3.mjs` — migration script (run once to update existing room files)
+- `src/levels/roomFileAudit.ts` — dev-only per-room audit/report utility
+- `src/levels/roomRoundTripValidator.ts` — dev-only dehydrate→hydrate correctness validator
+- All 15 active room files migrated to v3
+
+**Results (room file size reduction):**
+
+| Room | Before | After | Reduction |
+|------|--------|-------|-----------|
+| underwater_lake_room.json | 973 KB | 388 KB | 60% |
+| chasm_room.json | 483 KB | 84 KB | 83% |
+| seal_chamber_room.json | 236 KB | 29 KB | 88% |
+| the_fall_room.json | 197 KB | 40 KB | 80% |
+| w1_room1_room.json | 178 KB | 17 KB | 90% |
+| tall_shaft_room.json | 161 KB | 34 KB | 79% |
+| lobby_room.json | 155 KB | 9.5 KB | 94% |
+
+**Backward compatibility:** Old v2 files still load (their `exactWalls` array is still read by the hydrator). `isSavedRoomV2` accepts both v=2 and v=3.
+
+**Remaining optimization opportunities (not yet done):**
+
+1. **Water/lava zone rectangle merging.** Zones are currently stored as individual `[x, y, 1, 1]` rectangles in many rooms. Merging adjacent same-type zones into larger rects would further reduce file size. Requires care about zone semantic boundaries (e.g. separate visual bodies should stay separate).
+
+2. **Ambient blocker and background block compression.** Blockers and bgBlocks are stored per-entry. Groups of adjacent same-property entries could be merged.
+
+3. **`soundHardness` deprecation.** Per-wall `soundHardness` overrides in `exactWalls`/`specialWalls` are not currently emitted by the editor but the field exists in types. Sound hardness should derive from `blockTheme` globally. The field can be removed from `SavedSpecialWall` in a future cleanup pass.
+
+4. **Remove `exactWalls` type field entirely.** Once all campaign rooms are v3, the `exactWalls` field on `SavedRoomV2` can be marked `@deprecated`. It should remain readable for backward compat but the writer no longer produces it.
+
+5. **Audit utility integration.** `roomFileAudit.ts` and `roomRoundTripValidator.ts` exist but are not yet wired into any editor UI panel. Consider adding a "Room Audit" button to the editor dev toolbar.
+
+
 
 #### Part A: Transitions are now trigger strips, not boundary holes
 
