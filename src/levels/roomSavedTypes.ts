@@ -12,25 +12,55 @@ import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, Transition
 import type { RoomJsonLightSource, RoomJsonSunbeam, RoomJsonDialogueTrigger } from '../editor/roomJson';
 import type { SavedSceneLight } from './lightingSchema';
 export type { SavedRect, SavedRun, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
-import type { SavedRect, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
+import type { SavedRect, SavedPoint, SavedRun, SavedSolidLayer } from './tileGridCompressor';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA VERSIONING
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Current saved-file schema version. */
-export const ROOM_SCHEMA_VERSION = 2 as const;
+/**
+ * Current saved-file schema version.
+ *
+ * v3 changes vs v2:
+ *   • `solids.v1ByTheme` — compressed 1×1-visual-intent walls stored as
+ *     horizontal runs + points (no 2D rects).  Replaces the old `exactWalls`
+ *     array so large runs of 1×1 tiles are no longer individual JSON records.
+ *   • `exactWalls` is no longer written by the dehydrator for uniform solid
+ *     walls.  Old v2 files that do have `exactWalls` still load correctly.
+ */
+export const ROOM_SCHEMA_VERSION = 3 as const;
 
 /** Sentinel theme key used for tiles that use the room-level default theme. */
 export const DEFAULT_THEME_KEY = '__default__';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SAVED v2 TYPES
+// SAVED v2/v3 TYPES
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compact layer for walls that must keep 1×1 visual grain.
+ * Only horizontal runs and single points — no 2D rects — so that after
+ * hydration all walls have hBlock = 1.  This prevents `_buildSolid2x2Map`
+ * from promoting them to 2×2-sprite rendering.
+ */
+export interface Saved1x1Layer {
+  runs?: SavedRun[];
+  points?: SavedPoint[];
+}
 
 /** Encoded solids, grouped by block theme. */
 export interface SavedSolids {
+  /**
+   * Bulk uniform solid walls (any shape other than hBlock=1 single-row or
+   * exact 2×2).  Compressed using the full rect/run/point greedy algorithm.
+   */
   byTheme: Record<string, SavedSolidLayer>;
+  /**
+   * 1×1-visual-intent walls compressed as runs + points only (no 2D rects).
+   * Written by v3; absent in old v2 files (those use `exactWalls` instead).
+   * All walls here hydrate with hBlock = 1, which keeps the 1×1 visual grain.
+   */
+  v1ByTheme?: Record<string, Saved1x1Layer>;
 }
 
 /**
@@ -177,7 +207,8 @@ export interface SavedBgBlock {
 }
 
 export interface SavedRoomV2 {
-  v: 2;
+  /** Schema version. 2 = legacy (uses `exactWalls`); 3 = compressed (uses `solids.v1ByTheme`). */
+  v: 2 | 3;
   id: string;
   name: string;
   world: number;
