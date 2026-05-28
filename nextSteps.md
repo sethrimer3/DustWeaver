@@ -8,6 +8,33 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## Large-Room Performance — Remaining Area-Based Systems
+
+The main freeze cause (`buildAmbientDarknessAlphas` Phase 1 dead O(W×H) litAir loop) and `buildAmbientDepths` omni-mode O(W×H) litAir build were fixed. The speedrun timer no longer charges loading/warm frame time.
+
+The following area-based systems remain and were not changed in this pass:
+
+### 1. `bgWallGrid` dense allocation — `residentWorldBuilder.ts`, `gameLoadRoomPhases.ts`
+
+- **Pattern:** `new Uint8Array(room.widthBlocks * room.heightBlocks)` + fill, on every room load and resident build.
+- **Impact:** `new Uint8Array(N)` in V8 uses zero-initialized memory (calloc/mmap) and is very fast (<1 ms even for 1M cells). Not the 18-second freeze. For rooms > 65536 cells a sparse `Set<number>` (key = `col + row * width`) would reduce memory from ~1 MB to a few KB for sparse rooms, but the allocation itself is not a bottleneck.
+- **Constraint:** `src/sim/clusters/snakeAi.ts` reads `world.bgWallGrid[idx]` directly (line ~215). Any sparse path requires a compatibility adapter.
+- **Recommended next step:** If memory pressure from very large rooms becomes a concern, wrap `bgWallGrid` behind a `BgWallGridView` interface that picks dense vs. sparse based on a `DENSE_BG_GRID_MAX_CELLS = 65536` threshold. Gate behind the `65536` area check already logged in DEV.
+
+### 2. `rebuildNavSolidGrid` in `snakeAi.ts`
+
+- **Pattern:** `new Uint8Array(width * height)` for enemy snake pathfinding, then iterates occupied walls to fill.
+- **Impact:** Same fast-allocation story as `bgWallGrid`. The fill loop iterates only occupied wall entries (not all cells). Not a bottleneck for sparse rooms. For a 1M-cell room with 100 walls, the grid is allocated but only 100 entries are written.
+- **Recommended next step:** Low priority. Only matters if snake enemies exist in very large rooms.
+
+### 3. `buildRoomWallTemplate` — single synchronous phase
+
+- **File:** Called during Phase D of `gameLoadRoomPhases.ts`.
+- **Impact:** On very large rooms (> ~80×50 blocks) this can take 5–10 ms in one synchronous generator phase. A cache hit is ~0.1 ms. The per-phase 8 ms warnings (BUILD 419) make long executions visible.
+- **Recommended next step:** Make `buildRoomWallTemplate` internally incremental (split by row or chunk batch) so each generator yield fits within the 8 ms budget. This was previously noted as deferred in BUILD 419.
+
+---
+
 ## Electron Desktop Build Notes
 
 ### Failure reproduced and fixed
