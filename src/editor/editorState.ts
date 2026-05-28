@@ -275,6 +275,10 @@ export interface EditorUICallbacks {
   onBrushModeChange: (mode: BrushMode) => void;
   /** Called when the user clicks "Export Campaign JSON" while editing a custom campaign. */
   onExportCampaignJson?: () => void;
+  /** DEV-only: run the active campaign room-file audit and log results. */
+  onRunRoomAudit?: () => void;
+  /** DEV-only: validate active campaign rooms through dehydrate -> hydrate. */
+  onRunRoomRoundTripValidation?: () => void;
 }
 
 /** Selects the placement block theme and updates the recent-theme strip. */

@@ -184,8 +184,11 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 **exactWalls:** All v3 rooms have zero `exactWalls`. The field is deprecated in types; the writer never emits it for ordinary terrain; the hydrator still reads it from old v2 files.
 
 **Remaining minor items:**
-1. **Audit utility integration.** `roomFileAudit.ts` and `roomRoundTripValidator.ts` are not yet wired into any editor UI panel. Consider adding a "Room Audit" button to the editor dev toolbar.
-2. **`soundHardness` final removal.** `SavedSpecialWall.soundHardness` can be deleted from types once any legacy v2 files using it are no longer needed.
+1. **`soundHardness` final removal.** `SavedSpecialWall.soundHardness` can be deleted from types once any legacy v2 files using it are no longer needed.
+
+**Dev editor audit controls:** Completed. In dev/editor mode, the left editor panel now shows **Dev Room Checks** with:
+- **Room Audit** — logs `printRoomAuditTable()` for the active campaign room set and warns for non-v3 rooms, v3 `exactWalls`, v3 legacy `waterZones` / `lavaZones` / `ambientBlockers` / `bgBlocks`, or any room that cannot be audited.
+- **Round-trip Validate Rooms** — hydrates the active compact room set, runs the dehydrate -> hydrate validator through `printRoundTripReport()`, and logs a clear all-passed or failed-room summary.
 
 
 

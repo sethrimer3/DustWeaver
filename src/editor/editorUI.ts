@@ -91,6 +91,34 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   `;
   container.appendChild(exportAllBtn);
 
+  if (import.meta.env.DEV) {
+    const devToolsDiv = document.createElement('div');
+    devToolsDiv.style.cssText = `
+      border: 1px solid rgba(255,204,102,0.45); border-radius: 3px;
+      padding: 6px 8px; margin-bottom: 10px; background: rgba(35,25,0,0.3);
+    `;
+    const devToolsTitle = document.createElement('div');
+    devToolsTitle.textContent = 'Dev Room Checks';
+    devToolsTitle.style.cssText = 'font-size: 11px; color: #ffcc66; margin-bottom: 6px; font-weight: bold;';
+    devToolsDiv.appendChild(devToolsTitle);
+
+    const auditBtn = makeBtn('Room Audit', () => callbacks?.onRunRoomAudit?.());
+    auditBtn.style.cssText += `
+      width: 100%; padding: 6px 8px; font-size: 11px; margin-bottom: 4px;
+      background: rgba(90,65,0,0.45); border-color: #ffcc66; color: #ffdd88;
+    `;
+    devToolsDiv.appendChild(auditBtn);
+
+    const roundTripBtn = makeBtn('Round-trip Validate Rooms', () => callbacks?.onRunRoomRoundTripValidation?.());
+    roundTripBtn.style.cssText += `
+      width: 100%; padding: 6px 8px; font-size: 11px;
+      background: rgba(90,65,0,0.45); border-color: #ffcc66; color: #ffdd88;
+    `;
+    devToolsDiv.appendChild(roundTripBtn);
+
+    container.appendChild(devToolsDiv);
+  }
+
   // ── Tool buttons ─────────────────────────────────────────────────────────
   const toolBar = document.createElement('div');
   toolBar.style.cssText = 'display: flex; gap: 4px; margin-bottom: 10px;';

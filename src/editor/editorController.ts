@@ -33,7 +33,7 @@ import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
-import { ROOM_REGISTRY, initRoomRegistry, registerRoom, getLoadedOfficialCampaignSpawn } from '../levels/rooms';
+import { ROOM_REGISTRY, initRoomRegistry, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 import {
@@ -59,6 +59,13 @@ import {
 import { handleEditorKeyboardShortcuts } from './editorKeyboardShortcuts';
 import { invalidateRoomContour } from '../ui/mapSketchRenderer';
 import { setActiveSeamBlending } from '../render/walls/blockSpriteRenderer';
+import { editorRoomDataToJson } from './roomJson';
+import type { RoomJsonDef } from './roomJson';
+import { buildWorldMapFromRegistry } from './editableCampaignSession';
+import { dehydrateRoom, hydrateV2Room } from '../levels/roomSchemaV2';
+import type { SavedRoomV2 } from '../levels/roomSchemaV2';
+import { auditRoomJson, printRoomAuditTable } from '../levels/roomFileAudit';
+import { printRoundTripReport, validateRoundTrip } from '../levels/roomRoundTripValidator';
 
 const BS = BLOCK_SIZE_MEDIUM;
 
@@ -238,6 +245,115 @@ export function createEditorController(
       console.log(`[editor-perf] commitActiveRoomToCampaign reason=${reason} room=${roomId}`);
     }
     return true;
+  }
+
+  function collectActiveSavedRoomsForDevChecks(): SavedRoomV2[] {
+    const roomById = new Map<string, SavedRoomV2>();
+    if (campaignSession?.campaignStore !== undefined) {
+      for (const [id, rawRoom] of campaignSession.campaignStore.rawRoomsById) {
+        roomById.set(id, rawRoom);
+      }
+    } else {
+      for (const [id, roomDef] of ROOM_REGISTRY) {
+        const { data } = roomDefToEditorRoomData(roomDef, 1);
+        roomById.set(id, dehydrateRoom(editorRoomDataToJson(data)));
+      }
+    }
+    for (const [id, data] of pendingRoomEdits) {
+      roomById.set(id, dehydrateRoom(editorRoomDataToJson(data)));
+    }
+    if (state.roomData !== null) {
+      roomById.set(state.roomData.id, dehydrateRoom(editorRoomDataToJson(state.roomData)));
+    }
+
+    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+    const worldMapRoomById = new Map(worldMap.rooms.map(room => [room.id, room]));
+    const rooms: SavedRoomV2[] = [];
+    for (const [roomId, room] of roomById) {
+      const mapRoom = worldMapRoomById.get(roomId);
+      rooms.push(mapRoom === undefined ? room : {
+        ...room,
+        name: mapRoom.name,
+        world: mapRoom.worldId,
+        map: [mapRoom.mapX, mapRoom.mapY],
+      });
+    }
+    return rooms;
+  }
+
+  function runDevRoomAudit(): void {
+    if (!import.meta.env.DEV) return;
+    const savedRooms = collectActiveSavedRoomsForDevChecks();
+    if (savedRooms.length === 0) {
+      console.warn('[RoomAudit] No active campaign rooms were available to audit.');
+      return;
+    }
+
+    const rawRooms = savedRooms.map(room => ({
+      id: room.id,
+      rawJson: JSON.stringify(room, null, 2),
+    }));
+    printRoomAuditTable(rawRooms);
+
+    let warningCount = 0;
+    for (const room of rawRooms) {
+      const entry = auditRoomJson(room.rawJson);
+      if (entry === null) {
+        warningCount++;
+        console.warn(`[RoomAudit] Room "${room.id}" cannot be audited because raw JSON is unavailable or invalid.`);
+        continue;
+      }
+      if (entry.version < 3) {
+        warningCount++;
+        console.warn(`[RoomAudit] Room "${entry.roomId}" is schema v${entry.version}; active optimized rooms should be v3.`);
+      }
+      if (entry.version === 3 && entry.exactWallCount > 0) {
+        warningCount++;
+        console.warn(`[RoomAudit] Room "${entry.roomId}" is v3 but still contains exactWalls=${entry.exactWallCount}.`);
+      }
+      const legacyCount = entry.waterZoneLegacy + entry.lavaZoneLegacy + entry.ambientBlockerLegacy + entry.bgBlockLegacy;
+      if (entry.version === 3 && legacyCount > 0) {
+        warningCount++;
+        console.warn(
+          `[RoomAudit] Room "${entry.roomId}" is v3 but still uses legacy fields: ` +
+          `waterZones=${entry.waterZoneLegacy}, lavaZones=${entry.lavaZoneLegacy}, ` +
+          `ambientBlockers=${entry.ambientBlockerLegacy}, bgBlocks=${entry.bgBlockLegacy}.`,
+        );
+      }
+    }
+
+    if (warningCount === 0) {
+      console.log(`[RoomAudit] All ${rawRooms.length} active room(s) passed audit warnings.`);
+    } else {
+      console.warn(`[RoomAudit] Completed with ${warningCount} warning(s).`);
+    }
+  }
+
+  function runDevRoomRoundTripValidation(): void {
+    if (!import.meta.env.DEV) return;
+    const rooms: RoomJsonDef[] = [];
+    for (const savedRoom of collectActiveSavedRoomsForDevChecks()) {
+      try {
+        rooms.push(hydrateV2Room(savedRoom));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[RoundTrip] Room "${savedRoom.id}" could not be hydrated for validation: ${msg}`);
+      }
+    }
+    if (rooms.length === 0) {
+      console.warn('[RoundTrip] No active campaign rooms were available to validate.');
+      return;
+    }
+
+    printRoundTripReport(rooms);
+    const failedRooms = rooms
+      .map(room => validateRoundTrip(room))
+      .filter(result => !result.passed);
+    if (failedRooms.length === 0) {
+      console.log(`[RoundTrip] All ${rooms.length} active room(s) passed.`);
+    } else {
+      console.error(`[RoundTrip] ${failedRooms.length} active room(s) failed round-trip validation.`);
+    }
   }
 
   function discardCurrentRoomSessionChanges(roomData: EditorRoomData | null): void {
@@ -424,6 +540,8 @@ export function createEditorController(
             );
           }
         },
+        onRunRoomAudit: () => runDevRoomAudit(),
+        onRunRoomRoundTripValidation: () => runDevRoomRoundTripValidation(),
         onOpenVisualMap: () => openVisualMap(),
         onSkillTombWeaveChange: (weaveId: string) => {
           state.pendingSkillTombWeaveId = weaveId;
