@@ -97,8 +97,6 @@ export interface RoomJsonWall {
   blockTheme?: BlockTheme;
   /** Compact per-wall block theme override used by newer JSON exports. */
   blockThemeId?: BlockThemeId;
-  /** Per-wall player SFX material hardness. Defaults from wall/room theme. */
-  soundHardness?: BlockSoundHardness;
   /**
    * Ramp orientation. When present, this wall is a diagonal triangle.
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).

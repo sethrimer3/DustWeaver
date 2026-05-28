@@ -101,7 +101,7 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
       world.wallIsPlatformFlag[wallIndex]      = 0;
       world.wallPlatformEdge[wallIndex]        = 0;
       world.wallThemeIndex[wallIndex]          = WALL_THEME_DEFAULT_INDEX;
-      world.wallSoundHardnessIndex[wallIndex]  = resolveWallSoundHardnessIndex(room, undefined, undefined);
+      world.wallSoundHardnessIndex[wallIndex]  = resolveWallSoundHardnessIndex(room, undefined);
       // Falling block groups render through renderFallingBlocks(). This wall
       // slot exists only for broad collision/movement integration and must
       // stay invisible or the group's bounding box will be drawn as terrain.

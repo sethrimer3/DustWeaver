@@ -141,7 +141,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallWWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
       world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
-      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined, undefined);
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
       world.wallPlatformEdge[wallIdx] = 0;
@@ -178,7 +178,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallThemeIndex[wallIdx] = b.blockTheme !== undefined
         ? blockThemeToIndex(b.blockTheme)
         : WALL_THEME_DEFAULT_INDEX;
-      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, b.blockTheme, undefined);
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, b.blockTheme);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
       world.wallRampOrientationIndex[wallIdx] = 255;
@@ -215,7 +215,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
       world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
-      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined, undefined);
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
       world.wallPlatformEdge[wallIdx] = 0;
@@ -252,7 +252,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
       world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
-      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined, undefined);
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined);
       world.wallIsInvisibleFlag[wallIdx] = 1;  // Mark invisible: kinetic block visuals are drawn separately in renderHazards
       world.wallIsPlatformFlag[wallIdx] = 0;
       world.wallPlatformEdge[wallIdx] = 0;

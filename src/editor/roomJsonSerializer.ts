@@ -59,7 +59,6 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       }
       if (w.blockTheme !== undefined) wall.blockTheme = w.blockTheme;
       if (w.blockTheme !== undefined) wall.blockThemeId = blockThemeToId(w.blockTheme);
-      if (w.soundHardness !== undefined) wall.soundHardness = w.soundHardness;
       if (w.rampOrientation !== undefined) wall.rampOrientation = w.rampOrientation;
       if (w.isPillarHalfWidthFlag === 1) wall.isPillarHalfWidth = true;
       return wall;

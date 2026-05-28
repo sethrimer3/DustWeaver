@@ -91,7 +91,6 @@ export function computeWallTemplateSourceHash(json: RoomJsonDef): string {
     hashStr(String(w.platformEdge ?? ''));
     hashStr(w.blockTheme ?? '');
     hashStr(w.blockThemeId ?? '');
-    hashStr(w.soundHardness ?? '');
     hashStr(String(w.rampOrientation ?? ''));
     hashBool(w.isPillarHalfWidth);
   }

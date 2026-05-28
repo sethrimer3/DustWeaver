@@ -12,7 +12,7 @@
  * so all existing import paths continue to work without change.
  */
 
-import type { TransitionDirection, BlockTheme, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle } from '../levels/roomDef';
+import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle } from '../levels/roomDef';
 import type { LightType, LightBlendMode } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 
@@ -85,8 +85,6 @@ export interface EditorWall {
   platformEdge: 0 | 1 | 2 | 3;
   /** Per-wall block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
-  /** Per-wall player SFX material hardness. Defaults from wall/room theme. */
-  soundHardness?: BlockSoundHardness;
   /**
    * Ramp orientation (0-3). Undefined or -1 = not a ramp.
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).

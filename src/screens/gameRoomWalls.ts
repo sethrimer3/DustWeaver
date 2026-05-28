@@ -35,14 +35,12 @@ const WALL_MERGE_EPSILON_WORLD = 0.001;
 
 /**
  * Returns the packed sound-hardness index for a wall, resolving in priority
- * order: explicit per-wall override → room-level override → theme-derived default.
+ * order: room-level override → theme-derived default.
  */
 export function resolveWallSoundHardnessIndex(
   room: RoomDef,
   wallTheme: string | undefined,
-  explicitHardness: RoomDef['soundHardness'],
 ): number {
-  if (explicitHardness !== undefined) return blockSoundHardnessToIndex(explicitHardness);
   if (room.soundHardness !== undefined) return blockSoundHardnessToIndex(room.soundHardness);
   return blockSoundHardnessToIndex(blockThemeToSoundHardness(wallTheme ?? room.blockTheme));
 }
@@ -105,7 +103,7 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     pe.push(def.platformEdge ?? 0);
     const themeIdx = def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX;
     ts.push(themeIdx);
-    sh.push(resolveWallSoundHardnessIndex(room, def.blockTheme, def.soundHardness));
+    sh.push(resolveWallSoundHardnessIndex(room, def.blockTheme));
     iv.push(def.isInvisibleFlag === 1 ? 1 : 0);
     ro.push(def.rampOrientation !== undefined ? def.rampOrientation : 255);
     ph.push(isHalfWidthPillar ? 1 : 0);

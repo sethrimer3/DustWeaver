@@ -202,7 +202,6 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isPlatformFlag: w.isPlatform ? 1 : 0,
     platformEdge: w.platformEdge ?? 0,
     blockTheme: resolveJsonBlockTheme(w.blockTheme, w.blockThemeId),
-    soundHardness: w.soundHardness,
     rampOrientation: w.rampOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? 1 : 0,
   }));

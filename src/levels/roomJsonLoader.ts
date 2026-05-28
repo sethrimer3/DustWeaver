@@ -86,7 +86,6 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     isPlatformFlag: w.isPlatform ? (1 as const) : (0 as const),
     platformEdge: w.platformEdge,
     blockTheme: blockThemeRefToTheme(w.blockThemeId) ?? w.blockTheme,
-    soundHardness: w.soundHardness,
     rampOrientation: w.rampOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? (1 as const) : (0 as const),
   }));

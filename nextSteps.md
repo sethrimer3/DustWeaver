@@ -179,12 +179,9 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 | seal_chamber_room.json | 29 KB | 3.1 KB | 89% |
 | interesting_room_room.json | 9.3 KB | 1.5 KB | 84% |
 
-**soundHardness:** No active room file contains per-wall `soundHardness` overrides. The `SavedSpecialWall.soundHardness` field exists in types for backward compat reading of old files, but the editor export never writes it. Sound hardness at runtime derives from block theme.
+**soundHardness:** Per-wall `soundHardness` compatibility has been removed from active room wall, editor wall, and JSON wall types. Sound hardness at runtime derives from the room-level override or block theme.
 
 **exactWalls:** All v3 rooms have zero `exactWalls`. The field is deprecated in types; the writer never emits it for ordinary terrain; the hydrator still reads it from old v2 files.
-
-**Remaining minor items:**
-1. **`soundHardness` final removal.** `SavedSpecialWall.soundHardness` can be deleted from types once any legacy v2 files using it are no longer needed.
 
 **Dev editor audit controls:** Completed. In dev/editor mode, the left editor panel now shows **Dev Room Checks** with:
 - **Room Audit** — logs `printRoomAuditTable()` for the active campaign room set and warns for non-v3 rooms, v3 `exactWalls`, v3 legacy `waterZones` / `lavaZones` / `ambientBlockers` / `bgBlocks`, or any room that cannot be audited.

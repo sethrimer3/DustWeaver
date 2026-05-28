@@ -316,7 +316,7 @@ export function appendRoomWallsAtOffset(
       ? blockThemeToIndex(def.blockTheme)
       : WALL_THEME_DEFAULT_INDEX;
     world.wallSoundHardnessIndex[idx]    = blockSoundHardnessToIndex(
-      def.soundHardness ?? room.soundHardness ?? blockThemeToSoundHardness(def.blockTheme ?? room.blockTheme),
+      room.soundHardness ?? blockThemeToSoundHardness(def.blockTheme ?? room.blockTheme),
     );
     world.wallIsInvisibleFlag[idx]       = def.isInvisibleFlag === 1 ? 1 : 0;
     world.wallRampOrientationIndex[idx]  = def.rampOrientation !== undefined

@@ -379,8 +379,6 @@ export interface RoomWallDef {
   /** Per-wall block theme override.  When set, this wall renders with the
    *  specified theme instead of the room-level default. */
   blockTheme?: BlockTheme;
-  /** Per-wall player SFX material hardness. Defaults from blockTheme/room theme. */
-  soundHardness?: BlockSoundHardness;
   /** 1 if this wall is an invisible collision boundary (not rendered). */
   isInvisibleFlag?: 0 | 1;
   /**
