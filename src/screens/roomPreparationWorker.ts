@@ -6,8 +6,10 @@
  * whose typed-array fields are **transferred** (zero-copy) rather than copied.
  *
  * Build passes executed here:
- *  1. `buildRoomWallTemplate`    — iterative O(n²) wall-merge pass
- *  2. ambient-light blocker sets — two Set<string> from room metadata
+ *  1. Wall template — copies pre-baked typed arrays when `room.bakedWallTemplate`
+ *     exists (skipping the merge pass); otherwise runs `buildRoomWallTemplate`
+ *     (iterative O(n²) wall-merge pass)
+ *  2. Ambient-light blocker sets — two Set<string> from room metadata
  *  3. `buildRoomDecorations`     — pure geometry conversion
  *
  * Edge-extension cache building has been removed — that feature is legacy-only.
@@ -20,7 +22,7 @@
  * No DOM APIs are called.  `performance.now()` is available in all worker
  * environments and is used only for per-step timing diagnostics.
  *
- * BUILD 388
+ * BUILD 420
  */
 
 // Minimal interface for the dedicated-worker global scope.

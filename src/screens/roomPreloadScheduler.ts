@@ -116,10 +116,14 @@ const LONG_TASK_WARN_MS = 16;
  * build a room in the current idle slot.  It does NOT need to be precise.
  */
 function estimateRoomBuildCostMs(room: RoomDef): number {
-  const wallCount = room.walls?.length ?? 0;
-  // Wall-merge pass is super-linear: O(n²) in the worst case.
-  // Empirically, each wall costs ~0.04 ms + a quadratic term.
-  const wallCost = wallCount * 0.04 + wallCount * wallCount * 0.002;
+  // Baked rooms skip the wall-merge pass entirely — treat wall cost as zero.
+  let wallCost = 0;
+  if (room.bakedWallTemplate === undefined) {
+    const wallCount = room.walls?.length ?? 0;
+    // Wall-merge pass is super-linear: O(n²) in the worst case.
+    // Empirically, each wall costs ~0.04 ms + a quadratic term.
+    wallCost = wallCount * 0.04 + wallCount * wallCount * 0.002;
+  }
   let bgBlockCount = 0;
   if (room.backgroundBlocks !== undefined) {
     for (let i = 0; i < room.backgroundBlocks.length; i++) {

@@ -405,7 +405,7 @@ export interface RoomJsonDef {
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];
-  /** Interior walls only — boundary walls are regenerated from room dimensions + transitions. */
+  /** Interior walls only — boundary walls are regenerated from room dimensions alone. */
   interiorWalls: RoomJsonWall[];
   enemies: RoomJsonEnemy[];
   transitions: RoomJsonTransition[];
