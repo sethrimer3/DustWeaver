@@ -179,10 +179,11 @@ export function resolveRoomWallTemplate(
  */
 export interface PreparedRoomResult {
   runtimeEntry: RoomRuntimeEntry;
-  /** Wall template resolution time in ms (near-zero for baked/cache; merge time for fallback). */
+  /** Wall template resolution time in ms (near-zero for baked; merge time for fallback). */
   wallMs: number;
-  /** Where the wall template came from: 'baked' or 'fallback'. */
-  wallSource: WallTemplateSource;
+  /** Where the wall template came from: 'baked' or 'fallback'.
+   *  'cache' is never returned here — this function IS the cache population path. */
+  wallSource: 'baked' | 'fallback';
   /** Ambient blocker set construction time in ms. */
   blockerMs: number;
   /** Wall decoration geometry build time in ms. */
@@ -259,7 +260,7 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
       wallDecorations,
     },
     wallMs: wallResolution.buildMs,
-    wallSource: wallResolution.source,
+    wallSource: wallResolution.source as 'baked' | 'fallback',
     blockerMs,
     decorMs,
     totalMs,
