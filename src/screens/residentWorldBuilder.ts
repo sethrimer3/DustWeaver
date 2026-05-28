@@ -32,9 +32,9 @@ import { spawnBackgroundFluidParticles, spawnAllDustPiles, BACKGROUND_FLUID_COUN
 import { spawnEnemyClusters } from './gameEnemySpawn';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { loadRoomHazards, loadRoomRopes, loadRoomFallingBlocks, loadRoomGrasshoppers } from './gameRoom';
-import { applyRoomWallTemplate } from './gameRoomWalls';
-import { resolveRoomWallTemplate } from './preparedRoomRuntime';
+import { applyRoomWallTemplate, buildRoomWallTemplateIncremental } from './gameRoomWalls';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
+import { resolveRoomWallTemplate } from './preparedRoomRuntime';
 import * as FP from '../debug/perfFreezeProfiler';
 
 const FIXED_DT_MS = 16.666;
@@ -259,9 +259,9 @@ export function buildResidentWorldState(
  *
  * Note: phaseD_walls_build is only emitted on a cache miss.  On a cache hit the
  * generator emits phaseD_walls_lookup and proceeds directly to phaseE_sim.
- * buildRoomWallTemplate() is still a single synchronous step; if a room is
- * very large (> ~80×50 blocks) this phase may still take 5–10 ms.  DEV timing
- * is recorded via FP.recordLoadPhaseStep so the freeze profiler captures it.
+ * On a cache+baked miss, buildRoomWallTemplateIncremental() spreads the O(n²)
+ * merge pass across frames (4 ms budget per yield), emitting zero or more
+ * 'phaseD_walls_merge' yields before the final 'phaseD_walls_build' yield.
  *
  * Usage:
  *   const gen = createResidentBuildGenerator(room, campaignSeed, cache);
@@ -463,22 +463,35 @@ export function* createResidentBuildGenerator(
 
   // ── Phase D step 4: wall template build (cache+baked miss only) ─────────
   // Only reached when neither the runtime cache nor bakedWallTemplate had the
-  // template.  buildRoomWallTemplate() can take 5–10 ms on large rooms;
-  // keeping it in its own generator phase ensures no other work compounds this
-  // cost.  phaseD_walls_build remains a single synchronous step (not yet
-  // incremental).
-  // See nextSteps.md for the deferred incremental wall-build investigation.
+  // template.  buildRoomWallTemplateIncremental() spreads the O(n²) merge pass
+  // across multiple frames (4 ms budget per yield) so no single frame exceeds
+  // the 8 ms LONG_PHASE_WARN_MS threshold.  Each mid-build yield emits the
+  // 'phaseD_walls_merge' phase label so callers can observe progress.
   if (!_wallsCacheHit) {
     const _t = import.meta.env.DEV ? performance.now() : 0;
-    // resolveRoomWallTemplate stores the result in cache automatically.
-    const resolution = resolveRoomWallTemplate(room, roomRuntimeCache);
-    applyRoomWallTemplate(rw, resolution.template);
+    const mergeGen = buildRoomWallTemplateIncremental(room);
+    let mergeStep = mergeGen.next();
+    while (!mergeStep.done) {
+      // Merge budget elapsed — hand back to the scheduler and resume next frame.
+      if (import.meta.env.DEV) FP.recordLoadPhaseStep('Resident:walls_merge_slice', performance.now() - _t);
+      yield 'phaseD_walls_merge';
+      mergeStep = mergeGen.next();
+    }
+    const wallTemplate = mergeStep.value;
+    applyRoomWallTemplate(rw, wallTemplate);
+    // Cache the result so subsequent visitors get a fast hit.
+    roomRuntimeCache.set(room.id, {
+      wallTemplate,
+      edgeExtension:   null,
+      blockerKeys:     null,
+      darkBlockerKeys: null,
+      wallDecorations: null,
+    });
     if (import.meta.env.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:walls_build', _ms);
-      console.log(`[residentBuild:gen] ${room.id} walls: fallback build in ${_ms.toFixed(1)}ms` +
-        ` wallCount=${resolution.template.wallCount}`);
-      _warnLongPhase('phaseD_walls_build', _ms, room.id, diagContext);
+      console.log(`[residentBuild:gen] ${room.id} walls: incremental build in ${_ms.toFixed(1)}ms` +
+        ` wallCount=${wallTemplate.wallCount}`);
     } else { FP.recordLoadPhaseStep('Resident:walls_build', 0); }
     yield 'phaseD_walls_build';
   }

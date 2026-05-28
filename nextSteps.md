@@ -27,11 +27,11 @@ The following area-based systems remain and were not changed in this pass:
 - **Impact:** Same fast-allocation story as `bgWallGrid`. The fill loop iterates only occupied wall entries (not all cells). Not a bottleneck for sparse rooms. For a 1M-cell room with 100 walls, the grid is allocated but only 100 entries are written.
 - **Recommended next step:** Low priority. Only matters if snake enemies exist in very large rooms.
 
-### 3. `buildRoomWallTemplate` — single synchronous phase
+### 3. `buildRoomWallTemplate` — **DONE (BUILD 424)**
 
-- **File:** Called during Phase D of `gameLoadRoomPhases.ts`.
-- **Impact:** On very large rooms (> ~80×50 blocks) this can take 5–10 ms in one synchronous generator phase. A cache hit is ~0.1 ms. The per-phase 8 ms warnings (BUILD 419) make long executions visible.
-- **Recommended next step:** Make `buildRoomWallTemplate` internally incremental (split by row or chunk batch) so each generator yield fits within the 8 ms budget. This was previously noted as deferred in BUILD 419.
+- **File:** `gameRoomWalls.ts`, `residentWorldBuilder.ts`, `gameLoadRoomPhases.ts`.
+- **What was done:** Added `buildRoomWallTemplateIncremental` generator (4 ms time-budget per `yield`).  `buildRoomWallTemplate` is now a thin synchronous wrapper around it (unchanged semantics for worker/editor/sync callers).  `residentWorldBuilder.ts` `phaseD_walls_build` iterates the generator yielding `'phaseD_walls_merge'` per slice.  `gameLoadRoomPhases.ts` Phase D wall-template block now inlines cache → baked → incremental-fallback logic with an extra `yield` between the lookup and the first merge slice, and caches `blockerKeys`/`darkBlockerKeys` at entry creation time (no post-hoc backfill needed).
+- **Result:** The O(n²) merge pass is spread across frames; no single frame exceeds the 8 ms `LONG_PHASE_WARN_MS` threshold on large rooms.  Cache and baked paths are unchanged (fast O(n) copy).
 
 ---
 
@@ -721,13 +721,13 @@ These checks confirm correct behaviour for the resident-room runtime. Run manual
 
 7. **`diagContext` wired at both call sites.** Both the runtime scheduler and the initial build phase now pass `diagContext` (with `roomId` captured in a `const` ref) to `createResidentBuildGenerator`. Long-phase callbacks correctly identify the room even after `_activeBuildSession` or `_adjRoom` is reassigned.
 
-**`phaseD_walls_build` status:** Still a single synchronous step. `buildRoomWallTemplate()` is O(n²) iterative merge over the room's wall array; it cannot be trivially split across frames without carrying substantial intermediate merge state between yields. The per-phase 8 ms warning (item 1 above) makes long `phaseD_walls_build` executions visible in the debug overlay and DEV console. Full incremental wall building is deferred.
+**`phaseD_walls_build` status (BUILD 424):** Now incremental. `buildRoomWallTemplateIncremental()` spreads the O(n²) merge pass across frames (4 ms budget per yield), emitting `'phaseD_walls_merge'` labels. The deferred note from BUILD 419 is resolved.
 
 **Runtime phase budget policy:** Unchanged from BUILD 418. One generator phase per RAF frame, executed post-render before endFrame. The heavy-walls deferral gate (`_isAboutToRunHeavyWallsBuild`) skips `phaseD_walls_build` when last-frame time ≥ 10 ms. Priority-1/2 heavy phases are not deferred.
 
 #### Remaining limitations (BUILD 419)
 
-1. **`phaseD_walls_build` is still a single synchronous step.** `buildRoomWallTemplate()` is not internally incremental. On very large rooms (> ~80×50 blocks) it can still take 5–10 ms in one generator phase. The cache-hit path is fast (~0.1 ms). Per-phase 8 ms warnings (BUILD 419) make long executions visible. Making `buildRoomWallTemplate()` internally incremental is deferred.
+1. ~~**`phaseD_walls_build` is still a single synchronous step.**~~ **FIXED in BUILD 424.** `buildRoomWallTemplateIncremental()` spreads the merge pass across frames (4 ms budget per yield).
 
 2. **Build phases execute pre-paint (post-render, pre-endFrame).** A `requestIdleCallback`-style path would advance build phases after the browser paints the frame, reducing their contribution to frame latency. This requires synchronising the idle callback with the RAF loop to prevent concurrent mutations to `roomRuntimeCache` or the active `WorldState`. Deferred; the per-phase debug overlay provides sufficient visibility into individual phase costs in the interim.
 

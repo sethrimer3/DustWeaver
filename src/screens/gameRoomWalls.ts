@@ -12,6 +12,12 @@
  * `applyRoomWallTemplate` to support caching the expensive merge-pass result.
  * `loadRoomWalls` is retained as a compatibility wrapper that builds and
  * immediately applies a fresh template.
+ *
+ * BUILD 424: Added `buildRoomWallTemplateIncremental` generator that spreads
+ * the O(n²) merge pass across multiple frames using a 4 ms time budget per
+ * yield.  `buildRoomWallTemplate` is now a thin synchronous wrapper around the
+ * generator.  Generator callers (residentWorldBuilder, makeLoadRoomPhases) can
+ * use `yield*`-style iteration to keep each frame under the 8 ms budget.
  */
 
 import type { WorldState } from '../sim/world';
@@ -46,33 +52,33 @@ export function resolveWallSoundHardnessIndex(
 }
 
 /**
- * Builds a `RoomWallTemplate` by running the full conversion + iterative merge
- * pass on `room`.  The result is immutable and safe to cache across frames.
- *
- * COLLISION AUTHORITY:
- *   The merged rectangles produced here are the AUTHORITATIVE source of solid
- *   geometry at runtime.  Individual tile boundaries are not stored separately.
- *   Merging produces exact integer boundaries (BLOCK_SIZE_MEDIUM = 6 wu), so
- *   there are no subpixel gaps between adjacent merged solids.
- *
- *   Raycasts, grapple anchor placement, and LOS checks use these merged AABBs
- *   directly — they are NOT a "broad-phase only" approximation.  The merged
- *   representation is exact for solid walls because same-theme neighbours are
- *   fused into a single rectangle, and different-theme neighbours share integer
- *   boundaries with zero gap.
- *
- *   The only scenario where a merged rectangle is less precise than the tile
- *   grid is when two tiles of DIFFERENT themes share a face (they are not
- *   merged); in that case the shared face is an exact integer boundary so
- *   raycasts still return the correct normal.
- *
- * Call once per room (or once per editor edit) and cache the result.
- * Use `applyRoomWallTemplate()` to copy the cached data into `WorldState`.
+ * Time budget (ms) per generator yield in `buildRoomWallTemplateIncremental`.
+ * Each yield leaves the merge pass in a self-consistent state so the next
+ * `gen.next()` call can resume from where it left off.
  */
-export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
+const WALL_MERGE_BUDGET_MS = 4;
+
+/**
+ * Builds a `RoomWallTemplate` incrementally, yielding after approximately
+ * every `WALL_MERGE_BUDGET_MS` (4 ms) of merge work.
+ *
+ * For large rooms the O(n²) merge pass can take 5–10 ms in one shot.  By
+ * driving this generator from a per-frame scheduler, callers keep each frame
+ * comfortably under the 8 ms phase budget while still producing an identical
+ * result to the synchronous path.
+ *
+ * The generator returns the completed `RoomWallTemplate` as its final value
+ * (`done === true`).  Intermediate yields carry no payload (`void`).
+ *
+ * See `buildRoomWallTemplate` for the synchronous convenience wrapper and for
+ * the COLLISION AUTHORITY invariants that both variants honour.
+ */
+export function* buildRoomWallTemplateIncremental(
+  room: RoomDef,
+): Generator<void, RoomWallTemplate, void> {
   const rawCount = Math.min(room.walls.length, MAX_WALLS);
 
-  // Merge workspace — plain arrays; this runs once per cache miss, not per tick.
+  // Merge workspace — plain arrays; allocated once per cache miss.
   const xs: number[] = [];
   const ys: number[] = [];
   const ws: number[] = [];
@@ -115,10 +121,17 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     uic.push(resolvedTheme === 'ultraIceBlock' ? 1 : 0);
   }
 
-  // ── Iterative merge pass ─────────────────────────────────────────────────
+  // ── Incremental merge pass ────────────────────────────────────────────────
   // Two rectangles may merge if they share a complete face AND have the same
   // isPlatformFlag (platform walls must not merge with solid walls).
   // Ramps (ro !== 255) and half-width pillars (ph === 1) are never merged.
+  //
+  // Each outer while-loop iteration finds at most one merge.  After each
+  // iteration the deadline is checked: if the budget (WALL_MERGE_BUDGET_MS) has
+  // elapsed the generator yields so the caller can return to the event loop.
+  // On resumption, workspace arrays are intact and the scan starts fresh,
+  // maintaining exactly the same convergence semantics as the synchronous path.
+  let deadline = performance.now() + WALL_MERGE_BUDGET_MS;
   let merged = true;
   while (merged) {
     merged = false;
@@ -187,6 +200,13 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
       }
       if (merged) break;
     }
+    // Check time budget after each outer pass (at most one merge per pass).
+    // yield lets the caller return to the event loop; execution resumes here
+    // on the next gen.next() call with all workspace arrays intact.
+    if (performance.now() >= deadline) {
+      yield;
+      deadline = performance.now() + WALL_MERGE_BUDGET_MS;
+    }
   }
 
   // Pack into compact typed arrays sized to the actual merged count.
@@ -223,6 +243,45 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
     template.isUltraIceFlag[wi] = uic[wi];
   }
   return template;
+}
+
+/**
+ * Builds a `RoomWallTemplate` by running the full conversion + iterative merge
+ * pass on `room` synchronously.  The result is immutable and safe to cache
+ * across frames.
+ *
+ * COLLISION AUTHORITY:
+ *   The merged rectangles produced here are the AUTHORITATIVE source of solid
+ *   geometry at runtime.  Individual tile boundaries are not stored separately.
+ *   Merging produces exact integer boundaries (BLOCK_SIZE_MEDIUM = 6 wu), so
+ *   there are no subpixel gaps between adjacent merged solids.
+ *
+ *   Raycasts, grapple anchor placement, and LOS checks use these merged AABBs
+ *   directly — they are NOT a "broad-phase only" approximation.  The merged
+ *   representation is exact for solid walls because same-theme neighbours are
+ *   fused into a single rectangle, and different-theme neighbours share integer
+ *   boundaries with zero gap.
+ *
+ *   The only scenario where a merged rectangle is less precise than the tile
+ *   grid is when two tiles of DIFFERENT themes share a face (they are not
+ *   merged); in that case the shared face is an exact integer boundary so
+ *   raycasts still return the correct normal.
+ *
+ * This is a thin synchronous wrapper around `buildRoomWallTemplateIncremental`
+ * that runs the generator to completion in a single call.  Use it for
+ * synchronous contexts (worker threads, editor export, test code).  For
+ * main-thread generator phases prefer `buildRoomWallTemplateIncremental`
+ * directly so the merge cost is spread across frames.
+ *
+ * Call once per room (or once per editor edit) and cache the result.
+ * Use `applyRoomWallTemplate()` to copy the cached data into `WorldState`.
+ */
+export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
+  const gen = buildRoomWallTemplateIncremental(room);
+  let step = gen.next();
+  while (!step.done) step = gen.next();
+  // The generator always returns a value when done.
+  return step.value as RoomWallTemplate;
 }
 
 /**
