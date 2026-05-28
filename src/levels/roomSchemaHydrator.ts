@@ -41,7 +41,6 @@ import type {
   Saved1x1Layer,
   SavedEnemyType,
   SavedRoomV2,
-  SavedSolidLayer,
 } from './roomSavedTypes';
 import { DEFAULT_THEME_KEY } from './roomSavedTypes';
 import { expandLayerToRects, expandBlockerLayerToCells } from './tileGridCompressor';
@@ -394,6 +393,9 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.bgLayers && saved.bgLayers.length > 0) {
     const bgBlocks: RoomJsonBackgroundBlock[] = [];
     for (const group of saved.bgLayers) {
+      // themeKey is DEFAULT_THEME_KEY (empty string sentinel) or a BlockThemeId string.
+      // blockThemeRefToTheme handles both BlockTheme and BlockThemeId inputs; casting here
+      // is safe because themeKey originates from blockThemeToId() in the dehydrator.
       const theme = group.themeKey !== DEFAULT_THEME_KEY
         ? blockThemeRefToTheme(group.themeKey as BlockTheme | BlockThemeId)
         : undefined;

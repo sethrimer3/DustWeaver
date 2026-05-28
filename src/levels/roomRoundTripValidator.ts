@@ -65,6 +65,9 @@ function buildBlockerMap(blockers: RoomJsonDef['ambientLightBlockers']): Map<str
 function buildBgBlockMap(blocks: RoomJsonBackgroundBlock[] | undefined): Map<string, string> {
   const map = new Map<string, string>();
   for (const b of blocks ?? []) {
+    // Signature encodes the two properties we must preserve per cell.
+    // Using "theme|lb" where '|' cannot appear in a theme name (theme names use
+    // alphanumeric/underscore identifiers), so this concatenation is unambiguous.
     const themeStr = b.blockTheme ?? '';
     const lbStr    = b.isLightBlocking ? '1' : '0';
     const sig      = `${themeStr}|${lbStr}`;

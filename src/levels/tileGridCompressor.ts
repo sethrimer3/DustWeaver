@@ -152,15 +152,15 @@ export function expandLayerToRects(layer: SavedSolidLayer): SavedRect[] {
  *  • Each `runs` entry [y, xStart, xEnd] expands to individual cells [x, y].
  *  • Each `points` entry [x, y] is passed through as-is.
  */
-export function expandBlockerLayerToCells(layer: { runs?: ReadonlyArray<readonly [number, number, number]>; points?: ReadonlyArray<readonly [number, number]> }): Array<readonly [number, number]> {
+export function expandBlockerLayerToCells(blockerLayer: { runs?: ReadonlyArray<readonly [number, number, number]>; points?: ReadonlyArray<readonly [number, number]> }): Array<readonly [number, number]> {
   const out: Array<readonly [number, number]> = [];
-  if (layer.runs) {
-    for (const [y, xStart, xEnd] of layer.runs) {
+  if (blockerLayer.runs) {
+    for (const [y, xStart, xEnd] of blockerLayer.runs) {
       for (let x = xStart; x < xEnd; x++) out.push([x, y]);
     }
   }
-  if (layer.points) {
-    for (const pt of layer.points) out.push(pt);
+  if (blockerLayer.points) {
+    for (const pt of blockerLayer.points) out.push(pt);
   }
   return out;
 }

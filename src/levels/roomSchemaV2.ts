@@ -103,12 +103,10 @@ import type {
   SavedBounce,
   SavedKineticBlock,
   SavedRoomRope,
-  SavedBgBlock,
   SavedBgLayer,
   SavedGuideDustPath,
   SavedGuideDustPoint,
   SavedRoomV2,
-  SavedRect,
   SavedPoint,
   SavedSolidLayer,
 } from './roomSavedTypes';
@@ -242,12 +240,12 @@ function dehydrateBgLayers(
   if (bgBlocks.length === 0) return undefined;
 
   // Group by (themeKey, lb).
-  type GroupKey = string;
-  const groups = new Map<GroupKey, typeof bgBlocks[number][]>();
+  type BgBlockGroupKey = string;
+  const groups = new Map<BgBlockGroupKey, typeof bgBlocks[number][]>();
   for (const b of bgBlocks) {
     const themeKey = b.blockTheme && b.blockTheme !== defaultTheme ? blockThemeToId(b.blockTheme) : DEFAULT_THEME_KEY;
     const lb = b.isLightBlocking ? 1 : 0;
-    const key: GroupKey = `${themeKey}\0${lb}`;
+    const key: BgBlockGroupKey = `${themeKey}\0${lb}`;
     const list = groups.get(key) ?? [];
     list.push(b);
     if (!groups.has(key)) groups.set(key, list);
