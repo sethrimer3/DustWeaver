@@ -65,8 +65,10 @@ Calls are made:
 ### Initial Loading Overlay
 
 At `startGameScreen()` startup, if `areRoomSpritesReady(currentRoom)` returns `false`,
-a full-screen black DOM overlay with "Loading…" text is inserted into `uiRoot`.  The overlay
-is polled every 50 ms (throttled) and removed (with a 300 ms CSS fade) once sprites are ready
+a full-screen animated loading overlay is inserted into `uiRoot`.  It uses the
+loading background WebP as a cover-fill image, a subtle dark readability layer,
+and the loading-circle WebP in the bottom-right.  The overlay is polled every
+50 ms (throttled) and removed (with a 300 ms CSS fade) once sprites are ready
 and a 200 ms minimum display time has elapsed.
 
 ## Metroidvania Room System

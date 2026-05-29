@@ -12,10 +12,8 @@
  * All text uses Cinzel, Regular 400.
  */
 
-const FRAME_COUNT = 300;
-const ANIMATION_FPS = 30;
-const FRAME_INTERVAL_MS = 1000 / ANIMATION_FPS;
-const BASE = import.meta.env.BASE_URL;
+import { MENU_ANIMATION_ASSETS } from './animatedAssetPaths';
+import { createMenuAnimatedBackground } from './menuAnimatedBackground';
 
 export interface DeathScreenCallbacks {
   onReturnToLastSave: () => void;
@@ -26,20 +24,15 @@ export function showDeathScreen(
   root: HTMLElement,
   callbacks: DeathScreenCallbacks,
 ): () => void {
-  let isRunning = true;
-  let rafHandle = 0;
-  let frameIndex = 0;
-  let lastFrameTimeMs = 0;
+  const animatedBackground = createMenuAnimatedBackground({
+    normalUrl: MENU_ANIMATION_ASSETS.blurredUrl,
+    blurredUrl: MENU_ANIMATION_ASSETS.blurredUrl,
+    opacity: 0.5,
+    zIndex: 1,
+  });
+  animatedBackground.showBlurred();
 
   // ── Preload blurred frames ─────────────────────────────────────────────────
-  const blurredFrames: HTMLImageElement[] = new Array(FRAME_COUNT);
-  for (let i = 0; i < FRAME_COUNT; i++) {
-    const idx = String(i).padStart(5, '0');
-    const img = new Image();
-    img.src = `${BASE}ANIMATIONS/goldEmbers_blur/goldEmbers_blur_${idx}.webp`;
-    blurredFrames[i] = img;
-  }
-
   // ── Overlay container ──────────────────────────────────────────────────────
   const overlay = document.createElement('div');
   overlay.style.cssText = `
@@ -58,19 +51,7 @@ export function showDeathScreen(
   overlay.appendChild(darkLayer);
 
   // ── Animation canvas (blurred at 50% opacity) ──────────────────────────────
-  const bgCanvas = document.createElement('canvas');
-  bgCanvas.style.cssText = `
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none; z-index: 1; opacity: 0.5;
-  `;
-  const bgCtx = bgCanvas.getContext('2d')!;
-  overlay.appendChild(bgCanvas);
-
-  function resizeBgCanvas(): void {
-    bgCanvas.width = window.innerWidth;
-    bgCanvas.height = window.innerHeight;
-  }
-  resizeBgCanvas();
+  overlay.appendChild(animatedBackground.element);
 
   // ── UI content ─────────────────────────────────────────────────────────────
   const content = document.createElement('div');
@@ -131,39 +112,8 @@ export function showDeathScreen(
   overlay.appendChild(content);
 
   // ── Animation loop ─────────────────────────────────────────────────────────
-  function drawFrame(timestampMs: number): void {
-    if (!isRunning) return;
-
-    if (lastFrameTimeMs === 0) lastFrameTimeMs = timestampMs;
-    const elapsedMs = timestampMs - lastFrameTimeMs;
-    if (elapsedMs >= FRAME_INTERVAL_MS) {
-      const framesToAdvance = Math.floor(elapsedMs / FRAME_INTERVAL_MS);
-      frameIndex = (frameIndex + framesToAdvance) % FRAME_COUNT;
-      lastFrameTimeMs += framesToAdvance * FRAME_INTERVAL_MS;
-
-      const img = blurredFrames[frameIndex];
-      if (img.complete && img.naturalWidth > 0) {
-        const cw = bgCanvas.width;
-        const ch = bgCanvas.height;
-        bgCtx.clearRect(0, 0, cw, ch);
-        const iw = img.naturalWidth;
-        const ih = img.naturalHeight;
-        const scale = Math.max(cw / iw, ch / ih);
-        const dw = iw * scale;
-        const dh = ih * scale;
-        const dx = (cw - dw) / 2;
-        const dy = (ch - dh) / 2;
-        bgCtx.drawImage(img, dx, dy, dw, dh);
-      }
-    }
-
-    rafHandle = requestAnimationFrame(drawFrame);
-  }
-
   // ── Mount ──────────────────────────────────────────────────────────────────
   root.appendChild(overlay);
-  rafHandle = requestAnimationFrame(drawFrame);
-  window.addEventListener('resize', resizeBgCanvas);
 
   // Fade in
   requestAnimationFrame(() => {
@@ -172,9 +122,7 @@ export function showDeathScreen(
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
   function destroy(): void {
-    isRunning = false;
-    if (rafHandle !== 0) cancelAnimationFrame(rafHandle);
-    window.removeEventListener('resize', resizeBgCanvas);
+    animatedBackground.destroy();
     if (overlay.parentElement) overlay.parentElement.removeChild(overlay);
   }
 

@@ -16,12 +16,10 @@ import type { CampaignSource } from '../levels/campaignSource';
 import type { EditableCampaignSession } from '../editor/editableCampaignSession';
 import { buildCustomCampaignsUI } from './mainMenuCustomCampaigns';
 import { buildSaveSlotUI } from './mainMenuSaveSlots';
+import { MENU_ANIMATION_ASSETS } from './animatedAssetPaths';
+import { createMenuAnimatedBackground } from './menuAnimatedBackground';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-
-const FRAME_COUNT = 300;
-const ANIMATION_FPS = 30;
-const FRAME_INTERVAL_MS = 1000 / ANIMATION_FPS;
 
 /** Vite base URL so public assets resolve correctly. */
 const BASE = import.meta.env.BASE_URL;
@@ -40,53 +38,20 @@ export interface MainMenuCallbacks {
 /**
  * Preloads all frames for both normal and blurred animation sequences.
  */
-function preloadFrames(): { normal: HTMLImageElement[]; blurred: HTMLImageElement[] } {
-  const normal: HTMLImageElement[] = new Array(FRAME_COUNT);
-  const blurred: HTMLImageElement[] = new Array(FRAME_COUNT);
-
-  for (let i = 0; i < FRAME_COUNT; i++) {
-    const idx = String(i).padStart(5, '0');
-
-    const imgN = new Image();
-    imgN.src = `${BASE}ANIMATIONS/goldEmbers/goldEmbers_${idx}.webp`;
-    normal[i] = imgN;
-
-    const imgB = new Image();
-    imgB.src = `${BASE}ANIMATIONS/goldEmbers_blur/goldEmbers_blur_${idx}.webp`;
-    blurred[i] = imgB;
-  }
-
-  return { normal, blurred };
-}
-
 // ─── Public entry point ──────────────────────────────────────────────────────
 
 export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): () => void {
   // ── State ────────────────────────────────────────────────────────────────
-  let isBlurred = false;
-  let frameIndex = 0;
-  let lastFrameTimeMs = 0;
-  let rafHandle = 0;
-  let isRunning = false;
   let isDestroyed = false;
 
   // ── Preload frames ───────────────────────────────────────────────────────
-  const { normal, blurred } = preloadFrames();
+  const animatedBackground = createMenuAnimatedBackground({
+    normalUrl: MENU_ANIMATION_ASSETS.normalUrl,
+    blurredUrl: MENU_ANIMATION_ASSETS.blurredUrl,
+    zIndex: 0,
+  });
 
   // ── Background canvas ────────────────────────────────────────────────────
-  const bgCanvas = document.createElement('canvas');
-  bgCanvas.style.cssText = `
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none; z-index: 0;
-  `;
-  const bgCtx = bgCanvas.getContext('2d')!;
-
-  function resizeBgCanvas(): void {
-    bgCanvas.width = window.innerWidth;
-    bgCanvas.height = window.innerHeight;
-  }
-  resizeBgCanvas();
-
   // ── Music ────────────────────────────────────────────────────────────────
   const music = new Audio(`${BASE}MUSIC/titleMenu.mp3`);
   music.loop = false;
@@ -220,8 +185,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
       void document.documentElement.requestFullscreen().catch(() => {});
     }
 
-    // Switch to blurred background at the same frame
-    isBlurred = true;
+    animatedBackground.showBlurred();
 
     // Try playing music on interaction
     tryPlayMusic();
@@ -320,45 +284,9 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   }
 
   // ── Animation loop ───────────────────────────────────────────────────────
-  function drawFrame(timestampMs: number): void {
-    if (!isRunning) return;
-
-    if (lastFrameTimeMs === 0) lastFrameTimeMs = timestampMs;
-
-    const elapsedMs = timestampMs - lastFrameTimeMs;
-    if (elapsedMs >= FRAME_INTERVAL_MS) {
-      const framesToAdvance = Math.floor(elapsedMs / FRAME_INTERVAL_MS);
-      frameIndex = (frameIndex + framesToAdvance) % FRAME_COUNT;
-      lastFrameTimeMs += framesToAdvance * FRAME_INTERVAL_MS;
-
-      const frames = isBlurred ? blurred : normal;
-      const img = frames[frameIndex];
-      if (img.complete && img.naturalWidth > 0) {
-        const cw = bgCanvas.width;
-        const ch = bgCanvas.height;
-        bgCtx.clearRect(0, 0, cw, ch);
-
-        // Cover-fill: scale to fill canvas while maintaining aspect ratio
-        const iw = img.naturalWidth;
-        const ih = img.naturalHeight;
-        const scale = Math.max(cw / iw, ch / ih);
-        const dw = iw * scale;
-        const dh = ih * scale;
-        const dx = (cw - dw) / 2;
-        const dy = (ch - dh) / 2;
-        bgCtx.drawImage(img, dx, dy, dw, dh);
-      }
-    }
-
-    rafHandle = requestAnimationFrame(drawFrame);
-  }
-
   // ── Mount & start ────────────────────────────────────────────────────────
-  root.appendChild(bgCanvas);
+  root.appendChild(animatedBackground.element);
   root.appendChild(container);
-
-  isRunning = true;
-  rafHandle = requestAnimationFrame(drawFrame);
 
   // Fade in the title after a brief delay
   setTimeout(() => {
@@ -372,22 +300,15 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
 
   window.addEventListener('keydown', onAnyKey);
   container.addEventListener('click', onAnyClick);
-  window.addEventListener('resize', resizeBgCanvas);
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
   return () => {
     isDestroyed = true;
-    isRunning = false;
-    if (rafHandle !== 0) {
-      cancelAnimationFrame(rafHandle);
-      rafHandle = 0;
-    }
     music.pause();
     music.src = '';
     window.removeEventListener('keydown', onAnyKey);
     container.removeEventListener('click', onAnyClick);
-    window.removeEventListener('resize', resizeBgCanvas);
-    if (bgCanvas.parentElement !== null) bgCanvas.parentElement.removeChild(bgCanvas);
+    animatedBackground.destroy();
     if (container.parentElement !== null) container.parentElement.removeChild(container);
   };
 }

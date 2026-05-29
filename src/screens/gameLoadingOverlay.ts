@@ -13,6 +13,8 @@
  *   overlay.tick(() => areRoomSpritesReady(currentRoom));
  */
 
+import { LOADING_ANIMATION_ASSETS, MENU_ANIMATION_ASSETS } from '../ui/animatedAssetPaths';
+
 /** How often (ms) the readiness callback is polled to avoid per-frame DOM reads. */
 const CHECK_INTERVAL_MS = 50;
 
@@ -65,18 +67,19 @@ export class GameLoadingOverlay {
     div.style.cssText = [
       'position:absolute',
       'inset:0',
-      'background:#000',
+      'background:#060503',
       'display:flex',
       'align-items:center',
       'justify-content:center',
       'z-index:9999',
       "font-family:'Cinzel',serif",
-      'font-size:1.2rem',
-      'color:#00cfff',
+      'font-size:1rem',
+      'color:rgba(212,168,75,0.85)',
       'pointer-events:none',
+      'overflow:hidden',
       `transition:opacity ${(this.fadeDurationMs / 1000).toFixed(1)}s`,
     ].join(';');
-    div.textContent = 'Loading\u2026';
+    this.populateAnimatedLoadingOverlay(div);
     this.uiRoot.appendChild(div);
     this.el = div;
     this.minShowUntilMs = performance.now() + MIN_SHOW_MS;
@@ -112,11 +115,13 @@ export class GameLoadingOverlay {
     div.style.cssText = [
       'position:absolute',
       'inset:0',
-      'background:#000',
+      'background:#060503',
       'z-index:9999',
       'pointer-events:none',
+      'overflow:hidden',
       `transition:opacity ${(FADE_DURATION_ENTRY_WARM_MS / 1000).toFixed(2)}s`,
     ].join(';');
+    this.populateAnimatedLoadingOverlay(div, true);
     this.uiRoot.appendChild(div);
     this.el = div;
     this.minShowUntilMs = performance.now(); // no minimum — release ASAP when ready
@@ -154,5 +159,64 @@ export class GameLoadingOverlay {
   destroy(): void {
     if (this.el?.parentElement) this.el.parentElement.removeChild(this.el);
     this.el = null;
+  }
+
+  private populateAnimatedLoadingOverlay(div: HTMLDivElement, isTextless = false): void {
+    const backgroundImg = document.createElement('img');
+    backgroundImg.decoding = 'async';
+    backgroundImg.alt = '';
+    backgroundImg.src = LOADING_ANIMATION_ASSETS.backgroundUrl || MENU_ANIMATION_ASSETS.blurredUrl;
+    backgroundImg.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'width:100%',
+      'height:100%',
+      'object-fit:cover',
+      'pointer-events:none',
+      'z-index:0',
+    ].join(';');
+    div.appendChild(backgroundImg);
+
+    const darkOverlay = document.createElement('div');
+    darkOverlay.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'background:rgba(0,0,0,0.32)',
+      'pointer-events:none',
+      'z-index:1',
+    ].join(';');
+    div.appendChild(darkOverlay);
+
+    const loadingCircleImg = document.createElement('img');
+    loadingCircleImg.decoding = 'async';
+    loadingCircleImg.alt = '';
+    loadingCircleImg.src = LOADING_ANIMATION_ASSETS.circleUrl;
+    loadingCircleImg.style.cssText = [
+      'position:absolute',
+      'right:24px',
+      'bottom:24px',
+      'width:clamp(56px, 8vw, 112px)',
+      'height:auto',
+      'pointer-events:none',
+      'z-index:2',
+      'filter:drop-shadow(0 0 16px rgba(212,168,75,0.42))',
+    ].join(';');
+    div.appendChild(loadingCircleImg);
+
+    if (isTextless) return;
+
+    const label = document.createElement('div');
+    label.textContent = 'Loading...';
+    label.style.cssText = [
+      'position:absolute',
+      'right:24px',
+      'bottom:calc(24px + clamp(56px, 8vw, 112px) + 10px)',
+      'z-index:2',
+      'font-size:0.82rem',
+      'letter-spacing:0.14em',
+      'text-transform:uppercase',
+      'text-shadow:0 0 14px rgba(212,168,75,0.45)',
+    ].join(';');
+    div.appendChild(label);
   }
 }
