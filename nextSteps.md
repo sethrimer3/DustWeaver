@@ -8,6 +8,56 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## Editor Palette Previews — Remaining / Future Work
+
+Palette previews were added for all current `specialBlocks`, `enemies`, `triggers`,
+`collectables`, `environment`, `objects`, `liquids`, `ropes`, and `guidePaths`
+palette entries.  The following items have limitations or require future effort:
+
+### Palette categories that still use text-button lists (no visual grid)
+
+- **`lighting`** — The lighting panel (`editorUILightingPanel.ts`) inserts its own
+  rich UI (sliders, dropdowns) and is rebuilt separately via `syncOnRebuild` /
+  `syncInPlace`.  Individual lighting items (`ambient_light_blocker`, `light_source`,
+  `sunbeam`, `scene_light`) do have procedural preview shapes registered in
+  `editorPalettePreview.ts`; if the lighting panel is ever refactored to use the
+  standard palette grid, the previews are ready.
+
+### Enemy types that currently use procedural previews (no sprite asset)
+
+The following enemies use CSS/canvas shapes because no sprite asset exists in
+`ASSETS/SPRITES/ENEMIES/`.  To upgrade them to sprite-based previews, add the
+asset and register the URL in `ITEM_SPRITE_URL` inside `editorPalettePreview.ts`:
+
+- `enemy_flying_eye` — procedural diamond
+- `enemy_slime`, `enemy_slime_large` — procedural rounded shape
+- `enemy_wheel` — procedural circle
+- `enemy_water_bubble`, `enemy_ice_bubble` — procedural bubble circle
+- `enemy_square_stampede` — procedural square
+- `enemy_golden_mimic`, `enemy_golden_mimic_xy` — procedural gold diamond
+- `enemy_bee_swarm` — procedural hex
+- `enemy_web_spider` — procedural circle
+- `enemy_dust_constellation`, `enemy_dust_constellation_large` — procedural star
+- `enemy_orbital_dust_core`, `enemy_orbital_dust_core_large` — procedural orb
+- `enemy_dust_block_mimic`, `enemy_dust_block_mimic_large` — procedural block
+- `enemy_dust_weaver_architect`, `enemy_dust_weaver_architect_large` — procedural diamond
+- `enemy_void_singularity`, `enemy_void_singularity_pair` — procedural void
+- `enemy_dust_leech` — procedural oval
+- `enemy_radiant_web` — procedural circle
+
+### Crumble blocks and falling blocks (PaletteItem slots not yet in PALETTE_ITEMS)
+
+`PaletteItem` declares `isCrumbleBlockItem` and `isFallingBlockItem` flags, and
+`makeBlockPreviewShapeCss` in `editorUIHelpers.ts` already has switch-cases for
+`crumble_block`, `crumble_block_2x2`, `crumble_ramp_*` IDs.  However, no
+corresponding entries exist in `PALETTE_ITEMS` in `editorDropdownData.ts`.
+When crumble / falling-block palette items are eventually added, their preview
+shapes are already implemented — just add the item to `PALETTE_ITEMS` and the
+blocks grid will pick them up automatically.
+
+
+---
+
 ## Large-Room Performance — Remaining Area-Based Systems
 
 The main freeze cause (`buildAmbientDarknessAlphas` Phase 1 dead O(W×H) litAir loop) and `buildAmbientDepths` omni-mode O(W×H) litAir build were fixed. The speedrun timer no longer charges loading/warm frame time.
