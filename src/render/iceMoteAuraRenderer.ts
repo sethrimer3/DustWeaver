@@ -83,15 +83,16 @@ export function renderIceMoteAuraOverlay(
     ctx.fillStyle = ICE_FILL_RGBA;
     ctx.fillRect(sx, sy, sw, sh);
 
-    // ── Shimmer band — just below the top surface ────────────────────────
-    const shimmerH = Math.min(ICE_SHIMMER_THICKNESS_WORLD * zoom, sh * 0.4);
-    if (shimmerH >= 1) {
-      ctx.fillStyle = ICE_SHIMMER_RGBA;
-      ctx.fillRect(sx, sy + ICE_RIM_THICKNESS_WORLD * zoom, sw, shimmerH);
-    }
-
     // ── Crisp top-surface rim ────────────────────────────────────────────
     const rimH = Math.min(ICE_RIM_THICKNESS_WORLD * zoom, sh);
+
+    // ── Shimmer band — just below the top surface rim ────────────────────
+    const shimmerH = Math.min(ICE_SHIMMER_THICKNESS_WORLD * zoom, sh - rimH);
+    if (shimmerH >= 1) {
+      ctx.fillStyle = ICE_SHIMMER_RGBA;
+      ctx.fillRect(sx, sy + rimH, sw, shimmerH);
+    }
+
     if (rimH >= 0.5) {
       ctx.fillStyle = ICE_RIM_RGBA;
       ctx.fillRect(sx, sy, sw, rimH);

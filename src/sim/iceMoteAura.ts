@@ -112,9 +112,11 @@ export function tickIceMoteAura(world: WorldState): void {
   }
 
   if (!equipped || !playerAlive) {
-    // Start or advance thaw timers for all currently frozen zones.
-    // We iterate a copy of keys to avoid mutation-during-iteration issues.
-    for (const zi of _aura.zoneToSlot.keys()) {
+    // Advance thaw timers for all currently frozen zones.
+    // Iterate backwards over slotToZone so that _thawZone's slot compaction
+    // (swap-with-last) never disturbs indices we haven't visited yet.
+    for (let s = _aura.frozenSlotCount - 1; s >= 0; s--) {
+      const zi = _aura.slotToZone[s];
       _aura.thawTimers[zi] += dt;
       if (_aura.thawTimers[zi] >= ICE_MOTE_THAW_DELAY_MS) {
         _thawZone(world, zi);
@@ -130,9 +132,10 @@ export function tickIceMoteAura(world: WorldState): void {
   const r2  = ICE_MOTE_FREEZE_RADIUS_WORLD * ICE_MOTE_FREEZE_RADIUS_WORLD;
 
   // ── Advance thaw timers for zones outside the radius ─────────────────────
-  // Snapshot keys before mutating (thawing removes entries).
-  const frozenKeys = Array.from(_aura.zoneToSlot.keys());
-  for (const zi of frozenKeys) {
+  // Iterate backwards over slotToZone so that _thawZone's slot compaction
+  // (swap-with-last) never disturbs indices we haven't visited yet.
+  for (let s = _aura.frozenSlotCount - 1; s >= 0; s--) {
+    const zi = _aura.slotToZone[s];
     const rx  = world.waterZoneXWorld[zi];
     const ry  = world.waterZoneYWorld[zi];
     const rw  = world.waterZoneWWorld[zi];
@@ -150,8 +153,8 @@ export function tickIceMoteAura(world: WorldState): void {
   }
 
   // ── Freeze newly-in-range water zones ────────────────────────────────────
-  const cap = world.wallCount - _aura.baseWallCount; // already-frozen slots
-  const available = ICE_MOTE_MAX_FROZEN_ZONES - cap; // headroom
+  const usedSlots = _aura.frozenSlotCount;
+  const available = ICE_MOTE_MAX_FROZEN_ZONES - usedSlots; // remaining capacity
   let newFreezes = 0;
 
   for (let i = 0; i < world.waterZoneCount && newFreezes < available; i++) {
