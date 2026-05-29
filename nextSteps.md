@@ -243,6 +243,13 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 #### Part B: Baked runtime wall templates
 
+- **Baked wall templates are now persisted through the compact `SavedRoomV2` format.**
+  The persistence gap has been fixed: `dehydrateRoom()` now copies `json.bakedWallTemplate`
+  into the compact saved room output, and `hydrateV2Room()` restores it into the verbose
+  `RoomJsonDef` so `roomJsonDefToRoomDef()` receives and validates it normally.
+  `SavedRoomV2` gains an optional `bakedWallTemplate?` field (type `RoomJsonBakedWallTemplate`).
+  Old v2/v3 files without the field continue to load safely (field is optional).
+
 - **Baked wall templates** are saved in exported room JSON under `bakedWallTemplate`.
   The editor's `editorRoomDataToJson()` runs `buildRoomWallTemplate()` once at export
   time and stores the result as flat JSON arrays alongside a `sourceHash` and
@@ -275,6 +282,12 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
   - `src/levels/roomWallTemplateHash.ts` — NEW: `BAKED_WALL_SCHEMA_VERSION`, `computeWallTemplateSourceHash`, `hydrateAndValidateBakedWallTemplate`
   - `src/editor/roomJsonSchema.ts` — `RoomJsonBakedWallTemplate` interface; `bakedWallTemplate?` on `RoomJsonDef`
   - `src/editor/roomJsonSerializer.ts` — bakes wall template during export
+  - `src/editor/roomJson.ts` — re-exports `RoomJsonBakedWallTemplate`
+  - `src/levels/roomSavedTypes.ts` — `SavedRoomV2` gains optional `bakedWallTemplate?: RoomJsonBakedWallTemplate`
+  - `src/levels/roomSchemaV2.ts` — `dehydrateRoom()` deep-copies `json.bakedWallTemplate` into compact output
+  - `src/levels/roomSchemaHydrator.ts` — `hydrateV2Room()` restores `saved.bakedWallTemplate` into `RoomJsonDef`
+  - `src/levels/roomFileAudit.ts` — audit reports baked-template presence, wall count, schema version, and estimated size; warns for v3 rooms missing baked templates
+  - `src/levels/roomRoundTripValidator.ts` — round-trip validation checks baked-template preservation (schema version, source hash, wall count, array lengths)
   - `src/screens/gameRoomWalls.ts` — re-exports `RoomWallTemplate` from `roomDef.ts`
   - `src/screens/gameLoadRoomPhases.ts` — Phase D uses baked template before falling back
   - `src/screens/residentWorldBuilder.ts` — uses `resolveRoomWallTemplate` from `preparedRoomRuntime.ts`; generator baked-hit path skips `phaseD_walls_build`
@@ -314,8 +327,10 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 #### Remaining limitations
 
-- Existing campaign room JSON files do not have `bakedWallTemplate`; they will always
-  use the `buildRoomWallTemplate()` fallback until they are re-exported from the editor.
+- Active campaign room JSON files do not yet have `bakedWallTemplate`; they need to be
+  re-exported from the editor (open the DustWeaver campaign, use "Export Campaign") so
+  `editorRoomDataToJson()` → `dehydrateRoom()` writes the baked template into each compact
+  room file. Until re-exported, rooms use the `buildRoomWallTemplate()` fallback.
 - The hash does not cover per-wall ice/ultraIce flags (these fields do not exist in
   `RoomJsonWall`; ice theme is covered by `blockTheme`/`blockThemeId`).
 - `phaseD_walls_build` is skipped for rooms with valid baked templates on their first

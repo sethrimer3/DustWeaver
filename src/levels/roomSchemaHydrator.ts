@@ -435,6 +435,29 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     }));
   }
 
+  if (saved.bakedWallTemplate !== undefined) {
+    // Shallow-copy so the hydrated JSON does not share arrays with the saved object.
+    const b = saved.bakedWallTemplate;
+    json.bakedWallTemplate = {
+      schemaVersion:         b.schemaVersion,
+      sourceHash:            b.sourceHash,
+      wallCount:             b.wallCount,
+      xWorld:                b.xWorld.slice(),
+      yWorld:                b.yWorld.slice(),
+      wWorld:                b.wWorld.slice(),
+      hWorld:                b.hWorld.slice(),
+      isPlatformFlag:        b.isPlatformFlag.slice(),
+      platformEdge:          b.platformEdge.slice(),
+      themeIndex:            b.themeIndex.slice(),
+      soundHardnessIndex:    b.soundHardnessIndex.slice(),
+      isInvisibleFlag:       b.isInvisibleFlag.slice(),
+      rampOrientationIndex:  b.rampOrientationIndex.slice(),
+      isPillarHalfWidthFlag: b.isPillarHalfWidthFlag.slice(),
+      isIceFlag:             b.isIceFlag.slice(),
+      isUltraIceFlag:        b.isUltraIceFlag.slice(),
+    };
+  }
+
   return json;
 }
 

@@ -17,7 +17,6 @@
 import type { RoomJsonDef, RoomJsonWall, RoomJsonZone, RoomJsonBackgroundBlock } from '../editor/roomJson';
 import { dehydrateRoom } from './roomSchemaV2';
 import { hydrateV2Room } from './roomSchemaHydrator';
-
 // ─── Cell coverage helpers ────────────────────────────────────────────────────
 
 /** Expand a wall rect into individual cell keys `"x,y"`. */
@@ -132,6 +131,7 @@ export interface RoundTripValidationResult {
  *  6. Lava zone cell coverage
  *  7. Ambient blocker cells (clear and dark identity)
  *  8. Background block cells, theme, and light-blocking identity
+ *  9. Baked wall template preservation (schema version, source hash, wall count, array lengths)
  */
 export function validateRoundTrip(json: RoomJsonDef): RoundTripValidationResult {
   const errors: string[] = [];
@@ -237,6 +237,38 @@ export function validateRoundTrip(json: RoomJsonDef): RoundTripValidationResult 
   }
   for (const [k, sig] of bgAfter) {
     if (!bgBefore.has(k)) errors.push(`BG block ${k} ADDED (sig=${sig})`);
+  }
+
+  // ── 9. Baked wall template preservation ──────────────────────────────────
+  const btBefore = json.bakedWallTemplate;
+  const btAfter  = roundTripped.bakedWallTemplate;
+  if (btBefore !== undefined) {
+    if (btAfter === undefined) {
+      errors.push('bakedWallTemplate was DROPPED by round-trip');
+    } else {
+      if (btAfter.schemaVersion !== btBefore.schemaVersion) {
+        errors.push(`bakedWallTemplate schemaVersion changed: ${btBefore.schemaVersion} → ${btAfter.schemaVersion}`);
+      }
+      if (btAfter.sourceHash !== btBefore.sourceHash) {
+        errors.push(`bakedWallTemplate sourceHash changed: ${btBefore.sourceHash} → ${btAfter.sourceHash}`);
+      }
+      if (btAfter.wallCount !== btBefore.wallCount) {
+        errors.push(`bakedWallTemplate wallCount changed: ${btBefore.wallCount} → ${btAfter.wallCount}`);
+      }
+      const arrayFields: (keyof typeof btBefore)[] = [
+        'xWorld', 'yWorld', 'wWorld', 'hWorld',
+        'isPlatformFlag', 'platformEdge', 'themeIndex', 'soundHardnessIndex',
+        'isInvisibleFlag', 'rampOrientationIndex', 'isPillarHalfWidthFlag',
+        'isIceFlag', 'isUltraIceFlag',
+      ];
+      for (const field of arrayFields) {
+        const arrBefore = btBefore[field] as number[];
+        const arrAfter  = btAfter[field]  as number[];
+        if (!Array.isArray(arrAfter) || arrAfter.length !== arrBefore.length) {
+          errors.push(`bakedWallTemplate.${field} length changed: ${arrBefore.length} → ${Array.isArray(arrAfter) ? arrAfter.length : 'not-array'}`);
+        }
+      }
+    }
   }
 
   // Truncate error list to avoid log flooding for big rooms
