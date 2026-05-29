@@ -272,6 +272,21 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
           border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;
           clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
       };
+    case 'kinetic_block_1x1':
+      return {
+        containerCss,
+        shapeCss: `width: 40px; height: 40px; background: rgba(10,30,90,0.88);
+          border: 2px solid rgba(60,140,255,0.80); box-sizing: border-box;`,
+      };
+    case 'kinetic_block_2x2':
+      return {
+        containerCss,
+        shapeCss: `width: 40px; height: 40px; background: rgba(10,30,90,0.88);
+          border: 2px solid rgba(60,140,255,0.80); box-sizing: border-box;
+          background-image: linear-gradient(rgba(60,140,255,0.12) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(60,140,255,0.12) 1px, transparent 1px);
+          background-size: 50% 50%;`,
+      };
     default:
       return {
         containerCss,
@@ -360,5 +375,59 @@ export function makeBlockPreviewCard(item: PaletteItem, theme: string, onClick: 
   });
   card.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   return card;
+}
+
+// ── Generic palette card helpers ──────────────────────────────────────────────
+
+/**
+ * Creates the outer shell of a palette card (same visual style as
+ * `makeBlockPreviewCard`) with a custom 40×40 preview element and label.
+ *
+ * Used by `editorPalettePreview.ts` to keep the card style consistent across
+ * all palette categories.
+ */
+export function makePaletteCardShell(
+  previewEl: HTMLElement,
+  label: string,
+  onClick: () => void,
+): HTMLDivElement {
+  const card = document.createElement('div');
+  card.style.cssText = `
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 6px 4px 5px; border-radius: 4px; cursor: pointer;
+    background: ${BTN_BG}; border: 1px solid ${PANEL_BORDER};
+    transition: background 0.1s;
+  `;
+
+  card.appendChild(previewEl);
+
+  const lbl = document.createElement('div');
+  lbl.textContent = label;
+  lbl.style.cssText = `
+    font-size: 9px; color: ${TEXT_COLOR}; text-align: center; line-height: 1.2;
+    word-break: break-word;
+  `;
+  card.appendChild(lbl);
+
+  card.addEventListener('mouseenter', () => {
+    if (card.style.background !== ACTIVE_BG) card.style.background = 'rgba(0,200,100,0.12)';
+  });
+  card.addEventListener('mouseleave', () => {
+    if (card.style.background !== ACTIVE_BG) card.style.background = BTN_BG;
+  });
+  card.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+  return card;
+}
+
+/**
+ * Standard 40×40 preview container used across all palette card types.
+ */
+export function makePreviewContainer(): HTMLDivElement {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = `
+    width: 40px; height: 40px; overflow: hidden; position: relative; flex-shrink: 0;
+    border-radius: 2px; background: rgba(0,0,0,0.3);
+  `;
+  return wrap;
 }
 

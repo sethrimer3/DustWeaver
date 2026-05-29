@@ -1,0 +1,484 @@
+/**
+ * editorPalettePreview.ts — Centralized palette-preview resolver.
+ *
+ * Provides `makePalettePreviewCard()` for every non-block palette category
+ * (specialBlocks, enemies, triggers, collectables, environment, objects,
+ * lighting, liquids, ropes, guidePaths).
+ *
+ * Design goals:
+ *  - One card style matching `makeBlockPreviewCard` exactly (40×40 preview + label).
+ *  - Sprite images where assets exist; lightweight CSS/canvas shapes elsewhere.
+ *  - Deterministic, never random or frame-dependent.
+ *  - Missing sprites show a neutral fallback and warn once in DEV.
+ *  - No per-frame allocations: preview elements are created once at palette-build time.
+ */
+
+import type { PaletteItem } from './editorState';
+import { THEME_BLOCK_SPRITE_URL, makeBlockPreviewShapeCss, makePaletteCardShell, makePreviewContainer } from './editorUIHelpers';
+
+// ── Warning log deduplication ────────────────────────────────────────────────
+
+const _warnedIds = new Set<string>();
+function _warnOnce(id: string, msg: string): void {
+  if (import.meta.env.DEV && !_warnedIds.has(id)) {
+    _warnedIds.add(id);
+    console.warn(`[editorPalettePreview] ${msg}`);
+  }
+}
+
+// ── Sprite URL table ──────────────────────────────────────────────────────────
+
+/**
+ * Maps palette item IDs to their representative sprite URL (public path,
+ * no leading slash, no ASSETS/ prefix — same format used by `loadImg()`).
+ */
+const ITEM_SPRITE_URL: Readonly<Record<string, string>> = Object.freeze({
+  // Enemies with sprite assets
+  enemy_rolling:         'SPRITES/ENEMIES/goldenBlock/goldenBlock.png',
+  enemy_rock_elemental:  'SPRITES/ENEMIES/earthElemental/earthElemental_head_deactivated.png',
+  enemy_beetle:          'SPRITES/ENEMIES/goldenBeetle/goldenBeetle_walking.png',
+  enemy_radiant_tether:  'SPRITES/ENEMIES/radiantTeather/radiantTether_flying.png',
+  // Collectables / triggers with sprite assets
+  save_tomb:             'SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/saveTomb.png',
+  skill_tomb:            'SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/skillTomb.png',
+  dust_container:        'SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/dustContainer.png',
+  dust_container_piece:  'SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/dustContainerShard.png',
+});
+
+// ── Procedural visual descriptions ────────────────────────────────────────────
+
+/** CSS background string + optional centered glyph for procedural previews. */
+interface ProceduralVisual {
+  bg: string;
+  /** Extra CSS applied to the inner shape div (clip-path, gradient, etc.). */
+  extraCss?: string;
+  /** Unicode glyph rendered centred over the shape. */
+  glyph?: string;
+}
+
+const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
+  // ── Enemies ────────────────────────────────────────────────────────────────
+  enemy_flying_eye: {
+    bg: '#1a3a88',
+    extraCss: `clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);`,
+    glyph: '◈',
+  },
+  enemy_slime: {
+    bg: '#2a8a2a',
+    extraCss: `border-radius: 50% 50% 45% 45%;`,
+  },
+  enemy_slime_large: {
+    bg: '#26a026',
+    extraCss: `border-radius: 50% 50% 45% 45%;`,
+    glyph: 'L',
+  },
+  enemy_wheel: {
+    bg: '#666666',
+    extraCss: `border-radius: 50%; border: 3px solid #444; box-sizing: border-box;`,
+  },
+  enemy_water_bubble: {
+    bg: 'rgba(20,100,200,0.6)',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(80,160,255,0.8); box-sizing: border-box;`,
+  },
+  enemy_ice_bubble: {
+    bg: 'rgba(160,220,255,0.5)',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(180,230,255,0.9); box-sizing: border-box;`,
+  },
+  enemy_square_stampede: {
+    bg: '#802010',
+    extraCss: `border: 2px solid rgba(220,80,30,0.8); box-sizing: border-box;`,
+    glyph: '▣',
+  },
+  enemy_golden_mimic: {
+    bg: '#3a2800',
+    extraCss: `clip-path: polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%); border: 2px solid #d4a820;`,
+  },
+  enemy_golden_mimic_xy: {
+    bg: '#3a2800',
+    extraCss: `clip-path: polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%); border: 2px solid #d4a820;`,
+    glyph: 'XY',
+  },
+  enemy_bee_swarm: {
+    bg: '#2a1e00',
+    extraCss: `border: 2px solid rgba(220,180,30,0.8); box-sizing: border-box; border-radius: 3px;`,
+    glyph: '⬡',
+  },
+  enemy_web_spider: {
+    bg: '#181818',
+    extraCss: `border-radius: 50%; border: 2px solid #505050; box-sizing: border-box;`,
+    glyph: '⊕',
+  },
+  enemy_dust_constellation: {
+    bg: '#1a0840',
+    extraCss: `clip-path: polygon(50% 0%, 62% 38%, 100% 38%, 69% 59%, 81% 100%, 50% 75%, 19% 100%, 31% 59%, 0% 38%, 38% 38%);`,
+  },
+  enemy_dust_constellation_large: {
+    bg: '#220a50',
+    extraCss: `clip-path: polygon(50% 0%, 62% 38%, 100% 38%, 69% 59%, 81% 100%, 50% 75%, 19% 100%, 31% 59%, 0% 38%, 38% 38%);`,
+    glyph: 'L',
+  },
+  enemy_orbital_dust_core: {
+    bg: '#2a0860',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(120,60,220,0.8); box-sizing: border-box;`,
+  },
+  enemy_orbital_dust_core_large: {
+    bg: '#340a70',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(140,80,240,0.8); box-sizing: border-box;`,
+    glyph: 'L',
+  },
+  enemy_dust_block_mimic: {
+    bg: '#303020',
+    extraCss: `border: 2px solid rgba(180,160,60,0.6); box-sizing: border-box;`,
+    glyph: '⊡',
+  },
+  enemy_dust_block_mimic_large: {
+    bg: '#383828',
+    extraCss: `border: 2px solid rgba(180,160,60,0.6); box-sizing: border-box;`,
+    glyph: 'L',
+  },
+  enemy_dust_weaver_architect: {
+    bg: '#2a0845',
+    extraCss: `clip-path: polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%); border: 2px solid rgba(160,60,220,0.9);`,
+  },
+  enemy_dust_weaver_architect_large: {
+    bg: '#300a50',
+    extraCss: `clip-path: polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%); border: 2px solid rgba(160,60,220,0.9);`,
+    glyph: 'L',
+  },
+  enemy_void_singularity: {
+    bg: '#050508',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(60,20,80,0.9); box-sizing: border-box;`,
+  },
+  enemy_void_singularity_pair: {
+    bg: '#050508',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(60,20,80,0.9); box-sizing: border-box;`,
+    glyph: '×2',
+  },
+  enemy_dust_leech: {
+    bg: '#501c08',
+    extraCss: `border-radius: 50% 30% 50% 30%; border: 1px solid rgba(180,80,30,0.6); box-sizing: border-box;`,
+  },
+  enemy_radiant_web: {
+    bg: '#1a0800',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(255,120,10,0.7); box-sizing: border-box;`,
+    glyph: '✦',
+  },
+
+  // ── Triggers ───────────────────────────────────────────────────────────────
+  campaign_spawn: {
+    bg: '#0a2010',
+    extraCss: `clip-path: polygon(50% 0%, 62% 38%, 100% 38%, 69% 59%, 81% 100%, 50% 75%, 19% 100%, 31% 59%, 0% 38%, 38% 38%);`,
+    glyph: '★',
+  },
+  player_spawn: {
+    bg: '#0a1830',
+    extraCss: `border-radius: 50% 50% 8px 8px; border: 2px solid rgba(80,160,255,0.8); box-sizing: border-box;`,
+    glyph: '▼',
+  },
+  room_transition: {
+    bg: '#180a30',
+    extraCss: `border: 2px solid rgba(140,90,255,0.8); box-sizing: border-box;`,
+    glyph: '⇒',
+  },
+  dialogue_trigger: {
+    bg: '#081830',
+    extraCss: `border-radius: 6px 6px 6px 0px; border: 2px solid rgba(80,160,255,0.8); box-sizing: border-box;`,
+    glyph: '…',
+  },
+
+  // ── Collectables ───────────────────────────────────────────────────────────
+  dust_swarm: {
+    bg: '#100830',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(100,80,255,0.8); box-sizing: border-box;`,
+    glyph: '✦',
+  },
+
+  // ── Environment ────────────────────────────────────────────────────────────
+  dust_pile_small: {
+    bg: '#1a1400',
+    extraCss: `border-radius: 50% 50% 20% 20%;`,
+    glyph: 'S',
+  },
+  dust_pile_medium: {
+    bg: '#211900',
+    extraCss: `border-radius: 50% 50% 20% 20%;`,
+    glyph: 'M',
+  },
+  dust_pile_large: {
+    bg: '#282000',
+    extraCss: `border-radius: 50% 50% 20% 20%;`,
+    glyph: 'L',
+  },
+  dust_pile: {
+    bg: '#1a1400',
+    extraCss: `border-radius: 50% 50% 20% 20%;`,
+  },
+  grasshopper_area: {
+    bg: 'rgba(20,80,20,0.5)',
+    extraCss: `border: 2px dashed rgba(40,180,40,0.6); box-sizing: border-box; border-radius: 3px;`,
+    glyph: '♫',
+  },
+  firefly_area: {
+    bg: 'rgba(30,25,0,0.5)',
+    extraCss: `border: 2px dashed rgba(200,190,20,0.6); box-sizing: border-box; border-radius: 3px;`,
+    glyph: '✦',
+  },
+  decoration_mushroom: {
+    bg: '#1c0814',
+    extraCss: `border-radius: 50% 50% 8px 8px; border: 1px solid rgba(180,50,120,0.5); box-sizing: border-box;`,
+    glyph: '🍄',
+  },
+  decoration_glowgrass: {
+    bg: '#041c04',
+    extraCss: `border-radius: 8px 8px 0 0; border: 1px solid rgba(40,200,40,0.5); box-sizing: border-box;`,
+    glyph: '🌿',
+  },
+  decoration_vine: {
+    bg: '#021408',
+    extraCss: `border-radius: 3px; border: 1px solid rgba(30,160,60,0.5); box-sizing: border-box;`,
+    glyph: '〜',
+  },
+
+  // ── Objects ─────────────────────────────────────────────────────────────────
+  lambda_anchor: {
+    bg: '#1a1200',
+    extraCss: `border: 2px solid rgba(212,168,75,0.8); box-sizing: border-box; border-radius: 3px;`,
+    glyph: 'λ',
+  },
+  dust_boost_jar: {
+    bg: '#120020',
+    extraCss: `border-radius: 4px 4px 8px 8px; border: 2px solid rgba(180,60,255,0.8); box-sizing: border-box;`,
+    glyph: '⬡',
+  },
+
+  // ── Lighting ────────────────────────────────────────────────────────────────
+  ambient_light_blocker: {
+    bg: 'rgba(30,30,40,0.85)',
+    extraCss: `border: 2px dashed rgba(100,100,180,0.5); box-sizing: border-box; border-radius: 3px;`,
+    glyph: '▣',
+  },
+  dark_ambient_light_blocker: {
+    bg: 'rgba(5,5,10,0.95)',
+    extraCss: `border: 2px dashed rgba(60,60,100,0.5); box-sizing: border-box; border-radius: 3px;`,
+    glyph: '■',
+  },
+  light_source: {
+    bg: 'radial-gradient(circle, rgba(255,230,80,0.7) 0%, rgba(255,180,20,0.2) 60%, transparent 100%)',
+    extraCss: `border-radius: 50%;`,
+    glyph: '✦',
+  },
+  sunbeam: {
+    bg: 'linear-gradient(135deg, rgba(255,220,120,0.6) 0%, rgba(255,200,60,0.15) 60%, transparent 100%)',
+    extraCss: `border-radius: 2px;`,
+    glyph: '⟋',
+  },
+  scene_light: {
+    bg: 'radial-gradient(ellipse at 50% 20%, rgba(255,245,200,0.8) 0%, rgba(255,220,80,0.2) 50%, transparent 100%)',
+    extraCss: `border-radius: 50% 50% 30% 30%;`,
+    glyph: '⬦',
+  },
+
+  // ── Liquids ─────────────────────────────────────────────────────────────────
+  water_zone: {
+    bg: 'linear-gradient(180deg, rgba(20,80,180,0.3) 0%, rgba(20,100,220,0.7) 100%)',
+    extraCss: `border: 2px solid rgba(60,140,255,0.7); box-sizing: border-box; border-radius: 3px;`,
+    glyph: '≋',
+  },
+  lava_zone: {
+    bg: 'linear-gradient(180deg, rgba(200,60,10,0.3) 0%, rgba(240,80,10,0.7) 100%)',
+    extraCss: `border: 2px solid rgba(255,120,20,0.7); box-sizing: border-box; border-radius: 3px;`,
+    glyph: '≋',
+  },
+
+  // ── Ropes ───────────────────────────────────────────────────────────────────
+  rope: {
+    bg: 'transparent',
+    extraCss: `border-radius: 2px;`,
+    glyph: '|',
+  },
+
+  // ── Guide paths ──────────────────────────────────────────────────────────────
+  guide_dust_path: {
+    bg: '#1a1200',
+    extraCss: `border: 2px dashed rgba(212,168,75,0.6); box-sizing: border-box; border-radius: 3px;`,
+    glyph: '⟿',
+  },
+});
+
+// ── Internal helpers ─────────────────────────────────────────────────────────
+
+function _makeSpritePreview(spriteUrl: string, itemId: string): HTMLDivElement {
+  const wrap = makePreviewContainer();
+  const img = document.createElement('img');
+  img.alt = '';
+  img.draggable = false;
+  img.style.cssText = `
+    width: 100%; height: 100%; object-fit: contain;
+    image-rendering: pixelated; pointer-events: none;
+  `;
+  img.src = spriteUrl;
+  img.addEventListener('error', () => {
+    _warnOnce(`sprite:${itemId}`, `Sprite not found for palette item '${itemId}': ${spriteUrl}`);
+    img.remove();
+    _appendFallbackGlyph(wrap, '?');
+  }, { once: true });
+  wrap.appendChild(img);
+  return wrap;
+}
+
+function _appendFallbackGlyph(container: HTMLElement, glyph: string): void {
+  const g = document.createElement('div');
+  g.textContent = glyph;
+  g.style.cssText = `
+    width: 100%; height: 100%; display: flex; align-items: center;
+    justify-content: center; font-size: 16px; color: rgba(180,180,180,0.6);
+    font-family: monospace;
+  `;
+  container.appendChild(g);
+}
+
+function _makeProceduralPreview(visual: ProceduralVisual): HTMLDivElement {
+  const wrap = makePreviewContainer();
+  const shape = document.createElement('div');
+  shape.style.cssText = `
+    width: 40px; height: 40px; box-sizing: border-box;
+    background: ${visual.bg};
+    display: flex; align-items: center; justify-content: center;
+    ${visual.extraCss ?? ''}
+  `;
+  if (visual.glyph) {
+    const glyphEl = document.createElement('span');
+    glyphEl.textContent = visual.glyph;
+    glyphEl.style.cssText = `
+      font-size: 13px; color: rgba(220,220,220,0.75); font-family: monospace;
+      pointer-events: none; user-select: none; position: relative; z-index: 1;
+    `;
+    shape.appendChild(glyphEl);
+  }
+  wrap.appendChild(shape);
+  return wrap;
+}
+
+/**
+ * Builds a preview element (40×40 container) for items that use the block
+ * theme system (specialBlocks using `blockThemeOverride`).
+ */
+function _makeSpecialBlockPreview(item: PaletteItem, blockTheme: string): HTMLDivElement {
+  const effectiveTheme = item.blockThemeOverride ?? blockTheme;
+  const { containerCss, shapeCss } = makeBlockPreviewShapeCss(item.id, effectiveTheme);
+  const wrap = document.createElement('div');
+  wrap.style.cssText = containerCss;
+  const shape = document.createElement('div');
+  shape.style.cssText = shapeCss;
+  wrap.appendChild(shape);
+
+  // Bounce pads: add glowing core dot (mirrored from makeBlockPreviewCard)
+  if (item.isBouncePadItem) {
+    const coreCanvas = document.createElement('canvas');
+    coreCanvas.width = 40;
+    coreCanvas.height = 40;
+    coreCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
+    const ctx = coreCanvas.getContext('2d');
+    if (ctx) {
+      const dotSize = item.bouncePadSpeedFactorIndex === 1 ? 6 : 4;
+      const cx = 20, cy = 20;
+      ctx.fillStyle = 'rgba(255,140,30,0.35)';
+      ctx.fillRect(cx - dotSize, cy - dotSize, dotSize * 2, dotSize * 2);
+      const innerSize = dotSize * 0.5;
+      ctx.fillStyle = item.bouncePadSpeedFactorIndex === 1 ? 'rgba(255,220,60,0.95)' : 'rgba(255,100,15,0.85)';
+      ctx.fillRect(cx - innerSize, cy - innerSize, innerSize * 2, innerSize * 2);
+    }
+    wrap.appendChild(coreCanvas);
+  }
+
+  // Kinetic blocks: add a directional-boost arrow overlay
+  if (item.isKineticBlockItem) {
+    const arrowCanvas = document.createElement('canvas');
+    arrowCanvas.width = 40;
+    arrowCanvas.height = 40;
+    arrowCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
+    const ctx = arrowCanvas.getContext('2d');
+    if (ctx) {
+      ctx.strokeStyle = 'rgba(100,180,255,0.7)';
+      ctx.fillStyle = 'rgba(100,180,255,0.7)';
+      ctx.lineWidth = 1.5;
+      // Up arrow
+      ctx.beginPath();
+      ctx.moveTo(20, 10); ctx.lineTo(20, 28);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(20, 8); ctx.lineTo(15, 16); ctx.lineTo(25, 16); ctx.closePath();
+      ctx.fill();
+    }
+    wrap.appendChild(arrowCanvas);
+  }
+
+  return wrap;
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the preview sprite URL for a given palette item, or null if no sprite
+ * is registered. Used by external modules that want just the URL (e.g. for
+ * `<img>` tags built outside this module).
+ */
+export function getPaletteItemSpriteUrl(itemId: string): string | null {
+  // Check sprite override table
+  const direct = ITEM_SPRITE_URL[itemId];
+  if (direct !== undefined) return direct;
+  return null;
+}
+
+/**
+ * Creates a full palette card (40×40 preview + label) for the given item.
+ *
+ * For `specialBlocks`: renders a block-style shape using the current block theme
+ * (or `blockThemeOverride` when set on the item).
+ *
+ * For all other categories: uses a sprite image if one is registered, or falls
+ * back to a lightweight procedural CSS+canvas shape.
+ *
+ * The returned card uses the same visual style as `makeBlockPreviewCard`.
+ */
+export function makePalettePreviewCard(
+  item: PaletteItem,
+  blockTheme: string,
+  onClick: () => void,
+): HTMLDivElement {
+  let previewEl: HTMLDivElement;
+
+  if (item.category === 'specialBlocks') {
+    previewEl = _makeSpecialBlockPreview(item, blockTheme);
+  } else {
+    const spriteUrl = ITEM_SPRITE_URL[item.id];
+    if (spriteUrl !== undefined) {
+      previewEl = _makeSpritePreview(spriteUrl, item.id);
+    } else {
+      const visual = ITEM_VISUAL[item.id];
+      if (visual !== undefined) {
+        previewEl = _makeProceduralPreview(visual);
+      } else {
+        // Unknown item — neutral fallback
+        _warnOnce(`unknown:${item.id}`, `No preview registered for palette item '${item.id}' (category: ${item.category}). Add it to ITEM_SPRITE_URL or ITEM_VISUAL in editorPalettePreview.ts.`);
+        const fallbackWrap = makePreviewContainer();
+        _appendFallbackGlyph(fallbackWrap, '?');
+        previewEl = fallbackWrap;
+      }
+    }
+  }
+
+  // Special-case: if the item uses blockThemeOverride we want the ice sprite
+  // from THEME_BLOCK_SPRITE_URL; confirm at preview-build time and warn if missing.
+  if (item.blockThemeOverride !== undefined && item.category === 'specialBlocks') {
+    const url = THEME_BLOCK_SPRITE_URL[item.blockThemeOverride];
+    if (url === undefined && import.meta.env.DEV) {
+      _warnOnce(
+        `theme:${item.blockThemeOverride}`,
+        `Block theme '${item.blockThemeOverride}' has no sprite in THEME_BLOCK_SPRITE_URL — palette preview will use colour fill only.`,
+      );
+    }
+  }
+
+  return makePaletteCardShell(previewEl, item.label, onClick);
+}

@@ -20,6 +20,7 @@ import {
   makeBtn, makeEdgeBtn, makeThemeChip, makeThemePaletteButton,
   makeBlockPreviewCard,
 } from './editorUIHelpers';
+import { makePalettePreviewCard } from './editorPalettePreview';
 import { updateInspector } from './editorInspector';
 import { createEditorSpecialItemPickers } from './editorSpecialItemPickers';
 import { createEditorLightingPanel } from './editorUILightingPanel';
@@ -534,18 +535,46 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         paletteDiv.appendChild(grid);
 
       } else {
-        // Non-blocks categories: simple text button list
+        // Non-blocks categories
         if (state.activeCategory === 'lighting') {
           lightingPanel.syncOnRebuild(state, currentLighting, paletteDiv);
         }
         const items = PALETTE_ITEMS.filter(i => i.category === state.activeCategory);
-        for (const item of items) {
-          const btn = makeBtn(item.label, () => callbacks?.onPaletteItemSelect(item));
-          btn.style.width = '100%';
-          btn.style.marginBottom = '3px';
-          btn.style.textAlign = 'left';
-          paletteItems.push({ btn, itemId: item.id });
-          paletteDiv.appendChild(btn);
+
+        // Categories that get a visual 2-column preview grid
+        const usePreviewGrid = (
+          state.activeCategory === 'specialBlocks' ||
+          state.activeCategory === 'enemies' ||
+          state.activeCategory === 'triggers' ||
+          state.activeCategory === 'collectables' ||
+          state.activeCategory === 'environment' ||
+          state.activeCategory === 'objects' ||
+          state.activeCategory === 'liquids' ||
+          state.activeCategory === 'ropes' ||
+          state.activeCategory === 'guidePaths'
+        );
+
+        if (usePreviewGrid) {
+          const grid = document.createElement('div');
+          grid.style.cssText = `display: grid; grid-template-columns: 1fr 1fr; gap: 5px;`;
+          for (const item of items) {
+            const card = makePalettePreviewCard(item, currentTheme, () => {
+              callbacks?.onPaletteItemSelect(item);
+            });
+            paletteItems.push({ btn: card, itemId: item.id });
+            grid.appendChild(card);
+          }
+          paletteDiv.appendChild(grid);
+        } else {
+          // Lighting and other categories: simple text button list
+          for (const item of items) {
+            const btn = makeBtn(item.label, () => callbacks?.onPaletteItemSelect(item));
+            btn.style.width = '100%';
+            btn.style.marginBottom = '3px';
+            btn.style.textAlign = 'left';
+            paletteItems.push({ btn, itemId: item.id });
+            paletteDiv.appendChild(btn);
+          }
         }
       }
     } else if (state.activeCategory === 'lighting') {
