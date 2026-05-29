@@ -469,6 +469,7 @@ export function* makeLoadRoomPhases(
     } else {
       world.bgWallGrid.fill(0);
     }
+    let occupiedCells = 0;
     if (room.backgroundBlocks) {
       for (const b of room.backgroundBlocks) {
         for (let dy = 0; dy < b.hBlock; dy++) {
@@ -479,7 +480,9 @@ export function* makeLoadRoomPhases(
               col >= 0 && col < room.widthBlocks &&
               row >= 0 && row < room.heightBlocks
             ) {
-              world.bgWallGrid[col + row * room.widthBlocks] = 1;
+              const idx = col + row * room.widthBlocks;
+              if (world.bgWallGrid[idx] === 0) occupiedCells++;
+              world.bgWallGrid[idx] = 1;
             }
           }
         }
@@ -487,7 +490,6 @@ export function* makeLoadRoomPhases(
     }
     if (import.meta.env.DEV && bgWallCellCount > 65536) {
       const bgBlockCount = room.backgroundBlocks?.length ?? 0;
-      const occupiedCells = world.bgWallGrid.reduce((n, v) => n + v, 0);
       const sparsePct = bgWallCellCount > 0 ? ((occupiedCells / bgWallCellCount) * 100).toFixed(2) : '0';
       console.log(
         `[largeRoom] loadRoom bgWallGrid: roomId=${room.id}` +

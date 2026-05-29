@@ -18,7 +18,8 @@
 
 import type { RoomJsonDef, RoomJsonBakedWallTemplate } from '../editor/roomJsonSchema';
 import type { RoomWallTemplate } from './roomDef';
-import { BLOCK_SIZE_MEDIUM } from './roomDef';
+import { BLOCK_SIZE_MEDIUM, WALL_THEME_DEFAULT_INDEX } from './roomDef';
+import { blockThemeToIndex } from './blockTheme';
 
 // ── Schema version ────────────────────────────────────────────────────────────
 
@@ -177,6 +178,25 @@ export function hydrateAndValidateBakedWallTemplate(
     console.log(`[wallTemplate] roomId=${roomId} source=baked wallCount=${n}`);
   }
 
+  // ── Remap theme indices using themeNames (ensures session-order independence)
+  // themeNames[i] is the theme name for local index i+3.  Re-register each
+  // name via blockThemeToIndex so that the runtime Uint8Array holds the
+  // current session index regardless of load order.
+  let resolvedThemeIndex: Uint8Array;
+  if (Array.isArray(baked.themeNames) && baked.themeNames.length > 0) {
+    const remap = new Uint8Array(256);
+    // Identity map for indices 0-2 (legacy) and 255 (default).
+    for (let i = 0; i < 256; i++) remap[i] = i;
+    for (let i = 0; i < baked.themeNames.length; i++) {
+      const localIdx = i + 3;
+      const name = baked.themeNames[i];
+      if (name) remap[localIdx] = blockThemeToIndex(name);
+    }
+    resolvedThemeIndex = Uint8Array.from(baked.themeIndex, localIdx => remap[localIdx]);
+  } else {
+    resolvedThemeIndex = Uint8Array.from(baked.themeIndex);
+  }
+
   return {
     wallCount: n,
     xWorld:                Float32Array.from(baked.xWorld),
@@ -185,7 +205,7 @@ export function hydrateAndValidateBakedWallTemplate(
     hWorld:                Float32Array.from(baked.hWorld),
     isPlatformFlag:        Uint8Array.from(baked.isPlatformFlag),
     platformEdge:          Uint8Array.from(baked.platformEdge),
-    themeIndex:            Uint8Array.from(baked.themeIndex),
+    themeIndex:            resolvedThemeIndex,
     soundHardnessIndex:    Uint8Array.from(baked.soundHardnessIndex),
     isInvisibleFlag:       Uint8Array.from(baked.isInvisibleFlag),
     rampOrientationIndex:  Uint8Array.from(baked.rampOrientationIndex),

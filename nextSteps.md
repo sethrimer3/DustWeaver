@@ -18,6 +18,7 @@ The following area-based systems remain and were not changed in this pass:
 
 - **Pattern:** `new Uint8Array(room.widthBlocks * room.heightBlocks)` + fill, on every room load and resident build.
 - **Impact:** `new Uint8Array(N)` in V8 uses zero-initialized memory (calloc/mmap) and is very fast (<1 ms even for 1M cells). Not the 18-second freeze. For rooms > 65536 cells a sparse `Set<number>` (key = `col + row * width`) would reduce memory from ~1 MB to a few KB for sparse rooms, but the allocation itself is not a bottleneck.
+- **DEV scan fixed:** The DEV-only `bgWallGrid.reduce((n, v) => n + v, 0)` full-grid pass has been removed. `occupiedCells` is now counted during the painting loop (increment only when the target cell was previously 0), avoiding a second full-grid scan in the debug path.
 - **Constraint:** `src/sim/clusters/snakeAi.ts` reads `world.bgWallGrid[idx]` directly (line ~215). Any sparse path requires a compatibility adapter.
 - **Recommended next step:** If memory pressure from very large rooms becomes a concern, wrap `bgWallGrid` behind a `BgWallGridView` interface that picks dense vs. sparse based on a `DENSE_BG_GRID_MAX_CELLS = 65536` threshold. Gate behind the `65536` area check already logged in DEV.
 
@@ -298,10 +299,12 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 #### Cleanup hardening (BUILD 420 follow-up)
 
-- **Active-load path now uses the central resolver.** `gameLoadRoomPhases.ts` Phase D
-  was refactored to call `resolveRoomWallTemplate(room, roomRuntimeCache)` instead of
-  duplicating the cache → baked → fallback logic.  The active-load path now participates
-  in the aggregate DEV diagnostics (`logWallTemplateDiagnosticsSummary`).
+- **Active-load path inlines cache → baked → incremental fallback.** `gameLoadRoomPhases.ts` Phase D
+  intentionally does NOT call the central `resolveRoomWallTemplate()`.  It inlines the
+  cache → baked → `buildRoomWallTemplateIncremental()` fallback logic directly so it can
+  `yield` between the lookup and the first merge slice (and between merge slices), keeping
+  each frame under 8 ms.  The central resolver remains used in the resident-build and
+  worker paths where yielding is handled differently.
 
 - **Preload cost heuristic treats baked rooms as cheap.** `roomPreloadScheduler.ts`
   `estimateRoomBuildCostMs()` now returns zero wall cost when `room.bakedWallTemplate`
@@ -327,10 +330,10 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
 
 #### Remaining limitations
 
-- Active campaign room JSON files do not yet have `bakedWallTemplate`; they need to be
-  re-exported from the editor (open the DustWeaver campaign, use "Export Campaign") so
-  `editorRoomDataToJson()` → `dehydrateRoom()` writes the baked template into each compact
-  room file. Until re-exported, rooms use the `buildRoomWallTemplate()` fallback.
+- All 15 active campaign room JSON files now have a valid `bakedWallTemplate` (baked by
+  `scripts/bake-room-wall-templates.mjs`).  Rooms that are re-exported from the editor via
+  "Export Campaign" will automatically receive an updated baked template via
+  `editorRoomDataToJson()` → `dehydrateRoom()`.
 - The hash does not cover per-wall ice/ultraIce flags (these fields do not exist in
   `RoomJsonWall`; ice theme is covered by `blockTheme`/`blockThemeId`).
 - `phaseD_walls_build` is skipped for rooms with valid baked templates on their first

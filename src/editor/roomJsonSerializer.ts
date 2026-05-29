@@ -9,7 +9,7 @@
  * runtime can skip the expensive buildRoomWallTemplate() merge pass.
  */
 
-import { blockThemeToId, DEFAULT_ROPE_SEGMENT_COUNT } from '../levels/roomDef';
+import { blockThemeToId, DEFAULT_ROPE_SEGMENT_COUNT, indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
 import type {
   EditorRoomData,
 } from './editorState';
@@ -391,6 +391,20 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     const roomDef = editorRoomDataToRoomDef(data);
     const tpl = buildRoomWallTemplate(roomDef);
     const sourceHash = computeWallTemplateSourceHash(json);
+
+    // Collect theme names for non-legacy dynamic indices (≥3) so that
+    // hydrateAndValidateBakedWallTemplate can remap them to the runtime
+    // session registry independently of registration order.
+    let maxLocalIdx = 2;
+    for (let wi = 0; wi < tpl.wallCount; wi++) {
+      const idx = tpl.themeIndex[wi];
+      if (idx !== WALL_THEME_DEFAULT_INDEX && idx > maxLocalIdx) maxLocalIdx = idx;
+    }
+    const themeNames: string[] = [];
+    for (let i = 3; i <= maxLocalIdx; i++) {
+      themeNames.push(indexToBlockTheme(i));
+    }
+
     json.bakedWallTemplate = {
       schemaVersion: BAKED_WALL_SCHEMA_VERSION,
       sourceHash,
@@ -402,6 +416,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isPlatformFlag:        Array.from(tpl.isPlatformFlag),
       platformEdge:          Array.from(tpl.platformEdge),
       themeIndex:            Array.from(tpl.themeIndex),
+      ...(themeNames.length > 0 ? { themeNames } : {}),
       soundHardnessIndex:    Array.from(tpl.soundHardnessIndex),
       isInvisibleFlag:       Array.from(tpl.isInvisibleFlag),
       rampOrientationIndex:  Array.from(tpl.rampOrientationIndex),
