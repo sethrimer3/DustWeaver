@@ -72,6 +72,7 @@ export type {
   RoomJsonConversation,
   RoomJsonDialogueEntry,
   RoomJsonBackgroundBlock,
+  RoomJsonBakedWallTemplate,
 } from './roomJsonSchema';
 
 export function validateRoomJson(data: unknown): ValidationError[] {

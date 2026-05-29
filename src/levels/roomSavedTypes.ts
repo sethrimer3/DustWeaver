@@ -9,7 +9,7 @@
  */
 
 import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, TransitionDirection, CrumbleVariant, VoidEdgeStyle } from './roomDef';
-import type { RoomJsonLightSource, RoomJsonSunbeam, RoomJsonDialogueTrigger } from '../editor/roomJson';
+import type { RoomJsonLightSource, RoomJsonSunbeam, RoomJsonDialogueTrigger, RoomJsonBakedWallTemplate } from '../editor/roomJson';
 import type { SavedSceneLight } from './lightingSchema';
 export type { SavedRect, SavedRun, SavedPoint, SavedSolidLayer } from './tileGridCompressor';
 import type { SavedRect, SavedPoint, SavedRun, SavedSolidLayer } from './tileGridCompressor';
@@ -382,4 +382,10 @@ export interface SavedRoomV2 {
   bgBlocks?: SavedBgBlock[];
   /** Golden dust guide paths. */
   guidePaths?: SavedGuideDustPath[];
+  /**
+   * Pre-baked runtime wall template produced during export.
+   * Optional — absent in old v2/v3 files. When present and valid, the
+   * runtime skips `buildRoomWallTemplate()` and uses the baked fast path.
+   */
+  bakedWallTemplate?: RoomJsonBakedWallTemplate;
 }

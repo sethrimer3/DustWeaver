@@ -57,6 +57,17 @@ export interface RoomFileAuditEntry {
   /** Legacy bgBlocks count (v2 only; 0 in v3 rooms). */
   bgBlockLegacy: number;
   hydratedWallCount: number;
+  /** true when a bakedWallTemplate field is present in the saved file. */
+  bakedTemplatePresent: boolean;
+  /** wallCount from the baked template (0 when absent). */
+  bakedTemplateWallCount: number;
+  /** schemaVersion from the baked template (0 when absent). */
+  bakedTemplateSchemaVersion: number;
+  /**
+   * Rough byte estimate for the baked template arrays (sum of all number[]
+   * element counts × 4 bytes each).  0 when absent.
+   */
+  bakedTemplateBytesEstimate: number;
 }
 
 /** Count rects/runs/points across all themes in a solids block. */
@@ -128,6 +139,22 @@ export function auditRoomJson(rawJson: string): RoomFileAuditEntry | null {
   }
   const bgBlockLegacy = saved.bgBlocks?.length ?? 0;
 
+  // Baked wall template
+  const bakedTemplatePresent = saved.bakedWallTemplate !== undefined;
+  const bakedTemplateWallCount = saved.bakedWallTemplate?.wallCount ?? 0;
+  const bakedTemplateSchemaVersion = saved.bakedWallTemplate?.schemaVersion ?? 0;
+  let bakedTemplateBytesEstimate = 0;
+  if (saved.bakedWallTemplate) {
+    const b = saved.bakedWallTemplate;
+    const totalElements =
+      b.xWorld.length + b.yWorld.length + b.wWorld.length + b.hWorld.length +
+      b.isPlatformFlag.length + b.platformEdge.length + b.themeIndex.length +
+      b.soundHardnessIndex.length + b.isInvisibleFlag.length +
+      b.rampOrientationIndex.length + b.isPillarHalfWidthFlag.length +
+      b.isIceFlag.length + b.isUltraIceFlag.length;
+    bakedTemplateBytesEstimate = totalElements * 4;
+  }
+
   return {
     roomId:                 saved.id,
     version:                saved.v,
@@ -153,6 +180,10 @@ export function auditRoomJson(rawJson: string): RoomFileAuditEntry | null {
     bgLayerPrimitives,
     bgBlockLegacy,
     hydratedWallCount: hydratedWalls.length + exactWallCount + (saved.specialWalls?.length ?? 0),
+    bakedTemplatePresent,
+    bakedTemplateWallCount,
+    bakedTemplateSchemaVersion,
+    bakedTemplateBytesEstimate,
   };
 }
 
@@ -200,9 +231,13 @@ export function printRoomAuditTable(rooms: Array<{ id: string; rawJson: string }
       pad('bgPrms',  7),
       pad('bgLeg',   6),
       pad('hydWls',  7),
+      pad('baked?',  7),
+      pad('bkdWls',  7),
+      pad('bkdSv',   6),
+      pad('bkdKB',   7),
     ].join(' '),
   );
-  console.log('-'.repeat(170));
+  console.log('-'.repeat(200));
 
   for (const e of entries.sort((a, b) => b.jsonBytes - a.jsonBytes)) {
     console.log(
@@ -225,6 +260,10 @@ export function printRoomAuditTable(rooms: Array<{ id: string; rawJson: string }
         pad(fmt(e.bgLayerPrimitives), 7),
         pad(fmt(e.bgBlockLegacy), 6),
         pad(e.hydratedWallCount, 7),
+        pad(e.bakedTemplatePresent ? 'yes' : 'NO', 7),
+        pad(fmt(e.bakedTemplateWallCount), 7),
+        pad(fmt(e.bakedTemplateSchemaVersion), 6),
+        pad(e.bakedTemplateBytesEstimate > 0 ? (e.bakedTemplateBytesEstimate / 1024).toFixed(1) : '-', 7),
       ].join(' '),
     );
   }
@@ -232,7 +271,12 @@ export function printRoomAuditTable(rooms: Array<{ id: string; rawJson: string }
   const totalBytes = entries.reduce((s, e) => s + e.jsonBytes, 0);
   const totalExact = entries.reduce((s, e) => s + e.exactWallCount, 0);
   const totalV1    = entries.reduce((s, e) => s + e.v1ByThemePrimitives, 0);
-  console.log('-'.repeat(170));
-  console.log(`Rooms: ${entries.length}  Total JSON: ${(totalBytes / 1024).toFixed(1)} KB  exactWalls: ${totalExact}  v1Prims: ${totalV1}`);
+  const bakedCount = entries.filter(e => e.bakedTemplatePresent).length;
+  const missingBaked = entries.filter(e => e.version === 3 && !e.bakedTemplatePresent);
+  console.log('-'.repeat(200));
+  console.log(`Rooms: ${entries.length}  Total JSON: ${(totalBytes / 1024).toFixed(1)} KB  exactWalls: ${totalExact}  v1Prims: ${totalV1}  bakedTemplate: ${bakedCount}/${entries.length}`);
+  if (missingBaked.length > 0) {
+    console.warn(`[RoomAudit] WARNING: ${missingBaked.length} v3 room(s) missing bakedWallTemplate — re-export from editor to fix: ${missingBaked.map(e => e.roomId).join(', ')}`);
+  }
   console.groupEnd();
 }
