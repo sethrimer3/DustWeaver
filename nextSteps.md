@@ -338,6 +338,12 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
   `RoomJsonWall`; ice theme is covered by `blockTheme`/`blockThemeId`).
 - `phaseD_walls_build` is skipped for rooms with valid baked templates on their first
   load; subsequent visits always use `RoomRuntimeCache`.
+- **`themeNames` remap logic** in `hydrateAndValidateBakedWallTemplate` (lines 181–198 of
+  `roomWallTemplateHash.ts`) has no automated test coverage.  A unit test should verify
+  that local theme indices are correctly remapped to runtime indices regardless of the
+  `blockThemeToIndex` registration order.  A test that registers themes in a different order
+  than the bake script and then calls `hydrateAndValidateBakedWallTemplate` would provide
+  the needed coverage.
 
 ---
 

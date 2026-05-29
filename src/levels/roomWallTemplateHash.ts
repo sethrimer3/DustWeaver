@@ -18,7 +18,7 @@
 
 import type { RoomJsonDef, RoomJsonBakedWallTemplate } from '../editor/roomJsonSchema';
 import type { RoomWallTemplate } from './roomDef';
-import { BLOCK_SIZE_MEDIUM, WALL_THEME_DEFAULT_INDEX } from './roomDef';
+import { BLOCK_SIZE_MEDIUM } from './roomDef';
 import { blockThemeToIndex } from './blockTheme';
 
 // ── Schema version ────────────────────────────────────────────────────────────
