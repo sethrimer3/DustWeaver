@@ -20,7 +20,7 @@ import {
   makeBtn, makeEdgeBtn, makeThemeChip, makeThemePaletteButton,
   makeBlockPreviewCard,
 } from './editorUIHelpers';
-import { makePalettePreviewCard } from './editorPalettePreview';
+import { makePalettePreviewCard, auditPalettePreviews } from './editorPalettePreview';
 import { updateInspector } from './editorInspector';
 import { createEditorSpecialItemPickers } from './editorSpecialItemPickers';
 import { createEditorLightingPanel } from './editorUILightingPanel';
@@ -119,6 +119,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
     container.appendChild(devToolsDiv);
   }
+
+  // Run the one-time palette-preview audit at editor init time.
+  // auditPalettePreviews is a no-op in production builds (internal DEV guard).
+  auditPalettePreviews(PALETTE_ITEMS);
 
   // ── Tool buttons ─────────────────────────────────────────────────────────
   const toolBar = document.createElement('div');
@@ -549,6 +553,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           state.activeCategory === 'collectables' ||
           state.activeCategory === 'environment' ||
           state.activeCategory === 'objects' ||
+          state.activeCategory === 'lighting' ||
           state.activeCategory === 'liquids' ||
           state.activeCategory === 'ropes' ||
           state.activeCategory === 'guidePaths'
@@ -565,16 +570,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
             grid.appendChild(card);
           }
           paletteDiv.appendChild(grid);
-        } else {
-          // Lighting and other categories: simple text button list
-          for (const item of items) {
-            const btn = makeBtn(item.label, () => callbacks?.onPaletteItemSelect(item));
-            btn.style.width = '100%';
-            btn.style.marginBottom = '3px';
-            btn.style.textAlign = 'left';
-            paletteItems.push({ btn, itemId: item.id });
-            paletteDiv.appendChild(btn);
-          }
         }
       }
     } else if (state.activeCategory === 'lighting') {

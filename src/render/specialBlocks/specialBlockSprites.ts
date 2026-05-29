@@ -50,6 +50,17 @@ export function getKineticBlockSprite(varIdx: number): HTMLImageElement | null {
   return img.complete && img.naturalWidth > 0 ? img : null;
 }
 
+/**
+ * Returns the sorted list of kinetic block sprite URLs (public paths relative
+ * to ASSETS/, same format as `loadImg()`).  Builds the list lazily on first call.
+ *
+ * The first URL is the stable representative used for palette preview cards.
+ */
+export function getKineticBlockSpriteUrls(): readonly string[] {
+  _buildKineticBlockUrls();
+  return _KINETIC_BLOCK_URLS;
+}
+
 // ── Falling block overlay sprites ─────────────────────────────────────────────
 
 const _OVERLAY_URLS: string[] = [];
