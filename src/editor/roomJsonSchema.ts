@@ -492,7 +492,21 @@ export interface RoomJsonBakedWallTemplate {
   hWorld: number[];
   isPlatformFlag: number[];
   platformEdge: number[];
+  /**
+   * Per-wall theme indices.  Values 0–2 are legacy fixed indices (blackRock,
+   * brownRock, dirt); 255 is WALL_THEME_DEFAULT_INDEX (room default).
+   * Values ≥3 are local indices into `themeNames` (index − 3 = position in
+   * themeNames).  During hydration these local indices are remapped to the
+   * runtime session registry via `blockThemeToIndex`.
+   */
   themeIndex: number[];
+  /**
+   * Theme names for non-legacy dynamic indices (3+).  `themeNames[i]` is the
+   * theme name for local index `i + 3`.  Present when the room uses any
+   * folder-based or unknown per-wall theme overrides.  When absent or empty,
+   * themeIndex values ≥3 are used as-is (legacy behaviour).
+   */
+  themeNames?: string[];
   soundHardnessIndex: number[];
   isInvisibleFlag: number[];
   rampOrientationIndex: number[];

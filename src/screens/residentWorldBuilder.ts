@@ -134,6 +134,7 @@ export function buildResidentWorldState(
     } else {
       rw.bgWallGrid.fill(0);
     }
+    let occupiedCells = 0;
     if (room.backgroundBlocks) {
       for (const b of room.backgroundBlocks) {
         for (let dy = 0; dy < b.hBlock; dy++) {
@@ -141,7 +142,9 @@ export function buildResidentWorldState(
             const col = b.xBlock + dx;
             const row = b.yBlock + dy;
             if (col >= 0 && col < room.widthBlocks && row >= 0 && row < room.heightBlocks) {
-              rw.bgWallGrid[col + row * room.widthBlocks] = 1;
+              const idx = col + row * room.widthBlocks;
+              if (rw.bgWallGrid[idx] === 0) occupiedCells++;
+              rw.bgWallGrid[idx] = 1;
             }
           }
         }
@@ -149,7 +152,6 @@ export function buildResidentWorldState(
     }
     if (import.meta.env.DEV && bgWallCellCount > 65536) {
       const bgBlockCount = room.backgroundBlocks?.length ?? 0;
-      const occupiedCells = rw.bgWallGrid.reduce((n, v) => n + v, 0);
       const sparsePct = bgWallCellCount > 0 ? ((occupiedCells / bgWallCellCount) * 100).toFixed(2) : '0';
       console.log(
         `[largeRoom] resident bgWallGrid: roomId=${room.id}` +
@@ -354,6 +356,7 @@ export function* createResidentBuildGenerator(
     } else {
       rw.bgWallGrid.fill(0);
     }
+    let occupiedCells = 0;
     if (room.backgroundBlocks) {
       for (const b of room.backgroundBlocks) {
         for (let dy = 0; dy < b.hBlock; dy++) {
@@ -361,7 +364,9 @@ export function* createResidentBuildGenerator(
             const col = b.xBlock + dx;
             const row = b.yBlock + dy;
             if (col >= 0 && col < room.widthBlocks && row >= 0 && row < room.heightBlocks) {
-              rw.bgWallGrid[col + row * room.widthBlocks] = 1;
+              const idx = col + row * room.widthBlocks;
+              if (rw.bgWallGrid[idx] === 0) occupiedCells++;
+              rw.bgWallGrid[idx] = 1;
             }
           }
         }
@@ -369,7 +374,6 @@ export function* createResidentBuildGenerator(
     }
     if (import.meta.env.DEV && bgWallCellCount > 65536) {
       const bgBlockCount = room.backgroundBlocks?.length ?? 0;
-      const occupiedCells = rw.bgWallGrid.reduce((n, v) => n + v, 0);
       const sparsePct = bgWallCellCount > 0 ? ((occupiedCells / bgWallCellCount) * 100).toFixed(2) : '0';
       console.log(
         `[largeRoom] resident(gen) bgWallGrid: roomId=${room.id}` +

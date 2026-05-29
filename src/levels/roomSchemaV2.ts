@@ -594,6 +594,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       isPlatformFlag:        b.isPlatformFlag.slice(),
       platformEdge:          b.platformEdge.slice(),
       themeIndex:            b.themeIndex.slice(),
+      ...(b.themeNames !== undefined ? { themeNames: b.themeNames.slice() } : {}),
       soundHardnessIndex:    b.soundHardnessIndex.slice(),
       isInvisibleFlag:       b.isInvisibleFlag.slice(),
       rampOrientationIndex:  b.rampOrientationIndex.slice(),

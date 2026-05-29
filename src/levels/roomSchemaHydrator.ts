@@ -449,6 +449,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       isPlatformFlag:        b.isPlatformFlag.slice(),
       platformEdge:          b.platformEdge.slice(),
       themeIndex:            b.themeIndex.slice(),
+      ...(b.themeNames !== undefined ? { themeNames: b.themeNames.slice() } : {}),
       soundHardnessIndex:    b.soundHardnessIndex.slice(),
       isInvisibleFlag:       b.isInvisibleFlag.slice(),
       rampOrientationIndex:  b.rampOrientationIndex.slice(),
