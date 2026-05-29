@@ -134,6 +134,7 @@ import {
   getActiveRoomAdjacency,
 } from '../levels/roomFileLoader';
 import * as FP from '../debug/perfFreezeProfiler';
+import { resetIceMoteAuraForRoom } from '../sim/iceMoteAura';
 
 /**
  * All dependencies required by `makeLoadRoomPhases`.
@@ -598,6 +599,7 @@ export function* makeLoadRoomPhases(
     loadRoomHazards(world, room);
     FP.recordLoadPhaseStep('E:hazards', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
+  resetIceMoteAuraForRoom(world);
   {
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
     loadRoomRopes(world, room);
