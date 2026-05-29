@@ -15,6 +15,7 @@
 
 import type { PaletteItem } from './editorState';
 import { THEME_BLOCK_SPRITE_URL, makeBlockPreviewShapeCss, makePaletteCardShell, makePreviewContainer } from './editorUIHelpers';
+import { getKineticBlockSpriteUrls } from '../render/specialBlocks/specialBlockSprites';
 
 // ── Warning log deduplication ────────────────────────────────────────────────
 
@@ -359,11 +360,57 @@ function _makeProceduralPreview(visual: ProceduralVisual): HTMLDivElement {
   return wrap;
 }
 
+/** Builds a canvas with an upward directional-boost arrow, for kinetic block overlays. */
+const _KINETIC_CANVAS_SIZE = 40;
+const _KINETIC_ARROW_MID_X = 20;
+const _KINETIC_ARROW_TAIL_Y = 28;
+const _KINETIC_ARROW_TIP_Y  = 10;
+const _KINETIC_ARROW_HEAD_TOP_Y = 18;
+const _KINETIC_ARROW_HEAD_HALF_W = 5;
+
+function _makeKineticArrowCanvas(): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width  = _KINETIC_CANVAS_SIZE;
+  c.height = _KINETIC_CANVAS_SIZE;
+  c.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.strokeStyle = 'rgba(100,200,255,0.9)';
+    ctx.fillStyle   = 'rgba(100,200,255,0.9)';
+    ctx.lineWidth = 1.5;
+    // Shaft
+    ctx.beginPath();
+    ctx.moveTo(_KINETIC_ARROW_MID_X, _KINETIC_ARROW_TIP_Y + 2);
+    ctx.lineTo(_KINETIC_ARROW_MID_X, _KINETIC_ARROW_TAIL_Y);
+    ctx.stroke();
+    // Arrowhead triangle
+    ctx.beginPath();
+    ctx.moveTo(_KINETIC_ARROW_MID_X, _KINETIC_ARROW_TIP_Y);
+    ctx.lineTo(_KINETIC_ARROW_MID_X - _KINETIC_ARROW_HEAD_HALF_W, _KINETIC_ARROW_HEAD_TOP_Y);
+    ctx.lineTo(_KINETIC_ARROW_MID_X + _KINETIC_ARROW_HEAD_HALF_W, _KINETIC_ARROW_HEAD_TOP_Y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  return c;
+}
+
 /**
  * Builds a preview element (40×40 container) for items that use the block
  * theme system (specialBlocks using `blockThemeOverride`).
  */
 function _makeSpecialBlockPreview(item: PaletteItem, blockTheme: string): HTMLDivElement {
+  // Kinetic blocks: prefer the actual sprite when available.
+  if (item.isKineticBlockItem) {
+    const kineticUrls = getKineticBlockSpriteUrls();
+    if (kineticUrls.length > 0) {
+      const wrap = _makeSpritePreview(kineticUrls[0], item.id);
+      // Overlay a directional arrow so it's clear this is a kinetic (boost) block.
+      wrap.appendChild(_makeKineticArrowCanvas());
+      return wrap;
+    }
+    // Fall through to CSS procedural if no sprites discovered.
+  }
+
   const effectiveTheme = item.blockThemeOverride ?? blockTheme;
   const { containerCss, shapeCss } = makeBlockPreviewShapeCss(item.id, effectiveTheme);
   const wrap = document.createElement('div');
@@ -391,26 +438,9 @@ function _makeSpecialBlockPreview(item: PaletteItem, blockTheme: string): HTMLDi
     wrap.appendChild(coreCanvas);
   }
 
-  // Kinetic blocks: add a directional-boost arrow overlay
+  // Kinetic blocks (CSS fallback): add a directional-boost arrow overlay
   if (item.isKineticBlockItem) {
-    const arrowCanvas = document.createElement('canvas');
-    arrowCanvas.width = 40;
-    arrowCanvas.height = 40;
-    arrowCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
-    const ctx = arrowCanvas.getContext('2d');
-    if (ctx) {
-      ctx.strokeStyle = 'rgba(100,180,255,0.7)';
-      ctx.fillStyle = 'rgba(100,180,255,0.7)';
-      ctx.lineWidth = 1.5;
-      // Up arrow
-      ctx.beginPath();
-      ctx.moveTo(20, 10); ctx.lineTo(20, 28);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(20, 8); ctx.lineTo(15, 16); ctx.lineTo(25, 16); ctx.closePath();
-      ctx.fill();
-    }
-    wrap.appendChild(arrowCanvas);
+    wrap.appendChild(_makeKineticArrowCanvas());
   }
 
   return wrap;
@@ -428,6 +458,65 @@ export function getPaletteItemSpriteUrl(itemId: string): string | null {
   const direct = ITEM_SPRITE_URL[itemId];
   if (direct !== undefined) return direct;
   return null;
+}
+
+/** Coarse preview kind descriptor — used by the DEV audit and for future tooling. */
+export type PalettePreviewKind =
+  | 'sprite'       // Registered in ITEM_SPRITE_URL
+  | 'procedural'   // Registered in ITEM_VISUAL
+  | 'specialBlock' // Handled by _makeSpecialBlockPreview (block theme / kinetic sprite)
+  | 'none';        // No preview registered → will render '?' fallback
+
+/**
+ * Returns the preview kind for a given palette item without building any DOM.
+ * Used by `auditPalettePreviews` and can be used by external tooling.
+ */
+export function getPalettePreviewKind(item: PaletteItem): PalettePreviewKind {
+  if (item.category === 'specialBlocks') return 'specialBlock';
+  if (Object.prototype.hasOwnProperty.call(ITEM_SPRITE_URL, item.id)) return 'sprite';
+  if (Object.prototype.hasOwnProperty.call(ITEM_VISUAL, item.id)) return 'procedural';
+  return 'none';
+}
+
+/**
+ * Returns true when `makePalettePreviewCard()` will produce a meaningful visual
+ * for this item (i.e. not just a '?' fallback glyph).
+ */
+export function hasPalettePreview(item: PaletteItem): boolean {
+  return getPalettePreviewKind(item) !== 'none';
+}
+
+// ── DEV palette audit ─────────────────────────────────────────────────────────
+
+let _auditDone = false;
+
+/**
+ * DEV-only: checks every item in `items` for a registered preview and logs
+ * a one-time report.  Safe to call every frame — the audit runs at most once
+ * per session and is a no-op in production.
+ *
+ * @param items  Typically `PALETTE_ITEMS` from `editorDropdownData.ts`.
+ */
+export function auditPalettePreviews(items: readonly PaletteItem[]): void {
+  if (!import.meta.env.DEV || _auditDone) return;
+  _auditDone = true;
+
+  const missing: PaletteItem[] = [];
+  for (const item of items) {
+    if (!hasPalettePreview(item)) {
+      missing.push(item);
+    }
+  }
+
+  if (missing.length === 0) {
+    console.log('[editorPalettePreview] Audit: all palette items have previews. ✓');
+  } else {
+    console.group(`[editorPalettePreview] Audit: ${missing.length} item(s) lack previews`);
+    for (const item of missing) {
+      console.warn(`  id='${item.id}'  label='${item.label}'  category='${item.category}'`);
+    }
+    console.groupEnd();
+  }
 }
 
 /**

@@ -11,17 +11,31 @@ Current focus: large-room loading and rendering performance, especially room-tra
 ## Editor Palette Previews — Remaining / Future Work
 
 Palette previews were added for all current `specialBlocks`, `enemies`, `triggers`,
-`collectables`, `environment`, `objects`, `liquids`, `ropes`, and `guidePaths`
+`collectables`, `environment`, `objects`, `lighting`, `liquids`, `ropes`, and `guidePaths`
 palette entries.  The following items have limitations or require future effort:
 
-### Palette categories that still use text-button lists (no visual grid)
+### `lighting` category — preview cards added (rich controls preserved)
 
-- **`lighting`** — The lighting panel (`editorUILightingPanel.ts`) inserts its own
-  rich UI (sliders, dropdowns) and is rebuilt separately via `syncOnRebuild` /
-  `syncInPlace`.  Individual lighting items (`ambient_light_blocker`, `light_source`,
-  `sunbeam`, `scene_light`) do have procedural preview shapes registered in
-  `editorPalettePreview.ts`; if the lighting panel is ever refactored to use the
-  standard palette grid, the previews are ready.
+Individual lighting items (`ambient_light_blocker`, `dark_ambient_light_blocker`,
+`light_source`, `sunbeam`, `scene_light`) now show procedural preview cards in a
+2-column grid below the rich lighting controls (sliders and dropdowns).
+Selection highlighting and `onPaletteItemSelect` callbacks work the same as
+other categories.
+
+### Kinetic block previews — sprite-based
+
+Kinetic blocks now use the first alphabetically-sorted sprite from
+`ASSETS/SPRITES/specialBLOCKS/kineticBlock/` with a directional arrow overlay.
+If no sprites are discovered at build time, the preview falls back to the
+previous CSS/procedural style.
+
+### DEV palette audit
+
+`auditPalettePreviews(PALETTE_ITEMS)` runs once at editor init in DEV mode.
+It logs a single success line if all items have previews, or groups missing
+items with their id / label / category.  The helper functions
+`hasPalettePreview(item)` and `getPalettePreviewKind(item)` are exported from
+`editorPalettePreview.ts` for use in future tooling.
 
 ### Enemy types that currently use procedural previews (no sprite asset)
 

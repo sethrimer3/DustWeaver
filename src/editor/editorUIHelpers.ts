@@ -245,8 +245,13 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
     case 'bounce_pad_2x2_bright':
       return {
         containerCss,
+        // 2×2 grid overlay distinguishes this from the 1×1 variant.
         shapeCss: `width: 40px; height: 40px; background: rgba(80,30,5,0.85);
-          border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;`,
+          border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;
+          background-image:
+            linear-gradient(rgba(220,80,10,0.30) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(220,80,10,0.30) 1px, transparent 1px);
+          background-size: 50% 50%;`,
       };
     case 'bounce_pad_ramp_1x1_dim':
     case 'bounce_pad_ramp_1x1_bright':
