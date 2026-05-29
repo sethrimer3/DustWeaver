@@ -8,6 +8,33 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## Large-Room Performance — Remaining Area-Based Systems
+
+The main freeze cause (`buildAmbientDarknessAlphas` Phase 1 dead O(W×H) litAir loop) and `buildAmbientDepths` omni-mode O(W×H) litAir build were fixed. The speedrun timer no longer charges loading/warm frame time.
+
+The following area-based systems remain and were not changed in this pass:
+
+### 1. `bgWallGrid` dense allocation — `residentWorldBuilder.ts`, `gameLoadRoomPhases.ts`
+
+- **Pattern:** `new Uint8Array(room.widthBlocks * room.heightBlocks)` + fill, on every room load and resident build.
+- **Impact:** `new Uint8Array(N)` in V8 uses zero-initialized memory (calloc/mmap) and is very fast (<1 ms even for 1M cells). Not the 18-second freeze. For rooms > 65536 cells a sparse `Set<number>` (key = `col + row * width`) would reduce memory from ~1 MB to a few KB for sparse rooms, but the allocation itself is not a bottleneck.
+- **Constraint:** `src/sim/clusters/snakeAi.ts` reads `world.bgWallGrid[idx]` directly (line ~215). Any sparse path requires a compatibility adapter.
+- **Recommended next step:** If memory pressure from very large rooms becomes a concern, wrap `bgWallGrid` behind a `BgWallGridView` interface that picks dense vs. sparse based on a `DENSE_BG_GRID_MAX_CELLS = 65536` threshold. Gate behind the `65536` area check already logged in DEV.
+
+### 2. `rebuildNavSolidGrid` in `snakeAi.ts`
+
+- **Pattern:** `new Uint8Array(width * height)` for enemy snake pathfinding, then iterates occupied walls to fill.
+- **Impact:** Same fast-allocation story as `bgWallGrid`. The fill loop iterates only occupied wall entries (not all cells). Not a bottleneck for sparse rooms. For a 1M-cell room with 100 walls, the grid is allocated but only 100 entries are written.
+- **Recommended next step:** Low priority. Only matters if snake enemies exist in very large rooms.
+
+### 3. `buildRoomWallTemplate` — **DONE (BUILD 424)**
+
+- **File:** `gameRoomWalls.ts`, `residentWorldBuilder.ts`, `gameLoadRoomPhases.ts`.
+- **What was done:** Added `buildRoomWallTemplateIncremental` generator (4 ms time-budget per `yield`).  `buildRoomWallTemplate` is now a thin synchronous wrapper around it (unchanged semantics for worker/editor/sync callers).  `residentWorldBuilder.ts` `phaseD_walls_build` iterates the generator yielding `'phaseD_walls_merge'` per slice.  `gameLoadRoomPhases.ts` Phase D wall-template block now inlines cache → baked → incremental-fallback logic with an extra `yield` between the lookup and the first merge slice, and caches `blockerKeys`/`darkBlockerKeys` at entry creation time (no post-hoc backfill needed).
+- **Result:** The O(n²) merge pass is spread across frames; no single frame exceeds the 8 ms `LONG_PHASE_WARN_MS` threshold on large rooms.  Cache and baked paths are unchanged (fast O(n) copy).
+
+---
+
 ## Electron Desktop Build Notes
 
 ### Failure reproduced and fixed
@@ -694,13 +721,13 @@ These checks confirm correct behaviour for the resident-room runtime. Run manual
 
 7. **`diagContext` wired at both call sites.** Both the runtime scheduler and the initial build phase now pass `diagContext` (with `roomId` captured in a `const` ref) to `createResidentBuildGenerator`. Long-phase callbacks correctly identify the room even after `_activeBuildSession` or `_adjRoom` is reassigned.
 
-**`phaseD_walls_build` status:** Still a single synchronous step. `buildRoomWallTemplate()` is O(n²) iterative merge over the room's wall array; it cannot be trivially split across frames without carrying substantial intermediate merge state between yields. The per-phase 8 ms warning (item 1 above) makes long `phaseD_walls_build` executions visible in the debug overlay and DEV console. Full incremental wall building is deferred.
+**`phaseD_walls_build` status (BUILD 424):** Now incremental. `buildRoomWallTemplateIncremental()` spreads the O(n²) merge pass across frames (4 ms budget per yield), emitting `'phaseD_walls_merge'` labels. The deferred note from BUILD 419 is resolved.
 
 **Runtime phase budget policy:** Unchanged from BUILD 418. One generator phase per RAF frame, executed post-render before endFrame. The heavy-walls deferral gate (`_isAboutToRunHeavyWallsBuild`) skips `phaseD_walls_build` when last-frame time ≥ 10 ms. Priority-1/2 heavy phases are not deferred.
 
 #### Remaining limitations (BUILD 419)
 
-1. **`phaseD_walls_build` is still a single synchronous step.** `buildRoomWallTemplate()` is not internally incremental. On very large rooms (> ~80×50 blocks) it can still take 5–10 ms in one generator phase. The cache-hit path is fast (~0.1 ms). Per-phase 8 ms warnings (BUILD 419) make long executions visible. Making `buildRoomWallTemplate()` internally incremental is deferred.
+1. ~~**`phaseD_walls_build` is still a single synchronous step.**~~ **FIXED in BUILD 424.** `buildRoomWallTemplateIncremental()` spreads the merge pass across frames (4 ms budget per yield).
 
 2. **Build phases execute pre-paint (post-render, pre-endFrame).** A `requestIdleCallback`-style path would advance build phases after the browser paints the frame, reducing their contribution to frame latency. This requires synchronising the idle callback with the RAF loop to prevent concurrent mutations to `roomRuntimeCache` or the active `WorldState`. Deferred; the per-phase debug overlay provides sufficient visibility into individual phase costs in the interim.
 

@@ -1594,6 +1594,10 @@ export function startGameScreen(
       if (import.meta.env.DEV) FP.setFrameGameContext('loading');
       FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
+      // Reset the frame-delta accumulator so the first gameplay frame after
+      // loading does not charge elapsed time from this (frozen) frame to the
+      // speedrun timer or physics simulation.
+      lastTimestampMs = 0;
       rafHandle = requestAnimationFrame(frame);
       return;
     }
@@ -1610,6 +1614,9 @@ export function startGameScreen(
       tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
       tickLoadingOverlay();
       FP.endFrame();
+      // Reset the frame-delta accumulator so the first gameplay frame after
+      // entry warm does not charge the warm duration to the speedrun timer.
+      lastTimestampMs = 0;
       rafHandle = requestAnimationFrame(frame);
       return;
     }
@@ -1625,6 +1632,9 @@ export function startGameScreen(
       FP.setBakeForbiddenInGameplay(false);
       tickLoadingOverlay();
       FP.endFrame();
+      // Reset the frame-delta accumulator so the first gameplay frame after
+      // the entry hold does not charge hold time to the speedrun timer.
+      lastTimestampMs = 0;
       rafHandle = requestAnimationFrame(frame);
       return;
     }
