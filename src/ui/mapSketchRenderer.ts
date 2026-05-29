@@ -159,11 +159,13 @@ export function invalidateRoomContour(roomId: string): void {
  * Algorithm:
  * 1. Rasterize all non-invisible walls into a boolean solid grid.
  * 2. For each solid tile, inspect its four axis-aligned neighbors.
- *    If a neighbor is out of bounds (treated as air) or empty, emit the
- *    corresponding tile edge as a directed segment.  This produces outlines
- *    around all exposed wall boundaries — including the outer room perimeter,
- *    interior platforms, islands, and holes — giving the complete room
- *    silhouette on the world map.
+ *    If a neighbor is strictly inside the room and empty, emit the
+ *    corresponding tile edge as a directed segment.  Boundary-facing edges
+ *    (where the neighbor would be out of bounds) are deliberately suppressed
+ *    so the outer room rectangle is never traced as a cave-wall sketch stroke.
+ *    Interior islands, platforms, and holes each produce their own outline.
+ *    Contours that touch the boundary become open chains (isClosed=false),
+ *    which are drawn as open strokes without fill or closePath.
  * 3. Chain directed segments into closed polylines via a directed adjacency
  *    graph.  Multiple disjoint contours per room are fully supported.
  * 4. Remove collinear intermediate vertices (consecutive points sharing the
@@ -213,12 +215,24 @@ function buildRoomContour(room: RoomDef): ContourData {
   //
   // Vertices are tile corners at integer positions (0..w) × (0..h).
   // For each solid tile (gx, gy), inspect each of the 4 neighbors:
-  //   - If the neighbor is out of bounds or empty, emit a directed edge along
-  //     that tile face.  Direction: walking the edge, the solid tile is always
-  //     on the left (clockwise winding around solid in Y-down screen space).
+  //   - If the neighbor is strictly inside the room and empty, emit a directed
+  //     edge along that tile face.
+  //   - Boundary-facing edges (where the neighbor would be out of bounds) are
+  //     deliberately suppressed.  This prevents the outer room rectangle from
+  //     being traced as a cave-wall sketch stroke on the world map.
+  //     Contours that reach the room boundary become open chains (isClosed=false)
+  //     and are drawn as open strokes without fill — the tracer and drawContour
+  //     both handle this correctly.
   //
-  // This generates edges for every exposed solid-tile boundary, so
-  // interior islands, platforms, and holes all get their own outline.
+  // This generates edges for every exposed solid-tile boundary that lies
+  // strictly inside the room, so interior islands, platforms, and holes all
+  // get their own sketch outline while the outer bounds remain clean.
+  //
+  // Edge direction convention (Y-down screen space, solid tile on left):
+  //   Top    (gx,gy)   → (gx+1, gy)
+  //   Right  (gx+1,gy) → (gx+1, gy+1)
+  //   Bottom (gx+1,gy+1) → (gx, gy+1)
+  //   Left   (gx,gy+1) → (gx, gy)
   const vertexStride = w + 1;
   // adjacency maps fromVertex → array of toVertex (outgoing directed edges)
   const adjacency = new Map<number, number[]>();
@@ -234,28 +248,16 @@ function buildRoomContour(room: RoomDef): ContourData {
   for (let gy = 0; gy < h; gy++) {
     for (let gx = 0; gx < w; gx++) {
       if (solid[gy * w + gx] !== 1) continue;
-      // Emit an edge for each face of this solid tile that borders either:
-      //   (a) an in-bounds empty tile, or
-      //   (b) the room boundary (out-of-bounds — treated as air).
-      // Out-of-bounds neighbors must be treated as air so that the outer
-      // boundary of the room silhouette is fully visible on the world map.
-      // Suppressing boundary-facing edges (the previous approach) was
-      // intended to avoid a plain outer rectangle, but it caused the top
-      // and right edges of rooms to be systematically invisible, which is
-      // the top-right clipping bug.
-      //
-      // Edge direction convention (Y-down screen space, solid tile on left):
-      //   Top    (gx,gy)   → (gx+1, gy)
-      //   Right  (gx+1,gy) → (gx+1, gy+1)
-      //   Bottom (gx+1,gy+1) → (gx, gy+1)
-      //   Left   (gx,gy+1) → (gx, gy)
-      if (gy === 0 || solid[(gy - 1) * w + gx] === 0)
+      // Only emit an edge when the neighbor is strictly inside the room bounds
+      // and empty.  Boundary-facing edges (gy===0, gx===w-1, gy===h-1, gx===0)
+      // are skipped so the outer room rectangle is never sketched as cave walls.
+      if (gy > 0     && solid[(gy - 1) * w + gx] === 0)
         addEdge(gx, gy, gx + 1, gy);
-      if (gx === w - 1 || solid[gy * w + (gx + 1)] === 0)
+      if (gx < w - 1 && solid[gy * w + (gx + 1)] === 0)
         addEdge(gx + 1, gy, gx + 1, gy + 1);
-      if (gy === h - 1 || solid[(gy + 1) * w + gx] === 0)
+      if (gy < h - 1 && solid[(gy + 1) * w + gx] === 0)
         addEdge(gx + 1, gy + 1, gx, gy + 1);
-      if (gx === 0 || solid[gy * w + (gx - 1)] === 0)
+      if (gx > 0     && solid[gy * w + (gx - 1)] === 0)
         addEdge(gx, gy + 1, gx, gy);
     }
   }
