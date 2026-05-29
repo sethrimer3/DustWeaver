@@ -160,6 +160,7 @@ export function computePlayerWaterState(world: WorldState): void {
   world.playerWaterSubmersionRatio = 0;
 
   for (let i = 0; i < world.waterZoneCount; i++) {
+    if (world.frozenWaterZoneMask[i] === 1) continue; // zone is frozen — skip buoyancy
     const wLeft   = world.waterZoneXWorld[i];
     const wTop    = world.waterZoneYWorld[i];
     const wRight  = wLeft + world.waterZoneWWorld[i];
@@ -268,6 +269,7 @@ export function applyHazards(world: WorldState): void {
   world.playerBuoyancyDepthFactor = 0;
 
   for (let i = 0; i < world.waterZoneCount; i++) {
+    if (world.frozenWaterZoneMask[i] === 1) continue; // zone is frozen — skip buoyancy
     const wLeft   = world.waterZoneXWorld[i];
     const wTop    = world.waterZoneYWorld[i];
     const wRight  = wLeft + world.waterZoneWWorld[i];

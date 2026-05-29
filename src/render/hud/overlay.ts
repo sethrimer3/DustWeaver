@@ -95,6 +95,13 @@ export interface HudDebugState {
    * lateral solid-occupancy query in `computeGroundConnectedExclusion`.
    */
   wallDbgAdjacentFloorTopY: number;
+  // ── Ice Mote Aura debug ─────────────────────────────────────────────────
+  /** True when the Ice Mote freeze aura is currently active. */
+  iceMoteAuraActive: boolean;
+  /** Number of water zones currently frozen by the aura. */
+  iceMoteAuraFrozenCount: number;
+  /** Freeze radius in world units. */
+  iceMoteAuraRadiusWorld: number;
 }
 
 export interface HudState {
@@ -120,6 +127,7 @@ export function renderHudOverlay(
   const showMovement   = isPanelVisible('movement',    panelVisibility);
   const showGrapple    = isPanelVisible('grapple',     panelVisibility);
   const showWater      = isPanelVisible('water',       panelVisibility);
+  const showIceMoteAura = isPanelVisible('iceMoteAura', panelVisibility);
 
   // ── Top "green" lines: performance counters ──────────────────────────────
   const perfLines: string[] = [];
@@ -171,6 +179,13 @@ export function renderHudOverlay(
         `Water: ${d.isInLiquid ? 'IN' : 'OUT'} sub=${d.submergedFraction.toFixed(2)} df=${d.depthFactor.toFixed(2)}`,
         `Buoy: ${d.buoyancyAccelWorldPerSec2.toFixed(1)}wu/s² gScale=${d.gravityScale.toFixed(2)} velY=${d.playerVelocityYWorld.toFixed(1)}`,
         `LiqSurf: ${d.liquidSurfaceYWorld.toFixed(1)}`,
+      );
+    }
+
+    if (showIceMoteAura) {
+      debugLines.push(
+        `IceMoteAura: ${d.iceMoteAuraActive ? 'ACTIVE' : 'off'}`,
+        `FrozenZones: ${d.iceMoteAuraFrozenCount}  r=${d.iceMoteAuraRadiusWorld}wu`,
       );
     }
   }

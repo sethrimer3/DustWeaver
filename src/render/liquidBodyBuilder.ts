@@ -191,6 +191,7 @@ export function buildLiquidBodies(world: WorldState): LiquidBody[] {
   const lavaSet  = new Set<number>();
 
   for (let i = 0; i < world.waterZoneCount; i++) {
+    if (world.frozenWaterZoneMask[i] === 1) continue; // frozen — rendered as ice overlay
     expandZoneIntoSet(
       world.waterZoneXWorld[i], world.waterZoneYWorld[i],
       world.waterZoneWWorld[i], world.waterZoneHWorld[i],

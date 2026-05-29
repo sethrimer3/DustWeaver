@@ -20,6 +20,7 @@ import {
   canWallSlideOnSurface,
   MIN_WALL_SLIDE_SURFACE_HEIGHT_WORLD,
 } from '../sim/clusters/playerWallSurface';
+import { getIceMoteAuraDebugInfo } from '../sim/iceMoteAura';
 
 /**
  * Builds a `HudDebugState` object from current world and input state.
@@ -100,6 +101,9 @@ export function buildHudDebugState(
     wallDbgAdjacentFloorTopY         = exclusion.adjacentFloorTopY;
   }
 
+  // Ice Mote Aura debug (captured once before the return object).
+  const iceMoteDbg = getIceMoteAuraDebugInfo();
+
   return {
     isGrounded:           player.isGroundedFlag === 1,
     isStandingOnSurface,
@@ -160,5 +164,9 @@ export function buildHudDebugState(
     wallDbgSlideSuppressedShort,
     wallDbgActionSuppressedExclusion,
     wallDbgAdjacentFloorTopY,
+    // Ice Mote Aura debug
+    iceMoteAuraActive:      iceMoteDbg.isActive,
+    iceMoteAuraFrozenCount: iceMoteDbg.frozenZoneCount,
+    iceMoteAuraRadiusWorld: iceMoteDbg.radiusWorld,
   };
 }

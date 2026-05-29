@@ -2,7 +2,7 @@ import { ParticleBuffers, createParticleBuffers, MAX_PARTICLES } from './particl
 import { ClusterState } from './clusters/state';
 import { RngState, createRng } from './rng';
 import { GrappleWorldState, createGrappleWorldState } from './worldGrappleState';
-import { HazardWorldState, createHazardWorldState } from './worldHazardState';
+import { HazardWorldState, createHazardWorldState, MAX_WATER_ZONES } from './worldHazardState';
 
 // Re-export constants from sub-state files so existing imports from world.ts still work.
 export { MAX_GRAPPLE_WRAP_POINTS } from './worldGrappleState';
@@ -434,6 +434,15 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   webSpiderFadingWebRemainingTicks: Float32Array;
   /** Max ticks for this web (for alpha computation: remaining/max). */
   webSpiderFadingWebMaxTicks: Float32Array;
+
+  // ── Ice Mote Freeze Aura ─────────────────────────────────────────────────
+  /**
+   * Per-zone frozen mask: 1 if this water zone is temporarily frozen by the
+   * Ice Mote aura.  Frozen zones are excluded from buoyancy physics and liquid
+   * rendering while a solid one-way-platform ice wall covers their area.
+   * Managed by iceMoteAura.ts; reset to all-0 on each room load.
+   */
+  frozenWaterZoneMask: Uint8Array;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -572,6 +581,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     ...createGrappleWorldState(),
     ...createHazardWorldState(),
     ...createParticleBuffers(),
+    frozenWaterZoneMask: new Uint8Array(MAX_WATER_ZONES),
   };
 }
 

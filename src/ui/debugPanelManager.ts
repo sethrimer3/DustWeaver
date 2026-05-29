@@ -20,7 +20,8 @@ export type DebugPanelId =
   | 'room'
   | 'freeze'
   | 'prewarm'
-  | 'resident';
+  | 'resident'
+  | 'iceMoteAura';
 
 export interface DebugPanelVisibility {
   movement: boolean;
@@ -33,6 +34,7 @@ export interface DebugPanelVisibility {
   freeze: boolean;
   prewarm: boolean;
   resident: boolean;
+  iceMoteAura: boolean;
 }
 
 const STORAGE_KEY = 'dw_debug_panels';
@@ -49,6 +51,7 @@ function makeDefaults(): DebugPanelVisibility {
     freeze:      false,
     prewarm:     false,
     resident:    false,
+    iceMoteAura: false,
   };
 }
 

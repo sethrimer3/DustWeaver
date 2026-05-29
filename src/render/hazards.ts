@@ -18,6 +18,7 @@ import {
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
 import { renderWaterZones, renderLavaZones } from './liquidRenderer';
+import { renderIceMoteAuraOverlay } from './iceMoteAuraRenderer';
 import { isScreenRectVisible } from './viewportCull';
 
 const BLOCK_HALF = BLOCK_SIZE_MEDIUM * 0.5;
@@ -39,6 +40,9 @@ export function renderHazards(
 
   // ── Water zones (neighbor-aware rounded corners + wave surface) ──────────
   renderWaterZones(ctx, world, offsetXPx, offsetYPx, zoom, tick, vpW, vpH);
+
+  // ── Ice Mote aura — frost overlay on temporarily frozen water zones ────────
+  renderIceMoteAuraOverlay(ctx, world, offsetXPx, offsetYPx, zoom, vpW, vpH);
 
   // ── Lava zones (neighbor-aware rounded corners + wave + spark particles) ─
   renderLavaZones(ctx, world, offsetXPx, offsetYPx, zoom, tick, vpW, vpH);
