@@ -50,7 +50,7 @@ function zeroArrays(n: number): Pick<
   | 'rampOrientationIndex' | 'isPillarHalfWidthFlag'
   | 'isIceFlag' | 'isUltraIceFlag'
 > {
-  const z = Array<number>(n).fill(0);
+  const z = new Array<number>(n).fill(0);
   return {
     xWorld: [...z],
     yWorld: [...z],
@@ -91,7 +91,8 @@ test('dynamic theme remap: local baked indices map to runtime session indices', 
   // Bake order: crystalBlue → local 3, verdureMoss → local 4
   // Runtime order here: verdureMoss first, then a filler, then crystalBlue
   const mossIdx    = blockThemeToIndex('verdureMoss');
-  blockThemeToIndex('testFillerTheme');            // advance registry to simulate different order
+  const _fillerIdx = blockThemeToIndex('testFillerTheme'); // intentionally advances the registry
+  void _fillerIdx;
   const crystalIdx = blockThemeToIndex('crystalBlue');
 
   // crystalIdx > mossIdx because crystalBlue was registered later in this session
