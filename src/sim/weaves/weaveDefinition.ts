@@ -26,6 +26,7 @@ export const WEAVE_STORM        = 'storm';
 export const WEAVE_SHIELD       = 'shield';
 export const WEAVE_ARROW        = 'arrow';
 export const WEAVE_SHIELD_SWORD = 'shield_sword';
+export const WEAVE_NONE         = 'none';
 
 // ---- Weave Activation Role -------------------------------------------------
 
@@ -128,6 +129,18 @@ const SHIELD_SWORD_DEF: WeaveDefinition = {
   spreadRad: Math.PI * 0.75,
 };
 
+const NONE_DEF: WeaveDefinition = {
+  id: WEAVE_NONE,
+  displayName: 'None',
+  description: 'No active weave equipped.',
+  role: WeaveRole.Either,
+  dustSlotCapacity: 0,
+  durationTicks: 0,
+  cooldownTicks: 0,
+  deploySpeedWorld: 0,
+  spreadRad: 0,
+};
+
 // ---- Weave Registry --------------------------------------------------------
 
 /** All available weave definitions, keyed by WeaveId. */
@@ -136,6 +149,7 @@ export const WEAVE_REGISTRY: ReadonlyMap<WeaveId, WeaveDefinition> = new Map([
   [WEAVE_SHIELD,       SHIELD_DEF],
   [WEAVE_ARROW,        ARROW_DEF],
   [WEAVE_SHIELD_SWORD, SHIELD_SWORD_DEF],
+  [WEAVE_NONE,         NONE_DEF],
 ]);
 
 /** Ordered list of weave IDs for UI display. */

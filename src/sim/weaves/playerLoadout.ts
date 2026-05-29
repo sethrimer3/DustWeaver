@@ -8,8 +8,14 @@
  */
 
 import { ParticleKind } from '../particles/kinds';
-import { WeaveId, getWeaveDefinition, WEAVE_STORM, WEAVE_SHIELD_SWORD } from './weaveDefinition';
+import { WeaveId, getWeaveDefinition, WEAVE_STORM, WEAVE_NONE } from './weaveDefinition';
 import { getDustSlotCost } from './dustDefinition';
+
+interface ProgressionLoadoutGate {
+  unlockedDustKinds: ParticleKind[];
+  unlockedActiveWeaves: WeaveId[];
+  isDevModeDustUnlocked?: boolean;
+}
 
 // ---- Weave Binding ---------------------------------------------------------
 
@@ -108,13 +114,71 @@ export function getAllBoundDustFlat(loadout: PlayerWeaveLoadout): ParticleKind[]
   return [...loadout.primary.boundDust, ...loadout.secondary.boundDust];
 }
 
+function _isDustUnlockedForGameplay(kind: ParticleKind, progress: ProgressionLoadoutGate | undefined): boolean {
+  if (progress === undefined) return true;
+  if (progress.isDevModeDustUnlocked) return true;
+  return progress.unlockedDustKinds.indexOf(kind) !== -1;
+}
+
+function _sanitizeBoundDust(
+  boundDust: ParticleKind[],
+  progress: ProgressionLoadoutGate | undefined,
+): ParticleKind[] {
+  const sanitized: ParticleKind[] = [];
+  for (let i = 0; i < boundDust.length; i++) {
+    const kind = boundDust[i];
+    if (_isDustUnlockedForGameplay(kind, progress)) {
+      sanitized.push(kind);
+    }
+  }
+  return sanitized;
+}
+
+function _isActiveWeaveUnlockedForGameplay(
+  weaveId: WeaveId,
+  progress: ProgressionLoadoutGate | undefined,
+): boolean {
+  if (weaveId === WEAVE_NONE) return true;
+  if (progress === undefined) return true;
+  return progress.unlockedActiveWeaves.indexOf(weaveId) !== -1;
+}
+
+/**
+ * Returns the gameplay-authoritative loadout after applying progression gates.
+ * Save data and UI may contain stale/default weave IDs; room activation must
+ * use this effective loadout so locked active weaves cannot run just because a
+ * loadout object names them.
+ */
+export function sanitizePlayerWeaveLoadoutForProgress(
+  loadout: PlayerWeaveLoadout,
+  progress: ProgressionLoadoutGate | undefined,
+): PlayerWeaveLoadout {
+  const primaryWeaveId = (loadout.primary.weaveId === WEAVE_STORM || _isActiveWeaveUnlockedForGameplay(loadout.primary.weaveId, progress))
+    ? loadout.primary.weaveId
+    : WEAVE_STORM;
+  const secondaryWeaveId = _isActiveWeaveUnlockedForGameplay(loadout.secondary.weaveId, progress)
+    ? loadout.secondary.weaveId
+    : WEAVE_NONE;
+
+  return {
+    primary: {
+      weaveId: primaryWeaveId,
+      boundDust: primaryWeaveId === WEAVE_NONE ? [] : _sanitizeBoundDust(loadout.primary.boundDust, progress),
+    },
+    secondary: {
+      weaveId: secondaryWeaveId,
+      boundDust: secondaryWeaveId === WEAVE_NONE ? [] : _sanitizeBoundDust(loadout.secondary.boundDust, progress),
+    },
+  };
+}
+
 // ---- Default loadout -------------------------------------------------------
 
 /**
  * Creates the default starting loadout for a new game.
  *
  * Primary: Storm Weave (passive attraction — always active, no bound dust)
- * Secondary: Shield Sword Weave (sword auto-swing + RMB-held shield crescent)
+ * Secondary: None until progression unlocks and equips an active weave.
  */
 export function createDefaultWeaveLoadout(): PlayerWeaveLoadout {
   return {
@@ -123,7 +187,7 @@ export function createDefaultWeaveLoadout(): PlayerWeaveLoadout {
       boundDust: [],
     },
     secondary: {
-      weaveId: WEAVE_SHIELD_SWORD,
+      weaveId: WEAVE_NONE,
       boundDust: [],
     },
   };

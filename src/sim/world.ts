@@ -191,6 +191,8 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   playerPrimaryWeaveId: string;
   /** ID of the equipped secondary Weave. */
   playerSecondaryWeaveId: string;
+  /** 1 when progression has authorized the equipped secondary weave. */
+  canUsePlayerSecondaryWeaveFlag: 0 | 1;
   /** Set to 1 for one tick when the primary Weave should activate. */
   playerPrimaryWeaveTriggeredFlag: 0 | 1;
   /** Set to 1 for one tick when the secondary Weave should activate. */
@@ -487,7 +489,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerBlockDirYWorld: 0.0,
     // Weave combat state
     playerPrimaryWeaveId: 'storm',
-    playerSecondaryWeaveId: 'shield_sword',
+    playerSecondaryWeaveId: 'none',
+    canUsePlayerSecondaryWeaveFlag: 0,
     playerPrimaryWeaveTriggeredFlag: 0,
     playerSecondaryWeaveTriggeredFlag: 0,
     isPlayerPrimaryWeaveActiveFlag: 0,

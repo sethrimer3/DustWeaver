@@ -17,7 +17,6 @@ import {
   DUST_CONTAINER_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_SHARDS_PER_CONTAINER,
-  DUST_CONTAINER_DUST_GAIN,
 } from './gameRoom';
 
 /**
@@ -42,7 +41,8 @@ export function processRoomPickups(
   roomOriginYWorld = 0,
 ): void {
   // ── Dust container pickups ─────────────────────────────────────────────────
-  // Grants +1 dust container (+4 particle capacity) and spawns burst particles.
+  // Grants +1 dust container (+4 particle capacity). Containers do not grant
+  // usable dust particles; dust/weave access is controlled by progression.
   const roomDustContainers = currentRoom.dustContainers ?? [];
   for (let i = 0; i < roomDustContainers.length; i++) {
     const pickupKey = `${currentRoom.id}:container:${i}`;
@@ -62,15 +62,6 @@ export function processRoomPickups(
           progress.collectedDustContainerKeys.push(pickupKey);
         }
       }
-      spawnClusterParticles(
-        world,
-        player.entityId,
-        player.positionXWorld,
-        player.positionYWorld,
-        ParticleKind.Physical,
-        DUST_CONTAINER_DUST_GAIN,
-        levelRng,
-      );
     }
   }
 

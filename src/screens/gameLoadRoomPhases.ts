@@ -64,8 +64,11 @@ import { preloadTransitionSprites } from '../render/walls/seamBlending';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerProgress } from '../progression/playerProgress';
-import type { PlayerWeaveLoadout } from '../sim/weaves/playerLoadout';
-import { WEAVE_STORM } from '../sim/weaves/weaveDefinition';
+import {
+  type PlayerWeaveLoadout,
+  sanitizePlayerWeaveLoadoutForProgress,
+} from '../sim/weaves/playerLoadout';
+import { WEAVE_NONE, WEAVE_STORM } from '../sim/weaves/weaveDefinition';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
@@ -412,12 +415,16 @@ export function* makeLoadRoomPhases(
 
   {
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    const effectiveWeaveLoadout = sanitizePlayerWeaveLoadoutForProgress(
+      progress?.weaveLoadout ?? playerWeaveLoadout,
+      progress,
+    );
     const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
-    const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
-      || playerWeaveLoadout.secondary.boundDust.length > 0;
+    const hasWeaveBoundDust = effectiveWeaveLoadout.primary.boundDust.length > 0
+      || effectiveWeaveLoadout.secondary.boundDust.length > 0;
 
     if (hasWeaveBoundDust) {
-      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, effectiveWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
     } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
       const dustKind = progress.unlockedDustKinds[0];
       const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
@@ -426,8 +433,9 @@ export function* makeLoadRoomPhases(
       }
     }
 
-    world.playerPrimaryWeaveId = playerWeaveLoadout.primary.weaveId;
-    world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
+    world.playerPrimaryWeaveId = effectiveWeaveLoadout.primary.weaveId;
+    world.playerSecondaryWeaveId = effectiveWeaveLoadout.secondary.weaveId;
+    world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;
     world.isMoteSourceOrbitFlag = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
 
     initMoteQueueFromParticles(world, playerCluster.entityId);
@@ -967,12 +975,16 @@ export function applyResidentRoomActivation(
       particlesSkipped  = result.skipped;
     } else {
       // Fresh spawn path: first visit or no particles to carry.
+      const effectiveWeaveLoadout = sanitizePlayerWeaveLoadoutForProgress(
+        progress?.weaveLoadout ?? playerWeaveLoadout,
+        progress,
+      );
       const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
-      const hasWeaveBoundDust = playerWeaveLoadout.primary.boundDust.length > 0
-        || playerWeaveLoadout.secondary.boundDust.length > 0;
+      const hasWeaveBoundDust = effectiveWeaveLoadout.primary.boundDust.length > 0
+        || effectiveWeaveLoadout.secondary.boundDust.length > 0;
 
       if (hasWeaveBoundDust) {
-        spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, playerWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
+        spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, effectiveWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
       } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
         const dustKind = progress.unlockedDustKinds[0];
         const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
@@ -982,8 +994,13 @@ export function applyResidentRoomActivation(
       }
     }
 
-    world.playerPrimaryWeaveId   = playerWeaveLoadout.primary.weaveId;
-    world.playerSecondaryWeaveId = playerWeaveLoadout.secondary.weaveId;
+    const effectiveWeaveLoadout = sanitizePlayerWeaveLoadoutForProgress(
+      progress?.weaveLoadout ?? playerWeaveLoadout,
+      progress,
+    );
+    world.playerPrimaryWeaveId   = effectiveWeaveLoadout.primary.weaveId;
+    world.playerSecondaryWeaveId = effectiveWeaveLoadout.secondary.weaveId;
+    world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;
     world.isMoteSourceOrbitFlag  = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
     world.characterId            = ctx.progress?.characterId ?? 'knight';
 

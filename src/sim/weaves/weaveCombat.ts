@@ -255,7 +255,9 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
   let swordWeaveShouldApplyCresc = false;
 
   // Secondary mouse button — branched by equipped weave ID
-  if (world.playerSecondaryWeaveId === WEAVE_ARROW) {
+  if (world.canUsePlayerSecondaryWeaveFlag === 0) {
+    resetLockedSecondaryWeaveInput(world);
+  } else if (world.playerSecondaryWeaveId === WEAVE_ARROW) {
     // ── Arrow Weave secondary ────────────────────────────────────────────────
     if (world.playerSecondaryWeaveTriggeredFlag === 1) {
       world.playerSecondaryWeaveTriggeredFlag = 0;
@@ -341,4 +343,10 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
     const aimY = world.playerWeaveAimDirYWorld;
     applyShieldCrescent(world, playerX, playerY, aimX, aimY);
   }
+}
+
+function resetLockedSecondaryWeaveInput(world: WorldState): void {
+  world.playerSecondaryWeaveTriggeredFlag = 0;
+  world.playerSecondaryWeaveEndFlag = 0;
+  world.isPlayerSecondaryWeaveActiveFlag = 0;
 }
