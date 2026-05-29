@@ -373,7 +373,7 @@ function _makeSpecialBlockPreview(item: PaletteItem, blockTheme: string): HTMLDi
   wrap.appendChild(shape);
 
   // Bounce pads: add glowing core dot (mirrored from makeBlockPreviewCard)
-  if (item.isBouncePadItem === 1) {
+  if (item.isBouncePadItem) {
     const coreCanvas = document.createElement('canvas');
     coreCanvas.width = 40;
     coreCanvas.height = 40;
@@ -392,7 +392,7 @@ function _makeSpecialBlockPreview(item: PaletteItem, blockTheme: string): HTMLDi
   }
 
   // Kinetic blocks: add a directional-boost arrow overlay
-  if (item.isKineticBlockItem === 1) {
+  if (item.isKineticBlockItem) {
     const arrowCanvas = document.createElement('canvas');
     arrowCanvas.width = 40;
     arrowCanvas.height = 40;
