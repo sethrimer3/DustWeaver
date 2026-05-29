@@ -123,7 +123,7 @@ export function hydrateAndValidateBakedWallTemplate(
 
   // ── 1. Schema version ────────────────────────────────────────────────────
   if (baked.schemaVersion !== BAKED_WALL_SCHEMA_VERSION) {
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.warn(
         `[wallTemplate] roomId=${roomId} source=fallback reason=schema_version` +
         ` (baked=${baked.schemaVersion} expected=${BAKED_WALL_SCHEMA_VERSION})`,
@@ -135,7 +135,7 @@ export function hydrateAndValidateBakedWallTemplate(
   // ── 2. Source hash ───────────────────────────────────────────────────────
   const expectedHash = computeWallTemplateSourceHash(json);
   if (baked.sourceHash !== expectedHash) {
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.warn(
         `[wallTemplate] roomId=${roomId} source=fallback reason=stale_hash` +
         ` (baked=${baked.sourceHash} expected=${expectedHash})`,
@@ -163,7 +163,7 @@ export function hydrateAndValidateBakedWallTemplate(
   ];
   for (const [name, arr] of arrays) {
     if (!Array.isArray(arr) || arr.length !== n) {
-      if (import.meta.env.DEV) {
+      if (import.meta.env?.DEV) {
         console.warn(
           `[wallTemplate] roomId=${roomId} source=fallback reason=invalid_array` +
           ` (field=${name} length=${Array.isArray(arr) ? arr.length : 'not-array'} expected=${n})`,
@@ -174,7 +174,7 @@ export function hydrateAndValidateBakedWallTemplate(
   }
 
   // ── Hydrate into typed arrays ─────────────────────────────────────────────
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     console.log(`[wallTemplate] roomId=${roomId} source=baked wallCount=${n}`);
   }
 

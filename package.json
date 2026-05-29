@@ -9,12 +9,15 @@
     "lint": "eslint src/",
     "preview": "vite preview",
     "electron": "npm exec -- electron --no-sandbox .",
-    "desktop": "npm run build && npm exec -- electron --no-sandbox ."
+    "desktop": "npm run build && npm exec -- electron --no-sandbox .",
+    "test": "node --import tsx --test 'src/tests/**/*.test.ts'"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.1",
     "electron": "^42.2.0",
     "eslint": "^10.2.0",
+    "tsx": "^4.22.3",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.58.2",
     "vite": "^5.2.11"
