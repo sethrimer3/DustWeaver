@@ -17,6 +17,7 @@
 import type { RoomJsonDef, RoomJsonWall, RoomJsonZone, RoomJsonBackgroundBlock } from '../editor/roomJson';
 import { dehydrateRoom } from './roomSchemaV2';
 import { hydrateV2Room } from './roomSchemaHydrator';
+
 // ─── Cell coverage helpers ────────────────────────────────────────────────────
 
 /** Expand a wall rect into individual cell keys `"x,y"`. */

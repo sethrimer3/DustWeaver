@@ -436,7 +436,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   }
 
   if (saved.bakedWallTemplate !== undefined) {
-    // Shallow-copy so the hydrated JSON does not share arrays with the saved object.
+    // Deep-copy so the hydrated JSON does not share arrays with the saved object.
     const b = saved.bakedWallTemplate;
     json.bakedWallTemplate = {
       schemaVersion:         b.schemaVersion,
