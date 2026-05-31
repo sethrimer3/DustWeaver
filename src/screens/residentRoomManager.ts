@@ -316,14 +316,19 @@ export interface ResidentRoomDiagnostics {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /**
- * Maximum number of rooms kept resident simultaneously.
- * Active room + up to (MAX_RESIDENTS - 1) frozen neighbours.
- * Increased from 8 to 16 in BUILD 415 to accommodate radius-2 pre-registration
- * (active room + up to ~4 radius-1 + up to ~12 radius-2 neighbours).
- * LRU eviction by lastTouchedFrame when exceeded, with shells (never activated)
- * evicted before rooms carrying frozen state.
+ * Baseline maximum number of rooms kept resident when no zone protection is
+ * active.  The zone-aware eviction policy (`evictDistantZoneAware`) raises
+ * this dynamically so that all rooms in the active zone are always retained.
+ * Active room + up to (MAX_RESIDENTS_BASELINE − 1) frozen neighbours.
  */
-const MAX_RESIDENTS = 16;
+const MAX_RESIDENTS_BASELINE = 16;
+
+/**
+ * Extra resident slots kept beyond the protected zone size.
+ * Provides headroom for the previous zone (backtrack support) and any
+ * additional proximity-queued rooms.
+ */
+const MIN_FREE_RESIDENT_SLOTS = 4;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1205,14 +1210,16 @@ export class ResidentRoomManager {
   // ── Eviction ───────────────────────────────────────────────────────────────
 
   /**
-   * Evict stale residents to stay within MAX_RESIDENTS.
-   * Keeps the active room and the (MAX_RESIDENTS − 1) most recently touched
-   * frozen rooms.  Rooms that have never been activated (pre-registered shells
-   * with no frozen state) are evicted before rooms carrying frozen enemy or
-   * sim-state snapshots.  Call after every room transition.
+   * Evict stale residents to stay within MAX_RESIDENTS_BASELINE.
+   * Keeps the active room and the (MAX_RESIDENTS_BASELINE − 1) most recently
+   * touched frozen rooms.  Shells (never activated) are evicted before rooms
+   * carrying frozen state.  Call after every room transition.
+   *
+   * Prefer `evictDistantZoneAware` for zone-load scenarios where an entire
+   * zone must be protected from eviction.
    */
   evictDistant(currentRoomId: string): void {
-    if (this._residents.size <= MAX_RESIDENTS) return;
+    if (this._residents.size <= MAX_RESIDENTS_BASELINE) return;
     const candidates = [...this._residents.values()]
       .filter(r => r.roomId !== currentRoomId && r.lifecycle !== 'active')
       .sort((a, b) => {
@@ -1229,10 +1236,56 @@ export class ResidentRoomManager {
         if (aWorldPriority !== bWorldPriority) return aWorldPriority - bWorldPriority;
         return a.lastTouchedFrame - b.lastTouchedFrame;
       });
-    const toEvict = this._residents.size - MAX_RESIDENTS;
+    const toEvict = this._residents.size - MAX_RESIDENTS_BASELINE;
     for (let i = 0; i < toEvict && i < candidates.length; i++) {
       const evicted = candidates[i];
       // Null out the WorldState reference so GC can reclaim the memory.
+      evicted.world = null;
+      this._residents.delete(evicted.roomId);
+      this._evictionsTotal++;
+    }
+  }
+
+  /**
+   * Zone-aware variant of `evictDistant`.
+   *
+   * Rooms in `protectedZoneRoomIds` are never evicted.  The retention cap is
+   * raised dynamically so the entire protected zone always fits:
+   *   cap = max(protectedZoneRoomIds.size + MIN_FREE_RESIDENT_SLOTS,
+   *             MAX_RESIDENTS_BASELINE)
+   *
+   * Use this instead of `evictDistant` after a zone transition so that all
+   * rooms in the new active zone remain resident.
+   *
+   * @param protectedZoneRoomIds  Room IDs to never evict (active zone rooms).
+   */
+  evictDistantZoneAware(
+    protectedZoneRoomIds: ReadonlySet<string>,
+  ): void {
+    const cap = Math.max(
+      protectedZoneRoomIds.size + MIN_FREE_RESIDENT_SLOTS,
+      MAX_RESIDENTS_BASELINE,
+    );
+    if (this._residents.size <= cap) return;
+
+    const candidates = [...this._residents.values()]
+      .filter(r =>
+        r.lifecycle !== 'active' &&
+        !protectedZoneRoomIds.has(r.roomId),
+      )
+      .sort((a, b) => {
+        const aActivatedPriority = a.hasEverBeenActivated ? 1 : 0;
+        const bActivatedPriority = b.hasEverBeenActivated ? 1 : 0;
+        if (aActivatedPriority !== bActivatedPriority) return aActivatedPriority - bActivatedPriority;
+        const aWorldPriority = a.runtimeReady ? 1 : 0;
+        const bWorldPriority = b.runtimeReady ? 1 : 0;
+        if (aWorldPriority !== bWorldPriority) return aWorldPriority - bWorldPriority;
+        return a.lastTouchedFrame - b.lastTouchedFrame;
+      });
+
+    const toEvict = this._residents.size - cap;
+    for (let i = 0; i < toEvict && i < candidates.length; i++) {
+      const evicted = candidates[i];
       evicted.world = null;
       this._residents.delete(evicted.roomId);
       this._evictionsTotal++;
