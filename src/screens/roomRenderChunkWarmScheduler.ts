@@ -791,6 +791,84 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
   }
 }
 
+// ── Zone entry-viewport warm ─────────────────────────────────────────────────
+
+/**
+ * Appends low-priority prewarm tasks for every transition entry-viewport in a
+ * set of zone rooms.  Tasks are added to the END of the idle queue so they do
+ * not displace proximity or velocity-direction tasks for the current room.
+ *
+ * Rooms that are already fully warmed (wall + bg prewarm data present) are
+ * skipped to avoid redundant work.  Call this once per zone-load session
+ * after `scheduleChunkPrewarms` has been called so the scheduler state is
+ * initialised.
+ *
+ * @param zoneRoomIds   Room IDs belonging to the zone.
+ * @param registry      Full room registry.
+ * @param vpWPx         Viewport width  (virtual pixels).
+ * @param vpHPx         Viewport height (virtual pixels).
+ * @param scalePx       Camera scale factor (usually 1.0).
+ */
+export function addZoneEntryViewportTasks(
+  zoneRoomIds: readonly string[],
+  registry:    ReadonlyMap<string, RoomDef>,
+  vpWPx:       number,
+  vpHPx:       number,
+  scalePx:     number,
+): void {
+  if (_cancelled) return;
+
+  const existingIds = new Set(_queue.map(t => t.roomId));
+  let added = 0;
+
+  for (const roomId of zoneRoomIds) {
+    // Skip if already in the queue (any priority).
+    if (existingIds.has(roomId)) continue;
+
+    const room = registry.get(roomId);
+    if (room === undefined) continue;
+
+    // Skip if already fully warmed.
+    const wallReady = getPrewarmWallRoomStats(roomId) !== null;
+    const hasBg     = (room.backgroundBlocks?.length ?? 0) > 0;
+    const bgReady   = !hasBg || getPrewarmBgRoomStats(roomId) !== null;
+    if (wallReady && bgReady) continue;
+
+    // Compute entry-viewport offset using the room's first transition (or zero).
+    let offsetXPx = 0;
+    let offsetYPx = 0;
+    if (room.transitions.length > 0) {
+      const off = computeEntranceOffset(room.transitions[0], vpWPx, vpHPx, scalePx);
+      offsetXPx = off.offsetXPx;
+      offsetYPx = off.offsetYPx;
+    }
+
+    _queue.push({
+      roomId,
+      radius:    2, // treat as radius-2 priority (low, does not displace urgent tasks)
+      offsetXPx,
+      offsetYPx,
+      vpWPx,
+      vpHPx,
+      scalePx,
+      transitionDir: undefined,
+      wallDone: false,
+      bgDone:   false,
+    });
+    existingIds.add(roomId);
+    added++;
+  }
+
+  if (added > 0) {
+    if (import.meta.env.DEV) {
+      console.log(`[chunkPrewarm:zone] addZoneEntryViewportTasks: added ${added} tasks`);
+    }
+    if (_idleHandle === 0 && !_cancelled) {
+      _idleHandle = _scheduleIdle(_onIdle);
+    }
+  }
+}
+
 // ── Adoption on room entry ────────────────────────────────────────────────────
 
 /**

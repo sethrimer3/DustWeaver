@@ -128,9 +128,71 @@ export class GameLoadingOverlay {
     this.lastCheckMs = 0;
   }
 
-  /** Returns true while the overlay element is attached and not yet fading out. */
-  isVisible(): boolean {
-    return this.el !== null;
+  /**
+   * Shows the zone-load overlay with a progress label.
+   * Used for both the initial campaign zone load and cross-zone transitions.
+   *
+   * @param worldNumber            Zone number being loaded (shown in text).
+   * @param totalRooms             Total rooms in the zone (for initial progress text).
+   * @param isCampaignInitialLoad  When true, uses the longer campaign-start fade-out.
+   */
+  showZoneLoad(worldNumber: number, totalRooms: number, isCampaignInitialLoad = false): void {
+    if (this.el !== null) return;
+    this.fadeDurationMs = isCampaignInitialLoad
+      ? FADE_DURATION_CAMPAIGN_START_MS
+      : FADE_DURATION_STANDARD_MS;
+    this.checkIntervalMs = CHECK_INTERVAL_MS;
+    const div = document.createElement('div');
+    div.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'background:#060503',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'z-index:9999',
+      "font-family:'Cinzel',serif",
+      'font-size:1rem',
+      'color:rgba(212,168,75,0.85)',
+      'pointer-events:none',
+      'overflow:hidden',
+      `transition:opacity ${(this.fadeDurationMs / 1000).toFixed(1)}s`,
+    ].join(';');
+    this.populateAnimatedLoadingOverlay(div, false);
+
+    // Update the existing label element to show zone progress text.
+    const zoneLabel = div.querySelector<HTMLDivElement>('div[data-zone-progress]');
+    if (zoneLabel !== null) {
+      zoneLabel.textContent = `Loading zone ${worldNumber}: 0 / ${totalRooms}`;
+    } else {
+      // Replace the generic "Loading..." text created by populateAnimatedLoadingOverlay.
+      const existingLabel = div.lastElementChild as HTMLElement | null;
+      if (existingLabel !== null && existingLabel.tagName === 'DIV') {
+        existingLabel.textContent = `Loading zone ${worldNumber}: 0 / ${totalRooms}`;
+        existingLabel.setAttribute('data-zone-progress', '1');
+      }
+    }
+
+    this.uiRoot.appendChild(div);
+    this.el = div;
+    this.minShowUntilMs = performance.now() + MIN_SHOW_MS;
+    this.lastCheckMs = 0;
+  }
+
+  /**
+   * Updates the zone-load progress text inside an overlay opened by `showZoneLoad()`.
+   * No-op if the overlay is not visible.
+   *
+   * @param worldNumber  Zone number (for label).
+   * @param built        Rooms whose residents are built so far.
+   * @param total        Total rooms in the zone.
+   */
+  updateZoneProgress(worldNumber: number, built: number, total: number): void {
+    if (this.el === null) return;
+    const label = this.el.querySelector<HTMLElement>('[data-zone-progress]');
+    if (label !== null) {
+      label.textContent = `Loading zone ${worldNumber}: ${built} / ${total}`;
+    }
   }
 
   /**
