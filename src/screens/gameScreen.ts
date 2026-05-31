@@ -78,6 +78,7 @@ import {
   type TransitionReadinessDiagnostic,
   type WarmScheduleHandle,
 } from './roomRenderChunkWarmScheduler';
+import * as TP from '../debug/transitionProfiler';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import { GameLoadingOverlay } from './gameLoadingOverlay';
 import {
@@ -774,6 +775,62 @@ export function startGameScreen(
     return count;
   }
 
+  // ── DEV-only transition profiler helpers ─────────────────────────────────
+  /** Build the room-content counters surfaced in transition summaries. */
+  function _buildRoomCounts(room: RoomDef): TP.TransitionProfileRoomCounts {
+    const lightCount =
+      (room.lightSources?.length    ?? 0) +
+      (room.sceneLights?.length     ?? 0) +
+      (room.sunbeams?.length        ?? 0);
+    const liquidCount =
+      (room.waterZones?.length      ?? 0) +
+      (room.lavaZones?.length       ?? 0);
+    const objectCount =
+      (room.skillTombs?.length      ?? 0) +
+      (room.dustContainers?.length  ?? 0) +
+      (room.dustContainerPieces?.length ?? 0) +
+      (room.dustSwarms?.length      ?? 0) +
+      (room.lambdaAnchors?.length   ?? 0) +
+      (room.spikes?.length          ?? 0) +
+      (room.springboards?.length    ?? 0) +
+      (room.breakableBlocks?.length ?? 0) +
+      (room.crumbleBlocks?.length   ?? 0) +
+      (room.bouncePads?.length      ?? 0) +
+      (room.kineticBlocks?.length   ?? 0) +
+      (room.dustBoostJars?.length   ?? 0) +
+      (room.fireflyJars?.length     ?? 0) +
+      (room.dustPiles?.length       ?? 0) +
+      (room.ropes?.length           ?? 0) +
+      (room.fallingBlocks?.length   ?? 0) +
+      (room.dialogueTriggers?.length ?? 0) +
+      (room.guideDustPaths?.length  ?? 0) +
+      (room.decorations?.length     ?? 0);
+    return {
+      widthBlocks:  room.widthBlocks,
+      heightBlocks: room.heightBlocks,
+      wallCount:    room.walls.length,
+      enemyCount:   room.enemies.length,
+      objectCount,
+      liquidCount,
+      lightCount,
+      blockerCount: room.ambientLightBlockers?.length ?? 0,
+      bgBlockCount: room.backgroundBlocks?.length    ?? 0,
+    };
+  }
+
+  /** Convert a TransitionReadinessDiagnostic into the compact prewarm summary. */
+  function _buildPrewarmFromDiag(d: TransitionReadinessDiagnostic | null): TP.TransitionProfilePrewarm | null {
+    if (d === null) return null;
+    return {
+      wallPresent:           d.wallPrewarmPresent,
+      bgPresent:             d.bgPrewarmPresent,
+      bgRequired:            d.bgPrewarmRequired,
+      renderStateKeyMatches: d.renderStateKeyMatches,
+      entryViewportCovered:  d.entryViewportCovered,
+      missReason:            d.missReason,
+    };
+  }
+
   /**
    * Called by `orchestrateRoomTransitions` when a room transition fires.
    *
@@ -819,7 +876,11 @@ export function startGameScreen(
       _zoneLoader.startZoneLoad(targetWorldNumber, residentRoomManager);
       loadingOverlay.showZoneLoad(targetWorldNumber, _zoneLoader.getZoneRoomIds(targetWorldNumber).length, false);
       if (import.meta.env.DEV) {
-        console.log(`[zoneTransition] cross-zone: world ${currentWorldNumber} → ${targetWorldNumber}, queued zone load`);
+        TP.beginTransition(room.id, 'crossZoneDeferred', false);
+        TP.endTransition(_buildRoomCounts(room), null);
+        if (TP.isTransitionVerboseLogging()) {
+          console.log(`[zoneTransition] cross-zone: world ${currentWorldNumber} → ${targetWorldNumber}, queued zone load`);
+        }
       }
       return;
     }
@@ -841,8 +902,17 @@ export function startGameScreen(
       if (targetResident.world === null) return 'worldNull';
       return 'none'; // Should not reach here — hot-swap guard should have matched.
     })();
+    const _residentReady = targetResident !== undefined && targetResident.runtimeReady && targetResident.world !== null;
+    // Begin per-transition profiling (DEV-only no-op in production).
+    if (import.meta.env.DEV) {
+      const tpMode: TP.TransitionProfileMode =
+        _residentReady ? 'residentWorldHot' :
+        isPrepared     ? 'preparedInstant'  :
+                         'asyncCacheMiss';
+      TP.beginTransition(room.id, tpMode, _residentReady);
+    }
     if (targetResident !== undefined && targetResident.runtimeReady && targetResident.world !== null) {
-      if (import.meta.env.DEV) {
+      if (import.meta.env.DEV && TP.isTransitionVerboseLogging()) {
         console.log(`[transition] ${room.id}: residentWorldHot — skipping loadRoom`);
       }
       // Record the outgoing room id for the backtrackHot diagnostic.
@@ -907,36 +977,39 @@ export function startGameScreen(
       if (!hwViewportCovered) {
         startEntryWarm(entryWarmState, currentRoom, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
         loadingOverlay.showEntryWarm();
-        recordTransitionOutcome('entryWarm', {
-          roomId: room.id,
-          runtimeReady: true,
-          wallPrewarmPresent: hwWallPresent,
-          bgPrewarmPresent:   hwBgPresent,
-          bgPrewarmRequired:  hwBgRequired,
-          renderStateKeyMatches: hwRenderKeyMatches,
-          entryViewportCovered: false,
-          outcome: 'entryWarm',
-          spritesDecoded: areRoomSpritesReady(room),
-          backgroundDecoded: isRoomBackgroundDecodeReady(room),
-          missReason: 'entryViewportNotCovered',
-        });
-      } else {
-        recordTransitionOutcome('residentWorldHot', {
-          roomId: room.id,
-          runtimeReady: true,
-          wallPrewarmPresent: hwWallPresent,
-          bgPrewarmPresent:   hwBgPresent,
-          bgPrewarmRequired:  hwBgRequired,
-          renderStateKeyMatches: hwRenderKeyMatches,
-          entryViewportCovered: true,
-          outcome: 'residentWorldHot',
-          spritesDecoded: areRoomSpritesReady(room),
-          backgroundDecoded: isRoomBackgroundDecodeReady(room),
-          missReason: 'none',
-        });
       }
+      // Record the outcome diagnostic and emit the compact transition summary.
+      const _hwDiag: TransitionReadinessDiagnostic = !hwViewportCovered ? {
+        roomId: room.id,
+        runtimeReady: true,
+        wallPrewarmPresent: hwWallPresent,
+        bgPrewarmPresent:   hwBgPresent,
+        bgPrewarmRequired:  hwBgRequired,
+        renderStateKeyMatches: hwRenderKeyMatches,
+        entryViewportCovered: false,
+        outcome: 'entryWarm',
+        spritesDecoded: areRoomSpritesReady(room),
+        backgroundDecoded: isRoomBackgroundDecodeReady(room),
+        missReason: 'entryViewportNotCovered',
+      } : {
+        roomId: room.id,
+        runtimeReady: true,
+        wallPrewarmPresent: hwWallPresent,
+        bgPrewarmPresent:   hwBgPresent,
+        bgPrewarmRequired:  hwBgRequired,
+        renderStateKeyMatches: hwRenderKeyMatches,
+        entryViewportCovered: true,
+        outcome: 'residentWorldHot',
+        spritesDecoded: areRoomSpritesReady(room),
+        backgroundDecoded: isRoomBackgroundDecodeReady(room),
+        missReason: 'none',
+      };
+      recordTransitionOutcome(_hwDiag.outcome, _hwDiag);
       if (import.meta.env.DEV) {
-        console.log(`[transition] ${room.id}: residentWorldHot done in ${(performance.now() - t0).toFixed(1)}ms`);
+        if (TP.isTransitionVerboseLogging()) {
+          console.log(`[transition] ${room.id}: residentWorldHot done in ${(performance.now() - t0).toFixed(1)}ms`);
+        }
+        TP.endTransition(_buildRoomCounts(room), _buildPrewarmFromDiag(_hwDiag));
       }
       // Refresh build queue so newly adjacent rooms are queued after transition.
       _refreshResidentBuildQueue();
@@ -946,7 +1019,7 @@ export function startGameScreen(
 
     if (isPrepared) {
       // ── Instant path (fully prepared cache hit + snapshot restore) ─────────
-      if (import.meta.env.DEV) {
+      if (import.meta.env.DEV && TP.isTransitionVerboseLogging()) {
         console.log(`[transition] ${room.id}: prepared cache HIT — instant load (residentRestore/fallback)`);
       }
       // Freeze the outgoing room before loadRoom destroys its state.
@@ -1029,14 +1102,14 @@ export function startGameScreen(
           wallAdoptStatus === 'empty' ? 'wallAdoptEmpty' :
           (bgRequired && bgAdoptStatus === 'empty') ? 'bgAdoptEmpty' :
                          'entryViewportNotCovered';
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && TP.isTransitionVerboseLogging()) {
           console.warn(
             `[transition] ${room.id}: entryWarm — missReason: ${missReason}` +
             ` wallPresent:${wallPresent} bgPresent:${bgPresent} bgReq:${bgRequired}` +
             ` wall:${wallAdoptStatus} bg:${bgAdoptStatus}`,
           );
         }
-        recordTransitionOutcome('entryWarm', {
+        const _instDiag: TransitionReadinessDiagnostic = {
           roomId: room.id,
           runtimeReady: true,
           wallPrewarmPresent: wallPresent,
@@ -1048,9 +1121,11 @@ export function startGameScreen(
           spritesDecoded,
           backgroundDecoded,
           missReason,
-        });
+        };
+        recordTransitionOutcome('entryWarm', _instDiag);
+        if (import.meta.env.DEV) TP.endTransition(_buildRoomCounts(room), _buildPrewarmFromDiag(_instDiag));
       } else {
-        recordTransitionOutcome(residentMode, {
+        const _instDiag: TransitionReadinessDiagnostic = {
           roomId: room.id,
           runtimeReady: true,
           wallPrewarmPresent: wallPresent,
@@ -1062,9 +1137,11 @@ export function startGameScreen(
           spritesDecoded,
           backgroundDecoded,
           missReason: 'none',
-        });
+        };
+        recordTransitionOutcome(residentMode, _instDiag);
+        if (import.meta.env.DEV) TP.endTransition(_buildRoomCounts(room), _buildPrewarmFromDiag(_instDiag));
       }
-      if (import.meta.env.DEV) {
+      if (import.meta.env.DEV && TP.isTransitionVerboseLogging()) {
         const warmStatus = entryWarmState.phase === 'idle' ? ' (entryWarm skipped — viewport covered)' : ' (entryWarm started — overlay shown)';
         console.log(
           `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` + warmStatus,
@@ -1075,7 +1152,7 @@ export function startGameScreen(
       _updateRadiusReadyCounts();
     } else {
       // ── Async path (cache miss — spread over RAF frames) ──────────────────
-      if (import.meta.env.DEV) {
+      if (import.meta.env.DEV && TP.isTransitionVerboseLogging()) {
         const status = cacheEntry === undefined ? 'cold' : 'partial';
         console.warn(`[transition] ${room.id}: cache MISS (${status}) — async load`);
       }
@@ -1093,7 +1170,7 @@ export function startGameScreen(
       asyncLoadState.spawnYBlock   = spawnYBlock;
       asyncLoadState.gen           = _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, false);
       asyncLoadState.isActive      = true;
-      recordTransitionOutcome('loading', {
+      const _asyncDiag: TransitionReadinessDiagnostic = {
         roomId: room.id,
         runtimeReady: false,
         wallPrewarmPresent: false,
@@ -1105,7 +1182,15 @@ export function startGameScreen(
         spritesDecoded: null,
         backgroundDecoded: null,
         missReason: 'runtimeNotReady',
-      });
+      };
+      recordTransitionOutcome('loading', _asyncDiag);
+      // Async transition: finalise the profile now with mode+counts; the
+      // multi-frame Phase A–F timings continue to feed FP.recordLoadPhaseStep
+      // for the freeze profiler, but are not attributed to this single
+      // transition record (they span unrelated frames).  A separate
+      // `[transition async-complete]` line is logged when the generator
+      // finishes (see asyncLoadState completion path below).
+      if (import.meta.env.DEV) TP.endTransition(_buildRoomCounts(room), _buildPrewarmFromDiag(_asyncDiag));
       showLoadingOverlay();
       // Advance Phase A immediately (room metadata + world reset, < 1ms).
       // This sets `currentRoom = room` so `onRoomBecameActive()` — called by
@@ -2338,6 +2423,55 @@ export function startGameScreen(
     FP.endFrame();
 
     rafHandle = requestAnimationFrame(frame);
+  }
+
+  // ── DEV-only bench hook for transition profiling ────────────────────────
+  // Exposes `window.__dwBenchTransition(roomId, opts?)` for the dev console.
+  // Triggers a synthetic transition into `roomId` by invoking the same code
+  // path used by orchestrateRoomTransitions.  Each call produces one entry
+  // in the transition profiler history (visible via __dwTransitionStats()).
+  //
+  // opts.spawnBlock  — [x,y] block coords (defaults to room.playerSpawnBlock)
+  // opts.dir         — 'left' | 'right' | 'up' | 'down' (defaults to 'right')
+  // opts.iterations  — repeat count; for back-and-forth use ['A','B']
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    type BenchOpts = {
+      spawnBlock?: readonly [number, number];
+      dir?:        TransitionDirection;
+      vx?:         number;
+      vy?:         number;
+    };
+    type DwWin = Window & {
+      __dwBenchTransition?: (roomId: string, opts?: BenchOpts) => boolean;
+      __dwBenchPingPong?: (roomIdA: string, roomIdB: string, iterations: number) => void;
+    };
+    const w = window as DwWin;
+    w.__dwBenchTransition = (roomId: string, opts?: BenchOpts): boolean => {
+      const targetRoom = ROOM_REGISTRY.get(roomId);
+      if (targetRoom === undefined) {
+        // eslint-disable-next-line no-console
+        console.warn(`[bench] unknown roomId: ${roomId}`);
+        return false;
+      }
+      const sp = opts?.spawnBlock ?? targetRoom.playerSpawnBlock;
+      const dir = opts?.dir ?? 'right';
+      startTransitionLoad(targetRoom, sp[0], sp[1], opts?.vx ?? 0, opts?.vy ?? 0, dir);
+      return true;
+    };
+    w.__dwBenchPingPong = (a: string, b: string, iterations: number): void => {
+      // Best-effort: schedules transitions one per RAF frame so each completes
+      // before the next is issued.  Not robust if a transition uses the async
+      // multi-frame path — caller should warm both rooms first.
+      let i = 0;
+      const tick = (): void => {
+        if (i >= iterations) return;
+        const target = (i % 2 === 0) ? b : a;
+        w.__dwBenchTransition?.(target);
+        i++;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
   }
 
   rafHandle = requestAnimationFrame(frame);

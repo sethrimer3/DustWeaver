@@ -348,6 +348,24 @@ export function recordLoadPhaseStep(detail: string, ms: number): void {
   if (!import.meta.env.DEV) return;
   _cur.loadPhaseMs    += ms;
   if (ms > 0) _cur.loadPhaseDetail = detail;
+  // Forward to the active transition profiler (if any) so per-transition
+  // summaries include phase-level timings without duplicating instrumentation.
+  // Dynamic import would be cleaner but introduces a circular static import
+  // path; instead we late-bind through the registered hook.
+  if (_transitionPhaseHook !== null && ms > 0) _transitionPhaseHook(detail, ms);
+}
+
+/**
+ * Hook signature for forwarding `recordLoadPhaseStep` calls to a transition
+ * profiler.  Allows `transitionProfiler.ts` to subscribe without creating a
+ * static import cycle.
+ */
+export type LoadPhaseHook = (detail: string, ms: number) => void;
+let _transitionPhaseHook: LoadPhaseHook | null = null;
+
+/** Register (or clear, by passing null) the transition profiler forwarder. */
+export function setLoadPhaseHook(hook: LoadPhaseHook | null): void {
+  _transitionPhaseHook = hook;
 }
 
 /**

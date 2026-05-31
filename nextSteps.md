@@ -8,6 +8,41 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 428 — Per-Transition Profiler + computeRenderStateKey Memoization
+
+**Why:** The audit pass (problem statement: "DustWeaver ultimate room loading and rendering optimization") confirmed that the major architectural fixes (resident hot-swap, baked walls, trigger strips, chunk prewarm, schema v3, zone loader, incremental wall merge, entry warm) are already in place. To choose the next genuine bottleneck instead of speculating, we need per-transition measurements.
+
+**What was added:**
+
+1. **`src/debug/transitionProfiler.ts`** — DEV-only per-transition aggregator.
+   - `beginTransition` / `recordPhase` / `endTransition` capture mode + total ms + per-phase ms.
+   - Auto-forwards from existing `FP.recordLoadPhaseStep` via `setLoadPhaseHook` (no call-site changes needed for the load phases that are already instrumented).
+   - Emits **one compact summary line per transition** with mode, total ms, longest phase, room dims + content counts, and prewarm cache hit summary. Replaces the four scattered `[transition] …` console.log lines (now gated behind `__dwTransitionVerbose(true)`).
+   - DEV-only globals: `__dwTransitionStats(n)`, `__dwLastTransition()`, `__dwTransitionVerbose(on)`.
+
+2. **DEV bench helpers in `gameScreen.ts`** — `window.__dwBenchTransition(roomId, opts?)` and `window.__dwBenchPingPong(roomA, roomB, iterations)` for reproducible transition timing tests.
+
+3. **`computeRenderStateKey` memoization** (`roomRenderCacheStore.ts`). WeakMap keyed by `blockerKeys` Set identity + primitive-args signature. Empty-Set sentinel ensures freshly-constructed empty Sets still hit.
+   - **Measured speedup: 18.1× on a 200-blocker Set, N=50 000 calls** (cold 25.5 µs/call → warm 1.4 µs/call, `bench` test, node --import tsx). The dominant cost was the Set sort+join inside the key builder; this is now skipped on the common hot path where the same room's blocker Set is re-queried (render passes, entry-warm probes, repeated adoption checks).
+
+4. **Test coverage** — `src/tests/renderStateKeyMemo.test.ts` (5 tests, all passing) verifies cache stability, distinctness across different Sets, empty-Set sentinel sharing, and primitive-arg invalidation.
+
+**Verification status:**
+- `npm run build` — clean, 0 errors.
+- `npm test` — 10/10 passing.
+- The 18× memoization speedup is a measured node-side micro-benchmark. In-browser end-to-end transition timings have NOT been captured in this pass (no browser available in CI environment).
+
+**Next profiling target (once in-browser timings are captured):**
+Use the new `__dwTransitionStats()` / `__dwBenchPingPong()` helpers to capture compact summaries for the 13 verification scenarios listed in the problem statement. The dominant per-phase costs will then identify whether the next fix should target:
+- `Resident:phaseD_walls_*` (large-room wall merge — already incremental but the **first** entry to a 1M-cell room still does the full build during background resident construction),
+- `A:blockers+lighting` (now de-duplicated by render-state-key memoization),
+- `D:wallTemplate*` on cold loads,
+- or sprite/background decode at first room entry.
+
+**Do not touch without evidence:** `mapSketchRenderer.ts`, `buildCompleteBoundaryWalls`, transition trigger geometry. These have caused regressions before; the problem statement explicitly flags them.
+
+---
+
 ## Editor Palette Previews — Remaining / Future Work
 
 Palette previews were added for all current `specialBlocks`, `enemies`, `triggers`,
