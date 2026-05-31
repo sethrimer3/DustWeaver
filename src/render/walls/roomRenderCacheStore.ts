@@ -73,6 +73,33 @@ const _snapshots = new Map<string, RoomRenderSnapshot>();
  * Numbers are rounded to 4 decimal places before stringification so that
  * floating-point noise from independent re-computations produces identical keys.
  */
+/**
+ * Computes a stable render-state key from all fields that affect baked wall
+ * and background chunk visuals.
+ *
+ * Called both at prewarm time (from `WallPrewarmContext`) and at adoption time
+ * so that stale snapshots can be detected.
+ *
+ * Numbers are rounded to 4 decimal places before stringification so that
+ * floating-point noise from independent re-computations produces identical keys.
+ *
+ * Memoization (BUILD 428): the result is cached on the `blockerKeys` Set
+ * identity via a `WeakMap`.  When the same `blockerKeys` Set is passed in
+ * with identical primitive parameters, the cached string is returned without
+ * re-sorting/re-joining the Set entries.  `RoomDef.ambientLightBlockers` is
+ * rebuilt only when the room is reloaded, so the Set identity is stable across
+ * the many per-tick callers (entry-warm probes, render passes) that ask for the
+ * current key on the same room.
+ */
+interface _RenderKeyCacheEntry {
+  paramsSig: string;
+  key:       string;
+}
+const _renderKeyCache = new WeakMap<ReadonlySet<string>, _RenderKeyCacheEntry>();
+// Distinct empty-set sentinel so callers that pass `new Set()` each call still
+// benefit from the cache (their args still match the empty paramsSig).
+const _EMPTY_BLOCKER_SET: ReadonlySet<string> = new Set();
+
 export function computeRenderStateKey(
   blockTheme: string | null,
   worldNumber: number,
@@ -90,6 +117,22 @@ export function computeRenderStateKey(
   solidLightSoftness: number,
 ): string {
   const themeOrWorld = blockTheme !== null ? blockTheme : `w${worldNumber}`;
+  // Normalise floats to 4 dp so independent re-computations produce identical keys.
+  const n = (v: number) => v.toFixed(4);
+  // Build the param-only signature first so we can use it as the cache discriminator.
+  const paramsSig =
+    `${themeOrWorld}|${lightingEffect}|${ambientDirection}|${seamBlending}` +
+    `|${roomWidthBlocks}x${roomHeightBlocks}` +
+    `|db${n(directionalBias)}_se${n(sideExposureStrength)}_ml${n(minimumWallLight)}` +
+    `_fp${n(falloffPower)}_bs${n(backgroundLightSpill)}_ss${n(solidLightSoftness)}`;
+
+  // Empty-blocker fast path: stable cache key independent of Set identity.
+  const cacheKey: ReadonlySet<string> = blockerKeys.size === 0 ? _EMPTY_BLOCKER_SET : blockerKeys;
+  const cached = _renderKeyCache.get(cacheKey);
+  if (cached !== undefined && cached.paramsSig === paramsSig) {
+    return cached.key;
+  }
+
   let blockerSig: string;
   if (blockerKeys.size === 0) {
     blockerSig = '';
@@ -99,14 +142,13 @@ export function computeRenderStateKey(
     arr.sort();
     blockerSig = arr.join(';');
   }
-  // Normalise floats to 4 dp so independent re-computations produce identical keys.
-  const n = (v: number) => v.toFixed(4);
-  return (
+  const key =
     `${themeOrWorld}|${lightingEffect}|${ambientDirection}|${seamBlending}|${blockerSig}` +
     `|${roomWidthBlocks}x${roomHeightBlocks}` +
     `|db${n(directionalBias)}_se${n(sideExposureStrength)}_ml${n(minimumWallLight)}` +
-    `_fp${n(falloffPower)}_bs${n(backgroundLightSpill)}_ss${n(solidLightSoftness)}`
-  );
+    `_fp${n(falloffPower)}_bs${n(backgroundLightSpill)}_ss${n(solidLightSoftness)}`;
+  _renderKeyCache.set(cacheKey, { paramsSig, key });
+  return key;
 }
 
 // ── Snapshot lifecycle ────────────────────────────────────────────────────────
