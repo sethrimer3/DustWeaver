@@ -354,7 +354,8 @@ export function startGameScreen(
   // ── Zone-level resident loader (BUILD 430) ────────────────────────────────
   // Prepares all rooms in the active worldNumber zone before gameplay starts,
   // and shows a loading screen when the player crosses a zone boundary.
-  const _zoneLoader = new ZoneResidentLoader(ROOM_REGISTRY, roomRuntimeCache);
+  // Initialized lazily after roomRuntimeCache is declared (below).
+  let _zoneLoader!: ZoneResidentLoader;
 
   // State for mid-game cross-zone transition loads.
   // When isActive is true, gameplay is paused and the zone loader is ticking
@@ -585,6 +586,8 @@ export function startGameScreen(
   // Edge-extension caches are no longer built here — see legacy README.
   // Bounded LRU with 16 slots (current room + 3-hop radius + headroom).
   const roomRuntimeCache = new RoomRuntimeCache();
+  // Zone loader initialized here after roomRuntimeCache is available.
+  _zoneLoader = new ZoneResidentLoader(ROOM_REGISTRY, roomRuntimeCache);
 
   // Handle for the current idle preload schedule so it can be cancelled when
   // the player switches rooms before the previous schedule completes.
@@ -813,7 +816,7 @@ export function startGameScreen(
       _zoneTransitionLoad.vy               = vy;
       _zoneTransitionLoad.dir              = dir;
       _zoneTransitionLoad.targetWorldNumber = targetWorldNumber;
-      _zoneLoader.startZoneLoad(targetWorldNumber, residentRoomManager, RESIDENT_CAMPAIGN_SEED);
+      _zoneLoader.startZoneLoad(targetWorldNumber, residentRoomManager);
       loadingOverlay.showZoneLoad(targetWorldNumber, _zoneLoader.getZoneRoomIds(targetWorldNumber).length, false);
       if (import.meta.env.DEV) {
         console.log(`[zoneTransition] cross-zone: world ${currentWorldNumber} → ${targetWorldNumber}, queued zone load`);
@@ -879,7 +882,8 @@ export function startGameScreen(
       residentRoomManager.setResidentWorld(room.id, world, true);
       residentRoomManager.setActiveResidentId(room.id);
       residentRoomManager.evictDistantZoneAware(_zoneLoader.buildZoneRoomIdSet(room.worldNumber ?? 1));
-      residentRoomManager.recordTransitionMode('residentWorldHot',
+      residentRoomManager.recordTransitionMode('residentWorldHot', '', import.meta.env.DEV ? performance.now() - t0 : 0, true);
+      residentRoomManager.recordPlayerTransfer(
         playerTransferSnap?.ownedParticles.length ?? 0,
         particlesRestored,
         particlesSkipped,
@@ -1157,11 +1161,13 @@ export function startGameScreen(
   // local BFS list.  The zone loader handles yield frames internally.
   {
     const _startWorldNumber = currentRoom.worldNumber ?? 1;
-    _zoneLoader.startZoneLoad(_startWorldNumber, residentRoomManager, RESIDENT_CAMPAIGN_SEED);
+    _zoneLoader.startZoneLoad(_startWorldNumber, residentRoomManager);
     const _zoneRoomIds = _zoneLoader.getZoneRoomIds(_startWorldNumber);
     const _hasWork = !_zoneLoader.isZoneReady(_startWorldNumber, residentRoomManager);
     if (_hasWork) {
       _initialResidentBuildPhase.isActive    = true;
+      // Zone loader manages its own iteration; the tuple fields [radius, transIdx]
+      // are not used by the RAF zone-load path (zone loader drives its own queue).
       _initialResidentBuildPhase.rooms       = _zoneRoomIds.map(id => [id, 0, 0] as [string, number, number]);
       _initialResidentBuildPhase.idx         = 0;
       _initialResidentBuildPhase.built       = 0;
@@ -1615,8 +1621,13 @@ export function startGameScreen(
       }
       if (_zoneTick) {
         // Zone ready — activate target room via startTransitionLoad (takes hot-swap).
+        // We capture _tr before clearing isActive so its fields remain accessible.
+        // isActive is cleared BEFORE the call so startTransitionLoad's cross-zone guard
+        // (which checks !_zoneTransitionLoad.isActive) treats this as a normal intra-zone
+        // transition.  startTransitionLoad is synchronous JS: no RAF can interleave
+        // between the clear and the call, so re-entry is impossible.
         const _tr = _zoneTransitionLoad;
-        _zoneTransitionLoad.isActive = false; // clear BEFORE re-calling to avoid re-entry
+        _zoneTransitionLoad.isActive = false;
         const _prevWorldNumber = currentRoom.worldNumber ?? 1;
         // Queue zone entry viewport prewarm tasks for the new zone.
         addZoneEntryViewportTasks(

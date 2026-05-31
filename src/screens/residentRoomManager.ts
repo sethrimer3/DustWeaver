@@ -1258,16 +1258,12 @@ export class ResidentRoomManager {
    * rooms in the new active zone remain resident.
    *
    * @param protectedZoneRoomIds  Room IDs to never evict (active zone rooms).
-   * @param backtrackBudget       Extra slots reserved for recently-active rooms
-   *                              outside the protected zone (default 4).  This is
-   *                              already accounted for by MIN_FREE_RESIDENT_SLOTS.
    */
   evictDistantZoneAware(
     protectedZoneRoomIds: ReadonlySet<string>,
-    backtrackBudget = 4,
   ): void {
     const cap = Math.max(
-      protectedZoneRoomIds.size + MIN_FREE_RESIDENT_SLOTS + backtrackBudget,
+      protectedZoneRoomIds.size + MIN_FREE_RESIDENT_SLOTS,
       MAX_RESIDENTS_BASELINE,
     );
     if (this._residents.size <= cap) return;

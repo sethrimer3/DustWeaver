@@ -148,13 +148,11 @@ export class ZoneResidentLoader {
    *
    * @param worldNumber        Target zone.
    * @param residentRoomManager  To pre-register resident shells.
-   * @param campaignSeed       Numeric seed for deterministic per-room RNG.
    * @param force              If true, restart even if already loading this zone.
    */
   startZoneLoad(
     worldNumber: number,
     residentRoomManager: ResidentRoomManager,
-    campaignSeed: number,
     force = false,
   ): void {
     if (!force && this._activeZone?.worldNumber === worldNumber) return;
@@ -297,7 +295,7 @@ export class ZoneResidentLoader {
       const elapsed = performance.now() - state.t0;
       this._readyZones.add(state.worldNumber);
       if (import.meta.env.DEV) {
-        this._logZoneReadySummary(state, residentRoomManager, elapsed);
+        this._logZoneReadySummary(state, elapsed);
       }
       this._activeZone = null;
       return true;
@@ -432,10 +430,9 @@ export class ZoneResidentLoader {
     activeWorldNumber: number,
     prevWorldNumber:   number | null,
     residentRoomManager: ResidentRoomManager,
-    backtrackBudget = 4,
   ): void {
     const activeRoomIds = this.buildZoneRoomIdSet(activeWorldNumber);
-    residentRoomManager.evictDistantZoneAware(activeRoomIds, backtrackBudget);
+    residentRoomManager.evictDistantZoneAware(activeRoomIds);
     if (import.meta.env.DEV) {
       console.log(
         `[zoneLoader] evictInactiveZoneResidents: kept world=${activeWorldNumber} (${activeRoomIds.size} rooms)` +
@@ -467,9 +464,8 @@ export class ZoneResidentLoader {
   }
 
   private _logZoneReadySummary(
-    state:               ZoneLoadState,
-    residentRoomManager: ResidentRoomManager,
-    elapsedMs:           number,
+    state:     ZoneLoadState,
+    elapsedMs: number,
   ): void {
     let decodeReady = 0;
     for (const roomId of state.roomIds) {

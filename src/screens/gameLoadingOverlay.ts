@@ -158,20 +158,7 @@ export class GameLoadingOverlay {
       'overflow:hidden',
       `transition:opacity ${(this.fadeDurationMs / 1000).toFixed(1)}s`,
     ].join(';');
-    this.populateAnimatedLoadingOverlay(div, false);
-
-    // Update the existing label element to show zone progress text.
-    const zoneLabel = div.querySelector<HTMLDivElement>('div[data-zone-progress]');
-    if (zoneLabel !== null) {
-      zoneLabel.textContent = `Loading zone ${worldNumber}: 0 / ${totalRooms}`;
-    } else {
-      // Replace the generic "Loading..." text created by populateAnimatedLoadingOverlay.
-      const existingLabel = div.lastElementChild as HTMLElement | null;
-      if (existingLabel !== null && existingLabel.tagName === 'DIV') {
-        existingLabel.textContent = `Loading zone ${worldNumber}: 0 / ${totalRooms}`;
-        existingLabel.setAttribute('data-zone-progress', '1');
-      }
-    }
+    this.populateAnimatedLoadingOverlay(div, false, `Loading zone ${worldNumber}: 0 / ${totalRooms}`);
 
     this.uiRoot.appendChild(div);
     this.el = div;
@@ -223,7 +210,12 @@ export class GameLoadingOverlay {
     this.el = null;
   }
 
-  private populateAnimatedLoadingOverlay(div: HTMLDivElement, isTextless = false): void {
+  /** Returns true if the overlay element is currently mounted in the DOM. */
+  isVisible(): boolean {
+    return this.el !== null;
+  }
+
+  private populateAnimatedLoadingOverlay(div: HTMLDivElement, isTextless = false, zoneText?: string): void {
     const backgroundImg = document.createElement('img');
     backgroundImg.decoding = 'async';
     backgroundImg.alt = '';
@@ -268,7 +260,10 @@ export class GameLoadingOverlay {
     if (isTextless) return;
 
     const label = document.createElement('div');
-    label.textContent = 'Loading...';
+    label.textContent = zoneText ?? 'Loading...';
+    if (zoneText !== undefined) {
+      label.setAttribute('data-zone-progress', '1');
+    }
     label.style.cssText = [
       'position:absolute',
       'right:24px',
