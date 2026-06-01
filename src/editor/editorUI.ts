@@ -58,7 +58,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   if (campaignTitle) {
     title.innerHTML = `🛠 Custom Campaign Editor<br><span style="font-size:11px;color:#ffcc66;font-weight:normal;">${campaignTitle}</span>`;
   } else {
-    title.textContent = '🛠 World Editor';
+    title.textContent = '🛠 Zone Editor';
   }
   title.style.cssText = `font-size: 15px; color: ${GREEN}; margin-bottom: 12px; font-weight: bold;`;
   container.appendChild(title);
@@ -390,7 +390,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     position: absolute; top: 10px; right: 10px; z-index: 920;
     display: flex; gap: 6px; pointer-events: auto;
   `;
-  const worldMapBtn = makeBtn('🗺 World Map', () => callbacks?.onOpenVisualMap());
+  const worldMapBtn = makeBtn('🗺 Zone Map', () => callbacks?.onOpenVisualMap());
   worldMapBtn.style.cssText += `
     padding: 8px 14px; font-size: 12px;
     background: rgba(0,80,60,0.6); border-color: rgba(0,200,100,0.6); color: ${GREEN};

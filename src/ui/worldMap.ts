@@ -109,7 +109,7 @@ export function showWorldMap(
   header.style.cssText = 'text-align: center; margin-bottom: 1rem; z-index: 1;';
   header.innerHTML = `
     <h2 style="font-size:2rem; color:#00cfff; text-shadow:0 0 18px #00cfff; margin:0 0 0.25rem;">
-      World Map
+      Zone Map
     </h2>
     <p style="color:#88aacc; font-size:0.85rem; margin:0;">
       Player Level ${progress.level} &nbsp;|&nbsp; ${progress.dustSlots} dust slots
@@ -126,7 +126,7 @@ export function showWorldMap(
   w1Header.style.cssText = 'text-align:center; margin-bottom:0.6rem; z-index:1;';
   w1Header.innerHTML = `
     <h3 style="font-size:1.2rem; color:#33aaff; text-shadow:0 0 10px #33aaff; margin:0;">
-      World 1 — The Tideworn Keep
+      Zone 1 — The Tideworn Keep
     </h3>
   `;
   el.appendChild(w1Header);
@@ -141,7 +141,7 @@ export function showWorldMap(
   const w2Unlocked = (progress.world2UnlockedCount ?? 0) > 0;
   w2Header.innerHTML = `
     <h3 style="font-size:1.2rem; color:${w2Unlocked ? '#ff6622' : '#555'}; text-shadow:${w2Unlocked ? '0 0 10px #ff6622' : 'none'}; margin:0;">
-      World 2 — The Volcanic Depths${w2Unlocked ? '' : ' <span style="font-size:0.8rem; color:#555;">(Complete World 1 to unlock)</span>'}
+      Zone 2 — The Volcanic Depths${w2Unlocked ? '' : ' <span style="font-size:0.8rem; color:#555;">(Complete Zone 1 to unlock)</span>'}
     </h3>
   `;
   el.appendChild(w2Header);

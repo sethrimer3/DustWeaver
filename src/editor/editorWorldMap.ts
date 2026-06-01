@@ -13,9 +13,11 @@
 import { ROOM_REGISTRY } from '../levels/rooms';
 import {
   WORLD_NAMES,
+  WORLD_ORDER,
   ROOM_NAME_OVERRIDES,
   ROOM_WORLD_OVERRIDES,
   setWorldName,
+  setWorldOrder,
   setRoomNameOverride,
   setRoomWorldOverride,
   registerRoom,
@@ -61,7 +63,28 @@ export function showEditorWorldMap(
   }
 
   function worldDisplayName(worldId: number): string {
-    return WORLD_NAMES.get(worldId) ?? `World ${worldId}`;
+    return WORLD_NAMES.get(worldId) ?? `Zone ${worldId}`;
+  }
+
+  function sortedZoneIds(zoneIds: Iterable<number>): number[] {
+    return [...zoneIds].sort((a, b) => (WORLD_ORDER.get(a) ?? a) - (WORLD_ORDER.get(b) ?? b) || a - b);
+  }
+
+  function moveZoneInList(zoneId: number, direction: -1 | 1): void {
+    const zoneIdSet = new Set<number>();
+    for (const [id] of WORLD_NAMES) zoneIdSet.add(id);
+    for (const [, room] of ROOM_REGISTRY) zoneIdSet.add(effectiveWorldId(room.id));
+    const orderedZoneIds = sortedZoneIds(zoneIdSet);
+    const zoneIndex = orderedZoneIds.indexOf(zoneId);
+    const targetIndex = zoneIndex + direction;
+    if (zoneIndex < 0 || targetIndex < 0 || targetIndex >= orderedZoneIds.length) return;
+    const swapId = orderedZoneIds[targetIndex];
+    const currentOrder = WORLD_ORDER.get(zoneId) ?? zoneIndex;
+    const swapOrder = WORLD_ORDER.get(swapId) ?? targetIndex;
+    setWorldOrder(zoneId, swapOrder);
+    setWorldOrder(swapId, currentOrder);
+    callbacks.onWorldMapDataChanged?.();
+    rebuildList();
   }
 
   // ── Build overlay ─────────────────────────────────────────────────────────
@@ -82,7 +105,7 @@ export function showEditorWorldMap(
   `;
 
   const title = document.createElement('h3');
-  title.textContent = isLinkMode ? '\ud83d\udd17 Link Transition \u2014 Select Room & Door' : '\ud83d\uddfa Editor World Map';
+  title.textContent = isLinkMode ? '\ud83d\udd17 Link Transition \u2014 Select Room & Door' : '\ud83d\uddfa Editor Zone Map';
   title.style.cssText = `color: ${isLinkMode ? '#4488ff' : GREEN}; font-family: 'Cinzel', serif; margin: 0 0 16px 0; font-size: 1.2rem;`;
   panel.appendChild(title);
 
@@ -115,7 +138,7 @@ export function showEditorWorldMap(
       roomsByWorld.set(wId, list);
     }
 
-    const sortedWorlds = [...roomsByWorld.keys()].sort((a, b) => a - b);
+    const sortedWorlds = sortedZoneIds(roomsByWorld.keys());
     for (const worldNum of sortedWorlds) {
       // World header row
       const worldRow = document.createElement('div');
@@ -133,14 +156,16 @@ export function showEditorWorldMap(
       if (!isLinkMode) {
         const renameWorldBtn = document.createElement('button');
         renameWorldBtn.textContent = '\u270f';
-        renameWorldBtn.title = 'Rename world';
+        renameWorldBtn.title = 'Rename zone';
         renameWorldBtn.style.cssText = `
           background: transparent; color: rgba(200,255,200,0.5);
           border: 1px solid rgba(0,200,100,0.3); border-radius: 3px;
           font-size: 10px; cursor: pointer; padding: 1px 5px;
         `;
-        renameWorldBtn.addEventListener('click', () => {
-          const newName = window.prompt(`Rename world "${worldDisplayName(worldNum)}":`, worldDisplayName(worldNum));
+        renameWorldBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const newName = window.prompt(`Rename zone "${worldDisplayName(worldNum)}":`, worldDisplayName(worldNum));
           if (newName !== null && newName.trim()) {
             setWorldName(worldNum, newName.trim());
             callbacks.onWorldMapDataChanged?.();
@@ -148,6 +173,21 @@ export function showEditorWorldMap(
           }
         });
         worldRow.appendChild(renameWorldBtn);
+
+        const reorderZoneBtn = document.createElement('button');
+        reorderZoneBtn.textContent = '\u21c5';
+        reorderZoneBtn.title = 'Move zone down (Shift-click moves up)';
+        reorderZoneBtn.style.cssText = `
+          background: transparent; color: rgba(212,168,75,0.8);
+          border: 1px solid rgba(212,168,75,0.45); border-radius: 3px;
+          font-size: 10px; cursor: pointer; padding: 1px 5px;
+        `;
+        reorderZoneBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          moveZoneInList(worldNum, e.shiftKey ? -1 : 1);
+        });
+        worldRow.appendChild(reorderZoneBtn);
       }
 
       listContainer.appendChild(worldRow);
@@ -254,7 +294,9 @@ export function showEditorWorldMap(
             border: 1px solid rgba(0,200,100,0.3); border-radius: 3px;
             font-size: 10px; cursor: pointer; padding: 5px 6px; flex-shrink: 0;
           `;
-          renameRoomBtn.addEventListener('click', () => {
+          renameRoomBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             const newName = window.prompt(`Rename "${effectiveRoomName(room.id)}":`, effectiveRoomName(room.id));
             if (newName !== null && newName.trim()) {
               setRoomNameOverride(room.id, newName.trim());
@@ -265,15 +307,19 @@ export function showEditorWorldMap(
           btnRow.appendChild(renameRoomBtn);
 
           const moveBtn = document.createElement('button');
-          moveBtn.textContent = '\u21c4 World';
-          moveBtn.title = 'Move to a different world';
+          moveBtn.textContent = '\u21c4 Zone';
+          moveBtn.title = 'Move to a different zone';
           moveBtn.style.cssText = `
             background: transparent; color: rgba(150,200,255,0.6);
             border: 1px solid rgba(100,150,255,0.3); border-radius: 3px;
             font-size: 10px; cursor: pointer; padding: 5px 6px; flex-shrink: 0;
             font-family: monospace; white-space: nowrap;
           `;
-          moveBtn.addEventListener('click', () => showMoveToWorldInline(room.id, worldNum, roomContainer));
+          moveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showMoveToWorldInline(room.id, worldNum, roomContainer);
+          });
           btnRow.appendChild(moveBtn);
         }
 
@@ -298,7 +344,7 @@ export function showEditorWorldMap(
     for (const [, room] of ROOM_REGISTRY) {
       worldIdSet.add(ROOM_WORLD_OVERRIDES.get(room.id) ?? room.worldNumber);
     }
-    const sorted = [...worldIdSet].sort((a, b) => a - b);
+    const sorted = sortedZoneIds(worldIdSet);
 
     const dropDiv = document.createElement('div');
     dropDiv.style.cssText = `
@@ -372,7 +418,7 @@ export function showEditorWorldMap(
     addRoomBtn.addEventListener('click', () => showAddRoomModal());
     footerRow.appendChild(addRoomBtn);
 
-    const addWorldBtn = makeFooterBtn('+ Add World', '#6688cc');
+    const addWorldBtn = makeFooterBtn('+ Add Zone', '#6688cc');
     addWorldBtn.addEventListener('click', () => showAddWorldModal());
     footerRow.appendChild(addWorldBtn);
 
@@ -456,13 +502,13 @@ export function showEditorWorldMap(
     for (const [, room] of ROOM_REGISTRY) {
       worldIdSet.add(ROOM_WORLD_OVERRIDES.get(room.id) ?? room.worldNumber);
     }
-    for (const id of [...worldIdSet].sort((a, b) => a - b)) {
+    for (const id of sortedZoneIds(worldIdSet)) {
       const opt = document.createElement('option');
       opt.value = String(id);
       opt.textContent = `${worldDisplayName(id)} (id: ${id})`;
       worldSel.appendChild(opt);
     }
-    makeField2('World', worldSel);
+    makeField2('Zone', worldSel);
 
     const wInput = document.createElement('input');
     wInput.type = 'number'; wInput.value = '40'; wInput.min = '10';
@@ -559,18 +605,18 @@ export function showEditorWorldMap(
     `;
 
     const title3 = document.createElement('h3');
-    title3.textContent = '+ Add New World';
+    title3.textContent = '+ Add New Zone';
     title3.style.cssText = `color: ${GREEN}; margin: 0 0 12px; font-family: 'Cinzel', serif; font-size: 13px;`;
     modal.appendChild(title3);
 
     const lbl = document.createElement('label');
-    lbl.textContent = `World Name (id will be: ${nextId})`;
+    lbl.textContent = `Zone Name (id will be: ${nextId})`;
     lbl.style.cssText = 'display: block; color: rgba(200,255,200,0.6); font-size: 11px; margin-bottom: 4px; font-family: monospace;';
     modal.appendChild(lbl);
 
     const nameInput2 = document.createElement('input');
     nameInput2.type = 'text';
-    nameInput2.placeholder = `World ${nextId}`;
+    nameInput2.placeholder = `Zone ${nextId}`;
     nameInput2.style.cssText = `
       width: 100%; box-sizing: border-box; padding: 5px 8px;
       background: rgba(20,20,30,0.9); color: ${TEXT_COLOR};
@@ -583,15 +629,16 @@ export function showEditorWorldMap(
     btnRow3.style.cssText = 'display: flex; gap: 8px;';
 
     const createBtn3 = document.createElement('button');
-    createBtn3.textContent = 'Create World';
+    createBtn3.textContent = 'Create Zone';
     createBtn3.style.cssText = `
       flex: 1; padding: 8px; background: rgba(40,40,100,0.4); color: #6688cc;
       border: 1px solid #6688cc; border-radius: 3px; font-family: monospace;
       font-size: 11px; cursor: pointer;
     `;
     createBtn3.addEventListener('click', () => {
-      const name = nameInput2.value.trim() || `World ${nextId}`;
+      const name = nameInput2.value.trim() || `Zone ${nextId}`;
       setWorldName(nextId, name);
+      setWorldOrder(nextId, sortedZoneIds(WORLD_NAMES.keys()).length);
       callbacks.onWorldMapDataChanged?.();
       if (backdrop.parentElement) backdrop.parentElement.removeChild(backdrop);
       rebuildList();

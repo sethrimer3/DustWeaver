@@ -13,8 +13,10 @@
 export interface WorldMapWorldEntry {
   /** World number — matches RoomDef.worldNumber. */
   id: number;
-  /** Display name for this world group. */
+  /** Display name for this zone group. */
   name: string;
+  /** Display order in editor lists. Lower values appear first. */
+  order?: number;
 }
 
 export interface WorldMapRoomEntry {

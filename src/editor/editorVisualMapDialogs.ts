@@ -9,12 +9,14 @@
 import {
   ROOM_REGISTRY,
   WORLD_NAMES,
+  WORLD_ORDER,
   ROOM_WORLD_OVERRIDES,
   registerRoom,
   setRoomNameOverride,
   setRoomWorldOverride,
   setRoomMapPosition,
   setWorldName,
+  setWorldOrder,
 } from '../levels/rooms';
 import { roomJsonDefToRoomDef } from '../levels/roomJsonLoader';
 import type { MapRoomPlacement, VisualMapCallbacks } from './editorVisualMapHelpers';
@@ -120,12 +122,12 @@ export function showMoveToWorldDialog(
   for (const [, room] of ROOM_REGISTRY) {
     worldIdSet.add(ROOM_WORLD_OVERRIDES.get(room.id) ?? room.worldNumber);
   }
-  const sorted = [...worldIdSet].sort((a, b) => a - b);
+  const sorted = [...worldIdSet].sort((a, b) => (WORLD_ORDER.get(a) ?? a) - (WORLD_ORDER.get(b) ?? b) || a - b);
 
   const modal = createModal(ctx.overlay);
 
   const title = document.createElement('h3');
-  title.textContent = `Move "${effectiveRoomName(roomId)}" to World`;
+  title.textContent = `Move "${effectiveRoomName(roomId)}" to Zone`;
   title.style.cssText = `color: ${GREEN}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
   modal.panel.appendChild(title);
 
@@ -209,14 +211,14 @@ export function showAddRoomDialog(ctx: VisualMapDialogContext): void {
   for (const [, room] of ROOM_REGISTRY) {
     worldIdSet.add(ROOM_WORLD_OVERRIDES.get(room.id) ?? room.worldNumber);
   }
-  const sortedWorlds = [...worldIdSet].sort((a, b) => a - b);
+  const sortedWorlds = [...worldIdSet].sort((a, b) => (WORLD_ORDER.get(a) ?? a) - (WORLD_ORDER.get(b) ?? b) || a - b);
   for (const id of sortedWorlds) {
     const opt = document.createElement('option');
     opt.value = String(id);
     opt.textContent = `${worldDisplayName(id)} (id: ${id})`;
     worldSel.appendChild(opt);
   }
-  makeField('World', worldSel);
+  makeField('Zone', worldSel);
 
   const wInput = document.createElement('input');
   wInput.type = 'number';
@@ -306,7 +308,7 @@ export function showAddWorldDialog(ctx: VisualMapDialogContext): void {
   const modal = createModal(ctx.overlay);
 
   const title = document.createElement('h3');
-  title.textContent = '+ Add New World';
+  title.textContent = '+ Add New Zone';
   title.style.cssText = `color: ${GREEN}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
   modal.panel.appendChild(title);
 
@@ -319,7 +321,7 @@ export function showAddWorldDialog(ctx: VisualMapDialogContext): void {
 
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
-  nameInput.placeholder = `World ${nextId}`;
+  nameInput.placeholder = `Zone ${nextId}`;
   nameInput.style.cssText = `
     width: 100%; box-sizing: border-box; padding: 6px 8px;
     background: rgba(20,20,30,0.9); color: #c0ffd0;
@@ -328,7 +330,7 @@ export function showAddWorldDialog(ctx: VisualMapDialogContext): void {
   `;
 
   const lbl = document.createElement('label');
-  lbl.textContent = `World Name (will be assigned id: ${nextId})`;
+  lbl.textContent = `Zone Name (will be assigned id: ${nextId})`;
   lbl.style.cssText = 'display: block; color: rgba(200,255,200,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
   modal.panel.appendChild(lbl);
   modal.panel.appendChild(nameInput);
@@ -336,14 +338,15 @@ export function showAddWorldDialog(ctx: VisualMapDialogContext): void {
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display: flex; gap: 8px;';
 
-  const createBtn = makeHeaderBtn('Create World', '#6688cc');
+  const createBtn = makeHeaderBtn('Create Zone', '#6688cc');
   createBtn.style.cssText += ' flex: 1;';
   createBtn.addEventListener('click', () => {
-    const name = nameInput.value.trim() || `World ${nextId}`;
+    const name = nameInput.value.trim() || `Zone ${nextId}`;
     setWorldName(nextId, name);
+    setWorldOrder(nextId, WORLD_NAMES.size);
     ctx.callbacks.onWorldMapDataChanged?.();
     modal.destroy();
-    ctx.statusBar.textContent = `World "${name}" (id: ${nextId}) created \u2014 right-click rooms to move them into it.`;
+    ctx.statusBar.textContent = `Zone "${name}" (id: ${nextId}) created \u2014 right-click rooms to move them into it.`;
     ctx.statusBar.style.color = '#88ff88';
     ctx.render();
   });

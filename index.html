@@ -17,6 +17,33 @@
       font-display: swap;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cinzel', serif; }
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #d4a84b transparent;
+    }
+    *::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+      background: transparent;
+    }
+    *::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    *::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, #f2d87a 0%, #d4a84b 48%, #8e6420 100%);
+      border: 3px solid transparent;
+      border-radius: 999px;
+      background-clip: content-box;
+    }
+    *::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, #fff0a8 0%, #e0b957 48%, #a87a28 100%);
+      border: 3px solid transparent;
+      border-radius: 999px;
+      background-clip: content-box;
+    }
+    *::-webkit-scrollbar-corner {
+      background: transparent;
+    }
     body { background: #000; overflow: hidden; width: 100vw; height: 100vh; touch-action: none; }
     canvas { display: block; touch-action: none; }
     #game-canvas {

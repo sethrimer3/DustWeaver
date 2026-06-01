@@ -33,7 +33,7 @@ import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
-import { ROOM_REGISTRY, initRoomRegistry, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES } from '../levels/rooms';
+import { ROOM_REGISTRY, initRoomRegistry, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES, WORLD_ORDER } from '../levels/rooms';
 import { createEditorHistory, pushSnapshot, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 import {
@@ -266,7 +266,7 @@ export function createEditorController(
       roomById.set(state.roomData.id, dehydrateRoom(editorRoomDataToJson(state.roomData)));
     }
 
-    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
     const worldMapRoomById = new Map(worldMap.rooms.map(room => [room.id, room]));
     const rooms: SavedRoomV2[] = [];
     for (const [roomId, room] of roomById) {

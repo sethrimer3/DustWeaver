@@ -24,7 +24,7 @@ import {
 import { getLoadedOfficialCampaignRevisionMetadata } from '../levels/rooms';
 import type { EditableCampaignSession } from './editableCampaignSession';
 import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCampaignSession';
-import { WORLD_NAMES } from '../levels/rooms';
+import { WORLD_NAMES, WORLD_ORDER } from '../levels/rooms';
 import { BUILD_NUMBER } from '../build-info';
 import { createExportProgressModal } from './editorExportProgressModal';
 import type { SavedCampaignV1, CampaignSpawnData } from '../levels/campaignSchema';
@@ -329,7 +329,7 @@ export function exportCampaignJson(
 ): void {
   let exported: ReturnType<typeof assembleExportCampaign>;
   if (session.campaignStore !== undefined) {
-    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
     session.campaignStore.updateWorldMap(worldMap);
     if (activeRoomData !== undefined && activeRoomData !== null) {
       session.campaignStore.setActiveRoomId(activeRoomData.id);
@@ -354,7 +354,7 @@ export function exportCampaignJson(
         }
       }
     }
-    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
     exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
   }
 
@@ -436,7 +436,7 @@ export function exportMainCampaignJson(
     baselineRooms.push(dehydrateRoom(jsonDef));
   }
 
-  const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY);
+  const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
 
   // Synthetic session carrying the main campaign metadata and baseline rooms.
   // Propagate the existing revision metadata from the loaded canonical campaign

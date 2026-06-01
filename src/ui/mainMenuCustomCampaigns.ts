@@ -364,7 +364,7 @@ function showCreateNewCampaignDialog(
   const creatorInp = field('Creator', 'new-creator', '');
   const descInp = field('Description', 'new-desc', '');
   const initRoomIdInp = field('Initial Room ID', 'new-init-room', 'start');
-  const worldNameInp = field('World Name', 'new-world-name', 'World 1');
+  const worldNameInp = field('Zone Name', 'new-world-name', 'Zone 1');
   const widthInp = numField('Initial Room Width (blocks)', 'new-width', 40, 8, 256);
   const heightInp = numField('Initial Room Height (blocks)', 'new-height', 30, 8, 256);
 
@@ -419,7 +419,7 @@ function showCreateNewCampaignDialog(
       initialRoomId: sanitizeCampaignId(rawRoomId || 'start'),
       initialRoomWidthBlocks: Math.max(8, parseInt(widthInp.value, 10) || 40),
       initialRoomHeightBlocks: Math.max(8, parseInt(heightInp.value, 10) || 30),
-      worldName: worldNameInp.value.trim() || 'World 1',
+      worldName: worldNameInp.value.trim() || 'Zone 1',
     };
     const session = createNewCampaignSession(params);
     if (overlay.parentElement) overlay.parentElement.removeChild(overlay);

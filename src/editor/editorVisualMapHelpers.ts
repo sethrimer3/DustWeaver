@@ -40,7 +40,7 @@ export function effectiveWorldId(roomId: string): number {
 }
 
 export function worldDisplayName(worldId: number): string {
-  return WORLD_NAMES.get(worldId) ?? `World ${worldId}`;
+  return WORLD_NAMES.get(worldId) ?? `Zone ${worldId}`;
 }
 
 // ── Color utilities ───────────────────────────────────────────────────────────

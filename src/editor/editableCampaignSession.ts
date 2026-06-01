@@ -97,7 +97,7 @@ export function createNewCampaignSession(params: CreateNewCampaignParams): Edita
   };
 
   const worldMap: WorldMapJsonDef = {
-    worlds: [{ id: 1, name: params.worldName }],
+    worlds: [{ id: 1, name: params.worldName, order: 0 }],
     rooms: [{
       id: params.initialRoomId,
       name: params.initialRoomId,
@@ -255,6 +255,7 @@ export function assembleExportCampaign(
 export function buildWorldMapFromRegistry(
   worldNames: ReadonlyMap<number, string>,
   registryRooms: ReadonlyMap<string, { id: string; name: string; worldNumber: number; mapX: number; mapY: number }>,
+  worldOrder?: ReadonlyMap<number, number>,
 ): WorldMapJsonDef {
   const worldsMap = new Map<number, WorldMapWorldEntry>();
   const rooms: WorldMapRoomEntry[] = [];
@@ -264,6 +265,7 @@ export function buildWorldMapFromRegistry(
       worldsMap.set(room.worldNumber, {
         id: room.worldNumber,
         name: worldNames.get(room.worldNumber) ?? `World ${room.worldNumber}`,
+        order: worldOrder?.get(room.worldNumber) ?? worldsMap.size,
       });
     }
     rooms.push({
@@ -275,6 +277,6 @@ export function buildWorldMapFromRegistry(
     });
   }
 
-  const worlds = [...worldsMap.values()].sort((a, b) => a.id - b.id);
+  const worlds = [...worldsMap.values()].sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id) || a.id - b.id);
   return { worlds, rooms };
 }

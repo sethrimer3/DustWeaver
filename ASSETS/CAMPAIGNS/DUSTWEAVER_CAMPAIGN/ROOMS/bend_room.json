@@ -128,7 +128,7 @@
   ],
   "bakedWallTemplate": {
     "schemaVersion": 1,
-    "sourceHash": "988cb66c",
+    "sourceHash": "0433c8dd",
     "wallCount": 12,
     "xWorld": [
       0,
@@ -164,8 +164,8 @@
       8,
       8,
       8,
-      8,
       16,
+      8,
       16,
       32,
       16,
@@ -178,8 +178,8 @@
       384,
       384,
       8,
-      8,
       48,
+      8,
       24,
       8,
       8,
@@ -220,15 +220,16 @@
       255,
       255,
       255,
+      4,
       255,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3
+      4,
+      4,
+      4,
+      4,
+      4
     ],
     "themeNames": [
+      "overgrowth",
       "darkStone"
     ],
     "soundHardnessIndex": [

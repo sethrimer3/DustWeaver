@@ -60,6 +60,7 @@ export function getLoadedOfficialCampaignSpawn(): CampaignSpawnData | null {
 
 /** World id → display name. Populated from room world ids. */
 const worldNamesMap = new Map<number, string>();
+const worldOrderMap = new Map<number, number>();
 
 /** Room id → visual map position (map world units). */
 const worldMapPositions = new Map<string, { mapX: number; mapY: number }>();
@@ -72,6 +73,7 @@ const roomWorldOverridesMap = new Map<string, number>();
 
 /** World id → display name (read-only view). */
 export const WORLD_NAMES: ReadonlyMap<number, string> = worldNamesMap;
+export const WORLD_ORDER: ReadonlyMap<number, number> = worldOrderMap;
 /** Room id → visual map position (read-only view). */
 export const WORLD_MAP_POSITIONS: ReadonlyMap<string, { mapX: number; mapY: number }> = worldMapPositions;
 /** Room id → name override (read-only view). */
@@ -84,6 +86,11 @@ export const ROOM_WORLD_OVERRIDES: ReadonlyMap<string, number> = roomWorldOverri
 /** Sets the display name for a world id. */
 export function setWorldName(worldId: number, name: string): void {
   worldNamesMap.set(worldId, name);
+  if (!worldOrderMap.has(worldId)) worldOrderMap.set(worldId, worldOrderMap.size);
+}
+
+export function setWorldOrder(worldId: number, order: number): void {
+  worldOrderMap.set(worldId, order);
 }
 
 /** Sets the visual map position for a room. */
@@ -114,6 +121,7 @@ export function setRoomWorldOverride(roomId: string, worldId: number): void {
     if (!worldNamesMap.has(worldId)) {
       worldNamesMap.set(worldId, `World ${worldId}`);
     }
+    if (!worldOrderMap.has(worldId)) worldOrderMap.set(worldId, worldOrderMap.size);
   }
 }
 
@@ -150,6 +158,7 @@ export function registerRoom(room: RoomDef): void {
   if (!worldNamesMap.has(room.worldNumber)) {
     worldNamesMap.set(room.worldNumber, `World ${room.worldNumber}`);
   }
+  if (!worldOrderMap.has(room.worldNumber)) worldOrderMap.set(room.worldNumber, worldOrderMap.size);
 }
 
 /**
@@ -167,6 +176,7 @@ export function registerRoom(room: RoomDef): void {
 export async function initRoomRegistry(): Promise<void> {
   registryMap.clear();
   worldNamesMap.clear();
+  worldOrderMap.clear();
   worldMapPositions.clear();
   roomNameOverridesMap.clear();
   roomWorldOverridesMap.clear();
@@ -181,13 +191,16 @@ export async function initRoomRegistry(): Promise<void> {
       registryMap.set(id, room);
       worldMapPositions.set(id, { mapX: room.mapX, mapY: room.mapY });
     }
-    for (const world of packedCampaign.worldMap.worlds) {
+    for (let worldIndex = 0; worldIndex < packedCampaign.worldMap.worlds.length; worldIndex++) {
+      const world = packedCampaign.worldMap.worlds[worldIndex];
       worldNamesMap.set(world.id, world.name);
+      worldOrderMap.set(world.id, world.order ?? worldIndex);
     }
     for (const [, room] of rooms) {
       if (!worldNamesMap.has(room.worldNumber)) {
         worldNamesMap.set(room.worldNumber, `World ${room.worldNumber}`);
       }
+      if (!worldOrderMap.has(room.worldNumber)) worldOrderMap.set(room.worldNumber, worldOrderMap.size);
     }
     loadedOfficialCampaignRevisionMetadata = packedCampaign.metadata ?? null;
     loadedOfficialCampaignSpawn = packedCampaign.campaign.campaignSpawn ?? null;
@@ -209,6 +222,7 @@ export async function initRoomRegistry(): Promise<void> {
     registryMap.set(id, room);
     worldMapPositions.set(id, { mapX: room.mapX, mapY: room.mapY });
     worldNamesMap.set(room.worldNumber, worldNamesMap.get(room.worldNumber) ?? `World ${room.worldNumber}`);
+    if (!worldOrderMap.has(room.worldNumber)) worldOrderMap.set(room.worldNumber, worldOrderMap.size);
   }
   console.log(`[rooms] Loaded ${registryMap.size} rooms from individual JSON files (fallback)`);
 }
@@ -218,6 +232,7 @@ export async function initRoomRegistry(): Promise<void> {
 /** Saved snapshot of the main campaign registry state. */
 let mainCampaignSnapshot: Map<string, RoomDef> | null = null;
 let mainWorldNamesSnapshot: Map<number, string> | null = null;
+let mainWorldOrderSnapshot: Map<number, number> | null = null;
 let mainWorldMapPositionsSnapshot: Map<string, { mapX: number; mapY: number }> | null = null;
 
 /**
@@ -229,6 +244,7 @@ let mainWorldMapPositionsSnapshot: Map<string, { mapX: number; mapY: number }> |
 export function captureMainCampaignSnapshot(): void {
   mainCampaignSnapshot = new Map(registryMap);
   mainWorldNamesSnapshot = new Map(worldNamesMap);
+  mainWorldOrderSnapshot = new Map(worldOrderMap);
   mainWorldMapPositionsSnapshot = new Map(worldMapPositions);
 }
 
@@ -239,14 +255,16 @@ export function captureMainCampaignSnapshot(): void {
  * No-op if no snapshot has been captured.
  */
 export function restoreMainCampaignSnapshot(): void {
-  if (!mainCampaignSnapshot || !mainWorldNamesSnapshot || !mainWorldMapPositionsSnapshot) return;
+  if (!mainCampaignSnapshot || !mainWorldNamesSnapshot || !mainWorldOrderSnapshot || !mainWorldMapPositionsSnapshot) return;
   registryMap.clear();
   worldNamesMap.clear();
+  worldOrderMap.clear();
   worldMapPositions.clear();
   roomNameOverridesMap.clear();
   roomWorldOverridesMap.clear();
   for (const [k, v] of mainCampaignSnapshot) registryMap.set(k, v);
   for (const [k, v] of mainWorldNamesSnapshot) worldNamesMap.set(k, v);
+  for (const [k, v] of mainWorldOrderSnapshot) worldOrderMap.set(k, v);
   for (const [k, v] of mainWorldMapPositionsSnapshot) worldMapPositions.set(k, v);
 }
 
@@ -269,14 +287,17 @@ export function restoreMainCampaignSnapshot(): void {
 export function clearRegistryAndApplyCampaignMetadata(campaign: SavedCampaignV1): void {
   registryMap.clear();
   worldNamesMap.clear();
+  worldOrderMap.clear();
   worldMapPositions.clear();
   roomNameOverridesMap.clear();
   roomWorldOverridesMap.clear();
 
   // Populate world names from the campaign's worldMap.worlds so that proper
   // names (e.g. "Ancient Ruins") are used instead of the "World N" fallbacks.
-  for (const world of campaign.worldMap.worlds) {
+  for (let worldIndex = 0; worldIndex < campaign.worldMap.worlds.length; worldIndex++) {
+    const world = campaign.worldMap.worlds[worldIndex];
     worldNamesMap.set(world.id, world.name);
+    worldOrderMap.set(world.id, world.order ?? worldIndex);
   }
 
   // Populate world map positions from the campaign's worldMap.rooms so that
@@ -310,6 +331,7 @@ export function registerRoomsFromPackedCampaign(campaign: SavedCampaignV1): void
 
   registryMap.clear();
   worldNamesMap.clear();
+  worldOrderMap.clear();
   worldMapPositions.clear();
   roomNameOverridesMap.clear();
   roomWorldOverridesMap.clear();
@@ -320,14 +342,17 @@ export function registerRoomsFromPackedCampaign(campaign: SavedCampaignV1): void
   }
 
   // Populate world names from the campaign's worldMap.
-  for (const world of campaign.worldMap.worlds) {
+  for (let worldIndex = 0; worldIndex < campaign.worldMap.worlds.length; worldIndex++) {
+    const world = campaign.worldMap.worlds[worldIndex];
     worldNamesMap.set(world.id, world.name);
+    worldOrderMap.set(world.id, world.order ?? worldIndex);
   }
   // Fill gaps for any worlds referenced by rooms but missing from worldMap.worlds.
   for (const [, room] of rooms) {
     if (!worldNamesMap.has(room.worldNumber)) {
       worldNamesMap.set(room.worldNumber, `World ${room.worldNumber}`);
     }
+    if (!worldOrderMap.has(room.worldNumber)) worldOrderMap.set(room.worldNumber, worldOrderMap.size);
   }
 
   console.log(`[rooms] Registered ${registryMap.size} rooms from packed campaign "${campaign.campaign.id}"`);

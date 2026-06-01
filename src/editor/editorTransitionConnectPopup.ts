@@ -286,7 +286,7 @@ export function showConnectedRoomCreationDialog(
     if (wid === sourceWorldId) opt.selected = true;
     worldSel.appendChild(opt);
   }
-  makeField('World', worldSel);
+  makeField('Zone', worldSel);
 
   const wInput = document.createElement('input');
   wInput.type = 'number';

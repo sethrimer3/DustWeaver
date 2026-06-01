@@ -93,7 +93,7 @@ export function showVisualWorldMap(
   `;
 
   const titleEl = document.createElement('span');
-  titleEl.textContent = '🗺 Visual World Map Editor';
+  titleEl.textContent = '🗺 Visual Zone Map Editor';
   titleEl.style.cssText = `color: ${GREEN}; font-family: 'Cinzel', serif; font-size: 14px; font-weight: bold; margin-right: 8px;`;
   header.appendChild(titleEl);
 
@@ -120,8 +120,8 @@ export function showVisualWorldMap(
   addRoomBtn.addEventListener('click', () => showAddRoomDialog(dialogCtx));
   header.appendChild(addRoomBtn);
 
-  const addWorldBtn = makeHeaderBtn('+ Add World', '#6688cc');
-  addWorldBtn.title = 'Create a new world group';
+  const addWorldBtn = makeHeaderBtn('+ Add Zone', '#6688cc');
+  addWorldBtn.title = 'Create a new zone group';
   addWorldBtn.addEventListener('click', () => showAddWorldDialog(dialogCtx));
   header.appendChild(addWorldBtn);
 
@@ -160,7 +160,7 @@ export function showVisualWorldMap(
     color: rgba(200,255,200,0.6); font-size: 11px; font-family: monospace;
     min-height: 20px;
   `;
-  statusBar.textContent = 'Ready \u2014 right-click a room to rename or move it between worlds';
+  statusBar.textContent = 'Ready \u2014 right-click a room to rename or move it between zones';
   overlay.appendChild(statusBar);
 
   // ── Canvas ─────────────────────────────────────────────────────────────
@@ -598,7 +598,7 @@ export function showVisualWorldMap(
       }
     });
 
-    addMenuItem(`\ud83c\udf10 Move to World\u2026 (now: ${worldDisplayName(wId)})`, () => {
+    addMenuItem(`\ud83c\udf10 Move to Zone\u2026 (now: ${worldDisplayName(wId)})`, () => {
       showMoveToWorldDialog(dialogCtx, roomId, wId);
     });
 

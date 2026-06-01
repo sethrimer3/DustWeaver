@@ -691,7 +691,7 @@
   ],
   "bakedWallTemplate": {
     "schemaVersion": 1,
-    "sourceHash": "5c8ab0d2",
+    "sourceHash": "b745f227",
     "wallCount": 42,
     "xWorld": [
       0,
@@ -735,7 +735,7 @@
       312,
       288,
       256,
-      0
+      48
     ],
     "yWorld": [
       0,
@@ -823,7 +823,7 @@
       152,
       176,
       208,
-      464
+      416
     ],
     "hWorld": [
       8,
@@ -834,7 +834,7 @@
       40,
       56,
       88,
-      328,
+      392,
       8,
       16,
       8,
