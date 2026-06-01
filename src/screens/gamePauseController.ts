@@ -5,6 +5,7 @@ import {
   getMusicVolume,
   getSfxVolume,
   getWorldViewPresetId,
+  getManualSprintEnabled,
 } from '../ui/renderSettings';
 
 interface CreateGamePauseControllerParams {
@@ -46,6 +47,7 @@ export function createGamePauseController(
   const initialGraphicsQuality = getGraphicsQuality();
   const initialAlwaysCenterCamera = getAlwaysCenterCamera();
   const initialWorldViewPresetId = getWorldViewPresetId();
+  const initialManualSprintEnabled = getManualSprintEnabled();
 
   const state: GamePauseControllerState = {
     isPaused: false,
@@ -57,6 +59,7 @@ export function createGamePauseController(
       graphicsQuality: initialGraphicsQuality,
       alwaysCenterCamera: initialAlwaysCenterCamera,
       worldViewPresetId: initialWorldViewPresetId,
+      manualSprintEnabled: initialManualSprintEnabled,
     },
   };
 
@@ -98,6 +101,7 @@ export function createGamePauseController(
     state.pauseMenuState.graphicsQuality = initialGraphicsQuality;
     state.pauseMenuState.alwaysCenterCamera = initialAlwaysCenterCamera;
     state.pauseMenuState.worldViewPresetId = initialWorldViewPresetId;
+    state.pauseMenuState.manualSprintEnabled = initialManualSprintEnabled;
   }
 
   return {
