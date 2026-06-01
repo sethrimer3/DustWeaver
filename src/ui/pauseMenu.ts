@@ -18,6 +18,7 @@ import {
   setMusicVolume, setSfxVolume,
   setGraphicsQuality,
   setAlwaysCenterCamera,
+  setManualSprintEnabled,
   WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
   type WorldViewPresetId,
 } from './renderSettings';
@@ -42,6 +43,8 @@ export interface PauseMenuState {
   alwaysCenterCamera: boolean;
   /** Active world view preset id. */
   worldViewPresetId: WorldViewPresetId;
+  /** When true, sprint requires holding the Sprint key; when false, sprint is always active while moving. */
+  manualSprintEnabled: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -263,6 +266,36 @@ export function showPauseMenu(
   });
   resumeBtn.style.borderColor = GOLD;
   mainButtons.appendChild(resumeBtn);
+
+  // ── Manual Sprint toggle — prominent control option ───────────────────────
+  const manualSprintRow = document.createElement('div');
+  manualSprintRow.style.cssText = `
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin: 4px 0 12px 0;
+    padding: 10px 14px;
+    background: rgba(212,168,75,0.12);
+    border: 1px solid rgba(212,168,75,0.45);
+    border-radius: 6px;
+  `;
+  const manualSprintCheckbox = document.createElement('input');
+  manualSprintCheckbox.type = 'checkbox';
+  manualSprintCheckbox.id = 'pause-manual-sprint';
+  manualSprintCheckbox.checked = state.manualSprintEnabled;
+  manualSprintCheckbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
+  const manualSprintLabel = document.createElement('label');
+  manualSprintLabel.htmlFor = 'pause-manual-sprint';
+  manualSprintLabel.textContent = 'Manual Sprint (hold Shift)';
+  manualSprintLabel.style.cssText = `
+    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.95rem;
+    cursor: pointer; letter-spacing: 0.5px;
+  `;
+  manualSprintCheckbox.addEventListener('change', () => {
+    state.manualSprintEnabled = manualSprintCheckbox.checked;
+    setManualSprintEnabled(manualSprintCheckbox.checked);
+  });
+  manualSprintRow.appendChild(manualSprintCheckbox);
+  manualSprintRow.appendChild(manualSprintLabel);
+  mainButtons.appendChild(manualSprintRow);
 
   // Options
   const optionsBtn = makeButton('Options', () => {

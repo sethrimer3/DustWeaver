@@ -26,6 +26,106 @@ import {
   drawHoverTooltip, drawBlockRect, drawRampTriangle,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
 } from './editorRendererHelpers';
+import { loadImg, isSpriteReady } from '../render/imageCache';
+import { THEME_BLOCK_SPRITE_URL } from './editorUIHelpers';
+
+// ============================================================================
+// Sprite animation tables for ghost placement preview
+// ============================================================================
+
+/**
+ * Maps palette item IDs to one or more sprite URLs (public paths, same format
+ * as `loadImg()`).  When multiple URLs are provided they are cycled as an idle
+ * animation.
+ */
+const PLACEMENT_SPRITE_URLS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  enemy_rolling:         ['SPRITES/ENEMIES/goldenBlock/goldenBlock.png'],
+  enemy_rock_elemental:  [
+    'SPRITES/ENEMIES/earthElemental/earthElemental_head_deactivated.png',
+    'SPRITES/ENEMIES/earthElemental/earthElemental_head_activated.png',
+  ],
+  enemy_beetle:          [
+    'SPRITES/ENEMIES/goldenBeetle/goldenBeetle_walking.png',
+    'SPRITES/ENEMIES/goldenBeetle/goldenBeetle_flying.png',
+  ],
+  enemy_radiant_tether:  [
+    'SPRITES/ENEMIES/radiantTeather/radiantTether_flying.png',
+    'SPRITES/ENEMIES/radiantTeather/radiantTether_attacking.png',
+  ],
+  save_tomb:             ['SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/saveTomb.png'],
+  skill_tomb:            ['SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/skillTomb.png'],
+  dust_container:        ['SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/dustContainer.png'],
+  dust_container_piece:  ['SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/dustContainerShard.png'],
+});
+
+/** Milliseconds per animation frame for multi-sprite idle cycling. */
+const ANIM_FRAME_MS = 800;
+
+/** Ghost alpha for sprite previews. */
+const SPRITE_GHOST_ALPHA = 0.55;
+
+/** Ghost alpha for block tile previews. */
+const BLOCK_GHOST_ALPHA = 0.45;
+
+/**
+ * Draws a sprite ghost at (xPx, yPx) sized (wPx × hPx).
+ * When multiple URLs are provided, the frame is determined by performance.now().
+ * Returns false if the sprite is not yet loaded.
+ */
+function drawSpriteGhost(
+  ctx: CanvasRenderingContext2D,
+  spriteUrls: readonly string[],
+  xPx: number,
+  yPx: number,
+  wPx: number,
+  hPx: number,
+  alpha: number = SPRITE_GHOST_ALPHA,
+): boolean {
+  // Editor preview animations use wall-clock time intentionally — they are
+  // cosmetic only and do not need to be deterministic or reproducible.
+  const frameIndex = spriteUrls.length > 1
+    ? Math.floor(performance.now() / ANIM_FRAME_MS) % spriteUrls.length
+    : 0;
+  const sprite = loadImg(spriteUrls[frameIndex]);
+  if (!isSpriteReady(sprite)) return false;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(sprite, xPx, yPx, wPx, hPx);
+  ctx.restore();
+  return true;
+}
+
+/**
+ * Draws the active block theme's sprite tiled across the given footprint.
+ * Falls back silently when no sprite is available.
+ */
+function drawBlockSpriteGhost(
+  ctx: CanvasRenderingContext2D,
+  xBlock: number,
+  yBlock: number,
+  wBlock: number,
+  hBlock: number,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+  themeId: string,
+): void {
+  const spriteUrl = THEME_BLOCK_SPRITE_URL[themeId];
+  if (spriteUrl === undefined || spriteUrl.length === 0) return;
+  const sprite = loadImg(spriteUrl);
+  if (!isSpriteReady(sprite)) return;
+  const tilePx = BLOCK_SIZE_SMALL * zoom;
+  ctx.save();
+  ctx.globalAlpha = BLOCK_GHOST_ALPHA;
+  for (let row = 0; row < hBlock; row++) {
+    for (let col = 0; col < wBlock; col++) {
+      const sx = Math.round((xBlock + col) * tilePx + offsetXPx);
+      const sy = Math.round((yBlock + row) * tilePx + offsetYPx);
+      ctx.drawImage(sprite, sx, sy, Math.ceil(tilePx), Math.ceil(tilePx));
+    }
+  }
+  ctx.restore();
+}
 
 // ============================================================================
 // Placement preview (cursor ghost for the active Place tool item)
@@ -219,20 +319,38 @@ export function drawPlacementPreview(
   }
 
   if (item.id === 'save_tomb') {
+    const wPx = SAVE_TOMB_FOOTPRINT_W_BLOCKS * BLOCK_SIZE_SMALL * zoom;
+    const hPx = SAVE_TOMB_FOOTPRINT_H_BLOCKS * BLOCK_SIZE_SMALL * zoom;
+    const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY,
       SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
-      offsetXPx, offsetYPx, zoom, 'rgba(212,168,75,0.35)', 2);
-    drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
-      'rgba(212,168,75,0.5)', '⛩');
+      offsetXPx, offsetYPx, zoom, 'rgba(212,168,75,0.20)', 2);
+    const urls = PLACEMENT_SPRITE_URLS[item.id];
+    if (urls !== undefined) {
+      drawSpriteGhost(ctx, urls, xPx, yPx, wPx, hPx);
+    } else {
+      drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+        'rgba(212,168,75,0.5)', '⛩');
+    }
     return;
   }
 
   if (item.id === 'skill_tomb') {
+    const wPx = SKILL_TOMB_FOOTPRINT_W_BLOCKS * BLOCK_SIZE_SMALL * zoom;
+    const hPx = SKILL_TOMB_FOOTPRINT_H_BLOCKS * BLOCK_SIZE_SMALL * zoom;
+    const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY,
       SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
-      offsetXPx, offsetYPx, zoom, 'rgba(120,80,220,0.35)', 2);
-    drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
-      'rgba(120,80,220,0.55)', '✦');
+      offsetXPx, offsetYPx, zoom, 'rgba(120,80,220,0.20)', 2);
+    const urls = PLACEMENT_SPRITE_URLS[item.id];
+    if (urls !== undefined) {
+      drawSpriteGhost(ctx, urls, xPx, yPx, wPx, hPx);
+    } else {
+      drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+        'rgba(120,80,220,0.55)', '✦');
+    }
     return;
   }
 
@@ -246,25 +364,44 @@ export function drawPlacementPreview(
     const fp = footprintByItemId[item.id];
     drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY,
       fp.wBlock, fp.hBlock,
-      offsetXPx, offsetYPx, zoom, 'rgba(220,70,70,0.35)', 2);
-    drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
-      'rgba(220,70,70,0.55)', '⚔');
+      offsetXPx, offsetYPx, zoom, 'rgba(220,70,70,0.20)', 2);
+    const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = fp.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = fp.hBlock * BLOCK_SIZE_SMALL * zoom;
+    const urls = PLACEMENT_SPRITE_URLS[item.id];
+    if (urls === undefined || !drawSpriteGhost(ctx, urls, xPx, yPx, wPx, hPx)) {
+      drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+        'rgba(220,70,70,0.55)', '⚔');
+    }
     return;
   }
 
   if (item.isDustContainerItem === 1 || item.id === 'dust_container') {
     drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
-      offsetXPx, offsetYPx, zoom, 'rgba(80,220,255,0.25)', 2);
-    drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
-      'rgba(80,220,255,0.45)', '◈');
+      offsetXPx, offsetYPx, zoom, 'rgba(80,220,255,0.20)', 2);
+    const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const tilePx = BLOCK_SIZE_SMALL * zoom;
+    const urls = PLACEMENT_SPRITE_URLS['dust_container'];
+    if (urls === undefined || !drawSpriteGhost(ctx, urls, xPx, yPx, tilePx, tilePx)) {
+      drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+        'rgba(80,220,255,0.45)', '◈');
+    }
     return;
   }
 
   if (item.isDustContainerPieceItem === 1 || item.id === 'dust_container_piece') {
     drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
-      offsetXPx, offsetYPx, zoom, 'rgba(130,200,255,0.25)', 2);
-    drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
-      'rgba(130,200,255,0.45)', '◇');
+      offsetXPx, offsetYPx, zoom, 'rgba(130,200,255,0.20)', 2);
+    const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const tilePx = BLOCK_SIZE_SMALL * zoom;
+    const urls = PLACEMENT_SPRITE_URLS['dust_container_piece'];
+    if (urls === undefined || !drawSpriteGhost(ctx, urls, xPx, yPx, tilePx, tilePx)) {
+      drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
+        'rgba(130,200,255,0.45)', '◇');
+    }
     return;
   }
 
@@ -279,6 +416,16 @@ export function drawPlacementPreview(
   // Generic block preview
   drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY,
     preview.wBlock, preview.hBlock, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 2);
+  // Overlay the current block theme sprite across the footprint
+  if (item.category === 'blocks' && state.selectedBlockTheme !== undefined) {
+    drawBlockSpriteGhost(
+      ctx,
+      state.cursorBlockX, state.cursorBlockY,
+      preview.wBlock, preview.hBlock,
+      offsetXPx, offsetYPx, zoom,
+      state.selectedBlockTheme,
+    );
+  }
 }
 
 // ============================================================================
