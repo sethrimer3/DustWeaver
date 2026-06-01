@@ -2046,7 +2046,8 @@ export function startGameScreen(
         world.playerMoveInputDyWorld = (!isDialogueBlockingInput && inputState.isKeyS) ? 1.0 : 0.0;
       }
       // Pass sprint and crouch input to the sim
-      world.playerSprintHeldFlag = (!isDialogueBlockingInput && (getManualSprintEnabled() ? inputState.isSprintHeldFlag : moveDx !== 0)) ? 1 : 0;
+      const shouldSprint = !isDialogueBlockingInput && (getManualSprintEnabled() ? inputState.isSprintHeldFlag : moveDx !== 0);
+      world.playerSprintHeldFlag = shouldSprint ? 1 : 0;
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
       tick(world);
       _simTickCount++;

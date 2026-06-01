@@ -81,6 +81,8 @@ function drawSpriteGhost(
   hPx: number,
   alpha: number = SPRITE_GHOST_ALPHA,
 ): boolean {
+  // Editor preview animations use wall-clock time intentionally — they are
+  // cosmetic only and do not need to be deterministic or reproducible.
   const frameIndex = spriteUrls.length > 1
     ? Math.floor(performance.now() / ANIM_FRAME_MS) % spriteUrls.length
     : 0;
