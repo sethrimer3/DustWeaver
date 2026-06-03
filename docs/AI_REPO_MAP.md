@@ -1,0 +1,150 @@
+# AI Repo Map
+
+Purpose: help agents choose the smallest useful file set before making changes. This is a compact routing map, not a replacement for source inspection.
+
+## Fast read guide
+
+| Task type | Start here | Then inspect |
+|---|---|---|
+| App flow, screen navigation, save-slot start behavior | `src/game.ts` | `src/ui/mainMenu.ts`, `src/ui/weaveLoadout.ts`, `src/progression/` |
+| Gameplay loop, fixed tick, input-to-sim orchestration | `src/screens/gameScreen.ts` | `src/screens/gameCommandProcessor.ts`, `src/sim/tick.ts`, `src/input/handler.ts` |
+| Room load / transition hitch | `src/screens/gameLoadRoomPhases.ts` | `src/screens/residentWorldBuilder.ts`, `src/screens/residentRoomManager.ts`, `src/screens/zoneResidentLoader.ts`, `src/screens/roomRuntimeCache.ts`, `src/debug/transitionProfiler.ts` |
+| Resident-room / hot-swap behavior | `src/screens/residentRoomManager.ts` | `src/screens/residentWorldBuilder.ts`, `src/screens/playerTransfer.ts`, `src/screens/gameLoadRoomPhases.ts` |
+| Render chunk prewarming | `docs/render-chunk-prewarming.md` | `src/screens/roomRenderChunkWarmScheduler.ts`, `src/render/walls/blockSpriteRenderer.ts`, `src/render/walls/backgroundBlockRenderer.ts`, `src/render/walls/chunkRenderCache.ts` |
+| Wall template / boundary / transition geometry | `src/levels/roomBoundaryWalls.ts` | `src/screens/gameRoomWalls.ts`, `src/screens/gameTransitions.ts`, `src/screens/gameRoomTransitionOrchestrator.ts`, `src/screens/preparedRoomRuntime.ts` |
+| World map or room sketch artifacts | `src/render/mapSketchRenderer.ts` | Relevant map UI files and room boundary/wall data sources. Treat as regression-prone. |
+| Player movement, jump, grapple, ice behavior | `src/sim/clusters/movementConstants.ts` | `src/sim/clusters/`, `src/screens/gameCommandProcessor.ts`, relevant tests if present |
+| Enemy AI or pathing | `src/sim/clusters/` | `src/screens/gameEnemySpawn.ts`, room enemy definitions |
+| Editor palette / room authoring | `src/editor/editorController.ts` | `src/editor/editorDropdownData.ts`, `src/editor/editorPalettePreview.ts`, `src/editor/editorRoomBuilder.ts`, `src/editor/roomJsonSerializer.ts` |
+| Room save format / migration / compression | `src/levels/roomSavedTypes.ts` | `src/levels/roomSchemaV2.ts`, `src/levels/roomSchemaHydrator.ts`, `src/levels/tileGridCompressor.ts`, `src/levels/roomFileAudit.ts`, `src/levels/roomRoundTripValidator.ts` |
+| Asset loading / sprite decode | `src/render/roomAssetPreloader.ts` | `src/render/walls/imageCache.ts`, `src/screens/gameLoadRoomPhases.ts`, menu/loading UI files |
+| UI menus / settings / debug panels | `src/ui/` | `src/render/hud/renderProfiler.ts`, `src/screens/gameOverlayController.ts`, `src/screens/gamePauseController.ts` |
+| Build, lint, tests | `package.json` | `src/tests/**/*.test.ts` |
+
+## Main entry points
+
+- `src/main.ts` or equivalent Vite entry: browser bootstrapping. Verify exact file before editing because it was not inspected for this map.
+- `src/game.ts`: top-level app state machine. It wires main menu, loadout, gameplay, custom campaign play/edit, save persistence, lazy official/custom campaign room loading, and recovery when `ROOM_REGISTRY` is partial.
+- `src/screens/gameScreen.ts`: main gameplay orchestrator. It owns the fixed timestep loop, canvas size assumptions, input attachment, render orchestration, room loading, transition manager wiring, resident room manager, zone resident loader, debug/profiler hooks, and many renderer objects.
+
+## Runtime flow
+
+1. `startGame()` chooses menu/loadout/gameplay/custom campaign mode.
+2. Gameplay starts through `startGameScreen()`.
+3. Input is collected in `src/input/handler.ts` and translated by `src/screens/gameCommandProcessor.ts`.
+4. Simulation advances at fixed `16.666 ms` ticks through `src/sim/tick.ts`.
+5. `src/render/snapshot.ts` creates or updates reusable snapshots.
+6. `src/screens/gameRender.ts` and render submodules draw the current interpolated frame.
+7. Room transitions are orchestrated by `src/screens/gameRoomTransitionOrchestrator.ts` and loaded through `src/screens/gameLoadRoomPhases.ts` or resident activation paths.
+
+## Rendering
+
+Important files and roles:
+
+- `src/screens/gameRender.ts`: frame renderer entry point. Read when changing draw order or integrating render passes.
+- `src/screens/gameRenderQuality.ts`: adaptive render quality and quality-dependent cache limits. Risk: avoid per-frame allocations or redundant cache churn.
+- `src/screens/gameRenderSceneLighting.ts`: scene-light pass and occluder invalidation. Risk: lighting occluder rebuilds can become expensive.
+- `src/render/snapshot.ts`: reusable snapshot boundary between simulation and rendering. Risk: changing snapshot shape affects many renderers.
+- `src/render/effects/bloomSystem.ts` and `src/render/effects/bloomConfig.ts`: selective bloom pipeline.
+- `src/render/walls/blockSpriteRenderer.ts`: wall chunk rendering, prewarm/adopt APIs, active block sprite state.
+- `src/render/walls/backgroundBlockRenderer.ts`: background block chunks and prewarm/adopt APIs.
+- `src/render/walls/chunkRenderCache.ts`: chunk cache extraction/injection.
+- `src/render/walls/roomRenderCacheStore.ts`: render-state key and memoization.
+- `src/render/mapSketchRenderer.ts`: world/room sketch output. Marked regression-prone in planning notes.
+
+## Room and world loading
+
+Important files and roles:
+
+- `src/screens/gameLoadRoomPhases.ts`: six-phase room-load generator extracted from `gameScreen.ts`. It uses setter callbacks so Phase A updates outer `gameScreen.ts` state immediately. Read this before changing load order.
+- `src/screens/roomRuntimeCache.ts`: prepared runtime entry cache and readiness checks.
+- `src/screens/preparedRoomRuntime.ts`: central cache/baked/fallback wall-template resolution and diagnostics.
+- `src/screens/gameRoomWalls.ts`: wall template building and incremental wall-template generator.
+- `src/screens/residentWorldBuilder.ts`: background resident world construction. Known area to verify for first-entry large-room wall-template costs.
+- `src/screens/residentRoomManager.ts`: resident room ownership/lookup/activation management.
+- `src/screens/zoneResidentLoader.ts`: zone/world-level resident loading direction.
+- `src/screens/playerTransfer.ts`: preserves player state across resident hot-swap.
+- `src/screens/entryViewportWarm.ts`: entry viewport warm-up behavior.
+- `src/screens/roomPreloadScheduler.ts`: data and asset preloading.
+- `src/screens/roomPrewarmNeighborhood.ts`: nearby-room BFS.
+- `src/screens/roomRenderChunkWarmScheduler.ts`: idle-time render chunk warming.
+
+Common risks:
+
+- Phase ordering matters. Phase A state must be visible immediately for downstream preload/activation logic.
+- Resident worlds contain mutable state. Do not share per-visit mutable enemy, hazard, rope, particle, crumble, or pickup state unless the existing resident architecture explicitly owns that lifecycle.
+- Avoid reintroducing synchronous full-room work into transition frames.
+
+## Transitions and boundaries
+
+- `src/levels/roomBoundaryWalls.ts`: shared complete boundary wall builder. Boundary walls should remain complete solid edges.
+- `src/screens/gameTransitions.ts`: trigger strip detection. Transitions are independent trigger strips, not holes.
+- `src/screens/gameRoomTransitionOrchestrator.ts`: transition flow and camera/activation orchestration.
+
+Do not change boundary holes/trigger geometry casually. Planning notes explicitly warn this has caused regressions.
+
+## Simulation, movement, collision
+
+- `src/sim/world.ts`: `WorldState` and core buffers.
+- `src/sim/tick.ts`: fixed tick pipeline.
+- `src/sim/particles/`: particle forces, integration, lifetime, combat, wall interaction, element definitions.
+- `src/sim/clusters/`: player/enemy cluster behavior, movement, AI, pathing.
+- `src/sim/clusters/movementConstants.ts`: movement constants. Read for speed, jump, braking, wall slide, and related movement changes.
+- `src/screens/gameCommandProcessor.ts`: input commands into sim flags/vectors.
+
+Risk: simulation is intended to be deterministic. Keep DOM, render objects, and wall-clock randomness out of sim code.
+
+## Editor and room data
+
+- `src/editor/editorController.ts`: main editor controller. Large file; inspect only for editor orchestration changes.
+- `src/editor/editorDropdownData.ts`: palette item definitions.
+- `src/editor/editorPalettePreview.ts`: palette preview logic and audit helpers.
+- `src/editor/editorRoomBuilder.ts`: converts editor room data to runtime/editor geometry.
+- `src/editor/roomJsonSerializer.ts`: export serialization, including baked wall template generation.
+- `src/editor/roomJsonSchema.ts`: room JSON schema types.
+
+Room schema and compression:
+
+- `src/levels/roomSavedTypes.ts`: compact saved room types and schema version.
+- `src/levels/roomSchemaV2.ts`: dehydration/writer path.
+- `src/levels/roomSchemaHydrator.ts`: read/hydrate path with backward compatibility.
+- `src/levels/tileGridCompressor.ts`: compressed layer helpers.
+- `src/levels/roomFileAudit.ts` and `src/levels/roomRoundTripValidator.ts`: dev/audit validation tools.
+
+## Performance systems and hot paths
+
+Consult `nextSteps.md`, `performanceOptimizationDecisions.md`, and `docs/render-chunk-prewarming.md` before touching performance-sensitive code.
+
+Known hot or sensitive paths:
+
+- Fixed-step loop in `src/screens/gameScreen.ts`.
+- Tick pipeline in `src/sim/tick.ts` and particle/cluster systems.
+- Wall/background chunk renderers.
+- Scene-light occluder invalidation.
+- Room load phases and resident-world builds.
+- `computeRenderStateKey` in `roomRenderCacheStore.ts`.
+- Dense per-room grids such as `bgWallGrid` and snake pathing grids.
+
+## Asset loading and menus
+
+- `src/render/roomAssetPreloader.ts`: room sprite/background decode and readiness checks.
+- `src/render/walls/imageCache.ts`: image decode/cache helpers.
+- `src/ui/mainMenu.ts`, `src/ui/`, and loading screen modules: menu, save slots, settings, loadout, debug UI. Search by UI text or component name before editing.
+
+## Tests and commands
+
+Commands from `package.json`:
+
+```bash
+npm run build
+npm run lint
+npm test
+```
+
+Tests live under `src/tests/**/*.test.ts`. Prefer adding targeted tests near existing tests when changing pure helpers such as render-state keys, schema compression, wall template validation, or deterministic sim utilities.
+
+## Uncertain areas
+
+- This map was created from targeted source/docs inspection rather than a complete repo tree dump. Treat file lists as a routing aid, not exhaustive truth.
+- Verify exact exports before editing any file not directly inspected.
+- If source conflicts with this map, update this map after the change.
