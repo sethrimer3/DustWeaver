@@ -19,9 +19,11 @@ import {
   setGraphicsQuality,
   setAlwaysCenterCamera,
   setManualSprintEnabled,
+  saveCombatModeToStorage,
   WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
   type WorldViewPresetId,
 } from './renderSettings';
+import { setCombatMode, type CombatMode } from '../sim/combatMode';
 import { makeButton, makeSlider, makeTabButton, GOLD, PANEL_BORDER } from './helpers';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -45,6 +47,8 @@ export interface PauseMenuState {
   worldViewPresetId: WorldViewPresetId;
   /** When true, sprint requires holding the Sprint key; when false, sprint is always active while moving. */
   manualSprintEnabled: boolean;
+  /** Current combat mode: 'momentum' (default) or 'legacy'. */
+  combatMode: CombatMode;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -296,6 +300,38 @@ export function showPauseMenu(
   manualSprintRow.appendChild(manualSprintCheckbox);
   manualSprintRow.appendChild(manualSprintLabel);
   mainButtons.appendChild(manualSprintRow);
+
+  // ── Combat Mode toggle ────────────────────────────────────────────────────
+  const combatModeRow = document.createElement('div');
+  combatModeRow.style.cssText = `
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin: 4px 0 12px 0;
+    padding: 10px 14px;
+    background: rgba(212,168,75,0.12);
+    border: 1px solid rgba(212,168,75,0.45);
+    border-radius: 6px;
+  `;
+  const combatModeCheckbox = document.createElement('input');
+  combatModeCheckbox.type = 'checkbox';
+  combatModeCheckbox.id = 'pause-combat-mode';
+  combatModeCheckbox.checked = state.combatMode === 'momentum';
+  combatModeCheckbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
+  const combatModeLabel = document.createElement('label');
+  combatModeLabel.htmlFor = 'pause-combat-mode';
+  combatModeLabel.textContent = 'Momentum Combat';
+  combatModeLabel.style.cssText = `
+    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.95rem;
+    cursor: pointer; letter-spacing: 0.5px;
+  `;
+  combatModeCheckbox.addEventListener('change', () => {
+    const mode: CombatMode = combatModeCheckbox.checked ? 'momentum' : 'legacy';
+    state.combatMode = mode;
+    setCombatMode(mode);
+    saveCombatModeToStorage(mode);
+  });
+  combatModeRow.appendChild(combatModeCheckbox);
+  combatModeRow.appendChild(combatModeLabel);
+  mainButtons.appendChild(combatModeRow);
 
   // Options
   const optionsBtn = makeButton('Options', () => {

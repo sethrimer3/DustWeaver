@@ -365,6 +365,19 @@ export interface ClusterState {
   /** 1 while the player is sliding (sprint + crouch/down on ground). */
   isSlidingFlag: 0 | 1;
 
+  // ---- Momentum combat -------------------------------------------------------
+  /**
+   * 1 while the player is moving above MOMENTUM_COMBAT_MIN_SPEED in momentum
+   * combat mode.  Grants invulnerability to contact damage and enables
+   * collision-based enemy damage.
+   */
+  isHighVelocityAttacking: 0 | 1;
+  /**
+   * Countdown ticks before this enemy cluster can take another momentum-combat
+   * hit from the player.  0 = hittable.  Cleared on enemy death / room reset.
+   */
+  momentumHitCooldownTicks: number;
+
   // ---- Damage / hit feedback -----------------------------------------------
   /**
    * Ticks remaining during which the player is invulnerable to damage.
@@ -931,6 +944,8 @@ export function createClusterState(
     playerIdleNextSwitchTicks: 0,
     isSkiddingFlag: 0,
     isSlidingFlag: 0,
+    isHighVelocityAttacking: 0,
+    momentumHitCooldownTicks: 0,
     invulnerabilityTicks: 0,
     hurtTicks: 0,
     isSlimeFlag: 0,

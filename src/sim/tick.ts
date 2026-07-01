@@ -37,6 +37,7 @@ import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
 import { tickArrows } from './weaves/arrowWeave';
+import { tickMomentumCombat } from './momentumCombat';
 import { applyHazards, computePlayerWaterState } from './hazards';
 import { tickGrasshoppers } from './critters/grasshopper';
 import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
@@ -94,6 +95,9 @@ export function tick(world: WorldState): void {
 
   // 0. Cluster movement — smooth acceleration/deceleration for player and enemies
   applyClusterMovement(world);
+
+  // 0.01. Momentum combat — update isHighVelocityAttacking and collision damage
+  tickMomentumCombat(world);
 
   // 0.05. Falling block simulation — state machine tick (after movement so
   //        wall slots are current and playerPrevVelocityYWorld is set)
@@ -192,6 +196,7 @@ export function tick(world: WorldState): void {
 
   // 4.56. Arrow Weave flight update — move arrows, detect wall sticking, apply enemy hit sequences
   tickArrows(world);
+
   // 4.6. Lava AoE burn — heat damage to nearby enemy particles
   applyLavaEffect(world);
 
@@ -228,3 +233,5 @@ export function tick(world: WorldState): void {
 
   world.tick++;
 }
+
+// ── Momentum trail helpers ────────────────────────────────────────────────────

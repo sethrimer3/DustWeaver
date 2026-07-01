@@ -7,6 +7,7 @@
 
 import { WorldState } from '../world';
 import { triggerAttackLaunch, tickAttackMode, applyBlockForces } from './playerCombat';
+import { getCombatMode } from '../combatMode';
 
 /**
  * Main entry point called from tick.ts.
@@ -27,15 +28,20 @@ import { triggerAttackLaunch, tickAttackMode, applyBlockForces } from './playerC
  *   See combatDustPolishDecisions.md for the full audit.
  */
 export function applyCombatForces(world: WorldState): void {
-  // ---- Player attack trigger (one-shot) -----------------------------------
-  if (world.playerAttackTriggeredFlag === 1) {
-    triggerAttackLaunch(world);
+  // ---- Player attack trigger (one-shot) — legacy combat only -------------
+  if (getCombatMode() === 'legacy') {
+    if (world.playerAttackTriggeredFlag === 1) {
+      triggerAttackLaunch(world);
+      world.playerAttackTriggeredFlag = 0;
+    }
+    // ---- Block shield forces (player) — legacy combat only ----------------
+    applyBlockForces(world);
+  } else {
+    // In momentum mode the attack flag is still consumed so it never leaks.
     world.playerAttackTriggeredFlag = 0;
   }
 
   // ---- Per-tick attack mode forces (fire loops, spirals, etc.) -----------
+  // tickAttackMode drives enemy attack-mode particles and runs in both modes.
   tickAttackMode(world);
-
-  // ---- Block shield forces (player) ---------------------------------------
-  applyBlockForces(world);
 }

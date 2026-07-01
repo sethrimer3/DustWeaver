@@ -34,6 +34,7 @@ export interface PlayerDamageTarget {
   isGroundedFlag: 0 | 1;
   invulnerabilityTicks: number;
   hurtTicks: number;
+  isHighVelocityAttacking?: 0 | 1;
 }
 
 export function applyPlayerDamageWithKnockback(
@@ -44,6 +45,7 @@ export function applyPlayerDamageWithKnockback(
 ): void {
   if (player.isAliveFlag === 0) return;
   if (player.invulnerabilityTicks > 0) return;
+  if (player.isHighVelocityAttacking === 1) return; // momentum combat invulnerability
 
   const damageToApply = Math.max(0, damagePoints);
   if (damageToApply <= 0) return;

@@ -247,3 +247,17 @@ export function setManualSprintEnabled(enabled: boolean): void {
   localStorage.setItem(MANUAL_SPRINT_STORAGE_KEY, enabled ? '1' : '0');
 }
 
+// ── Combat Mode ──────────────────────────────────────────────────────────────
+
+import type { CombatMode } from '../sim/combatMode';
+
+const COMBAT_MODE_STORAGE_KEY = 'dustweaver-combat-mode';
+
+export function getCombatModeFromStorage(): CombatMode {
+  return localStorage.getItem(COMBAT_MODE_STORAGE_KEY) === 'legacy' ? 'legacy' : 'momentum';
+}
+
+export function saveCombatModeToStorage(mode: CombatMode): void {
+  localStorage.setItem(COMBAT_MODE_STORAGE_KEY, mode);
+}
+

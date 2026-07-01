@@ -3,6 +3,7 @@ import { ClusterState } from './clusters/state';
 import { RngState, createRng } from './rng';
 import { GrappleWorldState, createGrappleWorldState } from './worldGrappleState';
 import { HazardWorldState, createHazardWorldState, MAX_WATER_ZONES } from './worldHazardState';
+import { type CombatMode, DEFAULT_COMBAT_MODE } from './combatMode';
 
 // Re-export constants from sub-state files so existing imports from world.ts still work.
 export { MAX_GRAPPLE_WRAP_POINTS } from './worldGrappleState';
@@ -35,7 +36,13 @@ export const MAX_MOTE_SLOTS = 20;
 /** Maximum simultaneous arrows in flight or stuck. */
 export const MAX_ARROWS = 8;
 
+/** Number of positions stored in the momentum trail circular buffer. */
+export const MOMENTUM_TRAIL_MAX_POINTS = 8;
+
 export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWorldState {
+  /** Active combat mode. 'momentum' = speed-based; 'legacy' = dust/weave. */
+  combatMode: CombatMode;
+
   tick: number;
   dtMs: number;
   particleCount: number;
@@ -435,6 +442,18 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   /** Max ticks for this web (for alpha computation: remaining/max). */
   webSpiderFadingWebMaxTicks: Float32Array;
 
+  // ── Momentum Combat trail ────────────────────────────────────────────────
+  /** Write-head index for the circular trail buffer. */
+  momentumTrailWriteIndex: number;
+  /** Number of valid entries currently in the trail (up to MOMENTUM_TRAIL_MAX_POINTS). */
+  momentumTrailActiveCount: number;
+  /** World-space X positions of recent player positions for the trail. */
+  momentumTrailXWorld: Float32Array;
+  /** World-space Y positions. */
+  momentumTrailYWorld: Float32Array;
+  /** Age in ticks of each trail position (for alpha fade). */
+  momentumTrailAgeTicks: Uint8Array;
+
   // ── Ice Mote Freeze Aura ─────────────────────────────────────────────────
   /**
    * Per-zone frozen mask: 1 if this water zone is temporarily frozen by the
@@ -447,6 +466,7 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
+    combatMode: DEFAULT_COMBAT_MODE,
     tick: 0,
     dtMs,
     particleCount: 0,
@@ -582,6 +602,11 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     ...createHazardWorldState(),
     ...createParticleBuffers(),
     frozenWaterZoneMask: new Uint8Array(MAX_WATER_ZONES),
+    momentumTrailWriteIndex: 0,
+    momentumTrailActiveCount: 0,
+    momentumTrailXWorld: new Float32Array(MOMENTUM_TRAIL_MAX_POINTS),
+    momentumTrailYWorld: new Float32Array(MOMENTUM_TRAIL_MAX_POINTS),
+    momentumTrailAgeTicks: new Uint8Array(MOMENTUM_TRAIL_MAX_POINTS),
   };
 }
 

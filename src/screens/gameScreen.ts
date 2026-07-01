@@ -26,7 +26,8 @@ import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
-import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality, getManualSprintEnabled } from '../ui/renderSettings';
+import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality, getManualSprintEnabled, getCombatModeFromStorage } from '../ui/renderSettings';
+import { setCombatMode } from '../sim/combatMode';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
 import { BloomSystem } from '../render/effects/bloomSystem';
@@ -255,6 +256,9 @@ export function startGameScreen(
   const musicManager: MusicManager = createMusicManager(BASE);
   musicManager.setVolume(getMusicVolume());
 
+  // ── Combat mode — restore persisted setting into the sim module ───────────
+  setCombatMode(getCombatModeFromStorage());
+
   // ── Room state ────────────────────────────────────────────────────────────
   const {
     configuredSpawnRoom,
@@ -340,6 +344,8 @@ export function startGameScreen(
   // `world` is `let` because it gets reassigned during resident WorldState
   // hot-swap transitions (see startTransitionLoad: world = targetResident.world).
   let world = createWorldState(FIXED_DT_MS, 42);
+  // Sync combat mode from the persisted module singleton (set above at line ~260)
+  world.combatMode = getCombatModeFromStorage();
   // Set the selected character on the world for rendering
   world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);

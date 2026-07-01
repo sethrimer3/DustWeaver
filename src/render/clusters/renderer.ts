@@ -216,6 +216,37 @@ export function renderClusters(
           continue; // skip rest of player rendering
         }
 
+        // ── Momentum combat golden trail (behind cloak and body) ──────
+        // TODO: replace with polished trail effect
+        if (cluster.isHighVelocityAttacking === 1) {
+          const vx = cluster.velocityXWorld;
+          const vy = cluster.velocityYWorld;
+          const spd = Math.sqrt(vx * vx + vy * vy);
+          if (spd > 0) {
+            const nx = vx / spd;
+            const ny = vy / spd;
+            const trailCount = 5;
+            for (let ti = 0; ti < trailCount; ti++) {
+              const t = (ti + 1) / trailCount;
+              const alpha = 0.55 * (1 - t);
+              const offsetDist = t * 12 * scalePx;
+              ctx.save();
+              ctx.globalAlpha = alpha;
+              ctx.fillStyle = 'rgba(255,210,60,1)';
+              ctx.beginPath();
+              ctx.ellipse(
+                screenX - nx * offsetDist,
+                spriteCenterY - ny * offsetDist,
+                4 * scalePx * (1 - t * 0.5),
+                4 * scalePx * (1 - t * 0.5),
+                0, 0, Math.PI * 2,
+              );
+              ctx.fill();
+              ctx.restore();
+            }
+          }
+        }
+
         // ── Layer 0: Phantom cloak extension (behind main cloak) ──────────
         if (phantomCloak !== undefined) {
           phantomCloak.render(ctx, offsetXPx, offsetYPx, scalePx);

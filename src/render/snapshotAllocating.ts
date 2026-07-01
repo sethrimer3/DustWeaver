@@ -80,6 +80,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       snakeHeadDirXWorld:               c.snakeHeadDirXWorld,
       snakeHeadDirYWorld:               c.snakeHeadDirYWorld,
       snakeSlitherPhaseRad:             c.snakeSlitherPhaseRad,
+      isHighVelocityAttacking:          c.isHighVelocityAttacking,
       invulnerabilityTicks:             c.invulnerabilityTicks,
       hurtTicks:                        c.hurtTicks,
       isSlimeFlag:                c.isSlimeFlag,

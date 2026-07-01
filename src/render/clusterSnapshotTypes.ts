@@ -109,6 +109,8 @@ export interface ClusterSnapshot {
   readonly snakeHeadDirYWorld: number;
   /** Current slither phase (radians). */
   readonly snakeSlitherPhaseRad: number;
+  /** 1 while the player is in momentum-combat high-velocity attack state. */
+  readonly isHighVelocityAttacking: 0 | 1;
   /**
    * Ticks remaining of invulnerability after taking damage.
    * Non-zero while the player cannot be damaged again.

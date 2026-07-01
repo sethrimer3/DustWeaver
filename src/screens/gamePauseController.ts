@@ -6,6 +6,7 @@ import {
   getSfxVolume,
   getWorldViewPresetId,
   getManualSprintEnabled,
+  getCombatModeFromStorage,
 } from '../ui/renderSettings';
 
 interface CreateGamePauseControllerParams {
@@ -48,6 +49,7 @@ export function createGamePauseController(
   const initialAlwaysCenterCamera = getAlwaysCenterCamera();
   const initialWorldViewPresetId = getWorldViewPresetId();
   const initialManualSprintEnabled = getManualSprintEnabled();
+  const initialCombatMode = getCombatModeFromStorage();
 
   const state: GamePauseControllerState = {
     isPaused: false,
@@ -60,6 +62,7 @@ export function createGamePauseController(
       alwaysCenterCamera: initialAlwaysCenterCamera,
       worldViewPresetId: initialWorldViewPresetId,
       manualSprintEnabled: initialManualSprintEnabled,
+      combatMode: initialCombatMode,
     },
   };
 
@@ -102,6 +105,7 @@ export function createGamePauseController(
     state.pauseMenuState.alwaysCenterCamera = initialAlwaysCenterCamera;
     state.pauseMenuState.worldViewPresetId = initialWorldViewPresetId;
     state.pauseMenuState.manualSprintEnabled = initialManualSprintEnabled;
+    state.pauseMenuState.combatMode = initialCombatMode;
   }
 
   return {

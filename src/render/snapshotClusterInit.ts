@@ -66,6 +66,7 @@ export function _makeEmptyCluster(): _MutableCluster {
     snakeHeadDirXWorld: 1,
     snakeHeadDirYWorld: 0,
     snakeSlitherPhaseRad: 0,
+    isHighVelocityAttacking: 0,
     invulnerabilityTicks: 0,
     hurtTicks: 0,
     isSlimeFlag: 0,
@@ -246,6 +247,7 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.snakeHeadDirXWorld              = src.snakeHeadDirXWorld;
   dst.snakeHeadDirYWorld              = src.snakeHeadDirYWorld;
   dst.snakeSlitherPhaseRad            = src.snakeSlitherPhaseRad;
+  dst.isHighVelocityAttacking         = src.isHighVelocityAttacking;
   dst.invulnerabilityTicks            = src.invulnerabilityTicks;
   dst.hurtTicks                       = src.hurtTicks;
   dst.isSlimeFlag                     = src.isSlimeFlag;
