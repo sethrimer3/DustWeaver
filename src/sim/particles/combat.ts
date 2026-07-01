@@ -7,8 +7,6 @@
 
 import { WorldState } from '../world';
 import { triggerAttackLaunch, tickAttackMode, applyBlockForces } from './playerCombat';
-import { getCombatMode } from '../combatMode';
-
 /**
  * Main entry point called from tick.ts.
  * Handles attack trigger, attack mode tick-down, and block shield forces
@@ -26,10 +24,13 @@ import { getCombatMode } from '../combatMode';
  *     • The flag-gated player paths are no-ops every tick and impose
  *       negligible cost.
  *   See combatDustPolishDecisions.md for the full audit.
+ *
+ * Combat mode source of truth: world.combatMode (synced each tick from the
+ * persistence singleton in combatMode.ts).
  */
 export function applyCombatForces(world: WorldState): void {
   // ---- Player attack trigger (one-shot) — legacy combat only -------------
-  if (getCombatMode() === 'legacy') {
+  if (world.combatMode === 'legacy') {
     if (world.playerAttackTriggeredFlag === 1) {
       triggerAttackLaunch(world);
       world.playerAttackTriggeredFlag = 0;

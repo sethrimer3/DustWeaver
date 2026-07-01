@@ -443,6 +443,11 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   webSpiderFadingWebMaxTicks: Float32Array;
 
   // ── Momentum Combat trail ────────────────────────────────────────────────
+  // TODO: Implement golden grapple trail visual in a dedicated renderer module.
+  //        These buffers are allocated but not yet written or rendered; the
+  //        structure is intentionally kept modular so the renderer can be added
+  //        without changing WorldState.  Writer: tick when isHighVelocityAttacking;
+  //        reader: renderer that draws a fading gold streak.
   /** Write-head index for the circular trail buffer. */
   momentumTrailWriteIndex: number;
   /** Number of valid entries currently in the trail (up to MOMENTUM_TRAIL_MAX_POINTS). */

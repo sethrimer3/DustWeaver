@@ -514,6 +514,11 @@ export function applyInterParticleForces(world: WorldState): void {
           } else {
             // Player-to-enemy or enemy-to-enemy: use standard attackPower
             damage = profile.attackPower;
+            // In momentum mode, player-owned dust deals no offensive damage to enemies.
+            // Damage is handled exclusively via velocity collision (momentumCombat.ts).
+            if (attackerIsPlayer && world.combatMode !== 'legacy') {
+              damage = 0;
+            }
           }
 
           if (cluster.isPlayerFlag === 1 && damage > 0) {

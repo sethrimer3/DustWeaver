@@ -37,7 +37,8 @@ import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
 import { tickArrows } from './weaves/arrowWeave';
-import { tickMomentumCombat } from './momentumCombat';
+import { updateMomentumCombatState, applyMomentumCombatCollisionDamage } from './momentumCombat';
+import { getCombatMode } from './combatMode';
 import { applyHazards, computePlayerWaterState } from './hazards';
 import { tickGrasshoppers } from './critters/grasshopper';
 import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
@@ -66,6 +67,9 @@ import { tickKineticBlocks } from './kineticBlocks/kineticBlockSim';
 import { tickIceMoteAura } from './iceMoteAura';
 
 export function tick(world: WorldState): void {
+  // Sync world.combatMode from the module singleton (which is updated by the pause menu toggle).
+  // world.combatMode is the source of truth for all sim code; the singleton is the persistence layer.
+  world.combatMode = getCombatMode();
   if (world.grappleAttachFxTicks > 0) world.grappleAttachFxTicks -= 1;
   if (world.grappleProximityBounceTicksLeft > 0) world.grappleProximityBounceTicksLeft -= 1;
   if (world.grappleFailBeamTicksLeft > 0) world.grappleFailBeamTicksLeft -= 1;
@@ -96,9 +100,6 @@ export function tick(world: WorldState): void {
   // 0. Cluster movement — smooth acceleration/deceleration for player and enemies
   applyClusterMovement(world);
 
-  // 0.01. Momentum combat — update isHighVelocityAttacking and collision damage
-  tickMomentumCombat(world);
-
   // 0.05. Falling block simulation — state machine tick (after movement so
   //        wall slots are current and playerPrevVelocityYWorld is set)
   if (world.fallingBlockGroups.length > 0) {
@@ -119,6 +120,12 @@ export function tick(world: WorldState): void {
 
   // 0.25. Grapple rope constraint — corrects player cluster position/velocity
   applyGrappleClusterConstraint(world);
+
+  // 0.26. Momentum combat — must run AFTER grapple so it reads final-frame
+  //        post-grapple horizontal velocity.  Phase 1 sets isHighVelocityAttacking;
+  //        Phase 2 applies AABB collision damage to overlapping enemies.
+  updateMomentumCombatState(world);
+  applyMomentumCombatCollisionDamage(world);
 
   // 0.5. Enemy AI — decide attack / block / dodge for each enemy cluster
   applyEnemyAI(world);

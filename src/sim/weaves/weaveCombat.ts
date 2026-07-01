@@ -218,6 +218,10 @@ function applyShieldCrescent(
  *   2. Shield Weave — crescent formation when primary/secondary is held
  */
 export function applyPlayerWeaveCombat(world: WorldState): void {
+  // All player weave offense (Storm attraction, Shield, Arrow, Sword) is legacy-only.
+  // In momentum mode, the player deals damage via velocity collision, not dust/weaves.
+  if (world.combatMode !== 'legacy') return;
+
   // ── Storm Weave — only active when Storm is the equipped primary weave ────
   // Storm passively attracts nearby unowned Gold Dust to orbit the player.
   // When another primary weave is equipped, dust materializes from inventory
