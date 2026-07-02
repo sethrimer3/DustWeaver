@@ -1,0 +1,5003 @@
+{
+ "v": 1,
+ "kind": "DustWeaverCampaign",
+ "metadata": {
+  "version": 1,
+  "lastEditedAt": "2026-07-01T00:00:00.000Z"
+ },
+ "campaign": {
+  "id": "hand_drawn_dustweaver_map",
+  "title": "DustWeaver Hand-Drawn Map Prototype",
+  "creator": "GravyThyme",
+  "description": "Greybox prototype of the April 2026 hand-drawn \"Dust, Wurm\" overworld sketch: desert surface, void pyramid, sunken ship, speed check, ice zone, central hub, light/dark shaft, dark zone, golden dust, grapple vault, overgrowth, magma, and the teleporter pyramid.",
+  "initialRoomId": "room_desert_surface_start",
+  "initialRoomImagePath": null,
+  "campaignSpawn": {
+   "roomId": "room_desert_surface_start",
+   "xBlock": 8,
+   "yBlock": 19,
+   "startingDustTypes": [
+    "Physical"
+   ],
+   "startingDustContainerCount": 2
+  }
+ },
+ "worldMap": {
+  "worlds": [
+   {
+    "id": 1,
+    "name": "Dust, Wurm"
+   }
+  ],
+  "rooms": [
+   {
+    "id": "room_desert_surface_start",
+    "name": "Desert Surface",
+    "worldId": 1,
+    "mapX": -500,
+    "mapY": -120
+   },
+   {
+    "id": "room_void_pyramid_upper",
+    "name": "Void Pyramid",
+    "worldId": 1,
+    "mapX": -500,
+    "mapY": 0
+   },
+   {
+    "id": "room_void_pyramid_lower",
+    "name": "Void Chamber",
+    "worldId": 1,
+    "mapX": -500,
+    "mapY": 120
+   },
+   {
+    "id": "room_sunken_ship_surface",
+    "name": "Sunken Ship",
+    "worldId": 1,
+    "mapX": -300,
+    "mapY": -110
+   },
+   {
+    "id": "room_sunken_ship_water",
+    "name": "Ship Depths",
+    "worldId": 1,
+    "mapX": -300,
+    "mapY": 0
+   },
+   {
+    "id": "room_speed_check_water",
+    "name": "Speed Check",
+    "worldId": 1,
+    "mapX": -160,
+    "mapY": 30
+   },
+   {
+    "id": "room_speed_check_exit",
+    "name": "Still Waters Landing",
+    "worldId": 1,
+    "mapX": -40,
+    "mapY": 30
+   },
+   {
+    "id": "room_branch_cliff_surface",
+    "name": "Branch Cliff",
+    "worldId": 1,
+    "mapX": 0,
+    "mapY": -100
+   },
+   {
+    "id": "room_ice_zone_entry",
+    "name": "Ice Zone",
+    "worldId": 1,
+    "mapX": -50,
+    "mapY": 120
+   },
+   {
+    "id": "room_ice_water_vines",
+    "name": "Thaw Gate",
+    "worldId": 1,
+    "mapX": 80,
+    "mapY": 120
+   },
+   {
+    "id": "room_ice_caves_upper",
+    "name": "Ice Caves",
+    "worldId": 1,
+    "mapX": -120,
+    "mapY": 220
+   },
+   {
+    "id": "room_boss_ice_approach",
+    "name": "Frozen Approach",
+    "worldId": 1,
+    "mapX": -260,
+    "mapY": 250
+   },
+   {
+    "id": "room_boss_ice",
+    "name": "Boss Ice",
+    "worldId": 1,
+    "mapX": -390,
+    "mapY": 250
+   },
+   {
+    "id": "room_central_cave_hub",
+    "name": "Central Hub",
+    "worldId": 1,
+    "mapX": 0,
+    "mapY": 260
+   },
+   {
+    "id": "room_lower_caves_reset",
+    "name": "Reset Caves",
+    "worldId": 1,
+    "mapX": 0,
+    "mapY": 380
+   },
+   {
+    "id": "room_lower_caves_swing",
+    "name": "Swing Gallery",
+    "worldId": 1,
+    "mapX": 160,
+    "mapY": 390
+   },
+   {
+    "id": "room_falling_block_puzzle",
+    "name": "Falling Block Puzzle",
+    "worldId": 1,
+    "mapX": -40,
+    "mapY": 470
+   },
+   {
+    "id": "room_light_dark_shaft_mid",
+    "name": "Light-Dark Shaft",
+    "worldId": 1,
+    "mapX": 220,
+    "mapY": 170
+   },
+   {
+    "id": "room_enemy_lock_room",
+    "name": "Enemy Lock",
+    "worldId": 1,
+    "mapX": 340,
+    "mapY": 150
+   },
+   {
+    "id": "room_boss_lock_arena",
+    "name": "Boss Lock Arena",
+    "worldId": 1,
+    "mapX": 450,
+    "mapY": 160
+   },
+   {
+    "id": "room_dark_zone_lower_entry",
+    "name": "Dark Zone",
+    "worldId": 1,
+    "mapX": 250,
+    "mapY": 360
+   },
+   {
+    "id": "room_dark_zone_main",
+    "name": "Deep Dark",
+    "worldId": 1,
+    "mapX": 390,
+    "mapY": 360
+   },
+   {
+    "id": "room_golden_dust_region",
+    "name": "Golden Dust",
+    "worldId": 1,
+    "mapX": 520,
+    "mapY": 320
+   },
+   {
+    "id": "room_grapple_vault_region",
+    "name": "Grapple Vault",
+    "worldId": 1,
+    "mapX": 520,
+    "mapY": 210
+   },
+   {
+    "id": "room_overgrown_shaft",
+    "name": "Overgrowth Zone",
+    "worldId": 1,
+    "mapX": 520,
+    "mapY": 10
+   },
+   {
+    "id": "room_overgrown_upper",
+    "name": "Overgrown Canopy",
+    "worldId": 1,
+    "mapX": 500,
+    "mapY": -140
+   },
+   {
+    "id": "room_magma_entry",
+    "name": "Magma Zone",
+    "worldId": 1,
+    "mapX": 680,
+    "mapY": 30
+   },
+   {
+    "id": "room_magma_deeper",
+    "name": "Magma Depths",
+    "worldId": 1,
+    "mapX": 820,
+    "mapY": 30
+   },
+   {
+    "id": "room_teleporter_pyramid_entry",
+    "name": "Pyramid Descent",
+    "worldId": 1,
+    "mapX": 250,
+    "mapY": 520
+   },
+   {
+    "id": "room_teleporter_room",
+    "name": "Teleporter Room",
+    "worldId": 1,
+    "mapX": 250,
+    "mapY": 670
+   }
+  ]
+ },
+ "rooms": [
+  {
+   "v": 3,
+   "id": "room_desert_surface_start",
+   "name": "Desert Surface",
+   "world": 1,
+   "size": [
+    64,
+    24
+   ],
+   "spawn": [
+    31,
+    19
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        21,
+        12,
+        3
+       ],
+       [
+        17,
+        21,
+        47,
+        3
+       ]
+      ]
+     },
+     "sandStone": {
+      "rects": [
+       [
+        2,
+        2,
+        2,
+        19
+       ],
+       [
+        9,
+        17,
+        3,
+        4
+       ],
+       [
+        17,
+        17,
+        3,
+        4
+       ],
+       [
+        8,
+        19,
+        1,
+        2
+       ],
+       [
+        20,
+        19,
+        1,
+        2
+       ]
+      ]
+     },
+     "sandStoneBrick": {
+      "rects": [
+       [
+        40,
+        17,
+        3,
+        4
+       ],
+       [
+        32,
+        18,
+        3,
+        3
+       ],
+       [
+        47,
+        19,
+        3,
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -500,
+    -120
+   ],
+   "theme": "sand",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "transitions": [
+    {
+     "dir": "right",
+     "to": "room_sunken_ship_surface",
+     "pos": 14,
+     "size": 7,
+     "spawn": [
+      4,
+      21
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_void_pyramid_upper",
+     "pos": 12,
+     "size": 5,
+     "spawn": [
+      19,
+      5
+     ]
+    }
+   ],
+   "saveTombs": [
+    [
+     28,
+     20
+    ]
+   ],
+   "dustBoostJars": [
+    [
+     36,
+     20,
+     "Physical",
+     8
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_void_pyramid_upper",
+   "name": "Void Pyramid",
+   "world": 1,
+   "size": [
+    40,
+    28
+   ],
+   "spawn": [
+    20,
+    23
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        25,
+        8,
+        3
+       ],
+       [
+        13,
+        25,
+        27,
+        3
+       ]
+      ]
+     },
+     "carvedObsidian": {
+      "rects": [
+       [
+        0,
+        8,
+        6,
+        2
+       ],
+       [
+        34,
+        8,
+        6,
+        2
+       ],
+       [
+        0,
+        14,
+        10,
+        2
+       ],
+       [
+        30,
+        14,
+        10,
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -500,
+    0
+   ],
+   "theme": "obsidian",
+   "bg": "brownRock",
+   "light": "DarkRoom",
+   "specialWalls": [
+    {
+     "r": [
+      17,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      17,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      17,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      17,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      17,
+      22,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      19,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      24,
+      19,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "up",
+     "to": "room_desert_surface_start",
+     "pos": 17,
+     "size": 5,
+     "spawn": [
+      7,
+      19
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_void_pyramid_lower",
+     "pos": 8,
+     "size": 5,
+     "spawn": [
+      10,
+      5
+     ]
+    }
+   ],
+   "dustBoostJars": [
+    [
+     30,
+     24,
+     "Void",
+     8
+    ]
+   ],
+   "lights": [
+    [
+     20,
+     10,
+     8,
+     160,
+     90,
+     255,
+     70
+    ],
+    [
+     8,
+     21,
+     5,
+     120,
+     60,
+     220,
+     55
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_void_pyramid_lower",
+   "name": "Void Chamber",
+   "world": 1,
+   "size": [
+    40,
+    24
+   ],
+   "spawn": [
+    20,
+    19
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        21,
+        40,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -500,
+    120
+   ],
+   "theme": "carvedObsidian",
+   "bg": "brownRock",
+   "light": "DarkRoom",
+   "specialWalls": [
+    {
+     "r": [
+      8,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "enemies": [
+    {
+     "type": "voidSingularity",
+     "pos": [
+      24,
+      17
+     ],
+     "kinds": [
+      "Void"
+     ],
+     "particleCount": 12
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "up",
+     "to": "room_void_pyramid_upper",
+     "pos": 8,
+     "size": 5,
+     "spawn": [
+      5,
+      23
+     ]
+    }
+   ],
+   "dustPiles": [
+    [
+     32,
+     20,
+     20
+    ]
+   ],
+   "lights": [
+    [
+     20,
+     8,
+     7,
+     140,
+     80,
+     240,
+     60
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_sunken_ship_surface",
+   "name": "Sunken Ship",
+   "world": 1,
+   "size": [
+    72,
+    26
+   ],
+   "spawn": [
+    38,
+    21
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        23,
+        34,
+        3
+       ],
+       [
+        38,
+        23,
+        34,
+        3
+       ]
+      ]
+     },
+     "br": {
+      "rects": [
+       [
+        35,
+        10,
+        1,
+        7
+       ],
+       [
+        30,
+        15,
+        5,
+        2
+       ],
+       [
+        36,
+        15,
+        6,
+        2
+       ]
+      ]
+     },
+     "waterStone": {
+      "rects": [
+       [
+        20,
+        18,
+        4,
+        5
+       ],
+       [
+        48,
+        18,
+        4,
+        5
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -300,
+    -110
+   ],
+   "theme": "sand",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      31,
+      14,
+      10,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_desert_surface_start",
+     "pos": 16,
+     "size": 7,
+     "spawn": [
+      59,
+      19
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_branch_cliff_surface",
+     "pos": 16,
+     "size": 7,
+     "spawn": [
+      4,
+      10
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_sunken_ship_water",
+     "pos": 34,
+     "size": 4,
+     "spawn": [
+      28,
+      5
+     ]
+    }
+   ],
+   "waterLayer": {
+    "rects": [
+     [
+      24,
+      18,
+      24,
+      5
+     ]
+    ]
+   }
+  },
+  {
+   "v": 3,
+   "id": "room_sunken_ship_water",
+   "name": "Ship Depths",
+   "world": 1,
+   "size": [
+    56,
+    32
+   ],
+   "spawn": [
+    28,
+    27
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        29,
+        56,
+        3
+       ]
+      ]
+     },
+     "br": {
+      "rects": [
+       [
+        24,
+        20,
+        8,
+        2
+       ],
+       [
+        10,
+        24,
+        6,
+        2
+       ],
+       [
+        40,
+        24,
+        6,
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -300,
+    0
+   ],
+   "theme": "waterStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "enemies": [
+    {
+     "type": "slime",
+     "pos": [
+      34,
+      27
+     ],
+     "kinds": [
+      "Water"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "up",
+     "to": "room_sunken_ship_surface",
+     "pos": 26,
+     "size": 4,
+     "spawn": [
+      31,
+      21
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_speed_check_water",
+     "pos": 22,
+     "size": 7,
+     "spawn": [
+      4,
+      12
+     ]
+    }
+   ],
+   "waterLayer": {
+    "rects": [
+     [
+      0,
+      6,
+      56,
+      23
+     ]
+    ]
+   },
+   "breakableBlocks": [
+    [
+     27,
+     19
+    ],
+    [
+     28,
+     19
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_speed_check_water",
+   "name": "Speed Check",
+   "world": 1,
+   "size": [
+    112,
+    24
+   ],
+   "spawn": [
+    56,
+    19
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        14,
+        8,
+        3
+       ],
+       [
+        104,
+        14,
+        8,
+        3
+       ],
+       [
+        0,
+        21,
+        112,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -160,
+    30
+   ],
+   "theme": "waterStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      9,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      99,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      10,
+      14,
+      14,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      28,
+      14,
+      16,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      48,
+      14,
+      16,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      68,
+      14,
+      16,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      88,
+      14,
+      14,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_sunken_ship_water",
+     "pos": 7,
+     "size": 7,
+     "spawn": [
+      51,
+      27
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_speed_check_exit",
+     "pos": 7,
+     "size": 7,
+     "spawn": [
+      4,
+      15
+     ]
+    }
+   ],
+   "springboards": [
+    [
+     5,
+     13
+    ]
+   ],
+   "waterLayer": {
+    "rects": [
+     [
+      8,
+      17,
+      96,
+      4
+     ]
+    ]
+   },
+   "bounces": [
+    {
+     "r": [
+      25,
+      20,
+      2,
+      1
+     ]
+    },
+    {
+     "r": [
+      45,
+      20,
+      2,
+      1
+     ]
+    },
+    {
+     "r": [
+      65,
+      20,
+      2,
+      1
+     ]
+    },
+    {
+     "r": [
+      85,
+      20,
+      2,
+      1
+     ]
+    }
+   ],
+   "guidePaths": [
+    {
+     "pts": [
+      [
+       6,
+       12
+      ],
+      [
+       30,
+       11
+      ],
+      [
+       56,
+       11
+      ],
+      [
+       82,
+       11
+      ],
+      [
+       106,
+       12
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_speed_check_exit",
+   "name": "Still Waters Landing",
+   "world": 1,
+   "size": [
+    32,
+    20
+   ],
+   "spawn": [
+    16,
+    15
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        17,
+        32,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -40,
+    30
+   ],
+   "theme": "grayStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_speed_check_water",
+     "pos": 10,
+     "size": 7,
+     "spawn": [
+      107,
+      12
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_ice_zone_entry",
+     "pos": 10,
+     "size": 7,
+     "spawn": [
+      4,
+      21
+     ]
+    }
+   ],
+   "saveTombs": [
+    [
+     14,
+     16
+    ]
+   ],
+   "dustContainers": [
+    [
+     20,
+     16
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_branch_cliff_surface",
+   "name": "Branch Cliff",
+   "world": 1,
+   "size": [
+    48,
+    36
+   ],
+   "spawn": [
+    21,
+    31
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        12,
+        8,
+        3
+       ],
+       [
+        40,
+        12,
+        8,
+        3
+       ],
+       [
+        0,
+        33,
+        22,
+        3
+       ],
+       [
+        27,
+        33,
+        21,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    0,
+    -100
+   ],
+   "theme": "sandStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      9,
+      16,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      20,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      24,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      28,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      35,
+      16,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      35,
+      20,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      35,
+      24,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      35,
+      28,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      10,
+      12,
+      10,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      29,
+      12,
+      10,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      16,
+      20,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      27,
+      26,
+      6,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_sunken_ship_surface",
+     "pos": 5,
+     "size": 7,
+     "spawn": [
+      67,
+      21
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_light_dark_shaft_mid",
+     "pos": 22,
+     "size": 5,
+     "spawn": [
+      13,
+      5
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_overgrown_upper",
+     "pos": 5,
+     "size": 7,
+     "spawn": [
+      4,
+      23
+     ]
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_ice_zone_entry",
+   "name": "Ice Zone",
+   "world": 1,
+   "size": [
+    48,
+    26
+   ],
+   "spawn": [
+    26,
+    21
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        23,
+        30,
+        3
+       ],
+       [
+        35,
+        23,
+        13,
+        3
+       ]
+      ]
+     },
+     "frozenStone": {
+      "rects": [
+       [
+        38,
+        20,
+        1,
+        3
+       ],
+       [
+        44,
+        20,
+        1,
+        3
+       ]
+      ]
+     },
+     "iceBlock": {
+      "rects": [
+       [
+        6,
+        22,
+        10,
+        1
+       ],
+       [
+        20,
+        22,
+        6,
+        1
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -50,
+    120
+   ],
+   "theme": "frozenStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "enemies": [
+    {
+     "type": "wheel",
+     "pos": [
+      24,
+      21
+     ],
+     "kinds": [
+      "Ice"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_speed_check_exit",
+     "pos": 16,
+     "size": 7,
+     "spawn": [
+      27,
+      15
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_ice_water_vines",
+     "pos": 16,
+     "size": 7,
+     "spawn": [
+      4,
+      23
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_ice_caves_upper",
+     "pos": 30,
+     "size": 5,
+     "spawn": [
+      30,
+      5
+     ]
+    }
+   ],
+   "waterLayer": {
+    "rects": [
+     [
+      39,
+      20,
+      5,
+      3
+     ]
+    ]
+   },
+   "dustBoostJars": [
+    [
+     36,
+     22,
+     "Fire",
+     10
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_ice_water_vines",
+   "name": "Thaw Gate",
+   "world": 1,
+   "size": [
+    48,
+    28
+   ],
+   "spawn": [
+    24,
+    23
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        25,
+        48,
+        3
+       ]
+      ]
+     },
+     "waterStone": {
+      "rects": [
+       [
+        16,
+        21,
+        1,
+        4
+       ],
+       [
+        27,
+        21,
+        1,
+        4
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    80,
+    120
+   ],
+   "theme": "frozenStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "enemies": [
+    {
+     "type": "slime",
+     "pos": [
+      10,
+      23
+     ],
+     "kinds": [
+      "Water"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_ice_zone_entry",
+     "pos": 18,
+     "size": 7,
+     "spawn": [
+      43,
+      21
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_light_dark_shaft_mid",
+     "pos": 18,
+     "size": 7,
+     "spawn": [
+      4,
+      10
+     ]
+    }
+   ],
+   "waterLayer": {
+    "rects": [
+     [
+      17,
+      21,
+      10,
+      4
+     ]
+    ]
+   },
+   "breakableBlocks": [
+    [
+     38,
+     19
+    ],
+    [
+     39,
+     19
+    ],
+    [
+     38,
+     20
+    ],
+    [
+     39,
+     20
+    ],
+    [
+     38,
+     21
+    ],
+    [
+     39,
+     21
+    ],
+    [
+     38,
+     22
+    ],
+    [
+     39,
+     22
+    ],
+    [
+     38,
+     23
+    ],
+    [
+     39,
+     23
+    ],
+    [
+     38,
+     24
+    ],
+    [
+     39,
+     24
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_ice_caves_upper",
+   "name": "Ice Caves",
+   "world": 1,
+   "size": [
+    40,
+    40
+   ],
+   "spawn": [
+    20,
+    35
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        37,
+        40,
+        3
+       ]
+      ]
+     },
+     "frozenStone": {
+      "rects": [
+       [
+        6,
+        12,
+        8,
+        2
+       ],
+       [
+        6,
+        23,
+        8,
+        2
+       ],
+       [
+        22,
+        29,
+        10,
+        2
+       ]
+      ]
+     },
+     "iceBlock": {
+      "rects": [
+       [
+        22,
+        17,
+        10,
+        1
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -120,
+    220
+   ],
+   "theme": "frozenStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      28,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      28,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      28,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      28,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      28,
+      22,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      28,
+      26,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      28,
+      30,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      28,
+      34,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "enemies": [
+    {
+     "type": "flyingEye",
+     "pos": [
+      20,
+      24
+     ],
+     "kinds": [
+      "Ice"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "up",
+     "to": "room_ice_zone_entry",
+     "pos": 28,
+     "size": 5,
+     "spawn": [
+      27,
+      21
+     ]
+    },
+    {
+     "dir": "left",
+     "to": "room_boss_ice_approach",
+     "pos": 30,
+     "size": 7,
+     "spawn": [
+      31,
+      15
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_central_cave_hub",
+     "pos": 30,
+     "size": 7,
+     "spawn": [
+      4,
+      18
+     ]
+    }
+   ],
+   "spikes": [
+    [
+     8,
+     22,
+     "up"
+    ],
+    [
+     9,
+     22,
+     "up"
+    ]
+   ],
+   "dustPiles": [
+    [
+     30,
+     36,
+     12
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_boss_ice_approach",
+   "name": "Frozen Approach",
+   "world": 1,
+   "size": [
+    36,
+    20
+   ],
+   "spawn": [
+    18,
+    15
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        17,
+        36,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -260,
+    250
+   ],
+   "theme": "frozenStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "transitions": [
+    {
+     "dir": "right",
+     "to": "room_ice_caves_upper",
+     "pos": 10,
+     "size": 7,
+     "spawn": [
+      4,
+      35
+     ]
+    },
+    {
+     "dir": "left",
+     "to": "room_boss_ice",
+     "pos": 10,
+     "size": 7,
+     "spawn": [
+      43,
+      19
+     ]
+    }
+   ],
+   "saveTombs": [
+    [
+     20,
+     16
+    ]
+   ],
+   "dustContainers": [
+    [
+     26,
+     16
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_boss_ice",
+   "name": "Boss Ice",
+   "world": 1,
+   "size": [
+    48,
+    24
+   ],
+   "spawn": [
+    36,
+    19
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        21,
+        48,
+        3
+       ]
+      ]
+     },
+     "iceBlock": {
+      "rects": [
+       [
+        10,
+        20,
+        26,
+        1
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -390,
+    250
+   ],
+   "theme": "frozenStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "enemies": [
+    {
+     "type": "rockElemental",
+     "pos": [
+      18,
+      17
+     ],
+     "kinds": [
+      "Ice"
+     ],
+     "particleCount": 24,
+     "boss": true
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "right",
+     "to": "room_boss_ice_approach",
+     "pos": 14,
+     "size": 7,
+     "spawn": [
+      4,
+      15
+     ]
+    }
+   ],
+   "skillTombs": [
+    [
+     6,
+     20,
+     "storm"
+    ]
+   ],
+   "dustBoostJars": [
+    [
+     8,
+     20,
+     "Ice",
+     12
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_central_cave_hub",
+   "name": "Central Hub",
+   "world": 1,
+   "size": [
+    64,
+    40
+   ],
+   "spawn": [
+    32,
+    35
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        20,
+        8,
+        3
+       ],
+       [
+        56,
+        20,
+        8,
+        3
+       ],
+       [
+        0,
+        37,
+        14,
+        3
+       ],
+       [
+        19,
+        37,
+        25,
+        3
+       ],
+       [
+        49,
+        37,
+        15,
+        3
+       ]
+      ]
+     },
+     "grayStone": {
+      "rects": [
+       [
+        20,
+        26,
+        10,
+        2
+       ],
+       [
+        36,
+        30,
+        10,
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    0,
+    260
+   ],
+   "theme": "grayStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      9,
+      24,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      28,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      32,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      51,
+      24,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      51,
+      28,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      51,
+      32,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      30,
+      5,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      26,
+      22,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      40,
+      24,
+      6,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "enemies": [
+    {
+     "type": "basic",
+     "pos": [
+      24,
+      35
+     ],
+     "kinds": [
+      "Physical"
+     ],
+     "particleCount": 6
+    },
+    {
+     "type": "basic",
+     "pos": [
+      50,
+      35
+     ],
+     "kinds": [
+      "Physical"
+     ],
+     "particleCount": 6
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_ice_caves_upper",
+     "pos": 13,
+     "size": 7,
+     "spawn": [
+      35,
+      35
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_light_dark_shaft_mid",
+     "pos": 13,
+     "size": 7,
+     "spawn": [
+      4,
+      32
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_lower_caves_reset",
+     "pos": 14,
+     "size": 5,
+     "spawn": [
+      10,
+      5
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_falling_block_puzzle",
+     "pos": 44,
+     "size": 5,
+     "spawn": [
+      8,
+      5
+     ]
+    }
+   ],
+   "saveTombs": [
+    [
+     32,
+     36
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_lower_caves_reset",
+   "name": "Reset Caves",
+   "world": 1,
+   "size": [
+    40,
+    24
+   ],
+   "spawn": [
+    20,
+    19
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        21,
+        40,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    0,
+    380
+   ],
+   "theme": "grayStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      8,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "up",
+     "to": "room_central_cave_hub",
+     "pos": 8,
+     "size": 5,
+     "spawn": [
+      11,
+      35
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_lower_caves_swing",
+     "pos": 14,
+     "size": 7,
+     "spawn": [
+      4,
+      12
+     ]
+    }
+   ],
+   "springboards": [
+    [
+     20,
+     20
+    ],
+    [
+     28,
+     20
+    ]
+   ],
+   "dustPiles": [
+    [
+     16,
+     20,
+     10
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_lower_caves_swing",
+   "name": "Swing Gallery",
+   "world": 1,
+   "size": [
+    48,
+    32
+   ],
+   "spawn": [
+    24,
+    27
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        14,
+        8,
+        3
+       ],
+       [
+        0,
+        29,
+        48,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    160,
+    390
+   ],
+   "theme": "grayStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      9,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      22,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      26,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_lower_caves_reset",
+     "pos": 7,
+     "size": 7,
+     "spawn": [
+      35,
+      19
+     ]
+    },
+    {
+     "dir": "left",
+     "to": "room_falling_block_puzzle",
+     "pos": 22,
+     "size": 7,
+     "spawn": [
+      35,
+      39
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_dark_zone_lower_entry",
+     "pos": 22,
+     "size": 7,
+     "spawn": [
+      4,
+      21
+     ]
+    }
+   ],
+   "spikes": [
+    [
+     22,
+     28,
+     "up"
+    ],
+    [
+     23,
+     28,
+     "up"
+    ],
+    [
+     26,
+     28,
+     "up"
+    ],
+    [
+     27,
+     28,
+     "up"
+    ]
+   ],
+   "bounces": [
+    {
+     "r": [
+      24,
+      28,
+      2,
+      1
+     ]
+    }
+   ],
+   "ropes": [
+    {
+     "aax": 18,
+     "aay": 3,
+     "abx": 18,
+     "aby": 11,
+     "fixed": false
+    },
+    {
+     "aax": 30,
+     "aay": 3,
+     "abx": 30,
+     "aby": 11,
+     "fixed": false
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_falling_block_puzzle",
+   "name": "Falling Block Puzzle",
+   "world": 1,
+   "size": [
+    40,
+    44
+   ],
+   "spawn": [
+    20,
+    39
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        41,
+        40,
+        3
+       ]
+      ]
+     },
+     "grayStone": {
+      "rects": [
+       [
+        2,
+        20,
+        28,
+        3
+       ],
+       [
+        34,
+        20,
+        6,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    -40,
+    470
+   ],
+   "theme": "grayStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      6,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      22,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      26,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      30,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      34,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      38,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      0,
+      25,
+      3,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      0,
+      29,
+      3,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      0,
+      33,
+      3,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      0,
+      37,
+      3,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "up",
+     "to": "room_central_cave_hub",
+     "pos": 6,
+     "size": 5,
+     "spawn": [
+      41,
+      35
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_lower_caves_swing",
+     "pos": 34,
+     "size": 7,
+     "spawn": [
+      4,
+      27
+     ]
+    }
+   ],
+   "dustPiles": [
+    [
+     20,
+     40,
+     15
+    ]
+   ],
+   "crumbles": [
+    {
+     "r": [
+      30,
+      20,
+      4,
+      1
+     ]
+    }
+   ],
+   "fallingBlocks": [
+    [
+     12,
+     19,
+     "s"
+    ],
+    [
+     13,
+     19,
+     "c"
+    ],
+    [
+     14,
+     19,
+     "s"
+    ],
+    [
+     15,
+     19,
+     "c"
+    ],
+    [
+     16,
+     19,
+     "t"
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_light_dark_shaft_mid",
+   "name": "Light-Dark Shaft",
+   "world": 1,
+   "size": [
+    28,
+    48
+   ],
+   "spawn": [
+    16,
+    43
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        12,
+        8,
+        3
+       ],
+       [
+        20,
+        22,
+        8,
+        3
+       ],
+       [
+        0,
+        34,
+        8,
+        3
+       ],
+       [
+        0,
+        45,
+        11,
+        3
+       ],
+       [
+        16,
+        45,
+        12,
+        3
+       ]
+      ]
+     },
+     "darkStone": {
+      "rects": [
+       [
+        0,
+        40,
+        3,
+        5
+       ],
+       [
+        25,
+        40,
+        3,
+        5
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    220,
+    170
+   ],
+   "theme": "grayStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "ambientDir": "down",
+   "specialWalls": [
+    {
+     "r": [
+      9,
+      16,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      20,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      24,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      28,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      32,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      36,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      40,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      38,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      42,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      26,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      30,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      34,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      38,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      42,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      22,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      26,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      30,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      34,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      38,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      11,
+      42,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      4,
+      16,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      18,
+      19,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      4,
+      26,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      18,
+      30,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      4,
+      38,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      18,
+      41,
+      6,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_ice_water_vines",
+     "pos": 5,
+     "size": 7,
+     "spawn": [
+      43,
+      23
+     ]
+    },
+    {
+     "dir": "left",
+     "to": "room_central_cave_hub",
+     "pos": 27,
+     "size": 7,
+     "spawn": [
+      59,
+      18
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_enemy_lock_room",
+     "pos": 15,
+     "size": 7,
+     "spawn": [
+      4,
+      15
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_dark_zone_lower_entry",
+     "pos": 11,
+     "size": 5,
+     "spawn": [
+      22,
+      5
+     ]
+    },
+    {
+     "dir": "up",
+     "to": "room_branch_cliff_surface",
+     "pos": 11,
+     "size": 5,
+     "spawn": [
+      19,
+      31
+     ]
+    }
+   ],
+   "lights": [
+    [
+     14,
+     6,
+     9,
+     255,
+     240,
+     200,
+     80
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_enemy_lock_room",
+   "name": "Enemy Lock",
+   "world": 1,
+   "size": [
+    32,
+    20
+   ],
+   "spawn": [
+    16,
+    15
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        17,
+        32,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    340,
+    150
+   ],
+   "theme": "darkStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "enemies": [
+    {
+     "type": "slime",
+     "pos": [
+      12,
+      15
+     ],
+     "kinds": [
+      "Physical"
+     ],
+     "particleCount": 6
+    },
+    {
+     "type": "slime",
+     "pos": [
+      20,
+      15
+     ],
+     "kinds": [
+      "Physical"
+     ],
+     "particleCount": 6
+    },
+    {
+     "type": "wheel",
+     "pos": [
+      16,
+      15
+     ],
+     "kinds": [
+      "Physical"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_light_dark_shaft_mid",
+     "pos": 10,
+     "size": 7,
+     "spawn": [
+      23,
+      20
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_boss_lock_arena",
+     "pos": 10,
+     "size": 7,
+     "spawn": [
+      4,
+      19
+     ]
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_boss_lock_arena",
+   "name": "Boss Lock Arena",
+   "world": 1,
+   "size": [
+    44,
+    24
+   ],
+   "spawn": [
+    22,
+    19
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        21,
+        44,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    450,
+    160
+   ],
+   "theme": "darkStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "enemies": [
+    {
+     "type": "largeSlime",
+     "pos": [
+      24,
+      17
+     ],
+     "kinds": [
+      "Nature"
+     ],
+     "particleCount": 20,
+     "boss": true
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_enemy_lock_room",
+     "pos": 14,
+     "size": 7,
+     "spawn": [
+      27,
+      15
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_grapple_vault_region",
+     "pos": 14,
+     "size": 7,
+     "spawn": [
+      4,
+      14
+     ]
+    }
+   ],
+   "dustContainers": [
+    [
+     6,
+     20
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_dark_zone_lower_entry",
+   "name": "Dark Zone",
+   "world": 1,
+   "size": [
+    44,
+    26
+   ],
+   "spawn": [
+    22,
+    21
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        23,
+        32,
+        3
+       ],
+       [
+        37,
+        23,
+        7,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    250,
+    360
+   ],
+   "theme": "darkStone",
+   "bg": "brownRock",
+   "light": "DarkRoom",
+   "specialWalls": [
+    {
+     "r": [
+      20,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      20,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      20,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      20,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "enemies": [
+    {
+     "type": "flyingEye",
+     "pos": [
+      22,
+      12
+     ],
+     "kinds": [
+      "Shadow"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_lower_caves_swing",
+     "pos": 16,
+     "size": 7,
+     "spawn": [
+      43,
+      27
+     ]
+    },
+    {
+     "dir": "up",
+     "to": "room_light_dark_shaft_mid",
+     "pos": 20,
+     "size": 5,
+     "spawn": [
+      8,
+      43
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_dark_zone_main",
+     "pos": 16,
+     "size": 7,
+     "spawn": [
+      4,
+      21
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_teleporter_pyramid_entry",
+     "pos": 32,
+     "size": 5,
+     "spawn": [
+      16,
+      5
+     ]
+    }
+   ],
+   "saveTombs": [
+    [
+     8,
+     22
+    ]
+   ],
+   "lights": [
+    [
+     8,
+     19,
+     6,
+     255,
+     220,
+     150,
+     70
+    ],
+    [
+     26,
+     10,
+     5,
+     255,
+     220,
+     150,
+     55
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_dark_zone_main",
+   "name": "Deep Dark",
+   "world": 1,
+   "size": [
+    52,
+    26
+   ],
+   "spawn": [
+    26,
+    21
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        23,
+        52,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    390,
+    360
+   ],
+   "theme": "darkStone",
+   "bg": "brownRock",
+   "light": "DarkRoom",
+   "specialWalls": [
+    {
+     "r": [
+      18,
+      18,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      30,
+      15,
+      6,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "enemies": [
+    {
+     "type": "flyingEye",
+     "pos": [
+      16,
+      10
+     ],
+     "kinds": [
+      "Shadow"
+     ],
+     "particleCount": 8
+    },
+    {
+     "type": "flyingEye",
+     "pos": [
+      40,
+      12
+     ],
+     "kinds": [
+      "Shadow"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_dark_zone_lower_entry",
+     "pos": 16,
+     "size": 7,
+     "spawn": [
+      39,
+      21
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_golden_dust_region",
+     "pos": 16,
+     "size": 7,
+     "spawn": [
+      4,
+      19
+     ]
+    }
+   ],
+   "breakableBlocks": [
+    [
+     26,
+     22
+    ],
+    [
+     27,
+     22
+    ]
+   ],
+   "lights": [
+    [
+     14,
+     12,
+     5,
+     200,
+     190,
+     255,
+     45
+    ],
+    [
+     38,
+     10,
+     5,
+     200,
+     190,
+     255,
+     45
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_golden_dust_region",
+   "name": "Golden Dust",
+   "world": 1,
+   "size": [
+    40,
+    24
+   ],
+   "spawn": [
+    20,
+    19
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        21,
+        40,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    520,
+    320
+   ],
+   "theme": "sandStone",
+   "bg": "brownRock",
+   "light": "FullyLit",
+   "specialWalls": [
+    {
+     "r": [
+      18,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      18,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      18,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      18,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_dark_zone_main",
+     "pos": 14,
+     "size": 7,
+     "spawn": [
+      47,
+      21
+     ]
+    },
+    {
+     "dir": "up",
+     "to": "room_grapple_vault_region",
+     "pos": 18,
+     "size": 5,
+     "spawn": [
+      15,
+      31
+     ]
+    }
+   ],
+   "dustContainers": [
+    [
+     30,
+     20
+    ]
+   ],
+   "dustPiles": [
+    [
+     16,
+     20,
+     25
+    ],
+    [
+     20,
+     20,
+     25
+    ],
+    [
+     24,
+     20,
+     25
+    ]
+   ],
+   "guidePaths": [
+    {
+     "pts": [
+      [
+       12,
+       8
+      ],
+      [
+       28,
+       8
+      ],
+      [
+       28,
+       17
+      ],
+      [
+       12,
+       17
+      ]
+     ],
+     "lp": 1
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_grapple_vault_region",
+   "name": "Grapple Vault",
+   "world": 1,
+   "size": [
+    36,
+    36
+   ],
+   "spawn": [
+    17,
+    31
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        16,
+        8,
+        3
+       ],
+       [
+        0,
+        33,
+        18,
+        3
+       ],
+       [
+        23,
+        33,
+        13,
+        3
+       ]
+      ]
+     },
+     "grayStone": {
+      "rects": [
+       [
+        33,
+        25,
+        3,
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    520,
+    210
+   ],
+   "theme": "grayStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      9,
+      20,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      24,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      9,
+      28,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      22,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      26,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      8,
+      30,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "enemies": [
+    {
+     "type": "grappleHunter",
+     "pos": [
+      18,
+      20
+     ],
+     "kinds": [
+      "Physical"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_boss_lock_arena",
+     "pos": 9,
+     "size": 7,
+     "spawn": [
+      39,
+      19
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_golden_dust_region",
+     "pos": 18,
+     "size": 5,
+     "spawn": [
+      20,
+      5
+     ]
+    },
+    {
+     "dir": "up",
+     "to": "room_overgrown_shaft",
+     "pos": 8,
+     "size": 5,
+     "spawn": [
+      5,
+      39
+     ]
+    }
+   ],
+   "dustBoostJars": [
+    [
+     34,
+     32,
+     "Physical",
+     10
+    ]
+   ],
+   "crumbles": [
+    {
+     "r": [
+      30,
+      27,
+      2,
+      6
+     ]
+    }
+   ],
+   "ropes": [
+    {
+     "aax": 14,
+     "aay": 3,
+     "abx": 14,
+     "aby": 11,
+     "fixed": false
+    },
+    {
+     "aax": 24,
+     "aay": 5,
+     "abx": 24,
+     "aby": 13,
+     "fixed": false
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_overgrown_shaft",
+   "name": "Overgrowth Zone",
+   "world": 1,
+   "size": [
+    28,
+    44
+   ],
+   "spawn": [
+    14,
+    39
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        20,
+        20,
+        8,
+        3
+       ],
+       [
+        0,
+        41,
+        8,
+        3
+       ],
+       [
+        13,
+        41,
+        15,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    520,
+    10
+   ],
+   "theme": "overgrowth",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      14,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      22,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      26,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      30,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      34,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      38,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      24,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      28,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      32,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      15,
+      36,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      4,
+      12,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      16,
+      16,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      4,
+      24,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      16,
+      28,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      4,
+      34,
+      6,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "enemies": [
+    {
+     "type": "beetle",
+     "pos": [
+      14,
+      39
+     ],
+     "kinds": [
+      "Nature"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "down",
+     "to": "room_grapple_vault_region",
+     "pos": 8,
+     "size": 5,
+     "spawn": [
+      10,
+      5
+     ]
+    },
+    {
+     "dir": "up",
+     "to": "room_overgrown_upper",
+     "pos": 14,
+     "size": 5,
+     "spawn": [
+      23,
+      23
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_magma_entry",
+     "pos": 13,
+     "size": 7,
+     "spawn": [
+      4,
+      19
+     ]
+    }
+   ],
+   "saveTombs": [
+    [
+     20,
+     40
+    ]
+   ],
+   "ropes": [
+    {
+     "aax": 12,
+     "aay": 3,
+     "abx": 12,
+     "aby": 10,
+     "fixed": false
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_overgrown_upper",
+   "name": "Overgrown Canopy",
+   "world": 1,
+   "size": [
+    56,
+    28
+   ],
+   "spawn": [
+    25,
+    23
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        25,
+        26,
+        3
+       ],
+       [
+        31,
+        25,
+        25,
+        3
+       ]
+      ]
+     },
+     "glowingOvergrowth": {
+      "rects": [
+       [
+        36,
+        22,
+        4,
+        3
+       ],
+       [
+        18,
+        23,
+        5,
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    500,
+    -140
+   ],
+   "theme": "overgrowth",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "enemies": [
+    {
+     "type": "webSpider",
+     "pos": [
+      30,
+      8
+     ],
+     "kinds": [
+      "Nature"
+     ],
+     "particleCount": 10
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "down",
+     "to": "room_overgrown_shaft",
+     "pos": 26,
+     "size": 5,
+     "spawn": [
+      16,
+      5
+     ]
+    },
+    {
+     "dir": "left",
+     "to": "room_branch_cliff_surface",
+     "pos": 18,
+     "size": 7,
+     "spawn": [
+      43,
+      10
+     ]
+    }
+   ],
+   "breakableBlocks": [
+    [
+     10,
+     24
+    ],
+    [
+     11,
+     24
+    ],
+    [
+     24,
+     24
+    ],
+    [
+     25,
+     24
+    ],
+    [
+     33,
+     24
+    ],
+    [
+     46,
+     24
+    ],
+    [
+     47,
+     24
+    ]
+   ],
+   "ropes": [
+    {
+     "aax": 14,
+     "aay": 2,
+     "abx": 14,
+     "aby": 9,
+     "fixed": false
+    },
+    {
+     "aax": 26,
+     "aay": 2,
+     "abx": 26,
+     "aby": 10,
+     "fixed": false
+    },
+    {
+     "aax": 40,
+     "aay": 2,
+     "abx": 40,
+     "aby": 9,
+     "fixed": false
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_magma_entry",
+   "name": "Magma Zone",
+   "world": 1,
+   "size": [
+    44,
+    24
+   ],
+   "spawn": [
+    22,
+    19
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        21,
+        44,
+        3
+       ]
+      ]
+     },
+     "magma": {
+      "rects": [
+       [
+        15,
+        17,
+        1,
+        4
+       ],
+       [
+        28,
+        17,
+        1,
+        4
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    680,
+    30
+   ],
+   "theme": "magmaStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "specialWalls": [
+    {
+     "r": [
+      18,
+      14,
+      3,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      24,
+      14,
+      3,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "enemies": [
+    {
+     "type": "rolling",
+     "pos": [
+      36,
+      19
+     ],
+     "kinds": [
+      "Lava"
+     ],
+     "particleCount": 8
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_overgrown_shaft",
+     "pos": 14,
+     "size": 7,
+     "spawn": [
+      23,
+      18
+     ]
+    },
+    {
+     "dir": "right",
+     "to": "room_magma_deeper",
+     "pos": 14,
+     "size": 7,
+     "spawn": [
+      4,
+      15
+     ]
+    }
+   ],
+   "spikes": [
+    [
+     13,
+     20,
+     "up"
+    ],
+    [
+     30,
+     20,
+     "up"
+    ]
+   ],
+   "lavaLayer": {
+    "rects": [
+     [
+      16,
+      17,
+      12,
+      4
+     ]
+    ]
+   },
+   "lights": [
+    [
+     22,
+     16,
+     7,
+     255,
+     140,
+     60,
+     65
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_magma_deeper",
+   "name": "Magma Depths",
+   "world": 1,
+   "size": [
+    36,
+    20
+   ],
+   "spawn": [
+    18,
+    15
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        17,
+        36,
+        3
+       ]
+      ]
+     },
+     "magmaStone": {
+      "rects": [
+       [
+        24,
+        14,
+        1,
+        3
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    820,
+    30
+   ],
+   "theme": "magma",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "transitions": [
+    {
+     "dir": "left",
+     "to": "room_magma_entry",
+     "pos": 10,
+     "size": 7,
+     "spawn": [
+      39,
+      19
+     ]
+    }
+   ],
+   "lavaLayer": {
+    "rects": [
+     [
+      25,
+      14,
+      6,
+      3
+     ]
+    ]
+   },
+   "dustBoostJars": [
+    [
+     20,
+     16,
+     "Fire",
+     12
+    ]
+   ],
+   "lights": [
+    [
+     27,
+     13,
+     6,
+     255,
+     120,
+     50,
+     70
+    ]
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_teleporter_pyramid_entry",
+   "name": "Pyramid Descent",
+   "world": 1,
+   "size": [
+    32,
+    40
+   ],
+   "spawn": [
+    13,
+    35
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        37,
+        14,
+        3
+       ],
+       [
+        19,
+        37,
+        13,
+        3
+       ]
+      ]
+     },
+     "whiteMarble": {
+      "rects": [
+       [
+        0,
+        32,
+        4,
+        5
+       ],
+       [
+        28,
+        32,
+        4,
+        5
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    250,
+    520
+   ],
+   "theme": "darkStone",
+   "bg": "brownRock",
+   "light": "Ambient",
+   "ambientDir": "down",
+   "specialWalls": [
+    {
+     "r": [
+      14,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      22,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      26,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      30,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      14,
+      34,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      14,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      20,
+      18,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      6,
+      24,
+      6,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      20,
+      28,
+      6,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "up",
+     "to": "room_dark_zone_lower_entry",
+     "pos": 14,
+     "size": 5,
+     "spawn": [
+      29,
+      21
+     ]
+    },
+    {
+     "dir": "down",
+     "to": "room_teleporter_room",
+     "pos": 14,
+     "size": 5,
+     "spawn": [
+      22,
+      5
+     ]
+    }
+   ]
+  },
+  {
+   "v": 3,
+   "id": "room_teleporter_room",
+   "name": "Teleporter Room",
+   "world": 1,
+   "size": [
+    44,
+    26
+   ],
+   "spawn": [
+    26,
+    21
+   ],
+   "solids": {
+    "byTheme": {
+     "__default__": {
+      "rects": [
+       [
+        0,
+        23,
+        44,
+        3
+       ]
+      ]
+     },
+     "whiteMarble": {
+      "rects": [
+       [
+        0,
+        8,
+        6,
+        3
+       ],
+       [
+        38,
+        8,
+        6,
+        3
+       ],
+       [
+        0,
+        14,
+        10,
+        3
+       ],
+       [
+        34,
+        14,
+        10,
+        3
+       ],
+       [
+        18,
+        21,
+        8,
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "map": [
+    250,
+    670
+   ],
+   "theme": "whiteMarble",
+   "bg": "brownRock",
+   "light": "DarkRoom",
+   "specialWalls": [
+    {
+     "r": [
+      20,
+      6,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      20,
+      10,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      20,
+      14,
+      4,
+      1
+     ],
+     "plat": 1
+    },
+    {
+     "r": [
+      20,
+      18,
+      4,
+      1
+     ],
+     "plat": 1
+    }
+   ],
+   "transitions": [
+    {
+     "dir": "up",
+     "to": "room_teleporter_pyramid_entry",
+     "pos": 20,
+     "size": 5,
+     "spawn": [
+      11,
+      35
+     ]
+    }
+   ],
+   "saveTombs": [
+    [
+     10,
+     22
+    ]
+   ],
+   "dustContainers": [
+    [
+     32,
+     22
+    ]
+   ],
+   "lights": [
+    [
+     22,
+     18,
+     8,
+     180,
+     230,
+     255,
+     85
+    ],
+    [
+     8,
+     10,
+     5,
+     150,
+     200,
+     255,
+     50
+    ],
+    [
+     36,
+     10,
+     5,
+     150,
+     200,
+     255,
+     50
+    ]
+   ]
+  }
+ ],
+ "editor": {
+  "createdWithBuild": "script-greybox-1",
+  "lastEditedIso": "2026-07-01T00:00:00.000Z"
+ }
+}
