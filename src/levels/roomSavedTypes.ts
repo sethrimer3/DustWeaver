@@ -132,7 +132,13 @@ export type SavedEnemyType =
   | 'dustBlockMimicLarge'
   | 'voidSingularity'
   | 'voidSingularityPair'
-  | 'dustLeech';
+  | 'dustLeech'
+  | 'gridBlock1x1Slow'
+  | 'gridBlock1x1Medium'
+  | 'gridBlock1x1Fast'
+  | 'gridBlock2x2Slow'
+  | 'gridBlock2x2Medium'
+  | 'gridBlock2x2Fast';
 
 export interface SavedEnemy {
   type: SavedEnemyType;

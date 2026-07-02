@@ -137,6 +137,16 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isVoidSingularity && e.isVoidSingularityPair) return 'voidSingularityPair';
   if (e.isVoidSingularity) return 'voidSingularity';
   if (e.isDustLeech) return 'dustLeech';
+  if (e.isGridBlockEnemy) {
+    const sz = e.gridBlockSizeIndex ?? 0;
+    const sp = e.gridBlockSpeedIndex ?? 0;
+    if (sz === 0 && sp === 0) return 'gridBlock1x1Slow';
+    if (sz === 0 && sp === 1) return 'gridBlock1x1Medium';
+    if (sz === 0 && sp === 2) return 'gridBlock1x1Fast';
+    if (sz === 1 && sp === 0) return 'gridBlock2x2Slow';
+    if (sz === 1 && sp === 1) return 'gridBlock2x2Medium';
+    return 'gridBlock2x2Fast';
+  }
   return 'basic';
 }
 

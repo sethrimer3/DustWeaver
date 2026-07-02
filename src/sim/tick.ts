@@ -122,6 +122,10 @@ export function tick(world: WorldState): void {
   // 0.25. Grapple rope constraint — corrects player cluster position/velocity
   applyGrappleClusterConstraint(world);
 
+  // 0.25b. Grid Block Enemy AI — runs early so that momentum combat (below) reads
+  //         this tick's grid-aligned positions rather than last tick's.
+  applyGridBlockEnemyAI(world);
+
   // 0.26. Momentum combat — must run AFTER grapple so it reads final-frame
   //        post-grapple horizontal velocity.  Phase 1 sets isHighVelocityAttacking;
   //        Phase 2 applies AABB collision damage to overlapping enemies.
@@ -163,9 +167,6 @@ export function tick(world: WorldState): void {
 
   // 0.5k. Square Stampede AI — orthogonal dashing, trail update, contact damage
   applySquareStampedeAI(world);
-
-  // 0.5k2. Grid Block Enemy AI — tile-grid movement, BFS pathfinding, contact damage
-  applyGridBlockEnemyAI(world);
 
   // 0.5l. Golden Mimic AI — mirror player movement, heap/fade state, contact damage
   applyGoldenMimicAI(world);
