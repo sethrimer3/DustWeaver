@@ -72,14 +72,15 @@ function drawMomentumGoldenTrail(
   const dirY = velocityYWorld / speedWorldPerSec;
   const perpX = -dirY;
   const perpY = dirX;
-  const anchorX = screenX - dirX * 3.0 * scalePx;
-  const anchorY = spriteCenterY - dirY * 3.0 * scalePx;
-  const tailX = screenX - dirX * 34.0 * scalePx;
-  const tailY = spriteCenterY - dirY * 34.0 * scalePx;
-  const midX = screenX - dirX * 18.0 * scalePx;
-  const midY = spriteCenterY - dirY * 18.0 * scalePx;
-  const baseHalfWidthPx = Math.max(3.0, 6.5 * scalePx);
-  const tailHalfWidthPx = Math.max(0.75, 0.8 * scalePx);
+  const spriteScalePx = Math.max(1.0, Math.min(scalePx, 3.0));
+  const anchorX = screenX - dirX * 2.0 * spriteScalePx;
+  const anchorY = spriteCenterY - dirY * 2.0 * spriteScalePx;
+  const tailX = screenX - dirX * 28.0 * spriteScalePx;
+  const tailY = spriteCenterY - dirY * 28.0 * spriteScalePx;
+  const midX = screenX - dirX * 15.0 * spriteScalePx;
+  const midY = spriteCenterY - dirY * 15.0 * spriteScalePx;
+  const baseHalfWidthPx = 4.0 * spriteScalePx;
+  const tailHalfWidthPx = 0.65 * spriteScalePx;
 
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
