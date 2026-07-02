@@ -38,6 +38,82 @@ import {
   renderWebSpider,
   renderWebSpiderFadingWebs,
 } from './enemyRenderers';
+import { renderGridBlockEnemy } from './gridBlockEnemyRenderer';
+
+function drawPlayerOutlineMask(
+  ctx: CanvasRenderingContext2D,
+  outlineMask: HTMLCanvasElement,
+  xPx: number,
+  yPx: number,
+  widthPx: number,
+  heightPx: number,
+  color: string,
+): void {
+  ctx.save();
+  ctx.drawImage(outlineMask, xPx, yPx, widthPx, heightPx);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = color;
+  ctx.fillRect(xPx, yPx, widthPx, heightPx);
+  ctx.restore();
+}
+
+function drawMomentumGoldenTrail(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  spriteCenterY: number,
+  velocityXWorld: number,
+  velocityYWorld: number,
+  scalePx: number,
+): void {
+  const speedWorldPerSec = Math.hypot(velocityXWorld, velocityYWorld);
+  if (speedWorldPerSec <= 0) return;
+
+  const dirX = velocityXWorld / speedWorldPerSec;
+  const dirY = velocityYWorld / speedWorldPerSec;
+  const perpX = -dirY;
+  const perpY = dirX;
+  const anchorX = screenX - dirX * 3.0 * scalePx;
+  const anchorY = spriteCenterY - dirY * 3.0 * scalePx;
+  const tailX = screenX - dirX * 34.0 * scalePx;
+  const tailY = spriteCenterY - dirY * 34.0 * scalePx;
+  const midX = screenX - dirX * 18.0 * scalePx;
+  const midY = spriteCenterY - dirY * 18.0 * scalePx;
+  const baseHalfWidthPx = Math.max(3.0, 6.5 * scalePx);
+  const tailHalfWidthPx = Math.max(0.75, 0.8 * scalePx);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const gradient = ctx.createLinearGradient(anchorX, anchorY, tailX, tailY);
+  gradient.addColorStop(0.0, 'rgba(255, 225, 92, 0.78)');
+  gradient.addColorStop(0.55, 'rgba(255, 185, 36, 0.38)');
+  gradient.addColorStop(1.0, 'rgba(255, 170, 18, 0.0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.moveTo(anchorX + perpX * baseHalfWidthPx, anchorY + perpY * baseHalfWidthPx);
+  ctx.quadraticCurveTo(
+    midX + perpX * baseHalfWidthPx * 0.55,
+    midY + perpY * baseHalfWidthPx * 0.55,
+    tailX + perpX * tailHalfWidthPx,
+    tailY + perpY * tailHalfWidthPx,
+  );
+  ctx.lineTo(tailX - perpX * tailHalfWidthPx, tailY - perpY * tailHalfWidthPx);
+  ctx.quadraticCurveTo(
+    midX - perpX * baseHalfWidthPx * 0.55,
+    midY - perpY * baseHalfWidthPx * 0.55,
+    anchorX - perpX * baseHalfWidthPx,
+    anchorY - perpY * baseHalfWidthPx,
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255, 240, 150, 0.35)';
+  ctx.lineWidth = Math.max(1.0, 1.5 * scalePx);
+  ctx.beginPath();
+  ctx.moveTo(anchorX, anchorY);
+  ctx.lineTo(tailX, tailY);
+  ctx.stroke();
+  ctx.restore();
+}
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas using
@@ -216,35 +292,16 @@ export function renderClusters(
           continue; // skip rest of player rendering
         }
 
-        // ── Momentum combat golden trail (behind cloak and body) ──────
-        // TODO: replace with polished trail effect
-        if (cluster.isHighVelocityAttacking === 1) {
-          const vx = cluster.velocityXWorld;
-          const vy = cluster.velocityYWorld;
-          const spd = Math.sqrt(vx * vx + vy * vy);
-          if (spd > 0) {
-            const nx = vx / spd;
-            const ny = vy / spd;
-            const trailCount = 5;
-            for (let ti = 0; ti < trailCount; ti++) {
-              const t = (ti + 1) / trailCount;
-              const alpha = 0.55 * (1 - t);
-              const offsetDist = t * 12 * scalePx;
-              ctx.save();
-              ctx.globalAlpha = alpha;
-              ctx.fillStyle = 'rgba(255,210,60,1)';
-              ctx.beginPath();
-              ctx.ellipse(
-                screenX - nx * offsetDist,
-                spriteCenterY - ny * offsetDist,
-                4 * scalePx * (1 - t * 0.5),
-                4 * scalePx * (1 - t * 0.5),
-                0, 0, Math.PI * 2,
-              );
-              ctx.fill();
-              ctx.restore();
-            }
-          }
+        const isMomentumInvulnerable = cluster.isHighVelocityAttacking === 1;
+        if (isMomentumInvulnerable) {
+          drawMomentumGoldenTrail(
+            ctx,
+            screenX,
+            spriteCenterY,
+            cluster.velocityXWorld,
+            cluster.velocityYWorld,
+            scalePx,
+          );
         }
 
         // ── Layer 0: Phantom cloak extension (behind main cloak) ──────────
@@ -303,13 +360,16 @@ export function renderClusters(
         if (bounceRotationAngleRad !== 0) {
           ctx.rotate(bounceRotationAngleRad);
         }
-        // Draw black outer silhouette first, then the original sprite on top.
-        ctx.drawImage(
+        // Draw outer silhouette first, then the original sprite on top.
+        const outlineColor = isMomentumInvulnerable ? '#ffd84f' : '#000000';
+        drawPlayerOutlineMask(
+          ctx,
           outlineMask,
           -(spritePivotX + outlineThicknessPx),
           -spriteHalfH - outlineThicknessPx,
           spriteW + outlineThicknessPx * 2,
           spriteH + outlineThicknessPx * 2,
+          outlineColor,
         );
         ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
         ctx.restore();
@@ -480,6 +540,9 @@ export function renderClusters(
         }
       }
       // In popped state (bubbleState === 1), no cluster body is drawn — only particles.
+    } else if (cluster.isGridBlockEnemyFlag === 1) {
+      // ── Grid Block Enemy: metallic beveled tile block ─────────────────────
+      renderGridBlockEnemy(ctx, screenX, screenY, cluster, scalePx);
     } else if (cluster.isSquareStampedeFlag === 1) {
       // ── Square Stampede: ghost trail + current square ─────────────────────
       renderSquareStampede(ctx, screenX, screenY, cluster, snapshot, scalePx, offsetXPx, offsetYPx);
@@ -576,6 +639,11 @@ export function renderClusters(
       barColor = '#ffd700'; // golden yellow for beetle
     } else if (cluster.isBubbleEnemyFlag === 1) {
       barColor = cluster.isIceBubbleFlag === 1 ? '#aaddff' : '#3388ff';
+    } else if (cluster.isGridBlockEnemyFlag === 1) {
+      // Health bar color matches block speed variant.
+      barColor = cluster.gridBlockSpeedIndex === 0 ? '#4caf50'
+               : cluster.gridBlockSpeedIndex === 1 ? '#ffc107'
+               : '#f44336';
     } else if (cluster.isSquareStampedeFlag === 1) {
       barColor = '#dd44ff'; // vivid magenta-purple for square stampede
     } else if (cluster.isGoldenMimicFlag === 1) {

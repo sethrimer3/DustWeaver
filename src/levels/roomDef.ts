@@ -357,6 +357,15 @@ export interface RoomEnemyDef {
   isVoidSingularityPairFlag?: 0 | 1;
   /** 1 if this enemy is a Dust Leech. */
   isDustLeechFlag?: 0 | 1;
+  /**
+   * 1 if this enemy is a grid-aligned block enemy — stays on the tile grid,
+   * moves orthogonally, pathfinds toward the player, deals contact damage.
+   */
+  isGridBlockEnemyFlag?: 0 | 1;
+  /** 0 = 1×1 tile (default), 1 = 2×2 tile. */
+  gridBlockSizeIndex?: 0 | 1;
+  /** 0 = slow/green (default), 1 = medium/yellow, 2 = fast/red. */
+  gridBlockSpeedIndex?: 0 | 1 | 2;
 }
 
 /** An axis-aligned wall rectangle inside a room (block units). */

@@ -287,6 +287,13 @@ export interface ClusterSnapshot {
   readonly dustLeechAttackCooldownTicks: number;
   readonly dustLeechHitFlashTicks: number;
 
+  // ── Grid Block Enemy ─────────────────────────────────────────────────────
+  readonly isGridBlockEnemyFlag: 0 | 1;
+  readonly gridBlockSizeIndex: number;
+  readonly gridBlockSpeedIndex: number;
+  readonly gridBlockGlintPhase: number;
+  readonly gridBlockHitFlashTicks: number;
+
   // ── Dust Echo ─────────────────────────────────────────────────────────────
   readonly isDustEchoFlag: 0 | 1;
   readonly dustEchoState: number;

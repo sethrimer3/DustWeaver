@@ -56,6 +56,7 @@ import { applyDustWeaverArchitectAI } from './clusters/dustWeaverArchitectAi';
 import { applyVoidSingularityAI } from './clusters/voidSingularityAi';
 import { applyDustLeechAI } from './clusters/dustLeechAi';
 import { applySnakeAI } from './clusters/snakeAi';
+import { applyGridBlockEnemyAI } from './clusters/gridBlockEnemyAi';
 import {
   syncMoteQueueWithParticles,
   tickMoteSlotRegeneration,
@@ -162,6 +163,9 @@ export function tick(world: WorldState): void {
 
   // 0.5k. Square Stampede AI — orthogonal dashing, trail update, contact damage
   applySquareStampedeAI(world);
+
+  // 0.5k2. Grid Block Enemy AI — tile-grid movement, BFS pathfinding, contact damage
+  applyGridBlockEnemyAI(world);
 
   // 0.5l. Golden Mimic AI — mirror player movement, heap/fade state, contact damage
   applyGoldenMimicAI(world);

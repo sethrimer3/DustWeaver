@@ -94,6 +94,9 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isVoidSingularity: e.isVoidSingularityFlag === 1,
       isVoidSingularityPair: e.isVoidSingularityPairFlag === 1,
       isDustLeech: e.isDustLeechFlag === 1,
+      isGridBlockEnemy: e.isGridBlockEnemyFlag === 1,
+      gridBlockSizeIndex: e.gridBlockSizeIndex ?? 0,
+      gridBlockSpeedIndex: e.gridBlockSpeedIndex ?? 0,
     })),
     transitions: data.transitions.map(t => {
       // Compute legacy positionBlock / depthBlock from xBlock/yBlock for backward compat.
