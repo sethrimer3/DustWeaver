@@ -412,6 +412,165 @@ Current status:
 
 ---
 
+## Research findings: plausible optimizations not yet confirmed implemented
+
+Research pass date: 2026-07-01. Source search did not find obvious current use of `createImageBitmap`, `scheduler.postTask`, `isInputPending`, or Long Animation Frames instrumentation. `OffscreenCanvas` appears in a small number of rendering/effect files, but the room render-chunk prewarm pipeline still appears to be main-thread/idle-callback based. Verify with source before implementing.
+
+These are candidates, not recommendations to implement blindly. Each should be gated by transition-profiler evidence and a small A/B benchmark.
+
+### A. Worker-side render chunk prewarming with `OffscreenCanvas` + `ImageBitmap`
+
+**Why it may help:** DustWeaver already prewarms wall/background chunks during idle time, but if the heavy work is still 2D canvas drawing on the main thread, the browser can still miss idle windows or produce long frames. `OffscreenCanvas` is transferable and can run canvas work in a worker; MDN describes it as decoupling Canvas from the DOM and allowing rendering tasks in a separate thread. `OffscreenCanvas.transferToImageBitmap()` can produce an `ImageBitmap` that can be displayed or drawn without a transfer copy.
+
+**Possible DustWeaver application:** Move part of `roomRenderChunkWarmScheduler` / wall/background chunk rasterization into a dedicated render-prewarm worker. The worker would receive a serializable render command stream plus pre-decoded assets or atlas `ImageBitmap`s, render chunks into `OffscreenCanvas`, then transfer chunk `ImageBitmap`s back for adoption.
+
+**Implementation shape:**
+
+1. Prototype only one path first: one wall/background chunk type, one block theme, no lighting edge cases.
+2. Add a feature gate: `supportsOffscreenCanvasWorkerPrewarm`.
+3. Use a content key: `roomId + renderStateKey + scalePx + chunkCoord + assetRevision`.
+4. Return `ImageBitmap` chunks to the main thread and close/release them when evicted.
+5. Keep current main-thread chunk prewarm as fallback.
+
+**Risks:** OffscreenCanvas 2D output may not match every Canvas 2D feature/path exactly across browser/Electron versions; worker asset access is stricter; transferring many bitmaps can create memory pressure; `ImageBitmap.close()` discipline becomes important. Pixel-parity snapshot tests are required.
+
+**Evidence needed before implementation:** transition stats showing chunk prewarm slices, entry warm, or first visible chunk building are still a top bottleneck.
+
+### B. `createImageBitmap` asset pipeline instead of `HTMLImageElement`-only decode
+
+**Why it may help:** Current docs show decode-aware preloading through image elements. `createImageBitmap()` creates bitmap objects from images, blobs, canvases, and other sources asynchronously, and `ImageBitmap` is a valid Canvas image source for drawing. This may reduce first-draw decode/upload stalls, and it can work in worker contexts depending on call site.
+
+**Possible DustWeaver application:** For room-theme sprites/backgrounds, try a pipeline such as `fetch -> Blob -> createImageBitmap -> cache ImageBitmap`. Use that cache as the draw source in chunk builders instead of `HTMLImageElement` where possible.
+
+**Implementation shape:**
+
+1. Add a second asset cache beside `imageCache.ts`: `bitmapAssetCache.ts`.
+2. Feature-detect `createImageBitmap` and keep `HTMLImageElement.decode()` fallback.
+3. Start with room backgrounds or a single folder block theme; do not convert everything at once.
+4. Record decode time, first draw time, and memory pressure.
+5. Close evicted ImageBitmaps explicitly with `bitmap.close()`.
+
+**Risks:** In Chromium/Electron, `img.decode()` may already be sufficient; `ImageBitmap` can increase memory if both `HTMLImageElement` and `ImageBitmap` copies are kept; all cache eviction code must release bitmap resources.
+
+**Evidence needed before implementation:** profiler/LoAF data showing image decode, first draw, or GPU upload still occurs during room entry or entry warm.
+
+### C. Texture atlas / sprite atlas for folder block themes
+
+**Why it may help:** MDN canvas guidance recommends avoiding repeated scaling work in `drawImage`, caching image sizes on offscreen canvases, batching drawing where possible, and avoiding unnecessary state changes. A folder theme with many separate sprites may create many individual image decodes, cache lookups, and draw sources.
+
+**Possible DustWeaver application:** At build/export time, pack each folder block theme into one or a few atlas images with metadata. Chunk builders then draw atlas sub-rectangles from a smaller number of image sources.
+
+**Implementation shape:**
+
+1. Add an atlas build script for folder block themes.
+2. Emit atlas metadata mapping sprite IDs to source rectangles.
+3. Keep old individual-sprite loading as fallback for editor/dev simplicity.
+4. Measure number of image requests, decode promises, and draw-source switches on cold entry.
+
+**Risks:** Atlas invalidation and editor asset iteration become more complex; atlas updates must stay deterministic; very large atlases may hurt memory or upload time. This is most useful if asset-count/decode overhead, not wall/template work, is the bottleneck.
+
+### D. Persistent pre-rendered room-entry chunk cache
+
+**Why it may help:** Current prewarm caches appear session-memory based. If the same official campaign rooms are revisited across launches, the game could persist expensive render products or intermediate command streams keyed by room/render state.
+
+**Possible DustWeaver application:** In Electron, persist entry-viewport chunks, compact chunk command buffers, or precomputed chunk occupancy/manifests under the derived campaign cache. In browser mode, consider IndexedDB/Cache Storage only if worth the complexity.
+
+**Implementation shape:**
+
+1. Do not persist arbitrary live canvases directly as the first attempt.
+2. Persist a compact chunk manifest first: visible entry chunks, wall/background chunk bounds, render-state key, asset revision, and dirty dependencies.
+3. Later, consider storing encoded PNG/WebP chunk images or serialized `ImageBitmap`-source blobs for official campaigns.
+4. Invalidate on room hash, render-state key, graphics-quality tier, block-theme asset revision, and game version.
+
+**Risks:** Disk cache invalidation bugs can create stale visuals; encoded images can be larger than expected; decoding persisted chunk images may simply move the cost rather than remove it. This is best for official/static campaigns, not actively edited rooms.
+
+### E. Binary or streamable derived room/runtime payloads
+
+**Why it may help:** The repo already uses derived room files and baked wall templates, but JSON parse/hydration can still be a cold-path cost. The Compression Streams API supports gzip/deflate compression/decompression streams in modern browsers, and Electron can also use Node-side compression. For static typed data, a binary layout can avoid object-heavy hydration.
+
+**Possible DustWeaver application:** For official campaign exports, add an optional binary derived cache for static runtime fields: baked wall typed arrays, blocker key arrays, decoration geometry, adjacency, and room dimensions. Keep canonical JSON as source of truth.
+
+**Implementation shape:**
+
+1. First measure `loadRoomForGameplayAsync` time split: IPC/file read, JSON parse, schema hydrate, registry registration, runtime prep.
+2. If JSON parse/hydrate is significant, prototype one binary sidecar per room.
+3. Use typed arrays and transfer buffers where possible.
+4. Keep JSON fallback and round-trip validation.
+
+**Risks:** Binary formats increase maintenance cost and can obscure editor/debug workflows. This is not worth doing if transition stats point mostly to rendering, sprite decode, or resident-world construction.
+
+### F. Prioritized cooperative scheduler wrapper
+
+**Why it may help:** The current preload/chunk-warm schedulers rely primarily on `requestIdleCallback` and time-budget checks. `scheduler.postTask()` can schedule tasks with priorities such as `user-blocking`, `user-visible`, and `background`, and it is available in worker contexts, but MDN marks it as not Baseline because it does not work in some widely used browsers. Chromium/Electron support may still make it useful behind feature detection.
+
+**Possible DustWeaver application:** Create a single `backgroundWorkScheduler` abstraction that uses:
+
+1. `scheduler.postTask(..., { priority: 'background' })` when available;
+2. `requestIdleCallback` when useful;
+3. `MessageChannel`/`setTimeout(0)` fallback;
+4. optional `navigator.scheduling.isInputPending()` checks to yield early when input is pending.
+
+**Risks:** Scheduling APIs vary across browsers; overusing priority APIs can starve work or make debugging harder. Keep this as a wrapper, not scattered direct calls.
+
+**Evidence needed before implementation:** profiler data showing preload work starts at bad times or fails to make progress under `requestIdleCallback` despite available time.
+
+### G. Long Animation Frames API integration for hidden main-thread stalls
+
+**Why it may help:** DustWeaver already has internal transition profiling, but the browser can still spend time in GC, style/layout, image decode/upload, canvas internals, or other tasks that internal timers do not attribute. The Long Animation Frames API reports animation frames delayed beyond 50 ms and includes script timing attribution where available.
+
+**Possible DustWeaver application:** Add a DEV-only `PerformanceObserver` for `long-animation-frame` entries and correlate entries with room transition IDs from `transitionProfiler.ts`.
+
+**Implementation shape:**
+
+1. Feature-detect `PerformanceObserver.supportedEntryTypes.includes('long-animation-frame')`.
+2. Track only frames during a transition / entry warm / first N frames after room activation.
+3. Store a compact ring buffer in `__dwTransitionStats` output: duration, blockingDuration, renderStart, style/layout duration, and script source summary.
+4. Do not spam console by default.
+
+**Risks:** Script attribution can be incomplete, especially for worker-side work. Treat LoAF data as a complement to internal phase timers, not a replacement.
+
+### H. More aggressive zone residency / predictive resident build policy
+
+**Why it may help:** The docs already identify zone/world residency as a desired direction. If the remaining perceived delay is first-entry resident build, the fix may not be another micro-optimization; it may be earlier prediction and admission control.
+
+**Possible DustWeaver application:** Build resident worlds for the current zone in priority order:
+
+1. current room's direct exits,
+2. likely movement direction / velocity target,
+3. rooms visible on the map path,
+4. rest of zone while paused/menu/loading.
+
+Add a memory budget and degrade to static runtime prep only when resident `WorldState` memory is too high.
+
+**Risks:** Resident worlds include mutable state and memory-heavy arrays. Aggressive residency can create memory pressure and GC pauses if not bounded.
+
+### I. Separate static base chunks from dynamic lighting overlays
+
+**Why it may help:** Existing notes already mention that `setActiveBlockLighting` can invalidate whole wall chunks. If lighting changes are forcing full base-tile chunk rebuilds, splitting base tile rasterization from lighting/shadow overlay could reduce entry-warm and prewarm cost.
+
+**Possible DustWeaver application:** Cache base wall/background chunks keyed by geometry/theme, then cache or compute lighting overlays keyed by lighting/blocker state. Adoption could reuse base chunks even when ambient-light parameters differ.
+
+**Risks:** Extra compositing passes may cost more than they save on small rooms. This should only be attempted if transition diagnostics show stale render-state misses or lighting invalidation causing expensive wall chunk rebuilds.
+
+### J. Higher-risk / lower-confidence possibilities
+
+- **WASM for hot preprocessing kernels.** Consider only if a measured JS kernel remains CPU-bound after caching/incremental/worker work. Candidates could include wall merge, lighting masks, or compression/decompression. Risk: build complexity and JS/WASM transfer overhead.
+- **Sparse large-room grid adapters.** Already identified as likely memory rather than speed. Worth revisiting only if memory/GC or snake/pathfinding data implicates dense grids.
+- **Full WebGL/WebGPU tile renderer.** Could reduce CPU canvas work long-term, but it is a renderer rewrite, not a focused room-loading fix.
+
+### Research references reviewed
+
+- MDN — OffscreenCanvas: https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas
+- web.dev — OffscreenCanvas with workers: https://web.dev/articles/offscreen-canvas
+- MDN — createImageBitmap: https://developer.mozilla.org/en-US/docs/Web/API/Window/createImageBitmap
+- MDN — ImageBitmap.close: https://developer.mozilla.org/en-US/docs/Web/API/ImageBitmap/close
+- MDN — Optimizing canvas: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas
+- MDN — Scheduler.postTask: https://developer.mozilla.org/en-US/docs/Web/API/Scheduler/postTask
+- MDN — Long Animation Frame timing: https://developer.mozilla.org/en-US/docs/Web/API/Performance_API/Long_animation_frame_timing
+- MDN — Compression Streams API: https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API
+
+---
+
 ## Optimizations intentionally avoided or constrained
 
 These constraints matter because they prevent repeat attempts that are likely to break correctness.
@@ -422,6 +581,7 @@ These constraints matter because they prevent repeat attempts that are likely to
 4. **Do not casually alter boundary walls, trigger strips, spawn resolution, or map-sketch rendering.** These are regression-prone and have been explicitly called out in repo notes.
 5. **Do not re-enable legacy edge-extension cache building in normal gameplay.** Current runtime treats it as legacy-only.
 6. **Do not optimize dense grids before measuring.** Current docs say dense `Uint8Array` allocation is probably not the multi-second freeze source, though it may still matter for memory.
+7. **Do not implement the research candidates above as a batch.** Pick one candidate only after transition stats identify a matching bottleneck.
 
 ---
 
@@ -457,6 +617,9 @@ Use actual transition data before changing code. The most plausible remaining bo
    - Dense background wall grid is likely memory, not time, but should still be watched on huge rooms.
    - Snake nav grid only matters where snake enemies are active.
 
+7. **Browser-internal stalls not covered by game timers**
+   - GC, image decode/upload, Canvas internals, style/layout, and other browser work should be checked with Long Animation Frames data if internal timers do not explain the delay.
+
 ---
 
 ## Recommended measurement workflow
@@ -479,7 +642,8 @@ __dwLastTransition()
    - whether adoption rejected stale data;
    - whether entry viewport coverage was complete;
    - whether sprites/backgrounds were decoded;
-   - whether gameplay frames show `bake` / `edge` work.
+   - whether gameplay frames show `bake` / `edge` work;
+   - whether Long Animation Frames entries show browser-internal or unattributed main-thread stalls.
 5. Only then choose the next optimization target.
 
 ---
@@ -498,4 +662,4 @@ __dwLastTransition()
 
 ## Bottom line
 
-The repo has already tried broad, sophisticated room-loading optimizations. Future work should not be another generic "optimize room loading" pass. It should be a measurement-led fix targeted to the slowest observed transition phase or readiness miss reason.
+The repo has already tried broad, sophisticated room-loading optimizations. Future work should not be another generic "optimize room loading" pass. It should be a measurement-led fix targeted to the slowest observed transition phase or readiness miss reason. The most plausible untried families are worker-side render-chunk rasterization, ImageBitmap/atlas asset pipelines, persistent pre-rendered chunk caches, better task scheduling, and browser-level LoAF instrumentation, but none should be implemented without matching measurements.
