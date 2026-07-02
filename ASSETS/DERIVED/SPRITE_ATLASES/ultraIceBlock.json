@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "themeId": "ultraIceBlock",
+  "sourceRoot": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock",
+  "atlasImage": "ultraIceBlock.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "ultraIceBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (1).png"
+    },
+    "ultraIceBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (2).png"
+    },
+    "ultraIceBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (3).png"
+    },
+    "ultraIceBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (4).png"
+    },
+    "ultraIceBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (5).png"
+    },
+    "ultraIceBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (6).png"
+    }
+  }
+}

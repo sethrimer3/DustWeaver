@@ -648,6 +648,65 @@ __dwLastTransition()
 
 ---
 
+## Sprite atlas benchmark notes
+
+**Date:** 2026-07-02
+
+**Test environment:** Windows/PowerShell, Vite dev server on `http://127.0.0.1:5173/`, in-app browser automation, official campaign save slot 1. This was a measurement-only pass; sprite atlases remained disabled by default and gameplay rendering behavior was not changed.
+
+**Commands used:**
+
+```bash
+npm run build:atlases -- --deterministic
+npm run validate:atlases -- --strict
+npm run compare:atlases
+npm run build
+```
+
+**Corrected DEV console sequence after diagnostic-hook fix:**
+
+```js
+await window.__dwSpriteAtlasDebug()
+
+window.__dwSetSpriteAtlasesEnabled(false)
+// Reload if the helper reports reloadRequired before collecting clean timings.
+await window.__dwBenchSpriteAtlasRoom('lobby')
+window.__dwSpriteAtlasStats()
+
+window.__dwSetSpriteAtlasesEnabled(true)
+// Reload if the helper reports reloadRequired before collecting clean timings.
+await window.__dwBenchSpriteAtlasRoom('lobby')
+window.__dwSpriteAtlasStats()
+```
+
+**Atlas output validation before live testing:**
+
+- Atlas build completed with the existing deterministic outputs in `ASSETS/DERIVED/SPRITE_ATLASES/`.
+- Strict validation passed: `atlases=22`, `sprites=188`, `warnings=0`, `errors=0`.
+- Pixel comparison passed: `atlases=22`, `sprites=188`, `mismatches=0`, `errors=0`, `diffFiles=0`.
+
+**Rooms selected for coverage planning:**
+
+- `lobby` for the baseline official-campaign entry room.
+- Official packed campaign rooms with requested atlas-backed themes: `tall_shaft` for `grayStone`, plus `dark_tunnel`, `bend`, `the_fall`, `chasm`, and `underwater_lake` for `darkStone`.
+- Requested themes not found as obvious official-campaign room themes in this pass: `magma`, `sandStone`, `whiteMarble`, and `iceBlock` / `ultraIceBlock`. Representative custom-campaign rooms exist for these families, including `room_magma_deeper`, `room_branch_cliff_surface`, and `room_teleporter_room`, but they were not benchmarked because the live benchmark helper could not be reached through the available automation context.
+
+**Live browser benchmark result:** inconclusive for the original 2026-07-02 measurement attempt. The dev server loaded the app and the official campaign path reached the title/menu flow, but the browser automation context could not access the expected runtime benchmark globals or page storage needed to toggle atlas mode. Probes in the page context reported `typeof window.__dwSpriteAtlasStats === "undefined"` and `typeof window.__dwBenchSpriteAtlasRoom === "undefined"` from the automation scope. Attempts to use `window.localStorage` from the same context also failed, so the requested atlas-off / atlas-on reload sequence could not be executed safely or repeatably from that runner. A later diagnostics pass added direct DEV helpers: `window.__dwSpriteAtlasDebug()`, `window.__dwSetSpriteAtlasesEnabled(on)`, and a structured-result `window.__dwBenchSpriteAtlasRoom(roomId, opts?)`.
+
+**Console observations captured during the live attempt:**
+
+- No atlas-specific console errors or warnings were observed in the captured browser logs.
+- The app reported discovery of 22 folder-based block themes.
+- The official campaign load reported 15 packed rooms with `initialRoom: lobby`.
+- Existing non-atlas warnings appeared for stale baked wall templates on several official rooms, causing fallback wall-template behavior.
+- One captured lobby gameplay warning reported a long frame around `224ms`; this was not attributable to atlas mode because atlas mode could not be toggled or benchmarked.
+
+**Atlas-off vs atlas-on observation:** no reliable timing comparison was collected. Because the runtime helper and atlas flag were inaccessible through this automation path, no transition total time, longest phase, prewarm/adoption status, atlas lookup/hit/miss counts, unsupported path counts, or cold/warm repeat samples should be inferred from this run.
+
+**Recommendation:** keep atlas mode experimental and disabled by default. The generated atlas data remains pixel-correct and structurally valid, but this pass did not prove a room-loading or first-render performance benefit. The next step is to repeat the atlas-off / atlas-on benchmark with the corrected DEV helpers before tuning atlas loading or expanding runtime integration.
+
+---
+
 ## Quick glossary
 
 - **Runtime prepared room**: static room data cached in `RoomRuntimeCache` — wall template, blockers, decorations.

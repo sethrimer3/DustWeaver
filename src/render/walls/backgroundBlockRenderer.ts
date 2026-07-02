@@ -26,8 +26,11 @@ import type { RoomDef } from '../../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 import {
   isFolderBasedTheme,
+  getFolderThemeSpriteKey,
   getTheme1x1SpriteShaded,
 } from './folderBlockThemes';
+import { drawAtlasSprite } from '../atlases/drawAtlasSprite';
+import { getAtlasSprite } from '../atlases/spriteAtlasLoader';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
 import { RoomChunkCache, CHUNK_SIZE_BLOCKS, PrewarmChunkResult } from './chunkRenderCache';
 import {
@@ -182,20 +185,26 @@ function _makeBgBuildChunkFn(
       const sy = Math.round(row * cellW + chunkOffY);
 
       if (isFolderBasedTheme(themeId)) {
-        const sprite = getTheme1x1SpriteShaded(
-          themeId,
-          col,
-          row,
-          seed,
-          OPEN_AIR_ALL_SIDES,
-          CELL_SIZE_WORLD,
-        );
-        if (sprite !== null) {
-          chunkCtx.drawImage(sprite, sx, sy, sw, sw);
+        const folderThemeId = themeId as string;
+        const atlasSprite = getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, seed));
+        if (atlasSprite !== null) {
+          drawAtlasSprite(chunkCtx, atlasSprite, sx, sy, sw, sw);
         } else {
-          chunkCtx.fillStyle = FALLBACK_FILL;
-          chunkCtx.fillRect(sx, sy, sw, sw);
-          hadFallbacks = true;
+          const sprite = getTheme1x1SpriteShaded(
+            folderThemeId,
+            col,
+            row,
+            seed,
+            OPEN_AIR_ALL_SIDES,
+            CELL_SIZE_WORLD,
+          );
+          if (sprite !== null) {
+            chunkCtx.drawImage(sprite, sx, sy, sw, sw);
+          } else {
+            chunkCtx.fillStyle = FALLBACK_FILL;
+            chunkCtx.fillRect(sx, sy, sw, sw);
+            hadFallbacks = true;
+          }
         }
       } else {
         chunkCtx.fillStyle = FALLBACK_FILL;

@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "themeId": "blackRock",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/blackRock",
+  "atlasImage": "blackRock.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 128,
+  "height": 64,
+  "sprites": {
+    "blackRockBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (1).png"
+    },
+    "blackRockBlock (10)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (10).png"
+    },
+    "blackRockBlock (11)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (11).png"
+    },
+    "blackRockBlock (12)": {
+      "x": 56,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (12).png"
+    },
+    "blackRockBlock (13)": {
+      "x": 74,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (13).png"
+    },
+    "blackRockBlock (2)": {
+      "x": 92,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (2).png"
+    },
+    "blackRockBlock (3)": {
+      "x": 110,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (3).png"
+    },
+    "blackRockBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (4).png"
+    },
+    "blackRockBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (5).png"
+    },
+    "blackRockBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (6).png"
+    },
+    "blackRockBlock (7)": {
+      "x": 56,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (7).png"
+    },
+    "blackRockBlock (8)": {
+      "x": 74,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (8).png"
+    },
+    "blackRockBlock (9)": {
+      "x": 92,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/blackRock/blackRockBlock (9).png"
+    }
+  }
+}

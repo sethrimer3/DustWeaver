@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:atlases": "node scripts/build-sprite-atlases.mjs",
+    "validate:atlases": "node scripts/validate-sprite-atlases.mjs",
+    "compare:atlases": "node scripts/compare-sprite-atlases.mjs",
+    "preview:atlases": "node scripts/preview-sprite-atlases.mjs",
     "lint": "eslint src/",
     "preview": "vite preview",
     "electron": "npm exec -- electron --no-sandbox .",

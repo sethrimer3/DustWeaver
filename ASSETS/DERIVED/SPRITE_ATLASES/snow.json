@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "snow",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/snow",
+  "atlasImage": "snow.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "snowBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (1).png"
+    },
+    "snowBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (2).png"
+    },
+    "snowBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (3).png"
+    },
+    "snowBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (4).png"
+    },
+    "snowBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (5).png"
+    },
+    "snowBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (6).png"
+    },
+    "snowBlock (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (7).png"
+    },
+    "snowBlock (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (8).png"
+    },
+    "snowBlock (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (9).png"
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "carvedObsidian",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/carvedObsidian",
+  "atlasImage": "carvedObsidian.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "carvedObsidianBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (1).png"
+    },
+    "carvedObsidianBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (2).png"
+    },
+    "carvedObsidianBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (3).png"
+    },
+    "carvedObsidianBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (4).png"
+    },
+    "carvedObsidianBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (5).png"
+    },
+    "carvedObsidianBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (6).png"
+    },
+    "carvedObsidianBlock (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (7).png"
+    },
+    "carvedObsidianBlock (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (8).png"
+    },
+    "carvedObsidianBlock (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (9).png"
+    }
+  }
+}
