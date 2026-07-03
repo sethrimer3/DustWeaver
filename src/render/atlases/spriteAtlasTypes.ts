@@ -33,6 +33,7 @@ export interface SpriteAtlasLookupResult {
 
 export interface SpriteAtlasStats {
   readonly enabled: boolean;
+  readonly hardDisableActive: boolean;
   readonly metadataCount: number;
   readonly loadedAtlasCount: number;
   readonly failedAtlasCount: number;
@@ -45,6 +46,9 @@ export interface SpriteAtlasStats {
   readonly misses: number;
   readonly fallbacks: number;
   readonly unsupportedPaths: number;
+  readonly legacyDraws: number;
+  readonly attemptedDraws: number;
+  readonly disabledBypasses: number;
   readonly perTheme: Record<string, {
     readonly lookups: number;
     readonly hits: number;

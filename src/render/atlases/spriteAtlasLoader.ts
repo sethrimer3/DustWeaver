@@ -1,6 +1,7 @@
 import { decodeImg, isSpriteDecodeReady, isSpriteReady, loadImg } from '../imageCache';
 import {
   getSpriteAtlasConfigState,
+  isSpriteAtlasHardDisabled,
   isSpriteAtlasEnabled,
   setSpriteAtlasEnabledForDev,
   type SpriteAtlasConfigState,
@@ -36,6 +37,9 @@ let _hits = 0;
 let _misses = 0;
 let _fallbacks = 0;
 let _unsupportedPaths = 0;
+let _legacyDraws = 0;
+let _attemptedDraws = 0;
+let _disabledBypasses = 0;
 
 export interface SpriteAtlasDebugInfo {
   readonly enabled: boolean;
@@ -191,13 +195,19 @@ function _loadState(themeId: string): AtlasState | null {
 }
 
 export function preloadSpriteAtlasForTheme(themeId: string): void {
-  if (!isSpriteAtlasEnabled()) return;
+  if (!isSpriteAtlasEnabled()) {
+    _disabledBypasses++;
+    return;
+  }
   const state = _loadState(themeId);
   if (state === null) _recordMiss(themeId);
 }
 
 export async function decodeSpriteAtlasForTheme(themeId: string): Promise<void> {
-  if (!isSpriteAtlasEnabled()) return;
+  if (!isSpriteAtlasEnabled()) {
+    _disabledBypasses++;
+    return;
+  }
   const state = _loadState(themeId);
   if (state === null || state.status === 'failed') return;
   const imageUrl = state.status === 'loaded' ? state.atlas.imageUrl : state.imageUrl;
@@ -217,7 +227,11 @@ export async function decodeSpriteAtlasForTheme(themeId: string): Promise<void> 
 }
 
 export function getAtlasSprite(themeId: string | null, spriteKey: string | null): SpriteAtlasLookupResult | null {
-  if (!isSpriteAtlasEnabled()) return null;
+  if (!isSpriteAtlasEnabled()) {
+    _disabledBypasses++;
+    return null;
+  }
+  _attemptedDraws++;
   if (themeId === null || spriteKey === null) {
     _misses++;
     return null;
@@ -256,6 +270,14 @@ export function recordUnsupportedSpriteAtlasPath(_pathKind: string): void {
   _unsupportedPaths++;
 }
 
+export function recordSpriteAtlasLegacyDraw(): void {
+  _legacyDraws++;
+}
+
+export function recordSpriteAtlasDisabledBypass(): void {
+  _disabledBypasses++;
+}
+
 export function getSpriteAtlasStats(): SpriteAtlasStats {
   const loadedAtlases: string[] = [];
   const failedAtlases: string[] = [];
@@ -274,6 +296,7 @@ export function getSpriteAtlasStats(): SpriteAtlasStats {
   }
   return {
     enabled: isSpriteAtlasEnabled(),
+    hardDisableActive: isSpriteAtlasHardDisabled(),
     metadataCount: _states.size,
     loadedAtlasCount: loadedAtlases.length,
     failedAtlasCount: failedAtlases.length,
@@ -286,6 +309,9 @@ export function getSpriteAtlasStats(): SpriteAtlasStats {
     misses: _misses,
     fallbacks: _fallbacks,
     unsupportedPaths: _unsupportedPaths,
+    legacyDraws: _legacyDraws,
+    attemptedDraws: _attemptedDraws,
+    disabledBypasses: _disabledBypasses,
     perTheme,
   };
 }

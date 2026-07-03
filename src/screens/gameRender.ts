@@ -306,12 +306,17 @@ export function renderFrame(r: RenderFrameContext): void {
   const roomScreenYPx = oy;
   const roomScreenWidthPx = roomWidthWorld * zoom;
   const roomScreenHeightPx = roomHeightWorld * zoom;
-  // Keep sprite sampling nearest-neighbour even if context state changed.
+  // Frame-boundary reset: dynamic entity sprites must never inherit a leaked
+  // transform, alpha, composite mode, or clip from a previous renderer.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
   ctx.imageSmoothingEnabled = false;
   bloomSystem.beginFrame();
 
   // ── Clear / fill virtual canvas ─────────────────────────────────────────
   // Always start from black so anything outside the room remains pure black.
+  ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
   if (webglRenderer.isAvailable) {
@@ -373,19 +378,22 @@ export function renderFrame(r: RenderFrameContext): void {
   const bgSpill = getActiveBackgroundLightSpill();
   if (bgSpill > 0) {
     ctx.save();
-    // Clip to the current room so spill doesn't bleed into adjacent rooms.
-    const clipX = Math.round(ox);
-    const clipY = Math.round(oy);
-    const clipW = Math.round(roomWidthWorld * zoom);
-    const clipH = Math.round(roomHeightWorld * zoom);
-    ctx.beginPath();
-    ctx.rect(clipX, clipY, clipW, clipH);
-    ctx.clip();
-    // Warm amber tint — clamped to a subtle translucent fill.
-    const alpha = Math.min(bgSpill, 0.5);
-    ctx.fillStyle = `rgba(${BACKGROUND_SPILL_RGB},${alpha.toFixed(3)})`;
-    ctx.fillRect(clipX, clipY, clipW, clipH);
-    ctx.restore();
+    try {
+      // Clip to the current room so spill doesn't bleed into adjacent rooms.
+      const clipX = Math.round(ox);
+      const clipY = Math.round(oy);
+      const clipW = Math.round(roomWidthWorld * zoom);
+      const clipH = Math.round(roomHeightWorld * zoom);
+      ctx.beginPath();
+      ctx.rect(clipX, clipY, clipW, clipH);
+      ctx.clip();
+      // Warm amber tint — clamped to a subtle translucent fill.
+      const alpha = Math.min(bgSpill, 0.5);
+      ctx.fillStyle = `rgba(${BACKGROUND_SPILL_RGB},${alpha.toFixed(3)})`;
+      ctx.fillRect(clipX, clipY, clipW, clipH);
+    } finally {
+      ctx.restore();
+    }
   }
 
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
@@ -570,7 +578,11 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_UPSCALE);
+  deviceCtx.setTransform(1, 0, 0, 1, 0, 0);
+  deviceCtx.globalAlpha = 1;
+  deviceCtx.globalCompositeOperation = 'source-over';
   deviceCtx.imageSmoothingEnabled = false;
+  deviceCtx.clearRect(0, 0, canvas.width, canvas.height);
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   // Composite WebGL particle canvas on top (also at virtual resolution)
   if (webglRenderer.isAvailable) {

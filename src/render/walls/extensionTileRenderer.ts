@@ -10,7 +10,8 @@ import {
 } from './proceduralBlockSprite';
 import { isFolderBasedTheme, getFolderThemeSpriteKey, getTheme1x1SpriteShaded } from './folderBlockThemes';
 import { drawAtlasSprite } from '../atlases/drawAtlasSprite';
-import { getAtlasSprite } from '../atlases/spriteAtlasLoader';
+import { isSpriteAtlasEnabled } from '../atlases/spriteAtlasConfig';
+import { getAtlasSprite, recordSpriteAtlasDisabledBypass, recordSpriteAtlasLegacyDraw } from '../atlases/spriteAtlasLoader';
 import {
   drawFallbackTile,
   TILE_MASK_N,
@@ -83,12 +84,16 @@ export function renderSingleExtensionTileWithState(
   } else if (isFolderBasedTheme(tileTheme)) {
     // Folder-based theme: use edge-shaded 8×8 canvas for 1×1 tiles.
     const folderThemeId = tileTheme as string;
-    const atlasSprite = getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, activeWorldNumber));
+    const atlasSprite = isSpriteAtlasEnabled()
+      ? getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, activeWorldNumber))
+      : null;
+    if (atlasSprite === null && !isSpriteAtlasEnabled()) recordSpriteAtlasDisabledBypass();
     if (atlasSprite !== null) {
       drawAtlasSprite(ctx, atlasSprite, tileX, tileY, tileSizePx, tileSizePx);
     } else {
       const folderSprite = getTheme1x1SpriteShaded(folderThemeId, col, row, activeWorldNumber, openAirSidesMask, blockSizePx);
       if (folderSprite !== null) {
+        recordSpriteAtlasLegacyDraw();
         ctx.drawImage(folderSprite, tileX, tileY, tileSizePx, tileSizePx);
       } else {
         drawFallbackTile(ctx, tileX, tileY, tileSizePx);

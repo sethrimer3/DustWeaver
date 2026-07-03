@@ -30,7 +30,8 @@ import {
   getTheme1x1SpriteShaded,
 } from './folderBlockThemes';
 import { drawAtlasSprite } from '../atlases/drawAtlasSprite';
-import { getAtlasSprite } from '../atlases/spriteAtlasLoader';
+import { isSpriteAtlasEnabled } from '../atlases/spriteAtlasConfig';
+import { getAtlasSprite, recordSpriteAtlasDisabledBypass, recordSpriteAtlasLegacyDraw } from '../atlases/spriteAtlasLoader';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
 import { RoomChunkCache, CHUNK_SIZE_BLOCKS, PrewarmChunkResult } from './chunkRenderCache';
 import {
@@ -52,6 +53,13 @@ const _bgChunkCache = new RoomChunkCache(true); // isBgLayer=true → FP.recordB
 
 /** The room ID used to detect room changes. */
 let _bgCacheRoomRef: string | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('dw:sprite-atlas-mode-changed', () => {
+    invalidateBackgroundBlockCache();
+    clearAllRenderSnapshots();
+  });
+}
 
 /**
  * Invalidates all background-block chunk canvases.
@@ -113,6 +121,7 @@ export function setBgChunkCacheMemoryKB(kb: number): void {
 import { RoomChunkCache as _RCC } from './chunkRenderCache'; // local alias to avoid shadowing
 import {
   computeRenderStateKey,
+  clearAllRenderSnapshots,
   getSnapshot,
   getOrCreateSnapshot,
   clearSnapshotBgData,
@@ -186,7 +195,10 @@ function _makeBgBuildChunkFn(
 
       if (isFolderBasedTheme(themeId)) {
         const folderThemeId = themeId as string;
-        const atlasSprite = getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, seed));
+        const atlasSprite = isSpriteAtlasEnabled()
+          ? getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, seed))
+          : null;
+        if (atlasSprite === null && !isSpriteAtlasEnabled()) recordSpriteAtlasDisabledBypass();
         if (atlasSprite !== null) {
           drawAtlasSprite(chunkCtx, atlasSprite, sx, sy, sw, sw);
         } else {
@@ -199,6 +211,7 @@ function _makeBgBuildChunkFn(
             CELL_SIZE_WORLD,
           );
           if (sprite !== null) {
+            recordSpriteAtlasLegacyDraw();
             chunkCtx.drawImage(sprite, sx, sy, sw, sw);
           } else {
             chunkCtx.fillStyle = FALLBACK_FILL;

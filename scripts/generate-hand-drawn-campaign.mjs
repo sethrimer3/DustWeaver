@@ -949,6 +949,16 @@ if (errors.length) { console.error('VALIDATION ERRORS:\n' + errors.join('\n')); 
 // ─────────────────────────────────────────────────────────────────────────────
 
 const startFloorTop = byId.get('room_desert_surface_start').h - 3;
+// Campaign spawn must be a clear standing column: x=6 sits between the dust
+// storm wall (x2..4) and the pyramid steps (x8..12) in the desert start room.
+const CAMPAIGN_SPAWN = [6, startFloorTop - 2];
+{
+  const sb = buildersById.get('room_desert_surface_start');
+  if (sb.solidAt(CAMPAIGN_SPAWN[0], CAMPAIGN_SPAWN[1]) || sb.solidAt(CAMPAIGN_SPAWN[0], CAMPAIGN_SPAWN[1] + 1)) {
+    console.error(`campaign spawn [${CAMPAIGN_SPAWN}] is inside a solid`);
+    process.exit(1);
+  }
+}
 const campaign = {
   v: 1,
   kind: 'DustWeaverCampaign',
@@ -962,8 +972,8 @@ const campaign = {
     initialRoomImagePath: null,
     campaignSpawn: {
       roomId: 'room_desert_surface_start',
-      xBlock: 8,
-      yBlock: startFloorTop - 2,
+      xBlock: CAMPAIGN_SPAWN[0],
+      yBlock: CAMPAIGN_SPAWN[1],
       startingDustTypes: ['Physical'],
       startingDustContainerCount: 2,
     },

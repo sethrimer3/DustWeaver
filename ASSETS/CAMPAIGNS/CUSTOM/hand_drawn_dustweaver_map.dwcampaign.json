@@ -14,7 +14,7 @@
   "initialRoomImagePath": null,
   "campaignSpawn": {
    "roomId": "room_desert_surface_start",
-   "xBlock": 8,
+   "xBlock": 6,
    "yBlock": 19,
    "startingDustTypes": [
     "Physical"

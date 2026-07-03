@@ -47,7 +47,8 @@ import {
   getFolderThemeSpriteKey,
 } from './folderBlockThemes';
 import { drawAtlasSprite } from '../atlases/drawAtlasSprite';
-import { getAtlasSprite, recordUnsupportedSpriteAtlasPath } from '../atlases/spriteAtlasLoader';
+import { isSpriteAtlasEnabled } from '../atlases/spriteAtlasConfig';
+import { getAtlasSprite, recordSpriteAtlasDisabledBypass, recordSpriteAtlasLegacyDraw, recordUnsupportedSpriteAtlasPath } from '../atlases/spriteAtlasLoader';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
 import type { CachedTileCoord, RampWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
@@ -192,12 +193,16 @@ export function render2x2Pass(
         ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
       } else if (isFolderBasedTheme(resolvedTheme)) {
         const folderThemeId = resolvedTheme as string;
-        const atlasSprite = getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, activeWorldNumber));
+        const atlasSprite = isSpriteAtlasEnabled()
+          ? getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, activeWorldNumber))
+          : null;
+        if (atlasSprite === null && !isSpriteAtlasEnabled()) recordSpriteAtlasDisabledBypass();
         if (atlasSprite !== null) {
           drawAtlasSprite(ctx, atlasSprite, tileX, tileY, drawSize, drawSize);
         } else {
           const folderSprite = getTheme2x2SpriteShaded(folderThemeId, col, row, activeWorldNumber, openAirSidesMask2x2, blockSizePx);
           if (folderSprite !== null) {
+            recordSpriteAtlasLegacyDraw();
             ctx.drawImage(folderSprite, tileX, tileY, drawSize, drawSize);
           } else {
             hadFallbacks = true;
@@ -299,12 +304,16 @@ export function render1x1Pass(
         (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
         (southSolid ? 0 : OPEN_AIR_SIDE_S) |
         (westSolid  ? 0 : OPEN_AIR_SIDE_W);
-      const atlasSprite = getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, activeWorldNumber));
+      const atlasSprite = isSpriteAtlasEnabled()
+        ? getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, activeWorldNumber))
+        : null;
+      if (atlasSprite === null && !isSpriteAtlasEnabled()) recordSpriteAtlasDisabledBypass();
       if (atlasSprite !== null) {
         drawAtlasSprite(ctx, atlasSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
       } else {
         const folderSprite = getTheme1x1SpriteShaded(folderThemeId, col, row, activeWorldNumber, openAirSidesMask, blockSizePx);
         if (folderSprite !== null) {
+          recordSpriteAtlasLegacyDraw();
           ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
         } else {
           hadFallbacks = true;
@@ -434,7 +443,7 @@ export function renderPlatformPass(
         hadFallbacks = true;
       }
     } else if (isFolderBasedTheme(platTheme)) {
-      recordUnsupportedSpriteAtlasPath('platform');
+      if (isSpriteAtlasEnabled()) recordUnsupportedSpriteAtlasPath('platform');
       const folderThemeId = platTheme as string;
       const baseUrl = getFolderThemeBaseUrl(folderThemeId, col, row, activeWorldNumber);
       if (baseUrl !== null) {
@@ -537,7 +546,10 @@ export function renderRampPass(
       const folderRampSprite = use2x2
         ? getTheme2x2Sprite(folderThemeId, rCol, rRow, activeWorldNumber)
         : getTheme1x1Sprite(folderThemeId, rCol, rRow, activeWorldNumber);
-      const atlasSprite = getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, rCol, rRow, activeWorldNumber));
+      const atlasSprite = isSpriteAtlasEnabled()
+        ? getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, rCol, rRow, activeWorldNumber))
+        : null;
+      if (atlasSprite === null && !isSpriteAtlasEnabled()) recordSpriteAtlasDisabledBypass();
       if (atlasSprite !== null) {
         const rX = Math.round(wxPx);
         const rY = Math.round(wyPx);
@@ -549,6 +561,7 @@ export function renderRampPass(
         drawAtlasSprite(ctx, atlasSprite, rX, rY, rW, rH);
         ctx.restore();
       } else if (folderRampSprite !== null) {
+        recordSpriteAtlasLegacyDraw();
         const rX = Math.round(wxPx);
         const rY = Math.round(wyPx);
         const rW = Math.round(wwPx);

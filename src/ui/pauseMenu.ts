@@ -23,6 +23,11 @@ import {
   WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
   type WorldViewPresetId,
 } from './renderSettings';
+import {
+  getSpriteAtlasConfigState,
+  getSpriteAtlasUseSetting,
+  setSpriteAtlasUseSetting,
+} from '../render/atlases/spriteAtlasConfig';
 import { setCombatMode, type CombatMode } from '../sim/combatMode';
 import { makeButton, makeSlider, makeTabButton, GOLD, PANEL_BORDER } from './helpers';
 
@@ -227,6 +232,50 @@ export function showPauseMenu(
         font-size: 0.72rem; text-align: center; margin-top: 6px;
       `;
       optionsPanel.appendChild(wvHint);
+
+      // Sprite atlases remain experimental and opt-in.
+      const atlasEnabled = getSpriteAtlasUseSetting();
+      const atlasRow = document.createElement('label');
+      atlasRow.style.cssText = `
+        display: flex; align-items: center; justify-content: center;
+        gap: 10px; margin: 16px 0 12px 0;
+        padding: 10px 14px;
+        background: rgba(212,168,75,${atlasEnabled ? '0.12' : '0.04'});
+        border: 1px solid rgba(212,168,75,${atlasEnabled ? '0.55' : '0.25'});
+        border-radius: 6px;
+        cursor: pointer;
+      `;
+      const atlasCheckbox = document.createElement('input');
+      atlasCheckbox.type = 'checkbox';
+      atlasCheckbox.checked = atlasEnabled;
+      atlasCheckbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
+      const atlasLabel = document.createElement('span');
+      atlasLabel.textContent = 'Use sprite atlases (experimental)';
+      atlasLabel.style.cssText = `
+        font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.88rem;
+        cursor: pointer; letter-spacing: 0.4px;
+      `;
+      const atlasHint = document.createElement('div');
+      atlasHint.textContent = getSpriteAtlasConfigState().hardDisableActive
+        ? 'Hard-disabled internally while legacy rendering is restored.'
+        : 'Reload or re-enter the room after changing this.';
+      atlasHint.style.cssText = `
+        font-family: 'Cinzel', serif; color: rgba(212,168,75,0.65);
+        font-size: 0.72rem; text-align: center; margin: -6px 0 10px 0;
+      `;
+      atlasCheckbox.addEventListener('change', () => {
+        const enabled = atlasCheckbox.checked;
+        setSpriteAtlasUseSetting(enabled);
+        atlasRow.style.borderColor = `rgba(212,168,75,${enabled ? '0.55' : '0.25'})`;
+        atlasRow.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0.04'})`;
+        atlasHint.textContent = getSpriteAtlasConfigState().hardDisableActive
+          ? 'Hard-disabled internally while legacy rendering is restored.'
+          : 'Reload or re-enter the room after changing this.';
+      });
+      atlasRow.appendChild(atlasCheckbox);
+      atlasRow.appendChild(atlasLabel);
+      optionsPanel.appendChild(atlasRow);
+      optionsPanel.appendChild(atlasHint);
 
       // Visual effect opacity sliders
       const edgeGlowSlider = makeSlider(

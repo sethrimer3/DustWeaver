@@ -25,6 +25,7 @@
 
 import { RoomChunkCache } from './chunkRenderCache';
 import type { CachedWallLayout } from './blockWallLayoutCache';
+import { isSpriteAtlasEnabled } from '../atlases/spriteAtlasConfig';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -117,11 +118,12 @@ export function computeRenderStateKey(
   solidLightSoftness: number,
 ): string {
   const themeOrWorld = blockTheme !== null ? blockTheme : `w${worldNumber}`;
+  const atlasMode = isSpriteAtlasEnabled() ? 'atlas:on' : 'atlas:off';
   // Normalise floats to 4 dp so independent re-computations produce identical keys.
   const n = (v: number) => v.toFixed(4);
   // Build the param-only signature first so we can use it as the cache discriminator.
   const paramsSig =
-    `${themeOrWorld}|${lightingEffect}|${ambientDirection}|${seamBlending}` +
+    `${themeOrWorld}|${atlasMode}|${lightingEffect}|${ambientDirection}|${seamBlending}` +
     `|${roomWidthBlocks}x${roomHeightBlocks}` +
     `|db${n(directionalBias)}_se${n(sideExposureStrength)}_ml${n(minimumWallLight)}` +
     `_fp${n(falloffPower)}_bs${n(backgroundLightSpill)}_ss${n(solidLightSoftness)}`;
@@ -143,7 +145,7 @@ export function computeRenderStateKey(
     blockerSig = arr.join(';');
   }
   const key =
-    `${themeOrWorld}|${lightingEffect}|${ambientDirection}|${seamBlending}|${blockerSig}` +
+    `${themeOrWorld}|${atlasMode}|${lightingEffect}|${ambientDirection}|${seamBlending}|${blockerSig}` +
     `|${roomWidthBlocks}x${roomHeightBlocks}` +
     `|db${n(directionalBias)}_se${n(sideExposureStrength)}_ml${n(minimumWallLight)}` +
     `_fp${n(falloffPower)}_bs${n(backgroundLightSpill)}_ss${n(solidLightSoftness)}`;
@@ -180,6 +182,10 @@ export function getOrCreateSnapshot(roomId: string, renderStateKey: string): Roo
 /** Returns the snapshot for `roomId`, or `undefined` if not held. */
 export function getSnapshot(roomId: string): RoomRenderSnapshot | undefined {
   return _snapshots.get(roomId);
+}
+
+export function clearAllRenderSnapshots(): void {
+  _snapshots.clear();
 }
 
 /**

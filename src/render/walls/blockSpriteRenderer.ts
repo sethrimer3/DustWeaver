@@ -32,7 +32,7 @@ import {
   deletePrewarmEntry,
   getPrewarmDummyCtx,
 } from './wallChunkPrewarmStore';
-import { computeRenderStateKey, type PrewarmAdoptResult } from './roomRenderCacheStore';
+import { clearAllRenderSnapshots, computeRenderStateKey, type PrewarmAdoptResult } from './roomRenderCacheStore';
 // Re-export prewarm store management API so existing import paths continue to work.
 export {
   evictPrewarmedWallChunks,
@@ -424,6 +424,13 @@ export function invalidateChunkRect(
 /** Invalidates the chunk cache so all chunks are rebuilt on the next render. */
 function _invalidateBakedWallCanvas(): void {
   _chunkCache.invalidateAll();
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('dw:sprite-atlas-mode-changed', () => {
+    _chunkCache.invalidateAll();
+    clearAllRenderSnapshots();
+  });
 }
 
 // ── Render chunk prewarm API ──────────────────────────────────────────────────

@@ -8,18 +8,21 @@ export function drawAtlasSprite(
   dw: number = atlasSprite.sprite.w,
   dh: number = atlasSprite.sprite.h,
 ): void {
-  const previousSmoothing = ctx.imageSmoothingEnabled;
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(
-    atlasSprite.atlas.image,
-    atlasSprite.sprite.x,
-    atlasSprite.sprite.y,
-    atlasSprite.sprite.w,
-    atlasSprite.sprite.h,
-    dx,
-    dy,
-    dw,
-    dh,
-  );
-  ctx.imageSmoothingEnabled = previousSmoothing;
+  ctx.save();
+  try {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      atlasSprite.atlas.image,
+      atlasSprite.sprite.x,
+      atlasSprite.sprite.y,
+      atlasSprite.sprite.w,
+      atlasSprite.sprite.h,
+      dx,
+      dy,
+      dw,
+      dh,
+    );
+  } finally {
+    ctx.restore();
+  }
 }
