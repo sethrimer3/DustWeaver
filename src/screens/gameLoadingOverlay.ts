@@ -13,7 +13,7 @@
  *   overlay.tick(() => areRoomSpritesReady(currentRoom));
  */
 
-import { LOADING_ANIMATION_ASSETS, MENU_ANIMATION_ASSETS } from '../ui/animatedAssetPaths';
+import { LOADING_BACKGROUND_ASSETS } from '../ui/animatedAssetPaths';
 
 /** How often (ms) the readiness callback is polled to avoid per-frame DOM reads. */
 const CHECK_INTERVAL_MS = 50;
@@ -79,7 +79,7 @@ export class GameLoadingOverlay {
       'overflow:hidden',
       `transition:opacity ${(this.fadeDurationMs / 1000).toFixed(1)}s`,
     ].join(';');
-    this.populateAnimatedLoadingOverlay(div);
+    this.populateLoadingOverlay(div);
     this.uiRoot.appendChild(div);
     this.el = div;
     this.minShowUntilMs = performance.now() + MIN_SHOW_MS;
@@ -121,7 +121,7 @@ export class GameLoadingOverlay {
       'overflow:hidden',
       `transition:opacity ${(FADE_DURATION_ENTRY_WARM_MS / 1000).toFixed(2)}s`,
     ].join(';');
-    this.populateAnimatedLoadingOverlay(div, true);
+    this.populateLoadingOverlay(div, true);
     this.uiRoot.appendChild(div);
     this.el = div;
     this.minShowUntilMs = performance.now(); // no minimum — release ASAP when ready
@@ -158,7 +158,7 @@ export class GameLoadingOverlay {
       'overflow:hidden',
       `transition:opacity ${(this.fadeDurationMs / 1000).toFixed(1)}s`,
     ].join(';');
-    this.populateAnimatedLoadingOverlay(div, false, `Loading zone ${worldNumber}: 0 / ${totalRooms}`);
+    this.populateLoadingOverlay(div, false, `Loading zone ${worldNumber}: 0 / ${totalRooms}`);
 
     this.uiRoot.appendChild(div);
     this.el = div;
@@ -215,12 +215,12 @@ export class GameLoadingOverlay {
     return this.el !== null;
   }
 
-  private populateAnimatedLoadingOverlay(div: HTMLDivElement, isTextless = false, zoneText?: string): void {
-    const backgroundImg = document.createElement('img');
-    backgroundImg.decoding = 'async';
-    backgroundImg.alt = '';
-    backgroundImg.src = LOADING_ANIMATION_ASSETS.backgroundUrl || MENU_ANIMATION_ASSETS.blurredUrl;
-    backgroundImg.style.cssText = [
+  private populateLoadingOverlay(div: HTMLDivElement, isTextless = false, zoneText?: string): void {
+    const backgroundImgBase = document.createElement('img');
+    backgroundImgBase.decoding = 'async';
+    backgroundImgBase.alt = '';
+    backgroundImgBase.src = LOADING_BACKGROUND_ASSETS.caveBlurUrl;
+    backgroundImgBase.style.cssText = [
       'position:absolute',
       'inset:0',
       'width:100%',
@@ -229,7 +229,28 @@ export class GameLoadingOverlay {
       'pointer-events:none',
       'z-index:0',
     ].join(';');
-    div.appendChild(backgroundImg);
+    div.appendChild(backgroundImgBase);
+
+    const backgroundImgDark = document.createElement('img');
+    backgroundImgDark.decoding = 'async';
+    backgroundImgDark.alt = '';
+    backgroundImgDark.src = LOADING_BACKGROUND_ASSETS.caveBlurDarkUrl;
+    backgroundImgDark.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'width:100%',
+      'height:100%',
+      'object-fit:cover',
+      'pointer-events:none',
+      'z-index:1',
+      'opacity:0',
+      'transition:opacity 3s linear',
+    ].join(';');
+    div.appendChild(backgroundImgDark);
+
+    requestAnimationFrame(() => {
+      backgroundImgDark.style.opacity = '1';
+    });
 
     const darkOverlay = document.createElement('div');
     darkOverlay.style.cssText = [
@@ -237,25 +258,9 @@ export class GameLoadingOverlay {
       'inset:0',
       'background:rgba(0,0,0,0.32)',
       'pointer-events:none',
-      'z-index:1',
+      'z-index:2',
     ].join(';');
     div.appendChild(darkOverlay);
-
-    const loadingCircleImg = document.createElement('img');
-    loadingCircleImg.decoding = 'async';
-    loadingCircleImg.alt = '';
-    loadingCircleImg.src = LOADING_ANIMATION_ASSETS.circleUrl;
-    loadingCircleImg.style.cssText = [
-      'position:absolute',
-      'right:24px',
-      'bottom:24px',
-      'width:clamp(56px, 8vw, 112px)',
-      'height:auto',
-      'pointer-events:none',
-      'z-index:2',
-      'filter:drop-shadow(0 0 16px rgba(212,168,75,0.42))',
-    ].join(';');
-    div.appendChild(loadingCircleImg);
 
     if (isTextless) return;
 
@@ -267,8 +272,8 @@ export class GameLoadingOverlay {
     label.style.cssText = [
       'position:absolute',
       'right:24px',
-      'bottom:calc(24px + clamp(56px, 8vw, 112px) + 10px)',
-      'z-index:2',
+      'bottom:24px',
+      'z-index:3',
       'font-size:0.82rem',
       'letter-spacing:0.14em',
       'text-transform:uppercase',
