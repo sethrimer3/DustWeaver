@@ -13,6 +13,7 @@
  *   overlay.tick(() => areRoomSpritesReady(currentRoom));
  */
 
+import { renderLoadingGodRays } from '../render/effects/loadingGodRays';
 import { LOADING_BACKGROUND_ASSETS } from '../ui/animatedAssetPaths';
 
 /** How often (ms) the readiness callback is polled to avoid per-frame DOM reads. */
@@ -43,6 +44,8 @@ const FADE_DURATION_ENTRY_WARM_MS = 80;
 
 export class GameLoadingOverlay {
   private el: HTMLDivElement | null = null;
+  private godRaysCanvas: HTMLCanvasElement | null = null;
+  private godRaysRafId: number | null = null;
   private minShowUntilMs = 0;
   private lastCheckMs = 0;
   private fadeDurationMs = FADE_DURATION_STANDARD_MS;
@@ -198,6 +201,7 @@ export class GameLoadingOverlay {
     const el = this.el;
     const fadeDuration = this.fadeDurationMs;
     this.el = null;
+    this.stopGodRaysAnimation();
     el.style.opacity = '0';
     setTimeout(() => {
       if (el.parentElement !== null) el.parentElement.removeChild(el);
@@ -208,6 +212,7 @@ export class GameLoadingOverlay {
   destroy(): void {
     if (this.el?.parentElement) this.el.parentElement.removeChild(this.el);
     this.el = null;
+    this.stopGodRaysAnimation();
   }
 
   /** Returns true if the overlay element is currently mounted in the DOM. */
@@ -252,13 +257,27 @@ export class GameLoadingOverlay {
       backgroundImgDark.style.opacity = '1';
     });
 
+    const godRaysCanvas = document.createElement('canvas');
+    godRaysCanvas.setAttribute('aria-hidden', 'true');
+    godRaysCanvas.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'width:100%',
+      'height:100%',
+      'pointer-events:none',
+      'z-index:2',
+      'image-rendering:pixelated',
+    ].join(';');
+    div.appendChild(godRaysCanvas);
+    this.startGodRaysAnimation(godRaysCanvas);
+
     const darkOverlay = document.createElement('div');
     darkOverlay.style.cssText = [
       'position:absolute',
       'inset:0',
       'background:rgba(0,0,0,0.32)',
       'pointer-events:none',
-      'z-index:2',
+      'z-index:3',
     ].join(';');
     div.appendChild(darkOverlay);
 
@@ -273,12 +292,42 @@ export class GameLoadingOverlay {
       'position:absolute',
       'right:24px',
       'bottom:24px',
-      'z-index:3',
+      'z-index:4',
       'font-size:0.82rem',
       'letter-spacing:0.14em',
       'text-transform:uppercase',
       'text-shadow:0 0 14px rgba(212,168,75,0.45)',
     ].join(';');
     div.appendChild(label);
+  }
+
+  private startGodRaysAnimation(canvas: HTMLCanvasElement): void {
+    this.stopGodRaysAnimation();
+    this.godRaysCanvas = canvas;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return;
+
+    const render = (timeMs: number): void => {
+      if (this.godRaysCanvas !== canvas || canvas.isConnected === false) return;
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+      const height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      renderLoadingGodRays(ctx, { width, height }, timeMs);
+      this.godRaysRafId = requestAnimationFrame(render);
+    };
+
+    this.godRaysRafId = requestAnimationFrame(render);
+  }
+
+  private stopGodRaysAnimation(): void {
+    if (this.godRaysRafId !== null) {
+      cancelAnimationFrame(this.godRaysRafId);
+      this.godRaysRafId = null;
+    }
+    this.godRaysCanvas = null;
   }
 }

@@ -220,6 +220,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.sideExposureStrength !== undefined) json.sideExposureStrength = data.sideExposureStrength;
   if (data.minimumWallLight     !== undefined) json.minimumWallLight     = data.minimumWallLight;
   if (data.falloffPower         !== undefined) json.falloffPower         = data.falloffPower;
+  if (data.sunrays              !== undefined) json.sunrays              = data.sunrays;
   if (data.blockSeamBlending && data.blockSeamBlending !== 'off') {
     json.blockSeamBlending = data.blockSeamBlending;
   }

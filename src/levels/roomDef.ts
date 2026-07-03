@@ -545,6 +545,32 @@ export type BlockSeamBlending = 'off' | 'subtle' | 'organic' | 'heavy';
  */
 export type VoidEdgeStyle = 'off' | 'noisyEdge' | 'exteriorFill';
 
+/** Rendering style for room-level god-ray/sunray environment effect. */
+export type SunraysStyle = 'hard' | 'soft';
+
+/**
+ * Room-level "sunrays" environment effect: procedural god-ray shafts entering
+ * from the top of the screen at a designer-configured angle. Distinct from
+ * {@link RoomSunbeamDef}, which are individually hand-placed light shafts —
+ * this is a single global toggle that generates a deterministic ray field.
+ */
+export interface RoomSunraysDef {
+  /** Whether the effect is drawn for this room. Defaults to false. */
+  enabled: boolean;
+  /** 'hard' = crisp pixel-art shafts. 'soft' = layered, blurred, screen-composited beams. */
+  style: SunraysStyle;
+  /** Where rays originate. Currently only the top edge of the viewport is supported. */
+  source: 'top';
+  /** Direction rays travel after entering, in degrees. 90 = straight down, <90 = down-right, >90 = down-left. */
+  angleDeg: number;
+  /** Overall brightness multiplier, 0–1. Defaults to 0.5 when unset. */
+  intensity?: number;
+  /** Number of ray shafts to generate. Defaults to 6 when unset. */
+  rayCount?: number;
+  /** Subtle sway/pulse animation. Defaults to true when unset. */
+  animationEnabled?: boolean;
+}
+
 /** Full definition for a single room in the Metroidvania world. */
 export interface RoomDef {
   /** Unique identifier for this room. */
@@ -643,6 +669,8 @@ export interface RoomDef {
   lightSources?: readonly RoomLightSourceDef[];
   /** Designer-placed sunbeams (see {@link RoomSunbeamDef}). */
   sunbeams?: readonly RoomSunbeamDef[];
+  /** Room-level procedural sunrays/god-rays effect (see {@link RoomSunraysDef}). */
+  sunrays?: RoomSunraysDef;
   /** Designer-placed scene lights (visibility-polygon shadow system). */
   sceneLights?: readonly import('./lightingSchema').LightDef[];
   /** Room width in blocks. */

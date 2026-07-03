@@ -348,6 +348,8 @@ export interface SavedRoomV2 {
   lightSourcesExt?: RoomJsonLightSource[];
   /** Designer-placed sunbeams. Stored as full objects (small count). */
   sunbeams?: RoomJsonSunbeam[];
+  /** Room-level procedural sunrays/god-rays effect. Stored as a full object. */
+  sunrays?: import('./roomDef').RoomSunraysDef;
   /** Designer-placed scene lights (visibility-polygon shadow system). */
   sceneLights?: SavedSceneLight[];
   /** Editor-painted falling block tiles. Stored as compact tuples [x, y, variant_char]. */

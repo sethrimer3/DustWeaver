@@ -8,6 +8,7 @@ import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { HudState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
 import { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
+import { SunraysRenderer } from '../render/effects/sunraysRenderer';
 import { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
@@ -522,6 +523,7 @@ export function startGameScreen(
   }
   const environmentalDust = new EnvironmentalDustLayer();
   const sunbeamRenderer = new SunbeamRenderer();
+  const sunraysRenderer = new SunraysRenderer();
   const atmosphericLightDust = new AtmosphericLightDust();
   const guideDustPathRenderer = new GuideDustPathRenderer();
   const skidDebris = new SkidDebrisRenderer();
@@ -667,6 +669,7 @@ export function startGameScreen(
     decorationWaveState,
     environmentalDust,
     sunbeamRenderer,
+    sunraysRenderer,
     atmosphericLightDust,
     guideDustPathRenderer,
     reusableSnapshot,
@@ -2226,7 +2229,7 @@ export function startGameScreen(
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
-      sunbeamRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
+      sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,

@@ -252,6 +252,12 @@ export interface EditorUICallbacks {
   onFalloffPowerChange: (value: number) => void;
   onBackgroundLightSpillChange: (value: number) => void;
   onSolidLightSoftnessChange: (value: number) => void;
+  onSunraysEnabledChange: (enabled: boolean) => void;
+  onSunraysStyleChange: (style: 'hard' | 'soft') => void;
+  onSunraysAngleChange: (angleDeg: number) => void;
+  onSunraysIntensityChange: (value: number) => void;
+  onSunraysRayCountChange: (value: number) => void;
+  onSunraysAnimationChange: (enabled: boolean) => void;
   onSeamBlendingChange: (mode: BlockSeamBlending) => void;
   onVoidEdgeStyleChange: (style: VoidEdgeStyle) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
