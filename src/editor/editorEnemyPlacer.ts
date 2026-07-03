@@ -744,44 +744,6 @@ export function placeEnemyAtCursor(
       isBeeSwarmFlag: 0,
       isWebSpiderFlag: 0,
     });
-  } else if (
-    item.id === 'enemy_grid_block_1x1_slow'   ||
-    item.id === 'enemy_grid_block_1x1_medium' ||
-    item.id === 'enemy_grid_block_1x1_fast'   ||
-    item.id === 'enemy_grid_block_2x2_slow'   ||
-    item.id === 'enemy_grid_block_2x2_medium' ||
-    item.id === 'enemy_grid_block_2x2_fast'
-  ) {
-    const sizeIndex  = item.id.includes('2x2') ? 1 : 0;
-    const speedIndex = item.id.endsWith('_fast') ? 2 : item.id.endsWith('_medium') ? 1 : 0;
-    room.enemies.push({
-      uid: allocateUid(state),
-      xBlock: bx,
-      yBlock: by,
-      kinds: ['Physical'],
-      particleCount: 0,
-      isBossFlag: 0,
-      isFlyingEyeFlag: 0,
-      isRollingEnemyFlag: 0,
-      rollingEnemySpriteIndex: 0,
-      isRockElementalFlag: 0,
-      isRadiantTetherFlag: 0,
-      isRadiantWebFlag: 0,
-      isGrappleHunterFlag: 0,
-      isSlimeFlag: 0,
-      isLargeSlimeFlag: 0,
-      isWheelEnemyFlag: 0,
-      isBeetleFlag: 0,
-      isBubbleEnemyFlag: 0,
-      isIceBubbleFlag: 0,
-      isSquareStampedeFlag: 0,
-      isBeeSwarmFlag: 0,
-      isWebSpiderFlag: 0,
-      isGridBlockEnemyFlag: 1,
-      gridBlockSizeIndex: sizeIndex as 0 | 1,
-      gridBlockSpeedIndex: speedIndex as 0 | 1 | 2,
-    });
-    return true;
   } else if (item.id === 'grasshopper_area') {
     room.grasshopperAreas.push({
       uid: allocateUid(state),

@@ -239,9 +239,6 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isVoidSingularityFlag: (e.isVoidSingularity ?? false) ? 1 : 0,
     isVoidSingularityPairFlag: (e.isVoidSingularityPair ?? false) ? 1 : 0,
     isDustLeechFlag: (e.isDustLeech ?? false) ? 1 : 0,
-    isGridBlockEnemyFlag: (e.isGridBlockEnemy ?? false) ? 1 : 0,
-    gridBlockSizeIndex: (e.gridBlockSizeIndex ?? 0) as 0 | 1,
-    gridBlockSpeedIndex: (e.gridBlockSpeedIndex ?? 0) as 0 | 1 | 2,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => {

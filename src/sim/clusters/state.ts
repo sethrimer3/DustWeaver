@@ -810,39 +810,6 @@ export interface ClusterState {
   /** Ticks remaining for hit-flash visual. */
   dustLeechHitFlashTicks: number;
 
-  // ── Grid Block Enemy ─────────────────────────────────────────────────────────
-  /**
-   * 1 if this cluster is a grid-aligned block enemy — stays on the tile grid,
-   * moves orthogonally, pathfinds toward the player, deals contact damage.
-   */
-  isGridBlockEnemyFlag: 0 | 1;
-  /** 0 = 1×1 tile, 1 = 2×2 tile. */
-  gridBlockSizeIndex: number;
-  /** 0 = slow (green), 1 = medium (yellow), 2 = fast (red). */
-  gridBlockSpeedIndex: number;
-  /** Committed grid X (tile column of the top-left cell). */
-  gridBlockGridX: number;
-  /** Committed grid Y (tile row of the top-left cell). */
-  gridBlockGridY: number;
-  /** Target grid X for the current in-progress move. */
-  gridBlockTargetGridX: number;
-  /** Target grid Y for the current in-progress move. */
-  gridBlockTargetGridY: number;
-  /** Countdown ticks remaining in the current move step (0 = idle). */
-  gridBlockMoveTicks: number;
-  /** Countdown ticks until next BFS repath. */
-  gridBlockRepathCooldownTicks: number;
-  /** Cached BFS next-step direction X (−1, 0, or 1). */
-  gridBlockNextDirX: number;
-  /** Cached BFS next-step direction Y (−1, 0, or 1). */
-  gridBlockNextDirY: number;
-  /** Phase (radians) for the animated glint sweep effect. */
-  gridBlockGlintPhase: number;
-  /** Ticks remaining for the hit-flash visual. */
-  gridBlockHitFlashTicks: number;
-  /** Health recorded at end of previous tick — used to detect incoming damage. */
-  gridBlockPrevHealthPoints: number;
-
   // ── Dust Echo ───────────────────────────────────────────────────────────────
   /** 1 if this cluster is a Dust Echo (runtime-spawned by a Leech). */
   isDustEchoFlag: 0 | 1;
@@ -1117,20 +1084,6 @@ export function createClusterState(
     dustLeechSiphonCharge: 0,
     dustLeechAttackCooldownTicks: 0,
     dustLeechHitFlashTicks: 0,
-    isGridBlockEnemyFlag: 0,
-    gridBlockSizeIndex: 0,
-    gridBlockSpeedIndex: 0,
-    gridBlockGridX: 0,
-    gridBlockGridY: 0,
-    gridBlockTargetGridX: 0,
-    gridBlockTargetGridY: 0,
-    gridBlockMoveTicks: 0,
-    gridBlockRepathCooldownTicks: 0,
-    gridBlockNextDirX: 0,
-    gridBlockNextDirY: 0,
-    gridBlockGlintPhase: 0,
-    gridBlockHitFlashTicks: 0,
-    gridBlockPrevHealthPoints: 0,
     isDustEchoFlag: 0,
     dustEchoState: 0,
     dustEchoStateTicks: 0,

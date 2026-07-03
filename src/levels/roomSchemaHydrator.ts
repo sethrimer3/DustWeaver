@@ -79,18 +79,6 @@ export function enemyTypeToFlags(
     isVoidSingularity:        type === 'voidSingularity' || type === 'voidSingularityPair',
     isVoidSingularityPair:    type === 'voidSingularityPair',
     isDustLeech:              type === 'dustLeech',
-    isGridBlockEnemy: (
-      type === 'gridBlock1x1Slow' || type === 'gridBlock1x1Medium' || type === 'gridBlock1x1Fast' ||
-      type === 'gridBlock2x2Slow' || type === 'gridBlock2x2Medium' || type === 'gridBlock2x2Fast'
-    ),
-    gridBlockSizeIndex: (
-      type === 'gridBlock2x2Slow' || type === 'gridBlock2x2Medium' || type === 'gridBlock2x2Fast' ? 1 : 0
-    ) as 0 | 1,
-    gridBlockSpeedIndex: (
-      type === 'gridBlock1x1Medium' || type === 'gridBlock2x2Medium' ? 1
-      : type === 'gridBlock1x1Fast' || type === 'gridBlock2x2Fast' ? 2
-      : 0
-    ) as 0 | 1 | 2,
   };
 }
 

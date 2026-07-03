@@ -236,9 +236,6 @@ export function applyClusterMovement(world: WorldState): void {
       // ── Golden Mimic: movement and collision handled entirely in goldenMimicAi.ts ──
       // Nothing to do here — velocity is 0 (skipped in tickEnemyMovement) and
       // goldenMimicAi.ts applies its own physics after applyClusterMovement runs.
-    } else if (cluster.isGridBlockEnemyFlag === 1) {
-      // ── Grid block enemy: position driven entirely by gridBlockEnemyAi.ts ──
-      // No gravity, no velocity integration, no wall collision sweep.
     } else if (cluster.isWallSnakeFlag === 1 || cluster.isNeedleSnakeFlag === 1) {
       // ── Wall Snake / Needle Snake: movement handled entirely in snakeAi.ts ──
       // Snake AI pathing drives the head position directly so standard ground

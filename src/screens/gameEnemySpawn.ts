@@ -96,7 +96,6 @@ import {
 } from '../sim/clusters/dustLeechConfig';
 import { DL_STATE_IDLE as DL_IDLE } from '../sim/clusters/dustLeechAi';
 import { WEB_SPIDER_HALF_SIZE_WORLD } from '../sim/clusters/webSpiderAi';
-import { GRID_BLOCK_HALF_SIZE } from '../sim/clusters/gridBlockEnemyAi';
 import {
   BIG_SNAKE_HALF_HEIGHT_WORLD,
   BIG_SNAKE_HALF_WIDTH_WORLD,
@@ -599,34 +598,6 @@ export function spawnEnemyClusters(
           for (let p = 0; p < MAX_PROJS_PER_VSP; p++) world.vspProjAliveFlag[projBase + p] = 0;
         }
       }
-    } else if (enemyDef.isGridBlockEnemyFlag === 1) {
-      const sizeIndex  = (enemyDef.gridBlockSizeIndex  ?? 0) as 0 | 1;
-      const speedIndex = (enemyDef.gridBlockSpeedIndex ?? 0) as 0 | 1 | 2;
-      const hw = GRID_BLOCK_HALF_SIZE[sizeIndex];
-      const blockSize = BLOCK_SIZE_MEDIUM; // 8 world units
-      // Convert world spawn position to committed grid cell.
-      const gridX = Math.round((ex - hw) / blockSize);
-      const gridY = Math.round((ey - hw) / blockSize);
-      enemyCluster.isGridBlockEnemyFlag         = 1;
-      enemyCluster.gridBlockSizeIndex           = sizeIndex;
-      enemyCluster.gridBlockSpeedIndex          = speedIndex;
-      enemyCluster.gridBlockGridX               = gridX;
-      enemyCluster.gridBlockGridY               = gridY;
-      enemyCluster.gridBlockTargetGridX         = gridX;
-      enemyCluster.gridBlockTargetGridY         = gridY;
-      enemyCluster.gridBlockMoveTicks           = 0;
-      enemyCluster.gridBlockRepathCooldownTicks = 0;
-      enemyCluster.gridBlockNextDirX            = 0;
-      enemyCluster.gridBlockNextDirY            = 0;
-      enemyCluster.gridBlockGlintPhase          = 0;
-      enemyCluster.gridBlockHitFlashTicks       = 0;
-      enemyCluster.halfWidthWorld               = hw;
-      enemyCluster.halfHeightWorld              = hw;
-      enemyCluster.healthPoints                 = 6;
-      enemyCluster.maxHealthPoints              = 6;
-      // Snap to exact grid-aligned center.
-      enemyCluster.positionXWorld = gridX * blockSize + hw;
-      enemyCluster.positionYWorld = gridY * blockSize + hw;
     } else if (enemyDef.isDustLeechFlag === 1) {
       // Allocate a Dust Leech slot
       let slotIndex = -1;
@@ -677,8 +648,7 @@ export function spawnEnemyClusters(
       enemyCluster.isDustBlockMimicFlag === 1 ||
       enemyCluster.isDustWeaverArchitectFlag === 1 ||
       enemyCluster.isVoidSingularityFlag === 1 ||
-      enemyCluster.isDustLeechFlag === 1 ||
-      enemyCluster.isGridBlockEnemyFlag === 1;
+      enemyCluster.isDustLeechFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

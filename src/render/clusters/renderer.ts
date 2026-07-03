@@ -38,8 +38,6 @@ import {
   renderWebSpider,
   renderWebSpiderFadingWebs,
 } from './enemyRenderers';
-import { renderGridBlockEnemy } from './gridBlockEnemyRenderer';
-
 function drawPlayerOutlineMask(
   ctx: CanvasRenderingContext2D,
   outlineMask: HTMLCanvasElement,
@@ -553,9 +551,6 @@ export function renderClusters(
         }
       }
       // In popped state (bubbleState === 1), no cluster body is drawn — only particles.
-    } else if (cluster.isGridBlockEnemyFlag === 1) {
-      // ── Grid Block Enemy: metallic beveled tile block ─────────────────────
-      renderGridBlockEnemy(ctx, screenX, screenY, cluster, scalePx);
     } else if (cluster.isSquareStampedeFlag === 1) {
       // ── Square Stampede: ghost trail + current square ─────────────────────
       renderSquareStampede(ctx, screenX, screenY, cluster, snapshot, scalePx, offsetXPx, offsetYPx);
@@ -652,11 +647,6 @@ export function renderClusters(
       barColor = '#ffd700'; // golden yellow for beetle
     } else if (cluster.isBubbleEnemyFlag === 1) {
       barColor = cluster.isIceBubbleFlag === 1 ? '#aaddff' : '#3388ff';
-    } else if (cluster.isGridBlockEnemyFlag === 1) {
-      // Health bar color matches block speed variant.
-      barColor = cluster.gridBlockSpeedIndex === 0 ? '#4caf50'
-               : cluster.gridBlockSpeedIndex === 1 ? '#ffc107'
-               : '#f44336';
     } else if (cluster.isSquareStampedeFlag === 1) {
       barColor = '#dd44ff'; // vivid magenta-purple for square stampede
     } else if (cluster.isGoldenMimicFlag === 1) {

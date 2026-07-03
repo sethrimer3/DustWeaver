@@ -56,7 +56,6 @@ import { applyDustWeaverArchitectAI } from './clusters/dustWeaverArchitectAi';
 import { applyVoidSingularityAI } from './clusters/voidSingularityAi';
 import { applyDustLeechAI } from './clusters/dustLeechAi';
 import { applySnakeAI } from './clusters/snakeAi';
-import { applyGridBlockEnemyAI } from './clusters/gridBlockEnemyAi';
 import {
   syncMoteQueueWithParticles,
   tickMoteSlotRegeneration,
@@ -121,10 +120,6 @@ export function tick(world: WorldState): void {
 
   // 0.25. Grapple rope constraint — corrects player cluster position/velocity
   applyGrappleClusterConstraint(world);
-
-  // 0.25b. Grid Block Enemy AI — runs early so that momentum combat (below) reads
-  //         this tick's grid-aligned positions rather than last tick's.
-  applyGridBlockEnemyAI(world);
 
   // 0.26. Momentum combat — must run AFTER grapple so it reads final-frame
   //        post-grapple horizontal velocity.  Phase 1 sets isHighVelocityAttacking;

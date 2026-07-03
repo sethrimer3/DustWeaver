@@ -79,9 +79,6 @@ export interface RoomJsonEnemy {
   isVoidSingularity?: boolean;
   isVoidSingularityPair?: boolean;
   isDustLeech?: boolean;
-  isGridBlockEnemy?: boolean;
-  gridBlockSizeIndex?: 0 | 1;
-  gridBlockSpeedIndex?: 0 | 1 | 2;
 }
 
 export interface RoomJsonWall {

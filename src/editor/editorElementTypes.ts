@@ -133,9 +133,6 @@ export interface EditorEnemy {
   isVoidSingularityFlag?: 0 | 1;
   isVoidSingularityPairFlag?: 0 | 1;
   isDustLeechFlag?: 0 | 1;
-  isGridBlockEnemyFlag?: 0 | 1;
-  gridBlockSizeIndex?: 0 | 1;
-  gridBlockSpeedIndex?: 0 | 1 | 2;
 }
 
 // ── Transitions ───────────────────────────────────────────────────────────────

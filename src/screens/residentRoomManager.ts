@@ -366,8 +366,7 @@ function _skipParticleSpawn(cl: ClusterState): boolean {
     cl.isDustBlockMimicFlag      === 1 ||
     cl.isDustWeaverArchitectFlag === 1 ||
     cl.isVoidSingularityFlag     === 1 ||
-    cl.isDustLeechFlag           === 1 ||
-    cl.isGridBlockEnemyFlag      === 1
+    cl.isDustLeechFlag           === 1
   );
 }
 
