@@ -573,6 +573,10 @@ export class RoomChunkCache {
           // ── Build chunk ─────────────────────────────────────────────────
           const chunkCtx = chunk.canvas.getContext('2d');
           if (chunkCtx !== null) {
+            chunkCtx.setTransform(1, 0, 0, 1, 0, 0);
+            chunkCtx.globalAlpha = 1;
+            chunkCtx.globalCompositeOperation = 'source-over';
+            chunkCtx.imageSmoothingEnabled = false;
             chunkCtx.clearRect(0, 0, chunk.canvas.width, chunk.canvas.height);
 
             const colMin = cx * CHUNK_SIZE_BLOCKS;

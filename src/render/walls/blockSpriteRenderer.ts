@@ -860,26 +860,29 @@ function _doRenderWallTilesDirect(
     chunkKey,
   };
 
-  ctx.save();
-  ctx.imageSmoothingEnabled = false;
-
   let hadFallbacks = false;
-  hadFallbacks = render2x2Pass(ctx, pctx)      || hadFallbacks;
-  hadFallbacks = render1x1Pass(ctx, pctx)      || hadFallbacks;
-  hadFallbacks = renderPlatformPass(ctx, pctx) || hadFallbacks;
-  hadFallbacks = renderRampPass(ctx, pctx)     || hadFallbacks;
-  hadFallbacks = renderHalfPillarPass(ctx, pctx) || hadFallbacks;
+  ctx.save();
+  try {
+    ctx.imageSmoothingEnabled = false;
 
-  // Pass 6: seam transition overlays (or debug seam visualization).
-  if (_activeSeamBlending !== 'off' || _seamBlendDebug) {
-    renderSeamOverlayPass(
-      ctx, wallLayout, roomTheme,
-      offsetXPx, offsetYPx, scalePx, blockSizePx,
-      chunkKey, _activeSeamBlending, _seamBlendDebug,
-    );
+    hadFallbacks = render2x2Pass(ctx, pctx)      || hadFallbacks;
+    hadFallbacks = render1x1Pass(ctx, pctx)      || hadFallbacks;
+    hadFallbacks = renderPlatformPass(ctx, pctx) || hadFallbacks;
+    hadFallbacks = renderRampPass(ctx, pctx)     || hadFallbacks;
+    hadFallbacks = renderHalfPillarPass(ctx, pctx) || hadFallbacks;
+
+    // Pass 6: seam transition overlays (or debug seam visualization).
+    if (_activeSeamBlending !== 'off' || _seamBlendDebug) {
+      renderSeamOverlayPass(
+        ctx, wallLayout, roomTheme,
+        offsetXPx, offsetYPx, scalePx, blockSizePx,
+        chunkKey, _activeSeamBlending, _seamBlendDebug,
+      );
+    }
+  } finally {
+    ctx.restore();
   }
 
-  ctx.restore();
   return hadFallbacks;
 }
 

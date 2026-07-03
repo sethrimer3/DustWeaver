@@ -50,11 +50,14 @@ function drawPlayerOutlineMask(
   color: string,
 ): void {
   ctx.save();
-  ctx.drawImage(outlineMask, xPx, yPx, widthPx, heightPx);
-  ctx.globalCompositeOperation = 'source-in';
-  ctx.fillStyle = color;
-  ctx.fillRect(xPx, yPx, widthPx, heightPx);
-  ctx.restore();
+  try {
+    ctx.drawImage(outlineMask, xPx, yPx, widthPx, heightPx);
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.fillStyle = color;
+    ctx.fillRect(xPx, yPx, widthPx, heightPx);
+  } finally {
+    ctx.restore();
+  }
 }
 
 function drawMomentumGoldenTrail(
@@ -83,37 +86,40 @@ function drawMomentumGoldenTrail(
   const tailHalfWidthPx = 0.65 * spriteScalePx;
 
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  const gradient = ctx.createLinearGradient(anchorX, anchorY, tailX, tailY);
-  gradient.addColorStop(0.0, 'rgba(255, 225, 92, 0.78)');
-  gradient.addColorStop(0.55, 'rgba(255, 185, 36, 0.38)');
-  gradient.addColorStop(1.0, 'rgba(255, 170, 18, 0.0)');
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.moveTo(anchorX + perpX * baseHalfWidthPx, anchorY + perpY * baseHalfWidthPx);
-  ctx.quadraticCurveTo(
-    midX + perpX * baseHalfWidthPx * 0.55,
-    midY + perpY * baseHalfWidthPx * 0.55,
-    tailX + perpX * tailHalfWidthPx,
-    tailY + perpY * tailHalfWidthPx,
-  );
-  ctx.lineTo(tailX - perpX * tailHalfWidthPx, tailY - perpY * tailHalfWidthPx);
-  ctx.quadraticCurveTo(
-    midX - perpX * baseHalfWidthPx * 0.55,
-    midY - perpY * baseHalfWidthPx * 0.55,
-    anchorX - perpX * baseHalfWidthPx,
-    anchorY - perpY * baseHalfWidthPx,
-  );
-  ctx.closePath();
-  ctx.fill();
+  try {
+    ctx.globalCompositeOperation = 'lighter';
+    const gradient = ctx.createLinearGradient(anchorX, anchorY, tailX, tailY);
+    gradient.addColorStop(0.0, 'rgba(255, 225, 92, 0.78)');
+    gradient.addColorStop(0.55, 'rgba(255, 185, 36, 0.38)');
+    gradient.addColorStop(1.0, 'rgba(255, 170, 18, 0.0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(anchorX + perpX * baseHalfWidthPx, anchorY + perpY * baseHalfWidthPx);
+    ctx.quadraticCurveTo(
+      midX + perpX * baseHalfWidthPx * 0.55,
+      midY + perpY * baseHalfWidthPx * 0.55,
+      tailX + perpX * tailHalfWidthPx,
+      tailY + perpY * tailHalfWidthPx,
+    );
+    ctx.lineTo(tailX - perpX * tailHalfWidthPx, tailY - perpY * tailHalfWidthPx);
+    ctx.quadraticCurveTo(
+      midX - perpX * baseHalfWidthPx * 0.55,
+      midY - perpY * baseHalfWidthPx * 0.55,
+      anchorX - perpX * baseHalfWidthPx,
+      anchorY - perpY * baseHalfWidthPx,
+    );
+    ctx.closePath();
+    ctx.fill();
 
-  ctx.strokeStyle = 'rgba(255, 240, 150, 0.35)';
-  ctx.lineWidth = Math.max(1.0, 1.5 * scalePx);
-  ctx.beginPath();
-  ctx.moveTo(anchorX, anchorY);
-  ctx.lineTo(tailX, tailY);
-  ctx.stroke();
-  ctx.restore();
+    ctx.strokeStyle = 'rgba(255, 240, 150, 0.35)';
+    ctx.lineWidth = Math.max(1.0, 1.5 * scalePx);
+    ctx.beginPath();
+    ctx.moveTo(anchorX, anchorY);
+    ctx.lineTo(tailX, tailY);
+    ctx.stroke();
+  } finally {
+    ctx.restore();
+  }
 }
 
 /**
@@ -333,47 +339,53 @@ export function renderClusters(
             const drawCenterY = spriteCenterY - normY * spacingPx;
             const alpha = 0.085 * (1.0 - t * 0.35);
             ctx.save();
-            ctx.translate(Math.round(drawCenterX) - 0.5, Math.round(drawCenterY));
-            if (cluster.isFacingLeftFlag === 1) {
-              ctx.scale(-1, 1);
+            try {
+              ctx.translate(Math.round(drawCenterX) - 0.5, Math.round(drawCenterY));
+              if (cluster.isFacingLeftFlag === 1) {
+                ctx.scale(-1, 1);
+              }
+              ctx.globalAlpha = alpha;
+              ctx.drawImage(
+                outlineMask,
+                -(spritePivotX + outlineThicknessPx),
+                -spriteHalfH - outlineThicknessPx,
+                spriteW + outlineThicknessPx * 2,
+                spriteH + outlineThicknessPx * 2,
+              );
+              ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
+            } finally {
+              ctx.restore();
             }
-            ctx.globalAlpha = alpha;
-            ctx.drawImage(
-              outlineMask,
-              -(spritePivotX + outlineThicknessPx),
-              -spriteHalfH - outlineThicknessPx,
-              spriteW + outlineThicknessPx * 2,
-              spriteH + outlineThicknessPx * 2,
-            );
-            ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
-            ctx.restore();
           }
         }
         ctx.save();
-        // Shift by -0.5 so that sprite edges (at ±9.5 / ±6.5 from pivot) land on
-        // integer virtual pixels in both facing directions, preventing the edge-pixel
-        // duplication artifact that appears under ctx.scale(-1, 1).
-        ctx.translate(screenX - 0.5, spriteCenterY);
-        if (cluster.isFacingLeftFlag === 1) {
-          ctx.scale(-1, 1);
+        try {
+          // Shift by -0.5 so that sprite edges (at ±9.5 / ±6.5 from pivot) land on
+          // integer virtual pixels in both facing directions, preventing the edge-pixel
+          // duplication artifact that appears under ctx.scale(-1, 1).
+          ctx.translate(screenX - 0.5, spriteCenterY);
+          if (cluster.isFacingLeftFlag === 1) {
+            ctx.scale(-1, 1);
+          }
+          // Proximity-bounce stub: rotate the jumping sprite to face the surface.
+          if (bounceRotationAngleRad !== 0) {
+            ctx.rotate(bounceRotationAngleRad);
+          }
+          // Draw outer silhouette first, then the original sprite on top.
+          const outlineColor = isMomentumInvulnerable ? '#ffd84f' : '#000000';
+          drawPlayerOutlineMask(
+            ctx,
+            outlineMask,
+            -(spritePivotX + outlineThicknessPx),
+            -spriteHalfH - outlineThicknessPx,
+            spriteW + outlineThicknessPx * 2,
+            spriteH + outlineThicknessPx * 2,
+            outlineColor,
+          );
+          ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
+        } finally {
+          ctx.restore();
         }
-        // Proximity-bounce stub: rotate the jumping sprite to face the surface.
-        if (bounceRotationAngleRad !== 0) {
-          ctx.rotate(bounceRotationAngleRad);
-        }
-        // Draw outer silhouette first, then the original sprite on top.
-        const outlineColor = isMomentumInvulnerable ? '#ffd84f' : '#000000';
-        drawPlayerOutlineMask(
-          ctx,
-          outlineMask,
-          -(spritePivotX + outlineThicknessPx),
-          -spriteHalfH - outlineThicknessPx,
-          spriteW + outlineThicknessPx * 2,
-          spriteH + outlineThicknessPx * 2,
-          outlineColor,
-        );
-        ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
-        ctx.restore();
 
         // ── Hurt flash overlay: red tint while hurtTicks > 0 ─────────────
         if (cluster.hurtTicks > 0) {
