@@ -133,6 +133,62 @@ function computeRayGeometry(
   };
 }
 
+function clamp01(value: number): number {
+  return value <= 0 ? 0 : value >= 1 ? 1 : value;
+}
+
+/**
+ * Cheap normalized ray brightness estimate for a viewport-space point.
+ * Returns 0 outside all ray quads and approaches 1 in the brightest ray cores.
+ */
+export function estimateSunrayIntensityAt(
+  xPx: number,
+  yPx: number,
+  viewportW: number,
+  viewportH: number,
+  config: SunraysConfig,
+  timeMs: number,
+  rays: readonly SunrayDescriptor[],
+): number {
+  if (viewportW <= 0 || viewportH <= 0 || rays.length === 0 || config.intensity <= 0) return 0;
+  const angleRad = (config.angleDeg * Math.PI) / 180;
+  const dirX = Math.sin(angleRad);
+  const dirY = Math.cos(angleRad);
+  const perpX = dirY;
+  const perpY = -dirX;
+  let intensity = 0;
+
+  for (const ray of rays) {
+    const g = computeRayGeometry(ray, viewportW, viewportH, angleRad, 1.0, timeMs, config.animationEnabled);
+    const lenX = g.endX - g.startX;
+    const lenY = g.endY - g.startY;
+    const lenSq = lenX * lenX + lenY * lenY;
+    if (lenSq <= 0.001) continue;
+
+    const relX = xPx - g.startX;
+    const relY = yPx - g.startY;
+    const along = (relX * lenX + relY * lenY) / lenSq;
+    if (along < 0 || along > 1) continue;
+
+    const centerX = g.startX + lenX * along;
+    const centerY = g.startY + lenY * along;
+    const halfWidthStart = ray.width * viewportW;
+    const halfWidthEnd = halfWidthStart * 0.35;
+    const halfWidth = halfWidthStart + (halfWidthEnd - halfWidthStart) * along;
+    if (halfWidth <= 0.001) continue;
+
+    const lateral = Math.abs((xPx - centerX) * perpX + (yPx - centerY) * perpY) / halfWidth;
+    if (lateral >= 1) continue;
+
+    const crossFade = Math.pow(1 - lateral, 1.7);
+    const lengthFade = Math.pow(1 - along, 0.7);
+    const pulse = config.animationEnabled ? 0.9 + 0.1 * Math.sin(timeMs * 0.0005 + ray.phase) : 1;
+    intensity = Math.max(intensity, config.intensity * ray.alpha * pulse * crossFade * lengthFade);
+  }
+
+  return clamp01(intensity);
+}
+
 // ── Hard mode ─────────────────────────────────────────────────────────────
 
 /**

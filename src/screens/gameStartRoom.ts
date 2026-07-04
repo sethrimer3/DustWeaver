@@ -71,10 +71,16 @@ export function resolveGameStartRoomSelection(
   const initialRoom: RoomDef = requestedStartRoom ?? campaignSpawnRoom;
   const campaignSpawnBlock: readonly [number, number] =
     campaignSpawnBlockOverride ?? campaignSpawnRoom.playerSpawnBlock;
+  // Failsafe rules: with an explicit start room, only its absence indicates
+  // broken wiring.  The 'lobby' presence check applies only when no start room
+  // was requested — packed custom campaigns replace the registry and rarely
+  // contain a room named 'lobby', so requiring it would force-open the editor
+  // for every custom campaign played from the menu.
   const shouldOpenFailsafeEditor = hasCampaignSession
     ? (openEditorImmediately === true)
-    : ((startRoomId !== null && roomRegistry.get(startRoomId) === undefined)
-      || !roomRegistry.has('lobby'));
+    : (startRoomId !== null
+      ? roomRegistry.get(startRoomId) === undefined
+      : !roomRegistry.has('lobby'));
   return {
     configuredSpawnRoom,
     requestedStartRoom,

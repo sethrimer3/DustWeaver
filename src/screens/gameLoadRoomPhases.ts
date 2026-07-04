@@ -156,6 +156,7 @@ export interface LoadRoomCtx {
   progress: PlayerProgress | undefined;
   playerCloak: PlayerCloak;
   phantomCloak: PhantomCloakExtension;
+  momentumTrail?: import('../render/clusters/momentumTrail').MomentumTrail;
   decorationWaveState: import('../render/effects/wallDecorations').DecorationWaveState;
   environmentalDust: EnvironmentalDustLayer;
   sunbeamRenderer: SunbeamRenderer;
@@ -243,6 +244,7 @@ export function* makeLoadRoomPhases(
     progress,
     playerCloak,
     phantomCloak,
+    momentumTrail,
     decorationWaveState,
     environmentalDust,
     sunbeamRenderer,
@@ -656,6 +658,7 @@ export function* makeLoadRoomPhases(
 
   playerCloak.reset();
   phantomCloak.reset();
+  momentumTrail?.reset();
 
   decorationWaveState.reset(room.decorations?.length ?? 0);
 
@@ -838,6 +841,7 @@ export function applyResidentRoomActivation(
     progress,
     playerCloak,
     phantomCloak,
+    momentumTrail,
     decorationWaveState,
     environmentalDust,
     sunbeamRenderer,
@@ -1029,6 +1033,7 @@ export function applyResidentRoomActivation(
 
   playerCloak.reset();
   phantomCloak.reset();
+  momentumTrail?.reset();
   decorationWaveState.reset(room.decorations?.length ?? 0);
 
   {

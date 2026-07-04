@@ -4,6 +4,7 @@ import { tick } from '../sim/tick';
 import { createRng } from '../sim/rng';
 import { createReusableSnapshot, updateSnapshotInPlace } from '../render/snapshot';
 import { PlayerCloak } from '../render/clusters/playerCloak';
+import { MomentumTrail } from '../render/clusters/momentumTrail';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { HudState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
@@ -536,6 +537,7 @@ export function startGameScreen(
   const skillTombEffectRenderer = new SkillTombEffectRenderer();
   const playerCloak = new PlayerCloak();
   const phantomCloak = new PhantomCloakExtension();
+  const momentumTrail = new MomentumTrail();
   const decorationWaveState = new DecorationWaveState();
   const arrowWeaveRenderer = new ArrowWeaveRenderer();
   const swordWeaveRenderer = new SwordWeaveRenderer();
@@ -664,6 +666,7 @@ export function startGameScreen(
     progress,
     playerCloak,
     phantomCloak,
+    momentumTrail,
     decorationWaveState,
     environmentalDust,
     sunbeamRenderer,
@@ -2190,6 +2193,7 @@ export function startGameScreen(
       interpolationBuffers.prevClusterPosY,
       renderAlpha,
       elapsedMs,
+      momentumTrail,
     );
 
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
@@ -2226,7 +2230,7 @@ export function startGameScreen(
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-      playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+      playerCloak, phantomCloak, momentumTrail, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom,
       snapshot: reusableSnapshot,

@@ -142,6 +142,38 @@ export function getOrCreateOuterOutlineMask(sprite: HTMLImageElement): HTMLCanva
   return outlineCanvas;
 }
 
+/** Precomputed gold-recoloured outline masks, keyed by source player sprite image. */
+const _playerGoldOutlineMaskCache = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+
+/**
+ * Builds a warm-gold recolour of the outer outline mask (same silhouette
+ * shape as getOrCreateOuterOutlineMask, just tinted) — used to make the
+ * player's outline glow gold while in an invulnerable state.
+ */
+export function getOrCreateGoldOutlineMask(sprite: HTMLImageElement): HTMLCanvasElement {
+  const cached = _playerGoldOutlineMaskCache.get(sprite);
+  if (cached !== undefined) return cached;
+
+  const blackMask = getOrCreateOuterOutlineMask(sprite);
+  const goldCanvas = document.createElement('canvas');
+  goldCanvas.width = blackMask.width;
+  goldCanvas.height = blackMask.height;
+  const goldCtx = goldCanvas.getContext('2d');
+  if (goldCtx === null) {
+    _playerGoldOutlineMaskCache.set(sprite, goldCanvas);
+    return goldCanvas;
+  }
+  goldCtx.drawImage(blackMask, 0, 0);
+  // Recolour every non-transparent pixel to warm gold, keeping the silhouette's alpha.
+  goldCtx.globalCompositeOperation = 'source-in';
+  goldCtx.fillStyle = '#ffcf3f';
+  goldCtx.fillRect(0, 0, goldCanvas.width, goldCanvas.height);
+  goldCtx.globalCompositeOperation = 'source-over';
+
+  _playerGoldOutlineMaskCache.set(sprite, goldCanvas);
+  return goldCanvas;
+}
+
 function _loadCharacterSprites(characterId: string): CharacterSprites {
   const base = `SPRITES/PLAYERS/${characterId}/${characterId}`;
   const standingSrc = `${base}_standing.png`;

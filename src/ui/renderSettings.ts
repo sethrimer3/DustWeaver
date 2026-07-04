@@ -135,6 +135,23 @@ export function setOffensiveDustOutlineEnabled(isEnabled: boolean): void {
   localStorage.setItem(OFFENSIVE_DUST_OUTLINE_STORAGE_KEY, isEnabled ? '1' : '0');
 }
 
+// ── Momentum Combat Golden Trail ─────────────────────────────────────────────
+
+const MOMENTUM_TRAIL_STORAGE_KEY = 'dustweaver-momentum-trail-enabled';
+
+/**
+ * Whether the golden high-speed trail renders while the player is in the
+ * momentum-combat invulnerability state.  Defaults to enabled.
+ */
+export function isMomentumTrailEnabled(): boolean {
+  const value = localStorage.getItem(MOMENTUM_TRAIL_STORAGE_KEY);
+  return value !== '0';
+}
+
+export function setMomentumTrailEnabled(isEnabled: boolean): void {
+  localStorage.setItem(MOMENTUM_TRAIL_STORAGE_KEY, isEnabled ? '1' : '0');
+}
+
 // ── Reachable Edge Glow Opacity ─────────────────────────────────────────────
 
 const DEFAULT_REACHABLE_EDGE_GLOW_OPACITY = 0.5;

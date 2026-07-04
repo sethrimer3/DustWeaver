@@ -4,10 +4,13 @@ import { renderWallSprites } from '../walls/blockSpriteRenderer';
 import { BLOCK_SIZE_MEDIUM, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
 import type { PlayerCloak } from './playerCloak';
 import type { PhantomCloakExtension } from './phantomCloak';
+import type { MomentumTrail } from './momentumTrail';
 import { isSpriteReady } from '../imageCache';
+import { isMomentumTrailEnabled, type GraphicsQuality } from '../../ui/renderSettings';
 import {
   getCharacterSprites,
   getOrCreateOuterOutlineMask,
+  getOrCreateGoldOutlineMask,
   getPlayerSprite,
   PLAYER_OUTLINE_THICKNESS_WORLD,
   PLAYER_SPRITE_WIDTH_WORLD,
@@ -98,6 +101,8 @@ export function renderClusters(
   playerCloak?: PlayerCloak,
   phantomCloak?: PhantomCloakExtension,
   isDebugCloak = false,
+  momentumTrail?: MomentumTrail,
+  graphicsQuality: GraphicsQuality = 'med',
 ): void {
   ctx.save();
   // Fading webs render below clusters (behind everything else in this pass)
@@ -218,34 +223,8 @@ export function renderClusters(
         }
 
         // ── Momentum combat golden trail (behind cloak and body) ──────
-        // TODO: replace with polished trail effect
-        if (cluster.isHighVelocityAttacking === 1) {
-          const vx = cluster.velocityXWorld;
-          const vy = cluster.velocityYWorld;
-          const spd = Math.sqrt(vx * vx + vy * vy);
-          if (spd > 0) {
-            const nx = vx / spd;
-            const ny = vy / spd;
-            const trailCount = 5;
-            for (let ti = 0; ti < trailCount; ti++) {
-              const t = (ti + 1) / trailCount;
-              const alpha = 0.55 * (1 - t);
-              const offsetDist = t * 12 * scalePx;
-              ctx.save();
-              ctx.globalAlpha = alpha;
-              ctx.fillStyle = 'rgba(255,210,60,1)';
-              ctx.beginPath();
-              ctx.ellipse(
-                screenX - nx * offsetDist,
-                spriteCenterY - ny * offsetDist,
-                4 * scalePx * (1 - t * 0.5),
-                4 * scalePx * (1 - t * 0.5),
-                0, 0, Math.PI * 2,
-              );
-              ctx.fill();
-              ctx.restore();
-            }
-          }
+        if (momentumTrail !== undefined && isMomentumTrailEnabled()) {
+          momentumTrail.render(ctx, offsetXPx, offsetYPx, scalePx, graphicsQuality);
         }
 
         // ── Layer 0: Phantom cloak extension (behind main cloak) ──────────
@@ -259,8 +238,11 @@ export function renderClusters(
         }
 
         // ── Layer 2: Player body sprite ────────────────────────────────
+        // Outline glows warm gold while invulnerable (hit-invulnerability
+        // frames or momentum-combat high-velocity invulnerability).
+        const isInvulnerableGlow = isInvulnerable || cluster.isHighVelocityAttacking === 1;
         const outlineThicknessPx = PLAYER_OUTLINE_THICKNESS_WORLD * scalePx;
-        const outlineMask = getOrCreateOuterOutlineMask(sprite);
+        const outlineMask = isInvulnerableGlow ? getOrCreateGoldOutlineMask(sprite) : getOrCreateOuterOutlineMask(sprite);
         const speedXWorldPerSec = cluster.velocityXWorld;
         const speedYWorldPerSec = cluster.velocityYWorld;
         const speedWorldPerSec = Math.sqrt(
@@ -304,7 +286,28 @@ export function renderClusters(
         if (bounceRotationAngleRad !== 0) {
           ctx.rotate(bounceRotationAngleRad);
         }
-        // Draw black outer silhouette first, then the original sprite on top.
+        // Soft golden glow halo behind the outline while invulnerable — drawn
+        // as a few larger, lower-alpha copies of the outline mask (no blur
+        // filter, so it stays crisp and pixel-art friendly).
+        if (isInvulnerableGlow) {
+          const haloPasses: ReadonlyArray<readonly [number, number]> = [
+            [3, 0.16], [2, 0.26], [1, 0.4],
+          ];
+          for (const [padMultiplier, haloAlpha] of haloPasses) {
+            const padPx = outlineThicknessPx * padMultiplier;
+            ctx.globalAlpha = haloAlpha;
+            ctx.drawImage(
+              outlineMask,
+              -(spritePivotX + outlineThicknessPx) - padPx,
+              -spriteHalfH - outlineThicknessPx - padPx,
+              spriteW + outlineThicknessPx * 2 + padPx * 2,
+              spriteH + outlineThicknessPx * 2 + padPx * 2,
+            );
+          }
+          ctx.globalAlpha = 1.0;
+        }
+        // Draw outer silhouette (black normally, gold while invulnerable) first,
+        // then the original sprite on top.
         ctx.drawImage(
           outlineMask,
           -(spritePivotX + outlineThicknessPx),

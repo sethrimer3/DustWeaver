@@ -15,6 +15,8 @@ import {
   setSelectedRenderSize,
   isOffensiveDustOutlineEnabled,
   setOffensiveDustOutlineEnabled,
+  isMomentumTrailEnabled,
+  setMomentumTrailEnabled,
   getMusicVolume,
   setMusicVolume,
   getSfxVolume,
@@ -386,6 +388,27 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
       outlineBtn.style.background = `rgba(212,168,75,${nowEnabled ? '0.12' : '0'})`;
     });
     tabContent.appendChild(outlineBtn);
+
+    const trailEnabled = isMomentumTrailEnabled();
+    const trailBtn = document.createElement('button');
+    trailBtn.style.cssText = `
+      width: 100%; padding: 10px 14px; margin-bottom: 10px;
+      font-family: 'Cinzel', serif; font-size: 0.88rem; letter-spacing: 0.05em;
+      text-align: left; cursor: pointer; border-radius: 4px;
+      transition: background 0.15s, border-color 0.15s;
+      border: 1px solid rgba(212,168,75,${trailEnabled ? '0.7' : '0.3'});
+      background: rgba(212,168,75,${trailEnabled ? '0.12' : '0'});
+      color: #d4a84b;
+    `;
+    trailBtn.textContent = `Momentum Combat Golden Trail: ${trailEnabled ? 'On' : 'Off'}`;
+    trailBtn.addEventListener('click', () => {
+      const nowEnabled = !isMomentumTrailEnabled();
+      setMomentumTrailEnabled(nowEnabled);
+      trailBtn.textContent = `Momentum Combat Golden Trail: ${nowEnabled ? 'On' : 'Off'}`;
+      trailBtn.style.borderColor = `rgba(212,168,75,${nowEnabled ? '0.7' : '0.3'})`;
+      trailBtn.style.background = `rgba(212,168,75,${nowEnabled ? '0.12' : '0'})`;
+    });
+    tabContent.appendChild(trailBtn);
   }
 
   // ── Gameplay tab ───────────────────────────────────────────────────────

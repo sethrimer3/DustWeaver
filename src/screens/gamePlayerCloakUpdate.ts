@@ -21,6 +21,10 @@
 import type { WorldState } from '../sim/world';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
+import type { MomentumTrail } from '../render/clusters/momentumTrail';
+
+/** Matches PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD used by renderer.ts / playerCloak.ts. */
+const PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD = -1;
 
 /**
  * Updates the procedural player cloak and phantom-cloak extension for the
@@ -44,6 +48,7 @@ export function updatePlayerCloaks(
   prevClusterPosY: Float32Array,
   renderAlpha: number,
   elapsedMs: number,
+  momentumTrail?: MomentumTrail,
 ): void {
   const cloakPlayer = world.clusters[0];
   if (cloakPlayer === undefined || cloakPlayer.isAliveFlag === 0 || cloakPlayer.isPlayerFlag === 0) return;
@@ -81,4 +86,16 @@ export function updatePlayerCloaks(
     rootXWorld:        playerCloak.getTipXWorld(),
     rootYWorld:        playerCloak.getTipYWorld(),
   });
+
+  // Update the golden momentum-combat trail — anchored at the sprite center
+  // (matches the world-Y offset renderer.ts uses when positioning the sprite).
+  if (momentumTrail !== undefined) {
+    momentumTrail.update(elapsedMs / 1000, {
+      anchorXWorld: cloakInterpXWorld,
+      anchorYWorld: cloakInterpYWorld + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD,
+      velocityXWorld: cloakPlayer.velocityXWorld,
+      velocityYWorld: cloakPlayer.velocityYWorld,
+      isHighVelocityAttacking: cloakPlayer.isHighVelocityAttacking,
+    });
+  }
 }

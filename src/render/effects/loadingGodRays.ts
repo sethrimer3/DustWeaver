@@ -1,3 +1,5 @@
+import { SunrayDustMotes } from './sunrayDustMotes';
+
 export interface LoadingGodRaysViewport {
   readonly width: number;
   readonly height: number;
@@ -45,6 +47,14 @@ const RAYS: readonly LoadingRayDef[] = [
 let _noiseCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 let _noisePattern: CanvasPattern | null = null;
 let _isDevEnabled = true;
+const _loadingDustMotes = new SunrayDustMotes();
+_loadingDustMotes.reset(0x1c0ffee);
+let _dustViewportW = 0;
+let _dustViewportH = 0;
+let _dustAngleRad = RAY_ANGLE_RAD;
+let _dustBaseAlpha = BASE_ALPHA;
+let _dustDriftSpeed = DRIFT_SPEED;
+let _dustRayCount = RAY_COUNT;
 
 export function setLoadingGodRaysEnabled(enabled: boolean): boolean {
   _isDevEnabled = Boolean(enabled);
@@ -84,6 +94,13 @@ export function renderLoadingGodRays(
     }
 
     drawNoise(ctx, width, height, timeMs, noiseStrength);
+    _dustViewportW = width;
+    _dustViewportH = height;
+    _dustAngleRad = angleRad;
+    _dustBaseAlpha = baseAlpha;
+    _dustDriftSpeed = driftSpeed;
+    _dustRayCount = rayCount;
+    _loadingDustMotes.render(ctx, width, height, timeMs, loadingDustIntensityAt, 'loading');
     ctx.restore();
   } catch {
     try {
@@ -92,6 +109,73 @@ export function renderLoadingGodRays(
       // Loading should never fail because the optional effect did.
     }
   }
+}
+
+function loadingDustIntensityAt(xPx: number, yPx: number, timeMs: number): number {
+  return estimateLoadingGodRayIntensityAt(
+    xPx,
+    yPx,
+    _dustViewportW,
+    _dustViewportH,
+    _dustAngleRad,
+    _dustBaseAlpha,
+    _dustDriftSpeed,
+    timeMs,
+    _dustRayCount,
+  );
+}
+
+function estimateLoadingGodRayIntensityAt(
+  xPx: number,
+  yPx: number,
+  viewportW: number,
+  viewportH: number,
+  angleRad: number,
+  baseAlpha: number,
+  driftSpeed: number,
+  timeMs: number,
+  rayCount: number,
+): number {
+  const diagonal = Math.hypot(viewportW, viewportH);
+  const directionX = Math.cos(angleRad);
+  const directionY = Math.sin(angleRad);
+  const perpX = -directionY;
+  const perpY = directionX;
+  let intensity = 0;
+
+  for (let i = 0; i < rayCount; i++) {
+    const ray = RAYS[i];
+    const drift = Math.sin(timeMs * driftSpeed + ray.phase) * viewportW * 0.018;
+    const startX = Math.round(ray.x * viewportW + drift);
+    const startY = Math.round(ray.y * viewportH + Math.cos(timeMs * driftSpeed * 0.7 + ray.phase) * viewportH * 0.01);
+    const length = Math.round(ray.length * diagonal);
+    const endX = Math.round(startX + directionX * length);
+    const endY = Math.round(startY + directionY * length);
+    const lenX = endX - startX;
+    const lenY = endY - startY;
+    const lenSq = lenX * lenX + lenY * lenY;
+    if (lenSq <= 0.001) continue;
+
+    const along = ((xPx - startX) * lenX + (yPx - startY) * lenY) / lenSq;
+    if (along < 0 || along > 1) continue;
+
+    const centerX = startX + lenX * along;
+    const centerY = startY + lenY * along;
+    const widthStart = ray.widthStart * viewportW;
+    const widthEnd = ray.widthEnd * viewportW;
+    const halfWidth = widthStart + (widthEnd - widthStart) * along;
+    if (halfWidth <= 0.001) continue;
+
+    const lateral = Math.abs((xPx - centerX) * perpX + (yPx - centerY) * perpY) / halfWidth;
+    if (lateral >= 1) continue;
+
+    const shimmer = 0.92 + 0.08 * Math.sin(timeMs * 0.00042 + ray.phase);
+    const crossFade = Math.pow(1 - lateral, 1.65);
+    const lengthFade = Math.pow(1 - along, 0.72);
+    intensity = Math.max(intensity, baseAlpha * ray.alpha * shimmer * crossFade * lengthFade * 3.4);
+  }
+
+  return intensity <= 0 ? 0 : intensity >= 1 ? 1 : intensity;
 }
 
 function drawRay(

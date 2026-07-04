@@ -38,6 +38,8 @@ import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
+import type { MomentumTrail } from '../render/clusters/momentumTrail';
+import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
 import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
@@ -114,6 +116,8 @@ export interface RenderFrameContext {
   playerCloak: PlayerCloak;
   /** Phantasmal golden cloak extension — visible while the player is grappling. */
   phantomCloak: PhantomCloakExtension;
+  /** Golden high-speed trail — visible while momentum-combat invulnerability is active. */
+  momentumTrail: MomentumTrail;
   darkRoomOverlay: DarkRoomOverlay;
   /** Arrow Weave renderer — bow crescent, dissipation, and arrow bodies. */
   arrowWeaveRenderer: ArrowWeaveRenderer;
@@ -274,7 +278,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-    playerCloak, phantomCloak, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+    playerCloak, phantomCloak, momentumTrail, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
@@ -402,7 +406,15 @@ export function renderFrame(r: RenderFrameContext): void {
   // ── Sunbeams (light shafts behind walls) ────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_SUNBEAMS);
   sunbeamRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx);
-  sunraysRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx);
+  let playerForSunrayDust: ClusterSnapshot | null = null;
+  for (let i = 0; i < snapshot.clusters.length; i++) {
+    const cluster = snapshot.clusters[i];
+    if (cluster.isPlayerFlag === 1 && cluster.isAliveFlag === 1) {
+      playerForSunrayDust = cluster;
+      break;
+    }
+  }
+  sunraysRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx, playerForSunrayDust);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_SUNBEAMS);
 
   // ── Walls ────────────────────────────────────────────────────────────────
@@ -468,7 +480,7 @@ export function renderFrame(r: RenderFrameContext): void {
     renderProfiler.updateLiquidStats(getLiquidDebugStats());
   }
 
-  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode);
+  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode, momentumTrail, graphicsQuality);
   renderSnakes(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRadiantWeb(ctx, snapshot, ox, oy, zoom, isDebugMode);
