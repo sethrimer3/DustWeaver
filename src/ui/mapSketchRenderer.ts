@@ -499,12 +499,31 @@ function buildRoomContourOpenAir(room: RoomDef): ContourData {
     }
   }
 
-  // ── Step 3: Trace contours (identical to buildRoomContour) ────────────────
+  // ── Step 3: Trace contours ──────────────────────────────────────────────
+  //
+  // Unlike buildRoomContour, this graph can contain genuine open chains that
+  // are longer than one edge (the transition-open boundary segments). Tracing
+  // in raw Map insertion order is unsafe for those: a vertex in the *middle*
+  // of a chain may be visited as its own "start" before the vertex upstream
+  // of it gets a chance to walk through it, consuming its one outgoing edge
+  // and fragmenting the chain into pieces too short to pass the point-count
+  // threshold. To avoid that, chain traces always begin at true sources
+  // (in-degree 0); only after every such chain is fully consumed do we sweep
+  // remaining vertices, which by construction can only be closed loops.
   interface RawContour { pts: number[]; isClosed: boolean; }
   const rawContours: RawContour[] = [];
   const edgeCursor = new Map<number, number>();
 
-  for (const [startVertex, outEdges] of adjacency) {
+  const inDegree = new Map<number, number>();
+  for (const [, outs] of adjacency) {
+    for (const to of outs) {
+      inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
+    }
+  }
+
+  function traceFrom(startVertex: number): void {
+    const outEdges = adjacency.get(startVertex);
+    if (outEdges === undefined) return;
     let startCursor = edgeCursor.get(startVertex) ?? 0;
     while (startCursor < outEdges.length) {
       const points: number[] = [];
@@ -513,9 +532,15 @@ function buildRoomContourOpenAir(room: RoomDef): ContourData {
 
       for (;;) {
         const outs = adjacency.get(cur);
-        if (outs === undefined) break;
-        const cursor = edgeCursor.get(cur) ?? 0;
-        if (cursor >= outs.length) break;
+        const cursor = outs !== undefined ? (edgeCursor.get(cur) ?? 0) : 0;
+        if (outs === undefined || cursor >= outs.length) {
+          // Dead end: this is an open chain's final vertex — record it too,
+          // otherwise the endpoint would be silently dropped.
+          const vx = cur % vertexStride;
+          const vy = Math.floor(cur / vertexStride);
+          points.push(vx, vy);
+          break;
+        }
         edgeCursor.set(cur, cursor + 1);
         const next = outs[cursor];
         const vx = cur % vertexStride;
@@ -525,12 +550,23 @@ function buildRoomContourOpenAir(room: RoomDef): ContourData {
         if (cur === startVertex) { isClosed = true; break; }
       }
 
-      if (points.length >= 6) {
+      // Closed loops need >= 3 vertices to be a polygon; open chains are
+      // drawable (a plain line segment) with as few as 2 vertices.
+      if (points.length >= (isClosed ? 6 : 4)) {
         rawContours.push({ pts: points, isClosed });
       }
 
       startCursor = edgeCursor.get(startVertex) ?? 0;
     }
+  }
+
+  // Pass 1: true chain starts (in-degree 0) — open boundary chains.
+  for (const [startVertex] of adjacency) {
+    if ((inDegree.get(startVertex) ?? 0) === 0) traceFrom(startVertex);
+  }
+  // Pass 2: everything left can only belong to closed loops.
+  for (const [startVertex] of adjacency) {
+    traceFrom(startVertex);
   }
 
   if (rawContours.length === 0) {
@@ -540,13 +576,24 @@ function buildRoomContourOpenAir(room: RoomDef): ContourData {
   }
 
   // ── Step 4: Simplify — remove collinear intermediate vertices ─────────────
-  const simplifiedContours: Float32Array[] = rawContours.map(({ pts }) => {
+  //
+  // Open chains must never wrap their neighbor lookup around the array (the
+  // first and last vertices are real endpoints, not adjacent to each other),
+  // otherwise a straight open chain — e.g. a transition-open boundary segment,
+  // which is one long run of collinear points — would have every point
+  // (including both endpoints) judged "collinear with its neighbors" and
+  // stripped down to nothing.
+  const simplifiedContours: Float32Array[] = rawContours.map(({ pts, isClosed }) => {
     const n = pts.length / 2;
     if (n < 4) return new Float32Array(pts);
     const kept: number[] = [];
     for (let i = 0; i < n; i++) {
-      const pi = (i + n - 1) % n;
-      const ni = (i + 1) % n;
+      if (!isClosed && (i === 0 || i === n - 1)) {
+        kept.push(pts[i * 2], pts[i * 2 + 1]);
+        continue;
+      }
+      const pi = isClosed ? (i + n - 1) % n : i - 1;
+      const ni = isClosed ? (i + 1) % n : i + 1;
       const px = pts[pi * 2],  py = pts[pi * 2 + 1];
       const cx = pts[i  * 2],  cy = pts[i  * 2 + 1];
       const nx = pts[ni * 2],  ny = pts[ni * 2 + 1];
@@ -554,7 +601,7 @@ function buildRoomContourOpenAir(room: RoomDef): ContourData {
         kept.push(cx, cy);
       }
     }
-    return new Float32Array(kept.length >= 6 ? kept : []);
+    return new Float32Array(kept.length >= (isClosed ? 6 : 4) ? kept : []);
   });
 
   const result: ContourData = {
@@ -591,7 +638,10 @@ export function drawRoomSketchOpenAir(
   for (let contourIndex = 0; contourIndex < data.contours.length; contourIndex++) {
     const pts = data.contours[contourIndex];
     const ptCount = pts.length / 2;
-    if (ptCount < 3) continue;
+    const isClosed = data.isClosedFlags[contourIndex];
+    // Closed loops need >= 3 vertices to be a polygon; open chains (e.g. a
+    // transition-open boundary segment) are drawable with just 2.
+    if (ptCount < (isClosed ? 3 : 2)) continue;
 
     const contourSeed = (roomHash ^ Math.imul(contourIndex + 1, 0x9e3779b9)) | 0;
 
@@ -599,7 +649,7 @@ export function drawRoomSketchOpenAir(
       ctx, pts, ptCount, contourSeed,
       mapXBlock, mapYBlock, centerX, centerY,
       cellSizePx, alpha, strokeRgb, fillRgb,
-      data.isClosedFlags[contourIndex],
+      isClosed,
     );
   }
 }
