@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "themeId": "magmaStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/magmaStone",
+  "atlasImage": "magmaStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "magmaStoneBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magmaStone/magmaStoneBlock (1).png",
+      "sourceHash": "e24d6f17a56751ab979dcba28cf703780bac8653e553466a719e31fc28f90533"
+    },
+    "magmaStoneBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magmaStone/magmaStoneBlock (2).png",
+      "sourceHash": "2bf97c5436ffbca6101caaa1e769653f2b7f33f5f57614fbb71308d3eff9fa66"
+    },
+    "magmaStoneBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magmaStone/magmaStoneBlock (3).png",
+      "sourceHash": "ccc044922d35c2981ac2f1d35e027a2dbc70b99acdc223bdef723e274f3aa4dc"
+    },
+    "magmaStoneBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magmaStone/magmaStoneBlock (4).png",
+      "sourceHash": "0ca04595f9ddef4c0646feaf4e1421f9ceab7b6925bdab033f4d58b73b21231f"
+    },
+    "magmaStoneBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magmaStone/magmaStoneBlock (5).png",
+      "sourceHash": "977c344ac91dc02dea74760fc305c50e3421ab10cc1354d65ff3b2438c44ed3e"
+    },
+    "magmaStoneBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magmaStone/magmaStoneBlock (6).png",
+      "sourceHash": "da8db1ab98e71bb42507f6f57c0f69e55dc719635c77d01fa646545a14876936"
+    },
+    "magmaStoneBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magmaStone/magmaStoneBlock (7).png",
+      "sourceHash": "07d395e51cb8cff817b2be9f184bf0544b5d81548b86d61203322d487daf9c87"
+    },
+    "magmaStoneBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magmaStone/magmaStoneBlock (8).png",
+      "sourceHash": "e28e63dab33ec19e63b9eae285ce4c52498eab6f63846f223a2b00163fd51d4e"
+    }
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "sandStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/sandStone",
+  "atlasImage": "sandStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "sandStoneBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (1).png",
+      "sourceHash": "b47e9904c6eabe08b6a434c0cfe63d95f29a615ad0f89122a895441908cd57da"
+    },
+    "sandStoneBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (2).png",
+      "sourceHash": "680e4f689693bb29019eab4c2b28eb237a25e58cfbe57d3cc16d57d1010bcf8d"
+    },
+    "sandStoneBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (3).png",
+      "sourceHash": "05d78ef270302cdbccb2e9f5d4658b65456d5cc5f025507af2dbcfccc1e0b73a"
+    },
+    "sandStoneBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (4).png",
+      "sourceHash": "48cf510e6f7b4791f37e9a60f0c1cbe4a9153be4d56d4b07b3621b4bed453755"
+    },
+    "sandStoneBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (5).png",
+      "sourceHash": "39fd797e1c483082b2945feee9d1696e0d81d0d20bbcbd2589846a9968f1b3ac"
+    },
+    "sandStoneBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (6).png",
+      "sourceHash": "2a3b44f46646ebf44fd44e42883bd42a7a0518ea48267010c0c817cd06eb8732"
+    },
+    "sandStoneBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (7).png",
+      "sourceHash": "56357f4fdf87aa00f59c43ee8ce9257dde894d89efcf54b3b4d3b2d6dc4153f3"
+    },
+    "sandStoneBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (8).png",
+      "sourceHash": "f853e1adb7d677cf270e93fc25c2a3ba14d2cd0756b420053959796ba4b609b2"
+    },
+    "sandStoneBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (9).png",
+      "sourceHash": "c7042600082d4f685b28e870708c47875916368764f5ca17baab839761a85944"
+    }
+  }
+}

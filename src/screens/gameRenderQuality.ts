@@ -2,6 +2,7 @@ import type { GraphicsQuality } from '../ui/renderSettings';
 import { getQualityConfig, type RenderQualityConfig } from '../render/renderQualityConfig';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
+import type { SunraysRenderer } from '../render/effects/sunraysRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import { setWallChunkCacheMemoryKB } from '../render/walls/blockSpriteRenderer';
 import { setBgChunkCacheMemoryKB } from '../render/walls/backgroundBlockRenderer';
@@ -22,6 +23,8 @@ const _adaptiveQcScratch: RenderQualityConfig = {
   maxDynamicLightCount: 0,
   maxParticleLightCount: 0,
   isSunbeamEnabled: false,
+  isSunraysEnabled: false,
+  isSunraysReducedQuality: true,
 };
 
 export interface ApplyRenderQualitySettingsContext {
@@ -30,6 +33,7 @@ export interface ApplyRenderQualitySettingsContext {
   isDeepReductionActive: boolean;
   bloomSystem: BloomSystem;
   sunbeamRenderer: SunbeamRenderer;
+  sunraysRenderer: SunraysRenderer;
   atmosphericLightDust: AtmosphericLightDust;
 }
 
@@ -46,6 +50,8 @@ export function applyRenderQualitySettings(r: ApplyRenderQualitySettingsContext)
     _adaptiveQcScratch.bloomIntensity = qcBase.bloomIntensity;
     _adaptiveQcScratch.bloomBlurRadiusPx = qcBase.bloomBlurRadiusPx;
     _adaptiveQcScratch.isSunbeamEnabled = disableExpensive ? false : qcBase.isSunbeamEnabled;
+    _adaptiveQcScratch.isSunraysEnabled = disableExpensive ? false : qcBase.isSunraysEnabled;
+    _adaptiveQcScratch.isSunraysReducedQuality = true;
     _adaptiveQcScratch.maxDustMoteCount = Math.max(32, qcBase.maxDustMoteCount >> 1);
     _adaptiveQcScratch.maxDynamicLightCount = Math.max(4, qcBase.maxDynamicLightCount >> 1);
     _adaptiveQcScratch.maxParticleLightCount = Math.max(4, qcBase.maxParticleLightCount >> 1);
@@ -57,6 +63,8 @@ export function applyRenderQualitySettings(r: ApplyRenderQualitySettingsContext)
 
   r.bloomSystem.setQualityParams(qc.isBloomEnabled, qc.bloomIntensity, qc.bloomBlurRadiusPx);
   r.sunbeamRenderer.setEnabled(qc.isSunbeamEnabled);
+  r.sunraysRenderer.setEnabled(qc.isSunraysEnabled);
+  r.sunraysRenderer.setReducedQuality(qc.isSunraysReducedQuality);
   r.atmosphericLightDust.setMaxMotes(qc.maxDustMoteCount);
   r.atmosphericLightDust.setDensityMultiplier(r.isAdaptiveReductionActive ? 0.5 : 1.0);
   r.sunbeamRenderer.setDensityMultiplier(

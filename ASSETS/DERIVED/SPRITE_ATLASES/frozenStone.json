@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "frozenStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/frozenStone",
+  "atlasImage": "frozenStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "frozenStone (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (1).png",
+      "sourceHash": "5f9a182173abe9527f92e7f832430b28020084438f2fe12e9c3e2adc2eb45690"
+    },
+    "frozenStone (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (2).png",
+      "sourceHash": "cbcf96e6a3d2e9556f9a37f8c635bd821b41c7902d1fa4f1ff010eb17dfb2ad5"
+    },
+    "frozenStone (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (3).png",
+      "sourceHash": "f198c448ca813383e28a9f81802e20c541bb099efd161d2d54749c2d8a5c80b1"
+    },
+    "frozenStone (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (4).png",
+      "sourceHash": "d67b56532e6c8daa279bfe99955ff71bf882e392b24ee850254472a0ad272801"
+    },
+    "frozenStone (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (5).png",
+      "sourceHash": "34feaa840647416a263dd50b0c8473d6cd1496861f9b8f27296ff5228063417d"
+    },
+    "frozenStone (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (6).png",
+      "sourceHash": "f55d124873194143f9970d6bea8e40dcfa8987b54d290ae2436badd5b593c932"
+    },
+    "frozenStone (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (7).png",
+      "sourceHash": "eb303f45e721ba1e4482c4e30cdb5a3fae343470d8e02058f6925a70cb17b3a0"
+    },
+    "frozenStone (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (8).png",
+      "sourceHash": "931f12c6bf6e97112fb1bbd67efe95e35f6c43e87673905fed559cab80e848ff"
+    },
+    "frozenStone (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (9).png",
+      "sourceHash": "e8fba09e5d1b3801956fb8c93e124427ed4d263987429a4bb57685a1ed66beb7"
+    }
+  }
+}

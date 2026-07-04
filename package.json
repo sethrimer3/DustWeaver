@@ -10,7 +10,11 @@
     "preview": "vite preview",
     "electron": "npm exec -- electron --no-sandbox .",
     "desktop": "npm run build && npm exec -- electron --no-sandbox .",
-    "test": "node --import tsx --test 'src/tests/**/*.test.ts'"
+    "test": "node --import tsx --test 'src/tests/**/*.test.ts'",
+    "build:atlases": "node scripts/build-sprite-atlases.mjs",
+    "validate:atlases": "node scripts/validate-sprite-atlases.mjs",
+    "compare:atlases": "node scripts/compare-sprite-atlases.mjs",
+    "preview:atlases": "node scripts/preview-sprite-atlases.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

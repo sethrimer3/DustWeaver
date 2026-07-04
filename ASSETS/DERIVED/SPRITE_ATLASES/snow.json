@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "snow",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/snow",
+  "atlasImage": "snow.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "snowBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (1).png",
+      "sourceHash": "2cbc763e08aecd63149e1c73da6e94e5369b5ae18a96dd9bcc2908294a29d131"
+    },
+    "snowBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (2).png",
+      "sourceHash": "2f401ba3498264b1ea193e57d3cd8e9a3ca6dfa39a6dbdbd42e5fafcf2d67d3d"
+    },
+    "snowBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (3).png",
+      "sourceHash": "71ba7a8aa385a752bedf7d1e7a00e424521e681a6616e453735cd43d026f2f58"
+    },
+    "snowBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (4).png",
+      "sourceHash": "fbfc5425c61f0e9822e6467e64df91fbe36b82ddade87d067dcb96a7a2a4a3c4"
+    },
+    "snowBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (5).png",
+      "sourceHash": "031d3bfc8cff567f724acda2aec633c84e8275a3da4cc4999b1171ce23a6a834"
+    },
+    "snowBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (6).png",
+      "sourceHash": "002e9aeef2cb6cacf200f862e2aae5060ab7cec5ad27072e01a96817871fc5ab"
+    },
+    "snowBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (7).png",
+      "sourceHash": "a987082d8992d617756d71f2e755bcccb24833da56477a2f7408de5b61f1debb"
+    },
+    "snowBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (8).png",
+      "sourceHash": "0fd75c4b0bae7015d003c31045bab07ad28569da83b52ec4ceb219fca62aca32"
+    },
+    "snowBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/snow/snowBlock (9).png",
+      "sourceHash": "fa5a6d41d50da9208144d8f5f6aa5829122c98add87e1f742c3e48416a72d2bf"
+    }
+  }
+}

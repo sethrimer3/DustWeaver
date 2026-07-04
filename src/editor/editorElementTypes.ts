@@ -544,6 +544,8 @@ export interface EditorRoomData {
   ropes?: EditorRope[];
   /** Sunbeams placed in this room. */
   sunbeams?: EditorSunbeam[];
+  /** Room-level procedural sunrays/god-rays effect. */
+  sunrays?: import('../levels/roomDef').RoomSunraysDef;
   /** Scene lights (visibility-polygon shadow system) placed in this room. */
   sceneLights?: EditorSceneLight[];
   /** Falling block tiles placed in this room. */

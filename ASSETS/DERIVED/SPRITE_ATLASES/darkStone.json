@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "themeId": "darkStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/darkStone",
+  "atlasImage": "darkStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 128,
+  "height": 64,
+  "sprites": {
+    "darkStoneBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (1).png",
+      "sourceHash": "120d147564de467af44068c3440ed16b259c9bf3ed7ed8c026caa662a7a6c4eb"
+    },
+    "darkStoneBlock (10)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (10).png",
+      "sourceHash": "1846446b7ac4121a5209a830a8ff424dc51910d2da24e5771fc34ea8a06efb6d"
+    },
+    "darkStoneBlock (11)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (11).png",
+      "sourceHash": "14df34aef2e3189f74873d70b5fbdd5ff5a2f29f69129f3b53f77b60a9d65be3"
+    },
+    "darkStoneBlock (12)": {
+      "x": 54,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (12).png",
+      "sourceHash": "825fbf1537781fe2a66e059c33006f82e5b2f01e7fba9858e44d248d75d0c735"
+    },
+    "darkStoneBlock (13)": {
+      "x": 72,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (13).png",
+      "sourceHash": "b2086610d7a73dcde1a4839e2f0f05011316b7d854b66fa5364e2cd349c4a93f"
+    },
+    "darkStoneBlock (14)": {
+      "x": 90,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (14).png",
+      "sourceHash": "fec05b812a4023ab795b291e2583269cb17dfa895362743d7a83a06a1e928a86"
+    },
+    "darkStoneBlock (15)": {
+      "x": 108,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (15).png",
+      "sourceHash": "ea4c1d44169cff2e5bd96a36fb29295a93d8af0ffe06335a144afc2191680a90"
+    },
+    "darkStoneBlock (16)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (16).png",
+      "sourceHash": "85220877d8ef901529764435d91f0dd85f514519889594f7d2444224f128e843"
+    },
+    "darkStoneBlock (17)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (17).png",
+      "sourceHash": "6bd681a0dd6c567233b607e478f080a926774ab5bb17a793416fcb871cf475f8"
+    },
+    "darkStoneBlock (18)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (18).png",
+      "sourceHash": "4ed1c7dbf3c4ddd162873ea1c3220dafff6bd1751c74a335603276dc524c27dd"
+    },
+    "darkStoneBlock (2)": {
+      "x": 54,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (2).png",
+      "sourceHash": "c3b91150d5f3339666166eb4c23b28da716d7258f31785574bfa5bf844ec7063"
+    },
+    "darkStoneBlock (3)": {
+      "x": 72,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (3).png",
+      "sourceHash": "d64a39280245062818549f521c5dae0a683ef90bc02bb2536c100ad4507cb315"
+    },
+    "darkStoneBlock (4)": {
+      "x": 90,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (4).png",
+      "sourceHash": "449bca5c9ad1f571bc5903ad5fcfe4f7e7746136a58e8b8dcbdde11c8d00f0c5"
+    },
+    "darkStoneBlock (5)": {
+      "x": 108,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (5).png",
+      "sourceHash": "a7619f56eaa89516bad836ee8b9eef6273b7e80ee185450e54e68501657a2b4a"
+    },
+    "darkStoneBlock (6)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (6).png",
+      "sourceHash": "a02204e0f73aa81dd6bcabf972fb5da315b04a1f6da993aa7bc19d586dbbfedd"
+    },
+    "darkStoneBlock (7)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (7).png",
+      "sourceHash": "b28a99908fb51f82a859e62df3f1f22d7b223b63e8f30802269b4cf52ffc7146"
+    },
+    "darkStoneBlock (8)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (8).png",
+      "sourceHash": "8804fa4d98b37c870d90600b38ea2ea96a1819e646cd4b88f8be2356f7e1a90e"
+    },
+    "darkStoneBlock (9)": {
+      "x": 54,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/darkStone/darkStoneBlock (9).png",
+      "sourceHash": "670ccc4e2fae430854a594e8a84ff5ecb8eff9a145ef863fd179cb61bcaec2b2"
+    }
+  }
+}

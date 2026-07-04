@@ -38,6 +38,7 @@ import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
+import type { SunraysRenderer } from '../render/effects/sunraysRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
@@ -158,6 +159,7 @@ export interface LoadRoomCtx {
   decorationWaveState: import('../render/effects/wallDecorations').DecorationWaveState;
   environmentalDust: EnvironmentalDustLayer;
   sunbeamRenderer: SunbeamRenderer;
+  sunraysRenderer: SunraysRenderer;
   atmosphericLightDust: AtmosphericLightDust;
   guideDustPathRenderer: GuideDustPathRenderer;
   reusableSnapshot: ReusableWorldSnapshot;
@@ -244,6 +246,7 @@ export function* makeLoadRoomPhases(
     decorationWaveState,
     environmentalDust,
     sunbeamRenderer,
+    sunraysRenderer,
     atmosphericLightDust,
     guideDustPathRenderer,
     reusableSnapshot,
@@ -641,6 +644,7 @@ export function* makeLoadRoomPhases(
   {
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
     sunbeamRenderer.initFromRoom(room);
+    sunraysRenderer.initFromRoom(room);
     FP.recordLoadPhaseStep('F:sunbeamRenderer', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
   {
@@ -837,6 +841,7 @@ export function applyResidentRoomActivation(
     decorationWaveState,
     environmentalDust,
     sunbeamRenderer,
+    sunraysRenderer,
     atmosphericLightDust,
     guideDustPathRenderer,
     reusableSnapshot,
@@ -1018,6 +1023,7 @@ export function applyResidentRoomActivation(
   // ── Phase F equivalent: environment effects + rendering state + camera ────
   environmentalDust.initFromWorld(world, room.worldNumber);
   sunbeamRenderer.initFromRoom(room);
+  sunraysRenderer.initFromRoom(room);
   atmosphericLightDust.initFromRoom(room);
   guideDustPathRenderer.initFromRoom(room);
 

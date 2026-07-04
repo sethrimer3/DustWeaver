@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "carvedObsidian",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/carvedObsidian",
+  "atlasImage": "carvedObsidian.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "carvedObsidianBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (1).png",
+      "sourceHash": "5b2b2d0136f29df9f2476a00598f1850a160500b7a50da603b5711ad8f374f6b"
+    },
+    "carvedObsidianBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (2).png",
+      "sourceHash": "f9157b9d85b8081f3eefeffc891ee1696929db6c15c61f84752cac5c934c65a1"
+    },
+    "carvedObsidianBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (3).png",
+      "sourceHash": "e27c64d3b3dd94d35d6bb252f157264b0d301e9b00ff2dcce40fcf41c56d0aba"
+    },
+    "carvedObsidianBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (4).png",
+      "sourceHash": "83d927c7c05af3d26815f5587caf8b5db47e0835fefabc93866b1b94d0056417"
+    },
+    "carvedObsidianBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (5).png",
+      "sourceHash": "26ae38c6c6e0758468d06d6e5d52601c4332c1fde903205fad878768fae5df05"
+    },
+    "carvedObsidianBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (6).png",
+      "sourceHash": "71a5975525d30eae86df8f984fce93ac15fe3119912cb32a925bd20c286e4504"
+    },
+    "carvedObsidianBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (7).png",
+      "sourceHash": "97fbeedf7b638c97dff28faafaf1acdda26f6f16fe62959836feb2565f0b4dfe"
+    },
+    "carvedObsidianBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (8).png",
+      "sourceHash": "2e5ce93989b8a7438404b10e4245ba7608b44cbad44e96fd02a6b7126f689207"
+    },
+    "carvedObsidianBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/carvedObsidian/carvedObsidianBlock (9).png",
+      "sourceHash": "9c69480d76d43fd38fe01f70aec1579e2497dda80ed3903e9f53d928b6e75fc2"
+    }
+  }
+}

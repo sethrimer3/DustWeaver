@@ -30,6 +30,11 @@ import {
   setInfluenceHighlightWidth,
 } from './renderSettings';
 import { buildKeybindingsTab } from './mainMenuSettingsKeybindings';
+import {
+  getSpriteAtlasConfigState,
+  getSpriteAtlasUseSetting,
+  setSpriteAtlasUseSetting,
+} from '../render/atlases/spriteAtlasConfig';
 
 /**
  * Builds the settings panel into `settingsEl` and attaches a back button
@@ -315,6 +320,52 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
     tabContent.appendChild(resDropdown);
 
     tabContent.appendChild(makeLabel('Misc'));
+    const atlasEnabled = getSpriteAtlasUseSetting();
+    const atlasRow = document.createElement('label');
+    atlasRow.style.cssText = `
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 10px 14px; margin-bottom: 8px;
+      font-family: 'Cinzel', serif; font-size: 0.88rem; letter-spacing: 0.05em;
+      cursor: pointer; border-radius: 4px;
+      border: 1px solid rgba(212,168,75,${atlasEnabled ? '0.7' : '0.3'});
+      background: rgba(212,168,75,${atlasEnabled ? '0.12' : '0'});
+      color: #d4a84b;
+      box-sizing: border-box;
+    `;
+    const atlasCheckbox = document.createElement('input');
+    atlasCheckbox.type = 'checkbox';
+    atlasCheckbox.checked = atlasEnabled;
+    atlasCheckbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer; accent-color: #d4a84b; flex: 0 0 auto;';
+    const atlasText = document.createElement('span');
+    atlasText.textContent = 'Use sprite atlases (experimental)';
+    const atlasHint = document.createElement('div');
+    atlasHint.style.cssText = `
+      margin: -2px 0 10px 28px;
+      font-family: 'Cinzel', serif;
+      color: rgba(212,168,75,0.55);
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      line-height: 1.35;
+    `;
+    const updateAtlasHint = (): void => {
+      const state = getSpriteAtlasConfigState();
+      atlasHint.textContent = state.hardDisableActive
+        ? 'Currently hard-disabled internally while legacy room rendering remains active.'
+        : 'Reload or re-enter the room after changing this for a clean test.';
+    };
+    atlasCheckbox.addEventListener('change', () => {
+      const enabled = atlasCheckbox.checked;
+      setSpriteAtlasUseSetting(enabled);
+      atlasRow.style.borderColor = `rgba(212,168,75,${enabled ? '0.7' : '0.3'})`;
+      atlasRow.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0'})`;
+      updateAtlasHint();
+    });
+    atlasRow.appendChild(atlasCheckbox);
+    atlasRow.appendChild(atlasText);
+    tabContent.appendChild(atlasRow);
+    updateAtlasHint();
+    tabContent.appendChild(atlasHint);
+
     const outlineEnabled = isOffensiveDustOutlineEnabled();
     const outlineBtn = document.createElement('button');
     outlineBtn.style.cssText = `

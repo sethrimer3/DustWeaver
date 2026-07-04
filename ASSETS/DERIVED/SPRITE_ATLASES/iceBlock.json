@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "themeId": "iceBlock",
+  "sourceRoot": "ASSETS/SPRITES/specialBLOCKS/iceBlock",
+  "atlasImage": "iceBlock.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 32,
+  "height": 64,
+  "sprites": {
+    "iceBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/iceBlock/iceBlock (1).png",
+      "sourceHash": "ffd29d14c906b8551054a4128af170a9a30ed08f429bd9c22ec4bbacdc3db2de"
+    },
+    "iceBlock (2)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/iceBlock/iceBlock (2).png",
+      "sourceHash": "571e38acf9eff2e75469ea8035833f9987e2970b2459d1df7f463f1ba984f669"
+    },
+    "iceBlock (3)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/iceBlock/iceBlock (3).png",
+      "sourceHash": "b25df3c14d80a152a33a248fefc2157450a8f5b4e95f2dd24f95f0d18369b46d"
+    }
+  }
+}

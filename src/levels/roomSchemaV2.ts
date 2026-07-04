@@ -499,6 +499,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.sunbeams && json.sunbeams.length > 0) {
     out.sunbeams = json.sunbeams.map(s => ({ ...s }));
   }
+  if (json.sunrays !== undefined) {
+    out.sunrays = { ...json.sunrays };
+  }
   if (json.fallingBlocks && json.fallingBlocks.length > 0) {
     // Compact format: [xBlock, yBlock, variant_shortchar]
     // 't' = tough, 's' = sensitive, 'c' = crumbling

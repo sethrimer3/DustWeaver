@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "themeId": "ultraIceBlock",
+  "sourceRoot": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock",
+  "atlasImage": "ultraIceBlock.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "ultraIceBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (1).png",
+      "sourceHash": "844a57618469ccaa1d6d4908cfbc263ba755935785108c83f5ea10b9b19f0a42"
+    },
+    "ultraIceBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (2).png",
+      "sourceHash": "b9e4913b6ab95538cd9ca26e1b7fb8e86b047666021179176cb7939392c97475"
+    },
+    "ultraIceBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (3).png",
+      "sourceHash": "e1568cae9d730b3dde7cd180e2bff8f7936f7e11876da93d6e8e87e69cc4c57c"
+    },
+    "ultraIceBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (4).png",
+      "sourceHash": "aa0943baf2d5c4e967f38ef37f714efa080e64ce87ef6f1247fb62ad04a9b50b"
+    },
+    "ultraIceBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (5).png",
+      "sourceHash": "e3b535910ba49747c87585924e9f4671942d5505b85c8b067ac2ca77bd76bf02"
+    },
+    "ultraIceBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/specialBLOCKS/ultraIceBlock/ultraIceBlock (6).png",
+      "sourceHash": "c20afd9afaab2f8dcb52d21887ea89eaf9f5e11e73491d4478d9090f85927672"
+    }
+  }
+}

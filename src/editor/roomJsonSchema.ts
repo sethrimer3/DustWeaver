@@ -395,6 +395,8 @@ export interface RoomJsonDef {
   lightSources?: RoomJsonLightSource[];
   /** Designer-placed sunbeams (see {@link RoomJsonSunbeam}). */
   sunbeams?: RoomJsonSunbeam[];
+  /** Room-level procedural sunrays/god-rays effect. */
+  sunrays?: import('../levels/roomDef').RoomSunraysDef;
   /**
    * Background music. Omitting or setting to '_continue' means "keep playing
    * whatever was already playing".  '_silence' stops music.

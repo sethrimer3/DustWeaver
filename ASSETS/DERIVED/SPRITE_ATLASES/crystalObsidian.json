@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "crystalObsidian",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/crystalObsidian",
+  "atlasImage": "crystalObsidian.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "crystalObsidianBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (1).png",
+      "sourceHash": "22e072b69e8f3e0dda0a6cbf2511abfd28c187080d9550d4a47211520ff16d71"
+    },
+    "crystalObsidianBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (2).png",
+      "sourceHash": "2d888037467b13d9f7e9bfad43ab1186da2a6673aed7bb6d43c4d35b73692122"
+    },
+    "crystalObsidianBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (3).png",
+      "sourceHash": "84574bd67278870503e1900bc47c4ac755acfcfb65b1f684e7c0c60b3f6d2716"
+    },
+    "crystalObsidianBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (4).png",
+      "sourceHash": "831bf9d51098a6dae34b41098598913e49e0d0195f6e12ab28d02031bc310174"
+    },
+    "crystalObsidianBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (5).png",
+      "sourceHash": "3ca7496d2c28cda49d394aeb2cc2291fd304028ffc396d600e52f0bb2f416b69"
+    },
+    "crystalObsidianBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (6).png",
+      "sourceHash": "f29c086876bb2372c1288f1da8837cbb736ffddf70ee6c81343f5c59a3382abe"
+    },
+    "crystalObsidianBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (7).png",
+      "sourceHash": "07165a52f65e4f7764671285c5a6b05b8f84c12da9adbc0e133bd3695bcf7d24"
+    },
+    "crystalObsidianBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (8).png",
+      "sourceHash": "7d7c173afa1dd71c05176e128d09d69561e2046105bc3964bd1a3f17461dbe29"
+    },
+    "crystalObsidianBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/crystalObsidian/crystalObsidianBlock (9).png",
+      "sourceHash": "5bbc9c20b2a45ce443f86255cd5d1e383a7220c55216a4050f3fc121be6a6b7e"
+    }
+  }
+}

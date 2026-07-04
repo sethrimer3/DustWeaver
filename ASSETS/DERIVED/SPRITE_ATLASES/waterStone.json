@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "waterStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/waterStone",
+  "atlasImage": "waterStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "waterStoneBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (1).png",
+      "sourceHash": "d4f6257ba63493b3ef95f08800c891434d16e14ecd1c4ac328a63f441c928aa4"
+    },
+    "waterStoneBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (2).png",
+      "sourceHash": "2321a1b22dd4e2da7bbd12ea2f30409653abad02e0ff1cf4964b7516cf9805c9"
+    },
+    "waterStoneBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (3).png",
+      "sourceHash": "55287f8c929b78f99f388ae2ce20316891aa32f04aad06cc63f51fd1da1784fb"
+    },
+    "waterStoneBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (4).png",
+      "sourceHash": "19891f7eca2c210da443021cd1a02e0c6f75a99f0be7a94e91b4e36e125cc9a8"
+    },
+    "waterStoneBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (5).png",
+      "sourceHash": "788c9901d22e5ceb73bbfb5e553cf93050e2cdbabedbe77e6f6d856c03097222"
+    },
+    "waterStoneBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (6).png",
+      "sourceHash": "d99b5a631ce0b410bd0fd5ab78f9aa61790c4911759ed80dc633db9dd974c675"
+    },
+    "waterStoneBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (7).png",
+      "sourceHash": "aff81e33f6c3c1a601bd1d9d7cbbe6605a8725499ac32a212338ce8a70a1c904"
+    },
+    "waterStoneBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (8).png",
+      "sourceHash": "1e2799546eb4780ec1ab68133b3d9a13be31f5e955e5392e384ad16cf8794656"
+    },
+    "waterStoneBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (9).png",
+      "sourceHash": "35e02fd9d98fa8e84a6c1f11b9c0115ab7d310181bc428741126a27043798709"
+    }
+  }
+}

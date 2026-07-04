@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "glowingOvergrowth",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth",
+  "atlasImage": "glowingOvergrowth.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "glowingOvergrowthBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (1).png",
+      "sourceHash": "b13dd5d15f945773b61a22361a73d29ab0733b41345a3d8341cca80332fcee41"
+    },
+    "glowingOvergrowthBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (2).png",
+      "sourceHash": "9bd17b8036e0833839b7921c804e6d77390cc357e14cd682a062bb6a889a45a6"
+    },
+    "glowingOvergrowthBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (3).png",
+      "sourceHash": "664d2350aeda4933ed5da5723f9b5991e54f6b1e8e0b5f04832b6579953cc21f"
+    },
+    "glowingOvergrowthBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (4).png",
+      "sourceHash": "133f8010ebeaa4ffcf0d828847424b3ba0c9e752e813a8ad49205b1c1540663b"
+    },
+    "glowingOvergrowthBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (5).png",
+      "sourceHash": "c178e6a913440c31988f162a4fce39ba7d47fceb77c45a7ac0966487e5f2514f"
+    },
+    "glowingOvergrowthBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (6).png",
+      "sourceHash": "417aa6326ae68522fe293b2b7c8d87d500ce2dc624bfe085685fc7a7b83eeabb"
+    },
+    "glowingOvergrowthBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (7).png",
+      "sourceHash": "335a5a2ea38bd6e7b994f48d6bf14e87244630ed7dfc71a590b1ea19c117502f"
+    },
+    "glowingOvergrowthBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (8).png",
+      "sourceHash": "ca1ebfbb44a69f706a2a4b4190a513dd62f41c79c0f50553d348eb2725136bfa"
+    },
+    "glowingOvergrowthBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/glowingOvergrowth/glowingOvergrowthBlock (9).png",
+      "sourceHash": "c901f90effcd3fd4bfa68e11998a7fa25fd6b3a2da1f2bc95df8911be60d6bda"
+    }
+  }
+}

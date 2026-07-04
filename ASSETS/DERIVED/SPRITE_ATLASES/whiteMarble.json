@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "whiteMarble",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/whiteMarble",
+  "atlasImage": "whiteMarble.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "whiteMarbleBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (1).png",
+      "sourceHash": "f34ed200c51969bcc86f9061be1646e243d325046f72e96d35389d6335da8608"
+    },
+    "whiteMarbleBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (2).png",
+      "sourceHash": "47f3ac051a7534e56b3367fa09602df5c37a1ac2302ab4751284694a33f5fcf0"
+    },
+    "whiteMarbleBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (3).png",
+      "sourceHash": "0a732cd27309f75855725921b2cbe34904b42148b3d6930ed565226a988f6e8f"
+    },
+    "whiteMarbleBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (4).png",
+      "sourceHash": "39e1a6537fd61b7f43383c1ce0ff3646c5446dd2a3892ecbeeff56e48ec174aa"
+    },
+    "whiteMarbleBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (5).png",
+      "sourceHash": "21a6764bf9094e47f3275946cfb110e9a79fbd0a2c9980d449be7b9a5016f343"
+    },
+    "whiteMarbleBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (6).png",
+      "sourceHash": "815caccabb27e554773f4aaefb34b51186aef6c567c9d581e6266d9ba6cc55f1"
+    },
+    "whiteMarbleBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (7).png",
+      "sourceHash": "42f7d5afc5acaf755e5535baac55744702d5eedfdb9427996e3c9fd4017919d6"
+    },
+    "whiteMarbleBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (8).png",
+      "sourceHash": "22f755bb27e1a1655e56248b2ab46b51af1af5b6655ea8a70a041c449febf81e"
+    },
+    "whiteMarbleBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (9).png",
+      "sourceHash": "18f62c074d5927cc8c35972a1b73a624898e14ad87556aca0cc21e63cd52d550"
+    }
+  }
+}

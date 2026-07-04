@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "themeId": "dirt",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/dirt",
+  "atlasImage": "dirt.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 32,
+  "height": 16,
+  "sprites": {
+    "dirtBlock": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/dirt/dirtBlock.png",
+      "sourceHash": "302e07a6c52ac4b89d19e523073907b966a5a06df5e341337c02c1b45edfc454"
+    }
+  }
+}

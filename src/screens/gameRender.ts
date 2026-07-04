@@ -41,6 +41,7 @@ import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
+import type { SunraysRenderer } from '../render/effects/sunraysRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
@@ -120,6 +121,7 @@ export interface RenderFrameContext {
   swordWeaveRenderer: SwordWeaveRenderer;
   /** Pixel-art atmospheric sunbeam shafts. */
   sunbeamRenderer: SunbeamRenderer;
+  sunraysRenderer: SunraysRenderer;
   /** Floating dust motes near local light sources. */
   atmosphericLightDust: AtmosphericLightDust;
   /** Golden mote particles traveling along editor-authored guide paths. */
@@ -273,7 +275,7 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
-    sunbeamRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
+    sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -294,6 +296,7 @@ export function renderFrame(r: RenderFrameContext): void {
     isDeepReductionActive,
     bloomSystem,
     sunbeamRenderer,
+    sunraysRenderer,
     atmosphericLightDust,
   });
 
@@ -399,6 +402,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // ── Sunbeams (light shafts behind walls) ────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_SUNBEAMS);
   sunbeamRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx);
+  sunraysRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_SUNBEAMS);
 
   // ── Walls ────────────────────────────────────────────────────────────────

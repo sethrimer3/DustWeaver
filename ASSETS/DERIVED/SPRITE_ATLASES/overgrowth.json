@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "overgrowth",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/overgrowth",
+  "atlasImage": "overgrowth.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "overgrowthBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (1).png",
+      "sourceHash": "d1f61beedb4d36254cbfd25632770c6d388f8bc5fa65203c493ee656dea200e9"
+    },
+    "overgrowthBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (2).png",
+      "sourceHash": "a42ecee35fef6e4fe3d506fab174af164ab5a2a1f4366c9ce6a484262a001fb0"
+    },
+    "overgrowthBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (3).png",
+      "sourceHash": "ffaae00e5b9a6ec355fedfaff87ba73b6c9ee1883fb30890e2656846143304c2"
+    },
+    "overgrowthBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (4).png",
+      "sourceHash": "d668fc0491cddb4d0c2134f8572c57cf8dd7133e9c00f9b568fb8a7a052db360"
+    },
+    "overgrowthBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (5).png",
+      "sourceHash": "0870280d6faeedfb2b2ce21f57c313ed6dcc56e0b46fc47a3f45e8305a9dce44"
+    },
+    "overgrowthBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (6).png",
+      "sourceHash": "b0306a0acc6ee5e79a42bdfa8e7646bff5d767940c7f81e0df78a579fc45fd0d"
+    },
+    "overgrowthBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (7).png",
+      "sourceHash": "9c0b25d0e4c8be485e2820d25ba17d8fa404a00fff27068098326ab93cb7b065"
+    },
+    "overgrowthBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (8).png",
+      "sourceHash": "24e63494d32fb8afaa75534678fbf3f94ac249c24f9db4ba21ae01c1a3efa417"
+    },
+    "overgrowthBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (9).png",
+      "sourceHash": "7558fcfecd88f64b86e6a308220672498733c74bfba8fb8a94f20dd6da733d19"
+    }
+  }
+}

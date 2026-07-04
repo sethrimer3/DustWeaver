@@ -166,6 +166,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     sideExposureStrength:  data.sideExposureStrength,
     minimumWallLight:      data.minimumWallLight,
     falloffPower:          data.falloffPower,
+    sunrays:               data.sunrays,
     backgroundLightSpill:  data.backgroundLightSpill,
     solidLightSoftness:    data.solidLightSoftness,
     ambientLightBlockers: (data.ambientLightBlockers ?? []).map(b => ({

@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "mossyStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/mossyStone",
+  "atlasImage": "mossyStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "mossyStone (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (1).png",
+      "sourceHash": "77d69e69696a97bc37a10ef397b1e6b59f97f8bb2fbe930e636116a951ca8f56"
+    },
+    "mossyStone (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (2).png",
+      "sourceHash": "78cd3ad31fc77a49500406b4ba748d557c15231a5c002c5e5aa10a0a0a2d5bbe"
+    },
+    "mossyStone (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (3).png",
+      "sourceHash": "90cd17bf86a3d862e132edb937ebde9012c536e15ccad17faf2a4cf221ceafe2"
+    },
+    "mossyStone (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (4).png",
+      "sourceHash": "e27ff6d5da48ce8b5f0a8ecde1cde3d72a409b2d4dbe918654b54cc93065f0a4"
+    },
+    "mossyStone (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (5).png",
+      "sourceHash": "2aa3a94c11f06d30f5c871d98c64bdd5d572a301be3c784ae48d877e98011d31"
+    },
+    "mossyStone (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (6).png",
+      "sourceHash": "2ab287e6c941db4167dd2b357f86a5d4d27125e195128b586834aacf621a72e2"
+    },
+    "mossyStone (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (7).png",
+      "sourceHash": "aa97f1bbe059e6a207909d6bbc22cea51c5d3aff1379ceae37d5681f62a8b2da"
+    },
+    "mossyStone (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (8).png",
+      "sourceHash": "db9cea7af5ccd6084e0d25088b66417928173683d2baddeb0fcea8fa8a4b028b"
+    },
+    "mossyStone (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (9).png",
+      "sourceHash": "96ba4d26b2d99d249f2badc631c28ef389d3e51b9110cab398b89bdf873afe65"
+    }
+  }
+}

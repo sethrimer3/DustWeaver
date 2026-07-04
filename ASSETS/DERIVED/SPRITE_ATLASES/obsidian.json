@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "themeId": "obsidian",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/obsidian",
+  "atlasImage": "obsidian.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "obsidianBlock (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (1).png",
+      "sourceHash": "da63856397841bda98888d6984b12099fb9b668afb13e6fd4b6be02efae0a2df"
+    },
+    "obsidianBlock (2)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (2).png",
+      "sourceHash": "66ece93cf79fcc07c28bb1761204a2a98cc6c96f5220004804f06e28b2803eec"
+    },
+    "obsidianBlock (3)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (3).png",
+      "sourceHash": "d07344b2b2b0ead5af28443a439578da5aa24314a49c4fcaf5fbfc0cb208d04c"
+    },
+    "obsidianBlock (4)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (4).png",
+      "sourceHash": "33a6895edb5fa5d26343bdd02c084b983dc7c278980867885a44c5456ec17ea2"
+    },
+    "obsidianBlock (5)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (5).png",
+      "sourceHash": "ef935563a474ed68b35d8088c0effeefa524f6ad649be4a888e3804bb6ca7c98"
+    },
+    "obsidianBlock (6)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (6).png",
+      "sourceHash": "1ec5857f93136dab28a9590c1122e6f626158df916ae18c6915a545143da965b"
+    },
+    "obsidianBlock (7)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (7).png",
+      "sourceHash": "78eb52f14cd7000ceaf3d1f86dfc96419ed30b315a01226aced2cc6dd52a6461"
+    },
+    "obsidianBlock (8)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (8).png",
+      "sourceHash": "fd89992e95663aafc803a96d517ca31192cacbc8b51fec9ca60a272757281aac"
+    },
+    "obsidianBlock (9)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (9).png",
+      "sourceHash": "8565171ab4bb2a6a90b42da86ce7230bf96faf81e21138c2901ad5a66a7b7eaa"
+    }
+  }
+}

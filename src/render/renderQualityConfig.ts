@@ -52,6 +52,15 @@ export interface RenderQualityConfig {
    * On LOW they are hidden to save the per-beam gradient + fill call.
    */
   isSunbeamEnabled: boolean;
+
+  // ── Sunrays (procedural god-rays) ──────────────────────────────────────────
+  /** Whether the room-level procedural sunrays effect can render at all. */
+  isSunraysEnabled: boolean;
+  /**
+   * When true, soft-style sunrays fall back to fewer light-buffer layers and
+   * less blur (cheaper offscreen work) instead of being fully disabled.
+   */
+  isSunraysReducedQuality: boolean;
 }
 
 // ── Tier constants ───────────────────────────────────────────────────────────
@@ -66,6 +75,8 @@ const CONFIG_LOW: RenderQualityConfig = {
   maxDynamicLightCount:     6,
   maxParticleLightCount:    6,
   isSunbeamEnabled:         false,
+  isSunraysEnabled:         false,
+  isSunraysReducedQuality:  true,
 };
 
 /** MED: balanced default.  Cheaper bloom, moderate dust density. */
@@ -78,6 +89,8 @@ const CONFIG_MED: RenderQualityConfig = {
   maxDynamicLightCount:     16,
   maxParticleLightCount:    16,
   isSunbeamEnabled:         true,
+  isSunraysEnabled:         true,
+  isSunraysReducedQuality:  true,
 };
 
 /** HIGH: visual fidelity mode.  Full bloom, full dust, no caps. */
@@ -90,6 +103,8 @@ const CONFIG_HIGH: RenderQualityConfig = {
   maxDynamicLightCount:     64,
   maxParticleLightCount:    24,
   isSunbeamEnabled:         true,
+  isSunraysEnabled:         true,
+  isSunraysReducedQuality:  false,
 };
 
 // ── Public accessor ──────────────────────────────────────────────────────────

@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "themeId": "grayStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/grayStone",
+  "atlasImage": "grayStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 128,
+  "sprites": {
+    "grayStone (1)": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (1).png",
+      "sourceHash": "0fe0d7f264f932a88ac6f644d29f1ecebe9935925839ea7d39accd36bf2478f9"
+    },
+    "grayStone (10)": {
+      "x": 18,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (10).png",
+      "sourceHash": "0341c2384b99622dca04068f4a26dbc956cbc1fd1515596d79420dbb6b615218"
+    },
+    "grayStone (11)": {
+      "x": 36,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (11).png",
+      "sourceHash": "7fa31cd88408488ff3c82f3dba534e7768153aeb600fd0177286ae5cfe789dbc"
+    },
+    "grayStone (12)": {
+      "x": 0,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (12).png",
+      "sourceHash": "e0899ff920bd3ad5242066ec1cb87f0e74919a66e77d45c2d9fd0a2a10f47823"
+    },
+    "grayStone (2)": {
+      "x": 18,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (2).png",
+      "sourceHash": "a3dcf2bfef7bb8d4a57e5d52d592dc91a9a970386958a157c3eb9075cd2ea715"
+    },
+    "grayStone (3)": {
+      "x": 36,
+      "y": 18,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (3).png",
+      "sourceHash": "459e027a3d79eb963f111e560a697d5628e7cde1ee30352d9c0c53916b815798"
+    },
+    "grayStone (4)": {
+      "x": 0,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (4).png",
+      "sourceHash": "e25d291056992a6484a3ae01f0821dffd860e9ed3b161a8c9a3871f8af90dc8b"
+    },
+    "grayStone (5)": {
+      "x": 18,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (5).png",
+      "sourceHash": "627b94366d53196344ff2668dc99a462c7a6c5dcef5c64ea837f79fdf2cad3b1"
+    },
+    "grayStone (6)": {
+      "x": 36,
+      "y": 36,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (6).png",
+      "sourceHash": "e079fc522043c402d93f45b79c26bba4f7ed7e39cb7f7c86801e767558fd20bd"
+    },
+    "grayStone (7)": {
+      "x": 0,
+      "y": 54,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (7).png",
+      "sourceHash": "9dc2209f5a5a515a1463ea594d3ac56d951a0f4e77eb35092dd7a0b60fa83d11"
+    },
+    "grayStone (8)": {
+      "x": 18,
+      "y": 54,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (8).png",
+      "sourceHash": "545642d91cd2f0ea2a2f7b55f16cf1ae61cb37232ac89cb1b12d0c4569630305"
+    },
+    "grayStone (9)": {
+      "x": 36,
+      "y": 54,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (9).png",
+      "sourceHash": "caaa440f720f0bd9aa8d07cef25915af22af34e237c4e9a2629407dd7e8c1095"
+    }
+  }
+}
