@@ -788,6 +788,36 @@ export interface ClusterState {
   /** Pair: ticks elapsed in the current white hole state. */
   voidSingularityWholeStateTicks: number;
 
+  // ── Grid Block Enemy ────────────────────────────────────────────────────────
+  /** 1 if this cluster is a grid-aligned block enemy. */
+  isGridBlockEnemyFlag: 0 | 1;
+  /** 0 = 1×1 tile, 1 = 2×2 tiles. */
+  gridBlockSizeIndex: number;
+  /** 0 = slow (20 ticks/step), 1 = medium (12), 2 = fast (7). */
+  gridBlockSpeedIndex: number;
+  /** Committed grid column (top-left for 2×2). */
+  gridBlockGridX: number;
+  /** Committed grid row (top-left for 2×2). */
+  gridBlockGridY: number;
+  /** Target grid column during the current interpolated step. */
+  gridBlockTargetGridX: number;
+  /** Target grid row during the current interpolated step. */
+  gridBlockTargetGridY: number;
+  /** Countdown ticks for the current visual interpolation step (0 = idle). */
+  gridBlockMoveTicks: number;
+  /** Ticks until next BFS repath. */
+  gridBlockRepathCooldownTicks: number;
+  /** Cached BFS first-step direction X (-1, 0, or 1). */
+  gridBlockNextDirX: number;
+  /** Cached BFS first-step direction Y (-1, 0, or 1). */
+  gridBlockNextDirY: number;
+  /** Phase (radians) driving the animated glint sweep. */
+  gridBlockGlintPhase: number;
+  /** Ticks remaining for the hit-flash visual. */
+  gridBlockHitFlashTicks: number;
+  /** Health recorded at end of previous tick — used to detect incoming damage. */
+  gridBlockPrevHealthPoints: number;
+
   // ── Dust Leech ──────────────────────────────────────────────────────────────
   /** 1 if this cluster is a Dust Leech. */
   isDustLeechFlag: 0 | 1;
@@ -1074,6 +1104,20 @@ export function createClusterState(
     voidSingularityWholeCharge: 0,
     voidSingularityWholeState: 0,
     voidSingularityWholeStateTicks: 0,
+    isGridBlockEnemyFlag: 0,
+    gridBlockSizeIndex: 0,
+    gridBlockSpeedIndex: 0,
+    gridBlockGridX: 0,
+    gridBlockGridY: 0,
+    gridBlockTargetGridX: 0,
+    gridBlockTargetGridY: 0,
+    gridBlockMoveTicks: 0,
+    gridBlockRepathCooldownTicks: 0,
+    gridBlockNextDirX: 0,
+    gridBlockNextDirY: 0,
+    gridBlockGlintPhase: 0,
+    gridBlockHitFlashTicks: 0,
+    gridBlockPrevHealthPoints: 0,
     isDustLeechFlag: 0,
     dustLeechState: 0,
     dustLeechStateTicks: 0,

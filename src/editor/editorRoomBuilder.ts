@@ -83,7 +83,10 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isDustConstellationLargeFlag: e.isDustConstellationLargeFlag ?? 0,
       isOrbitalDustCoreFlag: e.isOrbitalDustCoreFlag ?? 0,
       isOrbitalDustCoreLargeFlag: e.isOrbitalDustCoreLargeFlag ?? 0,
-      isDustLeechFlag: e.isDustLeechFlag ?? 0,
+      isDustLeechFlag:       e.isDustLeechFlag       ?? 0,
+      isGridBlockEnemyFlag:  e.isGridBlockEnemyFlag  ?? 0,
+      gridBlockSizeIndex:    e.gridBlockSizeIndex     ?? 0,
+      gridBlockSpeedIndex:   e.gridBlockSpeedIndex    ?? 0,
     };
   });
 

@@ -29,6 +29,7 @@ import {
   TRAIL_UPDATE_INTERVAL_TICKS,
 } from '../sim/clusters/squareStampedeAi';
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
+import { GRID_BLOCK_HALF_SIZE } from '../sim/clusters/gridBlockEnemyAi';
 import { BEE_HALF_WIDTH_WORLD, BEE_HALF_HEIGHT_WORLD } from '../sim/clusters/beeSwarmAi';
 import {
   DC_SMALL_HP,
@@ -635,6 +636,36 @@ export function spawnEnemyClusters(
           world.dlMotePulsePhaseRad[mi] = (m / MAX_MOTES_PER_DL) * Math.PI * 2;
         }
       }
+    } else if (enemyDef.isGridBlockEnemyFlag === 1) {
+      const sizeIndex  = enemyDef.gridBlockSizeIndex  ?? 0;
+      const speedIndex = enemyDef.gridBlockSpeedIndex ?? 0;
+      const hw         = GRID_BLOCK_HALF_SIZE[sizeIndex];
+      const bs         = BLOCK_SIZE_MEDIUM;
+
+      // Snap spawn position to nearest valid grid cell.
+      const gridX = Math.round((ex - hw) / bs);
+      const gridY = Math.round((ey - hw) / bs);
+
+      enemyCluster.isGridBlockEnemyFlag          = 1;
+      enemyCluster.gridBlockSizeIndex            = sizeIndex;
+      enemyCluster.gridBlockSpeedIndex           = speedIndex;
+      enemyCluster.gridBlockGridX                = gridX;
+      enemyCluster.gridBlockGridY                = gridY;
+      enemyCluster.gridBlockTargetGridX          = gridX;
+      enemyCluster.gridBlockTargetGridY          = gridY;
+      enemyCluster.gridBlockMoveTicks            = 0;
+      enemyCluster.gridBlockRepathCooldownTicks  = 0;
+      enemyCluster.gridBlockNextDirX             = 0;
+      enemyCluster.gridBlockNextDirY             = 0;
+      enemyCluster.gridBlockGlintPhase           = 0;
+      enemyCluster.gridBlockHitFlashTicks        = 0;
+      enemyCluster.gridBlockPrevHealthPoints     = 6;
+      enemyCluster.positionXWorld                = gridX * bs + hw;
+      enemyCluster.positionYWorld                = gridY * bs + hw;
+      enemyCluster.halfWidthWorld                = hw;
+      enemyCluster.halfHeightWorld               = hw;
+      enemyCluster.healthPoints                  = 6;
+      enemyCluster.maxHealthPoints               = 6;
     }
     world.clusters.push(enemyCluster);
     const particleStartIdx = world.particleCount;
@@ -648,7 +679,8 @@ export function spawnEnemyClusters(
       enemyCluster.isDustBlockMimicFlag === 1 ||
       enemyCluster.isDustWeaverArchitectFlag === 1 ||
       enemyCluster.isVoidSingularityFlag === 1 ||
-      enemyCluster.isDustLeechFlag === 1;
+      enemyCluster.isDustLeechFlag === 1 ||
+      enemyCluster.isGridBlockEnemyFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }

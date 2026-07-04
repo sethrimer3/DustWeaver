@@ -93,7 +93,10 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isOrbitalDustCoreLarge: e.isOrbitalDustCoreLargeFlag === 1,
       isVoidSingularity: e.isVoidSingularityFlag === 1,
       isVoidSingularityPair: e.isVoidSingularityPairFlag === 1,
-      isDustLeech: e.isDustLeechFlag === 1,
+      isDustLeech:        e.isDustLeechFlag === 1,
+      isGridBlockEnemy:   e.isGridBlockEnemyFlag === 1 ? true : undefined,
+      gridBlockSizeIndex: e.isGridBlockEnemyFlag === 1 ? e.gridBlockSizeIndex  : undefined,
+      gridBlockSpeedIndex: e.isGridBlockEnemyFlag === 1 ? e.gridBlockSpeedIndex : undefined,
     })),
     transitions: data.transitions.map(t => {
       // Compute legacy positionBlock / depthBlock from xBlock/yBlock for backward compat.

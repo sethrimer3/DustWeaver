@@ -20,6 +20,7 @@ import {
   HURT_FLASH_DURATION_TICKS,
   HURT_FLASH_MAX_ALPHA,
 } from './characterSprites';
+import { renderGridBlockEnemy } from './gridBlockEnemyRenderer';
 import {
   getFlyingEyeColor,
   renderFlyingEye,
@@ -505,6 +506,8 @@ export function renderClusters(
       // Dust Leech / Echo bodies are rendered by dustLeechRenderer.ts.
     } else if (cluster.isWallSnakeFlag === 1 || cluster.isNeedleSnakeFlag === 1) {
       // Snake bodies are rendered in snakeRenderer.ts after the main cluster pass.
+    } else if (cluster.isGridBlockEnemyFlag === 1) {
+      renderGridBlockEnemy(ctx, screenX, screenY, cluster, scalePx);
     } else {
       // ── Regular cluster box body ─────────────────────────────────────────
       const bodyColor = '#ff6600';
@@ -592,6 +595,10 @@ export function renderClusters(
       barColor = '#9a64d8';
     } else if (cluster.isDustEchoFlag === 1) {
       barColor = '#d5b6ff';
+    } else if (cluster.isGridBlockEnemyFlag === 1) {
+      barColor = cluster.gridBlockSpeedIndex === 0 ? '#4caf50'
+               : cluster.gridBlockSpeedIndex === 1 ? '#ffc107'
+               : '#f44336';
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

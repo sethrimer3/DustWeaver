@@ -165,6 +165,11 @@ export function _makeEmptyCluster(): _MutableCluster {
     voidSingularityWholeCharge: 0,
     voidSingularityWholeState: 0,
     voidSingularityWholeStateTicks: 0,
+    isGridBlockEnemyFlag: 0,
+    gridBlockSizeIndex: 0,
+    gridBlockSpeedIndex: 0,
+    gridBlockGlintPhase: 0,
+    gridBlockHitFlashTicks: 0,
     isDustLeechFlag: 0,
     dustLeechState: 0,
     dustLeechStateTicks: 0,
@@ -346,6 +351,11 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.voidSingularityWholeCharge             = src.voidSingularityWholeCharge;
   dst.voidSingularityWholeState              = src.voidSingularityWholeState;
   dst.voidSingularityWholeStateTicks         = src.voidSingularityWholeStateTicks;
+  dst.isGridBlockEnemyFlag           = src.isGridBlockEnemyFlag;
+  dst.gridBlockSizeIndex             = src.gridBlockSizeIndex;
+  dst.gridBlockSpeedIndex            = src.gridBlockSpeedIndex;
+  dst.gridBlockGlintPhase            = src.gridBlockGlintPhase;
+  dst.gridBlockHitFlashTicks         = src.gridBlockHitFlashTicks;
   dst.isDustLeechFlag                = src.isDustLeechFlag;
   dst.dustLeechState                 = src.dustLeechState;
   dst.dustLeechStateTicks            = src.dustLeechStateTicks;
