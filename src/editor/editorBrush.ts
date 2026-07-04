@@ -6,7 +6,8 @@
  * getBrushCells() to determine which grid cells to affect.
  */
 
-import type { BrushMode } from './editorState';
+import type { BrushMode, EditorRoomData } from './editorState';
+import { isCellOccupiedByTile, isInsideRoom } from './editorHitTest';
 
 export interface BrushCell {
   x: number;
@@ -53,6 +54,10 @@ export function getBrushCells(
       return cells;
     }
 
+    case 'fill':
+      // Fill brush requires room data to flood-fill — see getFillBrushCells().
+      return [{ x: cursorX, y: cursorY }];
+
     case 'rect': {
       if (rectStartX == null || rectStartY == null) {
         // No drag in progress — treat as single cell.
@@ -71,6 +76,48 @@ export function getBrushCells(
       return cells;
     }
   }
+}
+
+/**
+ * Flood-fills the contiguous region of cells (4-directionally connected —
+ * never diagonally) that share the same occupied/empty state as the clicked
+ * cell.  Used by the "fill" brush to paint an entire empty area or replace an
+ * entire mass of placed tiles in one click.
+ */
+export function getFillBrushCells(
+  room: EditorRoomData,
+  startX: number,
+  startY: number,
+): BrushCell[] {
+  if (!isInsideRoom(room, startX, startY)) return [];
+  const targetOccupied = isCellOccupiedByTile(room, startX, startY);
+
+  const visited = new Set<string>();
+  const key = (x: number, y: number) => `${x},${y}`;
+  const cells: BrushCell[] = [];
+  const stack: BrushCell[] = [{ x: startX, y: startY }];
+  visited.add(key(startX, startY));
+
+  while (stack.length > 0) {
+    const { x, y } = stack.pop()!;
+    cells.push({ x, y });
+    const neighbors: BrushCell[] = [
+      { x: x + 1, y },
+      { x: x - 1, y },
+      { x, y: y + 1 },
+      { x, y: y - 1 },
+    ];
+    for (const n of neighbors) {
+      const k = key(n.x, n.y);
+      if (visited.has(k)) continue;
+      if (!isInsideRoom(room, n.x, n.y)) continue;
+      if (isCellOccupiedByTile(room, n.x, n.y) !== targetOccupied) continue;
+      visited.add(k);
+      stack.push(n);
+    }
+  }
+
+  return cells;
 }
 
 /**

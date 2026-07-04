@@ -15,16 +15,21 @@ import {
   setRoomNameOverride,
   setRoomWorldOverride,
   setRoomMapPosition,
+  setRoomTransitionLink,
   setWorldName,
   setWorldOrder,
 } from '../levels/rooms';
 import { roomJsonDefToRoomDef } from '../levels/roomJsonLoader';
+import type { RoomJsonTransition } from './roomJsonSchema';
 import type { MapRoomPlacement, VisualMapCallbacks } from './editorVisualMapHelpers';
 import {
   effectiveRoomName,
   worldDisplayName,
   findNearestNonOverlappingRoomPlacement,
+  getOppositeDirection,
+  getAdjacentRoomMapPosition,
 } from './editorVisualMapHelpers';
+import { computeSpawnBlockForMapLink } from './editorVisualMapLinkPrompt';
 
 // ── Shared constants ──────────────────────────────────────────────────────────
 
@@ -476,4 +481,226 @@ export function showColorPickerDialog(
   btnRow.appendChild(clearBtn);
   btnRow.appendChild(cancelBtn);
   modal.panel.appendChild(btnRow);
+}
+
+/**
+ * Shows the "Create Linked Room" dialog for an unlinked door on the visual
+ * map (opened via double-click). Creates a new room with a reciprocal
+ * transition on the opposite wall and links the two transitions together.
+ *
+ * The transition's along-wall position defaults to centered, but the user
+ * can type an explicit X (for ceiling/floor transitions) or Y (for left/right
+ * wall transitions) value, clamped so the transition never extends past the
+ * new room's bounds.
+ */
+export function showCreateLinkedRoomDialog(
+  ctx: VisualMapDialogContext,
+  sourceRoomId: string,
+  sourceTransIndex: number,
+): void {
+  const sourceRoom = ROOM_REGISTRY.get(sourceRoomId);
+  const sourceTrans = sourceRoom?.transitions[sourceTransIndex];
+  if (!sourceRoom || !sourceTrans) return;
+
+  const newDirection = getOppositeDirection(sourceTrans.direction);
+  const isHoriz = newDirection === 'left' || newDirection === 'right';
+  const openingSize = sourceTrans.openingSizeBlocks;
+  const gradientWidth = sourceTrans.gradientWidthBlocks ?? 3;
+
+  const modal = createModal(ctx.overlay);
+
+  const title = document.createElement('h3');
+  title.textContent = '+ Create Linked Room';
+  title.style.cssText = `color: ${GREEN}; margin: 0 0 6px; font-family: 'Cinzel', serif; font-size: 13px;`;
+  modal.panel.appendChild(title);
+
+  const subtitleEl = document.createElement('div');
+  subtitleEl.textContent = `Placed ${sourceTrans.direction} of "${effectiveRoomName(sourceRoomId)}" with a matching transition.`;
+  subtitleEl.style.cssText = 'color: rgba(200,255,200,0.6); font-size:11px; font-family:monospace; margin-bottom:14px;';
+  modal.panel.appendChild(subtitleEl);
+
+  function makeField(labelText: string, input: HTMLInputElement | HTMLSelectElement): void {
+    const row = document.createElement('div');
+    row.style.cssText = 'margin-bottom: 10px;';
+    const lbl = document.createElement('label');
+    lbl.textContent = labelText;
+    lbl.style.cssText = 'display: block; color: rgba(200,255,200,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
+    input.style.cssText = (input.style.cssText || '') + `
+      width: 100%; box-sizing: border-box; padding: 5px 8px;
+      background: rgba(20,20,30,0.9); color: #c0ffd0;
+      border: 1px solid rgba(0,200,100,0.4); border-radius: 3px;
+      font-family: monospace; font-size: 12px;
+    `;
+    row.appendChild(lbl);
+    row.appendChild(input);
+    modal.panel.appendChild(row);
+  }
+
+  const idInput = document.createElement('input');
+  idInput.type = 'text';
+  idInput.placeholder = 'e.g. my_new_room';
+  makeField('Room ID (unique, no spaces)', idInput);
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'e.g. My New Room';
+  makeField('Room Name', nameInput);
+
+  const worldSel = document.createElement('select');
+  const worldIdSet = new Set<number>();
+  for (const [id] of WORLD_NAMES) worldIdSet.add(id);
+  for (const [, room] of ROOM_REGISTRY) {
+    worldIdSet.add(ROOM_WORLD_OVERRIDES.get(room.id) ?? room.worldNumber);
+  }
+  const sortedWorlds = [...worldIdSet].sort((a, b) => (WORLD_ORDER.get(a) ?? a) - (WORLD_ORDER.get(b) ?? b) || a - b);
+  const sourceWorldId = ROOM_WORLD_OVERRIDES.get(sourceRoomId) ?? sourceRoom.worldNumber;
+  for (const id of sortedWorlds) {
+    const opt = document.createElement('option');
+    opt.value = String(id);
+    opt.textContent = `${worldDisplayName(id)} (id: ${id})`;
+    if (id === sourceWorldId) opt.selected = true;
+    worldSel.appendChild(opt);
+  }
+  makeField('Zone', worldSel);
+
+  const defaultW = isHoriz ? 40 : Math.max(40, openingSize + 10);
+  const defaultH = isHoriz ? Math.max(30, openingSize + 10) : 30;
+
+  const wInput = document.createElement('input');
+  wInput.type = 'number';
+  wInput.value = String(defaultW);
+  wInput.min = '10';
+  makeField('Width (blocks)', wInput);
+
+  const hInput = document.createElement('input');
+  hInput.type = 'number';
+  hInput.value = String(defaultH);
+  hInput.min = '10';
+  makeField('Height (blocks)', hInput);
+
+  const posLabel = isHoriz
+    ? 'Y Position of transition (top edge, blocks)'
+    : 'X Position of transition (left edge, blocks)';
+  const posInput = document.createElement('input');
+  posInput.type = 'number';
+  makeField(posLabel, posInput);
+
+  function getPerpDimension(): number {
+    const w = Math.max(10, parseInt(wInput.value, 10) || defaultW);
+    const h = Math.max(10, parseInt(hInput.value, 10) || defaultH);
+    return isHoriz ? h : w;
+  }
+
+  function refreshPosBounds(recenter: boolean): void {
+    const maxPos = Math.max(0, getPerpDimension() - openingSize);
+    posInput.min = '0';
+    posInput.max = String(maxPos);
+    if (recenter) {
+      posInput.value = String(Math.floor(maxPos / 2));
+    } else {
+      const clamped = Math.min(maxPos, Math.max(0, parseInt(posInput.value, 10) || 0));
+      posInput.value = String(clamped);
+    }
+  }
+
+  wInput.addEventListener('input', () => refreshPosBounds(false));
+  hInput.addEventListener('input', () => refreshPosBounds(false));
+  posInput.addEventListener('input', () => refreshPosBounds(false));
+  refreshPosBounds(true);
+
+  const errEl = document.createElement('div');
+  errEl.style.cssText = 'color: #ff8888; font-size: 11px; min-height: 16px; font-family: monospace; margin-bottom: 8px;';
+  modal.panel.appendChild(errEl);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display: flex; gap: 8px;';
+
+  const createBtn = makeHeaderBtn('Create Room', '#44cc88');
+  createBtn.style.cssText += ' flex: 1;';
+  createBtn.addEventListener('click', () => {
+    const id = idInput.value.trim().replace(/\s+/g, '_').replace(/_+/g, '_');
+    const name = nameInput.value.trim() || id;
+    const worldId = parseInt(worldSel.value, 10);
+    const w = Math.max(10, parseInt(wInput.value, 10) || defaultW);
+    const h = Math.max(10, parseInt(hInput.value, 10) || defaultH);
+    const perp = isHoriz ? h : w;
+    const maxPos = Math.max(0, perp - openingSize);
+    const pos = Math.min(maxPos, Math.max(0, parseInt(posInput.value, 10) || 0));
+
+    if (!id) { errEl.textContent = 'Room ID is required.'; return; }
+    if (ROOM_REGISTRY.has(id)) { errEl.textContent = `Room ID "${id}" already exists.`; return; }
+    if (perp < openingSize) {
+      errEl.textContent = `Room is too small to fit the ${openingSize}-block-wide transition.`;
+      return;
+    }
+
+    let xBlock: number;
+    let yBlock: number;
+    switch (newDirection) {
+      case 'left':  xBlock = 0; yBlock = pos; break;
+      case 'right': xBlock = w - gradientWidth; yBlock = pos; break;
+      case 'up':    xBlock = pos; yBlock = 0; break;
+      case 'down':  xBlock = pos; yBlock = h - gradientWidth; break;
+    }
+
+    const newJsonTrans: RoomJsonTransition = {
+      direction: newDirection,
+      positionBlock: pos,
+      openingSizeBlocks: openingSize,
+      targetRoomId: sourceRoomId,
+      targetSpawnBlock: [0, 0],
+      xBlock,
+      yBlock,
+      gradientWidthBlocks: gradientWidth,
+      fadeColor: sourceTrans.fadeColor,
+      isSecretDoor: sourceTrans.isSecretDoor,
+      longTransition: sourceTrans.longTransition,
+    };
+
+    const newRoomDef = roomJsonDefToRoomDef({
+      id,
+      name,
+      worldNumber: worldId,
+      widthBlocks: w,
+      heightBlocks: h,
+      playerSpawnBlock: [Math.floor(w / 2), Math.floor(h / 2)],
+      interiorWalls: [],
+      enemies: [],
+      transitions: [newJsonTrans],
+      skillTombs: [],
+    });
+
+    registerRoom(newRoomDef);
+    setRoomNameOverride(id, name);
+    setRoomWorldOverride(id, worldId);
+
+    const idealPos = getAdjacentRoomMapPosition(sourceRoomId, sourceTrans.direction, w, h)
+      ?? { mapX: 0, mapY: 0 };
+    const placed = findNearestNonOverlappingRoomPlacement(idealPos, ctx.placements, w, h);
+    ctx.placements.set(id, { room: newRoomDef, mapXWorld: placed.mapX, mapYWorld: placed.mapY });
+    setRoomMapPosition(id, placed.mapX, placed.mapY);
+
+    // Link the two transitions together (mirrors applyPendingDoorLink).
+    const sourceSpawn = computeSpawnBlockForMapLink(sourceRoom, sourceTrans);
+    const targetSpawn = computeSpawnBlockForMapLink(newRoomDef, newRoomDef.transitions[0]);
+    setRoomTransitionLink(sourceRoomId, sourceTransIndex, id, targetSpawn);
+    setRoomTransitionLink(id, 0, sourceRoomId, sourceSpawn);
+
+    ctx.callbacks.onWorldMapDataChanged?.();
+    ctx.setSelectedRoomId(id);
+    modal.destroy();
+    ctx.render();
+    ctx.statusBar.textContent = `Room "${name}" created and linked to "${effectiveRoomName(sourceRoomId)}".`;
+    ctx.statusBar.style.color = '#88ff88';
+  });
+
+  const cancelBtn = makeHeaderBtn('Cancel', '#888888');
+  cancelBtn.style.cssText += ' flex: 1;';
+  cancelBtn.addEventListener('click', () => modal.destroy());
+
+  btnRow.appendChild(createBtn);
+  btnRow.appendChild(cancelBtn);
+  modal.panel.appendChild(btnRow);
+
+  idInput.focus();
 }

@@ -15,7 +15,7 @@ import { FOLDER_BLOCK_THEMES, folderThemeShortId } from '../render/walls/folderB
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** Active brush mode for painting tools. */
-export type BrushMode = 'single' | '3x3' | '5x5' | 'rect';
+export type BrushMode = 'single' | '3x3' | '5x5' | 'rect' | 'fill';
 
 export type PaletteCategory = 'blocks' | 'specialBlocks' | 'enemies' | 'triggers' | 'collectables' | 'environment' | 'objects' | 'lighting' | 'liquids' | 'ropes' | 'guidePaths';
 

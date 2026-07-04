@@ -190,6 +190,23 @@ export function rectOverlapsSolidEditorObject(
   return false;
 }
 
+/**
+ * Returns true if the given block cell is covered by any placed tile-like
+ * solid object (interior wall, crumble block, or falling block tile).
+ *
+ * Used by the fill brush to determine the "occupied"/"empty" state a flood
+ * fill should match, since those are the object types the fill brush paints
+ * over with tile items.
+ */
+export function isCellOccupiedByTile(room: EditorRoomData, xBlock: number, yBlock: number): boolean {
+  if (room.interiorWalls.some(w => hitTestWall(w, xBlock, yBlock))) return true;
+  if ((room.crumbleBlocks ?? []).some(b => hitTestZone(
+    { xBlock: b.xBlock, yBlock: b.yBlock, wBlock: b.wBlock ?? 1, hBlock: b.hBlock ?? 1 }, xBlock, yBlock,
+  ))) return true;
+  if (isFallingBlockAt(room, xBlock, yBlock)) return true;
+  return false;
+}
+
 // ── Bounds helpers ───────────────────────────────────────────────────────────
 
 export function isInsideRoom(room: EditorRoomData, xBlock: number, yBlock: number): boolean {

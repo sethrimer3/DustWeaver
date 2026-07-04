@@ -157,6 +157,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     { mode: '3x3',   label: '3×3' },
     { mode: '5x5',   label: '5×5' },
     { mode: 'rect',  label: '▭' },
+    { mode: 'fill',  label: '⛃' },
   ];
   const brushBtns: HTMLButtonElement[] = [];
   for (const { mode, label } of brushModes) {

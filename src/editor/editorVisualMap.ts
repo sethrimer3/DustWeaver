@@ -43,6 +43,7 @@ import {
   showAddRoomDialog,
   showAddWorldDialog,
   showColorPickerDialog,
+  showCreateLinkedRoomDialog,
 } from './editorVisualMapDialogs';
 import {
   type DoorHitArea,
@@ -139,7 +140,7 @@ export function showVisualWorldMap(
   header.appendChild(exportBtn);
 
   const hintEl = document.createElement('span');
-  hintEl.textContent = 'Drag rooms \u2022 Doors snap when close \u2022 Click door to link \u2022 Double-click to jump \u2022 Right-click room for options \u2022 Arrow keys nudge selected \u2022 N/ESC to close';
+  hintEl.textContent = 'Drag rooms \u2022 Doors snap when close \u2022 Click door to link \u2022 Double-click room to jump \u2022 Double-click unlinked door to create linked room \u2022 Right-click room for options \u2022 Arrow keys nudge selected \u2022 N/ESC to close';
   hintEl.style.cssText = `color: rgba(200,255,200,0.4); font-size: 10px; font-family: monospace; margin-left: auto;`;
   header.appendChild(hintEl);
 
@@ -401,6 +402,11 @@ export function showVisualWorldMap(
     const door = hitTestDoor(mx, my);
     if (door) {
       if (linkSourceRoomId) {
+        if (door.roomId === linkSourceRoomId && door.transitionIndex === linkSourceTransIndex) {
+          // Second click of a double-click on the same still-unlinked door —
+          // let onDblClick handle it instead of attempting a self-link.
+          return;
+        }
         isDraggingDoorLink = false;
         completeDoorLink_impl(door);
       } else {
@@ -491,6 +497,18 @@ export function showVisualWorldMap(
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
+
+    const door = hitTestDoor(mx, my);
+    if (door) {
+      const doorRoom = ROOM_REGISTRY.get(door.roomId);
+      const doorTrans = doorRoom?.transitions[door.transitionIndex];
+      if (doorTrans && !doorTrans.targetRoomId) {
+        cancelDoorLink_impl();
+        dismissLinkRoomsPrompt(linkCtx, false);
+        showCreateLinkedRoomDialog(dialogCtx, door.roomId, door.transitionIndex);
+      }
+      return;
+    }
 
     const roomId = hitTestRoom(mx, my);
     if (roomId) {

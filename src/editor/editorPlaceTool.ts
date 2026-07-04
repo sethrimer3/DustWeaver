@@ -28,7 +28,7 @@ import {
   findFloorBlockRow,
   findCeilingBlockRow,
 } from './editorHitTest';
-import { getBrushCells } from './editorBrush';
+import { getBrushCells, getFillBrushCells } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
@@ -86,6 +86,14 @@ export function placeAtCursor(state: EditorState): void {
     item.category === 'specialBlocks' ||
     item.category === 'liquids' ||
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
+
+  if (isBrushable && state.brushMode === 'fill') {
+    const cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY);
+    for (const cell of cells) {
+      placeAt(state, cell.x, cell.y);
+    }
+    return;
+  }
 
   if (isBrushable && state.brushMode !== 'single') {
     const cells = getBrushCells(

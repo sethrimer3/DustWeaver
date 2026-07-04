@@ -57,8 +57,13 @@ export function computeSpawnBlockForTransition(
 ): readonly [number, number] {
   const { xBlock, yBlock } = getTransitionXYBlock(transition, room);
   const clampedFraction = Math.min(1, Math.max(0, entryOffsetFraction));
-  const maxOffset = Math.max(0, transition.openingSizeBlocks - 1);
-  const openingOffset = Math.round(clampedFraction * maxOffset);
+  // Keep a 1-block margin from each edge of the opening: the outermost blocks
+  // of a door frame are sometimes occupied by wall/pillar geometry even
+  // though they fall within the nominal opening range, so spawning exactly at
+  // the edge (fraction 0 or 1) can land the player inside a solid wall.
+  const edgeMargin = transition.openingSizeBlocks >= 3 ? 1 : 0;
+  const maxOffset = Math.max(0, transition.openingSizeBlocks - 1 - 2 * edgeMargin);
+  const openingOffset = edgeMargin + Math.round(clampedFraction * maxOffset);
   const openingPosHoriz = yBlock + openingOffset;
   const openingPosVert  = xBlock + openingOffset;
 
