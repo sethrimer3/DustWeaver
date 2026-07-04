@@ -1,15 +1,10 @@
 const { app, BrowserWindow, ipcMain, protocol, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const crypto = require("crypto");
 const {
   SAFE_ROOM_ID_RE,
   SAFE_CAMPAIGN_ID_RE,
   OFFICIAL_CAMPAIGN_ID,
-  PACKED_CAMPAIGN_FILENAME,
-  OFFICIAL_BACKUP_BASE_NAME,
-  ROOM_FILE_SUFFIX,
-  MAX_BACKUPS,
   tryReadExistingManifest,
   validateRoomCacheOnDisk,
   exportCampaignToDisk,
@@ -392,144 +387,26 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
     const campaignDir = isOfficialCampaign
       ? resolveCampaignDir()
       : resolveCustomCampaignDir(campaignId);
-    const roomsDir = path.join(campaignDir, "ROOMS");
-    const backupsDir = path.join(campaignDir, "BACKUPS");
 
-    try {
-      fs.mkdirSync(roomsDir, { recursive: true });
-    } catch (dirErr) {
-      const msg = dirErr instanceof Error ? dirErr.message : String(dirErr);
-      const error = `Failed to create campaign directory "${roomsDir}": ${msg}`;
-      sendProgress({ step: "error", message: error });
-      return { ok: false, error };
-    }
-
-    // ── Compute campaign hash ─────────────────────────────────────────────
-    const campaignHash = computeCampaignHash(campaign);
-
-    // ── Rolling backup of the existing packed campaign file ───────────────
-    // Back up BEFORE overwriting.  Only runs if the file already exists.
-    const packedFilename = isOfficialCampaign
-      ? PACKED_CAMPAIGN_FILENAME
-      : `${campaignId}.dwcampaign.json`;
-    const packedPath = path.join(campaignDir, packedFilename);
-    const backupBaseName = isOfficialCampaign ? OFFICIAL_BACKUP_BASE_NAME : campaignId;
-    ensureRollingBackup(packedPath, backupsDir, backupBaseName, MAX_BACKUPS);
-
-    // ── Write packed campaign file (atomic) ───────────────────────────────
-    sendProgress({ step: "writing-campaign", message: "Writing campaign file…" });
-
-    try {
-      writeJsonAtomic(packedPath, campaign);
-    } catch (writeErr) {
-      const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
-      const error = `Failed to write packed campaign file: ${msg}`;
-      sendProgress({ step: "error", message: error });
-      return { ok: false, error };
-    }
-
-    // ── Load existing manifest for selective updates ───────────────────────
-    const existingManifest = tryReadExistingManifest(roomsDir);
-    const existingRooms = (
-      existingManifest &&
-      typeof existingManifest.rooms === "object" &&
-      existingManifest.rooms !== null
-    )
-      ? existingManifest.rooms
-      : {};
-
-    // ── Write individual room files (atomic) ──────────────────────────────
-    const nowIso = new Date().toISOString();
-    const manifestRooms = {};
-    let writtenRooms = 0;
-    let skippedRooms = 0;
-    const totalRooms = rooms.length;
-
-    for (let i = 0; i < rooms.length; i++) {
-      const room = rooms[i];
-      const roomId = room.id;
-      const roomFilename = `${roomId}${ROOM_FILE_SUFFIX}`;
-      const roomPath = path.join(roomsDir, roomFilename);
-      const roomHash = computeContentHash(room);
-
-      const prev = existingRooms[roomId];
-      const isUnchanged = prev && typeof prev.hash === "string" && prev.hash === roomHash;
-
-      const roomName = (typeof room.name === "string" && room.name.length > 0) ? room.name : roomId;
-      sendProgress({
-        step: "exporting-room",
-        message: `Exporting room ${i + 1} / ${totalRooms}: ${roomName}`,
-        roomIndex: i + 1,
-        totalRooms,
-        roomId,
-      });
-
-      if (isUnchanged) {
-        skippedRooms += 1;
-      } else {
-        try {
-          writeJsonAtomic(roomPath, room);
-        } catch (roomErr) {
-          console.warn(`[dw:export-campaign-with-progress] Failed to write room "${roomId}":`, roomErr);
-        }
-        writtenRooms += 1;
-      }
-
-      manifestRooms[roomId] = {
-        roomId,
-        file: roomFilename,
-        hash: roomHash,
-        updatedAt: isUnchanged ? (prev.updatedAt || nowIso) : nowIso,
-      };
-    }
-
-    // ── Write enhanced manifest (atomic) ──────────────────────────────────
-    sendProgress({ step: "writing-manifest", message: "Writing room manifest…" });
-
-    const knownRoomIds = new Set(Object.keys(manifestRooms));
-    const manifest = {
+    // ── Delegate to the shared write routine (fails hard on any room or
+    // manifest write error, and validates the cache before reporting success —
+    // see exportCampaignToDisk in campaignExport.cjs) ──────────────────────
+    const result = exportCampaignToDisk({
+      campaign,
+      campaignMeta,
       campaignId,
-      campaignName: campaignMeta.title || campaignId,
-      campaignHash,
-      // campaignVersion is a convenience diagnostic; campaignHash is the
-      // authoritative stale-cache check.  See roomCacheManifest.ts for details.
-      campaignVersion: (campaign.metadata && campaign.metadata.version) || 0,
-      campaignSchemaVersion: campaign.v,
-      roomCacheVersion: ROOM_CACHE_VERSION,
-      exportedAt: nowIso,
-      rooms: manifestRooms,
-      adjacency: buildManifestAdjacency(rooms, knownRoomIds),
-    };
-    const manifestPath = path.join(roomsDir, "manifest.json");
-    try {
-      writeJsonAtomic(manifestPath, manifest);
-    } catch (manifestErr) {
-      console.warn("[dw:export-campaign-with-progress] Failed to write manifest atomically:", manifestErr);
+      rooms,
+      roomIdFirstIndex,
+      isOfficialCampaign,
+      campaignDir,
+      onProgress: sendProgress,
+    });
+    if (!result.ok) {
+      // exportCampaignToDisk already sent an 'error' progress event.
+      return { ok: false, error: result.error };
     }
 
-    // ── Remove stale room files ───────────────────────────────────────────
-    sendProgress({ step: "cleaning-stale", message: "Cleaning up stale files…" });
-
-    let removedCount = 0;
-    try {
-      const existing = fs.readdirSync(roomsDir);
-      for (const filename of existing) {
-        if (!filename.endsWith(ROOM_FILE_SUFFIX)) continue;
-        const candidateId = filename.slice(0, -ROOM_FILE_SUFFIX.length);
-        if (!SAFE_ROOM_ID_RE.test(candidateId)) continue;
-        if (roomIdFirstIndex.has(candidateId)) continue;
-        try {
-          fs.unlinkSync(path.join(roomsDir, filename));
-          removedCount += 1;
-          console.log(`[dw:export-campaign-with-progress] Removed stale room file: ${filename}`);
-        } catch (unlinkErr) {
-          console.warn(`[dw:export-campaign-with-progress] Could not remove stale file "${filename}":`, unlinkErr);
-        }
-      }
-    } catch (readdirErr) {
-      console.warn("[dw:export-campaign-with-progress] Could not read ROOMS directory for stale cleanup:", readdirErr);
-    }
-
+    const { writtenRooms, skippedRooms, removedCount } = result;
     const completeMsg = `Export complete — ${writtenRooms} room(s) written, ${skippedRooms} unchanged` +
       (removedCount > 0 ? `, ${removedCount} stale file(s) removed` : "");
     sendProgress({
@@ -575,38 +452,11 @@ ipcMain.handle("dw:validate-room-cache-files", (_event, campaignId, isOfficialCa
     const roomsDir = path.join(campaignDir, "ROOMS");
 
     const manifest = tryReadExistingManifest(roomsDir);
-    if (manifest === null || typeof manifest.rooms !== "object" || manifest.rooms === null) {
+    if (manifest === null) {
       return { ok: false, error: `No valid manifest found for campaign "${campaignId}"` };
     }
 
-    for (const [roomId, entry] of Object.entries(manifest.rooms)) {
-      if (typeof roomId !== "string" || !SAFE_ROOM_ID_RE.test(roomId)) {
-        // Skip unsafe room IDs — they would also be rejected at load time.
-        continue;
-      }
-      if (typeof entry.file !== "string") {
-        return {
-          ok: false,
-          error: `Room cache is incomplete: manifest entry for "${roomId}" has no file path`,
-        };
-      }
-      // Path traversal protection: reject any file path that escapes the ROOMS dir.
-      const roomFilePath = path.join(roomsDir, entry.file);
-      if (!roomFilePath.startsWith(roomsDir + path.sep)) {
-        return {
-          ok: false,
-          error: `Room cache is incomplete: file path escapes ROOMS directory for "${roomId}"`,
-        };
-      }
-      if (!fs.existsSync(roomFilePath)) {
-        return {
-          ok: false,
-          error: `Room cache is incomplete: missing file ROOMS/${entry.file}`,
-        };
-      }
-    }
-
-    return { ok: true };
+    return validateRoomCacheOnDisk(roomsDir, manifest);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
