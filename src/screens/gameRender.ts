@@ -351,7 +351,15 @@ export function renderFrame(r: RenderFrameContext): void {
   // areas remain black even when camera framing shows beyond room extents.
   // In always-center camera mode the clip is skipped — black void outside the
   // room is shown intentionally, so we must not cut off room content at edges.
+  // try/finally below guarantees this save() is always matched by the
+  // restore() further down, even if a renderer inside the clipped pass
+  // throws. Without it, an uncaught exception anywhere in this ~200-line
+  // block (walls, clusters, particles, effects) leaks the room-bounds clip
+  // onto the shared 2D context permanently — every subsequent frame's
+  // clear/fill gets constrained to the stale clip rect, producing a black
+  // screen with un-cleared trails in every room until reload.
   ctx.save();
+  try {
   if (!r.alwaysCenterCamera) {
     ctx.beginPath();
     ctx.rect(clipScreenXPx, clipScreenYPx, clipScreenWPx, clipScreenHPx);
@@ -569,8 +577,11 @@ export function renderFrame(r: RenderFrameContext): void {
   // backlight / sunray) with optional raytraced shadow polygons.
   renderSceneLightingPass(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx, nowMs);
 
-  // End room clip before any HUD/screen-space overlays are drawn.
-  ctx.restore();
+  } finally {
+    // End room clip before any HUD/screen-space overlays are drawn. Runs
+    // even on error so the clip never leaks into future frames.
+    ctx.restore();
+  }
 
   // ── Void edge overlay (noisy black intrusion along exposed room boundaries) ─
   renderVoidEdge(ctx, currentRoom, ox, oy, zoom);

@@ -186,6 +186,7 @@ export function startGameScreen(
   runOptions?: GameScreenRunOptions,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
+  (webglRenderer as { isAvailable: boolean }).isAvailable = false; // DWDEBUG: force 2D-only compositing to test wall visibility
   const bloomSystem = new BloomSystem({ ...DEFAULT_BLOOM_CONFIG });
   const darkRoomOverlay = new DarkRoomOverlay();
   const renderProfiler = new RenderProfiler();
@@ -1477,7 +1478,23 @@ export function startGameScreen(
   }
   window.addEventListener('resize', onResize);
 
+  // Thin error boundary around the real per-frame work below. Without this,
+  // an uncaught exception anywhere in frameImpl() (sim tick, snapshot build,
+  // any renderer) propagates out of the rAF callback and the loop simply
+  // stops rescheduling itself — the game silently freezes on whatever was
+  // last drawn, in every room, with no console output pointing at the cause.
+  // Catching here logs the real stack trace and keeps the loop alive so a
+  // single bad frame degrades gracefully instead of permanently hanging.
   function frame(timestampMs: number): void {
+    try {
+      frameImpl(timestampMs);
+    } catch (err) {
+      console.error('[gameScreen] Uncaught error in frame(); loop continues.', err);
+      if (isRunning) rafHandle = requestAnimationFrame(frame);
+    }
+  }
+
+  function frameImpl(timestampMs: number): void {
     if (!isRunning) return;
 
     const elapsedMs = lastTimestampMs === 0 ? FIXED_DT_MS : timestampMs - lastTimestampMs;
