@@ -12,6 +12,7 @@ import {
   toggleDebugPanel,
   hideAllDebugPanels,
 } from './debugPanelManager';
+import { isDevModeEnabled, setDevModeEnabled } from './devMode';
 
 const PANEL_BG = 'rgba(15,15,20,0.92)';
 const PANEL_BORDER = 'rgba(0,200,100,0.4)';
@@ -121,6 +122,29 @@ export function createDebugPanel(root: HTMLElement): DebugPanel {
     padding: 6px; box-sizing: border-box; z-index: 850;
     pointer-events: auto; border-radius: 6px;
   `;
+
+  // ── Dev Mode toggle (gates debug-only UI elements in other menus) ────────
+  const devModeBtn = document.createElement('button');
+  devModeBtn.type = 'button';
+  devModeBtn.style.cssText = `
+    width: 100%; margin-bottom: 6px; padding: 4px 8px; font-size: 9px;
+    background: rgba(0,0,0,0.35); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; font-family: monospace; cursor: pointer;
+    border-radius: 3px; text-align: left; box-sizing: border-box;
+  `;
+  const refreshDevModeBtn = (): void => {
+    const enabled = isDevModeEnabled();
+    devModeBtn.textContent = enabled ? '☑ Dev Mode' : '☐ Dev Mode';
+    devModeBtn.style.borderColor = enabled ? GREEN : PANEL_BORDER;
+    devModeBtn.style.color = enabled ? GREEN : TEXT_COLOR;
+  };
+  devModeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setDevModeEnabled(!isDevModeEnabled());
+    refreshDevModeBtn();
+  });
+  refreshDevModeBtn();
+  container.appendChild(devModeBtn);
 
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';

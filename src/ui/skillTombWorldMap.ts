@@ -11,7 +11,9 @@ import { ROOM_REGISTRY } from '../levels/rooms';
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { GOLD } from './skillTombShared';
-import { drawRoomSketch, smoothstep, ZOOM_SKETCH_FULL, ZOOM_DETAIL_FULL } from './mapSketchRenderer';
+import { drawRoomSketch, drawRoomSketchOpenAir, smoothstep, ZOOM_SKETCH_FULL, ZOOM_DETAIL_FULL } from './mapSketchRenderer';
+import { isDevModeEnabled } from './devMode';
+import { isLegacyMapSketchEnabled, setLegacyMapSketchEnabled } from './mapSketchPreference';
 
 /**
  * Set to true to draw a debug overlay on the world map showing each room's
@@ -49,6 +51,35 @@ export function buildMapTab(
   mapContainer.appendChild(mapCanvas);
 
   const mapCtx = mapCanvas.getContext('2d')!;
+
+  // ── Dev-only "Legacy Map Sketch" checkbox ────────────────────────────────
+  // Total vertical space (in canvas px) reserved for the legend, measured
+  // from the canvas bottom. Kept large enough that the "= You" row's marker
+  // and label never get clipped by the canvas edge.
+  const LEGEND_RESERVED_HEIGHT_PX = 80;
+  const showLegacySketchToggle = isDevModeEnabled();
+  let useLegacySketch = isLegacyMapSketchEnabled();
+
+  if (showLegacySketchToggle) {
+    const toggleLabel = document.createElement('label');
+    toggleLabel.style.cssText = `
+      position: absolute; left: 16px; display: flex; align-items: center; gap: 6px;
+      bottom: ${LEGEND_RESERVED_HEIGHT_PX + 8}px;
+      font-family: 'Cinzel', serif; font-size: 11px; color: #aaa;
+      user-select: none; cursor: pointer; z-index: 1;
+    `;
+    const toggleInput = document.createElement('input');
+    toggleInput.type = 'checkbox';
+    toggleInput.checked = useLegacySketch;
+    toggleInput.addEventListener('change', () => {
+      useLegacySketch = toggleInput.checked;
+      setLegacyMapSketchEnabled(useLegacySketch);
+      renderMap();
+    });
+    toggleLabel.appendChild(toggleInput);
+    toggleLabel.appendChild(document.createTextNode('Legacy Map Sketch'));
+    mapContainer.appendChild(toggleLabel);
+  }
 
   // Gather explored rooms
   const exploredRooms: RoomDef[] = [];
@@ -109,7 +140,8 @@ export function buildMapTab(
 
       // ── Sketch layer: silhouette with organic jitter ──────────────────────
       if (showSketch) {
-        drawRoomSketch(
+        const drawSketch = useLegacySketch ? drawRoomSketch : drawRoomSketchOpenAir;
+        drawSketch(
           mapCtx, room, mapXBlock, mapYBlock,
           centerX, centerY, cellSize,
           sketchAlpha, isCurrentRoom,
@@ -269,7 +301,7 @@ export function buildMapTab(
     // Legend
     mapCtx.textAlign = 'left';
     mapCtx.font = "12px 'Cinzel', serif";
-    const legendY = ch - 60;
+    const legendY = ch - LEGEND_RESERVED_HEIGHT_PX;
     const legendX = 16;
     mapCtx.fillStyle = 'rgba(212,168,75,0.6)';
     mapCtx.fillRect(legendX, legendY, 10, 10);

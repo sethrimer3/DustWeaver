@@ -314,13 +314,17 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   blockModifierTitle.style.cssText = 'font-size: 11px; color: #8fc8ff; margin-bottom: 6px; font-weight: bold;';
   blockModifierDiv.appendChild(blockModifierTitle);
   const modifierInputs: HTMLInputElement[] = [];
-  const modifierOptions: { id: BlockPlacementModifier; label: string }[] = [
-    { id: 'cracked', label: 'Cracked' },
-    { id: 'tough', label: 'Falling: Tough' },
-    { id: 'sensitive', label: 'Falling: Sensitive' },
-    { id: 'crumbling', label: 'Falling: Crumbling' },
+  const modifierOptions: { id: BlockPlacementModifier; label: string; help: string }[] = [
+    { id: 'cracked', label: 'Cracked',
+      help: 'Places a crumble block: cracks on the first hit, then breaks apart on the second.' },
+    { id: 'tough', label: 'Falling: Tough',
+      help: 'Falling block that only drops when hit by a strong downward force or a downward grapple pull.' },
+    { id: 'sensitive', label: 'Falling: Sensitive',
+      help: 'Falling block that drops from almost any contact.' },
+    { id: 'crumbling', label: 'Falling: Crumbling',
+      help: 'Falling block that drops like Sensitive, then disappears once it reaches full fall speed.' },
   ];
-  function makeModifierRow(id: BlockPlacementModifier, label: string): void {
+  function makeModifierRow(id: BlockPlacementModifier, label: string, help: string): void {
     const row = document.createElement('label');
     row.style.cssText = 'display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 11px; cursor: pointer;';
     const input = document.createElement('input');
@@ -336,9 +340,15 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     const text = document.createElement('span');
     text.textContent = label;
     row.appendChild(text);
+    const helpIcon = document.createElement('span');
+    helpIcon.textContent = '(?)';
+    helpIcon.title = help;
+    helpIcon.style.cssText = 'color: rgba(143,200,255,0.75); cursor: help; font-size: 10px;';
+    helpIcon.addEventListener('click', (e) => e.preventDefault());
+    row.appendChild(helpIcon);
     blockModifierDiv.appendChild(row);
   }
-  for (const opt of modifierOptions) makeModifierRow(opt.id, opt.label);
+  for (const opt of modifierOptions) makeModifierRow(opt.id, opt.label, opt.help);
   const modifierCrumbleSelect = document.createElement('select');
   modifierCrumbleSelect.style.cssText = `
     width: 100%; margin-top: 6px; background: rgba(0,0,0,0.6);

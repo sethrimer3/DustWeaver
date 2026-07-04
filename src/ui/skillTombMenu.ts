@@ -93,7 +93,7 @@ export function showMapOnlyModal(
   `;
 
   const title = document.createElement('span');
-  title.textContent = 'Zone Map';
+  title.textContent = 'Map';
   title.style.cssText = `
     font-size: 1.1rem; color: ${GOLD}; letter-spacing: 0.05em;
   `;
@@ -189,7 +189,7 @@ export function showSkillTombMenu(
   }
 
   const loadoutTabBtn = createTabBtn('Loadout', 'loadout');
-  const mapTabBtn = createTabBtn('Zone Map', 'map');
+  const mapTabBtn = createTabBtn('Map', 'map');
   tabRow.appendChild(loadoutTabBtn);
   tabRow.appendChild(mapTabBtn);
   topBar.appendChild(tabRow);
