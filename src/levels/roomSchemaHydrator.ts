@@ -50,7 +50,7 @@ import { expandLayerToRects, expandBlockerLayerToCells } from './tileGridCompres
 /** Expand a SavedEnemyType into the legacy boolean-flag shape (as RoomJsonEnemy). */
 export function enemyTypeToFlags(
   type: SavedEnemyType,
-  base: { xBlock: number; yBlock: number; kinds: string[]; particleCount: number; isBoss: boolean; spriteIndex?: number },
+  base: { xBlock: number; yBlock: number; kinds: string[]; particleCount: number; isBoss: boolean; spriteIndex?: number; snakeLength?: number },
 ): RoomJsonEnemy {
   return {
     xBlock: base.xBlock,
@@ -79,6 +79,8 @@ export function enemyTypeToFlags(
     isVoidSingularity:        type === 'voidSingularity' || type === 'voidSingularityPair',
     isVoidSingularityPair:    type === 'voidSingularityPair',
     isDustLeech:              type === 'dustLeech',
+    isGridSnakeEnemy:         type === 'gridSnake',
+    gridSnakeLength:          type === 'gridSnake' ? (base.snakeLength ?? 4) : undefined,
     isGridBlockEnemy: (
       type === 'gridBlock1x1Slow' || type === 'gridBlock1x1Medium' || type === 'gridBlock1x1Fast' ||
       type === 'gridBlock2x2Slow' || type === 'gridBlock2x2Medium' || type === 'gridBlock2x2Fast'
@@ -227,6 +229,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     particleCount: e.particleCount ?? 0,
     isBoss: e.boss === true,
     spriteIndex: e.spriteIndex,
+    snakeLength: e.snakeLength,
   }));
 
   const transitions: RoomJsonTransition[] = (saved.transitions ?? []).map(t => {

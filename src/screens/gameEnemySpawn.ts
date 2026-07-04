@@ -29,7 +29,13 @@ import {
   TRAIL_UPDATE_INTERVAL_TICKS,
 } from '../sim/clusters/squareStampedeAi';
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
-import { getGridBlockFootprintSize, GRID_BLOCK_HALF_SIZE } from '../sim/clusters/gridBlockEnemyAi';
+import {
+  DEFAULT_GRID_SNAKE_LENGTH,
+  getGridBlockFootprintSize,
+  GRID_BLOCK_HALF_SIZE,
+  GRID_SNAKE_HALF_SIZE,
+  initializeGridSnakeSegments,
+} from '../sim/clusters/gridBlockEnemyAi';
 import { BEE_HALF_WIDTH_WORLD, BEE_HALF_HEIGHT_WORLD } from '../sim/clusters/beeSwarmAi';
 import {
   DC_SMALL_HP,
@@ -636,6 +642,34 @@ export function spawnEnemyClusters(
           world.dlMotePulsePhaseRad[mi] = (m / MAX_MOTES_PER_DL) * Math.PI * 2;
         }
       }
+    } else if (enemyDef.isGridSnakeEnemyFlag === 1) {
+      const bs = BLOCK_SIZE_MEDIUM;
+      const roomW = Math.ceil(world.worldWidthWorld / bs);
+      const roomH = Math.ceil(world.worldHeightWorld / bs);
+      const gridX = Math.max(0, Math.min(Math.max(0, roomW - 1), Math.round((ex - GRID_SNAKE_HALF_SIZE) / bs)));
+      const gridY = Math.max(0, Math.min(Math.max(0, roomH - 1), Math.round((ey - GRID_SNAKE_HALF_SIZE) / bs)));
+      const length = Math.max(1, Math.min(12, Math.floor(enemyDef.gridSnakeLength ?? DEFAULT_GRID_SNAKE_LENGTH)));
+
+      enemyCluster.isGridSnakeEnemyFlag = 1;
+      enemyCluster.gridSnakeLength = length;
+      enemyCluster.gridSnakeGridX = gridX;
+      enemyCluster.gridSnakeGridY = gridY;
+      enemyCluster.gridSnakeTargetGridX = gridX;
+      enemyCluster.gridSnakeTargetGridY = gridY;
+      enemyCluster.gridSnakeMoveTicks = 0;
+      enemyCluster.gridSnakeRepathCooldownTicks = 0;
+      enemyCluster.gridSnakeNextDirX = 0;
+      enemyCluster.gridSnakeNextDirY = 0;
+      enemyCluster.gridSnakePhase = 0;
+      enemyCluster.gridSnakePrevHealthPoints = 6;
+      enemyCluster.gridBlockHitFlashTicks = 0;
+      enemyCluster.positionXWorld = gridX * bs + GRID_SNAKE_HALF_SIZE;
+      enemyCluster.positionYWorld = gridY * bs + GRID_SNAKE_HALF_SIZE;
+      enemyCluster.halfWidthWorld = GRID_SNAKE_HALF_SIZE;
+      enemyCluster.halfHeightWorld = GRID_SNAKE_HALF_SIZE;
+      enemyCluster.healthPoints = 6;
+      enemyCluster.maxHealthPoints = 6;
+      initializeGridSnakeSegments(enemyCluster, length);
     } else if (enemyDef.isGridBlockEnemyFlag === 1) {
       const sizeIndex  = enemyDef.gridBlockSizeIndex === 1 ? 1 : 0;
       const speedIndex = enemyDef.gridBlockSpeedIndex === 1 ? 1 : enemyDef.gridBlockSpeedIndex === 2 ? 2 : 0;
@@ -685,6 +719,7 @@ export function spawnEnemyClusters(
       enemyCluster.isDustWeaverArchitectFlag === 1 ||
       enemyCluster.isVoidSingularityFlag === 1 ||
       enemyCluster.isDustLeechFlag === 1 ||
+      enemyCluster.isGridSnakeEnemyFlag === 1 ||
       enemyCluster.isGridBlockEnemyFlag === 1;
     if (!skipParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);

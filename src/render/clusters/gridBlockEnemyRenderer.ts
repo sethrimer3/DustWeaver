@@ -9,6 +9,7 @@
  */
 
 import type { ClusterSnapshot } from '../clusterSnapshotTypes';
+import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 
 const BEVEL_PX   = 2;
 const GLINT_ALPHA = 0.28;
@@ -76,5 +77,45 @@ export function renderGridBlockEnemy(
   if (cluster.gridBlockHitFlashTicks > 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.fillRect(left, top, width, height);
+  }
+}
+
+export function renderGridSnakeEnemy(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  cluster: ClusterSnapshot,
+  scalePx: number,
+  offsetXPx: number,
+  offsetYPx: number,
+): void {
+  const tile = BLOCK_SIZE_SMALL * scalePx;
+  const half = tile * 0.5;
+
+  for (let i = cluster.gridSnakeLength - 1; i >= 0; i--) {
+    const gx = cluster.gridSnakeSegmentGridX[i];
+    const gy = cluster.gridSnakeSegmentGridY[i];
+    const sx = gx * tile + half + offsetXPx;
+    const sy = gy * tile + half + offsetYPx;
+    const pulse = (Math.sin(cluster.gridSnakePhase + i * 0.7) + 1) * 0.5;
+    ctx.fillStyle = pulse > 0.5 ? '#1fb6a6' : '#147d85';
+    ctx.fillRect(sx - half + 1, sy - half + 1, tile - 2, tile - 2);
+    ctx.strokeStyle = '#063c45';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx - half + 0.5, sy - half + 0.5, tile - 1, tile - 1);
+  }
+
+  ctx.fillStyle = '#35d6b8';
+  ctx.fillRect(screenX - half, screenY - half, tile, tile);
+  ctx.strokeStyle = '#052c34';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(screenX - half + 0.5, screenY - half + 0.5, tile - 1, tile - 1);
+  ctx.fillStyle = '#052c34';
+  ctx.fillRect(screenX - half + tile * 0.25, screenY - half + tile * 0.25, 1.5, 1.5);
+  ctx.fillRect(screenX + half - tile * 0.25 - 1.5, screenY - half + tile * 0.25, 1.5, 1.5);
+
+  if (cluster.gridBlockHitFlashTicks > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillRect(screenX - half, screenY - half, tile, tile);
   }
 }

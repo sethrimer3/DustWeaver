@@ -281,6 +281,11 @@ export interface ClusterSnapshot {
   readonly gridBlockSpeedIndex: number;
   readonly gridBlockGlintPhase: number;
   readonly gridBlockHitFlashTicks: number;
+  readonly isGridSnakeEnemyFlag: 0 | 1;
+  readonly gridSnakeLength: number;
+  readonly gridSnakeSegmentGridX: readonly number[];
+  readonly gridSnakeSegmentGridY: readonly number[];
+  readonly gridSnakePhase: number;
 
   // ── Dust Leech ────────────────────────────────────────────────────────────
   readonly isDustLeechFlag: 0 | 1;

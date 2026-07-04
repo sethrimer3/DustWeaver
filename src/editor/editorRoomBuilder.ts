@@ -87,6 +87,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isGridBlockEnemyFlag:  e.isGridBlockEnemyFlag  ?? 0,
       gridBlockSizeIndex:    e.gridBlockSizeIndex     ?? 0,
       gridBlockSpeedIndex:   e.gridBlockSpeedIndex    ?? 0,
+      isGridSnakeEnemyFlag:  e.isGridSnakeEnemyFlag   ?? 0,
+      gridSnakeLength:       e.gridSnakeLength        ?? 4,
     };
   });
 

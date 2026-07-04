@@ -159,6 +159,11 @@ const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
     bg: '#501c08',
     extraCss: `border-radius: 50% 30% 50% 30%; border: 1px solid rgba(180,80,30,0.6); box-sizing: border-box;`,
   },
+  enemy_grid_snake: {
+    bg: '#147d85',
+    extraCss: `border-radius: 3px; border: 2px solid #35d6b8; box-sizing: border-box;`,
+    glyph: 'S',
+  },
   enemy_radiant_web: {
     bg: '#1a0800',
     extraCss: `border-radius: 50%; border: 2px solid rgba(255,120,10,0.7); box-sizing: border-box;`,

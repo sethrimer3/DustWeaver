@@ -136,6 +136,8 @@ export interface EditorEnemy {
   isGridBlockEnemyFlag?: 0 | 1;
   gridBlockSizeIndex?: 0 | 1;
   gridBlockSpeedIndex?: 0 | 1 | 2;
+  isGridSnakeEnemyFlag?: 0 | 1;
+  gridSnakeLength?: number;
 }
 
 // ── Transitions ───────────────────────────────────────────────────────────────

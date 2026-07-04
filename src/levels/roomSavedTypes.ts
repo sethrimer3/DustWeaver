@@ -138,7 +138,8 @@ export type SavedEnemyType =
   | 'gridBlock1x1Fast'
   | 'gridBlock2x2Slow'
   | 'gridBlock2x2Medium'
-  | 'gridBlock2x2Fast';
+  | 'gridBlock2x2Fast'
+  | 'gridSnake';
 
 export interface SavedEnemy {
   type: SavedEnemyType;
@@ -149,6 +150,7 @@ export interface SavedEnemy {
   boss?: true;
   /** Sprite index — only meaningful for `rolling`. */
   spriteIndex?: number;
+  snakeLength?: number;
 }
 
 export interface SavedTransition {

@@ -82,6 +82,8 @@ export interface RoomJsonEnemy {
   isGridBlockEnemy?: boolean;
   gridBlockSizeIndex?: 0 | 1;
   gridBlockSpeedIndex?: 0 | 1 | 2;
+  isGridSnakeEnemy?: boolean;
+  gridSnakeLength?: number;
 }
 
 export interface RoomJsonWall {

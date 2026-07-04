@@ -242,6 +242,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isGridBlockEnemyFlag:  (e.isGridBlockEnemy ?? false) ? 1 : 0,
     gridBlockSizeIndex:    e.gridBlockSizeIndex  ?? 0,
     gridBlockSpeedIndex:   e.gridBlockSpeedIndex ?? 0,
+    isGridSnakeEnemyFlag:  (e.isGridSnakeEnemy ?? false) ? 1 : 0,
+    gridSnakeLength:       e.gridSnakeLength ?? 4,
   }));
 
   const transitions: EditorTransition[] = json.transitions.map(t => {

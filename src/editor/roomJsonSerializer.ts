@@ -97,6 +97,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isGridBlockEnemy:   e.isGridBlockEnemyFlag === 1 ? true : undefined,
       gridBlockSizeIndex: e.isGridBlockEnemyFlag === 1 ? e.gridBlockSizeIndex  : undefined,
       gridBlockSpeedIndex: e.isGridBlockEnemyFlag === 1 ? e.gridBlockSpeedIndex : undefined,
+      isGridSnakeEnemy:   e.isGridSnakeEnemyFlag === 1 ? true : undefined,
+      gridSnakeLength:    e.isGridSnakeEnemyFlag === 1 ? e.gridSnakeLength : undefined,
     })),
     transitions: data.transitions.map(t => {
       // Compute legacy positionBlock / depthBlock from xBlock/yBlock for backward compat.

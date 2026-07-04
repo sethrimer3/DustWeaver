@@ -137,6 +137,7 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isVoidSingularity && e.isVoidSingularityPair) return 'voidSingularityPair';
   if (e.isVoidSingularity) return 'voidSingularity';
   if (e.isDustLeech) return 'dustLeech';
+  if (e.isGridSnakeEnemy) return 'gridSnake';
   if (e.isGridBlockEnemy) {
     const sz = e.gridBlockSizeIndex ?? 0;
     const sp = e.gridBlockSpeedIndex ?? 0;
@@ -631,6 +632,9 @@ function dehydrateEnemy(e: RoomJsonEnemy): SavedEnemy {
   if (e.isBoss) out.boss = true;
   if (type === 'rolling' && e.rollingEnemySpriteIndex !== undefined && e.rollingEnemySpriteIndex !== 1) {
     out.spriteIndex = e.rollingEnemySpriteIndex;
+  }
+  if (type === 'gridSnake' && e.gridSnakeLength !== undefined && e.gridSnakeLength !== 4) {
+    out.snakeLength = e.gridSnakeLength;
   }
   return out;
 }

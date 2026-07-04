@@ -161,6 +161,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isSquareStampedeFlag: (e.isSquareStampedeFlag ?? 0) as 0 | 1,
     isGoldenMimicFlag: (e.isGoldenMimicFlag ?? 0) as 0 | 1,
     isGoldenMimicYFlippedFlag: (e.isGoldenMimicYFlippedFlag ?? 0) as 0 | 1,
+    isGridSnakeEnemyFlag: (e.isGridSnakeEnemyFlag ?? 0) as 0 | 1,
+    gridSnakeLength: e.gridSnakeLength ?? 4,
   }));
 
   const transitions: EditorTransition[] = room.transitions.map(t => {

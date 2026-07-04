@@ -47,7 +47,7 @@ import { applyBeetleAI } from './clusters/beetleAi';
 import { applyBubbleAI, applyBubblePopForces } from './clusters/bubbleAi';
 import { applySquareStampedeAI } from './clusters/squareStampedeAi';
 import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
-import { applyGridBlockEnemyAI } from './clusters/gridBlockEnemyAi';
+import { applyGridBlockEnemyAI, applyGridSnakeEnemyAI } from './clusters/gridBlockEnemyAi';
 import { applyBeeSwarmAI } from './clusters/beeSwarmAi';
 import { applyWebSpiderAI } from './clusters/webSpiderAi';
 import { applyDustConstellationAI } from './clusters/dustConstellationAi';
@@ -125,6 +125,7 @@ export function tick(world: WorldState): void {
   // 0.25b. Grid Block Enemy AI — runs early so momentum combat (below) reads
   //         this tick's grid-aligned positions rather than last tick's.
   applyGridBlockEnemyAI(world);
+  applyGridSnakeEnemyAI(world);
 
   // 0.26. Momentum combat — must run AFTER grapple so it reads final-frame
   //        post-grapple horizontal velocity.  Phase 1 sets isHighVelocityAttacking;

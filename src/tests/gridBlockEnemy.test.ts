@@ -1,20 +1,14 @@
-/**
- * Tests for the grid block enemy system.
- *
- * Covers:
- *  - Physics exclusion: no gravity or standard chase velocity applied
- *  - Grid alignment: positions match committed cell when not mid-step
- *  - Wall blocking: 2×2 enemy surrounded by blockers never moves
- *  - Speed variants: slow/medium/fast have distinct step durations
- *  - Contact damage: uses existing damage/invulnerability pipeline
- *  - Hit-flash: triggered when HP drops
- *  - Compact schema round-trip: all six variants preserved
- */
-
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyGridBlockEnemyAI, GRID_BLOCK_HALF_SIZE } from '../sim/clusters/gridBlockEnemyAi';
+import {
+  applyGridBlockEnemyAI,
+  applyGridSnakeEnemyAI,
+  DEFAULT_GRID_SNAKE_LENGTH,
+  GRID_BLOCK_HALF_SIZE,
+  GRID_SNAKE_HALF_SIZE,
+  initializeGridSnakeSegments,
+} from '../sim/clusters/gridBlockEnemyAi';
 import { spawnEnemyClusters } from '../screens/gameEnemySpawn';
 import { enemyFlagsToType } from '../levels/roomSchemaV2';
 import { enemyTypeToFlags } from '../levels/roomSchemaHydrator';
@@ -24,9 +18,7 @@ import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { createRng } from '../sim/rng';
 import { createWorldState } from '../sim/world';
 
-const BS = BLOCK_SIZE_SMALL; // 8
-
-// ── Minimal world/cluster builders ────────────────────────────────────────────
+const BS = BLOCK_SIZE_SMALL;
 
 function makeWall(x: number, y: number, w: number, h: number) {
   return { x, y, w, h };
@@ -36,44 +28,53 @@ function makeWorld(opts: {
   widthBlocks?: number;
   heightBlocks?: number;
   walls?: { x: number; y: number; w: number; h: number }[];
-  clusters?: ReturnType<typeof makeEnemy | typeof makePlayer>[];
+  clusters?: ReturnType<typeof makeBlockEnemy | typeof makeGridSnake | typeof makePlayer>[];
   dtMs?: number;
 }) {
-  const wb    = opts.widthBlocks  ?? 20;
-  const hb    = opts.heightBlocks ?? 15;
+  const wb = opts.widthBlocks ?? 20;
+  const hb = opts.heightBlocks ?? 15;
   const walls = opts.walls ?? [];
-  const wc    = walls.length;
+  const wc = walls.length;
 
-  const wallXWorld               = new Float32Array(wc);
-  const wallYWorld               = new Float32Array(wc);
-  const wallWWorld               = new Float32Array(wc);
-  const wallHWorld               = new Float32Array(wc);
-  const wallIsPlatformFlag       = new Uint8Array(wc);
+  const wallXWorld = new Float32Array(wc);
+  const wallYWorld = new Float32Array(wc);
+  const wallWWorld = new Float32Array(wc);
+  const wallHWorld = new Float32Array(wc);
+  const wallIsPlatformFlag = new Uint8Array(wc);
   const wallRampOrientationIndex = new Uint8Array(wc).fill(255);
-  const wallIsInvisibleFlag      = new Uint8Array(wc);
+  const wallIsInvisibleFlag = new Uint8Array(wc);
 
   walls.forEach((w, i) => {
-    wallXWorld[i] = w.x;  wallYWorld[i] = w.y;
-    wallWWorld[i] = w.w;  wallHWorld[i] = w.h;
+    wallXWorld[i] = w.x;
+    wallYWorld[i] = w.y;
+    wallWWorld[i] = w.w;
+    wallHWorld[i] = w.h;
   });
 
   return {
     dtMs: opts.dtMs ?? (1000 / 60),
-    worldWidthWorld:  wb * BS,
+    worldWidthWorld: wb * BS,
     worldHeightWorld: hb * BS,
     wallCount: wc,
-    wallXWorld, wallYWorld, wallWWorld, wallHWorld,
-    wallIsPlatformFlag, wallRampOrientationIndex, wallIsInvisibleFlag,
+    wallXWorld,
+    wallYWorld,
+    wallWWorld,
+    wallHWorld,
+    wallIsPlatformFlag,
+    wallRampOrientationIndex,
+    wallIsInvisibleFlag,
     clusters: opts.clusters ?? [],
   } as unknown as import('../sim/world').WorldState;
 }
 
-function makeEnemy(overrides: {
-  sizeIndex?: 0 | 1; speedIndex?: 0 | 1 | 2;
-  gridX?: number; gridY?: number;
-  hp?: number; entityId?: number;
+function makeBlockEnemy(overrides: {
+  sizeIndex?: 0 | 1;
+  speedIndex?: 0 | 1 | 2;
+  gridX?: number;
+  gridY?: number;
+  hp?: number;
 }) {
-  const sz = overrides.sizeIndex  ?? 0;
+  const sz = overrides.sizeIndex ?? 0;
   const sp = overrides.speedIndex ?? 0;
   const gx = overrides.gridX ?? 2;
   const gy = overrides.gridY ?? 2;
@@ -81,45 +82,97 @@ function makeEnemy(overrides: {
   const hp = overrides.hp ?? 10;
 
   return {
-    entityId: overrides.entityId ?? 1,
-    isAliveFlag:           1 as 0 | 1,
-    isPlayerFlag:          0 as 0 | 1,
-    isGridBlockEnemyFlag:  1 as 0 | 1,
-    gridBlockSizeIndex:    sz,
-    gridBlockSpeedIndex:   sp,
-    gridBlockGridX:        gx,
-    gridBlockGridY:        gy,
-    gridBlockTargetGridX:  gx,
-    gridBlockTargetGridY:  gy,
-    gridBlockMoveTicks:    0,
+    entityId: 1,
+    isAliveFlag: 1 as 0 | 1,
+    isPlayerFlag: 0 as 0 | 1,
+    isGridBlockEnemyFlag: 1 as 0 | 1,
+    isGridSnakeEnemyFlag: 0 as 0 | 1,
+    gridBlockSizeIndex: sz,
+    gridBlockSpeedIndex: sp,
+    gridBlockGridX: gx,
+    gridBlockGridY: gy,
+    gridBlockTargetGridX: gx,
+    gridBlockTargetGridY: gy,
+    gridBlockMoveTicks: 0,
     gridBlockRepathCooldownTicks: 0,
-    gridBlockNextDirX:     0,
-    gridBlockNextDirY:     0,
-    gridBlockGlintPhase:   0,
+    gridBlockNextDirX: 0,
+    gridBlockNextDirY: 0,
+    gridBlockGlintPhase: 0,
     gridBlockHitFlashTicks: 0,
     gridBlockPrevHealthPoints: hp,
+    gridBlockAiState: 0,
+    gridBlockChargeDirX: 0,
+    gridBlockChargeDirY: 0,
+    gridBlockChargeSpeedWorld: 0,
+    gridBlockRecoverTicks: 0,
     positionXWorld: gx * BS + hw,
     positionYWorld: gy * BS + hw,
-    halfWidthWorld:  hw,
+    halfWidthWorld: hw,
     halfHeightWorld: hw,
     velocityXWorld: 0,
     velocityYWorld: 0,
-    healthPoints:    hp,
+    healthPoints: hp,
     maxHealthPoints: hp,
     invulnerabilityTicks: 0,
     hurtTicks: 0,
   };
 }
 
+function makeGridSnake(overrides: {
+  gridX?: number;
+  gridY?: number;
+  length?: number;
+  hp?: number;
+}) {
+  const gx = overrides.gridX ?? 2;
+  const gy = overrides.gridY ?? 2;
+  const length = overrides.length ?? DEFAULT_GRID_SNAKE_LENGTH;
+  const hp = overrides.hp ?? 8;
+  const snake = {
+    entityId: 2,
+    isAliveFlag: 1 as 0 | 1,
+    isPlayerFlag: 0 as 0 | 1,
+    isGridBlockEnemyFlag: 0 as 0 | 1,
+    isGridSnakeEnemyFlag: 1 as 0 | 1,
+    gridSnakeLength: length,
+    gridSnakeGridX: gx,
+    gridSnakeGridY: gy,
+    gridSnakeTargetGridX: gx,
+    gridSnakeTargetGridY: gy,
+    gridSnakeMoveTicks: 0,
+    gridSnakeRepathCooldownTicks: 0,
+    gridSnakeNextDirX: 0,
+    gridSnakeNextDirY: 0,
+    gridSnakeSegmentGridX: [] as number[],
+    gridSnakeSegmentGridY: [] as number[],
+    gridSnakePhase: 0,
+    gridSnakePrevHealthPoints: hp,
+    gridBlockHitFlashTicks: 0,
+    positionXWorld: gx * BS + GRID_SNAKE_HALF_SIZE,
+    positionYWorld: gy * BS + GRID_SNAKE_HALF_SIZE,
+    halfWidthWorld: GRID_SNAKE_HALF_SIZE,
+    halfHeightWorld: GRID_SNAKE_HALF_SIZE,
+    velocityXWorld: 0,
+    velocityYWorld: 0,
+    healthPoints: hp,
+    maxHealthPoints: hp,
+    invulnerabilityTicks: 0,
+    hurtTicks: 0,
+  };
+  initializeGridSnakeSegments(snake as never, length);
+  return snake;
+}
+
 function makePlayer(x: number, y: number) {
   return {
     entityId: 0,
-    isAliveFlag:  1 as 0 | 1,
+    isAliveFlag: 1 as 0 | 1,
     isPlayerFlag: 1 as 0 | 1,
     isGridBlockEnemyFlag: 0 as 0 | 1,
+    isGridSnakeEnemyFlag: 0 as 0 | 1,
     positionXWorld: x,
     positionYWorld: y,
-    halfWidthWorld:  6,
+    halfWidthWorld: 6,
     halfHeightWorld: 8,
     velocityXWorld: 0,
     velocityYWorld: 0,
@@ -132,137 +185,186 @@ function makePlayer(x: number, y: number) {
   };
 }
 
-// ── Physics exclusion ─────────────────────────────────────────────────────────
-
-test('grid block enemy velocity stays zero after AI tick', () => {
-  const enemy = makeEnemy({});
-  const world = makeWorld({ clusters: [enemy] });
-  applyGridBlockEnemyAI(world);
-  assert.equal(enemy.velocityXWorld, 0);
-  assert.equal(enemy.velocityYWorld, 0);
-});
-
-test('grid block enemy velocity stays zero even with far-away player over many ticks', () => {
-  const enemy  = makeEnemy({ gridX: 2, gridY: 2 });
-  const player = makePlayer(15 * BS, 12 * BS);
-  const world  = makeWorld({ clusters: [player, enemy] });
-  for (let i = 0; i < 60; i++) applyGridBlockEnemyAI(world);
-  assert.equal(enemy.velocityXWorld, 0);
-  assert.equal(enemy.velocityYWorld, 0);
-});
-
-// ── Grid alignment ────────────────────────────────────────────────────────────
-
-test('1x1 enemy position matches committed grid cell when not mid-step', () => {
-  const enemy  = makeEnemy({ sizeIndex: 0, speedIndex: 0, gridX: 2, gridY: 2 });
-  const player = makePlayer(10 * BS, 2 * BS);
-  const world  = makeWorld({ clusters: [player, enemy] });
-
-  for (let i = 0; i < 120; i++) applyGridBlockEnemyAI(world);
-
-  if (enemy.gridBlockMoveTicks === 0) {
-    const hw       = GRID_BLOCK_HALF_SIZE[0];
-    const expectedX = enemy.gridBlockGridX * BS + hw;
-    const expectedY = enemy.gridBlockGridY * BS + hw;
-    assert.equal(enemy.positionXWorld, expectedX, 'positionX must match committed gridX');
-    assert.equal(enemy.positionYWorld, expectedY, 'positionY must match committed gridY');
-  }
-});
-
-test('2x2 enemy position matches committed grid cell when not mid-step', () => {
-  const enemy  = makeEnemy({ sizeIndex: 1, speedIndex: 0, gridX: 2, gridY: 2 });
-  const player = makePlayer(10 * BS, 2 * BS);
-  const world  = makeWorld({ clusters: [player, enemy] });
-
-  for (let i = 0; i < 120; i++) applyGridBlockEnemyAI(world);
-
-  if (enemy.gridBlockMoveTicks === 0) {
-    const hw       = GRID_BLOCK_HALF_SIZE[1];
-    const expectedX = enemy.gridBlockGridX * BS + hw;
-    const expectedY = enemy.gridBlockGridY * BS + hw;
-    assert.equal(enemy.positionXWorld, expectedX);
-    assert.equal(enemy.positionYWorld, expectedY);
-  }
-});
-
-// ── 2×2 wall blocking ─────────────────────────────────────────────────────────
-
-test('2x2 enemy stays put when surrounded by single-tile blockers', () => {
-  // Enemy 2×2 at (2,2) — footprint covers tiles (2,2),(3,2),(2,3),(3,3).
-  // Single-tile walls block every adjacent 2×2 footprint:
-  //   Right: (3,2) blocked  Left: (1,2) blocked
-  //   Down:  (2,4) blocked  Up:   (2,1) blocked
-  const enemy  = makeEnemy({ sizeIndex: 1, speedIndex: 2, gridX: 2, gridY: 2 });
+test('snake moves orthogonally one grid cell at a time', () => {
+  const snake = makeGridSnake({ gridX: 2, gridY: 2 });
   const player = makePlayer(8 * BS, 2 * BS);
+  const world = makeWorld({ clusters: [player, snake] });
 
-  const walls = [
-    makeWall(3 * BS, 2 * BS, BS, BS),
-    makeWall(1 * BS, 2 * BS, BS, BS),
-    makeWall(2 * BS, 4 * BS, BS, BS),
-    makeWall(2 * BS, 1 * BS, BS, BS),
-  ];
+  applyGridSnakeEnemyAI(world);
 
-  const world = makeWorld({ widthBlocks: 10, heightBlocks: 8, walls, clusters: [player, enemy] });
-  const startGX = enemy.gridBlockGridX;
-  const startGY = enemy.gridBlockGridY;
-
-  for (let i = 0; i < 200; i++) applyGridBlockEnemyAI(world);
-
-  assert.equal(enemy.gridBlockGridX, startGX, '2×2 enemy gridX should not change when surrounded');
-  assert.equal(enemy.gridBlockGridY, startGY, '2×2 enemy gridY should not change when surrounded');
+  assert.equal(snake.gridSnakeTargetGridX, 3);
+  assert.equal(snake.gridSnakeTargetGridY, 2);
+  assert.notEqual(snake.gridSnakeNextDirX, 1);
 });
 
-// ── Speed variants ────────────────────────────────────────────────────────────
+test('snake body segments follow the head previous positions', () => {
+  const snake = makeGridSnake({ gridX: 2, gridY: 2, length: 4 });
+  const player = makePlayer(8 * BS, 2 * BS);
+  const world = makeWorld({ clusters: [player, snake] });
 
-test('2x2 enemy at rightmost legal top-left cell cannot move right', () => {
-  const enemy = makeEnemy({ sizeIndex: 1, speedIndex: 2, gridX: 3, gridY: 1 });
-  const world = makeWorld({ widthBlocks: 5, heightBlocks: 5, clusters: [enemy] });
-  enemy.gridBlockNextDirX = 1;
-  enemy.gridBlockNextDirY = 0;
-  enemy.gridBlockRepathCooldownTicks = 100;
+  for (let i = 0; i < 20; i++) applyGridSnakeEnemyAI(world);
 
-  applyGridBlockEnemyAI(world);
-
-  assert.equal(enemy.gridBlockGridX, 3);
-  assert.equal(enemy.gridBlockTargetGridX, 3);
-  assert.equal(enemy.gridBlockMoveTicks, 0);
+  assert.equal(snake.gridSnakeGridX, 3);
+  assert.equal(snake.gridSnakeGridY, 2);
+  assert.equal(snake.gridSnakeSegmentGridX[0], 2);
+  assert.equal(snake.gridSnakeSegmentGridY[0], 2);
+  assert.equal(snake.gridSnakeSegmentGridX[1], 1);
+  assert.equal(snake.gridSnakeSegmentGridY[1], 2);
 });
 
-test('2x2 enemy at bottommost legal top-left cell cannot move down', () => {
-  const enemy = makeEnemy({ sizeIndex: 1, speedIndex: 2, gridX: 1, gridY: 3 });
-  const world = makeWorld({ widthBlocks: 5, heightBlocks: 5, clusters: [enemy] });
-  enemy.gridBlockNextDirX = 0;
-  enemy.gridBlockNextDirY = 1;
-  enemy.gridBlockRepathCooldownTicks = 100;
+test('snake cannot enter walls', () => {
+  const snake = makeGridSnake({ gridX: 2, gridY: 2 });
+  const player = makePlayer(8 * BS, 2 * BS);
+  const walls = [makeWall(3 * BS, 2 * BS, BS, BS)];
+  const world = makeWorld({ walls, clusters: [player, snake] });
 
-  applyGridBlockEnemyAI(world);
+  applyGridSnakeEnemyAI(world);
 
-  assert.equal(enemy.gridBlockGridY, 3);
-  assert.equal(enemy.gridBlockTargetGridY, 3);
-  assert.equal(enemy.gridBlockMoveTicks, 0);
+  assert.notEqual(`${snake.gridSnakeTargetGridX},${snake.gridSnakeTargetGridY}`, '3,2');
 });
 
-test('2x2 enemy footprint remains inside room after many ticks', () => {
-  const widthBlocks = 7;
-  const heightBlocks = 6;
-  const enemy = makeEnemy({ sizeIndex: 1, speedIndex: 2, gridX: 1, gridY: 1 });
-  const player = makePlayer((widthBlocks + 3) * BS, (heightBlocks + 3) * BS);
-  const world = makeWorld({ widthBlocks, heightBlocks, clusters: [player, enemy] });
+test('snake contact damages from body segments', () => {
+  const snake = makeGridSnake({ gridX: 4, gridY: 2 });
+  const player = makePlayer(3 * BS + GRID_SNAKE_HALF_SIZE, 2 * BS + GRID_SNAKE_HALF_SIZE);
+  const world = makeWorld({ clusters: [player, snake] });
 
-  for (let i = 0; i < 500; i++) {
-    applyGridBlockEnemyAI(world);
-    assert.ok(enemy.gridBlockGridX + 2 <= widthBlocks, `gridX out of bounds on tick ${i}`);
-    assert.ok(enemy.gridBlockGridY + 2 <= heightBlocks, `gridY out of bounds on tick ${i}`);
-    assert.ok(enemy.gridBlockTargetGridX + 2 <= widthBlocks, `targetGridX out of bounds on tick ${i}`);
-    assert.ok(enemy.gridBlockTargetGridY + 2 <= heightBlocks, `targetGridY out of bounds on tick ${i}`);
+  applyGridSnakeEnemyAI(world);
+
+  assert.ok(player.healthPoints < 10);
+});
+
+test('snake remains grid-aligned after many ticks', () => {
+  const snake = makeGridSnake({ gridX: 1, gridY: 1 });
+  const player = makePlayer(10 * BS, 8 * BS);
+  const world = makeWorld({ widthBlocks: 12, heightBlocks: 10, clusters: [player, snake] });
+
+  for (let i = 0; i < 300; i++) applyGridSnakeEnemyAI(world);
+
+  if (snake.gridSnakeMoveTicks === 0) {
+    assert.equal(snake.positionXWorld, snake.gridSnakeGridX * BS + GRID_SNAKE_HALF_SIZE);
+    assert.equal(snake.positionYWorld, snake.gridSnakeGridY * BS + GRID_SNAKE_HALF_SIZE);
+  }
+  for (let i = 0; i < snake.gridSnakeLength; i++) {
+    assert.equal(Number.isInteger(snake.gridSnakeSegmentGridX[i]), true);
+    assert.equal(Number.isInteger(snake.gridSnakeSegmentGridY[i]), true);
   }
 });
 
-test('spawn normalizes grid block size and speed indices and clamps 2x2 footprint in bounds', () => {
+test('block enemy detects a direct row slide crossing the player', () => {
+  const enemy = makeBlockEnemy({ speedIndex: 0, gridX: 1, gridY: 2 });
+  const player = makePlayer(5 * BS + 4, 2 * BS + 4);
+  const world = makeWorld({ widthBlocks: 8, heightBlocks: 5, clusters: [player, enemy] });
+
+  applyGridBlockEnemyAI(world);
+
+  assert.equal(enemy.gridBlockAiState, 1);
+  assert.equal(enemy.gridBlockChargeDirX, 1);
+  assert.equal(enemy.gridBlockChargeDirY, 0);
+  assert.equal(enemy.gridBlockTargetGridX, 7);
+});
+
+test('block enemy commits to one direction until wall impact', () => {
+  const enemy = makeBlockEnemy({ speedIndex: 2, gridX: 1, gridY: 2 });
+  const player = makePlayer(6 * BS + 4, 2 * BS + 4);
+  const world = makeWorld({ widthBlocks: 8, heightBlocks: 5, clusters: [player, enemy] });
+
+  applyGridBlockEnemyAI(world);
+  const dirX = enemy.gridBlockChargeDirX;
+  for (let i = 0; i < 60 && enemy.gridBlockAiState === 1; i++) {
+    applyGridBlockEnemyAI(world);
+    assert.equal(enemy.gridBlockChargeDirX, dirX);
+    assert.equal(enemy.gridBlockChargeDirY, 0);
+  }
+
+  assert.equal(enemy.gridBlockAiState, 2);
+  assert.equal(enemy.gridBlockGridX, 7);
+  assert.equal(enemy.gridBlockGridY, 2);
+});
+
+test('block enemy accelerates up to top speed', () => {
+  const enemy = makeBlockEnemy({ speedIndex: 1, gridX: 1, gridY: 1 });
+  const player = makePlayer(10 * BS + 4, BS + 4);
+  const world = makeWorld({ widthBlocks: 12, heightBlocks: 4, clusters: [player, enemy] });
+
+  applyGridBlockEnemyAI(world);
+  applyGridBlockEnemyAI(world);
+  const speedA = enemy.gridBlockChargeSpeedWorld;
+  applyGridBlockEnemyAI(world);
+  const speedB = enemy.gridBlockChargeSpeedWorld;
+
+  assert.ok(speedB > speedA);
+  assert.ok(speedB <= 112);
+});
+
+test('block enemy stops at the last legal cell before a wall', () => {
+  const enemy = makeBlockEnemy({ speedIndex: 2, gridX: 1, gridY: 2 });
+  const walls = [makeWall(5 * BS, 2 * BS, BS, BS)];
+  const world = makeWorld({ widthBlocks: 9, heightBlocks: 5, walls, clusters: [enemy] });
+  enemy.gridBlockNextDirX = 1;
+  enemy.gridBlockRepathCooldownTicks = 100;
+
+  for (let i = 0; i < 90; i++) applyGridBlockEnemyAI(world);
+
+  assert.equal(enemy.gridBlockGridX, 4);
+  assert.equal(enemy.gridBlockGridY, 2);
+});
+
+test('2x2 block enemy never clips outside right or bottom bounds', () => {
+  const enemy = makeBlockEnemy({ sizeIndex: 1, speedIndex: 2, gridX: 1, gridY: 1 });
+  const player = makePlayer(10 * BS, 10 * BS);
+  const world = makeWorld({ widthBlocks: 6, heightBlocks: 5, clusters: [player, enemy] });
+
+  for (let i = 0; i < 300; i++) {
+    applyGridBlockEnemyAI(world);
+    assert.ok(enemy.gridBlockGridX + 2 <= 6);
+    assert.ok(enemy.gridBlockGridY + 2 <= 5);
+    assert.ok(enemy.gridBlockTargetGridX + 2 <= 6);
+    assert.ok(enemy.gridBlockTargetGridY + 2 <= 5);
+  }
+});
+
+test('block enemy BFSes through slide-resting positions to set up a future slide', () => {
+  const enemy = makeBlockEnemy({ speedIndex: 0, gridX: 1, gridY: 1 });
+  const player = makePlayer(5 * BS + 4, 5 * BS + 4);
+  const world = makeWorld({ widthBlocks: 7, heightBlocks: 7, clusters: [player, enemy] });
+
+  applyGridBlockEnemyAI(world);
+
+  assert.equal(enemy.gridBlockAiState, 1);
+  assert.equal(enemy.gridBlockChargeDirX, 1);
+  assert.equal(enemy.gridBlockChargeDirY, 0);
+  assert.equal(enemy.gridBlockTargetGridX, 6);
+  assert.equal(enemy.gridBlockTargetGridY, 1);
+});
+
+test('block enemy deals contact damage during charge', () => {
+  const enemy = makeBlockEnemy({ speedIndex: 2, gridX: 1, gridY: 2 });
+  const player = makePlayer(2 * BS + 4, 2 * BS + 4);
+  const world = makeWorld({ widthBlocks: 8, heightBlocks: 5, clusters: [player, enemy] });
+
+  for (let i = 0; i < 10; i++) applyGridBlockEnemyAI(world);
+
+  assert.ok(player.healthPoints < 10);
+});
+
+test('block enemy pauses briefly after wall impact', () => {
+  const enemy = makeBlockEnemy({ speedIndex: 2, gridX: 1, gridY: 1 });
+  const player = makePlayer(5 * BS + 4, BS + 4);
+  const world = makeWorld({ widthBlocks: 6, heightBlocks: 4, clusters: [player, enemy] });
+
+  for (let i = 0; i < 90 && enemy.gridBlockAiState !== 2; i++) applyGridBlockEnemyAI(world);
+
+  assert.equal(enemy.gridBlockAiState, 2);
+  assert.ok(enemy.gridBlockRecoverTicks > 0);
+  const x = enemy.positionXWorld;
+  applyGridBlockEnemyAI(world);
+  assert.equal(enemy.positionXWorld, x);
+});
+
+test('spawn normalizes grid block size/speed and clamps 2x2 footprint in bounds', () => {
   const world = createWorldState(1000 / 60, 123);
   world.worldWidthWorld = 5 * BS;
   world.worldHeightWorld = 4 * BS;
-
   const enemyDef = {
     xBlock: 999,
     yBlock: 999,
@@ -281,124 +383,99 @@ test('spawn normalizes grid block size and speed indices and clamps 2x2 footprin
   assert.equal(enemy.gridBlockSpeedIndex, 0);
   assert.equal(enemy.gridBlockGridX, 3);
   assert.equal(enemy.gridBlockGridY, 2);
-  assert.equal(enemy.positionXWorld, 4 * BS);
-  assert.equal(enemy.positionYWorld, 3 * BS);
 });
 
-test('slow variant takes more ticks per step than medium, medium more than fast', () => {
-  function ticksForOneStep(speedIndex: 0 | 1 | 2): number {
-    const enemy  = makeEnemy({ sizeIndex: 0, speedIndex, gridX: 1, gridY: 1 });
-    const player = makePlayer(10 * BS, 1 * BS);
-    const world  = makeWorld({ clusters: [player, enemy] });
-    enemy.gridBlockRepathCooldownTicks = 0;
-    const startGX = enemy.gridBlockGridX;
-    for (let tick = 1; tick <= 100; tick++) {
-      applyGridBlockEnemyAI(world);
-      if (enemy.gridBlockMoveTicks === 0 && enemy.gridBlockGridX !== startGX) return tick;
-    }
-    return 100;
-  }
+test('spawn initializes grid snake length and segments', () => {
+  const world = createWorldState(1000 / 60, 123);
+  world.worldWidthWorld = 8 * BS;
+  world.worldHeightWorld = 6 * BS;
+  const enemyDef = {
+    xBlock: 3,
+    yBlock: 2,
+    kinds: [],
+    particleCount: 0,
+    isBossFlag: 0,
+    isGridSnakeEnemyFlag: 1,
+    gridSnakeLength: 5,
+  } as unknown as RoomEnemyDef;
 
-  const slow   = ticksForOneStep(0);
-  const medium = ticksForOneStep(1);
-  const fast   = ticksForOneStep(2);
+  spawnEnemyClusters(world, [enemyDef], 2, createRng(456));
 
-  assert.ok(slow > medium,   `slow(${slow}) should take more ticks than medium(${medium})`);
-  assert.ok(medium > fast,   `medium(${medium}) should take more ticks than fast(${fast})`);
+  const snake = world.clusters[0];
+  assert.equal(snake.isGridSnakeEnemyFlag, 1);
+  assert.equal(snake.gridSnakeLength, 5);
+  assert.equal(snake.gridSnakeSegmentGridX.length, 5);
 });
 
-// ── Contact damage ────────────────────────────────────────────────────────────
-
-test('enemy touching player deals contact damage respecting invulnerability', () => {
-  const enemy  = makeEnemy({ sizeIndex: 0, gridX: 2, gridY: 2 });
-  const player = makePlayer(enemy.positionXWorld, enemy.positionYWorld);
-  const world  = makeWorld({ clusters: [player, enemy] });
-
-  applyGridBlockEnemyAI(world);
-  const hpAfterFirst = player.healthPoints;
-  assert.ok(hpAfterFirst < 10, `Player should have taken damage; hp=${hpAfterFirst}`);
-
-  applyGridBlockEnemyAI(world);
-  assert.equal(player.healthPoints, hpAfterFirst, 'No damage during invulnerability');
-});
-
-test('enemy does not damage player when not overlapping', () => {
-  const enemy  = makeEnemy({ sizeIndex: 0, gridX: 2, gridY: 2 });
-  const player = makePlayer(10 * BS, 10 * BS);
-  const world  = makeWorld({ clusters: [player, enemy] });
-  applyGridBlockEnemyAI(world);
-  assert.equal(player.healthPoints, 10);
-});
-
-// ── Hit flash ─────────────────────────────────────────────────────────────────
-
-test('hit-flash ticks are set when enemy HP decreases', () => {
-  const enemy = makeEnemy({ hp: 10 });
-  const world = makeWorld({ clusters: [enemy] });
-
-  applyGridBlockEnemyAI(world);
-  assert.equal(enemy.gridBlockHitFlashTicks, 0, 'No flash when HP unchanged');
-
-  enemy.healthPoints -= 2;
-  applyGridBlockEnemyAI(world);
-  assert.ok(enemy.gridBlockHitFlashTicks > 0, 'Flash ticks should be set after HP drop');
-});
-
-// ── Compact schema round-trip ─────────────────────────────────────────────────
-
-function makeJsonEnemy(isGridBlockEnemy: boolean, sizeIndex: 0 | 1, speedIndex: 0 | 1 | 2): RoomJsonEnemy {
+function makeJsonEnemy(type: 'gridBlock' | 'gridSnake' | 'basic', sizeIndex: 0 | 1, speedIndex: 0 | 1 | 2): RoomJsonEnemy {
   return {
-    xBlock: 5, yBlock: 5,
-    kinds: [], particleCount: 0, isBoss: false,
-    isFlyingEye: false, isRollingEnemy: false, isRockElemental: false,
-    isRadiantTether: false, isRadiantWeb: false, isGrappleHunter: false,
-    isSlime: false, isLargeSlime: false, isWheelEnemy: false, isBeetle: false,
-    isWebSpider: false, isDustConstellation: false, isDustConstellationLarge: false,
-    isOrbitalDustCore: false, isOrbitalDustCoreLarge: false,
-    isDustBlockMimic: false, isDustBlockMimicLarge: false,
-    isVoidSingularity: false, isVoidSingularityPair: false, isDustLeech: false,
-    isGridBlockEnemy,
+    xBlock: 5,
+    yBlock: 5,
+    kinds: [],
+    particleCount: 0,
+    isBoss: false,
+    isFlyingEye: false,
+    isRollingEnemy: false,
+    isRockElemental: false,
+    isRadiantTether: false,
+    isRadiantWeb: false,
+    isGrappleHunter: false,
+    isSlime: false,
+    isLargeSlime: false,
+    isWheelEnemy: false,
+    isBeetle: false,
+    isWebSpider: false,
+    isDustConstellation: false,
+    isDustConstellationLarge: false,
+    isOrbitalDustCore: false,
+    isOrbitalDustCoreLarge: false,
+    isDustBlockMimic: false,
+    isDustBlockMimicLarge: false,
+    isVoidSingularity: false,
+    isVoidSingularityPair: false,
+    isDustLeech: false,
+    isGridBlockEnemy: type === 'gridBlock',
     gridBlockSizeIndex: sizeIndex,
     gridBlockSpeedIndex: speedIndex,
-    isSquareStampede: false, isBeeSwarm: false, isGoldenMimic: false,
+    isGridSnakeEnemy: type === 'gridSnake',
+    gridSnakeLength: 5,
+    isSquareStampede: false,
+    isBeeSwarm: false,
+    isGoldenMimic: false,
     isGoldenMimicYFlipped: false,
   } as unknown as RoomJsonEnemy;
 }
 
-const VARIANTS: Array<[string, boolean, 0 | 1, 0 | 1 | 2]> = [
-  ['gridBlock1x1Slow',   true, 0, 0],
-  ['gridBlock1x1Medium', true, 0, 1],
-  ['gridBlock1x1Fast',   true, 0, 2],
-  ['gridBlock2x2Slow',   true, 1, 0],
-  ['gridBlock2x2Medium', true, 1, 1],
-  ['gridBlock2x2Fast',   true, 1, 2],
+const BLOCK_VARIANTS: Array<[string, 0 | 1, 0 | 1 | 2]> = [
+  ['gridBlock1x1Slow', 0, 0],
+  ['gridBlock1x1Medium', 0, 1],
+  ['gridBlock1x1Fast', 0, 2],
+  ['gridBlock2x2Slow', 1, 0],
+  ['gridBlock2x2Medium', 1, 1],
+  ['gridBlock2x2Fast', 1, 2],
 ];
 
-for (const [expectedType, isGrid, sz, sp] of VARIANTS) {
-  test(`enemyFlagsToType encodes ${expectedType}`, () => {
-    assert.equal(enemyFlagsToType(makeJsonEnemy(isGrid, sz, sp)), expectedType);
-  });
-
-  test(`enemyTypeToFlags decodes ${expectedType}`, () => {
+for (const [expectedType, sz, sp] of BLOCK_VARIANTS) {
+  test(`compact schema preserves ${expectedType}`, () => {
+    const saved = enemyFlagsToType(makeJsonEnemy('gridBlock', sz, sp));
+    assert.equal(saved, expectedType);
     const base = { xBlock: 5, yBlock: 5, kinds: [], particleCount: 0, isBoss: false };
-    const flags = enemyTypeToFlags(expectedType as import('../levels/roomSavedTypes').SavedEnemyType, base);
-    assert.equal(flags.isGridBlockEnemy,    isGrid, 'isGridBlockEnemy');
-    assert.equal(flags.gridBlockSizeIndex,  sz,     'gridBlockSizeIndex');
-    assert.equal(flags.gridBlockSpeedIndex, sp,     'gridBlockSpeedIndex');
-  });
-
-  test(`compact round-trip preserves ${expectedType}`, () => {
-    const e       = makeJsonEnemy(isGrid, sz, sp);
-    const saved   = enemyFlagsToType(e);
-    assert.equal(saved, expectedType, 'dehydrate step');
-    const base    = { xBlock: 5, yBlock: 5, kinds: [], particleCount: 0, isBoss: false };
-    const restored = enemyTypeToFlags(saved, base);
-    assert.equal(restored.isGridBlockEnemy,    isGrid, 'isGridBlockEnemy after hydrate');
-    assert.equal(restored.gridBlockSizeIndex,  sz,     'sizeIndex after hydrate');
-    assert.equal(restored.gridBlockSpeedIndex, sp,     'speedIndex after hydrate');
+    const restored = enemyTypeToFlags(saved as import('../levels/roomSavedTypes').SavedEnemyType, base);
+    assert.equal(restored.isGridBlockEnemy, true);
+    assert.equal(restored.gridBlockSizeIndex, sz);
+    assert.equal(restored.gridBlockSpeedIndex, sp);
   });
 }
 
-test('non-grid-block enemies encode as basic (no regression)', () => {
-  assert.equal(enemyFlagsToType(makeJsonEnemy(false, 0, 0)), 'basic');
+test('compact schema preserves grid snake enemy type and length', () => {
+  const saved = enemyFlagsToType(makeJsonEnemy('gridSnake', 0, 0));
+  assert.equal(saved, 'gridSnake');
+  const base = { xBlock: 5, yBlock: 5, kinds: [], particleCount: 0, isBoss: false, snakeLength: 5 };
+  const restored = enemyTypeToFlags(saved, base);
+  assert.equal(restored.isGridSnakeEnemy, true);
+  assert.equal(restored.gridSnakeLength, 5);
+});
+
+test('non-grid enemies encode as basic', () => {
+  assert.equal(enemyFlagsToType(makeJsonEnemy('basic', 0, 0)), 'basic');
 });

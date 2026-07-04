@@ -817,6 +817,25 @@ export interface ClusterState {
   gridBlockHitFlashTicks: number;
   /** Health recorded at end of previous tick — used to detect incoming damage. */
   gridBlockPrevHealthPoints: number;
+  gridBlockAiState: number;
+  gridBlockChargeDirX: number;
+  gridBlockChargeDirY: number;
+  gridBlockChargeSpeedWorld: number;
+  gridBlockRecoverTicks: number;
+  isGridSnakeEnemyFlag: 0 | 1;
+  gridSnakeLength: number;
+  gridSnakeGridX: number;
+  gridSnakeGridY: number;
+  gridSnakeTargetGridX: number;
+  gridSnakeTargetGridY: number;
+  gridSnakeMoveTicks: number;
+  gridSnakeRepathCooldownTicks: number;
+  gridSnakeNextDirX: number;
+  gridSnakeNextDirY: number;
+  gridSnakeSegmentGridX: number[];
+  gridSnakeSegmentGridY: number[];
+  gridSnakePhase: number;
+  gridSnakePrevHealthPoints: number;
 
   // ── Dust Leech ──────────────────────────────────────────────────────────────
   /** 1 if this cluster is a Dust Leech. */
@@ -1118,6 +1137,25 @@ export function createClusterState(
     gridBlockGlintPhase: 0,
     gridBlockHitFlashTicks: 0,
     gridBlockPrevHealthPoints: 0,
+    gridBlockAiState: 0,
+    gridBlockChargeDirX: 0,
+    gridBlockChargeDirY: 0,
+    gridBlockChargeSpeedWorld: 0,
+    gridBlockRecoverTicks: 0,
+    isGridSnakeEnemyFlag: 0,
+    gridSnakeLength: 0,
+    gridSnakeGridX: 0,
+    gridSnakeGridY: 0,
+    gridSnakeTargetGridX: 0,
+    gridSnakeTargetGridY: 0,
+    gridSnakeMoveTicks: 0,
+    gridSnakeRepathCooldownTicks: 0,
+    gridSnakeNextDirX: 0,
+    gridSnakeNextDirY: 0,
+    gridSnakeSegmentGridX: [],
+    gridSnakeSegmentGridY: [],
+    gridSnakePhase: 0,
+    gridSnakePrevHealthPoints: 0,
     isDustLeechFlag: 0,
     dustLeechState: 0,
     dustLeechStateTicks: 0,
