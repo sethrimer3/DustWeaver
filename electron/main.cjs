@@ -2,6 +2,18 @@ const { app, BrowserWindow, ipcMain, protocol, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const {
+  SAFE_ROOM_ID_RE,
+  SAFE_CAMPAIGN_ID_RE,
+  OFFICIAL_CAMPAIGN_ID,
+  PACKED_CAMPAIGN_FILENAME,
+  OFFICIAL_BACKUP_BASE_NAME,
+  ROOM_FILE_SUFFIX,
+  MAX_BACKUPS,
+  tryReadExistingManifest,
+  validateRoomCacheOnDisk,
+  exportCampaignToDisk,
+} = require("./campaignExport.cjs");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -17,22 +29,6 @@ protocol.registerSchemesAsPrivileged([
 
 // ── Safety constants ──────────────────────────────────────────────────────────
 
-/** Only the official campaign ID is allowed through the official write path. */
-const OFFICIAL_CAMPAIGN_ID = "DUSTWEAVER_CAMPAIGN";
-/** Packed campaign filename for the official campaign. */
-const PACKED_CAMPAIGN_FILENAME = "DustweaverCampaign.dwcampaign.json";
-/** Base name used for official campaign backup files (no extension). */
-const OFFICIAL_BACKUP_BASE_NAME = "DustweaverCampaign";
-/** Regex for safe room IDs — letters, digits, underscores, hyphens only. */
-const SAFE_ROOM_ID_RE = /^[a-zA-Z0-9_-]+$/;
-/** Regex for a safe campaign ID used in filesystem paths. */
-const SAFE_CAMPAIGN_ID_RE = /^[a-zA-Z0-9_-]+$/;
-/** Version of the room cache manifest format written by this code. */
-const ROOM_CACHE_VERSION = 1;
-/** Suffix used for individual room cache files. */
-const ROOM_FILE_SUFFIX = "_room.json";
-/** Maximum number of rolling backups to keep per campaign. */
-const MAX_BACKUPS = 10;
 const ELECTRON_APP_ORIGIN = "dustweaver://app";
 const ELECTRON_DEV_SERVER_URL =
   process.env.DUSTWEAVER_ELECTRON_DEV_URL ||
@@ -98,45 +94,7 @@ function resolveAppIconPath() {
   return path.resolve(app.getAppPath(), "ASSETS", "icon", ELECTRON_APP_ICON_FILENAME);
 }
 
-// ── Atomic file write helpers ─────────────────────────────────────────────────
-
-/**
- * Returns an ISO 8601 timestamp string that is safe to embed in a filename.
- * Colons are replaced with hyphens so the result is valid on Windows/macOS.
- * Example: "2026-05-21T03-44-12-123Z"
- *
- * @param {Date} date - The date to format.
- */
-function safeTimestampForFilename(date) {
-  return date.toISOString().replace(/:/g, "-");
-}
-
-/**
- * Writes `text` to `filePath` atomically:
- *   1. Write to `filePath + '.tmp'` in the same directory.
- *   2. Rename the tmp file over the target path.
- *
- * On Windows, `fs.renameSync` can fail when the target already exists.
- * We handle this by deleting the existing target and retrying the rename.
- *
- * Cleans up the tmp file on any error and re-throws.
- */
-function writeTextAtomic(filePath, text) {
-  const tmpPath = filePath + ".tmp";
-  try {
-    fs.writeFileSync(tmpPath, text, "utf8");
-    try {
-      fs.renameSync(tmpPath, filePath);
-    } catch {
-      // Windows: target file may already exist — delete it and retry.
-      try { fs.unlinkSync(filePath); } catch { /* target didn't exist — fine */ }
-      fs.renameSync(tmpPath, filePath);
-    }
-  } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch { /* ignore cleanup error */ }
-    throw err;
-  }
-}
+// ── Static asset serving helpers ──────────────────────────────────────────────
 
 function getContentTypeForPath(filePath) {
   const extension = path.extname(filePath).toLowerCase();
@@ -230,225 +188,6 @@ function registerElectronAppProtocol() {
   });
 }
 
-/**
- * Serialises `value` to pretty-printed JSON and writes it atomically.
- * See `writeTextAtomic` for the atomic-rename strategy.
- */
-function writeJsonAtomic(filePath, value) {
-  writeTextAtomic(filePath, JSON.stringify(value, null, 2));
-}
-
-// ── Rolling backup helpers ────────────────────────────────────────────────────
-
-/**
- * Creates a timestamped backup of `packedPath` in `backupsDir`, then prunes
- * old backups so at most `maxBackups` remain.
- *
- * Backup filename pattern: `<backupBaseName>_<timestamp>.dwcampaign.json`
- * Example: `DustweaverCampaign_2026-05-21T03-44-12-123Z.dwcampaign.json`
- *
- * Only creates a backup if `packedPath` already exists and is readable.
- * Logs a warning and returns (without throwing) if backup creation fails so
- * the calling export can still proceed.
- */
-function ensureRollingBackup(packedPath, backupsDir, backupBaseName, maxBackups) {
-  // Only back up if the packed file currently exists.
-  let existingText;
-  try {
-    existingText = fs.readFileSync(packedPath, "utf8");
-  } catch {
-    return; // No existing file — nothing to back up.
-  }
-
-  // Ensure the BACKUPS directory exists.
-  try {
-    fs.mkdirSync(backupsDir, { recursive: true });
-  } catch (err) {
-    console.warn(`[backup] Could not create backups directory "${backupsDir}":`, err);
-    return;
-  }
-
-  const timestamp = safeTimestampForFilename(new Date());
-  const backupFilename = `${backupBaseName}_${timestamp}.dwcampaign.json`;
-  const backupPath = path.join(backupsDir, backupFilename);
-
-  try {
-    fs.writeFileSync(backupPath, existingText, "utf8");
-    console.log(`[backup] Created backup: ${backupFilename}`);
-  } catch (err) {
-    console.warn(`[backup] Could not write backup "${backupFilename}":`, err);
-    return;
-  }
-
-  // Prune excess backups.
-  pruneBackups(backupsDir, backupBaseName, maxBackups);
-}
-
-/**
- * Keeps only the newest `maxBackups` backup files in `backupsDir`.
- * Identifies backups by the pattern `<backupBaseName>_*.dwcampaign.json`.
- * Files are sorted lexicographically (ISO timestamps sort correctly as strings).
- */
-function pruneBackups(backupsDir, backupBaseName, maxBackups) {
-  let files;
-  try {
-    files = fs.readdirSync(backupsDir);
-  } catch {
-    return; // Directory doesn't exist or can't be read — nothing to prune.
-  }
-
-  const prefix = `${backupBaseName}_`;
-  const suffix = ".dwcampaign.json";
-  const backupFiles = files
-    .filter(f => f.startsWith(prefix) && f.endsWith(suffix))
-    .sort(); // ISO timestamps sort lexicographically → oldest first
-
-  const toDelete = backupFiles.slice(0, Math.max(0, backupFiles.length - maxBackups));
-  for (const filename of toDelete) {
-    try {
-      fs.unlinkSync(path.join(backupsDir, filename));
-      console.log(`[backup] Pruned old backup: ${filename}`);
-    } catch (err) {
-      console.warn(`[backup] Could not prune backup "${filename}":`, err);
-    }
-  }
-}
-
-/**
- * Returns a deterministic JSON serialisation of `value` with sorted object
- * keys.  Arrays preserve their order.  Produces the same string for the same
- * data structure regardless of key insertion order.
- */
-/**
- * Deterministic JSON stringify with sorted object keys.
- *
- * NOTE: This is intentionally duplicated from `src/utils/deterministicHash.ts`
- * because main.cjs runs in Node.js (CommonJS) and cannot import the TypeScript
- * source directly.  Both implementations must produce identical output for the
- * same input so hashes stored in manifest.json remain portable across contexts.
- * Keep the two implementations in sync if the algorithm ever changes.
- */
-function deterministicStringify(value) {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return "[" + value.map(deterministicStringify).join(",") + "]";
-  }
-  const keys = Object.keys(value).sort();
-  const parts = [];
-  for (const k of keys) {
-    const v = value[k];
-    if (v === undefined) continue;
-    parts.push(JSON.stringify(k) + ":" + deterministicStringify(v));
-  }
-  return "{" + parts.join(",") + "}";
-}
-
-/**
- * Computes a 16-character hex content hash (first 64 bits of SHA-256) of the
- * deterministic JSON serialisation of `value`.
- *
- * This is intentionally truncated (not the full 256-bit digest) because the
- * hash is only used for cache invalidation — not cryptographic security.
- * 64 bits is sufficient to detect accidental staleness with negligible
- * collision probability for campaign-sized data.
- *
- * Volatile fields (e.g. `lastEditedIso`, `exportedAt`) must be excluded
- * before passing to this function so the hash is stable across re-exports
- * that did not change any game data.
- *
- * NOTE: The renderer-side equivalent is `computeContentHash` in
- * `src/levels/roomFileLoader.ts`, which uses the Web Crypto API (SubtleCrypto)
- * to compute the same SHA-256 hash.  Both must produce identical hashes for
- * the same input so that manifest validation works across processes.
- * If the algorithm changes here, update roomFileLoader.ts to match.
- */
-function computeContentHash(value) {
-  const text = deterministicStringify(value);
-  return crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 16);
-}
-
-/**
- * Computes a stable campaign content hash from a SavedCampaignV1 payload.
- * Excludes volatile fields so the hash only changes when game content changes.
- */
-function computeCampaignHash(campaign) {
-  const stable = {
-    v: campaign.v,
-    kind: campaign.kind,
-    campaign: campaign.campaign,
-    worldMap: campaign.worldMap,
-    rooms: campaign.rooms,
-    // Intentionally exclude: campaign.editor (lastEditedIso) and
-    // campaign.metadata (lastEditedAt) — those are volatile timestamps.
-  };
-  return computeContentHash(stable);
-}
-
-/**
- * Attempts to read and parse the existing room cache manifest from `roomsDir`.
- * Returns the parsed manifest object on success, or null if it does not exist
- * or cannot be parsed.
- */
-function tryReadExistingManifest(roomsDir) {
-  const manifestPath = path.join(roomsDir, "manifest.json");
-  try {
-    const raw = fs.readFileSync(manifestPath, "utf8");
-    const parsed = JSON.parse(raw);
-    // Accept both the new object format and the legacy array format.
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Builds the manifest adjacency index from an array of SavedRoomV2 room objects.
- *
- * Each room's `transitions` array is inspected for `.to` target room IDs.
- * Only room IDs present in `knownRoomIds` appear as both keys and targets in
- * the result so the scheduler never tries to load rooms not in the manifest.
- * Targets are deduplicated per room.
- *
- * @param {Array}         rooms        - Array of SavedRoomV2 room objects from the campaign.
- * @param {Set<string>}   knownRoomIds - Set of room IDs present in manifest.rooms.
- * @returns {Object} adjacency map: { [roomId]: { roomId, targets: string[] } }
- */
-function buildManifestAdjacency(rooms, knownRoomIds) {
-  const adjacency = {};
-  for (const room of rooms) {
-    if (typeof room !== "object" || room === null) continue;
-    const roomId = room.id;
-    if (typeof roomId !== "string" || !knownRoomIds.has(roomId)) continue;
-
-    const transitions = room.transitions;
-    if (!Array.isArray(transitions)) continue;
-
-    const seen = new Set();
-    const targets = [];
-    for (const t of transitions) {
-      if (typeof t !== "object" || t === null) continue;
-      const to = t.to;
-      if (typeof to !== "string" || to.length === 0) continue;
-      // Only include targets that are known rooms in the manifest.
-      if (!knownRoomIds.has(to)) continue;
-      if (seen.has(to)) continue;
-      seen.add(to);
-      targets.push(to);
-    }
-
-    if (targets.length > 0) {
-      adjacency[roomId] = { roomId, targets };
-    }
-  }
-  return adjacency;
-}
-
-
 // ── IPC handler: dw:save-official-campaign (legacy) ──────────────────────────
 
 /**
@@ -521,108 +260,27 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
       roomIds.push(id);
     }
 
-    // ── Ensure directories exist ──────────────────────────────────────────
+    // ── Delegate to the shared write routine (fails hard on any room or
+    // manifest write error — see exportCampaignToDisk in campaignExport.cjs) ──
     const campaignDir = resolveCampaignDir();
-    const roomsDir = path.join(campaignDir, "ROOMS");
-    const backupsDir = path.join(campaignDir, "BACKUPS");
-    try {
-      fs.mkdirSync(roomsDir, { recursive: true });
-    } catch (dirErr) {
-      const msg = dirErr instanceof Error ? dirErr.message : String(dirErr);
-      return { ok: false, error: `Failed to create campaign directory "${roomsDir}": ${msg}` };
-    }
-
-    // ── Rolling backup of the existing packed campaign file ───────────────
-    // The backup is created BEFORE overwriting the packed file.
-    // Only done if the packed file already exists and is readable.
-    const packedPath = path.join(campaignDir, PACKED_CAMPAIGN_FILENAME);
-    ensureRollingBackup(packedPath, backupsDir, OFFICIAL_BACKUP_BASE_NAME, MAX_BACKUPS);
-
-    // ── Write packed campaign file (atomic) ───────────────────────────────
-    try {
-      writeJsonAtomic(packedPath, campaign);
-    } catch (writeErr) {
-      const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
-      return { ok: false, error: `Failed to write packed campaign file: ${msg}` };
-    }
-
-    // ── Write individual room files and build enhanced manifest ───────────
-    const nowIso = new Date().toISOString();
-    const campaignHash = computeCampaignHash(campaign);
-    const existingManifest = tryReadExistingManifest(roomsDir);
-    const existingRooms = (existingManifest && typeof existingManifest.rooms === "object")
-      ? existingManifest.rooms
-      : {};
-
-    const manifestRooms = {};
-    for (let i = 0; i < rooms.length; i++) {
-      const room = rooms[i];
-      const roomFilename = `${room.id}${ROOM_FILE_SUFFIX}`;
-      const roomPath = path.join(roomsDir, roomFilename);
-      const roomHash = computeContentHash(room);
-
-      const prev = existingRooms[room.id];
-      const isUnchanged = prev && typeof prev.hash === 'string' && prev.hash === roomHash;
-      if (!isUnchanged) {
-        try {
-          writeJsonAtomic(roomPath, room);
-        } catch (roomErr) {
-          console.warn(`[dw:save-official-campaign] Failed to write room "${room.id}":`, roomErr);
-        }
-      }
-
-      manifestRooms[room.id] = {
-        roomId: room.id,
-        file: roomFilename,
-        hash: roomHash,
-        updatedAt: isUnchanged ? (prev.updatedAt || nowIso) : nowIso,
-      };
-    }
-
-    // ── Write enhanced manifest (atomic) ──────────────────────────────────
-    const knownRoomIds = new Set(Object.keys(manifestRooms));
-    const manifest = {
+    const result = exportCampaignToDisk({
+      campaign,
+      campaignMeta,
       campaignId: campaignMeta.id,
-      campaignName: campaignMeta.title || campaignMeta.id,
-      campaignHash,
-      campaignVersion: (campaign.metadata && campaign.metadata.version) || 0,
-      campaignSchemaVersion: campaign.v,
-      roomCacheVersion: ROOM_CACHE_VERSION,
-      exportedAt: nowIso,
-      rooms: manifestRooms,
-      adjacency: buildManifestAdjacency(rooms, knownRoomIds),
-    };
-    const manifestPath = path.join(roomsDir, "manifest.json");
-    try {
-      writeJsonAtomic(manifestPath, manifest);
-    } catch (manifestErr) {
-      console.warn("[dw:save-official-campaign] Failed to write manifest atomically:", manifestErr);
-    }
-
-    // ── Remove stale room files no longer in the manifest ─────────────────
-    let removedCount = 0;
-    try {
-      const existing = fs.readdirSync(roomsDir);
-      for (const filename of existing) {
-        if (!filename.endsWith(ROOM_FILE_SUFFIX)) continue;
-        const candidateId = filename.slice(0, -ROOM_FILE_SUFFIX.length);
-        if (!SAFE_ROOM_ID_RE.test(candidateId)) continue;
-        if (roomIdFirstIndex.has(candidateId)) continue;
-        try {
-          fs.unlinkSync(path.join(roomsDir, filename));
-          removedCount += 1;
-          console.log(`[dw:save-official-campaign] Removed stale room file: ${filename}`);
-        } catch (unlinkErr) {
-          console.warn(`[dw:save-official-campaign] Could not remove stale file "${filename}":`, unlinkErr);
-        }
-      }
-    } catch (readdirErr) {
-      console.warn("[dw:save-official-campaign] Could not read ROOMS directory for stale cleanup:", readdirErr);
+      rooms,
+      roomIdFirstIndex,
+      isOfficialCampaign: true,
+      campaignDir,
+    });
+    if (!result.ok) {
+      console.error("[dw:save-official-campaign] Export failed:", result.error);
+      return { ok: false, error: result.error };
     }
 
     console.log(
-      `[dw:save-official-campaign] Wrote ${rooms.length} room(s) + packed campaign to ${campaignDir}` +
-      (removedCount > 0 ? ` (removed ${removedCount} stale room file(s))` : "")
+      `[dw:save-official-campaign] Wrote ${result.writtenRooms} room(s) (${result.skippedRooms} unchanged) ` +
+      `+ packed campaign to ${campaignDir}` +
+      (result.removedCount > 0 ? ` (removed ${result.removedCount} stale room file(s))` : "")
     );
     return { ok: true, campaignDir };
   } catch (err) {
