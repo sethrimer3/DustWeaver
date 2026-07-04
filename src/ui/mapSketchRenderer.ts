@@ -361,6 +361,249 @@ function buildRoomContour(room: RoomDef): ContourData {
   return result;
 }
 
+// ── Open-air contour cache (new renderer, separate from legacy cache) ────────
+
+/** Per-room contour cache for the open-air renderer. */
+const openAirContourCache = new Map<string, ContourData>();
+
+/** Clears the open-air contour cache so all rooms are re-contoured on next draw. */
+export function clearOpenAirContourCache(): void {
+  openAirContourCache.clear();
+}
+
+/** Invalidates the cached open-air contour for a single room (e.g. after an editor change). */
+export function invalidateRoomOpenAirContour(roomId: string): void {
+  openAirContourCache.delete(roomId);
+}
+
+/**
+ * Builds the set of boundary tile cells that count as "open air" outside the
+ * room, because a room transition opens through them.
+ *
+ * Each entry is `direction:index` where `index` is the row (left/right) or
+ * column (up/down) of the boundary tile whose *outside* neighbor should be
+ * treated as air rather than as an implicit solid tile.
+ */
+function buildTransitionOpenMask(room: RoomDef): Set<string> {
+  const mask = new Set<string>();
+  for (const t of room.transitions) {
+    const isHoriz = t.direction === 'left' || t.direction === 'right';
+    const xB = t.xBlock !== undefined ? t.xBlock : (isHoriz ? 0 : t.positionBlock);
+    const yB = t.yBlock !== undefined ? t.yBlock : (isHoriz ? t.positionBlock : 0);
+    const span = t.openingSizeBlocks;
+    for (let d = 0; d < span; d++) {
+      if (t.direction === 'left') {
+        mask.add(`left:${yB + d}`);
+      } else if (t.direction === 'right') {
+        mask.add(`right:${yB + d}`);
+      } else if (t.direction === 'up') {
+        mask.add(`up:${xB + d}`);
+      } else if (t.direction === 'down') {
+        mask.add(`down:${xB + d}`);
+      }
+    }
+  }
+  return mask;
+}
+
+/**
+ * Builds and caches silhouette contours for a room using the "open air"
+ * algorithm: a line is sketched wherever a solid tile borders open air.
+ *
+ * Differences from the legacy `buildRoomContour`:
+ *  - Dark ambient-light blockers still count as solid (secrets stay hidden —
+ *    "open air" explicitly excludes darkness tiles).
+ *  - The room boundary itself counts as an (implicit) solid tile, so a solid
+ *    tile flush against the room edge does NOT get a boundary line — UNLESS
+ *    that exact boundary cell is where a room transition opens, in which case
+ *    the outside is real open air and the line IS drawn, showing the doorway
+ *    as an actual gap in the sketched outline.
+ */
+function buildRoomContourOpenAir(room: RoomDef): ContourData {
+  const cached = openAirContourCache.get(room.id);
+  if (cached !== undefined) return cached;
+
+  const w = room.widthBlocks;
+  const h = room.heightBlocks;
+
+  // ── Step 1: Rasterize walls into a Uint8Array solid grid ─────────────────
+  const solid = new Uint8Array(w * h);
+  for (const wall of room.walls) {
+    if (wall.isInvisibleFlag === 1) continue;
+    const x0 = Math.max(0, wall.xBlock);
+    const y0 = Math.max(0, wall.yBlock);
+    const x1 = Math.min(w, wall.xBlock + wall.wBlock);
+    const y1 = Math.min(h, wall.yBlock + wall.hBlock);
+    for (let gy = y0; gy < y1; gy++) {
+      for (let gx = x0; gx < x1; gx++) {
+        solid[gy * w + gx] = 1;
+      }
+    }
+  }
+
+  // Dark ambient light blockers count as solid — darkness tiles are never
+  // treated as open air, so secrets stay concealed on the sketch map.
+  for (const blocker of (room.ambientLightBlockers ?? [])) {
+    if (!blocker.isDark) continue;
+    const bx = blocker.xBlock;
+    const by = blocker.yBlock;
+    if (bx >= 0 && bx < w && by >= 0 && by < h) {
+      solid[by * w + bx] = 1;
+    }
+  }
+
+  // ── Step 2: Build directed edge adjacency graph ───────────────────────────
+  const transitionOpenMask = buildTransitionOpenMask(room);
+  const vertexStride = w + 1;
+  const adjacency = new Map<number, number[]>();
+
+  function addEdge(x0: number, y0: number, x1: number, y1: number): void {
+    const from = y0 * vertexStride + x0;
+    const to   = y1 * vertexStride + x1;
+    const arr = adjacency.get(from);
+    if (arr !== undefined) arr.push(to);
+    else adjacency.set(from, [to]);
+  }
+
+  for (let gy = 0; gy < h; gy++) {
+    for (let gx = 0; gx < w; gx++) {
+      if (solid[gy * w + gx] !== 1) continue;
+
+      // Top neighbor
+      if (gy > 0) {
+        if (solid[(gy - 1) * w + gx] === 0) addEdge(gx, gy, gx + 1, gy);
+      } else if (transitionOpenMask.has(`up:${gx}`)) {
+        addEdge(gx, gy, gx + 1, gy);
+      }
+
+      // Right neighbor
+      if (gx < w - 1) {
+        if (solid[gy * w + (gx + 1)] === 0) addEdge(gx + 1, gy, gx + 1, gy + 1);
+      } else if (transitionOpenMask.has(`right:${gy}`)) {
+        addEdge(gx + 1, gy, gx + 1, gy + 1);
+      }
+
+      // Bottom neighbor
+      if (gy < h - 1) {
+        if (solid[(gy + 1) * w + gx] === 0) addEdge(gx + 1, gy + 1, gx, gy + 1);
+      } else if (transitionOpenMask.has(`down:${gx}`)) {
+        addEdge(gx + 1, gy + 1, gx, gy + 1);
+      }
+
+      // Left neighbor
+      if (gx > 0) {
+        if (solid[gy * w + (gx - 1)] === 0) addEdge(gx, gy + 1, gx, gy);
+      } else if (transitionOpenMask.has(`left:${gy}`)) {
+        addEdge(gx, gy + 1, gx, gy);
+      }
+    }
+  }
+
+  // ── Step 3: Trace contours (identical to buildRoomContour) ────────────────
+  interface RawContour { pts: number[]; isClosed: boolean; }
+  const rawContours: RawContour[] = [];
+  const edgeCursor = new Map<number, number>();
+
+  for (const [startVertex, outEdges] of adjacency) {
+    let startCursor = edgeCursor.get(startVertex) ?? 0;
+    while (startCursor < outEdges.length) {
+      const points: number[] = [];
+      let cur = startVertex;
+      let isClosed = false;
+
+      for (;;) {
+        const outs = adjacency.get(cur);
+        if (outs === undefined) break;
+        const cursor = edgeCursor.get(cur) ?? 0;
+        if (cursor >= outs.length) break;
+        edgeCursor.set(cur, cursor + 1);
+        const next = outs[cursor];
+        const vx = cur % vertexStride;
+        const vy = Math.floor(cur / vertexStride);
+        points.push(vx, vy);
+        cur = next;
+        if (cur === startVertex) { isClosed = true; break; }
+      }
+
+      if (points.length >= 6) {
+        rawContours.push({ pts: points, isClosed });
+      }
+
+      startCursor = edgeCursor.get(startVertex) ?? 0;
+    }
+  }
+
+  if (rawContours.length === 0) {
+    const result: ContourData = { contours: [], isClosedFlags: [] };
+    openAirContourCache.set(room.id, result);
+    return result;
+  }
+
+  // ── Step 4: Simplify — remove collinear intermediate vertices ─────────────
+  const simplifiedContours: Float32Array[] = rawContours.map(({ pts }) => {
+    const n = pts.length / 2;
+    if (n < 4) return new Float32Array(pts);
+    const kept: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const pi = (i + n - 1) % n;
+      const ni = (i + 1) % n;
+      const px = pts[pi * 2],  py = pts[pi * 2 + 1];
+      const cx = pts[i  * 2],  cy = pts[i  * 2 + 1];
+      const nx = pts[ni * 2],  ny = pts[ni * 2 + 1];
+      if (!((px === cx && cx === nx) || (py === cy && cy === ny))) {
+        kept.push(cx, cy);
+      }
+    }
+    return new Float32Array(kept.length >= 6 ? kept : []);
+  });
+
+  const result: ContourData = {
+    contours: simplifiedContours,
+    isClosedFlags: rawContours.map(({ isClosed }) => isClosed),
+  };
+  openAirContourCache.set(room.id, result);
+  return result;
+}
+
+/**
+ * Draws the sketch-mode silhouette of one room using the open-air algorithm.
+ * Same visual treatment (fill + layered jittered strokes) as `drawRoomSketch`,
+ * but the underlying contours correctly show room transitions as gaps.
+ */
+export function drawRoomSketchOpenAir(
+  ctx: CanvasRenderingContext2D,
+  room: RoomDef,
+  mapXBlock: number,
+  mapYBlock: number,
+  centerX: number,
+  centerY: number,
+  cellSizePx: number,
+  alpha: number,
+  isCurrentRoom: boolean,
+): void {
+  const data = buildRoomContourOpenAir(room);
+  if (data.contours.length === 0) return;
+
+  const roomHash  = hashRoomId(room.id);
+  const strokeRgb = isCurrentRoom ? STROKE_RGB_CURRENT : STROKE_RGB_OTHER;
+  const fillRgb   = isCurrentRoom ? FILL_RGB_CURRENT   : FILL_RGB_OTHER;
+
+  for (let contourIndex = 0; contourIndex < data.contours.length; contourIndex++) {
+    const pts = data.contours[contourIndex];
+    const ptCount = pts.length / 2;
+    if (ptCount < 3) continue;
+
+    const contourSeed = (roomHash ^ Math.imul(contourIndex + 1, 0x9e3779b9)) | 0;
+
+    drawContour(
+      ctx, pts, ptCount, contourSeed,
+      mapXBlock, mapYBlock, centerX, centerY,
+      cellSizePx, alpha, strokeRgb, fillRgb,
+      data.isClosedFlags[contourIndex],
+    );
+  }
+}
+
 // ── Smoothstep helper ─────────────────────────────────────────────────────────
 
 /**

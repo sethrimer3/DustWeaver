@@ -35,7 +35,7 @@ import {
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
   DUST_SWARM_COLOR, DUST_SWARM_SELECTED,
   CAMPAIGN_SPAWN_COLOR, CAMPAIGN_SPAWN_SELECTED,
-  drawMergedWallOutline, drawRampTriangle,
+  drawMergedWallOutline, drawWallTileGrid, drawRampTriangle,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   getEnemyFootprintBlocks, drawTransitionZone,
 } from './editorRendererHelpers';
@@ -101,6 +101,10 @@ export function drawEditorWalls(
       drawMergedWallOutline(ctx, occupied, w.xBlock, w.yBlock, w.wBlock, w.hBlock, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
     }
   }
+
+  // Subtle per-tile grid on top of the fills/outlines so individual tile
+  // boundaries stay visible inside merged blocks (a decorating aid).
+  drawWallTileGrid(ctx, occupied, offsetXPx, offsetYPx, zoom);
 }
 
 // ============================================================================

@@ -166,6 +166,49 @@ export function drawBlockRect(
   ctx.strokeRect(x, y, w, h);
 }
 
+/** Subtle color for the per-tile grid drawn over merged wall blocks. */
+export const WALL_TILE_GRID_COLOR = 'rgba(140,210,255,0.25)';
+
+/**
+ * Draws a thin, subtle 1×1 grid line over every occupied cell (interior and
+ * boundary edges alike) so players/level designers can still see individual
+ * tile boundaries inside a merged block — purely a visual aid, drawn once for
+ * the whole occupied set so shared edges between adjacent cells aren't
+ * double-drawn.
+ */
+export function drawWallTileGrid(
+  ctx: CanvasRenderingContext2D,
+  occupied: Set<string>,
+  ox: number, oy: number, zoom: number,
+): void {
+  const tile = BLOCK_SIZE_SMALL * zoom;
+  ctx.strokeStyle = WALL_TILE_GRID_COLOR;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (const cellKey of occupied) {
+    const [gx, gy] = cellKey.split(',').map(Number);
+    const cellX = gx * tile + ox;
+    const cellY = gy * tile + oy;
+    // Only draw top/left edges of each cell — the bottom/right edges are the
+    // top/left edges of the next cell over, so this covers every edge once.
+    ctx.moveTo(cellX, cellY);
+    ctx.lineTo(cellX + tile, cellY);
+    ctx.moveTo(cellX, cellY);
+    ctx.lineTo(cellX, cellY + tile);
+    // Draw the final row/column's trailing edges explicitly since there's no
+    // "next cell" to contribute them.
+    if (!occupied.has(`${gx + 1},${gy}`)) {
+      ctx.moveTo(cellX + tile, cellY);
+      ctx.lineTo(cellX + tile, cellY + tile);
+    }
+    if (!occupied.has(`${gx},${gy + 1}`)) {
+      ctx.moveTo(cellX, cellY + tile);
+      ctx.lineTo(cellX + tile, cellY + tile);
+    }
+  }
+  ctx.stroke();
+}
+
 /**
  * Draws a wall's fill plus an outline that traces only the boundary between
  * this wall's footprint and unoccupied space — shared edges with adjacent
