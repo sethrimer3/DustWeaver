@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "magma",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/magma",
+  "atlasImage": "magma.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "magmaBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (1).png"
+    },
+    "magmaBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (2).png"
+    },
+    "magmaBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (3).png"
+    },
+    "magmaBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (4).png"
+    },
+    "magmaBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (5).png"
+    },
+    "magmaBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (6).png"
+    },
+    "magmaBlock (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (7).png"
+    },
+    "magmaBlock (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (8).png"
+    },
+    "magmaBlock (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/magma/magmaBlock (9).png"
+    }
+  }
+}

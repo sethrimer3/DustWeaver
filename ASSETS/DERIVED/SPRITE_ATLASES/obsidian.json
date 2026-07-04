@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "obsidian",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/obsidian",
+  "atlasImage": "obsidian.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "obsidianBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (1).png"
+    },
+    "obsidianBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (2).png"
+    },
+    "obsidianBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (3).png"
+    },
+    "obsidianBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (4).png"
+    },
+    "obsidianBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (5).png"
+    },
+    "obsidianBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (6).png"
+    },
+    "obsidianBlock (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (7).png"
+    },
+    "obsidianBlock (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (8).png"
+    },
+    "obsidianBlock (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/obsidian/obsidianBlock (9).png"
+    }
+  }
+}

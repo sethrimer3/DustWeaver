@@ -1124,6 +1124,10 @@ function createWindow() {
     console.error("FAILED TO LOAD:", errorCode, errorDescription, validatedURL);
   });
 
+  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    console.log(`[renderer] ${message} (${sourceId}:${line})`);
+  });
+
   if (IS_ELECTRON_DEV_SERVER) {
     win.loadURL(ELECTRON_DEV_SERVER_URL);
   } else {

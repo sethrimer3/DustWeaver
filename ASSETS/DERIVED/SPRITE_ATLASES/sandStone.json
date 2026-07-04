@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "sandStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/sandStone",
+  "atlasImage": "sandStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "sandStoneBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (1).png"
+    },
+    "sandStoneBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (2).png"
+    },
+    "sandStoneBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (3).png"
+    },
+    "sandStoneBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (4).png"
+    },
+    "sandStoneBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (5).png"
+    },
+    "sandStoneBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (6).png"
+    },
+    "sandStoneBlock (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (7).png"
+    },
+    "sandStoneBlock (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (8).png"
+    },
+    "sandStoneBlock (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/sandStone/sandStoneBlock (9).png"
+    }
+  }
+}

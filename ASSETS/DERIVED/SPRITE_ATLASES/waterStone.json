@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "waterStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/waterStone",
+  "atlasImage": "waterStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "waterStoneBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (1).png"
+    },
+    "waterStoneBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (2).png"
+    },
+    "waterStoneBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (3).png"
+    },
+    "waterStoneBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (4).png"
+    },
+    "waterStoneBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (5).png"
+    },
+    "waterStoneBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (6).png"
+    },
+    "waterStoneBlock (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (7).png"
+    },
+    "waterStoneBlock (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (8).png"
+    },
+    "waterStoneBlock (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/waterStone/waterStoneBlock (9).png"
+    }
+  }
+}

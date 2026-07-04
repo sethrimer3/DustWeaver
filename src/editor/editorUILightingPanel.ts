@@ -223,6 +223,84 @@ export function createEditorLightingPanel(
   voidEdgeSelect.addEventListener('click', (e) => e.stopPropagation());
   lightingDiv.appendChild(voidEdgeSelect);
 
+  // ── Sunrays (procedural god-rays) ──────────────────────────────────────────
+  const sunraysLabel = document.createElement('div');
+  sunraysLabel.textContent = 'Sunrays';
+  sunraysLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 10px; margin-bottom: 4px; border-top: 1px solid ${PANEL_BORDER}; padding-top: 6px;`;
+  lightingDiv.appendChild(sunraysLabel);
+
+  const sunraysEnabledRow = document.createElement('label');
+  sunraysEnabledRow.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(200,255,200,0.7); cursor: pointer;';
+  const sunraysEnabledCheckbox = document.createElement('input');
+  sunraysEnabledCheckbox.type = 'checkbox';
+  sunraysEnabledRow.appendChild(sunraysEnabledCheckbox);
+  const sunraysEnabledText = document.createElement('span');
+  sunraysEnabledText.textContent = 'Enable Sunrays';
+  sunraysEnabledRow.appendChild(sunraysEnabledText);
+  sunraysEnabledCheckbox.addEventListener('change', () => {
+    getCallbacks()?.onSunraysEnabledChange(sunraysEnabledCheckbox.checked);
+  });
+  sunraysEnabledRow.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(sunraysEnabledRow);
+
+  const sunraysStyleLabel = document.createElement('div');
+  sunraysStyleLabel.textContent = 'Ray Style';
+  sunraysStyleLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  lightingDiv.appendChild(sunraysStyleLabel);
+  const sunraysStyleSelect = document.createElement('select');
+  sunraysStyleSelect.style.cssText = `
+    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
+    border-radius: 2px;
+  `;
+  for (const opt of [{ id: 'hard', label: 'Hard (crisp)' }, { id: 'soft', label: 'Soft (blurred)' }]) {
+    const o = document.createElement('option');
+    o.value = opt.id;
+    o.textContent = opt.label;
+    sunraysStyleSelect.appendChild(o);
+  }
+  sunraysStyleSelect.addEventListener('change', () => {
+    getCallbacks()?.onSunraysStyleChange(sunraysStyleSelect.value as 'hard' | 'soft');
+  });
+  sunraysStyleSelect.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(sunraysStyleSelect);
+
+  const sunraysSourceLabel = document.createElement('div');
+  sunraysSourceLabel.textContent = 'Source: Top of Screen';
+  sunraysSourceLabel.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.45); margin-top: 4px;`;
+  lightingDiv.appendChild(sunraysSourceLabel);
+
+  const { row: sunraysAngleRow, slider: sunraysAngleSlider, valueLabel: sunraysAngleValLabel } =
+    makeSliderRow('Ray Angle (deg)', 20, 160, 1, 100,
+      (v) => getCallbacks()?.onSunraysAngleChange(v));
+  sunraysAngleValLabel.textContent = '100';
+  lightingDiv.appendChild(sunraysAngleRow);
+
+  const { row: sunraysIntensityRow, slider: sunraysIntensitySlider, valueLabel: sunraysIntensityValLabel } =
+    makeSliderRow('Sunrays Intensity', 0, 1, 0.01, 0.5,
+      (v) => getCallbacks()?.onSunraysIntensityChange(v));
+  lightingDiv.appendChild(sunraysIntensityRow);
+
+  const { row: sunraysRayCountRow, slider: sunraysRayCountSlider, valueLabel: sunraysRayCountValLabel } =
+    makeSliderRow('Ray Count', 1, 16, 1, 6,
+      (v) => getCallbacks()?.onSunraysRayCountChange(v));
+  sunraysRayCountValLabel.textContent = '6';
+  lightingDiv.appendChild(sunraysRayCountRow);
+
+  const sunraysAnimRow = document.createElement('label');
+  sunraysAnimRow.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(200,255,200,0.7); cursor: pointer; margin-top: 6px;';
+  const sunraysAnimCheckbox = document.createElement('input');
+  sunraysAnimCheckbox.type = 'checkbox';
+  sunraysAnimRow.appendChild(sunraysAnimCheckbox);
+  const sunraysAnimText = document.createElement('span');
+  sunraysAnimText.textContent = 'Animate (sway/pulse)';
+  sunraysAnimRow.appendChild(sunraysAnimText);
+  sunraysAnimCheckbox.addEventListener('change', () => {
+    getCallbacks()?.onSunraysAnimationChange(sunraysAnimCheckbox.checked);
+  });
+  sunraysAnimRow.addEventListener('click', (e) => e.stopPropagation());
+  lightingDiv.appendChild(sunraysAnimRow);
+
   // ── Sync helpers ──────────────────────────────────────────────────────────
 
   function syncOnRebuild(state: EditorState, currentLighting: string, paletteDiv: HTMLElement): void {
@@ -238,6 +316,16 @@ export function createEditorLightingPanel(
     falloffValLabel.textContent  = (state.roomData?.falloffPower  ?? 1.4).toFixed(2);
     seamBlendSelect.value = state.roomData?.blockSeamBlending ?? 'off';
     voidEdgeSelect.value = state.roomData?.voidEdgeStyle ?? 'off';
+    const sunrays = state.roomData?.sunrays;
+    sunraysEnabledCheckbox.checked = sunrays?.enabled ?? false;
+    sunraysStyleSelect.value = sunrays?.style ?? 'soft';
+    sunraysAngleSlider.value = String(sunrays?.angleDeg ?? 100);
+    sunraysAngleValLabel.textContent = String(sunrays?.angleDeg ?? 100);
+    sunraysIntensitySlider.value = String(sunrays?.intensity ?? 0.5);
+    sunraysIntensityValLabel.textContent = (sunrays?.intensity ?? 0.5).toFixed(2);
+    sunraysRayCountSlider.value = String(sunrays?.rayCount ?? 6);
+    sunraysRayCountValLabel.textContent = String(sunrays?.rayCount ?? 6);
+    sunraysAnimCheckbox.checked = sunrays?.animationEnabled ?? true;
     _lastRenderedLightingEffect = currentLighting;
     paletteDiv.appendChild(lightingDiv);
   }
@@ -273,6 +361,19 @@ export function createEditorLightingPanel(
     }
     if (document.activeElement !== voidEdgeSelect) {
       voidEdgeSelect.value = state.roomData?.voidEdgeStyle ?? 'off';
+    }
+    const sunrays = state.roomData?.sunrays;
+    if (document.activeElement !== sunraysEnabledCheckbox) {
+      sunraysEnabledCheckbox.checked = sunrays?.enabled ?? false;
+    }
+    if (document.activeElement !== sunraysStyleSelect) {
+      sunraysStyleSelect.value = sunrays?.style ?? 'soft';
+    }
+    syncSlider(sunraysAngleSlider, sunraysAngleValLabel, sunrays?.angleDeg, 100);
+    syncSlider(sunraysIntensitySlider, sunraysIntensityValLabel, sunrays?.intensity, 0.5);
+    syncSlider(sunraysRayCountSlider, sunraysRayCountValLabel, sunrays?.rayCount, 6);
+    if (document.activeElement !== sunraysAnimCheckbox) {
+      sunraysAnimCheckbox.checked = sunrays?.animationEnabled ?? true;
     }
   }
 

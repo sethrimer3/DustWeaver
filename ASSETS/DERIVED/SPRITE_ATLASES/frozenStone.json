@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "frozenStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/frozenStone",
+  "atlasImage": "frozenStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "frozenStone (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (1).png"
+    },
+    "frozenStone (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (2).png"
+    },
+    "frozenStone (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (3).png"
+    },
+    "frozenStone (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (4).png"
+    },
+    "frozenStone (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (5).png"
+    },
+    "frozenStone (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (6).png"
+    },
+    "frozenStone (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (7).png"
+    },
+    "frozenStone (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (8).png"
+    },
+    "frozenStone (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/frozenStone/frozenStone (9).png"
+    }
+  }
+}

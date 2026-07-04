@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "whiteMarble",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/whiteMarble",
+  "atlasImage": "whiteMarble.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "whiteMarbleBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (1).png"
+    },
+    "whiteMarbleBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (2).png"
+    },
+    "whiteMarbleBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (3).png"
+    },
+    "whiteMarbleBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (4).png"
+    },
+    "whiteMarbleBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (5).png"
+    },
+    "whiteMarbleBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (6).png"
+    },
+    "whiteMarbleBlock (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (7).png"
+    },
+    "whiteMarbleBlock (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (8).png"
+    },
+    "whiteMarbleBlock (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/whiteMarble/whiteMarbleBlock (9).png"
+    }
+  }
+}

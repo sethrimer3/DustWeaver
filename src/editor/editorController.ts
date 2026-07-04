@@ -499,6 +499,40 @@ export function createEditorController(
           if (state.roomData) state.roomData.solidLightSoftness = value;
           applyEdits('metadata');
         },
+        onSunraysEnabledChange: (enabled: boolean) => {
+          if (!state.roomData) return;
+          const prev = state.roomData.sunrays;
+          state.roomData.sunrays = {
+            enabled,
+            style: prev?.style ?? 'soft',
+            source: 'top',
+            angleDeg: prev?.angleDeg ?? 100,
+            intensity: prev?.intensity,
+            rayCount: prev?.rayCount,
+            animationEnabled: prev?.animationEnabled,
+          };
+          applyEdits('metadata');
+        },
+        onSunraysStyleChange: (style: 'hard' | 'soft') => {
+          if (state.roomData?.sunrays) state.roomData.sunrays.style = style;
+          applyEdits('metadata');
+        },
+        onSunraysAngleChange: (angleDeg: number) => {
+          if (state.roomData?.sunrays) state.roomData.sunrays.angleDeg = angleDeg;
+          applyEdits('metadata');
+        },
+        onSunraysIntensityChange: (value: number) => {
+          if (state.roomData?.sunrays) state.roomData.sunrays.intensity = value;
+          applyEdits('metadata');
+        },
+        onSunraysRayCountChange: (value: number) => {
+          if (state.roomData?.sunrays) state.roomData.sunrays.rayCount = value;
+          applyEdits('metadata');
+        },
+        onSunraysAnimationChange: (enabled: boolean) => {
+          if (state.roomData?.sunrays) state.roomData.sunrays.animationEnabled = enabled;
+          applyEdits('metadata');
+        },
         onSeamBlendingChange: (mode) => {
           if (state.roomData) state.roomData.blockSeamBlending = mode;
           // Live-preview: update the active renderer immediately so the

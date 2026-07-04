@@ -12,9 +12,10 @@
  *  - Sketch outlines are generated from exposed solid-tile boundaries:
  *    for every solid tile, each neighbor that is empty OR out-of-bounds
  *    contributes an edge segment.  Out-of-bounds neighbors are treated as
- *    air so that the outer room boundary is fully visible on the map.
- *    These segments are chained into closed polylines, so interior islands,
- *    platforms, and holes all produce their own outline.
+ *    air so that the full room silhouette (including outer walls) is traced.
+ *    These segments are chained into closed polylines, so the outer room
+ *    boundary, interior islands, platforms, and holes all produce their own
+ *    outline.
  *  - Multiple contours per room are fully supported; the single-contour
  *    scanline-envelope approach has been replaced.
  *  - All jitter is deterministic: derived from the room ID hash, contour
@@ -113,10 +114,10 @@ function deterministicNoise(seed: number, pointIndex: number, channel: number): 
  * Immutable contours for a single room, cached after first build.
  *
  * Each contour is one polyline tracing the boundary between solid and
- * empty tiles.  Most contours are closed loops (interior platforms, islands,
- * holes); contours that touch the room boundary may be open chains because
- * boundary-facing edges are deliberately not emitted (to avoid showing the
- * outer room rectangle).
+ * empty tiles.  Since boundary-facing edges are emitted (out-of-bounds
+ * treated as air), all contours in well-formed rooms are closed loops.
+ * Open chains can occur only in degenerate room data; `isClosedFlags[i]`
+ * marks which case applies so drawContour handles them safely.
  *
  * Open contours MUST NOT be drawn with ctx.closePath() — doing so would
  * connect the last point back to the first with a spurious diagonal line.
@@ -133,9 +134,8 @@ interface ContourData {
   /**
    * Parallel array: `isClosedFlags[i]` is true when contour `i` forms a
    * closed loop (last traced edge returned to the start vertex).
-   * It is false for open chains produced when boundary-facing edges are
-   * suppressed.  Open chains must be drawn as open strokes — never filled,
-   * never closed with closePath.
+   * For rooms with solid boundary tiles this is true for all contours.
+   * Open chains must be drawn as open strokes — never filled, never closed.
    */
   readonly isClosedFlags: readonly boolean[];
 }
@@ -159,13 +159,11 @@ export function invalidateRoomContour(roomId: string): void {
  * Algorithm:
  * 1. Rasterize all non-invisible walls into a boolean solid grid.
  * 2. For each solid tile, inspect its four axis-aligned neighbors.
- *    If a neighbor is strictly inside the room and empty, emit the
- *    corresponding tile edge as a directed segment.  Boundary-facing edges
- *    (where the neighbor would be out of bounds) are deliberately suppressed
- *    so the outer room rectangle is never traced as a cave-wall sketch stroke.
- *    Interior islands, platforms, and holes each produce their own outline.
- *    Contours that touch the boundary become open chains (isClosed=false),
- *    which are drawn as open strokes without fill or closePath.
+ *    If a neighbor is out of bounds (treated as air) or is an in-bounds
+ *    empty tile, emit the corresponding tile edge as a directed segment.
+ *    This produces outlines around all exposed wall boundaries — including
+ *    the outer room perimeter, interior platforms, islands, and holes —
+ *    giving the complete room silhouette on the world map.
  * 3. Chain directed segments into closed polylines via a directed adjacency
  *    graph.  Multiple disjoint contours per room are fully supported.
  * 4. Remove collinear intermediate vertices (consecutive points sharing the
@@ -215,18 +213,13 @@ function buildRoomContour(room: RoomDef): ContourData {
   //
   // Vertices are tile corners at integer positions (0..w) × (0..h).
   // For each solid tile (gx, gy), inspect each of the 4 neighbors:
-  //   - If the neighbor is strictly inside the room and empty, emit a directed
-  //     edge along that tile face.
-  //   - Boundary-facing edges (where the neighbor would be out of bounds) are
-  //     deliberately suppressed.  This prevents the outer room rectangle from
-  //     being traced as a cave-wall sketch stroke on the world map.
-  //     Contours that reach the room boundary become open chains (isClosed=false)
-  //     and are drawn as open strokes without fill — the tracer and drawContour
-  //     both handle this correctly.
-  //
-  // This generates edges for every exposed solid-tile boundary that lies
-  // strictly inside the room, so interior islands, platforms, and holes all
-  // get their own sketch outline while the outer bounds remain clean.
+  //   - If the neighbor is strictly inside the room and empty, emit the
+  //     corresponding tile edge as a directed segment.  Boundary-facing edges
+  //     (where the neighbor would be out of bounds) are deliberately suppressed
+  //     so the outer room rectangle is never traced as a cave-wall sketch stroke.
+  //     Interior islands, platforms, and holes each produce their own outline.
+  //     Contours that touch the boundary become open chains (isClosed=false),
+  //     which are drawn as open strokes without fill or closePath.
   //
   // Edge direction convention (Y-down screen space, solid tile on left):
   //   Top    (gx,gy)   → (gx+1, gy)
@@ -274,7 +267,8 @@ function buildRoomContour(room: RoomDef): ContourData {
   // Array.shift() to keep each edge access O(1).
   //
   // `isClosed` is tracked per-contour: a chain that returns to its startVertex
-  // is closed; one that hits a dead-end (boundary-suppressed edge) is open.
+  // is closed; one that hits a dead-end is open (rare in well-formed rooms
+  // now that boundary edges are emitted).
   // Open chains must NOT be drawn with closePath — see drawContour.
   interface RawContour { pts: number[]; isClosed: boolean; }
   const rawContours: RawContour[] = [];
@@ -335,15 +329,21 @@ function buildRoomContour(room: RoomDef): ContourData {
   // same original raw contour.  Degenerate contours that collapse below
   // 3 vertices are stored as empty Float32Arrays; the ptCount < 3 guard
   // in drawRoomSketch skips them cleanly without disturbing array indices.
-  const simplifiedContours: Float32Array[] = rawContours.map(({ pts }) => {
+  const simplifiedContours: Float32Array[] = rawContours.map(({ pts, isClosed }) => {
     const n = pts.length / 2;
     if (n < 4) return new Float32Array(pts);
     const kept: number[] = [];
     for (let i = 0; i < n; i++) {
+      const cx = pts[i  * 2],  cy = pts[i  * 2 + 1];
+      // Endpoints of open chains have no real neighbors at the wrap-around
+      // position, so always keep them to avoid collapsing the chain.
+      if (!isClosed && (i === 0 || i === n - 1)) {
+        kept.push(cx, cy);
+        continue;
+      }
       const pi = (i + n - 1) % n;
       const ni = (i + 1) % n;
       const px = pts[pi * 2],  py = pts[pi * 2 + 1];
-      const cx = pts[i  * 2],  cy = pts[i  * 2 + 1];
       const nx = pts[ni * 2],  ny = pts[ni * 2 + 1];
       // Retain vertex only when it is NOT collinear with both neighbors.
       if (!((px === cx && cx === nx) || (py === cy && cy === ny))) {

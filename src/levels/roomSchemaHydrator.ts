@@ -333,6 +333,9 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.sunbeams && saved.sunbeams.length > 0) {
     json.sunbeams = saved.sunbeams.map(s => ({ ...s }));
   }
+  if (saved.sunrays !== undefined) {
+    json.sunrays = { ...saved.sunrays };
+  }
   if (saved.fallingBlocks && saved.fallingBlocks.length > 0) {
     json.fallingBlocks = saved.fallingBlocks.map(([x, y, code]) => ({
       xBlock: x,

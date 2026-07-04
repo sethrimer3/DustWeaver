@@ -49,11 +49,16 @@ export function renderEditorBackdrop(
   renderProfiler: RenderProfiler,
   isDebugMode: boolean,
 ): void {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
+
   bloomSystem.beginFrame();
 
   if (webglRenderer.isAvailable) {
     webglRenderer.render(snapshot, offsetXPx, offsetYPx, zoom);
-    ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
   } else {
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
@@ -97,7 +102,11 @@ export function renderEditorBackdrop(
 
   editorController.render(ctx, offsetXPx, offsetYPx, zoom, virtualWidthPx, virtualHeightPx);
 
+  deviceCtx.setTransform(1, 0, 0, 1, 0, 0);
+  deviceCtx.globalAlpha = 1;
+  deviceCtx.globalCompositeOperation = 'source-over';
   deviceCtx.imageSmoothingEnabled = false;
+  deviceCtx.clearRect(0, 0, canvas.width, canvas.height);
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   if (webglRenderer.isAvailable) {
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);

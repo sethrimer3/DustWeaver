@@ -26,8 +26,12 @@ import type { RoomDef } from '../../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 import {
   isFolderBasedTheme,
+  getFolderThemeSpriteKey,
   getTheme1x1SpriteShaded,
 } from './folderBlockThemes';
+import { drawAtlasSprite } from '../atlases/drawAtlasSprite';
+import { isSpriteAtlasEnabled } from '../atlases/spriteAtlasConfig';
+import { getAtlasSprite, recordSpriteAtlasDisabledBypass, recordSpriteAtlasLegacyDraw } from '../atlases/spriteAtlasLoader';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
 import { RoomChunkCache, CHUNK_SIZE_BLOCKS, PrewarmChunkResult } from './chunkRenderCache';
 import {
@@ -49,6 +53,13 @@ const _bgChunkCache = new RoomChunkCache(true); // isBgLayer=true → FP.recordB
 
 /** The room ID used to detect room changes. */
 let _bgCacheRoomRef: string | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('dw:sprite-atlas-mode-changed', () => {
+    invalidateBackgroundBlockCache();
+    clearAllRenderSnapshots();
+  });
+}
 
 /**
  * Invalidates all background-block chunk canvases.
@@ -110,6 +121,7 @@ export function setBgChunkCacheMemoryKB(kb: number): void {
 import { RoomChunkCache as _RCC } from './chunkRenderCache'; // local alias to avoid shadowing
 import {
   computeRenderStateKey,
+  clearAllRenderSnapshots,
   getSnapshot,
   getOrCreateSnapshot,
   clearSnapshotBgData,
@@ -182,20 +194,30 @@ function _makeBgBuildChunkFn(
       const sy = Math.round(row * cellW + chunkOffY);
 
       if (isFolderBasedTheme(themeId)) {
-        const sprite = getTheme1x1SpriteShaded(
-          themeId,
-          col,
-          row,
-          seed,
-          OPEN_AIR_ALL_SIDES,
-          CELL_SIZE_WORLD,
-        );
-        if (sprite !== null) {
-          chunkCtx.drawImage(sprite, sx, sy, sw, sw);
+        const folderThemeId = themeId as string;
+        const atlasSprite = isSpriteAtlasEnabled()
+          ? getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, seed))
+          : null;
+        if (atlasSprite === null && !isSpriteAtlasEnabled()) recordSpriteAtlasDisabledBypass();
+        if (atlasSprite !== null) {
+          drawAtlasSprite(chunkCtx, atlasSprite, sx, sy, sw, sw);
         } else {
-          chunkCtx.fillStyle = FALLBACK_FILL;
-          chunkCtx.fillRect(sx, sy, sw, sw);
-          hadFallbacks = true;
+          const sprite = getTheme1x1SpriteShaded(
+            folderThemeId,
+            col,
+            row,
+            seed,
+            OPEN_AIR_ALL_SIDES,
+            CELL_SIZE_WORLD,
+          );
+          if (sprite !== null) {
+            recordSpriteAtlasLegacyDraw();
+            chunkCtx.drawImage(sprite, sx, sy, sw, sw);
+          } else {
+            chunkCtx.fillStyle = FALLBACK_FILL;
+            chunkCtx.fillRect(sx, sy, sw, sw);
+            hadFallbacks = true;
+          }
         }
       } else {
         chunkCtx.fillStyle = FALLBACK_FILL;

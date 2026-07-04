@@ -573,6 +573,10 @@ export class RoomChunkCache {
           // ── Build chunk ─────────────────────────────────────────────────
           const chunkCtx = chunk.canvas.getContext('2d');
           if (chunkCtx !== null) {
+            chunkCtx.setTransform(1, 0, 0, 1, 0, 0);
+            chunkCtx.globalAlpha = 1;
+            chunkCtx.globalCompositeOperation = 'source-over';
+            chunkCtx.imageSmoothingEnabled = false;
             chunkCtx.clearRect(0, 0, chunk.canvas.width, chunk.canvas.height);
 
             const colMin = cx * CHUNK_SIZE_BLOCKS;
@@ -596,6 +600,15 @@ export class RoomChunkCache {
               colMax,
               rowMax,
             );
+            if (import.meta.env.DEV) {
+              const sample = chunkCtx.getImageData(0, 0, Math.min(4, chunk.canvas.width), Math.min(4, chunk.canvas.height)).data;
+              let nonZero = 0;
+              for (let i = 0; i < sample.length; i++) if (sample[i] !== 0) nonZero++;
+              console.log(
+                `[dwdebug-chunkbuild] key=${key} isBg=${this._isBgLayer} w=${chunk.canvas.width} h=${chunk.canvas.height} ` +
+                `hadFallbacks=${chunk.hadFallbacksFlag} nonZeroSamplePx=${nonZero}/${sample.length}`,
+              );
+            }
             if (import.meta.env.DEV) {
               const chunkMs = performance.now() - _ct0;
               rebuildTotalMs += chunkMs;

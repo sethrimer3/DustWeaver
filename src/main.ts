@@ -13,10 +13,13 @@ import {
 import { fetchOfficialPackedCampaign } from './levels/packedCampaignLoader';
 import { getCampaignStartRoomId } from './levels/campaignSchema';
 import { createExportProgressModal } from './editor/editorExportProgressModal';
+import { installSpriteAtlasDiagnostics } from './render/atlases/spriteAtlasLoader';
 import type { ExportProgressModal } from './editor/editorExportProgressModal';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui-root') as HTMLDivElement;
+
+installSpriteAtlasDiagnostics();
 
 if (!canvas || !uiRoot) {
   throw new Error('Missing required DOM elements: game-canvas or ui-root');

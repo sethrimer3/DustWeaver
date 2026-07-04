@@ -38,6 +38,87 @@ import {
   renderWebSpider,
   renderWebSpiderFadingWebs,
 } from './enemyRenderers';
+function drawPlayerOutlineMask(
+  ctx: CanvasRenderingContext2D,
+  outlineMask: HTMLCanvasElement,
+  xPx: number,
+  yPx: number,
+  widthPx: number,
+  heightPx: number,
+  color: string,
+): void {
+  ctx.save();
+  try {
+    ctx.drawImage(outlineMask, xPx, yPx, widthPx, heightPx);
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.fillStyle = color;
+    ctx.fillRect(xPx, yPx, widthPx, heightPx);
+  } finally {
+    ctx.restore();
+  }
+}
+
+function drawMomentumGoldenTrail(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  spriteCenterY: number,
+  velocityXWorld: number,
+  velocityYWorld: number,
+  scalePx: number,
+): void {
+  const speedWorldPerSec = Math.hypot(velocityXWorld, velocityYWorld);
+  if (speedWorldPerSec <= 0) return;
+
+  const dirX = velocityXWorld / speedWorldPerSec;
+  const dirY = velocityYWorld / speedWorldPerSec;
+  const perpX = -dirY;
+  const perpY = dirX;
+  const spriteScalePx = Math.max(1.0, Math.min(scalePx, 3.0));
+  const anchorX = screenX - dirX * 2.0 * spriteScalePx;
+  const anchorY = spriteCenterY - dirY * 2.0 * spriteScalePx;
+  const tailX = screenX - dirX * 28.0 * spriteScalePx;
+  const tailY = spriteCenterY - dirY * 28.0 * spriteScalePx;
+  const midX = screenX - dirX * 15.0 * spriteScalePx;
+  const midY = spriteCenterY - dirY * 15.0 * spriteScalePx;
+  const baseHalfWidthPx = 4.0 * spriteScalePx;
+  const tailHalfWidthPx = 0.65 * spriteScalePx;
+
+  ctx.save();
+  try {
+    ctx.globalCompositeOperation = 'lighter';
+    const gradient = ctx.createLinearGradient(anchorX, anchorY, tailX, tailY);
+    gradient.addColorStop(0.0, 'rgba(255, 225, 92, 0.78)');
+    gradient.addColorStop(0.55, 'rgba(255, 185, 36, 0.38)');
+    gradient.addColorStop(1.0, 'rgba(255, 170, 18, 0.0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(anchorX + perpX * baseHalfWidthPx, anchorY + perpY * baseHalfWidthPx);
+    ctx.quadraticCurveTo(
+      midX + perpX * baseHalfWidthPx * 0.55,
+      midY + perpY * baseHalfWidthPx * 0.55,
+      tailX + perpX * tailHalfWidthPx,
+      tailY + perpY * tailHalfWidthPx,
+    );
+    ctx.lineTo(tailX - perpX * tailHalfWidthPx, tailY - perpY * tailHalfWidthPx);
+    ctx.quadraticCurveTo(
+      midX - perpX * baseHalfWidthPx * 0.55,
+      midY - perpY * baseHalfWidthPx * 0.55,
+      anchorX - perpX * baseHalfWidthPx,
+      anchorY - perpY * baseHalfWidthPx,
+    );
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 240, 150, 0.35)';
+    ctx.lineWidth = Math.max(1.0, 1.5 * scalePx);
+    ctx.beginPath();
+    ctx.moveTo(anchorX, anchorY);
+    ctx.lineTo(tailX, tailY);
+    ctx.stroke();
+  } finally {
+    ctx.restore();
+  }
+}
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas using
@@ -216,35 +297,16 @@ export function renderClusters(
           continue; // skip rest of player rendering
         }
 
-        // ── Momentum combat golden trail (behind cloak and body) ──────
-        // TODO: replace with polished trail effect
-        if (cluster.isHighVelocityAttacking === 1) {
-          const vx = cluster.velocityXWorld;
-          const vy = cluster.velocityYWorld;
-          const spd = Math.sqrt(vx * vx + vy * vy);
-          if (spd > 0) {
-            const nx = vx / spd;
-            const ny = vy / spd;
-            const trailCount = 5;
-            for (let ti = 0; ti < trailCount; ti++) {
-              const t = (ti + 1) / trailCount;
-              const alpha = 0.55 * (1 - t);
-              const offsetDist = t * 12 * scalePx;
-              ctx.save();
-              ctx.globalAlpha = alpha;
-              ctx.fillStyle = 'rgba(255,210,60,1)';
-              ctx.beginPath();
-              ctx.ellipse(
-                screenX - nx * offsetDist,
-                spriteCenterY - ny * offsetDist,
-                4 * scalePx * (1 - t * 0.5),
-                4 * scalePx * (1 - t * 0.5),
-                0, 0, Math.PI * 2,
-              );
-              ctx.fill();
-              ctx.restore();
-            }
-          }
+        const isMomentumInvulnerable = cluster.isHighVelocityAttacking === 1;
+        if (isMomentumInvulnerable) {
+          drawMomentumGoldenTrail(
+            ctx,
+            screenX,
+            spriteCenterY,
+            cluster.velocityXWorld,
+            cluster.velocityYWorld,
+            scalePx,
+          );
         }
 
         // ── Layer 0: Phantom cloak extension (behind main cloak) ──────────
@@ -275,44 +337,53 @@ export function renderClusters(
             const drawCenterY = spriteCenterY - normY * spacingPx;
             const alpha = 0.085 * (1.0 - t * 0.35);
             ctx.save();
-            ctx.translate(Math.round(drawCenterX) - 0.5, Math.round(drawCenterY));
-            if (cluster.isFacingLeftFlag === 1) {
-              ctx.scale(-1, 1);
+            try {
+              ctx.translate(Math.round(drawCenterX) - 0.5, Math.round(drawCenterY));
+              if (cluster.isFacingLeftFlag === 1) {
+                ctx.scale(-1, 1);
+              }
+              ctx.globalAlpha = alpha;
+              ctx.drawImage(
+                outlineMask,
+                -(spritePivotX + outlineThicknessPx),
+                -spriteHalfH - outlineThicknessPx,
+                spriteW + outlineThicknessPx * 2,
+                spriteH + outlineThicknessPx * 2,
+              );
+              ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
+            } finally {
+              ctx.restore();
             }
-            ctx.globalAlpha = alpha;
-            ctx.drawImage(
-              outlineMask,
-              -(spritePivotX + outlineThicknessPx),
-              -spriteHalfH - outlineThicknessPx,
-              spriteW + outlineThicknessPx * 2,
-              spriteH + outlineThicknessPx * 2,
-            );
-            ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
-            ctx.restore();
           }
         }
         ctx.save();
-        // Shift by -0.5 so that sprite edges (at ±9.5 / ±6.5 from pivot) land on
-        // integer virtual pixels in both facing directions, preventing the edge-pixel
-        // duplication artifact that appears under ctx.scale(-1, 1).
-        ctx.translate(screenX - 0.5, spriteCenterY);
-        if (cluster.isFacingLeftFlag === 1) {
-          ctx.scale(-1, 1);
+        try {
+          // Shift by -0.5 so that sprite edges (at ±9.5 / ±6.5 from pivot) land on
+          // integer virtual pixels in both facing directions, preventing the edge-pixel
+          // duplication artifact that appears under ctx.scale(-1, 1).
+          ctx.translate(screenX - 0.5, spriteCenterY);
+          if (cluster.isFacingLeftFlag === 1) {
+            ctx.scale(-1, 1);
+          }
+          // Proximity-bounce stub: rotate the jumping sprite to face the surface.
+          if (bounceRotationAngleRad !== 0) {
+            ctx.rotate(bounceRotationAngleRad);
+          }
+          // Draw outer silhouette first, then the original sprite on top.
+          const outlineColor = isMomentumInvulnerable ? '#ffd84f' : '#000000';
+          drawPlayerOutlineMask(
+            ctx,
+            outlineMask,
+            -(spritePivotX + outlineThicknessPx),
+            -spriteHalfH - outlineThicknessPx,
+            spriteW + outlineThicknessPx * 2,
+            spriteH + outlineThicknessPx * 2,
+            outlineColor,
+          );
+          ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
+        } finally {
+          ctx.restore();
         }
-        // Proximity-bounce stub: rotate the jumping sprite to face the surface.
-        if (bounceRotationAngleRad !== 0) {
-          ctx.rotate(bounceRotationAngleRad);
-        }
-        // Draw black outer silhouette first, then the original sprite on top.
-        ctx.drawImage(
-          outlineMask,
-          -(spritePivotX + outlineThicknessPx),
-          -spriteHalfH - outlineThicknessPx,
-          spriteW + outlineThicknessPx * 2,
-          spriteH + outlineThicknessPx * 2,
-        );
-        ctx.drawImage(sprite, -spritePivotX, -spriteHalfH, spriteW, spriteH);
-        ctx.restore();
 
         // ── Hurt flash overlay: red tint while hurtTicks > 0 ─────────────
         if (cluster.hurtTicks > 0) {

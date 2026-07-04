@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "themeId": "grayStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/grayStone",
+  "atlasImage": "grayStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 128,
+  "sprites": {
+    "grayStone (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (1).png"
+    },
+    "grayStone (10)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (10).png"
+    },
+    "grayStone (11)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (11).png"
+    },
+    "grayStone (12)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (12).png"
+    },
+    "grayStone (2)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (2).png"
+    },
+    "grayStone (3)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (3).png"
+    },
+    "grayStone (4)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (4).png"
+    },
+    "grayStone (5)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (5).png"
+    },
+    "grayStone (6)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (6).png"
+    },
+    "grayStone (7)": {
+      "x": 2,
+      "y": 56,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (7).png"
+    },
+    "grayStone (8)": {
+      "x": 20,
+      "y": 56,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (8).png"
+    },
+    "grayStone (9)": {
+      "x": 38,
+      "y": 56,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/grayStone/grayStone (9).png"
+    }
+  }
+}

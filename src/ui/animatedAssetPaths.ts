@@ -9,7 +9,7 @@ export const MENU_ANIMATION_ASSETS = {
   blurredUrl: assetUrl('ANIMATIONS/goldEmbers_blur/goldEmbers_blur.webp'),
 } as const;
 
-export const LOADING_ANIMATION_ASSETS = {
-  backgroundUrl: assetUrl('ANIMATIONS/loadingScreenBackground/loadingScreenBackground.webp'),
-  circleUrl: assetUrl('ANIMATIONS/loadingAnimation/loadingAnimation.webp'),
+export const LOADING_BACKGROUND_ASSETS = {
+  caveBlurUrl: assetUrl('SPRITES/BACKGROUNDS/BrownCave_Blur.png'),
+  caveBlurDarkUrl: assetUrl('SPRITES/BACKGROUNDS/BrownCave_Blur_Dark.png'),
 } as const;

@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "overgrowth",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/overgrowth",
+  "atlasImage": "overgrowth.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "overgrowthBlock (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (1).png"
+    },
+    "overgrowthBlock (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (2).png"
+    },
+    "overgrowthBlock (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (3).png"
+    },
+    "overgrowthBlock (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (4).png"
+    },
+    "overgrowthBlock (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (5).png"
+    },
+    "overgrowthBlock (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (6).png"
+    },
+    "overgrowthBlock (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (7).png"
+    },
+    "overgrowthBlock (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (8).png"
+    },
+    "overgrowthBlock (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/overgrowth/overgrowthBlock (9).png"
+    }
+  }
+}

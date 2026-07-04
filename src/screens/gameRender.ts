@@ -41,6 +41,7 @@ import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
+import type { SunraysRenderer } from '../render/effects/sunraysRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
@@ -120,6 +121,7 @@ export interface RenderFrameContext {
   swordWeaveRenderer: SwordWeaveRenderer;
   /** Pixel-art atmospheric sunbeam shafts. */
   sunbeamRenderer: SunbeamRenderer;
+  sunraysRenderer: SunraysRenderer;
   /** Floating dust motes near local light sources. */
   atmosphericLightDust: AtmosphericLightDust;
   /** Golden mote particles traveling along editor-authored guide paths. */
@@ -273,7 +275,7 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
-    sunbeamRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
+    sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
     ox, oy, zoom, virtualWidthPx, virtualHeightPx,
@@ -294,6 +296,7 @@ export function renderFrame(r: RenderFrameContext): void {
     isDeepReductionActive,
     bloomSystem,
     sunbeamRenderer,
+    sunraysRenderer,
     atmosphericLightDust,
   });
 
@@ -306,12 +309,17 @@ export function renderFrame(r: RenderFrameContext): void {
   const roomScreenYPx = oy;
   const roomScreenWidthPx = roomWidthWorld * zoom;
   const roomScreenHeightPx = roomHeightWorld * zoom;
-  // Keep sprite sampling nearest-neighbour even if context state changed.
+  // Frame-boundary reset: dynamic entity sprites must never inherit a leaked
+  // transform, alpha, composite mode, or clip from a previous renderer.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
   ctx.imageSmoothingEnabled = false;
   bloomSystem.beginFrame();
 
   // ── Clear / fill virtual canvas ─────────────────────────────────────────
   // Always start from black so anything outside the room remains pure black.
+  ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
   if (webglRenderer.isAvailable) {
@@ -343,7 +351,15 @@ export function renderFrame(r: RenderFrameContext): void {
   // areas remain black even when camera framing shows beyond room extents.
   // In always-center camera mode the clip is skipped — black void outside the
   // room is shown intentionally, so we must not cut off room content at edges.
+  // try/finally below guarantees this save() is always matched by the
+  // restore() further down, even if a renderer inside the clipped pass
+  // throws. Without it, an uncaught exception anywhere in this ~200-line
+  // block (walls, clusters, particles, effects) leaks the room-bounds clip
+  // onto the shared 2D context permanently — every subsequent frame's
+  // clear/fill gets constrained to the stale clip rect, producing a black
+  // screen with un-cleared trails in every room until reload.
   ctx.save();
+  try {
   if (!r.alwaysCenterCamera) {
     ctx.beginPath();
     ctx.rect(clipScreenXPx, clipScreenYPx, clipScreenWPx, clipScreenHPx);
@@ -373,19 +389,22 @@ export function renderFrame(r: RenderFrameContext): void {
   const bgSpill = getActiveBackgroundLightSpill();
   if (bgSpill > 0) {
     ctx.save();
-    // Clip to the current room so spill doesn't bleed into adjacent rooms.
-    const clipX = Math.round(ox);
-    const clipY = Math.round(oy);
-    const clipW = Math.round(roomWidthWorld * zoom);
-    const clipH = Math.round(roomHeightWorld * zoom);
-    ctx.beginPath();
-    ctx.rect(clipX, clipY, clipW, clipH);
-    ctx.clip();
-    // Warm amber tint — clamped to a subtle translucent fill.
-    const alpha = Math.min(bgSpill, 0.5);
-    ctx.fillStyle = `rgba(${BACKGROUND_SPILL_RGB},${alpha.toFixed(3)})`;
-    ctx.fillRect(clipX, clipY, clipW, clipH);
-    ctx.restore();
+    try {
+      // Clip to the current room so spill doesn't bleed into adjacent rooms.
+      const clipX = Math.round(ox);
+      const clipY = Math.round(oy);
+      const clipW = Math.round(roomWidthWorld * zoom);
+      const clipH = Math.round(roomHeightWorld * zoom);
+      ctx.beginPath();
+      ctx.rect(clipX, clipY, clipW, clipH);
+      ctx.clip();
+      // Warm amber tint — clamped to a subtle translucent fill.
+      const alpha = Math.min(bgSpill, 0.5);
+      ctx.fillStyle = `rgba(${BACKGROUND_SPILL_RGB},${alpha.toFixed(3)})`;
+      ctx.fillRect(clipX, clipY, clipW, clipH);
+    } finally {
+      ctx.restore();
+    }
   }
 
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
@@ -399,6 +418,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // ── Sunbeams (light shafts behind walls) ────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_SUNBEAMS);
   sunbeamRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx);
+  sunraysRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_SUNBEAMS);
 
   // ── Walls ────────────────────────────────────────────────────────────────
@@ -557,8 +577,11 @@ export function renderFrame(r: RenderFrameContext): void {
   // backlight / sunray) with optional raytraced shadow polygons.
   renderSceneLightingPass(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx, nowMs);
 
-  // End room clip before any HUD/screen-space overlays are drawn.
-  ctx.restore();
+  } finally {
+    // End room clip before any HUD/screen-space overlays are drawn. Runs
+    // even on error so the clip never leaks into future frames.
+    ctx.restore();
+  }
 
   // ── Void edge overlay (noisy black intrusion along exposed room boundaries) ─
   renderVoidEdge(ctx, currentRoom, ox, oy, zoom);
@@ -570,7 +593,11 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_UPSCALE);
+  deviceCtx.setTransform(1, 0, 0, 1, 0, 0);
+  deviceCtx.globalAlpha = 1;
+  deviceCtx.globalCompositeOperation = 'source-over';
   deviceCtx.imageSmoothingEnabled = false;
+  deviceCtx.clearRect(0, 0, canvas.width, canvas.height);
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   // Composite WebGL particle canvas on top (also at virtual resolution)
   if (webglRenderer.isAvailable) {

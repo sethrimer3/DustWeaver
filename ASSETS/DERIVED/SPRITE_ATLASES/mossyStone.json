@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "themeId": "mossyStone",
+  "sourceRoot": "ASSETS/SPRITES/BLOCKS/mossyStone",
+  "atlasImage": "mossyStone.png",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "padding": 2,
+  "width": 64,
+  "height": 64,
+  "sprites": {
+    "mossyStone (1)": {
+      "x": 2,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (1).png"
+    },
+    "mossyStone (2)": {
+      "x": 20,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (2).png"
+    },
+    "mossyStone (3)": {
+      "x": 38,
+      "y": 2,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (3).png"
+    },
+    "mossyStone (4)": {
+      "x": 2,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (4).png"
+    },
+    "mossyStone (5)": {
+      "x": 20,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (5).png"
+    },
+    "mossyStone (6)": {
+      "x": 38,
+      "y": 20,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (6).png"
+    },
+    "mossyStone (7)": {
+      "x": 2,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (7).png"
+    },
+    "mossyStone (8)": {
+      "x": 20,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (8).png"
+    },
+    "mossyStone (9)": {
+      "x": 38,
+      "y": 38,
+      "w": 16,
+      "h": 16,
+      "sourcePath": "ASSETS/SPRITES/BLOCKS/mossyStone/mossyStone (9).png"
+    }
+  }
+}
