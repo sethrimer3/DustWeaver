@@ -42,6 +42,7 @@ import type { SunraysRenderer } from '../render/effects/sunraysRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { buildRoomAmbientBlockerKeys } from '../levels/roomAmbientBlockers';
 import { ROOM_REGISTRY } from '../levels/rooms';
 import type { CameraState } from '../render/camera';
 import { snapCamera } from '../render/camera';
@@ -302,31 +303,11 @@ export function* makeLoadRoomPhases(
         console.log(`[loadRoom] ${room.id} blockerKeys: cache HIT`);
       }
     } else {
-      // Build from scratch and store back into the cache entry if one exists.
+      // Build from scratch (shared builder — identical output to the prewarm
+      // cache-population path so render-state keys match and prewarmed chunks
+      // are adopted, not discarded) and store back into the entry if one exists.
       const _blockerT0 = import.meta.env.DEV ? performance.now() : 0;
-      if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
-        blockerKeys = new Set<string>();
-        for (const b of room.ambientLightBlockers) {
-          const key = `${b.xBlock},${b.yBlock}`;
-          blockerKeys.add(key);
-          if (b.isDark) {
-            if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
-            darkBlockerKeys.add(key);
-          }
-        }
-      }
-      // Add light-blocking background blocks to the ambient blocker set.
-      if (room.backgroundBlocks) {
-        for (const b of room.backgroundBlocks) {
-          if (b.isLightBlockingFlag !== 1) continue;
-          if (!blockerKeys) blockerKeys = new Set<string>();
-          for (let dy = 0; dy < b.hBlock; dy++) {
-            for (let dx = 0; dx < b.wBlock; dx++) {
-              blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
-            }
-          }
-        }
-      }
+      ({ blockerKeys, darkBlockerKeys } = buildRoomAmbientBlockerKeys(room));
       if (_phaseAEntry !== undefined) {
         // Store `undefined` (not `null`) so `isEntryFullyPrepared` can see these
         // fields are computed.  `null` is the "not yet computed" sentinel.
@@ -886,28 +867,8 @@ export function applyResidentRoomActivation(
       blockerKeys     = cacheEntry.blockerKeys;
       darkBlockerKeys = cacheEntry.darkBlockerKeys ?? undefined;
     } else {
-      if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
-        blockerKeys = new Set<string>();
-        for (const b of room.ambientLightBlockers) {
-          const key = `${b.xBlock},${b.yBlock}`;
-          blockerKeys.add(key);
-          if (b.isDark) {
-            if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
-            darkBlockerKeys.add(key);
-          }
-        }
-      }
-      if (room.backgroundBlocks) {
-        for (const b of room.backgroundBlocks) {
-          if (b.isLightBlockingFlag !== 1) continue;
-          if (!blockerKeys) blockerKeys = new Set<string>();
-          for (let dy = 0; dy < b.hBlock; dy++) {
-            for (let dx = 0; dx < b.wBlock; dx++) {
-              blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
-            }
-          }
-        }
-      }
+      // Shared builder — identical output to the prewarm cache-population path.
+      ({ blockerKeys, darkBlockerKeys } = buildRoomAmbientBlockerKeys(room));
       if (cacheEntry !== undefined) {
         cacheEntry.blockerKeys     = blockerKeys;
         cacheEntry.darkBlockerKeys = darkBlockerKeys;

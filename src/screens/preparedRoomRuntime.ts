@@ -16,6 +16,7 @@
 import type { RoomDef, RoomWallTemplate } from '../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { buildRoomWallTemplate } from './gameRoomWalls';
+import { buildRoomAmbientBlockerKeys } from '../levels/roomAmbientBlockers';
 import { buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { RoomRuntimeEntry } from './roomRuntimeCache';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
@@ -216,32 +217,12 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
   const wallTemplate = wallResolution.template;
 
   // ── Ambient light blocker sets ────────────────────────────────────────────
+  // Shared builder (see roomAmbientBlockers.ts) so this cache-population path
+  // produces byte-identical sets to the room-entry paths in gameLoadRoomPhases.
+  // Identical sets → identical render-state key → prewarmed chunks are adopted
+  // on entry instead of being discarded as stale and rebuilt.
   const t0Blocker = performance.now();
-  let blockerKeys: Set<string> | undefined;
-  let darkBlockerKeys: Set<string> | undefined;
-
-  if (room.ambientLightBlockers && room.ambientLightBlockers.length > 0) {
-    blockerKeys = new Set<string>();
-    for (const b of room.ambientLightBlockers) {
-      const key = `${b.xBlock},${b.yBlock}`;
-      blockerKeys.add(key);
-      if (b.isDark) {
-        if (!darkBlockerKeys) darkBlockerKeys = new Set<string>();
-        darkBlockerKeys.add(key);
-      }
-    }
-  }
-  if (room.backgroundBlocks) {
-    for (const b of room.backgroundBlocks) {
-      if (b.isLightBlockingFlag !== 1) continue;
-      if (!blockerKeys) blockerKeys = new Set<string>();
-      for (let dy = 0; dy < b.hBlock; dy++) {
-        for (let dx = 0; dx < b.wBlock; dx++) {
-          blockerKeys.add(`${b.xBlock + dx},${b.yBlock + dy}`);
-        }
-      }
-    }
-  }
+  const { blockerKeys, darkBlockerKeys } = buildRoomAmbientBlockerKeys(room);
   const blockerMs = performance.now() - t0Blocker;
 
   // ── Wall decorations (pure geometry, no mutable state) ────────────────────
