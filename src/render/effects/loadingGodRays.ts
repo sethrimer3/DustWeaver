@@ -125,6 +125,23 @@ function loadingDustIntensityAt(xPx: number, yPx: number, timeMs: number): numbe
   );
 }
 
+function computeRayOrigin(
+  ray: LoadingRayDef,
+  viewportW: number,
+  viewportH: number,
+  perpY: number,
+  driftSpeed: number,
+  timeMs: number,
+): { startX: number; startY: number } {
+  const drift = Math.sin(timeMs * driftSpeed + ray.phase) * viewportW * 0.018;
+  const topMargin = ray.widthStart * viewportW * Math.abs(perpY) + viewportW * 0.05;
+  const startX = Math.round(ray.x * viewportW + drift);
+  const startY = Math.round(
+    ray.y * viewportH - topMargin + Math.cos(timeMs * driftSpeed * 0.7 + ray.phase) * viewportH * 0.01,
+  );
+  return { startX, startY };
+}
+
 function estimateLoadingGodRayIntensityAt(
   xPx: number,
   yPx: number,
@@ -145,9 +162,7 @@ function estimateLoadingGodRayIntensityAt(
 
   for (let i = 0; i < rayCount; i++) {
     const ray = RAYS[i];
-    const drift = Math.sin(timeMs * driftSpeed + ray.phase) * viewportW * 0.018;
-    const startX = Math.round(ray.x * viewportW + drift);
-    const startY = Math.round(ray.y * viewportH + Math.cos(timeMs * driftSpeed * 0.7 + ray.phase) * viewportH * 0.01);
+    const { startX, startY } = computeRayOrigin(ray, viewportW, viewportH, perpY, driftSpeed, timeMs);
     const length = Math.round(ray.length * diagonal);
     const endX = Math.round(startX + directionX * length);
     const endY = Math.round(startY + directionY * length);
@@ -194,9 +209,7 @@ function drawRay(
   const perpX = -directionY;
   const perpY = directionX;
   const shimmer = 0.92 + 0.08 * Math.sin(timeMs * 0.00042 + ray.phase);
-  const drift = Math.sin(timeMs * driftSpeed + ray.phase) * viewportW * 0.018;
-  const startX = Math.round(ray.x * viewportW + drift);
-  const startY = Math.round(ray.y * viewportH + Math.cos(timeMs * driftSpeed * 0.7 + ray.phase) * viewportH * 0.01);
+  const { startX, startY } = computeRayOrigin(ray, viewportW, viewportH, perpY, driftSpeed, timeMs);
   const length = Math.round(ray.length * diagonal);
   const endX = Math.round(startX + directionX * length);
   const endY = Math.round(startY + directionY * length);

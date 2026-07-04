@@ -167,6 +167,60 @@ export function drawBlockRect(
 }
 
 /**
+ * Draws a wall's fill plus an outline that traces only the boundary between
+ * this wall's footprint and unoccupied space — shared edges with adjacent
+ * occupied cells (from `occupied`) are skipped, so contiguous blocks (e.g. a
+ * 2×2 block, or several 1×1 blocks placed side by side) render with a single
+ * merged outline instead of a grid of per-cell outlines. Isolated 1×1 blocks
+ * are unaffected since they have no occupied neighbors.
+ */
+export function drawMergedWallOutline(
+  ctx: CanvasRenderingContext2D,
+  occupied: Set<string>,
+  xBlock: number, yBlock: number, wBlock: number, hBlock: number,
+  ox: number, oy: number, zoom: number,
+  color: string, lineWidth: number,
+): void {
+  const tile = BLOCK_SIZE_SMALL * zoom;
+  const x = xBlock * tile + ox;
+  const y = yBlock * tile + oy;
+  const w = wBlock * tile;
+  const h = hBlock * tile;
+
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = color.replace(/[\d.]+\)$/, '1)');
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  for (let cy = 0; cy < hBlock; cy++) {
+    for (let cx = 0; cx < wBlock; cx++) {
+      const gx = xBlock + cx;
+      const gy = yBlock + cy;
+      const cellX = gx * tile + ox;
+      const cellY = gy * tile + oy;
+      if (!occupied.has(`${gx},${gy - 1}`)) {
+        ctx.moveTo(cellX, cellY);
+        ctx.lineTo(cellX + tile, cellY);
+      }
+      if (!occupied.has(`${gx},${gy + 1}`)) {
+        ctx.moveTo(cellX, cellY + tile);
+        ctx.lineTo(cellX + tile, cellY + tile);
+      }
+      if (!occupied.has(`${gx - 1},${gy}`)) {
+        ctx.moveTo(cellX, cellY);
+        ctx.lineTo(cellX, cellY + tile);
+      }
+      if (!occupied.has(`${gx + 1},${gy}`)) {
+        ctx.moveTo(cellX + tile, cellY);
+        ctx.lineTo(cellX + tile, cellY + tile);
+      }
+    }
+  }
+  ctx.stroke();
+}
+
+/**
  * Draws a ramp wall as a colored triangle using the wall's rampOrientation.
  */
 export function drawRampTriangle(

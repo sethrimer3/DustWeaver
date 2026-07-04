@@ -35,7 +35,7 @@ import {
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
   DUST_SWARM_COLOR, DUST_SWARM_SELECTED,
   CAMPAIGN_SPAWN_COLOR, CAMPAIGN_SPAWN_SELECTED,
-  drawBlockRect, drawRampTriangle,
+  drawMergedWallOutline, drawRampTriangle,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   getEnemyFootprintBlocks, drawTransitionZone,
 } from './editorRendererHelpers';
@@ -68,6 +68,19 @@ export function drawEditorWalls(
   offsetYPx: number,
   zoom: number,
 ): void {
+  // Precompute which cells are covered by a solid (non-ramp, non-platform,
+  // non-half-pillar) wall so adjacent solid blocks can share a single merged
+  // outline instead of each drawing its own per-cell border.
+  const occupied = new Set<string>();
+  for (const w of room.interiorWalls) {
+    if (w.isPlatformFlag === 1 || w.rampOrientation !== undefined || w.isPillarHalfWidthFlag === 1) continue;
+    for (let dy = 0; dy < w.hBlock; dy++) {
+      for (let dx = 0; dx < w.wBlock; dx++) {
+        occupied.add(`${w.xBlock + dx},${w.yBlock + dy}`);
+      }
+    }
+  }
+
   for (const w of room.interiorWalls) {
     const sel = isSelected('wall', w.uid);
     const isPlatform = w.isPlatformFlag === 1;
@@ -85,7 +98,7 @@ export function drawEditorWalls(
       drawHalfPillarRect(ctx, w, offsetXPx, offsetYPx, zoom, color);
     } else {
       const color = sel ? WALL_SELECTED : WALL_HIGHLIGHT;
-      drawBlockRect(ctx, w.xBlock, w.yBlock, w.wBlock, w.hBlock, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
+      drawMergedWallOutline(ctx, occupied, w.xBlock, w.yBlock, w.wBlock, w.hBlock, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
     }
   }
 }

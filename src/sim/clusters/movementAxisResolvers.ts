@@ -194,6 +194,8 @@ function tryJumpCornerCorrection(
 function tryStepUpSingleBlock(
   cluster: ClusterState,
   world: WorldState,
+  wallLeftWorld: number,
+  wallRightWorld: number,
   wallTopWorld: number,
   requiredInputDirX: -1 | 1,
   wasGrounded: boolean,
@@ -208,6 +210,11 @@ function tryStepUpSingleBlock(
   const inputDxWorld = world.playerMoveInputDxWorld;
   if (inputDxWorld * requiredInputDirX <= 0) return false;
 
+  // Reject step-up if this wall segment isn't the top of its stack — i.e. another
+  // segment sits directly above it (a seam), which would make wallTopWorld a false
+  // "top edge" in the middle of a tall stacked wall.
+  if (isWallSegmentBelowAnotherWall(world, wallLeftWorld, wallRightWorld, wallTopWorld)) return false;
+
   const playerBottomWorld = cluster.positionYWorld + cluster.halfHeightWorld;
   const stepUpHeightWorld = playerBottomWorld - wallTopWorld;
   const maxPopPixels = ov(debugSpeedOverrides.blockPopMaxPixels, BLOCK_POP_MAX_PIXELS);
@@ -220,6 +227,32 @@ function tryStepUpSingleBlock(
   cluster.velocityYWorld = 0;
   cluster.isGroundedFlag = 1;
   return true;
+}
+
+/**
+ * True if some other wall segment sits directly above [wallLeft, wallRight) at
+ * wallTopWorld (its bottom edge meets wallTopWorld) and overlaps horizontally —
+ * i.e. wallTopWorld is a seam between stacked segments, not the true top of the wall.
+ */
+function isWallSegmentBelowAnotherWall(
+  world: WorldState,
+  wallLeftWorld: number,
+  wallRightWorld: number,
+  wallTopWorld: number,
+): boolean {
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    if (world.wallIsPlatformFlag[wi] === 1) continue;
+    if (world.wallRampOrientationIndex[wi] !== 255) continue;
+
+    const otherLeft   = world.wallXWorld[wi];
+    const otherRight  = otherLeft + world.wallWWorld[wi];
+    const otherBottom = world.wallYWorld[wi] + world.wallHWorld[wi];
+
+    if (Math.abs(otherBottom - wallTopWorld) > COLLISION_EPSILON) continue;
+    if (otherRight <= wallLeftWorld || otherLeft >= wallRightWorld) continue;
+    return true;
+  }
+  return false;
 }
 
 // ── Axis resolvers ────────────────────────────────────────────────────────────
@@ -270,7 +303,7 @@ export function resolveWallsX(
     // Determine push direction from previous position
     if (prevRight <= wallLeft + COLLISION_EPSILON) {
       // Step-up is disabled for kinetic blocks so the boost always fires rather than silently stepping.
-      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallTop, 1, wasGrounded)) continue;
+      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallLeft, wallRight, wallTop, 1, wasGrounded)) continue;
       // Was to the left of wall — push out left
       cluster.positionXWorld = wallLeft - hw;
       if (isKinetic) {
@@ -288,7 +321,7 @@ export function resolveWallsX(
         if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
       }
     } else if (prevLeft >= wallRight - COLLISION_EPSILON) {
-      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallTop, -1, wasGrounded)) continue;
+      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallLeft, wallRight, wallTop, -1, wasGrounded)) continue;
       // Was to the right of wall — push out right
       cluster.positionXWorld = wallRight + hw;
       if (isKinetic) {
