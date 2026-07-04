@@ -35,16 +35,22 @@ export interface BlockSpriteSet {
 
 // ── Block-theme sprite pre-loads ────────────────────────────────────────────
 
-// Brown Rock sprites (single flat sprite, no auto-tiling variants)
-const _brownRockSprite8  = loadImg('SPRITES/BLOCKS/brownRock/brownRock_8x8.png');
-const _brownRockSprite16 = loadImg('SPRITES/BLOCKS/brownRock/brownRock_16x16.png');
-const _brownRockSprite32 = loadImg('SPRITES/BLOCKS/brownRock/brownRock_32x32.png');
+// 'brownRock' and 'dirt' are now rendered exclusively through the folder-based
+// theme system (see folderBlockThemes.ts), which loads the actual sprite files
+// that live under ASSETS/SPRITES/BLOCKS/brownRock/ and .../dirt/. The sized
+// per-variant filenames these constants used to reference (brownRock_8x8.png,
+// dirt_8x8_edge.png, etc.) were removed, so no image is loaded here — an
+// unset Image never issues a network request and never reports ready, letting
+// callers fall through to the folder-based sprite lookup.
+const _deadLegacySprite = new Image();
+const _brownRockSprite8  = _deadLegacySprite;
+const _brownRockSprite16 = _deadLegacySprite;
+const _brownRockSprite32 = _deadLegacySprite;
 
-// Dirt sprites (edge/corner auto-tiling at 8x8)
-const _dirtBlockSprite  = loadImg('SPRITES/BLOCKS/dirt/dirt_8x8.png');
-const _dirtEdgeSprite   = loadImg('SPRITES/BLOCKS/dirt/dirt_8x8_edge.png');
-const _dirtCornerSprite = loadImg('SPRITES/BLOCKS/dirt/dirt_8x8_corner.png');
-const _dirtSprite16     = loadImg('SPRITES/BLOCKS/dirt/dirt_16x16.png');
+const _dirtBlockSprite  = _deadLegacySprite;
+const _dirtEdgeSprite   = _deadLegacySprite;
+const _dirtCornerSprite = _deadLegacySprite;
+const _dirtSprite16     = _deadLegacySprite;
 
 /** Cache of loaded sprite sets keyed by worldNumber (for legacy world-number mode). */
 const _spriteSets = new Map<number, BlockSpriteSet>();
@@ -61,16 +67,7 @@ export function getBlockSpriteSet(worldNumber: number): BlockSpriteSet {
 
   const dir = `SPRITES/WORLDS/W-${worldNumber}/blocks`;
   let sprites: BlockSpriteSet;
-  if (worldNumber === 0) {
-    sprites = {
-      block:  _brownRockSprite8,
-      single: _brownRockSprite8,
-      edge:   _brownRockSprite8,
-      corner: _brownRockSprite8,
-      end:    _brownRockSprite8,
-      vertex: _brownRockSprite8,
-    };
-  } else if (worldNumber <= 2) {
+  if (worldNumber <= 2) {
     sprites = {
       block:  loadImg(`${dir}/block.png`),
       single: loadImg(`${dir}/single.png`),

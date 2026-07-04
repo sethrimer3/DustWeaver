@@ -1126,6 +1126,17 @@ export class ResidentRoomManager {
   setResidentWorld(roomId: string, w: WorldState, isActive: boolean): void {
     const resident = this._residents.get(roomId);
     if (resident === undefined) return; // Must ensureResident() first.
+    // Integrity check: the world's geometry must have been built for this room.
+    // A mismatch here is the earliest, most-precise signal that a build/caching
+    // path paired the wrong geometry with `roomId` (root cause of "another room
+    // shows the fall's tiles").  Log loudly but still store (the hot-swap guard
+    // will reject it on activation) so the diagnostic surfaces the culprit.
+    if (import.meta.env.DEV && w.builtForRoomId !== '' && w.builtForRoomId !== roomId) {
+      console.error(
+        `[resident] setResidentWorld("${roomId}"): world was built for ` +
+        `"${w.builtForRoomId}" — wrong geometry paired with this room id.`,
+      );
+    }
     resident.world        = w;
     resident.runtimeReady = true;
     resident.lifecycle    = isActive ? 'active' : 'frozen';

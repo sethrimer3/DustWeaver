@@ -36,8 +36,8 @@ export function handleEditorKeyboardShortcuts(
   state: EditorState,
   inputState: EditorInputState,
   history: EditorHistory,
-  openWorldMap: () => void,
-  openVisualMap: () => void,
+  openWorldMap: () => void | Promise<void>,
+  openVisualMap: () => void | Promise<void>,
   applyEdits: () => void,
 ): void {
   // Tool key shortcuts (1 = Select, 2 = Place, 3 = Delete)

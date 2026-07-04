@@ -376,6 +376,9 @@ export function* makeLoadRoomPhases(
   world.particleCount = 0;
   world.clusters.length = 0;
   world.wallCount = 0;
+  // Tag the live world with the room it is now being built for (integrity check
+  // used by the resident hot-swap guard in gameScreen.ts).
+  world.builtForRoomId = room.id;
   world.worldWidthWorld = roomWidthWorld;
   world.worldHeightWorld = roomHeightWorld;
   resetSnakeRuntimeState();
@@ -574,6 +577,31 @@ export function* makeLoadRoomPhases(
         console.log(`[wallTemplate] roomId=${room.id} source=fallback wallCount=${wallTemplate.wallCount} (build ${_ms.toFixed(1)}ms)`);
         FP.recordLoadPhaseStep('D:wallTemplate', _ms);
       } else { FP.recordLoadPhaseStep('D:wallTemplate', 0); }
+    }
+
+    // Integrity check: the applied wall geometry must fit within the room's
+    // declared bounds.  A gross overflow (e.g. walls extending far below a short
+    // room) means the wall template paired with this room id belongs to a
+    // different room — the root of "another room shows the fall's tiles".  A
+    // small margin absorbs legitimate boundary/overhang tiles.
+    if (import.meta.env.DEV) {
+      const marginWorld = BLOCK_SIZE_MEDIUM * 4;
+      let maxRightWorld = 0;
+      let maxBottomWorld = 0;
+      for (let wi = 0; wi < world.wallCount; wi++) {
+        const r = world.wallXWorld[wi] + world.wallWWorld[wi];
+        const b = world.wallYWorld[wi] + world.wallHWorld[wi];
+        if (r > maxRightWorld) maxRightWorld = r;
+        if (b > maxBottomWorld) maxBottomWorld = b;
+      }
+      if (maxRightWorld > roomWidthWorld + marginWorld || maxBottomWorld > roomHeightWorld + marginWorld) {
+        console.error(
+          `[loadRoom] WALL BOUNDS OVERFLOW for "${room.id}": geometry extends to ` +
+          `(${maxRightWorld.toFixed(0)},${maxBottomWorld.toFixed(0)}) but room is only ` +
+          `${roomWidthWorld}×${roomHeightWorld} world units. The cached/applied wall ` +
+          `template likely belongs to a different room.`,
+        );
+      }
     }
   }
 

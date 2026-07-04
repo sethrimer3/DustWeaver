@@ -109,6 +109,9 @@ export function buildResidentWorldState(
   const levelRng: RngState = createResidentRoomRng(room, campaignSeed);
 
   const rw = createWorldState(FIXED_DT_MS, 42);
+  // Tag this world with the room it is being built for so a later hot-swap can
+  // detect (and reject) a world that was somehow paired with the wrong room id.
+  rw.builtForRoomId = room.id;
 
   // ── Phase A equivalent: world dimensions + reset ─────────────────────────
   const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
@@ -331,6 +334,9 @@ export function* createResidentBuildGenerator(
   const levelRng: RngState = createResidentRoomRng(room, campaignSeed);
 
   const rw = createWorldState(FIXED_DT_MS, 42);
+  // Tag this world with the room it is being built for so a later hot-swap can
+  // detect (and reject) a world that was somehow paired with the wrong room id.
+  rw.builtForRoomId = room.id;
 
   // ── Phase A: world dimensions ─────────────────────────────────────────────
   {

@@ -50,22 +50,28 @@ function getTransitionXYBlock(t: RoomTransitionDef, room: RoomDef): { xBlock: nu
 export function computeSpawnBlockForTransition(
   room: RoomDef,
   transition: RoomTransitionDef,
+  // Player's offset (0..1) along the opening at the moment they crossed the
+  // source transition, so the destination spawn preserves relative position
+  // instead of always centering in the opening.
+  entryOffsetFraction = 0.5,
 ): readonly [number, number] {
   const { xBlock, yBlock } = getTransitionXYBlock(transition, room);
-  // Opening center: for left/right = yBlock + half opening; for up/down = xBlock + half opening
-  const openingCenterHoriz = yBlock + Math.floor(transition.openingSizeBlocks / 2);
-  const openingCenterVert  = xBlock + Math.floor(transition.openingSizeBlocks / 2);
+  const clampedFraction = Math.min(1, Math.max(0, entryOffsetFraction));
+  const maxOffset = Math.max(0, transition.openingSizeBlocks - 1);
+  const openingOffset = Math.round(clampedFraction * maxOffset);
+  const openingPosHoriz = yBlock + openingOffset;
+  const openingPosVert  = xBlock + openingOffset;
 
   if (transition.direction === 'left') {
-    return [TRANSITION_SPAWN_INSET_BLOCKS, openingCenterHoriz] as const;
+    return [TRANSITION_SPAWN_INSET_BLOCKS, openingPosHoriz] as const;
   }
   if (transition.direction === 'right') {
-    return [room.widthBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1, openingCenterHoriz] as const;
+    return [room.widthBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1, openingPosHoriz] as const;
   }
   if (transition.direction === 'up') {
-    return [openingCenterVert, TRANSITION_SPAWN_INSET_BLOCKS] as const;
+    return [openingPosVert, TRANSITION_SPAWN_INSET_BLOCKS] as const;
   }
-  return [openingCenterVert, room.heightBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1] as const;
+  return [openingPosVert, room.heightBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1] as const;
 }
 
 /**
@@ -177,7 +183,15 @@ export function checkRoomTransitions(
         );
 
         if (targetReturnTransition !== undefined) {
-          const spawnBlock = computeSpawnBlockForTransition(targetRoom, targetReturnTransition);
+          // Preserve the player's relative position along the opening: compute
+          // how far across the source transition's opening they are (0 = near
+          // edge, 1 = far edge) and carry that fraction over to the
+          // destination opening instead of always spawning at its center.
+          const openingStartBlock = isHoriz ? yBlock : xBlock;
+          const playerPerpBlock = (isHoriz ? py : px) / BS;
+          const maxSourceOffset = Math.max(1, t.openingSizeBlocks - 1);
+          const entryOffsetFraction = (playerPerpBlock - openingStartBlock) / maxSourceOffset;
+          const spawnBlock = computeSpawnBlockForTransition(targetRoom, targetReturnTransition, entryOffsetFraction);
           onLoadRoom(targetRoom, spawnBlock[0], spawnBlock[1], t.direction, ti);
         } else {
           console.warn(`[Transition] Room "${currentRoom.id}" transition[${ti}] → "${t.targetRoomId}" has no matching return transition (direction=${t.direction}). Falling back to targetSpawnBlock.`);

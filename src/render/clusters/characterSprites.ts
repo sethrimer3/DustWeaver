@@ -5,7 +5,7 @@
  */
 
 import type { ClusterSnapshot } from '../snapshot';
-import { loadImg, loadImgWithFallback } from '../imageCache';
+import { loadImg } from '../imageCache';
 export { isSpriteReady } from '../imageCache';
 
 // ── Character sprite sets ───────────────────────────────────────────────────
@@ -174,21 +174,42 @@ export function getOrCreateGoldOutlineMask(sprite: HTMLImageElement): HTMLCanvas
   return goldCanvas;
 }
 
+/**
+ * Per-character animation frames that actually exist on disk beyond the
+ * baseline standing/crouching pair. Characters not listed here (or states
+ * omitted for a listed character) fall back to the standing sprite directly
+ * — no network request is made for artwork that was intentionally removed.
+ */
+const _availableAnimationFrames: Record<string, ReadonlyArray<'jumping' | 'falling' | 'fastFalling' | 'swinging'>> = {
+  outcast: ['jumping', 'falling', 'fastFalling', 'swinging'],
+};
+
+const _animationFileSuffix: Record<'jumping' | 'falling' | 'fastFalling' | 'swinging', string> = {
+  jumping: 'jumping',
+  falling: 'falling',
+  fastFalling: 'fastfalling',
+  swinging: 'swinging',
+};
+
 function _loadCharacterSprites(characterId: string): CharacterSprites {
   const base = `SPRITES/PLAYERS/${characterId}/${characterId}`;
-  const standingSrc = `${base}_standing.png`;
+  const standingImg = loadImg(`${base}_standing.png`);
+  const availableFrames = _availableAnimationFrames[characterId] ?? [];
+  const framed = (key: 'jumping' | 'falling' | 'fastFalling' | 'swinging'): HTMLImageElement =>
+    availableFrames.includes(key) ? loadImg(`${base}_${_animationFileSuffix[key]}.png`) : standingImg;
+
   return {
-    standing:   loadImg(standingSrc),
-    idle1:      loadImgWithFallback([`${base}_idle1.png`, standingSrc]),
-    idle2:      loadImgWithFallback([`${base}_idle2.png`, standingSrc]),
-    idleBlink:  loadImgWithFallback([`${base}_idleBlink.png`, standingSrc]),
-    sprinting:  loadImgWithFallback([`${base}_sprinting.png`, standingSrc]),
-    crouching:  loadImgWithFallback([`${base}_crouching.png`, standingSrc]),
-    grappling:  loadImgWithFallback([`${base}_grappling.png`, standingSrc]),
-    jumping:    loadImgWithFallback([`${base}_jumping.png`, standingSrc]),
-    falling:    loadImgWithFallback([`${base}_falling.png`, standingSrc]),
-    fastFalling: loadImgWithFallback([`${base}_fastfalling.png`, standingSrc]),
-    swinging:   loadImgWithFallback([`${base}_swinging.png`, standingSrc]),
+    standing:   standingImg,
+    idle1:      standingImg,
+    idle2:      standingImg,
+    idleBlink:  standingImg,
+    sprinting:  standingImg,
+    crouching:  loadImg(`${base}_crouching.png`),
+    grappling:  standingImg,
+    jumping:    framed('jumping'),
+    falling:    framed('falling'),
+    fastFalling: framed('fastFalling'),
+    swinging:   framed('swinging'),
   };
 }
 

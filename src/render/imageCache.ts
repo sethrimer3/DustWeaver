@@ -174,19 +174,3 @@ export function decodeImg(src: string): Promise<void> {
 
   return promise;
 }
-
-/**
- * Loads an image from the first URL in srcList; on load error, tries
- * subsequent URLs in order until the list is exhausted.
- */
-export function loadImgWithFallback(srcList: readonly string[]): HTMLImageElement {
-  const img = loadImg(srcList[0]);
-  if (srcList.length <= 1) return img;
-
-  let candidateIndex = 1;
-  img.addEventListener('error', () => {
-    if (candidateIndex >= srcList.length) return;
-    img.src = srcList[candidateIndex++];
-  });
-  return img;
-}

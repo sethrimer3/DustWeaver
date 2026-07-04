@@ -43,6 +43,19 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   /** Active combat mode. 'momentum' = speed-based; 'legacy' = dust/weave. */
   combatMode: CombatMode;
 
+  /**
+   * Identity tag: the `RoomDef.id` this world's static geometry (walls,
+   * bgWallGrid, hazards) was built for.  Set whenever a room's world is
+   * built/loaded (main load path and resident builds) and checked before a
+   * resident hot-swap so a world built for one room can never be activated
+   * under another room's id.  Empty string = not yet tagged.
+   *
+   * This is a defensive integrity check, not gameplay state — a mismatch
+   * indicates a caching / build-scheduling bug (see the resident hot-swap in
+   * gameScreen.ts) and triggers a safe full-reload fallback.
+   */
+  builtForRoomId: string;
+
   tick: number;
   dtMs: number;
   particleCount: number;
@@ -472,6 +485,7 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
     combatMode: DEFAULT_COMBAT_MODE,
+    builtForRoomId: '',
     tick: 0,
     dtMs,
     particleCount: 0,

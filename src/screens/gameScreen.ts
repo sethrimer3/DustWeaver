@@ -912,9 +912,28 @@ export function startGameScreen(
         return 'runtimeNotReady';
       }
       if (targetResident.world === null) return 'worldNull';
+      if (targetResident.world.builtForRoomId !== room.id) return 'roomIdMismatch';
       return 'none'; // Should not reach here — hot-swap guard should have matched.
     })();
-    const _residentReady = targetResident !== undefined && targetResident.runtimeReady && targetResident.world !== null;
+    // Integrity guard: a resident world must have been built for THIS room.  A
+    // mismatch means a build/caching bug paired the wrong geometry with this
+    // room id (e.g. another room rendering with "the fall"'s wall tiles).
+    // Reject the hot-swap so the full loadRoom path rebuilds correct walls, and
+    // surface the bug loudly rather than rendering corrupt geometry.
+    if (
+      targetResident !== undefined &&
+      targetResident.world !== null &&
+      targetResident.world.builtForRoomId !== room.id
+    ) {
+      console.error(
+        `[resident] hot-swap REJECTED: resident world for "${room.id}" was built for ` +
+        `"${targetResident.world.builtForRoomId}". Discarding it and falling back to full load.`,
+      );
+      // Drop the mis-paired world so it is rebuilt correctly and never reused.
+      residentRoomManager.invalidateResidentWorld(room.id);
+    }
+    const _residentReady = targetResident !== undefined && targetResident.runtimeReady
+      && targetResident.world !== null && targetResident.world.builtForRoomId === room.id;
     // Begin per-transition profiling (DEV-only no-op in production).
     if (import.meta.env.DEV) {
       const tpMode: TP.TransitionProfileMode =
@@ -923,7 +942,7 @@ export function startGameScreen(
                          'asyncCacheMiss';
       TP.beginTransition(room.id, tpMode, _residentReady);
     }
-    if (targetResident !== undefined && targetResident.runtimeReady && targetResident.world !== null) {
+    if (_residentReady && targetResident !== undefined && targetResident.world !== null) {
       if (import.meta.env.DEV && TP.isTransitionVerboseLogging()) {
         console.log(`[transition] ${room.id}: residentWorldHot — skipping loadRoom`);
       }
