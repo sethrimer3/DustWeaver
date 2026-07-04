@@ -29,7 +29,7 @@ import {
   TRAIL_UPDATE_INTERVAL_TICKS,
 } from '../sim/clusters/squareStampedeAi';
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
-import { GRID_BLOCK_HALF_SIZE } from '../sim/clusters/gridBlockEnemyAi';
+import { getGridBlockFootprintSize, GRID_BLOCK_HALF_SIZE } from '../sim/clusters/gridBlockEnemyAi';
 import { BEE_HALF_WIDTH_WORLD, BEE_HALF_HEIGHT_WORLD } from '../sim/clusters/beeSwarmAi';
 import {
   DC_SMALL_HP,
@@ -637,14 +637,19 @@ export function spawnEnemyClusters(
         }
       }
     } else if (enemyDef.isGridBlockEnemyFlag === 1) {
-      const sizeIndex  = enemyDef.gridBlockSizeIndex  ?? 0;
-      const speedIndex = enemyDef.gridBlockSpeedIndex ?? 0;
+      const sizeIndex  = enemyDef.gridBlockSizeIndex === 1 ? 1 : 0;
+      const speedIndex = enemyDef.gridBlockSpeedIndex === 1 ? 1 : enemyDef.gridBlockSpeedIndex === 2 ? 2 : 0;
       const hw         = GRID_BLOCK_HALF_SIZE[sizeIndex];
       const bs         = BLOCK_SIZE_MEDIUM;
+      const footprint  = getGridBlockFootprintSize(sizeIndex);
+      const roomW      = Math.ceil(world.worldWidthWorld / bs);
+      const roomH      = Math.ceil(world.worldHeightWorld / bs);
+      const maxGridX   = Math.max(0, roomW - footprint.w);
+      const maxGridY   = Math.max(0, roomH - footprint.h);
 
-      // Snap spawn position to nearest valid grid cell.
-      const gridX = Math.round((ex - hw) / bs);
-      const gridY = Math.round((ey - hw) / bs);
+      // Snap spawn position to the nearest grid cell that keeps the full footprint in bounds.
+      const gridX = Math.max(0, Math.min(maxGridX, Math.round((ex - hw) / bs)));
+      const gridY = Math.max(0, Math.min(maxGridY, Math.round((ey - hw) / bs)));
 
       enemyCluster.isGridBlockEnemyFlag          = 1;
       enemyCluster.gridBlockSizeIndex            = sizeIndex;

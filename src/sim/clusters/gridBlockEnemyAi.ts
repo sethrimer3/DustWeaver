@@ -97,13 +97,30 @@ function isCellSolid(world: WorldState, gx: number, gy: number): boolean {
  * Returns true if a 2×2 tile footprint with its top-left at `(gx, gy)` is
  * entirely free of solid walls (all four cells must be passable).
  */
-function is2x2FootprintFree(world: WorldState, gx: number, gy: number): boolean {
+export function getGridBlockFootprintSize(sizeIndex: number): { w: number; h: number } {
+  return sizeIndex === 1 ? { w: 2, h: 2 } : { w: 1, h: 1 };
+}
+
+export function isGridFootprintInBounds(world: WorldState, gx: number, gy: number, sizeIndex: number): boolean {
+  const roomWidthBlocks  = Math.ceil(world.worldWidthWorld  / BS);
+  const roomHeightBlocks = Math.ceil(world.worldHeightWorld / BS);
+  const footprint = getGridBlockFootprintSize(sizeIndex);
   return (
-    !isCellSolid(world, gx,     gy    ) &&
-    !isCellSolid(world, gx + 1, gy    ) &&
-    !isCellSolid(world, gx,     gy + 1) &&
-    !isCellSolid(world, gx + 1, gy + 1)
+    gx >= 0 &&
+    gy >= 0 &&
+    gx + footprint.w <= roomWidthBlocks &&
+    gy + footprint.h <= roomHeightBlocks
   );
+}
+
+export function isGridFootprintPassable(world: WorldState, gx: number, gy: number, sizeIndex: number): boolean {
+  const footprint = getGridBlockFootprintSize(sizeIndex);
+  for (let fy = 0; fy < footprint.h; fy++) {
+    for (let fx = 0; fx < footprint.w; fx++) {
+      if (isCellSolid(world, gx + fx, gy + fy)) return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -121,7 +138,6 @@ function bfsNextDirection(
   sizeIndex: number,
 ): [number, number] {
   const roomWidthBlocks  = Math.ceil(world.worldWidthWorld  / BS);
-  const roomHeightBlocks = Math.ceil(world.worldHeightWorld / BS);
 
   if (startGX === targetGX && startGY === targetGY) return [0, 0];
 
@@ -156,16 +172,12 @@ function bfsNextDirection(
       const nx = cx + DIR_DX[d];
       const ny = cy + DIR_DY[d];
 
-      if (nx < 0 || ny < 0 || nx >= roomWidthBlocks || ny >= roomHeightBlocks) continue;
+      if (!isGridFootprintInBounds(world, nx, ny, sizeIndex)) continue;
 
       const key = nx + ny * roomWidthBlocks;
       if (_bfsVisited[key]) continue;
 
-      const passable = sizeIndex === 0
-        ? !isCellSolid(world, nx, ny)
-        : is2x2FootprintFree(world, nx, ny);
-
-      if (!passable) continue;
+      if (!isGridFootprintPassable(world, nx, ny, sizeIndex)) continue;
 
       _bfsVisited[key] = 1;
       visitedCells.push(key);
@@ -312,15 +324,8 @@ export function applyGridBlockEnemyAI(world: WorldState): void {
         const newGX = cluster.gridBlockGridX + ndx;
         const newGY = cluster.gridBlockGridY + ndy;
 
-        const roomW = Math.ceil(world.worldWidthWorld  / BS);
-        const roomH = Math.ceil(world.worldHeightWorld / BS);
-
-        let canMove = (newGX >= 0 && newGY >= 0 && newGX < roomW && newGY < roomH);
-        if (canMove) {
-          canMove = sizeIndex === 0
-            ? !isCellSolid(world, newGX, newGY)
-            : is2x2FootprintFree(world, newGX, newGY);
-        }
+        let canMove = isGridFootprintInBounds(world, newGX, newGY, sizeIndex);
+        if (canMove) canMove = isGridFootprintPassable(world, newGX, newGY, sizeIndex);
 
         if (canMove) {
           cluster.gridBlockTargetGridX = newGX;

@@ -15,10 +15,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { applyGridBlockEnemyAI, GRID_BLOCK_HALF_SIZE } from '../sim/clusters/gridBlockEnemyAi';
+import { spawnEnemyClusters } from '../screens/gameEnemySpawn';
 import { enemyFlagsToType } from '../levels/roomSchemaV2';
 import { enemyTypeToFlags } from '../levels/roomSchemaHydrator';
 import type { RoomJsonEnemy } from '../editor/roomJsonSchema';
+import type { RoomEnemyDef } from '../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { createRng } from '../sim/rng';
+import { createWorldState } from '../sim/world';
 
 const BS = BLOCK_SIZE_SMALL; // 8
 
@@ -209,6 +213,77 @@ test('2x2 enemy stays put when surrounded by single-tile blockers', () => {
 });
 
 // ── Speed variants ────────────────────────────────────────────────────────────
+
+test('2x2 enemy at rightmost legal top-left cell cannot move right', () => {
+  const enemy = makeEnemy({ sizeIndex: 1, speedIndex: 2, gridX: 3, gridY: 1 });
+  const world = makeWorld({ widthBlocks: 5, heightBlocks: 5, clusters: [enemy] });
+  enemy.gridBlockNextDirX = 1;
+  enemy.gridBlockNextDirY = 0;
+  enemy.gridBlockRepathCooldownTicks = 100;
+
+  applyGridBlockEnemyAI(world);
+
+  assert.equal(enemy.gridBlockGridX, 3);
+  assert.equal(enemy.gridBlockTargetGridX, 3);
+  assert.equal(enemy.gridBlockMoveTicks, 0);
+});
+
+test('2x2 enemy at bottommost legal top-left cell cannot move down', () => {
+  const enemy = makeEnemy({ sizeIndex: 1, speedIndex: 2, gridX: 1, gridY: 3 });
+  const world = makeWorld({ widthBlocks: 5, heightBlocks: 5, clusters: [enemy] });
+  enemy.gridBlockNextDirX = 0;
+  enemy.gridBlockNextDirY = 1;
+  enemy.gridBlockRepathCooldownTicks = 100;
+
+  applyGridBlockEnemyAI(world);
+
+  assert.equal(enemy.gridBlockGridY, 3);
+  assert.equal(enemy.gridBlockTargetGridY, 3);
+  assert.equal(enemy.gridBlockMoveTicks, 0);
+});
+
+test('2x2 enemy footprint remains inside room after many ticks', () => {
+  const widthBlocks = 7;
+  const heightBlocks = 6;
+  const enemy = makeEnemy({ sizeIndex: 1, speedIndex: 2, gridX: 1, gridY: 1 });
+  const player = makePlayer((widthBlocks + 3) * BS, (heightBlocks + 3) * BS);
+  const world = makeWorld({ widthBlocks, heightBlocks, clusters: [player, enemy] });
+
+  for (let i = 0; i < 500; i++) {
+    applyGridBlockEnemyAI(world);
+    assert.ok(enemy.gridBlockGridX + 2 <= widthBlocks, `gridX out of bounds on tick ${i}`);
+    assert.ok(enemy.gridBlockGridY + 2 <= heightBlocks, `gridY out of bounds on tick ${i}`);
+    assert.ok(enemy.gridBlockTargetGridX + 2 <= widthBlocks, `targetGridX out of bounds on tick ${i}`);
+    assert.ok(enemy.gridBlockTargetGridY + 2 <= heightBlocks, `targetGridY out of bounds on tick ${i}`);
+  }
+});
+
+test('spawn normalizes grid block size and speed indices and clamps 2x2 footprint in bounds', () => {
+  const world = createWorldState(1000 / 60, 123);
+  world.worldWidthWorld = 5 * BS;
+  world.worldHeightWorld = 4 * BS;
+
+  const enemyDef = {
+    xBlock: 999,
+    yBlock: 999,
+    kinds: [],
+    particleCount: 6,
+    isBossFlag: 0,
+    isGridBlockEnemyFlag: 1,
+    gridBlockSizeIndex: 1,
+    gridBlockSpeedIndex: 99,
+  } as unknown as RoomEnemyDef;
+
+  spawnEnemyClusters(world, [enemyDef], 2, createRng(456));
+
+  const enemy = world.clusters[0];
+  assert.equal(enemy.gridBlockSizeIndex, 1);
+  assert.equal(enemy.gridBlockSpeedIndex, 0);
+  assert.equal(enemy.gridBlockGridX, 3);
+  assert.equal(enemy.gridBlockGridY, 2);
+  assert.equal(enemy.positionXWorld, 4 * BS);
+  assert.equal(enemy.positionYWorld, 3 * BS);
+});
 
 test('slow variant takes more ticks per step than medium, medium more than fast', () => {
   function ticksForOneStep(speedIndex: 0 | 1 | 2): number {
