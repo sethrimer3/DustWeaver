@@ -219,12 +219,25 @@ export function isBakeBudgetExhausted(): boolean {
 let _bakeForbiddenInGameplay = false;
 
 /**
+ * Incremented every time the bake-forbidden flag transitions from `true` to
+ * `false` (i.e. baking becomes allowed again — loading screen, pause, editor).
+ * `RoomChunkCache` compares this against a locally-stored value to detect the
+ * transition and retry any chunk that was built using unshaded gameplay
+ * fallback sprites, so edge shading eventually converges instead of being
+ * stuck on the fallback forever.
+ */
+let _bakeUnlockGeneration = 0;
+
+/**
  * Sets the gameplay-bake-forbidden flag.
  * Pass `true` before each active-gameplay render frame.
  * Pass `false` during loading, paused, or editor frames.
  * Production-safe — no DEV guard.
  */
 export function setBakeForbiddenInGameplay(v: boolean): void {
+  if (v === false && _bakeForbiddenInGameplay === true) {
+    _bakeUnlockGeneration++;
+  }
   _bakeForbiddenInGameplay = v;
 }
 
@@ -235,6 +248,16 @@ export function setBakeForbiddenInGameplay(v: boolean): void {
  */
 export function isBakeForbiddenInGameplay(): boolean {
   return _bakeForbiddenInGameplay;
+}
+
+/**
+ * Returns the current bake-unlock generation counter.  Callers that cache
+ * chunks built with the gameplay fallback should store the value they last
+ * observed and, when it changes, retry those chunks — see `RoomChunkCache`.
+ * Production-safe — no DEV guard.
+ */
+export function getBakeUnlockGeneration(): number {
+  return _bakeUnlockGeneration;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

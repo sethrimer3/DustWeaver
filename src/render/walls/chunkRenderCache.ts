@@ -159,6 +159,16 @@ interface ChunkCanvas {
    * converges once all sprites have finished loading.
    */
   hadFallbacksFlag: boolean;
+  /**
+   * True when the last build pass ran while `FP.isBakeForbiddenInGameplay()`
+   * was true, meaning every sprite in this chunk used the cheap unshaded
+   * fallback instead of the real edge-shaded bake.  Unlike `hadFallbacksFlag`
+   * this does NOT feed into `needsBuild` (that would thrash-rebuild every
+   * frame while still in gameplay) — it is only consulted once, when baking
+   * next becomes allowed (see `_retryGameplayFallbackChunks`), so the chunk
+   * gets exactly one retry to pick up real shading.
+   */
+  builtWithGameplayFallbackFlag: boolean;
 }
 
 // ── RoomChunkCache ─────────────────────────────────────────────────────────────
@@ -238,6 +248,31 @@ export class RoomChunkCache {
    * Used by the eviction pass to find the least-recently-visible chunks.
    */
   private readonly _lastVisibleFrame = new Map<string, number>();
+
+  /**
+   * Last-observed value of `FP.getBakeUnlockGeneration()`.  Initialized from
+   * the current value so a cache created mid-gameplay doesn't immediately
+   * think an unlock just happened.
+   */
+  private _lastBakeUnlockGeneration = FP.getBakeUnlockGeneration();
+
+  /**
+   * Called once per `renderVisibleChunks` to detect the bake-forbidden flag
+   * clearing since the last call.  When it has, every chunk that was built
+   * using the gameplay unshaded fallback is marked dirty so it gets one
+   * retry at the real (shaded) bake, subject to the usual per-frame budget.
+   */
+  private _retryGameplayFallbackChunks(): void {
+    const gen = FP.getBakeUnlockGeneration();
+    if (gen === this._lastBakeUnlockGeneration) return;
+    this._lastBakeUnlockGeneration = gen;
+    for (const [key, chunk] of this._chunks) {
+      if (chunk.builtWithGameplayFallbackFlag) {
+        this._dirtyKeys.add(key);
+        chunk.builtWithGameplayFallbackFlag = false;
+      }
+    }
+  }
 
   /**
    * Set the maximum total canvas memory (in KB) before stale chunks are
@@ -327,7 +362,7 @@ export class RoomChunkCache {
     this._layoutRef = layoutRef;
     this._scalePx   = scalePx;
     for (const [key, canvas] of chunks) {
-      this._chunks.set(key, { canvas, hadFallbacksFlag: false });
+      this._chunks.set(key, { canvas, hadFallbacksFlag: false, builtWithGameplayFallbackFlag: false });
       this._dirtyKeys.delete(key);
     }
   }
@@ -499,6 +534,9 @@ export class RoomChunkCache {
   ): void {
     // Store the block size so _evictStaleChunks() can use the actual value.
     this._lastBlockSizePx = blockSizePx;
+    // Retry any chunk stuck on the gameplay unshaded fallback now that baking
+    // may have become allowed again since the last call.
+    this._retryGameplayFallbackChunks();
     // ── Layout / scale change detection ─────────────────────────────────────
     if (layoutRef !== this._layoutRef || scalePx !== this._scalePx) {
       this.invalidateAll();
@@ -566,7 +604,7 @@ export class RoomChunkCache {
             const c    = document.createElement('canvas');
             c.width    = side;
             c.height   = side;
-            chunk      = { canvas: c, hadFallbacksFlag: true };
+            chunk      = { canvas: c, hadFallbacksFlag: true, builtWithGameplayFallbackFlag: false };
             this._chunks.set(key, chunk);
           }
 
@@ -584,6 +622,11 @@ export class RoomChunkCache {
             const chunkOffX = -(colMin * blockSizePx * scalePx);
             const chunkOffY = -(rowMin * blockSizePx * scalePx);
 
+            // Captured before buildChunkFn runs — records whether this build
+            // used the cheap unshaded gameplay fallback so it can be retried
+            // once baking becomes allowed again (see _retryGameplayFallbackChunks).
+            const wasBakeForbidden = FP.isBakeForbiddenInGameplay();
+
             const _ct0 = import.meta.env.DEV ? performance.now() : 0;
             chunk.hadFallbacksFlag = buildChunkFn(
               chunkCtx,
@@ -596,6 +639,7 @@ export class RoomChunkCache {
               colMax,
               rowMax,
             );
+            chunk.builtWithGameplayFallbackFlag = wasBakeForbidden;
             if (import.meta.env.DEV) {
               const chunkMs = performance.now() - _ct0;
               rebuildTotalMs += chunkMs;
