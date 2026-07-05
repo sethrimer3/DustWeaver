@@ -19,7 +19,7 @@ import type { SelectedElement, EditorRoomData } from './editorElementTypes';
 // Re-export element types so existing consumers need not change their imports.
 export type {
   EditorRope, EditorSceneLight, EditorWall, EditorEnemy, EditorTransition,
-  EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorBouncePad, EditorKineticBlock,
+  EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorSpike, EditorBouncePad, EditorKineticBlock,
   EditorSaveTomb, EditorSkillTomb, EditorDustContainer, EditorDustContainerPiece,
   EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor, EditorDustPile,
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,

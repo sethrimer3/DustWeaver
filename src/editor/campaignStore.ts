@@ -59,6 +59,7 @@ function computeMaxUidPlusOne(roomData: EditorRoomData, startUid: number): numbe
   for (const z of (roomData.waterZones ?? [])) track(z.uid);
   for (const z of (roomData.lavaZones ?? [])) track(z.uid);
   for (const c of (roomData.crumbleBlocks ?? [])) track(c.uid);
+  for (const sp of (roomData.spikes ?? [])) track(sp.uid);
   for (const b of (roomData.bouncePads ?? [])) track(b.uid);
   for (const kb of (roomData.kineticBlocks ?? [])) track(kb.uid);
   for (const r of (roomData.ropes ?? [])) track(r.uid);

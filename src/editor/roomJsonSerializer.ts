@@ -23,6 +23,7 @@ import type {
   RoomJsonRope,
   RoomJsonDialogueTrigger,
   RoomJsonCrumbleBlock,
+  RoomJsonSpike,
   RoomJsonBouncePad,
   RoomJsonBackgroundBlock,
   RoomJsonGuideDustPath,
@@ -295,6 +296,18 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         entry.blockTheme = b.blockTheme;
         entry.blockThemeId = blockThemeToId(b.blockTheme);
       }
+      return entry;
+    });
+  }
+  if ((data.spikes ?? []).length > 0) {
+    json.spikes = (data.spikes ?? []).map(sp => {
+      const entry: RoomJsonSpike = {
+        xBlock: sp.xBlock,
+        yBlock: sp.yBlock,
+        direction: sp.direction,
+      };
+      if (sp.size !== '1x1') entry.size = sp.size;
+      if (sp.blockTheme !== undefined) entry.blockTheme = sp.blockTheme;
       return entry;
     });
   }

@@ -81,6 +81,9 @@ export function storeDragStartPositions(
     } else if (el.type === 'bouncePad') {
       const b = (s.roomData.bouncePads ?? []).find(b2 => b2.uid === el.uid);
       if (b) positions.set(key, { xBlock: b.xBlock, yBlock: b.yBlock });
+    } else if (el.type === 'spike') {
+      const sp = (s.roomData.spikes ?? []).find(sp2 => sp2.uid === el.uid);
+      if (sp) positions.set(key, { xBlock: sp.xBlock, yBlock: sp.yBlock });
     } else if (el.type === 'fallingBlock') {
       const fb = (s.roomData.fallingBlocks ?? []).find(fb2 => fb2.uid === el.uid);
       if (fb) positions.set(key, { xBlock: fb.xBlock, yBlock: fb.yBlock });
@@ -175,6 +178,9 @@ export function moveSelectedElements(
     } else if (el.type === 'bouncePad') {
       const b = (s.roomData.bouncePads ?? []).find(b2 => b2.uid === el.uid);
       if (b) { b.xBlock = orig.xBlock + deltaX; b.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'spike') {
+      const sp = (s.roomData.spikes ?? []).find(sp2 => sp2.uid === el.uid);
+      if (sp) { sp.xBlock = orig.xBlock + deltaX; sp.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'fallingBlock') {
       const fb = (s.roomData.fallingBlocks ?? []).find(fb2 => fb2.uid === el.uid);
       if (fb) { fb.xBlock = orig.xBlock + deltaX; fb.yBlock = orig.yBlock + deltaY; }
@@ -244,6 +250,7 @@ export function serializeSelectedElements(
     waterZones: EditorWaterZone[];
     lavaZones: EditorLavaZone[];
     crumbleBlocks: EditorCrumbleBlock[];
+    spikes: EditorSpike[];
     bouncePads: EditorBouncePad[];
     grasshopperAreas: EditorGrasshopperArea[];
     fireflyAreas: EditorFireflyArea[];
@@ -256,6 +263,7 @@ export function serializeSelectedElements(
     lambdaAnchors: [],
     dustPiles: [],
     decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
+    spikes: [],
     bouncePads: [], grasshopperAreas: [], fireflyAreas: [], fallingBlocks: [], guideDustPaths: [],
   };
   for (const el of elements) {
@@ -310,6 +318,9 @@ export function serializeSelectedElements(
     } else if (el.type === 'bouncePad') {
       const b = (room.bouncePads ?? []).find(b2 => b2.uid === el.uid);
       if (b) data.bouncePads.push({ ...b });
+    } else if (el.type === 'spike') {
+      const sp = (room.spikes ?? []).find(sp2 => sp2.uid === el.uid);
+      if (sp) data.spikes.push({ ...sp });
     } else if (el.type === 'fallingBlock') {
       const fb = (room.fallingBlocks ?? []).find(fb2 => fb2.uid === el.uid);
       if (fb) data.fallingBlocks.push({ ...fb });
@@ -350,6 +361,7 @@ export function pasteFromClipboard(s: EditorState): void {
     waterZones?: EditorWaterZone[];
     lavaZones?: EditorLavaZone[];
     crumbleBlocks?: EditorCrumbleBlock[];
+    spikes?: EditorSpike[];
     bouncePads?: EditorBouncePad[];
     grasshopperAreas?: EditorGrasshopperArea[];
     fireflyAreas?: EditorFireflyArea[];
@@ -375,6 +387,7 @@ export function pasteFromClipboard(s: EditorState): void {
     ...(data.dustPiles ?? []),
     ...(data.decorations ?? []), ...(data.lightSources ?? []), ...(data.sunbeams ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
+    ...(data.spikes ?? []),
     ...(data.bouncePads ?? []), ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
     ...(data.fallingBlocks ?? []),
     // For guide paths, collect all control points for proper bounding-box offset
@@ -565,6 +578,17 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: b.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'bouncePad', uid: newUid });
+  }
+  for (const sp of (data.spikes ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.spikes) s.roomData.spikes = [];
+    s.roomData.spikes.push({
+      ...sp,
+      uid: newUid,
+      xBlock: sp.xBlock - minX + offsetX,
+      yBlock: sp.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'spike', uid: newUid });
   }
   for (const a of (data.grasshopperAreas ?? [])) {
     const newUid = allocateUid(s);

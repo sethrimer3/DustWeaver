@@ -138,6 +138,62 @@ export function drawEditorCrumbleBlocks(
 }
 
 // ============================================================================
+// Spikes
+// ============================================================================
+
+export function drawEditorSpikes(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  for (const sp of (room.spikes ?? [])) {
+    const sel = isSelected('spike', sp.uid);
+    const sizeBlocks = sp.size === '2x2' ? 2 : 1;
+    const xPx = sp.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = sp.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = sizeBlocks * BLOCK_SIZE_SMALL * zoom;
+    const hPx = sizeBlocks * BLOCK_SIZE_SMALL * zoom;
+    const cx = xPx + wPx * 0.5;
+    const cy = yPx + hPx * 0.5;
+
+    const fillAlpha = sel ? 0.65 : 0.45;
+    const strokeAlpha = sel ? 1.0 : 0.65;
+    ctx.fillStyle = `rgba(160,20,20,${fillAlpha})`;
+    ctx.strokeStyle = `rgba(220,60,60,${strokeAlpha})`;
+    ctx.lineWidth = sel ? 2 : 1;
+
+    ctx.beginPath();
+    switch (sp.direction) {
+      case 'up':
+        ctx.moveTo(cx, yPx); ctx.lineTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx);
+        break;
+      case 'down':
+        ctx.moveTo(cx, yPx + hPx); ctx.lineTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx);
+        break;
+      case 'left':
+        ctx.moveTo(xPx, cy); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx + wPx, yPx + hPx);
+        break;
+      case 'right':
+        ctx.moveTo(xPx + wPx, cy); ctx.lineTo(xPx, yPx); ctx.lineTo(xPx, yPx + hPx);
+        break;
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    if (sp.blockTheme !== undefined) {
+      ctx.fillStyle = 'rgba(255,200,200,0.85)';
+      ctx.font = `bold ${Math.max(7, zoom * 3.5)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText(sp.blockTheme, cx, yPx + hPx + zoom * 5);
+    }
+  }
+}
+
+// ============================================================================
 // Bounce pads
 // ============================================================================
 

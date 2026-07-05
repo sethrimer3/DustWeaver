@@ -222,6 +222,13 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       variant: b.variant !== 'normal' ? b.variant : undefined,
       blockTheme: b.blockTheme,
     })),
+    spikes: (data.spikes ?? []).map(sp => ({
+      xBlock: sp.xBlock,
+      yBlock: sp.yBlock,
+      direction: sp.direction,
+      size: sp.size !== '1x1' ? sp.size : undefined,
+      blockTheme: sp.blockTheme,
+    })),
     bouncePads: (data.bouncePads ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,

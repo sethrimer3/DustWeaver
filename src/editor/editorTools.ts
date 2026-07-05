@@ -201,6 +201,14 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check spikes
+  for (const sp of (room.spikes ?? [])) {
+    const spSize = sp.size === '2x2' ? 2 : 1;
+    if (hitTestZone({ xBlock: sp.xBlock, yBlock: sp.yBlock, wBlock: spSize, hBlock: spSize }, bx, by)) {
+      return { type: 'spike', uid: sp.uid };
+    }
+  }
+
   // Check decorations
   for (const d of (room.decorations ?? [])) {
     if (hitTestPoint(d.xBlock, d.yBlock, bx, by)) {
@@ -474,6 +482,13 @@ export function getAllElementsInRect(
     if (b.xBlock + b.wBlock > minX && b.xBlock < maxX + 1 &&
         b.yBlock + b.hBlock > minY && b.yBlock < maxY + 1) {
       results.push({ type: 'bouncePad', uid: b.uid });
+    }
+  }
+  for (const sp of (room.spikes ?? [])) {
+    const spSize = sp.size === '2x2' ? 2 : 1;
+    if (sp.xBlock + spSize > minX && sp.xBlock < maxX + 1 &&
+        sp.yBlock + spSize > minY && sp.yBlock < maxY + 1) {
+      results.push({ type: 'spike', uid: sp.uid });
     }
   }
   for (const fb of (room.fallingBlocks ?? [])) {

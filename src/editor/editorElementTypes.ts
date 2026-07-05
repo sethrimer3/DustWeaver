@@ -225,6 +225,21 @@ export interface EditorCrumbleBlock {
   blockTheme?: BlockTheme;
 }
 
+// ── Spikes ────────────────────────────────────────────────────────────────────
+
+/** A spike hazard tile — damages the player on contact with its base half. */
+export interface EditorSpike {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Direction the spike points (the dangerous end). */
+  direction: import('../levels/roomDef').SpikeDirection;
+  /** Footprint size in blocks. */
+  size: import('../levels/roomDef').SpikeSize;
+  /** Block theme the spike's sprite is cut from. Undefined = use the room's active theme. */
+  blockTheme?: BlockTheme;
+}
+
 // ── Bounce pads ───────────────────────────────────────────────────────────────
 
 /** A bounce pad block that reflects the player's velocity on contact. */
@@ -542,6 +557,8 @@ export interface EditorRoomData {
   lavaZones?: EditorLavaZone[];
   /** Crumble blocks placed in this room (collapse on first player contact). */
   crumbleBlocks?: EditorCrumbleBlock[];
+  /** Spikes placed in this room (damage the player on contact with the base half). */
+  spikes?: EditorSpike[];
   /** Bounce pads placed in this room (reflect player velocity on contact). */
   bouncePads?: EditorBouncePad[];
   kineticBlocks?: EditorKineticBlock[];
@@ -565,7 +582,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'bouncePad' | 'kineticBlock' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath';
 
 export interface SelectedElement {
   type: SelectedElementType;

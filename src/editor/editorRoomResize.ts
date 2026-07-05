@@ -99,6 +99,12 @@ export function applyRoomDimensionChange(
     clampZoneToDimensions(b, room.widthBlocks, room.heightBlocks);
   }
 
+  for (const sp of (room.spikes ?? [])) {
+    const spSize = sp.size === '2x2' ? 2 : 1;
+    sp.xBlock = Math.min(Math.max(0, sp.xBlock), room.widthBlocks - spSize);
+    sp.yBlock = Math.min(Math.max(0, sp.yBlock), room.heightBlocks - spSize);
+  }
+
   // Clamp falling block tiles — remove any that fall outside the room
   if (room.fallingBlocks) {
     room.fallingBlocks = room.fallingBlocks.filter(
@@ -237,6 +243,12 @@ export function applyEdgeResize(
     for (const b of (room.bouncePads ?? [])) {
       b.xBlock += shiftX;
       b.yBlock += shiftY;
+    }
+
+    // Shift spikes
+    for (const sp of (room.spikes ?? [])) {
+      sp.xBlock += shiftX;
+      sp.yBlock += shiftY;
     }
 
     // Shift falling block tiles

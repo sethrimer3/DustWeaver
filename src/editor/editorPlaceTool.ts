@@ -285,6 +285,39 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       return;
     }
 
+    // ── Spikes ────────────────────────────────────────────────────────────────
+    if (item.isSpikeItem === 1) {
+      const spikeSize = item.spikeSize ?? '1x1';
+      const spikeW = getPlacementWidth(item, state.placementRotationSteps);
+      const spikeH = getPlacementHeight(item, state.placementRotationSteps);
+      // Direction follows the same 90°-CW rotation steps used for ramps/platforms:
+      // 0=up, 1=right, 2=down, 3=left (see _spikeDirRotStep in render/hazards.ts).
+      const spikeDirections: readonly ('up' | 'right' | 'down' | 'left')[] = ['up', 'right', 'down', 'left'];
+      const spikeDirection = spikeDirections[state.placementRotationSteps % 4];
+
+      if (!rectFitsInsideRoom(room, bx, by, spikeW, spikeH)) return;
+      const spikes = room.spikes ?? [];
+      const spikeSizeBlocks = spikeSize === '2x2' ? 2 : 1;
+      const overlapsSpike = spikes.some(sp => {
+        const spSize = sp.size === '2x2' ? 2 : 1;
+        return bx < sp.xBlock + spSize && bx + spikeSizeBlocks > sp.xBlock &&
+               by < sp.yBlock + spSize && by + spikeSizeBlocks > sp.yBlock;
+      });
+      if (overlapsSpike) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, spikeW, spikeH)) return;
+
+      if (!room.spikes) room.spikes = [];
+      room.spikes.push({
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        direction: spikeDirection,
+        size: spikeSize,
+        blockTheme: placementBlockTheme,
+      });
+      return;
+    }
+
     if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);

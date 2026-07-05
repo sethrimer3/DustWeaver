@@ -286,6 +286,18 @@ export function deleteAtCursor(state: EditorState): void {
     }
   }
 
+  // Check spikes
+  const spikes = room.spikes ?? [];
+  for (let i = 0; i < spikes.length; i++) {
+    const spSize = spikes[i].size === '2x2' ? 2 : 1;
+    if (hitTestZone({ xBlock: spikes[i].xBlock, yBlock: spikes[i].yBlock, wBlock: spSize, hBlock: spSize }, bx, by)) {
+      const removedUid = spikes[i].uid;
+      spikes.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
   // Check bounce pads
   const bouncePads = room.bouncePads ?? [];
   for (let i = 0; i < bouncePads.length; i++) {

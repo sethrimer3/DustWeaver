@@ -41,10 +41,138 @@ function _spikeDirRotStep(dir: number): number {
   }
 }
 
+/** Faint dark-red outline colour for placed spikes (matches the player's outline convention). */
+const SPIKE_OUTLINE_COLOR: readonly [number, number, number] = [139, 0, 0];
+/** Outline opacity (25%), applied via ctx.globalAlpha at draw time. */
+const SPIKE_OUTLINE_ALPHA = 0.25;
+/** 1 virtual pixel outline thickness, matching PLAYER_OUTLINE_THICKNESS_WORLD. */
+const SPIKE_OUTLINE_THICKNESS_WORLD = 1;
+/** 4-neighbour outline morphology keeps pixel-art corners cut off (mirrors characterSprites.ts). */
+const _spikeOutlineNeighborOffsets: ReadonlyArray<readonly [number, number]> = [
+            [0, -1],
+  [-1,  0],          [1,  0],
+            [0,  1],
+];
+/** Precomputed outer-edge outline masks keyed by the source spike sprite canvas. */
+const _spikeOutlineMaskCache = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+
 /**
- * Draws a spike using the active room's block theme, cut out via a
- * deterministically-chosen variation template mask (same "cutout" technique
- * used for ramp/platform block shapes — see proceduralBlockSprite.ts).
+ * Builds a faint dark-red outer-silhouette outline mask for a spike sprite,
+ * using the same outer-edge-only, no-corners flood-fill technique as the
+ * player's outline (characterSprites.ts:getOrCreateOuterOutlineMask), just
+ * recoloured and drawn at 25% opacity instead of solid black.
+ *
+ * Excludes interior transparent holes (flood-fills only the transparency
+ * region connected to the canvas border), so only the true outer silhouette
+ * gets outlined — correct for the jagged/triangular spike cutout shapes.
+ */
+function _getOrCreateSpikeOutlineMask(sprite: HTMLCanvasElement): HTMLCanvasElement {
+  const cached = _spikeOutlineMaskCache.get(sprite);
+  if (cached !== undefined) return cached;
+
+  const spriteWidthPx = sprite.width;
+  const spriteHeightPx = sprite.height;
+  const paddedWidthPx = spriteWidthPx + 2;
+  const paddedHeightPx = spriteHeightPx + 2;
+  const pixelCount = paddedWidthPx * paddedHeightPx;
+
+  const alphaCanvas = document.createElement('canvas');
+  alphaCanvas.width = paddedWidthPx;
+  alphaCanvas.height = paddedHeightPx;
+  const alphaCtx = alphaCanvas.getContext('2d');
+  if (alphaCtx === null) {
+    _spikeOutlineMaskCache.set(sprite, alphaCanvas);
+    return alphaCanvas;
+  }
+  alphaCtx.clearRect(0, 0, paddedWidthPx, paddedHeightPx);
+  alphaCtx.drawImage(sprite, 1, 1);
+  const alphaData = alphaCtx.getImageData(0, 0, paddedWidthPx, paddedHeightPx).data;
+
+  const isOpaqueFlag = new Uint8Array(pixelCount);
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
+    isOpaqueFlag[pixelIndex] = alphaData[pixelIndex * 4 + 3] > 0 ? 1 : 0;
+  }
+
+  const isOutsideFlag = new Uint8Array(pixelCount);
+  const queueX = new Int16Array(pixelCount);
+  const queueY = new Int16Array(pixelCount);
+  let queueReadIndex = 0;
+  let queueWriteIndex = 0;
+
+  const enqueueIfOutside = (xPx: number, yPx: number): void => {
+    const idx = yPx * paddedWidthPx + xPx;
+    if (isOpaqueFlag[idx] === 1 || isOutsideFlag[idx] === 1) return;
+    isOutsideFlag[idx] = 1;
+    queueX[queueWriteIndex] = xPx;
+    queueY[queueWriteIndex] = yPx;
+    queueWriteIndex++;
+  };
+
+  for (let xPx = 0; xPx < paddedWidthPx; xPx++) {
+    enqueueIfOutside(xPx, 0);
+    enqueueIfOutside(xPx, paddedHeightPx - 1);
+  }
+  for (let yPx = 1; yPx < paddedHeightPx - 1; yPx++) {
+    enqueueIfOutside(0, yPx);
+    enqueueIfOutside(paddedWidthPx - 1, yPx);
+  }
+
+  while (queueReadIndex < queueWriteIndex) {
+    const xPx = queueX[queueReadIndex];
+    const yPx = queueY[queueReadIndex];
+    queueReadIndex++;
+
+    if (xPx > 0) enqueueIfOutside(xPx - 1, yPx);
+    if (xPx < paddedWidthPx - 1) enqueueIfOutside(xPx + 1, yPx);
+    if (yPx > 0) enqueueIfOutside(xPx, yPx - 1);
+    if (yPx < paddedHeightPx - 1) enqueueIfOutside(xPx, yPx + 1);
+  }
+
+  const outlineCanvas = document.createElement('canvas');
+  outlineCanvas.width = paddedWidthPx;
+  outlineCanvas.height = paddedHeightPx;
+  const outlineCtx = outlineCanvas.getContext('2d');
+  if (outlineCtx === null) {
+    _spikeOutlineMaskCache.set(sprite, outlineCanvas);
+    return outlineCanvas;
+  }
+
+  const outlineImage = outlineCtx.createImageData(paddedWidthPx, paddedHeightPx);
+  const outlinePixels = outlineImage.data;
+  for (let yPx = 0; yPx < paddedHeightPx; yPx++) {
+    for (let xPx = 0; xPx < paddedWidthPx; xPx++) {
+      const idx = yPx * paddedWidthPx + xPx;
+      if (isOutsideFlag[idx] === 0) continue;
+
+      let hasOpaqueNeighbor = false;
+      for (let n = 0; n < _spikeOutlineNeighborOffsets.length; n++) {
+        const nx = xPx + _spikeOutlineNeighborOffsets[n][0];
+        const ny = yPx + _spikeOutlineNeighborOffsets[n][1];
+        if (nx < 0 || nx >= paddedWidthPx || ny < 0 || ny >= paddedHeightPx) continue;
+        if (isOpaqueFlag[ny * paddedWidthPx + nx] === 1) {
+          hasOpaqueNeighbor = true;
+          break;
+        }
+      }
+      if (!hasOpaqueNeighbor) continue;
+
+      const dataIndex = idx * 4;
+      outlinePixels[dataIndex] = SPIKE_OUTLINE_COLOR[0];
+      outlinePixels[dataIndex + 1] = SPIKE_OUTLINE_COLOR[1];
+      outlinePixels[dataIndex + 2] = SPIKE_OUTLINE_COLOR[2];
+      outlinePixels[dataIndex + 3] = 255;
+    }
+  }
+  outlineCtx.putImageData(outlineImage, 0, 0);
+  _spikeOutlineMaskCache.set(sprite, outlineCanvas);
+  return outlineCanvas;
+}
+
+/**
+ * Draws a spike using its block theme (per-spike override or the active
+ * room theme), cut out via a deterministically-chosen variation template
+ * mask (same "cutout" technique used for ramp/platform block shapes — see
+ * proceduralBlockSprite.ts), with a faint dark-red outer-silhouette outline.
  *
  * @returns `true` if the themed sprite was drawn; `false` when no folder-based
  *   theme is active or the sprite/template images have not finished loading
@@ -59,8 +187,12 @@ function _drawThemedSpike(
   screenHalf: number,
   sizeBlocks: number,
   dir: number,
+  zoom: number,
+  themeIndex: number,
 ): boolean {
-  const themeId = getActiveFolderBlockThemeId();
+  const themeId = themeIndex === WALL_THEME_DEFAULT_INDEX
+    ? getActiveFolderBlockThemeId()
+    : indexToBlockTheme(themeIndex);
   if (themeId === null) return false;
 
   const seed = getActiveWorldNumberForSprites();
@@ -83,6 +215,19 @@ function _drawThemedSpike(
     seed, colTopLeft, rowTopLeft,
   );
   if (sprite === null) return false;
+
+  // Outline first (underneath), matching the player's outline draw order —
+  // the 1px silhouette peeks out around the sprite's real edges.
+  const outlineThicknessPx = SPIKE_OUTLINE_THICKNESS_WORLD * zoom;
+  const outlineMask = _getOrCreateSpikeOutlineMask(sprite);
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = SPIKE_OUTLINE_ALPHA;
+  ctx.drawImage(
+    outlineMask,
+    Math.round(screenCx - screenHalf - outlineThicknessPx), Math.round(screenCy - screenHalf - outlineThicknessPx),
+    Math.round(screenHalf * 2 + outlineThicknessPx * 2), Math.round(screenHalf * 2 + outlineThicknessPx * 2),
+  );
+  ctx.globalAlpha = prevAlpha;
 
   ctx.drawImage(
     sprite,
@@ -394,7 +539,7 @@ export function renderHazards(
 
     if (!isScreenRectVisible(cx - half - 1, cy - half - 1, half * 2 + 2, half * 2 + 2, vpW, vpH)) continue;
 
-    const drawn = _drawThemedSpike(ctx, spx, spy, cx, cy, half, sizeBlocks, dir);
+    const drawn = _drawThemedSpike(ctx, spx, spy, cx, cy, half, sizeBlocks, dir, zoom, world.spikeBlockThemeIndex[i]);
     if (drawn) continue;
 
     // ── Fallback: flat triangle (theme not yet resolvable — e.g. legacy

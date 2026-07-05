@@ -34,6 +34,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     waterZone:        'water_zone',
     lavaZone:         'lava_zone',
     crumbleBlock:     'crumble_block',
+    spike:            'spike',
     bouncePad:        'bounce_pad',
     kineticBlock:     'kinetic_block',
     rope:             'rope',
@@ -122,6 +123,15 @@ export function buildElementTypeName(
       return `Crumble Block${sizeLabel}${variantLabel}`;
     }
     return 'Crumble Block';
+  }
+  if (type === 'spike') {
+    const sp = (room.spikes ?? []).find(x => x.uid === uid);
+    if (sp) {
+      const sizeLabel = sp.size === '2x2' ? '2×2' : '1×1';
+      const themeLabel = sp.blockTheme ? ` [${sp.blockTheme}]` : '';
+      return `Spike ${sizeLabel} (${sp.direction})${themeLabel}`;
+    }
+    return 'Spike';
   }
   if (type === 'bouncePad') {
     const b = (room.bouncePads ?? []).find(x => x.uid === uid);
