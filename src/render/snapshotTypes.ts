@@ -265,6 +265,23 @@ export interface WorldSnapshot {
   readonly vspProjLifetimeTicks: Float32Array;
   readonly vspProjAliveFlag: Uint8Array;
 
+  // Crimson Wizard fire/smoke/projectile arrays.
+  readonly cwFireDustXWorld: Float32Array;
+  readonly cwFireDustYWorld: Float32Array;
+  readonly cwFireDustAgeTicks: Uint16Array;
+  readonly cwFireDustLifetimeTicks: Uint16Array;
+  readonly cwFireDustColorIndex: Uint8Array;
+  readonly cwFireDustAliveFlag: Uint8Array;
+  readonly cwSmokeXWorld: Float32Array;
+  readonly cwSmokeYWorld: Float32Array;
+  readonly cwSmokeAgeTicks: Uint16Array;
+  readonly cwSmokeLifetimeTicks: Uint16Array;
+  readonly cwSmokeAliveFlag: Uint8Array;
+  readonly cwProjectileXWorld: Float32Array;
+  readonly cwProjectileYWorld: Float32Array;
+  readonly cwProjectileType: Uint8Array;
+  readonly cwProjectileAliveFlag: Uint8Array;
+
   // ── Dust Leech mote arrays ─────────────────────────────────────────────────
   readonly dlMoteAngleRad: Float32Array;
   readonly dlMotePulsePhaseRad: Float32Array;

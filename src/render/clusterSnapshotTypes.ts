@@ -83,6 +83,12 @@ export interface ClusterSnapshot {
   readonly radiantWebState: number;
   /** Ticks elapsed in the current Radiant Web state. */
   readonly radiantWebStateTicks: number;
+  /** 1 if this cluster is the Crimson Wizard boss. */
+  readonly isCrimsonWizardFlag: 0 | 1;
+  readonly crimsonWizardState: number;
+  readonly crimsonWizardStateTicks: number;
+  readonly crimsonWizardFacingX: number;
+  readonly crimsonWizardTelegraphTicks: number;
   /** 1 if this cluster is a grapple hunter. */
   readonly isGrappleHunterFlag: 0 | 1;
   /** Current grapple hunter state (0-4). */

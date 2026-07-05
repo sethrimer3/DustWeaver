@@ -424,6 +424,7 @@ export function getEnemyFootprintBlocks(enemy: EditorEnemy): { wBlock: number; h
   if (enemy.isBeetleFlag === 1) return { wBlock: 2, hBlock: 1 };
   if (enemy.isRadiantTetherFlag === 1) return { wBlock: 3, hBlock: 3 };
   if (enemy.isRadiantWebFlag === 1) return { wBlock: 3, hBlock: 3 };
+  if (enemy.isCrimsonWizardFlag === 1) return { wBlock: 1, hBlock: 3 };
   if (enemy.isRockElementalFlag === 1) return { wBlock: 3, hBlock: 3 };
   if (enemy.isGridBlockEnemyFlag === 1) return enemy.gridBlockSizeIndex === 1 ? { wBlock: 2, hBlock: 2 } : { wBlock: 1, hBlock: 1 };
   if (enemy.isGridSnakeEnemyFlag === 1) return { wBlock: 1, hBlock: 1 };

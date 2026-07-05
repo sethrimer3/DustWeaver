@@ -103,6 +103,9 @@ interface _ReusableBacking {
   odcMoteRadiusWorld: Float32Array;
   odcMoteAliveFlag: Uint8Array;
   odcMotePulsePhaseRad: Float32Array;
+  cwFireDustAliveFlag: Uint8Array;
+  cwSmokeAliveFlag: Uint8Array;
+  cwProjectileAliveFlag: Uint8Array;
   // Arrow Weave scalar fields updated each frame
   isArrowWeaveLoadingFlag: 0 | 1;
   arrowWeaveCurrentMoteCount: number;
@@ -299,6 +302,21 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     vspProjVelYWorld:            world.vspProjVelYWorld,
     vspProjLifetimeTicks:        world.vspProjLifetimeTicks,
     vspProjAliveFlag:            world.vspProjAliveFlag,
+    cwFireDustXWorld:            world.cwFireDustXWorld,
+    cwFireDustYWorld:            world.cwFireDustYWorld,
+    cwFireDustAgeTicks:          world.cwFireDustAgeTicks,
+    cwFireDustLifetimeTicks:     world.cwFireDustLifetimeTicks,
+    cwFireDustColorIndex:        world.cwFireDustColorIndex,
+    cwFireDustAliveFlag:         world.cwFireDustAliveFlag,
+    cwSmokeXWorld:               world.cwSmokeXWorld,
+    cwSmokeYWorld:               world.cwSmokeYWorld,
+    cwSmokeAgeTicks:             world.cwSmokeAgeTicks,
+    cwSmokeLifetimeTicks:        world.cwSmokeLifetimeTicks,
+    cwSmokeAliveFlag:            world.cwSmokeAliveFlag,
+    cwProjectileXWorld:          world.cwProjectileXWorld,
+    cwProjectileYWorld:          world.cwProjectileYWorld,
+    cwProjectileType:            world.cwProjectileType,
+    cwProjectileAliveFlag:       world.cwProjectileAliveFlag,
     architectBlockCount:         world.architectBlockCount,
     architectBlockXWorld:        world.architectBlockXWorld,
     architectBlockYWorld:        world.architectBlockYWorld,
@@ -615,6 +633,21 @@ export function refreshSnapshotWorldArrayRefs(
   raw.vspProjVelYWorld               = world.vspProjVelYWorld;
   raw.vspProjLifetimeTicks           = world.vspProjLifetimeTicks;
   raw.vspProjAliveFlag               = world.vspProjAliveFlag;
+  raw.cwFireDustXWorld               = world.cwFireDustXWorld;
+  raw.cwFireDustYWorld               = world.cwFireDustYWorld;
+  raw.cwFireDustAgeTicks             = world.cwFireDustAgeTicks;
+  raw.cwFireDustLifetimeTicks        = world.cwFireDustLifetimeTicks;
+  raw.cwFireDustColorIndex           = world.cwFireDustColorIndex;
+  raw.cwFireDustAliveFlag            = world.cwFireDustAliveFlag;
+  raw.cwSmokeXWorld                  = world.cwSmokeXWorld;
+  raw.cwSmokeYWorld                  = world.cwSmokeYWorld;
+  raw.cwSmokeAgeTicks                = world.cwSmokeAgeTicks;
+  raw.cwSmokeLifetimeTicks           = world.cwSmokeLifetimeTicks;
+  raw.cwSmokeAliveFlag               = world.cwSmokeAliveFlag;
+  raw.cwProjectileXWorld             = world.cwProjectileXWorld;
+  raw.cwProjectileYWorld             = world.cwProjectileYWorld;
+  raw.cwProjectileType               = world.cwProjectileType;
+  raw.cwProjectileAliveFlag          = world.cwProjectileAliveFlag;
   raw.architectBlockXWorld           = world.architectBlockXWorld;
   raw.architectBlockYWorld           = world.architectBlockYWorld;
   raw.architectBlockHealth           = world.architectBlockHealth;

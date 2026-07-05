@@ -344,6 +344,7 @@ function _isSimpleRestorable(cl: ClusterState): boolean {
   return (
     cl.isRadiantTetherFlag       === 0 &&
     cl.isRadiantWebFlag          === 0 &&
+    cl.isCrimsonWizardFlag       === 0 &&
     cl.isDustConstellationFlag   === 0 &&
     cl.isOrbitalDustCoreFlag     === 0 &&
     cl.isDustBlockMimicFlag      === 0 &&
@@ -361,6 +362,7 @@ function _skipParticleSpawn(cl: ClusterState): boolean {
   return (
     cl.isRadiantTetherFlag       === 1 ||
     cl.isRadiantWebFlag          === 1 ||
+    cl.isCrimsonWizardFlag       === 1 ||
     cl.isDustConstellationFlag   === 1 ||
     cl.isOrbitalDustCoreFlag     === 1 ||
     cl.isDustBlockMimicFlag      === 1 ||

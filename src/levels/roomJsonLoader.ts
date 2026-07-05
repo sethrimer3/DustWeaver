@@ -110,6 +110,8 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       rollingEnemySpriteIndex: e.rollingEnemySpriteIndex,
       isRockElementalFlag: e.isRockElemental ? 1 as const : 0 as const,
       isRadiantTetherFlag: e.isRadiantTether ? 1 as const : 0 as const,
+      isRadiantWebFlag: e.isRadiantWeb ? 1 as const : 0 as const,
+      isCrimsonWizardFlag: e.isCrimsonWizard ? 1 as const : 0 as const,
       isGrappleHunterFlag: e.isGrappleHunter ? 1 as const : 0 as const,
       isSlimeFlag: e.isSlime ? 1 as const : 0 as const,
       isLargeSlimeFlag: e.isLargeSlime ? 1 as const : 0 as const,

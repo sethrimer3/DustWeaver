@@ -220,6 +220,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isRockElementalFlag: e.isRockElemental ? 1 : 0,
     isRadiantTetherFlag: e.isRadiantTether ? 1 : 0,
     isRadiantWebFlag: e.isRadiantWeb ? 1 : 0,
+    isCrimsonWizardFlag: e.isCrimsonWizard ? 1 : 0,
     isGrappleHunterFlag: e.isGrappleHunter ? 1 : 0,
     isSlimeFlag: (e.isSlime ?? false) ? 1 : 0,
     isLargeSlimeFlag: (e.isLargeSlime ?? false) ? 1 : 0,

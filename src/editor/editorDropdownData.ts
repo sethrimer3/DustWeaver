@@ -178,6 +178,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_grid_block_2x2_fast',   label: 'Block 2×2 (Fast)',   category: 'enemies' },
   { id: 'enemy_radiant_tether', label: 'Radiant Tether (Boss)', category: 'enemies' },
   { id: 'enemy_radiant_web', label: 'Radiant Web (Boss)', category: 'enemies' },
+  { id: 'enemy_crimson_wizard', label: 'Crimson Wizard (Boss)', category: 'enemies' },
   // Triggers (player-facing activators and room logic)
   { id: 'campaign_spawn',  label: 'Campaign Spawn',          category: 'triggers' },
   { id: 'player_spawn',    label: 'Room Spawn (Fallback)',   category: 'triggers' },

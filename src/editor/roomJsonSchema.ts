@@ -58,6 +58,7 @@ export interface RoomJsonEnemy {
   isRockElemental: boolean;
   isRadiantTether: boolean;
   isRadiantWeb?: boolean;
+  isCrimsonWizard?: boolean;
   isGrappleHunter: boolean;
   isSlime?: boolean;
   isLargeSlime?: boolean;

@@ -24,6 +24,7 @@ import {
   HURT_FLASH_MAX_ALPHA,
 } from './characterSprites';
 import { renderGridBlockEnemy, renderGridSnakeEnemy } from './gridBlockEnemyRenderer';
+import { renderCrimsonWizardBody, renderCrimsonWizardEffects } from './crimsonWizardRenderer';
 import {
   getFlyingEyeColor,
   renderFlyingEye,
@@ -107,6 +108,7 @@ export function renderClusters(
   ctx.save();
   // Fading webs render below clusters (behind everything else in this pass)
   renderWebSpiderFadingWebs(ctx, snapshot, scalePx, offsetXPx, offsetYPx);
+  renderCrimsonWizardEffects(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   // Pixel-art safety: simulation/camera may be subpixel, but sprite draws
   // should land on integer screen pixels to avoid texture interpolation blur.
   ctx.imageSmoothingEnabled = false;
@@ -414,6 +416,8 @@ export function renderClusters(
     } else if (cluster.isRadiantWebFlag === 1) {
       // Radiant Web boss body is rendered by radiantWebRenderer.ts
       // Skip default cluster rendering; health bar drawn below.
+    } else if (cluster.isCrimsonWizardFlag === 1) {
+      renderCrimsonWizardBody(ctx, screenX, screenY, cluster, scalePx);
 
     } else if (cluster.isGrappleHunterFlag === 1) {
       // ── Grapple Hunter: dark purple box with hook accent ────────────────
@@ -572,6 +576,8 @@ export function renderClusters(
       barColor = '#fffde0'; // radiant white-gold for light boss
     } else if (cluster.isRadiantWebFlag === 1) {
       barColor = '#aaffdd'; // teal-green for web boss
+    } else if (cluster.isCrimsonWizardFlag === 1) {
+      barColor = '#ff3b24';
     } else if (cluster.isGrappleHunterFlag === 1) {
       barColor = '#aa55ee'; // purple for grapple hunter
     } else if (cluster.isSlimeFlag === 1) {

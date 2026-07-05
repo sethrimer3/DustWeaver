@@ -1,0 +1,86 @@
+import type { ClusterSnapshot } from '../snapshot';
+import type { WorldSnapshot } from '../snapshotTypes';
+import {
+  CW_FIREBALL_SIZE_WORLD,
+  CW_FIRE_DUST_SIZE_WORLD,
+  CW_PROJECTILE_TYPE_METEOR,
+  CW_SMOKE_SIZE_WORLD,
+  CW_METEOR_SIZE_WORLD,
+} from '../../sim/clusters/crimsonWizardConfig';
+
+const FIRE_COLORS = ['#ffb02e', '#ff6a1a', '#ff3b12', '#b11226', '#6f1018'];
+
+export function renderCrimsonWizardBody(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  cluster: ClusterSnapshot,
+  scalePx: number,
+): void {
+  const halfW = cluster.halfWidthWorld * scalePx;
+  const halfH = cluster.halfHeightWorld * scalePx;
+  ctx.fillStyle = '#9d1025';
+  ctx.fillRect(Math.round(screenX - halfW), Math.round(screenY - halfH), Math.round(halfW * 2), Math.round(halfH * 2));
+  ctx.strokeStyle = '#ff5a2a';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(Math.round(screenX - halfW) + 0.5, Math.round(screenY - halfH) + 0.5, Math.round(halfW * 2), Math.round(halfH * 2));
+
+  if (cluster.crimsonWizardTelegraphTicks > 0) {
+    ctx.globalAlpha = 0.35 + (cluster.crimsonWizardTelegraphTicks % 4) * 0.08;
+    ctx.fillStyle = '#ffcc33';
+    ctx.fillRect(Math.round(screenX - halfW), Math.round(screenY + halfH + 2), Math.round(halfW * 2), 2);
+    ctx.globalAlpha = 1;
+  }
+}
+
+export function renderCrimsonWizardEffects(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+): void {
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+
+  const smokeSize = Math.max(1, Math.round(CW_SMOKE_SIZE_WORLD * scalePx));
+  for (let i = 0; i < snapshot.cwSmokeAliveFlag.length; i++) {
+    if (snapshot.cwSmokeAliveFlag[i] === 0) continue;
+    const age = snapshot.cwSmokeAgeTicks[i];
+    const life = Math.max(1, snapshot.cwSmokeLifetimeTicks[i]);
+    const t = age / life;
+    const shade = Math.max(44, Math.floor(188 - t * 130));
+    ctx.globalAlpha = Math.max(0, 0.62 * (1 - t));
+    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+    ctx.fillRect(Math.round(snapshot.cwSmokeXWorld[i] * scalePx + offsetXPx), Math.round(snapshot.cwSmokeYWorld[i] * scalePx + offsetYPx), smokeSize, smokeSize);
+  }
+  ctx.globalAlpha = 1;
+
+  const dustSize = Math.max(1, Math.round(CW_FIRE_DUST_SIZE_WORLD * scalePx));
+  for (let i = 0; i < snapshot.cwFireDustAliveFlag.length; i++) {
+    if (snapshot.cwFireDustAliveFlag[i] === 0) continue;
+    const age = snapshot.cwFireDustAgeTicks[i];
+    const life = Math.max(1, snapshot.cwFireDustLifetimeTicks[i]);
+    const flicker = ((age + i) & 3) === 0 ? 1 : 0;
+    ctx.globalAlpha = Math.max(0.15, 1 - age / life);
+    ctx.fillStyle = FIRE_COLORS[(snapshot.cwFireDustColorIndex[i] + flicker) % FIRE_COLORS.length] ?? FIRE_COLORS[0];
+    ctx.fillRect(Math.round(snapshot.cwFireDustXWorld[i] * scalePx + offsetXPx), Math.round(snapshot.cwFireDustYWorld[i] * scalePx + offsetYPx), dustSize, dustSize);
+  }
+  ctx.globalAlpha = 1;
+
+  for (let i = 0; i < snapshot.cwProjectileAliveFlag.length; i++) {
+    if (snapshot.cwProjectileAliveFlag[i] === 0) continue;
+    const type = snapshot.cwProjectileType[i];
+    const sizeWorld = type === CW_PROJECTILE_TYPE_METEOR ? CW_METEOR_SIZE_WORLD : CW_FIREBALL_SIZE_WORLD;
+    const sizePx = Math.max(1, Math.round(sizeWorld * scalePx));
+    const x = Math.round(snapshot.cwProjectileXWorld[i] * scalePx + offsetXPx - sizePx * 0.5);
+    const y = Math.round(snapshot.cwProjectileYWorld[i] * scalePx + offsetYPx - sizePx * 0.5);
+    ctx.fillStyle = type === CW_PROJECTILE_TYPE_METEOR ? '#5b1010' : '#ff521c';
+    ctx.fillRect(x, y, sizePx, sizePx);
+    ctx.strokeStyle = type === CW_PROJECTILE_TYPE_METEOR ? '#ff9d22' : '#ffd04a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, sizePx, sizePx);
+  }
+
+  ctx.restore();
+}

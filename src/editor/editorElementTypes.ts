@@ -110,6 +110,7 @@ export interface EditorEnemy {
   isRockElementalFlag: 0 | 1;
   isRadiantTetherFlag: 0 | 1;
   isRadiantWebFlag: 0 | 1;
+  isCrimsonWizardFlag?: 0 | 1;
   isGrappleHunterFlag: 0 | 1;
   isSlimeFlag: 0 | 1;
   isLargeSlimeFlag: 0 | 1;

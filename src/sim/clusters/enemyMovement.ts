@@ -74,6 +74,9 @@ export function tickEnemyMovement(
   if (cluster.isGridBlockEnemyFlag === 1) {
     return;
   }
+  if (cluster.isCrimsonWizardFlag === 1) {
+    return;
+  }
   if (cluster.isFlyingEyeFlag === 1) {
     // ── Flying Eye: no gravity, 2D steering toward/away from player ────────
     if (isPlayerFound) {

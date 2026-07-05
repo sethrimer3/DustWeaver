@@ -76,6 +76,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isRockElemental: e.isRockElementalFlag === 1,
       isRadiantTether: e.isRadiantTetherFlag === 1,
       isRadiantWeb: e.isRadiantWebFlag === 1,
+      isCrimsonWizard: e.isCrimsonWizardFlag === 1,
       isGrappleHunter: e.isGrappleHunterFlag === 1,
       isSlime: e.isSlimeFlag === 1,
       isLargeSlime: e.isLargeSlimeFlag === 1,
