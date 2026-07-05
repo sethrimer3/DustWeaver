@@ -31,8 +31,14 @@ const RAY_ANGLE_RAD = Math.PI * 0.285;
 const BASE_ALPHA = 0.22;
 const DRIFT_SPEED = 0.000018;
 const NOISE_STRENGTH = 0.07;
-const LOGICAL_SCALE = 0.5;
+const LOGICAL_SCALE = 0.42;
 const NOISE_TILE_SIZE = 64;
+const HARD_TO_SOFT_DELAY_MS = 420;
+const HARD_TO_SOFT_DURATION_MS = 2600;
+const OVERLAY_RESET_GAP_MS = 900;
+const SOFT_LAYER_COUNT = 7;
+const SOFT_WIDTH_SCALE_MAX = 3.8;
+const SOFT_ALPHA_SCALE = 0.24;
 
 const RAYS: readonly LoadingRayDef[] = [
   { x: -0.18, y: -0.08, length: 1.48, widthStart: 0.17, widthEnd: 0.07, alpha: 0.60, phase: 0.1, core: true },
@@ -55,6 +61,8 @@ let _dustAngleRad = RAY_ANGLE_RAD;
 let _dustBaseAlpha = BASE_ALPHA;
 let _dustDriftSpeed = DRIFT_SPEED;
 let _dustRayCount = RAY_COUNT;
+let _transitionStartMs = -1;
+let _lastRenderTimeMs = -1;
 
 export function setLoadingGodRaysEnabled(enabled: boolean): boolean {
   _isDevEnabled = Boolean(enabled);
@@ -82,6 +90,15 @@ export function renderLoadingGodRays(
     const baseAlpha = options.baseAlpha ?? BASE_ALPHA;
     const driftSpeed = options.driftSpeed ?? DRIFT_SPEED;
     const noiseStrength = options.noiseStrength ?? NOISE_STRENGTH;
+    if (_transitionStartMs < 0 || (_lastRenderTimeMs >= 0 && timeMs - _lastRenderTimeMs > OVERLAY_RESET_GAP_MS)) {
+      _transitionStartMs = timeMs;
+    }
+    _lastRenderTimeMs = timeMs;
+    const transitionT = smoothstep(
+      (timeMs - _transitionStartMs - HARD_TO_SOFT_DELAY_MS) / HARD_TO_SOFT_DURATION_MS,
+    );
+    const hardAlphaScale = 1 - transitionT * 0.82;
+    const softAlphaScale = transitionT;
 
     ctx.save();
     ctx.clearRect(0, 0, viewport.width, viewport.height);
@@ -90,7 +107,8 @@ export function renderLoadingGodRays(
     ctx.globalCompositeOperation = 'screen';
 
     for (let i = 0; i < rayCount; i++) {
-      drawRay(ctx, RAYS[i], width, height, angleRad, baseAlpha, driftSpeed, timeMs);
+      drawSoftRay(ctx, RAYS[i], width, height, angleRad, baseAlpha * softAlphaScale, driftSpeed, timeMs);
+      drawRay(ctx, RAYS[i], width, height, angleRad, baseAlpha * hardAlphaScale, driftSpeed, timeMs);
     }
 
     drawNoise(ctx, width, height, timeMs, noiseStrength);
@@ -109,6 +127,11 @@ export function renderLoadingGodRays(
       // Loading should never fail because the optional effect did.
     }
   }
+}
+
+function smoothstep(value: number): number {
+  const t = value <= 0 ? 0 : value >= 1 ? 1 : value;
+  return t * t * (3 - 2 * t);
 }
 
 function loadingDustIntensityAt(xPx: number, yPx: number, timeMs: number): number {
@@ -222,6 +245,55 @@ function drawRay(
   if (ray.core) {
     fillBeamQuad(ctx, startX, startY, endX, endY, perpX, perpY, Math.max(2, w0 * 0.22), Math.max(1, w1 * 0.18), alpha * 0.36);
   }
+}
+
+function drawSoftRay(
+  ctx: CanvasRenderingContext2D,
+  ray: LoadingRayDef,
+  viewportW: number,
+  viewportH: number,
+  angleRad: number,
+  baseAlpha: number,
+  driftSpeed: number,
+  timeMs: number,
+): void {
+  if (baseAlpha <= 0.001) return;
+  const diagonal = Math.hypot(viewportW, viewportH);
+  const directionX = Math.cos(angleRad);
+  const directionY = Math.sin(angleRad);
+  const perpX = -directionY;
+  const perpY = directionX;
+  const shimmer = 0.88 + 0.12 * Math.sin(timeMs * 0.00034 + ray.phase);
+  const { startX, startY } = computeRayOrigin(ray, viewportW, viewportH, perpY, driftSpeed, timeMs);
+  const length = Math.round(ray.length * diagonal);
+  const endX = Math.round(startX + directionX * length);
+  const endY = Math.round(startY + directionY * length);
+  const w0 = ray.widthStart * viewportW;
+  const w1 = ray.widthEnd * viewportW;
+  const alpha = baseAlpha * ray.alpha * shimmer;
+
+  const prevComposite = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = 'lighter';
+  for (let layer = SOFT_LAYER_COUNT - 1; layer >= 0; layer--) {
+    const t = layer / Math.max(1, SOFT_LAYER_COUNT - 1);
+    const widthScale = 1 + t * (SOFT_WIDTH_SCALE_MAX - 1);
+    const falloff = Math.pow(1 - t * 0.78, 2.2);
+    const layerAlpha = alpha * SOFT_ALPHA_SCALE * falloff;
+    if (layerAlpha <= 0.0008) continue;
+    fillBeamQuad(
+      ctx,
+      startX,
+      startY,
+      endX,
+      endY,
+      perpX,
+      perpY,
+      Math.max(2, Math.round(w0 * widthScale)),
+      Math.max(1, Math.round(w1 * (0.7 + widthScale * 0.55))),
+      layerAlpha,
+    );
+  }
+  ctx.globalCompositeOperation = prevComposite;
 }
 
 function fillBeamQuad(
