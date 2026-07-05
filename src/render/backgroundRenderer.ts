@@ -10,7 +10,7 @@
  */
 
 import type { BackgroundId } from '../levels/roomDef';
-import { loadImg, isSpriteReady, isSpriteDecodeReady, decodeImg } from './imageCache';
+import { loadImg, isSpriteReady, isSpriteDecodeReady, decodeImg, hasImageFailed } from './imageCache';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -242,6 +242,15 @@ export function renderWorldBackground(
     // Procedural background with no image — solid black
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
+    return;
+  }
+
+  if (hasImageFailed(imgUrl)) {
+    // Image failed to load (e.g. missing asset) — draw solid black rather than
+    // retrying forever or showing the per-world tint (which implies "still loading").
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
+    _bgFallbacksThisFrame++;
     return;
   }
 

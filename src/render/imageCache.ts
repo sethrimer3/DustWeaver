@@ -21,6 +21,23 @@ const _decodedUrls = new Set<string>();
  */
 const _decodeInFlight = new Map<string, Promise<void>>();
 
+/**
+ * URLs whose image failed to load (network error, 404, etc). Tracked under
+ * both the caller-supplied URL and the browser-normalised `img.src` so a
+ * failed load is recognised regardless of which form is queried.
+ *
+ * A failed URL is treated as decode-"ready" (see isSpriteDecodeReady) so a
+ * missing/broken asset can never permanently block a caller (e.g. the zone
+ * loading overlay) that is waiting for decode readiness — it just never
+ * gets a usable image and falls back to solid-colour rendering instead.
+ */
+const _failedUrls = new Set<string>();
+
+/** Returns true once the image at `src` has been confirmed to have failed loading. */
+export function hasImageFailed(src: string): boolean {
+  return _failedUrls.has(src);
+}
+
 /** Returns (or creates) a loaded HTMLImageElement for the given URL. */
 export function loadImg(src: string): HTMLImageElement {
   const cached = _imgCache.get(src);
@@ -53,6 +70,7 @@ export function isSpriteReady(img: HTMLImageElement): boolean {
  */
 export function isSpriteDecodeReady(img: HTMLImageElement): boolean {
   if (_decodedUrls.has(img.src)) return true;
+  if (_failedUrls.has(img.src)) return true;         // failed load — unblock, fallback rendering handles it
   if (_decodeInFlight.has(img.src)) return false;   // decode requested but pending
   return isSpriteReady(img);                         // decode never requested
 }
@@ -103,6 +121,11 @@ export function decodeImg(src: string): Promise<void> {
   const markFailed = (): void => {
     _decodeInFlight.delete(src);
     _decodeInFlight.delete(img.src);
+    if (!_failedUrls.has(src)) {
+      console.warn(`[imageCache] failed to load image: ${src}`);
+    }
+    _failedUrls.add(src);
+    if (img.src !== src) _failedUrls.add(img.src);
   };
 
   // Run decode() (or confirm loaded) once the image data is available.
