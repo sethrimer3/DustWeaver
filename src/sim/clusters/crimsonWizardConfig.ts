@@ -11,6 +11,12 @@ export const CW_STATE_METEORS = 3;
 export const CW_STATE_FIRE_BALLS = 4;
 export const CW_STATE_RECOVER = 5;
 
+export const CW_PHASE_1 = 1;
+export const CW_PHASE_2 = 2;
+export const CW_PHASE_3 = 3;
+export const CW_PHASE_2_HEALTH_RATIO = 0.66;
+export const CW_PHASE_3_HEALTH_RATIO = 0.33;
+
 export const CW_MOVE_MAX_SPEED = 2.4;
 export const CW_MOVE_ACCEL = 0.095;
 export const CW_MOVE_DAMPING = 0.94;
@@ -27,6 +33,7 @@ export const CW_CONTACT_IFRAMES = 36;
 export const CW_INITIAL_COOLDOWN_TICKS = 80;
 export const CW_RECOVER_TICKS = 44;
 export const CW_BETWEEN_ATTACK_COOLDOWN_TICKS = 42;
+export const CW_MAX_REPEAT_ATTACKS = 1;
 
 export const CW_TIDAL_WAVE_TELEGRAPH_TICKS = 22;
 export const CW_TIDAL_WAVE_DURATION_TICKS = 94;
@@ -45,6 +52,7 @@ export const CW_PILLAR_SPACING_WORLD = 18;
 export const CW_PILLAR_EMIT_INTERVAL_TICKS = 8;
 export const CW_PILLAR_PARTICLES_PER_BURST = 28;
 export const CW_PILLAR_HALF_WIDTH_WORLD = 5;
+export const CW_PILLAR_SAFE_GAP_WORLD = 34;
 
 export const CW_METEOR_TELEGRAPH_TICKS = 28;
 export const CW_METEOR_DURATION_TICKS = 104;
@@ -55,6 +63,10 @@ export const CW_FIREBALL_TELEGRAPH_TICKS = 18;
 export const CW_FIREBALL_DURATION_TICKS = 88;
 export const CW_FIREBALL_INTERVAL_TICKS = 16;
 export const CW_FIREBALL_SPEED_WORLD = 2.75;
+export const CW_FIREBALL_SPREAD_RADIANS = 0.18;
+export const CW_FIREBALL_WIDE_SPREAD_RADIANS = 0.28;
+
+export const CW_DEBUG_FORCE_NONE = 0;
 
 export const MAX_CW_FIRE_DUST = 700;
 export const MAX_CW_SMOKE = 420;

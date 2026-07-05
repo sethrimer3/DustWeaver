@@ -2,32 +2,36 @@ import { WorldState } from '../world';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
 import { nextFloat } from '../rng';
 import {
-  CW_ATTACK_MOVE_SCALE,
-  CW_BETWEEN_ATTACK_COOLDOWN_TICKS,
   CW_CONTACT_DAMAGE,
   CW_CONTACT_IFRAMES,
+  CW_DEBUG_FORCE_NONE,
   CW_FIREBALL_DURATION_TICKS,
-  CW_FIREBALL_INTERVAL_TICKS,
+  CW_FIREBALL_SPREAD_RADIANS,
   CW_FIREBALL_TELEGRAPH_TICKS,
+  CW_FIREBALL_WIDE_SPREAD_RADIANS,
   CW_INITIAL_COOLDOWN_TICKS,
   CW_IDLE_DRIFT_STRENGTH_X,
   CW_IDLE_DRIFT_STRENGTH_Y,
   CW_METEOR_DURATION_TICKS,
-  CW_METEOR_INTERVAL_TICKS,
   CW_METEOR_SIZE_WORLD,
   CW_METEOR_TELEGRAPH_TICKS,
   CW_MOVE_ACCEL,
   CW_MOVE_DAMPING,
   CW_MOVE_MAX_SPEED,
+  CW_MAX_REPEAT_ATTACKS,
+  CW_PHASE_1,
+  CW_PHASE_2,
+  CW_PHASE_2_HEALTH_RATIO,
+  CW_PHASE_3,
+  CW_PHASE_3_HEALTH_RATIO,
   CW_PILLAR_COUNT,
   CW_PILLAR_DURATION_TICKS,
   CW_PILLAR_EMIT_INTERVAL_TICKS,
   CW_PILLAR_HALF_WIDTH_WORLD,
-  CW_PILLAR_PARTICLES_PER_BURST,
+  CW_PILLAR_SAFE_GAP_WORLD,
   CW_PILLAR_SPACING_WORLD,
   CW_PILLAR_TELEGRAPH_TICKS,
   CW_PREFERRED_DISTANCE,
-  CW_RECOVER_TICKS,
   CW_ROOM_MARGIN,
   CW_STATE_FIRE_BALLS,
   CW_STATE_FIRE_PILLARS,
@@ -38,11 +42,8 @@ import {
   CW_TELEGRAPH_KIND_CHARGE,
   CW_TELEGRAPH_KIND_METEOR,
   CW_TELEGRAPH_KIND_PILLAR,
-  CW_TIDAL_WAVE_DURATION_TICKS,
-  CW_TIDAL_WAVE_EMIT_INTERVAL_TICKS,
   CW_TIDAL_WAVE_LIFETIME_MIN_TICKS,
   CW_TIDAL_WAVE_LIFETIME_VARIANCE_TICKS,
-  CW_TIDAL_WAVE_PARTICLES_PER_EMIT,
   CW_TIDAL_WAVE_SPACING_WORLD,
   CW_TIDAL_WAVE_SPEED_MIN,
   CW_TIDAL_WAVE_SPEED_VARIANCE,
@@ -52,6 +53,116 @@ import {
 } from './crimsonWizardConfig';
 import { ClusterState } from './state';
 import { spawnCrimsonFireDust, spawnCrimsonFireball, spawnCrimsonMeteor, spawnCrimsonTelegraph } from './crimsonWizardEffects';
+
+export type CrimsonWizardPhase = typeof CW_PHASE_1 | typeof CW_PHASE_2 | typeof CW_PHASE_3;
+
+export interface CrimsonWizardPhaseTuning {
+  phase: CrimsonWizardPhase;
+  attackCooldownTicks: number;
+  recoverTicks: number;
+  attackMoveScale: number;
+  fireballCount: number;
+  fireballIntervalTicks: number;
+  fireballSpreadRadians: number;
+  pillarCount: number;
+  pillarParticlesPerBurst: number;
+  meteorCount: number;
+  meteorIntervalTicks: number;
+  tidalDurationTicks: number;
+  tidalParticlesPerEmit: number;
+  tidalEmitIntervalTicks: number;
+  tidalSpeedMultiplier: number;
+}
+
+export interface CrimsonWizardDebugState {
+  forceNextAttackState: number;
+}
+
+export const crimsonWizardDebug: CrimsonWizardDebugState = {
+  forceNextAttackState: CW_DEBUG_FORCE_NONE,
+};
+
+declare global {
+  // Console tuning hook: set __dwCrimsonWizardDebug.forceNextAttackState to a CW_STATE_* value.
+  var __dwCrimsonWizardDebug: CrimsonWizardDebugState | undefined;
+}
+
+globalThis.__dwCrimsonWizardDebug = crimsonWizardDebug;
+
+const PHASE_TUNING: readonly CrimsonWizardPhaseTuning[] = [
+  {
+    phase: CW_PHASE_1,
+    attackCooldownTicks: 54,
+    recoverTicks: 50,
+    attackMoveScale: 0.62,
+    fireballCount: 1,
+    fireballIntervalTicks: 20,
+    fireballSpreadRadians: 0,
+    pillarCount: 4,
+    pillarParticlesPerBurst: 22,
+    meteorCount: 1,
+    meteorIntervalTicks: 34,
+    tidalDurationTicks: 78,
+    tidalParticlesPerEmit: 10,
+    tidalEmitIntervalTicks: 6,
+    tidalSpeedMultiplier: 0.9,
+  },
+  {
+    phase: CW_PHASE_2,
+    attackCooldownTicks: 42,
+    recoverTicks: 42,
+    attackMoveScale: 0.72,
+    fireballCount: 3,
+    fireballIntervalTicks: 17,
+    fireballSpreadRadians: CW_FIREBALL_SPREAD_RADIANS,
+    pillarCount: 5,
+    pillarParticlesPerBurst: 26,
+    meteorCount: 2,
+    meteorIntervalTicks: 27,
+    tidalDurationTicks: 92,
+    tidalParticlesPerEmit: 13,
+    tidalEmitIntervalTicks: 5,
+    tidalSpeedMultiplier: 1,
+  },
+  {
+    phase: CW_PHASE_3,
+    attackCooldownTicks: 30,
+    recoverTicks: 32,
+    attackMoveScale: 0.78,
+    fireballCount: 4,
+    fireballIntervalTicks: 14,
+    fireballSpreadRadians: CW_FIREBALL_WIDE_SPREAD_RADIANS,
+    pillarCount: 6,
+    pillarParticlesPerBurst: 28,
+    meteorCount: 3,
+    meteorIntervalTicks: 22,
+    tidalDurationTicks: 104,
+    tidalParticlesPerEmit: 14,
+    tidalEmitIntervalTicks: 5,
+    tidalSpeedMultiplier: 1.08,
+  },
+] as const;
+
+const PHASE_ATTACK_WEIGHTS: Readonly<Record<CrimsonWizardPhase, Readonly<Record<number, number>>>> = {
+  [CW_PHASE_1]: {
+    [CW_STATE_FIRE_BALLS]: 46,
+    [CW_STATE_FIRE_PILLARS]: 32,
+    [CW_STATE_TIDAL_WAVE]: 16,
+    [CW_STATE_METEORS]: 6,
+  },
+  [CW_PHASE_2]: {
+    [CW_STATE_FIRE_BALLS]: 30,
+    [CW_STATE_FIRE_PILLARS]: 30,
+    [CW_STATE_METEORS]: 24,
+    [CW_STATE_TIDAL_WAVE]: 16,
+  },
+  [CW_PHASE_3]: {
+    [CW_STATE_FIRE_BALLS]: 26,
+    [CW_STATE_FIRE_PILLARS]: 28,
+    [CW_STATE_METEORS]: 28,
+    [CW_STATE_TIDAL_WAVE]: 18,
+  },
+};
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
@@ -75,6 +186,70 @@ function playableBounds(world: WorldState, boss: ClusterState): { minX: number; 
   return { minX, maxX, minY, maxY };
 }
 
+export function getCrimsonWizardPhase(healthPoints: number, maxHealthPoints: number): CrimsonWizardPhase {
+  const ratio = maxHealthPoints > 0 ? healthPoints / maxHealthPoints : 1;
+  if (ratio <= CW_PHASE_3_HEALTH_RATIO) return CW_PHASE_3;
+  if (ratio <= CW_PHASE_2_HEALTH_RATIO) return CW_PHASE_2;
+  return CW_PHASE_1;
+}
+
+export function getCrimsonWizardPhaseTuning(phase: CrimsonWizardPhase): CrimsonWizardPhaseTuning {
+  return PHASE_TUNING[phase - 1] ?? PHASE_TUNING[0];
+}
+
+function activeProjectileCount(world: WorldState): number {
+  let count = 0;
+  for (let i = 0; i < world.cwProjectileAliveFlag.length; i++) {
+    if (world.cwProjectileAliveFlag[i] === 1) count += 1;
+  }
+  return count;
+}
+
+export function isCrimsonWizardAttackValid(world: WorldState, attackState: number, phase: CrimsonWizardPhase): boolean {
+  if (attackState === CW_STATE_METEORS && phase === CW_PHASE_1) return world.worldHeightWorld >= 96;
+  if (attackState === CW_STATE_FIRE_PILLARS) return world.worldWidthWorld >= CW_PILLAR_SAFE_GAP_WORLD + CW_ROOM_MARGIN * 2;
+  if (attackState === CW_STATE_TIDAL_WAVE) return world.worldWidthWorld >= 96;
+  if (attackState === CW_STATE_METEORS) return world.worldHeightWorld >= 88 && activeProjectileCount(world) < 6;
+  if (attackState === CW_STATE_FIRE_BALLS) return activeProjectileCount(world) < 10;
+  return true;
+}
+
+export function selectCrimsonWizardAttack(world: WorldState, boss: ClusterState, phase: CrimsonWizardPhase): number {
+  if (crimsonWizardDebug.forceNextAttackState !== CW_DEBUG_FORCE_NONE) {
+    const forced = crimsonWizardDebug.forceNextAttackState;
+    crimsonWizardDebug.forceNextAttackState = CW_DEBUG_FORCE_NONE;
+    if (isCrimsonWizardAttackValid(world, forced, phase)) return forced;
+  }
+
+  const weights = PHASE_ATTACK_WEIGHTS[phase];
+  const candidates = [
+    CW_STATE_FIRE_BALLS,
+    CW_STATE_FIRE_PILLARS,
+    CW_STATE_METEORS,
+    CW_STATE_TIDAL_WAVE,
+  ];
+  let total = 0;
+  const weighted: Array<{ state: number; weight: number }> = [];
+  for (const state of candidates) {
+    if (!isCrimsonWizardAttackValid(world, state, phase)) continue;
+    let weight = weights[state] ?? 0;
+    if (weight <= 0) continue;
+    if (state === boss.crimsonWizardLastAttackState && boss.crimsonWizardRepeatCount >= CW_MAX_REPEAT_ATTACKS) weight = 0;
+    if (weight <= 0) continue;
+    total += weight;
+    weighted.push({ state, weight });
+  }
+  if (weighted.length === 0) return CW_STATE_FIRE_BALLS;
+
+  const salt = nextFloat(world.rng) + (boss.crimsonWizardNextAttackIndex % 7) * 0.03125;
+  let pick = (salt - Math.floor(salt)) * total;
+  for (const item of weighted) {
+    pick -= item.weight;
+    if (pick <= 0) return item.state;
+  }
+  return weighted[weighted.length - 1].state;
+}
+
 export function findCrimsonWizardFloorY(world: WorldState, xWorld: number): number {
   let floorY = world.worldHeightWorld - CW_ROOM_MARGIN;
   for (let i = 0; i < world.wallCount; i++) {
@@ -88,6 +263,7 @@ export function findCrimsonWizardFloorY(world: WorldState, xWorld: number): numb
 }
 
 export function steerCrimsonWizardMovement(world: WorldState, boss: ClusterState, player: ClusterState): void {
+  const tuning = getCrimsonWizardPhaseTuning(getCrimsonWizardPhase(boss.healthPoints, boss.maxHealthPoints));
   const dx = player.positionXWorld - boss.positionXWorld;
   const dy = player.positionYWorld - boss.positionYWorld;
   const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
@@ -121,7 +297,8 @@ export function steerCrimsonWizardMovement(world: WorldState, boss: ClusterState
   desiredY -= (1 - bottomT) * 1.3;
 
   const desiredLen = Math.sqrt(desiredX * desiredX + desiredY * desiredY);
-  const attackScale = boss.crimsonWizardState === CW_STATE_IDLE || boss.crimsonWizardState === CW_STATE_RECOVER ? 1 : CW_ATTACK_MOVE_SCALE;
+  const telegraphScale = boss.crimsonWizardTelegraphTicks > 0 ? 0.55 : 1;
+  const attackScale = boss.crimsonWizardState === CW_STATE_IDLE || boss.crimsonWizardState === CW_STATE_RECOVER ? 1 : tuning.attackMoveScale * telegraphScale;
   if (desiredLen > 0.001) {
     boss.crimsonWizardVelXWorld += (desiredX / desiredLen) * CW_MOVE_ACCEL * attackScale;
     boss.crimsonWizardVelYWorld += (desiredY / desiredLen) * CW_MOVE_ACCEL * attackScale;
@@ -158,26 +335,30 @@ function maybeSpawnChargeTelegraph(world: WorldState, boss: ClusterState, ticks:
   spawnCrimsonTelegraph(world, boss.positionXWorld, boss.positionYWorld + boss.halfHeightWorld + 4, boss.halfWidthWorld, CW_TELEGRAPH_KIND_CHARGE, ticks);
 }
 
-function emitTidalWave(world: WorldState, boss: ClusterState): void {
+function emitTidalWave(world: WorldState, boss: ClusterState, tuning: CrimsonWizardPhaseTuning): void {
   if (boss.crimsonWizardStateTicks <= CW_TIDAL_WAVE_TELEGRAPH_TICKS) return;
-  if (((boss.crimsonWizardStateTicks - CW_TIDAL_WAVE_TELEGRAPH_TICKS) % CW_TIDAL_WAVE_EMIT_INTERVAL_TICKS) !== 0) return;
+  if (((boss.crimsonWizardStateTicks - CW_TIDAL_WAVE_TELEGRAPH_TICKS) % tuning.tidalEmitIntervalTicks) !== 0) return;
   const dir = boss.crimsonWizardFacingX;
-  const waveY = boss.positionYWorld + 2 + Math.sin(boss.crimsonWizardStateTicks * 0.13) * 10;
-  for (let i = 0; i < CW_TIDAL_WAVE_PARTICLES_PER_EMIT; i++) {
-    const spread = (i - (CW_TIDAL_WAVE_PARTICLES_PER_EMIT - 1) * 0.5) * CW_TIDAL_WAVE_SPACING_WORLD;
+  const lowWave = tuning.phase !== CW_PHASE_1 && (boss.crimsonWizardNextAttackIndex & 1) === 0;
+  const waveY = lowWave
+    ? findCrimsonWizardFloorY(world, boss.positionXWorld) - 24 + Math.sin(boss.crimsonWizardStateTicks * 0.1) * 4
+    : boss.positionYWorld + 2 + Math.sin(boss.crimsonWizardStateTicks * 0.13) * 10;
+  for (let i = 0; i < tuning.tidalParticlesPerEmit; i++) {
+    const gapOffset = lowWave && i === Math.floor(tuning.tidalParticlesPerEmit * 0.5) ? 10 : 0;
+    const spread = (i - (tuning.tidalParticlesPerEmit - 1) * 0.5) * CW_TIDAL_WAVE_SPACING_WORLD + gapOffset;
     spawnCrimsonFireDust(
       world,
       boss.positionXWorld + dir * (10 + i * 1.7),
       waveY + spread * 0.34,
-      dir * (CW_TIDAL_WAVE_SPEED_MIN + nextFloat(world.rng) * CW_TIDAL_WAVE_SPEED_VARIANCE),
+      dir * (CW_TIDAL_WAVE_SPEED_MIN + nextFloat(world.rng) * CW_TIDAL_WAVE_SPEED_VARIANCE) * tuning.tidalSpeedMultiplier,
       -0.22 + randSigned(world) * 0.38,
       CW_TIDAL_WAVE_LIFETIME_MIN_TICKS + Math.floor(nextFloat(world.rng) * CW_TIDAL_WAVE_LIFETIME_VARIANCE_TICKS),
     );
   }
 }
 
-function pillarXForStep(world: WorldState, player: ClusterState, step: number): number {
-  const rowWidth = (CW_PILLAR_COUNT - 1) * CW_PILLAR_SPACING_WORLD;
+function pillarXForStep(world: WorldState, player: ClusterState, step: number, pillarCount = CW_PILLAR_COUNT): number {
+  const rowWidth = (pillarCount - 1) * CW_PILLAR_SPACING_WORLD;
   const minX = CW_ROOM_MARGIN + CW_PILLAR_HALF_WIDTH_WORLD;
   const maxX = Math.max(minX, world.worldWidthWorld - CW_ROOM_MARGIN - CW_PILLAR_HALF_WIDTH_WORLD);
   const maxStartX = Math.max(minX, maxX - rowWidth);
@@ -185,24 +366,41 @@ function pillarXForStep(world: WorldState, player: ClusterState, step: number): 
   return clamp(startX + step * CW_PILLAR_SPACING_WORLD, minX, maxX);
 }
 
-function emitPillarTelegraphs(world: WorldState, boss: ClusterState, player: ClusterState): void {
+export function getCrimsonWizardPillarSteps(phase: CrimsonWizardPhase, variant: number, pillarCount: number): number[] {
+  const steps: number[] = [];
+  const safeGapIndex = phase === CW_PHASE_1 ? -1 : Math.max(1, Math.min(pillarCount - 2, variant % pillarCount));
+  for (let step = 0; step < pillarCount; step++) {
+    if (step === safeGapIndex) continue;
+    if (phase >= CW_PHASE_2 && (variant & 1) === 1 && (step % 2) === 1) continue;
+    steps.push(step);
+  }
+  if (steps.length === 0) steps.push(0);
+  return steps;
+}
+
+function emitPillarTelegraphs(world: WorldState, boss: ClusterState, player: ClusterState, tuning: CrimsonWizardPhaseTuning): void {
   if (boss.crimsonWizardStateTicks !== 1) return;
   boss.crimsonWizardTelegraphTicks = CW_PILLAR_TELEGRAPH_TICKS;
-  for (let step = 0; step < CW_PILLAR_COUNT; step++) {
-    const x = pillarXForStep(world, player, step);
+  const steps = getCrimsonWizardPillarSteps(tuning.phase, boss.crimsonWizardNextAttackIndex, tuning.pillarCount);
+  for (const step of steps) {
+    const x = pillarXForStep(world, player, step, tuning.pillarCount);
     spawnCrimsonTelegraph(world, x, findCrimsonWizardFloorY(world, x) - 2, CW_PILLAR_HALF_WIDTH_WORLD + 2, CW_TELEGRAPH_KIND_PILLAR, CW_PILLAR_TELEGRAPH_TICKS);
   }
 }
 
-function emitPillarRow(world: WorldState, boss: ClusterState, player: ClusterState): void {
+function emitPillarRow(world: WorldState, boss: ClusterState, player: ClusterState, tuning: CrimsonWizardPhaseTuning): void {
   if (boss.crimsonWizardStateTicks <= CW_PILLAR_TELEGRAPH_TICKS) return;
   const attackTick = boss.crimsonWizardStateTicks - CW_PILLAR_TELEGRAPH_TICKS;
   if ((attackTick % CW_PILLAR_EMIT_INTERVAL_TICKS) !== 0) return;
-  const step = Math.floor(attackTick / CW_PILLAR_EMIT_INTERVAL_TICKS);
-  if (step >= CW_PILLAR_COUNT) return;
-  const x = pillarXForStep(world, player, step);
+  const steps = getCrimsonWizardPillarSteps(tuning.phase, boss.crimsonWizardNextAttackIndex, tuning.pillarCount);
+  const stepIndex = Math.floor(attackTick / CW_PILLAR_EMIT_INTERVAL_TICKS);
+  if (stepIndex >= steps.length) return;
+  const step = tuning.phase === CW_PHASE_3 && (boss.crimsonWizardNextAttackIndex & 1) === 0
+    ? steps[steps.length - 1 - stepIndex]
+    : steps[stepIndex];
+  const x = pillarXForStep(world, player, step, tuning.pillarCount);
   const floorY = findCrimsonWizardFloorY(world, x);
-  for (let i = 0; i < CW_PILLAR_PARTICLES_PER_BURST; i++) {
+  for (let i = 0; i < tuning.pillarParticlesPerBurst; i++) {
     spawnCrimsonFireDust(
       world,
       x + randSigned(world) * CW_PILLAR_HALF_WIDTH_WORLD,
@@ -214,33 +412,66 @@ function emitPillarRow(world: WorldState, boss: ClusterState, player: ClusterSta
   }
 }
 
-function emitMeteors(world: WorldState, boss: ClusterState, player: ClusterState): void {
+function meteorTargetX(world: WorldState, player: ClusterState, index: number, tuning: CrimsonWizardPhaseTuning): number {
+  const spread = tuning.phase === CW_PHASE_3 ? 34 : 28;
+  const offset = (index - (tuning.meteorCount - 1) * 0.5) * spread + randSigned(world) * 12;
+  return clamp(player.positionXWorld + offset, CW_ROOM_MARGIN + CW_METEOR_SIZE_WORLD, world.worldWidthWorld - CW_ROOM_MARGIN - CW_METEOR_SIZE_WORLD);
+}
+
+function emitMeteors(world: WorldState, boss: ClusterState, player: ClusterState, tuning: CrimsonWizardPhaseTuning): void {
   if (boss.crimsonWizardStateTicks === 1) boss.crimsonWizardTelegraphTicks = CW_METEOR_TELEGRAPH_TICKS;
   if (boss.crimsonWizardStateTicks <= CW_METEOR_TELEGRAPH_TICKS) {
-    if ((boss.crimsonWizardStateTicks % CW_METEOR_INTERVAL_TICKS) === 1) {
-      const targetX = clamp(player.positionXWorld + randSigned(world) * 42, CW_ROOM_MARGIN + CW_METEOR_SIZE_WORLD, world.worldWidthWorld - CW_ROOM_MARGIN - CW_METEOR_SIZE_WORLD);
-      const targetY = findCrimsonWizardFloorY(world, targetX) - CW_METEOR_SIZE_WORLD * 0.5;
-      spawnCrimsonTelegraph(world, targetX, targetY, CW_METEOR_SIZE_WORLD * 0.65, CW_TELEGRAPH_KIND_METEOR, CW_METEOR_TELEGRAPH_TICKS);
+    if (boss.crimsonWizardStateTicks === 1) {
+      for (let i = 0; i < tuning.meteorCount; i++) {
+        const targetX = meteorTargetX(world, player, i, tuning);
+        const targetY = findCrimsonWizardFloorY(world, targetX) - CW_METEOR_SIZE_WORLD * 0.5;
+        spawnCrimsonTelegraph(world, targetX, targetY, CW_METEOR_SIZE_WORLD * 0.65, CW_TELEGRAPH_KIND_METEOR, CW_METEOR_TELEGRAPH_TICKS + i * 8);
+      }
     }
     return;
   }
   const attackTick = boss.crimsonWizardStateTicks - CW_METEOR_TELEGRAPH_TICKS;
-  if ((attackTick % CW_METEOR_INTERVAL_TICKS) !== 3) return;
-  const targetX = clamp(player.positionXWorld + randSigned(world) * 42, CW_ROOM_MARGIN + CW_METEOR_SIZE_WORLD, world.worldWidthWorld - CW_ROOM_MARGIN - CW_METEOR_SIZE_WORLD);
-  const targetY = findCrimsonWizardFloorY(world, targetX) - CW_METEOR_SIZE_WORLD * 0.5;
+  if ((attackTick % tuning.meteorIntervalTicks) !== 3) return;
+  const meteorIndex = Math.floor(attackTick / tuning.meteorIntervalTicks);
+  if (meteorIndex >= tuning.meteorCount) return;
+  const targetX = meteorTargetX(world, player, meteorIndex, tuning);
+      const targetY = findCrimsonWizardFloorY(world, targetX) - CW_METEOR_SIZE_WORLD * 0.5;
   spawnCrimsonTelegraph(world, targetX, targetY, CW_METEOR_SIZE_WORLD * 0.65, CW_TELEGRAPH_KIND_METEOR, 18);
   spawnCrimsonMeteor(world, targetX + randSigned(world) * 36, -CW_METEOR_SIZE_WORLD * 1.5, targetX, targetY);
 }
 
-function emitFireballs(world: WorldState, boss: ClusterState, player: ClusterState): void {
+function spawnAimedFireball(world: WorldState, boss: ClusterState, targetXWorld: number, targetYWorld: number, angleOffsetRad: number): void {
+  const dx = targetXWorld - boss.positionXWorld;
+  const dy = targetYWorld - boss.positionYWorld;
+  const baseAngle = Math.atan2(dy, dx);
+  const angle = baseAngle + angleOffsetRad;
+  spawnCrimsonFireball(
+    world,
+    boss.positionXWorld,
+    boss.positionYWorld,
+    boss.positionXWorld + Math.cos(angle) * 120,
+    boss.positionYWorld + Math.sin(angle) * 120,
+  );
+}
+
+function emitFireballs(world: WorldState, boss: ClusterState, player: ClusterState, tuning: CrimsonWizardPhaseTuning): void {
   maybeSpawnChargeTelegraph(world, boss, CW_FIREBALL_TELEGRAPH_TICKS);
   if (boss.crimsonWizardStateTicks <= CW_FIREBALL_TELEGRAPH_TICKS) return;
   const attackTick = boss.crimsonWizardStateTicks - CW_FIREBALL_TELEGRAPH_TICKS;
-  if ((attackTick % CW_FIREBALL_INTERVAL_TICKS) !== 2) return;
-  spawnCrimsonFireball(world, boss.positionXWorld, boss.positionYWorld, player.positionXWorld + randSigned(world) * 24, player.positionYWorld + randSigned(world) * 10);
+  if ((attackTick % tuning.fireballIntervalTicks) !== 2) return;
+  const volleyIndex = Math.floor(attackTick / tuning.fireballIntervalTicks);
+  if (volleyIndex >= (tuning.phase === CW_PHASE_3 ? 3 : 2)) return;
+  const count = tuning.phase === CW_PHASE_1 ? 1 : tuning.fireballCount;
+  const centerOffset = tuning.phase === CW_PHASE_3 && (volleyIndex & 1) === 1 ? tuning.fireballSpreadRadians * 0.5 : 0;
+  for (let i = 0; i < count; i++) {
+    const offset = count === 1 ? 0 : (i - (count - 1) * 0.5) * tuning.fireballSpreadRadians + centerOffset;
+    spawnAimedFireball(world, boss, player.positionXWorld + randSigned(world) * 12, player.positionYWorld + randSigned(world) * 8, offset);
+  }
 }
 
 function tickAttackState(world: WorldState, boss: ClusterState, player: ClusterState): void {
+  const phase = getCrimsonWizardPhase(boss.healthPoints, boss.maxHealthPoints);
+  const tuning = getCrimsonWizardPhaseTuning(phase);
   boss.crimsonWizardStateTicks += 1;
   if (boss.crimsonWizardAttackCooldownTicks > 0) boss.crimsonWizardAttackCooldownTicks -= 1;
   if (boss.crimsonWizardTelegraphTicks > 0) boss.crimsonWizardTelegraphTicks -= 1;
@@ -248,32 +479,34 @@ function tickAttackState(world: WorldState, boss: ClusterState, player: ClusterS
   switch (boss.crimsonWizardState) {
     case CW_STATE_IDLE:
       if (boss.crimsonWizardAttackCooldownTicks <= 0) {
-        const next = boss.crimsonWizardNextAttackIndex % 4;
+        const nextState = selectCrimsonWizardAttack(world, boss, phase);
         boss.crimsonWizardNextAttackIndex += 1;
-        setState(boss, next === 0 ? CW_STATE_TIDAL_WAVE : next === 1 ? CW_STATE_FIRE_PILLARS : next === 2 ? CW_STATE_METEORS : CW_STATE_FIRE_BALLS);
+        boss.crimsonWizardRepeatCount = nextState === boss.crimsonWizardLastAttackState ? boss.crimsonWizardRepeatCount + 1 : 0;
+        boss.crimsonWizardLastAttackState = nextState;
+        setState(boss, nextState);
       }
       break;
     case CW_STATE_TIDAL_WAVE:
       maybeSpawnChargeTelegraph(world, boss, CW_TIDAL_WAVE_TELEGRAPH_TICKS);
-      emitTidalWave(world, boss);
-      if (boss.crimsonWizardStateTicks > CW_TIDAL_WAVE_DURATION_TICKS) setState(boss, CW_STATE_RECOVER);
+      emitTidalWave(world, boss, tuning);
+      if (boss.crimsonWizardStateTicks > tuning.tidalDurationTicks) setState(boss, CW_STATE_RECOVER);
       break;
     case CW_STATE_FIRE_PILLARS:
-      emitPillarTelegraphs(world, boss, player);
-      emitPillarRow(world, boss, player);
+      emitPillarTelegraphs(world, boss, player, tuning);
+      emitPillarRow(world, boss, player, tuning);
       if (boss.crimsonWizardStateTicks > CW_PILLAR_DURATION_TICKS) setState(boss, CW_STATE_RECOVER);
       break;
     case CW_STATE_METEORS:
-      emitMeteors(world, boss, player);
+      emitMeteors(world, boss, player, tuning);
       if (boss.crimsonWizardStateTicks > CW_METEOR_DURATION_TICKS) setState(boss, CW_STATE_RECOVER);
       break;
     case CW_STATE_FIRE_BALLS:
-      emitFireballs(world, boss, player);
+      emitFireballs(world, boss, player, tuning);
       if (boss.crimsonWizardStateTicks > CW_FIREBALL_DURATION_TICKS) setState(boss, CW_STATE_RECOVER);
       break;
     case CW_STATE_RECOVER:
-      if (boss.crimsonWizardStateTicks > CW_RECOVER_TICKS) {
-        boss.crimsonWizardAttackCooldownTicks = CW_BETWEEN_ATTACK_COOLDOWN_TICKS;
+      if (boss.crimsonWizardStateTicks > tuning.recoverTicks) {
+        boss.crimsonWizardAttackCooldownTicks = tuning.attackCooldownTicks;
         setState(boss, CW_STATE_IDLE);
       }
       break;

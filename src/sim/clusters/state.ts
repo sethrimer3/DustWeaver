@@ -355,10 +355,14 @@ export interface ClusterState {
   crimsonWizardHoverPhaseRad: number;
   /** Countdown ticks before the next attack can start. */
   crimsonWizardAttackCooldownTicks: number;
-  /** Round-robin attack selector. */
+  /** Deterministic selector salt for the next Crimson Wizard attack. */
   crimsonWizardNextAttackIndex: number;
   /** Placeholder telegraph timer for fire pillars. */
   crimsonWizardTelegraphTicks: number;
+  /** Last Crimson Wizard attack state chosen by the phase selector. */
+  crimsonWizardLastAttackState: number;
+  /** Consecutive times the last Crimson Wizard attack state has been chosen. */
+  crimsonWizardRepeatCount: number;
 
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
@@ -995,6 +999,8 @@ export function createClusterState(
     crimsonWizardAttackCooldownTicks: 0,
     crimsonWizardNextAttackIndex: 0,
     crimsonWizardTelegraphTicks: 0,
+    crimsonWizardLastAttackState: 0,
+    crimsonWizardRepeatCount: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterStateTicks: 0,

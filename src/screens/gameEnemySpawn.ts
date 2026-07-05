@@ -187,6 +187,8 @@ export function spawnEnemyClusters(
       enemyCluster.crimsonWizardAttackCooldownTicks = CW_INITIAL_COOLDOWN_TICKS;
       enemyCluster.crimsonWizardNextAttackIndex = 0;
       enemyCluster.crimsonWizardTelegraphTicks = 0;
+      enemyCluster.crimsonWizardLastAttackState = CW_STATE_IDLE;
+      enemyCluster.crimsonWizardRepeatCount = 0;
       enemyCluster.halfWidthWorld = CW_HALF_W;
       enemyCluster.halfHeightWorld = CW_HALF_H;
       enemyCluster.healthPoints = CW_HP;
