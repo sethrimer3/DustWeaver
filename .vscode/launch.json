@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Electron: Main",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd",
+      "runtimeArgs": ["--no-sandbox", "--remote-debugging-port=9222", "."],
+      "windows": {
+        "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd"
+      },
+      "env": {
+        "ELECTRON_RENDERER_URL": "http://localhost:5173"
+      },
+      "outputCapture": "std",
+      "preLaunchTask": "vite-dev",
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true
+    },
+    {
+      "name": "Electron: Renderer",
+      "type": "pwa-chrome",
+      "request": "attach",
+      "port": 9222,
+      "timeout": 30000,
+      "urlFilter": "http://localhost:5173/*",
+      "webRoot": "${workspaceFolder}/src",
+      "sourceMaps": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Electron: Debug (Main + Renderer)",
+      "configurations": ["Electron: Main", "Electron: Renderer"],
+      "stopAll": true
+    }
+  ]
+}
