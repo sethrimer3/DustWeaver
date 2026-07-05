@@ -78,6 +78,7 @@ import {
   getRoomPrewarmReadiness,
   getLastAdoptionResult,
   addZoneEntryViewportTasks,
+  runChunkPrewarmSliceNow,
   type TransitionReadinessDiagnostic,
   type WarmScheduleHandle,
 } from './roomRenderChunkWarmScheduler';
@@ -410,6 +411,22 @@ export function startGameScreen(
   const nonUrgentResidentBuildForcedStartFrames = 90;
   const nonUrgentWallsBuildDeferralFramesCap = 45;
   let _nonUrgentQueueBlockedFrames = 0;
+
+  // ── Frame-budget-driven background preload slice ────────────────────────
+  // `roomPreloadScheduler` and `roomRenderChunkWarmScheduler` schedule their
+  // work via `requestIdleCallback`, which is an unreliable cadence source in a
+  // continuously-rendering canvas game: genuine idle slots between animation
+  // frames are rare, so real progress often only happened when each
+  // scheduler's multi-second forced timeout fired — long enough that a player
+  // could reach a "preloaded" room while it was still cold, producing a
+  // visible hitch despite the preload systems reporting success.
+  // Driving both schedulers here, once per frame, from *measured* spare frame
+  // time (last frame's cost vs. this budget) gives deterministic, far more
+  // frequent progress with no added risk of a frame overrun: the budget below
+  // already matches the same conservative threshold the resident-build
+  // scheduler above uses for its own background work.
+  const preloadSliceFrameBudgetMs = residentBuildBackgroundFrameBudgetMs;
+  const preloadSliceMaxMs = 8;
 
   /**
    * Per-room version counter.  Incremented when a room is edited so that
@@ -2444,6 +2461,23 @@ export function startGameScreen(
         _qByPri[_pi]++;
       }
       residentRoomManager.setResidentBuildQueueLength(_residentBuildQueue.length, _qByPri);
+    }
+
+    // ── Frame-budget-driven background preload slice ────────────────────────
+    // Supplements the requestIdleCallback-based schedulers with deterministic
+    // progress driven by this frame's actual measured spare time — see the
+    // constants declared above for rationale.  Gated on the previous frame
+    // having genuine headroom so this can never itself cause a frame to blow
+    // its budget; each scheduler further self-limits internally (chunk/room
+    // count and per-room cost thresholds).
+    {
+      const _lastFrameMsForPreload = renderProfiler.getLastFrameMs();
+      const _preloadSpareMs = preloadSliceFrameBudgetMs - _lastFrameMsForPreload;
+      if (_preloadSpareMs > 0) {
+        const _sliceMs = Math.min(_preloadSpareMs, preloadSliceMaxMs);
+        _preloadScheduleHandle?.runSliceNow(_sliceMs);
+        runChunkPrewarmSliceNow(_sliceMs);
+      }
     }
 
     // Clear the gameplay-bake-forbidden flag before ending the frame so it

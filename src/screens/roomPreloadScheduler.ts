@@ -65,10 +65,18 @@ import * as FP from '../debug/perfFreezeProfiler';
 /**
  * Minimum milliseconds of idle budget required before starting a room build.
  * If the deadline reports less than this, the callback reschedules rather than
- * risking a long task inside an animation frame.  20 ms gives enough headroom
- * for a typical room build without cutting into active frame time.
+ * risking a long task inside an animation frame.
+ *
+ * Lowered from the original 20 ms (BUILD 390) once `runSliceNow()` started
+ * driving this scheduler from measured per-frame spare time (see gameScreen.ts):
+ * a 60 fps frame only has ~16.7 ms total, so a 20 ms floor made per-frame
+ * slices impossible to clear and left this scheduler dependent on rare/slow
+ * `requestIdleCallback` gaps or the multi-second forced timeout. 6 ms still
+ * comfortably covers the cheap-room threshold (`MAX_R1_COST_SYNC_MS` = 8 ms is
+ * gated separately, downstream, per-room) while letting frequent small slices
+ * make real progress.
  */
-const MIN_IDLE_BUDGET_MS = 20;
+const MIN_IDLE_BUDGET_MS = 6;
 
 /**
  * Timeout passed to `requestIdleCallback`.  After this many ms without a
@@ -270,6 +278,21 @@ export interface PreloadScheduleHandle {
    * front of the queue.
    */
   prioritize(roomId: string): void;
+  /**
+   * Runs one bounded slice of preload work immediately, using `maxMs` as the
+   * time budget instead of waiting for a `requestIdleCallback` slot.
+   *
+   * `requestIdleCallback` is an unreliable cadence source in a continuously
+   * rendering canvas game — genuine idle slots are rare between animation
+   * frames, so real progress often only happens when `IDLE_TIMEOUT_MS`
+   * (several seconds) forces the callback.  Calling this from the game's own
+   * RAF loop with *measured* spare frame time gives deterministic, frequent
+   * progress with no risk of exceeding the frame budget, since the caller
+   * already knows exactly how much time is actually spare this frame.
+   *
+   * Safe to call every frame: no-ops when cancelled or the queue is empty.
+   */
+  runSliceNow(maxMs: number): void;
 }
 
 /**
@@ -588,6 +611,17 @@ export function scheduleRoomPreloads(
         }
       }
       // If already at front (idx === 0), nothing to do.
+    },
+
+    runSliceNow(maxMs: number): void {
+      if (isCancelled || workQueue.length === 0) return;
+      // Cancel any pending idle callback so this slice and the idle-triggered
+      // slice never double-process the same queue head in the same tick.
+      if (activeHandle !== null) {
+        cancelIdle(activeHandle);
+        activeHandle = null;
+      }
+      processNext({ timeRemaining: () => maxMs, didTimeout: false });
     },
   };
 }

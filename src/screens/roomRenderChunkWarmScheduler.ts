@@ -1010,7 +1010,43 @@ export function evictStalePrewarmedChunks(
 
 function _onIdle(deadline: IdleDeadline): void {
   _idleHandle = 0;
+  _runSlice(deadline);
+}
 
+/**
+ * Runs one bounded slice of chunk-prewarm work against a caller-supplied
+ * deadline, identical in behaviour to the `requestIdleCallback`-driven path.
+ *
+ * `requestIdleCallback` alone is an unreliable cadence source in a
+ * continuously-rendering canvas game: browsers rarely report genuine idle
+ * time between animation frames, so real progress often only happens when
+ * the `IDLE_TIMEOUT_MS` forced-callback fires — multiple seconds apart.  A
+ * player can easily reach an adjacent room well before that, leaving
+ * "preloaded" rooms still cold on arrival.
+ *
+ * `runChunkPrewarmSliceNow` lets `gameScreen.ts`'s own RAF loop drive
+ * progress deterministically from *measured* spare frame time (see the
+ * frame-budget preload slice in gameScreen.ts), which is both more frequent
+ * and safer than a forced idle timeout — the caller already knows exactly
+ * how much time is actually spare this frame, rather than the browser
+ * guessing after a multi-second wait.
+ *
+ * Safe to call every frame: it is a no-op when the queue is empty or the
+ * schedule has been cancelled, and internally respects the same per-slice
+ * chunk/time budgets as the idle path.
+ */
+export function runChunkPrewarmSliceNow(maxMs: number): void {
+  if (_cancelled || _queue.length === 0) return;
+  // Cancel any pending idle callback so this slice and the idle-triggered
+  // slice never double-process the same queue head in the same tick.
+  if (_idleHandle !== 0) {
+    _cancelIdle(_idleHandle);
+    _idleHandle = 0;
+  }
+  _runSlice({ timeRemaining: () => maxMs, didTimeout: false });
+}
+
+function _runSlice(deadline: IdleDeadline): void {
   if (_cancelled) return;
   if (_queue.length === 0) {
     _refreshStats();
