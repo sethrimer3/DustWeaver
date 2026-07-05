@@ -234,6 +234,10 @@ export function applyHazards(world: WorldState): void {
       if (overlapAABB(px, py, phw, phh, hazLeft, hazTop, hazRight, hazBottom)) {
         const sourceXWorld = sx;
         const sourceYWorld = sy;
+        // Arrest all momentum on contact so knockback isn't blended with
+        // (and partially canceled by) whatever speed carried the player in.
+        player.velocityXWorld = 0;
+        player.velocityYWorld = 0;
         applyPlayerDamageWithKnockback(player, SPIKE_DAMAGE, sourceXWorld, sourceYWorld);
         world.spikeInvulnTicks = SPIKE_INVULN_TICKS;
         break; // one spike hit per tick
