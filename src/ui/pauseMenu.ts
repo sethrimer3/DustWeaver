@@ -19,6 +19,8 @@ import {
   setGraphicsQuality,
   setAlwaysCenterCamera,
   setManualSprintEnabled,
+  getPixelSpeedometerEnabled,
+  setPixelSpeedometerEnabled,
   saveCombatModeToStorage,
   WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
   type WorldViewPresetId,
@@ -297,6 +299,37 @@ export function showPauseMenu(
         (v) => { setInfluenceCircleOpacity(v); },
       );
       optionsPanel.appendChild(influenceCircleSlider);
+
+      const speedometerEnabled = getPixelSpeedometerEnabled();
+      const speedometerRow = document.createElement('label');
+      speedometerRow.style.cssText = `
+        display: flex; align-items: center; justify-content: center;
+        gap: 10px; margin: 16px 0 8px 0;
+        padding: 10px 14px;
+        background: rgba(212,168,75,${speedometerEnabled ? '0.12' : '0.04'});
+        border: 1px solid rgba(212,168,75,${speedometerEnabled ? '0.55' : '0.25'});
+        border-radius: 6px;
+        cursor: pointer;
+      `;
+      const speedometerCheckbox = document.createElement('input');
+      speedometerCheckbox.type = 'checkbox';
+      speedometerCheckbox.checked = speedometerEnabled;
+      speedometerCheckbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
+      const speedometerLabel = document.createElement('span');
+      speedometerLabel.textContent = 'Pixel speedometer';
+      speedometerLabel.style.cssText = `
+        font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.88rem;
+        cursor: pointer; letter-spacing: 0.4px;
+      `;
+      speedometerCheckbox.addEventListener('change', () => {
+        const enabled = speedometerCheckbox.checked;
+        setPixelSpeedometerEnabled(enabled);
+        speedometerRow.style.borderColor = `rgba(212,168,75,${enabled ? '0.55' : '0.25'})`;
+        speedometerRow.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0.04'})`;
+      });
+      speedometerRow.appendChild(speedometerCheckbox);
+      speedometerRow.appendChild(speedometerLabel);
+      optionsPanel.appendChild(speedometerRow);
     }
 
     // Back button
