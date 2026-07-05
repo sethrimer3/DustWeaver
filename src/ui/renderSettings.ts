@@ -54,6 +54,7 @@ const REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY = 'dustweaver-reachable-edge-glow-
 const INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY = 'dustweaver-influence-circle-opacity';
 const INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY = 'dustweaver-influence-highlight-width';
 const DOUBLE_JUMP_TO_GRAPPLE_STORAGE_KEY = 'dustweaver-double-jump-to-grapple';
+const PIXEL_SPEEDOMETER_STORAGE_KEY = 'dustweaver-pixel-speedometer-enabled';
 const DEFAULT_RENDER_SIZE_ID = '1080p';
 
 const RENDER_SIZE_OPTIONS: RenderSizeOption[] = [
@@ -200,6 +201,17 @@ export function getDoubleJumpToGrappleEnabled(): boolean {
 
 export function setDoubleJumpToGrappleEnabled(enabled: boolean): void {
   localStorage.setItem(DOUBLE_JUMP_TO_GRAPPLE_STORAGE_KEY, enabled ? '1' : '0');
+}
+
+/**
+ * Shows the player's current in-game pixel velocity in the HUD. Defaults to off.
+ */
+export function getPixelSpeedometerEnabled(): boolean {
+  return localStorage.getItem(PIXEL_SPEEDOMETER_STORAGE_KEY) === '1';
+}
+
+export function setPixelSpeedometerEnabled(enabled: boolean): void {
+  localStorage.setItem(PIXEL_SPEEDOMETER_STORAGE_KEY, enabled ? '1' : '0');
 }
 
 // ── World View Presets ────────────────────────────────────────────────────────

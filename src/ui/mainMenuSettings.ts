@@ -32,6 +32,8 @@ import {
   setInfluenceHighlightWidth,
   getDoubleJumpToGrappleEnabled,
   setDoubleJumpToGrappleEnabled,
+  getPixelSpeedometerEnabled,
+  setPixelSpeedometerEnabled,
 } from './renderSettings';
 import { buildKeybindingsTab } from './mainMenuSettingsKeybindings';
 import {
@@ -482,6 +484,11 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
     tabContent.appendChild(
       makeCheckboxRow('Double-jump to grapple', getDoubleJumpToGrappleEnabled(), (enabled) => {
         setDoubleJumpToGrappleEnabled(enabled);
+      }),
+    );
+    tabContent.appendChild(
+      makeCheckboxRow('Pixel speedometer', getPixelSpeedometerEnabled(), (enabled) => {
+        setPixelSpeedometerEnabled(enabled);
       }),
     );
   }
