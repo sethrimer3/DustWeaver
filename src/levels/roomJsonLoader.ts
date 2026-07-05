@@ -158,6 +158,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     xBlock: s.xBlock,
     yBlock: s.yBlock,
     direction: s.direction as SpikeDirection,
+    size: s.size ?? '1x1',
   }));
 
   const springboards: RoomSpringboardDef[] | undefined = json.springboards?.map(s => ({

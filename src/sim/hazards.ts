@@ -110,9 +110,6 @@ const FIREFLY_DIRECTION_CHANGE_TICKS = 90;
 /** Margin from world edges for firefly clamping (world units). */
 const FIREFLY_EDGE_MARGIN_WORLD = 12.0;
 
-/** Half-size of a spike hitbox in world units (occupies one block). */
-const SPIKE_HALF_SIZE_WORLD = BLOCK_SIZE_MEDIUM * 0.5;
-
 /** Half-size of a springboard hitbox in world units. */
 const SPRINGBOARD_HALF_WIDTH_WORLD = BLOCK_SIZE_MEDIUM * 0.5;
 const SPRINGBOARD_HALF_HEIGHT_WORLD = BLOCK_SIZE_MEDIUM * 0.25;
@@ -209,16 +206,32 @@ export function applyHazards(world: WorldState): void {
   }
 
   // ── Spikes ───────────────────────────────────────────────────────────────
+  // Only the half of the spike's footprint nearest its base (i.e. opposite the
+  // pointed tip) is damaging — for an upward spike that's the bottom half
+  // (bottom 4px of a 1×1 spike, bottom 8px of a 2×2 spike). This keeps a
+  // shallow graze of the thin tip from registering as a hit; the player must
+  // be overlapping the thicker base region to actually take damage.
   if (world.spikeInvulnTicks === 0) {
     for (let i = 0; i < world.spikeCount; i++) {
       const sx = world.spikeXWorld[i];
       const sy = world.spikeYWorld[i];
-      const sLeft = sx - SPIKE_HALF_SIZE_WORLD;
-      const sRight = sx + SPIKE_HALF_SIZE_WORLD;
-      const sTop = sy - SPIKE_HALF_SIZE_WORLD;
-      const sBottom = sy + SPIKE_HALF_SIZE_WORLD;
+      const sizeBlocks = world.spikeSizeBlocks[i] || 1;
+      const half = sizeBlocks * BLOCK_SIZE_MEDIUM * 0.5;
+      const sLeft = sx - half;
+      const sRight = sx + half;
+      const sTop = sy - half;
+      const sBottom = sy + half;
 
-      if (overlapAABB(px, py, phw, phh, sLeft, sTop, sRight, sBottom)) {
+      // Restrict the hazard AABB to the base half, opposite the tip direction.
+      let hazLeft = sLeft, hazRight = sRight, hazTop = sTop, hazBottom = sBottom;
+      switch (world.spikeDirection[i]) {
+        case SPIKE_DIR_UP:    hazTop = sy;    break; // tip up    → base is bottom half
+        case SPIKE_DIR_DOWN:  hazBottom = sy; break; // tip down  → base is top half
+        case SPIKE_DIR_LEFT:  hazLeft = sx;   break; // tip left  → base is right half
+        case SPIKE_DIR_RIGHT: hazRight = sx;  break; // tip right → base is left half
+      }
+
+      if (overlapAABB(px, py, phw, phh, hazLeft, hazTop, hazRight, hazBottom)) {
         const sourceXWorld = sx;
         const sourceYWorld = sy;
         applyPlayerDamageWithKnockback(player, SPIKE_DAMAGE, sourceXWorld, sourceYWorld);

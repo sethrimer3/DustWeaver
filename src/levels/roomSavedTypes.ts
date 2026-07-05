@@ -263,7 +263,12 @@ export interface SavedRoomV2 {
   skillTombs?: [number, number, string][];
   skillBooks?: SavedPoint[];
   dustContainers?: SavedPoint[];
-  spikes?: [number, number, 'up' | 'down' | 'left' | 'right'][];
+  /**
+   * Spikes as `[x, y, direction, size?]`. `size` is omitted for `'1x1'`
+   * (the implicit default prior to 2×2 spike support) to keep older-format
+   * saves byte-for-byte unchanged.
+   */
+  spikes?: [number, number, 'up' | 'down' | 'left' | 'right', ('1x1' | '2x2')?][];
   springboards?: SavedPoint[];
   /**
    * Compact water-zone coverage layer (v3+ preferred).

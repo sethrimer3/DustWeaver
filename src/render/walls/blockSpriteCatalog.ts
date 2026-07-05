@@ -27,6 +27,25 @@ export const TEMPLATE_URLS = {
 /** Union of all supported shape names. */
 export type BlockShapeName = keyof typeof TEMPLATE_URLS;
 
+/**
+ * Variation template masks for spike hazards, one folder per size tier.
+ * Unlike `TEMPLATE_URLS` (one mask per shape), spikes have several interchangeable
+ * variation masks per size so that repeated spikes in a room don't look identical.
+ * All variations face upward by default — `getProceduralSprite`'s `rotStep`/`flipY`
+ * params reorient them to match a spike's placed direction.
+ */
+export const SPIKE_TEMPLATE_VARIATIONS = {
+  '1x1 spike': [1, 2, 3, 4, 5].map(
+    n => `${_TEMPLATE_BASE_PATH}/1x1 spike/1x1 spike_template_variation${n}.png`,
+  ),
+  '2x2 spike': [1, 2, 3, 4, 5].map(
+    n => `${_TEMPLATE_BASE_PATH}/2x2 spike/2x2 spike_template_variation${n}.png`,
+  ),
+} as const;
+
+/** Union of supported spike shape sizes. */
+export type SpikeShapeName = keyof typeof SPIKE_TEMPLATE_VARIATIONS;
+
 // ── Pool accessor ─────────────────────────────────────────────────────────────
 
 /**

@@ -16,12 +16,17 @@ import type { BlockTheme } from './blockTheme';
 /** Direction a spike faces (the pointy end). */
 export type SpikeDirection = 'up' | 'down' | 'left' | 'right';
 
+/** Footprint size of a spike, in blocks. Defaults to `'1x1'` when omitted. */
+export type SpikeSize = '1x1' | '2x2';
+
 /** A spike tile placed in the room. */
 export interface RoomSpikeDef {
   xBlock: number;
   yBlock: number;
   /** Direction the spike points (the dangerous end). */
   direction: SpikeDirection;
+  /** Footprint size in blocks. Defaults to `'1x1'` when omitted. */
+  size?: SpikeSize;
 }
 
 /** A springboard tile that bounces the player upward. */

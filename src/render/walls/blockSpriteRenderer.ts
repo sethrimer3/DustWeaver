@@ -66,6 +66,7 @@ import {
   setPrebuiltWallLayout,
 } from './blockWallLayoutCache';
 import { renderSingleExtensionTileWithState } from './extensionTileRenderer';
+import { isFolderBasedTheme } from './folderBlockThemes';
 import {
   type WallTilePassContext,
   render2x2Pass,
@@ -177,6 +178,28 @@ export function setActiveBlockSpriteTheme(theme: BlockTheme): void {
  */
 export function getActiveProceduralMaterial(): string | null {
   return themeToProceduralMaterial(_activeBlockTheme, _activeWorldNumber);
+}
+
+/**
+ * Returns the active folder-based block theme ID (e.g. `'grayStone'`), or
+ * `null` when no explicit theme is set for the room (legacy per-world sprite
+ * sets) or the active theme is not folder-based.
+ *
+ * Used by standalone hazard renderers (e.g. spikes) that need to visually
+ * match the room's block theme without going through the full wall-chunk
+ * rendering pipeline.
+ */
+export function getActiveFolderBlockThemeId(): string | null {
+  return (_activeBlockTheme !== null && isFolderBasedTheme(_activeBlockTheme)) ? _activeBlockTheme : null;
+}
+
+/**
+ * Returns the active world number, used as the deterministic-variant seed by
+ * standalone hazard renderers that need to match block-sprite variation
+ * selection (e.g. spikes via `getFolderThemeBaseUrl`).
+ */
+export function getActiveWorldNumberForSprites(): number {
+  return _activeWorldNumber;
 }
 
 /**

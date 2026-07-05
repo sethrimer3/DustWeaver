@@ -79,8 +79,11 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   for (let i = 0; i < spikeDefs.length && world.spikeCount < world.spikeXWorld.length; i++) {
     const s = spikeDefs[i];
     const si = world.spikeCount++;
-    world.spikeXWorld[si] = (s.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
-    world.spikeYWorld[si] = (s.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    const sizeBlocks = s.size === '2x2' ? 2 : 1;
+    world.spikeSizeBlocks[si] = sizeBlocks;
+    // xBlock/yBlock are the footprint's top-left corner regardless of size.
+    world.spikeXWorld[si] = (s.xBlock + sizeBlocks * 0.5) * BLOCK_SIZE_MEDIUM;
+    world.spikeYWorld[si] = (s.yBlock + sizeBlocks * 0.5) * BLOCK_SIZE_MEDIUM;
     switch (s.direction) {
       case 'up':    world.spikeDirection[si] = SPIKE_DIR_UP; break;
       case 'down':  world.spikeDirection[si] = SPIKE_DIR_DOWN; break;

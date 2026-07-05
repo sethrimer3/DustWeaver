@@ -152,6 +152,8 @@ export interface RoomJsonSpike {
   xBlock: number;
   yBlock: number;
   direction: 'up' | 'down' | 'left' | 'right';
+  /** Footprint size in blocks. Defaults to `'1x1'` when omitted. */
+  size?: '1x1' | '2x2';
 }
 
 export interface RoomJsonSpringboard {

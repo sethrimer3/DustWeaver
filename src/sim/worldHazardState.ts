@@ -136,6 +136,12 @@ export interface HazardWorldState {
    * Encoded as Uint8 for hot-path reads.
    */
   spikeDirection: Uint8Array;
+  /**
+   * Footprint size of each spike, in blocks (1 or 2). Determines both the
+   * collision AABB and which template variation pool (`1x1 spike` vs
+   * `2x2 spike`) is used for rendering.
+   */
+  spikeSizeBlocks: Uint8Array;
   /** Invulnerability cooldown ticks after spike damage. */
   spikeInvulnTicks: number;
 
@@ -533,6 +539,7 @@ export function createHazardWorldState(): HazardWorldState {
     spikeXWorld:                   new Float32Array(MAX_SPIKES),
     spikeYWorld:                   new Float32Array(MAX_SPIKES),
     spikeDirection:                new Uint8Array(MAX_SPIKES),
+    spikeSizeBlocks:               new Uint8Array(MAX_SPIKES),
     spikeInvulnTicks:              0,
     springboardCount:              0,
     springboardXWorld:             new Float32Array(MAX_SPRINGBOARDS),

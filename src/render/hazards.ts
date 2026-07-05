@@ -20,8 +20,77 @@ import {
 import { renderWaterZones, renderLavaZones } from './liquidRenderer';
 import { renderIceMoteAuraOverlay } from './iceMoteAuraRenderer';
 import { isScreenRectVisible } from './viewportCull';
+import { SPIKE_TEMPLATE_VARIATIONS } from './walls/blockSpriteCatalog';
+import { getProceduralSprite, hashTilePosition, OPEN_AIR_ALL_SIDES } from './walls/proceduralBlockSprite';
+import { getFolderThemeBaseUrl } from './walls/folderBlockThemes';
+import { getActiveFolderBlockThemeId, getActiveWorldNumberForSprites } from './walls/blockSpriteRenderer';
 
 const BLOCK_HALF = BLOCK_SIZE_MEDIUM * 0.5;
+
+/**
+ * Rotation step (90° CW) to reorient an upward-facing spike template mask to
+ * match the placed spike direction. Templates in ASSETS/SPRITES/BLOCKS/
+ * block_templates/{1x1,2x2} spike/ face up by default.
+ */
+function _spikeDirRotStep(dir: number): number {
+  switch (dir) {
+    case SPIKE_DIR_RIGHT: return 1;
+    case SPIKE_DIR_DOWN:  return 2;
+    case SPIKE_DIR_LEFT:  return 3;
+    default:              return 0; // SPIKE_DIR_UP
+  }
+}
+
+/**
+ * Draws a spike using the active room's block theme, cut out via a
+ * deterministically-chosen variation template mask (same "cutout" technique
+ * used for ramp/platform block shapes — see proceduralBlockSprite.ts).
+ *
+ * @returns `true` if the themed sprite was drawn; `false` when no folder-based
+ *   theme is active or the sprite/template images have not finished loading
+ *   yet, so the caller can fall back to the flat-triangle draw.
+ */
+function _drawThemedSpike(
+  ctx: CanvasRenderingContext2D,
+  spikeWorldX: number,
+  spikeWorldY: number,
+  screenCx: number,
+  screenCy: number,
+  screenHalf: number,
+  sizeBlocks: number,
+  dir: number,
+): boolean {
+  const themeId = getActiveFolderBlockThemeId();
+  if (themeId === null) return false;
+
+  const seed = getActiveWorldNumberForSprites();
+  const colTopLeft = Math.round(spikeWorldX / BLOCK_SIZE_MEDIUM - sizeBlocks * 0.5);
+  const rowTopLeft = Math.round(spikeWorldY / BLOCK_SIZE_MEDIUM - sizeBlocks * 0.5);
+
+  const baseUrl = getFolderThemeBaseUrl(themeId, colTopLeft, rowTopLeft, seed);
+  if (baseUrl === null) return false;
+
+  const variations = sizeBlocks >= 2 ? SPIKE_TEMPLATE_VARIATIONS['2x2 spike'] : SPIKE_TEMPLATE_VARIATIONS['1x1 spike'];
+  const variantHash = hashTilePosition(colTopLeft, rowTopLeft, seed);
+  const templateUrl = variations[variantHash % variations.length];
+
+  const dimPx = sizeBlocks * BLOCK_SIZE_MEDIUM;
+  const sprite = getProceduralSprite(
+    baseUrl, templateUrl, dimPx, dimPx,
+    /* flipX */ false, /* flipY */ false, _spikeDirRotStep(dir),
+    OPEN_AIR_ALL_SIDES,
+    colTopLeft * BLOCK_SIZE_MEDIUM, rowTopLeft * BLOCK_SIZE_MEDIUM,
+    seed, colTopLeft, rowTopLeft,
+  );
+  if (sprite === null) return false;
+
+  ctx.drawImage(
+    sprite,
+    Math.round(screenCx - screenHalf), Math.round(screenCy - screenHalf),
+    Math.round(screenHalf * 2), Math.round(screenHalf * 2),
+  );
+  return true;
+}
 
 /**
  * Renders all environmental hazards.
@@ -312,18 +381,24 @@ export function renderHazards(
     }
   }
 
-  // ── Spikes (triangular shapes) ─────────────────────────────────────────
+  // ── Spikes (themed cutout, falls back to a flat triangle) ──────────────
   for (let i = 0; i < world.spikeCount; i++) {
     const spx = world.spikeXWorld[i];
     const spy = world.spikeYWorld[i];
     const dir = world.spikeDirection[i];
-    const half = BLOCK_HALF * zoom;
+    const sizeBlocks = world.spikeSizeBlocks[i] || 1;
+    const half = sizeBlocks * BLOCK_HALF * zoom;
 
     const cx = spx * zoom + offsetXPx;
     const cy = spy * zoom + offsetYPx;
 
     if (!isScreenRectVisible(cx - half - 1, cy - half - 1, half * 2 + 2, half * 2 + 2, vpW, vpH)) continue;
 
+    const drawn = _drawThemedSpike(ctx, spx, spy, cx, cy, half, sizeBlocks, dir);
+    if (drawn) continue;
+
+    // ── Fallback: flat triangle (theme not yet resolvable — e.g. legacy
+    // per-world sprite rooms with no explicit folder-based blockTheme) ──────
     ctx.fillStyle = '#888888';
     ctx.beginPath();
 

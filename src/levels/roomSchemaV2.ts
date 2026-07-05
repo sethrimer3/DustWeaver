@@ -429,7 +429,11 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.dustContainers = json.dustContainers.map(s => [s.xBlock, s.yBlock] as SavedPoint);
   }
   if (json.spikes && json.spikes.length > 0) {
-    out.spikes = json.spikes.map(s => [s.xBlock, s.yBlock, s.direction]);
+    out.spikes = json.spikes.map(s =>
+      s.size === '2x2'
+        ? [s.xBlock, s.yBlock, s.direction, '2x2']
+        : [s.xBlock, s.yBlock, s.direction],
+    );
   }
   if (json.springboards && json.springboards.length > 0) {
     out.springboards = json.springboards.map(s => [s.xBlock, s.yBlock] as SavedPoint);
