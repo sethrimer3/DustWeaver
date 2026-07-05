@@ -52,6 +52,11 @@ import {
   MAX_MOTES_PER_DL,
   MAX_MOTES_PER_DE,
 } from './clusters/dustLeechConfig';
+import {
+  MAX_CW_FIRE_DUST,
+  MAX_CW_PROJECTILES,
+  MAX_CW_SMOKE,
+} from './clusters/crimsonWizardConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -122,6 +127,11 @@ export {
   MAX_MOTES_PER_DL,
   MAX_MOTES_PER_DE,
 } from './clusters/dustLeechConfig';
+export {
+  MAX_CW_FIRE_DUST,
+  MAX_CW_PROJECTILES,
+  MAX_CW_SMOKE,
+} from './clusters/crimsonWizardConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -535,6 +545,31 @@ export interface HazardWorldState {
   deMoteOffsetYWorld: Float32Array;
   /** Per-mote pulse phase (radians). Same layout. */
   deMotePulsePhaseRad: Float32Array;
+
+  // Crimson Wizard fire/smoke/projectile buffers.
+  cwFireDustXWorld: Float32Array;
+  cwFireDustYWorld: Float32Array;
+  cwFireDustVelXWorld: Float32Array;
+  cwFireDustVelYWorld: Float32Array;
+  cwFireDustAgeTicks: Uint16Array;
+  cwFireDustLifetimeTicks: Uint16Array;
+  cwFireDustColorIndex: Uint8Array;
+  cwFireDustAliveFlag: Uint8Array;
+  cwSmokeXWorld: Float32Array;
+  cwSmokeYWorld: Float32Array;
+  cwSmokeVelXWorld: Float32Array;
+  cwSmokeVelYWorld: Float32Array;
+  cwSmokeAgeTicks: Uint16Array;
+  cwSmokeLifetimeTicks: Uint16Array;
+  cwSmokeAliveFlag: Uint8Array;
+  cwProjectileXWorld: Float32Array;
+  cwProjectileYWorld: Float32Array;
+  cwProjectileVelXWorld: Float32Array;
+  cwProjectileVelYWorld: Float32Array;
+  cwProjectileLifetimeTicks: Uint16Array;
+  cwProjectileType: Uint8Array;
+  cwProjectileAliveFlag: Uint8Array;
+  cwProjectileHitFlag: Uint8Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -684,5 +719,28 @@ export function createHazardWorldState(): HazardWorldState {
     deMoteOffsetXWorld:           new Float32Array(MAX_DUST_ECHOES * MAX_MOTES_PER_DE),
     deMoteOffsetYWorld:           new Float32Array(MAX_DUST_ECHOES * MAX_MOTES_PER_DE),
     deMotePulsePhaseRad:          new Float32Array(MAX_DUST_ECHOES * MAX_MOTES_PER_DE),
+    cwFireDustXWorld:             new Float32Array(MAX_CW_FIRE_DUST),
+    cwFireDustYWorld:             new Float32Array(MAX_CW_FIRE_DUST),
+    cwFireDustVelXWorld:          new Float32Array(MAX_CW_FIRE_DUST),
+    cwFireDustVelYWorld:          new Float32Array(MAX_CW_FIRE_DUST),
+    cwFireDustAgeTicks:           new Uint16Array(MAX_CW_FIRE_DUST),
+    cwFireDustLifetimeTicks:      new Uint16Array(MAX_CW_FIRE_DUST),
+    cwFireDustColorIndex:         new Uint8Array(MAX_CW_FIRE_DUST),
+    cwFireDustAliveFlag:          new Uint8Array(MAX_CW_FIRE_DUST),
+    cwSmokeXWorld:                new Float32Array(MAX_CW_SMOKE),
+    cwSmokeYWorld:                new Float32Array(MAX_CW_SMOKE),
+    cwSmokeVelXWorld:             new Float32Array(MAX_CW_SMOKE),
+    cwSmokeVelYWorld:             new Float32Array(MAX_CW_SMOKE),
+    cwSmokeAgeTicks:              new Uint16Array(MAX_CW_SMOKE),
+    cwSmokeLifetimeTicks:         new Uint16Array(MAX_CW_SMOKE),
+    cwSmokeAliveFlag:             new Uint8Array(MAX_CW_SMOKE),
+    cwProjectileXWorld:           new Float32Array(MAX_CW_PROJECTILES),
+    cwProjectileYWorld:           new Float32Array(MAX_CW_PROJECTILES),
+    cwProjectileVelXWorld:        new Float32Array(MAX_CW_PROJECTILES),
+    cwProjectileVelYWorld:        new Float32Array(MAX_CW_PROJECTILES),
+    cwProjectileLifetimeTicks:    new Uint16Array(MAX_CW_PROJECTILES),
+    cwProjectileType:             new Uint8Array(MAX_CW_PROJECTILES),
+    cwProjectileAliveFlag:        new Uint8Array(MAX_CW_PROJECTILES),
+    cwProjectileHitFlag:          new Uint8Array(MAX_CW_PROJECTILES),
   };
 }

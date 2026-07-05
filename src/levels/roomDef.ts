@@ -277,6 +277,8 @@ export interface RoomEnemyDef {
   isRadiantTetherFlag?: 0 | 1;
   /** 1 if this enemy is the Radiant Web boss — floating sphere that fires splitting beam attacks. */
   isRadiantWebFlag?: 0 | 1;
+  /** 1 if this enemy is the Crimson Wizard boss. */
+  isCrimsonWizardFlag?: 0 | 1;
   /** 1 if this enemy is a grapple hunter — ground enemy that fires slow grapple hooks at the player. */
   isGrappleHunterFlag?: 0 | 1;
   /** 1 if this enemy is a slime — hops toward the player. */

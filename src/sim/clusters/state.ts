@@ -339,6 +339,27 @@ export interface ClusterState {
   /** Ticks elapsed in the current Radiant Web state. */
   radiantWebStateTicks: number;
 
+  /** 1 if this cluster is the Crimson Wizard boss. */
+  isCrimsonWizardFlag: 0 | 1;
+  /** Current Crimson Wizard attack state. */
+  crimsonWizardState: number;
+  /** Ticks elapsed in the current Crimson Wizard state. */
+  crimsonWizardStateTicks: number;
+  /** Horizontal facing direction, -1 left or 1 right. */
+  crimsonWizardFacingX: number;
+  /** Boss horizontal velocity (world units/tick). */
+  crimsonWizardVelXWorld: number;
+  /** Boss vertical velocity (world units/tick). */
+  crimsonWizardVelYWorld: number;
+  /** Organic hover phase for deterministic movement variation. */
+  crimsonWizardHoverPhaseRad: number;
+  /** Countdown ticks before the next attack can start. */
+  crimsonWizardAttackCooldownTicks: number;
+  /** Round-robin attack selector. */
+  crimsonWizardNextAttackIndex: number;
+  /** Placeholder telegraph timer for fire pillars. */
+  crimsonWizardTelegraphTicks: number;
+
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
   isFacingLeftFlag: 0 | 1;
@@ -964,6 +985,16 @@ export function createClusterState(
     isRadiantWebFlag: 0,
     radiantWebState: 0,
     radiantWebStateTicks: 0,
+    isCrimsonWizardFlag: 0,
+    crimsonWizardState: 0,
+    crimsonWizardStateTicks: 0,
+    crimsonWizardFacingX: 1,
+    crimsonWizardVelXWorld: 0,
+    crimsonWizardVelYWorld: 0,
+    crimsonWizardHoverPhaseRad: 0,
+    crimsonWizardAttackCooldownTicks: 0,
+    crimsonWizardNextAttackIndex: 0,
+    crimsonWizardTelegraphTicks: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterStateTicks: 0,

@@ -25,6 +25,8 @@ import { applyEnemyAI } from './clusters/enemyAi';
 import { applyRockElementalAI } from './clusters/rockElementalAi';
 import { applyRadiantTetherAI } from './clusters/radiantTetherAi';
 import { applyRadiantWebAI } from './clusters/radiantWebAi';
+import { applyCrimsonWizardAI } from './clusters/crimsonWizardAi';
+import { tickCrimsonWizardEffects } from './clusters/crimsonWizardEffects';
 import { applyGrappleHunterAI } from './clusters/grappleHunterAi';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
@@ -145,6 +147,9 @@ export function tick(world: WorldState): void {
   // 0.5d2. Radiant Web AI — web-beam boss state machine
   applyRadiantWebAI(world);
 
+  // 0.5d3. Crimson Wizard AI — hovering fire boss state machine
+  applyCrimsonWizardAI(world);
+
   // 0.5e. Grapple Hunter AI — grapple attack state machine
   applyGrappleHunterAI(world);
 
@@ -209,6 +214,9 @@ export function tick(world: WorldState): void {
 
   // 4.56. Arrow Weave flight update — move arrows, detect wall sticking, apply enemy hit sequences
   tickArrows(world);
+
+  // 4.57. Crimson Wizard fire/smoke/projectile buffers
+  tickCrimsonWizardEffects(world);
 
   // 4.6. Lava AoE burn — heat damage to nearby enemy particles
   applyLavaEffect(world);

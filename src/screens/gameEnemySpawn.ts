@@ -93,6 +93,7 @@ import {
   VS_HALF_H,
   VS_MOTE_START_RADIUS_WORLD,
 } from '../sim/clusters/voidSingularityConfig';
+import { CW_HALF_H, CW_HALF_W, CW_HP, CW_INITIAL_COOLDOWN_TICKS, CW_STATE_IDLE } from '../sim/clusters/crimsonWizardConfig';
 import { VS_STATE_IDLE as VS_IDLE } from '../sim/clusters/voidSingularityAi';
 import {
   DL_HP,
@@ -175,6 +176,21 @@ export function spawnEnemyClusters(
       enemyCluster.radiantWebState  = 0;
       enemyCluster.halfWidthWorld   = 6.0;
       enemyCluster.halfHeightWorld  = 6.0;
+    } else if (enemyDef.isCrimsonWizardFlag === 1) {
+      enemyCluster.isCrimsonWizardFlag = 1;
+      enemyCluster.crimsonWizardState = CW_STATE_IDLE;
+      enemyCluster.crimsonWizardStateTicks = 0;
+      enemyCluster.crimsonWizardFacingX = 1;
+      enemyCluster.crimsonWizardVelXWorld = 0;
+      enemyCluster.crimsonWizardVelYWorld = 0;
+      enemyCluster.crimsonWizardHoverPhaseRad = 0;
+      enemyCluster.crimsonWizardAttackCooldownTicks = CW_INITIAL_COOLDOWN_TICKS;
+      enemyCluster.crimsonWizardNextAttackIndex = 0;
+      enemyCluster.crimsonWizardTelegraphTicks = 0;
+      enemyCluster.halfWidthWorld = CW_HALF_W;
+      enemyCluster.halfHeightWorld = CW_HALF_H;
+      enemyCluster.healthPoints = CW_HP;
+      enemyCluster.maxHealthPoints = CW_HP;
     } else if (enemyDef.isGrappleHunterFlag === 1) {
       enemyCluster.isGrappleHunterFlag  = 1;
       enemyCluster.grappleHunterState   = 0;
@@ -713,6 +729,7 @@ export function spawnEnemyClusters(
     const skipParticleSpawn =
       enemyCluster.isRadiantTetherFlag === 1 ||
       enemyCluster.isRadiantWebFlag    === 1 ||
+      enemyCluster.isCrimsonWizardFlag === 1 ||
       enemyCluster.isDustConstellationFlag === 1 ||
       enemyCluster.isOrbitalDustCoreFlag === 1 ||
       enemyCluster.isDustBlockMimicFlag === 1 ||
