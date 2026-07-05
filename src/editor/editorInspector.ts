@@ -74,6 +74,11 @@ export function updateInspector(
           FADE_COLOR_OPTIONS,
           '(mixed)',
           v => callbacks?.onPropertyChange('transition.fadeColor', v));
+      } else if (type === 'spike') {
+        addSelect(div, 'blockTheme',
+          BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
+          '(mixed)',
+          v => callbacks?.onPropertyChange('spike.blockTheme', v));
       }
     } else {
       const typeInfo = document.createElement('div');
@@ -680,6 +685,34 @@ export function updateInspector(
         ],
         String(bp.speedFactorIndex ?? 0),
         v => callbacks?.onPropertyChange('bouncePad.speedFactorIndex', parseInt(v)));
+    }
+  } else if (el.type === 'spike') {
+    const sp = (room.spikes ?? []).find(s => s.uid === el.uid);
+    if (sp) {
+      addField(div, 'xBlock', String(sp.xBlock),
+        v => callbacks?.onPropertyChange('spike.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(sp.yBlock),
+        v => callbacks?.onPropertyChange('spike.yBlock', parseInt(v)));
+      addSelect(div, 'direction',
+        [
+          { label: 'Up',    value: 'up' },
+          { label: 'Right', value: 'right' },
+          { label: 'Down',  value: 'down' },
+          { label: 'Left',  value: 'left' },
+        ],
+        sp.direction,
+        v => callbacks?.onPropertyChange('spike.direction', v));
+      addSelect(div, 'size',
+        [
+          { label: '1×1', value: '1x1' },
+          { label: '2×2', value: '2x2' },
+        ],
+        sp.size,
+        v => callbacks?.onPropertyChange('spike.size', v));
+      addSelect(div, 'blockTheme',
+        BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
+        sp.blockTheme ?? room.blockTheme,
+        v => callbacks?.onPropertyChange('spike.blockTheme', v));
     }
   } else if (el.type === 'rope') {
     const ropes = room.ropes ?? [];

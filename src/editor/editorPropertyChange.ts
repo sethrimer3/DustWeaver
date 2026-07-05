@@ -27,6 +27,7 @@ import type {
   EditorLavaZone,
   EditorCrumbleBlock,
   EditorBouncePad,
+  EditorSpike,
   EditorDustContainer,
   EditorDustContainerPiece,
   EditorDustBoostJar,
@@ -171,6 +172,21 @@ export function applyPropertyToElement(
       if (prop === 'bouncePad.yBlock' && !isNaN(numVal)) bp.yBlock = numVal;
       if (prop === 'bouncePad.speedFactorIndex' && !isNaN(numVal)) {
         bp.speedFactorIndex = (numVal as 0 | 1);
+      }
+    }
+  } else if (el.type === 'spike') {
+    const sp = (room.spikes ?? []).find((s: EditorSpike) => s.uid === el.uid);
+    if (sp) {
+      if (prop === 'spike.xBlock' && !isNaN(numVal)) sp.xBlock = numVal;
+      if (prop === 'spike.yBlock' && !isNaN(numVal)) sp.yBlock = numVal;
+      if (prop === 'spike.direction' && typeof value === 'string') {
+        sp.direction = value as EditorSpike['direction'];
+      }
+      if (prop === 'spike.size' && typeof value === 'string') {
+        sp.size = value as EditorSpike['size'];
+      }
+      if (prop === 'spike.blockTheme' && typeof value === 'string') {
+        sp.blockTheme = value as BlockTheme;
       }
     }
   } else if (el.type === 'dustContainer') {
