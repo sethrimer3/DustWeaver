@@ -106,6 +106,7 @@ interface _ReusableBacking {
   cwFireDustAliveFlag: Uint8Array;
   cwSmokeAliveFlag: Uint8Array;
   cwProjectileAliveFlag: Uint8Array;
+  cwTelegraphAliveFlag: Uint8Array;
   // Arrow Weave scalar fields updated each frame
   isArrowWeaveLoadingFlag: 0 | 1;
   arrowWeaveCurrentMoteCount: number;
@@ -317,6 +318,13 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     cwProjectileYWorld:          world.cwProjectileYWorld,
     cwProjectileType:            world.cwProjectileType,
     cwProjectileAliveFlag:       world.cwProjectileAliveFlag,
+    cwTelegraphXWorld:           world.cwTelegraphXWorld,
+    cwTelegraphYWorld:           world.cwTelegraphYWorld,
+    cwTelegraphHalfSizeWorld:    world.cwTelegraphHalfSizeWorld,
+    cwTelegraphTicksLeft:        world.cwTelegraphTicksLeft,
+    cwTelegraphMaxTicks:         world.cwTelegraphMaxTicks,
+    cwTelegraphKind:             world.cwTelegraphKind,
+    cwTelegraphAliveFlag:        world.cwTelegraphAliveFlag,
     architectBlockCount:         world.architectBlockCount,
     architectBlockXWorld:        world.architectBlockXWorld,
     architectBlockYWorld:        world.architectBlockYWorld,
@@ -648,6 +656,13 @@ export function refreshSnapshotWorldArrayRefs(
   raw.cwProjectileYWorld             = world.cwProjectileYWorld;
   raw.cwProjectileType               = world.cwProjectileType;
   raw.cwProjectileAliveFlag          = world.cwProjectileAliveFlag;
+  raw.cwTelegraphXWorld              = world.cwTelegraphXWorld;
+  raw.cwTelegraphYWorld              = world.cwTelegraphYWorld;
+  raw.cwTelegraphHalfSizeWorld       = world.cwTelegraphHalfSizeWorld;
+  raw.cwTelegraphTicksLeft           = world.cwTelegraphTicksLeft;
+  raw.cwTelegraphMaxTicks            = world.cwTelegraphMaxTicks;
+  raw.cwTelegraphKind                = world.cwTelegraphKind;
+  raw.cwTelegraphAliveFlag           = world.cwTelegraphAliveFlag;
   raw.architectBlockXWorld           = world.architectBlockXWorld;
   raw.architectBlockYWorld           = world.architectBlockYWorld;
   raw.architectBlockHealth           = world.architectBlockHealth;

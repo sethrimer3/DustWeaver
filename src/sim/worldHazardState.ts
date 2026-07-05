@@ -56,6 +56,7 @@ import {
   MAX_CW_FIRE_DUST,
   MAX_CW_PROJECTILES,
   MAX_CW_SMOKE,
+  MAX_CW_TELEGRAPHS,
 } from './clusters/crimsonWizardConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
@@ -131,6 +132,7 @@ export {
   MAX_CW_FIRE_DUST,
   MAX_CW_PROJECTILES,
   MAX_CW_SMOKE,
+  MAX_CW_TELEGRAPHS,
 } from './clusters/crimsonWizardConfig';
 
 export interface HazardWorldState {
@@ -570,6 +572,13 @@ export interface HazardWorldState {
   cwProjectileType: Uint8Array;
   cwProjectileAliveFlag: Uint8Array;
   cwProjectileHitFlag: Uint8Array;
+  cwTelegraphXWorld: Float32Array;
+  cwTelegraphYWorld: Float32Array;
+  cwTelegraphHalfSizeWorld: Float32Array;
+  cwTelegraphTicksLeft: Uint16Array;
+  cwTelegraphMaxTicks: Uint16Array;
+  cwTelegraphKind: Uint8Array;
+  cwTelegraphAliveFlag: Uint8Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -742,5 +751,12 @@ export function createHazardWorldState(): HazardWorldState {
     cwProjectileType:             new Uint8Array(MAX_CW_PROJECTILES),
     cwProjectileAliveFlag:        new Uint8Array(MAX_CW_PROJECTILES),
     cwProjectileHitFlag:          new Uint8Array(MAX_CW_PROJECTILES),
+    cwTelegraphXWorld:            new Float32Array(MAX_CW_TELEGRAPHS),
+    cwTelegraphYWorld:            new Float32Array(MAX_CW_TELEGRAPHS),
+    cwTelegraphHalfSizeWorld:     new Float32Array(MAX_CW_TELEGRAPHS),
+    cwTelegraphTicksLeft:         new Uint16Array(MAX_CW_TELEGRAPHS),
+    cwTelegraphMaxTicks:          new Uint16Array(MAX_CW_TELEGRAPHS),
+    cwTelegraphKind:              new Uint8Array(MAX_CW_TELEGRAPHS),
+    cwTelegraphAliveFlag:         new Uint8Array(MAX_CW_TELEGRAPHS),
   };
 }

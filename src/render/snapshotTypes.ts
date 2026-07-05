@@ -281,6 +281,13 @@ export interface WorldSnapshot {
   readonly cwProjectileYWorld: Float32Array;
   readonly cwProjectileType: Uint8Array;
   readonly cwProjectileAliveFlag: Uint8Array;
+  readonly cwTelegraphXWorld: Float32Array;
+  readonly cwTelegraphYWorld: Float32Array;
+  readonly cwTelegraphHalfSizeWorld: Float32Array;
+  readonly cwTelegraphTicksLeft: Uint16Array;
+  readonly cwTelegraphMaxTicks: Uint16Array;
+  readonly cwTelegraphKind: Uint8Array;
+  readonly cwTelegraphAliveFlag: Uint8Array;
 
   // ── Dust Leech mote arrays ─────────────────────────────────────────────────
   readonly dlMoteAngleRad: Float32Array;

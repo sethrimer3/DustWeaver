@@ -6,6 +6,8 @@ import {
   CW_PROJECTILE_TYPE_METEOR,
   CW_SMOKE_SIZE_WORLD,
   CW_METEOR_SIZE_WORLD,
+  CW_TELEGRAPH_KIND_METEOR,
+  CW_TELEGRAPH_KIND_PILLAR,
 } from '../../sim/clusters/crimsonWizardConfig';
 
 const FIRE_COLORS = ['#ffb02e', '#ff6a1a', '#ff3b12', '#b11226', '#6f1018'];
@@ -42,6 +44,25 @@ export function renderCrimsonWizardEffects(
 ): void {
   ctx.save();
   ctx.imageSmoothingEnabled = false;
+
+  for (let i = 0; i < snapshot.cwTelegraphAliveFlag.length; i++) {
+    if (snapshot.cwTelegraphAliveFlag[i] === 0) continue;
+    const maxTicks = Math.max(1, snapshot.cwTelegraphMaxTicks[i]);
+    const t = snapshot.cwTelegraphTicksLeft[i] / maxTicks;
+    const half = Math.max(1, Math.round(snapshot.cwTelegraphHalfSizeWorld[i] * scalePx));
+    const x = Math.round(snapshot.cwTelegraphXWorld[i] * scalePx + offsetXPx - half);
+    const y = Math.round(snapshot.cwTelegraphYWorld[i] * scalePx + offsetYPx - half);
+    const size = half * 2;
+    const kind = snapshot.cwTelegraphKind[i];
+    ctx.globalAlpha = 0.28 + (1 - t) * 0.32;
+    ctx.fillStyle = kind === CW_TELEGRAPH_KIND_METEOR ? '#6f1018' : kind === CW_TELEGRAPH_KIND_PILLAR ? '#d64216' : '#ffcc33';
+    ctx.fillRect(x, y, size, size);
+    ctx.globalAlpha = 0.75;
+    ctx.strokeStyle = '#ffd04a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, size, size);
+  }
+  ctx.globalAlpha = 1;
 
   const smokeSize = Math.max(1, Math.round(CW_SMOKE_SIZE_WORLD * scalePx));
   for (let i = 0; i < snapshot.cwSmokeAliveFlag.length; i++) {

@@ -4,13 +4,17 @@ import {
   CW_FIRE_DUST_DAMAGE,
   CW_FIRE_DUST_HIT_RADIUS,
   CW_FIRE_DUST_IFRAMES,
+  CW_FIREBALL_SPEED_WORLD,
   CW_METEOR_DAMAGE,
   CW_METEOR_SIZE_WORLD,
+  CW_METEOR_SPEED_WORLD,
   CW_PROJECTILE_IFRAMES,
   CW_PROJECTILE_TYPE_FIREBALL,
   CW_PROJECTILE_TYPE_METEOR,
   CW_FIREBALL_DAMAGE,
   CW_FIREBALL_SIZE_WORLD,
+  CW_TELEGRAPH_KIND_METEOR,
+  CW_TELEGRAPH_KIND_PILLAR,
 } from './crimsonWizardConfig';
 import { nextFloat } from '../rng';
 
@@ -47,6 +51,32 @@ function allocProjectile(world: WorldState): number {
     if (world.cwProjectileAliveFlag[i] === 0) return i;
   }
   return -1;
+}
+
+function allocTelegraph(world: WorldState): number {
+  for (let i = 0; i < world.cwTelegraphAliveFlag.length; i++) {
+    if (world.cwTelegraphAliveFlag[i] === 0) return i;
+  }
+  return -1;
+}
+
+export function spawnCrimsonTelegraph(
+  world: WorldState,
+  xWorld: number,
+  yWorld: number,
+  halfSizeWorld: number,
+  kind: number,
+  ticks: number,
+): void {
+  const i = allocTelegraph(world);
+  if (i < 0) return;
+  world.cwTelegraphAliveFlag[i] = 1;
+  world.cwTelegraphXWorld[i] = xWorld;
+  world.cwTelegraphYWorld[i] = yWorld;
+  world.cwTelegraphHalfSizeWorld[i] = halfSizeWorld;
+  world.cwTelegraphTicksLeft[i] = ticks;
+  world.cwTelegraphMaxTicks[i] = ticks;
+  world.cwTelegraphKind[i] = kind;
 }
 
 export function spawnCrimsonFireDust(
@@ -90,8 +120,8 @@ export function spawnCrimsonMeteor(world: WorldState, xWorld: number, yWorld: nu
   world.cwProjectileType[i] = CW_PROJECTILE_TYPE_METEOR;
   world.cwProjectileXWorld[i] = xWorld;
   world.cwProjectileYWorld[i] = yWorld;
-  world.cwProjectileVelXWorld[i] = (dx / len) * 2.2;
-  world.cwProjectileVelYWorld[i] = (dy / len) * 2.2;
+  world.cwProjectileVelXWorld[i] = (dx / len) * CW_METEOR_SPEED_WORLD;
+  world.cwProjectileVelYWorld[i] = (dy / len) * CW_METEOR_SPEED_WORLD;
   world.cwProjectileLifetimeTicks[i] = 120;
   world.cwProjectileHitFlag[i] = 0;
 }
@@ -106,8 +136,8 @@ export function spawnCrimsonFireball(world: WorldState, xWorld: number, yWorld: 
   world.cwProjectileType[i] = CW_PROJECTILE_TYPE_FIREBALL;
   world.cwProjectileXWorld[i] = xWorld;
   world.cwProjectileYWorld[i] = yWorld;
-  world.cwProjectileVelXWorld[i] = (dx / len) * 2.9 + randSigned(world) * 0.25;
-  world.cwProjectileVelYWorld[i] = (dy / len) * 2.9 + randSigned(world) * 0.18;
+  world.cwProjectileVelXWorld[i] = (dx / len) * CW_FIREBALL_SPEED_WORLD + randSigned(world) * 0.22;
+  world.cwProjectileVelYWorld[i] = (dy / len) * CW_FIREBALL_SPEED_WORLD + randSigned(world) * 0.16;
   world.cwProjectileLifetimeTicks[i] = 96;
   world.cwProjectileHitFlag[i] = 0;
 }
@@ -123,6 +153,15 @@ function burstFire(world: WorldState, xWorld: number, yWorld: number, count: num
 
 export function tickCrimsonWizardEffects(world: WorldState): void {
   const player = world.clusters[0];
+  for (let i = 0; i < world.cwTelegraphAliveFlag.length; i++) {
+    if (world.cwTelegraphAliveFlag[i] === 0) continue;
+    if (world.cwTelegraphTicksLeft[i] <= 1) {
+      world.cwTelegraphAliveFlag[i] = 0;
+    } else {
+      world.cwTelegraphTicksLeft[i] -= 1;
+    }
+  }
+
   for (let i = 0; i < world.cwFireDustAliveFlag.length; i++) {
     if (world.cwFireDustAliveFlag[i] === 0) continue;
     const age = world.cwFireDustAgeTicks[i] + 1;
@@ -184,9 +223,12 @@ export function tickCrimsonWizardEffects(world: WorldState): void {
       }
     }
     const outOfBounds = x < -32 || y < -48 || x > world.worldWidthWorld + 32 || y > world.worldHeightWorld + 32;
-    if (world.cwProjectileLifetimeTicks[i] <= 0 || world.cwProjectileHitFlag[i] === 1 || outOfBounds) {
+    const hitFloor = y >= world.worldHeightWorld - size * 0.5 - 4;
+    if (world.cwProjectileLifetimeTicks[i] <= 0 || world.cwProjectileHitFlag[i] === 1 || outOfBounds || hitFloor) {
       burstFire(world, x, y, type === CW_PROJECTILE_TYPE_METEOR ? 34 : 18);
       world.cwProjectileAliveFlag[i] = 0;
     }
   }
 }
+
+export { CW_TELEGRAPH_KIND_METEOR, CW_TELEGRAPH_KIND_PILLAR };
