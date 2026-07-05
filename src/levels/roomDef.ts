@@ -485,6 +485,7 @@ export interface RoomTransitionDef {
 // don't need to update their import paths.
 export type {
   SpikeDirection,
+  SpikeSize,
   RoomSpikeDef,
   RoomSpringboardDef,
   RoomZoneDef,

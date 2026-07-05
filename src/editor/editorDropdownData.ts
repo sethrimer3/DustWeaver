@@ -75,6 +75,10 @@ export interface PaletteItem {
   isSceneLightItem?: 1;
   /** 1 if this palette item places/extends a golden dust guide path. */
   isGuideDustPathItem?: 1;
+  /** 1 if this palette item places a spike hazard. */
+  isSpikeItem?: 1;
+  /** Which spike footprint size this item places. Only meaningful when isSpikeItem === 1. */
+  spikeSize?: import('../levels/roomElementDefs').SpikeSize;
 }
 
 export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
@@ -137,6 +141,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'ramp_1x1',  label: '1×1 Ramp',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isRampItem: 1 },
   { id: 'ramp_1x2',  label: '1×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isRampItem: 1 },
   { id: 'ramp_2x2',  label: '2×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isRampItem: 1 },
+  { id: 'spike_1x1', label: '1×1 Spike',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isSpikeItem: 1, spikeSize: '1x1' },
+  { id: 'spike_2x2', label: '2×2 Spike',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isSpikeItem: 1, spikeSize: '2x2' },
   // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },

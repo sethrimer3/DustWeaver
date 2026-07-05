@@ -154,6 +154,8 @@ export interface RoomJsonSpike {
   direction: 'up' | 'down' | 'left' | 'right';
   /** Footprint size in blocks. Defaults to `'1x1'` when omitted. */
   size?: '1x1' | '2x2';
+  /** Override block theme the spike's sprite is cut from. Absent = use room theme. */
+  blockTheme?: BlockTheme;
 }
 
 export interface RoomJsonSpringboard {

@@ -264,11 +264,14 @@ export interface SavedRoomV2 {
   skillBooks?: SavedPoint[];
   dustContainers?: SavedPoint[];
   /**
-   * Spikes as `[x, y, direction, size?]`. `size` is omitted for `'1x1'`
-   * (the implicit default prior to 2×2 spike support) to keep older-format
-   * saves byte-for-byte unchanged.
+   * Spikes as `[x, y, direction, size?, themeId?]`. `size` is omitted for
+   * `'1x1'` (the implicit default prior to 2×2 spike support) to keep
+   * older-format saves byte-for-byte unchanged. `themeId` (compact block
+   * theme id, e.g. `'bk'`) is present only when the spike overrides the
+   * room's default theme; when present, `size` is always written explicitly
+   * (even `'1x1'`) so the tuple stays positionally unambiguous.
    */
-  spikes?: [number, number, 'up' | 'down' | 'left' | 'right', ('1x1' | '2x2')?][];
+  spikes?: [number, number, 'up' | 'down' | 'left' | 'right', ('1x1' | '2x2')?, string?][];
   springboards?: SavedPoint[];
   /**
    * Compact water-zone coverage layer (v3+ preferred).

@@ -142,6 +142,11 @@ export interface HazardWorldState {
    * `2x2 spike`) is used for rendering.
    */
   spikeSizeBlocks: Uint8Array;
+  /**
+   * Per-spike block-theme override index (via `blockThemeToIndex`), or
+   * `WALL_THEME_DEFAULT_INDEX` to use the room's active block theme.
+   */
+  spikeBlockThemeIndex: Uint8Array;
   /** Invulnerability cooldown ticks after spike damage. */
   spikeInvulnTicks: number;
 
@@ -540,6 +545,7 @@ export function createHazardWorldState(): HazardWorldState {
     spikeYWorld:                   new Float32Array(MAX_SPIKES),
     spikeDirection:                new Uint8Array(MAX_SPIKES),
     spikeSizeBlocks:               new Uint8Array(MAX_SPIKES),
+    spikeBlockThemeIndex:          new Uint8Array(MAX_SPIKES),
     spikeInvulnTicks:              0,
     springboardCount:              0,
     springboardXWorld:             new Float32Array(MAX_SPRINGBOARDS),

@@ -90,6 +90,9 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       case 'left':  world.spikeDirection[si] = SPIKE_DIR_LEFT; break;
       case 'right': world.spikeDirection[si] = SPIKE_DIR_RIGHT; break;
     }
+    world.spikeBlockThemeIndex[si] = s.blockTheme !== undefined
+      ? blockThemeToIndex(s.blockTheme)
+      : WALL_THEME_DEFAULT_INDEX;
   }
 
   // ── Springboards ──────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@
  */
 
 import { WorldState } from '../sim/world';
-import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM, indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,

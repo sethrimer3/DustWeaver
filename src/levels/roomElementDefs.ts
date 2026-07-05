@@ -27,6 +27,8 @@ export interface RoomSpikeDef {
   direction: SpikeDirection;
   /** Footprint size in blocks. Defaults to `'1x1'` when omitted. */
   size?: SpikeSize;
+  /** Block theme the spike's sprite is cut from. Defaults to the room's active theme when omitted. */
+  blockTheme?: BlockTheme;
 }
 
 /** A springboard tile that bounces the player upward. */
