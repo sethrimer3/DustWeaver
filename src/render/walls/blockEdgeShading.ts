@@ -14,8 +14,10 @@
  *   2. Look up a base multiply multiplier for that depth (0.70 / 0.82 / 0.92 at strength 1.0).
  *   3. Add centred smooth world-space noise variation (±0.08) for an organic look.
  *   4. Apply a corner boost (−0.05) when ≥ 2 cardinal neighbours are open air (inner corner).
- *   5. Apply a rim highlight on depth-0 pixels for every exposed face (N/E/S/W);
- *      the top (N) face gets a slightly stronger highlight than the other three.
+ *   5. Apply a rim highlight on depth-0 pixels for every exposed face (N/E/S/W) as a
+ *      true additive RGB brighten (can exceed the source pixel's original value,
+ *      unlike folding it into the multiply darkening step); the top (N) face gets
+ *      a slightly stronger highlight than the other three.
  *   6. Scale the shading intensity by `EDGE_SHADING_STRENGTH` (1.0 = default; raise for
  *      stronger visibility on dark sprites — useful for tuning and debugging).
  *   7. Multiply the pixel's RGB channels by the final multiplier.
@@ -81,24 +83,37 @@ const _OPEN_AIR_EDGE_DISTANCE_NONE = 255;
 /** Max internal BFS depth (0-indexed). Depths 0..2 map to spec distances 1..3. */
 const _OPEN_AIR_FILTER_MAX_DISTANCE_PX = 2;
 
+// ⚠️ DEBUG TUNING — temporarily cranked way past normal calibration (per user
+// request) so the 3-pixel edge band is unmistakable during visual
+// troubleshooting. Restore the original calibrated values (in the git history
+// of this file) once the underlying rendering question is resolved.
 /** Base multiply multiplier per internal depth (before EDGE_SHADING_STRENGTH scaling). */
-const _EDGE_BASE_MULTIPLIER = [0.70, 0.82, 0.92] as const;
+const _EDGE_BASE_MULTIPLIER = [0.10, 0.45, 0.75] as const;
 /** Minimum multiplier per depth — clamps the darkest allowed shade at each level. */
-const _EDGE_CLAMP_MIN       = [0.65, 0.78, 0.88] as const;
+const _EDGE_CLAMP_MIN       = [0.02, 0.35, 0.65] as const;
 /** Maximum multiplier per depth — prevents a shallower depth from exceeding a deeper one. */
-const _EDGE_CLAMP_MAX       = [0.78, 0.88, 0.96] as const;
+const _EDGE_CLAMP_MAX       = [0.20, 0.55, 0.85] as const;
 /** Noise-coordinate scale (noise-grid-units per world pixel). */
 const _EDGE_NOISE_SCALE     = 0.15;
-/** Amplitude of centred noise variation (+/−). */
-const _EDGE_VARIATION_STR   = 0.08;
+/** Amplitude of centred noise variation (+/−) — reduced while debugging so the band reads as a solid line rather than mottled. */
+const _EDGE_VARIATION_STR   = 0.02;
 /** Extra darkening offset for depth-0 pixels with ≥ 2 open-air cardinal neighbours (inner corner). Negative value darkens the multiplier. */
 const _EDGE_INNER_CORNER_DARKEN = -0.08;
 /** Subtle darkening for outer-corner pixels (diagonal-air only, no cardinal-air). */
 const _EDGE_OUTER_CORNER_DARKEN = 0.95;
-/** Additive highlight for outermost (depth-0) pixels exposed on the E, S, or W face. */
-const _EDGE_HIGHLIGHT_AMOUNT = 0.07;
-/** Additive highlight for outermost (depth-0) pixels exposed on the N (top) face — slightly stronger than the other three sides. */
-const _EDGE_HIGHLIGHT_AMOUNT_TOP = 0.10;
+/**
+ * Additive RGB rim-light brightening (0-255 scale) for outermost (depth-0)
+ * pixels exposed on the E, S, or W face.  This is a true additive term applied
+ * AFTER the multiply-darken step, so it can push a pixel brighter than its
+ * original (unshaded) color — unlike folding a "highlight" into the multiply
+ * multiplier, which can only ever reduce darkening and never actually
+ * brightens a pixel past its source value.  That distinction matters on dark
+ * materials: a multiply-only highlight is invisible against texture noise.
+ */
+// ⚠️ DEBUG TUNING — also cranked, see note above.
+const _EDGE_HIGHLIGHT_ADD = 110;
+/** Additive rim-light brightening for the N (top) face — slightly stronger than the other three sides. */
+const _EDGE_HIGHLIGHT_ADD_TOP = 160;
 
 // ── Smooth value noise (deterministic world-space) ────────────────────────────
 
@@ -385,34 +400,34 @@ export function applyOrganicEdgeShading(
     if (rawMultiplier < cMin) rawMultiplier = cMin;
     if (rawMultiplier > cMax) rawMultiplier = cMax;
 
-    // Rim highlight for outermost (depth-0) pixels — applied on all four exposed
-    // faces equally, except the top (N) face gets a slightly stronger highlight.
-    // A pixel at a corner can face two directions at once; take the max so it
-    // doesn't get double-brightened.
-    if (d === 0) {
-      const facesN = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0, -1);
-      const facesE = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  1,  0);
-      const facesS = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0,  1);
-      const facesW = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask, -1,  0);
-      let highlight = 0;
-      if (facesN) highlight = Math.max(highlight, _EDGE_HIGHLIGHT_AMOUNT_TOP);
-      if (facesE) highlight = Math.max(highlight, _EDGE_HIGHLIGHT_AMOUNT);
-      if (facesS) highlight = Math.max(highlight, _EDGE_HIGHLIGHT_AMOUNT);
-      if (facesW) highlight = Math.max(highlight, _EDGE_HIGHLIGHT_AMOUNT);
-      if (highlight > 0) {
-        rawMultiplier = Math.min(rawMultiplier + highlight, 1.0);
-      }
-    }
-
     // Scale the shading intensity by EDGE_SHADING_STRENGTH.
     // effectiveMultiplier = 1.0 − (1.0 − rawMultiplier) × EDGE_SHADING_STRENGTH
     let multiplier = 1.0 - (1.0 - rawMultiplier) * EDGE_SHADING_STRENGTH;
     if (multiplier < 0.0) multiplier = 0.0;
 
+    // Rim highlight for outermost (depth-0) pixels — a genuine additive
+    // brighten (can exceed the pixel's original value) applied on all four
+    // exposed faces equally, except the top (N) face gets a slightly stronger
+    // highlight.  A pixel at a corner can face two directions at once; take
+    // the max so it doesn't get double-brightened.  Scaled by
+    // EDGE_SHADING_STRENGTH like the darkening pass so both stay in sync when tuning.
+    let highlightAdd = 0;
+    if (d === 0) {
+      const facesN = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0, -1);
+      const facesE = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  1,  0);
+      const facesS = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0,  1);
+      const facesW = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask, -1,  0);
+      if (facesN) highlightAdd = Math.max(highlightAdd, _EDGE_HIGHLIGHT_ADD_TOP);
+      if (facesE) highlightAdd = Math.max(highlightAdd, _EDGE_HIGHLIGHT_ADD);
+      if (facesS) highlightAdd = Math.max(highlightAdd, _EDGE_HIGHLIGHT_ADD);
+      if (facesW) highlightAdd = Math.max(highlightAdd, _EDGE_HIGHLIGHT_ADD);
+      highlightAdd *= EDGE_SHADING_STRENGTH;
+    }
+
     const di = pi * 4;
-    data[di]     = Math.round(data[di]     * multiplier);
-    data[di + 1] = Math.round(data[di + 1] * multiplier);
-    data[di + 2] = Math.round(data[di + 2] * multiplier);
+    data[di]     = Math.min(255, Math.round(data[di]     * multiplier + highlightAdd));
+    data[di + 1] = Math.min(255, Math.round(data[di + 1] * multiplier + highlightAdd));
+    data[di + 2] = Math.min(255, Math.round(data[di + 2] * multiplier + highlightAdd));
   }
 
   // ── Pass 2: outer-corner overlay ─────────────────────────────────────────
