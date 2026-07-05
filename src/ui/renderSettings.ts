@@ -53,6 +53,7 @@ const OFFENSIVE_DUST_OUTLINE_STORAGE_KEY = 'dustweaver-offensive-dust-outline-en
 const REACHABLE_EDGE_GLOW_OPACITY_STORAGE_KEY = 'dustweaver-reachable-edge-glow-opacity';
 const INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY = 'dustweaver-influence-circle-opacity';
 const INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY = 'dustweaver-influence-highlight-width';
+const DOUBLE_JUMP_TO_GRAPPLE_STORAGE_KEY = 'dustweaver-double-jump-to-grapple';
 const DEFAULT_RENDER_SIZE_ID = '1080p';
 
 const RENDER_SIZE_OPTIONS: RenderSizeOption[] = [
@@ -187,6 +188,18 @@ export function getInfluenceHighlightWidth(): number {
 
 export function setInfluenceHighlightWidth(width: number): void {
   setStoredFloat(INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY, width, 0, 1);
+}
+
+/**
+ * When enabled, pressing jump in midair after all normal jump options are
+ * exhausted fires the grapple toward the current aim point. Defaults to off.
+ */
+export function getDoubleJumpToGrappleEnabled(): boolean {
+  return localStorage.getItem(DOUBLE_JUMP_TO_GRAPPLE_STORAGE_KEY) === '1';
+}
+
+export function setDoubleJumpToGrappleEnabled(enabled: boolean): void {
+  localStorage.setItem(DOUBLE_JUMP_TO_GRAPPLE_STORAGE_KEY, enabled ? '1' : '0');
 }
 
 // ── World View Presets ────────────────────────────────────────────────────────

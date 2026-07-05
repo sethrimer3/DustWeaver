@@ -30,6 +30,8 @@ import {
   setInfluenceCircleOpacity,
   getInfluenceHighlightWidth,
   setInfluenceHighlightWidth,
+  getDoubleJumpToGrappleEnabled,
+  setDoubleJumpToGrappleEnabled,
 } from './renderSettings';
 import { buildKeybindingsTab } from './mainMenuSettingsKeybindings';
 import {
@@ -270,6 +272,43 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
     return wrapper;
   }
 
+  function makeCheckboxRow(
+    label: string,
+    initialValue: boolean,
+    onChangeFn: (enabled: boolean) => void,
+  ): HTMLLabelElement {
+    const row = document.createElement('label');
+    row.style.cssText = `
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 10px 14px; margin-bottom: 8px;
+      font-family: 'Cinzel', serif; font-size: 0.88rem; letter-spacing: 0.05em;
+      cursor: pointer; border-radius: 4px;
+      border: 1px solid rgba(212,168,75,${initialValue ? '0.7' : '0.3'});
+      background: rgba(212,168,75,${initialValue ? '0.12' : '0'});
+      color: #d4a84b;
+      box-sizing: border-box;
+    `;
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = initialValue;
+    checkbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer; accent-color: #d4a84b; flex: 0 0 auto;';
+
+    const text = document.createElement('span');
+    text.textContent = label;
+
+    checkbox.addEventListener('change', () => {
+      const enabled = checkbox.checked;
+      onChangeFn(enabled);
+      row.style.borderColor = `rgba(212,168,75,${enabled ? '0.7' : '0.3'})`;
+      row.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0'})`;
+    });
+
+    row.appendChild(checkbox);
+    row.appendChild(text);
+    return row;
+  }
+
   // ── Audio tab ──────────────────────────────────────────────────────────
 
   function buildAudioTab(): void {
@@ -436,6 +475,13 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
     tabContent.appendChild(
       makeSettingsSlider('Circle Opacity', getInfluenceCircleOpacity(), (v) => {
         setInfluenceCircleOpacity(v);
+      }),
+    );
+
+    tabContent.appendChild(makeLabel('Controls'));
+    tabContent.appendChild(
+      makeCheckboxRow('Double-jump to grapple', getDoubleJumpToGrappleEnabled(), (enabled) => {
+        setDoubleJumpToGrappleEnabled(enabled);
       }),
     );
   }

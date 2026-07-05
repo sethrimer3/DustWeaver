@@ -13,7 +13,9 @@ import { CommandKind } from '../input/commands';
 import { WorldState } from '../sim/world';
 import { fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
 import { GrappleInputMode } from '../sim/worldGrappleState';
+import { getWallJumpCandidate } from '../sim/clusters/playerWallJump';
 import { screenToWorld } from './gameRoom';
+import { getDoubleJumpToGrappleEnabled } from '../ui/renderSettings';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { PlayerProgress } from '../progression/playerProgress';
@@ -29,6 +31,34 @@ import { spawnClusterParticles } from './gameSpawn';
 
 /** Radius within which the player can collect a dust swarm by pressing F. */
 const DUST_SWARM_COLLECT_RADIUS_WORLD = BLOCK_SIZE_MEDIUM * 2;
+
+function canJumpInputBecomeGrapple(ctx: GameCommandContext): boolean {
+  if (!getDoubleJumpToGrappleEnabled()) return false;
+
+  const player = ctx.world.clusters[0];
+  if (player === undefined || player.isAliveFlag === 0) return false;
+  if (ctx.world.isGrappleActiveFlag === 1) return false;
+  if (player.isGroundedFlag === 1 || player.coyoteTimeTicks > 0) return false;
+  if (player.wallJumpForceTimeTicks > 0) return false;
+
+  const wallJumpCandidate = getWallJumpCandidate(player, ctx.world);
+  return !wallJumpCandidate.canJumpFromLeft && !wallJumpCandidate.canJumpFromRight;
+}
+
+function fireGrappleAtScreenPoint(ctx: GameCommandContext, aimXPx: number, aimYPx: number): void {
+  const aim = screenToWorld(
+    aimXPx,
+    aimYPx,
+    ctx.offsetXPx,
+    ctx.offsetYPx,
+    ctx.zoom,
+    ctx.canvas.width,
+    ctx.canvas.height,
+    ctx.virtualWidthPx,
+    ctx.virtualHeightPx,
+  );
+  fireGrapple(ctx.world, aim.xWorld, aim.yWorld);
+}
 
 /** Context passed to {@link processPlayerCommands} each frame. */
 export interface GameCommandContext {
@@ -117,7 +147,12 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
     } else if (cmd.kind === CommandKind.MovePlayer) {
       moveDx = cmd.dx;
     } else if (cmd.kind === CommandKind.Jump) {
-      jumpTriggered = true;
+      if (canJumpInputBecomeGrapple(ctx)) {
+        fireGrappleAtScreenPoint(ctx, inputState.mouseXPx, inputState.mouseYPx);
+        grappleFireTriggered = true;
+      } else {
+        jumpTriggered = true;
+      }
     } else if (cmd.kind === CommandKind.Attack) {
       // Legacy attack command — no longer used for player (enemies still use it internally)
       // Kept for backward compatibility; ignored for player
@@ -216,8 +251,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
           // Toggle mode: a second left-click releases the grapple instead of re-firing.
           releaseGrapple(world);
         } else {
-          const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
-          fireGrapple(world, aim.xWorld, aim.yWorld);
+          fireGrappleAtScreenPoint(ctx, cmd.aimXPx, cmd.aimYPx);
           grappleFireTriggered = true;
           // If RMB is held while firing, trigger an instant zip toward the new anchor.
           if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0
