@@ -14,7 +14,8 @@
  *   2. Look up a base multiply multiplier for that depth (0.70 / 0.82 / 0.92 at strength 1.0).
  *   3. Add centred smooth world-space noise variation (±0.08) for an organic look.
  *   4. Apply a corner boost (−0.05) when ≥ 2 cardinal neighbours are open air (inner corner).
- *   5. Apply a rim highlight (+0.07) on depth-0 pixels facing N or W (top-left light).
+ *   5. Apply a rim highlight on depth-0 pixels for every exposed face (N/E/S/W);
+ *      the top (N) face gets a slightly stronger highlight than the other three.
  *   6. Scale the shading intensity by `EDGE_SHADING_STRENGTH` (1.0 = default; raise for
  *      stronger visibility on dark sprites — useful for tuning and debugging).
  *   7. Multiply the pixel's RGB channels by the final multiplier.
@@ -94,8 +95,10 @@ const _EDGE_VARIATION_STR   = 0.08;
 const _EDGE_INNER_CORNER_DARKEN = -0.08;
 /** Subtle darkening for outer-corner pixels (diagonal-air only, no cardinal-air). */
 const _EDGE_OUTER_CORNER_DARKEN = 0.95;
-/** Additive highlight for outermost (depth-0) pixels exposed toward the top-left light. */
+/** Additive highlight for outermost (depth-0) pixels exposed on the E, S, or W face. */
 const _EDGE_HIGHLIGHT_AMOUNT = 0.07;
+/** Additive highlight for outermost (depth-0) pixels exposed on the N (top) face — slightly stronger than the other three sides. */
+const _EDGE_HIGHLIGHT_AMOUNT_TOP = 0.10;
 
 // ── Smooth value noise (deterministic world-space) ────────────────────────────
 
@@ -382,12 +385,22 @@ export function applyOrganicEdgeShading(
     if (rawMultiplier < cMin) rawMultiplier = cMin;
     if (rawMultiplier > cMax) rawMultiplier = cMax;
 
-    // Rim highlight for outermost (depth-0) pixels facing N or W (top-left light).
+    // Rim highlight for outermost (depth-0) pixels — applied on all four exposed
+    // faces equally, except the top (N) face gets a slightly stronger highlight.
+    // A pixel at a corner can face two directions at once; take the max so it
+    // doesn't get double-brightened.
     if (d === 0) {
-      const facesLightN = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0, -1);
-      const facesLightW = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask, -1,  0);
-      if (facesLightN || facesLightW) {
-        rawMultiplier = Math.min(rawMultiplier + _EDGE_HIGHLIGHT_AMOUNT, 1.0);
+      const facesN = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0, -1);
+      const facesE = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  1,  0);
+      const facesS = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask,  0,  1);
+      const facesW = _isCardinalAirNeighbor(data, widthPx, heightPx, xPx, yPx, openAirSidesMask, -1,  0);
+      let highlight = 0;
+      if (facesN) highlight = Math.max(highlight, _EDGE_HIGHLIGHT_AMOUNT_TOP);
+      if (facesE) highlight = Math.max(highlight, _EDGE_HIGHLIGHT_AMOUNT);
+      if (facesS) highlight = Math.max(highlight, _EDGE_HIGHLIGHT_AMOUNT);
+      if (facesW) highlight = Math.max(highlight, _EDGE_HIGHLIGHT_AMOUNT);
+      if (highlight > 0) {
+        rawMultiplier = Math.min(rawMultiplier + highlight, 1.0);
       }
     }
 
