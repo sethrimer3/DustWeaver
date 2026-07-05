@@ -120,6 +120,8 @@ export function spawnCrimsonMeteor(world: WorldState, xWorld: number, yWorld: nu
   world.cwProjectileType[i] = CW_PROJECTILE_TYPE_METEOR;
   world.cwProjectileXWorld[i] = xWorld;
   world.cwProjectileYWorld[i] = yWorld;
+  world.cwProjectileTargetXWorld[i] = targetXWorld;
+  world.cwProjectileTargetYWorld[i] = targetYWorld;
   world.cwProjectileVelXWorld[i] = (dx / len) * CW_METEOR_SPEED_WORLD;
   world.cwProjectileVelYWorld[i] = (dy / len) * CW_METEOR_SPEED_WORLD;
   world.cwProjectileLifetimeTicks[i] = 120;
@@ -136,6 +138,8 @@ export function spawnCrimsonFireball(world: WorldState, xWorld: number, yWorld: 
   world.cwProjectileType[i] = CW_PROJECTILE_TYPE_FIREBALL;
   world.cwProjectileXWorld[i] = xWorld;
   world.cwProjectileYWorld[i] = yWorld;
+  world.cwProjectileTargetXWorld[i] = targetXWorld;
+  world.cwProjectileTargetYWorld[i] = targetYWorld;
   world.cwProjectileVelXWorld[i] = (dx / len) * CW_FIREBALL_SPEED_WORLD + randSigned(world) * 0.22;
   world.cwProjectileVelYWorld[i] = (dy / len) * CW_FIREBALL_SPEED_WORLD + randSigned(world) * 0.16;
   world.cwProjectileLifetimeTicks[i] = 96;
@@ -223,9 +227,14 @@ export function tickCrimsonWizardEffects(world: WorldState): void {
       }
     }
     const outOfBounds = x < -32 || y < -48 || x > world.worldWidthWorld + 32 || y > world.worldHeightWorld + 32;
-    const hitFloor = y >= world.worldHeightWorld - size * 0.5 - 4;
-    if (world.cwProjectileLifetimeTicks[i] <= 0 || world.cwProjectileHitFlag[i] === 1 || outOfBounds || hitFloor) {
-      burstFire(world, x, y, type === CW_PROJECTILE_TYPE_METEOR ? 34 : 18);
+    const hitMeteorTarget = type === CW_PROJECTILE_TYPE_METEOR && world.cwProjectileVelYWorld[i] >= 0 && y >= world.cwProjectileTargetYWorld[i];
+    const hitRoomFloor = type !== CW_PROJECTILE_TYPE_METEOR && y >= world.worldHeightWorld - size * 0.5 - 4;
+    if (world.cwProjectileLifetimeTicks[i] <= 0 || world.cwProjectileHitFlag[i] === 1 || outOfBounds || hitRoomFloor || hitMeteorTarget) {
+      const impactX = hitMeteorTarget ? world.cwProjectileTargetXWorld[i] : x;
+      const impactY = hitMeteorTarget ? world.cwProjectileTargetYWorld[i] : y;
+      world.cwProjectileXWorld[i] = impactX;
+      world.cwProjectileYWorld[i] = impactY;
+      burstFire(world, impactX, impactY, type === CW_PROJECTILE_TYPE_METEOR ? 34 : 18);
       world.cwProjectileAliveFlag[i] = 0;
     }
   }

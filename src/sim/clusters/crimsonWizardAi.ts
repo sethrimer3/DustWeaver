@@ -50,6 +50,7 @@ import {
   CW_TIDAL_WAVE_TELEGRAPH_TICKS,
   CW_TOO_CLOSE_DISTANCE,
   CW_WALL_AVOID_DISTANCE,
+  MAX_CW_METEOR_SCHEDULE,
 } from './crimsonWizardConfig';
 import { ClusterState } from './state';
 import { spawnCrimsonFireDust, spawnCrimsonFireball, spawnCrimsonMeteor, spawnCrimsonTelegraph } from './crimsonWizardEffects';
@@ -176,6 +177,10 @@ function setState(cluster: ClusterState, state: number): void {
   cluster.crimsonWizardState = state;
   cluster.crimsonWizardStateTicks = 0;
   cluster.crimsonWizardTelegraphTicks = 0;
+  if (state !== CW_STATE_METEORS) {
+    cluster.crimsonWizardMeteorCount = 0;
+    cluster.crimsonWizardMeteorSpawnedFlag.fill(0);
+  }
 }
 
 function playableBounds(world: WorldState, boss: ClusterState): { minX: number; maxX: number; minY: number; maxY: number } {
@@ -418,26 +423,35 @@ function meteorTargetX(world: WorldState, player: ClusterState, index: number, t
   return clamp(player.positionXWorld + offset, CW_ROOM_MARGIN + CW_METEOR_SIZE_WORLD, world.worldWidthWorld - CW_ROOM_MARGIN - CW_METEOR_SIZE_WORLD);
 }
 
-function emitMeteors(world: WorldState, boss: ClusterState, player: ClusterState, tuning: CrimsonWizardPhaseTuning): void {
-  if (boss.crimsonWizardStateTicks === 1) boss.crimsonWizardTelegraphTicks = CW_METEOR_TELEGRAPH_TICKS;
-  if (boss.crimsonWizardStateTicks <= CW_METEOR_TELEGRAPH_TICKS) {
-    if (boss.crimsonWizardStateTicks === 1) {
-      for (let i = 0; i < tuning.meteorCount; i++) {
-        const targetX = meteorTargetX(world, player, i, tuning);
-        const targetY = findCrimsonWizardFloorY(world, targetX) - CW_METEOR_SIZE_WORLD * 0.5;
-        spawnCrimsonTelegraph(world, targetX, targetY, CW_METEOR_SIZE_WORLD * 0.65, CW_TELEGRAPH_KIND_METEOR, CW_METEOR_TELEGRAPH_TICKS + i * 8);
-      }
-    }
-    return;
+export function prepareCrimsonWizardMeteorSchedule(world: WorldState, boss: ClusterState, player: ClusterState, tuning: CrimsonWizardPhaseTuning): void {
+  const count = Math.min(tuning.meteorCount, MAX_CW_METEOR_SCHEDULE);
+  boss.crimsonWizardMeteorCount = count;
+  boss.crimsonWizardMeteorSpawnedFlag.fill(0);
+  for (let i = 0; i < count; i++) {
+    const targetX = meteorTargetX(world, player, i, tuning);
+    const targetY = findCrimsonWizardFloorY(world, targetX) - CW_METEOR_SIZE_WORLD * 0.5;
+    boss.crimsonWizardMeteorTargetXWorld[i] = targetX;
+    boss.crimsonWizardMeteorTargetYWorld[i] = targetY;
+    boss.crimsonWizardMeteorSpawnXWorld[i] = targetX + randSigned(world) * 36;
+    boss.crimsonWizardMeteorSpawnYWorld[i] = -CW_METEOR_SIZE_WORLD * 1.5;
+    boss.crimsonWizardMeteorSpawnTick[i] = CW_METEOR_TELEGRAPH_TICKS + 3 + i * tuning.meteorIntervalTicks;
+    spawnCrimsonTelegraph(world, targetX, targetY, CW_METEOR_SIZE_WORLD * 0.65, CW_TELEGRAPH_KIND_METEOR, boss.crimsonWizardMeteorSpawnTick[i]);
   }
-  const attackTick = boss.crimsonWizardStateTicks - CW_METEOR_TELEGRAPH_TICKS;
-  if ((attackTick % tuning.meteorIntervalTicks) !== 3) return;
-  const meteorIndex = Math.floor(attackTick / tuning.meteorIntervalTicks);
-  if (meteorIndex >= tuning.meteorCount) return;
-  const targetX = meteorTargetX(world, player, meteorIndex, tuning);
-      const targetY = findCrimsonWizardFloorY(world, targetX) - CW_METEOR_SIZE_WORLD * 0.5;
-  spawnCrimsonTelegraph(world, targetX, targetY, CW_METEOR_SIZE_WORLD * 0.65, CW_TELEGRAPH_KIND_METEOR, 18);
-  spawnCrimsonMeteor(world, targetX + randSigned(world) * 36, -CW_METEOR_SIZE_WORLD * 1.5, targetX, targetY);
+}
+
+function emitMeteors(world: WorldState, boss: ClusterState, player: ClusterState, tuning: CrimsonWizardPhaseTuning): void {
+  if (boss.crimsonWizardStateTicks === 1) {
+    boss.crimsonWizardTelegraphTicks = CW_METEOR_TELEGRAPH_TICKS;
+    prepareCrimsonWizardMeteorSchedule(world, boss, player, tuning);
+  }
+  for (let i = 0; i < boss.crimsonWizardMeteorCount; i++) {
+    if (boss.crimsonWizardMeteorSpawnedFlag[i] === 1 || boss.crimsonWizardStateTicks < boss.crimsonWizardMeteorSpawnTick[i]) continue;
+    const targetX = boss.crimsonWizardMeteorTargetXWorld[i];
+    const targetY = boss.crimsonWizardMeteorTargetYWorld[i];
+    boss.crimsonWizardMeteorSpawnedFlag[i] = 1;
+    spawnCrimsonTelegraph(world, targetX, targetY, CW_METEOR_SIZE_WORLD * 0.65, CW_TELEGRAPH_KIND_METEOR, 18);
+    spawnCrimsonMeteor(world, boss.crimsonWizardMeteorSpawnXWorld[i], boss.crimsonWizardMeteorSpawnYWorld[i], targetX, targetY);
+  }
 }
 
 function spawnAimedFireball(world: WorldState, boss: ClusterState, targetXWorld: number, targetYWorld: number, angleOffsetRad: number): void {

@@ -72,6 +72,7 @@ export const MAX_CW_FIRE_DUST = 700;
 export const MAX_CW_SMOKE = 420;
 export const MAX_CW_PROJECTILES = 18;
 export const MAX_CW_TELEGRAPHS = 20;
+export const MAX_CW_METEOR_SCHEDULE = 3;
 
 export const CW_TELEGRAPH_KIND_PILLAR = 1;
 export const CW_TELEGRAPH_KIND_METEOR = 2;

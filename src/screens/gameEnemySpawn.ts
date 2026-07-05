@@ -189,6 +189,8 @@ export function spawnEnemyClusters(
       enemyCluster.crimsonWizardTelegraphTicks = 0;
       enemyCluster.crimsonWizardLastAttackState = CW_STATE_IDLE;
       enemyCluster.crimsonWizardRepeatCount = 0;
+      enemyCluster.crimsonWizardMeteorCount = 0;
+      enemyCluster.crimsonWizardMeteorSpawnedFlag.fill(0);
       enemyCluster.halfWidthWorld = CW_HALF_W;
       enemyCluster.halfHeightWorld = CW_HALF_H;
       enemyCluster.healthPoints = CW_HP;

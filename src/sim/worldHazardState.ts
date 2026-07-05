@@ -566,6 +566,8 @@ export interface HazardWorldState {
   cwSmokeAliveFlag: Uint8Array;
   cwProjectileXWorld: Float32Array;
   cwProjectileYWorld: Float32Array;
+  cwProjectileTargetXWorld: Float32Array;
+  cwProjectileTargetYWorld: Float32Array;
   cwProjectileVelXWorld: Float32Array;
   cwProjectileVelYWorld: Float32Array;
   cwProjectileLifetimeTicks: Uint16Array;
@@ -745,6 +747,8 @@ export function createHazardWorldState(): HazardWorldState {
     cwSmokeAliveFlag:             new Uint8Array(MAX_CW_SMOKE),
     cwProjectileXWorld:           new Float32Array(MAX_CW_PROJECTILES),
     cwProjectileYWorld:           new Float32Array(MAX_CW_PROJECTILES),
+    cwProjectileTargetXWorld:     new Float32Array(MAX_CW_PROJECTILES),
+    cwProjectileTargetYWorld:     new Float32Array(MAX_CW_PROJECTILES),
     cwProjectileVelXWorld:        new Float32Array(MAX_CW_PROJECTILES),
     cwProjectileVelYWorld:        new Float32Array(MAX_CW_PROJECTILES),
     cwProjectileLifetimeTicks:    new Uint16Array(MAX_CW_PROJECTILES),

@@ -1,4 +1,5 @@
 import { PLAYER_HALF_WIDTH_WORLD, PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
+import { MAX_CW_METEOR_SCHEDULE } from './crimsonWizardConfig';
 
 export interface ClusterState {
   entityId: number;
@@ -363,6 +364,20 @@ export interface ClusterState {
   crimsonWizardLastAttackState: number;
   /** Consecutive times the last Crimson Wizard attack state has been chosen. */
   crimsonWizardRepeatCount: number;
+  /** Number of scheduled meteors for the current Crimson Wizard meteor attack. */
+  crimsonWizardMeteorCount: number;
+  /** Scheduled meteor landing X values. */
+  crimsonWizardMeteorTargetXWorld: Float32Array;
+  /** Scheduled meteor landing Y values. */
+  crimsonWizardMeteorTargetYWorld: Float32Array;
+  /** Scheduled meteor spawn X values. */
+  crimsonWizardMeteorSpawnXWorld: Float32Array;
+  /** Scheduled meteor spawn Y values. */
+  crimsonWizardMeteorSpawnYWorld: Float32Array;
+  /** State tick at which each scheduled meteor should spawn. */
+  crimsonWizardMeteorSpawnTick: Uint16Array;
+  /** 1 once the scheduled meteor has spawned. */
+  crimsonWizardMeteorSpawnedFlag: Uint8Array;
 
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
@@ -1001,6 +1016,13 @@ export function createClusterState(
     crimsonWizardTelegraphTicks: 0,
     crimsonWizardLastAttackState: 0,
     crimsonWizardRepeatCount: 0,
+    crimsonWizardMeteorCount: 0,
+    crimsonWizardMeteorTargetXWorld: new Float32Array(MAX_CW_METEOR_SCHEDULE),
+    crimsonWizardMeteorTargetYWorld: new Float32Array(MAX_CW_METEOR_SCHEDULE),
+    crimsonWizardMeteorSpawnXWorld: new Float32Array(MAX_CW_METEOR_SCHEDULE),
+    crimsonWizardMeteorSpawnYWorld: new Float32Array(MAX_CW_METEOR_SCHEDULE),
+    crimsonWizardMeteorSpawnTick: new Uint16Array(MAX_CW_METEOR_SCHEDULE),
+    crimsonWizardMeteorSpawnedFlag: new Uint8Array(MAX_CW_METEOR_SCHEDULE),
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterStateTicks: 0,

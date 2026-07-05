@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import {
+  applyCrimsonWizardAI,
   findCrimsonWizardFloorY,
   getCrimsonWizardPhase,
   getCrimsonWizardPhaseTuning,
@@ -15,10 +16,13 @@ import {
   CW_PHASE_1,
   CW_PHASE_2,
   CW_PHASE_3,
+  CW_METEOR_SIZE_WORLD,
+  CW_METEOR_TELEGRAPH_TICKS,
   CW_PILLAR_SAFE_GAP_WORLD,
   CW_ROOM_MARGIN,
   CW_STATE_FIRE_BALLS,
   CW_STATE_FIRE_PILLARS,
+  CW_STATE_METEORS,
   MAX_CW_FIRE_DUST,
 } from '../sim/clusters/crimsonWizardConfig';
 
@@ -130,12 +134,76 @@ test('Crimson Wizard telegraphs expire without leaking slots', () => {
   assert.equal(world.cwTelegraphAliveFlag[0], 0);
 });
 
+test('Crimson Wizard meteor telegraph and spawned meteor use the same scheduled target', () => {
+  const world = createWorldState(1000 / 60, 123);
+  world.worldWidthWorld = 220;
+  world.worldHeightWorld = 160;
+  const player = createClusterState(1, 80, 120, 1, 10);
+  const boss = createClusterState(2, 130, 60, 0, 48);
+  boss.isCrimsonWizardFlag = 1;
+  boss.crimsonWizardState = CW_STATE_METEORS;
+  boss.crimsonWizardStateTicks = 0;
+  boss.healthPoints = 16;
+  boss.maxHealthPoints = 48;
+  world.clusters.push(player, boss);
+
+  applyCrimsonWizardAI(world);
+  const warnedX = world.cwTelegraphXWorld[0];
+  const warnedY = world.cwTelegraphYWorld[0];
+  const scheduledX = boss.crimsonWizardMeteorTargetXWorld[0];
+  const scheduledY = boss.crimsonWizardMeteorTargetYWorld[0];
+  assert.equal(warnedX, scheduledX);
+  assert.equal(warnedY, scheduledY);
+
+  player.positionXWorld = 190;
+  for (let i = 0; i < CW_METEOR_TELEGRAPH_TICKS + 3; i++) {
+    applyCrimsonWizardAI(world);
+  }
+
+  assert.equal(world.cwProjectileAliveFlag[0], 1);
+  assert.equal(world.cwProjectileTargetXWorld[0], scheduledX);
+  assert.equal(world.cwProjectileTargetYWorld[0], scheduledY);
+  assert.equal(world.cwProjectileTargetXWorld[0], warnedX);
+  assert.equal(world.cwProjectileTargetYWorld[0], warnedY);
+});
+
+test('Crimson Wizard meteors burst on their scheduled upper floor instead of room bottom', () => {
+  const world = createWorldState(1000 / 60, 123);
+  world.worldWidthWorld = 160;
+  world.worldHeightWorld = 160;
+  world.wallCount = 1;
+  world.wallXWorld[0] = 48;
+  world.wallYWorld[0] = 84;
+  world.wallWWorld[0] = 64;
+  world.wallHWorld[0] = 8;
+  world.clusters.push(createClusterState(1, 30, 60, 1, 10));
+  const targetX = 80;
+  const targetY = findCrimsonWizardFloorY(world, targetX) - CW_METEOR_SIZE_WORLD * 0.5;
+  spawnCrimsonMeteor(world, targetX - 20, 0, targetX, targetY);
+
+  for (let i = 0; i < 80 && world.cwProjectileAliveFlag[0] === 1; i++) {
+    tickCrimsonWizardEffects(world);
+  }
+
+  assert.equal(world.cwProjectileAliveFlag[0], 0);
+  assert.equal(world.cwProjectileXWorld[0], targetX);
+  assert.equal(world.cwProjectileYWorld[0], targetY);
+  assert.ok(world.cwProjectileYWorld[0] < world.worldHeightWorld - 40);
+  let aliveDust = 0;
+  for (let i = 0; i < world.cwFireDustAliveFlag.length; i++) {
+    if (world.cwFireDustAliveFlag[i] === 1) aliveDust += 1;
+  }
+  assert.ok(aliveDust > 0);
+  assert.ok(aliveDust <= MAX_CW_FIRE_DUST);
+});
+
 test('Crimson Wizard meteors despawn on floor impact and leave capped burst particles', () => {
   const world = createWorldState(1000 / 60, 123);
   world.worldWidthWorld = 160;
   world.worldHeightWorld = 120;
   world.clusters.push(createClusterState(1, 30, 60, 1, 10));
-  spawnCrimsonMeteor(world, 80, 116, 80, 140);
+  const targetY = world.worldHeightWorld - CW_ROOM_MARGIN - CW_METEOR_SIZE_WORLD * 0.5;
+  spawnCrimsonMeteor(world, 80, targetY - 1, 80, targetY);
 
   tickCrimsonWizardEffects(world);
 
