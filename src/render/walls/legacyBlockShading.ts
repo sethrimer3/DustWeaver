@@ -127,9 +127,9 @@ export function getLegacyShadedSprite(
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(img, 0, 0, widthPx, heightPx);
 
-  const _t0 = import.meta.env.DEV ? performance.now() : 0;
+  const _t0 = import.meta.env?.DEV ? performance.now() : 0;
   applyOrganicEdgeShading(ctx, widthPx, heightPx, openAirSidesMask, bucketWorldX, bucketWorldY, seed);
-  FP.recordSpriteBake(key, import.meta.env.DEV ? performance.now() - _t0 : 0);
+  FP.recordSpriteBake(key, import.meta.env?.DEV ? performance.now() - _t0 : 0);
 
   legacyShadingStats.shadedBakesThisFrame++;
   legacyShadingStats.totalShadedBakes++;

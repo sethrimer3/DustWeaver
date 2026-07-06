@@ -9,7 +9,7 @@
  *   - Room preload main-thread tasks (roomPreloadScheduler)
  *   - Room load phase/substep timing (gameScreen)
  *
- * All exported functions are no-ops when `import.meta.env.DEV` is false
+ * All exported functions are no-ops when `_DEV` is false
  * so they are tree-shaken from production builds.
  *
  * Usage:
@@ -25,6 +25,14 @@
  * exceeds LONG_FRAME_WARN_MS (100 ms).
  * A "severe freeze" warning is printed above SEVERE_FREEZE_MS (1000 ms).
  */
+
+// Resolved once at module load. Uses optional chaining so this module (and
+// anything that imports it) does not throw when loaded under a plain
+// Node/tsx test runner that has no Vite `import.meta.env` injection — it
+// safely evaluates to `false` there instead of crashing on every DEV-gated
+// call (this file's functions are called from applyOrganicEdgeShading and
+// other modules that now have direct unit test coverage).
+const _DEV = import.meta.env?.DEV ?? false;
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 
@@ -312,7 +320,7 @@ export function getBakeUnlockGeneration(): number {
 export function beginFrame(frameMs: number): void {
   // Always reset the bake-budget counter (works in both dev and prod).
   _resetBakeBudget();
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   // Reset current frame
   const c = _cur;
   c.frameMs              = frameMs;
@@ -346,26 +354,26 @@ export function beginFrame(frameMs: number): void {
 
 /** Record sim tick count for this frame (call from sim loop). */
 export function recordSimTicks(count: number): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.simTickCount = count;
 }
 
 /** Record total render time. Call from endFrame in renderProfiler. */
 export function recordRenderMs(ms: number): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.renderMs = ms;
 }
 
 /** Record a wall-layer chunk rebuild. */
 export function recordWallChunkBuild(_key: string, buildMs: number): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.wallChunkBuiltCount++;
   _cur.wallChunkBuildMs += buildMs;
 }
 
 /** Record a background-block chunk rebuild. */
 export function recordBgChunkBuild(_key: string, buildMs: number): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.bgChunkBuiltCount++;
   _cur.bgChunkBuildMs += buildMs;
 }
@@ -377,7 +385,7 @@ export function recordBgChunkBuild(_key: string, buildMs: number): void {
 export function recordSpriteBake(key: string, bakeMs: number): void {
   // Always increment the production-safe counter.
   _spriteBakesThisFrame++;
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.spriteBakeCount++;
   _cur.spriteBakeMs += bakeMs;
   if (bakeMs > _cur.worstSpriteBakeMs) {
@@ -388,14 +396,14 @@ export function recordSpriteBake(key: string, bakeMs: number): void {
 
 /** Record a single `applyOrganicEdgeShading` call. */
 export function recordEdgeShading(ms: number): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.edgeShadingCount++;
   _cur.edgeShadingMs += ms;
 }
 
 /** Record wall layout signature build and optional full rebuild. */
 export function recordLayoutWork(sigMs: number, rebuildMs: number, wallCount: number): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.layoutSigMs      += sigMs;
   _cur.layoutRebuildMs  += rebuildMs;
   _cur.layoutWallCount   = wallCount;
@@ -403,14 +411,14 @@ export function recordLayoutWork(sigMs: number, rebuildMs: number, wallCount: nu
 
 /** Record a main-thread room preload task. */
 export function recordPreloadTask(roomId: string, ms: number): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.preloadMainThreadMs += ms;
   if (ms > 0) _cur.preloadMainThreadRoomId = roomId;
 }
 
 /** Record a load-phase sub-step. */
 export function recordLoadPhaseStep(detail: string, ms: number): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.loadPhaseMs    += ms;
   if (ms > 0) _cur.loadPhaseDetail = detail;
   // Forward to the active transition profiler (if any) so per-transition
@@ -448,7 +456,7 @@ export function recordSceneLightStats(
   shadowLights: number,
   occluderSegs: number,
 ): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.sceneLightTotalCount       = totalLights;
   _cur.sceneLightCulledCount      = culledLights;
   _cur.sceneLightShadowCount      = shadowLights;
@@ -457,7 +465,7 @@ export function recordSceneLightStats(
 
 /** Record that the bloom composite was skipped because no glow was submitted. */
 export function recordBloomSkippedNoGlow(): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.bloomSkippedNoGlow = true;
 }
 
@@ -476,7 +484,7 @@ export function setFrameContext(
   camBlockRange: string,
   playerBlock: string,
 ): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _contextRoomId        = roomId;
   _contextCamBlockRange = camBlockRange;
   _contextPlayerBlock   = playerBlock;
@@ -489,7 +497,7 @@ export function setFrameContext(
  * freezes in console warnings and the debug overlay.
  */
 export function setFrameGameContext(ctx: FrameContext): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   _cur.frameContext = ctx;
 }
 
@@ -499,7 +507,7 @@ export function setFrameGameContext(ctx: FrameContext): void {
  * for long frames.
  */
 export function endFrame(): void {
-  if (!import.meta.env.DEV) return;
+  if (!_DEV) return;
   const c = _cur;
 
   // Determine top cause
@@ -559,7 +567,7 @@ export function endFrame(): void {
 
 /** Returns a snapshot of the most recent `count` frames (oldest-first). */
 export function getRecentFrames(count: number): readonly FreezeFrameData[] {
-  if (!import.meta.env.DEV) return [];
+  if (!_DEV) return [];
   const n = Math.min(count, RING_SIZE);
   const out: FreezeFrameData[] = [];
   for (let i = n - 1; i >= 0; i--) {
@@ -571,7 +579,7 @@ export function getRecentFrames(count: number): readonly FreezeFrameData[] {
 
 /** Returns a copy of the most recent completed frame's data (or null before first endFrame). */
 export function getLastFrame(): FreezeFrameData | null {
-  if (!import.meta.env.DEV) return null;
+  if (!_DEV) return null;
   const idx = (_ringHead - 1 + RING_SIZE) % RING_SIZE;
   const f = _ring[idx];
   return f.frameMs === 0 ? null : f;
@@ -579,12 +587,12 @@ export function getLastFrame(): FreezeFrameData | null {
 
 /** Returns the last frame that exceeded LONG_FRAME_WARN_MS (100 ms). */
 export function getLastLongFrame(): FreezeFrameData | null {
-  if (!import.meta.env.DEV) return null;
+  if (!_DEV) return null;
   return _lastLongFrame;
 }
 
 /** Returns the last frame that exceeded SEVERE_FREEZE_MS (1000 ms). */
 export function getLastSevereFreeze(): FreezeFrameData | null {
-  if (!import.meta.env.DEV) return null;
+  if (!_DEV) return null;
   return _lastSevereFreeze;
 }

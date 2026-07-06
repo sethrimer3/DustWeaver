@@ -330,7 +330,7 @@ export function applyOrganicEdgeShading(
   worldOriginYWorld: number,
   seed: number,
 ): void {
-  const _t0 = import.meta.env.DEV ? performance.now() : 0;
+  const _t0 = import.meta.env?.DEV ? performance.now() : 0;
   const imageData = ctx.getImageData(0, 0, widthPx, heightPx);
   const data = imageData.data;
   const pixelCount = widthPx * heightPx;
@@ -468,7 +468,7 @@ export function applyOrganicEdgeShading(
   }
 
   ctx.putImageData(imageData, 0, 0);
-  if (import.meta.env.DEV) FP.recordEdgeShading(performance.now() - _t0);
+  if (import.meta.env?.DEV) FP.recordEdgeShading(performance.now() - _t0);
 }
 
 // ── DEV console diagnostics ───────────────────────────────────────────────────
@@ -492,7 +492,11 @@ declare global {
   }
 }
 
-if (import.meta.env.DEV && typeof window !== 'undefined') {
+// Uses optional chaining on `import.meta.env` (rather than the usual bare
+// `import.meta.env?.DEV` guard) so this top-level registration does not throw
+// when the module is loaded under a plain Node/tsx test runner that has no
+// Vite `import.meta.env` injection — it safely no-ops there instead.
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__dwEdgeShadingStats = () => {
     const last = FP.getLastFrame();
     const counts = FP.getShadedBakeLifetimeCounts();

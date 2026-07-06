@@ -2519,7 +2519,6 @@ export function startGameScreen(
     w.__dwBenchTransition = (roomId: string, opts?: BenchOpts): boolean => {
       const targetRoom = ROOM_REGISTRY.get(roomId);
       if (targetRoom === undefined) {
-        // eslint-disable-next-line no-console
         console.warn(`[bench] unknown roomId: ${roomId}`);
         return false;
       }
