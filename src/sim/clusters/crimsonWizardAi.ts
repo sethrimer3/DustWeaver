@@ -236,10 +236,18 @@ export function selectCrimsonWizardAttack(world: WorldState, boss: ClusterState,
     if (isCrimsonWizardAttackValid(world, forced, phase)) return forced;
   }
 
+  // The boss splits roughly 50/50 between flying attacks and landing to cast
+  // its more powerful grounded spell — kept as a flat coin flip outside the
+  // weighted flying pool so it isn't crowded out or over-picked by phase tuning.
+  const groundRepeatBlocked =
+    boss.crimsonWizardLastAttackState === CW_STATE_GROUND_FIRE_BALLS && boss.crimsonWizardRepeatCount >= CW_MAX_REPEAT_ATTACKS;
+  if (!groundRepeatBlocked && isCrimsonWizardAttackValid(world, CW_STATE_GROUND_FIRE_BALLS, phase) && nextFloat(world.rng) < CW_GROUND_ATTACK_CHANCE) {
+    return CW_STATE_GROUND_FIRE_BALLS;
+  }
+
   const weights = PHASE_ATTACK_WEIGHTS[phase];
   const candidates = [
     CW_STATE_FIRE_BALLS,
-    CW_STATE_GROUND_FIRE_BALLS,
     CW_STATE_FIRE_PILLARS,
     CW_STATE_METEORS,
     CW_STATE_TIDAL_WAVE,
@@ -280,14 +288,51 @@ export function findCrimsonWizardFloorY(world: WorldState, xWorld: number): numb
 
 const CW_GROUND_DESCENT_SPEED_WORLD = 2.2;
 
+/** Axis-separated hard collision: reverts an axis move that would overlap solid wall geometry. */
+function moveCrimsonWizardWithWalls(world: WorldState, boss: ClusterState, nextX: number, nextY: number): { hitX: boolean; hitY: boolean } {
+  let hitX = false;
+  let hitY = false;
+  if (!hasWallOverlapAtPosition(boss, world, nextX, boss.positionYWorld)) {
+    boss.positionXWorld = nextX;
+  } else {
+    hitX = true;
+  }
+  if (!hasWallOverlapAtPosition(boss, world, boss.positionXWorld, nextY)) {
+    boss.positionYWorld = nextY;
+  } else {
+    hitY = true;
+  }
+  return { hitX, hitY };
+}
+
+/**
+ * Nudges a desired steering direction away from any wall the boss is about to
+ * fly into, so it routes around obstacles instead of relying solely on the
+ * hard collision stop in moveCrimsonWizardWithWalls.
+ */
+function applyCrimsonWizardWallAvoidance(world: WorldState, boss: ClusterState, desiredX: number, desiredY: number): { x: number; y: number } {
+  const dirLen = Math.sqrt(desiredX * desiredX + desiredY * desiredY);
+  if (dirLen < 0.001) return { x: desiredX, y: desiredY };
+  const dirX = desiredX / dirLen;
+  const dirY = desiredY / dirLen;
+  const probeDist = CW_WALL_AVOID_PROBE_DIST + Math.max(boss.halfWidthWorld, boss.halfHeightWorld);
+  const hit = raycastWalls(world, boss.positionXWorld, boss.positionYWorld, dirX, dirY, probeDist);
+  if (hit === null) return { x: desiredX, y: desiredY };
+  const closeness = clamp(1 - hit.t / probeDist, 0, 1);
+  return {
+    x: desiredX + hit.normalX * closeness * 2.2 - dirY * closeness * 1.1,
+    y: desiredY + hit.normalY * closeness * 2.2 + dirX * closeness * 1.1,
+  };
+}
+
 /** While ground-casting, glides the boss down to (and holds it at) the floor instead of hovering. */
 function steerCrimsonWizardGrounded(world: WorldState, boss: ClusterState): void {
   const floorY = findCrimsonWizardFloorY(world, boss.positionXWorld) - boss.halfHeightWorld;
   const dy = floorY - boss.positionYWorld;
-  if (Math.abs(dy) > CW_GROUND_DESCENT_SPEED_WORLD) {
-    boss.positionYWorld += Math.sign(dy) * CW_GROUND_DESCENT_SPEED_WORLD;
-  } else {
-    boss.positionYWorld = floorY;
+  const step = Math.abs(dy) > CW_GROUND_DESCENT_SPEED_WORLD ? Math.sign(dy) * CW_GROUND_DESCENT_SPEED_WORLD : dy;
+  const nextY = boss.positionYWorld + step;
+  if (!hasWallOverlapAtPosition(boss, world, boss.positionXWorld, nextY)) {
+    boss.positionYWorld = nextY;
   }
   boss.crimsonWizardVelXWorld *= CW_MOVE_DAMPING;
   boss.crimsonWizardVelYWorld = 0;
@@ -323,6 +368,10 @@ export function steerCrimsonWizardMovement(world: WorldState, boss: ClusterState
   desiredX += Math.cos(phase * 0.73) * CW_IDLE_DRIFT_STRENGTH_X;
   desiredY += Math.sin(phase) * CW_IDLE_DRIFT_STRENGTH_Y;
 
+  const avoided = applyCrimsonWizardWallAvoidance(world, boss, desiredX, desiredY);
+  desiredX = avoided.x;
+  desiredY = avoided.y;
+
   const { minX, maxX, minY, maxY } = playableBounds(world, boss);
   const leftT = clamp((boss.positionXWorld - minX) / CW_WALL_AVOID_DISTANCE, 0, 1);
   const rightT = clamp((maxX - boss.positionXWorld) / CW_WALL_AVOID_DISTANCE, 0, 1);
@@ -351,14 +400,13 @@ export function steerCrimsonWizardMovement(world: WorldState, boss: ClusterState
     boss.crimsonWizardVelYWorld *= s;
   }
 
-  const nextX = boss.positionXWorld + boss.crimsonWizardVelXWorld;
-  const nextY = boss.positionYWorld + boss.crimsonWizardVelYWorld;
-  boss.positionXWorld = clamp(nextX, minX, maxX);
-  boss.positionYWorld = clamp(nextY, minY, maxY);
-  if ((boss.positionXWorld === minX && boss.crimsonWizardVelXWorld < 0) || (boss.positionXWorld === maxX && boss.crimsonWizardVelXWorld > 0)) {
+  const nextX = clamp(boss.positionXWorld + boss.crimsonWizardVelXWorld, minX, maxX);
+  const nextY = clamp(boss.positionYWorld + boss.crimsonWizardVelYWorld, minY, maxY);
+  const { hitX, hitY } = moveCrimsonWizardWithWalls(world, boss, nextX, nextY);
+  if (hitX || (boss.positionXWorld === minX && boss.crimsonWizardVelXWorld < 0) || (boss.positionXWorld === maxX && boss.crimsonWizardVelXWorld > 0)) {
     boss.crimsonWizardVelXWorld = 0;
   }
-  if ((boss.positionYWorld === minY && boss.crimsonWizardVelYWorld < 0) || (boss.positionYWorld === maxY && boss.crimsonWizardVelYWorld > 0)) {
+  if (hitY || (boss.positionYWorld === minY && boss.crimsonWizardVelYWorld < 0) || (boss.positionYWorld === maxY && boss.crimsonWizardVelYWorld > 0)) {
     boss.crimsonWizardVelYWorld = 0;
   }
   boss.velocityXWorld = boss.crimsonWizardVelXWorld * 60;
@@ -521,7 +569,9 @@ function emitGroundFireballs(world: WorldState, boss: ClusterState, player: Clus
   if ((castTick % CW_GROUND_FIREBALL_INTERVAL_TICKS) !== 1) return;
   const volleyIndex = Math.floor(castTick / CW_GROUND_FIREBALL_INTERVAL_TICKS);
   if (volleyIndex >= CW_GROUND_FIREBALL_COUNT) return;
-  spawnAimedFireball(world, boss, player.positionXWorld + randSigned(world) * 12, player.positionYWorld + randSigned(world) * 8, 0);
+  // More powerful than the flying fireball attack: a wide fan cast every interval tick.
+  const offset = (volleyIndex - (CW_GROUND_FIREBALL_COUNT - 1) * 0.5) * CW_GROUND_FIREBALL_SPREAD_RADIANS;
+  spawnAimedFireball(world, boss, player.positionXWorld + randSigned(world) * 12, player.positionYWorld + randSigned(world) * 8, offset);
 }
 
 function tickAttackState(world: WorldState, boss: ClusterState, player: ClusterState): void {

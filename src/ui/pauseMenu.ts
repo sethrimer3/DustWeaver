@@ -24,9 +24,13 @@ import {
   saveCombatModeToStorage,
   WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
   type WorldViewPresetId,
+  getDoubleJumpToGrappleEnabled,
+  setDoubleJumpToGrappleEnabled,
+  getAdvancedWallJumpsEnabled,
+  setAdvancedWallJumpsEnabled,
 } from './renderSettings';
 import { setCombatMode, type CombatMode } from '../sim/combatMode';
-import { makeButton, makeSlider, makeTabButton, GOLD, PANEL_BORDER } from './helpers';
+import { makeButton, makeSlider, makeTabButton, makeCheckboxRow, GOLD, PANEL_BORDER } from './helpers';
 import {
   getSpriteAtlasConfigState,
   getSpriteAtlasUseSetting,
@@ -134,7 +138,7 @@ export function showPauseMenu(
   const optionsPanel = document.createElement('div');
   optionsPanel.style.cssText = `display: none; text-align: left;`;
 
-  let activeTab: 'sound' | 'graphics' = 'sound';
+  let activeTab: 'sound' | 'graphics' | 'gameplay' = 'sound';
 
   function buildOptionsContent(): void {
     optionsPanel.innerHTML = '';
@@ -151,8 +155,13 @@ export function showPauseMenu(
       activeTab = 'graphics';
       buildOptionsContent();
     });
+    const gameplayTab = makeTabButton('Gameplay', activeTab === 'gameplay', () => {
+      activeTab = 'gameplay';
+      buildOptionsContent();
+    });
     tabBar.appendChild(soundTab);
     tabBar.appendChild(graphicsTab);
+    tabBar.appendChild(gameplayTab);
     optionsPanel.appendChild(tabBar);
 
     if (activeTab === 'sound') {
@@ -169,6 +178,20 @@ export function showPauseMenu(
         setSfxVolume(v);
       });
       optionsPanel.appendChild(sfxSlider);
+    } else if (activeTab === 'gameplay') {
+      optionsPanel.appendChild(
+        makeCheckboxRow('Double-jump to grapple', getDoubleJumpToGrappleEnabled(), (enabled) => {
+          setDoubleJumpToGrappleEnabled(enabled);
+        }),
+      );
+      optionsPanel.appendChild(
+        makeCheckboxRow(
+          'Advanced Wall Jumps',
+          getAdvancedWallJumpsEnabled(),
+          (enabled) => { setAdvancedWallJumpsEnabled(enabled); },
+          'When off (default), pressing jump next to a wall always wall-jumps, even with no directional input held. When on, a wall jump requires deliberate intent: wall-sliding, pressing away from the wall, or having been falling in the air for a moment.',
+        ),
+      );
     } else {
       // Graphics quality buttons
       const qualityLabel = document.createElement('div');

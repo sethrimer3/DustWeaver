@@ -125,6 +125,69 @@ export function makeSlider(
   return row;
 }
 
+// ─── Checkbox-row factory ─────────────────────────────────────────────────────
+
+/**
+ * Creates a labelled checkbox row with the standard gold-highlight styling
+ * used across the pause menu and settings panels. Pass `tooltip` to attach
+ * a hoverable "?" hint describing the setting.
+ */
+export function makeCheckboxRow(
+  label: string,
+  initialValue: boolean,
+  onChange: (enabled: boolean) => void,
+  tooltip?: string,
+): HTMLLabelElement {
+  const row = document.createElement('label');
+  row.style.cssText = `
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin: 8px 0;
+    padding: 10px 14px;
+    background: rgba(212,168,75,${initialValue ? '0.12' : '0.04'});
+    border: 1px solid rgba(212,168,75,${initialValue ? '0.55' : '0.25'});
+    border-radius: 6px;
+    cursor: pointer;
+  `;
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = initialValue;
+  checkbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
+
+  const text = document.createElement('span');
+  text.textContent = label;
+  text.style.cssText = `
+    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.88rem;
+    cursor: pointer; letter-spacing: 0.4px;
+  `;
+
+  checkbox.addEventListener('change', () => {
+    const enabled = checkbox.checked;
+    onChange(enabled);
+    row.style.borderColor = `rgba(212,168,75,${enabled ? '0.55' : '0.25'})`;
+    row.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0.04'})`;
+  });
+
+  row.appendChild(checkbox);
+  row.appendChild(text);
+
+  if (tooltip !== undefined) {
+    const hint = document.createElement('span');
+    hint.textContent = '?';
+    hint.title = tooltip;
+    hint.style.cssText = `
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto;
+      font-family: 'Cinzel', serif; font-size: 0.7rem; font-weight: 700;
+      color: rgba(212,168,75,0.85); border: 1px solid rgba(212,168,75,0.5);
+      background: rgba(0,0,0,0.25); cursor: help;
+    `;
+    row.appendChild(hint);
+  }
+
+  return row;
+}
+
 // ─── Tab-button factory ───────────────────────────────────────────────────────
 
 /**
