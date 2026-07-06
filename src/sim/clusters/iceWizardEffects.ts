@@ -1,6 +1,9 @@
 import { BLOCK_SIZE_MEDIUM } from '../../levels/roomDef';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import { ParticleKind } from '../particles/kinds';
 import { WorldState } from '../world';
+import { BUBBLE_HALF_SIZE_WORLD, WATER_BUBBLE_REGEN_INTERVAL_TICKS, spawnBubbleOrbitParticles } from './bubbleAi';
+import { createClusterState } from './state';
 import {
   ICE_SPIKE_ACTIVE_TICKS,
   ICE_SPIKE_DAMAGE,
@@ -14,6 +17,10 @@ import {
   ICE_SPIKE_WAVE_MAX_RANGE_TILES,
   ICE_SPIKE_WAVE_PROPAGATION_DELAY_TICKS,
   ICE_SPIKE_WIDTH_WORLD,
+  ICE_WIZARD_SUMMON_RADIUS_TILES,
+  ICE_WIZARD_SUMMON_SEARCH_RADIUS_TILES,
+  ICE_WIZARD_SUMMONED_ICE_BUBBLE_HP,
+  ICE_WIZARD_SUMMONED_ICE_BUBBLE_PARTICLES,
 } from './iceWizardConfig';
 
 export interface IceSpikeFloorCandidate {
@@ -42,6 +49,95 @@ function overlapsSolidWall(world: WorldState, cx: number, cy: number, halfW: num
     if (right > wl && left < wr && bottom > wt && top < wb) return true;
   }
   return false;
+}
+
+function overlapsAnyWall(world: WorldState, cx: number, cy: number, halfW: number, halfH: number): boolean {
+  const left = cx - halfW;
+  const right = cx + halfW;
+  const top = cy - halfH;
+  const bottom = cy + halfH;
+  for (let wi = 0; wi < world.wallCount; wi++) {
+    const wl = world.wallXWorld[wi];
+    const wt = world.wallYWorld[wi];
+    const wr = wl + world.wallWWorld[wi];
+    const wb = wt + world.wallHWorld[wi];
+    if (right > wl && left < wr && bottom > wt && top < wb) return true;
+  }
+  return false;
+}
+
+export function isValidIceBubbleSummonPosition(world: WorldState, xWorld: number, yWorld: number): boolean {
+  const half = BUBBLE_HALF_SIZE_WORLD;
+  if (xWorld - half < 0 || xWorld + half > world.worldWidthWorld) return false;
+  if (yWorld - half < 0 || yWorld + half > world.worldHeightWorld) return false;
+  return !overlapsAnyWall(world, xWorld, yWorld, half, half);
+}
+
+function nextClusterEntityId(world: WorldState): number {
+  let nextEntityId = 2;
+  for (let i = 0; i < world.clusters.length; i++) {
+    if (world.clusters[i].entityId >= nextEntityId) nextEntityId = world.clusters[i].entityId + 1;
+  }
+  return nextEntityId;
+}
+
+function findNearbyIceBubbleSummonPosition(world: WorldState, preferredX: number, preferredY: number): IceSpikeFloorCandidate | null {
+  const tile = BLOCK_SIZE_MEDIUM;
+  const maxRadius = ICE_WIZARD_SUMMON_SEARCH_RADIUS_TILES;
+  if (isValidIceBubbleSummonPosition(world, preferredX, preferredY)) {
+    return { xWorld: preferredX, floorYWorld: preferredY };
+  }
+
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    for (let oy = -radius; oy <= radius; oy++) {
+      for (let ox = -radius; ox <= radius; ox++) {
+        if (Math.max(Math.abs(ox), Math.abs(oy)) !== radius) continue;
+        const x = preferredX + ox * tile;
+        const y = preferredY + oy * tile;
+        if (isValidIceBubbleSummonPosition(world, x, y)) {
+          return { xWorld: x, floorYWorld: y };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+export function summonIceBubblesAroundWizard(world: WorldState, bossXWorld: number, bossYWorld: number, count: number): number {
+  const radius = ICE_WIZARD_SUMMON_RADIUS_TILES * BLOCK_SIZE_MEDIUM;
+  const startEntityId = nextClusterEntityId(world);
+  let spawned = 0;
+
+  for (let i = 0; i < count; i++) {
+    const angle = -Math.PI * 0.5 + (i / Math.max(1, count)) * Math.PI * 2.0;
+    const preferredX = bossXWorld + Math.cos(angle) * radius;
+    const preferredY = bossYWorld + Math.sin(angle) * radius;
+    const pos = findNearbyIceBubbleSummonPosition(world, preferredX, preferredY);
+    if (pos === null) continue;
+
+    const bubble = createClusterState(
+      startEntityId + spawned,
+      pos.xWorld,
+      pos.floorYWorld,
+      0,
+      ICE_WIZARD_SUMMONED_ICE_BUBBLE_HP,
+    );
+    bubble.isBubbleEnemyFlag = 1;
+    bubble.isIceBubbleFlag = 1;
+    bubble.halfWidthWorld = BUBBLE_HALF_SIZE_WORLD;
+    bubble.halfHeightWorld = BUBBLE_HALF_SIZE_WORLD;
+    bubble.bubbleState = 0;
+    bubble.bubbleMaxParticleCount = ICE_WIZARD_SUMMONED_ICE_BUBBLE_PARTICLES;
+    bubble.bubbleOrbitAngleRad = angle;
+    bubble.bubbleRegenTicks = WATER_BUBBLE_REGEN_INTERVAL_TICKS;
+    bubble.bubbleDriftPhaseRad = i * 0.9;
+    bubble.bubblePrevHealthPoints = bubble.healthPoints;
+    world.clusters.push(bubble);
+    spawnBubbleOrbitParticles(world, bubble.entityId, pos.xWorld, pos.floorYWorld, ParticleKind.Ice, ICE_WIZARD_SUMMONED_ICE_BUBBLE_PARTICLES);
+    spawned += 1;
+  }
+
+  return spawned;
 }
 
 function findFloorTopAtX(world: WorldState, xWorld: number, nearYWorld: number): number | null {

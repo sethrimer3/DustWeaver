@@ -214,6 +214,10 @@ export function spawnEnemyClusters(
       enemyCluster.isIceWizardFlag = 1;
       enemyCluster.iceWizardState = ICE_WIZARD_STATE_IDLE;
       enemyCluster.iceWizardStateTicks = 0;
+      enemyCluster.iceWizardSummonTriggeredMask = 0;
+      enemyCluster.iceWizardSummonPendingMask = 0;
+      enemyCluster.iceWizardCurrentSummonThresholdIndex = -1;
+      enemyCluster.iceWizardSummonReleasedFlag = 0;
       enemyCluster.halfWidthWorld = ICE_WIZARD_HALF_W;
       enemyCluster.halfHeightWorld = ICE_WIZARD_HALF_H;
       enemyCluster.positionXWorld = Math.round((ex - ICE_WIZARD_HALF_W) / BLOCK_SIZE_MEDIUM) * BLOCK_SIZE_MEDIUM + ICE_WIZARD_HALF_W;
@@ -828,6 +832,10 @@ export function spawnIceWizardForTesting(world: WorldState, xWorld: number, yWor
   boss.isIceWizardFlag = 1;
   boss.iceWizardState = ICE_WIZARD_STATE_IDLE;
   boss.iceWizardStateTicks = 0;
+  boss.iceWizardSummonTriggeredMask = 0;
+  boss.iceWizardSummonPendingMask = 0;
+  boss.iceWizardCurrentSummonThresholdIndex = -1;
+  boss.iceWizardSummonReleasedFlag = 0;
   boss.halfWidthWorld = ICE_WIZARD_HALF_W;
   boss.halfHeightWorld = ICE_WIZARD_HALF_H;
   boss.iceWizardGridX = Math.round((snappedX - ICE_WIZARD_HALF_W) / BLOCK_SIZE_MEDIUM);

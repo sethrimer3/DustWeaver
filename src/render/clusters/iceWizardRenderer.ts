@@ -8,7 +8,12 @@ import {
   ICE_SPIKE_TELEGRAPH_TICKS,
   ICE_SPIKE_WIDTH_WORLD,
   ICE_WIZARD_STATE_SLAM_DOWN,
+  ICE_WIZARD_STATE_SUMMON_RECOVERY,
+  ICE_WIZARD_STATE_SUMMON_RELEASE,
+  ICE_WIZARD_STATE_SUMMON_TELEGRAPH,
   ICE_WIZARD_STATE_TELEGRAPH_SLAM,
+  ICE_WIZARD_SUMMON_RECOVERY_TICKS,
+  ICE_WIZARD_SUMMON_TELEGRAPH_TICKS,
 } from '../../sim/clusters/iceWizardConfig';
 
 export function renderIceWizardBody(
@@ -27,6 +32,10 @@ export function renderIceWizardBody(
   const telegraphPulse = cluster.iceWizardState === ICE_WIZARD_STATE_TELEGRAPH_SLAM
     ? 0.5 + 0.5 * Math.sin(cluster.iceWizardStateTicks * 0.45)
     : 0;
+  const isSummoning =
+    cluster.iceWizardState === ICE_WIZARD_STATE_SUMMON_TELEGRAPH ||
+    cluster.iceWizardState === ICE_WIZARD_STATE_SUMMON_RELEASE ||
+    cluster.iceWizardState === ICE_WIZARD_STATE_SUMMON_RECOVERY;
 
   ctx.save();
   ctx.fillStyle = cluster.iceWizardState === ICE_WIZARD_STATE_SLAM_DOWN ? '#bdf7ff' : '#62d8ff';
@@ -61,6 +70,35 @@ export function renderIceWizardBody(
     ctx.moveTo(screenX - halfW * 0.62, screenY + halfH + 3 * scalePx);
     ctx.lineTo(screenX + halfW * 0.62, screenY + halfH + 3 * scalePx);
     ctx.stroke();
+  }
+
+  if (isSummoning) {
+    const summonT = cluster.iceWizardState === ICE_WIZARD_STATE_SUMMON_TELEGRAPH
+      ? Math.min(1, cluster.iceWizardStateTicks / ICE_WIZARD_SUMMON_TELEGRAPH_TICKS)
+      : cluster.iceWizardState === ICE_WIZARD_STATE_SUMMON_RELEASE
+        ? 1
+        : 1 - Math.min(1, cluster.iceWizardStateTicks / ICE_WIZARD_SUMMON_RECOVERY_TICKS);
+    const pulse = 0.5 + 0.5 * Math.sin(cluster.iceWizardStateTicks * 0.5);
+    const ringRadius = (Math.max(halfW, halfH) + (8 + summonT * 14) * scalePx);
+    ctx.globalAlpha = 0.35 + pulse * 0.28;
+    ctx.strokeStyle = '#e9fdff';
+    ctx.lineWidth = Math.max(1, 2 * scalePx);
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.28 + summonT * 0.25;
+    ctx.strokeStyle = '#7ee8ff';
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + cluster.iceWizardStateTicks * 0.06;
+      const inner = Math.max(halfW, halfH) + 4 * scalePx;
+      const outer = ringRadius + (4 + pulse * 4) * scalePx;
+      ctx.beginPath();
+      ctx.moveTo(screenX + Math.cos(a) * inner, screenY + Math.sin(a) * inner);
+      ctx.lineTo(screenX + Math.cos(a) * outer, screenY + Math.sin(a) * outer);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 }

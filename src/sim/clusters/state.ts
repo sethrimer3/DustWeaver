@@ -402,7 +402,7 @@ export interface ClusterState {
 
   /** 1 if this cluster is the Ice Wizard boss. */
   isIceWizardFlag: 0 | 1;
-  /** Current Ice Wizard state: idle/telegraphSlam/slamDown/recovery. */
+  /** Current Ice Wizard state: idle/telegraphSlam/slamDown/recovery/summon phases. */
   iceWizardState: number;
   /** Ticks elapsed in the current Ice Wizard state. */
   iceWizardStateTicks: number;
@@ -411,6 +411,14 @@ export interface ClusterState {
   iceWizardGridY: number;
   /** Last floor Y used by the slam impact, for debug/tests/future effects. */
   iceWizardImpactFloorYWorld: number;
+  /** Bitmask of HP thresholds already queued for this Ice Wizard instance. */
+  iceWizardSummonTriggeredMask: number;
+  /** Bitmask of HP thresholds waiting to run their summon sequence. */
+  iceWizardSummonPendingMask: number;
+  /** Threshold index currently being summoned, or -1 when no summon is active. */
+  iceWizardCurrentSummonThresholdIndex: number;
+  /** 1 once the current summon release has spawned its Ice Bubble enemies. */
+  iceWizardSummonReleasedFlag: 0 | 1;
 
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
@@ -1072,6 +1080,10 @@ export function createClusterState(
     iceWizardGridX: 0,
     iceWizardGridY: 0,
     iceWizardImpactFloorYWorld: 0,
+    iceWizardSummonTriggeredMask: 0,
+    iceWizardSummonPendingMask: 0,
+    iceWizardCurrentSummonThresholdIndex: -1,
+    iceWizardSummonReleasedFlag: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterStateTicks: 0,

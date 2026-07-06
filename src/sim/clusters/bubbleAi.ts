@@ -62,6 +62,19 @@ const BUBBLE_INTER_REPEL_VEL_WORLD = 35.0;
 /** Half-size (world units) of the bubble cluster collision/render box. */
 export const BUBBLE_HALF_SIZE_WORLD = BUBBLE_ORBIT_RADIUS_WORLD + 4.0;
 
+export function spawnBubbleOrbitParticles(
+  world: WorldState,
+  clusterEntityId: number,
+  cx: number,
+  cy: number,
+  kind: ParticleKind,
+  count: number,
+): void {
+  for (let i = 0; i < count; i++) {
+    _spawnBubbleRingParticle(world, clusterEntityId, cx, cy, kind, (i / count) * Math.PI * 2.0);
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _findFreeSlot(world: WorldState): number {

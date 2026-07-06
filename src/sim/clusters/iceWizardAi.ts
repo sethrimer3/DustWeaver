@@ -14,10 +14,17 @@ import {
   ICE_WIZARD_STATE_IDLE,
   ICE_WIZARD_STATE_RECOVERY,
   ICE_WIZARD_STATE_SLAM_DOWN,
+  ICE_WIZARD_STATE_SUMMON_RECOVERY,
+  ICE_WIZARD_STATE_SUMMON_RELEASE,
+  ICE_WIZARD_STATE_SUMMON_TELEGRAPH,
   ICE_WIZARD_STATE_TELEGRAPH_SLAM,
+  ICE_WIZARD_SUMMON_RECOVERY_TICKS,
+  ICE_WIZARD_SUMMON_RELEASE_TICKS,
+  ICE_WIZARD_SUMMON_TELEGRAPH_TICKS,
+  ICE_WIZARD_SUMMON_THRESHOLDS,
   ICE_WIZARD_TELEGRAPH_TICKS,
 } from './iceWizardConfig';
-import { clearIceSpikes, findIceWizardSlamFloorY, spawnIceSpikeWave } from './iceWizardEffects';
+import { clearIceSpikes, findIceWizardSlamFloorY, spawnIceSpikeWave, summonIceBubblesAroundWizard } from './iceWizardEffects';
 
 export function snapIceWizardToGrid(boss: ClusterState): void {
   const tile = BLOCK_SIZE_MEDIUM;
@@ -31,6 +38,36 @@ export function snapIceWizardToGrid(boss: ClusterState): void {
 function setState(boss: ClusterState, state: number): void {
   boss.iceWizardState = state;
   boss.iceWizardStateTicks = 0;
+  if (state !== ICE_WIZARD_STATE_SUMMON_RELEASE) {
+    boss.iceWizardSummonReleasedFlag = 0;
+  }
+}
+
+function queueCrossedSummonThresholds(boss: ClusterState): void {
+  const hpRatio = boss.maxHealthPoints > 0 ? boss.healthPoints / boss.maxHealthPoints : 0;
+  for (let i = 0; i < ICE_WIZARD_SUMMON_THRESHOLDS.length; i++) {
+    const threshold = ICE_WIZARD_SUMMON_THRESHOLDS[i];
+    if (hpRatio > threshold.ratio) continue;
+    if ((boss.iceWizardSummonTriggeredMask & threshold.mask) !== 0) continue;
+    boss.iceWizardSummonTriggeredMask |= threshold.mask;
+    boss.iceWizardSummonPendingMask |= threshold.mask;
+  }
+}
+
+function nextPendingSummonThresholdIndex(boss: ClusterState): number {
+  for (let i = 0; i < ICE_WIZARD_SUMMON_THRESHOLDS.length; i++) {
+    if ((boss.iceWizardSummonPendingMask & ICE_WIZARD_SUMMON_THRESHOLDS[i].mask) !== 0) return i;
+  }
+  return -1;
+}
+
+function beginNextSummonIfPending(boss: ClusterState): boolean {
+  const thresholdIndex = nextPendingSummonThresholdIndex(boss);
+  if (thresholdIndex < 0) return false;
+  boss.iceWizardCurrentSummonThresholdIndex = thresholdIndex;
+  boss.velocityYWorld = 0;
+  setState(boss, ICE_WIZARD_STATE_SUMMON_TELEGRAPH);
+  return true;
 }
 
 function shouldStartSlam(boss: ClusterState, player: ClusterState): boolean {
@@ -50,17 +87,24 @@ function finishSlam(world: WorldState, boss: ClusterState, floorYWorld: number):
 
 function tickBoss(world: WorldState, boss: ClusterState, player: ClusterState): void {
   snapIceWizardToGrid(boss);
+  queueCrossedSummonThresholds(boss);
   boss.iceWizardStateTicks += 1;
 
   switch (boss.iceWizardState) {
     case ICE_WIZARD_STATE_IDLE:
       boss.velocityYWorld = 0;
+      if (beginNextSummonIfPending(boss)) {
+        break;
+      }
       if (shouldStartSlam(boss, player)) {
         setState(boss, ICE_WIZARD_STATE_TELEGRAPH_SLAM);
       }
       break;
     case ICE_WIZARD_STATE_TELEGRAPH_SLAM:
       boss.velocityYWorld = 0;
+      if (beginNextSummonIfPending(boss)) {
+        break;
+      }
       if (boss.iceWizardStateTicks >= ICE_WIZARD_TELEGRAPH_TICKS) {
         setState(boss, ICE_WIZARD_STATE_SLAM_DOWN);
       }
@@ -87,8 +131,42 @@ function tickBoss(world: WorldState, boss: ClusterState, player: ClusterState): 
     }
     case ICE_WIZARD_STATE_RECOVERY:
       boss.velocityYWorld = 0;
+      if (beginNextSummonIfPending(boss)) {
+        break;
+      }
       if (boss.iceWizardStateTicks >= ICE_WIZARD_RECOVERY_TICKS) {
         setState(boss, ICE_WIZARD_STATE_IDLE);
+      }
+      break;
+    case ICE_WIZARD_STATE_SUMMON_TELEGRAPH:
+      boss.velocityYWorld = 0;
+      if (boss.iceWizardStateTicks >= ICE_WIZARD_SUMMON_TELEGRAPH_TICKS) {
+        setState(boss, ICE_WIZARD_STATE_SUMMON_RELEASE);
+      }
+      break;
+    case ICE_WIZARD_STATE_SUMMON_RELEASE: {
+      boss.velocityYWorld = 0;
+      if (boss.iceWizardSummonReleasedFlag === 0) {
+        const thresholdIndex = boss.iceWizardCurrentSummonThresholdIndex;
+        const threshold = ICE_WIZARD_SUMMON_THRESHOLDS[thresholdIndex];
+        if (threshold !== undefined) {
+          boss.iceWizardSummonPendingMask &= ~threshold.mask;
+          summonIceBubblesAroundWizard(world, boss.positionXWorld, boss.positionYWorld, threshold.bubbleCount);
+        }
+        boss.iceWizardSummonReleasedFlag = 1;
+      }
+      if (boss.iceWizardStateTicks >= ICE_WIZARD_SUMMON_RELEASE_TICKS) {
+        setState(boss, ICE_WIZARD_STATE_SUMMON_RECOVERY);
+      }
+      break;
+    }
+    case ICE_WIZARD_STATE_SUMMON_RECOVERY:
+      boss.velocityYWorld = 0;
+      if (boss.iceWizardStateTicks >= ICE_WIZARD_SUMMON_RECOVERY_TICKS) {
+        boss.iceWizardCurrentSummonThresholdIndex = -1;
+        if (!beginNextSummonIfPending(boss)) {
+          setState(boss, ICE_WIZARD_STATE_IDLE);
+        }
       }
       break;
   }
