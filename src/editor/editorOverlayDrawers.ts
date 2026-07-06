@@ -71,13 +71,19 @@ export function drawEditorWalls(
 ): void {
   // Precompute which cells are covered by a solid (non-ramp, non-platform,
   // non-half-pillar) wall so adjacent solid blocks can share a single merged
-  // outline instead of each drawing its own per-cell border.
+  // outline instead of each drawing its own per-cell border. Also track which
+  // wall instance (uid) owns each cell so the per-tile grid can distinguish
+  // real instance boundaries (e.g. a 2×2 block next to separate 1×1 blocks)
+  // from cells that merely belong to the same multi-cell instance.
   const occupied = new Set<string>();
+  const cellOwner = new Map<string, number>();
   for (const w of room.interiorWalls) {
     if (w.isPlatformFlag === 1 || w.rampOrientation !== undefined || w.isPillarHalfWidthFlag === 1) continue;
     for (let dy = 0; dy < w.hBlock; dy++) {
       for (let dx = 0; dx < w.wBlock; dx++) {
-        occupied.add(`${w.xBlock + dx},${w.yBlock + dy}`);
+        const key = `${w.xBlock + dx},${w.yBlock + dy}`;
+        occupied.add(key);
+        cellOwner.set(key, w.uid);
       }
     }
   }
@@ -105,7 +111,7 @@ export function drawEditorWalls(
 
   // Subtle per-tile grid on top of the fills/outlines so individual tile
   // boundaries stay visible inside merged blocks (a decorating aid).
-  drawWallTileGrid(ctx, occupied, offsetXPx, offsetYPx, zoom);
+  drawWallTileGrid(ctx, cellOwner, offsetXPx, offsetYPx, zoom);
 }
 
 // ============================================================================

@@ -166,42 +166,42 @@ export function drawBlockRect(
   ctx.strokeRect(x, y, w, h);
 }
 
-/** Subtle color for the per-tile grid drawn over merged wall blocks. */
+/** Subtle color for the boundary line drawn between distinct wall instances. */
 export const WALL_TILE_GRID_COLOR = 'rgba(140,210,255,0.25)';
 
 /**
- * Draws a thin, subtle 1×1 grid line over every occupied cell (interior and
- * boundary edges alike) so players/level designers can still see individual
- * tile boundaries inside a merged block — purely a visual aid, drawn once for
- * the whole occupied set so shared edges between adjacent cells aren't
- * double-drawn.
+ * Draws a thin, subtle line only where two *different* wall instances meet
+ * (tracked via `cellOwner`, cell key → owning wall uid) — never inside a
+ * single instance's own footprint. This lets a level designer see exactly
+ * where one placed block ends and the next begins (e.g. a 2×2 block sitting
+ * next to four separate 1×1 blocks reads as one 2×2 plus four distinct
+ * cells, not as an undifferentiated blob).
  */
 export function drawWallTileGrid(
   ctx: CanvasRenderingContext2D,
-  occupied: Set<string>,
+  cellOwner: Map<string, number>,
   ox: number, oy: number, zoom: number,
 ): void {
   const tile = BLOCK_SIZE_SMALL * zoom;
   ctx.strokeStyle = WALL_TILE_GRID_COLOR;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (const cellKey of occupied) {
+  for (const [cellKey, uid] of cellOwner) {
     const [gx, gy] = cellKey.split(',').map(Number);
     const cellX = gx * tile + ox;
     const cellY = gy * tile + oy;
-    // Only draw top/left edges of each cell — the bottom/right edges are the
-    // top/left edges of the next cell over, so this covers every edge once.
-    ctx.moveTo(cellX, cellY);
-    ctx.lineTo(cellX + tile, cellY);
-    ctx.moveTo(cellX, cellY);
-    ctx.lineTo(cellX, cellY + tile);
-    // Draw the final row/column's trailing edges explicitly since there's no
-    // "next cell" to contribute them.
-    if (!occupied.has(`${gx + 1},${gy}`)) {
+
+    // Only draw an edge when the neighbor cell is occupied by a *different*
+    // wall instance — a missing neighbor (open air) is already handled by
+    // the merged outer outline, and a same-instance neighbor shares this
+    // block and should show no seam at all.
+    const rightOwner = cellOwner.get(`${gx + 1},${gy}`);
+    if (rightOwner !== undefined && rightOwner !== uid) {
       ctx.moveTo(cellX + tile, cellY);
       ctx.lineTo(cellX + tile, cellY + tile);
     }
-    if (!occupied.has(`${gx},${gy + 1}`)) {
+    const downOwner = cellOwner.get(`${gx},${gy + 1}`);
+    if (downOwner !== undefined && downOwner !== uid) {
       ctx.moveTo(cellX, cellY + tile);
       ctx.lineTo(cellX + tile, cellY + tile);
     }
@@ -374,8 +374,8 @@ export function drawMarker(
   ox: number, oy: number, zoom: number,
   color: string, emoji: string,
 ): void {
-  const cx = xBlock * BLOCK_SIZE_SMALL * zoom + ox;
-  const cy = yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const cx = (xBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + ox;
+  const cy = (yBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + oy;
   const r = BLOCK_SIZE_SMALL * zoom * 0.4;
 
   ctx.fillStyle = color;
