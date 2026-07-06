@@ -27,6 +27,8 @@ import { applyRadiantTetherAI } from './clusters/radiantTetherAi';
 import { applyRadiantWebAI } from './clusters/radiantWebAi';
 import { applyCrimsonWizardAI } from './clusters/crimsonWizardAi';
 import { tickCrimsonWizardEffects } from './clusters/crimsonWizardEffects';
+import { applyHeraldAI } from './clusters/heraldAi';
+import { tickVoidSpheres } from './clusters/heraldEffects';
 import { applyGrappleHunterAI } from './clusters/grappleHunterAi';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
@@ -150,6 +152,9 @@ export function tick(world: WorldState): void {
   // 0.5d3. Crimson Wizard AI — hovering fire boss state machine
   applyCrimsonWizardAI(world);
 
+  // 0.5d4. The Herald AI — void wizard boss state machine
+  applyHeraldAI(world);
+
   // 0.5e. Grapple Hunter AI — grapple attack state machine
   applyGrappleHunterAI(world);
 
@@ -217,6 +222,9 @@ export function tick(world: WorldState): void {
 
   // 4.57. Crimson Wizard fire/smoke/projectile buffers
   tickCrimsonWizardEffects(world);
+
+  // 4.58. The Herald — Void Sphere projectile movement/despawn/damage
+  tickVoidSpheres(world);
 
   // 4.6. Lava AoE burn — heat damage to nearby enemy particles
   applyLavaEffect(world);

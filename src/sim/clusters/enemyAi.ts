@@ -47,6 +47,7 @@ export function applyEnemyAI(world: WorldState): void {
     if (cluster.isRadiantTetherFlag === 1) continue;
     if (cluster.isRadiantWebFlag === 1) continue;
     if (cluster.isCrimsonWizardFlag === 1) continue;
+    if (cluster.isHeraldFlag === 1) continue;
     if (cluster.isGrappleHunterFlag === 1) continue;
     if (cluster.isBubbleEnemyFlag === 1) continue;
     if (cluster.isDustConstellationFlag === 1) continue;

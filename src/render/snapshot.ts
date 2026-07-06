@@ -107,6 +107,7 @@ interface _ReusableBacking {
   cwSmokeAliveFlag: Uint8Array;
   cwProjectileAliveFlag: Uint8Array;
   cwTelegraphAliveFlag: Uint8Array;
+  voidSphereAliveFlag: Uint8Array;
   // Arrow Weave scalar fields updated each frame
   isArrowWeaveLoadingFlag: 0 | 1;
   arrowWeaveCurrentMoteCount: number;
@@ -325,6 +326,10 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     cwTelegraphMaxTicks:         world.cwTelegraphMaxTicks,
     cwTelegraphKind:             world.cwTelegraphKind,
     cwTelegraphAliveFlag:        world.cwTelegraphAliveFlag,
+    voidSphereXWorld:            world.voidSphereXWorld,
+    voidSphereYWorld:            world.voidSphereYWorld,
+    voidSpherePulsePhaseRad:     world.voidSpherePulsePhaseRad,
+    voidSphereAliveFlag:         world.voidSphereAliveFlag,
     architectBlockCount:         world.architectBlockCount,
     architectBlockXWorld:        world.architectBlockXWorld,
     architectBlockYWorld:        world.architectBlockYWorld,
@@ -663,6 +668,10 @@ export function refreshSnapshotWorldArrayRefs(
   raw.cwTelegraphMaxTicks            = world.cwTelegraphMaxTicks;
   raw.cwTelegraphKind                = world.cwTelegraphKind;
   raw.cwTelegraphAliveFlag           = world.cwTelegraphAliveFlag;
+  raw.voidSphereXWorld               = world.voidSphereXWorld;
+  raw.voidSphereYWorld               = world.voidSphereYWorld;
+  raw.voidSpherePulsePhaseRad        = world.voidSpherePulsePhaseRad;
+  raw.voidSphereAliveFlag            = world.voidSphereAliveFlag;
   raw.architectBlockXWorld           = world.architectBlockXWorld;
   raw.architectBlockYWorld           = world.architectBlockYWorld;
   raw.architectBlockHealth           = world.architectBlockHealth;

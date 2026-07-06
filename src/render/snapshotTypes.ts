@@ -289,6 +289,12 @@ export interface WorldSnapshot {
   readonly cwTelegraphKind: Uint8Array;
   readonly cwTelegraphAliveFlag: Uint8Array;
 
+  // The Herald — Void Sphere projectile arrays.
+  readonly voidSphereXWorld: Float32Array;
+  readonly voidSphereYWorld: Float32Array;
+  readonly voidSpherePulsePhaseRad: Float32Array;
+  readonly voidSphereAliveFlag: Uint8Array;
+
   // ── Dust Leech mote arrays ─────────────────────────────────────────────────
   readonly dlMoteAngleRad: Float32Array;
   readonly dlMotePulsePhaseRad: Float32Array;

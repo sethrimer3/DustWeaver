@@ -89,6 +89,11 @@ export interface ClusterSnapshot {
   readonly crimsonWizardStateTicks: number;
   readonly crimsonWizardFacingX: number;
   readonly crimsonWizardTelegraphTicks: number;
+  /** 1 if this cluster is The Herald boss. */
+  readonly isHeraldFlag: 0 | 1;
+  readonly heraldState: number;
+  readonly heraldStateTicks: number;
+  readonly heraldFacingX: number;
   /** 1 if this cluster is a grapple hunter. */
   readonly isGrappleHunterFlag: 0 | 1;
   /** Current grapple hunter state (0-4). */

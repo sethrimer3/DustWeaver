@@ -379,6 +379,23 @@ export interface ClusterState {
   /** 1 once the scheduled meteor has spawned. */
   crimsonWizardMeteorSpawnedFlag: Uint8Array;
 
+  /** 1 if this cluster is The Herald — void wizard boss. */
+  isHeraldFlag: 0 | 1;
+  /** Current Herald state (idle/cast/recover). */
+  heraldState: number;
+  /** Ticks elapsed in the current Herald state. */
+  heraldStateTicks: number;
+  /** Horizontal facing direction, -1 left or 1 right. */
+  heraldFacingX: number;
+  /** Boss horizontal velocity (world units/tick). */
+  heraldVelXWorld: number;
+  /** Boss vertical velocity (world units/tick). */
+  heraldVelYWorld: number;
+  /** Organic hover phase for deterministic idle-movement variation. */
+  heraldHoverPhaseRad: number;
+  /** Countdown ticks before the next Void Sphere cast can start. */
+  heraldAttackCooldownTicks: number;
+
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
   isFacingLeftFlag: 0 | 1;
@@ -1023,6 +1040,14 @@ export function createClusterState(
     crimsonWizardMeteorSpawnYWorld: new Float32Array(MAX_CW_METEOR_SCHEDULE),
     crimsonWizardMeteorSpawnTick: new Uint16Array(MAX_CW_METEOR_SCHEDULE),
     crimsonWizardMeteorSpawnedFlag: new Uint8Array(MAX_CW_METEOR_SCHEDULE),
+    isHeraldFlag: 0,
+    heraldState: 0,
+    heraldStateTicks: 0,
+    heraldFacingX: 1,
+    heraldVelXWorld: 0,
+    heraldVelYWorld: 0,
+    heraldHoverPhaseRad: 0,
+    heraldAttackCooldownTicks: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterStateTicks: 0,

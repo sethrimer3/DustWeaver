@@ -58,6 +58,7 @@ import {
   MAX_CW_SMOKE,
   MAX_CW_TELEGRAPHS,
 } from './clusters/crimsonWizardConfig';
+import { MAX_VOID_SPHERES } from './clusters/heraldConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -134,6 +135,7 @@ export {
   MAX_CW_SMOKE,
   MAX_CW_TELEGRAPHS,
 } from './clusters/crimsonWizardConfig';
+export { MAX_VOID_SPHERES } from './clusters/heraldConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -581,6 +583,15 @@ export interface HazardWorldState {
   cwTelegraphMaxTicks: Uint16Array;
   cwTelegraphKind: Uint8Array;
   cwTelegraphAliveFlag: Uint8Array;
+
+  // The Herald — Void Sphere projectile buffers (pass through walls/terrain).
+  voidSphereXWorld: Float32Array;
+  voidSphereYWorld: Float32Array;
+  voidSphereVelXWorld: Float32Array;
+  voidSphereVelYWorld: Float32Array;
+  voidSphereAgeTicks: Uint16Array;
+  voidSpherePulsePhaseRad: Float32Array;
+  voidSphereAliveFlag: Uint8Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -762,5 +773,12 @@ export function createHazardWorldState(): HazardWorldState {
     cwTelegraphMaxTicks:          new Uint16Array(MAX_CW_TELEGRAPHS),
     cwTelegraphKind:              new Uint8Array(MAX_CW_TELEGRAPHS),
     cwTelegraphAliveFlag:         new Uint8Array(MAX_CW_TELEGRAPHS),
+    voidSphereXWorld:             new Float32Array(MAX_VOID_SPHERES),
+    voidSphereYWorld:             new Float32Array(MAX_VOID_SPHERES),
+    voidSphereVelXWorld:          new Float32Array(MAX_VOID_SPHERES),
+    voidSphereVelYWorld:          new Float32Array(MAX_VOID_SPHERES),
+    voidSphereAgeTicks:           new Uint16Array(MAX_VOID_SPHERES),
+    voidSpherePulsePhaseRad:      new Float32Array(MAX_VOID_SPHERES),
+    voidSphereAliveFlag:          new Uint8Array(MAX_VOID_SPHERES),
   };
 }

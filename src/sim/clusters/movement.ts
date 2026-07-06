@@ -210,6 +210,8 @@ export function applyClusterMovement(world: WorldState): void {
       }
     } else if (cluster.isCrimsonWizardFlag === 1) {
       // Crimson Wizard movement is integrated by crimsonWizardAi.ts.
+    } else if (cluster.isHeraldFlag === 1) {
+      // The Herald movement is integrated by heraldAi.ts.
     } else if (cluster.isBubbleEnemyFlag === 1) {
       // ── Bubble enemy: 2D drift + world-bounds clamp (no wall collision) ─────
       cluster.positionXWorld += cluster.velocityXWorld * dtSec;
