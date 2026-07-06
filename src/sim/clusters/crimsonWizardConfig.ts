@@ -1,8 +1,7 @@
-import { PLAYER_HALF_HEIGHT_WORLD, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
-
 export const CW_HP = 48;
-export const CW_HALF_W = PLAYER_HALF_WIDTH_WORLD;
-export const CW_HALF_H = PLAYER_HALF_HEIGHT_WORLD;
+/** Boss hitbox matches the 32x32 sprite sheet exactly. */
+export const CW_HALF_W = 16;
+export const CW_HALF_H = 16;
 
 export const CW_STATE_IDLE = 0;
 export const CW_STATE_TIDAL_WAVE = 1;
@@ -14,13 +13,13 @@ export const CW_STATE_RECOVER = 5;
 export const CW_STATE_GROUND_FIRE_BALLS = 6;
 
 // ── Grounded fireball cast animation timeline (all values in ticks @ 60 ticks/sec) ──
-/** Brief idle stand on the ground before the attack wind-up begins. */
-export const CW_GROUND_IDLE_TICKS = 10;
+/** Idle stand on the ground before the attack wind-up begins — 3 seconds. */
+export const CW_GROUND_IDLE_TICKS = 180;
 /** Ticks each attacking frame (1-6) is held while winding up / winding down. */
 export const CW_GROUND_ATTACK_FRAME_TICKS = 6;
 export const CW_ATTACK_FRAME_COUNT = 6;
 /** Ticks the boss holds on attacking frame 6 while the fireball volley is cast. */
-export const CW_GROUND_CAST_HOLD_TICKS = 64;
+export const CW_GROUND_CAST_HOLD_TICKS = 72;
 /** Pause after the spell finishes casting, before winding back down to idle (1 second). */
 export const CW_GROUND_POST_CAST_WAIT_TICKS = 60;
 export const CW_GROUND_WIND_UP_TICKS = CW_ATTACK_FRAME_COUNT * CW_GROUND_ATTACK_FRAME_TICKS;
@@ -28,12 +27,20 @@ export const CW_GROUND_WIND_DOWN_TICKS = CW_ATTACK_FRAME_COUNT * CW_GROUND_ATTAC
 export const CW_GROUND_ATTACK_DURATION_TICKS =
   CW_GROUND_IDLE_TICKS + CW_GROUND_WIND_UP_TICKS + CW_GROUND_CAST_HOLD_TICKS + CW_GROUND_POST_CAST_WAIT_TICKS + CW_GROUND_WIND_DOWN_TICKS;
 
-export const CW_GROUND_FIREBALL_COUNT = 3;
-export const CW_GROUND_FIREBALL_INTERVAL_TICKS = 18;
+/** The grounded cast is the boss's "more powerful" spell: a wide fan of fireballs. */
+export const CW_GROUND_FIREBALL_COUNT = 6;
+export const CW_GROUND_FIREBALL_INTERVAL_TICKS = 9;
+export const CW_GROUND_FIREBALL_SPREAD_RADIANS = 0.55;
+
+/** Chance (0-1) that the boss lands to cast its ground spell instead of picking a flying attack. */
+export const CW_GROUND_ATTACK_CHANCE = 0.5;
 
 /** Flying (airborne, non-grounded) attacking-above sprite cycle. */
 export const CW_ATTACK_ABOVE_FRAME_COUNT = 3;
 export const CW_FLYING_ABOVE_FRAME_TICKS = 10;
+
+/** How far ahead (world units) the boss probes for walls while flying, for avoidance steering. */
+export const CW_WALL_AVOID_PROBE_DIST = 22;
 
 export const CW_PHASE_1 = 1;
 export const CW_PHASE_2 = 2;

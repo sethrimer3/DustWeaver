@@ -42,6 +42,8 @@ import {
   CW_STATE_TIDAL_WAVE,
   CW_GROUND_FIREBALL_COUNT,
   CW_GROUND_FIREBALL_INTERVAL_TICKS,
+  CW_GROUND_FIREBALL_SPREAD_RADIANS,
+  CW_GROUND_ATTACK_CHANCE,
   CW_TELEGRAPH_KIND_CHARGE,
   CW_TELEGRAPH_KIND_METEOR,
   CW_TELEGRAPH_KIND_PILLAR,
@@ -53,11 +55,14 @@ import {
   CW_TIDAL_WAVE_TELEGRAPH_TICKS,
   CW_TOO_CLOSE_DISTANCE,
   CW_WALL_AVOID_DISTANCE,
+  CW_WALL_AVOID_PROBE_DIST,
   MAX_CW_METEOR_SCHEDULE,
 } from './crimsonWizardConfig';
 import { ClusterState } from './state';
 import { spawnCrimsonFireDust, spawnCrimsonFireball, spawnCrimsonMeteor, spawnCrimsonTelegraph } from './crimsonWizardEffects';
 import { isCrimsonWizardGroundCastDone, isCrimsonWizardGroundCasting } from './crimsonWizardAnimation';
+import { hasWallOverlapAtPosition } from './movementAxisResolvers';
+import { raycastWalls } from './grappleShared';
 
 export type CrimsonWizardPhase = typeof CW_PHASE_1 | typeof CW_PHASE_2 | typeof CW_PHASE_3;
 
@@ -150,25 +155,22 @@ const PHASE_TUNING: readonly CrimsonWizardPhaseTuning[] = [
 
 const PHASE_ATTACK_WEIGHTS: Readonly<Record<CrimsonWizardPhase, Readonly<Record<number, number>>>> = {
   [CW_PHASE_1]: {
-    [CW_STATE_FIRE_BALLS]: 36,
-    [CW_STATE_GROUND_FIRE_BALLS]: 20,
-    [CW_STATE_FIRE_PILLARS]: 26,
-    [CW_STATE_TIDAL_WAVE]: 12,
+    [CW_STATE_FIRE_BALLS]: 46,
+    [CW_STATE_FIRE_PILLARS]: 32,
+    [CW_STATE_TIDAL_WAVE]: 16,
     [CW_STATE_METEORS]: 6,
   },
   [CW_PHASE_2]: {
-    [CW_STATE_FIRE_BALLS]: 24,
-    [CW_STATE_GROUND_FIRE_BALLS]: 18,
-    [CW_STATE_FIRE_PILLARS]: 24,
-    [CW_STATE_METEORS]: 20,
-    [CW_STATE_TIDAL_WAVE]: 14,
-  },
-  [CW_PHASE_3]: {
-    [CW_STATE_FIRE_BALLS]: 20,
-    [CW_STATE_GROUND_FIRE_BALLS]: 16,
-    [CW_STATE_FIRE_PILLARS]: 24,
+    [CW_STATE_FIRE_BALLS]: 30,
+    [CW_STATE_FIRE_PILLARS]: 30,
     [CW_STATE_METEORS]: 24,
     [CW_STATE_TIDAL_WAVE]: 16,
+  },
+  [CW_PHASE_3]: {
+    [CW_STATE_FIRE_BALLS]: 26,
+    [CW_STATE_FIRE_PILLARS]: 28,
+    [CW_STATE_METEORS]: 28,
+    [CW_STATE_TIDAL_WAVE]: 18,
   },
 };
 
