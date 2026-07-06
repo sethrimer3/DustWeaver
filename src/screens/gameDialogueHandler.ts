@@ -88,15 +88,23 @@ export function checkDialogueTriggers(
                    playerYBlock >= trig.yBlock && playerYBlock < trig.yBlock + trig.hBlock;
     if (!inZone) continue;
 
-    firedDialogueTriggerUids.add(triggerIndex);
     // Use the pre-converted runtime Conversation (no allocation in hot path).
     const conv = cachedRoomConversations[triggerIndex];
-    if (conv && conv.entries.length > 0) {
-      startDialogue(dialogueState, conv);
-      const firstEntry = conv.entries[0];
-      const isLast = conv.entries.length === 1;
-      dialogueRenderer.show(firstEntry, conv.title, isLast);
+    if (!conv || conv.entries.length === 0) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          `[gameDialogueHandler] Skipping dialogue trigger ${triggerIndex} in room "${currentRoom.id}": ` +
+          'no valid conversation or entries.',
+        );
+      }
+      continue;
     }
+
+    firedDialogueTriggerUids.add(triggerIndex);
+    startDialogue(dialogueState, conv);
+    const firstEntry = conv.entries[0];
+    const isLast = conv.entries.length === 1;
+    dialogueRenderer.show(firstEntry, conv.title, isLast);
     break;
   }
 }
