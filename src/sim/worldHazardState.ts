@@ -58,7 +58,12 @@ import {
   MAX_CW_SMOKE,
   MAX_CW_TELEGRAPHS,
 } from './clusters/crimsonWizardConfig';
-import { MAX_VOID_SPHERES } from './clusters/heraldConfig';
+import {
+  MAX_PHANTASMAL_BLOCKS,
+  MAX_PHANTASMAL_SHOCKWAVES,
+  MAX_PHANTASMAL_SPIKES,
+  MAX_VOID_SPHERES,
+} from './clusters/heraldConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -135,7 +140,12 @@ export {
   MAX_CW_SMOKE,
   MAX_CW_TELEGRAPHS,
 } from './clusters/crimsonWizardConfig';
-export { MAX_VOID_SPHERES } from './clusters/heraldConfig';
+export {
+  MAX_PHANTASMAL_BLOCKS,
+  MAX_PHANTASMAL_SHOCKWAVES,
+  MAX_PHANTASMAL_SPIKES,
+  MAX_VOID_SPHERES,
+} from './clusters/heraldConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -592,6 +602,23 @@ export interface HazardWorldState {
   voidSphereAgeTicks: Uint16Array;
   voidSpherePulsePhaseRad: Float32Array;
   voidSphereAliveFlag: Uint8Array;
+
+  // The Void Herald - Phantasmal Geometry buffers.
+  phantasmalSpikeXWorld: Float32Array;
+  phantasmalSpikeYWorld: Float32Array;
+  /** Direction each spike points: 0=up, 1=down, 2=left, 3=right. */
+  phantasmalSpikeDirection: Uint8Array;
+  phantasmalSpikeAgeTicks: Uint16Array;
+  phantasmalSpikeAliveFlag: Uint8Array;
+  phantasmalBlockXWorld: Float32Array;
+  phantasmalBlockYWorld: Float32Array;
+  phantasmalBlockAgeTicks: Uint16Array;
+  phantasmalBlockFlashTicks: Uint8Array;
+  phantasmalBlockAliveFlag: Uint8Array;
+  phantasmalShockwaveXWorld: Float32Array;
+  phantasmalShockwaveYWorld: Float32Array;
+  phantasmalShockwaveAgeTicks: Uint16Array;
+  phantasmalShockwaveAliveFlag: Uint8Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -780,5 +807,19 @@ export function createHazardWorldState(): HazardWorldState {
     voidSphereAgeTicks:           new Uint16Array(MAX_VOID_SPHERES),
     voidSpherePulsePhaseRad:      new Float32Array(MAX_VOID_SPHERES),
     voidSphereAliveFlag:          new Uint8Array(MAX_VOID_SPHERES),
+    phantasmalSpikeXWorld:        new Float32Array(MAX_PHANTASMAL_SPIKES),
+    phantasmalSpikeYWorld:        new Float32Array(MAX_PHANTASMAL_SPIKES),
+    phantasmalSpikeDirection:     new Uint8Array(MAX_PHANTASMAL_SPIKES),
+    phantasmalSpikeAgeTicks:      new Uint16Array(MAX_PHANTASMAL_SPIKES),
+    phantasmalSpikeAliveFlag:     new Uint8Array(MAX_PHANTASMAL_SPIKES),
+    phantasmalBlockXWorld:        new Float32Array(MAX_PHANTASMAL_BLOCKS),
+    phantasmalBlockYWorld:        new Float32Array(MAX_PHANTASMAL_BLOCKS),
+    phantasmalBlockAgeTicks:      new Uint16Array(MAX_PHANTASMAL_BLOCKS),
+    phantasmalBlockFlashTicks:    new Uint8Array(MAX_PHANTASMAL_BLOCKS),
+    phantasmalBlockAliveFlag:     new Uint8Array(MAX_PHANTASMAL_BLOCKS),
+    phantasmalShockwaveXWorld:    new Float32Array(MAX_PHANTASMAL_SHOCKWAVES),
+    phantasmalShockwaveYWorld:    new Float32Array(MAX_PHANTASMAL_SHOCKWAVES),
+    phantasmalShockwaveAgeTicks:  new Uint16Array(MAX_PHANTASMAL_SHOCKWAVES),
+    phantasmalShockwaveAliveFlag: new Uint8Array(MAX_PHANTASMAL_SHOCKWAVES),
   };
 }

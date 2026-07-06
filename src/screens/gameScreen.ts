@@ -2541,8 +2541,8 @@ export function startGameScreen(
       requestAnimationFrame(tick);
     };
 
-    // ── DEV-only spawn hook for The Herald boss ──────────────────────────
-    // `window.__dwSpawnHerald(xBlock?, yBlock?)` — spawns a Herald directly
+    // ── DEV-only spawn hook for The Void Herald boss ─────────────────────
+    // `window.__dwSpawnHerald(xBlock?, yBlock?)` — spawns The Void Herald directly
     // into the running world at the given block position (defaults to the
     // room center), bypassing the room-def enemy list entirely.
     (w as DwWin & { __dwSpawnHerald?: (xBlock?: number, yBlock?: number) => number }).__dwSpawnHerald =
@@ -2550,8 +2550,7 @@ export function startGameScreen(
         const bx = xBlock ?? Math.floor(world.worldWidthWorld / BLOCK_SIZE_MEDIUM / 2);
         const by = yBlock ?? Math.floor(world.worldHeightWorld / BLOCK_SIZE_MEDIUM / 2);
         const entityId = spawnHeraldForTesting(world, bx * BLOCK_SIZE_MEDIUM, by * BLOCK_SIZE_MEDIUM);
-        // eslint-disable-next-line no-console
-        console.log(`[dev] spawned The Herald (entityId=${entityId}) at block (${bx}, ${by})`);
+        console.log(`[dev] spawned The Void Herald (entityId=${entityId}) at block (${bx}, ${by})`);
         return entityId;
       };
   }

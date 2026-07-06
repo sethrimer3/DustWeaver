@@ -28,7 +28,7 @@ import { applyRadiantWebAI } from './clusters/radiantWebAi';
 import { applyCrimsonWizardAI } from './clusters/crimsonWizardAi';
 import { tickCrimsonWizardEffects } from './clusters/crimsonWizardEffects';
 import { applyHeraldAI } from './clusters/heraldAi';
-import { tickVoidSpheres } from './clusters/heraldEffects';
+import { tickPhantasmalGeometry, tickVoidSpheres } from './clusters/heraldEffects';
 import { applyGrappleHunterAI } from './clusters/grappleHunterAi';
 import { applyElementForces } from './particles/elementForces';
 import { applyFluidDisturbance } from './particles/disturbance';
@@ -225,6 +225,7 @@ export function tick(world: WorldState): void {
 
   // 4.58. The Herald — Void Sphere projectile movement/despawn/damage
   tickVoidSpheres(world);
+  tickPhantasmalGeometry(world);
 
   // 4.6. Lava AoE burn — heat damage to nearby enemy particles
   applyLavaEffect(world);

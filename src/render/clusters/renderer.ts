@@ -25,7 +25,7 @@ import {
 } from './characterSprites';
 import { renderGridBlockEnemy, renderGridSnakeEnemy } from './gridBlockEnemyRenderer';
 import { renderCrimsonWizardBody, renderCrimsonWizardEffects } from './crimsonWizardRenderer';
-import { renderHeraldBody, renderVoidSpheres } from './heraldRenderer';
+import { renderHeraldBody, renderPhantasmalGeometry, renderVoidSpheres } from './heraldRenderer';
 import {
   getFlyingEyeColor,
   renderFlyingEye,
@@ -110,6 +110,7 @@ export function renderClusters(
   // Fading webs render below clusters (behind everything else in this pass)
   renderWebSpiderFadingWebs(ctx, snapshot, scalePx, offsetXPx, offsetYPx);
   renderCrimsonWizardEffects(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+  renderPhantasmalGeometry(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderVoidSpheres(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   // Pixel-art safety: simulation/camera may be subpixel, but sprite draws
   // should land on integer screen pixels to avoid texture interpolation blur.

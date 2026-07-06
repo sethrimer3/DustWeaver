@@ -108,6 +108,9 @@ interface _ReusableBacking {
   cwProjectileAliveFlag: Uint8Array;
   cwTelegraphAliveFlag: Uint8Array;
   voidSphereAliveFlag: Uint8Array;
+  phantasmalSpikeAliveFlag: Uint8Array;
+  phantasmalBlockAliveFlag: Uint8Array;
+  phantasmalShockwaveAliveFlag: Uint8Array;
   // Arrow Weave scalar fields updated each frame
   isArrowWeaveLoadingFlag: 0 | 1;
   arrowWeaveCurrentMoteCount: number;
@@ -330,6 +333,20 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     voidSphereYWorld:            world.voidSphereYWorld,
     voidSpherePulsePhaseRad:     world.voidSpherePulsePhaseRad,
     voidSphereAliveFlag:         world.voidSphereAliveFlag,
+    phantasmalSpikeXWorld:       world.phantasmalSpikeXWorld,
+    phantasmalSpikeYWorld:       world.phantasmalSpikeYWorld,
+    phantasmalSpikeDirection:    world.phantasmalSpikeDirection,
+    phantasmalSpikeAgeTicks:     world.phantasmalSpikeAgeTicks,
+    phantasmalSpikeAliveFlag:    world.phantasmalSpikeAliveFlag,
+    phantasmalBlockXWorld:       world.phantasmalBlockXWorld,
+    phantasmalBlockYWorld:       world.phantasmalBlockYWorld,
+    phantasmalBlockAgeTicks:     world.phantasmalBlockAgeTicks,
+    phantasmalBlockFlashTicks:   world.phantasmalBlockFlashTicks,
+    phantasmalBlockAliveFlag:    world.phantasmalBlockAliveFlag,
+    phantasmalShockwaveXWorld:   world.phantasmalShockwaveXWorld,
+    phantasmalShockwaveYWorld:   world.phantasmalShockwaveYWorld,
+    phantasmalShockwaveAgeTicks: world.phantasmalShockwaveAgeTicks,
+    phantasmalShockwaveAliveFlag: world.phantasmalShockwaveAliveFlag,
     architectBlockCount:         world.architectBlockCount,
     architectBlockXWorld:        world.architectBlockXWorld,
     architectBlockYWorld:        world.architectBlockYWorld,
@@ -672,6 +689,20 @@ export function refreshSnapshotWorldArrayRefs(
   raw.voidSphereYWorld               = world.voidSphereYWorld;
   raw.voidSpherePulsePhaseRad        = world.voidSpherePulsePhaseRad;
   raw.voidSphereAliveFlag            = world.voidSphereAliveFlag;
+  raw.phantasmalSpikeXWorld          = world.phantasmalSpikeXWorld;
+  raw.phantasmalSpikeYWorld          = world.phantasmalSpikeYWorld;
+  raw.phantasmalSpikeDirection       = world.phantasmalSpikeDirection;
+  raw.phantasmalSpikeAgeTicks        = world.phantasmalSpikeAgeTicks;
+  raw.phantasmalSpikeAliveFlag       = world.phantasmalSpikeAliveFlag;
+  raw.phantasmalBlockXWorld          = world.phantasmalBlockXWorld;
+  raw.phantasmalBlockYWorld          = world.phantasmalBlockYWorld;
+  raw.phantasmalBlockAgeTicks        = world.phantasmalBlockAgeTicks;
+  raw.phantasmalBlockFlashTicks      = world.phantasmalBlockFlashTicks;
+  raw.phantasmalBlockAliveFlag       = world.phantasmalBlockAliveFlag;
+  raw.phantasmalShockwaveXWorld      = world.phantasmalShockwaveXWorld;
+  raw.phantasmalShockwaveYWorld      = world.phantasmalShockwaveYWorld;
+  raw.phantasmalShockwaveAgeTicks    = world.phantasmalShockwaveAgeTicks;
+  raw.phantasmalShockwaveAliveFlag   = world.phantasmalShockwaveAliveFlag;
   raw.architectBlockXWorld           = world.architectBlockXWorld;
   raw.architectBlockYWorld           = world.architectBlockYWorld;
   raw.architectBlockHealth           = world.architectBlockHealth;

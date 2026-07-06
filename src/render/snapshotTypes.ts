@@ -294,6 +294,20 @@ export interface WorldSnapshot {
   readonly voidSphereYWorld: Float32Array;
   readonly voidSpherePulsePhaseRad: Float32Array;
   readonly voidSphereAliveFlag: Uint8Array;
+  readonly phantasmalSpikeXWorld: Float32Array;
+  readonly phantasmalSpikeYWorld: Float32Array;
+  readonly phantasmalSpikeDirection: Uint8Array;
+  readonly phantasmalSpikeAgeTicks: Uint16Array;
+  readonly phantasmalSpikeAliveFlag: Uint8Array;
+  readonly phantasmalBlockXWorld: Float32Array;
+  readonly phantasmalBlockYWorld: Float32Array;
+  readonly phantasmalBlockAgeTicks: Uint16Array;
+  readonly phantasmalBlockFlashTicks: Uint8Array;
+  readonly phantasmalBlockAliveFlag: Uint8Array;
+  readonly phantasmalShockwaveXWorld: Float32Array;
+  readonly phantasmalShockwaveYWorld: Float32Array;
+  readonly phantasmalShockwaveAgeTicks: Uint16Array;
+  readonly phantasmalShockwaveAliveFlag: Uint8Array;
 
   // ── Dust Leech mote arrays ─────────────────────────────────────────────────
   readonly dlMoteAngleRad: Float32Array;

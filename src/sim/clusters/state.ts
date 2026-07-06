@@ -395,6 +395,10 @@ export interface ClusterState {
   heraldHoverPhaseRad: number;
   /** Countdown ticks before the next Void Sphere cast can start. */
   heraldAttackCooldownTicks: number;
+  /** Current selected Void Herald attack package. */
+  heraldAttackKind: number;
+  /** Deterministic attack cycle counter. */
+  heraldNextAttackIndex: number;
 
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
@@ -1048,6 +1052,8 @@ export function createClusterState(
     heraldVelYWorld: 0,
     heraldHoverPhaseRad: 0,
     heraldAttackCooldownTicks: 0,
+    heraldAttackKind: 0,
+    heraldNextAttackIndex: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterStateTicks: 0,
