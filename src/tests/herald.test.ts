@@ -5,9 +5,12 @@ import { createClusterState } from '../sim/clusters/state';
 import { applyHeraldAI, steerHeraldMovement } from '../sim/clusters/heraldAi';
 import {
   clearPhantasmalGeometry,
+  classifyVoidLaserSegmentT,
   collectPhantasmalSpikeSurfaceCandidates,
+  projectPointToVoidLaser,
   spawnPhantasmalBlocks,
   spawnPhantasmalSpikes,
+  spawnVoidLaserWeb,
   spawnVoidSphere,
   tickPhantasmalGeometry,
   tickVoidSpheres,
@@ -16,15 +19,25 @@ import { applyVoidLensDistortion } from '../render/effects/voidLensDistortion';
 import {
   HERALD_ATTACK_COOLDOWN_TICKS,
   HERALD_CAST_TICKS,
+  HERALD_ATTACK_VOID_LASER_WEB,
   HERALD_RECOVER_TICKS,
   HERALD_ROOM_MARGIN,
   MAX_PHANTASMAL_BLOCKS,
   MAX_PHANTASMAL_SPIKES,
+  MAX_VOID_LASER_DUST,
+  MAX_VOID_LASERS,
   MAX_VOID_SPHERES,
   PHANTASMAL_BLOCK_BREAK_SPEED,
   PHANTASMAL_BLOCK_FORM_TICKS,
   PHANTASMAL_BLOCK_LIFETIME_TICKS,
   PHANTASMAL_SPIKE_TELEGRAPH_TICKS,
+  VOID_LASER_CENTER_SAFE_MAX_T,
+  VOID_LASER_CENTER_SAFE_MIN_T,
+  VOID_LASER_DUST_PER_DISSIPATION,
+  VOID_LASER_ENDPOINT_BURY_DEPTH,
+  VOID_LASER_MIN_LENGTH_WORLD,
+  VOID_LASER_TELEGRAPH_TICKS,
+  VOID_LASER_TOTAL_TICKS,
   VOID_HERALD_BOSS_NAME,
   VOID_SPHERE_BOUNDS_MARGIN_WORLD,
   VOID_SPHERE_LIFETIME_TICKS,
@@ -45,6 +58,28 @@ function countAlive(flags: Uint8Array): number {
     if (flags[i] === 1) count += 1;
   }
   return count;
+}
+
+function addLaserTestBounds(world: ReturnType<typeof createWorldState>): void {
+  world.worldWidthWorld = 240;
+  world.worldHeightWorld = 180;
+  addWall(world, 0, 0, 240, 8);
+  addWall(world, 0, 172, 240, 8);
+  addWall(world, 0, 0, 8, 180);
+  addWall(world, 232, 0, 8, 180);
+}
+
+function setTestLaser(world: ReturnType<typeof createWorldState>, ax: number, ay: number, bx: number, by: number, age: number): void {
+  world.voidLaserAliveFlag[0] = 1;
+  world.voidLaserAgeTicks[0] = age;
+  world.voidLaserVisibleStartXWorld[0] = ax;
+  world.voidLaserVisibleStartYWorld[0] = ay;
+  world.voidLaserVisibleEndXWorld[0] = bx;
+  world.voidLaserVisibleEndYWorld[0] = by;
+  world.voidLaserStartXWorld[0] = ax - VOID_LASER_ENDPOINT_BURY_DEPTH;
+  world.voidLaserStartYWorld[0] = ay;
+  world.voidLaserEndXWorld[0] = bx + VOID_LASER_ENDPOINT_BURY_DEPTH;
+  world.voidLaserEndYWorld[0] = by;
 }
 
 test('canonical boss name is The Void Herald', () => {
@@ -95,6 +130,17 @@ test('Herald cast cycle fires a Void Sphere and returns to idle', () => {
   }
   assert.equal(aliveCount, 1);
   assert.equal(boss.heraldAttackCooldownTicks, HERALD_ATTACK_COOLDOWN_TICKS);
+});
+
+test('Void Laser Web attack can be scheduled by The Void Herald', () => {
+  const boss = createClusterState(2, 120, 80, 0, 40);
+  boss.isHeraldFlag = 1;
+  const attacks: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    attacks.push(boss.heraldNextAttackIndex % 4);
+    boss.heraldNextAttackIndex += 1;
+  }
+  assert.ok(attacks.includes(HERALD_ATTACK_VOID_LASER_WEB));
 });
 
 test('Void Spheres move through walls instead of colliding with them', () => {
@@ -302,4 +348,115 @@ test('Active Phantasmal Geometry counts stay capped', () => {
   assert.ok(blocks <= MAX_PHANTASMAL_BLOCKS);
   assert.equal(world.phantasmalSpikeAliveFlag.length, MAX_PHANTASMAL_SPIKES);
   assert.equal(world.phantasmalBlockAliveFlag.length, MAX_PHANTASMAL_BLOCKS);
+});
+
+test('Void Laser Web spawns valid buried surface-to-surface lasers', () => {
+  const world = createWorldState(1000 / 60, 123);
+  addLaserTestBounds(world);
+  const player = createClusterState(1, 120, 90, 1, 10);
+  const spawned = spawnVoidLaserWeb(world, 3, player);
+
+  assert.ok(spawned > 0);
+  assert.ok(spawned <= MAX_VOID_LASERS);
+  for (let i = 0; i < world.voidLaserAliveFlag.length; i++) {
+    if (world.voidLaserAliveFlag[i] === 0) continue;
+    const dx = world.voidLaserVisibleEndXWorld[i] - world.voidLaserVisibleStartXWorld[i];
+    const dy = world.voidLaserVisibleEndYWorld[i] - world.voidLaserVisibleStartYWorld[i];
+    assert.ok(Math.sqrt(dx * dx + dy * dy) >= VOID_LASER_MIN_LENGTH_WORLD);
+    const buryA = Math.hypot(world.voidLaserStartXWorld[i] - world.voidLaserVisibleStartXWorld[i], world.voidLaserStartYWorld[i] - world.voidLaserVisibleStartYWorld[i]);
+    const buryB = Math.hypot(world.voidLaserEndXWorld[i] - world.voidLaserVisibleEndXWorld[i], world.voidLaserEndYWorld[i] - world.voidLaserVisibleEndYWorld[i]);
+    assert.equal(Math.round(buryA), VOID_LASER_ENDPOINT_BURY_DEPTH);
+    assert.equal(Math.round(buryB), VOID_LASER_ENDPOINT_BURY_DEPTH);
+  }
+});
+
+test('Void Laser Web rejects rooms without beams above minimum length', () => {
+  const world = createWorldState(1000 / 60, 123);
+  world.worldWidthWorld = 60;
+  world.worldHeightWorld = 60;
+  addWall(world, 0, 0, 60, 8);
+  addWall(world, 0, 52, 60, 8);
+  assert.equal(spawnVoidLaserWeb(world, 2), 0);
+});
+
+test('Void Laser segment center classification uses the middle 25 percent', () => {
+  assert.equal(classifyVoidLaserSegmentT(VOID_LASER_CENTER_SAFE_MIN_T), 1);
+  assert.equal(classifyVoidLaserSegmentT(0.5), 1);
+  assert.equal(classifyVoidLaserSegmentT(VOID_LASER_CENTER_SAFE_MAX_T), 1);
+  assert.equal(classifyVoidLaserSegmentT(VOID_LASER_CENTER_SAFE_MIN_T - 0.01), 0);
+  assert.equal(classifyVoidLaserSegmentT(VOID_LASER_CENTER_SAFE_MAX_T + 0.01), 0);
+  const hit = projectPointToVoidLaser(50, 5, 0, 0, 100, 0);
+  assert.equal(hit.t, 0.5);
+  assert.equal(hit.distanceWorld, 5);
+});
+
+test('Void Laser telegraph does not damage arrest momentum or deactivate', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 50, 50, 1, 10);
+  world.clusters.push(player);
+  setTestLaser(world, 0, 50, 100, 50, VOID_LASER_TELEGRAPH_TICKS - 2);
+  player.velocityXWorld = 320;
+
+  tickPhantasmalGeometry(world);
+
+  assert.equal(world.voidLaserAliveFlag[0], 1);
+  assert.equal(player.invulnerabilityTicks, 0);
+  assert.equal(player.velocityXWorld, 320);
+});
+
+test('Void Laser gold center dissipates safely with gold dust', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 50, 50, 1, 10);
+  world.clusters.push(player);
+  setTestLaser(world, 0, 50, 100, 50, VOID_LASER_TELEGRAPH_TICKS);
+  player.velocityXWorld = 360;
+
+  tickPhantasmalGeometry(world);
+
+  assert.equal(world.voidLaserAliveFlag[0], 0);
+  assert.equal(player.invulnerabilityTicks, 0);
+  assert.equal(player.velocityXWorld, 360);
+  assert.equal(countAlive(world.voidLaserDustAliveFlag), VOID_LASER_DUST_PER_DISSIPATION);
+  assert.equal(world.voidLaserDustKind[0], 1);
+});
+
+test('Void Laser purple section dissipates and arrests momentum', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 20, 50, 1, 10);
+  world.clusters.push(player);
+  setTestLaser(world, 0, 50, 100, 50, VOID_LASER_TELEGRAPH_TICKS);
+  player.velocityXWorld = 360;
+  player.velocityYWorld = 120;
+
+  tickPhantasmalGeometry(world);
+
+  assert.equal(world.voidLaserAliveFlag[0], 0);
+  assert.ok(player.invulnerabilityTicks > 0);
+  assert.ok(Math.abs(player.velocityXWorld) < 80);
+  assert.ok(Math.abs(player.velocityYWorld) < 80);
+  assert.equal(world.voidLaserDustKind[0], 0);
+});
+
+test('Void Laser cleanup and dust caps hold', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 20, 50, 1, 10);
+  world.clusters.push(player);
+  for (let i = 0; i < MAX_VOID_LASERS; i++) {
+    world.voidLaserAliveFlag[i] = 1;
+    world.voidLaserAgeTicks[i] = VOID_LASER_TOTAL_TICKS - 1;
+  }
+
+  tickPhantasmalGeometry(world);
+  assert.equal(countAlive(world.voidLaserAliveFlag), 0);
+
+  for (let i = 0; i < MAX_VOID_LASER_DUST + 20; i++) {
+    setTestLaser(world, 0, 50, 100, 50, VOID_LASER_TELEGRAPH_TICKS);
+    player.positionXWorld = 20;
+    tickPhantasmalGeometry(world);
+  }
+  assert.ok(countAlive(world.voidLaserDustAliveFlag) <= MAX_VOID_LASER_DUST);
+
+  clearPhantasmalGeometry(world);
+  assert.equal(countAlive(world.voidLaserAliveFlag), 0);
+  assert.equal(countAlive(world.voidLaserDustAliveFlag), 0);
 });

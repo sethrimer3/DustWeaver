@@ -111,6 +111,8 @@ interface _ReusableBacking {
   phantasmalSpikeAliveFlag: Uint8Array;
   phantasmalBlockAliveFlag: Uint8Array;
   phantasmalShockwaveAliveFlag: Uint8Array;
+  voidLaserAliveFlag: Uint8Array;
+  voidLaserDustAliveFlag: Uint8Array;
   iceSpikeAliveFlag: Uint8Array;
   // Arrow Weave scalar fields updated each frame
   isArrowWeaveLoadingFlag: 0 | 1;
@@ -348,6 +350,21 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     phantasmalShockwaveYWorld:   world.phantasmalShockwaveYWorld,
     phantasmalShockwaveAgeTicks: world.phantasmalShockwaveAgeTicks,
     phantasmalShockwaveAliveFlag: world.phantasmalShockwaveAliveFlag,
+    voidLaserStartXWorld:        world.voidLaserStartXWorld,
+    voidLaserStartYWorld:        world.voidLaserStartYWorld,
+    voidLaserEndXWorld:          world.voidLaserEndXWorld,
+    voidLaserEndYWorld:          world.voidLaserEndYWorld,
+    voidLaserVisibleStartXWorld: world.voidLaserVisibleStartXWorld,
+    voidLaserVisibleStartYWorld: world.voidLaserVisibleStartYWorld,
+    voidLaserVisibleEndXWorld:   world.voidLaserVisibleEndXWorld,
+    voidLaserVisibleEndYWorld:   world.voidLaserVisibleEndYWorld,
+    voidLaserAgeTicks:           world.voidLaserAgeTicks,
+    voidLaserAliveFlag:          world.voidLaserAliveFlag,
+    voidLaserDustXWorld:         world.voidLaserDustXWorld,
+    voidLaserDustYWorld:         world.voidLaserDustYWorld,
+    voidLaserDustAgeTicks:       world.voidLaserDustAgeTicks,
+    voidLaserDustKind:           world.voidLaserDustKind,
+    voidLaserDustAliveFlag:      world.voidLaserDustAliveFlag,
     iceSpikeXWorld:              world.iceSpikeXWorld,
     iceSpikeBaseYWorld:          world.iceSpikeBaseYWorld,
     iceSpikeAgeTicks:            world.iceSpikeAgeTicks,
@@ -709,6 +726,21 @@ export function refreshSnapshotWorldArrayRefs(
   raw.phantasmalShockwaveYWorld      = world.phantasmalShockwaveYWorld;
   raw.phantasmalShockwaveAgeTicks    = world.phantasmalShockwaveAgeTicks;
   raw.phantasmalShockwaveAliveFlag   = world.phantasmalShockwaveAliveFlag;
+  raw.voidLaserStartXWorld           = world.voidLaserStartXWorld;
+  raw.voidLaserStartYWorld           = world.voidLaserStartYWorld;
+  raw.voidLaserEndXWorld             = world.voidLaserEndXWorld;
+  raw.voidLaserEndYWorld             = world.voidLaserEndYWorld;
+  raw.voidLaserVisibleStartXWorld    = world.voidLaserVisibleStartXWorld;
+  raw.voidLaserVisibleStartYWorld    = world.voidLaserVisibleStartYWorld;
+  raw.voidLaserVisibleEndXWorld      = world.voidLaserVisibleEndXWorld;
+  raw.voidLaserVisibleEndYWorld      = world.voidLaserVisibleEndYWorld;
+  raw.voidLaserAgeTicks              = world.voidLaserAgeTicks;
+  raw.voidLaserAliveFlag             = world.voidLaserAliveFlag;
+  raw.voidLaserDustXWorld            = world.voidLaserDustXWorld;
+  raw.voidLaserDustYWorld            = world.voidLaserDustYWorld;
+  raw.voidLaserDustAgeTicks          = world.voidLaserDustAgeTicks;
+  raw.voidLaserDustKind              = world.voidLaserDustKind;
+  raw.voidLaserDustAliveFlag         = world.voidLaserDustAliveFlag;
   raw.iceSpikeXWorld                 = world.iceSpikeXWorld;
   raw.iceSpikeBaseYWorld             = world.iceSpikeBaseYWorld;
   raw.iceSpikeAgeTicks               = world.iceSpikeAgeTicks;

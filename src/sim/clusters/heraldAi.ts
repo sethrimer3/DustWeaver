@@ -1,12 +1,13 @@
 import { WorldState } from '../world';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
 import { ClusterState } from './state';
-import { clearPhantasmalGeometry, spawnPhantasmalBlocks, spawnPhantasmalSpikes, spawnVoidSphere } from './heraldEffects';
+import { clearPhantasmalGeometry, spawnPhantasmalBlocks, spawnPhantasmalSpikes, spawnVoidLaserWeb, spawnVoidSphere } from './heraldEffects';
 import {
   HERALD_ATTACK_COOLDOWN_TICKS,
   HERALD_ATTACK_PHANTASMAL_BLOCKS,
   HERALD_ATTACK_PHANTASMAL_SPIKES,
   HERALD_ATTACK_VOID_SPHERE,
+  HERALD_ATTACK_VOID_LASER_WEB,
   HERALD_CAST_TICKS,
   HERALD_CONTACT_DAMAGE,
   HERALD_CONTACT_IFRAMES,
@@ -23,6 +24,8 @@ import {
   PHANTASMAL_BLOCK_COUNT,
   PHANTASMAL_SPIKE_COUNT,
   PHANTASMAL_SPIKE_TELEGRAPH_TICKS,
+  VOID_LASER_COUNT,
+  VOID_LASER_TELEGRAPH_TICKS,
   VOID_SPHERE_SPEED_WORLD,
 } from './heraldConfig';
 
@@ -85,7 +88,7 @@ function setState(boss: ClusterState, state: number): void {
 }
 
 function selectNextAttack(boss: ClusterState): number {
-  const attack = boss.heraldNextAttackIndex % 3;
+  const attack = boss.heraldNextAttackIndex % 4;
   boss.heraldNextAttackIndex += 1;
   return attack;
 }
@@ -114,6 +117,13 @@ function tickAttackState(world: WorldState, boss: ClusterState, player: ClusterS
           spawnPhantasmalBlocks(world, boss, player, PHANTASMAL_BLOCK_COUNT);
         }
         if (boss.heraldStateTicks >= HERALD_CAST_TICKS) {
+          setState(boss, HERALD_STATE_RECOVER);
+        }
+      } else if (boss.heraldAttackKind === HERALD_ATTACK_VOID_LASER_WEB) {
+        if (boss.heraldStateTicks === 1) {
+          spawnVoidLaserWeb(world, VOID_LASER_COUNT, player);
+        }
+        if (boss.heraldStateTicks >= VOID_LASER_TELEGRAPH_TICKS) {
           setState(boss, HERALD_STATE_RECOVER);
         }
       } else if (boss.heraldAttackKind === HERALD_ATTACK_VOID_SPHERE && boss.heraldStateTicks >= HERALD_CAST_TICKS) {

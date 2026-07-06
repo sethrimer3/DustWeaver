@@ -11,6 +11,13 @@ import {
   PHANTASMAL_SPIKE_LENGTH_WORLD,
   PHANTASMAL_SPIKE_TELEGRAPH_TICKS,
   PHANTASMAL_SPIKE_WIDTH_WORLD,
+  VOID_LASER_ACTIVE_TICKS,
+  VOID_LASER_CENTER_SAFE_MAX_T,
+  VOID_LASER_CENTER_SAFE_MIN_T,
+  VOID_LASER_DUST_LIFETIME_TICKS,
+  VOID_LASER_FADE_TICKS,
+  VOID_LASER_TELEGRAPH_TICKS,
+  VOID_LASER_WIDTH_WORLD,
   VOID_SPHERE_DISTORTION_RADIUS_WORLD,
   VOID_SPHERE_RADIUS_WORLD,
 } from '../../sim/clusters/heraldConfig';
@@ -171,6 +178,78 @@ export function renderPhantasmalGeometry(
 ): void {
   ctx.save();
   ctx.lineJoin = 'round';
+
+  for (let i = 0; i < snapshot.voidLaserAliveFlag.length; i++) {
+    if (snapshot.voidLaserAliveFlag[i] === 0) continue;
+    const age = snapshot.voidLaserAgeTicks[i];
+    const telegraph = age < VOID_LASER_TELEGRAPH_TICKS;
+    const activeEnd = VOID_LASER_TELEGRAPH_TICKS + VOID_LASER_ACTIVE_TICKS;
+    const fade = age >= activeEnd ? 1 - Math.min(1, (age - activeEnd) / VOID_LASER_FADE_TICKS) : 1;
+    const alpha = telegraph
+      ? Math.max(0.16, Math.min(1, age / VOID_LASER_TELEGRAPH_TICKS)) * 0.55
+      : fade;
+    const sx = snapshot.voidLaserStartXWorld[i] * scalePx + offsetXPx;
+    const sy = snapshot.voidLaserStartYWorld[i] * scalePx + offsetYPx;
+    const ex = snapshot.voidLaserEndXWorld[i] * scalePx + offsetXPx;
+    const ey = snapshot.voidLaserEndYWorld[i] * scalePx + offsetYPx;
+    const vsx = snapshot.voidLaserVisibleStartXWorld[i] * scalePx + offsetXPx;
+    const vsy = snapshot.voidLaserVisibleStartYWorld[i] * scalePx + offsetYPx;
+    const vex = snapshot.voidLaserVisibleEndXWorld[i] * scalePx + offsetXPx;
+    const vey = snapshot.voidLaserVisibleEndYWorld[i] * scalePx + offsetYPx;
+    const pulse = 0.75 + Math.sin((snapshot.tick + i * 13) * 0.16) * 0.25;
+    const coreWidth = Math.max(1.5, VOID_LASER_WIDTH_WORLD * scalePx);
+
+    ctx.shadowColor = 'rgba(166, 60, 255, 0.72)';
+    ctx.shadowBlur = (telegraph ? 6 : 13) * scalePx;
+    ctx.strokeStyle = `rgba(151, 52, 226, ${0.38 * alpha * pulse})`;
+    ctx.lineWidth = coreWidth * (telegraph ? 1.4 : 2.6);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    ctx.shadowBlur = (telegraph ? 2 : 6) * scalePx;
+    ctx.strokeStyle = `rgba(224, 160, 255, ${0.55 * alpha})`;
+    ctx.lineWidth = coreWidth * (telegraph ? 0.55 : 0.9);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    const centerStartX = vsx + (vex - vsx) * VOID_LASER_CENTER_SAFE_MIN_T;
+    const centerStartY = vsy + (vey - vsy) * VOID_LASER_CENTER_SAFE_MIN_T;
+    const centerEndX = vsx + (vex - vsx) * VOID_LASER_CENTER_SAFE_MAX_T;
+    const centerEndY = vsy + (vey - vsy) * VOID_LASER_CENTER_SAFE_MAX_T;
+    ctx.shadowColor = 'rgba(255, 214, 102, 0.9)';
+    ctx.shadowBlur = (telegraph ? 8 : 14) * scalePx;
+    ctx.strokeStyle = `rgba(255, 202, 72, ${0.85 * alpha})`;
+    ctx.lineWidth = coreWidth * (telegraph ? 1.15 : 1.55);
+    ctx.beginPath();
+    ctx.moveTo(centerStartX, centerStartY);
+    ctx.lineTo(centerEndX, centerEndY);
+    ctx.stroke();
+    ctx.shadowBlur = 3 * scalePx;
+    ctx.strokeStyle = `rgba(255, 248, 196, ${0.9 * alpha})`;
+    ctx.lineWidth = Math.max(1, coreWidth * 0.45);
+    ctx.beginPath();
+    ctx.moveTo(centerStartX, centerStartY);
+    ctx.lineTo(centerEndX, centerEndY);
+    ctx.stroke();
+  }
+
+  for (let i = 0; i < snapshot.voidLaserDustAliveFlag.length; i++) {
+    if (snapshot.voidLaserDustAliveFlag[i] === 0) continue;
+    const t = Math.min(1, snapshot.voidLaserDustAgeTicks[i] / VOID_LASER_DUST_LIFETIME_TICKS);
+    const x = snapshot.voidLaserDustXWorld[i] * scalePx + offsetXPx;
+    const y = snapshot.voidLaserDustYWorld[i] * scalePx + offsetYPx;
+    const gold = snapshot.voidLaserDustKind[i] === 1;
+    ctx.shadowColor = gold ? 'rgba(255, 214, 96, 0.72)' : 'rgba(152, 64, 255, 0.66)';
+    ctx.shadowBlur = 5 * scalePx;
+    ctx.fillStyle = gold ? `rgba(255, 218, 92, ${1 - t})` : `rgba(133, 58, 210, ${0.75 * (1 - t)})`;
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(1, (gold ? 1.45 : 1.2) * scalePx * (1 - t * 0.35)), 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   for (let i = 0; i < snapshot.phantasmalSpikeAliveFlag.length; i++) {
     if (snapshot.phantasmalSpikeAliveFlag[i] === 0) continue;

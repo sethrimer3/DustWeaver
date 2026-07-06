@@ -2,6 +2,7 @@ import { WorldState } from '../world';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
 import {
   MAX_PHANTASMAL_SPIKES,
+  MAX_VOID_LASERS,
   PHANTASMAL_BLOCK_BREAK_SPEED,
   PHANTASMAL_BLOCK_DAMAGE,
   PHANTASMAL_BLOCK_FLASH_TICKS,
@@ -23,6 +24,21 @@ import {
   PHANTASMAL_SPIKE_TELEGRAPH_TICKS,
   PHANTASMAL_SPIKE_TOTAL_TICKS,
   PHANTASMAL_SPIKE_WIDTH_WORLD,
+  VOID_LASER_ACTIVE_TICKS,
+  VOID_LASER_CENTER_SAFE_MAX_T,
+  VOID_LASER_CENTER_SAFE_MIN_T,
+  VOID_LASER_DAMAGE,
+  VOID_LASER_DUST_LIFETIME_TICKS,
+  VOID_LASER_DUST_PER_DISSIPATION,
+  VOID_LASER_ENDPOINT_BURY_DEPTH,
+  VOID_LASER_IFRAMES,
+  VOID_LASER_MAX_SPAWN_ATTEMPTS,
+  VOID_LASER_MIN_LENGTH_WORLD,
+  VOID_LASER_MOMENTUM_ARREST_STRENGTH,
+  VOID_LASER_PLAYER_SAFETY_RADIUS_WORLD,
+  VOID_LASER_TELEGRAPH_TICKS,
+  VOID_LASER_TOTAL_TICKS,
+  VOID_LASER_WIDTH_WORLD,
   VOID_SPHERE_BOUNDS_MARGIN_WORLD,
   VOID_SPHERE_DAMAGE,
   VOID_SPHERE_DAMAGE_RADIUS_WORLD,
@@ -37,6 +53,13 @@ export interface PhantasmalSurfaceCandidate {
   xWorld: number;
   yWorld: number;
   direction: PhantasmalSurfaceDirection;
+}
+
+interface VoidLaserSurfaceAnchor {
+  xWorld: number;
+  yWorld: number;
+  normalXWorld: number;
+  normalYWorld: number;
 }
 
 function allocVoidSphere(world: WorldState): number {
@@ -63,6 +86,20 @@ function allocBlock(world: WorldState): number {
 function allocShockwave(world: WorldState): number {
   for (let i = 0; i < world.phantasmalShockwaveAliveFlag.length; i++) {
     if (world.phantasmalShockwaveAliveFlag[i] === 0) return i;
+  }
+  return -1;
+}
+
+function allocVoidLaser(world: WorldState): number {
+  for (let i = 0; i < world.voidLaserAliveFlag.length; i++) {
+    if (world.voidLaserAliveFlag[i] === 0) return i;
+  }
+  return -1;
+}
+
+function allocVoidLaserDust(world: WorldState): number {
+  for (let i = 0; i < world.voidLaserDustAliveFlag.length; i++) {
+    if (world.voidLaserDustAliveFlag[i] === 0) return i;
   }
   return -1;
 }
@@ -131,6 +168,55 @@ export function collectPhantasmalSpikeSurfaceCandidates(world: WorldState, playe
     }
   }
   return out;
+}
+
+function collectVoidLaserSurfaceAnchors(world: WorldState): VoidLaserSurfaceAnchor[] {
+  const out: VoidLaserSurfaceAnchor[] = [];
+  const step = 24;
+  for (let wi = 0; wi < world.wallCount && out.length < MAX_VOID_LASERS * 24; wi++) {
+    if (world.wallIsPlatformFlag[wi] === 1 || world.wallIsInvisibleFlag[wi] === 1) continue;
+    const x = world.wallXWorld[wi];
+    const y = world.wallYWorld[wi];
+    const w = world.wallWWorld[wi];
+    const h = world.wallHWorld[wi];
+    const horizontalSamples = Math.max(1, Math.floor(w / step));
+    const verticalSamples = Math.max(1, Math.floor(h / step));
+    for (let s = 0; s <= horizontalSamples; s++) {
+      const sx = x + (w * s) / Math.max(1, horizontalSamples);
+      out.push({ xWorld: sx, yWorld: y, normalXWorld: 0, normalYWorld: -1 });
+      out.push({ xWorld: sx, yWorld: y + h, normalXWorld: 0, normalYWorld: 1 });
+    }
+    for (let s = 0; s <= verticalSamples; s++) {
+      const sy = y + (h * s) / Math.max(1, verticalSamples);
+      out.push({ xWorld: x, yWorld: sy, normalXWorld: -1, normalYWorld: 0 });
+      out.push({ xWorld: x + w, yWorld: sy, normalXWorld: 1, normalYWorld: 0 });
+    }
+  }
+  return out;
+}
+
+export function classifyVoidLaserSegmentT(t: number): 0 | 1 {
+  return t >= VOID_LASER_CENTER_SAFE_MIN_T && t <= VOID_LASER_CENTER_SAFE_MAX_T ? 1 : 0;
+}
+
+export function projectPointToVoidLaser(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): { t: number; closestXWorld: number; closestYWorld: number; distanceWorld: number } {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = Math.max(0.0001, dx * dx + dy * dy);
+  const rawT = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+  const t = Math.max(0, Math.min(1, rawT));
+  const closestXWorld = ax + dx * t;
+  const closestYWorld = ay + dy * t;
+  const offX = px - closestXWorld;
+  const offY = py - closestYWorld;
+  return { t, closestXWorld, closestYWorld, distanceWorld: Math.sqrt(offX * offX + offY * offY) };
 }
 
 export function spawnVoidSphere(
@@ -207,6 +293,68 @@ export function spawnPhantasmalBlocks(world: WorldState, boss: ClusterState, pla
   return spawned;
 }
 
+function isNearDuplicateLaser(world: WorldState, ax: number, ay: number, bx: number, by: number): boolean {
+  for (let i = 0; i < world.voidLaserAliveFlag.length; i++) {
+    if (world.voidLaserAliveFlag[i] === 0) continue;
+    const dax = world.voidLaserVisibleStartXWorld[i] - ax;
+    const day = world.voidLaserVisibleStartYWorld[i] - ay;
+    const dbx = world.voidLaserVisibleEndXWorld[i] - bx;
+    const dby = world.voidLaserVisibleEndYWorld[i] - by;
+    const rax = world.voidLaserVisibleStartXWorld[i] - bx;
+    const ray = world.voidLaserVisibleStartYWorld[i] - by;
+    const rbx = world.voidLaserVisibleEndXWorld[i] - ax;
+    const rby = world.voidLaserVisibleEndYWorld[i] - ay;
+    if (dax * dax + day * day + dbx * dbx + dby * dby < 900) return true;
+    if (rax * rax + ray * ray + rbx * rbx + rby * rby < 900) return true;
+  }
+  return false;
+}
+
+function canPlaceLaserBetween(world: WorldState, a: VoidLaserSurfaceAnchor, b: VoidLaserSurfaceAnchor, player?: ClusterState): boolean {
+  const dx = b.xWorld - a.xWorld;
+  const dy = b.yWorld - a.yWorld;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < VOID_LASER_MIN_LENGTH_WORLD) return false;
+  if (a.normalXWorld === -b.normalXWorld && a.normalYWorld === -b.normalYWorld && Math.abs(dx * a.normalYWorld - dy * a.normalXWorld) < 4) {
+    return false;
+  }
+  if (isNearDuplicateLaser(world, a.xWorld, a.yWorld, b.xWorld, b.yWorld)) return false;
+  if (player !== undefined) {
+    const hit = projectPointToVoidLaser(player.positionXWorld, player.positionYWorld, a.xWorld, a.yWorld, b.xWorld, b.yWorld);
+    if (hit.distanceWorld < VOID_LASER_PLAYER_SAFETY_RADIUS_WORLD) return false;
+  }
+  return true;
+}
+
+export function spawnVoidLaserWeb(world: WorldState, count: number, player?: ClusterState): number {
+  const anchors = collectVoidLaserSurfaceAnchors(world);
+  if (anchors.length < 2) return 0;
+  let spawned = 0;
+  for (let attempt = 0; attempt < VOID_LASER_MAX_SPAWN_ATTEMPTS && spawned < count; attempt++) {
+    const aIndex = (world.tick + attempt * 7 + spawned * 11) % anchors.length;
+    const bIndex = (world.tick * 3 + attempt * 13 + spawned * 17 + Math.floor(anchors.length / 2)) % anchors.length;
+    if (aIndex === bIndex) continue;
+    const a = anchors[aIndex];
+    const b = anchors[bIndex];
+    if (!canPlaceLaserBetween(world, a, b, player)) continue;
+    const slot = allocVoidLaser(world);
+    if (slot < 0) break;
+    world.voidLaserAliveFlag[slot] = 1;
+    world.voidLaserAgeTicks[slot] = 0;
+    world.voidLaserDissipationKind[slot] = 0;
+    world.voidLaserVisibleStartXWorld[slot] = a.xWorld;
+    world.voidLaserVisibleStartYWorld[slot] = a.yWorld;
+    world.voidLaserVisibleEndXWorld[slot] = b.xWorld;
+    world.voidLaserVisibleEndYWorld[slot] = b.yWorld;
+    world.voidLaserStartXWorld[slot] = a.xWorld - a.normalXWorld * VOID_LASER_ENDPOINT_BURY_DEPTH;
+    world.voidLaserStartYWorld[slot] = a.yWorld - a.normalYWorld * VOID_LASER_ENDPOINT_BURY_DEPTH;
+    world.voidLaserEndXWorld[slot] = b.xWorld - b.normalXWorld * VOID_LASER_ENDPOINT_BURY_DEPTH;
+    world.voidLaserEndYWorld[slot] = b.yWorld - b.normalYWorld * VOID_LASER_ENDPOINT_BURY_DEPTH;
+    spawned += 1;
+  }
+  return spawned;
+}
+
 function spawnShockwave(world: WorldState, x: number, y: number): void {
   const slot = allocShockwave(world);
   if (slot < 0) return;
@@ -220,6 +368,8 @@ export function clearPhantasmalGeometry(world: WorldState): void {
   world.phantasmalSpikeAliveFlag.fill(0);
   world.phantasmalBlockAliveFlag.fill(0);
   world.phantasmalShockwaveAliveFlag.fill(0);
+  world.voidLaserAliveFlag.fill(0);
+  world.voidLaserDustAliveFlag.fill(0);
 }
 
 function playerOverlapsAabb(player: ClusterState, cx: number, cy: number, halfW: number, halfH: number): boolean {
@@ -254,6 +404,33 @@ function applyStableShoveFrom(world: WorldState, player: ClusterState, x: number
   world.zipImpactFxTotalTicks = 10;
   world.zipImpactFxXWorld = x;
   world.zipImpactFxYWorld = y;
+}
+
+function spawnVoidLaserDust(world: WorldState, x: number, y: number, kind: 0 | 1): void {
+  for (let n = 0; n < VOID_LASER_DUST_PER_DISSIPATION; n++) {
+    const slot = allocVoidLaserDust(world);
+    if (slot < 0) return;
+    const angle = (n / VOID_LASER_DUST_PER_DISSIPATION) * Math.PI * 2 + (world.tick % 17) * 0.17;
+    const speed = kind === 1 ? 0.55 + (n % 3) * 0.08 : 0.42 + (n % 4) * 0.1;
+    world.voidLaserDustAliveFlag[slot] = 1;
+    world.voidLaserDustKind[slot] = kind;
+    world.voidLaserDustAgeTicks[slot] = 0;
+    world.voidLaserDustXWorld[slot] = x;
+    world.voidLaserDustYWorld[slot] = y;
+    world.voidLaserDustVelXWorld[slot] = Math.cos(angle) * speed;
+    world.voidLaserDustVelYWorld[slot] = Math.sin(angle) * speed;
+  }
+}
+
+function dissipateVoidLaser(world: WorldState, i: number, x: number, y: number, kind: 1 | 2): void {
+  world.voidLaserDissipationKind[i] = kind;
+  world.voidLaserAliveFlag[i] = 0;
+  spawnVoidLaserDust(world, x, y, kind === 1 ? 1 : 0);
+}
+
+function arrestPlayerMomentum(player: ClusterState): void {
+  player.velocityXWorld *= VOID_LASER_MOMENTUM_ARREST_STRENGTH;
+  player.velocityYWorld *= VOID_LASER_MOMENTUM_ARREST_STRENGTH;
 }
 
 export function tickVoidSpheres(world: WorldState): void {
@@ -344,5 +521,54 @@ export function tickPhantasmalGeometry(world: WorldState): void {
     if (++world.phantasmalShockwaveAgeTicks[i] >= PHANTASMAL_SHOCKWAVE_TICKS) {
       world.phantasmalShockwaveAliveFlag[i] = 0;
     }
+  }
+
+  for (let i = 0; i < world.voidLaserAliveFlag.length; i++) {
+    if (world.voidLaserAliveFlag[i] === 0) continue;
+    const age = ++world.voidLaserAgeTicks[i];
+    if (age >= VOID_LASER_TOTAL_TICKS) {
+      world.voidLaserAliveFlag[i] = 0;
+      continue;
+    }
+    const activeEnd = VOID_LASER_TELEGRAPH_TICKS + VOID_LASER_ACTIVE_TICKS;
+    if (age < VOID_LASER_TELEGRAPH_TICKS || age >= activeEnd || player === undefined || player.isAliveFlag === 0) continue;
+
+    // Project the player center onto the logical visible beam. The resulting
+    // t value is length-normalized, so the gold center is fair even though the
+    // rendered endpoints are buried into terrain.
+    const hit = projectPointToVoidLaser(
+      player.positionXWorld,
+      player.positionYWorld,
+      world.voidLaserVisibleStartXWorld[i],
+      world.voidLaserVisibleStartYWorld[i],
+      world.voidLaserVisibleEndXWorld[i],
+      world.voidLaserVisibleEndYWorld[i],
+    );
+    const hitRadius = VOID_LASER_WIDTH_WORLD * 0.5 + Math.max(player.halfWidthWorld, player.halfHeightWorld) * 0.65;
+    if (hit.distanceWorld > hitRadius) continue;
+    if (classifyVoidLaserSegmentT(hit.t) === 1) {
+      dissipateVoidLaser(world, i, hit.closestXWorld, hit.closestYWorld, 1);
+    } else {
+      arrestPlayerMomentum(player);
+      if (player.invulnerabilityTicks <= 0) {
+        applyPlayerDamageWithKnockback(player, VOID_LASER_DAMAGE, hit.closestXWorld, hit.closestYWorld);
+        player.invulnerabilityTicks = Math.max(player.invulnerabilityTicks, VOID_LASER_IFRAMES);
+        arrestPlayerMomentum(player);
+      }
+      dissipateVoidLaser(world, i, hit.closestXWorld, hit.closestYWorld, 2);
+    }
+  }
+
+  for (let i = 0; i < world.voidLaserDustAliveFlag.length; i++) {
+    if (world.voidLaserDustAliveFlag[i] === 0) continue;
+    const age = ++world.voidLaserDustAgeTicks[i];
+    if (age >= VOID_LASER_DUST_LIFETIME_TICKS) {
+      world.voidLaserDustAliveFlag[i] = 0;
+      continue;
+    }
+    world.voidLaserDustXWorld[i] += world.voidLaserDustVelXWorld[i];
+    world.voidLaserDustYWorld[i] += world.voidLaserDustVelYWorld[i];
+    world.voidLaserDustVelXWorld[i] *= 0.94;
+    world.voidLaserDustVelYWorld[i] *= 0.94;
   }
 }
