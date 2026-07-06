@@ -77,6 +77,17 @@ export const OPEN_AIR_ALL_SIDES = 0xF;
  */
 export const EDGE_SHADING_STRENGTH = 1.2;
 
+/**
+ * Bump this whenever the shading constants above (or the algorithm itself)
+ * change in a way that should invalidate previously-baked shaded sprite
+ * canvases and any prewarmed chunk/render-state caches that embed them.
+ * All shaded-sprite cache keys (folder themes, legacy/world sprites,
+ * procedural sprites) must include this value so a version bump forces a
+ * fresh bake instead of leaving old unshaded/differently-shaded canvases
+ * visually stuck.
+ */
+export const EDGE_SHADING_VERSION = 2;
+
 // ── Internal shading constants ────────────────────────────────────────────────
 
 const _OPEN_AIR_EDGE_DISTANCE_NONE = 255;
@@ -458,4 +469,42 @@ export function applyOrganicEdgeShading(
 
   ctx.putImageData(imageData, 0, 0);
   if (import.meta.env.DEV) FP.recordEdgeShading(performance.now() - _t0);
+}
+
+// ── DEV console diagnostics ───────────────────────────────────────────────────
+//
+// window.__dwEdgeShadingStats() — dumps whether applyOrganicEdgeShading ran
+// this frame plus lifetime bake counts broken down by source path (legacy
+// world-number sprites vs folder-based theme sprites) and how many tiles
+// fell back to an unshaded canvas (gameplay bake budget/forbidden-flag).
+// window.__dwEdgeOverlay — toggle set directly by the caller (see
+// wallTilePassRenderers.ts); read back here for convenience.
+declare global {
+  interface Window {
+    __dwEdgeShadingStats?: () => {
+      calledLastFrame: boolean;
+      edgeShadingCallsLastFrame: number;
+      legacyShadedBakesLifetime: number;
+      folderShadedBakesLifetime: number;
+      unshadedFallbacksLifetime: number;
+      overlayEnabled: boolean;
+    };
+  }
+}
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__dwEdgeShadingStats = () => {
+    const last = FP.getLastFrame();
+    const counts = FP.getShadedBakeLifetimeCounts();
+    const stats = {
+      calledLastFrame: (last?.edgeShadingCount ?? 0) > 0,
+      edgeShadingCallsLastFrame: last?.edgeShadingCount ?? 0,
+      legacyShadedBakesLifetime: counts.legacyShadedBakes,
+      folderShadedBakesLifetime: counts.folderShadedBakes,
+      unshadedFallbacksLifetime: counts.unshadedFallbacks,
+      overlayEnabled: window.__dwEdgeOverlay === true,
+    };
+    console.table([stats]);
+    return stats;
+  };
 }

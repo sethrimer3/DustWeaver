@@ -94,6 +94,9 @@ export interface ClusterSnapshot {
   readonly heraldState: number;
   readonly heraldStateTicks: number;
   readonly heraldFacingX: number;
+  readonly isIceWizardFlag: 0 | 1;
+  readonly iceWizardState: number;
+  readonly iceWizardStateTicks: number;
   /** 1 if this cluster is a grapple hunter. */
   readonly isGrappleHunterFlag: 0 | 1;
   /** Current grapple hunter state (0-4). */

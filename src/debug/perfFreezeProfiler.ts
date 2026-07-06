@@ -204,6 +204,48 @@ export function isBakeBudgetExhausted(): boolean {
   return _spriteBakeMaxPerFrame > 0 && _spriteBakesThisFrame >= _spriteBakeMaxPerFrame;
 }
 
+// ── Shaded-sprite bake breakdown (legacy vs folder vs unshaded fallback) ──────
+//
+// `recordSpriteBake` above tracks aggregate bake count/time but does not
+// distinguish which code path produced the bake.  These lifetime counters let
+// `window.__dwEdgeShadingStats()` (see blockEdgeShading.ts) report exactly how
+// many legacy/world-number sprites vs folder-theme sprites were shaded this
+// session, and how many tiles fell back to an unshaded canvas because gameplay
+// baking was forbidden or the per-frame budget was exhausted — the numbers
+// needed to confirm the legacy blackRock/world-0 path (previously bypassing
+// applyOrganicEdgeShading entirely) is actually being baked now.
+let _legacyShadedBakeLifetime = 0;
+let _folderShadedBakeLifetime = 0;
+let _unshadedFallbackLifetime = 0;
+
+/** Record a legacy/world-number sprite shaded bake (production-safe). */
+export function recordLegacyShadedBake(): void {
+  _legacyShadedBakeLifetime++;
+}
+
+/** Record a folder-based theme sprite shaded bake (production-safe). */
+export function recordFolderShadedBake(): void {
+  _folderShadedBakeLifetime++;
+}
+
+/** Record a cheap unshaded fallback canvas used in place of a real bake (production-safe). */
+export function recordUnshadedFallback(): void {
+  _unshadedFallbackLifetime++;
+}
+
+/** Lifetime shaded/fallback bake counters — read by window.__dwEdgeShadingStats(). */
+export function getShadedBakeLifetimeCounts(): {
+  legacyShadedBakes: number;
+  folderShadedBakes: number;
+  unshadedFallbacks: number;
+} {
+  return {
+    legacyShadedBakes: _legacyShadedBakeLifetime,
+    folderShadedBakes: _folderShadedBakeLifetime,
+    unshadedFallbacks: _unshadedFallbackLifetime,
+  };
+}
+
 // ── Gameplay bake-forbidden flag ──────────────────────────────────────────────
 
 /**

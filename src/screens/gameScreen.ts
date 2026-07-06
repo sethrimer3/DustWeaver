@@ -21,7 +21,7 @@ import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRe
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
-import { spawnHeraldForTesting } from './gameEnemySpawn';
+import { spawnHeraldForTesting, spawnIceWizardForTesting } from './gameEnemySpawn';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, getCameraOffset } from '../render/camera';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
@@ -106,6 +106,7 @@ import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoo
 import type { TransitionDirection } from './gameTransitions';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import * as FP from '../debug/perfFreezeProfiler';
+import { resetLegacyShadingFrameStats } from '../render/walls/legacyBlockShading';
 import { type LoadRoomCtx, makeLoadRoomPhases, applyResidentRoomActivation } from './gameLoadRoomPhases';
 import {
   capturePlayerTransferState,
@@ -1524,6 +1525,7 @@ export function startGameScreen(
     // Reset per-frame freeze-profiler counters (works in both dev and production
     // because it also resets the production-safe sprite-bake budget counter).
     FP.beginFrame(elapsedMs);
+    if (import.meta.env.DEV) resetLegacyShadingFrameStats();
 
     // Record raw frame time to the profiler ring buffer unconditionally so
     // frame-pacing stats are available immediately when debug mode is enabled.
@@ -2551,6 +2553,15 @@ export function startGameScreen(
         const by = yBlock ?? Math.floor(world.worldHeightWorld / BLOCK_SIZE_MEDIUM / 2);
         const entityId = spawnHeraldForTesting(world, bx * BLOCK_SIZE_MEDIUM, by * BLOCK_SIZE_MEDIUM);
         console.log(`[dev] spawned The Void Herald (entityId=${entityId}) at block (${bx}, ${by})`);
+        return entityId;
+      };
+
+    (w as DwWin & { __dwSpawnIceWizard?: (xBlock?: number, yBlock?: number) => number }).__dwSpawnIceWizard =
+      (xBlock?: number, yBlock?: number): number => {
+        const bx = xBlock ?? Math.floor(world.worldWidthWorld / BLOCK_SIZE_MEDIUM / 2);
+        const by = yBlock ?? Math.floor(world.worldHeightWorld / BLOCK_SIZE_MEDIUM / 2);
+        const entityId = spawnIceWizardForTesting(world, bx * BLOCK_SIZE_MEDIUM, by * BLOCK_SIZE_MEDIUM);
+        console.log(`[dev] spawned Ice Wizard (entityId=${entityId}) at block (${bx}, ${by})`);
         return entityId;
       };
   }

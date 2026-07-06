@@ -12,7 +12,7 @@
 
 import { loadImg } from '../imageCache';
 import { hashTilePosition } from './proceduralBlockSprite';
-import { applyOrganicEdgeShading, OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
+import { applyOrganicEdgeShading, EDGE_SHADING_VERSION, OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
 import * as FP from '../../debug/perfFreezeProfiler';
 export type { FolderThemeData } from './folderThemeCatalogue';
 export { FOLDER_BLOCK_THEMES, isFolderBasedTheme, folderThemeShortId } from './folderThemeCatalogue';
@@ -210,7 +210,7 @@ function _shadedCacheKey(
   variantBucket: number,
   seed: number,
 ): string {
-  return `${url}|${widthPx}|${heightPx}|${openAirSidesMask}|${variantBucket}|${seed}`;
+  return `${url}|${widthPx}|${heightPx}|${openAirSidesMask}|${variantBucket}|${seed}|v${EDGE_SHADING_VERSION}`;
 }
 
 /**
@@ -237,6 +237,7 @@ function _createShadedCanvas(
   ctx.drawImage(src, 0, 0, widthPx, heightPx);
   applyOrganicEdgeShading(ctx, widthPx, heightPx, openAirSidesMask, worldOriginXWorld, worldOriginYWorld, seed);
   FP.recordSpriteBake(key, import.meta.env.DEV ? performance.now() - _t0 : 0);
+  FP.recordFolderShadedBake();
   return c;
 }
 
@@ -300,6 +301,7 @@ export function getTheme1x1SpriteShaded(
   // canvas instead — this is a stable non-null result so the chunk does NOT
   // set hadFallbacksFlag and will NOT rebuild every frame.
   if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    FP.recordUnshadedFallback();
     return _getOrCreateUnshaded8x8(url, base);
   }
 
@@ -355,6 +357,7 @@ export function getTheme2x2SpriteShaded(
   // During active gameplay, baking new shaded canvases is forbidden.  Return a
   // cheap unshaded canvas so the chunk renders without hadFallbacksFlag loops.
   if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    FP.recordUnshadedFallback();
     return _getOrCreateUnshaded16x16(url, img);
   }
 

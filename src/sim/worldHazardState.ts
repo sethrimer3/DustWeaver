@@ -64,6 +64,7 @@ import {
   MAX_PHANTASMAL_SPIKES,
   MAX_VOID_SPHERES,
 } from './clusters/heraldConfig';
+import { MAX_ICE_SPIKES } from './clusters/iceWizardConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -146,6 +147,7 @@ export {
   MAX_PHANTASMAL_SPIKES,
   MAX_VOID_SPHERES,
 } from './clusters/heraldConfig';
+export { MAX_ICE_SPIKES } from './clusters/iceWizardConfig';
 
 export interface HazardWorldState {
   // ── Spikes ─────────────────────────────────────────────────────────────────
@@ -619,6 +621,14 @@ export interface HazardWorldState {
   phantasmalShockwaveYWorld: Float32Array;
   phantasmalShockwaveAgeTicks: Uint16Array;
   phantasmalShockwaveAliveFlag: Uint8Array;
+
+  // Ice Wizard transient floor spikes.
+  iceSpikeXWorld: Float32Array;
+  iceSpikeBaseYWorld: Float32Array;
+  iceSpikeAgeTicks: Uint16Array;
+  iceSpikeDelayTicks: Uint16Array;
+  iceSpikeAliveFlag: Uint8Array;
+  iceSpikeHitPlayerFlag: Uint8Array;
 }
 
 /** Returns the default-initialised hazard/critter state for use in createWorldState(). */
@@ -821,5 +831,11 @@ export function createHazardWorldState(): HazardWorldState {
     phantasmalShockwaveYWorld:    new Float32Array(MAX_PHANTASMAL_SHOCKWAVES),
     phantasmalShockwaveAgeTicks:  new Uint16Array(MAX_PHANTASMAL_SHOCKWAVES),
     phantasmalShockwaveAliveFlag: new Uint8Array(MAX_PHANTASMAL_SHOCKWAVES),
+    iceSpikeXWorld:               new Float32Array(MAX_ICE_SPIKES),
+    iceSpikeBaseYWorld:           new Float32Array(MAX_ICE_SPIKES),
+    iceSpikeAgeTicks:             new Uint16Array(MAX_ICE_SPIKES),
+    iceSpikeDelayTicks:           new Uint16Array(MAX_ICE_SPIKES),
+    iceSpikeAliveFlag:            new Uint8Array(MAX_ICE_SPIKES),
+    iceSpikeHitPlayerFlag:        new Uint8Array(MAX_ICE_SPIKES),
   };
 }

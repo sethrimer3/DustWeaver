@@ -95,6 +95,7 @@ import {
 } from '../sim/clusters/voidSingularityConfig';
 import { CW_HALF_H, CW_HALF_W, CW_HP, CW_INITIAL_COOLDOWN_TICKS, CW_STATE_IDLE } from '../sim/clusters/crimsonWizardConfig';
 import { HERALD_HALF_H, HERALD_HALF_W, HERALD_HP, HERALD_INITIAL_COOLDOWN_TICKS, HERALD_STATE_IDLE } from '../sim/clusters/heraldConfig';
+import { ICE_WIZARD_HALF_H, ICE_WIZARD_HALF_W, ICE_WIZARD_HP, ICE_WIZARD_STATE_IDLE } from '../sim/clusters/iceWizardConfig';
 import { VS_STATE_IDLE as VS_IDLE } from '../sim/clusters/voidSingularityAi';
 import {
   DL_HP,
@@ -209,6 +210,18 @@ export function spawnEnemyClusters(
       enemyCluster.halfHeightWorld = HERALD_HALF_H;
       enemyCluster.healthPoints = HERALD_HP;
       enemyCluster.maxHealthPoints = HERALD_HP;
+    } else if (enemyDef.isIceWizardFlag === 1) {
+      enemyCluster.isIceWizardFlag = 1;
+      enemyCluster.iceWizardState = ICE_WIZARD_STATE_IDLE;
+      enemyCluster.iceWizardStateTicks = 0;
+      enemyCluster.halfWidthWorld = ICE_WIZARD_HALF_W;
+      enemyCluster.halfHeightWorld = ICE_WIZARD_HALF_H;
+      enemyCluster.positionXWorld = Math.round((ex - ICE_WIZARD_HALF_W) / BLOCK_SIZE_MEDIUM) * BLOCK_SIZE_MEDIUM + ICE_WIZARD_HALF_W;
+      enemyCluster.positionYWorld = Math.round((ey - ICE_WIZARD_HALF_H) / BLOCK_SIZE_MEDIUM) * BLOCK_SIZE_MEDIUM + ICE_WIZARD_HALF_H;
+      enemyCluster.iceWizardGridX = Math.round((enemyCluster.positionXWorld - ICE_WIZARD_HALF_W) / BLOCK_SIZE_MEDIUM);
+      enemyCluster.iceWizardGridY = Math.round((enemyCluster.positionYWorld - ICE_WIZARD_HALF_H) / BLOCK_SIZE_MEDIUM);
+      enemyCluster.healthPoints = ICE_WIZARD_HP;
+      enemyCluster.maxHealthPoints = ICE_WIZARD_HP;
     } else if (enemyDef.isGrappleHunterFlag === 1) {
       enemyCluster.isGrappleHunterFlag  = 1;
       enemyCluster.grappleHunterState   = 0;
@@ -749,6 +762,7 @@ export function spawnEnemyClusters(
       enemyCluster.isRadiantWebFlag    === 1 ||
       enemyCluster.isCrimsonWizardFlag === 1 ||
       enemyCluster.isHeraldFlag === 1 ||
+      enemyCluster.isIceWizardFlag === 1 ||
       enemyCluster.isDustConstellationFlag === 1 ||
       enemyCluster.isOrbitalDustCoreFlag === 1 ||
       enemyCluster.isDustBlockMimicFlag === 1 ||
@@ -799,6 +813,27 @@ export function spawnHeraldForTesting(world: WorldState, xWorld: number, yWorld:
   boss.halfHeightWorld = HERALD_HALF_H;
   boss.healthPoints = HERALD_HP;
   boss.maxHealthPoints = HERALD_HP;
+  world.clusters.push(boss);
+  return boss.entityId;
+}
+
+export function spawnIceWizardForTesting(world: WorldState, xWorld: number, yWorld: number): number {
+  let nextEntityId = 2;
+  for (let i = 0; i < world.clusters.length; i++) {
+    if (world.clusters[i].entityId >= nextEntityId) nextEntityId = world.clusters[i].entityId + 1;
+  }
+  const snappedX = Math.round((xWorld - ICE_WIZARD_HALF_W) / BLOCK_SIZE_MEDIUM) * BLOCK_SIZE_MEDIUM + ICE_WIZARD_HALF_W;
+  const snappedY = Math.round((yWorld - ICE_WIZARD_HALF_H) / BLOCK_SIZE_MEDIUM) * BLOCK_SIZE_MEDIUM + ICE_WIZARD_HALF_H;
+  const boss = createClusterState(nextEntityId, snappedX, snappedY, 0, ICE_WIZARD_HP);
+  boss.isIceWizardFlag = 1;
+  boss.iceWizardState = ICE_WIZARD_STATE_IDLE;
+  boss.iceWizardStateTicks = 0;
+  boss.halfWidthWorld = ICE_WIZARD_HALF_W;
+  boss.halfHeightWorld = ICE_WIZARD_HALF_H;
+  boss.iceWizardGridX = Math.round((snappedX - ICE_WIZARD_HALF_W) / BLOCK_SIZE_MEDIUM);
+  boss.iceWizardGridY = Math.round((snappedY - ICE_WIZARD_HALF_H) / BLOCK_SIZE_MEDIUM);
+  boss.healthPoints = ICE_WIZARD_HP;
+  boss.maxHealthPoints = ICE_WIZARD_HP;
   world.clusters.push(boss);
   return boss.entityId;
 }

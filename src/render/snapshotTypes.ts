@@ -308,6 +308,11 @@ export interface WorldSnapshot {
   readonly phantasmalShockwaveYWorld: Float32Array;
   readonly phantasmalShockwaveAgeTicks: Uint16Array;
   readonly phantasmalShockwaveAliveFlag: Uint8Array;
+  readonly iceSpikeXWorld: Float32Array;
+  readonly iceSpikeBaseYWorld: Float32Array;
+  readonly iceSpikeAgeTicks: Uint16Array;
+  readonly iceSpikeDelayTicks: Uint16Array;
+  readonly iceSpikeAliveFlag: Uint8Array;
 
   // ── Dust Leech mote arrays ─────────────────────────────────────────────────
   readonly dlMoteAngleRad: Float32Array;

@@ -35,6 +35,7 @@
  */
 
 import * as FP from '../../debug/perfFreezeProfiler';
+import { EDGE_SHADING_VERSION } from './blockEdgeShading';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -202,6 +203,16 @@ export class RoomChunkCache {
 
   /** scalePx used when chunks were last allocated. */
   private _scalePx = 0;
+
+  /**
+   * `EDGE_SHADING_VERSION` observed when chunks were last built.  A version
+   * bump (shading constants/algorithm tuning) must invalidate every baked
+   * chunk canvas even though the wall layout and scale are unchanged —
+   * otherwise previously-baked (unshaded or differently-shaded) chunks would
+   * stay visually stuck until some unrelated layout change happened to
+   * trigger a full rebuild.
+   */
+  private _shadingVersion = EDGE_SHADING_VERSION;
 
   /** Mutable stats object updated every frame. */
   readonly stats: ChunkCacheStats = {
@@ -537,11 +548,12 @@ export class RoomChunkCache {
     // Retry any chunk stuck on the gameplay unshaded fallback now that baking
     // may have become allowed again since the last call.
     this._retryGameplayFallbackChunks();
-    // ── Layout / scale change detection ─────────────────────────────────────
-    if (layoutRef !== this._layoutRef || scalePx !== this._scalePx) {
+    // ── Layout / scale / shading-version change detection ───────────────────
+    if (layoutRef !== this._layoutRef || scalePx !== this._scalePx || this._shadingVersion !== EDGE_SHADING_VERSION) {
       this.invalidateAll();
       this._layoutRef = layoutRef;
       this._scalePx   = scalePx;
+      this._shadingVersion = EDGE_SHADING_VERSION;
     }
 
     // ── Compute visible chunk range ──────────────────────────────────────────

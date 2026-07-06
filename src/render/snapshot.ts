@@ -111,6 +111,7 @@ interface _ReusableBacking {
   phantasmalSpikeAliveFlag: Uint8Array;
   phantasmalBlockAliveFlag: Uint8Array;
   phantasmalShockwaveAliveFlag: Uint8Array;
+  iceSpikeAliveFlag: Uint8Array;
   // Arrow Weave scalar fields updated each frame
   isArrowWeaveLoadingFlag: 0 | 1;
   arrowWeaveCurrentMoteCount: number;
@@ -347,6 +348,11 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     phantasmalShockwaveYWorld:   world.phantasmalShockwaveYWorld,
     phantasmalShockwaveAgeTicks: world.phantasmalShockwaveAgeTicks,
     phantasmalShockwaveAliveFlag: world.phantasmalShockwaveAliveFlag,
+    iceSpikeXWorld:              world.iceSpikeXWorld,
+    iceSpikeBaseYWorld:          world.iceSpikeBaseYWorld,
+    iceSpikeAgeTicks:            world.iceSpikeAgeTicks,
+    iceSpikeDelayTicks:          world.iceSpikeDelayTicks,
+    iceSpikeAliveFlag:           world.iceSpikeAliveFlag,
     architectBlockCount:         world.architectBlockCount,
     architectBlockXWorld:        world.architectBlockXWorld,
     architectBlockYWorld:        world.architectBlockYWorld,
@@ -703,6 +709,11 @@ export function refreshSnapshotWorldArrayRefs(
   raw.phantasmalShockwaveYWorld      = world.phantasmalShockwaveYWorld;
   raw.phantasmalShockwaveAgeTicks    = world.phantasmalShockwaveAgeTicks;
   raw.phantasmalShockwaveAliveFlag   = world.phantasmalShockwaveAliveFlag;
+  raw.iceSpikeXWorld                 = world.iceSpikeXWorld;
+  raw.iceSpikeBaseYWorld             = world.iceSpikeBaseYWorld;
+  raw.iceSpikeAgeTicks               = world.iceSpikeAgeTicks;
+  raw.iceSpikeDelayTicks             = world.iceSpikeDelayTicks;
+  raw.iceSpikeAliveFlag              = world.iceSpikeAliveFlag;
   raw.architectBlockXWorld           = world.architectBlockXWorld;
   raw.architectBlockYWorld           = world.architectBlockYWorld;
   raw.architectBlockHealth           = world.architectBlockHealth;

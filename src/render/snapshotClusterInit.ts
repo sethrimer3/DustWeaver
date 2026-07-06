@@ -62,6 +62,9 @@ export function _makeEmptyCluster(): _MutableCluster {
     heraldState: 0,
     heraldStateTicks: 0,
     heraldFacingX: 1,
+    isIceWizardFlag: 0,
+    iceWizardState: 0,
+    iceWizardStateTicks: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterChainStartIndex: -1,
@@ -262,6 +265,9 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.heraldState                     = src.heraldState;
   dst.heraldStateTicks                = src.heraldStateTicks;
   dst.heraldFacingX                   = src.heraldFacingX;
+  dst.isIceWizardFlag                 = src.isIceWizardFlag;
+  dst.iceWizardState                  = src.iceWizardState;
+  dst.iceWizardStateTicks             = src.iceWizardStateTicks;
   dst.isGrappleHunterFlag             = src.isGrappleHunterFlag;
   dst.grappleHunterState              = src.grappleHunterState;
   dst.grappleHunterChainStartIndex    = src.grappleHunterChainStartIndex;

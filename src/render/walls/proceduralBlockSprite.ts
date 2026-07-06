@@ -25,6 +25,7 @@ import type { BlockShapeName } from './blockSpriteCatalog';
 import { TEMPLATE_URLS, getBaseSpriteProbePool } from './blockSpriteCatalog';
 import {
   applyOrganicEdgeShading,
+  EDGE_SHADING_VERSION,
   OPEN_AIR_SIDE_N,
   OPEN_AIR_SIDE_E,
   OPEN_AIR_SIDE_S,
@@ -78,7 +79,7 @@ function _cacheKey(
   variantBucket: number,
   seed: number,
 ): string {
-  return `${baseUrl}|${templateUrl}|${widthPx}|${heightPx}|${flipX ? 1 : 0}${flipY ? 1 : 0}${rotStep}|${openAirSidesMask}|${variantBucket}|${seed}`;
+  return `${baseUrl}|${templateUrl}|${widthPx}|${heightPx}|${flipX ? 1 : 0}${flipY ? 1 : 0}${rotStep}|${openAirSidesMask}|${variantBucket}|${seed}|v${EDGE_SHADING_VERSION}`;
 }
 
 /**

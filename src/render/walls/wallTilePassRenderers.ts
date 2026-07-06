@@ -45,6 +45,7 @@ import {
   getTheme2x2SpriteShaded,
   getFolderThemeBaseUrl,
 } from './folderBlockThemes';
+import { getLegacyShadedSprite } from './legacyBlockShading';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
 import type { CachedTileCoord, RampWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
@@ -63,6 +64,68 @@ import {
 
 // Dev-mode set of theme keys that have already triggered a missing-sprite warning.
 const _warnedMissingThemes: Set<string> = import.meta.env.DEV ? new Set() : (null as unknown as Set<string>);
+
+// ── DEV-only open-air side diagnostic overlay ─────────────────────────────────
+//
+// Toggle via the browser console: `window.__dwEdgeOverlay = true`.
+// Draws a bright line on each exposed (open-air) side of every 1×1 wall tile,
+// straight from `openAirSidesMask` — the same value fed into
+// `applyOrganicEdgeShading` — with NO sprite baking/caching in the path, so it
+// proves whether the room's actual open-air detection is correct independent
+// of whatever the shaded-sprite cache is doing.
+//   top (N)    → bright red
+//   right (E)  → bright green
+//   bottom (S) → bright cyan
+//   left (W)   → bright magenta
+declare global {
+  interface Window {
+    __dwEdgeOverlay?: boolean;
+  }
+}
+
+function _devEdgeOverlayEnabled(): boolean {
+  return typeof window !== 'undefined' && window.__dwEdgeOverlay === true;
+}
+
+function _drawEdgeOverlay(
+  ctx: CanvasRenderingContext2D,
+  tileX: number,
+  tileY: number,
+  sizePx: number,
+  openAirSidesMask: number,
+): void {
+  ctx.save();
+  ctx.lineWidth = 1;
+  if (openAirSidesMask & OPEN_AIR_SIDE_N) {
+    ctx.strokeStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.moveTo(tileX, tileY + 0.5);
+    ctx.lineTo(tileX + sizePx, tileY + 0.5);
+    ctx.stroke();
+  }
+  if (openAirSidesMask & OPEN_AIR_SIDE_E) {
+    ctx.strokeStyle = '#00ff00';
+    ctx.beginPath();
+    ctx.moveTo(tileX + sizePx - 0.5, tileY);
+    ctx.lineTo(tileX + sizePx - 0.5, tileY + sizePx);
+    ctx.stroke();
+  }
+  if (openAirSidesMask & OPEN_AIR_SIDE_S) {
+    ctx.strokeStyle = '#00ffff';
+    ctx.beginPath();
+    ctx.moveTo(tileX, tileY + sizePx - 0.5);
+    ctx.lineTo(tileX + sizePx, tileY + sizePx - 0.5);
+    ctx.stroke();
+  }
+  if (openAirSidesMask & OPEN_AIR_SIDE_W) {
+    ctx.strokeStyle = '#ff00ff';
+    ctx.beginPath();
+    ctx.moveTo(tileX + 0.5, tileY);
+    ctx.lineTo(tileX + 0.5, tileY + sizePx);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
 // Pre-allocated empty arrays used as fallbacks when a chunk has no items of a type.
 const _EMPTY_TILES: CachedTileCoord[]     = [];
@@ -270,12 +333,13 @@ export function render1x1Pass(
 
     const material = themeToProceduralMaterial(tileTheme, activeWorldNumber);
 
+    const openAirSidesMask =
+      (northSolid ? 0 : OPEN_AIR_SIDE_N) |
+      (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
+      (southSolid ? 0 : OPEN_AIR_SIDE_S) |
+      (westSolid  ? 0 : OPEN_AIR_SIDE_W);
+
     if (material !== null) {
-      const openAirSidesMask =
-        (northSolid ? 0 : OPEN_AIR_SIDE_N) |
-        (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
-        (southSolid ? 0 : OPEN_AIR_SIDE_S) |
-        (westSolid  ? 0 : OPEN_AIR_SIDE_W);
       const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -284,11 +348,6 @@ export function render1x1Pass(
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else if (isFolderBasedTheme(tileTheme)) {
-      const openAirSidesMask =
-        (northSolid ? 0 : OPEN_AIR_SIDE_N) |
-        (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
-        (southSolid ? 0 : OPEN_AIR_SIDE_S) |
-        (westSolid  ? 0 : OPEN_AIR_SIDE_W);
       const folderSprite = getTheme1x1SpriteShaded(tileTheme, col, row, activeWorldNumber, openAirSidesMask, blockSizePx);
       if (folderSprite !== null) {
         ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -310,8 +369,9 @@ export function render1x1Pass(
       }
       const img = getSpriteForLegacyTheme(tileTheme, spec.variant, blockSizePx);
       if (isSpriteReady(img)) {
+        const shaded = getLegacyShadedSprite(img, img.naturalWidth, img.naturalHeight, openAirSidesMask, col, row, activeWorldNumber, blockSizePx);
         if (tileTheme === 'brownRock' || spec.rotationRad === 0) {
-          ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
+          ctx.drawImage(shaded, tileX, tileY, tileSizeScreen, tileSizeScreen);
         } else {
           const halfSz = Math.round(tileSizeScreen * 0.5);
           const cx     = Math.round(tileX + tileSizeScreen * 0.5);
@@ -319,7 +379,7 @@ export function render1x1Pass(
           ctx.save();
           ctx.translate(cx, cy);
           ctx.rotate(spec.rotationRad);
-          ctx.drawImage(img, -halfSz, -halfSz, tileSizeScreen, tileSizeScreen);
+          ctx.drawImage(shaded, -halfSz, -halfSz, tileSizeScreen, tileSizeScreen);
           ctx.restore();
         }
       } else {
@@ -329,8 +389,9 @@ export function render1x1Pass(
     } else {
       const img = sprites[spec.variant];
       if (isSpriteReady(img)) {
+        const shaded = getLegacyShadedSprite(img, img.naturalWidth, img.naturalHeight, openAirSidesMask, col, row, activeWorldNumber, blockSizePx);
         if (spec.rotationRad === 0) {
-          ctx.drawImage(img, tileX, tileY, tileSizeScreen, tileSizeScreen);
+          ctx.drawImage(shaded, tileX, tileY, tileSizeScreen, tileSizeScreen);
         } else {
           const halfSz = Math.round(tileSizeScreen * 0.5);
           const cx     = Math.round(tileX + tileSizeScreen * 0.5);
@@ -338,13 +399,17 @@ export function render1x1Pass(
           ctx.save();
           ctx.translate(cx, cy);
           ctx.rotate(spec.rotationRad);
-          ctx.drawImage(img, -halfSz, -halfSz, tileSizeScreen, tileSizeScreen);
+          ctx.drawImage(shaded, -halfSz, -halfSz, tileSizeScreen, tileSizeScreen);
           ctx.restore();
         }
       } else {
         hadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
+    }
+
+    if (import.meta.env.DEV && _devEdgeOverlayEnabled()) {
+      _drawEdgeOverlay(ctx, tileX, tileY, tileSizeScreen, openAirSidesMask);
     }
 
     if (isBlockTintEnabled) {

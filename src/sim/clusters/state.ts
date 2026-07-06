@@ -400,6 +400,18 @@ export interface ClusterState {
   /** Deterministic attack cycle counter. */
   heraldNextAttackIndex: number;
 
+  /** 1 if this cluster is the Ice Wizard boss. */
+  isIceWizardFlag: 0 | 1;
+  /** Current Ice Wizard state: idle/telegraphSlam/slamDown/recovery. */
+  iceWizardState: number;
+  /** Ticks elapsed in the current Ice Wizard state. */
+  iceWizardStateTicks: number;
+  /** Grid-aligned top-left tile occupied by the 4x4 boss footprint. */
+  iceWizardGridX: number;
+  iceWizardGridY: number;
+  /** Last floor Y used by the slam impact, for debug/tests/future effects. */
+  iceWizardImpactFloorYWorld: number;
+
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
   isFacingLeftFlag: 0 | 1;
@@ -1054,6 +1066,12 @@ export function createClusterState(
     heraldAttackCooldownTicks: 0,
     heraldAttackKind: 0,
     heraldNextAttackIndex: 0,
+    isIceWizardFlag: 0,
+    iceWizardState: 0,
+    iceWizardStateTicks: 0,
+    iceWizardGridX: 0,
+    iceWizardGridY: 0,
+    iceWizardImpactFloorYWorld: 0,
     isGrappleHunterFlag: 0,
     grappleHunterState: 0,
     grappleHunterStateTicks: 0,
