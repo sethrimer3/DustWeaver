@@ -9,8 +9,30 @@ import {
   CW_TELEGRAPH_KIND_METEOR,
   CW_TELEGRAPH_KIND_PILLAR,
 } from '../../sim/clusters/crimsonWizardConfig';
+import {
+  CW_SPRITE_ATTACK,
+  CW_SPRITE_ATTACK_ABOVE,
+  getCrimsonWizardSpriteFrame,
+} from '../../sim/clusters/crimsonWizardAnimation';
+import { loadImg, isSpriteReady } from '../imageCache';
 
 const FIRE_COLORS = ['#ffb02e', '#ff6a1a', '#ff3b12', '#b11226', '#6f1018'];
+
+const CW_SPRITE_DIR = 'SPRITES/ENEMIES/BOSSES/CrimsonWizard';
+const _cwIdleSprite = loadImg(`${CW_SPRITE_DIR}/CrimsonWizard_Idle.png`);
+const _cwAttackSprites: readonly HTMLImageElement[] = [1, 2, 3, 4, 5, 6].map((n) =>
+  loadImg(`${CW_SPRITE_DIR}/CrimsonWizard_Attacking_Frame_${n}.png`),
+);
+const _cwAttackAboveSprites: readonly HTMLImageElement[] = [1, 2, 3].map((n) =>
+  loadImg(`${CW_SPRITE_DIR}/CrimsonWizard_Attacking_Above_Frame_${n}.png`),
+);
+
+function selectCrimsonWizardSprite(cluster: ClusterSnapshot): HTMLImageElement | null {
+  const frame = getCrimsonWizardSpriteFrame(cluster.crimsonWizardState, cluster.crimsonWizardStateTicks);
+  if (frame.kind === CW_SPRITE_ATTACK) return _cwAttackSprites[frame.frameIndex - 1] ?? null;
+  if (frame.kind === CW_SPRITE_ATTACK_ABOVE) return _cwAttackAboveSprites[frame.frameIndex - 1] ?? null;
+  return _cwIdleSprite;
+}
 
 export function renderCrimsonWizardBody(
   ctx: CanvasRenderingContext2D,
@@ -21,11 +43,22 @@ export function renderCrimsonWizardBody(
 ): void {
   const halfW = cluster.halfWidthWorld * scalePx;
   const halfH = cluster.halfHeightWorld * scalePx;
-  ctx.fillStyle = '#9d1025';
-  ctx.fillRect(Math.round(screenX - halfW), Math.round(screenY - halfH), Math.round(halfW * 2), Math.round(halfH * 2));
-  ctx.strokeStyle = '#ff5a2a';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(Math.round(screenX - halfW) + 0.5, Math.round(screenY - halfH) + 0.5, Math.round(halfW * 2), Math.round(halfH * 2));
+  const sprite = selectCrimsonWizardSprite(cluster);
+
+  if (sprite !== null && isSpriteReady(sprite)) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(Math.round(screenX), Math.round(screenY));
+    ctx.scale(cluster.crimsonWizardFacingX < 0 ? -1 : 1, 1);
+    ctx.drawImage(sprite, -halfW, -halfH, halfW * 2, halfH * 2);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = '#9d1025';
+    ctx.fillRect(Math.round(screenX - halfW), Math.round(screenY - halfH), Math.round(halfW * 2), Math.round(halfH * 2));
+    ctx.strokeStyle = '#ff5a2a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(screenX - halfW) + 0.5, Math.round(screenY - halfH) + 0.5, Math.round(halfW * 2), Math.round(halfH * 2));
+  }
 
   if (cluster.crimsonWizardTelegraphTicks > 0) {
     ctx.globalAlpha = 0.35 + (cluster.crimsonWizardTelegraphTicks % 4) * 0.08;

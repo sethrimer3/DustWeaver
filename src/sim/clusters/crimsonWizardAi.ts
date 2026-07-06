@@ -35,10 +35,13 @@ import {
   CW_ROOM_MARGIN,
   CW_STATE_FIRE_BALLS,
   CW_STATE_FIRE_PILLARS,
+  CW_STATE_GROUND_FIRE_BALLS,
   CW_STATE_IDLE,
   CW_STATE_METEORS,
   CW_STATE_RECOVER,
   CW_STATE_TIDAL_WAVE,
+  CW_GROUND_FIREBALL_COUNT,
+  CW_GROUND_FIREBALL_INTERVAL_TICKS,
   CW_TELEGRAPH_KIND_CHARGE,
   CW_TELEGRAPH_KIND_METEOR,
   CW_TELEGRAPH_KIND_PILLAR,
@@ -54,6 +57,7 @@ import {
 } from './crimsonWizardConfig';
 import { ClusterState } from './state';
 import { spawnCrimsonFireDust, spawnCrimsonFireball, spawnCrimsonMeteor, spawnCrimsonTelegraph } from './crimsonWizardEffects';
+import { isCrimsonWizardGroundCastDone, isCrimsonWizardGroundCasting } from './crimsonWizardAnimation';
 
 export type CrimsonWizardPhase = typeof CW_PHASE_1 | typeof CW_PHASE_2 | typeof CW_PHASE_3;
 
@@ -146,22 +150,25 @@ const PHASE_TUNING: readonly CrimsonWizardPhaseTuning[] = [
 
 const PHASE_ATTACK_WEIGHTS: Readonly<Record<CrimsonWizardPhase, Readonly<Record<number, number>>>> = {
   [CW_PHASE_1]: {
-    [CW_STATE_FIRE_BALLS]: 46,
-    [CW_STATE_FIRE_PILLARS]: 32,
-    [CW_STATE_TIDAL_WAVE]: 16,
+    [CW_STATE_FIRE_BALLS]: 36,
+    [CW_STATE_GROUND_FIRE_BALLS]: 20,
+    [CW_STATE_FIRE_PILLARS]: 26,
+    [CW_STATE_TIDAL_WAVE]: 12,
     [CW_STATE_METEORS]: 6,
   },
   [CW_PHASE_2]: {
-    [CW_STATE_FIRE_BALLS]: 30,
-    [CW_STATE_FIRE_PILLARS]: 30,
-    [CW_STATE_METEORS]: 24,
-    [CW_STATE_TIDAL_WAVE]: 16,
+    [CW_STATE_FIRE_BALLS]: 24,
+    [CW_STATE_GROUND_FIRE_BALLS]: 18,
+    [CW_STATE_FIRE_PILLARS]: 24,
+    [CW_STATE_METEORS]: 20,
+    [CW_STATE_TIDAL_WAVE]: 14,
   },
   [CW_PHASE_3]: {
-    [CW_STATE_FIRE_BALLS]: 26,
-    [CW_STATE_FIRE_PILLARS]: 28,
-    [CW_STATE_METEORS]: 28,
-    [CW_STATE_TIDAL_WAVE]: 18,
+    [CW_STATE_FIRE_BALLS]: 20,
+    [CW_STATE_GROUND_FIRE_BALLS]: 16,
+    [CW_STATE_FIRE_PILLARS]: 24,
+    [CW_STATE_METEORS]: 24,
+    [CW_STATE_TIDAL_WAVE]: 16,
   },
 };
 
@@ -216,6 +223,7 @@ export function isCrimsonWizardAttackValid(world: WorldState, attackState: numbe
   if (attackState === CW_STATE_TIDAL_WAVE) return world.worldWidthWorld >= 96;
   if (attackState === CW_STATE_METEORS) return world.worldHeightWorld >= 88 && activeProjectileCount(world) < 6;
   if (attackState === CW_STATE_FIRE_BALLS) return activeProjectileCount(world) < 10;
+  if (attackState === CW_STATE_GROUND_FIRE_BALLS) return activeProjectileCount(world) < 10;
   return true;
 }
 
@@ -229,6 +237,7 @@ export function selectCrimsonWizardAttack(world: WorldState, boss: ClusterState,
   const weights = PHASE_ATTACK_WEIGHTS[phase];
   const candidates = [
     CW_STATE_FIRE_BALLS,
+    CW_STATE_GROUND_FIRE_BALLS,
     CW_STATE_FIRE_PILLARS,
     CW_STATE_METEORS,
     CW_STATE_TIDAL_WAVE,
@@ -267,7 +276,28 @@ export function findCrimsonWizardFloorY(world: WorldState, xWorld: number): numb
   return clamp(floorY, CW_ROOM_MARGIN, world.worldHeightWorld - 4);
 }
 
+const CW_GROUND_DESCENT_SPEED_WORLD = 2.2;
+
+/** While ground-casting, glides the boss down to (and holds it at) the floor instead of hovering. */
+function steerCrimsonWizardGrounded(world: WorldState, boss: ClusterState): void {
+  const floorY = findCrimsonWizardFloorY(world, boss.positionXWorld) - boss.halfHeightWorld;
+  const dy = floorY - boss.positionYWorld;
+  if (Math.abs(dy) > CW_GROUND_DESCENT_SPEED_WORLD) {
+    boss.positionYWorld += Math.sign(dy) * CW_GROUND_DESCENT_SPEED_WORLD;
+  } else {
+    boss.positionYWorld = floorY;
+  }
+  boss.crimsonWizardVelXWorld *= CW_MOVE_DAMPING;
+  boss.crimsonWizardVelYWorld = 0;
+  boss.velocityXWorld = 0;
+  boss.velocityYWorld = 0;
+}
+
 export function steerCrimsonWizardMovement(world: WorldState, boss: ClusterState, player: ClusterState): void {
+  if (boss.crimsonWizardState === CW_STATE_GROUND_FIRE_BALLS) {
+    steerCrimsonWizardGrounded(world, boss);
+    return;
+  }
   const tuning = getCrimsonWizardPhaseTuning(getCrimsonWizardPhase(boss.healthPoints, boss.maxHealthPoints));
   const dx = player.positionXWorld - boss.positionXWorld;
   const dy = player.positionYWorld - boss.positionYWorld;
@@ -483,6 +513,15 @@ function emitFireballs(world: WorldState, boss: ClusterState, player: ClusterSta
   }
 }
 
+function emitGroundFireballs(world: WorldState, boss: ClusterState, player: ClusterState): void {
+  if (!isCrimsonWizardGroundCasting(boss.crimsonWizardStateTicks)) return;
+  const castTick = boss.crimsonWizardStateTicks;
+  if ((castTick % CW_GROUND_FIREBALL_INTERVAL_TICKS) !== 1) return;
+  const volleyIndex = Math.floor(castTick / CW_GROUND_FIREBALL_INTERVAL_TICKS);
+  if (volleyIndex >= CW_GROUND_FIREBALL_COUNT) return;
+  spawnAimedFireball(world, boss, player.positionXWorld + randSigned(world) * 12, player.positionYWorld + randSigned(world) * 8, 0);
+}
+
 function tickAttackState(world: WorldState, boss: ClusterState, player: ClusterState): void {
   const phase = getCrimsonWizardPhase(boss.healthPoints, boss.maxHealthPoints);
   const tuning = getCrimsonWizardPhaseTuning(phase);
@@ -517,6 +556,10 @@ function tickAttackState(world: WorldState, boss: ClusterState, player: ClusterS
     case CW_STATE_FIRE_BALLS:
       emitFireballs(world, boss, player, tuning);
       if (boss.crimsonWizardStateTicks > CW_FIREBALL_DURATION_TICKS) setState(boss, CW_STATE_RECOVER);
+      break;
+    case CW_STATE_GROUND_FIRE_BALLS:
+      emitGroundFireballs(world, boss, player);
+      if (isCrimsonWizardGroundCastDone(boss.crimsonWizardStateTicks)) setState(boss, CW_STATE_RECOVER);
       break;
     case CW_STATE_RECOVER:
       if (boss.crimsonWizardStateTicks > tuning.recoverTicks) {

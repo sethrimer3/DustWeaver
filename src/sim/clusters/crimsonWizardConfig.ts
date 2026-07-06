@@ -10,6 +10,30 @@ export const CW_STATE_FIRE_PILLARS = 2;
 export const CW_STATE_METEORS = 3;
 export const CW_STATE_FIRE_BALLS = 4;
 export const CW_STATE_RECOVER = 5;
+/** Grounded fireball-casting attack: lands, plays attack frames 1-6, casts, then reverses back to idle. */
+export const CW_STATE_GROUND_FIRE_BALLS = 6;
+
+// ── Grounded fireball cast animation timeline (all values in ticks @ 60 ticks/sec) ──
+/** Brief idle stand on the ground before the attack wind-up begins. */
+export const CW_GROUND_IDLE_TICKS = 10;
+/** Ticks each attacking frame (1-6) is held while winding up / winding down. */
+export const CW_GROUND_ATTACK_FRAME_TICKS = 6;
+export const CW_ATTACK_FRAME_COUNT = 6;
+/** Ticks the boss holds on attacking frame 6 while the fireball volley is cast. */
+export const CW_GROUND_CAST_HOLD_TICKS = 64;
+/** Pause after the spell finishes casting, before winding back down to idle (1 second). */
+export const CW_GROUND_POST_CAST_WAIT_TICKS = 60;
+export const CW_GROUND_WIND_UP_TICKS = CW_ATTACK_FRAME_COUNT * CW_GROUND_ATTACK_FRAME_TICKS;
+export const CW_GROUND_WIND_DOWN_TICKS = CW_ATTACK_FRAME_COUNT * CW_GROUND_ATTACK_FRAME_TICKS;
+export const CW_GROUND_ATTACK_DURATION_TICKS =
+  CW_GROUND_IDLE_TICKS + CW_GROUND_WIND_UP_TICKS + CW_GROUND_CAST_HOLD_TICKS + CW_GROUND_POST_CAST_WAIT_TICKS + CW_GROUND_WIND_DOWN_TICKS;
+
+export const CW_GROUND_FIREBALL_COUNT = 3;
+export const CW_GROUND_FIREBALL_INTERVAL_TICKS = 18;
+
+/** Flying (airborne, non-grounded) attacking-above sprite cycle. */
+export const CW_ATTACK_ABOVE_FRAME_COUNT = 3;
+export const CW_FLYING_ABOVE_FRAME_TICKS = 10;
 
 export const CW_PHASE_1 = 1;
 export const CW_PHASE_2 = 2;
