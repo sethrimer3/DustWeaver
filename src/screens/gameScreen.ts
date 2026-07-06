@@ -1508,6 +1508,9 @@ export function startGameScreen(
         editorDebugControls?.removeEditorButton();
       }
     },
+    onEnterWorldEditor: () => {
+      editorController.toggle(currentRoom);
+    },
     onResizeCanvas: resizeCanvas,
   });
 

@@ -39,6 +39,8 @@ export interface PauseMenuCallbacks {
   onResume: () => void;
   onExitToMainMenu: () => void;
   onToggleDebug: () => void;
+  /** Called when the player clicks "World Editor" — should enable debug mode (if needed) and enter the editor directly. */
+  onOpenWorldEditor: () => void;
   /** Called after a World View preset change so the caller can resize the virtual canvas. */
   onWorldViewChanged?: () => void;
 }
@@ -431,6 +433,13 @@ export function showPauseMenu(
     },
   );
   mainButtons.appendChild(debugBtn);
+
+  // World Editor — jumps straight into the editor without requiring Debug mode
+  const worldEditorBtn = makeButton('World Editor', () => {
+    destroy();
+    callbacks.onOpenWorldEditor();
+  });
+  mainButtons.appendChild(worldEditorBtn);
 
   // Always Center Camera — inline checkbox below Debug toggle
   const alwaysCenterRow = document.createElement('div');

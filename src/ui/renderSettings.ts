@@ -289,6 +289,27 @@ export function setManualSprintEnabled(enabled: boolean): void {
   localStorage.setItem(MANUAL_SPRINT_STORAGE_KEY, enabled ? '1' : '0');
 }
 
+// ── Advanced Wall Jumps ──────────────────────────────────────────────────────
+
+const ADVANCED_WALL_JUMPS_STORAGE_KEY = 'dustweaver-advanced-wall-jumps';
+
+/**
+ * When false (default), any jump press while next to a quality wall — not
+ * grappling, not grounded, not in coyote time — triggers a wall jump
+ * regardless of horizontal input direction (including no input at all).
+ * When true, wall jumps require deliberate intent (wall-sliding, pressing
+ * away from the wall, or having been airborne/falling for a few ticks) —
+ * the original stricter behavior.
+ * Persists in localStorage.
+ */
+export function getAdvancedWallJumpsEnabled(): boolean {
+  return localStorage.getItem(ADVANCED_WALL_JUMPS_STORAGE_KEY) === '1';
+}
+
+export function setAdvancedWallJumpsEnabled(enabled: boolean): void {
+  localStorage.setItem(ADVANCED_WALL_JUMPS_STORAGE_KEY, enabled ? '1' : '0');
+}
+
 // ── Combat Mode ──────────────────────────────────────────────────────────────
 
 import type { CombatMode } from '../sim/combatMode';

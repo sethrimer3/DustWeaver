@@ -15,6 +15,8 @@ interface CreateGamePauseControllerParams {
   onResetFrameClock: () => void;
   onExitToMainMenu: () => void;
   onDebugModeChanged: (isDebugMode: boolean) => void;
+  /** Called to actually enter the world editor (e.g. `editorController.toggle(currentRoom)`). */
+  onEnterWorldEditor: () => void;
   /** Called when the player changes the World View preset so the caller can resize the canvas. */
   onResizeCanvas?: () => void;
 }
@@ -40,6 +42,7 @@ export function createGamePauseController(
     onResetFrameClock,
     onExitToMainMenu,
     onDebugModeChanged,
+    onEnterWorldEditor,
     onResizeCanvas,
   } = params;
 
@@ -86,6 +89,17 @@ export function createGamePauseController(
         state.isDebugMode = !state.isDebugMode;
         state.pauseMenuState.isDebugOn = state.isDebugMode;
         onDebugModeChanged(state.isDebugMode);
+      },
+      onOpenWorldEditor: () => {
+        state.isPaused = false;
+        pauseMenuCleanup = null;
+        onResetFrameClock();
+        if (!state.isDebugMode) {
+          state.isDebugMode = true;
+          state.pauseMenuState.isDebugOn = true;
+          onDebugModeChanged(true);
+        }
+        onEnterWorldEditor();
       },
       onWorldViewChanged: onResizeCanvas,
     });

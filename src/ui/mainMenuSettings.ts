@@ -34,6 +34,8 @@ import {
   setDoubleJumpToGrappleEnabled,
   getPixelSpeedometerEnabled,
   setPixelSpeedometerEnabled,
+  getAdvancedWallJumpsEnabled,
+  setAdvancedWallJumpsEnabled,
 } from './renderSettings';
 import { buildKeybindingsTab } from './mainMenuSettingsKeybindings';
 import {
@@ -278,6 +280,7 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
     label: string,
     initialValue: boolean,
     onChangeFn: (enabled: boolean) => void,
+    tooltip?: string,
   ): HTMLLabelElement {
     const row = document.createElement('label');
     row.style.cssText = `
@@ -308,6 +311,21 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
 
     row.appendChild(checkbox);
     row.appendChild(text);
+
+    if (tooltip !== undefined) {
+      const hint = document.createElement('span');
+      hint.textContent = '?';
+      hint.title = tooltip;
+      hint.style.cssText = `
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto;
+        font-family: 'Cinzel', serif; font-size: 0.7rem; font-weight: 700;
+        color: rgba(212,168,75,0.85); border: 1px solid rgba(212,168,75,0.5);
+        background: rgba(0,0,0,0.25); cursor: help;
+      `;
+      row.appendChild(hint);
+    }
+
     return row;
   }
 
@@ -490,6 +508,11 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
       makeCheckboxRow('Pixel speedometer', getPixelSpeedometerEnabled(), (enabled) => {
         setPixelSpeedometerEnabled(enabled);
       }),
+    );
+    tabContent.appendChild(
+      makeCheckboxRow('Advanced Wall Jumps', getAdvancedWallJumpsEnabled(), (enabled) => {
+        setAdvancedWallJumpsEnabled(enabled);
+      }, 'When off (default), pressing jump next to a wall always wall-jumps, even with no directional input held. When on, a wall jump requires deliberate intent: wall-sliding, pressing away from the wall, or having been falling in the air for a moment.'),
     );
   }
 

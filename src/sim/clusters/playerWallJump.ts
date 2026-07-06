@@ -37,6 +37,7 @@ import {
   computeGroundConnectedExclusion,
   canWallJumpFromSurface,
 } from './playerWallSurface';
+import { getAdvancedWallJumpsEnabled } from '../../ui/renderSettings';
 
 // ── Public result type ────────────────────────────────────────────────────────
 
@@ -112,7 +113,14 @@ function isValidWallJumpFace(
  * Returns true when the player's inputs or state indicate deliberate intent to
  * perform a wall jump off the given side.
  *
- * Intent conditions (ANY is sufficient):
+ * With "Advanced Wall Jumps" DISABLED (the default), any jump press next to a
+ * quality wall is treated as intentional — including no horizontal input at
+ * all — as long as the wall-jump candidate was otherwise found (not grounded,
+ * not in coyote time, not grappling; those are enforced by the caller). This
+ * makes wall jumps fire whenever the player is next to a wall and presses jump.
+ *
+ * With "Advanced Wall Jumps" ENABLED, the stricter original behavior applies —
+ * intent conditions (ANY is sufficient):
  *   - Wall sliding:          player is actively gripping the wall (always intentional).
  *   - Away input:            pressing away from the wall on the jump frame.
  *   - Airborne long enough:  been airborne ≥ MIN_AIRBORNE_TICKS AND falling.
@@ -132,6 +140,10 @@ function hasWallJumpIntent(
   usedProximity: boolean,
 ): boolean {
   if (!WALL_JUMP_REQUIRE_INTENT) return true;
+
+  // Simple mode (default): jump next to a wall always counts as intent,
+  // regardless of horizontal input direction (including no input).
+  if (!getAdvancedWallJumpsEnabled()) return true;
 
   const inputDx = world.playerMoveInputDxWorld;
   const isWallSliding = cluster.isWallSlidingFlag === 1;

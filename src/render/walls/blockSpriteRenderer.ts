@@ -74,6 +74,7 @@ import {
   renderPlatformPass,
   renderRampPass,
   renderHalfPillarPass,
+  clearWallCellDiag,
 } from './wallTilePassRenderers';
 import { renderSeamOverlayPass } from './seamBlending';
 
@@ -316,15 +317,43 @@ function _getAmbientDepths(layout: CachedWallLayout): Map<string, number> {
 }
 
 /**
+ * Feature flag for the 2×2 full-sprite wall rendering optimization.
+ *
+ * ⚠️ TEMPORARILY DISABLED — see the open-air edge-shading bug report.
+ * `render2x2Pass` computes a single `openAirSidesMask2x2` for the whole 2×2
+ * group (a side only counts as open when BOTH constituent cells are open),
+ * so cells inside a 2×2 group receive coarser, inconsistent edge shading
+ * than the same cells would get from the per-cell 1×1 path — visually this
+ * shows up as edge shading on only *some* 2×2 groups while adjacent 1×1-
+ * authored or partially-exposed tiles are untouched. The 2×2 path is a
+ * pure draw-call optimization (fewer drawImage calls for large uniform
+ * regions); it has no effect on gameplay, only on how many sprite blits
+ * happen per frame. Until it is made per-cell-aware (each of the 4
+ * constituent cells computing its own openAirSidesMask and shading only
+ * its own exposed pixel bands), every solid wall cell must go through the
+ * 1×1 path instead so the edge filter is evaluated in tile/cell terms, not
+ * per-2×2-group terms. Flip back to `true` once render2x2Pass supports
+ * correct partial per-cell shading.
+ */
+export const WALL_2X2_FULL_SPRITE_ENABLED = false;
+
+/**
  * Reusable Set identifying tiles covered by a 2×2 full-sprite block.
  * Cleared and repopulated each frame from `wallLayout.solid2x2Map` —
  * avoids creating a new Set<string> every render call.
+ *
+ * When `WALL_2X2_FULL_SPRITE_ENABLED` is false this stays permanently empty,
+ * which is sufficient to fully disable the 2×2 path: `render2x2Pass` early-
+ * returns when this set is empty, and `render1x1Pass` treats every cell as
+ * NOT covered, so all solid cells render through the per-cell 1×1 shaded
+ * path with a correctly-computed per-tile `openAirSidesMask`.
  */
 const _coveredBy2x2Keys = new Set<string>();
 
 /**
  * Populates `_coveredBy2x2Keys` from the layout's `solid2x2Map`.
  * Must be called before the tile-draw loop each frame.
+ * No-ops (leaves the set empty) while `WALL_2X2_FULL_SPRITE_ENABLED` is false.
  */
 function _populateCoveredBy2x2Keys(
   solid2x2Map: Map<string, number>,
@@ -332,6 +361,7 @@ function _populateCoveredBy2x2Keys(
   roomTheme: BlockTheme | null,
 ): void {
   _coveredBy2x2Keys.clear();
+  if (!WALL_2X2_FULL_SPRITE_ENABLED) return;
   for (const [topLeftKey, wallThemeIdx] of solid2x2Map) {
     const resolvedTheme: BlockTheme | null = wallThemeIdx !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(wallThemeIdx)
@@ -776,6 +806,8 @@ export function renderWallSprites(
 ): void {
   const walls = snapshot.walls;
   if (walls.count === 0) return;
+
+  if (import.meta.env?.DEV) clearWallCellDiag();
 
   const wallLayout = getWallLayoutCache(walls, blockSizePx);
 

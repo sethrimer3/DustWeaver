@@ -211,18 +211,18 @@ export function getWallLayoutCache(
   walls: WallSnapshot,
   blockSizePx: number,
 ): CachedWallLayout {
-  const _sigT0 = import.meta.env.DEV ? performance.now() : 0;
+  const _sigT0 = import.meta.env?.DEV ? performance.now() : 0;
   const signature = _computeLayoutSignature(walls, blockSizePx);
-  const _sigMs = import.meta.env.DEV ? performance.now() - _sigT0 : 0;
+  const _sigMs = import.meta.env?.DEV ? performance.now() - _sigT0 : 0;
 
   if (_cachedWallLayout !== null &&
       _cachedWallLayout.signature === signature &&
       _cachedWallLayout.blockSizePx === blockSizePx) {
-    if (import.meta.env.DEV) FP.recordLayoutWork(_sigMs, 0, walls.count);
+    if (import.meta.env?.DEV) FP.recordLayoutWork(_sigMs, 0, walls.count);
     return _cachedWallLayout;
   }
 
-  const _rebuildT0 = import.meta.env.DEV ? performance.now() : 0;
+  const _rebuildT0 = import.meta.env?.DEV ? performance.now() : 0;
 
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
@@ -337,7 +337,7 @@ export function getWallLayoutCache(
   // reflect the final state and chunk rebuilds are O(items-in-chunk).
   _buildChunkBuckets(_cachedWallLayout, walls);
 
-  if (import.meta.env.DEV) FP.recordLayoutWork(_sigMs, performance.now() - _rebuildT0, walls.count);
+  if (import.meta.env?.DEV) FP.recordLayoutWork(_sigMs, performance.now() - _rebuildT0, walls.count);
 
   return _cachedWallLayout;
 }

@@ -87,6 +87,56 @@ function _devEdgeOverlayEnabled(): boolean {
   return typeof window !== 'undefined' && window.__dwEdgeOverlay === true;
 }
 
+// ── DEV-only per-cell render diagnostics ──────────────────────────────────────
+//
+// Records, for every visible wall cell drawn this frame, which pass rendered
+// it (1×1 or 2×2), its computed open-air side mask, and whether it was ever
+// skipped from independent per-cell shading because it was covered by a 2×2
+// full-sprite group. Query from the console:
+//   window.__dwWallCellDiag(col, row)   → single-cell record
+//   window.__dwWallCellDiagDump()       → console.table of everything recorded this frame
+export interface WallCellRenderDiag {
+  col: number;
+  row: number;
+  pass: '1x1' | '2x2';
+  openAirSidesMask: number;
+  coveredBy2x2: boolean;
+}
+
+const _wallCellDiag: Map<string, WallCellRenderDiag> = import.meta.env?.DEV ? new Map() : (null as unknown as Map<string, WallCellRenderDiag>);
+
+function _recordWallCellDiag(
+  col: number,
+  row: number,
+  pass: '1x1' | '2x2',
+  openAirSidesMask: number,
+  coveredBy2x2: boolean,
+): void {
+  if (!import.meta.env?.DEV) return;
+  _wallCellDiag.set(`${col},${row}`, { col, row, pass, openAirSidesMask, coveredBy2x2 });
+}
+
+/** Clears the per-frame diagnostic map. Call once per frame before the wall passes run. */
+export function clearWallCellDiag(): void {
+  if (import.meta.env?.DEV) _wallCellDiag.clear();
+}
+
+declare global {
+  interface Window {
+    __dwWallCellDiag?: (col: number, row: number) => WallCellRenderDiag | undefined;
+    __dwWallCellDiagDump?: () => WallCellRenderDiag[];
+  }
+}
+
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
+  window.__dwWallCellDiag = (col: number, row: number) => _wallCellDiag.get(`${col},${row}`);
+  window.__dwWallCellDiagDump = () => {
+    const out = Array.from(_wallCellDiag.values());
+    console.table(out);
+    return out;
+  };
+}
+
 function _drawEdgeOverlay(
   ctx: CanvasRenderingContext2D,
   tileX: number,
@@ -238,6 +288,13 @@ export function render2x2Pass(
       ((southOpenA && southOpenB) ? OPEN_AIR_SIDE_S : 0) |
       ((westOpenA  && westOpenB)  ? OPEN_AIR_SIDE_W : 0);
 
+    if (import.meta.env?.DEV) {
+      _recordWallCellDiag(col,     row,     '2x2', openAirSidesMask2x2, true);
+      _recordWallCellDiag(col + 1, row,     '2x2', openAirSidesMask2x2, true);
+      _recordWallCellDiag(col,     row + 1, '2x2', openAirSidesMask2x2, true);
+      _recordWallCellDiag(col + 1, row + 1, '2x2', openAirSidesMask2x2, true);
+    }
+
     if (material !== null) {
       const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask2x2);
       if (procSprite !== null) {
@@ -338,6 +395,10 @@ export function render1x1Pass(
       (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
       (southSolid ? 0 : OPEN_AIR_SIDE_S) |
       (westSolid  ? 0 : OPEN_AIR_SIDE_W);
+
+    if (import.meta.env?.DEV) {
+      _recordWallCellDiag(col, row, '1x1', openAirSidesMask, false);
+    }
 
     if (material !== null) {
       const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask);
