@@ -68,6 +68,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isRadiantTetherFlag: e.isRadiantTetherFlag,
       isRadiantWebFlag: e.isRadiantWebFlag,
       isCrimsonWizardFlag: e.isCrimsonWizardFlag ?? 0,
+      isHeraldFlag: e.isHeraldFlag ?? 0,
       isGrappleHunterFlag: e.isGrappleHunterFlag,
       isSlimeFlag: e.isSlimeFlag,
       isLargeSlimeFlag: e.isLargeSlimeFlag,

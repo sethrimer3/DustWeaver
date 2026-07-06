@@ -112,6 +112,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       isRadiantTetherFlag: e.isRadiantTether ? 1 as const : 0 as const,
       isRadiantWebFlag: e.isRadiantWeb ? 1 as const : 0 as const,
       isCrimsonWizardFlag: e.isCrimsonWizard ? 1 as const : 0 as const,
+      isHeraldFlag: e.isHerald ? 1 as const : 0 as const,
       isGrappleHunterFlag: e.isGrappleHunter ? 1 as const : 0 as const,
       isSlimeFlag: e.isSlime ? 1 as const : 0 as const,
       isLargeSlimeFlag: e.isLargeSlime ? 1 as const : 0 as const,

@@ -21,6 +21,7 @@ import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRe
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { spawnHeraldForTesting } from './gameEnemySpawn';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, getCameraOffset } from '../render/camera';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
@@ -2539,6 +2540,20 @@ export function startGameScreen(
       };
       requestAnimationFrame(tick);
     };
+
+    // ── DEV-only spawn hook for The Herald boss ──────────────────────────
+    // `window.__dwSpawnHerald(xBlock?, yBlock?)` — spawns a Herald directly
+    // into the running world at the given block position (defaults to the
+    // room center), bypassing the room-def enemy list entirely.
+    (w as DwWin & { __dwSpawnHerald?: (xBlock?: number, yBlock?: number) => number }).__dwSpawnHerald =
+      (xBlock?: number, yBlock?: number): number => {
+        const bx = xBlock ?? Math.floor(world.worldWidthWorld / BLOCK_SIZE_MEDIUM / 2);
+        const by = yBlock ?? Math.floor(world.worldHeightWorld / BLOCK_SIZE_MEDIUM / 2);
+        const entityId = spawnHeraldForTesting(world, bx * BLOCK_SIZE_MEDIUM, by * BLOCK_SIZE_MEDIUM);
+        // eslint-disable-next-line no-console
+        console.log(`[dev] spawned The Herald (entityId=${entityId}) at block (${bx}, ${by})`);
+        return entityId;
+      };
   }
 
   rafHandle = requestAnimationFrame(frame);

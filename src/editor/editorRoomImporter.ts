@@ -152,6 +152,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isRadiantTetherFlag: (e.isRadiantTetherFlag ?? 0) as 0 | 1,
     isRadiantWebFlag: (e.isRadiantWebFlag ?? 0) as 0 | 1,
     isCrimsonWizardFlag: (e.isCrimsonWizardFlag ?? 0) as 0 | 1,
+    isHeraldFlag: (e.isHeraldFlag ?? 0) as 0 | 1,
     isGrappleHunterFlag: (e.isGrappleHunterFlag ?? 0) as 0 | 1,
     isSlimeFlag: (e.isSlimeFlag ?? 0) as 0 | 1,
     isLargeSlimeFlag: (e.isLargeSlimeFlag ?? 0) as 0 | 1,

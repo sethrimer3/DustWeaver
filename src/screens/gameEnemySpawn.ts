@@ -94,6 +94,7 @@ import {
   VS_MOTE_START_RADIUS_WORLD,
 } from '../sim/clusters/voidSingularityConfig';
 import { CW_HALF_H, CW_HALF_W, CW_HP, CW_INITIAL_COOLDOWN_TICKS, CW_STATE_IDLE } from '../sim/clusters/crimsonWizardConfig';
+import { HERALD_HALF_H, HERALD_HALF_W, HERALD_HP, HERALD_INITIAL_COOLDOWN_TICKS, HERALD_STATE_IDLE } from '../sim/clusters/heraldConfig';
 import { VS_STATE_IDLE as VS_IDLE } from '../sim/clusters/voidSingularityAi';
 import {
   DL_HP,
@@ -195,6 +196,19 @@ export function spawnEnemyClusters(
       enemyCluster.halfHeightWorld = CW_HALF_H;
       enemyCluster.healthPoints = CW_HP;
       enemyCluster.maxHealthPoints = CW_HP;
+    } else if (enemyDef.isHeraldFlag === 1) {
+      enemyCluster.isHeraldFlag = 1;
+      enemyCluster.heraldState = HERALD_STATE_IDLE;
+      enemyCluster.heraldStateTicks = 0;
+      enemyCluster.heraldFacingX = 1;
+      enemyCluster.heraldVelXWorld = 0;
+      enemyCluster.heraldVelYWorld = 0;
+      enemyCluster.heraldHoverPhaseRad = 0;
+      enemyCluster.heraldAttackCooldownTicks = HERALD_INITIAL_COOLDOWN_TICKS;
+      enemyCluster.halfWidthWorld = HERALD_HALF_W;
+      enemyCluster.halfHeightWorld = HERALD_HALF_H;
+      enemyCluster.healthPoints = HERALD_HP;
+      enemyCluster.maxHealthPoints = HERALD_HP;
     } else if (enemyDef.isGrappleHunterFlag === 1) {
       enemyCluster.isGrappleHunterFlag  = 1;
       enemyCluster.grappleHunterState   = 0;
@@ -734,6 +748,7 @@ export function spawnEnemyClusters(
       enemyCluster.isRadiantTetherFlag === 1 ||
       enemyCluster.isRadiantWebFlag    === 1 ||
       enemyCluster.isCrimsonWizardFlag === 1 ||
+      enemyCluster.isHeraldFlag === 1 ||
       enemyCluster.isDustConstellationFlag === 1 ||
       enemyCluster.isOrbitalDustCoreFlag === 1 ||
       enemyCluster.isDustBlockMimicFlag === 1 ||
@@ -759,4 +774,31 @@ export function spawnEnemyClusters(
     }
   }
   return nextEntityId;
+}
+
+/**
+ * Dev/test hook: spawns a single Herald boss directly into a running world,
+ * bypassing the room-def enemy list. Used by unit tests and by the
+ * `window.__dwSpawnHerald()` console hook wired up in gameScreen.ts.
+ */
+export function spawnHeraldForTesting(world: WorldState, xWorld: number, yWorld: number): number {
+  let nextEntityId = 2;
+  for (let i = 0; i < world.clusters.length; i++) {
+    if (world.clusters[i].entityId >= nextEntityId) nextEntityId = world.clusters[i].entityId + 1;
+  }
+  const boss = createClusterState(nextEntityId, xWorld, yWorld, 0, HERALD_HP);
+  boss.isHeraldFlag = 1;
+  boss.heraldState = HERALD_STATE_IDLE;
+  boss.heraldStateTicks = 0;
+  boss.heraldFacingX = 1;
+  boss.heraldVelXWorld = 0;
+  boss.heraldVelYWorld = 0;
+  boss.heraldHoverPhaseRad = 0;
+  boss.heraldAttackCooldownTicks = HERALD_INITIAL_COOLDOWN_TICKS;
+  boss.halfWidthWorld = HERALD_HALF_W;
+  boss.halfHeightWorld = HERALD_HALF_H;
+  boss.healthPoints = HERALD_HP;
+  boss.maxHealthPoints = HERALD_HP;
+  world.clusters.push(boss);
+  return boss.entityId;
 }

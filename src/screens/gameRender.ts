@@ -22,6 +22,8 @@ import { renderDustBlockMimics } from '../render/clusters/dustBlockMimicRenderer
 import { renderDustWeaverArchitects } from '../render/clusters/dustWeaverArchitectRenderer';
 import { renderVoidSingularities } from '../render/clusters/voidSingularityRenderer';
 import { renderDustLeeches } from '../render/clusters/dustLeechRenderer';
+import { collectVoidSphereScreenCircles, renderVoidSpheres } from '../render/clusters/heraldRenderer';
+import { applyVoidLensDistortion } from '../render/effects/voidLensDistortion';
 import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
 import { renderPixelLockedDust } from '../render/particles/pixelLockedDustRenderer';
@@ -572,6 +574,17 @@ export function renderFrame(r: RenderFrameContext): void {
   // Renders designer-placed scene lights (softGlow / spotlight / floodlight /
   // backlight / sunray) with optional raytraced shadow polygons.
   renderSceneLightingPass(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx, nowMs);
+
+  // ── The Herald — Void Sphere gravitational-lensing distortion ────────────
+  // Applied last (reads back everything drawn above: tiles, walls, entities,
+  // particles) so the warp visibly bends the whole scene around each sphere.
+  // The sphere sprite is redrawn crisply on top afterward so it never looks
+  // smeared by its own distortion pass. No-ops cheaply when no spheres exist.
+  const voidSphereCircles = collectVoidSphereScreenCircles(snapshot, ox, oy, zoom);
+  if (voidSphereCircles.length > 0) {
+    applyVoidLensDistortion(ctx, voidSphereCircles, virtualWidthPx, virtualHeightPx);
+    renderVoidSpheres(ctx, snapshot, ox, oy, zoom);
+  }
 
   // End room clip before any HUD/screen-space overlays are drawn.
   ctx.restore();

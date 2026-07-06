@@ -66,6 +66,7 @@ export function buildElementTypeName(
       if (e.isRadiantTetherFlag === 1)return 'Radiant Tether';
       if (e.isRadiantWebFlag === 1)   return 'Radiant Web';
       if (e.isCrimsonWizardFlag === 1)return 'Crimson Wizard';
+      if (e.isHeraldFlag === 1)       return 'The Herald';
       if (e.isGrappleHunterFlag === 1)return 'Grapple Hunter';
       return 'Enemy';
     }
