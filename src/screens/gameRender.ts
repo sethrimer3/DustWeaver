@@ -350,14 +350,12 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // Constrain all world-space rendering to the clip rect so out-of-bounds
   // areas remain black even when camera framing shows beyond room extents.
-  // In always-center camera mode the clip is skipped — black void outside the
-  // room is shown intentionally, so we must not cut off room content at edges.
+  // This applies in always-center mode too; the unclamped camera can expose
+  // off-room pixels, and those should remain the black canvas clear.
   ctx.save();
-  if (!r.alwaysCenterCamera) {
-    ctx.beginPath();
-    ctx.rect(clipScreenXPx, clipScreenYPx, clipScreenWPx, clipScreenHPx);
-    ctx.clip();
-  }
+  ctx.beginPath();
+  ctx.rect(clipScreenXPx, clipScreenYPx, clipScreenWPx, clipScreenHPx);
+  ctx.clip();
 
   // ── World background with parallax ──────────────────────────────────────
   renderBackgroundPass({
@@ -458,7 +456,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // Grapple influence visuals (golden circle + edge glow) drawn on top of walls
   // but behind clusters/particles so they don't obscure the action.
   renderGrappleInfluenceVisuals(
-    ctx, snapshot, ox, oy, zoom,
+    ctx, snapshot, currentRoom.widthBlocks, currentRoom.heightBlocks, ox, oy, zoom,
     inputState.mouseXPx, inputState.mouseYPx,
     canvas.width, canvas.height,
     virtualWidthPx, virtualHeightPx,
@@ -603,11 +601,31 @@ export function renderFrame(r: RenderFrameContext): void {
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   // Composite WebGL particle canvas on top (also at virtual resolution)
   if (webglRenderer.isAvailable) {
+    deviceCtx.save();
+    deviceCtx.beginPath();
+    deviceCtx.rect(
+      roomScreenXPx * (canvas.width / virtualWidthPx),
+      roomScreenYPx * (canvas.height / virtualHeightPx),
+      roomScreenWidthPx * (canvas.width / virtualWidthPx),
+      roomScreenHeightPx * (canvas.height / virtualHeightPx),
+    );
+    deviceCtx.clip();
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
+    deviceCtx.restore();
   }
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_UPSCALE);
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BLOOM);
+  deviceCtx.save();
+  deviceCtx.beginPath();
+  deviceCtx.rect(
+    roomScreenXPx * (canvas.width / virtualWidthPx),
+    roomScreenYPx * (canvas.height / virtualHeightPx),
+    roomScreenWidthPx * (canvas.width / virtualWidthPx),
+    roomScreenHeightPx * (canvas.height / virtualHeightPx),
+  );
+  deviceCtx.clip();
   bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
+  deviceCtx.restore();
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BLOOM);
   drawOffensiveDustOutlineOverlay(deviceCtx, snapshot, canvas.width, canvas.height, ox, oy, zoom);
 

@@ -49,6 +49,7 @@ import { getLegacyShadedSprite } from './legacyBlockShading';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
 import type { CachedTileCoord, RampWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
+import { getSurfaceMaskAtTile, type SurfaceMask } from '../../sim/world/surfaceExposure';
 import {
   TILE_MASK_N,
   TILE_MASK_E,
@@ -177,6 +178,21 @@ function _drawEdgeOverlay(
   ctx.restore();
 }
 
+/**
+ * Converts an authoritative per-tile `SurfaceMask` (from the shared
+ * `surfaceExposure` module) into the legacy N/E/S/W `OPEN_AIR_SIDE_*` bit
+ * mask this renderer's sprite-shading functions expect. This is the only
+ * place tile-side exposure is computed for rendering purposes — both the
+ * 1×1 and 2×2 passes below read it from `wallLayout.surfaceExposureMap`
+ * rather than re-deriving exposure from neighbour occupancy themselves.
+ */
+function surfaceMaskToOpenAirBits(mask: SurfaceMask): number {
+  return (mask.top    ? OPEN_AIR_SIDE_N : 0) |
+         (mask.right  ? OPEN_AIR_SIDE_E : 0) |
+         (mask.bottom ? OPEN_AIR_SIDE_S : 0) |
+         (mask.left   ? OPEN_AIR_SIDE_W : 0);
+}
+
 // Pre-allocated empty arrays used as fallbacks when a chunk has no items of a type.
 const _EMPTY_TILES: CachedTileCoord[]     = [];
 const _EMPTY_RAMPS: RampWallInfo[]         = [];
@@ -272,21 +288,20 @@ export function render2x2Pass(
 
     const material = themeToProceduralMaterial(resolvedTheme, activeWorldNumber);
 
-    // Compute open-air sides for the 2×2 group.
-    const { occupied } = wallLayout;
-    const northOpenA = !isWallOccupied(occupied, col,     row - 1);
-    const northOpenB = !isWallOccupied(occupied, col + 1, row - 1);
-    const southOpenA = !isWallOccupied(occupied, col,     row + 2);
-    const southOpenB = !isWallOccupied(occupied, col + 1, row + 2);
-    const eastOpenA  = !isWallOccupied(occupied, col + 2, row    );
-    const eastOpenB  = !isWallOccupied(occupied, col + 2, row + 1);
-    const westOpenA  = !isWallOccupied(occupied, col - 1, row    );
-    const westOpenB  = !isWallOccupied(occupied, col - 1, row + 1);
+    // Compute open-air sides for the 2×2 group from the authoritative
+    // per-tile exposure map (same source `render1x1Pass` reads below) —
+    // a side is open only when BOTH constituent cells expose that side,
+    // which also makes this correctly room-bounds aware at the room edge.
+    const { surfaceExposureMap } = wallLayout;
+    const topLeftMask     = getSurfaceMaskAtTile(surfaceExposureMap, col,     row    );
+    const topRightMask    = getSurfaceMaskAtTile(surfaceExposureMap, col + 1, row    );
+    const bottomLeftMask  = getSurfaceMaskAtTile(surfaceExposureMap, col,     row + 1);
+    const bottomRightMask = getSurfaceMaskAtTile(surfaceExposureMap, col + 1, row + 1);
     const openAirSidesMask2x2 =
-      ((northOpenA && northOpenB) ? OPEN_AIR_SIDE_N : 0) |
-      ((eastOpenA  && eastOpenB)  ? OPEN_AIR_SIDE_E : 0) |
-      ((southOpenA && southOpenB) ? OPEN_AIR_SIDE_S : 0) |
-      ((westOpenA  && westOpenB)  ? OPEN_AIR_SIDE_W : 0);
+      ((topLeftMask.top    && topRightMask.top)    ? OPEN_AIR_SIDE_N : 0) |
+      ((topRightMask.right && bottomRightMask.right) ? OPEN_AIR_SIDE_E : 0) |
+      ((bottomLeftMask.bottom && bottomRightMask.bottom) ? OPEN_AIR_SIDE_S : 0) |
+      ((topLeftMask.left   && bottomLeftMask.left) ? OPEN_AIR_SIDE_W : 0);
 
     if (import.meta.env?.DEV) {
       _recordWallCellDiag(col,     row,     '2x2', openAirSidesMask2x2, true);
@@ -390,11 +405,11 @@ export function render1x1Pass(
 
     const material = themeToProceduralMaterial(tileTheme, activeWorldNumber);
 
-    const openAirSidesMask =
-      (northSolid ? 0 : OPEN_AIR_SIDE_N) |
-      (eastSolid  ? 0 : OPEN_AIR_SIDE_E) |
-      (southSolid ? 0 : OPEN_AIR_SIDE_S) |
-      (westSolid  ? 0 : OPEN_AIR_SIDE_W);
+    // Authoritative exposure for shading/edge-effect purposes (room-bounds
+    // aware) — distinct from the northSolid/eastSolid/... neighbour-solidity
+    // booleans above, which still drive the TILE_TABLE auto-tiling sprite
+    // pick and are unaffected by this.
+    const openAirSidesMask = surfaceMaskToOpenAirBits(getSurfaceMaskAtTile(wallLayout.surfaceExposureMap, col, row));
 
     if (import.meta.env?.DEV) {
       _recordWallCellDiag(col, row, '1x1', openAirSidesMask, false);

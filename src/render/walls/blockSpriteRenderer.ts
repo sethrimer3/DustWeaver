@@ -606,7 +606,7 @@ export function prewarmWallChunksForRoom(
       // identity check in renderVisibleChunks does not invalidate prior chunks.
       setPrebuiltWallLayout(existingLayout);
     }
-    const wallLayout = getWallLayoutCache(ctx.wallSnapshot, blockSizePx);
+    const wallLayout = getWallLayoutCache(ctx.wallSnapshot, blockSizePx, ctx.roomWidthBlocks, ctx.roomHeightBlocks);
     setPrewarmWallLayout(roomId, wallLayout);
 
     // ── Compute ambient depths and populate 2×2 covered keys ────────────────
@@ -809,7 +809,7 @@ export function renderWallSprites(
 
   if (import.meta.env?.DEV) clearWallCellDiag();
 
-  const wallLayout = getWallLayoutCache(walls, blockSizePx);
+  const wallLayout = getWallLayoutCache(walls, blockSizePx, _activeRoomWidthBlocks, _activeRoomHeightBlocks);
 
   // Populate module-level coveredBy2x2Keys from the cached solid2x2Map —
   // avoids allocating a new Set<string> every frame.

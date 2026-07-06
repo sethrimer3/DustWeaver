@@ -180,6 +180,20 @@ export function showPauseMenu(
       optionsPanel.appendChild(sfxSlider);
     } else if (activeTab === 'gameplay') {
       optionsPanel.appendChild(
+        makeCheckboxRow('Manual Sprint (hold Shift)', state.manualSprintEnabled, (enabled) => {
+          state.manualSprintEnabled = enabled;
+          setManualSprintEnabled(enabled);
+        }),
+      );
+      optionsPanel.appendChild(
+        makeCheckboxRow('Momentum Combat', state.combatMode === 'momentum', (enabled) => {
+          const mode: CombatMode = enabled ? 'momentum' : 'legacy';
+          state.combatMode = mode;
+          setCombatMode(mode);
+          saveCombatModeToStorage(mode);
+        }),
+      );
+      optionsPanel.appendChild(
         makeCheckboxRow('Double-jump to grapple', getDoubleJumpToGrappleEnabled(), (enabled) => {
           setDoubleJumpToGrappleEnabled(enabled);
         }),
@@ -259,6 +273,13 @@ export function showPauseMenu(
         font-size: 0.72rem; text-align: center; margin-top: 6px;
       `;
       optionsPanel.appendChild(wvHint);
+
+      optionsPanel.appendChild(
+        makeCheckboxRow('Always Center Camera', state.alwaysCenterCamera, (enabled) => {
+          state.alwaysCenterCamera = enabled;
+          setAlwaysCenterCamera(enabled);
+        }),
+      );
 
       const atlasEnabled = getSpriteAtlasUseSetting();
       const atlasRow = document.createElement('label');
@@ -377,67 +398,6 @@ export function showPauseMenu(
   resumeBtn.style.borderColor = GOLD;
   mainButtons.appendChild(resumeBtn);
 
-  // ── Manual Sprint toggle — prominent control option ───────────────────────
-  const manualSprintRow = document.createElement('div');
-  manualSprintRow.style.cssText = `
-    display: flex; align-items: center; justify-content: center;
-    gap: 10px; margin: 4px 0 12px 0;
-    padding: 10px 14px;
-    background: rgba(212,168,75,0.12);
-    border: 1px solid rgba(212,168,75,0.45);
-    border-radius: 6px;
-  `;
-  const manualSprintCheckbox = document.createElement('input');
-  manualSprintCheckbox.type = 'checkbox';
-  manualSprintCheckbox.id = 'pause-manual-sprint';
-  manualSprintCheckbox.checked = state.manualSprintEnabled;
-  manualSprintCheckbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
-  const manualSprintLabel = document.createElement('label');
-  manualSprintLabel.htmlFor = 'pause-manual-sprint';
-  manualSprintLabel.textContent = 'Manual Sprint (hold Shift)';
-  manualSprintLabel.style.cssText = `
-    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.95rem;
-    cursor: pointer; letter-spacing: 0.5px;
-  `;
-  manualSprintCheckbox.addEventListener('change', () => {
-    state.manualSprintEnabled = manualSprintCheckbox.checked;
-    setManualSprintEnabled(manualSprintCheckbox.checked);
-  });
-  manualSprintRow.appendChild(manualSprintCheckbox);
-  manualSprintRow.appendChild(manualSprintLabel);
-  mainButtons.appendChild(manualSprintRow);
-
-  // ── Combat Mode toggle ────────────────────────────────────────────────────
-  const combatModeRow = document.createElement('div');
-  combatModeRow.style.cssText = `
-    display: flex; align-items: center; justify-content: center;
-    gap: 10px; margin: 4px 0 12px 0;
-    padding: 10px 14px;
-    background: rgba(212,168,75,0.12);
-    border: 1px solid rgba(212,168,75,0.45);
-    border-radius: 6px;
-  `;
-  const combatModeCheckbox = document.createElement('input');
-  combatModeCheckbox.type = 'checkbox';
-  combatModeCheckbox.id = 'pause-combat-mode';
-  combatModeCheckbox.checked = state.combatMode === 'momentum';
-  combatModeCheckbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
-  const combatModeLabel = document.createElement('label');
-  combatModeLabel.htmlFor = 'pause-combat-mode';
-  combatModeLabel.textContent = 'Momentum Combat';
-  combatModeLabel.style.cssText = `
-    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.95rem;
-    cursor: pointer; letter-spacing: 0.5px;
-  `;
-  combatModeCheckbox.addEventListener('change', () => {
-    const mode: CombatMode = combatModeCheckbox.checked ? 'momentum' : 'legacy';
-    state.combatMode = mode;
-    setCombatMode(mode);
-    saveCombatModeToStorage(mode);
-  });
-  combatModeRow.appendChild(combatModeCheckbox);
-  combatModeRow.appendChild(combatModeLabel);
-  mainButtons.appendChild(combatModeRow);
 
   // Options
   const optionsBtn = makeButton('Options', () => {
@@ -464,30 +424,6 @@ export function showPauseMenu(
   });
   mainButtons.appendChild(worldEditorBtn);
 
-  // Always Center Camera — inline checkbox below Debug toggle
-  const alwaysCenterRow = document.createElement('div');
-  alwaysCenterRow.style.cssText = `
-    display: flex; align-items: center; justify-content: center;
-    gap: 10px; margin: 6px 0 10px 0;
-  `;
-  const alwaysCenterCheckbox = document.createElement('input');
-  alwaysCenterCheckbox.type = 'checkbox';
-  alwaysCenterCheckbox.id = 'pause-always-center-camera';
-  alwaysCenterCheckbox.checked = state.alwaysCenterCamera;
-  alwaysCenterCheckbox.style.cssText = `width: 16px; height: 16px; cursor: pointer; accent-color: ${GOLD};`;
-  const alwaysCenterLabel = document.createElement('label');
-  alwaysCenterLabel.htmlFor = 'pause-always-center-camera';
-  alwaysCenterLabel.textContent = 'Always Center Camera';
-  alwaysCenterLabel.style.cssText = `
-    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.88rem; cursor: pointer;
-  `;
-  alwaysCenterCheckbox.addEventListener('change', () => {
-    state.alwaysCenterCamera = alwaysCenterCheckbox.checked;
-    setAlwaysCenterCamera(alwaysCenterCheckbox.checked);
-  });
-  alwaysCenterRow.appendChild(alwaysCenterCheckbox);
-  alwaysCenterRow.appendChild(alwaysCenterLabel);
-  mainButtons.appendChild(alwaysCenterRow);
 
   // Exit to Main Menu (bottom) — requires a second click for confirmation
   let exitConfirmPending = false;

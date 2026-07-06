@@ -96,7 +96,7 @@ test('large rectangular wall: every cell along the exposed top edge gets a consi
   const wallsWide = 8;
   const wallsTall = 4;
   const snapshot = makeWallSnapshot([{ x: 0, y: 0, w: wallsWide * BLOCK_SIZE, h: wallsTall * BLOCK_SIZE }]);
-  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 100, 100);
 
   // Confirm the layout DOES register 2x2 sub-groups for this rect (proving the
   // bug scenario exists in the data) — the render-path fix is what prevents
@@ -123,7 +123,7 @@ test('vertical wall: entire exposed left/right surface is consistently shaded', 
   const cols = 3;
   const rows = 10;
   const snapshot = makeWallSnapshot([{ x: 0, y: 0, w: cols * BLOCK_SIZE, h: rows * BLOCK_SIZE }]);
-  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 100, 100);
 
   for (let row = 0; row < rows; row++) {
     const leftMask  = computeCellMask(layout.occupied, 0, row);
@@ -136,7 +136,7 @@ test('vertical wall: entire exposed left/right surface is consistently shaded', 
 test('floating 2x2 block: all four sides shade correctly and no internal seam forms between its own cells', () => {
   // A standalone 2x2 block floating in open space.
   const snapshot = makeWallSnapshot([{ x: 40, y: 40, w: 2 * BLOCK_SIZE, h: 2 * BLOCK_SIZE }]);
-  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 100, 100);
 
   const col0 = 5; // 40 / 8
   const row0 = 5;
@@ -164,7 +164,7 @@ test('stair/overhang shape: exposed step surfaces shade per-cell even though aut
     { x: 0 * BLOCK_SIZE, y: 0, w: 4 * BLOCK_SIZE, h: 1 * BLOCK_SIZE },
     { x: 2 * BLOCK_SIZE, y: 1 * BLOCK_SIZE, w: 2 * BLOCK_SIZE, h: 1 * BLOCK_SIZE },
   ]);
-  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 100, 100);
 
   // Row 0, cols 0-1 overhang: south face must be open (no wall below them).
   assert.ok(computeCellMask(layout.occupied, 0, 0) & OPEN_AIR_SIDE_S, 'overhang cell (0,0) must be south-open');
@@ -188,8 +188,8 @@ test('mixed adjacent 2x2 and 1x1 authored blocks produce identical masks regardl
   }
   const asManyTiles = makeWallSnapshot(singleTiles);
 
-  const layoutRect  = getWallLayoutCache(asOneRect, BLOCK_SIZE);
-  const layoutTiles = getWallLayoutCache(asManyTiles, BLOCK_SIZE);
+  const layoutRect  = getWallLayoutCache(asOneRect, BLOCK_SIZE, 100, 100);
+  const layoutTiles = getWallLayoutCache(asManyTiles, BLOCK_SIZE, 100, 100);
 
   for (let row = 0; row < 2; row++) {
     for (let col = 0; col < 4; col++) {

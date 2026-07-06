@@ -13,6 +13,7 @@ import type { BlockTheme } from '../../levels/roomDef';
 import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDef';
 import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 import * as FP from '../../debug/perfFreezeProfiler';
+import { buildSurfaceExposureMap, type SurfaceExposureMap, type TileSolidityGrid } from '../../sim/world/surfaceExposure';
 
 // ── Fast layout signature hash ─────────────────────────────────────────────────
 
@@ -84,6 +85,16 @@ export interface CachedWallLayout {
   halfPillarWalls: HalfPillarWallInfo[];
   /** Per-tile theme: maps tile key → BlockTheme (null = use room default). */
   tileTheme: Map<string, BlockTheme | null>;
+  /**
+   * Authoritative tile-level open-air exposure, built from the same
+   * `occupied` set above but room-bounds aware (out-of-bounds neighbours
+   * never count as open air — unlike the raw N/E/S/W `isWallOccupied`
+   * checks the tile passes used before this was added). This is the single
+   * source of truth for "which sides of this tile are exposed"; the 1×1 and
+   * 2×2 wall tile passes read it via `getSurfaceMaskAtTile` instead of
+   * re-deriving exposure from `occupied` themselves.
+   */
+  surfaceExposureMap: SurfaceExposureMap;
   /**
    * Per-(room-size × direction × blockers) cache of computed ambient depths.
    * Keyed by `"widthxheight|direction|blockerSig"` so a room that keeps the
@@ -210,9 +221,11 @@ function _buildSolid2x2Map(walls: WallSnapshot, blockSizePx: number): Map<string
 export function getWallLayoutCache(
   walls: WallSnapshot,
   blockSizePx: number,
+  widthBlocks: number,
+  heightBlocks: number,
 ): CachedWallLayout {
   const _sigT0 = import.meta.env?.DEV ? performance.now() : 0;
-  const signature = _computeLayoutSignature(walls, blockSizePx);
+  const signature = `${widthBlocks}x${heightBlocks}|${_computeLayoutSignature(walls, blockSizePx)}`;
   const _sigMs = import.meta.env?.DEV ? performance.now() - _sigT0 : 0;
 
   if (_cachedWallLayout !== null &&
@@ -314,6 +327,18 @@ export function getWallLayoutCache(
     });
   }
 
+  // Wrap the already-computed `occupied` set as a TileSolidityGrid — this
+  // reuses the exact same solidity data the rest of this cache uses (no
+  // re-decomposition of wall AABBs), just adds room-bounds awareness so
+  // out-of-bounds neighbours are never treated as open air.
+  const solidityGrid: TileSolidityGrid = {
+    widthBlocks,
+    heightBlocks,
+    blockSizePx,
+    isSolidAt: (col: number, row: number): boolean => occupied.has(wallTileKey(col, row)),
+  };
+  const surfaceExposureMap = buildSurfaceExposureMap(solidityGrid);
+
   _cachedWallLayout = {
     signature,
     blockSizePx,
@@ -324,6 +349,7 @@ export function getWallLayoutCache(
     rampWalls,
     halfPillarWalls,
     tileTheme,
+    surfaceExposureMap,
     ambientDepthsByKey: new Map<string, Map<string, number>>(),
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),
     occupiedByChunkKey:   new Map(),
