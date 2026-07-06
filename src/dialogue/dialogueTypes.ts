@@ -11,22 +11,6 @@
 /** Maximum number of entries allowed per conversation (inclusive). */
 export const MAX_DIALOGUE_ENTRIES = 99;
 
-/**
- * Stub portrait IDs available before final portrait assets are ready.
- *
- * TODO: Replace stub portraits with real portrait assets. Each ID should
- * eventually map to a sprite sheet slice or a pre-loaded image element
- * loaded through the asset pipeline (e.g., SPRITES/portraits/{id}.png).
- */
-export const STUB_PORTRAIT_IDS = [
-  'none',
-  'narrator',
-  'hero',
-  'elder',
-  'merchant',
-  'enemy',
-] as const;
-
 /** A single dialogue text box shown to the player. */
 export interface DialogueEntry {
   /** The text displayed in the dialogue box. */
