@@ -62,6 +62,8 @@ import {
   MAX_PHANTASMAL_BLOCKS,
   MAX_PHANTASMAL_SHOCKWAVES,
   MAX_PHANTASMAL_SPIKES,
+  MAX_VOID_LASERS,
+  MAX_VOID_LASER_DUST,
   MAX_VOID_SPHERES,
 } from './clusters/heraldConfig';
 import { MAX_ICE_SPIKES } from './clusters/iceWizardConfig';
@@ -145,6 +147,8 @@ export {
   MAX_PHANTASMAL_BLOCKS,
   MAX_PHANTASMAL_SHOCKWAVES,
   MAX_PHANTASMAL_SPIKES,
+  MAX_VOID_LASERS,
+  MAX_VOID_LASER_DUST,
   MAX_VOID_SPHERES,
 } from './clusters/heraldConfig';
 export { MAX_ICE_SPIKES } from './clusters/iceWizardConfig';
@@ -621,6 +625,26 @@ export interface HazardWorldState {
   phantasmalShockwaveYWorld: Float32Array;
   phantasmalShockwaveAgeTicks: Uint16Array;
   phantasmalShockwaveAliveFlag: Uint8Array;
+  voidLaserStartXWorld: Float32Array;
+  voidLaserStartYWorld: Float32Array;
+  voidLaserEndXWorld: Float32Array;
+  voidLaserEndYWorld: Float32Array;
+  voidLaserVisibleStartXWorld: Float32Array;
+  voidLaserVisibleStartYWorld: Float32Array;
+  voidLaserVisibleEndXWorld: Float32Array;
+  voidLaserVisibleEndYWorld: Float32Array;
+  voidLaserAgeTicks: Uint16Array;
+  /** 0=alive, 1=gold-safe dissipating, 2=purple-danger dissipating. */
+  voidLaserDissipationKind: Uint8Array;
+  voidLaserAliveFlag: Uint8Array;
+  voidLaserDustXWorld: Float32Array;
+  voidLaserDustYWorld: Float32Array;
+  voidLaserDustVelXWorld: Float32Array;
+  voidLaserDustVelYWorld: Float32Array;
+  voidLaserDustAgeTicks: Uint16Array;
+  /** 0=purple void dust, 1=gold deactivation dust. */
+  voidLaserDustKind: Uint8Array;
+  voidLaserDustAliveFlag: Uint8Array;
 
   // Ice Wizard transient floor spikes.
   iceSpikeXWorld: Float32Array;
@@ -831,6 +855,24 @@ export function createHazardWorldState(): HazardWorldState {
     phantasmalShockwaveYWorld:    new Float32Array(MAX_PHANTASMAL_SHOCKWAVES),
     phantasmalShockwaveAgeTicks:  new Uint16Array(MAX_PHANTASMAL_SHOCKWAVES),
     phantasmalShockwaveAliveFlag: new Uint8Array(MAX_PHANTASMAL_SHOCKWAVES),
+    voidLaserStartXWorld:         new Float32Array(MAX_VOID_LASERS),
+    voidLaserStartYWorld:         new Float32Array(MAX_VOID_LASERS),
+    voidLaserEndXWorld:           new Float32Array(MAX_VOID_LASERS),
+    voidLaserEndYWorld:           new Float32Array(MAX_VOID_LASERS),
+    voidLaserVisibleStartXWorld:  new Float32Array(MAX_VOID_LASERS),
+    voidLaserVisibleStartYWorld:  new Float32Array(MAX_VOID_LASERS),
+    voidLaserVisibleEndXWorld:    new Float32Array(MAX_VOID_LASERS),
+    voidLaserVisibleEndYWorld:    new Float32Array(MAX_VOID_LASERS),
+    voidLaserAgeTicks:            new Uint16Array(MAX_VOID_LASERS),
+    voidLaserDissipationKind:     new Uint8Array(MAX_VOID_LASERS),
+    voidLaserAliveFlag:           new Uint8Array(MAX_VOID_LASERS),
+    voidLaserDustXWorld:          new Float32Array(MAX_VOID_LASER_DUST),
+    voidLaserDustYWorld:          new Float32Array(MAX_VOID_LASER_DUST),
+    voidLaserDustVelXWorld:       new Float32Array(MAX_VOID_LASER_DUST),
+    voidLaserDustVelYWorld:       new Float32Array(MAX_VOID_LASER_DUST),
+    voidLaserDustAgeTicks:        new Uint16Array(MAX_VOID_LASER_DUST),
+    voidLaserDustKind:            new Uint8Array(MAX_VOID_LASER_DUST),
+    voidLaserDustAliveFlag:       new Uint8Array(MAX_VOID_LASER_DUST),
     iceSpikeXWorld:               new Float32Array(MAX_ICE_SPIKES),
     iceSpikeBaseYWorld:           new Float32Array(MAX_ICE_SPIKES),
     iceSpikeAgeTicks:             new Uint16Array(MAX_ICE_SPIKES),
