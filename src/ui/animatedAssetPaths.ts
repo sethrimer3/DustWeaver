@@ -10,6 +10,6 @@ export const MENU_ANIMATION_ASSETS = {
 } as const;
 
 export const LOADING_BACKGROUND_ASSETS = {
-  caveBlurUrl: assetUrl('SPRITES/BACKGROUNDS/BrownCave_Blur.png'),
-  caveBlurDarkUrl: assetUrl('SPRITES/BACKGROUNDS/BrownCave_Blur_Dark.png'),
+  caveBlurUrl: assetUrl('SPRITES/BACKGROUNDS/BrownCave_Variant1/BrownCave_Variant1_Blur.png'),
+  caveBlurDarkUrl: assetUrl('SPRITES/BACKGROUNDS/BrownCave_Variant1/BrownCave_Variant1_Blur_Dark.png'),
 } as const;
