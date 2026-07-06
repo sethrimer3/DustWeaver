@@ -11,7 +11,8 @@
 import type { EditorState, EditorUICallbacks } from './editorState';
 import { makeBtn } from './editorUIHelpers';
 import { GREEN, PANEL_BORDER, BTN_BG, TEXT_COLOR } from './editorStyles';
-import { STUB_PORTRAIT_IDS, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
+import { MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
+import { DIALOGUE_PORTRAIT_OPTIONS } from '../dialogue/dialoguePortraits';
 
 // ── Local style constants ─────────────────────────────────────────────────────
 
@@ -125,7 +126,7 @@ export function buildDialogueTriggerInspector(
   div.appendChild(entriesHeader);
 
   // ── Entry list ───────────────────────────────────────────────────────────
-  const portraitOptions = STUB_PORTRAIT_IDS.map(id => ({ label: id, value: id }));
+  const portraitOptions = DIALOGUE_PORTRAIT_OPTIONS.map(({ id, label }) => ({ label, value: id }));
   const sideOptions = [
     { label: 'Left', value: 'left' },
     { label: 'Right', value: 'right' },
