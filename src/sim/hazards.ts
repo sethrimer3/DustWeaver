@@ -234,10 +234,11 @@ export function applyHazards(world: WorldState): void {
       if (overlapAABB(px, py, phw, phh, hazLeft, hazTop, hazRight, hazBottom)) {
         const sourceXWorld = sx;
         const sourceYWorld = sy;
-        // Arrest all momentum on contact so knockback isn't blended with
-        // (and partially canceled by) whatever speed carried the player in.
-        player.velocityXWorld = 0;
-        player.velocityYWorld = 0;
+        // Throw the player back the way they came: reverse their velocity
+        // vector and halve its magnitude, so the damage/knockback blend below
+        // starts from a bounce-back rather than the incoming momentum.
+        player.velocityXWorld = -player.velocityXWorld * 0.5;
+        player.velocityYWorld = -player.velocityYWorld * 0.5;
         applyPlayerDamageWithKnockback(player, SPIKE_DAMAGE, sourceXWorld, sourceYWorld);
         world.spikeInvulnTicks = SPIKE_INVULN_TICKS;
         break; // one spike hit per tick
