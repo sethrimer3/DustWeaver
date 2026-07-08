@@ -132,6 +132,18 @@ export interface RoomKineticBlockDef {
   hBlock?: number;
 }
 
+/** A 1x1 movable block that can be carried through grapple tension. */
+export interface RoomGrappleCarryBlockDef {
+  xBlock: number;
+  yBlock: number;
+}
+
+/** A 1x1 ghost tile: player/grapple ignore it, carried physics blocks collide. */
+export interface RoomPhantasmalTileDef {
+  xBlock: number;
+  yBlock: number;
+}
+
 // ── Rope types ────────────────────────────────────────────────────────────────
 
 /**

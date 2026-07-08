@@ -32,6 +32,8 @@ import type {
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
   RoomKineticBlockDef,
+  RoomGrappleCarryBlockDef,
+  RoomPhantasmalTileDef,
   RoomRopeDef,
   RoomDustBoostJarDef,
   RoomFireflyJarDef,
@@ -500,6 +502,8 @@ export type {
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
   RoomKineticBlockDef,
+  RoomGrappleCarryBlockDef,
+  RoomPhantasmalTileDef,
   RopeDestructibility,
   RoomRopeDef,
   RoomDustBoostJarDef,
@@ -732,6 +736,10 @@ export interface RoomDef {
   /** Bounce pad blocks that reflect the player's velocity on contact. */
   bouncePads?: readonly RoomBouncePadDef[];
   kineticBlocks?: readonly RoomKineticBlockDef[];
+  /** Movable 1x1 grapple-carry physics blocks. */
+  grappleCarryBlocks?: readonly RoomGrappleCarryBlockDef[];
+  /** 1x1 ghost tiles that block grapple-carry blocks but not the player or grapple raycasts. */
+  phantasmalTiles?: readonly RoomPhantasmalTileDef[];
   /** Ropes hanging between anchor points in the room. */
   ropes?: readonly RoomRopeDef[];
   /** Jars that grant temporary dust particles when broken by the player. */

@@ -310,6 +310,16 @@ export interface RoomJsonKineticBlock {
   hBlock?: number;
 }
 
+export interface RoomJsonGrappleCarryBlock {
+  xBlock: number;
+  yBlock: number;
+}
+
+export interface RoomJsonPhantasmalTile {
+  xBlock: number;
+  yBlock: number;
+}
+
 export interface RoomJsonRope {
   aax: number;
   aay: number;
@@ -439,6 +449,8 @@ export interface RoomJsonDef {
   crumbleBlocks?: RoomJsonCrumbleBlock[];
   bouncePads?: RoomJsonBouncePad[];
   kineticBlocks?: RoomJsonKineticBlock[];
+  grappleCarryBlocks?: RoomJsonGrappleCarryBlock[];
+  phantasmalTiles?: RoomJsonPhantasmalTile[];
   ropes?: RoomJsonRope[];
   dustBoostJars?: RoomJsonDustBoostJar[];
   dustSwarms?: RoomJsonDustSwarm[];

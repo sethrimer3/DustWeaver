@@ -274,6 +274,18 @@ export interface EditorKineticBlock {
   hBlock: number;
 }
 
+export interface EditorGrappleCarryBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
+export interface EditorPhantasmalTile {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
 // ── Tombs ─────────────────────────────────────────────────────────────────────
 
 /** Save Tomb — where the player saves their progress. */
@@ -565,6 +577,8 @@ export interface EditorRoomData {
   /** Bounce pads placed in this room (reflect player velocity on contact). */
   bouncePads?: EditorBouncePad[];
   kineticBlocks?: EditorKineticBlock[];
+  grappleCarryBlocks?: EditorGrappleCarryBlock[];
+  phantasmalTiles?: EditorPhantasmalTile[];
   /** Ropes placed in this room. */
   ropes?: EditorRope[];
   /** Sunbeams placed in this room. */
@@ -585,7 +599,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'phantasmalTile' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath';
 
 export interface SelectedElement {
   type: SelectedElementType;

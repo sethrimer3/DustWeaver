@@ -20,6 +20,7 @@ import type { SelectedElement, EditorRoomData } from './editorElementTypes';
 export type {
   EditorRope, EditorSceneLight, EditorWall, EditorEnemy, EditorTransition,
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorSpike, EditorBouncePad, EditorKineticBlock,
+  EditorGrappleCarryBlock, EditorPhantasmalTile,
   EditorSaveTomb, EditorSkillTomb, EditorDustContainer, EditorDustContainerPiece,
   EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor, EditorDustPile,
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,

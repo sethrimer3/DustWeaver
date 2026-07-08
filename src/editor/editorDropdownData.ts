@@ -51,6 +51,10 @@ export interface PaletteItem {
   bouncePadSpeedFactorIndex?: 0 | 1;
   /** 1 if this palette item places a kinetic block (fixed-velocity boost on contact). */
   isKineticBlockItem?: 1;
+  /** 1 if this palette item places a 1x1 grapple-carry physics block. */
+  isGrappleCarryBlockItem?: 1;
+  /** 1 if this palette item places a phantasmal tile. */
+  isPhantasmalTileItem?: 1;
   /** Block theme override used by special block entries such as ice blocks. */
   blockThemeOverride?: BlockTheme;
   /** 1 if this palette item places a collectible dust container (grants +4 max capacity). */
@@ -233,6 +237,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // ── Kinetic blocks (impart fixed directional velocity boost on contact) ───
   { id: 'kinetic_block_1x1', label: 'Kinetic Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isKineticBlockItem: 1 },
   { id: 'kinetic_block_2x2', label: 'Kinetic Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isKineticBlockItem: 1 },
+  { id: 'grapple_carry_block', label: 'Grapple Carry 1x1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isGrappleCarryBlockItem: 1 },
+  { id: 'phantasmal_block', label: 'Phantasmal Block', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPhantasmalTileItem: 1 },
   // ── Ice blocks (static wall theme with ice-surface physics) ───────────────
   { id: 'ice_block_1x1', label: 'Ice Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'iceBlock' },
   { id: 'ice_block_2x2', label: 'Ice Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, blockThemeOverride: 'iceBlock' },
