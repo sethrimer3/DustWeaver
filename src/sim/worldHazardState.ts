@@ -24,6 +24,8 @@ export const MAX_BREAKABLE_BLOCKS = 32;
 export const MAX_CRUMBLE_BLOCKS = 32;
 /** Maximum number of bounce pads per room. */
 export const MAX_BOUNCE_PADS = 64;
+export const MAX_GRAPPLE_CARRY_BLOCKS = 64;
+export const MAX_PHANTASMAL_TILES = 512;
 
 import { MAX_KINETIC_BLOCKS } from './kineticBlocks/kineticBlockTypes';
 export { MAX_KINETIC_BLOCKS } from './kineticBlocks/kineticBlockTypes';
@@ -290,6 +292,18 @@ export interface HazardWorldState {
   kineticBlockHWorld: Float32Array;
   /** Per-block animation phase [0..255], advanced each tick by tickKineticBlocks. */
   kineticBlockAnimPhase: Uint8Array;
+
+  grappleCarryBlockCount: number;
+  grappleCarryBlockXWorld: Float32Array;
+  grappleCarryBlockYWorld: Float32Array;
+  grappleCarryBlockVelXWorld: Float32Array;
+  grappleCarryBlockVelYWorld: Float32Array;
+  grappleCarryBlockGroundedFlag: Uint8Array;
+  grappleCarryBlockContactFlags: Uint8Array;
+
+  phantasmalTileCount: number;
+  phantasmalTileXWorld: Float32Array;
+  phantasmalTileYWorld: Float32Array;
 
   // ── Dust boost jars ────────────────────────────────────────────────────────
   /** Number of dust boost jars (active + broken). */
@@ -706,6 +720,16 @@ export function createHazardWorldState(): HazardWorldState {
     kineticBlockWWorld:    new Float32Array(MAX_KINETIC_BLOCKS),
     kineticBlockHWorld:    new Float32Array(MAX_KINETIC_BLOCKS),
     kineticBlockAnimPhase: new Uint8Array(MAX_KINETIC_BLOCKS),
+    grappleCarryBlockCount: 0,
+    grappleCarryBlockXWorld: new Float32Array(MAX_GRAPPLE_CARRY_BLOCKS),
+    grappleCarryBlockYWorld: new Float32Array(MAX_GRAPPLE_CARRY_BLOCKS),
+    grappleCarryBlockVelXWorld: new Float32Array(MAX_GRAPPLE_CARRY_BLOCKS),
+    grappleCarryBlockVelYWorld: new Float32Array(MAX_GRAPPLE_CARRY_BLOCKS),
+    grappleCarryBlockGroundedFlag: new Uint8Array(MAX_GRAPPLE_CARRY_BLOCKS),
+    grappleCarryBlockContactFlags: new Uint8Array(MAX_GRAPPLE_CARRY_BLOCKS),
+    phantasmalTileCount: 0,
+    phantasmalTileXWorld: new Float32Array(MAX_PHANTASMAL_TILES),
+    phantasmalTileYWorld: new Float32Array(MAX_PHANTASMAL_TILES),
     dustBoostJarCount:             0,
     dustBoostJarXWorld:            new Float32Array(MAX_DUST_BOOST_JARS),
     dustBoostJarYWorld:            new Float32Array(MAX_DUST_BOOST_JARS),

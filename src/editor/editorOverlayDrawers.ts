@@ -50,6 +50,8 @@ export {
   drawEditorSpikes,
   drawEditorBouncePads,
   drawEditorKineticBlocks,
+  drawEditorGrappleCarryBlocks,
+  drawEditorPhantasmalTiles,
   drawEditorEnvironmentItems,
   drawEditorRopes,
   drawEditorDialogueTriggers,

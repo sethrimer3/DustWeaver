@@ -245,6 +245,14 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       wBlock: kb.wBlock !== 1 ? kb.wBlock : undefined,
       hBlock: kb.hBlock !== 1 ? kb.hBlock : undefined,
     })),
+    grappleCarryBlocks: (data.grappleCarryBlocks ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+    })),
+    phantasmalTiles: (data.phantasmalTiles ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+    })),
     ropes: (data.ropes ?? []).map(r => ({
       anchorAXBlock: r.anchorAXBlock,
       anchorAYBlock: r.anchorAYBlock,

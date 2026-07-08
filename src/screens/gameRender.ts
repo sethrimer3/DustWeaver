@@ -86,6 +86,7 @@ import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
 import { renderSnakes } from '../render/clusters/snakeRenderer';
 import { renderUltraIceSparkles } from '../render/effects/ultraIceSparkleRenderer';
+import { renderGrappleCarryBlocks, renderPhantasmalTiles } from '../render/grappleCarryBlockRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -427,6 +428,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderPhantasmalTiles(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderUltraIceSparkles(ctx, snapshot.walls, nowMs, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined && isDebugMode) {
@@ -490,6 +492,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDustWeaverArchitects(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderVoidSingularities(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderDustLeeches(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderGrappleCarryBlocks(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
 
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows

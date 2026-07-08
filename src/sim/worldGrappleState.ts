@@ -39,6 +39,8 @@ export interface GrappleWorldState {
    * the attached rope.  Only meaningful when grappleRopeIndex >= 0.
    */
   grappleRopeAttachSegF: number;
+  /** Index of the grapple-carry block currently attached, or -1. */
+  grappleCarryBlockIndex: number;
 
   // ---- Grapple hook -------------------------------------------------------
   /** 1 while the player's grapple hook is attached to an anchor point. */
@@ -383,6 +385,7 @@ export function createGrappleWorldState(): GrappleWorldState {
   return {
     grappleRopeIndex:                      -1,
     grappleRopeAttachSegF:                 0.0,
+    grappleCarryBlockIndex:                -1,
     isGrappleActiveFlag:                   0,
     grappleAnchorXWorld:                   0.0,
     grappleAnchorYWorld:                   0.0,

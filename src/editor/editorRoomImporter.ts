@@ -38,6 +38,8 @@ import type {
   EditorDialogueTrigger,
   EditorSceneLight,
   EditorGuideDustPath,
+  EditorGrappleCarryBlock,
+  EditorPhantasmalTile,
 } from './editorState';
 import { particleKindToString } from './roomJsonSchema';
 
@@ -377,6 +379,18 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     opacityPct: p.opacityPct,
   }));
 
+  const grappleCarryBlocks: EditorGrappleCarryBlock[] = (room.grappleCarryBlocks ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+  }));
+
+  const phantasmalTiles: EditorPhantasmalTile[] = (room.phantasmalTiles ?? []).map(t => ({
+    uid: uid++,
+    xBlock: t.xBlock,
+    yBlock: t.yBlock,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -423,6 +437,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       sunbeams,
       sceneLights,
       fallingBlocks,
+      grappleCarryBlocks,
+      phantasmalTiles,
       dialogueTriggers,
       guideDustPaths,
     },

@@ -85,6 +85,7 @@ import {
 } from './grappleShared';
 import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 import { raycastRopeSegments } from './grappleRopeSupport';
+import { findGrappleCarryBlockRayHit } from '../grappleCarryBlocks';
 
 export { updateGrappleRopeAnchor } from './grappleRopeSupport';
 export { raycastRopeSegments } from './grappleRopeSupport';
@@ -279,6 +280,52 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
       }
       return;
     }
+  }
+
+  const carryHit = findGrappleCarryBlockRayHit(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
+  if (carryHit !== null && carryHit.t >= GRAPPLE_MIN_LENGTH_WORLD) {
+    clearGrappleFailureFx(world);
+    world.grappleCarryBlockIndex = carryHit.index;
+    world.grappleRopeIndex = -1;
+    world.grappleAnchorXWorld = world.grappleCarryBlockXWorld[carryHit.index];
+    world.grappleAnchorYWorld = world.grappleCarryBlockYWorld[carryHit.index];
+    world.grappleAnchorNormalXWorld = 0;
+    world.grappleAnchorNormalYWorld = 0;
+    world.grappleLengthWorld = carryHit.t;
+    world.grapplePullInAmountWorld = 0.0;
+    world.grappleJumpHeldTickCount = 0;
+    world.grappleRetractHeldTicks = 0;
+    world.playerJumpTriggeredFlag = 0;
+    world.isGrappleActiveFlag = 1;
+    world.isGrappleZipActiveFlag = 0;
+    world.isGrappleZipTriggeredFlag = 0;
+    world.isGrappleStuckFlag = 0;
+    world.grappleStuckStoppedTickCount = 0;
+    world.grappleWrapPointCount = 0;
+    world.grappleAttachFxTicks = GRAPPLE_ATTACH_FX_TICKS;
+    world.grappleAttachFxXWorld = world.grappleAnchorXWorld;
+    world.grappleAttachFxYWorld = world.grappleAnchorYWorld;
+    player.isFastFallModeFlag = 0;
+    world.hasGrappleChargeFlag = 0;
+    if (world.grappleParticleStartIndex >= 0) {
+      const start = world.grappleParticleStartIndex;
+      const chainProfile = getElementProfile(ParticleKind.Gold);
+      for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+        const idx = start + i;
+        world.isAliveFlag[idx] = 1;
+        world.ageTicks[idx] = 0.0;
+        world.lifetimeTicks[idx] = GRAPPLE_CHAIN_LIFETIME_TICKS;
+        world.kindBuffer[idx] = ParticleKind.Gold;
+        world.ownerEntityId[idx] = playerEntityId;
+        world.behaviorMode[idx] = BEHAVIOR_MODE_GRAPPLE_CHAIN;
+        world.isTransientFlag[idx] = 1;
+        world.particleDurability[idx] = chainProfile.toughness;
+        world.respawnDelayTicks[idx] = 0;
+        world.velocityXWorld[idx] = 0.0;
+        world.velocityYWorld[idx] = 0.0;
+      }
+    }
+    return;
   }
 
   const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);

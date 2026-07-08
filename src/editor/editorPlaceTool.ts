@@ -11,6 +11,7 @@ const ROPE_SEGMENTS_PER_BLOCK = 1.5;
 import {
   EditorState, EditorTool, allocateUid,
   PaletteItem, DecorationKind, EditorBouncePad, EditorKineticBlock, EditorSunbeam, EditorFallingBlock,
+  EditorGrappleCarryBlock, EditorPhantasmalTile,
   EditorDialogueTrigger, EditorGuideDustPath,
 } from './editorState';
 import { createDefaultLight } from '../render/lighting/lightingTypes';
@@ -286,6 +287,33 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     }
 
     // ── Spikes ────────────────────────────────────────────────────────────────
+    if (item.isGrappleCarryBlockItem === 1) {
+      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
+      if ((room.grappleCarryBlocks ?? []).some(b => b.xBlock === bx && b.yBlock === by)) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return;
+      if (!room.grappleCarryBlocks) room.grappleCarryBlocks = [];
+      const block: EditorGrappleCarryBlock = {
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+      };
+      room.grappleCarryBlocks.push(block);
+      return;
+    }
+
+    if (item.isPhantasmalTileItem === 1) {
+      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
+      if ((room.phantasmalTiles ?? []).some(t => t.xBlock === bx && t.yBlock === by)) return;
+      if (!room.phantasmalTiles) room.phantasmalTiles = [];
+      const tile: EditorPhantasmalTile = {
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+      };
+      room.phantasmalTiles.push(tile);
+      return;
+    }
+
     if (item.isSpikeItem === 1) {
       const spikeSize = item.spikeSize ?? '1x1';
       const spikeW = getPlacementWidth(item, state.placementRotationSteps);

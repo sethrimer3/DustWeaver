@@ -37,6 +37,8 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     spike:            'spike',
     bouncePad:        'bounce_pad',
     kineticBlock:     'kinetic_block',
+    grappleCarryBlock:'grapple_carry_block',
+    phantasmalTile:   'phantasmal_tile',
     rope:             'rope',
     fallingBlock:     'falling_block',
     dialogueTrigger:  'dialogue_trigger',
@@ -104,6 +106,8 @@ export function buildElementTypeName(
     sunbeam:            'Sunbeam',
     waterZone:          'Water Zone',
     lavaZone:           'Lava Zone',
+    grappleCarryBlock:  'Grapple Carry Block',
+    phantasmalTile:     'Phantasmal Block',
     rope:               'Rope',
   };
   if (type === 'dustBoostJar') {

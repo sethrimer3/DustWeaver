@@ -22,6 +22,7 @@ import {
 import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 import { tickGrappleWrapping } from './grappleWrapping';
 import { tickGrappleZip } from './grappleZip';
+import { isGrappleCarryBlockPinnedToward } from '../grappleCarryBlocks';
 
 // ============================================================================
 // Tuning constants — used only by applyGrappleClusterConstraint
@@ -150,6 +151,15 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   }
 
   const dtSec = world.dtMs / 1000.0;
+  if (world.grappleCarryBlockIndex >= 0) {
+    const bi = world.grappleCarryBlockIndex;
+    if (bi >= world.grappleCarryBlockCount) {
+      releaseGrapple(world);
+      return;
+    }
+    world.grappleAnchorXWorld = world.grappleCarryBlockXWorld[bi];
+    world.grappleAnchorYWorld = world.grappleCarryBlockYWorld[bi];
+  }
 
   // ── Jump input ────────────────────────────────────────────────────────────
   // movement.ts preserves playerJumpTriggeredFlag when grapple is active so we
@@ -239,7 +249,19 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         retractDistWorld,
       ) === null;
 
-      if (isRetractPathClear) {
+      if (world.grappleCarryBlockIndex >= 0) {
+        const bi = world.grappleCarryBlockIndex;
+        const towardPlayerX = nx;
+        const towardPlayerY = ny;
+        if (!isGrappleCarryBlockPinnedToward(world, bi, towardPlayerX, towardPlayerY)) {
+          const pullSpeed = GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC * rampFactor;
+          world.grappleCarryBlockVelXWorld[bi] += towardPlayerX * pullSpeed * 0.45;
+          world.grappleCarryBlockVelYWorld[bi] += towardPlayerY * pullSpeed * 0.45;
+          world.grappleLengthWorld = newLength;
+        } else if (isRetractPathClear) {
+          world.grappleLengthWorld = newLength;
+        }
+      } else if (isRetractPathClear) {
         // Decompose velocity into radial and tangential components relative to
         // the anchor→player axis.
         const vRadial = player.velocityXWorld * nx + player.velocityYWorld * ny;

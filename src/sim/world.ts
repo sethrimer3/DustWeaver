@@ -23,7 +23,7 @@ export {
   MAX_PHANTASMAL_BLOCKS, MAX_PHANTASMAL_SHOCKWAVES, MAX_PHANTASMAL_SPIKES,
   MAX_VOID_LASERS, MAX_VOID_LASER_DUST,
   MAX_ICE_SPIKES,
-  MAX_KINETIC_BLOCKS,
+  MAX_KINETIC_BLOCKS, MAX_GRAPPLE_CARRY_BLOCKS, MAX_PHANTASMAL_TILES,
 } from './worldHazardState';
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */

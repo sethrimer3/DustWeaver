@@ -289,6 +289,58 @@ export function drawEditorKineticBlocks(
   }
 }
 
+export function drawEditorGrappleCarryBlocks(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  const bs = BLOCK_SIZE_SMALL * zoom;
+  for (const block of (room.grappleCarryBlocks ?? [])) {
+    const sel = isSelected('grappleCarryBlock', block.uid);
+    const xPx = block.xBlock * bs + offsetXPx;
+    const yPx = block.yBlock * bs + offsetYPx;
+    ctx.save();
+    ctx.fillStyle = sel ? 'rgba(210,150,60,0.55)' : 'rgba(190,125,45,0.35)';
+    ctx.strokeStyle = sel ? 'rgba(255,215,120,0.95)' : 'rgba(235,175,90,0.7)';
+    ctx.lineWidth = sel ? 2 : 1;
+    ctx.fillRect(xPx, yPx, bs, bs);
+    ctx.strokeRect(xPx, yPx, bs, bs);
+    ctx.fillStyle = sel ? 'rgba(255,240,180,0.95)' : 'rgba(255,220,140,0.75)';
+    ctx.font = `bold ${Math.max(7, bs * 0.32)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('GC', xPx + bs * 0.5, yPx + bs * 0.5);
+    ctx.restore();
+  }
+}
+
+export function drawEditorPhantasmalTiles(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  const bs = BLOCK_SIZE_SMALL * zoom;
+  for (const tile of (room.phantasmalTiles ?? [])) {
+    const sel = isSelected('phantasmalTile', tile.uid);
+    const xPx = tile.xBlock * bs + offsetXPx;
+    const yPx = tile.yBlock * bs + offsetYPx;
+    ctx.save();
+    ctx.fillStyle = sel ? 'rgba(170,90,255,0.45)' : 'rgba(150,70,230,0.25)';
+    ctx.strokeStyle = sel ? 'rgba(230,190,255,0.95)' : 'rgba(205,150,255,0.65)';
+    ctx.lineWidth = sel ? 2 : 1;
+    ctx.fillRect(xPx, yPx, bs, bs);
+    ctx.setLineDash([3, 2]);
+    ctx.strokeRect(xPx, yPx, bs, bs);
+    ctx.restore();
+  }
+}
+
 export function drawEditorEnvironmentItems(
   ctx: CanvasRenderingContext2D,
   room: EditorRoomData,

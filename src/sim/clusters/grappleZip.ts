@@ -22,6 +22,7 @@ import {
   resolveClusterFloorCollision,
 } from './movementCollision';
 import { raycastWalls, releaseGrapple } from './grappleShared';
+import { isGrappleCarryBlockPinnedToward } from '../grappleCarryBlocks';
 
 // ============================================================================
 // Zip tuning constants
@@ -185,6 +186,18 @@ export function tickGrappleZip(
   // The flag is set by the command processor when right-click is received while
   // the grapple is attached (isGrappleActiveFlag === 1).
   if (world.isGrappleZipTriggeredFlag === 1 && world.isGrappleZipActiveFlag === 0) {
+    if (world.grappleCarryBlockIndex >= 0) {
+      const bi = world.grappleCarryBlockIndex;
+      const dx = player.positionXWorld - world.grappleCarryBlockXWorld[bi];
+      const dy = player.positionYWorld - world.grappleCarryBlockYWorld[bi];
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0.001 && !isGrappleCarryBlockPinnedToward(world, bi, dx / dist, dy / dist)) {
+        world.grappleCarryBlockVelXWorld[bi] += (dx / dist) * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * 0.75;
+        world.grappleCarryBlockVelYWorld[bi] += (dy / dist) * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * 0.75;
+        world.isGrappleZipTriggeredFlag = 0;
+        return true;
+      }
+    }
     world.isGrappleZipTriggeredFlag = 0;
     // Compute surface normal = normalized direction from anchor toward player.
     const ax = world.grappleAnchorXWorld;

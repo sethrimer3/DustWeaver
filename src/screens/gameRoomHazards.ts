@@ -15,6 +15,8 @@ import {
   MAX_FIREFLIES,
   MAX_BOUNCE_PADS,
   MAX_KINETIC_BLOCKS,
+  MAX_GRAPPLE_CARRY_BLOCKS,
+  MAX_PHANTASMAL_TILES,
 } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
@@ -68,6 +70,8 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.crumbleBlockCount = 0;
   world.bouncePadCount = 0;
   world.kineticBlockCount = 0;
+  world.grappleCarryBlockCount = 0;
+  world.phantasmalTileCount = 0;
   world.dustBoostJarCount = 0;
   world.fireflyJarCount = 0;
   world.fireflyCount = 0;
@@ -279,6 +283,24 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.kineticBlockHWorld[ki] = hBlocks * BLOCK_SIZE_MEDIUM;
     world.kineticBlockAnimPhase[ki] = 0;
     void wallIdx;
+  }
+  const carryDefs = room.grappleCarryBlocks ?? [];
+  for (let i = 0; i < carryDefs.length && world.grappleCarryBlockCount < MAX_GRAPPLE_CARRY_BLOCKS; i++) {
+    const b = carryDefs[i];
+    const bi = world.grappleCarryBlockCount++;
+    world.grappleCarryBlockXWorld[bi] = (b.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.grappleCarryBlockYWorld[bi] = (b.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.grappleCarryBlockVelXWorld[bi] = 0;
+    world.grappleCarryBlockVelYWorld[bi] = 0;
+    world.grappleCarryBlockGroundedFlag[bi] = 0;
+    world.grappleCarryBlockContactFlags[bi] = 0;
+  }
+  const phantasmalDefs = room.phantasmalTiles ?? [];
+  for (let i = 0; i < phantasmalDefs.length && world.phantasmalTileCount < MAX_PHANTASMAL_TILES; i++) {
+    const b = phantasmalDefs[i];
+    const pi = world.phantasmalTileCount++;
+    world.phantasmalTileXWorld[pi] = b.xBlock * BLOCK_SIZE_MEDIUM;
+    world.phantasmalTileYWorld[pi] = b.yBlock * BLOCK_SIZE_MEDIUM;
   }
   const dustJarDefs = room.dustBoostJars ?? [];
   for (let i = 0; i < dustJarDefs.length && world.dustBoostJarCount < world.dustBoostJarXWorld.length; i++) {

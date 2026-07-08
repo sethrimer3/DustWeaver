@@ -24,6 +24,8 @@ import {
   drawEditorSpikes,
   drawEditorBouncePads,
   drawEditorKineticBlocks,
+  drawEditorGrappleCarryBlocks,
+  drawEditorPhantasmalTiles,
   drawEditorEnvironmentItems,
   drawEditorRopes,
   drawEditorDialogueTriggers,
@@ -96,6 +98,8 @@ export function renderEditorOverlays(
   drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorGrappleCarryBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorEnvironmentItems(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorRopes(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorDialogueTriggers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);

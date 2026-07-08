@@ -34,6 +34,8 @@ import { savedToLightDef } from '../levels/lightingSchema';
 export { editorRoomDataToJson } from './roomJsonSerializer';
 import type {
   RoomJsonDef,
+  RoomJsonGrappleCarryBlock,
+  RoomJsonPhantasmalTile,
   RoomJsonWall,
   RoomJsonTransition,
   ValidationError,
@@ -72,6 +74,8 @@ export type {
   RoomJsonConversation,
   RoomJsonDialogueEntry,
   RoomJsonBackgroundBlock,
+  RoomJsonGrappleCarryBlock,
+  RoomJsonPhantasmalTile,
   RoomJsonBakedWallTemplate,
 } from './roomJsonSchema';
 
@@ -456,6 +460,18 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     hBlock: kb.hBlock ?? 1,
   }));
 
+  const grappleCarryBlocks = (json.grappleCarryBlocks ?? []).map((b: RoomJsonGrappleCarryBlock) => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+  }));
+
+  const phantasmalTiles = (json.phantasmalTiles ?? []).map((b: RoomJsonPhantasmalTile) => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+  }));
+
   const ropes: EditorRope[] = (json.ropes ?? []).map(r => ({
     uid: uid++,
     anchorAXBlock: r.aax,
@@ -546,6 +562,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       spikes,
       bouncePads,
       kineticBlocks,
+      grappleCarryBlocks,
+      phantasmalTiles,
       ropes,
       sunbeams,
       sceneLights,

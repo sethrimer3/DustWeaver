@@ -71,6 +71,7 @@ import {
 import { tickRopes } from './ropes/ropeSim';
 import { tickFallingBlocks } from './fallingBlocks/fallingBlockSim';
 import { tickKineticBlocks } from './kineticBlocks/kineticBlockSim';
+import { tickGrappleCarryBlocks } from './grappleCarryBlocks';
 import { tickIceMoteAura } from './iceMoteAura';
 
 export function tick(world: WorldState): void {
@@ -115,6 +116,7 @@ export function tick(world: WorldState): void {
 
   // 0.06. Kinetic block animation phase advancement
   tickKineticBlocks(world);
+  tickGrappleCarryBlocks(world);
 
   // 0.1. Environmental hazards — spikes, springs, water buoyancy, lava, breakables, jars, fireflies
   applyHazards(world);

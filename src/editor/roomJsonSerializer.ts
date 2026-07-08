@@ -341,6 +341,18 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       return entry;
     });
   }
+  if ((data.grappleCarryBlocks ?? []).length > 0) {
+    json.grappleCarryBlocks = (data.grappleCarryBlocks ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+    }));
+  }
+  if ((data.phantasmalTiles ?? []).length > 0) {
+    json.phantasmalTiles = (data.phantasmalTiles ?? []).map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+    }));
+  }
   if ((data.fallingBlocks ?? []).length > 0) {
     json.fallingBlocks = (data.fallingBlocks ?? []).map(fb => ({
       xBlock: fb.xBlock,

@@ -174,6 +174,18 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  for (const b of (room.grappleCarryBlocks ?? [])) {
+    if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) {
+      return { type: 'grappleCarryBlock', uid: b.uid };
+    }
+  }
+
+  for (const t of (room.phantasmalTiles ?? [])) {
+    if (hitTestPoint(t.xBlock, t.yBlock, bx, by)) {
+      return { type: 'phantasmalTile', uid: t.uid };
+    }
+  }
+
   // Check dialogue triggers
   for (const dt of (room.dialogueTriggers ?? [])) {
     if (hitTestZone({ xBlock: dt.xBlock, yBlock: dt.yBlock, wBlock: dt.wBlock, hBlock: dt.hBlock }, bx, by)) {
@@ -500,6 +512,16 @@ export function getAllElementsInRect(
     if (b.xBlock + b.wBlock > minX && b.xBlock < maxX + 1 &&
         b.yBlock + b.hBlock > minY && b.yBlock < maxY + 1) {
       results.push({ type: 'backgroundBlock', uid: b.uid });
+    }
+  }
+  for (const b of (room.grappleCarryBlocks ?? [])) {
+    if (b.xBlock >= minX && b.xBlock <= maxX && b.yBlock >= minY && b.yBlock <= maxY) {
+      results.push({ type: 'grappleCarryBlock', uid: b.uid });
+    }
+  }
+  for (const t of (room.phantasmalTiles ?? [])) {
+    if (t.xBlock >= minX && t.xBlock <= maxX && t.yBlock >= minY && t.yBlock <= maxY) {
+      results.push({ type: 'phantasmalTile', uid: t.uid });
     }
   }
   if (room.playerSpawnBlock[0] >= minX && room.playerSpawnBlock[0] <= maxX &&

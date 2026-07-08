@@ -281,6 +281,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   world.grappleOutOfRangeTicks = 0;
   world.grappleTensionFactor = 0;
   world.grappleRopeIndex = -1; // detach from rope segment (if any)
+  world.grappleCarryBlockIndex = -1;
   world.grappleWrapPointCount = 0;  // clear wrap corners
   // Clear surface-anchor state (no longer attached to any surface).
   world.grappleAnchorNormalXWorld = 0.0;

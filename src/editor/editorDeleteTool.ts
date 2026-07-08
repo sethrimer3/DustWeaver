@@ -320,6 +320,26 @@ export function deleteAtCursor(state: EditorState): void {
     }
   }
 
+  const grappleCarryBlocks = room.grappleCarryBlocks ?? [];
+  for (let i = 0; i < grappleCarryBlocks.length; i++) {
+    if (hitTestPoint(grappleCarryBlocks[i].xBlock, grappleCarryBlocks[i].yBlock, bx, by)) {
+      const removedUid = grappleCarryBlocks[i].uid;
+      grappleCarryBlocks.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  const phantasmalTiles = room.phantasmalTiles ?? [];
+  for (let i = 0; i < phantasmalTiles.length; i++) {
+    if (hitTestPoint(phantasmalTiles[i].xBlock, phantasmalTiles[i].yBlock, bx, by)) {
+      const removedUid = phantasmalTiles[i].uid;
+      phantasmalTiles.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
   // Check dialogue triggers
   const dialogueTriggers = room.dialogueTriggers ?? [];
   for (let i = 0; i < dialogueTriggers.length; i++) {
