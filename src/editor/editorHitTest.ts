@@ -190,6 +190,55 @@ export function rectOverlapsSolidEditorObject(
   return false;
 }
 
+export function cellOverlapsSolidWall(room: EditorRoomData, bx: number, by: number): boolean {
+  return room.interiorWalls.some(w =>
+    w.isPlatformFlag !== 1 &&
+    w.rampOrientation === undefined &&
+    wallsOverlap(w, bx, by, 1, 1),
+  );
+}
+
+function rectOverlapsEditorZones(
+  zones: readonly { xBlock: number; yBlock: number; wBlock: number; hBlock: number }[] | undefined,
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number,
+): boolean {
+  return (zones ?? []).some(z =>
+    bx < z.xBlock + z.wBlock && bx + bw > z.xBlock &&
+    by < z.yBlock + z.hBlock && by + bh > z.yBlock,
+  );
+}
+
+function cellOverlapsEditorPoints(
+  points: readonly { xBlock: number; yBlock: number }[] | undefined,
+  bx: number,
+  by: number,
+): boolean {
+  return (points ?? []).some(p => p.xBlock === bx && p.yBlock === by);
+}
+
+export function canPlaceGrappleCarryBlockAt(room: EditorRoomData, bx: number, by: number): boolean {
+  if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return false;
+  if (cellOverlapsSolidWall(room, bx, by)) return false;
+  if (rectOverlapsEditorZones(room.bouncePads, bx, by, 1, 1)) return false;
+  if (rectOverlapsEditorZones(room.kineticBlocks, bx, by, 1, 1)) return false;
+  if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return false;
+  if (cellOverlapsEditorPoints(room.phantasmalTiles, bx, by)) return false;
+  if (cellOverlapsEditorPoints(room.grappleCarryBlocks, bx, by)) return false;
+  return true;
+}
+
+export function canPlacePhantasmalTileAt(room: EditorRoomData, bx: number, by: number): boolean {
+  if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return false;
+  if (cellOverlapsSolidWall(room, bx, by)) return false;
+  if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return false;
+  if (cellOverlapsEditorPoints(room.grappleCarryBlocks, bx, by)) return false;
+  if (cellOverlapsEditorPoints(room.phantasmalTiles, bx, by)) return false;
+  return true;
+}
+
 /**
  * Returns true if the given block cell is covered by any placed tile-like
  * solid object (interior wall, crumble block, or falling block tile).

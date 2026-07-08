@@ -28,6 +28,8 @@ import {
   ropeLineCrossesWall,
   findFloorBlockRow,
   findCeilingBlockRow,
+  canPlaceGrappleCarryBlockAt,
+  canPlacePhantasmalTileAt,
 } from './editorHitTest';
 import { getBrushCells, getFillBrushCells } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
@@ -288,9 +290,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
 
     // ── Spikes ────────────────────────────────────────────────────────────────
     if (item.isGrappleCarryBlockItem === 1) {
-      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
-      if ((room.grappleCarryBlocks ?? []).some(b => b.xBlock === bx && b.yBlock === by)) return;
-      if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return;
+      if (!canPlaceGrappleCarryBlockAt(room, bx, by)) return;
       if (!room.grappleCarryBlocks) room.grappleCarryBlocks = [];
       const block: EditorGrappleCarryBlock = {
         uid: allocateUid(state),
@@ -302,8 +302,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     }
 
     if (item.isPhantasmalTileItem === 1) {
-      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
-      if ((room.phantasmalTiles ?? []).some(t => t.xBlock === bx && t.yBlock === by)) return;
+      if (!canPlacePhantasmalTileAt(room, bx, by)) return;
       if (!room.phantasmalTiles) room.phantasmalTiles = [];
       const tile: EditorPhantasmalTile = {
         uid: allocateUid(state),

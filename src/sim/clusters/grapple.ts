@@ -283,7 +283,12 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   }
 
   const carryHit = findGrappleCarryBlockRayHit(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
-  if (carryHit !== null && carryHit.t >= GRAPPLE_MIN_LENGTH_WORLD) {
+  const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
+  if (
+    carryHit !== null &&
+    carryHit.t >= GRAPPLE_MIN_LENGTH_WORLD &&
+    (hit === null || carryHit.t < hit.t)
+  ) {
     clearGrappleFailureFx(world);
     world.grappleCarryBlockIndex = carryHit.index;
     world.grappleRopeIndex = -1;
@@ -327,8 +332,6 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
     }
     return;
   }
-
-  const hit = raycastWalls(world, player.positionXWorld, player.positionYWorld, dirX, dirY, maxCastDist);
 
   if (hit === null) {
     clearLegacyGrappleMissState(world);

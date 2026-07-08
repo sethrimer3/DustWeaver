@@ -7,6 +7,7 @@ const HALF = GRAPPLE_CARRY_BLOCK_SIZE_WORLD * 0.5;
 const GRAVITY_WORLD_PER_SEC2 = 520;
 const MAX_SPEED_WORLD_PER_SEC = 260;
 const FLOOR_FRICTION_PER_SEC = 7.5;
+const PINNED_PROBE_WORLD = 0.5;
 
 export const enum GrappleCarryContactFlag {
   Left = 1,
@@ -36,6 +37,47 @@ function forEachCarrySolid(world: WorldState, cb: (left: number, top: number, ri
     const top = world.phantasmalTileYWorld[i];
     cb(left, top, left + BLOCK_SIZE_MEDIUM, top + BLOCK_SIZE_MEDIUM);
   }
+}
+
+function intersectsCarrySolidAt(world: WorldState, cx: number, cy: number): boolean {
+  let blocked = false;
+  forEachCarrySolid(world, (left, top, right, bottom) => {
+    if (blocked) return;
+    blocked = overlaps(cx, cy, left, top, right, bottom);
+  });
+  return blocked;
+}
+
+export function canMoveGrappleCarryBlockToward(
+  world: WorldState,
+  index: number,
+  dirX: number,
+  dirY: number,
+  probeWorld = PINNED_PROBE_WORLD,
+): boolean {
+  if (index < 0 || index >= world.grappleCarryBlockCount) return false;
+  const len = Math.sqrt(dirX * dirX + dirY * dirY);
+  if (len < 0.001) return true;
+  const nx = dirX / len;
+  const ny = dirY / len;
+  const nextX = world.grappleCarryBlockXWorld[index] + nx * probeWorld;
+  const nextY = world.grappleCarryBlockYWorld[index] + ny * probeWorld;
+  return !intersectsCarrySolidAt(world, nextX, nextY);
+}
+
+export function pullGrappleCarryBlockToward(
+  world: WorldState,
+  index: number,
+  dirX: number,
+  dirY: number,
+  speedWorldPerSec: number,
+): void {
+  const len = Math.sqrt(dirX * dirX + dirY * dirY);
+  if (index < 0 || index >= world.grappleCarryBlockCount || len < 0.001) return;
+  const nx = dirX / len;
+  const ny = dirY / len;
+  world.grappleCarryBlockVelXWorld[index] = clampSpeed(world.grappleCarryBlockVelXWorld[index] + nx * speedWorldPerSec);
+  world.grappleCarryBlockVelYWorld[index] = clampSpeed(world.grappleCarryBlockVelYWorld[index] + ny * speedWorldPerSec);
 }
 
 function moveX(world: WorldState, index: number, dtSec: number): void {
@@ -107,6 +149,7 @@ export function tickGrappleCarryBlocks(world: WorldState): void {
 }
 
 export function isGrappleCarryBlockPinnedToward(world: WorldState, index: number, dirX: number, dirY: number): boolean {
+  if (!canMoveGrappleCarryBlockToward(world, index, dirX, dirY)) return true;
   const flags = world.grappleCarryBlockContactFlags[index];
   return (dirX < -0.15 && (flags & GrappleCarryContactFlag.Left) !== 0)
     || (dirX > 0.15 && (flags & GrappleCarryContactFlag.Right) !== 0)

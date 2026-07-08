@@ -7,12 +7,14 @@ import { createClusterState } from '../sim/clusters/state';
 import { fireGrapple, applyGrappleClusterConstraint } from '../sim/clusters/grapple';
 import {
   GRAPPLE_CARRY_BLOCK_SIZE_WORLD,
+  canMoveGrappleCarryBlockToward,
   findGrappleCarryBlockRayHit,
   tickGrappleCarryBlocks,
 } from '../sim/grappleCarryBlocks';
 import { resolveClusterSolidWallCollision } from '../sim/clusters/movementCollision';
 import { editorRoomDataToJson, jsonToEditorRoomData } from '../editor/roomJson';
 import type { EditorRoomData } from '../editor/editorState';
+import { canPlaceGrappleCarryBlockAt, canPlacePhantasmalTileAt } from '../editor/editorHitTest';
 
 function addWall(world: WorldState, x: number, y: number, w: number, h: number): void {
   const i = world.wallCount++;
@@ -113,6 +115,75 @@ test('player cannot grapple to phantasmal tiles, but can grapple to carry blocks
   assert.equal(world.grappleCarryBlockIndex, 0);
 });
 
+test('a nearer wall blocks grappling to a carry block behind it', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 24, 44, 1, 10);
+  world.clusters.push(player);
+  world.hasGrappleChargeFlag = 1;
+  addWall(world, 56, 0, 8, 120);
+  addCarryBlock(world, 96, 44);
+
+  fireGrapple(world, 128, 44);
+
+  assert.equal(world.isGrappleActiveFlag, 1);
+  assert.equal(world.grappleCarryBlockIndex, -1);
+});
+
+test('a carry block closer than a wall is grappled', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 24, 44, 1, 10);
+  world.clusters.push(player);
+  world.hasGrappleChargeFlag = 1;
+  addCarryBlock(world, 56, 44);
+  addWall(world, 96, 0, 8, 120);
+
+  fireGrapple(world, 128, 44);
+
+  assert.equal(world.isGrappleActiveFlag, 1);
+  assert.equal(world.grappleCarryBlockIndex, 0);
+});
+
+test('phantasmal tiles do not block grapple raycasts to carry blocks', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 24, 44, 1, 10);
+  world.clusters.push(player);
+  world.hasGrappleChargeFlag = 1;
+  addPhantasmalTile(world, 7, 5);
+  addCarryBlock(world, 96, 44);
+
+  fireGrapple(world, 128, 44);
+
+  assert.equal(world.isGrappleActiveFlag, 1);
+  assert.equal(world.grappleCarryBlockIndex, 0);
+});
+
+test('predictive pinned detection works while flush against a wall without contact flags', () => {
+  const world = createWorldState(1000 / 60, 123);
+  addWall(world, 96, 0, 8, 120);
+  addCarryBlock(world, 96 - GRAPPLE_CARRY_BLOCK_SIZE_WORLD * 0.5, 44);
+
+  assert.equal(world.grappleCarryBlockContactFlags[0], 0);
+  assert.equal(canMoveGrappleCarryBlockToward(world, 0, 1, 0), false);
+  assert.equal(canMoveGrappleCarryBlockToward(world, 0, -1, 0), true);
+});
+
+test('normal grapple tension pulls an unpinned carry block without strongly dragging the player', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 32, 40, 1, 10);
+  world.clusters.push(player);
+  addCarryBlock(world, 96, 40);
+  world.isGrappleActiveFlag = 1;
+  world.grappleCarryBlockIndex = 0;
+  world.grappleAnchorXWorld = 96;
+  world.grappleAnchorYWorld = 40;
+  world.grappleLengthWorld = 48;
+
+  applyGrappleClusterConstraint(world);
+
+  assert.ok(world.grappleCarryBlockVelXWorld[0] < 0);
+  assert.equal(player.positionXWorld, 32);
+});
+
 test('reel pulls an unobstructed carry block toward the player', () => {
   const world = createWorldState(1000 / 60, 123);
   const player = createClusterState(1, 32, 40, 1, 10);
@@ -149,6 +220,60 @@ test('reel against a pinned carry block shortens rope for player pull instead of
 
   assert.equal(world.grappleCarryBlockVelXWorld[0], 0);
   assert.ok(world.grappleLengthWorld < 80);
+});
+
+test('zip-pulling an unpinned carry block continues across frames', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 32, 40, 1, 10);
+  world.clusters.push(player);
+  addCarryBlock(world, 112, 40);
+  world.isGrappleActiveFlag = 1;
+  world.grappleCarryBlockIndex = 0;
+  world.grappleAnchorXWorld = 112;
+  world.grappleAnchorYWorld = 40;
+  world.grappleLengthWorld = 80;
+  world.isGrappleZipTriggeredFlag = 1;
+
+  applyGrappleClusterConstraint(world);
+  const vAfterFirst = world.grappleCarryBlockVelXWorld[0];
+  applyGrappleClusterConstraint(world);
+
+  assert.ok(vAfterFirst < 0);
+  assert.ok(world.grappleCarryBlockVelXWorld[0] < vAfterFirst);
+  assert.equal(world.isGrappleZipActiveFlag, 1);
+});
+
+test('zip-pulling transitions to player zip when the carry block becomes pinned', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 32, 40, 1, 10);
+  world.clusters.push(player);
+  addWall(world, 96, 0, 8, 120);
+  addCarryBlock(world, 104 + GRAPPLE_CARRY_BLOCK_SIZE_WORLD * 0.5, 40);
+  world.isGrappleActiveFlag = 1;
+  world.grappleCarryBlockIndex = 0;
+  world.grappleAnchorXWorld = world.grappleCarryBlockXWorld[0];
+  world.grappleAnchorYWorld = 40;
+  world.grappleLengthWorld = 80;
+  world.isGrappleZipTriggeredFlag = 1;
+
+  applyGrappleClusterConstraint(world);
+
+  assert.equal(world.grappleCarryBlockVelXWorld[0], 0);
+  assert.notEqual(player.velocityXWorld, 0);
+});
+
+test('normal grapple-to-wall still attaches when no carry block is nearer', () => {
+  const world = createWorldState(1000 / 60, 123);
+  const player = createClusterState(1, 24, 44, 1, 10);
+  world.clusters.push(player);
+  world.hasGrappleChargeFlag = 1;
+  addWall(world, 80, 0, 8, 120);
+
+  fireGrapple(world, 128, 44);
+
+  assert.equal(world.isGrappleActiveFlag, 1);
+  assert.equal(world.grappleCarryBlockIndex, -1);
+  assert.notEqual(world.grappleAnchorNormalXWorld, 0);
 });
 
 test('grapple targeting ray hit follows the moving carry block position', () => {
@@ -214,4 +339,42 @@ test('room JSON serialization preserves grapple-carry blocks and phantasmal tile
   assert.deepEqual(json.phantasmalTiles, [{ xBlock: 6, yBlock: 7 }]);
   assert.equal(roundTrip.grappleCarryBlocks?.[0]?.xBlock, 4);
   assert.equal(roundTrip.phantasmalTiles?.[0]?.yBlock, 7);
+});
+
+test('editor placement rejects invalid grapple-carry and phantasmal overlaps', () => {
+  const room = {
+    id: 'test',
+    name: 'Test',
+    worldNumber: 1,
+    blockTheme: 'blackRock',
+    backgroundId: 'brownRock',
+    lightingEffect: 'Ambient',
+    songId: '_continue',
+    widthBlocks: 20,
+    heightBlocks: 14,
+    playerSpawnBlock: [2, 2],
+    interiorWalls: [{ uid: 1, xBlock: 4, yBlock: 4, wBlock: 1, hBlock: 1, isPlatformFlag: 0 }],
+    enemies: [],
+    transitions: [],
+    saveTombs: [],
+    skillTombs: [],
+    dustPiles: [],
+    grasshopperAreas: [],
+    fallingBlocks: [{ uid: 2, xBlock: 5, yBlock: 4, variant: 'tough' }],
+    bouncePads: [{ uid: 3, xBlock: 6, yBlock: 4, wBlock: 1, hBlock: 1, speedFactorIndex: 0 }],
+    kineticBlocks: [{ uid: 4, xBlock: 7, yBlock: 4, wBlock: 1, hBlock: 1 }],
+    grappleCarryBlocks: [{ uid: 5, xBlock: 8, yBlock: 4 }],
+    phantasmalTiles: [{ uid: 6, xBlock: 9, yBlock: 4 }],
+  } as EditorRoomData;
+
+  for (const x of [4, 5, 6, 7, 8, 9]) {
+    assert.equal(canPlaceGrappleCarryBlockAt(room, x, 4), false);
+  }
+  assert.equal(canPlaceGrappleCarryBlockAt(room, 10, 4), true);
+
+  for (const x of [4, 5, 8, 9, 10]) {
+    const expected = x === 10;
+    assert.equal(canPlacePhantasmalTileAt(room, x, 4), expected);
+  }
+  assert.equal(canPlacePhantasmalTileAt(room, 11, 4), true);
 });

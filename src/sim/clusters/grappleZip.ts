@@ -22,7 +22,10 @@ import {
   resolveClusterFloorCollision,
 } from './movementCollision';
 import { raycastWalls, releaseGrapple } from './grappleShared';
-import { isGrappleCarryBlockPinnedToward } from '../grappleCarryBlocks';
+import {
+  canMoveGrappleCarryBlockToward,
+  pullGrappleCarryBlockToward,
+} from '../grappleCarryBlocks';
 
 // ============================================================================
 // Zip tuning constants
@@ -32,6 +35,8 @@ import { isGrappleCarryBlockPinnedToward } from '../grappleCarryBlocks';
  * Speed at which the player is zipped toward the grapple anchor.
  */
 export const GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 210.0;
+const GRAPPLE_CARRY_ZIP_PULL_SPEED_WORLD_PER_SEC = 72.0;
+const GRAPPLE_CARRY_ZIP_CLOSE_DISTANCE_WORLD = 18.0;
 
 /**
  * Arrival distance (world units) — the player is snapped to the target when
@@ -191,9 +196,9 @@ export function tickGrappleZip(
       const dx = player.positionXWorld - world.grappleCarryBlockXWorld[bi];
       const dy = player.positionYWorld - world.grappleCarryBlockYWorld[bi];
       const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 0.001 && !isGrappleCarryBlockPinnedToward(world, bi, dx / dist, dy / dist)) {
-        world.grappleCarryBlockVelXWorld[bi] += (dx / dist) * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * 0.75;
-        world.grappleCarryBlockVelYWorld[bi] += (dy / dist) * GRAPPLE_ZIP_SPEED_WORLD_PER_SEC * 0.75;
+      if (dist > GRAPPLE_CARRY_ZIP_CLOSE_DISTANCE_WORLD && canMoveGrappleCarryBlockToward(world, bi, dx, dy)) {
+        pullGrappleCarryBlockToward(world, bi, dx, dy, GRAPPLE_CARRY_ZIP_PULL_SPEED_WORLD_PER_SEC);
+        world.isGrappleZipActiveFlag = 1;
         world.isGrappleZipTriggeredFlag = 0;
         return true;
       }
@@ -226,6 +231,34 @@ export function tickGrappleZip(
   // ════════════════════════════════════════════════════════════════════════════
   if (world.isGrappleZipActiveFlag === 0) {
     return false; // zip not active — normal pendulum continues
+  }
+
+  if (world.grappleCarryBlockIndex >= 0) {
+    const bi = world.grappleCarryBlockIndex;
+    if (bi >= world.grappleCarryBlockCount) {
+      releaseGrapple(world);
+      return true;
+    }
+    world.grappleAnchorXWorld = world.grappleCarryBlockXWorld[bi];
+    world.grappleAnchorYWorld = world.grappleCarryBlockYWorld[bi];
+    const dxToPlayer = player.positionXWorld - world.grappleCarryBlockXWorld[bi];
+    const dyToPlayer = player.positionYWorld - world.grappleCarryBlockYWorld[bi];
+    const distToPlayer = Math.sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
+    if (
+      distToPlayer > GRAPPLE_CARRY_ZIP_CLOSE_DISTANCE_WORLD &&
+      canMoveGrappleCarryBlockToward(world, bi, dxToPlayer, dyToPlayer)
+    ) {
+      pullGrappleCarryBlockToward(world, bi, dxToPlayer, dyToPlayer, GRAPPLE_CARRY_ZIP_PULL_SPEED_WORLD_PER_SEC);
+      return true;
+    }
+    if (distToPlayer <= GRAPPLE_CARRY_ZIP_CLOSE_DISTANCE_WORLD) {
+      releaseGrapple(world, false);
+      return true;
+    }
+    if (distToPlayer > 0.001) {
+      world.grappleZipNormalXWorld = dxToPlayer / distToPlayer;
+      world.grappleZipNormalYWorld = dyToPlayer / distToPlayer;
+    }
   }
 
   const ax = world.grappleAnchorXWorld;

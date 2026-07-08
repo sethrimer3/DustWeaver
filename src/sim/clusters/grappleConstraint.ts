@@ -22,7 +22,10 @@ import {
 import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 import { tickGrappleWrapping } from './grappleWrapping';
 import { tickGrappleZip } from './grappleZip';
-import { isGrappleCarryBlockPinnedToward } from '../grappleCarryBlocks';
+import {
+  canMoveGrappleCarryBlockToward,
+  pullGrappleCarryBlockToward,
+} from '../grappleCarryBlocks';
 
 // ============================================================================
 // Tuning constants — used only by applyGrappleClusterConstraint
@@ -97,6 +100,9 @@ const GRAPPLE_MAX_TANGENTIAL_SPEED_WORLD_PER_SEC = 540.0;
  * full oscillations.  Increase for more drag; decrease for a floatier feel.
  */
 const GRAPPLE_SWING_DAMPING_PER_SEC = 0.12;
+const GRAPPLE_CARRY_TENSION_SLACK_WORLD = 1.0;
+const GRAPPLE_CARRY_TENSION_PULL_SPEED_WORLD_PER_SEC = 36.0;
+const GRAPPLE_CARRY_REEL_PULL_SPEED_WORLD_PER_SEC = 44.0;
 
 /**
  * Upward velocity impulse (world units/second) added to the player when they
@@ -253,11 +259,9 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         const bi = world.grappleCarryBlockIndex;
         const towardPlayerX = nx;
         const towardPlayerY = ny;
-        if (!isGrappleCarryBlockPinnedToward(world, bi, towardPlayerX, towardPlayerY)) {
-          const pullSpeed = GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC * rampFactor;
-          world.grappleCarryBlockVelXWorld[bi] += towardPlayerX * pullSpeed * 0.45;
-          world.grappleCarryBlockVelYWorld[bi] += towardPlayerY * pullSpeed * 0.45;
-          world.grappleLengthWorld = newLength;
+        if (canMoveGrappleCarryBlockToward(world, bi, towardPlayerX, towardPlayerY)) {
+          const pullSpeed = GRAPPLE_CARRY_REEL_PULL_SPEED_WORLD_PER_SEC * rampFactor;
+          pullGrappleCarryBlockToward(world, bi, towardPlayerX, towardPlayerY, pullSpeed);
         } else if (isRetractPathClear) {
           world.grappleLengthWorld = newLength;
         }
@@ -314,6 +318,28 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // The tangential (swing) component is fully preserved — this is what makes
   // the pendulum feel physical rather than scripted.
   const ropeLength = world.grappleLengthWorld;
+
+  if (world.grappleCarryBlockIndex >= 0) {
+    const bi = world.grappleCarryBlockIndex;
+    const towardPlayerX = nx;
+    const towardPlayerY = ny;
+    if (
+      dist > ropeLength + GRAPPLE_CARRY_TENSION_SLACK_WORLD &&
+      canMoveGrappleCarryBlockToward(world, bi, towardPlayerX, towardPlayerY)
+    ) {
+      const stretchWorld = dist - ropeLength;
+      const stretchFactor = Math.min(1, stretchWorld / 24);
+      pullGrappleCarryBlockToward(
+        world,
+        bi,
+        towardPlayerX,
+        towardPlayerY,
+        GRAPPLE_CARRY_TENSION_PULL_SPEED_WORLD_PER_SEC * stretchFactor,
+      );
+      world.grappleLengthWorld = Math.max(world.grappleLengthWorld, dist - GRAPPLE_CARRY_TENSION_SLACK_WORLD);
+      return;
+    }
+  }
 
   if (dist > ropeLength) {
     // Target position: player centre on the rope circle.
