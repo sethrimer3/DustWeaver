@@ -423,6 +423,8 @@ export interface RoomJsonDef {
    * whatever was already playing".  '_silence' stops music.
    */
   songId?: string;
+  /** Legacy packed-campaign field. Prefer songId for newly-written room JSON. */
+  song?: string;
   widthBlocks: number;
   heightBlocks: number;
   playerSpawnBlock: [number, number];

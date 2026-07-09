@@ -53,7 +53,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
 
   // ── Background canvas ────────────────────────────────────────────────────
   // ── Music ────────────────────────────────────────────────────────────────
-  const music = new Audio(`${BASE}MUSIC/titleMenu.mp3`);
+  const music = new Audio(`${BASE}music/titleMenu.mp3`);
   music.loop = false;
   music.volume = 0.5;
 

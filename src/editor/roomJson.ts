@@ -167,6 +167,10 @@ export function parseSongId(raw: string | undefined): RoomSongId {
   return '_continue';
 }
 
+export function parseRoomJsonSongId(json: Pick<RoomJsonDef, 'songId' | 'song'>): RoomSongId {
+  return parseSongId(json.songId ?? json.song);
+}
+
 function resolveJsonBlockTheme(
   blockTheme: BlockTheme | undefined,
   blockThemeId: RoomJsonDef['blockThemeId'] | RoomJsonWall['blockThemeId'] | undefined,
@@ -536,7 +540,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       falloffPower:          json.falloffPower,
       blockSeamBlending:     json.blockSeamBlending,
       voidEdgeStyle:         json.voidEdgeStyle,
-      songId: parseSongId(json.songId),
+      songId: parseRoomJsonSongId(json),
       widthBlocks: json.widthBlocks,
       heightBlocks: json.heightBlocks,
       playerSpawnBlock: [...json.playerSpawnBlock] as [number, number],

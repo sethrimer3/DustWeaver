@@ -39,13 +39,15 @@ export const AVAILABLE_SONGS: readonly RoomSongId[] = [
   'titleMenu',
 ];
 
+const DEFAULT_GAMEPLAY_SONG_ID = 'thoughtfulLevel';
+
 // ── Internal constants ────────────────────────────────────────────────────────
 
-/** Relative path to each song inside ASSETS/MUSIC/. */
+/** Relative path to each song inside ASSETS/music/. */
 const SONG_FILE: Readonly<Record<string, string>> = {
-  rainWindAtmosphere: 'MUSIC/rainWindAtmosphere.mp3',
-  thoughtfulLevel:    'MUSIC/thoughtfulLevel.mp3',
-  titleMenu:          'MUSIC/titleMenu.mp3',
+  rainWindAtmosphere: 'music/rainWindAtmosphere.mp3',
+  thoughtfulLevel:    'music/thoughtfulLevel.mp3',
+  titleMenu:          'music/titleMenu.mp3',
 };
 
 /** Duration of the room-to-room crossfade in milliseconds. */
@@ -126,7 +128,10 @@ export class MusicManager {
     if (this.isDisposed) return;
 
     if (songId === '_continue') {
-      // Keep playing whatever is already playing — do nothing.
+      if (this.activeSongId === null) {
+        this.beginCrossfade(DEFAULT_GAMEPLAY_SONG_ID);
+      }
+      // Keep playing whatever is already playing.
       return;
     }
 

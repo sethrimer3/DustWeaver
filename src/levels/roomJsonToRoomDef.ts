@@ -24,7 +24,7 @@ import { blockThemeRefToTheme } from './roomDef';
 import {
   validateRoomJson,
   stringToParticleKind,
-  parseSongId,
+  parseRoomJsonSongId,
 } from '../editor/roomJson';
 import type { RoomJsonDef } from '../editor/roomJson';
 import { savedToLightDef } from './lightingSchema';
@@ -204,7 +204,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (json.soundHardness) room.soundHardness = json.soundHardness;
   if (json.backgroundId) room.backgroundId = json.backgroundId;
   if (json.lightingEffect) room.lightingEffect = json.lightingEffect;
-  const resolvedSongId = parseSongId(json.songId);
+  const resolvedSongId = parseRoomJsonSongId(json);
   if (resolvedSongId !== '_continue') room.songId = resolvedSongId;
 
   // Add optional fields only if present
