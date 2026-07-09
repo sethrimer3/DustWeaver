@@ -53,6 +53,37 @@ function surfaceMaskHasAnySide(mask: SurfaceMask): boolean {
   return mask.top || mask.right || mask.bottom || mask.left;
 }
 
+/**
+ * Diagonal corner directions, distinct from the cardinal `SurfaceSide`s.
+ * Used for *concave* (inner) corner detection: a tile whose two adjacent
+ * cardinal neighbours are both solid (so it has no exposed cardinal side on
+ * either of them) but whose diagonal neighbour is open air — the classic
+ * "inner corner" / notch pattern in auto-tiling, e.g. a staircase step.
+ */
+export type CornerSide = 'nw' | 'ne' | 'sw' | 'se';
+
+export const CORNER_SIDES: readonly CornerSide[] = ['nw', 'ne', 'sw', 'se'];
+
+export interface CornerMask {
+  readonly nw: boolean;
+  readonly ne: boolean;
+  readonly sw: boolean;
+  readonly se: boolean;
+}
+
+export const EMPTY_CORNER_MASK: CornerMask = { nw: false, ne: false, sw: false, se: false };
+
+function cornerMaskHasAnyCorner(mask: CornerMask): boolean {
+  return mask.nw || mask.ne || mask.sw || mask.se;
+}
+
+/** A tile with at least one concave (inner) corner exposed, in tile-grid coordinates. */
+export interface ConcaveCornerTile {
+  readonly col: number;
+  readonly row: number;
+  readonly corners: CornerMask;
+}
+
 /** A single exposed tile-side, in both tile-grid and pixel-space coordinates. */
 export interface SurfaceSegment {
   readonly col: number;
@@ -79,6 +110,20 @@ export interface SurfaceExposureMap {
   readonly masks: ReadonlyMap<string, SurfaceMask>;
   /** Flat list of exposed segments, in no particular order. */
   readonly segments: readonly SurfaceSegment[];
+  /**
+   * Per-solid-tile *concave* (inner) corner masks, keyed by `"col,row"`.
+   * Tiles with no concave corner are omitted — this is deliberately separate
+   * from `masks` because a tile can have a concave corner with ZERO exposed
+   * cardinal sides (both neighbours adjacent to the corner are solid; only
+   * the diagonal neighbour is open air), so it would otherwise never appear
+   * anywhere in this map. Convex (outer) corners are NOT tracked here — they
+   * are fully derivable from `masks` alone (both adjacent cardinal sides
+   * exposed on the same tile), so callers needing convex-corner info should
+   * derive it from `masks` rather than looking for it in this map.
+   */
+  readonly concaveCornerMasks: ReadonlyMap<string, CornerMask>;
+  /** Flat list of tiles with at least one concave corner, in no particular order. */
+  readonly concaveCorners: readonly ConcaveCornerTile[];
 }
 
 /**
@@ -196,6 +241,8 @@ export function buildSurfaceExposureMap(
 
   const masks = new Map<string, SurfaceMask>();
   const segments: SurfaceSegment[] = [];
+  const concaveCornerMasks = new Map<string, CornerMask>();
+  const concaveCorners: ConcaveCornerTile[] = [];
   const blockSizePx = grid.blockSizePx;
 
   for (let row = 0; row < grid.heightBlocks; row++) {
@@ -207,6 +254,24 @@ export function buildSurfaceExposureMap(
       const bottom = isOpenAir(col, row + 1);
       const left   = isOpenAir(col - 1, row);
       const mask: SurfaceMask = { top, right, bottom, left };
+
+      // Concave (inner) corner: both cardinal neighbours adjacent to the
+      // corner are NOT open air (so neither contributes an exposed cardinal
+      // side of its own — they may be solid, or out of bounds), yet the
+      // diagonal neighbour IS open air. This is the classic auto-tiling
+      // "inner corner" / staircase-notch pattern, and is intentionally
+      // independent of `mask` above: a tile can have a concave corner with
+      // zero exposed cardinal sides at all.
+      const nw = !top && !left   && isOpenAir(col - 1, row - 1);
+      const ne = !top && !right  && isOpenAir(col + 1, row - 1);
+      const sw = !bottom && !left  && isOpenAir(col - 1, row + 1);
+      const se = !bottom && !right && isOpenAir(col + 1, row + 1);
+      const cornerMask: CornerMask = { nw, ne, sw, se };
+
+      if (cornerMaskHasAnyCorner(cornerMask)) {
+        concaveCornerMasks.set(tileKey(col, row), cornerMask);
+        concaveCorners.push({ col, row, corners: cornerMask });
+      }
 
       if (!surfaceMaskHasAnySide(mask)) continue;
 
@@ -246,7 +311,10 @@ export function buildSurfaceExposureMap(
     }
   }
 
-  return { widthBlocks: grid.widthBlocks, heightBlocks: grid.heightBlocks, blockSizePx, masks, segments };
+  return {
+    widthBlocks: grid.widthBlocks, heightBlocks: grid.heightBlocks, blockSizePx,
+    masks, segments, concaveCornerMasks, concaveCorners,
+  };
 }
 
 export function getSurfaceMaskAtTile(map: SurfaceExposureMap, col: number, row: number): SurfaceMask {
@@ -255,6 +323,11 @@ export function getSurfaceMaskAtTile(map: SurfaceExposureMap, col: number, row: 
 
 export function getSurfaceSegments(map: SurfaceExposureMap): readonly SurfaceSegment[] {
   return map.segments;
+}
+
+/** Returns the concave (inner) corner mask for a tile, or all-false if it has none. */
+export function getConcaveCornerMaskAtTile(map: SurfaceExposureMap, col: number, row: number): CornerMask {
+  return map.concaveCornerMasks.get(tileKey(col, row)) ?? EMPTY_CORNER_MASK;
 }
 
 /**
