@@ -6,11 +6,12 @@
  * effects, no runtime state).
  */
 
-import type { BlockTheme, BlockThemeId, BackgroundId, LightingEffect, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
+import type { BlockTheme, BlockThemeId, LightingEffect, AmbientLightDirection, CrumbleVariant } from '../levels/roomDef';
 import type { LightType } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 import { AVAILABLE_SONGS, SONG_DISPLAY_NAMES } from '../audio/musicManager';
 import { FOLDER_BLOCK_THEMES, folderThemeShortId } from '../render/walls/folderBlockThemes';
+export { BACKGROUND_OPTIONS } from '../render/backgroundCatalogue';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -281,22 +282,6 @@ export const BLOCK_THEMES: readonly { id: BlockTheme; shortId: BlockThemeId; lab
     return orderA !== orderB ? orderA - orderB : a.id.localeCompare(b.id);
   })
   .map(makeBlockThemeOption);
-
-/** Available background options for the editor dropdown. */
-export const BACKGROUND_OPTIONS: readonly { id: BackgroundId; label: string }[] = [
-  { id: 'brownRock',        label: 'Brown Rock Cave' },
-  { id: 'world1',           label: 'World 1' },
-  { id: 'world2',           label: 'World 2' },
-  { id: 'world3',           label: 'World 3' },
-  { id: 'crystallineCracks', label: 'Crystalline Cracks' },
-  { id: 'thero_prologue',   label: 'Thero Prologue (Shape Glow)' },
-  { id: 'thero_ch1',        label: 'Thero Chapter 1 (Vermiculate)' },
-  { id: 'thero_ch2',        label: 'Thero Chapter 2 (Gravity Grid)' },
-  { id: 'thero_ch3',        label: 'Thero Chapter 3 (Euler Fluid)' },
-  { id: 'thero_ch4',        label: 'Thero Chapter 4 (Floater Lattice)' },
-  { id: 'thero_ch5',        label: 'Thero Chapter 5 (Tetris Blocks)' },
-  { id: 'thero_ch6',        label: 'Thero Chapter 6 (Substrate)' },
-];
 
 /**
  * Available lighting models for the editor dropdown.

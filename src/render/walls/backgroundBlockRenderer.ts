@@ -89,6 +89,22 @@ export function getBgChunkCacheStats() {
   return _bgChunkCache.stats;
 }
 
+/** Diagnostic counts of background chunks currently marked hadFallbacksFlag / builtWithGameplayFallbackFlag. */
+export function getBgChunkFallbackCounts(): { hadFallbacksCount: number; gameplayFallbackCount: number } {
+  return _bgChunkCache.getFallbackDiagnosticCounts();
+}
+
+/**
+ * Marks every background chunk currently built with the gameplay unshaded
+ * fallback as dirty, so it rebuilds with real shading the next time it
+ * renders. Call this at the start of any visual-refresh phase where baking
+ * is known to be allowed again (entry warm, editor entry, loading) — see
+ * `RoomChunkCache.retryGameplayFallbackChunksNow()` for the full rationale.
+ */
+export function retryBgGameplayFallbackChunksNow(): void {
+  _bgChunkCache.retryGameplayFallbackChunksNow();
+}
+
 /**
  * Set the maximum memory budget for the background block chunk render cache.
  * Call this when graphics quality changes.

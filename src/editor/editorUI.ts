@@ -8,7 +8,7 @@
 import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
   BLOCK_THEMES, BACKGROUND_OPTIONS,
-  BlockTheme, BackgroundId, SONG_OPTIONS, RoomSongId,
+  BlockTheme, SONG_OPTIONS, RoomSongId,
   RoomEdge, EditorUICallbacks, BrushMode, BlockPlacementModifier,
   CRUMBLE_VARIANT_OPTIONS, CrumbleVariant,
 } from './editorState';
@@ -212,7 +212,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
   container.appendChild(roomDimDiv);
 
-  // ── Background dropdown ──────────────────────────────────────────────────
+  // ── Background picker ────────────────────────────────────────────────────
   const bgDiv = document.createElement('div');
   bgDiv.style.cssText = `
     border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
@@ -222,23 +222,75 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   bgTitle.textContent = 'Background';
   bgTitle.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
   bgDiv.appendChild(bgTitle);
-  const bgSelect = document.createElement('select');
-  bgSelect.style.cssText = `
-    width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 4px 6px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
+  const bgCurrentBtn = document.createElement('button');
+  bgCurrentBtn.type = 'button';
+  bgCurrentBtn.style.cssText = `
+    width: 100%; height: 58px; position: relative; overflow: hidden; cursor: pointer;
+    border: 1px solid ${PANEL_BORDER}; border-radius: 3px; padding: 0;
+    background: #000; color: #fff; font-family: 'Cinzel', monospace;
   `;
-  for (const opt of BACKGROUND_OPTIONS) {
-    const o = document.createElement('option');
-    o.value = opt.id;
-    o.textContent = opt.label;
-    bgSelect.appendChild(o);
+  const bgCurrentLabel = document.createElement('span');
+  bgCurrentLabel.style.cssText = `
+    position: absolute; left: 6px; right: 6px; bottom: 5px; text-align: center;
+    color: #fff; font-size: 11px; font-weight: bold; pointer-events: none;
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 0 #000;
+  `;
+  bgCurrentBtn.appendChild(bgCurrentLabel);
+  const bgPickerPanel = document.createElement('div');
+  bgPickerPanel.style.cssText = `
+    display: none; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 6px;
+    max-height: 300px; overflow-y: auto; padding-right: 2px;
+  `;
+  function findBackgroundOption(id: string) {
+    return BACKGROUND_OPTIONS.find(opt => opt.id === id) ?? null;
   }
-  bgSelect.addEventListener('change', () => {
-    callbacks?.onBackgroundChange(bgSelect.value as BackgroundId);
+  function backgroundPreviewCss(option: { previewUrl: string | null; isProcedural?: boolean }): string {
+    if (option.previewUrl !== null) {
+      return `center / cover repeat url("${option.previewUrl}")`;
+    }
+    if (option.isProcedural) {
+      return 'radial-gradient(circle at 50% 45%, rgba(90,255,190,0.45), rgba(0,0,0,0.96) 48%), #000';
+    }
+    return '#000';
+  }
+  function syncCurrentBackgroundButton(backgroundId: string): void {
+    const option = findBackgroundOption(backgroundId);
+    bgCurrentLabel.textContent = option?.label ?? backgroundId;
+    bgCurrentBtn.style.background = backgroundPreviewCss(option ?? { previewUrl: null });
+  }
+  function makeBackgroundPreviewButton(option: (typeof BACKGROUND_OPTIONS)[number]): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.backgroundId = option.id;
+    btn.title = option.label;
+    btn.style.cssText = `
+      height: 64px; position: relative; overflow: hidden; cursor: pointer;
+      border: 1px solid ${PANEL_BORDER}; border-radius: 3px; padding: 0;
+      background: ${backgroundPreviewCss(option)}; color: #fff; font-family: 'Cinzel', monospace;
+    `;
+    const label = document.createElement('span');
+    label.textContent = option.label;
+    label.style.cssText = `
+      position: absolute; left: 5px; right: 5px; bottom: 4px; text-align: center;
+      color: #fff; font-size: 10px; line-height: 1.05; font-weight: bold; pointer-events: none;
+      text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 0 #000;
+    `;
+    btn.appendChild(label);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      callbacks?.onBackgroundChange(option.id);
+    });
+    return btn;
+  }
+  bgCurrentBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    bgPickerPanel.style.display = bgPickerPanel.style.display === 'grid' ? 'none' : 'grid';
   });
-  bgSelect.addEventListener('click', (e) => e.stopPropagation());
-  bgDiv.appendChild(bgSelect);
+  for (const opt of BACKGROUND_OPTIONS) {
+    bgPickerPanel.appendChild(makeBackgroundPreviewButton(opt));
+  }
+  bgDiv.appendChild(bgCurrentBtn);
+  bgDiv.appendChild(bgPickerPanel);
   container.appendChild(bgDiv);
 
   // ── Room Song dropdown ───────────────────────────────────────────────────
@@ -454,12 +506,15 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       }
     }
 
-    // Update background dropdown
+    // Update background picker
     const currentBgId = state.roomData?.backgroundId ?? 'brownRock';
     if (currentBgId !== lastRenderedBackgroundId) {
       lastRenderedBackgroundId = currentBgId;
-      if (document.activeElement !== bgSelect) {
-        bgSelect.value = currentBgId;
+      syncCurrentBackgroundButton(currentBgId);
+      for (const btn of bgPickerPanel.querySelectorAll<HTMLButtonElement>('button[data-background-id]')) {
+        const isSelected = btn.dataset.backgroundId === currentBgId;
+        btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
+        btn.style.boxShadow = isSelected ? `0 0 0 1px ${GREEN} inset` : 'none';
       }
     }
 

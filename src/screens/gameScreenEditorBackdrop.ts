@@ -11,7 +11,12 @@ import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import type { BloomSystem } from '../render/effects/bloomSystem';
-import { isTheroShowcaseRoom, renderTheroShowcaseEffect, renderCrystallineCracksBackground } from '../render/effects/theroEffectManager';
+import {
+  isTheroShowcaseRoom,
+  renderTheroShowcaseEffect,
+  renderTheroBackgroundEffect,
+  renderCrystallineCracksBackground,
+} from '../render/effects/theroEffectManager';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { renderRadiantWeb } from '../render/clusters/radiantWebRenderer';
 import { renderGrasshoppers } from '../render/critters/grasshopperRenderer';
@@ -74,7 +79,14 @@ export function renderEditorBackdrop(
   if (isTheroShowcaseRoom(currentRoom.id)) {
     renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
   }
-  if (currentRoom.backgroundId === 'crystallineCracks') {
+  const renderedTheroBackground = renderTheroBackgroundEffect(
+    ctx,
+    currentRoom.backgroundId,
+    virtualWidthPx,
+    virtualHeightPx,
+    performance.now(),
+  );
+  if (!renderedTheroBackground && currentRoom.backgroundId === 'crystallineCracks') {
     renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
   }
   renderWalls(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);

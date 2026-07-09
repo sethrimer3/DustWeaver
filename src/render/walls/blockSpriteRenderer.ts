@@ -448,6 +448,22 @@ export function getChunkCacheStats(): import('./chunkRenderCache').ChunkCacheSta
   return _chunkCache.stats;
 }
 
+/** Diagnostic counts of wall chunks currently marked hadFallbacksFlag / builtWithGameplayFallbackFlag. */
+export function getWallChunkFallbackCounts(): { hadFallbacksCount: number; gameplayFallbackCount: number } {
+  return _chunkCache.getFallbackDiagnosticCounts();
+}
+
+/**
+ * Marks every wall chunk currently built with the gameplay unshaded fallback
+ * as dirty, so it rebuilds with real shading the next time it renders. Call
+ * this at the start of any visual-refresh phase where baking is known to be
+ * allowed again (entry warm, editor entry, loading) — see
+ * `RoomChunkCache.retryGameplayFallbackChunksNow()` for the full rationale.
+ */
+export function retryWallGameplayFallbackChunksNow(): void {
+  _chunkCache.retryGameplayFallbackChunksNow();
+}
+
 /**
  * Set the maximum memory budget for the wall chunk render cache.
  * Call this when graphics quality changes to cap GPU/CPU canvas memory usage.

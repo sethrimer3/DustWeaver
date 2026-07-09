@@ -272,17 +272,60 @@ export class RoomChunkCache {
    * clearing since the last call.  When it has, every chunk that was built
    * using the gameplay unshaded fallback is marked dirty so it gets one
    * retry at the real (shaded) bake, subject to the usual per-frame budget.
+   *
+   * This is a *passive* retry: it only fires the next time this cache's own
+   * `renderVisibleChunks` happens to run after the unlock. For chunks that
+   * sit outside whatever is currently being rendered (e.g. this room isn't
+   * the active one, or entry warm hasn't started rendering yet), the passive
+   * path can sit for a while before it gets a chance to fire. Callers that
+   * need fallback chunks to start converging immediately — e.g. entry warm,
+   * which knows baking has just become allowed for this room — should call
+   * `retryGameplayFallbackChunksNow()` explicitly instead of waiting for this.
    */
   private _retryGameplayFallbackChunks(): void {
     const gen = FP.getBakeUnlockGeneration();
     if (gen === this._lastBakeUnlockGeneration) return;
     this._lastBakeUnlockGeneration = gen;
+    this.retryGameplayFallbackChunksNow();
+  }
+
+  /**
+   * Marks every currently-allocated chunk that was built using the gameplay
+   * unshaded fallback as dirty, forcing a real shaded rebuild the next time
+   * it is rendered — without waiting for the passive bake-unlock-generation
+   * check in `_retryGameplayFallbackChunks` to happen to fire on this cache's
+   * own next `renderVisibleChunks` call.
+   *
+   * Call this explicitly whenever a visual-refresh phase begins where baking
+   * is known to be allowed again (entry warm start, editor entry, loading),
+   * so stale gameplay-fallback chunks — which may be missing real edge
+   * shading/lighting entirely — start converging to their real shaded
+   * appearance as soon as possible instead of staying visually broken until
+   * some unrelated render call happens to trigger the passive retry.
+   */
+  retryGameplayFallbackChunksNow(): void {
     for (const [key, chunk] of this._chunks) {
       if (chunk.builtWithGameplayFallbackFlag) {
         this._dirtyKeys.add(key);
         chunk.builtWithGameplayFallbackFlag = false;
       }
     }
+  }
+
+  /**
+   * Diagnostic counts of chunks currently marked with `hadFallbacksFlag` /
+   * `builtWithGameplayFallbackFlag`. Intended for one-shot DEV logging (e.g.
+   * entry-warm completion diagnostics) — not cheap enough to call every
+   * frame on large rooms, but fine for occasional use.
+   */
+  getFallbackDiagnosticCounts(): { hadFallbacksCount: number; gameplayFallbackCount: number } {
+    let hadFallbacksCount = 0;
+    let gameplayFallbackCount = 0;
+    for (const chunk of this._chunks.values()) {
+      if (chunk.hadFallbacksFlag) hadFallbacksCount++;
+      if (chunk.builtWithGameplayFallbackFlag) gameplayFallbackCount++;
+    }
+    return { hadFallbacksCount, gameplayFallbackCount };
   }
 
   /**

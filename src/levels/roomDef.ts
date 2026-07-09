@@ -75,19 +75,7 @@ export {
  * Background visual identifier for a room.
  * Controls the parallax background image (or effect) shown behind the level.
  */
-export type BackgroundId =
-  | 'brownRock'
-  | 'world1'
-  | 'world2'
-  | 'world3'
-  | 'crystallineCracks'
-  | 'thero_prologue'
-  | 'thero_ch1'
-  | 'thero_ch2'
-  | 'thero_ch3'
-  | 'thero_ch4'
-  | 'thero_ch5'
-  | 'thero_ch6';
+export type BackgroundId = string;
 
 /**
  * Lighting model used when shading block tiles in a room.

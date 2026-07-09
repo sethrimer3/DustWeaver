@@ -11,6 +11,7 @@
 
 import type { BackgroundId } from '../levels/roomDef';
 import { loadImg, isSpriteReady, isSpriteDecodeReady, decodeImg, hasImageFailed } from './imageCache';
+import { backgroundIdToImageUrl } from './backgroundCatalogue';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -33,22 +34,7 @@ function worldBgImagePath(worldNumber: number): string {
  * backgrounds (e.g. crystallineCracks) that have no static image.
  */
 function backgroundIdToImagePath(id: BackgroundId): string | null {
-  switch (id) {
-    case 'brownRock':        return `${BASE}SPRITES/BACKGROUNDS/brownRock_background_1.png`;
-    case 'world1':           return `${BASE}SPRITES/WORLDS/W-1/background/background.png`;
-    case 'world2':           return `${BASE}SPRITES/WORLDS/W-2/background/background.png`;
-    case 'world3':           return `${BASE}SPRITES/WORLDS/W-3/background/background.png`;
-    case 'crystallineCracks':
-    case 'thero_prologue':
-    case 'thero_ch1':
-    case 'thero_ch2':
-    case 'thero_ch3':
-    case 'thero_ch4':
-    case 'thero_ch5':
-    case 'thero_ch6':
-      return null;  // procedural background effect
-    default:                 return null;
-  }
+  return backgroundIdToImageUrl(id);
 }
 
 /** Solid fallback colour per world (shown while the image is loading). */
