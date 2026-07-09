@@ -76,11 +76,7 @@ import {
   resolveRampSurfaces,
 } from './movementCollision';
 import { resolvePlayerRopeCollisions } from '../ropes/ropeCollision';
-import {
-  computeLogicalWallSurface,
-  computeGroundConnectedExclusion,
-  canWallSlideOnSurface,
-} from './playerWallSurface';
+import { getWallJumpCandidate } from './playerWallJump';
 
 export { debugSpeedOverrides, PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER };
 
@@ -285,19 +281,15 @@ export function applyClusterMovement(world: WorldState): void {
             (cluster.isTouchingWallRightFlag === 1 && inputDx > 0) ||
             (cluster.isTouchingWallLeftFlag  === 1 && inputDx < 0);
           if (pressingIntoWall) {
-            // Determine the wall face X from the player's current position
-            // (after collision push-out the player edge is exactly on the face).
-            const side   = (cluster.isTouchingWallRightFlag === 1 && inputDx > 0) ? 'right' : 'left';
-            const faceX  = side === 'right'
-              ? cluster.positionXWorld + cluster.halfWidthWorld
-              : cluster.positionXWorld - cluster.halfWidthWorld;
-            const playerTop    = cluster.positionYWorld - cluster.halfHeightWorld;
-            const playerBottom = cluster.positionYWorld + cluster.halfHeightWorld;
+            // Use the same unified wall-interaction candidate that wall-jump
+            // consumes (playerWallJump.ts) so slide and jump always agree on
+            // whether a given contact (including top-corner-only contact on
+            // a tall wall) is eligible.
+            const side = (cluster.isTouchingWallRightFlag === 1 && inputDx > 0) ? 'right' : 'left';
+            const wjCandidate = getWallJumpCandidate(cluster, world);
+            const canSlide = side === 'right' ? wjCandidate.canSlideFromRight : wjCandidate.canSlideFromLeft;
 
-            const surface   = computeLogicalWallSurface(faceX, side, playerTop, playerBottom, world);
-            const exclusion = computeGroundConnectedExclusion(surface, side, world);
-
-            if (canWallSlideOnSurface(surface, exclusion, playerBottom)) {
+            if (canSlide) {
               cluster.isWallSlidingFlag = 1;
               if (cluster.velocityYWorld > WALL_SLIDE_MAX_FALL_SPEED) {
                 cluster.velocityYWorld = WALL_SLIDE_MAX_FALL_SPEED;

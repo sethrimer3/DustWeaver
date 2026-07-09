@@ -36,8 +36,21 @@ import {
   computeLogicalWallSurface,
   computeGroundConnectedExclusion,
   canWallJumpFromSurface,
+  canWallSlideOnSurface,
 } from './playerWallSurface';
 import { getAdvancedWallJumpsEnabled } from '../../ui/renderSettings';
+
+/**
+ * Tolerance (world units) used to treat a near-zero gap as "actually touching"
+ * the wall for this tick's geometry scan.  Using a live geometric check
+ * (rather than relying solely on `isTouchingWallLeftFlag`/`isTouchingWallRightFlag`,
+ * which are only rebuilt by the collision resolver *after* the jump trigger
+ * runs this same tick) fixes the same-frame timing bug where a jump press on
+ * the very tick wall contact begins could be dropped because neither the
+ * "touch/grace" nor the strict "proximity" (`dist > 0`) branch matched a
+ * zero-gap contact.
+ */
+const WALL_TOUCH_EPSILON_WORLD = 0.5;
 
 // ── Public result type ────────────────────────────────────────────────────────
 
@@ -60,10 +73,22 @@ export interface WallJumpCandidateResult {
   canJumpFromLeft: boolean;
   /** A wall jump can fire from the right wall. */
   canJumpFromRight: boolean;
+  /** A wall slide is eligible against the left wall (same contact model as jump). */
+  canSlideFromLeft: boolean;
+  /** A wall slide is eligible against the right wall (same contact model as jump). */
+  canSlideFromRight: boolean;
   /** Gap to the best valid left-side wall (0 = touching, >0 = proximity, Infinity = none). */
   leftDistWorld: number;
   /** Gap to the best valid right-side wall (0 = touching, >0 = proximity, Infinity = none). */
   rightDistWorld: number;
+  /** True when the left-side candidate is a direct-touch/grace contact (vs. proximity-only). */
+  leftIsTouching: boolean;
+  /** True when the right-side candidate is a direct-touch/grace contact (vs. proximity-only). */
+  rightIsTouching: boolean;
+  /** Contact Y for the left wall (overlap midpoint, clamped to the overlap range). */
+  leftContactYWorld: number;
+  /** Contact Y for the right wall (overlap midpoint, clamped to the overlap range). */
+  rightContactYWorld: number;
   /** Human-readable reason the left side was accepted or rejected (debug). */
   dbgLeft: string;
   /** Human-readable reason the right side was accepted or rejected (debug). */
@@ -98,9 +123,21 @@ function isValidWallJumpFace(
   playerBottom: number,
   wallTop: number,
   wallBottom: number,
+  isDirectlyTouching: boolean,
 ): boolean {
   const overlap = Math.min(playerBottom, wallBottom) - Math.max(playerTop, wallTop);
-  if (overlap < WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD) return false;
+  if (overlap <= 0) return false;
+
+  // The minimum-overlap check exists to keep *proximity* wall jumps from
+  // firing off a face the player barely grazes (e.g. reaching toward a stair
+  // step from a few pixels away). When the player's AABB is ALREADY in direct
+  // contact with the face this tick (broad-phase collision already confirmed
+  // real intersection), skip this filter so wall-jump agrees with wall-slide,
+  // which allows sliding from any direct contact against a tall-enough
+  // logical surface — including thin top-corner-only overlaps. The ledge
+  // suppression check below still applies to direct contact, so stair-step /
+  // low-ledge exploits remain blocked.
+  if (!isDirectlyTouching && overlap < WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD) return false;
 
   // Ledge suppression: wallTop is within LEDGE_SUPPRESS_WORLD above the player's
   // feet → this is a ledge edge, not a jumpable wall face.
@@ -138,6 +175,7 @@ function hasWallJumpIntent(
   world: WorldState,
   wallSideDir: number,
   usedProximity: boolean,
+  isWallSlidingNow: boolean,
 ): boolean {
   if (!WALL_JUMP_REQUIRE_INTENT) return true;
 
@@ -146,7 +184,12 @@ function hasWallJumpIntent(
   if (!getAdvancedWallJumpsEnabled()) return true;
 
   const inputDx = world.playerMoveInputDxWorld;
-  const isWallSliding = cluster.isWallSlidingFlag === 1;
+  // Use the freshly-computed (this-tick) wall-slide eligibility rather than
+  // `cluster.isWallSlidingFlag`, which is not rebuilt until the wall-slide
+  // block in movement.ts runs *after* this jump-trigger check — using the
+  // stale flag would silently deny "wall sliding ⇒ always intentional" on
+  // the very tick sliding begins (same-frame timing bug).
+  const isWallSliding = isWallSlidingNow;
   // "Away from wall": wall on right (+1) → pressing left (inputDx < 0).
   const isPressingAway = inputDx * wallSideDir < 0;
   const isFalling = cluster.velocityYWorld > 0;
@@ -192,7 +235,11 @@ export function getWallJumpCandidate(
 ): WallJumpCandidateResult {
   const noResult: WallJumpCandidateResult = {
     canJumpFromLeft: false, canJumpFromRight: false,
+    canSlideFromLeft: false, canSlideFromRight: false,
     leftDistWorld: Infinity, rightDistWorld: Infinity,
+    leftIsTouching: false, rightIsTouching: false,
+    leftContactYWorld: cluster.positionYWorld + cluster.halfHeightWorld,
+    rightContactYWorld: cluster.positionYWorld + cluster.halfHeightWorld,
     dbgLeft: 'lockout', dbgRight: 'lockout',
     dbgLogicalSurface: null, dbgExclusion: null, dbgActiveSide: 'none',
   };
@@ -217,6 +264,12 @@ export function getWallJumpCandidate(
   // Face X of the wall that achieved the minimum gap on each side.
   let leftFaceX  = playerLeft;
   let rightFaceX = playerRight;
+  // Contact Y (overlap midpoint, clamped to the overlap span) of the wall
+  // that achieved the minimum gap on each side — preferred over always using
+  // playerBottom so ground-exclusion / slide-height checks reflect where the
+  // player is actually contacting the face (e.g. top-corner-only contact).
+  let leftContactY  = playerBottom;
+  let rightContactY = playerBottom;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
     // NOTE: Only real tile walls (world.walls[]) are scanned here.
@@ -232,42 +285,61 @@ export function getWallJumpCandidate(
     const wallRight  = wallLeft + world.wallWWorld[wi];
     const wallBottom = wallTop  + world.wallHWorld[wi];
 
-    // Quality check: must have sufficient vertical overlap and not be a ledge edge.
-    // (Minimum height check removed — logical surface aggregation handles that.)
-    if (!isValidWallJumpFace(playerTop, playerBottom, wallTop, wallBottom)) continue;
-
     // Left side: wall's right face is to the player's left.
     const leftGap = playerLeft - wallRight;
     if (leftGap >= 0 && leftGap <= proximity) {
-      if (leftGap < leftMinDist) {
-        leftMinDist = leftGap;
-        leftFaceX   = wallRight;
+      const leftTouching = leftGap <= WALL_TOUCH_EPSILON_WORLD;
+      if (isValidWallJumpFace(playerTop, playerBottom, wallTop, wallBottom, leftTouching)
+        && leftGap < leftMinDist) {
+        leftMinDist  = leftGap;
+        leftFaceX    = wallRight;
+        const oMin = Math.max(playerTop, wallTop);
+        const oMax = Math.min(playerBottom, wallBottom);
+        leftContactY = oMax > oMin ? (oMin + oMax) * 0.5 : playerBottom;
       }
     }
 
     // Right side: wall's left face is to the player's right.
     const rightGap = wallLeft - playerRight;
     if (rightGap >= 0 && rightGap <= proximity) {
-      if (rightGap < rightMinDist) {
-        rightMinDist = rightGap;
-        rightFaceX   = wallLeft;
+      const rightTouching = rightGap <= WALL_TOUCH_EPSILON_WORLD;
+      if (isValidWallJumpFace(playerTop, playerBottom, wallTop, wallBottom, rightTouching)
+        && rightGap < rightMinDist) {
+        rightMinDist  = rightGap;
+        rightFaceX    = wallLeft;
+        const oMin = Math.max(playerTop, wallTop);
+        const oMax = Math.min(playerBottom, wallBottom);
+        rightContactY = oMax > oMin ? (oMin + oMax) * 0.5 : playerBottom;
       }
     }
   }
 
   // Check which sides have contact (touch / grace) vs proximity-only.
+  //
+  // IMPORTANT: `isTouchingWallLeftFlag`/`isTouchingWallRightFlag` are rebuilt
+  // by the collision resolver *after* the jump trigger runs this same tick
+  // (see movement.ts), so on the tick contact first begins those flags still
+  // reflect LAST tick. We therefore also treat a live near-zero geometric gap
+  // as "touching" — this is what actually fixes the same-frame timing bug
+  // (a jump press on the very tick a wall is newly touched would otherwise
+  // fall through both the touch/grace branch and the strict `dist > 0`
+  // proximity branch and be silently dropped).
+  const leftGeometricTouch  = leftMinDist  <= WALL_TOUCH_EPSILON_WORLD;
+  const rightGeometricTouch = rightMinDist <= WALL_TOUCH_EPSILON_WORLD;
   const leftHasTouchOrGrace  =
-    cluster.isTouchingWallLeftFlag  === 1 || cluster.wallJumpGraceLeftTicks  > 0;
+    leftGeometricTouch  || cluster.isTouchingWallLeftFlag  === 1 || cluster.wallJumpGraceLeftTicks  > 0;
   const rightHasTouchOrGrace =
-    cluster.isTouchingWallRightFlag === 1 || cluster.wallJumpGraceRightTicks > 0;
+    rightGeometricTouch || cluster.isTouchingWallRightFlag === 1 || cluster.wallJumpGraceRightTicks > 0;
 
   // A quality wall must be within proximity for either mechanism to activate.
   // (Grace without a nearby quality wall means the player left a low-quality surface.)
   const leftTouchOrGraceOk  = leftHasTouchOrGrace  && leftMinDist  <= proximity;
   const rightTouchOrGraceOk = rightHasTouchOrGrace && rightMinDist <= proximity;
 
-  const leftProximityOnly  = !leftHasTouchOrGrace  && leftMinDist  > 0 && leftMinDist  <= proximity;
-  const rightProximityOnly = !rightHasTouchOrGrace && rightMinDist > 0 && rightMinDist <= proximity;
+  const leftProximityOnly  =
+    !leftHasTouchOrGrace  && leftMinDist  > WALL_TOUCH_EPSILON_WORLD && leftMinDist  <= proximity;
+  const rightProximityOnly =
+    !rightHasTouchOrGrace && rightMinDist > WALL_TOUCH_EPSILON_WORLD && rightMinDist <= proximity;
 
   // ── Compute logical wall surfaces and exclusion zones ─────────────────────
   // Only compute for sides that have a candidate wall in range.
@@ -285,6 +357,16 @@ export function getWallJumpCandidate(
     rightExclusion = computeGroundConnectedExclusion(rightSurface, 'right', world);
   }
 
+  // ── Wall-slide eligibility (shared contact model with wall-jump) ──────────
+  // Computed live from geometry so both slide and jump agree on the same
+  // tick, regardless of when `isWallSlidingFlag` is written by movement.ts.
+  const canSlideFromLeft  = leftHasTouchOrGrace  && leftSurface  !== null && leftExclusion  !== null
+    ? canWallSlideOnSurface(leftSurface, leftExclusion, leftContactY)
+    : false;
+  const canSlideFromRight = rightHasTouchOrGrace && rightSurface !== null && rightExclusion !== null
+    ? canWallSlideOnSurface(rightSurface, rightExclusion, rightContactY)
+    : false;
+
   // Evaluate left side.
   let canJumpFromLeft  = false;
   let dbgLeft = leftMinDist === Infinity
@@ -294,23 +376,23 @@ export function getWallJumpCandidate(
   if (leftTouchOrGraceOk) {
     // Surface eligibility: ground-connected exclusion zone check.
     const surfaceOk = leftSurface !== null && leftExclusion !== null
-      ? canWallJumpFromSurface(leftSurface, leftExclusion, playerBottom)
+      ? canWallJumpFromSurface(leftSurface, leftExclusion, leftContactY)
       : true;
     if (!surfaceOk) {
       dbgLeft = 'ground-exclusion';
-    } else if (hasWallJumpIntent(cluster, world, -1, false)) {
+    } else if (hasWallJumpIntent(cluster, world, -1, false, canSlideFromLeft)) {
       canJumpFromLeft = true;
-      dbgLeft = cluster.isTouchingWallLeftFlag === 1 ? 'touch+intent' : 'grace+intent';
+      dbgLeft = (leftGeometricTouch || cluster.isTouchingWallLeftFlag === 1) ? 'touch+intent' : 'grace+intent';
     } else {
       dbgLeft = 'touch/grace+no-intent';
     }
   } else if (leftProximityOnly) {
     const surfaceOk = leftSurface !== null && leftExclusion !== null
-      ? canWallJumpFromSurface(leftSurface, leftExclusion, playerBottom)
+      ? canWallJumpFromSurface(leftSurface, leftExclusion, leftContactY)
       : true;
     if (!surfaceOk) {
       dbgLeft = 'ground-exclusion';
-    } else if (hasWallJumpIntent(cluster, world, -1, true)) {
+    } else if (hasWallJumpIntent(cluster, world, -1, true, canSlideFromLeft)) {
       canJumpFromLeft = true;
       dbgLeft = 'proximity+intent';
     } else {
@@ -326,23 +408,23 @@ export function getWallJumpCandidate(
 
   if (rightTouchOrGraceOk) {
     const surfaceOk = rightSurface !== null && rightExclusion !== null
-      ? canWallJumpFromSurface(rightSurface, rightExclusion, playerBottom)
+      ? canWallJumpFromSurface(rightSurface, rightExclusion, rightContactY)
       : true;
     if (!surfaceOk) {
       dbgRight = 'ground-exclusion';
-    } else if (hasWallJumpIntent(cluster, world, 1, false)) {
+    } else if (hasWallJumpIntent(cluster, world, 1, false, canSlideFromRight)) {
       canJumpFromRight = true;
-      dbgRight = cluster.isTouchingWallRightFlag === 1 ? 'touch+intent' : 'grace+intent';
+      dbgRight = (rightGeometricTouch || cluster.isTouchingWallRightFlag === 1) ? 'touch+intent' : 'grace+intent';
     } else {
       dbgRight = 'touch/grace+no-intent';
     }
   } else if (rightProximityOnly) {
     const surfaceOk = rightSurface !== null && rightExclusion !== null
-      ? canWallJumpFromSurface(rightSurface, rightExclusion, playerBottom)
+      ? canWallJumpFromSurface(rightSurface, rightExclusion, rightContactY)
       : true;
     if (!surfaceOk) {
       dbgRight = 'ground-exclusion';
-    } else if (hasWallJumpIntent(cluster, world, 1, true)) {
+    } else if (hasWallJumpIntent(cluster, world, 1, true, canSlideFromRight)) {
       canJumpFromRight = true;
       dbgRight = 'proximity+intent';
     } else {
@@ -364,11 +446,29 @@ export function getWallJumpCandidate(
     dbgExclusion      = rightExclusion;
   }
 
+  // Debug aid: when wall-slide is eligible but wall-jump was rejected on the
+  // same side, print the rejection reason. Gated behind the same DEV flag
+  // pattern used elsewhere in the codebase (see src/debug/transitionProfiler.ts).
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    if (canSlideFromLeft && !canJumpFromLeft) {
+      console.debug(`[wallJump] slide active but jump rejected (left): ${dbgLeft}`);
+    }
+    if (canSlideFromRight && !canJumpFromRight) {
+      console.debug(`[wallJump] slide active but jump rejected (right): ${dbgRight}`);
+    }
+  }
+
   return {
     canJumpFromLeft,
     canJumpFromRight,
+    canSlideFromLeft,
+    canSlideFromRight,
     leftDistWorld: leftMinDist,
     rightDistWorld: rightMinDist,
+    leftIsTouching: leftHasTouchOrGrace,
+    rightIsTouching: rightHasTouchOrGrace,
+    leftContactYWorld: leftContactY,
+    rightContactYWorld: rightContactY,
     dbgLeft,
     dbgRight,
     dbgLogicalSurface,
