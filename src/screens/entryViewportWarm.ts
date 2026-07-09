@@ -52,6 +52,11 @@ import {
   DEFAULT_BACKGROUND_LIGHT_SPILL,
   DEFAULT_SOLID_LIGHT_SOFTNESS,
 } from '../render/walls/ambientLightDepths';
+import {
+  decideEntryWarm,
+  type EntryWarmCoverageSnapshot,
+  type EntryWarmDecision,
+} from './entryWarmDecision';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -84,6 +89,47 @@ const ENTRY_WARM_HARD_BUDGET_MS = 2000;
 
 /** Wall + background chunks built per warm step. */
 const ENTRY_WARM_CHUNKS_PER_STEP = 6;
+
+// ── Entry-warm diagnostics (window.__dwEntryWarmStats) ────────────────────────
+
+/** Diagnostic snapshot recorded each time a room-entry warm finishes (ready or timed out). */
+export interface EntryWarmDiagSnapshot {
+  roomId: string;
+  finishReason: 'ready' | 'softTimedOut' | 'hardTimedOut';
+  wallCoreCovered: boolean;
+  bgCoreCovered: boolean;
+  wallMarginCovered: boolean;
+  bgMarginCovered: boolean;
+  fullReady: boolean;
+  wallFallback: { hadFallbacksCount: number; gameplayFallbackCount: number };
+  bgFallback: { hadFallbacksCount: number; gameplayFallbackCount: number };
+  elapsedMs: number;
+  frameCount: number;
+  hardTimedOut: boolean;
+}
+
+let _lastEntryWarmDiag: EntryWarmDiagSnapshot | null = null;
+
+declare global {
+  interface Window {
+    /**
+     * Returns the most recent room-entry warm diagnostic snapshot, or `null`
+     * if no room entry has finished warming yet this session.
+     *
+     * Debug-only — never consulted by gameplay logic. Use this to investigate
+     * a "lighting was broken when I entered the room" report: check
+     * `finishReason` (did it release via a soft or hard timeout instead of
+     * genuine completion?), the coverage booleans, and the fallback counts
+     * (were any chunks still sitting on a gameplay-fallback build when the
+     * overlay released?).
+     */
+    __dwEntryWarmStats?: () => EntryWarmDiagSnapshot | null;
+  }
+}
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__dwEntryWarmStats = () => _lastEntryWarmDiag;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -207,38 +253,20 @@ export function tickEntryWarm(
 ): void {
   if (state.phase !== 'warming') return;
 
-  // Guard: hard ceiling. Always releases regardless of coverage — a safety
-  // net so a pathological room (or runtime data that never becomes ready)
-  // cannot hang room entry forever. Always logged (not DEV-gated) since it
-  // means the soft-timeout extension below failed to converge in time.
-  if (performance.now() - state.enteredAtMs >= ENTRY_WARM_HARD_BUDGET_MS) {
-    console.warn(
-      `[entryWarm] hard timeout (${ENTRY_WARM_HARD_BUDGET_MS}ms) reached for room ${state.roomId} — ` +
-      'releasing overlay even though the core viewport may still be unshaded.',
-    );
-    _finishWarm(state, room, /* timedOut */ true, undefined);
-    return;
-  }
-
-  // Guard: soft frame/ms budget. Exceeding this is NOT, by itself, permission
-  // to release the overlay — it only releases if the core (no-margin)
-  // viewport is already covered by the active chunk caches. Otherwise the
-  // soft budget is extended (logged once) rather than showing broken/
-  // unshaded chunks on room entry.
-  if (state.framesWarmed >= ENTRY_WARM_MAX_FRAMES || state.msSpent >= ENTRY_WARM_BUDGET_MS) {
-    if (isEntryCoreViewportCovered(state, room)) {
-      _finishWarm(state, room, /* timedOut */ true, undefined);
-      return;
-    }
-    _warnSoftTimeoutExtend(state);
-    // Fall through — keep warming below instead of releasing.
-  }
+  // Guard: pre-build timing check. `fullReady` is always false here — if the
+  // entry viewport were already fully covered, a prior tick's post-build
+  // check below would have already finished the warm and this function would
+  // have returned at the top-of-function phase check. This call exists so a
+  // room that never gets a build step (e.g. runtime data never becomes ready)
+  // still converges to a soft/hard timeout instead of warming forever.
+  const preBuildDecision = decideEntryWarm(_buildDecisionInput(state, room, /* fullReady */ false));
+  if (_applyDecision(preBuildDecision, state, room, undefined)) return;
 
   const entry = runtimeCache.get(room.id);
   if (entry === undefined || entry.blockerKeys === null) {
     // Runtime data not yet ready — defer, counting against frame budget.
-    // (The soft/hard timeout checks above will eventually release the
-    // overlay if this never becomes ready — no separate check needed here.)
+    // (The timing checks above will eventually release the overlay via a
+    // soft or hard timeout if this never becomes ready.)
     state.framesWarmed++;
     return;
   }
@@ -297,42 +325,24 @@ export function tickEntryWarm(
 
   // Viewport is fully covered when neither pass rebuilt nor skipped any chunk.
   // Using both fields rather than rebuilt === 0 alone makes intent explicit.
-  if (
+  // This is the authoritative "nothing left to prewarm" signal — it reads the
+  // temporary prewarm caches' just-built progress, which is why it can't be
+  // folded into the coverage-snapshot helper (that reads the ACTIVE caches,
+  // which haven't been adopted into yet at this point in the tick).
+  const fullReady =
     wallResult.rebuilt === 0 && wallResult.skipped === 0 &&
-    bgResult.rebuilt   === 0 && bgResult.skipped   === 0
-  ) {
-    _finishWarm(state, room, /* timedOut */ false, currentRenderStateKey);
-    return;
-  }
+    bgResult.rebuilt   === 0 && bgResult.skipped   === 0;
 
-  // Check the soft budget after this step so a single expensive step that
-  // pushes past budget doesn't cost an extra idle tick before releasing.
-  // Same "soft" semantics as the guard at the top of this function: only
-  // release if the core viewport is already covered.
-  if (state.msSpent >= ENTRY_WARM_BUDGET_MS || state.framesWarmed >= ENTRY_WARM_MAX_FRAMES) {
-    if (isEntryCoreViewportCovered(state, room)) {
-      _finishWarm(state, room, /* timedOut */ true, currentRenderStateKey);
-    } else {
-      _warnSoftTimeoutExtend(state);
-    }
-  }
+  const postBuildDecision = decideEntryWarm(_buildDecisionInput(state, room, fullReady));
+  _applyDecision(postBuildDecision, state, room, currentRenderStateKey);
 }
 
 /**
  * Checks whether the core (no-margin) visible viewport is already covered by
  * the ACTIVE wall and background chunk caches — i.e. what the player would
- * actually see this frame, as opposed to `wallResult`/`bgResult` above, which
- * report progress on the temporary prewarm caches this function builds into.
- *
- * Used to gate the soft-timeout release: exceeding the soft frame/ms budget
- * should not, by itself, release the loading overlay while the chunks the
- * player is about to see are still missing/dirty/gameplay-fallback in the
- * active caches (see `RoomChunkCache.isViewportCoreCovered` — it now also
- * rejects `builtWithGameplayFallbackFlag` chunks, not just missing/dirty
- * ones). The outer safety-margin ring is intentionally excluded here — it is
- * not yet visible on entry, so leaving it to finish warming in the background
- * (or converging lazily during gameplay) is an acceptable trade, unlike the
- * core viewport.
+ * actually see this frame. Exported for diagnostics/tests; `tickEntryWarm`
+ * itself goes through `_buildCoverageSnapshot` → `decideEntryWarm` instead of
+ * calling this directly.
  */
 export function isEntryCoreViewportCovered(state: EntryWarmState, room: RoomDef): boolean {
   const wallCoreCovered = isWallCoreViewportCovered(
@@ -344,9 +354,91 @@ export function isEntryCoreViewportCovered(state: EntryWarmState, room: RoomDef)
   return wallCoreCovered && bgCoreCovered;
 }
 
-/** One-shot (per room entry) DEV warning that the soft timeout is being extended. */
-function _warnSoftTimeoutExtend(state: EntryWarmState): void {
+/**
+ * Builds the live coverage snapshot (from the ACTIVE wall/background chunk
+ * caches) and packages it with the current timing state into the input shape
+ * `decideEntryWarm()` (entryWarmDecision.ts) expects. This is the only place
+ * that reads real chunk-cache/DOM state for the decision — the decision logic
+ * itself stays pure and unit-testable.
+ *
+ * @param fullReady  Caller-supplied "nothing left to prewarm this tick"
+ *                   signal — see the comment at its call site in
+ *                   `tickEntryWarm` for why this can't be derived from the
+ *                   margin-coverage booleans computed here.
+ */
+function _buildDecisionInput(
+  state: EntryWarmState,
+  room: RoomDef,
+  fullReady: boolean,
+): import('./entryWarmDecision').EntryWarmDecisionInput {
+  const wallCoreCovered = isWallCoreViewportCovered(
+    state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx, BLOCK_SIZE_MEDIUM,
+  );
+  const bgCoreCovered = isBgCoreViewportCovered(
+    room, state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx,
+  );
+  const wallMarginCovered = isWallActiveViewportCovered(
+    state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx, BLOCK_SIZE_MEDIUM,
+  );
+  const bgMarginCovered = isBgActiveViewportCovered(
+    room, state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx,
+  );
+  const coverage: EntryWarmCoverageSnapshot = {
+    wallCoreCovered, bgCoreCovered, wallMarginCovered, bgMarginCovered, fullReady,
+  };
+  return {
+    nowMs: performance.now(),
+    enteredAtMs: state.enteredAtMs,
+    frameCount: state.framesWarmed,
+    softMaxFrames: ENTRY_WARM_MAX_FRAMES,
+    softBudgetMs: ENTRY_WARM_BUDGET_MS,
+    hardBudgetMs: ENTRY_WARM_HARD_BUDGET_MS,
+    coverage,
+  };
+}
+
+/**
+ * Applies an `EntryWarmDecision` to `state`: finishes the warm (ready/timed
+ * out) or, for `continue`, logs the one-shot "extending warm" DEV warning
+ * when a soft/hard timeout would otherwise have applied.
+ *
+ * @returns `true` when the decision finished the warm (caller should stop
+ *          processing this tick), `false` for `continue`.
+ */
+function _applyDecision(
+  decision: EntryWarmDecision,
+  state: EntryWarmState,
+  room: RoomDef,
+  currentRenderStateKey: string | undefined,
+): boolean {
+  switch (decision.kind) {
+    case 'ready':
+      _finishWarm(state, room, /* timedOut */ false, false, currentRenderStateKey, undefined);
+      return true;
+    case 'softTimedOut':
+      _finishWarm(state, room, /* timedOut */ true, false, currentRenderStateKey, decision.reason);
+      return true;
+    case 'hardTimedOut':
+      _finishWarm(state, room, /* timedOut */ true, true, currentRenderStateKey, decision.reason);
+      return true;
+    case 'continue':
+      _warnSoftTimeoutExtend(state, room);
+      return false;
+  }
+}
+
+/**
+ * One-shot (per room entry) DEV warning that the soft timeout is being
+ * extended, i.e. `decideEntryWarm` returned `continue` because core coverage
+ * wasn't ready yet even though the soft budget was exceeded. Cheap to call
+ * every `continue` tick — it no-ops after the first one via `warnedSoftTimeoutExtend`.
+ */
+function _warnSoftTimeoutExtend(state: EntryWarmState, room: RoomDef): void {
   if (state.warnedSoftTimeoutExtend) return;
+  const elapsedMs = performance.now() - state.enteredAtMs;
+  const softExceeded = state.framesWarmed >= ENTRY_WARM_MAX_FRAMES || elapsedMs >= ENTRY_WARM_BUDGET_MS;
+  if (!softExceeded) return;
+  if (isEntryCoreViewportCovered(state, room)) return; // decideEntryWarm would have finished, not continued
   state.warnedSoftTimeoutExtend = true;
   if (import.meta.env.DEV) {
     console.warn(
@@ -420,7 +512,9 @@ function _finishWarm(
   state: EntryWarmState,
   room: RoomDef,
   timedOut: boolean,
+  hardTimedOut: boolean,
   currentRenderStateKey: string | undefined,
+  reason: string | undefined,
 ): void {
   // Pass the current render-state key so that adoptPrewarmedWallChunks and
   // adoptPrewarmedBgChunks can reject any snapshot whose key does not match
@@ -431,21 +525,43 @@ function _finishWarm(
   state.phase              = timedOut ? 'timedOut' : 'ready';
   state.usedFallbackRelease = timedOut;
 
-  if (import.meta.env.DEV) {
-    // Read coverage/fallback state AFTER adoption above, so this reflects
-    // what the player is about to see, not the pre-adoption snapshot.
-    const wallCoreCovered = isWallCoreViewportCovered(
-      state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx, BLOCK_SIZE_MEDIUM,
-    );
-    const bgCoreCovered = isBgCoreViewportCovered(
-      room, state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx,
-    );
-    const marginCovered =
-      isWallActiveViewportCovered(state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx, BLOCK_SIZE_MEDIUM) &&
-      isBgActiveViewportCovered(room, state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx);
-    const wallFallback = getWallChunkFallbackCounts();
-    const bgFallback   = getBgChunkFallbackCounts();
+  // Read coverage/fallback state AFTER adoption above, so this reflects what
+  // the player is about to see, not the pre-adoption snapshot. Recorded
+  // unconditionally (not DEV-gated) so `window.__dwEntryWarmStats()` and the
+  // hard-timeout warning below have real data to work with even in a
+  // production build being used to chase down a field report.
+  const wallCoreCovered = isWallCoreViewportCovered(
+    state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx, BLOCK_SIZE_MEDIUM,
+  );
+  const bgCoreCovered = isBgCoreViewportCovered(
+    room, state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx,
+  );
+  const wallMarginCovered = isWallActiveViewportCovered(
+    state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx, BLOCK_SIZE_MEDIUM,
+  );
+  const bgMarginCovered = isBgActiveViewportCovered(
+    room, state.entryOffsetXPx, state.entryOffsetYPx, state.vpWPx, state.vpHPx, state.scalePx,
+  );
+  const wallFallback = getWallChunkFallbackCounts();
+  const bgFallback   = getBgChunkFallbackCounts();
+  const elapsedMs    = performance.now() - state.enteredAtMs;
 
+  _lastEntryWarmDiag = {
+    roomId: state.roomId,
+    finishReason: hardTimedOut ? 'hardTimedOut' : timedOut ? 'softTimedOut' : 'ready',
+    wallCoreCovered,
+    bgCoreCovered,
+    wallMarginCovered,
+    bgMarginCovered,
+    fullReady: wallMarginCovered && bgMarginCovered,
+    wallFallback,
+    bgFallback,
+    elapsedMs,
+    frameCount: state.framesWarmed,
+    hardTimedOut,
+  };
+
+  if (import.meta.env.DEV) {
     // This is the log to grep for when a "lighting looks broken on entry"
     // report comes in: it distinguishes whether the core viewport was
     // actually covered when the overlay released, and how many chunks (if
@@ -455,17 +571,32 @@ function _finishWarm(
       `chunks: ${state.chunksWarmed}, frames: ${state.framesWarmed}, ` +
       `ms: ${state.msSpent.toFixed(1)}${timedOut ? ' (timeout)' : ''}, ` +
       `wallCoreCovered: ${wallCoreCovered}, bgCoreCovered: ${bgCoreCovered}, ` +
-      `marginCovered: ${marginCovered}, ` +
+      `wallMarginCovered: ${wallMarginCovered}, bgMarginCovered: ${bgMarginCovered}, ` +
       `hadFallbacks: wall=${wallFallback.hadFallbacksCount} bg=${bgFallback.hadFallbacksCount}, ` +
-      `gameplayFallback: wall=${wallFallback.gameplayFallbackCount} bg=${bgFallback.gameplayFallbackCount}`,
+      `gameplayFallback: wall=${wallFallback.gameplayFallbackCount} bg=${bgFallback.gameplayFallbackCount}` +
+      (reason !== undefined ? `, reason: ${reason}` : ''),
     );
+  }
 
-    if (timedOut && !(wallCoreCovered && bgCoreCovered)) {
-      console.warn(
-        `[entryWarm] room ${state.roomId} released via hard timeout with the core viewport still not fully ` +
-        'covered — the player may briefly see unshaded/fallback wall or background chunks.',
-      );
-    }
+  // Hard-timeout diagnostics: always logged (not DEV-gated), one-shot per
+  // room entry (this function only runs once per warm, since it transitions
+  // `state.phase` away from 'warming'). This is the message to search for
+  // when a "lighting was broken when I entered the room" report comes in —
+  // it has every field needed to tell whether the safety-net actually fired
+  // and, if so, exactly what was still incomplete.
+  if (hardTimedOut) {
+    console.warn(
+      `[entryWarm] HARD TIMEOUT — releasing room "${state.roomId}" with incomplete visual readiness. ` +
+      `elapsedMs=${elapsedMs.toFixed(1)} frames=${state.framesWarmed} ` +
+      `wallCoreCovered=${wallCoreCovered} bgCoreCovered=${bgCoreCovered} ` +
+      `wallMarginCovered=${wallMarginCovered} bgMarginCovered=${bgMarginCovered} ` +
+      `fullReady=${wallMarginCovered && bgMarginCovered} ` +
+      `wallFallback(hadFallbacks=${wallFallback.hadFallbacksCount},gameplayFallback=${wallFallback.gameplayFallbackCount}) ` +
+      `bgFallback(hadFallbacks=${bgFallback.hadFallbacksCount},gameplayFallback=${bgFallback.gameplayFallbackCount}) ` +
+      `anyGameplayFallbackChunks=${wallFallback.gameplayFallbackCount > 0 || bgFallback.gameplayFallbackCount > 0} ` +
+      `anyHadFallbacksChunks=${wallFallback.hadFallbacksCount > 0 || bgFallback.hadFallbacksCount > 0}` +
+      (reason !== undefined ? ` reason: ${reason}` : ''),
+    );
   }
 }
 
