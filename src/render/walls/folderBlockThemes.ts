@@ -301,6 +301,7 @@ export function getTheme1x1SpriteShaded(
   // canvas instead — this is a stable non-null result so the chunk does NOT
   // set hadFallbacksFlag and will NOT rebuild every frame.
   if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    if (!FP.isBakeForbiddenInGameplay()) FP.markBudgetExhaustedFallback();
     FP.recordUnshadedFallback();
     return _getOrCreateUnshaded8x8(url, base);
   }
@@ -357,6 +358,7 @@ export function getTheme2x2SpriteShaded(
   // During active gameplay, baking new shaded canvases is forbidden.  Return a
   // cheap unshaded canvas so the chunk renders without hadFallbacksFlag loops.
   if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    if (!FP.isBakeForbiddenInGameplay()) FP.markBudgetExhaustedFallback();
     FP.recordUnshadedFallback();
     return _getOrCreateUnshaded16x16(url, img);
   }

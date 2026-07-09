@@ -104,6 +104,7 @@ export function getLegacyShadedSprite(
   if (cached !== undefined) return cached;
 
   if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    if (!FP.isBakeForbiddenInGameplay()) FP.markBudgetExhaustedFallback();
     const uKey = `${imgKey}|${widthPx}|${heightPx}`;
     let unshaded = _unshadedCache.get(uKey);
     if (unshaded === undefined) {

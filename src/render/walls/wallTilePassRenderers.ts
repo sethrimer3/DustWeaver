@@ -46,6 +46,7 @@ import {
   getFolderThemeBaseUrl,
 } from './folderBlockThemes';
 import { getLegacyShadedSprite } from './legacyBlockShading';
+import * as FP from '../../debug/perfFreezeProfiler';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
 import type { CachedTileCoord, RampWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
@@ -314,6 +315,7 @@ export function render2x2Pass(
       const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask2x2);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, drawSize, drawSize);
+        if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
       } else {
         hadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, drawSize);
@@ -326,6 +328,7 @@ export function render2x2Pass(
         const folderSprite = getTheme2x2SpriteShaded(resolvedTheme, col, row, activeWorldNumber, openAirSidesMask2x2, blockSizePx);
         if (folderSprite !== null) {
           ctx.drawImage(folderSprite, tileX, tileY, drawSize, drawSize);
+          if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
         } else {
           hadFallbacks = true;
           drawFallbackTile(ctx, tileX, tileY, drawSize);
@@ -419,6 +422,7 @@ export function render1x1Pass(
       const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
+        if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
       } else {
         hadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
@@ -427,6 +431,7 @@ export function render1x1Pass(
       const folderSprite = getTheme1x1SpriteShaded(tileTheme, col, row, activeWorldNumber, openAirSidesMask, blockSizePx);
       if (folderSprite !== null) {
         ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
+        if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
       } else {
         hadFallbacks = true;
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
@@ -446,6 +451,7 @@ export function render1x1Pass(
       const img = getSpriteForLegacyTheme(tileTheme, spec.variant, blockSizePx);
       if (isSpriteReady(img)) {
         const shaded = getLegacyShadedSprite(img, img.naturalWidth, img.naturalHeight, openAirSidesMask, col, row, activeWorldNumber, blockSizePx);
+        if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
         if (tileTheme === 'brownRock' || spec.rotationRad === 0) {
           ctx.drawImage(shaded, tileX, tileY, tileSizeScreen, tileSizeScreen);
         } else {
@@ -466,6 +472,7 @@ export function render1x1Pass(
       const img = sprites[spec.variant];
       if (isSpriteReady(img)) {
         const shaded = getLegacyShadedSprite(img, img.naturalWidth, img.naturalHeight, openAirSidesMask, col, row, activeWorldNumber, blockSizePx);
+        if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
         if (spec.rotationRad === 0) {
           ctx.drawImage(shaded, tileX, tileY, tileSizeScreen, tileSizeScreen);
         } else {

@@ -192,6 +192,7 @@ export function getProceduralSprite(
   // fallback canvas — this is a stable non-null result so the chunk does NOT
   // set hadFallbacksFlag and will NOT rebuild every frame.
   if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
+    if (!FP.isBakeForbiddenInGameplay()) FP.markBudgetExhaustedFallback();
     const unshadedCached = _unshadedSpriteCache.get(key);
     if (unshadedCached !== undefined) return unshadedCached;
     const unshaded = _generateSprite(

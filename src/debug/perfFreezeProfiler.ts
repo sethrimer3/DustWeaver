@@ -241,6 +241,31 @@ export function recordUnshadedFallback(): void {
   _unshadedFallbackLifetime++;
 }
 
+// ── Budget-exhausted retry flag ────────────────────────────────────────────────
+//
+// Distinguishes "baking is allowed but this frame's bake budget ran out" from
+// "baking is intentionally forbidden this frame" (see `_bakeForbiddenInGameplay`
+// above). The former must NOT be treated as a final clean build — the chunk
+// should retry once the budget resets next frame, otherwise a tile can
+// permanently get stuck on an unshaded sprite purely because it happened to be
+// baked on a frame where earlier tiles used up the budget. Sprite accessors call
+// `markBudgetExhaustedFallback()` when they take this branch; the wall tile
+// passes consume the flag right after the call to fold it into their
+// `hadFallbacks` return value (which the chunk cache uses to schedule a retry).
+let _budgetExhaustedFallbackThisCall = false;
+
+/** Called by a sprite accessor when it returns an unshaded fallback solely because the per-frame bake budget (not the gameplay-forbidden flag) was exhausted. */
+export function markBudgetExhaustedFallback(): void {
+  _budgetExhaustedFallbackThisCall = true;
+}
+
+/** Reads and clears the budget-exhausted-fallback flag. Callers should check this immediately after each sprite-accessor call whose result they intend to draw. */
+export function consumeBudgetExhaustedFallbackFlag(): boolean {
+  const v = _budgetExhaustedFallbackThisCall;
+  _budgetExhaustedFallbackThisCall = false;
+  return v;
+}
+
 /** Lifetime shaded/fallback bake counters — read by window.__dwEdgeShadingStats(). */
 export function getShadedBakeLifetimeCounts(): {
   legacyShadedBakes: number;
