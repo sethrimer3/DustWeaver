@@ -51,6 +51,7 @@ import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
 import type { CachedTileCoord, RampWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
 import { getSurfaceMaskAtTile, type SurfaceMask } from '../../sim/world/surfaceExposure';
+import { renderSurfaceEdgeOverlayPass as _renderSurfaceEdgeOverlayPass } from './surfaceEdgeOverlay';
 import {
   TILE_MASK_N,
   TILE_MASK_E,
@@ -516,6 +517,34 @@ export function render1x1Pass(
     }
   }
   return hadFallbacks;
+}
+
+// ── Guaranteed surface-edge overlay pass ──────────────────────────────────────
+//
+// Draws the exposed-edge visual straight from `wallLayout.surfaceExposureMap`
+// — the authoritative tile-level open-air map — instead of relying on shading
+// baked into sprite canvases. See surfaceEdgeOverlay.ts for the full rationale
+// and implementation; this is a thin adapter that maps the shared
+// `WallTilePassContext` onto that module's dependency-light param shape (kept
+// separate so surfaceEdgeOverlay.ts stays unit-testable without pulling in the
+// Vite-only folder-theme sprite loading machinery this file depends on).
+export function renderSurfaceEdgeOverlayPass(
+  ctx: CanvasRenderingContext2D,
+  pctx: WallTilePassContext,
+): void {
+  _renderSurfaceEdgeOverlayPass(ctx, {
+    surfaceExposureMap: pctx.wallLayout.surfaceExposureMap,
+    ambientDepths: pctx.ambientDepths,
+    isBlockTintEnabled: pctx.isBlockTintEnabled,
+    offsetXPx: pctx.offsetXPx,
+    offsetYPx: pctx.offsetYPx,
+    scalePx: pctx.scalePx,
+    blockSizePx: pctx.blockSizePx,
+    filterColMinBlocks: pctx.filterColMinBlocks,
+    filterColMaxBlocks: pctx.filterColMaxBlocks,
+    filterRowMinBlocks: pctx.filterRowMinBlocks,
+    filterRowMaxBlocks: pctx.filterRowMaxBlocks,
+  });
 }
 
 // ── Pass 3: Platform tiles ────────────────────────────────────────────────────

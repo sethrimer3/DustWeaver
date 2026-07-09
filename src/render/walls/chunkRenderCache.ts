@@ -387,7 +387,12 @@ export class RoomChunkCache {
   extractCleanChunks(): Map<string, HTMLCanvasElement> {
     const result = new Map<string, HTMLCanvasElement>();
     for (const [key, entry] of this._chunks) {
-      if (!entry.hadFallbacksFlag && !this._dirtyKeys.has(key)) {
+      // A chunk built while gameplay baking was forbidden may be missing real
+      // edge shading / lighting (it drew cheap unshaded sprites instead) —
+      // it is visually "not ready" even though it isn't literally dirty or
+      // hadFallbacksFlag. Never adopt/prewarm-promote such a chunk into
+      // another room-entry path as if it were a finished, shaded bake.
+      if (!entry.hadFallbacksFlag && !entry.builtWithGameplayFallbackFlag && !this._dirtyKeys.has(key)) {
         result.set(key, entry.canvas);
       }
     }
@@ -471,7 +476,15 @@ export class RoomChunkCache {
       for (let cx = cxMin; cx <= cxMax; cx++) {
         const key = `${cx},${cy}`;
         const entry = this._chunks.get(key);
-        if (!entry || entry.hadFallbacksFlag || this._dirtyKeys.has(key)) {
+        // A chunk built with the gameplay unshaded fallback is not visually
+        // ready — it may be missing real edge shading / lighting entirely.
+        // Reject it here the same as a missing/dirty/hadFallbacksFlag chunk so
+        // room-entry readiness checks never treat it as "covered". Without
+        // this, a room can enter gameplay showing broken lighting on chunks
+        // that were only ever built via the cheap fallback path, and it stays
+        // that way until something (e.g. the editor) clears the bake-forbidden
+        // state and triggers a retry.
+        if (!entry || entry.hadFallbacksFlag || entry.builtWithGameplayFallbackFlag || this._dirtyKeys.has(key)) {
           return false;
         }
       }

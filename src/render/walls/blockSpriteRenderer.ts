@@ -74,6 +74,7 @@ import {
   renderPlatformPass,
   renderRampPass,
   renderHalfPillarPass,
+  renderSurfaceEdgeOverlayPass,
   clearWallCellDiag,
 } from './wallTilePassRenderers';
 import { renderSeamOverlayPass } from './seamBlending';
@@ -917,6 +918,13 @@ function _doRenderWallTilesDirect(
   hadFallbacks = renderPlatformPass(ctx, pctx) || hadFallbacks;
   hadFallbacks = renderRampPass(ctx, pctx)     || hadFallbacks;
   hadFallbacks = renderHalfPillarPass(ctx, pctx) || hadFallbacks;
+
+  // Guaranteed surface-edge overlay: drawn from the authoritative
+  // surfaceExposureMap after all base wall sprites (and their per-tile
+  // darkness fill) so every exposed tile side gets the edge distinction
+  // regardless of sprite-bake fallback state or 2×2/1×1 grouping. See
+  // renderSurfaceEdgeOverlayPass in wallTilePassRenderers.ts.
+  renderSurfaceEdgeOverlayPass(ctx, pctx);
 
   // Pass 6: seam transition overlays (or debug seam visualization).
   if (_activeSeamBlending !== 'off' || _seamBlendDebug) {
