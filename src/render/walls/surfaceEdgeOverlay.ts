@@ -18,36 +18,54 @@
  * exposure data `src/sim/world/surfaceExposure.ts` builds — so every exposed
  * tile side gets marked, every frame, independent of sprite state.
  *
+ * Visual intent: subtle 3-pixel inward falloff
+ * ─────────────────────────────────────────────
+ * The guaranteed effect is intentionally understated — a soft distinction
+ * along exposed edges, not a bright glowing outline. Each exposed edge gets 3
+ * one-world-pixel-thick bands falling off inward (see `_BAND_ALPHA_RANGES`):
+ * outermost ~20-30% alpha, middle ~10-20%, innermost ~0-10%. Alpha within
+ * each band is a stable per-tile/per-side/per-depth pseudo-random value (see
+ * `_bandNoise`) so the effect reads as organic texture rather than a flat,
+ * uniform tint — but it never flickers, since the value is a deterministic
+ * hash of tile position + side + depth, not real randomness.
+ *
  * Geometry: three concepts, painted so each pixel is touched at most once
  * ─────────────────────────────────────────────────────────────────────────
  * A tile's overlay is built from three distinct pieces, iterated per-tile
  * (not per-segment) so corner ownership can be resolved once per tile:
- *   1. Straight side bands — one per exposed cardinal side, but TRIMMED at
- *      whichever end(s) abut another exposed cardinal side on the same tile.
- *      Untrimmed bands would double-paint the shared corner pixel with both
- *      the horizontal and vertical band (visibly brighter — bug fixed here).
- *   2. Convex (outer) corner squares — drawn once, exactly at the trimmed-off
+ *   1. Straight side bands — 3 depth bands per exposed cardinal side, but
+ *      TRIMMED at whichever end(s) abut another exposed cardinal side on the
+ *      same tile. Untrimmed bands would double-paint the shared corner
+ *      pixels with both the horizontal and vertical band (visibly brighter).
+ *   2. Convex (outer) corner rings — drawn once, exactly at the trimmed-off
  *      region from (1), for each pair of adjacent exposed cardinal sides.
- *      Fully derivable from the tile's own `SurfaceMask` (`masks` map) — no
- *      new exposure data needed.
- *   3. Concave (inner) corner squares — drawn once per diagonally-exposed
+ *      Uses the same 3-depth falloff as straight bands, but with true
+ *      Chebyshev-style corner depth (`min` of the two axis offsets) so the
+ *      corner reads as a continuation of the adjacent bands rather than a
+ *      brighter blob. Fully derivable from the tile's own `SurfaceMask`
+ *      (`masks` map) — no new exposure data needed.
+ *   3. Concave (inner) corner rings — drawn once per diagonally-exposed
  *      corner where BOTH adjacent cardinal sides are blocked (so no cardinal
  *      band exists there at all) but the diagonal neighbour is open air —
- *      the classic auto-tiling inner-corner/staircase-notch pattern. This
- *      needs the new `concaveCornerMasks`/`concaveCorners` data on
- *      `SurfaceExposureMap` (see surfaceExposure.ts) since such a tile can
- *      have zero exposed cardinal sides and would otherwise never appear
- *      anywhere in the map.
+ *      the classic auto-tiling inner-corner/staircase-notch pattern. Reuses
+ *      the exact same corner-ring geometry/alpha treatment as (2) — same
+ *      subtlety, same non-doubling guarantee — triggered by
+ *      `concaveCornerMasks`/`concaveCorners` on `SurfaceExposureMap` (see
+ *      surfaceExposure.ts) instead of a `SurfaceMask` pair, since such a tile
+ *      can have zero exposed cardinal sides and would otherwise never appear
+ *      anywhere in `masks`.
  *
  * Since (1)+(2) partition the tile's cardinal-adjacent corner area exactly
- * (never overlapping) and (3) only fires where (1)/(2) do not, every pixel of
- * the overlay is painted by exactly one draw call per tile — no double
- * strength anywhere, matching the intended single-layer edge brightness.
+ * (never overlapping — each corner-ring cell is painted by exactly one of
+ * the 3 depth "rings", never by more than one) and (3) only fires where
+ * (1)/(2) do not, every pixel of the overlay is painted by exactly one draw
+ * call — no double strength anywhere, matching the intended single-layer
+ * edge brightness.
  *
- * Deliberately kept dependency-light (only `surfaceExposure.ts` types and the
- * freeze profiler) so it can be unit-tested without pulling in the browser/Vite
- * -only folder-theme sprite loading machinery that `wallTilePassRenderers.ts`
- * depends on for its sprite-drawing passes.
+ * Deliberately kept dependency-light (only `surfaceExposure.ts` types) so it
+ * can be unit-tested without pulling in the browser/Vite-only folder-theme
+ * sprite loading machinery that `wallTilePassRenderers.ts` depends on for its
+ * sprite-drawing passes.
  */
 
 import {
@@ -59,18 +77,62 @@ import {
 
 // ── Tuning constants ──────────────────────────────────────────────────────────
 
+/** Number of one-world-pixel-thick inward falloff bands per exposed edge/corner. */
+const _BAND_COUNT = 3;
+
 /**
- * Additive rim-light strength (0-1) for the top face vs the other three faces —
- * mirrors the asymmetry in `applyOrganicEdgeShading`'s `_EDGE_HIGHLIGHT_ADD_TOP`
- * vs `_EDGE_HIGHLIGHT_ADD`. Intentionally strong/"exaggerated" for now (see the
- * task note in blockEdgeShading.ts) so the guaranteed effect is unmistakable
- * while the underlying rendering question is being resolved.
+ * Alpha range [lo, hi] per inward depth (0 = outermost, touching the exposed
+ * edge; 2 = innermost, 3 pixels in). Per-pixel-band alpha is chosen
+ * pseudo-randomly (but deterministically — see `_bandNoise`) within the
+ * matching range, so the effect reads as soft, organic edge distinction
+ * rather than a flat, uniform, or bright glowing outline.
  */
-const _EDGE_OVERLAY_STRENGTH_TOP = 0.55;
-const _EDGE_OVERLAY_STRENGTH_SIDE = 0.38;
+const _BAND_ALPHA_RANGES: readonly (readonly [number, number])[] = [
+  [0.20, 0.30],
+  [0.10, 0.20],
+  [0.00, 0.10],
+];
 
 /** Ambient darkness alpha at/above which the overlay is fully suppressed so it never glows through darkness. */
 const _EDGE_OVERLAY_DARKNESS_CUTOFF = 0.97;
+
+// ── Deterministic per-pixel-band variation ────────────────────────────────────
+
+/**
+ * Hashes 4 integers to a float in [0, 1). Same MurmurHash3-style mix used
+ * elsewhere in the block-sprite renderer (see `hashTilePosition` in
+ * proceduralBlockSprite.ts and `_hashNoiseCorner` in blockEdgeShading.ts) —
+ * duplicated locally (rather than imported) to keep this module free of the
+ * Vite-only sprite-loading import chain those modules pull in.
+ */
+function _hash4(a: number, b: number, c: number, d: number): number {
+  let h = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791) ^ (d * 2246822519);
+  h |= 0;
+  h ^= h >>> 16;
+  h = Math.imul(h, 2246822519);
+  h ^= h >>> 13;
+  h = Math.imul(h, 3266489917);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967295;
+}
+
+/** Stable integer id for a cardinal side or corner direction — used as the hash's "kind" axis. */
+const _KIND_ID: Record<SurfaceSide | CornerSide, number> = {
+  top: 0, right: 1, bottom: 2, left: 3,
+  nw: 4, ne: 5, sw: 6, se: 7,
+};
+
+/**
+ * Deterministic per-(tile, side-or-corner, depth) alpha within the depth's
+ * intended range. Stable frame-to-frame and tile-to-tile (a pure function of
+ * tile coordinates + which edge/corner + how many pixels inward) — never
+ * flickers, but avoids a flat/uniform look across different tiles or sides.
+ */
+function _bandAlpha(col: number, row: number, kind: SurfaceSide | CornerSide, depth: number): number {
+  const [lo, hi] = _BAND_ALPHA_RANGES[depth];
+  const noise = _hash4(col, row, _KIND_ID[kind], depth);
+  return lo + noise * (hi - lo);
+}
 
 // ── DEV-only diagnostic overlay (colour-coded, from the same segment source) ──
 //
@@ -137,24 +199,28 @@ const _CORNER_ADJACENT_SIDES: Record<CornerSide, readonly [SurfaceSide, SurfaceS
   se: ['bottom', 'right'],
 };
 
+interface Rect { x: number; y: number; w: number; h: number }
+
 /**
- * Draws one straight side band for a tile, trimmed at either end where an
- * adjacent exposed cardinal side (on the SAME tile) would otherwise share —
- * and double-paint — the corner pixel square. The trimmed-off region is
- * instead painted exactly once by `_drawConvexCorner`.
+ * Draws the 3-band inward falloff for one straight side of a tile, trimmed
+ * at either end where an adjacent exposed cardinal side (on the SAME tile)
+ * would otherwise share — and double-paint — the corner region. The
+ * trimmed-off region (sized `_BAND_COUNT * bandUnit` at each trimmed end) is
+ * instead painted exactly once by `_drawCornerRings`.
  */
 function _drawTrimmedSideBand(
   ctx: CanvasRenderingContext2D,
   tileX: number,
   tileY: number,
   sizeScreen: number,
-  bandScreen: number,
+  bandUnit: number,
   side: SurfaceSide,
   mask: SurfaceMask,
-  alpha: number,
+  col: number,
+  row: number,
+  darknessMul: number,
 ): void {
-  const strength = (side === 'top' ? _EDGE_OVERLAY_STRENGTH_TOP : _EDGE_OVERLAY_STRENGTH_SIDE) * alpha;
-  if (strength <= 0) return;
+  const cornerSpan = _BAND_COUNT * bandUnit;
 
   // A horizontal band (top/bottom) trims its X extent where left/right are
   // also exposed; a vertical band (left/right) trims its Y extent where
@@ -162,83 +228,100 @@ function _drawTrimmedSideBand(
   const trimStart = side === 'top' || side === 'bottom' ? mask.left : mask.top;
   const trimEnd   = side === 'top' || side === 'bottom' ? mask.right : mask.bottom;
 
-  const runLength = sizeScreen - (trimStart ? bandScreen : 0) - (trimEnd ? bandScreen : 0);
+  const runLength = sizeScreen - (trimStart ? cornerSpan : 0) - (trimEnd ? cornerSpan : 0);
   if (runLength <= 0) return; // fully consumed by corners (degenerate — tiny tiles only)
 
-  ctx.fillStyle = `rgba(255,255,255,${strength})`;
-  switch (side) {
-    case 'top':
-      ctx.fillRect(tileX + (trimStart ? bandScreen : 0), tileY, runLength, bandScreen);
-      break;
-    case 'bottom':
-      ctx.fillRect(tileX + (trimStart ? bandScreen : 0), tileY + sizeScreen - bandScreen, runLength, bandScreen);
-      break;
-    case 'left':
-      ctx.fillRect(tileX, tileY + (trimStart ? bandScreen : 0), bandScreen, runLength);
-      break;
-    case 'right':
-      ctx.fillRect(tileX + sizeScreen - bandScreen, tileY + (trimStart ? bandScreen : 0), bandScreen, runLength);
-      break;
+  const runStart = trimStart ? cornerSpan : 0;
+
+  for (let depth = 0; depth < _BAND_COUNT; depth++) {
+    const strength = _bandAlpha(col, row, side, depth) * darknessMul;
+    if (strength <= 0) continue;
+    ctx.fillStyle = `rgba(255,255,255,${strength})`;
+    switch (side) {
+      case 'top':
+        ctx.fillRect(tileX + runStart, tileY + depth * bandUnit, runLength, bandUnit);
+        break;
+      case 'bottom':
+        ctx.fillRect(tileX + runStart, tileY + sizeScreen - (depth + 1) * bandUnit, runLength, bandUnit);
+        break;
+      case 'left':
+        ctx.fillRect(tileX + depth * bandUnit, tileY + runStart, bandUnit, runLength);
+        break;
+      case 'right':
+        ctx.fillRect(tileX + sizeScreen - (depth + 1) * bandUnit, tileY + runStart, bandUnit, runLength);
+        break;
+    }
   }
 }
 
-/** Screen-space rect (tile-relative) for a bandScreen×bandScreen corner square. */
-function _cornerRect(
-  tileX: number, tileY: number, sizeScreen: number, bandScreen: number, corner: CornerSide,
-): { x: number; y: number } {
-  const x = corner === 'nw' || corner === 'sw' ? tileX : tileX + sizeScreen - bandScreen;
-  const y = corner === 'nw' || corner === 'ne' ? tileY : tileY + sizeScreen - bandScreen;
-  return { x, y };
-}
-
 /**
- * Draws a convex (outer) corner square exactly once, at the intended edge
- * brightness (not doubled) — uses whichever of its two adjacent sides is
- * brighter (top's brighter strength wins for nw/ne corners) so it reads as a
- * continuation of the brighter of the two bands it joins, rather than a sum.
+ * Draws the 3-ring inward falloff for one corner of a tile (convex or
+ * concave — same geometry either way, only the triggering condition
+ * differs). Uses true Chebyshev-style corner depth: a cell at local offset
+ * (u, v) from the corner (0-indexed, both in `[0, _BAND_COUNT)`) gets
+ * `depth = min(u, v)`, so the ring nearest the actual corner pixel is the
+ * *shallowest* depth (brightest) and rings widen outward from there — the
+ * corner is a continuation of the adjacent bands' falloff, never brighter
+ * than they are, and each of the `_BAND_COUNT` rings is painted by exactly
+ * one pair of non-overlapping rects (an L-shaped strip), so there is no
+ * double-painting between rings either.
  */
-function _drawConvexCorner(
+function _drawCornerRings(
   ctx: CanvasRenderingContext2D,
-  tileX: number, tileY: number, sizeScreen: number, bandScreen: number,
-  corner: CornerSide, alpha: number,
+  tileX: number, tileY: number, sizeScreen: number, bandUnit: number,
+  corner: CornerSide, col: number, row: number, darknessMul: number,
 ): void {
-  const [sideA, sideB] = _CORNER_ADJACENT_SIDES[corner];
-  const strengthA = sideA === 'top' ? _EDGE_OVERLAY_STRENGTH_TOP : _EDGE_OVERLAY_STRENGTH_SIDE;
-  const strengthB = sideB === 'top' ? _EDGE_OVERLAY_STRENGTH_TOP : _EDGE_OVERLAY_STRENGTH_SIDE;
-  const strength = Math.max(strengthA, strengthB) * alpha;
-  if (strength <= 0) return;
+  const leftAnchor = corner === 'nw' || corner === 'sw';
+  const topAnchor  = corner === 'nw' || corner === 'ne';
+  const originX = leftAnchor ? tileX : tileX + sizeScreen;
+  const originY = topAnchor  ? tileY : tileY + sizeScreen;
+  const dirX = leftAnchor ? 1 : -1;
+  const dirY = topAnchor  ? 1 : -1;
 
-  const { x, y } = _cornerRect(tileX, tileY, sizeScreen, bandScreen, corner);
-  ctx.fillStyle = `rgba(255,255,255,${strength})`;
-  ctx.fillRect(x, y, bandScreen, bandScreen);
-}
+  // Converts a [uStart, uStart+uLen) run (in bandUnit steps, measured inward
+  // from the corner along the horizontal axis) to a screen-space x/w pair,
+  // accounting for which way "inward" points for this corner.
+  const uToScreenX = (uStart: number, uLen: number): { x: number; w: number } =>
+    dirX === 1
+      ? { x: originX + uStart * bandUnit, w: uLen * bandUnit }
+      : { x: originX - (uStart + uLen) * bandUnit, w: uLen * bandUnit };
+  const vToScreenY = (vStart: number, vLen: number): { y: number; h: number } =>
+    dirY === 1
+      ? { y: originY + vStart * bandUnit, h: vLen * bandUnit }
+      : { y: originY - (vStart + vLen) * bandUnit, h: vLen * bandUnit };
 
-/**
- * Draws a concave (inner) corner square exactly once, at the same geometric
- * position a convex corner would occupy for that corner direction — this is
- * where the tile's own corner pixel touches the diagonally-exposed air
- * pocket, so an accent there reads as the "recessed" counterpart to the
- * convex corner treatment.
- */
-function _drawConcaveCorner(
-  ctx: CanvasRenderingContext2D,
-  tileX: number, tileY: number, sizeScreen: number, bandScreen: number,
-  corner: CornerSide, alpha: number,
-): void {
-  const strength = _EDGE_OVERLAY_STRENGTH_SIDE * alpha;
-  if (strength <= 0) return;
+  for (let depth = 0; depth < _BAND_COUNT; depth++) {
+    const strength = _bandAlpha(col, row, corner, depth) * darknessMul;
+    if (strength <= 0) continue;
+    ctx.fillStyle = `rgba(255,255,255,${strength})`;
 
-  const { x, y } = _cornerRect(tileX, tileY, sizeScreen, bandScreen, corner);
-  ctx.fillStyle = `rgba(255,255,255,${strength})`;
-  ctx.fillRect(x, y, bandScreen, bandScreen);
+    const rects: Rect[] = [];
+    // Ring `depth` = { (u,v) : min(u,v) === depth, u,v in [0, _BAND_COUNT) }.
+    // Part 1: row v = depth, u in [depth, _BAND_COUNT).
+    {
+      const uLen = _BAND_COUNT - depth;
+      const { x, w } = uToScreenX(depth, uLen);
+      const { y, h } = vToScreenY(depth, 1);
+      rects.push({ x, y, w, h });
+    }
+    // Part 2: column u = depth, v in [depth+1, _BAND_COUNT) — excludes the
+    // (depth, depth) cell already covered by part 1, so the two never overlap.
+    if (depth < _BAND_COUNT - 1) {
+      const vLen = _BAND_COUNT - depth - 1;
+      const { x, w } = uToScreenX(depth, 1);
+      const { y, h } = vToScreenY(depth + 1, vLen);
+      rects.push({ x, y, w, h });
+    }
+
+    for (const r of rects) ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
 }
 
 // ── Diagnostics ────────────────────────────────────────────────────────────────
 
 /**
  * Per-frame counters for the guaranteed overlay pass, read by
- * `window.__dwSurfaceEdgeOverlayStats()` (wallTilePassRenderers.ts) so it's
- * possible to tell apart:
+ * `window.__dwSurfaceEdgeOverlayStats()` so it's possible to tell apart:
  *   - `tilesConsideredLastFrame === 0` → the bug is upstream, in the
  *     exposure/layout data (surfaceExposure.ts / blockWallLayoutCache.ts).
  *   - draws lower than expected → the bug is in this overlay's own draw
@@ -249,9 +332,9 @@ function _drawConcaveCorner(
  */
 export const surfaceEdgeOverlayDiag = {
   tilesConsideredLastFrame: 0,
-  sideBandsDrawnLastFrame: 0,
-  convexCornersDrawnLastFrame: 0,
-  concaveCornersDrawnLastFrame: 0,
+  sideBandRectsDrawnLastFrame: 0,
+  convexCornerRectsDrawnLastFrame: 0,
+  concaveCornerRectsDrawnLastFrame: 0,
   tilesSkippedDarknessLastFrame: 0,
 };
 
@@ -276,7 +359,7 @@ function _inFilterRange(col: number, row: number, params: SurfaceEdgeOverlayPara
          row >= params.filterRowMinBlocks && row <= params.filterRowMaxBlocks;
 }
 
-function _darknessAlphaAtTile(
+function _darknessMulAtTile(
   col: number, row: number, params: SurfaceEdgeOverlayParams,
 ): number | null {
   const darkness = params.isBlockTintEnabled ? (params.ambientDepths?.get(`${col},${row}`) ?? 0) : 0;
@@ -287,8 +370,9 @@ function _darknessAlphaAtTile(
 /**
  * Draws the guaranteed surface-edge overlay for every exposed tile side and
  * corner within the given chunk/viewport bounds, reading straight from
- * `params.surfaceExposureMap` (see the module doc comment for the three-part
- * side-band / convex-corner / concave-corner geometry this builds).
+ * `params.surfaceExposureMap` (see the module doc comment for the subtle
+ * 3-pixel falloff and the side-band / convex-corner / concave-corner
+ * geometry this builds).
  *
  * Always runs — this is the actual guaranteed visual, not a debug-only
  * diagnostic. Call this after all base wall sprites (and any per-tile
@@ -298,7 +382,8 @@ function _darknessAlphaAtTile(
  * When `window.__dwEdgeOverlay` is enabled, this also draws the existing
  * colour-coded per-side diagnostic line for troubleshooting, sourced from the
  * same segments (so it now also covers 2×2-covered tiles, unlike the old
- * 1×1-pass-only diagnostic it replaces).
+ * 1×1-pass-only diagnostic it replaces). This debug line is unrelated to (and
+ * unaffected by) the subtle-intensity tuning above.
  */
 export function renderSurfaceEdgeOverlayPass(
   ctx: CanvasRenderingContext2D,
@@ -306,19 +391,24 @@ export function renderSurfaceEdgeOverlayPass(
 ): void {
   const { surfaceExposureMap, offsetXPx, offsetYPx, scalePx, blockSizePx } = params;
 
-  const bandPx = Math.max(1, Math.min(3, Math.round(blockSizePx * 0.25)));
-  const bandScreen = Math.max(1, Math.round(bandPx * scalePx));
   const sizeScreen = blockSizePx * scalePx;
+  // One world-pixel per inward band, scaled to screen space; clamped so
+  // 3 bands never exceed the tile itself (relevant only for pathologically
+  // small block sizes/zoom levels).
+  const bandUnit = Math.max(1, Math.min(
+    Math.round(scalePx),
+    Math.floor(sizeScreen / _BAND_COUNT),
+  ));
   const debugMode = _devEdgeOverlayEnabled();
 
   let tilesConsidered = 0;
-  let sideBandsDrawn = 0;
-  let convexCornersDrawn = 0;
-  let concaveCornersDrawn = 0;
+  let sideBandRectsDrawn = 0;
+  let convexCornerRectsDrawn = 0;
+  let concaveCornerRectsDrawn = 0;
   let skippedDarkness = 0;
 
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = 'source-over';
 
   // ── Pass A: straight side bands + convex (outer) corners ────────────────────
   // Iterated per-tile (via `masks`, not `segments`) so all of a tile's
@@ -331,8 +421,8 @@ export function renderSurfaceEdgeOverlayPass(
     if (!_inFilterRange(col, row, params)) continue;
     tilesConsidered++;
 
-    const alpha = _darknessAlphaAtTile(col, row, params);
-    if (alpha === null) { skippedDarkness++; continue; }
+    const darknessMul = _darknessMulAtTile(col, row, params);
+    if (darknessMul === null) { skippedDarkness++; continue; }
 
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
@@ -340,16 +430,16 @@ export function renderSurfaceEdgeOverlayPass(
     const sides: readonly SurfaceSide[] = ['top', 'right', 'bottom', 'left'];
     for (const side of sides) {
       if (!mask[side]) continue;
-      _drawTrimmedSideBand(ctx, tileX, tileY, sizeScreen, bandScreen, side, mask, alpha);
-      sideBandsDrawn++;
+      _drawTrimmedSideBand(ctx, tileX, tileY, sizeScreen, bandUnit, side, mask, col, row, darknessMul);
+      sideBandRectsDrawn += _BAND_COUNT;
     }
 
     const corners: readonly CornerSide[] = ['nw', 'ne', 'sw', 'se'];
     for (const corner of corners) {
       const [sideA, sideB] = _CORNER_ADJACENT_SIDES[corner];
       if (!mask[sideA] || !mask[sideB]) continue; // convex corner requires BOTH adjacent sides exposed
-      _drawConvexCorner(ctx, tileX, tileY, sizeScreen, bandScreen, corner, alpha);
-      convexCornersDrawn++;
+      _drawCornerRings(ctx, tileX, tileY, sizeScreen, bandUnit, corner, col, row, darknessMul);
+      convexCornerRectsDrawn += _BAND_COUNT * 2 - 1;
     }
   }
 
@@ -360,8 +450,8 @@ export function renderSurfaceEdgeOverlayPass(
     const { col, row, corners } = tile;
     if (!_inFilterRange(col, row, params)) continue;
 
-    const alpha = _darknessAlphaAtTile(col, row, params);
-    if (alpha === null) continue; // already counted as skipped in pass A when the tile also has a mask entry
+    const darknessMul = _darknessMulAtTile(col, row, params);
+    if (darknessMul === null) continue; // already counted as skipped in pass A when the tile also has a mask entry
 
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
@@ -369,8 +459,8 @@ export function renderSurfaceEdgeOverlayPass(
     const cornerSides: readonly CornerSide[] = ['nw', 'ne', 'sw', 'se'];
     for (const corner of cornerSides) {
       if (!corners[corner]) continue;
-      _drawConcaveCorner(ctx, tileX, tileY, sizeScreen, bandScreen, corner, alpha);
-      concaveCornersDrawn++;
+      _drawCornerRings(ctx, tileX, tileY, sizeScreen, bandUnit, corner, col, row, darknessMul);
+      concaveCornerRectsDrawn += _BAND_COUNT * 2 - 1;
     }
   }
 
@@ -387,9 +477,9 @@ export function renderSurfaceEdgeOverlayPass(
 
   if (import.meta.env?.DEV) {
     surfaceEdgeOverlayDiag.tilesConsideredLastFrame = tilesConsidered;
-    surfaceEdgeOverlayDiag.sideBandsDrawnLastFrame = sideBandsDrawn;
-    surfaceEdgeOverlayDiag.convexCornersDrawnLastFrame = convexCornersDrawn;
-    surfaceEdgeOverlayDiag.concaveCornersDrawnLastFrame = concaveCornersDrawn;
+    surfaceEdgeOverlayDiag.sideBandRectsDrawnLastFrame = sideBandRectsDrawn;
+    surfaceEdgeOverlayDiag.convexCornerRectsDrawnLastFrame = convexCornerRectsDrawn;
+    surfaceEdgeOverlayDiag.concaveCornerRectsDrawnLastFrame = concaveCornerRectsDrawn;
     surfaceEdgeOverlayDiag.tilesSkippedDarknessLastFrame = skippedDarkness;
   }
 }
@@ -410,4 +500,3 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
     return surfaceEdgeOverlayDiag;
   };
 }
-
