@@ -55,7 +55,6 @@ function makeWorldAndPlayer(playerX: number, playerY: number): { world: WorldSta
 
 test('slide and jump agree on a full-height valid wall contact (right side, touching)', () => {
   const { world, player } = makeWorldAndPlayer(0, 0);
-  const playerLeft   = player.positionXWorld - player.halfWidthWorld;
   const playerRight  = player.positionXWorld + player.halfWidthWorld;
   const playerTop    = player.positionYWorld - player.halfHeightWorld;
 
