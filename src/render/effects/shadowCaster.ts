@@ -1,7 +1,7 @@
 /**
  * shadowCaster.ts — Player shadow geometry for the DarkRoom overlay.
  *
- * Builds simple tapered-polygon shadow occluders for a single caster
+ * Builds simple projected-polygon shadow occluders for a single caster
  * (the player) against up to MAX_SHADOW_CASTER_LIGHTS authored local
  * light sources.  The occluders are consumed by DarkRoomOverlay.render()
  * which draws them back into the darkness mask after the light holes have
@@ -20,7 +20,7 @@ import { BLOCK_SIZE_SMALL, type RoomLightSourceDef } from '../../levels/roomDef'
 // ── Shadow polygon type ───────────────────────────────────────────────────────
 
 /**
- * A tapered-quadrilateral shadow occluder in virtual-pixel coordinates.
+ * A quadrilateral shadow occluder in virtual-pixel coordinates.
  *
  * Vertex order:
  *
@@ -71,12 +71,6 @@ const SHADOW_REACH_FACTOR = 1.05;
 /** Opacity of the core (hard) shadow polygon. */
 const SHADOW_CORE_ALPHA = 0.88;
 
-/**
- * Fraction of the body-half-radius applied at the shadow tip, producing a
- * tapered (trapezoidal) wedge rather than a rectangular slab.
- */
-const SHADOW_TIP_TAPER = 0.22;
-
 // ── Scratch arrays (avoids per-frame allocations in hot path) ─────────────────
 
 // These two parallel arrays store up to MAX_SHADOW_CASTER_LIGHTS candidate
@@ -92,6 +86,93 @@ const _shadowPool: ShadowCasterOccluderPx[] = Array.from(
 );
 
 // ── Public API ────────────────────────────────────────────────────────────────
+
+const _cornerX = new Float32Array(4);
+const _cornerY = new Float32Array(4);
+const _cornerAngle = new Float32Array(4);
+const _cornerOrder = new Int32Array(4);
+
+export function buildRectShadowOccluderPx(
+  casterXPx: number,
+  casterYPx: number,
+  casterHalfWPx: number,
+  casterHalfHPx: number,
+  lightXPx: number,
+  lightYPx: number,
+  shadowLengthPx: number,
+  out: ShadowCasterOccluderPx,
+  alpha = SHADOW_CORE_ALPHA,
+): boolean {
+  if (casterHalfWPx <= 0 || casterHalfHPx <= 0 || shadowLengthPx <= 0) return false;
+
+  const minX = casterXPx - casterHalfWPx;
+  const maxX = casterXPx + casterHalfWPx;
+  const minY = casterYPx - casterHalfHPx;
+  const maxY = casterYPx + casterHalfHPx;
+
+  if (lightXPx > minX && lightXPx < maxX && lightYPx > minY && lightYPx < maxY) return false;
+
+  _cornerX[0] = minX; _cornerY[0] = minY;
+  _cornerX[1] = maxX; _cornerY[1] = minY;
+  _cornerX[2] = maxX; _cornerY[2] = maxY;
+  _cornerX[3] = minX; _cornerY[3] = maxY;
+
+  for (let i = 0; i < 4; i++) {
+    _cornerAngle[i] = Math.atan2(_cornerY[i] - lightYPx, _cornerX[i] - lightXPx);
+    _cornerOrder[i] = i;
+  }
+
+  for (let i = 1; i < 4; i++) {
+    const idx = _cornerOrder[i];
+    const angle = _cornerAngle[idx];
+    let j = i - 1;
+    while (j >= 0 && _cornerAngle[_cornerOrder[j]] > angle) {
+      _cornerOrder[j + 1] = _cornerOrder[j];
+      j--;
+    }
+    _cornerOrder[j + 1] = idx;
+  }
+
+  let largestGap = -1;
+  let gapStartOrder = 0;
+  for (let i = 0; i < 4; i++) {
+    const currentIdx = _cornerOrder[i];
+    const nextIdx = _cornerOrder[(i + 1) & 3];
+    const currentAngle = _cornerAngle[currentIdx];
+    const nextAngle = _cornerAngle[nextIdx] + (i === 3 ? Math.PI * 2 : 0);
+    const gap = nextAngle - currentAngle;
+    if (gap > largestGap) {
+      largestGap = gap;
+      gapStartOrder = i;
+    }
+  }
+
+  const nearAIdx = _cornerOrder[(gapStartOrder + 1) & 3];
+  const nearBIdx = _cornerOrder[gapStartOrder];
+  const nearAx = _cornerX[nearAIdx];
+  const nearAy = _cornerY[nearAIdx];
+  const nearBx = _cornerX[nearBIdx];
+  const nearBy = _cornerY[nearBIdx];
+
+  const dirAx = nearAx - lightXPx;
+  const dirAy = nearAy - lightYPx;
+  const dirBx = nearBx - lightXPx;
+  const dirBy = nearBy - lightYPx;
+  const lenA = Math.sqrt(dirAx * dirAx + dirAy * dirAy);
+  const lenB = Math.sqrt(dirBx * dirBx + dirBy * dirBy);
+  if (lenA < SHADOW_MIN_DIST_PX || lenB < SHADOW_MIN_DIST_PX) return false;
+
+  out.baseAx = nearAx;
+  out.baseAy = nearAy;
+  out.baseBx = nearBx;
+  out.baseBy = nearBy;
+  out.tipAx = nearAx + (dirAx / lenA) * shadowLengthPx;
+  out.tipAy = nearAy + (dirAy / lenA) * shadowLengthPx;
+  out.tipBx = nearBx + (dirBx / lenB) * shadowLengthPx;
+  out.tipBy = nearBy + (dirBy / lenB) * shadowLengthPx;
+  out.alpha = alpha;
+  return true;
+}
 
 /**
  * Populates `out` with shadow occluder polygons for the given player caster
@@ -123,10 +204,6 @@ export function buildPlayerShadowOccluders(
   out.length = 0;
 
   if (lightSources.length === 0) return;
-
-  // Approximate player silhouette radius perpendicular to shadow direction.
-  // Using the larger half-extent gives a conservative (slightly roomy) shadow.
-  const bodyRPx = Math.max(playerHalfWPx, playerHalfHPx) * 0.85;
 
   // ── Phase 1: collect the best MAX_SHADOW_CASTER_LIGHTS candidates ─────────
   // Sort criterion: lower score = better.  Score = distance / brightnessFraction
@@ -200,14 +277,6 @@ export function buildPlayerShadowOccluders(
     // guard again in case floating-point drift produces a 0 dist here).
     if (distPx < SHADOW_MIN_DIST_PX) continue;
 
-    const invDist = 1.0 / distPx;
-    // Shadow direction unit vector (light → player → beyond).
-    const dirX  = dx * invDist;
-    const dirY  = dy * invDist;
-    // Perpendicular unit vector (rotated 90° CCW from dir).
-    const perpX = -dirY;
-    const perpY =  dirX;
-
     // ── Shadow length ─────────────────────────────────────────────────────
     // Shadows are longer near the light and shorter toward the edge of the
     // illuminated circle, giving a physically plausible falloff without
@@ -216,19 +285,19 @@ export function buildPlayerShadowOccluders(
     const rawLengthPx     = lightRadiusPx * 0.70 * (1.0 - distFraction * 0.65);
     const shadowLengthPx  = Math.max(8.0, Math.min(lightRadiusPx * 0.70, rawLengthPx));
 
-    // ── Shadow tip half-width (tapered) ──────────────────────────────────
-    const tipRPx = bodyRPx * SHADOW_TIP_TAPER;
-
     const poolObj = _shadowPool[out.length];
-    poolObj.baseAx = playerXPx + perpX * bodyRPx;
-    poolObj.baseAy = playerYPx + perpY * bodyRPx;
-    poolObj.baseBx = playerXPx - perpX * bodyRPx;
-    poolObj.baseBy = playerYPx - perpY * bodyRPx;
-    poolObj.tipAx  = playerXPx + dirX * shadowLengthPx + perpX * tipRPx;
-    poolObj.tipAy  = playerYPx + dirY * shadowLengthPx + perpY * tipRPx;
-    poolObj.tipBx  = playerXPx + dirX * shadowLengthPx - perpX * tipRPx;
-    poolObj.tipBy  = playerYPx + dirY * shadowLengthPx - perpY * tipRPx;
-    poolObj.alpha  = SHADOW_CORE_ALPHA;
-    out.push(poolObj);
+    if (buildRectShadowOccluderPx(
+      playerXPx,
+      playerYPx,
+      playerHalfWPx,
+      playerHalfHPx,
+      lightXPx,
+      lightYPx,
+      shadowLengthPx,
+      poolObj,
+      SHADOW_CORE_ALPHA,
+    )) {
+      out.push(poolObj);
+    }
   }
 }
