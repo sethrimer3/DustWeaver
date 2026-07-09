@@ -158,6 +158,70 @@ test('chunk/viewport filtering: segments outside the filter bounds are not drawn
   assert.ok(rects.length < wallLayout.surfaceExposureMap.segments.length, 'fixture must have at least one out-of-range segment excluded');
 });
 
+test('no overlay band is ever emitted for an internal solid-solid seam', () => {
+  // Two horizontally-adjacent 1x1 tiles: the shared seam between them must
+  // never receive a band, on either side of it.
+  const snapshot = makeWallSnapshot([
+    { x: 2 * BLOCK_SIZE, y: 2 * BLOCK_SIZE, w: BLOCK_SIZE, h: BLOCK_SIZE }, // (2,2)
+    { x: 3 * BLOCK_SIZE, y: 2 * BLOCK_SIZE, w: BLOCK_SIZE, h: BLOCK_SIZE }, // (3,2) — shares the left/right seam with (2,2)
+  ]);
+  const wallLayout = getWallLayoutCache(snapshot, BLOCK_SIZE, 10, 10);
+  const map = wallLayout.surfaceExposureMap;
+
+  // The exposure map itself must not carry a seam segment — this is the
+  // authoritative source the overlay reads from, so if this holds, the
+  // overlay can't possibly draw one either.
+  const leftTileRightSide = map.segments.find((s) => s.col === 2 && s.row === 2 && s.side === 'right');
+  const rightTileLeftSide = map.segments.find((s) => s.col === 3 && s.row === 2 && s.side === 'left');
+  assert.equal(leftTileRightSide, undefined, 'internal seam (right face of left tile) must not be an exposed segment');
+  assert.equal(rightTileLeftSide, undefined, 'internal seam (left face of right tile) must not be an exposed segment');
+
+  const { ctx, rects } = makeFakeCtx();
+  const params = makeParams({ surfaceExposureMap: map });
+  renderSurfaceEdgeOverlayPass(ctx, params);
+
+  // Every drawn rect must correspond to a real segment — i.e. exactly one
+  // band per segment, none extra for the seam.
+  assert.equal(rects.length, map.segments.length);
+});
+
+test('no overlay band is emitted for a side facing outside the room bounds', () => {
+  // A wall tile sitting in the top-left corner of a small room: its top and
+  // left faces point outside the room and must never receive a band, even
+  // though nothing is "solid" out there to seam against.
+  const snapshot = makeWallSnapshot([{ x: 0, y: 0, w: BLOCK_SIZE, h: BLOCK_SIZE }]);
+  const wallLayout = getWallLayoutCache(snapshot, BLOCK_SIZE, 5, 5);
+  const map = wallLayout.surfaceExposureMap;
+
+  const topSeg  = map.segments.find((s) => s.col === 0 && s.row === 0 && s.side === 'top');
+  const leftSeg = map.segments.find((s) => s.col === 0 && s.row === 0 && s.side === 'left');
+  assert.equal(topSeg, undefined, 'top face is out-of-room-bounds — must not be an exposed segment');
+  assert.equal(leftSeg, undefined, 'left face is out-of-room-bounds — must not be an exposed segment');
+
+  const { ctx, rects } = makeFakeCtx();
+  const params = makeParams({ surfaceExposureMap: map });
+  renderSurfaceEdgeOverlayPass(ctx, params);
+
+  // Only the two genuinely-exposed sides (right, bottom) should draw.
+  assert.equal(rects.length, 2);
+  assert.equal(map.segments.length, 2);
+});
+
+test('partial darkness attenuates but does not fully suppress the overlay (below the cutoff)', () => {
+  // Distinguishes "attenuate" from "skip": a tile that is dimly lit (not at
+  // the full-darkness cutoff) should still receive a band, just weaker.
+  const snapshot = makeWallSnapshot([{ x: 2 * BLOCK_SIZE, y: 2 * BLOCK_SIZE, w: BLOCK_SIZE, h: BLOCK_SIZE }]);
+  const wallLayout = getWallLayoutCache(snapshot, BLOCK_SIZE, 10, 10);
+
+  const ambientDepths = new Map<string, number>([['2,2', 0.5]]); // dim, not pitch black
+  const { ctx, rects } = makeFakeCtx();
+  const params = makeParams({ surfaceExposureMap: wallLayout.surfaceExposureMap, ambientDepths, isBlockTintEnabled: true });
+
+  renderSurfaceEdgeOverlayPass(ctx, params);
+
+  assert.equal(rects.length, wallLayout.surfaceExposureMap.segments.length, 'a dim (not pitch-black) tile must still receive a band per exposed side');
+});
+
 // ── Budget-exhausted-fallback retry signal ────────────────────────────────────
 
 test('budget-exhausted fallback flag is single-shot: consuming it clears it for the next check', () => {
