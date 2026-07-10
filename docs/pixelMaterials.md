@@ -8,6 +8,17 @@ architecture. Initial scope: one material (1×1 sand).
 > wind currents, dev diagnostics, and a footprint abstraction prepping for
 > future 2×2 materials. See the sections below for what changed; the
 > "Phase 1" sections above them are unchanged in behavior except where noted.
+>
+> **Phase 3 update**: `MATERIAL_SAND_2X2` is now a real multi-cell material.
+> `PixelMaterialSystem` occupancy is now `particles: Set` (one entry per
+> particle) + `occupancy: Map<cell, particle>` (one entry per OCCUPIED CELL —
+> N*N for an N×N footprint, all pointing at the same particle). Placement,
+> movement, wind, wake, and the editor solid-check are all footprint-aware via
+> `getMaterialFootprintSize(material)` — no material-specific branching at any
+> call site. The editor's pixel-material solid-check was also upgraded from
+> block-cell to native-pixel-AABB precision (`isPixelMaterialSolidAtPixel`),
+> fixing a parity bug where half-width pillars (4px-wide wall rects) were
+> incorrectly treated as fully solid across the whole 8×8 block.
 
 ## Coordinate space
 

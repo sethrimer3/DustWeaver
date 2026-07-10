@@ -30,6 +30,7 @@ import type { RoomJsonDef } from '../editor/roomJson';
 import { savedToLightDef } from './lightingSchema';
 import { buildCompleteBoundaryWalls } from './roomBoundaryWalls';
 import { hydrateAndValidateBakedWallTemplate } from './roomWallTemplateHash';
+import { isKnownMaterialId } from '../sim/pixelMaterials/pixelMaterialTypes';
 
 export { validateRoomJson };
 
@@ -239,8 +240,13 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   }
 
   if (json.pixelMaterials && json.pixelMaterials.length > 0) {
+    // Bounds/overlap are still re-validated per-footprint by
+    // `PixelMaterialSystem.loadFromDefs`/`place()` at room-load time (the
+    // runtime authority); this filter only guards against non-finite
+    // coordinates and unknown material ids so garbage data can't even reach
+    // that stage.
     room.pixelMaterials = json.pixelMaterials
-      .filter(p => Number.isFinite(p.xPixel) && Number.isFinite(p.yPixel) && Number.isFinite(p.material))
+      .filter(p => Number.isFinite(p.xPixel) && Number.isFinite(p.yPixel) && isKnownMaterialId(p.material))
       .map(p => ({
         xPixel: Math.floor(p.xPixel),
         yPixel: Math.floor(p.yPixel),

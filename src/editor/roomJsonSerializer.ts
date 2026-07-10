@@ -10,6 +10,7 @@
  */
 
 import { blockThemeToId, BLOCK_SIZE_SMALL, DEFAULT_ROPE_SEGMENT_COUNT, indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
+import { getMaterialFootprintSize, isKnownMaterialId } from '../sim/pixelMaterials/pixelMaterialTypes';
 import type {
   EditorRoomData,
 } from './editorState';
@@ -354,20 +355,24 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     }));
   }
   if ((data.pixelMaterials ?? []).length > 0) {
-    // Defensive bounds filter: even if in-memory data somehow contains
-    // out-of-bounds entries (e.g. a bug elsewhere, or hand-edited JSON that
-    // was re-imported), never export them. This is a belt-and-suspenders
-    // check — `applyRoomDimensionChange`/`applyEdgeResize` already clip on
-    // resize — but export is the last line of defense before the data leaves
-    // the editor.
+    // Defensive bounds + material-id filter: even if in-memory data somehow
+    // contains out-of-bounds or invalid-material entries (e.g. a bug
+    // elsewhere, or hand-edited JSON that was re-imported), never export
+    // them. This is a belt-and-suspenders check — `applyRoomDimensionChange`/
+    // `applyEdgeResize` already clip on resize — but export is the last line
+    // of defense before the data leaves the editor. Footprint-aware: a 2x2
+    // entry is rejected if ANY part of its footprint falls outside bounds,
+    // not just its anchor.
     const widthPx = data.widthBlocks * BLOCK_SIZE_SMALL;
     const heightPx = data.heightBlocks * BLOCK_SIZE_SMALL;
-    const inBounds = (data.pixelMaterials ?? []).filter(
-      p => Number.isFinite(p.xPixel) && Number.isFinite(p.yPixel) &&
-        p.xPixel >= 0 && p.xPixel < widthPx && p.yPixel >= 0 && p.yPixel < heightPx,
-    );
-    if (inBounds.length > 0) {
-      json.pixelMaterials = inBounds.map(p => ({
+    const valid = (data.pixelMaterials ?? []).filter(p => {
+      if (!Number.isFinite(p.xPixel) || !Number.isFinite(p.yPixel) || !isKnownMaterialId(p.material)) return false;
+      const size = getMaterialFootprintSize(p.material);
+      return p.xPixel >= 0 && p.yPixel >= 0 &&
+        p.xPixel + size <= widthPx && p.yPixel + size <= heightPx;
+    });
+    if (valid.length > 0) {
+      json.pixelMaterials = valid.map(p => ({
         xPixel: p.xPixel,
         yPixel: p.yPixel,
         material: p.material,

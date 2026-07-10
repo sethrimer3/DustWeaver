@@ -15,6 +15,7 @@ import type { EditorHistory } from './editorHistory';
 import { pushSnapshot } from './editorHistory';
 import type { RoomEdge } from './editorUI';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
 
 /** Clamps a zone rect (with wBlock/hBlock) to fit within the given room dimensions. */
 export function clampZoneToDimensions(
@@ -122,9 +123,13 @@ export function applyRoomDimensionChange(
   if (room.pixelMaterials) {
     const widthPx = room.widthBlocks * BLOCK_SIZE_SMALL;
     const heightPx = room.heightBlocks * BLOCK_SIZE_SMALL;
-    room.pixelMaterials = room.pixelMaterials.filter(
-      p => p.xPixel >= 0 && p.xPixel < widthPx && p.yPixel >= 0 && p.yPixel < heightPx,
-    );
+    // Footprint-aware: a 2x2 particle is removed if ANY part of its footprint
+    // (not just its anchor) would fall outside the new bounds.
+    room.pixelMaterials = room.pixelMaterials.filter(p => {
+      const size = getMaterialFootprintSize(p.material);
+      return p.xPixel >= 0 && p.yPixel >= 0 &&
+        p.xPixel + size <= widthPx && p.yPixel + size <= heightPx;
+    });
   }
 
   // Clamp interior wall rectangles so they stay fully inside the room.

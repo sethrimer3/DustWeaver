@@ -13,6 +13,7 @@
 
 import type { BlockTheme } from '../levels/roomDef';
 import { blockThemeRefToTheme, DEFAULT_ROPE_SEGMENT_COUNT } from '../levels/roomDef';
+import { isKnownMaterialId } from '../sim/pixelMaterials/pixelMaterialTypes';
 import type {
   EditorRoomData, EditorEnemy, EditorTransition, EditorWall,
   EditorSaveTomb, EditorSkillTomb, EditorDustPile,
@@ -478,7 +479,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
   }));
 
   const pixelMaterials = (json.pixelMaterials ?? [])
-    .filter((p: RoomJsonPixelMaterial) => Number.isFinite(p.xPixel) && Number.isFinite(p.yPixel) && Number.isFinite(p.material))
+    .filter((p: RoomJsonPixelMaterial) => Number.isFinite(p.xPixel) && Number.isFinite(p.yPixel) && isKnownMaterialId(p.material))
     .map((p: RoomJsonPixelMaterial) => ({
       uid: uid++,
       xPixel: Math.floor(p.xPixel),
