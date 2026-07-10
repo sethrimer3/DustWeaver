@@ -19,37 +19,41 @@ export const MATERIAL_SAND_2X2 = 2;
 export type MaterialId = typeof MATERIAL_EMPTY | typeof MATERIAL_SAND | typeof MATERIAL_SAND_2X2;
 
 /**
- * Per-material definition: visual + footprint size, so additional materials
- * (and eventually 2x2 variants) can be added by extending this table rather
- * than touching the renderer or collision code.
+ * Per-material definition: visual + footprint size + wind response, so
+ * additional materials can be added by extending this table rather than
+ * touching the renderer, collision, or wind code.
  *
- * `footprintSize` is the material's square footprint in native pixels — 1 for
- * every material implemented so far. It is threaded through placement
- * (`PixelMaterialSystem.place`/`canOccupy`) and the editor solid-check so a
- * future `footprintSize: 2` material only needs those call sites to already
- * be querying this table (which they do) rather than assuming 1x1 everywhere.
+ * `footprintSize` is the material's square footprint in native pixels.
+ * `MATERIAL_SAND` is 1x1; `MATERIAL_SAND_2X2` is a real 2x2 rigid multi-cell
+ * particle (not four independent grains). It is threaded through placement
+ * (`PixelMaterialSystem.place`/`canOccupy`/`isRegionFree`), movement
+ * (`stepParticle`/`moveParticle`, which check/reserve the whole
+ * `footprintSize x footprintSize` region atomically), wind
+ * (`applyWindForce`), and the editor solid-check — no material-specific
+ * branching at any of those call sites; a future footprint size only needs a
+ * new table entry here.
  *
- * IMPORTANT: `stepParticle()` (pixelMaterialSystem.ts) still only implements
- * single-cell movement — a `footprintSize > 1` material would fall through
- * the current gravity/diagonal logic incorrectly (it moves the particle's
- * anchor cell only, without sweeping/reserving the other footprint cells).
- * Adding a real 2x2 material requires extending `stepParticle`/`moveParticle`
- * to treat the footprint as a rigid multi-cell unit (check + reserve all
- * `footprintSize x footprintSize` cells atomically before moving); this table
- * only prepares the data model, per the current phase's scope (no 2x2 yet).
+ * `windResponse` scales how much wind momentum a material accumulates per
+ * unit of applied force (see `applyWindForce`) — lower values feel heavier/
+ * less reactive. Defaults to `1` (full response) via `getMaterialWindResponse`
+ * for any material that doesn't set it explicitly.
  */
 export interface MaterialDef {
-  /** Square footprint size in native pixels. 1 for all materials today. */
+  /** Square footprint size in native pixels. */
   readonly footprintSize: number;
   /** CSS color string used for solid-fill rendering. */
   readonly color: string;
+  /** Wind momentum multiplier (0–1 typical). Omit for the default of 1 (full response). */
+  readonly windResponse?: number;
 }
 
 export const MATERIAL_DEFS: Readonly<Record<number, MaterialDef>> = {
-  [MATERIAL_SAND]: { footprintSize: 1, color: '#d9c07a' },
+  [MATERIAL_SAND]: { footprintSize: 1, color: '#d9c07a', windResponse: 1 },
   // Distinct but related hue (deeper/more saturated tan) so a 2x2 grain reads
   // as visually different from 1x1 sand at a glance, not just "bigger sand".
-  [MATERIAL_SAND_2X2]: { footprintSize: 2, color: '#b8925a' },
+  // Reduced windResponse: a bigger grain should feel heavier/less reactive
+  // than 1x1 sand under the same gust, not equally easy to blow around.
+  [MATERIAL_SAND_2X2]: { footprintSize: 2, color: '#b8925a', windResponse: 0.55 },
 };
 
 /** Returns the material's square footprint size in native pixels (defaults to 1 for unknown ids). */
@@ -60,6 +64,11 @@ export function getMaterialFootprintSize(material: number): number {
 /** Returns true if `material` is a recognized, placeable material id (not `MATERIAL_EMPTY`, not unknown). */
 export function isKnownMaterialId(material: number): material is MaterialId {
   return material !== MATERIAL_EMPTY && MATERIAL_DEFS[material] !== undefined;
+}
+
+/** Returns the material's wind-momentum multiplier (defaults to 1 — full response — for unknown ids or when unset). */
+export function getMaterialWindResponse(material: number): number {
+  return MATERIAL_DEFS[material]?.windResponse ?? 1;
 }
 
 /**

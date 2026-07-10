@@ -342,7 +342,12 @@ export function drawEditorPhantasmalTiles(
   }
 }
 
-/** Draws placed 1x1 pixel-material particles (native-pixel granularity, not block-snapped). */
+/**
+ * Draws placed pixel-material particles (1x1 or 2x2, native-pixel
+ * granularity, not block-snapped) at their full footprint size — a 2x2
+ * particle draws as one 2x2 square with a border, not a single highlighted
+ * pixel, via `getMaterialFootprintSize`.
+ */
 export function drawEditorPixelMaterials(
   ctx: CanvasRenderingContext2D,
   room: EditorRoomData,

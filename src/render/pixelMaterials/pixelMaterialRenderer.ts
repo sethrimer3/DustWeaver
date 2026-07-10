@@ -1,18 +1,20 @@
 /**
- * Renders occupied pixel-material cells (currently: sand) as crisp,
- * one-native-pixel squares. No smoothing/subpixel blending — matches the
+ * Renders pixel-material particles as crisp, footprint-sized squares: a 1x1
+ * `MATERIAL_SAND` particle draws one native pixel; a 2x2 `MATERIAL_SAND_2X2`
+ * particle draws one 2x2 native-pixel square (via `getMaterialFootprintSize`,
+ * not a hard-coded size). No smoothing/subpixel blending — matches the
  * project's pixel-art rendering behaviour.
  *
  * Allocation policy: zero per-particle allocations in the steady-state path.
- * `forEachParticle` iterates the system's own `Map` directly (no snapshot
- * array); this function does not build any intermediate `{x,y}` records or
- * per-material grouping arrays — it sets `ctx.fillStyle` lazily, only when
- * the material actually changes between consecutive particles in iteration
- * order (cheap because occupancy is a single `Map`, typically dominated by
- * one material for now). With only one material (`MATERIAL_SAND`) this is
- * equivalent to a single `fillStyle` assignment for the whole draw; the
- * per-particle check is what keeps this correct once more materials exist,
- * without reintroducing a grouping allocation.
+ * `forEachParticle` iterates the system's own particle `Set` directly (one
+ * call per particle, regardless of footprint size — not per occupied cell),
+ * with no snapshot array; this function does not build any intermediate
+ * `{x,y}` records or per-material grouping arrays — it sets `ctx.fillStyle`
+ * lazily, only when the material actually changes between consecutive
+ * particles in iteration order. With a single material present (the common
+ * case today) this reduces to one `fillStyle` assignment for the whole draw;
+ * the per-particle check is what keeps this correct as more materials are
+ * added, without reintroducing a grouping allocation.
  */
 
 import type { WorldState } from '../../sim/world';

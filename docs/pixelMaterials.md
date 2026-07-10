@@ -19,6 +19,13 @@ architecture. Initial scope: one material (1×1 sand).
 > block-cell to native-pixel-AABB precision (`isPixelMaterialSolidAtPixel`),
 > fixing a parity bug where half-width pillars (4px-wide wall rects) were
 > incorrectly treated as fully solid across the whole 8×8 block.
+>
+> **Phase 4 update** (pre-water cleanup pass): `applyWindForce` now dedupes
+> multi-cell particles via a reusable scratch `Set` (cleared at the start and
+> end of every call) instead of allocating a new `Set` per impulse. Materials
+> now also have a `windResponse` multiplier (`pixelMaterialTypes.ts`) — 2×2
+> sand accumulates noticeably less wind momentum than 1×1 sand from an
+> identical gust, so it reads as heavier.
 
 ## Coordinate space
 
@@ -195,6 +202,21 @@ All in `pixelMaterialMovementWind.ts` unless noted:
 | `LATERAL_RADIUS_FACTOR` | 0.6 | Lateral impulse radius, relative to the trailing radius. |
 | `WIND_MOMENTUM_DAMPING` (pixelMaterialTypes.ts) | 0.85/step | Per-step momentum decay (limited momentum, returns to gravity). |
 | `WIND_MOMENTUM_EPSILON` (pixelMaterialTypes.ts) | 4 px/s | Momentum snap-to-zero threshold. |
+| `MATERIAL_DEFS[MATERIAL_SAND].windResponse` | 1 | Full wind response (unchanged from Phase 1–3). |
+| `MATERIAL_DEFS[MATERIAL_SAND_2X2].windResponse` | 0.55 | 2×2 sand accumulates ~55% of the momentum 1×1 sand would from the same gust — feels heavier. |
+
+### Multi-cell wind + dedupe (Phase 3/4)
+
+A particle is affected by a wind call if ANY of its footprint cells falls
+within the force radius (matches how collision/wake already do per-cell
+lookups). Force is applied to each affected particle **exactly once per
+`applyWindForce` call**, scaled by `getMaterialWindResponse(material)` —
+never once per covered cell, which would let a 2×2 particle receive up to 4×
+the momentum of a 1×1 particle for the same gust. Dedup uses a reusable
+scratch `Set` (`windAffectedScratch`) cleared at the start and end of every
+call, instead of allocating a new `Set` per impulse — movement wind can emit
+several impulses per moving cluster per tick (trailing + lateral), so this
+avoids per-impulse allocator churn.
 
 ## Serialization (room data)
 

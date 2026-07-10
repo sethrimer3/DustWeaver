@@ -55,6 +55,7 @@ import {
   WIND_MOMENTUM_DAMPING,
   WIND_MOMENTUM_EPSILON,
   getMaterialFootprintSize,
+  getMaterialWindResponse,
   isKnownMaterialId,
   type MaterialId,
   type PixelMaterialParticle,
@@ -92,6 +93,16 @@ export class PixelMaterialSystem {
   /** Diagnostics for the current tick — see `resetWindDiagnostics()`. Dev-only consumers. */
   windImpulsesThisTick = 0;
   windParticlesAffectedThisTick = 0;
+
+  /**
+   * Reusable dedupe scratch set for `applyWindForce` — movement wind can emit
+   * several impulses per moving cluster per tick (trailing + lateral, see
+   * `pixelMaterialMovementWind.ts`), so a fresh `Set` per call would churn
+   * the allocator every tick even when nothing is near any sand. Cleared at
+   * the START of every `applyWindForce` call (not just the end) so a call
+   * that throws or returns early never leaks stale entries into the next one.
+   */
+  private readonly windAffectedScratch = new Set<PixelMaterialParticle>();
 
   constructor(widthPx: number, heightPx: number, solid: SolidMask | null = null) {
     this.widthPx = Math.max(0, Math.floor(widthPx));
@@ -295,24 +306,32 @@ export class PixelMaterialSystem {
    * feels more physically right for a "gust hits part of a boulder" gust than
    * requiring the whole footprint or just the anchor to be inside the
    * radius. Force is applied to each affected particle exactly ONCE per call
-   * (deduped via a local `Set`) regardless of how many of its footprint
-   * cells fall inside the radius — otherwise a 2x2 particle would receive up
-   * to 4x the momentum of a 1x1 particle for the same gust, which would make
-   * bigger particles feel MORE fragile, the opposite of intended game feel.
+   * (deduped via `windAffectedScratch`, a reusable scratch `Set` — see its
+   * doc comment) regardless of how many of its footprint cells fall inside
+   * the radius — otherwise a 2x2 particle would receive up to 4x the
+   * momentum of a 1x1 particle for the same gust, which would make bigger
+   * particles feel MORE fragile, the opposite of intended game feel.
+   *
+   * Wind response: the velocity actually added is scaled by
+   * `getMaterialWindResponse(p.material)` (see pixelMaterialTypes.ts) — e.g.
+   * 2x2 sand accumulates less momentum than 1x1 sand from the same gust,
+   * making it feel heavier. This is a per-material table lookup, not a
+   * material-id branch in this function.
    */
   applyWindForce(params: WindForceParams): void {
     const { centerXPx, centerYPx, radiusPx, forceX, forceY } = params;
     const falloff = params.falloff ?? 1;
+    const affected = this.windAffectedScratch;
+    affected.clear();
     if (radiusPx <= 0) return;
     const minX = Math.max(0, Math.floor(centerXPx - radiusPx));
     const maxX = Math.min(this.widthPx - 1, Math.ceil(centerXPx + radiusPx));
     const minY = Math.max(0, Math.floor(centerYPx - radiusPx));
     const maxY = Math.min(this.heightPx - 1, Math.ceil(centerYPx + radiusPx));
-    const affectedThisCall = new Set<PixelMaterialParticle>();
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
         const p = this.occupancy.get(this.key(x, y));
-        if (p === undefined || affectedThisCall.has(p)) continue;
+        if (p === undefined || affected.has(p)) continue;
         const dx = x - centerXPx;
         const dy = y - centerYPx;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -320,15 +339,19 @@ export class PixelMaterialSystem {
         const t = radiusPx > 0 ? dist / radiusPx : 0;
         const strength = 1 - falloff * t;
         if (strength <= 0) continue;
-        p.windVelX += forceX * strength;
-        p.windVelY += forceY * strength;
+        const response = getMaterialWindResponse(p.material);
+        p.windVelX += forceX * strength * response;
+        p.windVelY += forceY * strength * response;
         this.wake(p);
-        affectedThisCall.add(p);
+        affected.add(p);
       }
     }
     this.windImpulsesThisTick++;
-    this.windParticlesAffectedThisTick += affectedThisCall.size;
+    this.windParticlesAffectedThisTick += affected.size;
     this.recordWindDebugEvent(centerXPx, centerYPx, radiusPx, forceX, forceY);
+    // Release references to particles now that this call is done — avoids
+    // retaining otherwise-dead particle objects between wind calls.
+    affected.clear();
   }
 
   // ── Debug wind-event visualization (dev-only consumer) ──────────────────
