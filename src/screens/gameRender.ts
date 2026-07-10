@@ -52,6 +52,8 @@ import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBl
 import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderPixelMaterials } from '../render/pixelMaterials/pixelMaterialRenderer';
 import { renderPixelMaterialDebug } from '../render/pixelMaterials/pixelMaterialDebugRenderer';
+import { renderAirCurrentsDebug } from '../render/pixelMaterials/airCurrentsDebugRenderer';
+import { getAirCurrentsDebugEnabled } from '../ui/renderSettings';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import {
@@ -541,6 +543,11 @@ export function renderFrame(r: RenderFrameContext): void {
   // visualization (center, radius, direction, short fade). Disabled outside
   // debug mode; see render/pixelMaterials/pixelMaterialDebugRenderer.ts.
   if (isDebugMode) renderPixelMaterialDebug(ctx, world, ox, oy, zoom);
+  // Independently toggleable "Air Currents" overlay — off by default, only
+  // does any work when both debug mode and its own pause-menu checkbox are on.
+  if (isDebugMode && getAirCurrentsDebugEnabled()) {
+    renderAirCurrentsDebug(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
+  }
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
   // Save tombs (sprite + swirling/falling dust particles)

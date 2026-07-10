@@ -30,6 +30,8 @@ import {
   setDoubleJumpToGrappleEnabled,
   getAdvancedWallJumpsEnabled,
   setAdvancedWallJumpsEnabled,
+  getAirCurrentsDebugEnabled,
+  setAirCurrentsDebugEnabled,
 } from './renderSettings';
 import { setCombatMode, type CombatMode } from '../sim/combatMode';
 import { makeButton, makeSlider, makeTabButton, makeCheckboxRow, GOLD, PANEL_BORDER } from './helpers';
@@ -208,6 +210,16 @@ export function showPauseMenu(
           'When off (default), pressing jump next to a wall always wall-jumps, even with no directional input held. When on, a wall jump requires deliberate intent: wall-sliding, pressing away from the wall, or having been falling in the air for a moment.',
         ),
       );
+      if (state.isDebugOn) {
+        optionsPanel.appendChild(
+          makeCheckboxRow(
+            'Air Currents (debug)',
+            getAirCurrentsDebugEnabled(),
+            (enabled) => { setAirCurrentsDebugEnabled(enabled); },
+            'Draws arrows over the room showing the live wind field created by player and enemy movement. Only visible while Debug mode is on.',
+          ),
+        );
+      }
     } else {
       // Graphics quality buttons
       const qualityLabel = document.createElement('div');
