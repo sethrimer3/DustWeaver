@@ -69,14 +69,32 @@ export function resolveStairsSurfaces(
     const isIce = world.wallIsIceFlag[wi] === 1;
     const isUltraIce = world.wallIsUltraIceFlag[wi] === 1;
 
-    // X pass first, then Y — matching resolveClusterSolidWallCollision's order
-    // so that the final Y pass is what establishes isGroundedFlag.
+    // Y before X, deliberately — the reverse of resolveClusterSolidWallCollision.
+    //
+    // That resolver interleaves integration with its passes, so at X time the
+    // cluster has not yet descended into the floor. This one runs after both
+    // axes are integrated, so a cluster falling onto a tread already overlaps
+    // the riser beside it. Resolving X first would shove it sideways off the
+    // step. Landing on Y first snaps its feet flush to the tread, after which
+    // the riser no longer overlaps and the X pass correctly does nothing.
+    for (let i = 0; i < _stepRects.length; i += 4) {
+      if (_resolveStepY(cluster, prevYWorld, isIce, isUltraIce,
+        _stepRects[i], _stepRects[i + 1], _stepRects[i + 2], _stepRects[i + 3])) {
+        landed = true;
+      }
+    }
     for (let i = 0; i < _stepRects.length; i += 4) {
       _resolveStepX(cluster, world, prevXWorld, wasGrounded,
         _stepRects[i], _stepRects[i + 1], _stepRects[i + 2], _stepRects[i + 3]);
     }
+
+    // Cleanup for clusters that were already inside the stair when the tick
+    // began (spawns, teleports, geometry appearing around them). Neither
+    // directional pass fires there, so push out along the axis of least
+    // penetration. Never a vertical-only push: ejecting a cluster upward out of
+    // the tall face of a 2x2 stair would look like a 14px teleport.
     for (let i = 0; i < _stepRects.length; i += 4) {
-      if (_resolveStepY(cluster, prevYWorld, isIce, isUltraIce,
+      if (_depenetrateStep(cluster, isIce, isUltraIce,
         _stepRects[i], _stepRects[i + 1], _stepRects[i + 2], _stepRects[i + 3])) {
         landed = true;
       }
@@ -84,6 +102,58 @@ export function resolveStairsSurfaces(
   }
 
   return landed;
+}
+
+/**
+ * Resolves a residual overlap along the axis of least penetration.
+ * Returns true when the cluster ended up standing on the rect's top face.
+ */
+function _depenetrateStep(
+  cluster: ClusterState,
+  isIce: boolean,
+  isUltraIce: boolean,
+  stepLeft: number, stepTop: number, stepRight: number, stepBottom: number,
+): boolean {
+  const hw = cluster.halfWidthWorld;
+  const hh = cluster.halfHeightWorld;
+
+  const left = cluster.positionXWorld - hw;
+  const right = cluster.positionXWorld + hw;
+  const top = cluster.positionYWorld - hh;
+  const bottom = cluster.positionYWorld + hh;
+  if (right <= stepLeft || left >= stepRight || bottom <= stepTop || top >= stepBottom) return false;
+
+  const penLeft = right - stepLeft;
+  const penRight = stepRight - left;
+  const penTop = bottom - stepTop;
+  const penBottom = stepBottom - top;
+
+  const minX = penLeft < penRight ? penLeft : penRight;
+  const minY = penTop < penBottom ? penTop : penBottom;
+
+  if (minX <= minY) {
+    if (penLeft < penRight) {
+      cluster.positionXWorld = stepLeft - hw;
+      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
+    } else {
+      cluster.positionXWorld = stepRight + hw;
+      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
+    }
+    return false;
+  }
+
+  if (penTop < penBottom) {
+    cluster.positionYWorld = stepTop - hh;
+    cluster.velocityYWorld = 0;
+    cluster.isGroundedFlag = 1;
+    if (isIce) cluster.isGroundedOnIceFlag = 1;
+    if (isUltraIce) cluster.isGroundedOnUltraIceFlag = 1;
+    return true;
+  }
+
+  cluster.positionYWorld = stepBottom + hh;
+  if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+  return false;
 }
 
 /** X-axis push-out against a single step rectangle. */
@@ -118,18 +188,10 @@ function _resolveStepX(
     cluster.positionXWorld = stepRight + hw;
     if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
     if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
-  } else {
-    // Already overlapping on X at tick start (e.g. spawned inside) — shortest push-out.
-    if (right - stepLeft < stepRight - left) {
-      cluster.positionXWorld = stepLeft - hw;
-      if (cluster.velocityXWorld > 0) cluster.velocityXWorld = 0;
-      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
-    } else {
-      cluster.positionXWorld = stepRight + hw;
-      if (cluster.velocityXWorld < 0) cluster.velocityXWorld = 0;
-      if (cluster.isPlayerFlag === 1) cluster.isTouchingWallLeftFlag = 1;
-    }
   }
+  // Neither directional case applies: the cluster was already overlapping on X
+  // last tick. `_depenetrateStep` resolves that, choosing the axis of least
+  // penetration rather than guessing a direction here.
 }
 
 /** Y-axis push-out against a single step rectangle. Returns true on landing. */
@@ -171,9 +233,7 @@ function _resolveStepY(
     return false;
   }
 
-  // Already overlapping on Y at tick start — shortest push-out.
-  if (bottom - stepTop < stepBottom - top) return land();
-  cluster.positionYWorld = stepBottom + hh;
-  if (cluster.velocityYWorld < 0) cluster.velocityYWorld = 0;
+  // Neither directional case applies — left to `_depenetrateStep`, which will
+  // only push vertically when that is genuinely the shallowest way out.
   return false;
 }
