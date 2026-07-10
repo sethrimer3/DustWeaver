@@ -33,7 +33,9 @@ import {
   getDoubleJumpToGrappleEnabled,
   setDoubleJumpToGrappleEnabled,
   getPixelSpeedometerEnabled,
+  getPixelSpeedometerPlacement,
   setPixelSpeedometerEnabled,
+  setPixelSpeedometerPlacement,
   getAdvancedWallJumpsEnabled,
   setAdvancedWallJumpsEnabled,
 } from './renderSettings';
@@ -507,8 +509,24 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
     tabContent.appendChild(
       makeCheckboxRow('Pixel speedometer', getPixelSpeedometerEnabled(), (enabled) => {
         setPixelSpeedometerEnabled(enabled);
+        buildGameplayTab();
       }),
     );
+    if (getPixelSpeedometerEnabled()) {
+      const placementSelect = document.createElement('select');
+      placementSelect.style.cssText = `width: 100%; padding: 8px 10px; margin-bottom: 12px; background: rgba(20,18,14,0.9); color: #d4a84b; border: 1px solid rgba(212,168,75,0.35); border-radius: 4px; font-family: 'Cinzel', serif;`;
+      for (const [value, label] of [['over-player', 'Over Player'], ['on-top', 'On top'], ['both', 'Both']] as const) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        option.selected = getPixelSpeedometerPlacement() === value;
+        placementSelect.appendChild(option);
+      }
+      placementSelect.addEventListener('change', () => {
+        setPixelSpeedometerPlacement(placementSelect.value as 'over-player' | 'on-top' | 'both');
+      });
+      tabContent.appendChild(placementSelect);
+    }
     tabContent.appendChild(
       makeCheckboxRow('Advanced Wall Jumps', getAdvancedWallJumpsEnabled(), (enabled) => {
         setAdvancedWallJumpsEnabled(enabled);

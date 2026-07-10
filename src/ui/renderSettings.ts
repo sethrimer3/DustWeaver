@@ -55,6 +55,7 @@ const INFLUENCE_CIRCLE_OPACITY_STORAGE_KEY = 'dustweaver-influence-circle-opacit
 const INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY = 'dustweaver-influence-highlight-width';
 const DOUBLE_JUMP_TO_GRAPPLE_STORAGE_KEY = 'dustweaver-double-jump-to-grapple';
 const PIXEL_SPEEDOMETER_STORAGE_KEY = 'dustweaver-pixel-speedometer-enabled';
+const PIXEL_SPEEDOMETER_PLACEMENT_STORAGE_KEY = 'dustweaver-pixel-speedometer-placement';
 const DEFAULT_RENDER_SIZE_ID = '1080p';
 
 const RENDER_SIZE_OPTIONS: RenderSizeOption[] = [
@@ -212,6 +213,18 @@ export function getPixelSpeedometerEnabled(): boolean {
 
 export function setPixelSpeedometerEnabled(enabled: boolean): void {
   localStorage.setItem(PIXEL_SPEEDOMETER_STORAGE_KEY, enabled ? '1' : '0');
+}
+
+export type PixelSpeedometerPlacement = 'over-player' | 'on-top' | 'both';
+
+export function getPixelSpeedometerPlacement(): PixelSpeedometerPlacement {
+  const value = localStorage.getItem(PIXEL_SPEEDOMETER_PLACEMENT_STORAGE_KEY);
+  if (value === 'on-top' || value === 'both') return value;
+  return 'over-player';
+}
+
+export function setPixelSpeedometerPlacement(placement: PixelSpeedometerPlacement): void {
+  localStorage.setItem(PIXEL_SPEEDOMETER_PLACEMENT_STORAGE_KEY, placement);
 }
 
 // ── World View Presets ────────────────────────────────────────────────────────

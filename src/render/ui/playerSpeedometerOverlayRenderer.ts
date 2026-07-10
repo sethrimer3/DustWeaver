@@ -1,4 +1,4 @@
-import { getPixelSpeedometerEnabled } from '../../ui/renderSettings';
+import { getPixelSpeedometerEnabled, getPixelSpeedometerPlacement } from '../../ui/renderSettings';
 import type { WorldState } from '../../sim/world';
 import {
   nativeGamePointToOverlayCssPoint,
@@ -16,7 +16,7 @@ const SPEEDOMETER_CSS = `
   font-size: 13px;
   line-height: 16px;
   font-weight: 700;
-  color: #d4a84b;
+  color: #fff;
   text-align: center;
   white-space: nowrap;
   text-shadow:
@@ -27,7 +27,7 @@ const SPEEDOMETER_CSS = `
      0 0 5px rgba(0, 0, 0, 0.70);
 `;
 
-const GAP_ABOVE_PLAYER_CSS_PX = 6;
+const GAP_ABOVE_PLAYER_CSS_PX = 12;
 
 export interface PlayerSpeedometerOverlayUpdate {
   readonly world: WorldState;
@@ -42,6 +42,7 @@ export interface PlayerSpeedometerOverlayUpdate {
 export class PlayerSpeedometerOverlayRenderer {
   private readonly _root: HTMLElement;
   private readonly _el: HTMLDivElement;
+  private readonly _topEl: HTMLDivElement;
   private _lastText = '';
 
   constructor(uiRoot: HTMLElement) {
@@ -49,6 +50,9 @@ export class PlayerSpeedometerOverlayRenderer {
     this._el = document.createElement('div');
     this._el.style.cssText = SPEEDOMETER_CSS;
     uiRoot.appendChild(this._el);
+    this._topEl = document.createElement('div');
+    this._topEl.style.cssText = `${SPEEDOMETER_CSS} right: 16px; top: 12px; left: auto;`;
+    uiRoot.appendChild(this._topEl);
   }
 
   update(params: PlayerSpeedometerOverlayUpdate): void {
@@ -64,10 +68,19 @@ export class PlayerSpeedometerOverlayRenderer {
     }
 
     const speedPxPerSec = Math.hypot(player.velocityXWorld, player.velocityYWorld);
-    const speedText = `${Math.round(speedPxPerSec)} px/s`;
+    const speedText = `${Math.round(speedPxPerSec)} px/s${player.isHighVelocityAttacking === 1 ? ' ◆' : ''}`;
     if (speedText !== this._lastText) {
       this._el.textContent = speedText;
+      this._topEl.textContent = speedText;
       this._lastText = speedText;
+    }
+
+    const placement = getPixelSpeedometerPlacement();
+    const showOverPlayer = placement === 'over-player' || placement === 'both';
+    this._topEl.style.display = placement === 'on-top' || placement === 'both' ? 'block' : 'none';
+    if (!showOverPlayer) {
+      this._el.style.display = 'none';
+      return;
     }
 
     const nativePlayerCenterXPx = player.positionXWorld * params.zoom + params.offsetXPx;
@@ -97,9 +110,11 @@ export class PlayerSpeedometerOverlayRenderer {
 
   hide(): void {
     this._el.style.display = 'none';
+    this._topEl.style.display = 'none';
   }
 
   destroy(): void {
     this._el.remove();
+    this._topEl.remove();
   }
 }

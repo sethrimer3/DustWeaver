@@ -21,6 +21,8 @@ import {
   setManualSprintEnabled,
   getPixelSpeedometerEnabled,
   setPixelSpeedometerEnabled,
+  getPixelSpeedometerPlacement,
+  setPixelSpeedometerPlacement,
   saveCombatModeToStorage,
   WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
   type WorldViewPresetId,
@@ -370,12 +372,30 @@ export function showPauseMenu(
       speedometerCheckbox.addEventListener('change', () => {
         const enabled = speedometerCheckbox.checked;
         setPixelSpeedometerEnabled(enabled);
-        speedometerRow.style.borderColor = `rgba(212,168,75,${enabled ? '0.55' : '0.25'})`;
-        speedometerRow.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0.04'})`;
+        buildOptionsContent();
       });
       speedometerRow.appendChild(speedometerCheckbox);
       speedometerRow.appendChild(speedometerLabel);
       optionsPanel.appendChild(speedometerRow);
+      if (speedometerEnabled) {
+        const placementSelect = document.createElement('select');
+        placementSelect.style.cssText = `
+          display: block; width: 100%; margin: 0 0 8px 0; padding: 8px 10px;
+          color: ${GOLD}; background: rgba(30,28,22,0.9); border: 1px solid ${PANEL_BORDER};
+          border-radius: 4px; font-family: 'Cinzel', serif; cursor: pointer;
+        `;
+        for (const [value, label] of [['over-player', 'Over Player'], ['on-top', 'On top'], ['both', 'Both']] as const) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = label;
+          option.selected = getPixelSpeedometerPlacement() === value;
+          placementSelect.appendChild(option);
+        }
+        placementSelect.addEventListener('change', () => {
+          setPixelSpeedometerPlacement(placementSelect.value as 'over-player' | 'on-top' | 'both');
+        });
+        optionsPanel.appendChild(placementSelect);
+      }
     }
 
     // Back button
